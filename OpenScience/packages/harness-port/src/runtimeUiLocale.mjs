@@ -68,6 +68,14 @@ export const EVIMED_DOCUMENT_LANG = 'zh-CN';
 export function evimedDictionaries() {
   return {
     conversation: {
+      'detail.schedule.count': '{count} 个定时任务',
+      'detail.schedule.empty': '没有定时任务',
+      'tool.title.createSchedule': '创建定时任务',
+      'tool.title.deleteSchedule': '删除定时任务',
+      'tool.title.editSchedule': '编辑定时任务',
+      'tool.title.listSchedules': '查看定时任务',
+      'tool.title.updateSchedule': '修改定时任务',
+      'tool.title.viewSchedule': '查看定时任务详情',
       'hero.headline': '今天想做点什么？',
       'hero.preview': '',
       'placeholder.hero': '描述你的问题或任务…',
@@ -91,6 +99,8 @@ export function evimedDictionaries() {
       'detail.wait.noProgress': '没有正在运行的子任务',
     },
     chat: {
+      // The line above a turn a scheduled task delivered: the product has one word for them.
+      'message.trigger.schedule': '定时任务',
       // The working indicator under the last message. The kernel's copy is its
       // vendor's Chinese name plus 中; the product's own name goes there, as
       // 正在 + a verb with no ellipsis (design reference §7.3, E-13).
@@ -141,6 +151,33 @@ export function evimedDictionaries() {
       'archive.confirm.subagents.one': '{n} 个运行中的子任务：{names}',
       'archive.confirm.subagents.other': '{n} 个运行中的子任务：{names}',
     },
+    // The kernel's automation-tasks page and its marks: the product has one word for them.
+    'schedule.catalog': {
+      'delete.label': '删除定时任务：{title}',
+      'list.aria': '已开启的定时任务',
+      'list.error': '无法加载定时任务。',
+      'list.loading': '正在加载定时任务',
+      'list.open': '打开定时任务详情：{title}',
+      'mark.aria': '{count} 个定时任务',
+      'trigger.label': '定时任务',
+      'trigger.one': '{count} 个定时任务',
+      'trigger.other': '{count} 个定时任务',
+    },
+    'schedule.manager': {
+      'detail.instruction': '定时任务内容',
+      'detail.more': '定时任务操作',
+      'detail.name': '定时任务名称',
+      'empty.action': '新建定时任务',
+      'host.createPrompt': '请根据需求创建一个定时任务。',
+      'list.empty': '还没有定时任务，在会话中创建的任务会显示在这里',
+      'list.emptyActive': '没有已开启的定时任务',
+      'list.emptyInactive': '没有已结束的定时任务',
+      'list.emptyPaused': '没有已暂停的定时任务',
+      'list.noMatches': '没有匹配的定时任务',
+      'panel': '定时任务',
+      'search.placeholder': '搜索定时任务',
+      'title': '定时任务',
+    },
     'slash.menu': {
       subagent: '子任务',
     },
@@ -154,6 +191,18 @@ export function evimedDictionaries() {
     },
     trajectory: {
       'view.trajectory': '运行',
+    },
+    // The `/model` command of the kernel's model-selection row, which stays mounted for the composer's seat. This deployment runs
+    // one model and the person chooses a thinking strength, so the command is worded as that (2026-11-05); the one list it opens
+    // names its entry from host data, which no locale key reaches.
+    model: {
+      'command.label': '思考强度',
+      'command.description': '选择本会话的思考强度',
+      'menu.aria': '思考强度',
+      'menu.model': '思考强度',
+      'search.placeholder': '搜索…',
+      'search.empty': '没有匹配项。',
+      'empty.models': '暂无可选项',
     },
     // The goal bar of the LoopX plugin (`dsh-loopx-plugin`, pinned in deps-version.json `loopx`). Its own
     // Chinese names the vendor and an internal lane (「LoopX 目标状态」「Agent 通道待办」); the product calls

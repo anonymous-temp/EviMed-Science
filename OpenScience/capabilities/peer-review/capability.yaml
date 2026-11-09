@@ -40,11 +40,6 @@ inputs:
   optional:
   - articleType
   - outputLanguage
-autopilot:
-  taskTypes: []
-  costClass: medium
-  unattendedInputs:
-  - manuscript
 estimatedMinutes:
 - 20
 - 120

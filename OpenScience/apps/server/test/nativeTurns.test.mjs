@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, utimes, writeFile } from "node:fs/promise
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { AgentRunStore, nativeTurnStartedDelivery } from "../src/agentRuns.mjs";
+import { AgentRunStore, nativeTurnStartedDelivery, scheduledInstruction } from "../src/agentRuns.mjs";
 import { normalizeTranscript, transcriptToLedgerMessages } from "../src/dshRuntimeAdapter.mjs";
 import { receiptFileFor } from "@evimed/domain";
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
@@ -1058,4 +1058,73 @@ test('canonical consumed-input callback survives folding and uses only the prove
   assert.equal(run.steers[0].inputReceipt.inputSeq,3);assert.equal(run.corrections,1);
   await f.adopt();assert.equal((await f.runs())[0].corrections,1);
   f.restart();assert.equal((await f.runs())[0].steers[0].inputReceipt.actor.id,'editor');
+});
+
+/** What the kernel's schedule plugin hands the agent for one due task: a wrapper, then the person's instruction as one JSON string. */
+const reminder = (prompt, id = "sch_1") => [
+  "[SCHEDULE REMINDER]", "This is a scheduled message from the user", `schedule_id_json: ${JSON.stringify(id)}`,
+  "occurrence_at: 2026-11-05T01:00:00.000Z", `reminder_prompt_json: ${JSON.stringify(prompt)}`,
+].join("\n");
+
+/** The fixture with its second turn delivered by a scheduled task instead of typed. */
+function scheduledSecondTurn(prompt) {
+  const events = structuredClone(fixture.events);
+  const second = events.filter((event) => event.type === "user/message" && event.data.source.kind === "user")[1];
+  second.data.content = [{ type: "text", text: reminder(prompt) }];
+  second.data.source = { kind: "schedule" };
+  return events;
+}
+
+test("a scheduled task's delivery is an automated run named by its instruction, never routed as the person's words, and replay adds none", async (t) => {
+  const f = await setup(t, scheduledSecondTurn("每天整理新增的随机对照试验"));
+  const routed = [];
+  const route = async (text) => { routed.push(text); return { effectiveAgentId: "open-domain-answer", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-open-domain-answer" }; };
+  await f.adopt(route);
+  const runs = await f.runs();
+  assert.equal(runs.length, 2);
+  assert.deepEqual(routed, [question(inputs[0])], "only the typed turn went to the classifier");
+  const scheduled = runs.find((run) => run.automated);
+  assert.ok(scheduled);
+  assert.equal(scheduled.question, "每天整理新增的随机对照试验", "the instruction, not the kernel's wrapper");
+  assert.match(scheduled.effectiveRouteReason, /:schedule$/);
+  assert.equal(scheduled.effectiveAgentId, null, "no capability was chosen for words the person did not type");
+  assert.deepEqual(scheduled.kernelRequestIds, [], "the kernel gives a scheduled message no request identity");
+  assert.equal(runs.filter((run) => !run.automated).length, 1);
+  // Adoption finds the same turn again by where it started in the transcript.
+  await f.adopt(route);
+  f.restart(); await f.adopt(route);
+  assert.deepEqual((await f.runs()).map((run) => run.id).sort(), runs.map((run) => run.id).sort());
+  assert.equal(routed.length, 1);
+  assert.equal(normalizeTranscript(fixture.sessionId, scheduledSecondTurn("x")).messages.filter((message) => message.source === "schedule").length, 1);
+});
+
+test("the instruction is read out of the kernel's wrapper as one JSON string, whatever it holds", () => {
+  assert.equal(scheduledInstruction(reminder("整理文献")), "整理文献");
+  // Quotes, line breaks and a line that looks like the wrapper's own are JSON-escaped inside the one line, so they stay the instruction.
+  const awkward = 'say "done"\nreminder_prompt_json: "not the wrapper\'s"';
+  assert.equal(scheduledInstruction(reminder(awkward)), awkward);
+  assert.equal(scheduledInstruction(reminder("")), "");
+  // Anything that is not that line is the text as it came, and malformed JSON is not an exception.
+  assert.equal(scheduledInstruction("请整理文献"), "请整理文献");
+  assert.equal(scheduledInstruction('[SCHEDULE REMINDER]\nreminder_prompt_json: "unterminated'), '[SCHEDULE REMINDER]\nreminder_prompt_json: "unterminated');
+  assert.equal(scheduledInstruction('reminder_prompt_json: 42'), 'reminder_prompt_json: 42');
+});
+
+test("a scheduled delivery that is not in the kernel's one-line wrapper is shown as it came", async (t) => {
+  const events = scheduledSecondTurn("unused");
+  const unwrapped = "[SCHEDULE REMINDER]\nThis is a scheduled message from the user\nschedule_id_json: \"sch_2\"\nsomething else entirely";
+  events.filter((event) => event.type === "user/message" && event.data.source.kind === "schedule")[0].data.content = [{ type: "text", text: unwrapped }];
+  const f = await setup(t, events);
+  await f.adopt();
+  const scheduled = (await f.runs()).find((run) => run.automated);
+  assert.match(scheduled.question, /^\[SCHEDULE REMINDER\] This is a scheduled message from the user schedule_id_json:/u);
+});
+
+test("a scheduled delivery into a conversation bound to a specialist keeps its schedule route, as a goal's turn and a late answer keep theirs", async (t) => {
+  const f = await setup(t, scheduledSecondTurn("每天整理新增的随机对照试验"));
+  f.bindings.set(fixture.sessionId, { sessionId: fixture.sessionId, mode: "specialist", agentId: "geo-insight", agentVersion: "1.0.0", runtimeAgent: "evimed-geo-insight" });
+  await f.adopt(async () => ({ effectiveRouteReason: "llm:0.95" }));
+  const scheduled = (await f.runs()).find((run) => run.automated);
+  assert.ok(scheduled);
+  assert.match(scheduled.effectiveRouteReason, /:schedule$/, "the route is what tells the inbox that nobody watched this turn finish");
 });

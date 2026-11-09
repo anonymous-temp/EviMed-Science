@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { RESEARCH_NATIVE_BUNDLES, nativeResearchToolProfileHolds } from '@evimed/domain'
 import { loadHarnessModule } from '../index.mjs'
 import SEAMS from '../seam-manifest.json' with { type: 'json' }
 /** The citation bundle this runtime is built with: the seam manifest names it, and a test holds the name equal to `deps-version.json`. */
@@ -70,6 +71,34 @@ export async function installedCitationVersion(manifestUrl) {
 const citationRegistrations = new Set()
 /** Standing preset registrations, removed with their native contexts. */
 const extensionRegistrations = new Set()
+/** Actual definitions installed by the five first-party research bundles. */
+const researchRegistrations = new Set()
+const RESEARCH_TOOLS = Object.freeze(Object.fromEntries(Object.entries(RESEARCH_NATIVE_BUNDLES).map(([id, spec]) => [id, spec.tools])))
+/** @param {any} ctx @param {{extensionId:string, definitions:Map<string,any>}} configuration */
+export async function registerResearchConfiguration(ctx, configuration) {
+  const expected = RESEARCH_TOOLS[configuration.extensionId]
+  if (!expected || !(configuration.definitions instanceof Map) ||
+      JSON.stringify([...configuration.definitions.keys()].sort()) !== JSON.stringify([...expected].sort())) {
+    throw probeFailure('extension_probe_config_invalid')
+  }
+  const value = { extensionId: configuration.extensionId, definitions: new Map(configuration.definitions) }
+  ctx.effect(() => { researchRegistrations.add(value); return () => { researchRegistrations.delete(value) } })
+}
+/** Verify both absence and identity against the kernel's agent-scoped registry.
+ * @param {any} ctx @param {any} agent @param {string[]} enabledIds */
+export function verifyResearchAgent(ctx, agent, enabledIds) {
+  if (!Array.isArray(enabledIds) || new Set(enabledIds).size !== enabledIds.length ||
+      enabledIds.some(id => !Object.hasOwn(RESEARCH_TOOLS, id))) throw probeFailure('extension_probe_config_invalid')
+  for (const [id, names] of Object.entries(RESEARCH_TOOLS)) {
+    const registrations = [...researchRegistrations].filter(value => value.extensionId === id)
+    for (const name of names) {
+      const actual = ctx.tools.get(name, agent)
+      if (enabledIds.includes(id) ? !actual || !registrations.some(value => value.definitions.get(name) === actual) : Boolean(actual)) {
+        throw probeFailure('extension_probe_registrations_invalid', `research:${id}:${name} selected=${enabledIds.includes(id)} visible=${Boolean(actual)} registrations=${registrations.length}`)
+      }
+    }
+  }
+}
 /** @param {any} ctx @param {any} configuration */
 export async function registerExtensionConfiguration(ctx, configuration) {
   const value = { plugins: globalThis.structuredClone(configuration.plugins), definitions: new Map(configuration.definitions) }
@@ -87,17 +116,21 @@ export async function verifyExtensionAgent(ctx, agent) {
   if (legacy && (legacy.extensionId !== 'dsh-cite' || legacy.enabled !== citation.enabled || legacy.configRevision !== citation.revision
     || legacy.settings.timeoutMs !== citation.timeoutMs)) throw probeFailure('extension_probe_config_invalid')
   const citationTools = CITATION_TOOLS.filter(name => Boolean(ctx.tools.get(name, agent)))
-  if (citationTools.length !== (citation.enabled ? CITATION_TOOLS.length : 0)) throw probeFailure('extension_probe_registrations_invalid')
+  if (citationTools.length !== (citation.enabled ? CITATION_TOOLS.length : 0)) throw probeFailure('extension_probe_registrations_invalid', `citation enabled=${citation.enabled} registered=${citationTools.length}`)
   const external = plugins.filter(plugin => plugin.compatibility !== 'legacy-citation-v1')
-  if (external.length > 1) throw probeFailure('extension_probe_config_invalid')
+  const native = external.filter(plugin => plugin.executionClass === 'managed-native')
+  const isolated = external.filter(plugin => plugin.executionClass !== 'managed-native')
+  if (isolated.length > 1 || native.length > 5 || new Set(external.map(plugin => plugin.extensionId)).size !== external.length
+    || native.some(plugin => !nativeResearchToolProfileHolds(plugin))) throw probeFailure('extension_probe_config_invalid')
+  verifyResearchAgent(ctx, agent, native.filter(plugin => plugin.enabled).map(plugin => plugin.extensionId))
   for (const name of ['doc_read', 'doc_write']) {
     const actual = ctx.tools.get(name, agent)
-    if (external[0]?.enabled ? !actual || !values.some(value => value.definitions.get(name) === actual) : Boolean(actual)) throw probeFailure('extension_probe_registrations_invalid')
+    if (isolated[0]?.enabled ? !actual || !values.some(value => value.definitions.get(name) === actual) : Boolean(actual)) throw probeFailure('extension_probe_registrations_invalid', `document:${name} selected=${Boolean(isolated[0]?.enabled)} visible=${Boolean(actual)}`)
   }
   return { inventory: plugins.map(plugin => ({ extensionId: plugin.extensionId, artifactDigest: plugin.artifactDigest,
     configRevision: plugin.configRevision, configDigest: plugin.configDigest, enabled: plugin.enabled })), citation: {
     enabled: citation.enabled, revision: citation.revision, timeoutMs: citation.timeoutMs, binaryVersion: citation.binaryVersion,
-  }, tools: ['doc_read', 'doc_write'].filter(name => Boolean(ctx.tools.get(name, agent))) }
+  }, tools: ['doc_read', 'doc_write', ...Object.values(RESEARCH_TOOLS).flat()].filter(name => Boolean(ctx.tools.get(name, agent))) }
 }
 /** Target-session facts do not authorize a caller, child, or request. @param {any} ctx @param {string} sessionId */
 export function extensionInvocationFacts(ctx, sessionId) {
@@ -247,9 +280,9 @@ export async function verifyCitationAgent(ctx, agent) {
   /** @type {{ ok: boolean, code: string | null } | null} */
   let upstream = null
   if (config.enabled) {
-    const [{ Context }, { ToolRuntime }, { SystemPrompt }] = await Promise.all([
+    const [{ Context }, { ToolRuntime }, { SystemPrompt }, { NativeToolExecutor }] = await Promise.all([
       loadHarnessModule('@deepseek-ai/cordis'), loadHarnessModule('@deepseek-ai/dsh-tools'),
-      loadHarnessModule('@deepseek-ai/dsh-system-prompt'),
+      loadHarnessModule('@deepseek-ai/dsh-system-prompt'), loadHarnessModule('@deepseek-ai/dsh-tool-executor-native'),
     ])
     // Use the identical registered definitions in an owned native pipeline.
     // Native argument/output validation and cancellation still apply, while
@@ -258,14 +291,18 @@ export async function verifyCitationAgent(ctx, agent) {
     try {
       new SystemPrompt(isolated, { includeHarnessIdentity: false, includeRuntimeContext: false })
       const pipeline = new ToolRuntime(isolated)
+      // From 0.2.2 a registry runs nothing by itself: its executor is the composition's `tool-executor-native`, and a call is a batch of one.
+      pipeline.setExecutor(new NativeToolExecutor(isolated))
       for (const name of tools) pipeline.register(ctx.tools.get(name, agent))
       // One call, `cite_health`: it exercises the registered definition, the
       // managed transport and the token, and it is the whole of what the
       // source is asked. A DOI lookup used to follow it, a second Crossref
       // request per probe that proved nothing about the configuration.
       await agent.runMaintenance(async (/** @type {AbortSignal} */ signal) => {
-        const result = await pipeline.execute({ agent, callId: `evimed-plugin-cite_health-${Date.now()}`, name: 'cite_health',
-          arguments: {}, signal: AbortSignal.any([signal, AbortSignal.timeout(config.timeoutMs + 2000)]) })
+        const batch = await pipeline.execute({ agent,
+          calls: [{ type: 'tool-call', id: `evimed-plugin-cite_health-${Date.now()}`, name: 'cite_health', arguments: '{}' }],
+          signal: AbortSignal.any([signal, AbortSignal.timeout(config.timeoutMs + 2000)]) })
+        const result = batch.results[0].result
         // The native pipeline refusing the registered definition -- its input
         // or output schema, a denial -- is the registration failing, not the
         // source: `cite_health` reports a transport or source failure in its

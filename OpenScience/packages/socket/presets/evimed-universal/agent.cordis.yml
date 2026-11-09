@@ -226,6 +226,12 @@
 - id: present
   name: '@deepseek-ai/dsh-tool-present'
 
+# The kernel's scheduled tasks: "every weekday at nine, ..." said in the conversation. The tool refuses a delegated child by
+# itself and captures this session's directory and preset for a task that opens conversations; the run policy keeps an
+# unattended execution from making or widening one. It stays inert if the Host's `schedule` row is off.
+- id: tool-schedule
+  name: '@deepseek-ai/dsh-tool-schedule'
+
 # The kernel's own sub-agent for general work: several independent pieces in
 # parallel, or a side task whose reading the root will not need again. One
 # level deep. From 0.2.1 every child is a managed activation: the call returns

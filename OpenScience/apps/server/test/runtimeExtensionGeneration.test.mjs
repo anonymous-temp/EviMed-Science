@@ -57,3 +57,14 @@ test('a selected tool is admitted by the deployment descriptor it matches, which
     assert.throws(()=>manager.assertSelectedBridge([wrong]),{code:'extension_contract_invalid'});
   assert.throws(()=>manager.assertSelectedBridge([row,row]),{code:'extension_contract_invalid'},'one bridge row per runtime');
 });
+
+test('fixed native rows coexist with one isolated tool while class and descriptor forgeries are refused',async()=>{
+  const {RESEARCH_NATIVE_BUNDLES}=await import('@evimed/domain');
+  const manager=new RuntimeManager({runtimeIdleTimeoutMs:0});
+  const native=Object.entries(RESEARCH_NATIVE_BUNDLES).map(([extensionId,spec])=>({extensionId,executionClass:'managed-native',coordinate:{kind:'npm',name:spec.name,version:'0.1.0'},integrity:'sha256:'+'4'.repeat(64),artifactDigest:'sha256:'+'5'.repeat(64),enabled:true,settings:{},connectionRefs:[]}));
+  manager.extensionNativeBundles=new Map(native.map(row=>[row.extensionId,{...row,id:row.extensionId}]));
+  const doc={extensionId:'doc',executionClass:'isolated-tool',coordinate:{kind:'github',repository:'fixture/doc',commit:'e'.repeat(40)},integrity:'sha256:'+'1'.repeat(64),artifactDigest:'sha256:'+'2'.repeat(64),enabled:true,settings:{},connectionRefs:[]};
+  manager.extensionArtifacts=new Map([['doc',{...doc,id:'doc'}]]);
+  for(const rows of [[],native.slice(0,1),native.slice(0,4),native,[...native,doc]])manager.assertSelectedBridge(rows);
+  for(const rows of [[...native,doc,doc],[native[0],native[0]],[{...native[0],extensionId:'arbitrary'}],[{...native[0],integrity:'sha256:'+'6'.repeat(64)}],[{...native[0],executionClass:'isolated-tool'}],[{...doc,executionClass:'managed-native'}]])assert.throws(()=>manager.assertSelectedBridge(rows),{code:'extension_contract_invalid'});
+});

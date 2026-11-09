@@ -5,7 +5,7 @@
       "items": [
         {
           "seq": 1,
-          "recorded_at": "2026-10-23T05:47:12.547913+00:00",
+          "recorded_at": "2026-11-05T08:44:14.155535+00:00",
           "kind": "created",
           "status": "pending",
           "stage": null,
@@ -14,7 +14,7 @@
         },
         {
           "seq": 2,
-          "recorded_at": "2026-10-23T05:47:12.548821+00:00",
+          "recorded_at": "2026-11-05T08:44:14.156622+00:00",
           "kind": "stage_changed",
           "status": "pending",
           "stage": "queued",
@@ -23,7 +23,7 @@
         },
         {
           "seq": 3,
-          "recorded_at": "2026-10-23T05:47:13.215493+00:00",
+          "recorded_at": "2026-11-05T08:44:14.760161+00:00",
           "kind": "status_changed",
           "status": "running",
           "stage": "submitting",
@@ -32,7 +32,7 @@
         },
         {
           "seq": 4,
-          "recorded_at": "2026-10-23T05:47:13.215493+00:00",
+          "recorded_at": "2026-11-05T08:44:14.760161+00:00",
           "kind": "stage_changed",
           "status": "running",
           "stage": "submitting",
@@ -41,7 +41,7 @@
         },
         {
           "seq": 5,
-          "recorded_at": "2026-10-23T05:47:13.471088+00:00",
+          "recorded_at": "2026-11-05T08:44:14.909078+00:00",
           "kind": "stage_changed",
           "status": "running",
           "stage": "compile: collecting_context",
@@ -50,7 +50,7 @@
         },
         {
           "seq": 6,
-          "recorded_at": "2026-10-23T05:47:43.535548+00:00",
+          "recorded_at": "2026-11-05T08:44:44.942766+00:00",
           "kind": "stage_changed",
           "status": "running",
           "stage": "compile: pipeline",
@@ -59,19 +59,10 @@
         },
         {
           "seq": 7,
-          "recorded_at": "2026-10-23T05:48:13.585506+00:00",
-          "kind": "stage_changed",
-          "status": "running",
-          "stage": "compile: completed",
-          "operation": null,
-          "error": null
-        },
-        {
-          "seq": 8,
-          "recorded_at": "2026-10-23T05:48:13.588977+00:00",
+          "recorded_at": "2026-11-05T08:45:15.058680+00:00",
           "kind": "status_changed",
           "status": "completed",
-          "stage": "compile: completed",
+          "stage": "compile: pipeline",
           "operation": null,
           "error": null
         }
@@ -79,12 +70,12 @@
       "dropped_count": 0,
       "started_mid_task": false
     },
-    "task_id": "cmp_cd2843026bd7ef9f27c5aa57d05b048d03c2e488943f7ac7b049594694d593c4",
+    "task_id": "cmp_722f9bc21a6b739db36ae2ebaba84ab41dd9e1939902091ab7ad5260b886a8bf",
     "task_type": "compile",
     "status": "completed",
-    "created_at": 1792734432.5474696,
-    "updated_at": 1792734493.5889742,
-    "processing_seconds": 60.373812675476074,
+    "created_at": 1793868254.1551142,
+    "updated_at": 1793868315.0586774,
+    "processing_seconds": 60.32365798950195,
     "resource_id": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources",
     "meta": {
       "request": {
@@ -92,14 +83,18 @@
           "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/sources"
         ],
         "to": "viking://user/u-0f1e2d3c4b5a69788796a5b4/resources/p/p-3c2b1a0998877665/wiki",
-        "skill": "viking://agent/skills/llm-wiki"
+        "skill": "viking://agent/skills/llm-wiki",
+        "compile": {
+          "mode": "incremental",
+          "trigger": "manual"
+        }
       },
       "pipeline": {
         "errors": [],
         "tokens": {
-          "cached": 17152,
-          "input": 31026,
-          "output": 9658
+          "cached": 67328,
+          "input": 84444,
+          "output": 8841
         }
       }
     },
@@ -122,14 +117,13 @@
       "updated": [],
       "unchanged": [],
       "conflicts": [],
-      "page_count": 0,
+      "page_count": 6,
       "link_count": 0,
-      "link_report": {},
       "warnings": []
     },
     "error": null,
-    "created_at_iso": "2026-10-23T05:47:12.547470+00:00",
-    "updated_at_iso": "2026-10-23T05:48:13.588974+00:00"
+    "created_at_iso": "2026-11-05T08:44:14.155114+00:00",
+    "updated_at_iso": "2026-11-05T08:45:15.058677+00:00"
   },
   "error": null,
   "telemetry": null,

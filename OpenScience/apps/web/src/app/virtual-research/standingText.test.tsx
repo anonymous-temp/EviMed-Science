@@ -1,6 +1,6 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { forgetStudies } from "@/components/vcr/useStudy";
 import { fixture, installVcrServer, STUDY_ID } from "@/components/vcr/__fixtures__/serverFixtures";
 import { drawStudy, standingBlocks } from "./studyPageHarness";
@@ -95,39 +95,32 @@ describe("the frame and the views that are its own", () => {
 describe("the list", () => {
   it("is rows: a study's question and finding are the row's own, and nothing stands outside the rows", async () => {
     installVcrServer(network.productRequest);
-    drawStudy("/app/virtual-research");
+    drawStudy("/app/virtual-research?area=records");
     await screen.findByRole("list", { name: "研究" });
     expect(blocks()).toEqual([]);
   });
 
   it("is a recipe in its empty state, not a paragraph", async () => {
     installVcrServer(network.productRequest, { "GET /vcr/studies": { studies: [], draftProjectIds: [] } });
-    drawStudy("/app/virtual-research");
+    drawStudy("/app/virtual-research?area=records");
     await screen.findByText("暂无研究");
     expect(blocks()).toEqual([]);
   });
-  describe("beside its preview", () => {
-    let rect: { mockRestore(): void };
-    beforeEach(() => {
-      rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-        return { width: this.hasAttribute("data-master-detail") ? 1100 : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
-      });
-    });
-    afterEach(() => rect.mockRestore());
-
-    it("the pane says what is enough to begin in the four examples' own rows, and stands no paragraph", async () => {
+  describe("records and addressed preview", () => {
+    it("keeps task introductions off the records page", async () => {
       installVcrServer(network.productRequest);
-      drawStudy("/app/virtual-research");
+      drawStudy("/app/virtual-research?area=records");
       await screen.findByRole("list", { name: "研究" });
-      expect(screen.getByRole("list", { name: "研究示例" }).querySelectorAll("li")).toHaveLength(4);
+      expect(screen.queryByRole("list", { name: "研究示例" })).toBeNull();
+      expect(screen.queryByRole("textbox", { name: "研究问题" })).toBeNull();
       expect(blocks()).toEqual([]);
     });
 
     it("a chosen study's preview stands one block of text — the finding the study wrote — and every other sentence is a note, a row or a fact", async () => {
       installVcrServer(network.productRequest);
-      drawStudy("/app/virtual-research");
+      drawStudy("/app/virtual-research?area=records");
       await userEvent.click(await screen.findByRole("link", { name: /EV-201 二线/ }));
-      await screen.findByRole("heading", { level: 2, name: /EV-201 二线/ });
+      await screen.findByRole("heading", { level: 1, name: /EV-201 二线/ });
       const standing = blocks();
       expect(standing, standing.join("\n")).toHaveLength(1);
       expect(standing[0]).toMatch(/已模拟 3 个方案/);

@@ -96,7 +96,8 @@ vcr_pool <- function(yi, vi, method = "random_effects_dl", level = 0.95,
     tcrit <- stats::qt(1 - (1 - level) / 2, k - 2L)
     pi <- c(theta - tcrit * pise, theta + tcrit * pise)
   }
-  i2 <- if (Q > df && Q > 0) max(0, (Q - df) / Q) else 0
+  # (I-squared compares Q with its degrees of freedom: one study has none, and a Q of 1e-31 over 0 df read 100% -- not reported then)
+  i2 <- if (df <= 0) NA_real_ else if (Q > df && Q > 0) max(0, (Q - df) / Q) else 0
   h2 <- if (df > 0) max(1, Q / df) else 1
 
   list(estimate = theta, se = se, interval = ci, predictionInterval = pi,

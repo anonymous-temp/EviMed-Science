@@ -350,7 +350,7 @@ test("the patch's override rows are collected as host-row references, not lost",
   // (0.2.1), disabled by value, with `subagent` carrying the run's concurrency budget.
   // `sandbox` joined on 2026-11-01: the row is configured with the runner that makes /dev/shm writable to a command.
   assert.deepEqual(hostRows.sort(), [
-    "account-controller", "agent-preset-registry", "deepseek-account", "desktop-product-telemetry", "harness-dev-context", "hmr", "llm-deepseek-account", "loopx-driver", "loopx-goalbar", "loopx-init-command", "mcp-resources",
+    "account-controller", "agent-preset-registry", "deepseek-account", "desktop-product-telemetry", "evimed-synthetic-control", "evimed-virtual-cohort", "evimed-virtual-patient", "evimed-virtual-research-suite", "evimed-virtual-trial", "harness-dev-context", "hmr", "llm-deepseek-account", "loopx-driver", "loopx-goalbar", "loopx-init-command", "mcp-resources",
     "open-in-app", "openviking-memory-runtime", "otel", "plugin-manager", "plugin-package-inventory-deepseek",
     "preset-cordis", "preset-minimal", "preset-ptc", "preset-standard", "product-analytics", "sandbox", "schedule", "session-log-deepseek", "session-telemetry-otel",
     "subagent", "terminal-controller", "tool-web", "tool-working-directory", "ui-open-in-app", "ui-plugin-manager", "ui-settings-account", "ui-sidebar-browser", "ui-sidebar-terminal",

@@ -1,12 +1,13 @@
 {
   "schemaVersion": 1,
-  "kernel": "@deepseek-ai/dsh@0.2.1-rc.5",
+  "kernel": "@deepseek-ai/dsh@0.2.2-rc.1",
   "management": "immutable-release",
   "nativePlugins": [
     "evimed-runtime-ui",
     "evimed-skill-catalogue",
     "evimed-plugin-probe",
     "evimed-engine-context",
+    "evimed-research-adapter",
     "evimed-loopx-bootstrap",
     "evimed-memory-bridge",
     "evimed-seam-probe",

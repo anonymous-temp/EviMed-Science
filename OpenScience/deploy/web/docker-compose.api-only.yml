@@ -68,9 +68,6 @@ services:
       OPEN_SCIENCE_EVOLUTION_LEASE_MS: ${OPEN_SCIENCE_EVOLUTION_LEASE_MS:-120000}
       OPEN_SCIENCE_EVOLUTION_RETRY_MS: ${OPEN_SCIENCE_EVOLUTION_RETRY_MS:-60000}
       OPEN_SCIENCE_EVOLUTION_MAX_JOB_ATTEMPTS: ${OPEN_SCIENCE_EVOLUTION_MAX_JOB_ATTEMPTS:-3}
-      OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES:-4194304}
-      OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS:-10000}
-      OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS: ${OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS:-256}
       OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY: ${OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY:-1}
       OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS: ${OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS:-30000}
       OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT: ${OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT:-2}
@@ -87,13 +84,12 @@ services:
       OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN: ${OPEN_SCIENCE_RUNTIME_WARM_ON_SIGN_IN:-false}
       # The engines are not composed; readiness must not require them.
       OPEN_SCIENCE_REQUIRE_ALL_SPECIALIST_ADAPTERS: ${OPEN_SCIENCE_REQUIRE_ALL_SPECIALIST_ADAPTERS:-false}
-      # The two workers that start runs of their own: distillation and
-      # consolidation, and proactive research. Without a runtime each would
+      # The worker that starts runs of its own: distillation and
+      # consolidation. Without a runtime it would
       # dispatch into a refusal on its schedule. (Habits learned from
       # prescription edits do not need the worker: the control plane counts
       # and writes them when the observation arrives.)
       OPEN_SCIENCE_LEARNING_ENABLED: ${OPEN_SCIENCE_LEARNING_ENABLED:-false}
-      OPEN_SCIENCE_AUTOPILOT_ENABLED: ${OPEN_SCIENCE_AUTOPILOT_ENABLED:-false}
       # Product surfaces this shape does not have; off by default already.
       # A .env copied from a full deployment that turns them on turns them on
       # here too, so remove those lines from it.

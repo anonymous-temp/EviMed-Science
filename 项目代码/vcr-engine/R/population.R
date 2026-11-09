@@ -409,6 +409,63 @@ vcr_population_literature <- function(table, n, correlation = NULL,
   })
 }
 
+# Validate only explicitly supplied numeric imputation encodings. Column names
+# are never interpreted as a declaration, and invalid source rows are refused.
+vcr_validate_imputation_rules <- function(data, rules) {
+  if (is.null(rules) || !length(rules)) return(invisible(TRUE))
+  values <- vapply(rules, function(r) as.character(r$valueColumn %||% ""), character(1))
+  indicators <- vapply(rules, function(r) as.character(r$indicatorColumn %||% ""), character(1))
+  if (anyDuplicated(values) || anyDuplicated(indicators) || length(intersect(values, indicators)))
+    vcr_abort("scenario_value_invalid", "scenario.imputationRules", "Imputation rules must use distinct value and indicator columns.")
+  for (r in rules) {
+    value <- as.character(r$valueColumn %||% ""); indicator <- as.character(r$indicatorColumn %||% "")
+    fill <- r$imputedValue; missing <- r$missingValue
+    if (!(value %in% names(data)) || !(indicator %in% names(data)) || !is.numeric(data[[value]]) ||
+        !is.numeric(fill) || length(fill) != 1L || !is.finite(fill) || !identical(as.numeric(missing), 1))
+      vcr_abort("scenario_value_invalid", "scenario.imputationRules", "Each rule needs existing numeric value and indicator columns and a finite fill value.")
+    flag <- suppressWarnings(as.numeric(as.character(data[[indicator]])))
+    x <- data[[value]]
+    if (anyNA(flag) || any(!is.finite(flag)) || any(!(flag %in% c(0,1))) || any(!is.finite(x)) ||
+        any(abs(x[flag == 1] - fill) > 1e-8 * pmax(1, abs(fill))))
+      vcr_abort("scenario_value_invalid", "scenario.imputationRules", "The source table does not obey its declared filled-value and binary-indicator encoding.")
+  }
+  invisible(TRUE)
+}
+
+# Bind the declared fill to the exact double preserved in the source rows.
+# A tolerance checks declaration agreement; it is never used as a KS tolerance.
+vcr_bind_imputation_rules <- function(data, rules) {
+  vcr_validate_imputation_rules(data, rules)
+  lapply(rules %||% list(), function(r) {
+    flag <- suppressWarnings(as.numeric(as.character(data[[r$indicatorColumn]])))
+    source <- data[[r$valueColumn]][flag == 1]
+    if (!length(source)) {
+      if (is.null(r$sourceBoundValue)) vcr_abort("scenario_value_invalid", "scenario.imputationRules", "A declared fill needs at least one marked source row to bind its exact value.")
+      return(r)
+    }
+    if (any(source != source[[1L]])) vcr_abort("scenario_value_invalid", "scenario.imputationRules", "Marked source rows must share the same exact filled value.")
+    r$declaredValue <- r$declaredValue %||% r$imputedValue
+    r$sourceBoundValue <- source[[1L]]; r$imputedValue <- source[[1L]]
+    r
+  })
+}
+
+vcr_apply_imputation_rules <- function(data, rules, exact_binding = FALSE) {
+  report <- list()
+  for (r in rules %||% list()) {
+    value <- as.character(r$valueColumn); indicator <- as.character(r$indicatorColumn); fill <- r$imputedValue
+    flag <- suppressWarnings(as.numeric(as.character(data[[indicator]])))
+    x <- suppressWarnings(as.numeric(as.character(data[[value]])))
+    if (anyNA(flag) || any(!is.finite(flag)) || any(!(flag %in% c(0,1))) || any(!is.finite(x)))
+      vcr_abort("scenario_value_invalid", "scenario.imputationRules", "A generated value or indicator cannot satisfy the declared encoding.")
+    marked <- flag == 1; corrected <- if (isTRUE(exact_binding)) sum(marked & x != fill) else sum(marked & abs(x - fill) > 1e-8 * pmax(1, abs(fill)))
+    x[marked] <- fill; data[[value]] <- x
+    report[[length(report)+1L]] <- c(list(valueColumn=value,indicatorColumn=indicator,corrected=corrected),
+      if (isTRUE(exact_binding)) list(declaredValue=sprintf("%.17g",r$declaredValue),sourceBoundValue=sprintf("%.17g",r$sourceBoundValue)))
+  }
+  list(data=data,report=report)
+}
+
 #' Empirical synthesis with synthpop's sequential CART.
 #'
 #' Hidden knowledge: `smoothing = "density"` on numeric columns is what stops
@@ -419,8 +476,14 @@ vcr_population_literature <- function(table, n, correlation = NULL,
 vcr_population_synthpop <- function(data, m = 5L, seed = 1L, visit_sequence = NULL,
                                     rules = NULL, rvalues = NULL,
                                     min_numlevels = 5L, smoothing = "density",
-                                    rare_floor = NULL) {
+                                    rare_floor = NULL, sparse_aware = FALSE, imputation_rules = NULL, exact_imputation = FALSE) {
   if (!requireNamespace("synthpop", quietly = TRUE)) stop("vcr_population_synthpop: synthpop is not installed")
+  vcr_validate_imputation_rules(data, imputation_rules)
+  if (isTRUE(exact_imputation) && length(imputation_rules)) {
+    imputation_rules <- vcr_bind_imputation_rules(data, imputation_rules)
+    # Declared binary flags are categorical encodings, not rare text levels.
+    for (r in imputation_rules) data[[r$indicatorColumn]] <- as.numeric(as.character(data[[r$indicatorColumn]]))
+  }
   # Rare categories are merged before synthesis: a CART leaf holding one person
   # with a one-in-a-hundred level reproduces that person, and the level itself
   # is a small cell the disclosure axis would then flag. The floor is the
@@ -436,7 +499,19 @@ vcr_population_synthpop <- function(data, m = 5L, seed = 1L, visit_sequence = NU
   # like a type error and is really a modelling-decision mismatch.
   numeric_cols <- names(data)[vapply(data, function(v)
     is.numeric(v) && length(unique(stats::na.omit(v))) > min_numlevels, logical(1))]
-  smooth <- as.list(stats::setNames(rep(smoothing, length(numeric_cols)), numeric_cols))
+  # 1.2.0 only: density's Sheather-Jones bandwidth has no solution for some
+  # imputation-heavy numeric columns. Retain the CART variable and disclose
+  # exactly which columns cannot use this smoother; do not discard records.
+  sparse_cols <- if (isTRUE(sparse_aware) && identical(smoothing, "density")) Filter(function(nm) {
+    x <- data[[nm]]; x <- x[is.finite(x)]
+    bandwidth <- tryCatch(stats::bw.SJ(x), error = identity)
+    if (!inherits(bandwidth, "error")) return(FALSE)
+    message <- conditionMessage(bandwidth)
+    if (grepl("too sparse to find TD", message, fixed = TRUE) || grepl("bandwidth", message, fixed = TRUE)) return(TRUE)
+    stop(bandwidth)
+  }, numeric_cols) else character(0)
+  smooth_cols <- setdiff(numeric_cols, sparse_cols)
+  smooth <- as.list(stats::setNames(rep(smoothing, length(smooth_cols)), smooth_cols))
   args <- list(data = data, method = "cart", m = 1L, seed = seed,
                minnumlevels = min_numlevels, smoothing = smooth, print.flag = FALSE)
   if (!is.null(visit_sequence)) args$visit.sequence <- visit_sequence
@@ -448,13 +523,33 @@ vcr_population_synthpop <- function(data, m = 5L, seed = 1L, visit_sequence = NU
   # synthpop announces its own decisions ("turned into factor") on stdout and
   # stderr; the job's result says what matters, and a service log is no place
   # for a package's chatter.
-  synth <- list(); interrupted <- NULL
+  synth <- list(); interrupted <- NULL; unsmoothed <- integer(0); imputation_reports <- list()
+  run_syn <- function(a) { syn <- NULL; invisible(utils::capture.output(syn <- suppressMessages(do.call(synthpop::syn, a)))); syn }
   for (k in seq_len(m)) {
     interrupted <- vcr_interrupt()
     if (!is.null(interrupted)) break
     args$seed <- as.integer((as.numeric(seed) + (k - 1) * 104729) %% 2147483647)
-    syn <- NULL
-    invisible(utils::capture.output(syn <- suppressMessages(do.call(synthpop::syn, args))))
+    # The smoother of a numeric column cannot choose a bandwidth from fewer than two points, and a cart leaf can hold one: about one table in five
+    # hundred of ordinary size stopped the whole job there. That copy is made without smoothing (the leaf's value is then a value of the data) and
+    # the copy is named in the result.
+    syn <- tryCatch(run_syn(args), error = function(e) {
+      if (!grepl("bandwidth", conditionMessage(e), fixed = TRUE) && !(isTRUE(sparse_aware) && grepl("too sparse to find TD", conditionMessage(e), fixed = TRUE))) stop(e)
+      plain <- args; plain$smoothing <- NULL
+      unsmoothed <<- c(unsmoothed, k)
+      run_syn(plain)
+    })
+    if (length(imputation_rules)) {
+      fixed <- vcr_apply_imputation_rules(syn$syn, imputation_rules, exact_binding=exact_imputation)
+      syn$syn <- fixed$data; imputation_reports[[k]] <- list(copy=k, rules=fixed$report)
+    }
+    if (isTRUE(sparse_aware)) {
+      if (!identical(names(syn$syn), names(data))) stop("synthesis_changed_columns")
+      for (nm in names(data)) {
+        present <- unique(data[[nm]][!is.na(data[[nm]])])
+        if (length(present) == 0L && any(!is.na(syn$syn[[nm]]))) stop("synthesis_changed_all_missing_column")
+        if (length(present) == 1L && any(!is.na(syn$syn[[nm]]) & as.character(syn$syn[[nm]]) != as.character(present))) stop("synthesis_changed_constant_column")
+      }
+    }
     synth[[k]] <- syn$syn
   }
   if (!is.null(interrupted)) return(list(interrupted = interrupted, data = synth, m = length(synth)))
@@ -462,7 +557,8 @@ vcr_population_synthpop <- function(data, m = 5L, seed = 1L, visit_sequence = NU
        trainingObservations = nrow(data),
        generatedRecords = sum(vapply(synth, nrow, numeric(1))),
        counts = vcr_counts(realPatients = 0, generatedRecords = sum(vapply(synth, nrow, numeric(1)))),
-       method = "cart", smoothing = smoothing, seed = seed,
+       method = "cart", smoothing = smoothing, smoothingNotApplied = as.list(unsmoothed),
+       smoothingSkippedColumns = as.list(sparse_cols), imputationCorrections = imputation_reports, seed = seed,
        valueSource = "synthetic", modelTier = "data",
        inferenceLabel = "exploratory",
        rareLevelsMerged = merged$report, rareLevelFloor = floor_,

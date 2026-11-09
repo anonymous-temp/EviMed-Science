@@ -1,9 +1,9 @@
 {
   "note": "A commit whose extraction wrote nothing.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "GET",
-    "path": "/api/v1/tasks/b1e66bc4-48de-480d-896d-3b2ce00700e9",
+    "path": "/api/v1/tasks/2f53e8b6-e321-4658-93cc-cde3ad7b290a",
     "headers": {
       "X-API-Key": "recorded-against-a-real-server",
       "X-OpenViking-Account": "evimed",
@@ -15,12 +15,12 @@
   "response": {
     "status": "ok",
     "result": {
-      "task_id": "b1e66bc4-48de-480d-896d-3b2ce00700e9",
+      "task_id": "2f53e8b6-e321-4658-93cc-cde3ad7b290a",
       "task_type": "session_commit",
       "status": "completed",
-      "created_at": 1792733893.1603491,
-      "updated_at": 1792733895.0172038,
-      "processing_seconds": 1.5575366020202637,
+      "created_at": 1793866319.4507656,
+      "updated_at": 1793866321.5360591,
+      "processing_seconds": 1.1391992568969727,
       "resource_id": "dsh-session_fixture0000000000000000000000000001",
       "meta": {},
       "stage": "completed",
@@ -40,35 +40,37 @@
           "decisions",
           "entities",
           "follow_ups",
+          "observations",
           "preferences",
           "profile",
           "project_context",
-          "project_facts"
+          "project_facts",
+          "recent_work"
         ],
         "agent_evolution_enabled": false,
         "agent_memory_skip_reason": "agent_evolution_disabled",
         "token_usage": {
           "llm": {
-            "prompt_tokens": 40646,
-            "completion_tokens": 151,
-            "total_tokens": 40797,
-            "cached_tokens": 39808,
+            "prompt_tokens": 56305,
+            "completion_tokens": 146,
+            "total_tokens": 56451,
+            "cached_tokens": 28416,
             "reasoning_tokens": 0
           },
           "embedding": {
             "total_tokens": 108
           },
           "total": {
-            "total_tokens": 40905,
-            "cached_tokens": 39808,
+            "total_tokens": 56559,
+            "cached_tokens": 28416,
             "reasoning_tokens": 0
           }
         },
         "memory_diff_uri": "viking://user/fx-user-a/sessions/dsh-session_fixture0000000000000000000000000001/history/archive_002/memory_diff.json"
       },
       "error": null,
-      "created_at_iso": "2026-10-23T05:38:13.160349+00:00",
-      "updated_at_iso": "2026-10-23T05:38:15.017204+00:00"
+      "created_at_iso": "2026-11-05T08:11:59.450766+00:00",
+      "updated_at_iso": "2026-11-05T08:12:01.536059+00:00"
     },
     "error": null,
     "telemetry": null,

@@ -1,6 +1,6 @@
 {
   "note": "A request as the user being deleted, at once.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "GET",
     "path": "/api/v1/fs/ls?uri=viking%3A%2F%2Fuser%2Ffx-user-b%2Fmemories",
@@ -10,17 +10,16 @@
       "X-OpenViking-User": "fx-user-b"
     }
   },
-  "status": 404,
+  "status": 412,
   "contentType": "application/json",
   "response": {
     "status": "error",
     "result": null,
     "error": {
-      "code": "NOT_FOUND",
-      "message": "Directory not found: viking://user/fx-user-b/memories",
+      "code": "FAILED_PRECONDITION",
+      "message": "Identity deletion is in progress",
       "details": {
-        "type": "directory",
-        "resource": "viking://user/fx-user-b/memories"
+        "task_id": "5d513ee3-e0e7-4700-8ccb-9ec09acf5907"
       }
     },
     "telemetry": null,

@@ -1,0 +1,10 @@
+{
+  "code": 429,
+  "message": "密钥可用额度不足",
+  "uuid": "3A1B0C2D-0000-4000-8000-000000000005",
+  "timestamp": 1787032800,
+  "elapsed_ms": 2,
+  "data": {
+    "error_code": "quota_exhausted"
+  }
+}

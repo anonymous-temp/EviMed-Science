@@ -46,6 +46,12 @@
  *   others printed, is a subtraction. When one of the pair is small the whole identity goes (the people, the events, the non-events)
  *   and so does what is computed from it (`VCR_PEOPLE_COUNT_LINKS`); the measures that restate such a rate go with it
  *   (`VCR_PEOPLE_DERIVED_MEASURES`).
+ * - **A mean is not a count.** A key that holds a mean, a share or a median is never in these lists, whatever it is called: a restatement
+ *   of the people a trimming removed names its means `keptMean` / `removedMean`, and when the group is under the floor the engine does
+ *   not state the mean at all (a mean of three people is three people's values). The totals and the parts that make each other (the
+ *   rows a table started from, used and left out; a trimming's arm cell `n = kept + removed`) go together (`VCR_PEOPLE_COUNT_LINKS`,
+ *   and the cell rule for the arms). The size of the table itself (`counts.realPatients`) stands beside them in another object and is
+ *   not closed over: that complement is the one thing this walk cannot see.
  * - **A count may be a count only where it sits.** `treated`, `control`, `people` and `records` are head counts inside the blocks that
  *   say so (`VCR_PEOPLE_COUNT_BLOCK_FIELDS`: the enrolment-year cells, a batch reading's estimate) and a design's planned sample or a
  *   covariate's mean anywhere else; the block names the keys, nothing is judged by a bare key. An arm's head count under the arm's name
@@ -208,7 +214,9 @@ function hideLinkedCounts(object, minCell) {
 function withheldBlock(key, block) {
   const rule = key !== null && Object.hasOwn(VCR_PEOPLE_COUNT_WITHHELD_BLOCKS, key) ? /** @type {Record<string, any>} */ (VCR_PEOPLE_COUNT_WITHHELD_BLOCKS)[key] : null
   if (!rule) return block
-  const gated = rule.gates.some((/** @type {string} */ gate) => isPlainObject(block[gate]) && Object.values(block[gate]).some((entry) => entry === null))
+  // a gate is a map of arm to head count with an entry hidden, or a head count hidden alone (it says so in `suppressed`)
+  const hiddenAlone = (/** @type {string} */ gate) => block[gate] === null && Array.isArray(block.suppressed) && block.suppressed.includes(gate)
+  const gated = rule.gates.some((/** @type {string} */ gate) => (isPlainObject(block[gate]) ? Object.values(block[gate]).some((entry) => entry === null) : hiddenAlone(gate)))
   if (!gated) return block
   /** @type {Record<string, any>} */
   const kept = {}
@@ -315,11 +323,10 @@ export function suppressForModel(payload, { minCell = VCR_MIN_CELL_SIZE } = {}) 
       // A list member's counts wait for the list's own judgement (`hiddenSet`);
       // every other object answers to the standalone rule. The scalar keys are
       // never a list's cells, so they answer to it wherever they are.
+      // (the linked counts first: a total whose part is a scalar count is hidden with it before the part itself becomes null)
+      if (!asCell) hideLinkedCounts(out, minCell)
       hideStandaloneCounts(out, minCell, VCR_PEOPLE_COUNT_SCALAR_FIELDS)
-      if (!asCell) {
-        hideLinkedCounts(out, minCell)
-        hideStandaloneCounts(out, minCell, fieldsOf(block ?? inherited))
-      }
+      if (!asCell) hideStandaloneCounts(out, minCell, fieldsOf(block ?? inherited))
       hideDerivedMeasures(out)
       return isSmallCountMeasure(out, minCell) ? hiddenMeasure(out) : withheldBlock(key, out)
     } finally {

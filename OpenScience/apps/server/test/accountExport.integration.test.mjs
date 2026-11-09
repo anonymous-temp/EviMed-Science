@@ -61,8 +61,6 @@ async function fixture(t) {
     await documents.put(id, "fact", "fact-one", { capsuleId: "capsule-one", content: `${label} corrected fact`, status: "approved" }, { expectedRevision: 1 });
     await documents.put(id, "source", "source-one", { title: `${label} paper`, paths: ["customer.md"], fingerprint: { sha256: "a".repeat(64), size: 10 } }, { expectedRevision: 0, projectId: "default" });
     await documents.put(id, "source-unit", "unit-one", { sourceId: "source-one", content: `${label} preserved excerpt` }, { expectedRevision: 0, projectId: "default" });
-    await documents.put(id, "agenda", "agenda-one", { title: `${label} agenda`, enabled: false }, { expectedRevision: 0, projectId: "default" });
-    await documents.put(id, "digest", "digest-one", { agendaId: "agenda-one", claims: [{ statement: `${label} digest finding` }], openedAt: null }, { expectedRevision: 0, projectId: "default" });
     await documents.put(id, "preferences", "active-capsules:account", { items: [{ capsuleId: "capsule-one", mode: "own" }] }, { expectedRevision: 0 });
     await documents.put(id, "price-list", "operator-price", { providerSecret: "excluded-operator-provider-secret" }, { expectedRevision: 0 });
     await notifications.create(id, { id: `notice-${id}`, projectId: "default", noticeType: "notify", priority: 1, title: `${label} notice`, body: `${label} inbox body`, actions: [] });
@@ -97,7 +95,7 @@ test("account export includes the owner's PostgreSQL customer state and revision
   assert.equal(state.account.id, f.owner);
   assert.equal(state.documents.find(row => row.kind === "fact").payload.content, "owner corrected fact");
   assert.ok(state.revisions.some(row => row.kind === "fact" && row.revision === 1 && row.payload.content === "owner original fact"));
-  for (const kind of ["capsule", "source", "source-unit", "agenda", "digest", "preferences"]) assert.ok(state.documents.some(row => row.kind === kind), kind);
+  for (const kind of ["capsule", "source", "source-unit", "preferences"]) assert.ok(state.documents.some(row => row.kind === kind), kind);
   assert.equal(state.researchSessions[0].sessionId, "session-owner");
   assert.equal(state.inbox.notifications[0].body, "owner inbox body");
   assert.deepEqual(state.inbox.preferences.channels, ["in-app"]);
@@ -186,8 +184,7 @@ test("an account with captured results, a calculation and a document conversion 
     source: { id: "10.9999/paper", doi: "10.9999/paper" },
     sourceStatus: { state: "changed", checkedAt: at, updates: [{ kind: "correction", noticeDoi: "10.9999/correction", date: "2026-10-01", source: "crossref" }] },
     changeKey: "excluded-change-key", effect: "potentially_affected", claimIds: [], coverage: "result_inputs_only",
-    historicalResultPreserved: true, recomputed: false, observedAt: at,
-    continuation: { status: "preparing", agendaId: "agenda-one", requestedBy: "excluded-requester", requestedAt: at } });
+    historicalResultPreserved: true, recomputed: false, observedAt: at });
   await put("result-revision", `rr_${"b".repeat(64)}`, { recordType: "result-revision", id: `rr_${"b".repeat(64)}`, projectId: "default",
     requestedBy: "excluded-requester", versionId: version.versionId, digest: version.digest, sessionId: "session-owner",
     anchor: { kind: "text", elementId: "paragraph-1", selectedText: "owner workspace", matchMode: "raw_text" },

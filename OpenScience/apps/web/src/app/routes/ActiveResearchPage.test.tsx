@@ -1,10 +1,9 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { useTaskPane } from "@/lib/taskPane";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
-import { useToastStore } from "@/lib/toast";
 import { ActiveResearchPage } from "./ActiveResearchPage";
 
 const identity = vi.hoisted(() => ({ projectId: "project-a" }));
@@ -16,26 +15,18 @@ const goalMocks = vi.hoisted(() => ({ listResearchGoals: vi.fn(), pauseResearchG
 vi.mock("@/lib/researchGoalClient", () => goalMocks);
 const dispatchMocks = vi.hoisted(() => ({ startResearchGoal: vi.fn() }));
 vi.mock("@/lib/dispatch", async (original) => ({ ...(await original<object>()), startResearchGoal: dispatchMocks.startResearchGoal }));
-const mocks = vi.hoisted(() => ({ listAgendas: vi.fn(), listWebAgentRuns: vi.fn(), steerWebAgentRun: vi.fn(), cancelWebAgentRun: vi.fn(), listEpisodes: vi.fn(), getResearchState: vi.fn(), addAgendaMaterials: vi.fn(), removeAgendaMaterial: vi.fn(), cancelEpisode: vi.fn(), followUpAgenda: vi.fn(), runAgendaNow: vi.fn(), pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), sha256Hex: vi.fn(), partition: vi.fn() }));
-vi.mock("@/lib/autopilotClient", () => mocks);
-vi.mock("@/lib/apiClient", async (original) => ({ ...(await original<object>()), getWebProjectId: () => identity.projectId, listWebAgentRuns: mocks.listWebAgentRuns, steerWebAgentRun: mocks.steerWebAgentRun, cancelWebAgentRun: mocks.cancelWebAgentRun }));
+const mocks = vi.hoisted(() => ({ listWebAgentRuns: vi.fn(), cancelWebAgentRun: vi.fn(), pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), partition: vi.fn() }));
+vi.mock("@/lib/apiClient", async (original) => ({ ...(await original<object>()), getWebProjectId: () => identity.projectId, listWebAgentRuns: mocks.listWebAgentRuns, cancelWebAgentRun: mocks.cancelWebAgentRun }));
 vi.mock("@/lib/backend", async (original) => ({ ...(await original<object>()), pickFiles: mocks.pickFiles, uploadFilesToWorkspace: mocks.uploadFilesToWorkspace }));
-vi.mock("@/lib/fileDigest", () => ({ sha256Hex: mocks.sha256Hex }));
 vi.mock("@/lib/knowledgeBaseFiles", async (original) => ({ ...(await original<object>()), partitionKnowledgeBaseFiles: mocks.partition }));
 // The observatory is drawn elsewhere; what the page needs of it is the run it is shown, what its stream says of that run, and the ways to begin it stands by with.
-vi.mock("@/components/autopilot/ResearchObservatory", () => ({ ResearchObservatory: ({ runId, onObserved, standbyActions }: { runId: string | null; onObserved?: (observed: unknown) => void; standbyActions?: React.ReactNode }) => <>
+vi.mock("@/components/activeResearch/ResearchObservatory", () => ({ ResearchObservatory: ({ runId, onObserved, standbyActions }: { runId: string | null; onObserved?: (observed: unknown) => void; standbyActions?: React.ReactNode }) => <>
   <p data-testid="observatory">{runId ?? "no-run"}</p>
   {standbyActions}<p>{standbyActions ? "写下研究目标" : ""}</p>
   <button onClick={() => onObserved?.({ runId, state: "succeeded", connected: true })}>stream: ended</button>
   <button onClick={() => onObserved?.({ runId, state: "running", connected: true })}>stream: running</button>
   <button onClick={() => onObserved?.(null)}>stream: closed</button>
 </> }));
-vi.mock("@/components/autopilot/MaterialPicker", () => ({ MaterialPicker: ({ onChoose }: { onChoose: (ids: string[]) => void }) => <button onClick={() => onChoose(["src_new"])}>选择示例资料</button> }));
-const task = (id: string, title: string) => ({ id, projectId: "project-a", revision: 1, payload: { title, topics: [], taskTypes: ["routine"], enabled: true, status: "active", materials: [] } });
-const episode = (id: string, agendaId: string, status: string, path?: string) => ({ id, projectId: "project-a", revision: 1, payload: { agendaId, taskType: "routine", status, runId: `run-${id}`, sessionId: `session-${id}`, createdAt: "2026-10-28T01:00:00Z", artifactRefs: path ? [{ projectId: "project-a", runId: `run-${id}`, sessionId: `session-${id}`, path }] : [] } });
-const running = { ...episode("active", "a", "running"), payload: { ...episode("active", "a", "running").payload, interactive: true } };
-const finished = episode("done", "b", "merged", "output/paper.docx");
-const states = (agendaId: string) => ({ agendaId, materials: agendaId === "a" ? [{ sourceId: "src_data", name: "cohort.csv", state: "ready", addedAt: "2026-10-28" }] : [], found: [], unresolved: [] });
 function PaneProbe() { const pane = useTaskPane(); return <><p data-testid="native-pane">{pane ? `${pane.projectId}:${pane.sessionId}` : "none"}</p></>; }
 const renderPage = (state: unknown = null) => render(<MemoryRouter initialEntries={[{ pathname: "/app/active-research", state }]}><ActiveResearchPage /><PaneProbe /></MemoryRouter>);
 
@@ -48,34 +39,7 @@ describe("active research workspace", () => {
     Object.values(goalMocks).forEach(fn => fn.mockReset());
     goalMocks.listResearchGoals.mockResolvedValue({ available: false, goals: [] });
     goalMocks.pauseResearchGoal.mockResolvedValue({ sessionId: "goal-session", status: "paused" }); goalMocks.resumeResearchGoal.mockResolvedValue({ sessionId: "goal-session", status: "active" });
-    mocks.listAgendas.mockResolvedValue({ items: [task("b", "已完成研究"), task("a", "进行中研究")], nextCursor: null, available: true });
-    mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => ({ items: agendaId === "a" ? [running] : agendaId === "b" ? [finished] : [finished, running], nextCursor: null }));
-    mocks.getResearchState.mockImplementation(async (id: string) => states(id));
-    mocks.addAgendaMaterials.mockResolvedValue({}); mocks.removeAgendaMaterial.mockResolvedValue({}); mocks.cancelEpisode.mockResolvedValue({ ...running, payload: { ...running.payload, status: "canceled" } }); mocks.followUpAgenda.mockResolvedValue({ episode: null }); mocks.partition.mockImplementation((files: File[]) => ({ accepted: files, refused: [] }));
-  });
-  it("selects an active execution first and keeps project data and output scoped", async () => {
-    const user = userEvent.setup(); renderPage();
-    await waitFor(() => expect(screen.getByTestId("observatory")).toHaveTextContent("run-active"));
-    expect(await screen.findByText("cohort.csv")).toHaveAttribute("href", "/app/files/src_data");
-    expect(within(screen.getByLabelText("研究队列")).getByText(/1 项进行中/)).toBeInTheDocument();
-    await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
-    await waitFor(() => expect(screen.getByTestId("observatory")).toHaveTextContent("run-done"));
-    expect(screen.queryByText("cohort.csv")).not.toBeInTheDocument();
-    for (const link of await screen.findAllByRole("link", { name: "paper.docx" })) expect(link).toHaveAttribute("href", "/app/runs/run-done/files/output/paper.docx");
-  });
-  it("lists a long goal in the queue by what was asked, without attributing the agenda materials to it", async () => {
-    const user = userEvent.setup(); mocks.listWebAgentRuns.mockResolvedValue([
-      { id: "goal-run", sessionId: "goal-session", automated: true, effectiveRouteReason: "loopx-continuation", goal: { id: "goal", runId: "anchor-run" }, startedAt: "2026-10-28T01:00:00Z", status: "running" },
-      { id: "anchor-run", sessionId: "goal-session", question: "/loopx 评估心衰队列的再入院风险", startedAt: "2026-10-28T00:00:00Z", status: "succeeded" },
-    ]);
-    renderPage(); await screen.findByText("cohort.csv");
-    await user.click(within(await screen.findByLabelText("研究队列")).getByRole("button", { name: "评估心衰队列的再入院风险" }));
-    expect(screen.getByTestId("observatory")).toHaveTextContent("goal-run");
-    expect(screen.queryByText("cohort.csv")).not.toBeInTheDocument();
-    // What the goal is: its state line, and its views under the observatory; there is no second route to its conversation.
-    expect(within(screen.getByLabelText("当前研究")).getByText(/已推进 2 轮/)).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "打开所属对话" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "在本页打开对话" })).not.toBeInTheDocument();
+    mocks.partition.mockImplementation((files: File[]) => ({ accepted: files, refused: [] }));
   });
   it("does not offer to start long research when the deployment does not advertise it", async () => {
     skillMocks.listPlatformSkills.mockResolvedValue({ items: [] }); renderPage();
@@ -86,7 +50,7 @@ describe("active research workspace", () => {
     const user = userEvent.setup();
     const started = { id: "new-run", sessionId: "new-session", effectiveRouteReason: "research-goal", question: "评估心衰队列的再入院风险", startedAt: "2026-11-01T00:00:00Z", status: "running" };
     dispatchMocks.startResearchGoal.mockResolvedValue(started);
-    renderPage(); await screen.findByText("cohort.csv");
+    renderPage(); await screen.findByTestId("observatory");
     await waitFor(() => expect(screen.getByRole("button", { name: "发起研究" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "发起研究" }));
     expect(screen.getByRole("button", { name: "开始研究" })).toBeDisabled();
@@ -102,7 +66,7 @@ describe("active research workspace", () => {
   it("retries a goal that could not be confirmed as the same request", async () => {
     const user = userEvent.setup();
     dispatchMocks.startResearchGoal.mockRejectedValueOnce(new Error("网络中断")).mockResolvedValue({ id: "new-run", sessionId: "new-session", effectiveRouteReason: "research-goal", question: "目标", startedAt: "2026-11-01T00:00:00Z", status: "running" });
-    renderPage(); await screen.findByText("cohort.csv");
+    renderPage(); await screen.findByTestId("observatory");
     await waitFor(() => expect(screen.getByRole("button", { name: "发起研究" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "发起研究" }));
     await user.type(screen.getByLabelText("研究目标"), "目标");
@@ -116,7 +80,7 @@ describe("active research workspace", () => {
   it("REVIEWFIX 10 reopening the dialog after a lost answer is the same request until the goal is known to have started", async () => {
     const user = userEvent.setup();
     dispatchMocks.startResearchGoal.mockRejectedValueOnce(new Error("网络中断")).mockResolvedValue({ id: "new-run", sessionId: "new-session", effectiveRouteReason: "research-goal", question: "目标", startedAt: "2026-11-01T00:00:00Z", status: "running" });
-    renderPage(); await screen.findByText("cohort.csv");
+    renderPage(); await screen.findByTestId("observatory");
     await waitFor(() => expect(screen.getByRole("button", { name: "发起研究" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "发起研究" }));
     await user.type(screen.getByLabelText("研究目标"), "目标");
@@ -135,7 +99,7 @@ describe("active research workspace", () => {
   it("REVIEWFIX 10 another goal is another request, even when the first answer was lost", async () => {
     const user = userEvent.setup();
     dispatchMocks.startResearchGoal.mockRejectedValueOnce(new Error("网络中断")).mockResolvedValue({ id: "new-run", sessionId: "new-session", effectiveRouteReason: "research-goal", question: "另一个目标", startedAt: "2026-11-01T00:00:00Z", status: "running" });
-    renderPage(); await screen.findByText("cohort.csv");
+    renderPage(); await screen.findByTestId("observatory");
     await waitFor(() => expect(screen.getByRole("button", { name: "发起研究" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "发起研究" }));
     await user.type(screen.getByLabelText("研究目标"), "目标");
@@ -150,36 +114,18 @@ describe("active research workspace", () => {
     const [first, second] = dispatchMocks.startResearchGoal.mock.calls.map(call => call[0]);
     expect(second.dispatchId).not.toBe(first.dispatchId);
   });
-  it("makes no scheduled study here: it is shown in the queue and made in 定时任务", async () => {
-    renderPage(); await screen.findByText("cohort.csv");
-    expect(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "进行中研究" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /定时研究/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /长期研究/ })).not.toBeInTheDocument();
-  });
-  it("opens on the running goal when no study is on its way, and on the study when one is", async () => {
-    const goal = { id: "goal-run", sessionId: "goal-session", automated: true, effectiveRouteReason: "loopx-continuation", goal: { id: "goal", runId: null }, startedAt: "2026-10-28T01:00:00Z", status: "running", title: "长期目标" };
-    mocks.listWebAgentRuns.mockResolvedValue([goal]);
-    const first = renderPage();
-    await waitFor(() => expect(screen.getByTestId("observatory")).toHaveTextContent("run-active"));
-    first.unmount();
-    mocks.listEpisodes.mockResolvedValue({ items: [finished], nextCursor: null });
-    renderPage();
-    await waitFor(() => expect(screen.getByTestId("observatory")).toHaveTextContent("goal-run"));
-    expect(within(screen.getByLabelText("当前研究")).getByText(/长期研究/)).toBeInTheDocument();
-  });
   it("connects files to the project's knowledge base, with no study named", async () => {
     const user = userEvent.setup(); const file = new File(["x"], "cohort-2.csv");
     mocks.pickFiles.mockResolvedValue([file]); mocks.partition.mockReturnValue({ accepted: [file], refused: [] }); mocks.uploadFilesToWorkspace.mockResolvedValue(["cohort-2.csv"]);
     dbMocks.researchDatabaseStatus.mockResolvedValue({ available: false });
-    renderPage(); await screen.findByText("cohort.csv");
+    renderPage(); await screen.findByTestId("observatory");
     await user.click(screen.getByRole("button", { name: "接入数据" }));
     expect(await screen.findByText(/已接入 1 份资料/)).toBeInTheDocument();
     expect(mocks.uploadFilesToWorkspace).toHaveBeenCalledWith([file], "knowledge-base", "base", "project-a", expect.any(Function));
-    expect(mocks.addAgendaMaterials).not.toHaveBeenCalled();
   });
   it("offers the database beside the files where the deployment has the connector, and imports with no study named", async () => {
     const user = userEvent.setup(); dbMocks.researchDatabaseStatus.mockResolvedValue({ available: true });
-    renderPage(); await screen.findByText("cohort.csv");
+    renderPage(); await screen.findByTestId("observatory");
     await user.click(await screen.findByRole("button", { name: "接入数据" }));
     const dialog = within(await screen.findByRole("dialog"));
     expect(dialog.getByRole("button", { name: "上传文件" })).toBeInTheDocument();
@@ -188,7 +134,7 @@ describe("active research workspace", () => {
   });
   it("opens an observed goal's own native conversation inside the page", async () => {
     const user = userEvent.setup(); mocks.listWebAgentRuns.mockResolvedValue([{ id: "goal-run", sessionId: "goal-session", automated: true, effectiveRouteReason: "loopx-continuation", goal: { id: "goal", runId: null }, startedAt: "2026-10-28T01:00:00Z", status: "running" }]);
-    renderPage(); await screen.findByText("cohort.csv");
+    renderPage(); await screen.findByTestId("observatory");
     await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "长期研究" }));
     await user.click(screen.getByRole("tab", { name: "对话" }));
     expect(screen.getByTestId("native-pane")).toHaveTextContent("project-a:goal-session");
@@ -197,19 +143,11 @@ describe("active research workspace", () => {
     expect(screen.getByTestId("native-pane")).toHaveTextContent("none");
     expect(screen.getByRole("tab", { name: "结果", selected: true })).toBeInTheDocument();
   });
-  it("loads subsequent project episode pages so older running work is not hidden", async () => {
-    mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string, cursor?: string) => {
-      if (agendaId) return { items: agendaId === "a" ? [running] : [finished], nextCursor: null };
-      return cursor ? { items: [running], nextCursor: null } : { items: [finished], nextCursor: "next-page" };
-    });
-    renderPage(); await waitFor(() => expect(screen.getByTestId("observatory")).toHaveTextContent("run-active"));
-    expect(mocks.listEpisodes).toHaveBeenCalledWith("project-a", undefined, "next-page");
-  });
   it("says a goal round's real outcome in the queue, as the goal's own record does", async () => {
     const user = userEvent.setup();
     const round = (id: string, session: string, status: string) => ({ id, sessionId: session, automated: true, effectiveRouteReason: "loopx-continuation", goal: { id: `goal-${session}`, runId: null }, startedAt: "2026-10-28T01:00:00Z", finishedAt: "2026-10-28T01:30:00Z", status, title: `目标 ${status}` });
     mocks.listWebAgentRuns.mockResolvedValue([round("r-failed", "s-failed", "failed"), round("r-stopped", "s-stopped", "canceled"), round("r-done", "s-done", "succeeded")]);
-    renderPage(); await screen.findByText("cohort.csv");
+    renderPage(); await screen.findByTestId("observatory");
     const queue = within(await screen.findByLabelText("研究队列"));
     for (const [title, word, record] of [["目标 failed", "未完成", "未完成"], ["目标 canceled", "已停止", "已停止"], ["目标 succeeded", "本轮完成", "已完成"]] as const) {
       const card = queue.getByRole("button", { name: title });
@@ -223,12 +161,10 @@ describe("active research workspace", () => {
     expect(queue.getByRole("button", { name: "目标 failed" })).not.toHaveTextContent("已完成");
   });
   it("does not show the first-research recipe while the long goals are still being read, or when they could not be read", async () => {
-    mocks.listAgendas.mockResolvedValue({ items: [], nextCursor: null, available: true });
-    mocks.listEpisodes.mockResolvedValue({ items: [], nextCursor: null });
     let release: (runs: unknown[]) => void = () => {};
     mocks.listWebAgentRuns.mockReturnValue(new Promise(resolve => { release = resolve; }));
     const first = renderPage();
-    await waitFor(() => expect(mocks.listAgendas).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.listWebAgentRuns).toHaveBeenCalled());
     expect(await screen.findByRole("status", { name: "正在载入研究" })).toBeInTheDocument();
     expect(screen.queryByText(/写下研究目标/)).not.toBeInTheDocument();
     await act(async () => { release([]); });
@@ -248,7 +184,7 @@ describe("active research workspace", () => {
     const goalState = (status: string, reason: string | null = null) => ({ available: true, goals: [{ sessionId: "goal-session", status, reason, statusAt: "2026-11-03T02:00:00Z", goalId: "goal", progress: null }] });
     const showGoal = async (runs: unknown[], states: unknown) => {
       mocks.listWebAgentRuns.mockResolvedValue(runs); goalMocks.listResearchGoals.mockResolvedValue(states);
-      renderPage(); await screen.findByText("cohort.csv");
+      renderPage(); await screen.findByTestId("observatory");
       const card = await within(await screen.findByLabelText("研究队列")).findByRole("button", { name: ASKED });
       await userEvent.setup().click(card);
       return { card, row: within(screen.getByLabelText("当前研究")) };
@@ -279,7 +215,7 @@ describe("active research workspace", () => {
     it("says a goal between two rounds is going, and that the next round starts at once", async () => {
       const { card } = await showGoal(resting, goalState("active"));
       expect(card).toHaveTextContent("下一轮马上开始");
-      expect(within(screen.getByLabelText("研究队列")).getByText(/2 项进行中/)).toBeInTheDocument();
+      expect(within(screen.getByLabelText("研究队列")).getByText(/1 项进行中/)).toBeInTheDocument();
     });
     it("offers to pause and to stop the round that is going, whatever the goal's state, and stops it through the run's own route", async () => {
       const user = userEvent.setup(); mocks.cancelWebAgentRun.mockResolvedValue({});
@@ -382,7 +318,7 @@ describe("active research workspace", () => {
       const user = userEvent.setup();
       Object.defineProperty(window, "innerHeight", { value: 900, configurable: true }); rect(85);
       mocks.listWebAgentRuns.mockResolvedValue([goalRun]);
-      renderPage(); await screen.findByText("cohort.csv");
+      renderPage(); await screen.findByTestId("observatory");
       await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "长期研究" }));
       await user.click(screen.getByRole("tab", { name: "对话" }));
       const pane = screen.getByRole("region", { name: "原生研究对话" });
@@ -397,118 +333,20 @@ describe("active research workspace", () => {
       expect(pane).toHaveStyle({ height: "360px" });
     });
   });
-  describe("reading again while the page is open", () => {
-    const settle = () => act(async () => { await Promise.resolve(); });
-    // Asynchronously, so each read settles before the next tick (a read still out holds the next one off).
-    const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
-    const forget = () => { for (const fn of [mocks.listAgendas, mocks.listEpisodes, mocks.getResearchState, mocks.listWebAgentRuns]) fn.mockClear(); };
-    const projectPages = () => mocks.listEpisodes.mock.calls.filter(call => call[1] === undefined);
-    const ofStudy = (id: string) => mocks.listEpisodes.mock.calls.filter(call => call[1] === id);
-
-    it("reads each thing at its own rate: the tasks and the displayed study every 5 s while an execution runs, the run list every 20 s", async () => {
-      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-      renderPage(); await screen.findByText("cohort.csv"); await settle(); forget();
-      await advance(5_000);
-      expect(mocks.listAgendas).toHaveBeenCalledTimes(1); expect(projectPages()).toHaveLength(1);
-      expect(mocks.getResearchState).toHaveBeenCalledTimes(1); expect(ofStudy("a")).toHaveLength(1);
-      expect(mocks.listWebAgentRuns).not.toHaveBeenCalled();
-      await advance(15_000);
-      expect(mocks.listAgendas).toHaveBeenCalledTimes(4);
-      expect(mocks.getResearchState).toHaveBeenCalledTimes(4);
-      expect(mocks.listWebAgentRuns).toHaveBeenCalledTimes(1);
-      await advance(20_000);
-      expect(mocks.listWebAgentRuns).toHaveBeenCalledTimes(2);
-    });
-    it("REVIEWFIX 11 a read that fails while the page is open leaves what was shown where it was, with the error said above it; a first read that fails shows the error alone", async () => {
-      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-      renderPage(); await screen.findByText("cohort.csv"); await settle();
-      mocks.listAgendas.mockRejectedValue(new Error("网络中断"));
-      await advance(5_000);
-      expect(await screen.findByText(/研究暂时无法载入/)).toBeInTheDocument();
-      expect(screen.getByLabelText("研究队列")).toBeInTheDocument();
-      expect(screen.getByTestId("observatory")).toHaveTextContent("run-active");
-      expect(screen.getByText("cohort.csv")).toBeInTheDocument();
-      // the next read that succeeds takes the error away
-      mocks.listAgendas.mockResolvedValue({ items: [task("b", "已完成研究"), task("a", "进行中研究")], nextCursor: null, available: true });
-      await advance(5_000);
-      expect(screen.queryByText(/研究暂时无法载入/)).not.toBeInTheDocument();
-      expect(screen.getByTestId("observatory")).toHaveTextContent("run-active");
-    });
-    it("REVIEWFIX 11 the first read failing shows the error and nothing of the research", async () => {
-      mocks.listAgendas.mockReset().mockRejectedValue(new Error("网络中断"));
-      renderPage();
-      expect(await screen.findByText(/研究暂时无法载入/)).toBeInTheDocument();
-      expect(screen.queryByLabelText("研究队列")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("observatory")).not.toBeInTheDocument();
-    });
-    it("reads quietly, every 30 s, when no execution is on its way — the run list still at 20 s", async () => {
-      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-      mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => ({ items: agendaId === "a" ? [] : [finished], nextCursor: null }));
-      renderPage(); await screen.findByLabelText("研究队列"); await settle(); forget();
-      await advance(29_000);
-      expect(mocks.listAgendas).not.toHaveBeenCalled(); expect(mocks.getResearchState).not.toHaveBeenCalled();
-      expect(mocks.listWebAgentRuns).toHaveBeenCalledTimes(1);
-      await advance(1_000);
-      expect(mocks.listAgendas).toHaveBeenCalledTimes(1); expect(mocks.getResearchState).toHaveBeenCalledTimes(1);
-    });
-    it("reads only the newest page of executions, and keeps the older ones the first read gave", async () => {
-      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-      mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string, cursor?: string) => {
-        if (agendaId) return { items: agendaId === "a" ? [running] : [finished], nextCursor: null };
-        return cursor ? { items: [running], nextCursor: null } : { items: [finished], nextCursor: "next-page" };
-      });
-      renderPage(); await waitFor(() => expect(screen.getByTestId("observatory")).toHaveTextContent("run-active")); await settle();
-      expect(mocks.listEpisodes).toHaveBeenCalledWith("project-a", undefined, "next-page");
-      forget();
-      await advance(10_000);
-      expect(projectPages().length).toBeGreaterThan(0);
-      expect(mocks.listEpisodes.mock.calls.filter(call => call[2] !== undefined)).toEqual([]);
-      // The execution that only the older page held is still running on the screen.
-      expect(within(screen.getByLabelText("研究队列")).getByText(/1 项进行中/)).toBeInTheDocument();
-    });
-    it("does not read a study that is not displayed: a shown goal is read through the run list alone", async () => {
-      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      mocks.listWebAgentRuns.mockResolvedValue([{ id: "goal-run", sessionId: "goal-session", automated: true, effectiveRouteReason: "loopx-continuation", goal: { id: "goal", runId: null }, startedAt: "2026-10-28T01:00:00Z", status: "running", title: "长期目标" }]);
-      renderPage(); await screen.findByText("cohort.csv");
-      await user.click(within(await screen.findByLabelText("研究队列")).getByRole("button", { name: "长期目标" }));
-      expect(screen.queryByText("cohort.csv")).not.toBeInTheDocument(); await settle(); forget();
-      await advance(40_000);
-      expect(mocks.getResearchState).not.toHaveBeenCalled(); expect(ofStudy("a")).toEqual([]); expect(ofStudy("b")).toEqual([]);
-      expect(mocks.listWebAgentRuns).toHaveBeenCalledTimes(2);
-      // The tasks are still read: the queue shows them beside the goal.
-      expect(mocks.listAgendas).toHaveBeenCalled();
-    });
-  });
-  it("selects project sources through the task association API", async () => {
-    const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-    await user.click(screen.getByRole("button", { name: "从知识库选择" }));
-    await user.click(screen.getByRole("button", { name: "选择示例资料" }));
-    await waitFor(() => expect(mocks.addAgendaMaterials).toHaveBeenCalledWith("a", { sourceIds: ["src_new"] }));
-  });
-  it("explains where an uploaded file went if association fails", async () => {
-    const file = new File(["data"], "cohort.csv", { type: "text/csv" });
-    mocks.pickFiles.mockResolvedValue([file]); mocks.uploadFilesToWorkspace.mockResolvedValue(["cohort.csv"]); mocks.sha256Hex.mockResolvedValue("abc");
-    mocks.addAgendaMaterials.mockRejectedValue(new Error("association failed"));
-    const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-    await user.click(screen.getByRole("button", { name: "上传资料" }));
-    expect(await screen.findByText(/资料已上传到知识库，但没能加入本研究/)).toBeInTheDocument();
-  });
   it("does not upload to a different project when the selection changes while the picker is open", async () => {
     const user = userEvent.setup(); let finish: (files: File[]) => void = () => {};
     mocks.pickFiles.mockReturnValue(new Promise<File[]>(resolve => { finish = resolve; }));
-    renderPage(); await screen.findByText("cohort.csv");
-    await user.click(screen.getByRole("button", { name: "上传资料" }));
+    dbMocks.researchDatabaseStatus.mockResolvedValue({ available: false }); renderPage(); await screen.findByTestId("observatory");
+    await user.click(screen.getByRole("button", { name: "接入数据" }));
     identity.projectId = "project-b";
     await act(async () => { finish([new File(["x"], "data.csv")]); });
     expect(mocks.uploadFilesToWorkspace).not.toHaveBeenCalled();
-    expect(mocks.addAgendaMaterials).not.toHaveBeenCalled();
   });
   it("refuses more than ten uploads before sending bytes", async () => {
     const user = userEvent.setup();
     mocks.pickFiles.mockResolvedValue(Array.from({ length: 11 }, (_, i) => new File(["x"], `file${i}.csv`)));
-    renderPage(); await screen.findByText("cohort.csv");
-    await user.click(screen.getByRole("button", { name: "上传资料" }));
+    dbMocks.researchDatabaseStatus.mockResolvedValue({ available: false }); renderPage(); await screen.findByTestId("observatory");
+    await user.click(screen.getByRole("button", { name: "接入数据" }));
     expect(await screen.findByText(/每次最多添加 10 份资料/)).toBeInTheDocument();
     expect(mocks.uploadFilesToWorkspace).not.toHaveBeenCalled();
   });
@@ -516,143 +354,12 @@ describe("active research workspace", () => {
     const user = userEvent.setup();
     mocks.pickFiles.mockResolvedValue([new File(["ok"], "a.csv"), new File(["bad"], "b.csv")]);
     mocks.partition.mockReturnValue({ accepted: [new File(["ok"], "a.csv")], refused: [{ name: "b.csv", reason: "不支持" }] });
-    renderPage(); await screen.findByText("cohort.csv"); await user.click(screen.getByRole("button", { name: "上传资料" }));
+    dbMocks.researchDatabaseStatus.mockResolvedValue({ available: false }); renderPage(); await screen.findByTestId("observatory"); await user.click(screen.getByRole("button", { name: "接入数据" }));
     expect(await screen.findByText(/b.csv（不支持）/)).toBeInTheDocument();
     expect(mocks.uploadFilesToWorkspace).not.toHaveBeenCalled();
   });
-  it("disables execution after a previously loaded history fails to refresh", async () => {
-    const user = userEvent.setup(); let fail = false;
-    mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => {
-      if (agendaId === "b" && fail) throw new Error("offline");
-      return { items: agendaId === "a" ? [running] : agendaId === "b" ? [finished] : [finished, running], nextCursor: null };
-    });
-    renderPage(); await screen.findByText("cohort.csv");
-    await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeEnabled());
-    fail = true;
-    await user.click(screen.getByRole("button", { name: "从知识库选择" }));
-    await user.click(screen.getByRole("button", { name: "选择示例资料" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeDisabled());
-    expect(screen.getAllByRole("link", { name: "paper.docx" }).length).toBeGreaterThan(0);
-  });
-  it("reuses a request id after an uncertain run-now failure", async () => {
-    const user = userEvent.setup(); mocks.runAgendaNow.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce({ episode: { ...running, payload: { ...running.payload, agendaId: "b" } } });
-    renderPage(); await screen.findByText("cohort.csv");
-    await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "立即运行" }));
-    await screen.findByRole("alert");
-    await user.click(screen.getByRole("button", { name: "立即运行" }));
-    await waitFor(() => expect(mocks.runAgendaNow).toHaveBeenCalledTimes(2));
-    expect(mocks.runAgendaNow.mock.calls[0]).toEqual(mocks.runAgendaNow.mock.calls[1]);
-  });
-  it("keeps an acknowledged new execution visible while the list is stale", async () => {
-    const user = userEvent.setup(); mocks.runAgendaNow.mockResolvedValue({ episode: { ...running, payload: { ...running.payload, agendaId: "b" } } });
-    renderPage(); await screen.findByText("cohort.csv");
-    await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeEnabled());
-    await user.click(screen.getByRole("button", { name: "立即运行" }));
-    expect(await screen.findByRole("button", { name: "停止本次" })).toBeInTheDocument();
-  });
-  it("stops the selected live execution rather than the entire agenda", async () => {
-    const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-    await user.click(screen.getByRole("button", { name: "停止本次" }));
-    await waitFor(() => expect(mocks.cancelEpisode).toHaveBeenCalledWith("a", "active", expect.any(String)));
-  });
-  it("refreshes materials after mutation even when an earlier read is pending", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-    const user = userEvent.setup(); let hold = false, calls = 0, release: (value: unknown) => void = () => {};
-    const stale = new Promise(resolve => { release = resolve; });
-    mocks.getResearchState.mockImplementation(async (id: string) => {
-      if (!hold) return states(id);
-      calls += 1; return calls === 1 ? stale : { ...states(id), materials: [{ sourceId: "src_new", name: "new.csv", state: "ready", addedAt: "2026-10-28" }] };
-    });
-    renderPage(); await screen.findByText("cohort.csv");
-    hold = true; await act(async () => { vi.advanceTimersByTime(10_000); });
-    await user.click(screen.getByRole("button", { name: "从知识库选择" }));
-    await user.click(screen.getByRole("button", { name: "选择示例资料" }));
-    expect(await screen.findByText("new.csv")).toBeInTheDocument();
-    await act(async () => { release(states("a")); });
-    expect(screen.getByText("new.csv")).toBeInTheDocument(); expect(screen.queryByText("cohort.csv")).not.toBeInTheDocument();
-  });
-  it("does not let stale polling overwrite an acknowledged cancellation", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-    const user = userEvent.setup(); let delay = false;
-    let releaseProject: (value: unknown) => void = () => {}; let releaseHistory: (value: unknown) => void = () => {};
-    const projectPage = new Promise(resolve => { releaseProject = resolve; });
-    const historyPage = new Promise(resolve => { releaseHistory = resolve; });
-    mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => {
-      if (delay) return agendaId ? historyPage : projectPage;
-      return { items: agendaId === "a" ? [running] : [finished, running], nextCursor: null };
-    });
-    mocks.cancelEpisode.mockResolvedValue({ ...running, revision: 2, payload: { ...running.payload, status: "canceled" } });
-    renderPage(); await screen.findByText("cohort.csv");
-    delay = true; await act(async () => { vi.advanceTimersByTime(10_000); });
-    await user.click(screen.getByRole("button", { name: "停止本次" }));
-    await waitFor(() => expect(mocks.cancelEpisode).toHaveBeenCalledOnce());
-    await act(async () => { releaseProject({ items: [finished, running], nextCursor: null }); releaseHistory({ items: [running], nextCursor: null }); });
-    await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: "停止本次" })).not.toBeInTheDocument();
-  });
-  it("sends a direction to the selected research without replacing the current execution", async () => {
-    const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-    await user.click(screen.getByRole("button", { name: "调整研究方向" }));
-    await user.type(screen.getByRole("textbox", { name: "希望研究如何调整" }), "优先分析年龄差异");
-    await user.click(screen.getByRole("button", { name: "提交方向" }));
-    await waitFor(() => expect(mocks.steerWebAgentRun).toHaveBeenCalledWith("run-active", "优先分析年龄差异"));
-    expect(mocks.followUpAgenda).not.toHaveBeenCalled();
-    expect(await screen.findByText(/方向已送达/)).toBeInTheDocument();
-  });
-  it("does not silently schedule a follow-up if live direction delivery fails", async () => {
-    mocks.steerWebAgentRun.mockRejectedValue(new Error("offline"));
-    const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-    await user.click(screen.getByRole("button", { name: "调整研究方向" }));
-    await user.type(screen.getByRole("textbox", { name: "希望研究如何调整" }), "检查结果");
-    await user.click(screen.getByRole("button", { name: "提交方向" }));
-    expect(await screen.findByText(/没能确认方向是否送达/)).toBeInTheDocument();
-    expect(mocks.followUpAgenda).not.toHaveBeenCalled();
-  });
-  it("schedules a follow-up for a completed research task", async () => {
-    const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-    await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
-    await waitFor(() => expect(screen.getByTestId("observatory")).toHaveTextContent("run-done"));
-    await user.click(screen.getByRole("button", { name: "调整研究方向" }));
-    await user.type(screen.getByRole("textbox", { name: "希望研究如何调整" }), "补充分析");
-    await user.click(screen.getByRole("button", { name: "提交方向" }));
-    await waitFor(() => expect(mocks.followUpAgenda).toHaveBeenCalledWith("b", expect.objectContaining({ note: "补充分析", episodeId: "done" })));
-    expect(mocks.steerWebAgentRun).not.toHaveBeenCalled();
-  });
-  it("schedules a follow-up instead of steering a bounded execution", async () => {
-    const bounded = { ...running, payload: { ...running.payload, interactive: false } };
-    mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => ({ items: agendaId === "a" ? [bounded] : agendaId === "b" ? [finished] : [finished, bounded], nextCursor: null }));
-    const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-    await user.click(screen.getByRole("button", { name: "调整研究方向" }));
-    expect(screen.getByText(/不会改变当前执行/)).toBeInTheDocument();
-    await user.type(screen.getByRole("textbox", { name: "希望研究如何调整" }), "补充分析");
-    await user.click(screen.getByRole("button", { name: "提交方向" }));
-    await waitFor(() => expect(mocks.followUpAgenda).toHaveBeenCalledWith("a", expect.objectContaining({ note: "补充分析", episodeId: "active" })));
-    expect(mocks.steerWebAgentRun).not.toHaveBeenCalled();
-  });
-  it("remounts the database dialog when the selected task changes", async () => {
-    const user = userEvent.setup(); sessionStorage.setItem("evimed.research-db.snapshot.project-a.a", "request-for-a"); sessionStorage.setItem("evimed.research-db.snapshot.project-a.b", "request-for-b");
-    renderPage(); await screen.findByText("cohort.csv");
-    await user.click(await screen.findByRole("button", { name: "从数据库导入" }));
-    expect(await screen.findByText(/上次导入还没有确认结果/)).toBeInTheDocument();
-    fireEvent.click(within(screen.getByLabelText("研究队列")).getByText("已完成研究"));
-    await waitFor(() => expect(dbMocks.listResearchDatabases).toHaveBeenCalledTimes(2));
-    await user.click(await screen.findByRole("button", { name: "重新开始导入" }));
-    expect(sessionStorage.getItem("evimed.research-db.snapshot.project-a.b")).toBeNull();
-    expect(sessionStorage.getItem("evimed.research-db.snapshot.project-a.a")).toBe("request-for-a");
-  });
-  it("does not report an empty history when the history request fails", async () => {
-    mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => { if (agendaId) throw new Error("offline"); return { items: [running], nextCursor: null }; });
-    renderPage(); expect(await screen.findByText("执行记录暂不可用")).toBeInTheDocument();
-    expect(screen.queryByText("还没有执行过")).not.toBeInTheDocument();
-  });
   it("stands by in the observatory when the project has no research, with the two ways to begin in the scene", async () => {
     const user = userEvent.setup();
-    mocks.listAgendas.mockResolvedValue({ items: [], nextCursor: null, available: true });
-    mocks.listEpisodes.mockResolvedValue({ items: [], nextCursor: null });
     renderPage();
     expect(await screen.findByTestId("observatory")).toHaveTextContent("no-run");
     expect(screen.queryByLabelText("研究队列")).not.toBeInTheDocument();
@@ -662,124 +369,26 @@ describe("active research workspace", () => {
     await user.click(screen.getByRole("button", { name: "发起研究" }));
     expect(screen.getByLabelText("研究目标")).toBeInTheDocument();
   });
-  describe("the page under the observatory (module workspace audit, D2)", () => {
-    it("keeps the observatory first and puts the rest of the research under three views, results first", async () => {
-      renderPage(); await screen.findByText("cohort.csv");
-      const tabs = screen.getAllByRole("tab").map(tab => tab.textContent);
-      expect(tabs).toEqual(["结果", "记录", "对话"]);
-      expect(screen.getByRole("tab", { name: "结果", selected: true })).toBeInTheDocument();
-      // The observatory comes before the views in the page, and the queue before both.
-      const order = [screen.getByLabelText("研究队列"), screen.getByTestId("observatory"), screen.getByRole("tablist")];
-      for (let i = 1; i < order.length; i += 1) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      // 结果 holds the findings, the files and the data; the history is not under it.
-      expect(screen.getByLabelText("研究成果")).toBeInTheDocument();
-      expect(screen.getByLabelText("研究资料")).toBeInTheDocument();
-      expect(screen.queryByLabelText("执行记录")).not.toBeInTheDocument();
-    });
-    it("lists the executions under 记录, and joins the controls of the research on show to the observatory's row", async () => {
-      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-      const row = screen.getByLabelText("当前研究");
-      for (const name of ["停止本次", "调整研究方向", "打开对话"]) expect(within(row).getByRole("button", { name })).toBeInTheDocument();
-      await user.click(screen.getByRole("tab", { name: "记录" }));
-      expect(screen.getByLabelText("执行记录")).toBeInTheDocument();
-      expect(screen.queryByLabelText("研究资料")).not.toBeInTheDocument();
-    });
-    it("opens the task's own conversation in the 对话 view by one path, the button or the tab, and never navigates away", async () => {
-      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-      expect(screen.getByTestId("native-pane")).toHaveTextContent("none");
-      await user.click(within(screen.getByLabelText("当前研究")).getByRole("button", { name: "打开对话" }));
-      expect(screen.getByRole("tab", { name: "对话", selected: true })).toBeInTheDocument();
-      await waitFor(() => expect(screen.getByTestId("native-pane")).toHaveTextContent("project-a:session-active"));
-      expect(screen.queryByRole("button", { name: "打开任务对话" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: "打开所属对话" })).not.toBeInTheDocument();
-      // Back to the results: the conversation is withdrawn.
-      await user.click(screen.getByRole("tab", { name: "结果" }));
-      expect(screen.getByTestId("native-pane")).toHaveTextContent("none");
-    });
-    it("takes the word on whether the run is going from the open stream, and from the poll where there is none", async () => {
-      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-      // The poll says the execution is running.
-      expect(screen.getByRole("button", { name: "停止本次" })).toBeInTheDocument();
-      const stateOf = () => within(screen.getByLabelText("研究队列")).getByRole("button", { name: "进行中研究" }).querySelector(".rq-state")!;
-      expect(stateOf()).toHaveTextContent("进行中");
-      // The stream says it has ended before the poll caught up: the button, the queue and the strip agree with the stream.
-      await user.click(screen.getByRole("button", { name: "stream: ended" }));
-      await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeInTheDocument());
-      expect(screen.queryByRole("button", { name: "停止本次" })).not.toBeInTheDocument();
-      expect(stateOf()).toHaveTextContent("已完成");
-      expect(document.querySelector("[data-activity]")).toBeNull();
-      // It also reads the records again at once rather than waiting for its next poll.
-      const reads = mocks.listAgendas.mock.calls.length;
-      await user.click(screen.getByRole("button", { name: "stream: closed" }));
-      // The stream is gone: the poll's account stands again.
-      await waitFor(() => expect(screen.getByRole("button", { name: "停止本次" })).toBeInTheDocument());
-      expect(reads).toBeGreaterThan(1);
-    });
-    it("shows the activity strip in the page's band while a run is going, and not otherwise", async () => {
-      renderPage(); await screen.findByText("cohort.csv");
-      const strip = document.querySelector<HTMLElement>("[data-page-chrome] [data-activity='strip']");
-      expect(strip).not.toBeNull();
-      expect(strip).toHaveTextContent("正在运行“进行中研究”");
-    });
-    it("says before the wall that a bounded execution holds the project's conversation, and lets the researcher end it from the note", async () => {
-      const bounded = { ...running, payload: { ...running.payload, interactive: false } };
-      mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => ({ items: agendaId === "a" ? [bounded] : agendaId === "b" ? [finished] : [finished, bounded], nextCursor: null }));
-      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-      expect(await screen.findByText("运行期间，这个项目的对话会暂停，结束后可继续")).toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: "停止并继续对话" }));
-      await waitFor(() => expect(mocks.cancelEpisode).toHaveBeenCalledWith("a", "active", expect.any(String)));
-    });
-    it("points to the task that holds the conversation when another research is the one on show", async () => {
-      const bounded = { ...running, payload: { ...running.payload, interactive: false } };
-      mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => ({ items: agendaId === "a" ? [bounded] : agendaId === "b" ? [finished] : [finished, bounded], nextCursor: null }));
-      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-      await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
-      await waitFor(() => expect(screen.getByTestId("observatory")).toHaveTextContent("run-done"));
-      expect(screen.getByRole("link", { name: "查看正在运行的任务" })).toHaveAttribute("href", "/app/autopilot/a");
-    });
-    it("says nothing of a held conversation for an execution in the researcher's own runtime", async () => {
-      renderPage(); await screen.findByText("cohort.csv");
-      expect(screen.queryByText("运行期间，这个项目的对话会暂停，结束后可继续")).not.toBeInTheDocument();
-    });
+  it("reads the run list at the sidebar's pace and again at once when the stream says the round is over", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+    renderPage(); await screen.findByTestId("observatory"); await act(async () => { await Promise.resolve(); });
+    mocks.listWebAgentRuns.mockClear();
+    await advance(19_000); expect(mocks.listWebAgentRuns).not.toHaveBeenCalled();
+    await advance(1_000); expect(mocks.listWebAgentRuns).toHaveBeenCalledTimes(1);
+    await advance(20_000); expect(mocks.listWebAgentRuns).toHaveBeenCalledTimes(2);
   });
-  describe("one verb for one act, and what pressing it does (audit D11)", () => {
-    it("says 立即运行, never 立即执行, makes no scheduled study here, and declares what each button does", async () => {
-      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-      expect(screen.queryByRole("button", { name: /立即执行|新建定时/ })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "停止本次" })).toHaveAttribute("data-action-kind", "set");
-      expect(screen.getByRole("button", { name: "接入数据" })).toHaveAttribute("data-action-kind", "set");
-      await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
-      await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeEnabled());
-      expect(screen.getByRole("button", { name: "立即运行" })).toHaveAttribute("data-action-kind", "start");
-      await user.click(screen.getByRole("button", { name: "发起研究" }));
-      expect(screen.getByRole("button", { name: "开始研究" })).toHaveAttribute("data-action-kind", "start");
-    });
-    it("says when a run is started that the project's conversation pauses while it runs", async () => {
-      useToastStore.setState({ toasts: [] });
-      mocks.runAgendaNow.mockResolvedValue({ episode: { ...running, payload: { ...running.payload, agendaId: "b" } } });
-      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-      await user.click(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "已完成研究" }));
-      await waitFor(() => expect(screen.getByRole("button", { name: "立即运行" })).toBeEnabled());
-      await user.click(screen.getByRole("button", { name: "立即运行" }));
-      await waitFor(() => expect(useToastStore.getState().toasts.map(item => item.message)).toContain("已开始运行。运行期间，这个项目的对话会暂停，结束后可继续"));
-    });
-    it("keeps 调整研究方向 as a form of its own: it sends a structured direction, and 提交方向 starts the run it asks for", async () => {
-      const user = userEvent.setup(); renderPage(); await screen.findByText("cohort.csv");
-      expect(screen.getByRole("button", { name: "调整研究方向" })).toHaveAttribute("data-action-kind", "set");
-      await user.click(screen.getByRole("button", { name: "调整研究方向" }));
-      expect(screen.getByRole("button", { name: "提交方向" })).toHaveAttribute("data-action-kind", "start");
-    });
-  });
-  describe("a run ends while the page is open (audit D14)", () => {
-    it("announces the end once, as a toast", async () => {
-      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-      useToastStore.setState({ toasts: [] });
-      renderPage(); await screen.findByText("cohort.csv");
-      expect(useToastStore.getState().toasts).toHaveLength(0);
-      const ended = { ...running, payload: { ...running.payload, status: "merged" } };
-      mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => ({ items: agendaId === "a" ? [ended] : agendaId === "b" ? [finished] : [finished, ended], nextCursor: null }));
-      await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
-      expect(useToastStore.getState().toasts.map(item => item.message)).toEqual(["“进行中研究”已完成"]);
-    });
+  it("leaves what was shown where it was when a later read fails, and shows the error alone when the first one did", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const goal = { id: "goal-run", sessionId: "goal-session", automated: true, effectiveRouteReason: "loopx-continuation", goal: { id: "goal", runId: null }, startedAt: "2026-10-28T01:00:00Z", status: "running", title: "长期目标" };
+    mocks.listWebAgentRuns.mockResolvedValue([goal]);
+    renderPage(); await screen.findByLabelText("研究队列"); await act(async () => { await Promise.resolve(); });
+    mocks.listWebAgentRuns.mockRejectedValue(new Error("网络中断"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+    expect(await screen.findByText("长期研究暂时无法载入。")).toBeInTheDocument();
+    expect(screen.getByLabelText("研究队列")).toBeInTheDocument();
+    mocks.listWebAgentRuns.mockResolvedValue([goal]);
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+    expect(screen.queryByText("长期研究暂时无法载入。")).not.toBeInTheDocument();
   });
 });

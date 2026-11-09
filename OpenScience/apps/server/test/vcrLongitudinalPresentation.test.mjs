@@ -32,3 +32,15 @@ test('site subgroups and stable report references retain identity while honoring
   const synthetic={...record,summary:{...record.summary,dataClass:'synthetic'}};
   assert.equal(presentLongitudinal({records:[synthetic],byId:{vlf_site:synthetic.summary}}).byId.vlf_site.subgroups[0].groups[0].metrics.mae.value,7);
 });
+
+test('a batch ledger reaches the page whole and a run without its small counts (review eng P1-3)',()=>{
+  const record={id:'vlf_batch',kind:'prediction',summary:{dataClass:'patient',accounting:{submitted:100,admitted:100,completed:97,rejected:2,failed:1,unprocessed:0,partial:0},
+    accountingReasons:{action_input_missing:2,provider_request_failed:1},groups:[]}};
+  const model=presentLongitudinalRead({records:[record]},suppressForModel({records:[record]}),'longitudinal',{}).records[0].summary;
+  assert.equal(model.accounting.rejected,null);assert.equal(model.accounting.submitted,null);
+  assert.deepEqual(model.accountingReasons,{action_input_missing:null,provider_request_failed:null});
+  const status={result:{kind:'longitudinal',diagnostics:{longitudinal:record}}};
+  assert.equal(presentLongitudinalRead(status,suppressForModel(status),'job_result',{}).result.diagnostics.longitudinal.summary.accounting.rejected,null);
+  const page=presentLongitudinal({records:[record]},{page:true}).records[0].summary;
+  assert.deepEqual(page.accounting,record.summary.accounting);assert.deepEqual(page.accountingReasons,record.summary.accountingReasons);
+});

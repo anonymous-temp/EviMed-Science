@@ -2,7 +2,7 @@
   "id": "c02-bare-imperative-in-work-order",
   "class": "work-order-one-request",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C02); every name, number and identifier is invented",
-  "expected": "Nothing is written: 「让测试通过，不要改测试」 is the condition of one task, and the bare 「好」 states nothing.",
+  "expected": "A one-task condition does not establish a general preference. Useful local constraints may be dated notes.",
   "decidable": true,
   "replay": {
     "synthetic": true,
@@ -26,6 +26,11 @@
     ]
   },
   "expect": {
-    "atMostRecords": 0
-  }
+    "noRecordOfKinds": [
+      "profile",
+      "preference"
+    ]
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }

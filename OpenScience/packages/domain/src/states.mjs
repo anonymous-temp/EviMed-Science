@@ -62,7 +62,7 @@ export const TURN_END_KINDS = Object.freeze([
 /** How much of a delivered claim set was actually checked. */
 export const VERIFICATION_STATES = Object.freeze(['verified', 'unverified', 'unchecked'])
 
-/** Confidence tier of an autopilot claim (§24.4.4). Only a verification episode may raise it. */
+/** Confidence tier of a claim. */
 export const CLAIM_TIERS = Object.freeze(['unverified', 'gated', 'reproduced'])
 
 /** Every vocabulary, keyed the way `transition()` names its tables. */

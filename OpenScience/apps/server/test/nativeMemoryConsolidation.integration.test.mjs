@@ -46,9 +46,9 @@ test("a due consolidation of changed files is submitted as the engine documents 
   const [asked] = compile(f.stub);
   assert.deepEqual(Object.keys(asked.body).sort(), ["instruction", "skill", "to"], "memory mode takes no --from");
   assert.equal(asked.body.skill, "memory");
-  assert.equal(asked.body.to, f.root);
+  assert.equal(asked.body.to, `${f.root}/entities`, "a memory type's directory: v0.5.3 refuses the root");
   assert.match(asked.body.instruction, /without losing any fact/);
-  assert.match(asked.headers["idempotency-key"], /^nm-consolidate-[a-f0-9]{24}-[a-f0-9]{24}-\d{10}$/);
+  assert.match(asked.headers["idempotency-key"], /^nm-consolidate-[a-f0-9]{24}-[a-f0-9]{8}-[a-f0-9]{24}-\d{10}$/);
   assert.equal(asked.headers["x-openviking-role"], undefined);
   const state = await f.overlay.consolidationState(f.userId);
   assert.ok(state.task, "the task is on the account's row");
@@ -176,7 +176,7 @@ test("errors with no change are a failure, errors with some change keep the chan
 
 test("what a consolidation writes is held to the checks after the fact: an identifier, and a line the person removed that a merge brought back", options, async (t) => {
   const f = await account(t, { consolidate: ({ user }) => ({ updates: [
-    { uri: `viking://user/${user}/memories/entities/person/p0.md`, text: "Fact number 0 about the person's work.\nReach them at someone@example.org." },
+    { uri: `viking://user/${user}/memories/entities/person/p0.md`, text: "Fact number 0 about the person's work.\nTheir identity card is 110101199001011237." },
     { uri: `viking://user/${user}/memories/entities/person/p2.md`, text: "Fact number 2 about the person's work.\nPrefers tables for comparisons of every kind." },
   ] }) });
   // The person removed a line earlier; a merge puts it back.
@@ -186,7 +186,7 @@ test("what a consolidation writes is held to the checks after the fact: an ident
   // The overlay's last reading of the file the merge will rewrite is what it was before.
   await f.tick(); await f.tick();
   assert.equal(await f.tick(), "completed");
-  assert.equal(await f.sessions.read(f.userId, f.uris[0]), "Fact number 0 about the person's work.", "the e-mail address is taken out");
+  assert.equal(await f.sessions.read(f.userId, f.uris[0]), "Fact number 0 about the person's work.", "the identity number is taken out");
   const checked = (await f.overlay.revisionsOf(f.userId, f.uris[0])).find((revision) => revision.actor === "platform");
   assert.match(checked.reason, /identifier_shape/);
   assert.equal(nativeMemoryCounters().checkActions.identifier_shape, 1);
@@ -218,4 +218,30 @@ test("a consolidation can only target the account's own memories, and always car
   const task = await f.resources.submitMemoryConsolidation(f.userId, { to: `${f.root}/entities`, idempotencyKey: "nm-consolidate-abcdefgh" });
   assert.equal(task.terminal, false);
   assert.equal(compile(f.stub)[0].body.to, `${f.root}/entities`, "a type's own directory is a target too");
+});
+
+test("a pass walks the memory directories that hold files, one task at a time, and a directory that fails does not stop the others", options, async (t) => {
+  /** @type {string[]} */ const asked = [];
+  const f = await account(t, {
+    files: 3,
+    consolidate: ({ to }) => { asked.push(to.slice(to.indexOf("/memories/") + "/memories/".length)); return asked.length === 1 ? { fail: "the model budget is spent" } : {}; },
+  });
+  for (const name of ["a", "b"]) {
+    const text = `A preference ${name}.`;
+    const uri = f.seed(`preferences/self/${name}.md`, text, { type: "preferences" });
+    await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: "preferences", body: text });
+  }
+  // A lone file of another type, the engine's scaffolding and the capsule's index copies are not directories to consolidate.
+  f.seed("project_facts/only.md", "One fact.", { type: "project_facts" });
+  assert.equal(await f.tick(), "submitted");
+  assert.equal(await f.tick(), "submitted", "still running");
+  assert.equal(await f.tick(), "submitted", "the first directory failed and the second was asked for");
+  assert.equal(await f.tick(), "submitted", "still running");
+  assert.equal(await f.tick(), "completed", "the pass closes when the last directory's task is read in");
+  assert.deepEqual(asked, ["entities", "preferences"]);
+  assert.equal(compile(f.stub).filter((request) => request.body.to === f.root).length, 0, "the root is never asked for");
+  assert.equal(nativeMemoryCounters().consolidations.failed, 1);
+  assert.equal(nativeMemoryCounters().consolidations.completed, 1);
+  const state = await f.overlay.consolidationState(f.userId);
+  assert.deepEqual([state.task, Boolean(state.consolidatedAt && state.fingerprint)], [null, true]);
 });

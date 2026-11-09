@@ -18,10 +18,17 @@ import { MasterDetail } from "@/components/ui/MasterDetail";
 import { Section } from "@/components/ui/Section";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { VcrBiasAnalysis } from "../VcrBiasAnalysis";
+import { VcrBorrowing } from "../VcrBorrowing";
+import { VcrPrognosticModels } from "../VcrPrognosticModels";
 import { VcrSeriesLegend, VcrSurvivalChart } from "../VcrCharts";
+import { VcrImputation } from "../VcrImputation";
+import { VcrStcComparison } from "../VcrStcComparison";
+import { VcrTargetTrial } from "../VcrTargetTrial";
 import { ConclusionChip, SourceTag } from "../VcrMarks";
 import { VcrNumber } from "../VcrNumber";
 import { VcrPremises, premiseDraft } from "../VcrPremises";
+import { VcrTrimRestatement } from "../VcrTrimRestatement";
 import { NotEstimableCard, PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { BalancePlot } from "../comparator/BalancePlot";
 import { DimensionBand } from "../comparator/DimensionBand";
@@ -81,7 +88,11 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
   // so they do not count as a result.
   const prior = data.prior ?? [];
   const nothing = data.curves.length === 0 && !data.rmst && !data.median && !data.gaps && !data.estimand
-    && data.comparability.length === 0 && data.diagnostics.length === 0 && prior.length === 0 && data.qc.length === 0 && !data.verdict && !data.predictionBenchmark;
+    && data.comparability.length === 0 && data.diagnostics.length === 0 && prior.length === 0 && data.qc.length === 0 && !data.verdict && !data.predictionBenchmark
+    // A bias analysis filed alone, a trimming restatement, an imputation card and a target-trial emulation are results of the comparison.
+    && !data.biasAnalysis && !data.borrowing && !data.trim && !data.imputation && !data.targetTrialEmulation && !data.stcComparison
+    // A model trained on the person's own table is a result of the comparison step, filed alone.
+    && !data.prognosticModels?.length;
   // The route in view: the one the study uses until the reader presses another. On a narrow page the record replaces the list.
   const used = data.routes.find((route) => route.selected)?.route ?? data.routes[0]?.route ?? null;
   const [looking, setLooking] = useState<string | null>(null);
@@ -144,6 +155,18 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
               {(data.limits ?? []).map((limit) => <li key={limit.key} data-vcr-limit={limit.key}>{limit.text}</li>)}
             </ul>
           )}
+
+          {/* Who the estimate is about when a propensity trimming removed people: said before the premises and the diagnostics. */}
+          <VcrTrimRestatement trim={data.trim} />
+
+          {/* What filling in missing covariate values did to the answer, beside the complete-case one. */}
+          <VcrImputation card={data.imputation} />
+
+          {/* The target-trial emulation: the question, the effect of each estimand and the naive number set apart. */}
+          <VcrTargetTrial card={data.targetTrialEmulation} />
+
+          {/* The simulated treatment comparison: what the indirect estimate is a difference of, and the population it is about. */}
+          <VcrStcComparison card={data.stcComparison} />
 
           {/* What the conclusion stands on, once; the comparator's own premises are listed by the server (`vcrPremises`). */}
           <VcrPremises
@@ -238,8 +261,10 @@ function UsedRoute({ data }: { data: ComparatorData }) {
 
   // The estimand is its first row; the rest is the target trial, component by component (A6), which the premise block shows only where it
   // cannot be emulated exactly, so the whole record is folded under the estimand.
-  const [estimandHead, ...targetTrialRows]: Fact[] = estimand ? estimand.rows.map((row) => ({ label: row.label, value: row.value })) : [];
-  const estimandRows: Fact[] = estimandHead ? [estimandHead] : [];
+  // (the method's own estimand when its result states one; a method that reads none has no such row, and what is left is the target trial)
+  const estimandHead: Fact | undefined = estimand?.rows.find((row) => row.label === "估计目标");
+  const targetTrialRows: Fact[] = estimand ? estimand.rows.filter((row) => row.label !== "估计目标").map((row) => ({ label: row.label, value: row.value })) : [];
+  const estimandRows: Fact[] = estimandHead ? [{ label: estimandHead.label, value: estimandHead.value }] : [];
   if (estimand?.note) targetTrialRows.push({ label: "说明", value: estimand.note });
   const priorRows: Fact[] = prior.map((row) => ({
     label: row.label,
@@ -252,10 +277,10 @@ function UsedRoute({ data }: { data: ComparatorData }) {
       {comparing && frame && <VcrVersionComparison studyId={frame.studyId} kind="comparator" versions={data.versions ?? []} onClose={() => setComparing(false)} />}
 
       {data.predictionBenchmark && <PredictionBenchmark data={data.predictionBenchmark} />}
-      {estimandRows.length > 0 && (
+      {(estimandRows.length > 0 || targetTrialRows.length > 0) && (
         <Section title="估计目标" toolbar={estimand?.source ? <SourceTag source={estimand.source} /> : undefined}>
           <div className="flex flex-col gap-3">
-            <FactList rows={estimandRows} />
+            {estimandRows.length > 0 && <FactList rows={estimandRows} />}
             {targetTrialRows.length > 0 && (
               <Disclosure summary={`目标试验的要素 · ${targetTrialRows.length}`}>
                 <div data-vcr-target-trial=""><FactList max={targetTrialRows.length} rows={targetTrialRows} /></div>
@@ -287,6 +312,12 @@ function UsedRoute({ data }: { data: ComparatorData }) {
       )}
 
       {data.operatingCharacteristics && <OperatingCharacteristicsSection table={data.operatingCharacteristics} />}
+
+      <VcrBiasAnalysis card={data.biasAnalysis} />
+
+      <VcrBorrowing card={data.borrowing} />
+
+      <VcrPrognosticModels cards={data.prognosticModels ?? []} />
 
       {data.robustness && (data.robustness.rows.length > 0 || data.robustness.qualification || data.robustness.notes.length > 0) && (
         <RobustnessSection robustness={data.robustness} />

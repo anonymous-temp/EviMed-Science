@@ -35,5 +35,14 @@ export function VcrForecastComparisonResult({ record, records = [] }: { record: 
       { key: "difference", header: "均值差", cell: group => group.displayReason ? "未展示" : number(group.meanDifference) },
       { key: "interval", header: samplingIntervals ? "95% 抽样区间" : "差值区间", cell: group => group.displayReason ? "未展示" : group.lower != null && group.upper != null ? `${number(group.lower)}–${number(group.upper)}` : "未估计" },
     ]} />}
+    {summary.observed?.groups && summary.observed.groups.length > 0 && <DataTable label="旧预测、新预测与随后的实际观测" rows={summary.observed.groups.map((group, index) => ({ ...group, key: String(index) }))} rowKey={group => group.key}
+      footnote="只统计两个版本都有预测、且实际观测发生在新版本的预测起点之后的受试者；误差是点估计，没有做显著性检验。" columns={[
+      { key: "target", header: "目标日期", rowHeader: true, cell: group => group.targetAt ? date(group.targetAt) : `${group.horizonDays} 天` },
+      { key: "observed", header: "有观测的人数", cell: group => number(group.observed) },
+      { key: "older", header: "旧预测误差", cell: group => number(group.olderError) },
+      { key: "newer", header: "新预测误差", cell: group => number(group.newerError) },
+      { key: "closer", header: "新预测更接近", cell: group => `${number(group.newerCloser)} 人` },
+      { key: "olderCloser", header: "旧预测更接近", cell: group => `${number(group.olderCloser)} 人` },
+    ]} />}
   </Section>;
 }

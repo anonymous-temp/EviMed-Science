@@ -73,7 +73,8 @@ import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { VCR_PUBLICATION_KINDS, VCR_PUBLICATION_LIMITS } from "./vcrPublications.mjs";
 import { prepareVcrMethodConfiguration, resolveJobSubject, prepareVcrSubjectPopulation } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
-import { zhTime } from "./vcrViewsKit.mjs";
+import { measureValue, zhTime } from "./vcrViewsKit.mjs";
+import { presentSplineFit } from "./vcrSplineFit.mjs";
 import { checkRegulatoryContact } from "./vcrScheduleView.mjs";
 import { VCR_ROWS_PAGE_MAX } from "./vcrRows.mjs";
 import { readRunMarks } from "./vcrStudyStatus.mjs";
@@ -183,11 +184,15 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/method-configurations": ["run"],
   "GET /studies/:id/jobs/:job/result": ["read"],
   "GET /studies/:id/longitudinal": ["read"],
+  "GET /studies/:id/longitudinal/:prediction/subjects": ["read_patient_level"],
   "GET /studies/:id/followup-history": ["read_patient_level"],
   "POST /studies/:id/longitudinal/histories": ["run"],
   "POST /studies/:id/longitudinal/predictions": ["run"],
   "POST /studies/:id/longitudinal/benchmarks": ["run"],
   "POST /studies/:id/jobs/:job/cancel": ["run"],
+  "GET /studies/:id/experiments": ["read"],
+  "GET /studies/:id/experiments/:experiment": ["read"],
+  "POST /studies/:id/experiments/:experiment/cancel": ["run"],
   "POST /studies/:id/budget": ["manage_study"],
   "POST /studies/:id/assumptions": ["write"],
   "POST /studies/:id/model-assessments": ["manage_study"],
@@ -268,7 +273,7 @@ export function vcrRoutePattern(pathname) {
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
   if (parts[1] === "of-project" && parts.length === 3) return "/api/vcr/studies/of-project/:project";
-  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "method-configurations", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs"];
+  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "method-configurations", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "experiments"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -764,14 +769,21 @@ export function createVcrRoutes(dependencies) {
       if (!longitudinal && method === 'GET') return reply({available:false,records:[],providers:[],templates:LONGITUDINAL_TEMPLATES});
       if (!longitudinal) throw UNAVAILABLE();
       if (method === 'GET' && parts.length === 3) return reply(presentLongitudinal(await longitudinal.view(study,
-        Object.fromEntries(['id','parentId','kind','offset','limit'].map(key => [key,url.searchParams.get(key)]))),{minCell:service.minCell}));
+        Object.fromEntries(['id','parentId','kind','offset','limit'].map(key => [key,url.searchParams.get(key)]))),{minCell:service.minCell,page:true}));
+      // The owner's protected per-person read: its keys are the study's pseudonyms, so it is not the suppressed aggregate view above.
+      if (method === 'GET' && parts.length === 5 && parts[4] === 'subjects') {
+        // a per-person read, judged as one at the route too (review eng P2-3): the artifact's own lineage check stays the second guard
+        await requireAbility(study,'read_patient_level');
+        return reply(await longitudinal.subjectPage(study,parts[3],String(user.id),{status:url.searchParams.get('status'),reason:url.searchParams.get('reason'),
+          offset:Number(url.searchParams.get('offset') ?? 0),limit:Number(url.searchParams.get('limit') ?? 50)}));
+      }
       if (method === 'POST' && parts.length === 4 && ['histories','predictions','benchmarks'].includes(parts[3])) {
         const fields = parts[3] === 'histories' ? ['snapshotId','asOf','mappings','split','priorHistoryId','includeClinicalFacts','perturbation']
           : parts[3] === 'benchmarks' ? ['model','comparisons','split','trainingOverlap']
           : ['schema','historyId','origin','endpoint','horizonsDays','rows','model','scenario','priorPredictionId','subjectKeyMode','predictions'];
         const body = await bodyOf(req,Math.max(maxJsonBytes,8*1024*1024),fields);
         const save = parts[3] === 'histories' ? longitudinal.freezeHistory : parts[3] === 'predictions' ? longitudinal.importPrediction : longitudinal.importBenchmark;
-        return reply(presentLongitudinal(await save(study,body,String(user.id)),{minCell:service.minCell}),201);
+        return reply(presentLongitudinal(await save(study,body,String(user.id)),{minCell:service.minCell,page:true}),201);
       }
       throw new HttpError(404,'not_found','Longitudinal route not found.');
     }
@@ -841,6 +853,9 @@ export function createVcrRoutes(dependencies) {
         // First: the run's own end advances the programme, and by then there must be nothing left for it to take up.
         const held = hooks.orchestrator?.holdProgramme
           ? (await hooks.orchestrator.holdProgramme(study.id).catch(() => ({ held: [] }))).held : [];
+        // the study's design searches stop before their units are cancelled, so none moves on to its next candidate (review eng P1-2)
+        const lab = service.packages?.experiments ?? null;
+        if (lab?.cancelStudy) await lab.cancelStudy(study).catch(() => 0);
         const { flight } = await readRunMarks(data(), study.id).catch(() => ({ flight: null }));
         /** @type {string | null} */
         let runId = null;
@@ -1220,6 +1235,28 @@ export function createVcrRoutes(dependencies) {
       return reply(reconstruction.reconstructionResultId ? { ...prepared, reconstructionResultId: reconstruction.reconstructionResultId, scenario: body.scenario } : prepared, 201);
     }
 
+    // --- the virtual lab: design experiments and design-search campaigns (vcrExperiments.mjs) -------------------------------
+    // Read models for the lab page; they are started from the conversation (virtual_trial_search / virtual_trial_compare).
+    if (section === "experiments") {
+      const lab = service.packages?.experiments ?? null;
+      if (parts.length === 3 && method === "GET") {
+        const { study } = await authorize(id, "read");
+        if (!lab) throw UNAVAILABLE();
+        return reply({ experiments: await lab.list(study) });
+      }
+      if (parts.length === 4 && method === "GET") {
+        const { study } = await authorize(id, "read");
+        if (!lab) throw UNAVAILABLE();
+        return reply(await lab.view(study, parts[3]));
+      }
+      if (parts.length === 5 && parts[4] === "cancel" && method === "POST") {
+        await bodyOf(req, maxJsonBytes, []);
+        const { study } = await authorize(id, "run");
+        if (!lab) throw UNAVAILABLE();
+        return reply(await audited("vcr.experiment.cancel", () => ({ code: parts[3] }), { code: parts[3] }, () => lab.cancel(study, parts[3], { actor: String(user.id) })));
+      }
+    }
+
     // --- jobs ------------------------------------------------------------------
     if (section === "jobs") {
       if (parts.length === 3 && method === "GET") {
@@ -1262,6 +1299,8 @@ export function createVcrRoutes(dependencies) {
         if (body.selection != null) throw new HttpError(400, 'vcr_matching_selection_invalid', 'selection is for matching only.');
         if (body.modelId != null && (typeof body.modelId !== "string" || !ID.test(body.modelId))) throw new HttpError(400, "vcr_model_invalid", "modelId is an id.");
         if (body.kind === "apply_prognostic_model" && !body.modelId) throw new HttpError(400, "vcr_model_invalid", "Select a source-bound prognostic model before applying it.");
+        // (the equation of a model the person's own data trained is the model's, not the call's: filled in by code)
+        if (body.modelId) body.scenario = await service.modelScenario(user, body.modelId, body.kind, body.scenario ?? {});
         const sourceModel = body.modelId ? await service.modelExecution(user, study, body.modelId, body.kind, body.scenario ?? {}) : null;
         const cpuSecondsLimit = body.cpuSecondsLimit == null ? null : wholeNumber(body.cpuSecondsLimit, "cpuSecondsLimit", CPU_SECONDS_MAX);
         // A computation names the object it is for, like the conversation's (`resolveJobSubject`): its result is filed under it.
@@ -1304,6 +1343,8 @@ export function createVcrRoutes(dependencies) {
         const { supersededBy: _supersededBy, ...historicalResult } = result;
         return reply({ jobId: parts[3], result: service.forModel(historicalResult),
           computationBasis:vcrAnalyticComputationBasis(result,job),
+          // a spline survival fit (C13): the median, the restricted mean and the survival with how far beyond the data each lies, and the premises
+          splineFit: job.method === "model.survival_fit" ? presentSplineFit(result, (measure) => measureValue(measure, { kind: result.kind, result, tab: "patients", staleMark: null })) : null,
           execution: { method: job.method, methodVersion: job.methodVersion, seed: job.seed, scenarioHash: job.scenarioHash, sourceModel: job.checkpoint?.sourceModel ? { id: job.checkpoint.sourceModel.id, version: job.checkpoint.sourceModel.version } : null },
           records: available ? { ...described, available: true, state: "available", csvUrl: `${prefix}/records/${encodeURIComponent(result.id)}.csv`,
             rowsUrl: `${prefix}/${result.kind === "population" ? "population" : "patients"}/rows?result=${encodeURIComponent(result.id)}` }

@@ -38,18 +38,19 @@ export function recordProjectId(record: Pick<WebStructuredMemory, "scope" | "sco
  * what they prefer, how they work and write, what they corrected. One word for
  * the same thing whichever store a row comes from.
  */
-export type SelfSection = "background" | "preference" | "habit" | "correction" | "other";
+export type SelfSection = "background" | "preference" | "habit" | "correction" | "people" | "other";
 
 export const SELF_SECTIONS: readonly { key: SelfSection; label: string }[] = [
   { key: "background", label: "背景" },
   { key: "preference", label: "偏好" },
   { key: "habit", label: "工作与写作习惯" },
   { key: "correction", label: "纠正过的" },
-  { key: "other", label: "其他" },
+  { key: "people", label: "人物" },
+  { key: "other", label: "其他记忆" },
 ];
 
 const SECTION_OF_KIND: Readonly<Record<string, SelfSection>> = {
-  profile: "background", expertise: "background", stance: "background",
+  person: "people", note: "other", profile: "background", expertise: "background", stance: "background",
   preference: "preference",
   behavior: "habit", writing_style: "habit", method_preference: "habit", tooling: "habit",
   correction: "correction",
@@ -62,7 +63,7 @@ export function selfSection(kind: string): SelfSection {
 
 /** What a memory kind is called as a drawer's title, for a project's facts as for a person's. */
 const KIND_TITLES: Readonly<Record<string, string>> = {
-  profile: "背景", expertise: "背景", stance: "背景", preference: "偏好", behavior: "工作习惯", writing_style: "写作习惯", method_preference: "工作习惯", tooling: "工作习惯",
+  person: "人物", note: "其他记忆", profile: "背景", expertise: "背景", stance: "背景", preference: "偏好", behavior: "工作习惯", writing_style: "写作习惯", method_preference: "工作习惯", tooling: "工作习惯",
   correction: "纠正过的", project_fact: "项目事实", analysis: "分析口径", decision: "已定的决策", follow_up: "待跟进", tension: "两难之处",
 };
 

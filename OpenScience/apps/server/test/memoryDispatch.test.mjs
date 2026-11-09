@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, evidenceProgrammeRouteReason } from "@evimed/domain";
-import { VERIFICATION_ROUTE_REASON } from "../src/autopilotService.mjs";
+import { AUTOPILOT_VERIFICATION_ROUTE_REASON as VERIFICATION_ROUTE_REASON } from "@evimed/domain";
 import { isPlatformStartedRun } from "../src/memoryDispatch.mjs";
 
 test("which runs the platform started: a harness, a scheduled execution and its verification, a module's run, a continuation", () => {

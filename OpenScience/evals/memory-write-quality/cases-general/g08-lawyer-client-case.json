@@ -2,7 +2,7 @@
   "id": "g08-lawyer-client-case",
   "class": "third-party-details",
   "observedIn": "written for LAB-MEM on 2026-10-12; every name, number and identifier is invented",
-  "expected": "Nothing is written: a client’s case with identifiers is worked on in the conversation and forgotten.",
+  "expected": "Preserve the client case, phone, employment facts and desired remedy under the user label. Government ID stays excluded.",
   "decidable": true,
   "replay": {
     "synthetic": true,
@@ -21,11 +21,18 @@
     ]
   },
   "expect": {
-    "noTextContains": [
-      "320102198805052345",
+    "requireKinds": {
+      "person": 1
+    },
+    "requireTextContains": [
+      "李某某",
       "13600136000",
-      "李某某"
+      "2019"
     ],
-    "atMostRecords": 0
-  }
+    "noTextContains": [
+      "320102198805052345"
+    ]
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }

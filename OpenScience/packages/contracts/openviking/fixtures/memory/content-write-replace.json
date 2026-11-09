@@ -1,6 +1,6 @@
 {
   "note": "content/write, mode replace: the body changes, MEMORY_FIELDS and tags stay.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "POST",
     "path": "/api/v1/content/write",

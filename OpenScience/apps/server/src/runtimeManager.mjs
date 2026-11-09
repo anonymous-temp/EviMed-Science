@@ -16,7 +16,7 @@ import http from "node:http";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { gzipSync } from "node:zlib";
-import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, briefFileForSession, isolatedToolRowIsAdmitted, runTimeBudgetMinutes, workspaceLayout } from "@evimed/domain";
+import { GENE_EXPRESSION_LIMITS, RUNTIME_LOCK_REASONS, RUN_CONTEXT_PROTOCOL, briefFileForSession, isolatedToolRowIsAdmitted, nativeResearchRowIsAdmitted, runTimeBudgetMinutes, workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv, nativeInputText } from "@evimed/harness-port";
 import { appendAttendanceReceipt, attendanceInputDigest, attendanceReceiptsFileFor, runContextAuthorityPublicKey, signRunContextAuthority, verifyRunContextAuthority } from "@evimed/harness-port/run-context-authority";
 import {
@@ -510,6 +510,12 @@ export function isImmutableRuntimeUiAsset(suffix) {
  * revision that names the content. Exact paths only — a new one is a line here and a test, never a pattern.
  */
 export const ROOT_PLUGIN_RUNTIME_ASSET = /^\/dsh-mermaid\/mermaid-runtime\.js\?rev=[A-Za-z0-9._-]{6,64}$/;
+
+/**
+ * A plugin's lazy chunk, imported by its own client bundle from beside it: `client.pdf.js` and `client.excel.js` of the document
+ * preview. One file of one scoped package at a revision, the same shape as a combo bundle's with a single member. Exact shape only.
+ */
+export const PLUGIN_CHUNK_ASSET = /^\/plugins\/@[A-Za-z0-9._-]{1,64}\/[A-Za-z0-9._-]{1,128}\/client\.[A-Za-z0-9._-]{1,64}\.js\?rev=[A-Za-z0-9._-]{6,64}$/;
 
 /** What a browser may keep of an immutable kernel file: this account's copy, for a year. */
 export const IMMUTABLE_UI_CACHE = "private, max-age=31536000, immutable";
@@ -1753,11 +1759,6 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     // ledger exists, so a run's `dataset_semantics` tool answers `semantics_disabled` without a request elsewhere.
     const semanticsGatewayUrl = gateways ? String(gateways.semantics ?? "") : dataSemanticsGatewayProviderUrl(config);
     if (semanticsGatewayUrl) environment.EVIMED_SEMANTICS_GATEWAY_URL = semanticsGatewayUrl;
-    // The two tools that schedule and change a task from a conversation ride the same token, and are given an address on
-    // the same terms: the feature on and the product ledger there to keep a task in. Without it they are not offered below.
-    const tasksGatewayUrl = taskToolsGatewayProviderUrl(config)
-      ? gateways ? String(gateways.tasks ?? "") : taskToolsGatewayProviderUrl(config) : "";
-    if (tasksGatewayUrl) environment.EVIMED_TASKS_GATEWAY_URL = tasksGatewayUrl;
     // So does 「前沿动态」 search, and it is absent for the same reason — and
     // also for an account the module is not open to yet (the operators-only
     // dry run): that runtime's tool answers `frontier_disabled` without asking
@@ -1917,12 +1918,6 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   // release audit count it as not offered.
   if (!environment.EVIMED_FRONTIER_GATEWAY_URL) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), "frontier_search"])].join(",");
-  }
-  // Scheduling a task from a conversation likewise: offered only where its gateway address was given above. Listed anyway it
-  // would cost every root request its two schemas for tools that could only answer `task_tools_disabled`.
-  // `OPTIONAL_TOOLS` in the MCP server lets the release audit count them.
-  if (!environment.EVIMED_TASKS_GATEWAY_URL) {
-    environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...TASK_RUNTIME_TOOLS])].join(",");
   }
   // 「循证 GEO」's tools likewise: offered only where their gateway address
   // was given above, and the social search only where the deployment has a
@@ -2122,21 +2117,6 @@ export function dataSemanticsGatewayProviderUrl(config) {
   return url.toString().replace(/\/$/, "");
 }
 
-/**
- * The scheduled-task tools' gateway, as the runtime may know it: empty when the feature is off or there is no product ledger
- * to keep a task in.
- * @param {any} config @returns {string}
- */
-export function taskToolsGatewayProviderUrl(config) {
-  if (!config.taskToolsEnabled || config.autopilotEnabled === false || config.stateStore !== "postgres") return "";
-  const url = new URL(modelGatewayProviderUrl(config));
-  url.pathname = "/internal/tasks/v1";
-  return url.toString().replace(/\/$/, "");
-}
-
-/** The two tools the gateway above serves, by the base names the MCP server publishes them under. */
-export const TASK_RUNTIME_TOOLS = Object.freeze(["schedule_task", "update_task"]);
-
 /** @param {any} config */
 export function capsuleGatewayProviderUrl(config) {
   if (config.stateStore !== "postgres" || !config.evimedWorkloadSigningSecret) return "";
@@ -2232,6 +2212,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
   // is the only thing about the model provider that differs.
   const gateways = plan.gateways ?? null;
   const capsuleGatewayUrl = gateways ? String(gateways.capsule ?? "") : capsuleGatewayProviderUrl(config);
+  const mcpEnvironment = evimedMcpEnvironment(config, project, plan, { workloadTokenPath });
   return {
     modelGatewayUrl: plan.modelGatewayUrl ?? (gateways ? String(gateways.model) : modelGatewayProviderUrl(config)),
     model,
@@ -2242,7 +2223,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     maxOutputTokens: Number(config.runtimeMaxOutputTokens) || 65_536,
     sessionsDir: "/runtime/dsh-home/sessions",
     mcpServerPath: "/opt/evimed/mcp/evimed-research/server.py",
-    mcpEnvironment: evimedMcpEnvironment(config, project, plan, { workloadTokenPath: workloadTokenPath }),
+    mcpEnvironment,
     // Empty when no sidecar is deployed, and then no row is emitted -- a
     // deployment without one behaves exactly as it did before.
     toolUniverseUrl: String(config.toolUniverseMcpUrl ?? "").trim()
@@ -2254,6 +2235,8 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     // plan: the methods the container mounts and the methods the profile names
     // are one directory or the feature is dark in whichever half is wrong.
     capsuleMethodsDir: capsuleMethodsRuntimePath(plan),
+    vcrGatewayUrl: mcpEnvironment.EVIMED_VCR_GATEWAY_URL ?? "",
+    nativeResearchPlugins: plan.extensionGeneration?.projection?.plugins?.filter(plugin => plugin.executionClass === "managed-native") ?? [],
     extensionProjectionFile: plan.extensionGeneration?.reference ? "/opt/evimed/extensions/projection.json" : "",
     extensionGatewayUrl: plan.extensionGeneration?.reference ? extensionGatewayEndpointUrl(config) : "",
     personalSkillsDir: plan.personalSkillsRuntimeDir ?? PERSONAL_SKILLS_RUNTIME_DIR,
@@ -2294,6 +2277,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
       // downstream would ever look at the result.
       askUser: Boolean(config.runtimeAskUserEnabled),
       askUserMode: config.runtimeAskUserMode === 'timed' ? 'timed' : 'attended',
+      scheduleNewSessionIntervalSeconds: config.scheduleNewSessionIntervalSeconds,
       review: Boolean(config.runtimeReviewEnabled),
       // Not a setting: the capsule is active when a recall endpoint is
       // configured, and the plugin reports its own absence.
@@ -2947,6 +2931,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           capsuleMethodsDir: capsuleMethodsRuntimeDir,
           extensionProjectionFile: extensionReference ? "/opt/evimed/extensions/projection.json" : "",
           extensionGatewayUrl: extensionReference ? extensionGatewayEndpointUrl(config) : "",
+          vcrGatewayUrl: vcrAudienceAllows(config, { id: String(project.userId ?? "") }) ? vcrGatewayProviderUrl(config) : "",
           personalSkillsDir: PERSONAL_SKILLS_RUNTIME_DIR,
           disabledPlatformSkills,
           disabledClientBundles: [...new Set([...disabledClientBundles, ...(config.runtimeAnnotationEnabled === false ? ['annotation'] : []), ...(config.runtimeMermaidEnabled === false ? ['mermaid'] : [])])],
@@ -2983,6 +2968,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
             // Same two settings as `dshProfileInput`; see there.
             askUser: Boolean(config.runtimeAskUserEnabled),
             askUserMode: config.runtimeAskUserMode === 'timed' ? 'timed' : 'attended',
+      scheduleNewSessionIntervalSeconds: config.scheduleNewSessionIntervalSeconds,
             review: Boolean(config.runtimeReviewEnabled),
             capsule: Boolean(capsuleGatewayUrl),
             operator: Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(project.userId ?? "")),
@@ -3665,6 +3651,7 @@ export class RuntimeManager {
     this.extensionGenerationOverrides = new Map();
     /** Deployment-owned descriptor tuples; no development artifact defaults. */
     this.extensionArtifacts = new Map();
+    this.extensionNativeBundles = new Map();
     /**
      * The account's memory capsules — the seam this manager reads a project's
      * approved work-style methods through.
@@ -6744,7 +6731,7 @@ export class RuntimeManager {
 
   /**
    * Background work in a researcher's own projects — a 虚拟临床研究 or 循证 GEO
-   * step, an autopilot episode: a run reserved a bounded runtime for — holds at
+   * step: a run reserved a bounded runtime for — holds at
    * most one slot less than their ceiling, so a conversation they open always
    * has one (owner, 2026-10-08). That day two background analysis runs of one
    * account held both of its slots, and its third study's conversation waited
@@ -6855,6 +6842,23 @@ export class RuntimeManager {
    * @param {Record<string, any>} project @param {Record<string, any>} [options] as for `start`
    * @param {{ sleep?: (ms: number) => Promise<void>, now?: () => number }} [hooks] a test's clock
    */
+  /** What `ScheduleWakes` acts through. A woken runtime asks for nothing the idle rules do not already allow. */
+  scheduleWakeFace() {
+    return {
+      liveProjects: () => [...this.runtimes.values()].map((runtime) => runtime.project).filter(Boolean),
+      isRunning: (project) => this.runtimes.has(this.key(project)),
+      listTasks: async (project) => {
+        const runtime = this.runtimes.get(this.key(project));
+        if (!runtime) return null;
+        const reply = await this.callKernel(runtime, project, "schedule/list", { request: { limit: 500 } }, AbortSignal.timeout(10_000));
+        return reply?.ok === false ? null : reply?.value ?? reply;
+      },
+      start: (project) => this.start(project, { dispatch: true }),
+      idle: async (project) => (this.runtimeActivity.get(this.key(project))?.activeProxies ?? 0) === 0 && await this.idleVerdict(project) === "idle",
+      rest: (project) => this.stopIdleRuntime(project, { event: "schedule_rest" }),
+    };
+  }
+
   async startWhenRoom(project, options = {}, { sleep: pause = sleep, now = Date.now } = {}) {
     const maxWaitMs = Number(this.config.runtimeStartWaitMs);
     const budget = Number.isFinite(maxWaitMs) && maxWaitMs > 0 ? maxWaitMs : 0;
@@ -7265,11 +7269,15 @@ export class RuntimeManager {
     } else if (personal.pins.length) throw new HttpError(400, 'extension_contract_invalid', 'Personal generation pins require selected bytes.');
     return { joined: true, manifestDigest: 'sha256:' + createHash('sha256').update(canonicalJson(candidate)).digest('hex') };
   }
-  /** One native bridge row carries the selected isolated tool, and it must be exactly what the deployment admitted: the
+  /** One isolated tool and the fixed native research rows must be exactly what the deployment admitted: the
    * descriptor's artifact digest, package integrity, coordinate and the class's permission profile. Which repository that
    * is, is the deployment's protected allow-list and not a name written here. @param {any[]} external projection rows that are not the citation baseline */
   assertSelectedBridge(external) {
-    if (external.length > 1 || external.some(plugin => !isolatedToolRowIsAdmitted(plugin, this.extensionArtifacts.get(plugin.extensionId)))) {
+    const isolated = external.filter(plugin => plugin.executionClass !== 'managed-native');
+    const native = external.filter(plugin => plugin.executionClass === 'managed-native');
+    if (isolated.length > 1 || native.length > 5 || new Set(external.map(plugin => plugin.extensionId)).size !== external.length
+      || isolated.some(plugin => !isolatedToolRowIsAdmitted(plugin, this.extensionArtifacts.get(plugin.extensionId)))
+      || native.some(plugin => !nativeResearchRowIsAdmitted(plugin, this.extensionNativeBundles.get(plugin.extensionId)))) {
       throw new HttpError(400, 'extension_contract_invalid', 'The selected bridge is unsupported.');
     }
   }
@@ -7739,7 +7747,7 @@ export class RuntimeManager {
 
   /**
    * Retry every unconfirmed close that is due, on a timer: the project that
-   * nobody is asking to start (the autopilot defers on the refusal and waits;
+   * nobody is asking to start (a background step defers on the refusal and waits;
    * a researcher has gone home) still gets its slot back. Runs whether or not
    * an idle timeout is configured, which the reaper's early return would have
    * made a coin toss.
@@ -7772,7 +7780,7 @@ export class RuntimeManager {
   /**
    * Stop a project's runtime. `by` says who asked: `"user"` for the researcher's own stop, restart or project
    * deletion — the runs it held are then a user's stop, charged for what ran — and anything else, including
-   * nothing, is the platform's (a release, the idle reaper, a capacity yield, the autopilot): free.
+   * nothing, is the platform's (a release, the idle reaper, a capacity yield, a scheduled task's wake): free.
    * @param {any} project @param {{expectedGeneration?:string|null,terminalStatus?:string,failureCode?:string|null,guard?:(()=>boolean)|null,by?:'user'|'platform'|null}} [options] */
   async stop(project, { expectedGeneration = null, terminalStatus = "canceled", failureCode = null, guard = null, by = null } = {}) {
     const key = this.key(project);
@@ -7982,10 +7990,10 @@ export class RuntimeManager {
    * loopback for exactly this reason — out of reach of a remote caller.
    *
    * @param {Record<string, any>} project
-   * @param {{opening?: boolean}} [options] explicit module opens may yield idle connected runtimes
+   * @param {{opening?: boolean, sessionId?: string}} [options] explicit module opens may yield idle connected runtimes; `sessionId` asks the kernel for that id (idempotent for the same workspace)
    * @returns {Promise<{ id: string, kernel: string }>}
    */
-  async createRuntimeSession(project, { opening = false } = {}) {
+  async createRuntimeSession(project, { opening = false, sessionId = undefined } = {}) {
     this.assertInteractiveRuntimeAvailable(project);
     const runtime = await this.start(project, { opening });
     if (runtime.modelGatewayScope) this.assertInteractiveRuntimeAvailable(project);
@@ -7998,7 +8006,7 @@ export class RuntimeManager {
           // directory still makes the session, by cwd as before: the partial result stands.
           const workspaceId = await this.kernelWorkspaceId(runtime, project, cwd, signal);
           return this.callKernel(runtime, project, "session/create", {
-            request: { ...(workspaceId ? { workspaceId } : { cwd }), agentPreset: EVIMED_AGENT_PRESET },
+            request: { ...(workspaceId ? { workspaceId } : { cwd }), agentPreset: EVIMED_AGENT_PRESET, ...(sessionId ? { sessionId } : {}) },
           }, signal);
         },
         "runtime_session_create_failed",

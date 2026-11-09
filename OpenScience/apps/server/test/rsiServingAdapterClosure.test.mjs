@@ -25,8 +25,8 @@ test('a qualified closure is computed once per surface and process, however many
   assert.equal(calls[0].surface, 'frontier-selection')
   assert.deepEqual(calls[0].settings, rsiClosureSettings('frontier-selection'), 'the settings that bind the digest are the process\'s, and what a score means among them')
   assert.equal(calls[0].settings.scoreVersion, FRONTIER_SCORE_VERSION)
-  await serving.currentTarget('autopilot-planner', client)
-  assert.deepEqual(calls.map(call => call.surface), ['frontier-selection', 'autopilot-planner'], 'each surface has its own closure')
+  await serving.currentTarget('geo-supplements', client)
+  assert.deepEqual(calls.map(call => call.surface), ['frontier-selection', 'geo-supplements'], 'each surface has its own closure')
   assert.equal((await adapters(qualified).serving.currentTarget('frontier-selection', client)).dependencyDigest, 'digest-frontier-selection', 'another process computes its own')
 })
 

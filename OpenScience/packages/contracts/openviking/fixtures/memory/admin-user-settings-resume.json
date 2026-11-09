@@ -1,6 +1,6 @@
 {
   "note": "Resume.",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "PATCH",
     "path": "/api/v1/admin/accounts/evimed/users/fx-user-a/settings",
@@ -44,14 +44,17 @@
           "experiences",
           "follow_ups",
           "identity",
+          "observations",
           "preferences",
           "profile",
           "project_context",
           "project_facts",
+          "recent_work",
           "soul",
           "trajectories"
         ]
-      }
+      },
+      "ttl": null
     },
     "error": null,
     "telemetry": null,

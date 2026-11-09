@@ -52,11 +52,6 @@ inputs:
   - mode
   - week
   - tier
-autopilot:
-  taskTypes: []
-  costClass: medium
-  unattendedInputs:
-  - brandEntity
 estimatedMinutes:
 - 20
 - 90

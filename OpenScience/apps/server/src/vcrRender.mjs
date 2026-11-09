@@ -54,6 +54,7 @@
  * @module vcrRender
  */
 
+import { comparatorOriginsOfReport } from "./vcrComparatorOrigins.mjs";
 import { createHash } from "node:crypto";
 import {
   documentExportDigest, VCR_COUNT_KEYS, VCR_VALUE_SOURCE_LABELS_ZH,
@@ -178,7 +179,8 @@ export function renderVcrNumbers(template, results) {
  *
  * @param {{ study: any, definition?: any, assumptions?: any[], results?: any[], seal?: any, reviews?: any[],
  *   staleMarks?: any[], models?: any[], population?: any, comparator?: any, scenarios?: any[], counts?: Record<string, any>,
- *   modelAnalysis?: Record<string, any> | null, schedule?: any, contacts?: any[] }} input
+ *   modelAnalysis?: Record<string, any> | null, schedule?: any, contacts?: any[], executions?: Map<string, Record<string, any>> | null }} input
+ *   `executions` holds the execution of the comparison the newest comparator design names, so its origin is read by the method that ran
  */
 export function vcrReportModel(input) {
   const study = object(input.study);
@@ -247,6 +249,8 @@ export function vcrReportModel(input) {
     intendedUse: object(headline).intendedUse ?? String(study.intendedUse ?? "exploratory"),
     useDowngrade: object(headline).useDowngrade ?? null,
     counts,
+    // where the comparison's control comes from (observed, reconstructed, model-predicted, simulated): a simulated control adds no observed people
+    comparatorOrigins: comparatorOriginsOfReport({ results, comparator: input.comparator ? comparator : null, executions: input.executions instanceof Map ? input.executions : null }),
     measures: list(object(headline).measures),
     diagnostics: object(object(headline).diagnostics),
     tables: list(object(headline).tables),

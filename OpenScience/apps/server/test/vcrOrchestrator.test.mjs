@@ -13,11 +13,11 @@ import {
   vcrProductsOfSteps, vcrProgramSteps, vcrProjectScenario, vcrReviewRepairBrief, vcrRunId, vcrRunPrompt, vcrSimpleStepStatus, vcrStepUpdates, vcrStepsInFlight,
   vcrStepClosure, vcrSupersededNodes, wantedVcrSteps,
 } from "../src/vcrOrchestrator.mjs";
-import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
+import { VCR_NOTICE_KINDS, createVcrNotifier, vcrJobNoticeText, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
 import {
   VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
   VCR_MODEL_DOCUMENT_SECTIONS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob,
-  knownErrorCodeMessage, validateLongitudinalScenario, validateScenario, vcrIsNullScenario,
+  VCR_SCENARIO_EXAMPLES, knownErrorCodeMessage, validateLongitudinalScenario, validateScenario, vcrIsNullScenario,
 } from "@evimed/domain";
 
 /** @param {string[]} requested */
@@ -343,7 +343,7 @@ test("a runtime reserved for another dispatch is not the export's run; the resea
   const mark = { key: "run:export:exp_9", dispatch_id: "vcr-run-export-exp_9-1", run_id: "run_7", detail: { purpose: "export", kind: "validation_pack", exportId: "exp_9" } };
   const { orchestrator } = slotHeldBy(mark);
   assert.equal((await orchestrator.exportDispatch("std_1", { runtimeRunId: "vcr-run-export-exp_9-1" }))?.exportId, "exp_9");
-  assert.equal(await orchestrator.exportDispatch("std_1", { runtimeRunId: "autopilot-episode-4" }), null);
+  assert.equal(await orchestrator.exportDispatch("std_1", { runtimeRunId: "other-run-4" }), null);
   assert.equal((await orchestrator.exportDispatch("std_1", { runtimeRunId: null }))?.exportId, "exp_9");
   assert.equal((await orchestrator.exportDispatch("std_1", {}))?.exportId, "exp_9");
 });
@@ -354,12 +354,21 @@ test("there are exactly seven notices, and they are the domain's seven: the five
     ["package_ready", "not_estimable", "budget_confirm", "new_evidence", "job_finished"]);
 });
 
+test("a notice title puts a space between the design's name and the label of its number (live D9)", () => {
+  const title = (/** @type {string} */ label, /** @type {Record<string, any>} */ measure, stage = "simulation") =>
+    vcrJobNoticeText({ resultKind: "trial_scenario", stage, label, state: "succeeded", result: { conclusion: "estimable", measures: [measure] } })?.title;
+  assert.equal(title("试验方案 4", { name: "type_one_error", value: 0.025 }), "方案模拟完成：试验方案 4 I 类错误 2.5%");
+  assert.equal(title("试验方案 2", { name: "power", value: 0.764 }), "方案模拟完成：试验方案 2 功效 76.4%");
+  assert.equal(title("试验方案 3", { name: "assurance", value: 0.71 }, "assurance"), "成功把握计算完成：试验方案 3 成功把握 71%");
+  assert.equal(title("", { name: "power", value: 0.9 }), "方案模拟完成：功效 90%", "no name, no leading space");
+});
+
 test("a finished computation says what was computed and the one number a reader wants first, from the engine's own measures", async () => {
   const { sent, notifier } = notifierFixture();
   const measures = [{ name: "power", value: 0.915, simulated: true, mcse: 0.004 }];
   await notifier.jobFinished(study, { jobId: "job_1", resultKind: "trial_scenario", stage: "simulation", label: "B 1:1 固定设计", state: "succeeded",
     result: { conclusion: "estimable", measures } });
-  assert.equal(sent[0].title, "方案模拟完成：1:1 固定设计功效 91.5%", "the design's letter is the page's, the number is the result's");
+  assert.equal(sent[0].title, "方案模拟完成：1:1 固定设计 功效 91.5%", "the design's letter is the page's, the number is the result's");
   assert.match(sent[0].body, /EV-201 二线 NSCLC/);
   assert.match(sent[0].body, /「试验」页/);
   assert.deepEqual(sent[0].source, { type: "vcr", id: "std_1/trial" }, "the notice carries the study and the tab it opens");
@@ -516,6 +525,10 @@ test("a scenario is the object projected onto the schema of the method that runs
   assert.equal(analytic.scenario.design.allocation, 0.6667);
   // A null is not a value in the protocol: the key is left out.
   assert.deepEqual(vcrProjectScenario("design.simulate", { ...candidate, truth: { ...candidate.truth, null: null } }).scenario.truth, candidate.truth);
+  // A design search's precision block never reaches a step built from a stored object, though the method's schema reads it (review eng P1-1).
+  const screened = vcrProjectScenario("design.simulate", { ...candidate, evaluation: { version: 1, screeningReplicates: 200 } });
+  assert.equal(screened.scenario.evaluation, undefined);
+  assert.ok(screened.dropped.includes("evaluation"));
 });
 
 test("an assumption card's point value is the number the scenario uses, and a new version of the card is a different scenario", () => {
@@ -880,6 +893,24 @@ const planComparator = (configuration, row = {}, ctx = CMP_T2) => /** @type {any
 const stageIssues = (stage) => validateScenario(VCR_JOB_METHODS[stage.jobKind],
   stage.derived.some((/** @type {any} */ entry) => entry.bindTo) ? { ...stage.scenario, pseudoIpdInputId: "res_x:reconstructed-ipd" } : stage.scenario);
 
+test("a design's propensity trimming and a time-to-event doubly robust design reach the engine's stage as the schema reads them", () => {
+  // trim is the weighting jobs' key (algorithm round C14): the plan keeps it where the method reads it and nowhere else
+  const weighted = planComparator({ covariates: ["age"], method: "propensity", tau: 12, trim: { rule: "crump" } }, { estimand: "ATE" });
+  assert.equal(weighted.ok, true, JSON.stringify(weighted));
+  assert.equal(weighted.stages[0].jobKind, "propensity_weight_comparator");
+  assert.deepEqual(weighted.stages[0].scenario.trim, { rule: "crump" });
+  assert.deepEqual(stageIssues(weighted.stages[0]), [], "and the engine's schema accepts it");
+  const cox = planComparator({ covariates: ["age"], method: "weighted_cox", weighting: "propensity", tau: 12, trim: { rule: "fixed", lower: 0.1 } });
+  assert.equal(cox.ok, true, JSON.stringify(cox));
+  assert.deepEqual(cox.stages[0].scenario.trim, { rule: "fixed", lower: 0.1 });
+  assert.deepEqual(stageIssues(cox.stages[0]), []);
+  const aipw = planComparator({ covariates: ["age"], method: "aipw", tau: 12, summary: "survival", trim: { rule: "crump" } });
+  assert.equal(aipw.ok, true, JSON.stringify(aipw));
+  assert.equal(aipw.stages[0].scenario.summary, "survival");
+  assert.deepEqual(aipw.stages[0].scenario.trim, { rule: "crump" });
+  assert.deepEqual(stageIssues(aipw.stages[0]), []);
+});
+
 test("a study's declared design reaches the comparator-effect methods: weighted Cox, doubly robust, covariate sets", () => {
   const base = { covariates: ["age", "ecog"], tau: 12, parameterCode: "OS", snapshotId: "snp_1" };
   // the declared method and endpoint decide; nothing is read from a word of prose
@@ -938,7 +969,11 @@ test("a design the study's endpoint cannot support is refused in a sentence, not
   };
   const binary = { ...CMP_T2, definition: { ...definition, endpointType: "binary" } };
   refused(planComparator({ covariates: ["age"], method: "weighted_cox", tau: 12 }, {}, binary), "vcr_job_scenario_invalid", /事件时间终点/);
-  refused(planComparator({ covariates: ["age"], method: "aipw", tau: 12 }), "vcr_job_scenario_invalid", /连续或二分类/);
+  // the doubly robust job reads a time-to-event outcome since 1.3.0 (C8): the plan is made, and carries the horizon; only the covariate-set comparison still refuses it
+  const aipwTte = planComparator({ covariates: ["age"], method: "aipw", tau: 12 });
+  assert.equal(aipwTte.ok, true, JSON.stringify(aipwTte));
+  assert.equal(aipwTte.stages[0].jobKind, "aipw_comparator");
+  assert.equal(aipwTte.stages[0].scenario.tau, 12);
   refused(planComparator({ covariates: ["age"], method: "aipw" }, { estimand: "ATE" }, binary), "vcr_job_scenario_invalid", /ATT/);
   refused(planComparator({ covariateSets: [{ name: "a", covariates: ["x"] }, { name: "b", covariates: ["y"] }], method: "aipw", tau: 12 }), "vcr_job_scenario_invalid", /连续或二分类/);
   const noEndpoint = { ...CMP_T2, definition: null };
@@ -1250,7 +1285,8 @@ test("C3-09 a model answers only for what it declares it covers: the endpoint, t
   const refused = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: patientRow }, { ...context, populations: [population], models: [fitted] }));
   assert.equal(refused.ok, false);
   assert.equal(refused.refused.code, "vcr_model_not_applicable");
-  assert.deepEqual(refused.refused.paths, ["creatinine", "age"]);
+  // age reaching outside the fitted 40–80 is a premise of the answer now (in silico plan T03), not a reason to refuse it
+  assert.deepEqual(refused.refused.paths, ["creatinine"]);
   assert.match(refused.refused.message, /fitted-os/);
   // An explicitly selected missing model is refused; it never becomes a different generator.
   const unknown = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...patientRow, modelId: "absent" } }, { ...context, populations: [population], models: [fitted] }));
@@ -1654,4 +1690,14 @@ test("a stage states the unit its times are in — the design's own, the one its
   assert.ok(binary.ok, JSON.stringify(binary));
   for (const entry of binary.stages) assert.equal(entry.scenario.timeUnit, undefined, `${entry.stage}: no time, no unit`);
   assert.equal(binary.stages.some((entry) => entry.detail.timeUnitBasis !== undefined), false);
+});
+
+test("a borrowed control started by the id of a comparison that holds its scenario is built from the object; another method's configuration is not taken for it (review RF2 P2-2)", async () => {
+  const example = VCR_SCENARIO_EXAMPLES["comparator.borrowing"][0].scenario;
+  const self = { store: { async comparatorDesigns() { return [{ id: "cmp_b", configuration: example }, { id: "cmp_w", configuration: { covariates: ["age"], endpoint: { type: "binary" }, treatmentColumn: "arm", outcomeColumn: "y" } }, { id: "cmp_e", configuration: {} }]; } } };
+  const stage = (/** @type {string} */ id, /** @type {string} */ kind) => VcrOrchestrator.prototype.stageScenarioOf.call(self, { id: "std_1" }, id, kind);
+  assert.deepEqual(await stage("cmp_b", "borrowing_prior"), { scenario: example, detail: {} });
+  assert.deepEqual(await stage("cmp_w", "borrowing_prior"), { unavailable: true }, "a weighting's configuration is not a borrowing scenario");
+  assert.deepEqual(await stage("cmp_e", "borrowing_prior"), { unavailable: true }, "an object that holds nothing has no scenario to build");
+  assert.deepEqual(await stage("cmp_missing", "borrowing_prior"), { unavailable: true });
 });

@@ -18,7 +18,7 @@ const finishedRun = (extra = {}) => ({
   effectiveAgentId: "adr-analysis", effectiveAgentVersion: "1.3.1", finishedAt: "2026-10-03T09:00:00.000Z", durationMs: 1_380_000,
   artifacts: ["safety-report.md", "signals.csv"], ...extra,
 });
-const manifest = { id: "adr-analysis", version: "1.3.1", skill: "adr-analysis", companionSkills: ["autopilot-episode"], outputs: [{ path: "safety-report.md", required: true }] };
+const manifest = { id: "adr-analysis", version: "1.3.1", skill: "adr-analysis", companionSkills: ["deep-research"], outputs: [{ path: "safety-report.md", required: true }] };
 const noResults = { total: 0, bound: 0 };
 
 test("how a tool call ended is read from the persisted transcript's own shape", () => {
@@ -90,7 +90,7 @@ test("a delivered run is a success of its exact capability version, joined to it
   assert.equal(capability?.ref.boundResultVersions, 2);
   assert.deepEqual(capability?.ref.skills, [
     { name: "adr-analysis", source: "delegated", version: "1.3.1", digest: DIGEST },
-    { name: "autopilot-episode", source: "delegated", version: "1.3.1", digest: null },
+    { name: "deep-research", source: "delegated", version: "1.3.1", digest: null },
     { name: "personal-abc", source: "personal", version: "r4", digest: DIGEST },
   ], "a personal skill is named only when the model called it, at the revision and digest the run pinned");
   const tools = observations.filter((item) => item.kind === "tool").map((item) => `${item.id}:${item.outcome}`).sort();
@@ -146,6 +146,6 @@ test("a capability that owes no files delivers in its reply", () => {
 
 test("a skill version is recorded only where it is known: no digest for an old run, none for a companion", () => {
   const skills = skillVersionsOfRun({ manifest, run: finishedRun(), invoked: new Set(), bodyDigest: null });
-  assert.deepEqual(skills.map((skill) => [skill.name, skill.version, skill.digest]), [["adr-analysis", "1.3.1", null], ["autopilot-episode", "1.3.1", null]]);
+  assert.deepEqual(skills.map((skill) => [skill.name, skill.version, skill.digest]), [["adr-analysis", "1.3.1", null], ["deep-research", "1.3.1", null]]);
   assert.deepEqual(skillVersionsOfRun({ manifest: null, run: finishedRun(), invoked: new Set(), bodyDigest: null }), []);
 });

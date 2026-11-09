@@ -11,7 +11,9 @@
 #   packages on Ubuntu 24.04** (its `sysreqs` API, asked once for the union of
 #   both locks): libcurl and libssl for curl, libicu for stringi, libxml2 for
 #   xml2, libnode for V8 (RBesT's chain), libuv and cmake for fs and
-#   RcppParallel, make and pandoc for the Stan packages. Binary packages need
+#   RcppParallel, make and pandoc for the Stan packages; libglpk for igraph
+#   (netmeta's chain) and libpng, libjpeg, libtiff for readbitmap (IPDfromKM's),
+#   added with those cross-checks on 2026-11-03. Binary packages need
 #   the runtime side of these and a source build needs the headers; the -dev
 #   packages bring both. A package that still cannot load is named by
 #   `r-library.sh verify`, which loads every one of them.
@@ -32,6 +34,7 @@ attempt apt-get "${apt_fetch[@]}" update
 attempt apt-get "${apt_fetch[@]}" install -y --no-install-recommends \
   r-base r-base-dev r-recommended \
   libcurl4-openssl-dev libssl-dev libicu-dev libxml2-dev libnode-dev libuv1-dev \
+  libglpk-dev libpng-dev libjpeg-dev libtiff-dev \
   cmake make pandoc
 
 # The locks are for one R. An image that ships another is a different build of

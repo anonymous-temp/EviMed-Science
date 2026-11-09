@@ -34,7 +34,10 @@ export const ENGINE_BACKED_INTEGRATION_TESTS = Object.freeze([
   "vcrIntake.integration.test.mjs",
   "vcrKnowledgeEngine.integration.test.mjs",
   "vcrModelScience.integration.test.mjs",
+  "vcrTrainedModel.integration.test.mjs",
   "resultReplayLifecycle.integration.test.mjs",
+  "vcrExperiments.integration.test.mjs",
+  "vcrDiseaseLab.integration.test.mjs",
 ]);
 
 /** Auth's legacy schema-reset test must run in a different database. */
@@ -68,8 +71,8 @@ export async function runProductIntegrationTests({ databaseUrl, tests = productI
       await admin.query(`CREATE DATABASE "${name}"`);
       try {
         const isolated = new URL(url); isolated.pathname = `/${name}`;
-        const result = execute(process.execPath, ["--test", "--test-concurrency=1", "--test-timeout=180000", file], {
-          stdio: "inherit", env: { ...process.env, OPEN_SCIENCE_TEST_POSTGRES_URL: isolated.href }, timeout: 210000,
+        const result = execute(process.execPath, ["--test", "--test-concurrency=1", "--test-timeout=300000", file], {
+          stdio: "inherit", env: { ...process.env, OPEN_SCIENCE_TEST_POSTGRES_URL: isolated.href }, timeout: 330000,
         });
         results.push({ file: filename, exitCode: result.status ?? 1 });
       } finally { await admin.query(`DROP DATABASE "${name}" WITH (FORCE)`); }

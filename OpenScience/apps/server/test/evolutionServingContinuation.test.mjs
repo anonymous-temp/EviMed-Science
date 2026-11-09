@@ -9,7 +9,6 @@ import path from 'node:path';
 import { evolutionJobQueue, evolutionServiceFixture } from './helpers/evolutionServiceFixture.mjs';
 import { createEvolutionServingWorker } from '../src/evolutionServingWorker.mjs';
 import { createEvolutionServing } from '../src/evolutionServing.mjs';
-import { EvolutionIntegration } from '../src/evolutionIntegration.mjs';
 import { EvolutionDecisions } from '../src/evolutionDecisions.mjs';
 import { EvolutionMaintenance } from '../src/evolutionMaintenance.mjs';
 
@@ -17,26 +16,6 @@ const SERVING = { evolutionEnabled: true, evolutionMaxJobAttempts: 3 };
 const queue = evolutionJobQueue;
 /** Tick until nothing is claimed. @param {any} worker */
 async function drain(worker, limit = 30) { for (let index = 0; index < limit; index++) if (!await worker.tick()) return index; throw new Error('the queue did not drain'); }
-
-test('a dataset for a waiting agenda runs the published tool\'s self-check in serving and the agenda resumes', async () => {
-  const f = evolutionServiceFixture(); Object.assign(f.service.config, SERVING); f.service.jobs = queue(f);
-  const woken = [], ran = [];
-  const integration = new EvolutionIntegration({ service: f.service, autopilot: { wakeForEvolution: async (/** @type {any} */ input) => { woken.push(input); return { resumed: true }; } } });
-  f.service.callbacks.wakeAgenda = (/** @type {any} */ input) => integration.wakeAgenda(input);
-  await f.service.save('tool', 'published-tool', { track: 'M', status: 'active', validationLevel: 'V1', artifactDigest: 'pin' });
-  const waiter = await f.service.waitFor({ userId: 'alice', projectId: 'study', agendaId: 'agenda', toolId: 'published-tool', dataRequirements: { schema: { fields: [] } } });
-  const selfCheck = { run: async (/** @type {any} */ input) => { ran.push(input); return f.service.save('self-check', 'check-1', { projectId: input.projectId, toolId: input.toolId, status: 'passed', measurementCompleted: true }, null, input.userId); } };
-  const worker = createEvolutionServingWorker({ service: f.service, integration, decisions: new EvolutionDecisions({ service: f.service }), maintenance: new EvolutionMaintenance({ service: f.service }), selfCheck, config: f.service.config });
-  await integration.publish({ id: 'dataset:study:data:1', type: 'dataset-ready', userId: 'alice', projectId: 'study', datasetId: 'data', dataset: { semanticsChecksPassed: true } });
-  await drain(worker);
-  assert.deepEqual(ran.map(input => [input.toolId, input.datasetId, input.waiterId]), [['published-tool', 'data', waiter.id]]);
-  assert.deepEqual(woken.map(input => [input.agendaId, input.event.selfCheckStatus]), [['agenda', 'passed']]);
-  const resolved = await f.service.get(waiter.id, 'alice');
-  assert.equal(resolved.payload.status, 'resolved'); assert.equal(resolved.payload.selfCheckId, 'check-1');
-  assert.equal(f.jobs.find(job => job.kind === 'evolution-self-check').state, 'succeeded');
-  assert.equal(f.jobs.some(job => job.state === 'canceled' || /scout|build|mission|evaluate/.test(job.kind)), false);
-  await worker.close();
-});
 
 test('serving housekeeping keeps the digest, retirement completion and metrics-only month, and quarantines at most hourly', async () => {
   const f = evolutionServiceFixture(); Object.assign(f.service.config, SERVING); f.service.jobs = queue(f);
@@ -85,7 +64,7 @@ test('an unanswered harm review retires the tool restorably in serving and recor
     const facade = createEvolutionServing({ config: { evolutionEnabled: true, operatorUsers: ['operator'], dataDir, evolutionDecisionTimeoutMs: 0 }, documents: f.documents, jobs,
       database: { query: async () => ({ rows: [] }), transaction: async (/** @type {any} */ fn) => fn({ query: async () => ({ rows: [] }) }) },
       store: { userById: async () => user, projectFor: async () => ({ id: 'evolution' }), requireProject: async () => ({ id: 'p', userId: user.id }) },
-      registry: Promise.resolve({ list: () => [] }), runtimeManager: {}, controller: {}, agentRuns: { list: async () => [] }, notifications: f.service.notifications, autopilot: {} });
+      registry: Promise.resolve({ list: () => [] }), runtimeManager: {}, controller: {}, agentRuns: { list: async () => [] }, notifications: f.service.notifications });
     assert.ok(facade);
     const s = facade.service;
     const tool = await s.save('tool', 'flagged', { track: 'M', status: 'active', artifactDigest: 'sha256:'.padEnd(71, 'a'), validationLevel: 'V1',

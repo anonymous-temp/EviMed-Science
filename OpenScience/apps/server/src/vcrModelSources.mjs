@@ -7,6 +7,19 @@ import { literatureUnitIsInQuote } from "./vcrEvidenceSources.mjs";
 import { numericLiteralInSpan, numericLiteralSpans } from "./vcrNumericLiterals.mjs";
 const object = (/** @type {any} */ value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 const digest = (/** @type {string} */ value) => createHash("sha256").update(value).digest("hex");
+/**
+ * The identity of a model as a calculation freezes it: its name and version plus whatever the card pins by hash — the source
+ * files, the weights, the code and the executable specification. A changed hash is a new identity, so a result computed on the
+ * old one keeps naming the old one and stays readable; a card that pins nothing (every card written before) is identified by its
+ * name and version alone, exactly as it was.
+ * @param {Record<string, any>} model a row of the model library
+ */
+export function vcrModelIdentity(model) {
+  const card = object(model.card);
+  const pinned = Object.fromEntries(["sourceSha256", "weightsSha256", "codeSha256"].filter(key => typeof card[key] === "string" && card[key]).map(key => [key, card[key]]));
+  const scenarioHash = object(card.executionSpec).scenarioHash;
+  return digest(canonicalScenarioJson({ name: model.name ?? model.id ?? null, version: model.version ?? null, ...pinned, ...(typeof scenarioHash === "string" ? { scenarioHash } : {}) }));
+}
 export const VCR_LITERATURE_PROFILES = Object.freeze([
   { method: "patients.continuous", label: "连续结局参考仿真", endpoint: "continuous", fields: [
     { key: "truth.effect", label: "结局差值", unit: "outcome units", required: true }, { key: "truth.sd", label: "标准差", unit: "outcome units", required: true },

@@ -97,7 +97,11 @@ test("every setting the runtime depends on still holds in the composition the im
   // 209 on 2026-10-31 (merge of the Gitee main e9c9f96f6): `evimed-search-topics`, the row of the independent search-topics host bundle
   // (disabled unless EVIMED_SEARCH_TOPICS_ENABLED), written by hand into the baseline with BASELINE_PROVENANCE.sha256 moved in the same edit.
   // 210 on 2026-11-01 (0.2.1-rc.5): `entry-customization`, the More menus the kernel's web app adds (hidden by the hosted profile).
-  assert.equal(report.counts.baselineRows, 210, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue, LoopX and the OpenViking memory plugin with its bridge");
+  // 215 on 2026-11-04 (0.2.2-rc.1): seven in (the native and PTC tool executors, file actions, the context menu, message quotes, file drag,
+  // the deliverable-file paragraph), two out (the subagent list-agents leaf, the 1017 model label).
+  // 221 on 2026-11-07 (merge of the in silico branch): the six rows of 2026-11-06, four research domains, their optional suite and the
+  // authenticated host adapter.
+  assert.equal(report.counts.baselineRows, 221, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue, LoopX and the OpenViking memory plugin with its bridge");
   assert.equal(parseCordisDocument(await readFile(source("baseline"), "utf8")).rows.filter((row) => ["dsh-annotation", "ui-mermaid"].includes(row.id)).length, 2);
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.byId.get("evimed-engine-context").name, "@evimed/dsh-socket/plugins/engine-context");
@@ -117,7 +121,8 @@ test("every setting the runtime depends on still holds in the composition the im
   // (`present`), one-shot sub-agent (`tool-subagent`) and `/compact`
   // (`command-compact`, inside the compaction group) are mounted for general
   // multi-step work.
-  assert.equal(report.counts.presetRows, 26, "the preset includes core policy, grouped native tools and the trusted optional hosted extension shim");
+  // 27 since 2026-11-04: `tool-schedule`, the kernel's scheduled tasks, said in the conversation.
+  assert.equal(report.counts.presetRows, 27, "the preset includes core policy, grouped native tools and the trusted optional hosted extension shim");
   const preset = parseCordisDocument(await readFile(source("preset"), "utf8"));
   assert.equal(preset.rows.filter(row => row.id === "evimed-cowork-bridge").length, 1);
   assert.equal(preset.byId.get("evimed-cowork-bridge").name, "@evimed/dsh-socket/extensions/cowork");
@@ -169,6 +174,12 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "deepseek-account.disabled=true",
       // 0.2.0's product-usage pair: upstream disables it with a profile-name expression, held off by value here.
       "desktop-product-telemetry.disabled=true",
+      // Preinstalled research bundles require verified project admission before activation.
+      "evimed-synthetic-control.disabled=true",
+      "evimed-virtual-cohort.disabled=true",
+      "evimed-virtual-patient.disabled=true",
+      "evimed-virtual-research-suite.disabled=true",
+      "evimed-virtual-trial.disabled=true",
       // 0.2.1's guidance for people developing the kernel (its checkout, its page's reload) plus an internal URL.
       "harness-dev-context.disabled=true",
       "hmr.disabled=true",
@@ -215,7 +226,7 @@ test("the invariant list is read out of the composition, not retyped beside it",
       "sandbox.config.runnerFailureSignatures[5]=landlock-run: exec failed",
       "sandbox.config.runnerFailureSignatures[6]=landlock-run: out of memory",
       // 0.2.1 brought the kernel's own cron-like prompts back into the web app; scheduled work is the control plane's.
-      "schedule.disabled=true",
+      "schedule.config.newSessionIntervalSeconds=!!js Number(process.env.EVIMED_SCHEDULE_NEW_SESSION_INTERVAL_SECONDS || 900)",
       // 0.1.7 flipped its default on: the whole session log with every request.
       "session-log-deepseek.disabled=true",
       "session-telemetry-otel.disabled=true",

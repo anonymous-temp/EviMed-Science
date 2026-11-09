@@ -79,7 +79,7 @@ test("the composition mounts every agent plugin we own, the kernel's own pieces 
   assert.equal(AGENT_PLUGIN_IDS.length, 10, "add the row here when a plugin is added, so the count stays a fact");
   assert.deepEqual([...HOST_PLUGIN_IDS].sort(), [
     "evimed-runtime-ui", "evimed-skill-catalogue", "evimed-plugin-probe", "evimed-seam-probe",
-    "evimed-evidence-store", "evimed-web", "evimed-engine-context", "evimed-loopx-bootstrap", "evimed-memory-bridge",
+    "evimed-evidence-store", "evimed-web", "evimed-engine-context", "evimed-research-adapter", "evimed-loopx-bootstrap", "evimed-memory-bridge",
   ].sort());
   assert.deepEqual([...patch.matchAll(/^\s+- id: (evimed-[\w-]+)\s*$/gm)].map(row => row[1]).sort(),
     [...HOST_PLUGIN_IDS].sort(), "the host patch must mount exactly the intended plugin identities");
@@ -97,7 +97,7 @@ test("the composition mounts every agent plugin we own, the kernel's own pieces 
   // while the composition was written as a medical research assistant's
   // (2026-10-12 review, GA19): a task that is not a capability deliverable had
   // no step list, no delegation and no way to hand a file over.
-  for (const native of ["tool-todo", "tool-subagent", "present", "tool-ask-user", "command-compact"]) {
+  for (const native of ["tool-todo", "tool-subagent", "present", "tool-ask-user", "command-compact", "tool-schedule"]) {
     assert.ok(mounted(native), `${native} is not mounted; a general task has nothing to work with in its place`);
   }
   // What the composition says about code is a fact about the pinned kernel,
@@ -1220,7 +1220,7 @@ test("the guidance offers the capability catalogue as an index of professional w
   // A plan is for one of these deliverables; an ordinary file task is simply done.
   assert.doesNotMatch(text, /需要产出文件的任务，先写计划/);
   assert.match(text, /用户要的正是其中一种正式交付物时才用它：调用 `evimed_plan`/);
-  assert.match(text, /把所作的假设写进结果里/, "a runtime without the ask-user tool is told to write the assumption down");
+  assert.match(text, /清楚标注假设/, "an authorized hypothetical demonstration must label its assumptions");
   assert.ok(!/evimed_review_run/.test(text), "a disabled capability must not be advertised");
   assert.ok(CONTRACT_KINDS.includes("clinical-evidence-report"));
   // With the tool mounted, a question is for what changes the next step, never a ceremony (principle 17).
@@ -1233,7 +1233,8 @@ test("the guidance offers the capability catalogue as an index of professional w
   assert.doesNotMatch(asking, /一次问清/);
   // A question nobody answered is not the reply. On a real session a clinical question (「INR 3.8，今晚这顿还吃不吃」)
   // was answered with two questions and nothing else once the card could not be drawn (2026-10-13).
-  assert.match(asking, /提问没有得到回答时，照最合理的理解做完，把还需要用户确认的点写在回答里，不提提问的事/);
+  assert.match(asking, /提问没有得到回答时，已有输入的部分照常完成/);
+  assert.match(asking, /列出所需信息，不补造/);
   assert.match(asking, /自动续跑和定时触发的轮次不追问/);
   assert.doesNotMatch(asking, /本部署不接受运行中追问/);
 });
@@ -1490,4 +1491,47 @@ test("the plugin probe injects no loader: a runtime without one keeps its citati
   assert.equal(inject.includes("loader"), false);
   // Every service it does inject is one the seam manifest names as required of the kernel.
   for (const name of inject) assert.ok(SEAMS.services.required.includes(name), `${name} is a required kernel service`);
+});
+
+test("an unattended execution can pause or delete a scheduled task and nothing else; a person's turn is held to nothing", () => {
+  // The kernel's own scheduled-task tools (2026-11-04). A task that makes tasks is a loop nobody asked for, and widening one
+  // (a new instruction, a new rule, a new destination, resuming) is the person's to say; pausing and deleting are what upstream's own
+  // guidance keeps authorised for a running task ("stop once the PR is merged").
+  const state = (/** @type {Record<string, any>} */ over) => ({
+    budget: { steps: 0, tokens: 0, children: 0 }, limits: { maxSteps: 0, maxTokens: 0, maxChildren: 0, maxConcurrentChildren: 0 },
+    submitAttempts: 0, deliveryAttemptLimit: 3, ...over,
+  });
+  /** The refusal's code, or null when the call is allowed. */
+  const refused = (/** @type {string} */ name, /** @type {Record<string, any>} */ args, /** @type {Record<string, any>} */ over = { unattended: true }) => {
+    const verdict = toolPolicy({ name, args }, state(over));
+    return verdict.allow ? null : verdict.code;
+  };
+  const create = { title: "weekly digest", prompt: "summarise new trials", rrule: "FREQ=WEEKLY", target: "new" };
+  assert.equal(refused("schedule_create", create), "task_tools_not_in_conversation");
+  assert.equal(refused("schedule_create", {}), "task_tools_not_in_conversation");
+  // Pausing, with or without the edit's concurrency check, and deleting.
+  assert.equal(refused("schedule_edit", { id: "sch_1", action: "update", active: false }), null);
+  assert.equal(refused("schedule_edit", { id: "sch_1", action: "update", active: false, expectedUpdatedAt: "2026-11-05T01:00:00.000Z" }), null);
+  assert.equal(refused("schedule_edit", { id: "sch_1", action: "delete" }), null);
+  assert.equal(refused("schedule_edit", { id: "sch_1", action: "delete", expectedUpdatedAt: "2026-11-05T01:00:00.000Z" }), null);
+  // Everything that would keep a task going, or send it somewhere else, is refused: resuming, and each field a patch can carry.
+  assert.equal(refused("schedule_edit", { id: "sch_1", action: "update", active: true }), "task_tools_not_in_conversation");
+  assert.equal(refused("schedule_edit", { id: "sch_1", action: "update" }), "task_tools_not_in_conversation", "an update that pauses nothing");
+  for (const field of ["title", "prompt", "rrule", "target"]) {
+    assert.equal(refused("schedule_edit", { id: "sch_1", action: "update", active: false, [field]: field === "target" ? "new" : "x" }), "task_tools_not_in_conversation", `a pause that also sets ${field}`);
+    assert.equal(refused("schedule_edit", { id: "sch_1", action: "update", [field]: field === "target" ? "new" : "x" }), "task_tools_not_in_conversation", field);
+  }
+  // Reading is not changing.
+  assert.equal(refused("schedule_list", {}), null);
+  assert.equal(refused("schedule_view", { id: "sch_1" }), null);
+  // The reason is a sentence the model can act on, and it names what is allowed.
+  const verdict = toolPolicy({ name: "schedule_edit", args: { id: "sch_1", action: "update", active: true } }, state({ unattended: true }));
+  assert.match(/** @type {any} */ (verdict).reason, /pause or delete/);
+  // A person at the conversation, or a turn that says nothing about it (attended is the default of a run policy that was never told
+  // otherwise), is not held: they asked for the task.
+  for (const over of [{ unattended: false }, {}]) {
+    assert.equal(refused("schedule_create", create, over), null);
+    assert.equal(refused("schedule_edit", { id: "sch_1", action: "update", active: true, prompt: "new" }, over), null);
+    assert.equal(refused("schedule_edit", { id: "sch_1", action: "delete" }, over), null);
+  }
 });

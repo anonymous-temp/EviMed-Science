@@ -944,7 +944,7 @@ export function pluginSource(plugin) {
  * are read from a deployment-owned read-only directory rather than materialized
  * into the workspace — a workspace file would be an upload away from being an
  * instruction).
- * @param {any} ctx @param {{ name: string, description: string, content: string, whenToUse?: string }} skill
+ * @param {any} ctx @param {{ name: string, description: string, content: string, whenToUse?: string, resourceDir?: string }} skill
  * @returns {() => void}
  */
 export function registerSkill(ctx, skill) {
@@ -952,6 +952,8 @@ export function registerSkill(ctx, skill) {
     name: skill.name,
     description: skill.description,
     content: skill.content,
+    source: 'runtime',
+    ...(skill.resourceDir ? { resourceBase: { kind: 'directory', path: skill.resourceDir } } : {}),
     // `whenToUse` is a declared field of `SkillSummary`, and the catalog the
     // model reads surfaces it as routing guidance. Under `metadata` it is
     // parsed-frontmatter cargo the catalog never shows, so the skill was
@@ -1504,7 +1506,9 @@ async function probeToolPipeline(ctx) {
       execute: async () => ({ ok: true, data: { probe: true } }),
     })
     disposers.push(ctx.tools.register(tool))
-    await ctx.tools.execute({ callId: `probe-${Date.now()}`, name: probeName, arguments: {}, signal: AbortSignal.timeout(5000) })
+    // From 0.2.2 a call is a batch, run by the composition's executor row (`tool-executor-native`). A probe that kept the old shape reads as
+    // two silent seams, because the batch is refused before either fires.
+    await ctx.tools.execute({ calls: [{ type: 'tool-call', id: `probe-${Date.now()}`, name: probeName, arguments: '{}' }], signal: AbortSignal.timeout(5000) })
     return { policyFired, observedFired, error: null }
   } catch (error) {
     return { policyFired, observedFired, error: errorMessage(error) }
@@ -1596,7 +1600,7 @@ export async function probeSandbox(ctx, required) {
   }
 }
 
-export { registerPluginProbe, registerCitationConfiguration, installedCitationVersion, registerExtensionConfiguration, verifyExtensionAgent, extensionInvocationFacts } from './src/pluginProbe.mjs'
+export { registerPluginProbe, registerCitationConfiguration, installedCitationVersion, registerExtensionConfiguration, registerResearchConfiguration, verifyResearchAgent, verifyExtensionAgent, extensionInvocationFacts } from './src/pluginProbe.mjs'
 
 // The compaction settings both sides of the container boundary derive, and the
 // request-size guard's measurement and trigger. The compaction itself is the

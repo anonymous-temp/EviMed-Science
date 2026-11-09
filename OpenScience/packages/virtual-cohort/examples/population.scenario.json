@@ -1,0 +1,16 @@
+{
+  "method": "population.scenario",
+  "scenario": {
+    "n": 200,
+    "population": {
+      "variables": [
+        {
+          "name": "age",
+          "family": "normal",
+          "mean": 60,
+          "sd": 9
+        }
+      ]
+    }
+  }
+}

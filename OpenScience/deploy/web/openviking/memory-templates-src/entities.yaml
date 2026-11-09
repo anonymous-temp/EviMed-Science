@@ -5,15 +5,12 @@ description: |
   user described in a user-role message: organisations and institutions, products, software
   systems, datasets and registries, standards and guidelines, instruments, works, places and
   concepts. Store what the entity is and its durable relation to the user's work.
-  Never a card for a person. No individual gets an entity card: not a patient, client,
-  student, colleague, supervisor, family member or public figure.
-  The user's own project is not an entity: it is described in PROJECT_CONTEXT. An entity
-  the user merely asked a question about (a trial, a drug, a law, a competitor's product)
-  gets no card; only what the user states about an entity as part of their own work does.
-  The most useful cards are the organisations and systems the user's work depends on: their
-  employer, department or lab, a journal or client they write for, the software their team
-  uses, a registry or standard they follow. People are never cards: who does what in their work
-  is a working fact of a project (PROJECT_CONTEXT) or of their team (PROJECT_FACTS).
+  A person belongs in PEOPLE, one file per person; useful information about them is preserved
+  there under the same retention rule. The user's own project belongs in PROJECT_CONTEXT.
+  A question alone does not establish a fact, but useful claims about an entity from documents
+  or the assistant may be retained with explicit attribution, without treating them as true.
+  The most useful cards include organisations and systems the user's work depends on, and
+  any other recurring entity. These examples do not define a closed category list.
   Entity identity is the referenced real-world object. Merge only explicit aliases of the
   same object; distinct objects stay separate even when they share a theme.
 
@@ -43,7 +40,6 @@ fields:
     description: |
       Category written in {{ language }}, e.g. 机构, 产品, 系统, 数据集, 标准, 地点, 概念.
       {% if language == 'en' %}Use lowercase with underscores, max 3 words.{% else %}Keep it concise and natural in {{ language }}.{% endif %}
-      Never a category of people.
     merge_op: replace
 
   - name: name
@@ -56,7 +52,7 @@ fields:
     type: string
     description: |
       Compact Markdown card: one H1 display name, one plain sentence saying what it is, then
-      1-3 H2 sections whose bodies are bullet lists (1-5 bullets each) of facts the user
-      stated about it. About 800 characters is a soft target. When updating, keep every
+      1-3 H2 sections whose bodies are bullet lists (1-5 bullets each) of useful attributed information
+      about it. About 800 characters is a soft target. When updating, keep every
       existing fact that is not contradicted and deduplicate paraphrases.
     merge_op: patch

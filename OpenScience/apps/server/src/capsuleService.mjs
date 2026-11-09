@@ -660,7 +660,7 @@ export class CapsuleService {
 
   /**
    * Something the assistant wrote down because the researcher asked it to
-   * (「记住…」), or a decision the researcher made on an autopilot digest.
+   * (「记住…」).
    *
    * It is an entry of the researcher's one capsule, labelled with the project it
    * was written in (`entryProject`): the project's conversations read it and no

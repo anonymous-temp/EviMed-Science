@@ -658,10 +658,14 @@ profile_seed() {
   # (deps-version.json loopx.compatibility.dshVersionExemption) and only for the archive whose digest is the pin.
   node /usr/local/lib/evimed/loopx-compat.mjs --grant-exemption "${DSH_HOME_SEED}" "${loopx_archive}"
   DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --save-prod --save-exact "@deepseek-ai/dsh-base@${DSH_VERSION}" "@deepseek-ai/dsh-web-app@${DSH_VERSION}" "${DSH_CITE_BUNDLE}" "${DSH_ANNOTATION_BUNDLE}" "${DSH_MERMAID_BUNDLE}" "${loopx_archive}" "${openviking_archive}" file:/opt/evimed/socket file:/opt/evimed/search-topics
+  # Official package installation is image-build-only. Every package remains
+  # disabled by the socket until a verified project generation selects it.
+  node /usr/local/bin/evimed-research-bundles.mjs install
   node -e 'const fs=require("node:fs");const name="@evimed/dsh-search-topics";const source=JSON.parse(fs.readFileSync("/opt/evimed/search-topics/package.json","utf8"));const installed=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));if(installed.name!==name||installed.version!==source.version)throw Error("Search topics bundle identity mismatch")' "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@evimed/dsh-search-topics/package.json"
   # Reconciliation follows pnpm's package-name order; our patch must run after LoopX's and the OpenViking plugin's, whose rows it configures.
   node /usr/local/lib/evimed/loopx-compat.mjs --order-profile "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"
   node /usr/local/lib/evimed/install-openviking-plugin.mjs order "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"
+  node /usr/local/bin/evimed-research-bundles.mjs order
   # Keep this independent host bundle last in both a fresh build and an offline delta.
   node -e 'const fs=require("node:fs");const file=process.argv[1],profile=JSON.parse(fs.readFileSync(file,"utf8")),name="@evimed/dsh-search-topics",bundles=profile.dsh.profile.bundles;if(bundles.filter(value=>value===name).length!==1)throw Error("Search topics bundle is not selected exactly once");profile.dsh.profile.bundles=[...bundles.filter(value=>value!==name),name];fs.writeFileSync(file,JSON.stringify(profile,null,2)+"\n")' "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"
   node /usr/local/lib/evimed/install-openviking-plugin.mjs verify "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@openviking/dsh-memory-plugin"

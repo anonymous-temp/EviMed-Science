@@ -1,14 +1,16 @@
 {
   "dependency": "dsh",
-  "version": "0.2.1-rc.5",
-  "observedAt": "2026-11-01T03:20:00Z",
-  "observedOn": "the dev box, 2026-11-01: `@deepseek-ai/dsh@0.2.1-rc.5` installed with npm under the pin's `publishedBefore` into a scratch prefix, booted as the shipped `web` profile (not the hosted `evimed-runtime` composition) with one `--patch` overlay that sets the `ui-chat` row's config to `transcriptView: standard` and `linkOpening: new-tab`, the two values apps/server/src/dshProfilePatch.mjs writes",
-  "fixtureEvidence": "Every other file in this directory is the verbatim response body the kernel returned, byte for byte, captured with curl after exchanging the printed launch token for the browser cookie. Nothing was re-indented, trimmed or invented. Re-recorded at rc.5 (the rc.2 recording of 2026-10-28 differed from it in two ways only: the schema numbers of the refs, and the model catalogue's two changes listed below).",
+  "version": "0.2.2-rc.1",
+  "observedAt": "2026-11-04T23:50:00Z",
+  "observedOn": "the dev box, 2026-11-04: `@deepseek-ai/dsh@0.2.2-rc.1` installed with npm under the pin's `publishedBefore` into a scratch prefix, booted as the shipped `web` profile (not the hosted `evimed-runtime` composition) with one `--patch` overlay that sets the `ui-chat` row's config to `transcriptView: standard` and `linkOpening: new-tab`, the two values apps/server/src/dshProfilePatch.mjs writes, and the `session-log-deepseek` row disabled, as the hosted composition has it",
+  "fixtureEvidence": "Every other file in this directory is the verbatim response body the kernel returned, byte for byte, captured with curl after exchanging the printed launch token for the browser cookie. Nothing was re-indented, trimmed or invented. Re-recorded at 0.2.2-rc.1 (2026-11-04), and earlier at rc.5 (the rc.2 recording of 2026-10-28 differed from it in two ways only: the schema numbers of the refs, and the model catalogue's two changes listed below).",
   "fixtures": {
     "settings-describe.json": {
       "request": "POST /api/settings/describe, body {\"type\":\"client-request\",\"rpcId\":\"r1\",\"method\":\"settings/describe\",\"payload\":{\"args\":{}}}",
       "status": 200,
-      "headers": { "content-type": "application/json" },
+      "headers": {
+        "content-type": "application/json"
+      },
       "readBy": "apps/server/test/runtimeUiPolicy.test.mjs (replayed through the hosted proxy's projection, runtimeUiSettingsAnswer in @evimed/domain) and apps/server/test/dshProfilePatch.test.mjs (the profile's values against the kernel's schema)"
     }
   },

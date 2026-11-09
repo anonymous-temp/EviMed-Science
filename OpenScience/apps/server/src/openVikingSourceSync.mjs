@@ -72,6 +72,9 @@ export async function readableSourceProjects(database, { limit = 200, includeLib
   return result.rows.map((/** @type {any} */ row) => ({ userId: row.user_id, projectId: row.project_id }));
 }
 
+/** How many times a document that changed under a pass is converged again before the next event is trusted to. */
+const CONVERGE_RECHECKS = 3;
+
 export class OpenVikingSourceSync {
   /**
    * @param {{ config: any, sources: any, resources: any, jobs: any, library?: any, engine?: any, lifecycle?: ((job: any) => Promise<any>) | null, now?: () => Date, report?: (code: string) => void }} dependencies
@@ -171,32 +174,47 @@ export class OpenVikingSourceSync {
    * @returns {Promise<{ action: "pushed" | "removed" | "unchanged" | "absent", sourceId: string }>}
    */
   async convergeSource(userId, sourceId, projectId = null) {
-    const work = () => this.convergeSourceCurrent(userId, sourceId, projectId);
-    return typeof this.sources.withRegistrationLocks === "function"
-      ? this.sources.withRegistrationLocks([`source:${userId}:${sourceId}`], work) : work();
+    // No registration lock and no transaction: the engine answers in seconds to minutes, and a lock or a transaction held
+    // that long froze ingestion's publication and emptied the connection pool (2026-11-05). What the lock guarded is
+    // checked afterwards instead: a document that changed while it was being pushed is converged again, and a push of a
+    // stale rendition is replaced by the next one (the push is idempotent and keyed by content).
+    let outcome = await this.convergeSourceCurrent(userId, sourceId, projectId);
+    for (let again = 0; again < CONVERGE_RECHECKS; again += 1) {
+      const settled = outcome.stamp;
+      if (settled === (await this.#stamp(userId, sourceId))) break;
+      outcome = await this.convergeSourceCurrent(userId, sourceId, projectId);
+    }
+    return { action: outcome.action, sourceId: outcome.sourceId };
+  }
+
+  /** What identifies the state of a document a pass read: its revision, or that it is gone. @param {string} userId @param {string} sourceId */
+  async #stamp(userId, sourceId) {
+    const source = await this.#current(userId, sourceId);
+    return source ? `${source.revision}:${source.payload?.generation ?? ""}` : "gone";
   }
 
   /** @param {string} userId @param {string} sourceId @param {string | null} projectId
-   * @returns {Promise<{ action: "pushed" | "removed" | "unchanged" | "absent", sourceId: string }>} */
+   * @returns {Promise<{ action: "pushed" | "removed" | "unchanged" | "absent", sourceId: string, stamp: string }>} */
   async convergeSourceCurrent(userId, sourceId, projectId) {
     const source = await this.#current(userId, sourceId);
+    const stamp = source ? `${source.revision}:${source.payload?.generation ?? ""}` : "gone";
     const project = source?.projectId ?? projectId;
-    if (!project) return { action: "absent", sourceId };
+    if (!project) return { action: "absent", sourceId, stamp };
     const uri = this.resources.sourceUri(userId, project, sourceId);
     if (!OpenVikingSourceSync.pushable(source)) {
       const removed = await this.resources.removeSource(userId, uri);
       if (removed) this.counters.removed += 1;
-      return { action: removed ? "removed" : "absent", sourceId };
+      return { action: removed ? "removed" : "absent", sourceId, stamp };
     }
     const rendition = await this.#rendition(userId, source);
-    if (!rendition) return { action: "absent", sourceId };
+    if (!rendition) return { action: "absent", sourceId, stamp };
     const attrs = await this.resources.attrs(userId, uri);
     if (attrs?.sha === rendition.sha && attrs.rendition === renditionHash(rendition.text)) {
-      this.counters.unchanged += 1; return { action: "unchanged", sourceId };
+      this.counters.unchanged += 1; return { action: "unchanged", sourceId, stamp };
     }
     await this.resources.pushSource(userId, uri, rendition.text, { sourceId, sha: rendition.sha, docType: source.payload.docType ?? null });
     this.counters.pushed += 1;
-    return { action: "pushed", sourceId };
+    return { action: "pushed", sourceId, stamp };
   }
 
   /** The complete readable inventory and its text/rendered digests; a partial scan cannot authorize removals.
@@ -279,9 +297,9 @@ export class OpenVikingSourceSync {
    * @param {string} userId @param {{ apply?: boolean }} [options]
    */
   async reconcileLibrary(userId, { apply = true } = {}) {
-    const work = () => this.reconcileLibraryCurrent(userId, { apply });
-    return typeof this.sources.withRegistrationLocks === "function"
-      ? this.sources.withRegistrationLocks([`library:${userId}`], work) : work();
+    // No library lock or transaction around the engine calls (see `convergeSource`): a pass reads the account's library,
+    // then pushes; a document that changed meanwhile is corrected by the next pass, which the change itself queues.
+    return this.reconcileLibraryCurrent(userId, { apply });
   }
 
   /** @param {string} userId @param {{ apply?: boolean }} [options] */
@@ -331,34 +349,57 @@ export class OpenVikingSourceSync {
     return this.convergeSource(job.userId, String(job.payload?.sourceId ?? ""), job.payload?.projectId ?? job.projectId ?? null);
   }
 
-  /** The validated account epoch owns SQL changes and bounded engine requests until they settle.
+  /** The validated account epoch owns the SQL changes of a lifecycle event; the engine is reached after it has committed.
    * @param {{ userId: string, payload: any }} job */
   async runLifecycleJob(job) {
-    const work = async () => {
+    // Phase 1, inside the database: the account fence and the lifecycle's own SQL (a short transaction, under the
+    // registration guards in their fixed order). Phase 2, outside it: the engine requests, which may take minutes.
+    const sql = async () => {
       const lifecycle = await this.lifecycle?.(job);
       if (lifecycle === false) return { skipped: "obsolete-account" };
-      const runtimeReplica = lifecycle?.runtimeReplica;
-      if (!this.enabled) return { lifecycle: true, skipped: "engine-disabled", ...(runtimeReplica ? { runtimeReplica } : {}) };
-      const sourceScope = job.payload.scope === "source";
-      if (sourceScope) await this.convergeSourceCurrent(job.userId, job.payload.sourceId, job.payload.projectId);
-      const library = sourceScope ? await this.reconcileLibraryCurrent(job.userId) : await this.reconcileLibrary(job.userId);
-      if (library.failed.length) throw Object.assign(new Error("Some library resources could not be synchronised."), { code: "ov_resource_sync_partial" });
-      return { lifecycle: true, library, ...(runtimeReplica ? { runtimeReplica } : {}) };
+      return { runtimeReplica: lifecycle?.runtimeReplica };
     };
     const database = this.sources.documents?.database;
-    if (!database) return work();
-    const epoch = () => database.transaction(client => database.withTransactionClient(client, async () => {
-      const account = await client.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1 FOR SHARE", [job.userId]);
-      if (!job.payload.accountCreatedAt || account.rows[0]?.generation !== job.payload.accountCreatedAt) return { skipped: "obsolete-account" };
-      return work();
-    }));
-    if (job.payload.scope !== "source" || typeof this.sources.withRegistrationLocks !== "function") return epoch();
-    const current = await this.sources.documents.get(job.userId, "source", job.payload.sourceId, { includeDeleted: true });
-    // Own every JS/advisory guard before the account -> jobs -> source row fences. Nested
-    // convergence and source publication use their Current helpers under these same guards.
-    const keys = [`library:${job.userId}`, `source:${job.userId}:${job.payload.sourceId}`];
-    if (current?.payload.familyId) keys.push(`family:${job.userId}:${current.payload.familyId}`);
-    return this.sources.withRegistrationLocks(keys, epoch);
+    /** @type {any} */
+    let phase;
+    if (!database) phase = await sql();
+    else {
+      const epoch = () => database.transaction((/** @type {any} */ client) => database.withTransactionClient(client, async () => {
+        if (!(await this.#accountCurrent(client, job))) return { skipped: "obsolete-account" };
+        return sql();
+      }));
+      if (job.payload.scope !== "source" || typeof this.sources.withRegistrationLocks !== "function") phase = await epoch();
+      else {
+        const current = await this.sources.documents.get(job.userId, "source", job.payload.sourceId, { includeDeleted: true });
+        // Own every JS/advisory guard before the account -> jobs -> source row fences.
+        const keys = [`library:${job.userId}`, `source:${job.userId}:${job.payload.sourceId}`];
+        if (current?.payload.familyId) keys.push(`family:${job.userId}:${current.payload.familyId}`);
+        phase = await this.sources.withRegistrationLocks(keys, epoch);
+      }
+    }
+    if (phase.skipped) return phase;
+    const runtimeReplica = phase.runtimeReplica;
+    if (!this.enabled) return { lifecycle: true, skipped: "engine-disabled", ...(runtimeReplica ? { runtimeReplica } : {}) };
+    const sourceScope = job.payload.scope === "source";
+    if (sourceScope) await this.convergeSource(job.userId, job.payload.sourceId, job.payload.projectId);
+    let library = await this.reconcileLibrary(job.userId);
+    // The fence of the first phase held while the SQL ran; the engine work after it can overlap an account's deletion or
+    // re-creation. Looked at again, and if the account is no longer the one the event named, the engine is made to agree
+    // with what PostgreSQL holds now (the account's documents are gone, so the pass removes what it just wrote).
+    if (database && !(await this.#accountCurrent(database, job))) {
+      if (sourceScope) await this.convergeSource(job.userId, job.payload.sourceId, job.payload.projectId);
+      library = await this.reconcileLibrary(job.userId);
+    }
+    if (library.failed.length) throw Object.assign(new Error("Some library resources could not be synchronised."), { code: "ov_resource_sync_partial" });
+    return { lifecycle: true, library, ...(runtimeReplica ? { runtimeReplica } : {}) };
+  }
+
+  /** Whether the account is still the incarnation the event was written for. `runner` is a client (shared lock) or the database.
+   * @param {any} runner @param {{ userId: string, payload: any }} job */
+  async #accountCurrent(runner, job) {
+    const shared = typeof runner.release === "function" ? " FOR SHARE" : "";
+    const account = await runner.query(`SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1${shared}`, [job.userId]);
+    return Boolean(job.payload.accountCreatedAt) && account.rows[0]?.generation === job.payload.accountCreatedAt;
   }
 
   /**

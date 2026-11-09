@@ -39,6 +39,8 @@ export const CAPSULE_LAYERS = Object.freeze(['sources', 'knowledge', 'profile', 
  */
 export const CAPSULE_FACT_KINDS = Object.freeze([
   'profile',
+  'person',
+  'note',
   'preference',
   'behavior',
   'project_fact',

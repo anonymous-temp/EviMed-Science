@@ -57,6 +57,8 @@ export function nativeConversationTitleKey(ref) {
  *  (`nativeMemoryFile`): the corrections template writes under `preferences/corrections/`, and that is `corrections` here. */
 export const PAGE_KIND_OF_TYPE = Object.freeze({
   profile: "profile",
+  people: "person",
+  notes: "note",
   preferences: "preference",
   corrections: "correction",
   decisions: "decision",
@@ -788,12 +790,13 @@ export class NativeMemoryStore {
 
   /**
    * The page's list read with filters (`GET /api/memory/records`): scopes, kinds and a project.
-   * @param {string} userId @param {{ scopes?: string[], statuses?: string[], kinds?: string[], scopeId?: string, query?: string, pageSize?: number }} filters
+   * @param {string} userId @param {{ scopes?: string[], statuses?: string[], kinds?: string[], scopeId?: string, query?: string, pageSize?: number, allowRecord?: (record: any) => boolean }} filters
    */
-  async listRecords(userId, { scopes = [], statuses = [], kinds = [], scopeId = "", query = "", pageSize = 100 } = {}) {
+  async listRecords(userId, { scopes = [], statuses = [], kinds = [], scopeId = "", query = "", pageSize = 100, allowRecord = () => true } = {}) {
     const words = String(query ?? "").trim().toLowerCase();
     const view = scopeId ? await this.#projectContext(userId, scopeId) : null;
     return (await this.records(userId, { context: view?.kind === 'geo-project' ? view : null }))
+      .filter(allowRecord)
       .filter((record) => !statuses.length || statuses.includes(record.status))
       .filter((record) => !scopes.length || scopes.includes(record.scope))
       .filter((record) => !kinds.length || kinds.includes(record.kind))

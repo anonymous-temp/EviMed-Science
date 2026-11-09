@@ -83,7 +83,7 @@ READ_WHATS = (
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
     "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
     "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
-    "candidates",
+    "candidates", "success_rates",
 )
 WRITE_WHATS = ("data_intake", "task_context", "patient_context",
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
@@ -108,13 +108,33 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "generate_patients_longitudinal",
     # a generated population against a second baseline table (2026-11-01)
     "population_check",
+    # the confirmatory designs: futility boundaries, sample-size re-estimation, multi-arm, enrichment, counts (2026-11-03)
+    "design_confirmatory",
+    # quantitative bias analysis of an estimate and the G-computation simulated treatment comparison (2026-11-03)
+    "bias_analysis", "stc_comparator",
+    # network and dose-response meta-analysis and the empirical shrinkage of a published effect (2026-11-03)
+    "network_meta", "dose_response_meta", "effect_shrinkage",
+    # target-trial emulation from a person-period table: a sequence of trials and clone-censor-weight (2026-11-03)
+    "target_trial_emulation",
+    # dose-finding designs and Bayesian designs without MCMC (2026-11-03)
+    "design_dose", "design_bayesian", "design_win_ratio",
+    # dynamic borrowing of an external control arm: the power, SAM and elastic priors (2026-11-03)
+    "borrowing_prior",
+    # a prognostic model trained on the person's own historical table, cross-fitted, and a population-level disease-progression simulator (2026-11-03)
+    "train_prognostic_model", "generate_progression",
     # the batch reading of patient records for the criteria's facts (2026-11-01)
     "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
 POOLING_CALIBRES = ("closest", "overall", "next_closest")
-SIMULATE_ACTIONS = ("start", "status", "cancel", "shape", "validate")
+# The empirical priors for the between-study spread a pooling may name (`packages/domain/src/vcrEvidencePriors.mjs`); a prior the run types in is not offered here.
+TAU_PRIOR_KINDS = ("turner_2015", "turner_2015_generic", "bartos_2023")
+# The virtual lab's actions (F4): the same operation the trial plugin's `virtual_trial_search` / `virtual_trial_compare` reach, so a study
+# conversation without that plugin runs a design search or a design comparison through this one tool. They take a frozen manifest or an
+# experiment and an id, never a job id; the lab answers them whole (a campaign advances on the platform, not in this call).
+LAB_ACTIONS = ("search", "search_status", "search_cancel", "compare", "compare_status")
+SIMULATE_ACTIONS = ("start", "status", "cancel", "shape", "validate", *LAB_ACTIONS)
 # The objects `vcr_write` takes whose configuration, scenario or definition carries the keys of a job kind's scenario (the
 # platform projects the object onto that kind's schema and refuses what it does not read): where to look a shape up before
 # writing one. `test_vcr_platform.py` holds every name to the domain's job kinds.
@@ -125,7 +145,8 @@ OBJECT_SHAPES = {
     "population (definition)": ("generate_population", "literature_population", "synthesize_population"),
     "comparator (configuration)": ("weight_comparator", "propensity_weight_comparator", "weighted_cox_comparator", "aipw_comparator",
                                    "covariate_set_comparator", "maic_comparator", "maic_time_to_event_comparator", "map_prior", "procova",
-                                   "prognostic_adjustment_comparator", "negative_control_comparator", "tipping_point"),
+                                   "prognostic_adjustment_comparator", "negative_control_comparator", "tipping_point", "stc_comparator", "bias_analysis",
+                                   "target_trial_emulation", "borrowing_prior"),
 }
 # What the platform generates from the domain's scenario schemas (`pnpm generate:vcr-scenario-help`): every key each method's
 # scenario reads. It rides in the image beside this file and is never edited by hand.
@@ -133,6 +154,29 @@ OBJECT_SHAPES = {
 RECORD_KINDS = tuple(OBJECT_SHAPES["population (definition)"] + OBJECT_SHAPES["patient_set (scenario)"])
 # The kinds whose scenario states the truth a design assumes: a number read in a paper can be tied to its field there (`sources`).
 SOURCE_KINDS = ("design_analytic", "design_simulation", "design_grid", "assurance", "procova")
+
+# The generic design kinds the model opens first. A question that has a method of its own is answered by that kind, and in three live conversations
+# (2026-11-04: dose escalation, a single-arm look every ten patients, a three-level composite) the model had shaped a generic kind and then wrote its own
+# simulation for what another kind computes. The pointer rides on the shape answer, where the model is already choosing, and not in the tool description.
+# Live 2026-11-07: an Alzheimer three-arm simulation, a comparison of designs computed earlier and a forecast for six listed patients each went
+# to a script of the model's own; in the forecast conversation the model had shaped design_analytic for the sample-size half of the question.
+# So the pointer also names the disease-progression kind, the batch forecast and the lab's two actions.
+DESIGN_POINTER_KINDS = ("design_analytic", "design_simulation", "design_grid")
+DESIGN_POINTER = ("This kind designs one trial of the usual kinds. If the question is of another sort, shape that kind instead of writing your own simulation: "
+                  "design_dose (3+3, BOIN, CRM, Keyboard: which dose is chosen), design_bayesian (a single-arm trial looked at every few patients: BOP2, "
+                  "predictive monitoring, against Simon), design_confirmatory (futility stops, sample-size re-estimation, multi-arm selection, enrichment), "
+                  "design_win_ratio (death, then admissions, then a score, compared in order), network_meta (which of several treatments is best), "
+                  "generate_progression (trial arms on a disease-progression model: the Alzheimer ADAS-cog model with a symptomatic or disease-modifying "
+                  "drug hypothesis), forecast_trajectories (a forecast for each of the person's patients). Designs already computed are compared with "
+                  "action compare, and the smallest design that meets stated requirements is found with action search; action shape with no kind gives "
+                  "both forms.")
+# The disease-progression kind: several drug hypotheses on the same people are one comparison, and a population's course is not a person's forecast.
+PROGRESSION_POINTER = ("Several drug hypotheses on the same people (no drug, symptomatic, disease-modifying) are one start each, or one comparison: action "
+                       "compare with arms [{name, method: \"patients.progression\", scenario}] that differ only in treatment (action shape with no kind "
+                       "gives its form). The result is the course of a population, not a forecast for a named patient: that is forecast_trajectories.")
+# Generated people are not the person's patients: a forecast for a list of real patients is the batch forecast.
+GENERATED_PATIENTS_POINTER = ("These people are generated from stated assumptions; a forecast for each of the person's own patients is forecast_trajectories, "
+                              "and the course of a disease under drug hypotheses is generate_progression.")
 HELP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vcr_scenario_help.json")
 # Where the VCR methods are in the runtime image. They are capability skill bodies, which delegation injects into a planned
 # capability's run; a plain conversation in a study uses these tools too and its skill catalogue does not list them, so the tools
@@ -343,11 +387,23 @@ def _detailed_tool_definitions():
                     }, "additionalProperties": False},
                     "reconstructionResultId": ID,
                     "jobId": ID,
+                    "manifest": {"type": "object"},
+                    "campaignId": ID,
+                    "experiment": {"type": "object"},
+                    "experimentId": ID,
                     "sources": {"type": "array", "maxItems": 8, "description": (
                         "A number you read in a paper and wrote into the scenario: [{field: its path in the scenario, e.g. truth.controlMedian, "
-                        "publication: PMID or DOI, quote: the sentence that prints it}]. The platform records the paper, and the result page names it."),
-                        "items": {"type": "object", "properties": {"field": {"type": "string"}, "publication": {"type": "string"}, "quote": {"type": "string"}},
-                                  "required": ["field", "publication", "quote"], "additionalProperties": False}},
+                        "publication: PMID or DOI, quote: the sentence that prints it}]. For a user-stated parameter, optionally use "
+                        "{origin:user, field:design.nTreat, value:30, quote:<original human sentence>, unit:patients, context:<its meaning>}. "
+                        "Bind only the stated meaning, arm and unit; equal digits elsewhere do not establish a parameter. Missing bindings stay assumptions."),
+                        "items": {"oneOf": [
+                            {"type": "object", "properties": {"field": {"type": "string"}, "publication": {"type": "string"}, "quote": {"type": "string"}},
+                             "required": ["field", "publication", "quote"], "additionalProperties": False},
+                            {"type": "object", "properties": {"origin": {"const": "user"}, "field": {"type": "string"},
+                                "value": {"type": "number"}, "quote": {"type": "string"}, "unit": {"type": "string"}, "context": {"type": "string"},
+                                "sessionId": {"type": "string"}, "messageSeq": {"type": "integer", "minimum": 0}},
+                             "required": ["origin", "field", "value", "quote", "unit", "context"], "additionalProperties": False}
+                        ]}},
                 },
                 "required": ["action"],
                 "additionalProperties": False,
@@ -498,6 +554,18 @@ def _detailed_tool_definitions():
                     "endpointKey": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$"},
                     "calibres": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "enum": list(POOLING_CALIBRES)}},
                     "method": {"type": "string", "enum": list(POOLING_METHODS), "default": "random_effects_reml"},
+                    "tauPrior": {
+                        "type": "object",
+                        "description": "Optional Cochrane reference for the spread between studies; gives two studies a prediction interval. Its shape is in vcr_simulate action=shape.",
+                        "properties": {
+                            "kind": {"type": "string", "enum": list(TAU_PRIOR_KINDS)},
+                            "outcome": {"type": "string", "maxLength": 60},
+                            "comparison": {"type": "string", "maxLength": 60},
+                            "effectScale": {"type": "string", "maxLength": 40},
+                        },
+                        "required": ["kind"],
+                        "additionalProperties": False,
+                    },
                     "jobId": ID,
                 },
                 "required": ["action"],
@@ -519,7 +587,11 @@ def tool_definitions():
     descriptions = {
         "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches. Any eligibility verdict you deliver (reply, table or file) is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
         "vcr_write": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. A fact states only what its quote says: what the text does not mention is unknown, never negated, and age, sex or a diagnosis do not imply pregnancy, menopause or a negative result. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read %s/vcr-matching/SKILL.md before writing facts, criteria or trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs." % root,
-        "vcr_simulate": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page with versions and premises. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
+        # The one line of the module a general conversation always reads: the classes of question in a person's words. Live 2026-11-07: an
+        # Alzheimer three-arm simulation, a comparison of designs computed earlier and a forecast for six listed patients went to the
+        # model's own scripts; they are named here within the same 420 characters ("modelId requires modelVersion" is said by the
+        # gateway's refusal of a modelId without it, the pointer to the result page by the answer of start).
+        "vcr_simulate": "Trial sample size, power or events; comparing designs (saved too) or searching one; dose finding; disease-progression arms (Alzheimer ADAS-cog); patient forecasts; synthetic cohort from a baseline table; external control; comparing several drugs (network meta-analysis): calculate here, not in your script. No study needed. action=shape with kind gives fields; do not guess keys. Jobs that outlive this turn resume here.",
     }
     tools = _detailed_tool_definitions()
     for tool in tools:
@@ -735,6 +807,11 @@ def read(arguments: dict) -> dict:
         # that needed it is affected.
         warnings.append(str(data.get("message") or "This part of the platform is not available on this deployment."))
         next_actions.append("Do the steps that do not need it, and say in the report what is missing and why.")
+    if what == "results" and any(_type_one_verdicts(result) for result in data.get("results") or [] if isinstance(result, dict)):
+        # Live D8, phase 3 (2026-11-07): a grid's null check of 2.44% +/- 0.11% was read here and answered "can confirm it does not exceed 2.5%".
+        next_actions.append(TYPE_ONE_VERDICT_LINE)
+    if what == "results" and any(_progression_differences(result) for result in data.get("results") or []):
+        next_actions.append(PROGRESSION_DIFFERENCE_LINE)
     return {
         "status": "warning" if warnings else "success",
         "summary": ("Read %s of this 虚拟临床研究 study. %s" % (what, _longitudinal_comparison_summary(data) if what == "longitudinal" else "")).strip(),
@@ -804,6 +881,9 @@ def write(arguments: dict) -> dict:
     if reminders:
         next_actions.append("The warnings that name a record or a role are reminders: the object is saved and its result is delivered as it "
                             "stands. Add what they name by writing the same object again (a new version), without waiting for anyone.")
+    if any(issue.get("code") in ("vcr_evidence_values_inconsistent", "vcr_evidence_second_read_differs") for issue in reminders):
+        next_actions.append("A warning that names numbers which do not agree (or two readings of one passage) is advice: read those numbers in the source again; if one was copied wrong, "
+                            "write the item again with the right one, otherwise leave it. The value is kept as read either way.")
     return _with_entry({
         "status": "warning" if issues else "success",
         "summary": "Wrote %s: %d written%s%s." % (what, len(ids), ", %d refused" % len(refused) if refused else "",
@@ -815,7 +895,8 @@ def write(arguments: dict) -> dict:
 
 
 # The write issues that are reminders of a record the object has not got yet, not refusals (the object is saved).
-_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing", "vcr_evidence_item_incomplete", "vcr_evidence_reported_unverified"})
+_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing", "vcr_evidence_item_incomplete", "vcr_evidence_reported_unverified",
+                            "vcr_evidence_values_inconsistent", "vcr_evidence_second_read_differs"})
 
 
 def _issue_line(issue: dict) -> str:
@@ -1011,6 +1092,13 @@ def _method_of(kind: str):
     return (entry, method_id, method) if isinstance(method, dict) else (None, None, None)
 
 
+# Live 2026-11-07: asked for each of six listed patients' MMSE over 24 months, with no forecast service in the deployment, the model wrote
+# per-patient projections with prediction intervals of its own. The answer says what a forecast needs and what to say when it is not there.
+FORECAST_PROVIDER_NOTE = ("A forecast for named patients needs their history stored for this study and a forecast service: providerId is one that vcr_read "
+                          "what longitudinal lists. With none listed, no individual forecast can be computed here: say so and never project a patient "
+                          "yourself; the course of a population under stated assumptions is generate_progression or generate_patients_longitudinal.")
+
+
 def _control_plane_shape(kind: str):
     """A forecast kind runs in the control plane, not the engine: its scenario names stored histories, forecasts and outcomes by id,
     plus options. The keys come from the generated help's ``longitudinal`` section (the validator's own lists)."""
@@ -1021,16 +1109,41 @@ def _control_plane_shape(kind: str):
     if not isinstance(schema, dict):
         return None
     required, optional = list(schema.get("required", [])), list(schema.get("optional", []))
-    keys = ["%s: %s; required" % (key, "id of a stored record" if key.endswith("Id") else "value") for key in required]
-    keys += ["%s: %s; optional" % (key, "id of a stored record" if key.endswith("Id") else "value") for key in optional]
+    fields = schema.get("fields") if isinstance(schema.get("fields"), dict) else {}
+
+    def say(key: str) -> str:
+        # a field the domain describes (the batch forecast's mode, actions and versioning) is said in the domain's words
+        return fields.get(key) or ("id of a stored record" if key.endswith("Id") else "value")
+
+    keys = ["%s: %s; required" % (key, say(key)) for key in required]
+    keys += ["%s: %s; optional" % (key, say(key)) for key in optional]
     return {
         "status": "success",
         "summary": "The scenario of %s (method %s) reads %d keys; the platform computes it from the stored records they name." % (kind, method_id, len(keys)),
         "data": {"kind": kind, "method": method_id, "controlPlane": True, "keys": keys,
-                 "notes": ["Ids name records already stored for this study (vcr_read what: longitudinal); the platform computes every metric."]},
+                 "notes": ["Ids name records already stored for this study (vcr_read what: longitudinal); the platform computes every metric."]
+                 + ([FORECAST_PROVIDER_NOTE] if kind == "forecast_trajectories" else [])},
         "warnings": [],
         "next_actions": ["Write exactly these keys and no others, then queue it with vcr_simulate action start."],
     }
+
+
+# The lab's own shapes (F4), answered by `shape` with no kind so the tool description stays as short as it was. The keys inside a manifest
+# are the domain's `vcrCampaignManifest`; `test_vcr_platform.py` holds the words that matter (the frozen evaluator, the analysis level).
+LAB_SHAPES = {
+    "search": "action search with manifest {question, objective {measure, direction minimize|maximize, truth}, constraints [{measure, op <=|>=, bound, "
+              "kind error_control|design|safety, truth}], space {method design.simulate|design.dose|design.analytic|patients.progression, scenario, "
+              "truths [{name, truth}], and either variables [{path, values}] or candidates [{set}]}, stages {screening {replicates}, final {count}}, "
+              "budget {maxCandidates, cpuSeconds}}. Only design paths vary: the truth, endpoint, sidedness and what is measured are the evaluator. "
+              "An error-control bound is fixed and never relaxed; it passes only on its conservative bound, never on a point estimate. The analysis "
+              "level (analysis.alpha, design.simulate and patients.progression) may be a variable only at or below that bound, with an error-control "
+              "constraint stated: it is how a design gains margin under the same constraint. A changed manifest is a new campaign. Read with "
+              "search_status {campaignId}, stop with search_cancel {campaignId}.",
+    "compare": "action compare with experiment {question, arms [{name, resultId} | {name, method, scenario}], comparison {measures, reference}}: saved "
+               "design results attach by id and are never rerun. A design this conversation cannot read by id (computed in another conversation) is "
+               "an arm {name, method, scenario} stated again from its numbers. The arms of a disease experiment are {name, method: "
+               "\"patients.progression\", scenario} that differ only in treatment. Read with compare_status {experimentId}.",
+}
 
 
 def shape(arguments: dict) -> dict:
@@ -1047,6 +1160,7 @@ def shape(arguments: dict) -> dict:
                                          if help_["methods"].get(entry["method"], {}).get("endpoints") else "")
                           for name, entry in help_["kinds"].items()},
                 "objects": {name: list(kinds) for name, kinds in OBJECT_SHAPES.items()},
+                "lab": LAB_SHAPES,
             },
             "warnings": [],
             "next_actions": ["Call vcr_simulate with action shape and the kind you are about to write or queue."],
@@ -1080,12 +1194,16 @@ def shape(arguments: dict) -> dict:
         data["endpoints"] = list(method["endpoints"])
     if platform is not None:
         # The platform freezes this scenario itself; the run states only the keys named here.
-        keys = [_row_line(by_path[name], by_path) for name in platform if name in by_path]
+        # an object row (tauPrior) is only its keys; the note below says what it takes
+        keys = [_row_line(by_path[name], by_path) for name in platform if name in by_path and by_path[name].get("type") != "object"]
         data["builtByPlatform"] = True
         data["runStates"] = list(platform)
         data["keys"] = keys
         if kind == "pool_evidence":
             notes.append("Use the evidence_pool tool: you name the parameter and the endpoint definition, never the numbers; the pooled values are this study's verified extractions.")
+            notes.append("tauPrior (optional) is the Cochrane reference for how much studies of one comparison differ, so that two studies get a prediction interval: {kind: turner_2015, outcome, comparison} "
+                         "for a binary outcome on the log odds ratio scale, {kind: turner_2015_generic}, or {kind: bartos_2023, effectScale: log_odds_ratio | log_risk_ratio | risk_difference | log_hazard_ratio}. "
+                         "Say which prior you used and why that setting fits, and that it is a reference for such comparisons in general, not for this drug.")
         elif kind == "match_criteria":
             notes.append("Start it with an empty scenario: the platform freezes the newest protocol version's criteria and the facts written for the study.")
         else:
@@ -1098,6 +1216,12 @@ def shape(arguments: dict) -> dict:
             data["rules"] = [_rule_line(rule) for rule in method["rules"]]
         if method.get("gridCells"):
             notes.append("A grid has at most %s cells (designs x truths), and every cell is a valid scenario of its own." % method["gridCells"])
+        if kind in DESIGN_POINTER_KINDS:
+            notes.append(DESIGN_POINTER)
+        if kind == "generate_progression":
+            notes.append(PROGRESSION_POINTER)
+        if kind in ("generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"):
+            notes.append(GENERATED_PATIENTS_POINTER)
         if kind == "literature_population":
             # On 2026-11-01 the run read this path's evidence bindings, saw no source to bind a pasted table to, and left for its own R.
             notes.append("A baseline table the person pasted, with no paper preserved to bind its numbers to, goes through generate_population with the "
@@ -1208,6 +1332,8 @@ def simulate(arguments: dict) -> dict:
         raise VcrPlatformError("vcr_simulate_action_invalid", "action must be one of: %s." % ", ".join(SIMULATE_ACTIONS))
     if action == "shape":
         return shape(arguments)
+    if action in LAB_ACTIONS:
+        return lab(arguments, action)
     payload = {"action": action}
     if action in ("start", "validate"):
         kind = arguments.get("kind")
@@ -1237,6 +1363,96 @@ def simulate(arguments: dict) -> dict:
     if action in ("start", "status"):
         data = _wait_for_job(data)
     return _with_entry(_with_applied(_job_answer(data, action), data), data)
+
+
+# What each lab action takes: the one object that names the work, or the id that reads or stops it. The keys inside a manifest are the
+# lab's (`shape` with no kind answers them), not the scenario help's.
+_LAB_INPUT = {"search": "manifest", "compare": "experiment", "search_status": "campaignId", "search_cancel": "campaignId", "compare_status": "experimentId"}
+
+
+def lab(arguments: dict, action: str) -> dict:
+    """``vcr_simulate`` lab actions: freeze a design search or a comparison of named designs, read it, stop it. Nothing is computed
+    here: the platform evaluates every candidate on the engine, one unit at a time, and says why it stopped."""
+    key = _LAB_INPUT[action]
+    value = arguments.get(key)
+    if action in ("search", "compare"):
+        if not isinstance(value, dict) or not value:
+            raise VcrPlatformError("vcr_simulate_payload_invalid", "%s is the %s object; action shape with no kind says what it holds." % (
+                key, "frozen campaign" if action == "search" else "experiment of named arms and their comparison"))
+    elif not isinstance(value, str) or not value:
+        raise VcrPlatformError("vcr_simulate_payload_invalid", "%s is the id %s answered with." % (key, "search" if key == "campaignId" else "compare"))
+    try:
+        data = _post("simulate", {"action": action, key: value})
+    except VcrPlatformError as error:
+        if error.code in _absent_codes():
+            return _module_absent(error, "design search", "queue")
+        raise
+    return _lab_answer(data, action)
+
+
+def _lab_answer(data: dict, action: str) -> dict:
+    stop = data.get("stop") if isinstance(data.get("stop"), dict) else None
+    status = str(data.get("status") or "")
+    ident = str(data.get("id") or data.get("campaignId") or data.get("experimentId") or "")
+    running = status == "running" or (stop is None and data.get("kind") == "campaign" and status != "stopped")
+    if action in ("search", "compare") or running:
+        next_actions = [
+            "The platform evaluates every candidate on the engine without you; do not wait for it in this turn and never run a status loop. Tell the "
+            "researcher what was started, where it appears (the study's lab page) and how it is judged, then end the turn or go on with other work.",
+            "Give no number of your own for any candidate: the numbers, bounds and verdicts are the engine's and are read back with %s." % (
+                "search_status (campaignId)" if data.get("kind") == "campaign" or action.startswith("search") else "compare_status (experimentId)"),
+        ]
+    else:
+        next_actions = [
+            "Report the stop reason in the researcher's words, the best design with its final numbers and their error, which constraints were met, "
+            "undecided or not met, and the budget used; cite the fields, never retyped numbers.",
+        ]
+        if any(isinstance(point, dict) and "againstReference" in point for arm in data.get("arms") or [] if isinstance(arm, dict)
+               for point in arm.get("trajectory") or []):
+            next_actions.append(PROGRESSION_DIFFERENCE_LINE)
+        undecided = data.get("undecided") if isinstance(data.get("undecided"), dict) else None
+        if undecided and undecided.get("advice"):
+            next_actions.append(
+                "The campaign stopped undecided: give the closest design and say what would decide it (undecided.advice) in your own sentence. The frozen "
+                "constraint never changes and a point estimate never passes it: a lower analysis level or more replicates is a NEW campaign the researcher asks for.")
+    return {
+        "status": "success",
+        "summary": "%s %s%s." % ("Design search" if data.get("kind") == "campaign" else "Design comparison", ident,
+                               " is running" if running else (" stopped: %s" % stop.get("reason") if stop else " is read")) if ident else "Done.",
+        "data": data, "warnings": [], "next_actions": next_actions,
+    }
+
+
+# How a simulated type I error is said wherever the platform judged it: the result's own typeOneError, or a design grid cell's.
+TYPE_ONE_VERDICT_LINE = ("Say each type I error in the words of its verdict (data.typeOneError.text, a result's typeOneError.text, or a grid "
+                         "cell's in diagnostics.cells), the platform's verdict on its conservative bound: \"not above\" only when that text says "
+                         "so; never conclude it from the estimate, and give no interval of your own.")
+
+
+# How the difference between two arms of a disease-progression run, or between two arms of a comparison, is said: the platform's own.
+PROGRESSION_DIFFERENCE_LINE = ("The difference between arms at each visit is the platform's: diagnostics.progression.curves[].difference (treated less "
+                               "untreated) in a run, trajectory[].againstReference (an arm less the reference arm) in a comparison, both calculated "
+                               "exactly in the typical study; the simulated difference at the analysis visit carries its Monte Carlo SE. Cite them; "
+                               "never subtract the means yourself.")
+
+
+def _progression_differences(result) -> bool:
+    """Whether a result is a progression run whose curves carry the platform's differences between its arms."""
+    if not isinstance(result, dict) or result.get("kind") != "progression_simulation":
+        return False
+    progression = (result.get("diagnostics") or {}).get("progression") if isinstance(result.get("diagnostics"), dict) else None
+    curves = progression.get("curves") if isinstance(progression, dict) else None
+    return any(isinstance(curve, dict) and isinstance(curve.get("difference"), dict) for curve in curves or [])
+
+
+def _type_one_verdicts(holder) -> bool:
+    """Whether an answer's object carries a type I verdict: its own, or one of its design grid cells'."""
+    if not isinstance(holder, dict):
+        return False
+    if isinstance(holder.get("typeOneError"), dict) and isinstance(holder["typeOneError"].get("text"), str):
+        return True
+    diagnostics = holder.get("diagnostics") if isinstance(holder.get("diagnostics"), dict) else {}
+    return any(isinstance(cell, dict) and isinstance(cell.get("typeOneError"), dict) for cell in diagnostics.get("cells") or [])
 
 
 def _validate_answer(data: dict, kind) -> dict:
@@ -1346,7 +1562,7 @@ def _with_applied(answer: dict, data: dict) -> dict:
 
 
 def _source_lines(data: dict) -> list:
-    """What became of the papers the call named: a premise the platform tied to its paper, and one that stays the researcher's assumption."""
+    """Report source binding without treating model interpretation as observed data."""
     sources = data.get("sources") if isinstance(data, dict) else None
     if not isinstance(sources, list) or not sources:
         return []
@@ -1420,6 +1636,9 @@ def _job_answer(data: dict, action: str) -> dict:
                 "Do not wait for it in this turn -- no status loop, no sleep or wait command. Tell the researcher what is "
                 "computing, where the result will appear and how far it got, answer with what you already have, and end the turn "
                 "(or go on with work that does not need this result).",
+                "Do not work out the same quantity yourself meanwhile and give no number of your own for it: the number the researcher "
+                "is given is the engine's. A small job is usually finished by the time you have written your reply, so look once more "
+                "with status just before you answer and use the result if it is there; one more look is not a loop.",
                 "In a later turn, when asked, read the result with vcr_read (what: results).",
             ],
         }
@@ -1444,10 +1663,19 @@ def _job_answer(data: dict, action: str) -> dict:
         }
     actions = ["Read the result with vcr_read (what: results) and cite the fields, never retyped numbers."]
     result = data.get("result") if isinstance(data.get("result"), dict) else {}
+    if _type_one_verdicts(data) or _type_one_verdicts(result):
+        # Live D8 (2026-11-07): 2.53% +/- 0.11% was headed "the simulation supports not exceeding 2.5%"; its upper bound is 2.75%.
+        actions.append(TYPE_ONE_VERDICT_LINE)
+    if _progression_differences(result):
+        # Live D6 (2026-11-07): three Alzheimer arms were compared by a reply that subtracted the arms' means itself.
+        actions.append(PROGRESSION_DIFFERENCE_LINE)
     if result.get("kind") in ("trial_scenario", "design_grid"):
         # A design is chosen by the researcher: the reply recommends one in a sentence and says which bound decided it.
         actions.append("When designs are compared, close with one sentence of recommendation that says which constraint decided it (the type I error "
                        "bound, the target power, the sample size or the duration), from the numbers in the result; the platform does not pick the design.")
+        # Live D6 (2026-11-07): a simulated power of 83.8% (MCSE 0.37%) was given a "95% interval 81.8-85.8%" of the model's own.
+        actions.append("A simulated number is said with the Monte Carlo SE its measure carries (83.8% ± 0.37%); work out no interval, sensitivity or "
+                       "derived figure of your own: a further number is another start.")
     return {
         "status": "success",
         "summary": "Job %s succeeded." % job_id if action != "cancel" else "Job %s is cancelled." % job_id,
@@ -1577,6 +1805,11 @@ def evidence_pool(arguments: dict) -> dict:
         if method not in POOLING_METHODS:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "method must be one of: %s." % ", ".join(POOLING_METHODS))
         scenario["method"] = method
+    tau_prior = arguments.get("tauPrior")
+    if tau_prior is not None:
+        if not isinstance(tau_prior, dict) or tau_prior.get("kind") not in TAU_PRIOR_KINDS:
+            raise VcrPlatformError("vcr_simulate_payload_invalid", "tauPrior.kind is one of: %s." % ", ".join(TAU_PRIOR_KINDS))
+        scenario["tauPrior"] = tau_prior
     return simulate({
         "action": "start",
         "kind": "pool_evidence",

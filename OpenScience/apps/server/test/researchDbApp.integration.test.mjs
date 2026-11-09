@@ -11,8 +11,6 @@ import { databaseUrl, signedIn } from './helpers/knowledgeBaseApp.mjs';
 import { createWebApiApp } from '../src/server.mjs';
 import { ResearchDbStaging } from '../src/researchDbStaging.mjs';
 import { HttpError } from '../src/security.mjs';
-import { loadAutopilotProgress } from '../src/autopilotProgress.mjs';
-import { RUNTIME_KNOWLEDGE_DIR } from '../src/researchContext.mjs';
 
 const external = process.env.OPEN_SCIENCE_TEST_RESEARCH_DB_URL ?? '';
 if (external) { const url = new URL(external); assert(['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)); assert.match(url.pathname, /evimed_test/); }
@@ -114,8 +112,15 @@ test('a project-owned database snapshot is captured, published, attached and fen
     return { status: response.status, body: await response.json() };
   };
   try {
-    const agenda = await ctx.app.autopilotService.create(ctx.user.id, { projectId: ctx.project.id, title: 'Question', topics: ['research'],
-      taskTypes: ['evidence-update'], dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 8, scheduleHour: 1, timeZone: 'UTC' });
+    // The publication transaction's last statement records the snapshot; a test reaches into that moment through the database.
+    const onRecordSnapshot = hook => {
+      const original = ctx.app.store.database.query;
+      ctx.app.store.database.query = async function (sql, ...rest) {
+        if (typeof sql === 'string' && sql.includes('research_db_requests') && sql.includes("'snapshot',$3,$4")) await hook();
+        return original.call(this, sql, ...rest);
+      };
+      return () => { ctx.app.store.database.query = original; };
+    };
     const connection = { projectId: ctx.project.id, host: 'db.example.org', port: 5432, database: 'research', username: 'reader', password: 'hidden-fixture-password', requestId: randomUUID() };
     const saved = await call('/api/research-databases', connection); assert.equal(saved.status, 201);
     assert.equal((await call('/api/research-databases', connection)).body.data.id, saved.body.data.id);
@@ -145,7 +150,7 @@ test('a project-owned database snapshot is captured, published, attached and fen
     assert.equal((await fetch(`${other.base}/api/research-databases/${id}/tables?projectId=${encodeURIComponent(other.project.id)}`, { headers: other.headers })).status, 404);
     assert.equal((await fetch(`${ctx.base}/api/research-databases/${id}/tables?projectId=no-such-project`, { headers: ctx.headers })).status, 404);
     assert.equal((await fetch(`${ctx.base}/api/research-databases/status?projectId=${encodeURIComponent(ctx.project.id)}`, { headers: ctx.headers }).then(response => response.json())).data.available, true);
-    const request = { projectId: ctx.project.id, agendaId: agenda.id, schema: 'public', table: 'research_db_app_fixture', columns: ['id', 'name'], requestId: randomUUID() };
+    const request = { projectId: ctx.project.id, schema: 'public', table: 'research_db_app_fixture', columns: ['id', 'name'], requestId: randomUUID() };
     const orphanRel = `knowledge-base/databases/.evimed-revisions/${'f'.repeat(64)}/public.orphan_table-1a2b3c4d.csv`;
     const orphanFile = path.join(ctx.project.baseDir, orphanRel);
     await mkdir(path.dirname(orphanFile), { recursive: true }); await writeFile(orphanFile, 'interrupted staging fixture');
@@ -203,7 +208,6 @@ test('a project-owned database snapshot is captured, published, attached and fen
     assert.equal((await ctx.app.sourceService.list(ctx.user.id, { projectId: ctx.project.id, limit: 50 })).items.filter(item => item.payload.paths.some(file => file.endsWith('.json'))).length, 0);
     const captured = await readFile(path.join(ctx.project.baseDir, source.payload.paths[0]), 'utf8');
     assert.equal(captured, '\uFEFFid,name\r\n1,Alice\r\n');
-    assert.deepEqual((await ctx.app.autopilotService.get(ctx.user.id, agenda.id)).payload.materials.map(item => item.sourceId), [sourceId]);
     assert(!JSON.stringify(captured).includes(connection.password));
     const files = async () => {
       const root = path.join(ctx.project.baseDir, 'knowledge-base', 'databases', '.evimed-revisions');
@@ -211,19 +215,17 @@ test('a project-owned database snapshot is captured, published, attached and fen
       return entries.filter(entry => entry.endsWith('.csv') || entry.endsWith('.import.json')).sort();
     };
     const beforeFailure = await files();
-    const add = ctx.app.autopilotService.addMaterials;
-    ctx.app.autopilotService.addMaterials = async () => { throw new Error('Injected association failure'); };
+    const unhook = onRecordSnapshot(async () => { throw new Error('Injected recording failure'); });
     await grow(2);
     const failed = await call(`/api/research-databases/${id}/snapshot`, { ...request, requestId: randomUUID() });
-    ctx.app.autopilotService.addMaterials = add;
+    unhook();
     assert.equal(failed.status, 503);
     assert.equal((await files()).length, beforeFailure.length + 2, 'unconfirmed snapshot (the CSV and its sidecar) stays staged until ledger-checked recovery');
     const recovery = new ResearchDbStaging({ database: ctx.app.store.database, store: ctx.app.store });
     await recovery.recover(0);
     assert.deepEqual(await files(), beforeFailure, 'ledger-checked recovery removes rolled-back snapshot bytes and the sidecar beside them');
-    assert.deepEqual((await ctx.app.autopilotService.get(ctx.user.id, agenda.id)).payload.materials.map(item => item.sourceId), [sourceId]);
 
-    const db = ctx.app.store.database, withClient = db.withClient, addMaterials = ctx.app.autopilotService.addMaterials;
+    const db = ctx.app.store.database, withClient = db.withClient;
     let commitClient = null, acknowledgmentLost = false;
     db.withClient = async operation => withClient.call(db, async client => {
       const query = client.query;
@@ -237,34 +239,26 @@ test('a project-owned database snapshot is captured, published, attached and fen
       };
       try { return await operation(client); } finally { client.query = query; }
     });
-    ctx.app.autopilotService.addMaterials = async (...args) => {
-      const value = await addMaterials.apply(ctx.app.autopilotService, args);
-      commitClient = db.transactionScope().client;
-      return value;
-    };
+    const unhookCommit = onRecordSnapshot(async () => { commitClient = db.transactionScope().client; });
     await grow(3);
     const uncertainRequest = { ...request, requestId: randomUUID() };
     let uncertain;
     try { uncertain = await call(`/api/research-databases/${id}/snapshot`, uncertainRequest); }
-    finally { db.withClient = withClient; ctx.app.autopilotService.addMaterials = addMaterials; }
+    finally { db.withClient = withClient; unhookCommit(); }
     assert.equal(acknowledgmentLost, true, 'the database applied COMMIT before the injected failure');
     assert.equal(uncertain.status, 503);
     const recovered = await call(`/api/research-databases/${id}/snapshot`, uncertainRequest);
     assert.equal(recovered.status, 200, JSON.stringify(recovered));
     const committedSource = await ctx.app.sourceService.get(ctx.user.id, recovered.body.data.sourceId);
-    // Importing the table again is a new version of the same source: the first version is retired, and the question's
-    // material points at the new one instead of holding both.
+    // Importing the table again is a new version of the same source: the first version is retired.
     assert.equal(recovered.body.data.version, 2); assert.notEqual(committedSource.id, sourceId);
     assert.equal(committedSource.payload.familyId, source.payload.familyId); assert.equal(committedSource.payload.logicalPath, source.payload.logicalPath);
     assert.equal((await ctx.app.sourceService.get(ctx.user.id, sourceId)).payload.publication.current, false);
     assert.equal(committedSource.payload.publication.current, true);
-    assert.deepEqual((await ctx.app.autopilotService.get(ctx.user.id, agenda.id)).payload.materials.map(item => item.sourceId), [committedSource.id]);
     const committedFile = path.join(ctx.project.baseDir, committedSource.payload.paths[0]);
     const committedBytes = await readFile(committedFile);
     await recovery.recover(0);
     assert.deepEqual(await readFile(committedFile), committedBytes, 'recovery retains a source from a committed transaction with a lost acknowledgment');
-    await ctx.app.autopilotService.removeMaterial(ctx.user.id, agenda.id, committedSource.id);
-    assert.deepEqual((await ctx.app.autopilotService.get(ctx.user.id, agenda.id)).payload.materials, []);
     await grow(4);
     hold = true;
     const pending = call(`/api/research-databases/${id}/snapshot`, { ...request, requestId: randomUUID() });
@@ -273,7 +267,6 @@ test('a project-owned database snapshot is captured, published, attached and fen
     assert.equal((await call('/api/research-databases', connection)).status, 410);
     resume();
     const blocked = await pending; assert.equal(blocked.status, 404, JSON.stringify(blocked));
-    assert.deepEqual((await ctx.app.autopilotService.get(ctx.user.id, agenda.id)).payload.materials, [], 'a revoked connection published nothing');
 
     const second = await call('/api/research-databases', { ...connection, requestId: randomUUID() }); assert.equal(second.status, 201);
     const secondId = second.body.data.id;
@@ -282,26 +275,23 @@ test('a project-owned database snapshot is captured, published, attached and fen
     let publishing, continuePublication;
     const inPublication = new Promise(resolve => { publishing = resolve; });
     const publicationRelease = new Promise(resolve => { continuePublication = resolve; });
-    const originalAdd = ctx.app.autopilotService.addMaterials.bind(ctx.app.autopilotService);
-    ctx.app.autopilotService.addMaterials = async (...args) => { publishing(); await publicationRelease; return originalAdd(...args); };
+    const unholdPublication = onRecordSnapshot(async () => { publishing(); await publicationRelease; });
     const publishingSnapshot = call(`/api/research-databases/${secondId}/snapshot`, { ...request, requestId: randomUUID() });
     await inPublication;
     let removed = false;
     const removal = call(`/api/research-databases/${secondId}`, { projectId: ctx.project.id }, 'DELETE').then(value => { removed = true; return value; });
     try { await new Promise(resolve => setTimeout(resolve, 100)); assert.equal(removed, false, 'revocation waits for the publication transaction'); }
     finally { continuePublication(); }
-    const published = await publishingSnapshot; assert.equal(published.status, 201, JSON.stringify(published));
+    const published = await publishingSnapshot; unholdPublication(); assert.equal(published.status, 201, JSON.stringify(published));
     assert.equal((await removal).body.data.removed, true);
-    assert.deepEqual((await ctx.app.autopilotService.get(ctx.user.id, agenda.id)).payload.materials.map(item => item.sourceId), [published.body.data.sourceId]);
 
     // No `columns` means every supported column; an empty list is the same request, so a retry in either form is one result.
     const third = await call('/api/research-databases', { ...connection, requestId: randomUUID() }); assert.equal(third.status, 201);
     await grow(6);
-    const everything = { projectId: ctx.project.id, agendaId: agenda.id, schema: 'public', table: 'research_db_app_fixture', requestId: randomUUID() };
+    const everything = { projectId: ctx.project.id, schema: 'public', table: 'research_db_app_fixture', requestId: randomUUID() };
     const whole = await call(`/api/research-databases/${third.body.data.id}/snapshot`, everything);
     assert.equal(whole.status, 201, JSON.stringify(whole)); assert.equal(whole.body.data.columns, 2); assert.equal(whole.body.data.rowCount, 6);
     assert.equal(whole.body.data.version, 4, 'the fourth version of the same table');
-    assert.deepEqual((await ctx.app.autopilotService.get(ctx.user.id, agenda.id)).payload.materials.map(item => item.sourceId), [whole.body.data.sourceId], 'the question holds the newest version only');
     const again = await call(`/api/research-databases/${third.body.data.id}/snapshot`, { ...everything, columns: [] });
     assert.equal(again.status, 200); assert.deepEqual(again.body.data, whole.body.data);
     const wholeSource = await ctx.app.sourceService.get(ctx.user.id, whole.body.data.sourceId);
@@ -326,9 +316,8 @@ test('an import that left something out says so in the title, the source, the si
   await admin.query('CREATE TABLE research_db_part_other (id integer)'); await admin.query('INSERT INTO research_db_part_other VALUES (1)');
   await admin.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
   await admin.query(`GRANT SELECT ON research_db_part_fixture, research_db_part_other TO ${role}`);
-  let opened = 0, failure = null, asSuperuser = false;
+  let failure = null, asSuperuser = false;
   const open = async () => {
-    opened += 1;
     if (failure) throw failure;
     const client = new pg.Client({ connectionString: external }); await client.connect();
     if (!asSuperuser) await client.query(`SET ROLE ${role}`);
@@ -353,12 +342,10 @@ test('an import that left something out says so in the title, the source, the si
   try {
     const { resetResearchDbMetrics, researchDbMetricSnapshot } = await import('../src/researchDbMetrics.mjs');
     resetResearchDbMetrics();
-    const agenda = await ctx.app.autopilotService.create(ctx.user.id, { projectId: ctx.project.id, title: 'Question', topics: ['research'],
-      taskTypes: ['evidence-update'], dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 8, scheduleHour: 1, timeZone: 'UTC' });
     const connection = { projectId: ctx.project.id, host: 'Db.Example.org', port: 5432, database: 'research', username: 'reader', password: 'hidden-fixture-password', requestId: randomUUID() };
     const saved = await call('/api/research-databases', connection); assert.equal(saved.status, 201);
     const id = saved.body.data.id;
-    const request = (table, extra = {}) => ({ projectId: ctx.project.id, agendaId: agenda.id, schema: 'public', table, requestId: randomUUID(), ...extra });
+    const request = (table, extra = {}) => ({ projectId: ctx.project.id, schema: 'public', table, requestId: randomUUID(), ...extra });
 
     // The listing says which columns the snapshot will not read.
     const listing = (await (await fetch(`${ctx.base}/api/research-databases/${id}/tables?projectId=${encodeURIComponent(ctx.project.id)}`, { headers: ctx.headers })).json()).data;
@@ -366,7 +353,7 @@ test('an import that left something out says so in the title, the source, the si
     assert.deepEqual(part.unsupportedColumns, [{ name: 'doc', type: 'jsonb' }]); assert.equal(part.unsupportedColumnCount, 1);
     assert.deepEqual(listing.limits, { rows: 3, columns: 64, cellBytes: 256 });
 
-    // A cut import: the title, the facts, the sidecar, the CSV and the material entry all say what was left out.
+    // A cut import: the title, the facts, the sidecar and the CSV all say what was left out.
     const firstRequest = request('research_db_part_fixture');
     const first = await call(`/api/research-databases/${id}/snapshot`, firstRequest);
     assert.equal(first.status, 201, JSON.stringify(first));
@@ -387,16 +374,6 @@ test('an import that left something out says so in the title, the source, the si
     assert.deepEqual(note.withheldCells.byColumn, { note: 1 }); assert.equal(note.droppedColumns[0].reason, 'unsupported_type');
     assert.equal(note.database.host, 'db.example.org', 'the host is kept in lower case');
     assert.match(note.howToRead.join(' '), /NOT the whole table/);
-    // The study's material entry carries it, with the path a run opens.
-    const state = await ctx.app.autopilotService.researchState(ctx.user.id, agenda.id);
-    assert.equal(state.materials.length, 1);
-    assert.deepEqual(state.materials[0].import, { fromDatabase: true, partial: true, truncated: true, rowCount: 3, totalRows: 5, totalRowsExact: true, withheldCells: 1,
-      droppedColumnCount: 1, details: `${RUNTIME_KNOWLEDGE_DIR}/${data.sidecar.slice('knowledge-base/'.length)}` });
-    const progress = await loadAutopilotProgress(ctx.app.autopilotService.documents, { userId: ctx.user.id, agenda: await ctx.app.autopilotService.get(ctx.user.id, agenda.id),
-      date: '2026-10-29', episodeId: '', asOf: new Date().toISOString() });
-    assert.equal(progress.materials[0].import.partial, true);
-    assert.equal(progress.materials[0].path.endsWith('.csv'), true);
-
     // Counters: one partial import, and the three limits that bit.
     let metrics = researchDbMetricSnapshot();
     assert.deepEqual([metrics.imports.partial, metrics.imports.complete, metrics.refusals.truncated, metrics.refusals.cells_withheld, metrics.refusals.columns_dropped], [1, 0, 1, 1, 1]);
@@ -408,9 +385,6 @@ test('an import that left something out says so in the title, the source, the si
     const other = await call(`/api/research-databases/${id}/snapshot`, request('research_db_part_other'));
     assert.equal(other.status, 201); assert.equal(other.body.data.partial, false); assert.equal(other.body.data.title, 'public.research_db_part_other');
     metrics = researchDbMetricSnapshot(); assert.equal(metrics.imports.complete, 1);
-
-    // The two tables are two documents in the question's material, each one version of its own source.
-    assert.equal((await ctx.app.autopilotService.get(ctx.user.id, agenda.id)).payload.materials.length, 2);
 
     // Failures are told apart, counted, and audited by their code.
     const refusals = [
@@ -435,30 +409,6 @@ test('an import that left something out says so in the title, the source, the si
     asSuperuser = false;
     assert.equal(researchDbMetricSnapshot().refusals.too_privileged, 2);
 
-    // The question's room: filled to its twenty, a NEW table is refused before the remote database is read; a new version of a
-    // table it holds is not, and takes the old one's place.
-    const material = [];
-    for (let index = 0; index < 18; index += 1) {
-      const registered = await ctx.app.sourceService.register(ctx.user.id, { projectId: ctx.project.id, connector: { type: 'upload', id: 'dummy' }, path: `knowledge-base/room-${index}.txt`,
-        size: 1, mtime: new Date().toISOString(), mimeType: 'text/plain', sha256: createHash('sha256').update(`room ${index}`).digest('hex') });
-      material.push(registered.source.id);
-    }
-    await ctx.app.autopilotService.addMaterials(ctx.user.id, agenda.id, { sourceIds: material.slice(0, 9) });
-    await ctx.app.autopilotService.addMaterials(ctx.user.id, agenda.id, { sourceIds: material.slice(9) });
-    assert.equal((await ctx.app.autopilotService.get(ctx.user.id, agenda.id)).payload.materials.length, 20);
-    await admin.query('CREATE TABLE research_db_part_third (id integer)'); await admin.query(`GRANT SELECT ON research_db_part_third TO ${role}`);
-    const before = opened;
-    const full = await call(`/api/research-databases/${id}/snapshot`, request('research_db_part_third'));
-    assert.equal(full.status, 409); assert.equal(full.body.code, 'autopilot_materials_full');
-    assert.equal(opened, before, 'the remote database was not opened for an import that could not be kept');
-    assert.equal(researchDbMetricSnapshot().refusals.materials_full, 1);
-    await admin.query("INSERT INTO research_db_part_other VALUES (2)");
-    const again = await call(`/api/research-databases/${id}/snapshot`, request('research_db_part_other'));
-    assert.equal(again.status, 201, JSON.stringify(again)); assert.equal(again.body.data.version, 2);
-    const materials = (await ctx.app.autopilotService.get(ctx.user.id, agenda.id)).payload.materials;
-    assert.equal(materials.length, 20, 'the new version took the old one\'s place');
-    assert(materials.some(item => item.sourceId === again.body.data.sourceId) && !materials.some(item => item.sourceId === other.body.data.sourceId));
-
     // The audit: a line for the credential and for each import, failures with their code, never a secret.
     auditLines.expect = 5;
     const lines = await auditLines();
@@ -467,12 +417,10 @@ test('an import that left something out says so in the title, the source, the si
     assert(lines.some(line => line.action === 'research_db.import' && line.status === 'failed' && line.error === 'research_db_tls_failed'));
     assert(lines.some(line => line.action === 'research_db.connection.save' && line.target === id));
     assert(!JSON.stringify(lines).match(/hidden-fixture-password|reader|db\.example\.org/i), 'no password, user name or host in an audit line');
-    // No study named: the table goes to the project's knowledge base and no study's material list changes.
-    const held = (await ctx.app.autopilotService.researchState(ctx.user.id, agenda.id)).materials.map(item => item.sourceId);
+    await admin.query('CREATE TABLE research_db_part_third (id integer)'); await admin.query(`GRANT SELECT ON research_db_part_third TO ${role}`);
     const toBase = await call(`/api/research-databases/${id}/snapshot`, { projectId: ctx.project.id, schema: 'public', table: 'research_db_part_third', requestId: randomUUID() });
     assert.equal(toBase.status, 201, JSON.stringify(toBase));
     assert.ok(await ctx.app.sourceService.get(ctx.user.id, toBase.body.data.sourceId));
-    assert.deepEqual((await ctx.app.autopilotService.researchState(ctx.user.id, agenda.id)).materials.map(item => item.sourceId), held);
     const removed = await call(`/api/research-databases/${id}`, { projectId: ctx.project.id }, 'DELETE'); assert.equal(removed.body.data.removed, true);
     auditLines.expect = lines.length + 2;
     assert((await auditLines()).some(line => line.action === 'research_db.connection.remove' && line.target === id));

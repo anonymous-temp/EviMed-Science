@@ -1,0 +1,11 @@
+{"pmcid": "PMC12752976", "page": 7, "table": "Table 1", "caption": "Demographic and intraoperative characteristics.", "columns": ["SGB group (n=28)", "TAP group (n=28)", "Control group (n=27)", "P value"], "keys": ["SGB", "TAP", "Control", "P value"],"rows":[
+["Age (years)", "49.6±4.7", "51.9±5.4", "51.1±5.2", "0.186"],
+["BMI (kg/m2)", "23.0±2.3", "24.0±2.2", "24.2±1.9", "0.069"],
+["ASA (II/III, n)", "24/4", "21/7", "22/5", "0.592"],
+["Menopause (Yes/No, n)", "12/18", "18/12", "9/16", "0.149"],
+["Duration of surgery (min)", "133.5 (68.3,159.3)", "145 (92.5,178.8)", "127 (105,170)", "0.803"],
+["Anesthesia time (min)", "180 (136.3,205)", "180 (135,215)", "180 (160,225)", "0.778"],
+["Sufentanil consumption (ug)", "45.0 (40.0,50.0)", "50.0 (45.0,58.8)", "50.0 (45.0,60.0)", "0.162"],
+["Total fluid infusion (ml)", "1600 (1400,1775)", "1600 (1400,2175)", "1600 (1600,2100)", "0.155"],
+["Blood loss (ml)", "50.0 (50.0-100.0)", "50.0 (30.0-100.0)", "80.0 (40.0-200.0)", "0.577"]
+]}

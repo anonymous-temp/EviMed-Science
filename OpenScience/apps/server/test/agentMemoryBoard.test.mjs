@@ -30,6 +30,7 @@ function memoryDouble(records) {
   const nativeMemory = {
     calls,
     configured: true,
+    async getRecord(_userId, id) { return records.find(item => item.id === id) ?? record({ id }); },
     async listRecords(userId, input) { calls.push(["listRecords", userId, input]); return records; },
     async changes(userId, input) {
       calls.push(["changes", userId, input]);
@@ -194,4 +195,14 @@ test("a proposed note is admitted to the engine when confirmed and retired as th
   assert.deepEqual(updates.map((entry) => entry[2].status), ["retired"]);
   await assert.rejects(() => noteAction({ capsules, nativeMemory }, { id: "u1" }, "other", "confirm", { expectedRevision: 1 }), (error) => error.code === "note_not_found");
   await assert.rejects(() => noteAction({ capsules, nativeMemory: { configured: false } }, { id: "u1" }, "n1", "confirm", { expectedRevision: 1 }), (error) => error.code === "memory_engine_unavailable");
+});
+
+
+test("the external board omits people from active, forgotten, recent changes and pending notes", async () => {
+  const fixtures = memoryDouble([record({ id: "active-person", kind: "person" }), record({ id: "forgotten-person", kind: "person", status: "archived" }), record({ id: "ordinary", kind: "note" })]);
+  fixtures.nativeMemory.changes = async () => [{ id: "person-change", kind: "person", summary: "Private patient", changedAt: NOW.toISOString() }];
+  const capsules = { documents: { async list() { return { items: [{ id: "private-pending", payload: { factKind: "person", content: "Private pending patient", status: "candidate" } }] }; } } };
+  const board = await memoryBoard({ ...fixtures, capsules, now: () => NOW }, { id: "u1" });
+  assert.deepEqual(board.records.map(item => item.id), ["ordinary"]);
+  assert.deepEqual(board.forgotten, []); assert.deepEqual(board.recentChanges, []); assert.deepEqual(board.pending, []);
 });

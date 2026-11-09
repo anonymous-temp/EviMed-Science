@@ -63,6 +63,7 @@ const FIELD_EXPECTATIONS = GENERAL_EXPECT_FIELDS;
 
 /** Where each kind's files live under `memories/`, for `onlyKinds` (a correction lives under the preferences, so a preference allows it). */
 const KIND_PLACES = Object.freeze({
+  person: ["people/"], note: ["notes/"],
   profile: ["profile.md"], preference: ["preferences/"], correction: ["preferences/corrections/", "corrections/"], entity: ["entities/"],
   project_fact: ["projects/", "project_facts/"], decision: ["decisions/"], follow_up: ["follow_ups/"], recent_work: ["recent_work/"],
 });
@@ -91,7 +92,7 @@ const bullets = (/** @type {string} */ text) => text.split("\n").filter((line) =
  */
 export function kindsOf(files) {
   /** @type {Record<string, string[]>} */
-  const out = { profile: [], preference: [], correction: [], decision: [], follow_up: [], project_fact: [], recent_work: [], entity: [], other: [] };
+  const out = { person: [], note: [], profile: [], preference: [], correction: [], decision: [], follow_up: [], project_fact: [], recent_work: [], entity: [], other: [] };
   for (const [rel, raw] of Object.entries(files)) {
     const text = body(raw);
     if (rel === "profile.md") out.profile.push(...bullets(text));
@@ -101,6 +102,8 @@ export function kindsOf(files) {
     else if (rel.startsWith("follow_ups/")) out.follow_up.push(...bullets(text));
     else if (rel.startsWith("project_facts/")) out.project_fact.push(...bullets(text));
     else if (rel.startsWith("recent_work/")) { out.recent_work.push(...bullets(text)); out.project_fact.push(...bullets(text)); }
+    else if (rel.startsWith("people/")) out.person.push(rel);
+    else if (rel.startsWith("notes/")) out.note.push(rel);
     else if (rel.startsWith("entities/")) out.entity.push(rel);
     else if (rel.startsWith("projects/")) {
       let section = "";

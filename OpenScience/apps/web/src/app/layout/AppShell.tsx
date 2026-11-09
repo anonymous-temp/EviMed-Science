@@ -81,19 +81,16 @@ export function AppShell() {
     useUiStore.getState().settleSidebar();
   }, [drawerLayout]);
 
-  // Only a committed destination closes mobile navigation. Filter-only query changes
-  // keep it open; blocked transitions never change this pathname.
-  const acceptedPath = useRef(location.pathname);
-  const acceptedGeoSettings = useRef(false);
+  // A committed destination closes mobile navigation, including query-addressed module directories.
+  // Modified clicks and blocked transitions do not change the current location.
+  const acceptedDestination = useRef({ pathname: location.pathname, search: location.search });
   useLayoutEffect(() => {
-    const settings = /^\/app\/geo\/[^/]+(?:\/|$)/.test(location.pathname)
-      && new URLSearchParams(location.search).get("panel") === "settings";
-    const openingSettings = settings && !acceptedGeoSettings.current;
-    acceptedGeoSettings.current = settings;
-    if (acceptedPath.current === location.pathname && !openingSettings) return;
-    acceptedPath.current = location.pathname;
+    const previous = acceptedDestination.current;
+    if (previous.pathname === location.pathname && previous.search === location.search) return;
+    acceptedDestination.current = { pathname: location.pathname, search: location.search };
     if (!drawerLayout) return;
-    focusAfter.current = "route";
+    // A query-only change does not trigger route-heading focus; return sidebar focus to the expand control.
+    focusAfter.current = previous.pathname === location.pathname ? null : "route";
     setSidebarCollapsed(true);
   }, [location.pathname, location.search, drawerLayout, setSidebarCollapsed]);
 

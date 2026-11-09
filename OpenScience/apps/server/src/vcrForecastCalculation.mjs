@@ -1,13 +1,14 @@
 /** Statistical work runs off the HTTP event loop. This is deterministic code,
  * not a locally deployed model. Patient inputs never enter the DSH workspace. */
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
-import { evaluateForecast, compareForecasts, evaluateTrialBenchmark } from '@evimed/domain';
+import { evaluateForecast, compareForecasts, compareVersionsToObserved, evaluateTrialBenchmark } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 
 if (!isMainThread) {
   const {method,args} = workerData;
   const value = method === 'forecast.evaluate' ? evaluateForecast(args[0],args[1],args[2],args[3])
     : method === 'forecast.compare' ? compareForecasts(args[0],args[1],args[2])
+      : method === 'forecast.compare_observed' ? compareVersionsToObserved(args[0],args[1],args[2],args[3])
       : method === 'forecast.trial_benchmark' ? evaluateTrialBenchmark(args[0],args[1]) : null;
   parentPort?.postMessage(value);
 }

@@ -29,4 +29,4 @@ export function evolutionCompletedResult(use, run, transcript) {
     resultScope: 'completed-run-with-substantive-tool-output', runStatus: run.status };
 }
 
-export const EVOLUTION_MODULE_IDS = Object.freeze(['tools', 'frontier', 'geo', 'autopilot', 'sources', 'evidence', 'memory', 'runtime']);
+export const EVOLUTION_MODULE_IDS = Object.freeze(['tools', 'frontier', 'geo', 'sources', 'evidence', 'memory', 'runtime']);

@@ -70,6 +70,11 @@ const DEPLOYMENTS = [
 ] as const;
 
 describe("设置", () => {
+  it("links 技能与插件 as a page, not a section", async () => {
+    open();
+    await answered();
+    expect(within(nav()).getByRole("link", { name: "技能与插件" })).toHaveAttribute("href", "/app/extensions/installed");
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     useUiStore.setState({ theme: "system" });
@@ -98,7 +103,7 @@ describe("设置", () => {
       expect(await screen.findByText("账户分区")).toBeInTheDocument();
       await answered();
       // Only the settings: 插件 and 技能 have their own page, and 运维 its own route.
-      expect(names()).toEqual(["账户", "外观", "通知", usage, "数据源", "项目"]);
+      expect(names()).toEqual(["账户", "外观", "通知", usage, "数据源", "项目", "技能与插件"]);
       expect(within(nav()).queryByRole("link", { name: other })).not.toBeInTheDocument();
       expect(within(nav()).getByRole("link", { name: "账户" })).toHaveAttribute("aria-current", "page");
       // The address is the same under either name: links and the server's copy depend on it.
@@ -142,7 +147,7 @@ describe("设置", () => {
       await screen.findByText("账户分区");
       await answered();
       const labels = names();
-      expect(labels).toEqual(["账户", "外观", "通知", usage, "数据源", "项目"]);
+      expect(labels).toEqual(["账户", "外观", "通知", usage, "数据源", "项目", "技能与插件"]);
       for (const label of labels) {
         await user.click(within(nav()).getByRole("link", { name: label ?? "" }));
         for (const gone of [/API Key/i, /审批模式/, /选择模型/, /添加 MCP/]) expect(screen.queryByText(gone)).not.toBeInTheDocument();
@@ -156,9 +161,9 @@ describe("设置", () => {
     mocks.allowance.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
     open();
     expect(await screen.findByText("账户分区")).toBeInTheDocument();
-    expect(names()).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目"]);
+    expect(names()).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目", "技能与插件"]);
     await act(async () => { answer(billing(true)); });
-    expect(names()).toEqual(["账户", "外观", "通知", "额度", "数据源", "项目"]);
+    expect(names()).toEqual(["账户", "外观", "通知", "额度", "数据源", "项目", "技能与插件"]);
     expect(within(nav()).getByRole("link", { name: "额度" })).toHaveAttribute("href", "/app/account?tab=usage");
   });
 
@@ -168,13 +173,13 @@ describe("设置", () => {
     mocks.allowance.mockResolvedValue(billing(true));
     open("/app/account?tab=usage");
     expect(await screen.findByRole("note")).toHaveTextContent("操作未完成，请重试。");
-    expect(names()).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目"]);
+    expect(names()).toEqual(["账户", "外观", "通知", "用量", "数据源", "项目", "技能与插件"]);
     expect(screen.queryByText("用量分区")).not.toBeInTheDocument();
     expect(screen.queryByText("额度分区")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重试" }));
     expect(await screen.findByText("额度分区")).toBeInTheDocument();
     // The one read the retry made is the tab's answer too.
-    expect(names()).toEqual(["账户", "外观", "通知", "额度", "数据源", "项目"]);
+    expect(names()).toEqual(["账户", "外观", "通知", "额度", "数据源", "项目", "技能与插件"]);
   });
 
   it.each([

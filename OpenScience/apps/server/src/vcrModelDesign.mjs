@@ -26,8 +26,9 @@ export function vcrModelDesignBinding(result, scenario, quantile = 'p50') {
     truth = { controlDistribution: structuredClone(variant.controlDistribution) };
     basis = { quantile, median: variant.median, method: diag.model.medianParameterQuantileBasis,
       uncertainty: 'Median-parameter sensitivity with fitted shape fixed; not joint parameter uncertainty or assurance.' };
-  } else if (diag.modelScope === 'published_prognostic_equation') {
-    if (quantile !== 'p50') fail('Published fixed-coefficient predictions have no parameter-quantile uncertainty model.');
+  } else if (['published_prognostic_equation', 'prognostic_equation_source_unknown'].includes(diag.modelScope)) {
+    const published = diag.modelScope === 'published_prognostic_equation';
+    if (quantile !== 'p50') fail('Fixed-coefficient predictions have no parameter-quantile uncertainty model.');
     if (diag.absoluteRiskAvailable !== true || diag.endpoint?.type !== type) fail('Relative scores or a different endpoint cannot supply an absolute control benchmark.');
     if (scenario.endpoint?.horizon !== diag.endpoint.horizon || scenario.endpoint?.timeUnit !== diag.endpoint.timeUnit) fail('The prediction and design need the same declared horizon and unit.');
     const mean = measure(result, 'predicted_population_mean');
@@ -35,11 +36,13 @@ export function vcrModelDesignBinding(result, scenario, quantile = 'p50') {
     if (type === 'binary') truth = { [single ? 'nullRate' : 'controlRate']: mean };
     else if (type === 'continuous') {
       const sd = measure(result, 'predicted_outcome_sd');
-      if (diag.populationVarianceIncludesResidual !== true || !(sd > 0)) fail('Continuous design requires an outcome SD including the published residual variance.');
+      if (diag.populationVarianceIncludesResidual !== true || !(sd > 0)) fail('Continuous design requires an outcome SD including the declared residual variance.');
       truth = { sd, ...(single ? { benchmark: mean } : {}) };
     } else fail('One predicted survival risk does not identify a full time-to-event control distribution.');
     basis = { quantile: null, horizon: diag.endpoint.horizon, timeUnit: diag.endpoint.timeUnit,
-      populationMean: mean, uncertainty: 'Fixed published coefficients; coefficient uncertainty and transportability not estimated.' };
+      populationMean: mean, uncertainty: published
+        ? 'Fixed published coefficients; coefficient uncertainty and transportability not estimated.'
+        : 'Fixed supplied coefficients with unverified source; coefficient uncertainty and transportability not estimated.' };
   } else fail('This saved result has no supported control-design adapter.');
   const next = { ...scenario, endpoint: { type }, truth: { ...object(scenario.truth), ...truth } };
   if (truth.controlDistribution) delete next.truth.controlMedian;

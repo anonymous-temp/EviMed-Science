@@ -17,7 +17,6 @@ import { evolutionScientificUse } from './evolutionScientificUse.mjs';
 import { evolutionCompletedResult } from './evolutionUsage.mjs';
 import { readRunTranscript } from './runTranscripts.mjs';
 import { quarantineRetiredEvolutionJobs } from './evolutionRetiredJobs.mjs';
-import { createEvolutionSelfCheck } from './evolutionSelfCheck.mjs';
 import { evolutionMonthlyMetrics } from './evolutionMetrics.mjs';
 import { compactEvolutionRecords } from './evolutionRetention.mjs';
 

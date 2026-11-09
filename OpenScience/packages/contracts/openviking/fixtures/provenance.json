@@ -1,13 +1,13 @@
 {
- "dependencyVersion": "0.5.1.1",
- "imageRef": "ghcr.io/volcengine/openviking:v0.5.1.1",
- "imageDigest": "sha256:551b1ae00f59fd7b1a2434ecc10a4860be34aae8b7627f5f57240be355b23217",
+ "dependencyVersion": "0.5.3",
+ "imageRef": "ghcr.io/volcengine/openviking:v0.5.3",
+ "imageDigest": "sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d",
  "sourceRepo": "https://github.com/volcengine/OpenViking",
- "sourceCommitAtObservation": "tag v0.5.1.1",
- "observedAt": "2026-10-23",
- "observedOn": "an isolated v0.5.1.1 lab engine on a development host (its own volume and root key, reached through an ssh tunnel), in throwaway accounts that were deleted afterwards (the account name is written as `evimed`, as the production account is named). They held only records written for these recordings; no user memory or document was read or written.",
+ "sourceCommitAtObservation": "tag v0.5.3 (178a8cdfb41b51e7d24c4bf79a13cc54981e0ee8)",
+ "observedAt": "2026-11-05",
+ "observedOn": "a v0.5.3 engine (container ov053-rehearsal, the pinned image) holding a copy of the production volume, recorded on 2026-11-05 by record.mjs of branch codex/openviking-053-20261105 in throwaway accounts that were deleted afterwards (written as `evimed`, the production account's name). The engine's model calls went straight to the model provider and not through the platform's gateway, because the gateway's daily budget was spent that day; the embedding is the production pin's. The root key is a placeholder. No user memory or document of the copy was read or written.",
  "layout": {
-  ".": "The exchanges `apps/server/src/openVikingClient.mjs` makes through its five original calls, recorded on 2026-10-23 by running that client itself (`packages/contracts/openviking/record.mjs`, which builds no request of its own for them) — every request body is the one the client builds — and saved as the bare response body the server sent, re-indented. `find.json` is trimmed to its first three hits of four written; nothing was added, renamed or invented.",
+  ".": "The exchanges `apps/server/src/openVikingClient.mjs` makes through its five original calls, recorded on 2026-11-05 by running that client itself (`packages/contracts/openviking/record.mjs`, which builds no request of its own for them) — every request body is the one the client builds — and saved as the bare response body the server sent, re-indented. `find.json` is trimmed to its first three hits of four written; nothing was added, renamed or invented.",
   "memory/": "The exchanges of native memory, sessions, the admin routes and the MCP endpoint, recorded by `record.mjs` against the lab (`task-failed.json` and `archive-failed-marker-read.json` could not be recorded again and stay as recorded on v0.5.0: see `notRecorded`). Each file is `{ note, recordedFrom, request, status, contentType, response }`; `memory/_index.json` lists them and `memory/provenance.json` says how they were taken and what the wire disagreed with the documentation about.",
   "knowledge/": "Response bodies (and the binary downloads) of resources, Compile, tasks, search, skills and the checked batch write, recorded by `record.mjs` against the lab. Each file is the bare body; `knowledge/provenance.json` holds the method, path, request body and status of every one.",
   "engine/": "The control plane's engine check (`apps/server/src/openVikingEngine.mjs`) run against the lab twice, exchange by exchange: as an account the server had never seen (`engine-check-new-volume`: registration pending, the two skills installed) and as the same account once registered (`engine-check-ready`). `engine-check-no-templates.json` stays as recorded on v0.5.0: it needs a server that mounts no template directory."

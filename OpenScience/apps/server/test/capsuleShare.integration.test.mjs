@@ -706,3 +706,11 @@ test("a run that used an uncorroborated guest capsule still learns for its own a
   const marked = await guestMarkedRuns(database, alice, [guestA.id, guestB.id, vouchedA.id, vouchedB.id]);
   assert.deepEqual([...marked].sort(), [guestA.id, guestB.id].sort(), "only the runs that used an uncorroborated pack are marked");
 });
+
+
+test("delivery and link preserve explicit private selections through their own whitelist", options, async () => {
+  const { capsule } = await authored("Share selection wiring");
+  const includePrivateEntries = [{ id: "native:nm_aaaaaaaaaaaaaaaaaaaaaaaa", sha256: "a".repeat(64) }];
+  await assert.rejects(sharing.deliver(author, capsule.id, { recipients: [alice], scopes: ["workstyle"], includePrivateEntries }), { code: "capsule_private_selection_changed" });
+  await assert.rejects(sharing.createLink(author, capsule.id, { scopes: ["workstyle"], includePrivateEntries }), { code: "capsule_private_selection_changed" });
+});

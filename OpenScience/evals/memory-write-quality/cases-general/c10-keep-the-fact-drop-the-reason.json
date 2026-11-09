@@ -2,7 +2,7 @@
   "id": "c10-keep-the-fact-drop-the-reason",
   "class": "work-order-fact-without-reason",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C10); every name, number and identifier is invented",
-  "expected": "The fact is kept (vegetarian) and the sensitive reason is not (the religion, in any form).",
+  "expected": "Keep vegetarian context together with its stated religious reason when useful; the reason is no longer categorically forbidden.",
   "decidable": true,
   "replay": {
     "synthetic": true,
@@ -22,11 +22,10 @@
   },
   "expect": {
     "requireTextContains": [
-      "素"
-    ],
-    "noTextContains": [
-      "信佛",
+      "素",
       "佛"
     ]
-  }
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }

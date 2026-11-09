@@ -69,12 +69,6 @@ inputs:
   - decisionDate
   - budgetContext
   - uploadedFiles
-autopilot:
-  taskTypes: []
-  costClass: medium
-  unattendedInputs:
-  - candidateDrugs
-  - indication
 estimatedMinutes:
 - 20
 - 50

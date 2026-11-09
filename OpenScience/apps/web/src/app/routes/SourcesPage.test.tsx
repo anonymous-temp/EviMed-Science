@@ -13,6 +13,8 @@ import treeMixed from "@/components/sources/knowledgeFixtures/tree-mixed.json";
 import graphKgMedical from "@/components/sources/knowledgeFixtures/graph-kg-medical.json";
 import graphWikiMedical from "@/components/sources/knowledgeFixtures/graph-wiki-medical.json";
 import { compositionFacts, precedes } from "@/test/compositionFixtures";
+import { KnowledgeWorkspaceNav } from "@/components/sources/KnowledgeWorkspaceNav";
+import { knowledgePagesOffered } from "@/lib/sourceClient";
 import { SourcesPage } from "./SourcesPage";
 
 const mocks = vi.hoisted(() => ({
@@ -126,7 +128,7 @@ function Probe() {
 /** The router's one route to the page — the list, or a document in the list's pane (`files/:sourceId?`) — so choosing a document is not a reload. */
 function Pages() {
   return useRoutes([
-    { path: "/app/files/:sourceId?", element: <><SourcesPage /><Probe /></> },
+    { path: "/app/files/:sourceId?", element: <><SourcesPage /><KnowledgeWorkspaceNav pagesOffered={knowledgePagesOffered({ features: context.features } as never)} /><Probe /></> },
     { path: "/app/chat", element: <Probe /> },
   ]);
 }
@@ -808,7 +810,7 @@ describe("知识库", () => {
       renderPage("/app/files?kind=wiki");
       const list = await screen.findByRole("region", { name: "资料列表" });
       await waitFor(() => expect(within(list).getByText("虚拟临床研究")).toBeInTheDocument());
-      expect(within(list).getAllByRole("link").map((link) => link.textContent)).toEqual(expect.arrayContaining(["资料", "知识页", "图谱", "对话产出", "我的研究", "疳证 Meta 文献检索", "二甲双胍外部对照研究", "波立维"]));
+      expect(within(list).getAllByRole("link").map((link) => link.textContent)).toEqual(expect.arrayContaining(["我的研究", "疳证 Meta 文献检索", "二甲双胍外部对照研究", "波立维"]));
       // The sidebar's project is the one shown when the address names none; its row is the chosen one, and the address is not written.
       expect(within(list).getByRole("link", { name: "我的研究" })).toHaveAttribute("aria-current", "true");
       const pane = screen.getByRole("region", { name: "资料阅读" });

@@ -18,12 +18,12 @@ test("a registration names its source, trial, endpoint and prediction in closed 
   assert.equal(normalizePrediction(filing(), NOW).payloadHash, payloadHash, "the same filing hashes the same");
   assert.notEqual(normalizePrediction(filing({ estimate: 0.8 }), NOW).payloadHash, payloadHash);
   assert.notEqual(normalizePrediction(filing({ filedAt: "2026-10-06T07:58:00.000Z" }), NOW).payloadHash, payloadHash, "a revised filing is a different registration");
-  assert.deepEqual(normalizePrediction(filing({ source: "agenda", studyId: undefined, agendaId: "agenda-1", estimate: undefined, interval: undefined }), NOW).payload.prediction, { probability: 0.7 });
+  assert.deepEqual(normalizePrediction(filing({ estimate: undefined, interval: undefined }), NOW).payload.prediction, { probability: 0.7 });
   for (const broken of [{ source: "geo" }, { studyId: "" }, { accountId: "" }, { projectId: undefined }, { registryId: "not a registry id" }, { endpoint: " " }, { estimate: NaN }, { estimate: undefined, probability: undefined },
     { probability: 1.2 }, { probability: -0.1 }, { interval: [0.9, 0.6] }, { interval: [0.1, 0.2] }, { interval: [0.6] }, { filedAt: "yesterday" }, { filedAt: "2026-10-06T09:00:00.000Z" }, { methodId: 5 }]) {
     assert.throws(() => normalizePrediction(filing(broken), NOW), refused("prediction_invalid"), JSON.stringify(broken));
   }
-  assert.throws(() => normalizePrediction(filing({ source: "agenda" }), NOW), refused("prediction_invalid"), "an agenda's filing names the agenda");
+  assert.throws(() => normalizePrediction(filing({ source: "agenda" }), NOW), refused("prediction_invalid"), "only a study files");
   assert.throws(() => normalizePrediction(filing({ estimate: undefined, interval: [0.1, 0.2] }), NOW), refused("prediction_invalid"), "an interval is around an estimate");
 });
 

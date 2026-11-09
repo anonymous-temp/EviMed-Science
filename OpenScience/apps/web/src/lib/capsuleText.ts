@@ -5,6 +5,8 @@
  * 「研究方法」 for the same entry (2026-09-16 review, U11).
  */
 export const CAPSULE_ENTRY_TYPES = [
+  { value: "person", label: "人物", layer: "knowledge" },
+  { value: "note", label: "其他记忆", layer: "knowledge" },
   { value: "method_preference", label: "研究方法", layer: "methods" },
   { value: "writing_style", label: "写作偏好", layer: "profile" },
   { value: "preference", label: "一般偏好", layer: "profile" },

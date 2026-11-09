@@ -17,6 +17,12 @@ COPY packages/harness-port/package.json packages/harness-port/package.json
 COPY packages/search-topics/package.json packages/search-topics/package.json
 COPY packages/socket/package.json packages/socket/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/research-plugin-runtime/package.json packages/research-plugin-runtime/package.json
+COPY packages/virtual-trial/package.json packages/virtual-trial/package.json
+COPY packages/virtual-cohort/package.json packages/virtual-cohort/package.json
+COPY packages/virtual-patient/package.json packages/virtual-patient/package.json
+COPY packages/synthetic-control/package.json packages/synthetic-control/package.json
+COPY packages/virtual-research-suite/package.json packages/virtual-research-suite/package.json
 
 # The store is a build cache, so a changed lockfile fetches only what moved,
 # and fewer parallel fetches keep the serving host answering: a from-scratch
@@ -113,6 +119,7 @@ COPY --from=build /app/packages/contracts/healthflux/candidates.json ./packages/
 COPY --from=build /app/packages/contracts/openviking/compile-scope-proof.json ./packages/contracts/openviking/compile-scope-proof.json
 COPY --from=build /app/packages/harness-port/index.mjs /app/packages/harness-port/seam-manifest.json ./packages/harness-port/
 COPY --from=build /app/packages/harness-port/src ./packages/harness-port/src
+COPY --from=build /app/packages/research-plugin-runtime ./packages/research-plugin-runtime
 COPY --from=build /app/packages/socket/index.mjs /app/packages/socket/cordis.patch.yml ./packages/socket/
 COPY --from=build /app/packages/socket/extensions ./packages/socket/extensions
 COPY --from=build /app/packages/socket/plugins ./packages/socket/plugins

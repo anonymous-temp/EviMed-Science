@@ -29,7 +29,6 @@ persona: |
 safetyClass: clinical
 skills:
 - manuscript-support
-- autopilot-episode
 - citation-integrity
 - manuscript-humanize
 - biomedical-database-search
@@ -94,9 +93,6 @@ produces:
   - path: delivery-summary.md
     role: document
     required: true
-  - path: agenda-delta.json
-    role: work
-    required: false
   checks:
   - requiredOutputsExist
   - citationsResolvable
@@ -116,17 +112,6 @@ inputs:
   - targetJournal
   - wordBudget
   - outputLanguage
-autopilot:
-  # The scheduled shape is "the evidence run finished overnight; draft the
-  # discussion against it" — a writing pipeline whose inputs both exist before
-  # anyone is awake. It is not eligible with the section unnamed: an unattended
-  # run that picks the section itself delivers a document nobody asked for.
-  taskTypes:
-  - writing-pipeline
-  costClass: medium
-  unattendedInputs:
-  - section
-  - sources
 estimatedMinutes:
 - 15
 - 60

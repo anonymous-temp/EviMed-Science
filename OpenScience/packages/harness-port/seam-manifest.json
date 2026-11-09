@@ -1,6 +1,6 @@
 {
-  "dsh": "0.2.1-rc.5",
-  "cordis": "4.0.5",
+  "dsh": "0.2.2-rc.1",
+  "cordis": "4.1.0",
   "pnpm": "11.7.0",
   "plugins": {
     "dsh-cite": "0.3.5"
@@ -94,7 +94,8 @@
     "working-directory/change"
   ],
   "messageSourceKinds": {
-    "subagentSettled": "subagent-settled"
+    "subagentSettled": "subagent-settled",
+    "schedule": "schedule"
   },
   "turnEndKinds": [
     "completed",
@@ -146,6 +147,7 @@
     "@deepseek-ai/dsh-tool-todo": "config-row",
     "@deepseek-ai/dsh-tool-present": "config-row",
     "@deepseek-ai/dsh-tool-subagent": "config-row",
+    "@deepseek-ai/dsh-tool-schedule": "config-row",
     "@deepseek-ai/dsh-command-compact": "config-row",
     "@deepseek-ai/dsh-llm-deepseek": "config-row",
     "@deepseek-ai/dsh-llm-deepseek-api-key": "config-row",
@@ -153,7 +155,8 @@
     "@deepseek-ai/dsh-typert-protocol": "dependency",
     "@deepseek-ai/dsh-scope": "dependency",
     "@deepseek-ai/dsh-system-prompt": "dependency",
-    "@deepseek-ai/dsh-plugin-manager": "dependency"
+    "@deepseek-ai/dsh-plugin-manager": "dependency",
+    "@deepseek-ai/dsh-tool-executor-native": "dependency"
   },
   "providers": {
     "compaction": {
@@ -178,7 +181,7 @@
       },
       "read": "unauthenticated hint",
       "fallback": "the project's single active run, as before",
-      "verifiedAgainst": "0.2.1-rc.5, read in the installed closure at @deepseek-ai/dsh-llm-deepseek@0.2.1-rc.5/lib/index.js (the shared Messages transport the `llm-deepseek` row's `dsh-llm-deepseek-api-key` plugin registers onto; the header is still stamped from options.sessionId; rc.4 added a model listing to that plugin, which follows only the official endpoint with the built-in catalogue, and this deployment's route is neither)"
+      "verifiedAgainst": "0.2.2-rc.1, read in the installed closure at @deepseek-ai/dsh-llm-deepseek@0.2.2-rc.1/lib/index.js (the shared Messages transport the `llm-deepseek` row's `dsh-llm-deepseek-api-key` plugin registers onto; the header is still stamped from options.sessionId; rc.4 added a model listing to that plugin, which follows only the official endpoint with the built-in catalogue, and this deployment's route is neither)"
     },
     "personalSkills": {
       "package": "@deepseek-ai/dsh-skill-filesystem",
@@ -281,7 +284,8 @@
       "evimedPlugins/extensionInvocationFacts",
       "evimedSkills/list",
       "evimedSkills/read",
-      "evimedSkills/snapshotBuiltin"
+      "evimedSkills/snapshotBuiltin",
+      "schedule/list"
     ],
     "denied": [
       "account/ackBonusNotified",
@@ -295,6 +299,7 @@
       "account/startSignIn",
       "account/watch",
       "account/watchExpiry",
+      "actionCards/act",
       "agentPresets/read",
       "agentPresets/select",
       "commands/execute",
@@ -321,6 +326,26 @@
       "dynamicCordisRunner/undefineFromPanel",
       "fileReferences/list",
       "fileUploads/upload",
+      "forgePanel/branches",
+      "forgePanel/cancelWorktree",
+      "forgePanel/changeRequestChecks",
+      "forgePanel/changeRequestDiff",
+      "forgePanel/changeRequestStates",
+      "forgePanel/changeRequestText",
+      "forgePanel/continueInProject",
+      "forgePanel/dismiss",
+      "forgePanel/follow",
+      "forgePanel/localDiff",
+      "forgePanel/localText",
+      "forgePanel/markReady",
+      "forgePanel/merge",
+      "forgePanel/refresh",
+      "forgePanel/requestWorktree",
+      "forgePanel/restoreWorktree",
+      "forgePanel/retryWorktree",
+      "forgePanel/stopCreation",
+      "forgePanel/submitReview",
+      "forgePanel/track",
       "goals/clear",
       "goals/complete",
       "goals/create",
@@ -331,6 +356,18 @@
       "job/follow",
       "job/kill",
       "job/list",
+      "liveshareShares/audit",
+      "liveshareShares/capabilities",
+      "liveshareShares/create",
+      "liveshareShares/identity",
+      "liveshareShares/list",
+      "liveshareShares/relay",
+      "liveshareShares/setCapabilities",
+      "liveshareShares/setRelay",
+      "liveshareShares/stop",
+      "liveshareShares/testPublish",
+      "liveshareShares/testRelay",
+      "liveshareShares/updatePermissions",
       "llm/discoverModels",
       "llm/listConfigurableProviders",
       "llm/listProviders",
@@ -347,35 +384,49 @@
       "pluginManager/listBundles",
       "pluginManager/listPlugins",
       "pluginManager/listVersionExemptions",
+      "pluginManager/listVersions",
+      "pluginManager/readBundleDetail",
       "pluginManager/registries",
       "pluginManager/removeBundle",
       "pluginManager/setBundleEnabled",
       "pluginManager/setPluginEnabled",
       "pluginManager/setVersionExemption",
+      "pluginManager/updateBundle",
       "pluginManager/waitForInstall",
       "pluginMarket/listIndexes",
+      "pluginMarket/readEntryDetail",
       "pluginMarket/search",
       "pluginMarket/setIndexes",
+      "pluginRecommendations/describe",
       "pluginRegistryProbe/fastest",
       "productAnalytics/enabled",
       "productAnalytics/report",
       "productAnalytics/watchPolicy",
       "remoteAccess/follow",
       "schedule/catalog",
-      "schedule/delete",
+      "schedule/create",
+      "schedule/deleteInactive",
+      "schedule/deliveryLimits",
+      "schedule/edit",
       "schedule/history",
-      "schedule/list",
-      "schedule/update",
+      "schedule/run",
+      "schedule/view",
       "session/attachment",
       "session/canOpenWorkspacePath",
       "session/control",
+      "session/events",
       "session/initializeDefaultModel",
       "session/modelCatalog",
+      "session/observeEvent",
+      "session/observeProjections",
+      "session/observeState",
       "session/openWorkspacePath",
       "session/rename",
       "session/search",
       "session/selectModel",
+      "session/state",
       "session/updateQueue",
+      "session/wait",
       "session/workspacePathApplications",
       "sessionFeedback/record",
       "sessionReferenceResolver/candidates",
@@ -400,6 +451,7 @@
       "terminal/rename",
       "terminal/retain",
       "terminal/shells",
+      "toolResults/watch",
       "userQuestions/answer",
       "userQuestions/attachWait",
       "workspace/archiveSession",
@@ -463,6 +515,9 @@
       "evimedSkills/snapshotBuiltin": [
         "sessionId",
         "key"
+      ],
+      "schedule/list": [
+        "request"
       ]
     },
     "mux": "/api/remote.mux",
@@ -599,7 +654,10 @@
     "resultRevisionContext": {
       "ownedGlobal": "__EVIMED_RESULT_REVISION__",
       "requestEnvelope": "args.request.evimedResultRevision.referenceId",
-      "methods": ["stage", "clear"],
+      "methods": [
+        "stage",
+        "clear"
+      ],
       "note": "Control-plane-owned reference. Selected-text revisions retain their native draft prefix; optional whole-file context leaves the existing composer draft intact and attaches to the next actual request in that session. The official fetch/openStream hooks attach a selected-text reference only to the same session/prompt whose text retains that draft prefix; replacement, navigation, cancellation and disposal clear it. Only an exact same requestId/text retry retains the submitted reference. The control plane reauthorizes the immutable target and removes this envelope before the upstream kernel receives the request. No new upstream service or composer subscription is used."
     },
     "generation": "connection.generation",

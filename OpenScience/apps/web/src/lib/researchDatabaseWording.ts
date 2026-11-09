@@ -41,7 +41,7 @@ export function tableImportNotes(table: ResearchDatabaseTable, limits: ResearchD
   const listed = table.unsupportedColumns.map(typed);
   const unlisted = count - listed.length;
   return {
-    limits: `导入后存为知识库里的数据表，并加入本研究。${bound}`,
+    limits: `导入后存为知识库里的数据表。${bound}`,
     rows: rowNote,
     overLimit: table.omittedColumnCount > 0 ? `另有 ${formatNumber(table.omittedColumnCount)} 列超出 ${formatNumber(limits.columns)} 列的上限，不会导入。` : null,
     unsupported: count > 0
@@ -82,9 +82,9 @@ export function importOutcome(result: ResearchDatabaseSnapshot, name: string): I
     unnamed > 0 ? `另有 ${formatNumber(unnamed)} 列未导入` : null,
   ].filter((item): item is string => item !== null);
   const partial = result.partial === true || truncated || left.length > 0;
-  const text = !partial ? `已导入 ${name}：${shape}，已加入本研究。`
-    : left.length > 0 ? `已导入 ${name}，只导入了一部分：${shape}；${left.join("；")}。已加入本研究。`
-      : `已导入 ${name}，只导入了一部分：${shape}。已加入本研究。`;
+  const text = !partial ? `已导入 ${name}：${shape}，已存入知识库。`
+    : left.length > 0 ? `已导入 ${name}，只导入了一部分：${shape}；${left.join("；")}。已存入知识库。`
+      : `已导入 ${name}，只导入了一部分：${shape}。已存入知识库。`;
   const notes: string[] = [];
   if (truncated) notes.push(`取的是表里靠前的行（${SAMPLE_CAVEAT}），不能代表整张表。`);
   if (truncated && result.stoppedBy === "bytes") notes.push("数据量超过单次导入的上限，读到这里就停了。");
@@ -93,6 +93,6 @@ export function importOutcome(result: ResearchDatabaseSnapshot, name: string): I
     const names = dropped.slice(0, COLUMN_NAMES_INLINE).map(item => item.name);
     notes.push(`未导入的列：${names.join("、")}${droppedCount > names.length ? ` 等 ${formatNumber(droppedCount)} 列` : ""}。`);
   }
-  if (Number(result.version) > 1) notes.push(`这是 ${name} 的第 ${Number(result.version)} 版，本研究里已改用这一版。`);
+  if (Number(result.version) > 1) notes.push(`这是 ${name} 的第 ${Number(result.version)} 版，已改用这一版。`);
   return { text, partial, notes };
 }

@@ -24,7 +24,7 @@ function isMemoryMark(node: Pick<MapNode, "type" | "memberType">): boolean {
  * kind. A cluster that folds memories answers for the memories it folds, which are all of one kind and one project.
  */
 export function isAboutYou(node: Pick<MapNode, "type" | "memberType" | "subtype" | "projectId">): boolean {
-  return isMemoryMark(node) && !node.projectId && !PROJECT_KINDS.has(String(node.subtype));
+  return isMemoryMark(node) && node.subtype !== "person" && !node.projectId && !PROJECT_KINDS.has(String(node.subtype));
 }
 
 /** What a mark that needs a second look says, in the reader's words. */

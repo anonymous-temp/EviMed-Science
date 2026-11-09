@@ -311,7 +311,7 @@ describe("人群定义库 on the module home", () => {
     const { unmount } = draw(<VcrDefinitionsPanel />);
     expect(await screen.findByText("还没有人群定义")).toBeInTheDocument();
     // One sentence and one way to where a definition comes from — the studies, whose 人群 page saves it — and no paragraph of instructions.
-    expect(screen.getByRole("link", { name: "去研究里存入" })).toHaveAttribute("href", "/app/virtual-research");
+    expect(screen.getByRole("link", { name: "去研究里存入" })).toHaveAttribute("href", "/app/virtual-research?area=records");
     expect(screen.queryByText(/点“存入定义库”/)).toBeNull();
     expect(screen.queryByText(/公开资料（T0）的研究用的是生成人群/)).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();

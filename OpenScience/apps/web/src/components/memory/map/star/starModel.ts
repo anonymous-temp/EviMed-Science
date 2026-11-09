@@ -12,10 +12,12 @@ import { unitHash } from "@/components/charts/map/layout";
  */
 
 /** What a mark is, for its colour, its shape and its word in the legend. */
-export type StarFamily = "about" | "preference" | "correction" | "fact" | "decision" | "method" | "document" | "entity";
+export type StarFamily = "person" | "note" | "about" | "preference" | "correction" | "fact" | "decision" | "method" | "document" | "entity";
 export type StarShape = "ball" | "crystal" | "pyramid" | "sheet";
 
 export const STAR_FAMILIES: Readonly<Record<StarFamily, { word: string; shape: StarShape }>> = {
+  person: { word: "人物", shape: "crystal" },
+  note: { word: "其他记忆", shape: "sheet" },
   about: { word: "关于你", shape: "ball" },
   preference: { word: "偏好", shape: "ball" },
   correction: { word: "纠正", shape: "crystal" },
@@ -28,7 +30,7 @@ export const STAR_FAMILIES: Readonly<Record<StarFamily, { word: string; shape: S
 export const STAR_FAMILY_ORDER = Object.keys(STAR_FAMILIES) as StarFamily[];
 
 const MEMORY_FAMILY: Readonly<Record<string, StarFamily>> = {
-  profile: "about", behavior: "about", preference: "preference", correction: "correction", decision: "decision",
+  person: "person", note: "note", profile: "about", behavior: "about", preference: "preference", correction: "correction", decision: "decision",
   project_fact: "fact", analysis: "fact", follow_up: "fact", run_summary: "fact",
   // A capsule's own kinds, as a shared pack's entries say them.
   method_preference: "method", writing_style: "preference", tooling: "preference",

@@ -100,6 +100,26 @@ export function vcrSynthpopEstimateSeconds({ rows, columns, copies = VCR_SYNTHPO
 }
 
 /**
+ * Seconds per synthetic copy of the permuted-arm calibration (`inference.nullCalibration`, population.synthpop / population.quality 1.1.0): the
+ * synthesis alone, with none of the scoring a full job does for its copies. Measured through `vcr_population_synthpop` on tables of 500, 2,000 and 6,000
+ * rows and 8, 16 and 32 numeric and 0/1 columns, one copy, one core, R 4.3.3 with synthpop 1.9-3 (2026-11-03): 0.12 s (500 x 8), 1.0 s (2,000 x 16), 3.1 s
+ * (2,000 x 32), 4.0 s (6,000 x 16), 11.9 s (6,000 x 32). The fitted law below is within a factor of 1.34 over the measured seconds on all nine, never under.
+ */
+export const VCR_SYNTHPOP_CALIBRATION_COST = frozen({ perRowColumnSquared: 1.281e-6, perRowColumn: 1.946e-5 })
+
+/**
+ * The CPU seconds the permuted-arm calibration would use: `replicates` tables, each synthesised again (`copies` copies of it).
+ * The calibration stops at the job's budget and keeps the replicates that finished, so this says how many to expect, not whether to refuse.
+ * @param {{ rows: number, columns: number, replicates: number, copies?: number }} table
+ */
+export function vcrSynthpopCalibrationSeconds({ rows, columns, replicates, copies = 1 }) {
+  const cost = VCR_SYNTHPOP_CALIBRATION_COST
+  const n = Math.max(1, rows)
+  const p = Math.max(1, columns)
+  return replicates * copies * (cost.perRowColumnSquared * n * p * p + cost.perRowColumn * n * p)
+}
+
+/**
  * The seconds a job can use before R stops it.
  * @param {number} cpuSecondsLimit the job's own limit
  */

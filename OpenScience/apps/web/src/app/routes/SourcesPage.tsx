@@ -34,7 +34,7 @@ import { AddLinkDialog, NewNoteDialog } from "@/components/sources/AddEntryDialo
 import { AppliesToDialog, conversationProjects } from "@/components/sources/AppliesTo";
 import { ConversationProjectDialog } from "@/components/sources/ConversationProjectDialog";
 import { DeleteDocumentDialog } from "@/components/sources/DeleteDocumentDialog";
-import { KnowledgeViews, ProjectList } from "@/components/sources/KnowledgeColumn";
+import { ProjectList } from "@/components/sources/KnowledgeColumn";
 import { LibraryDriveImport } from "@/components/sources/LibraryDriveImport";
 import { ProjectKnowledge, usePagesOffered } from "@/components/sources/ProjectKnowledge";
 import { SourceReader } from "@/components/sources/SourceReader";
@@ -437,8 +437,6 @@ function KnowledgeBase({ sourceId }: { sourceId: string | null }) {
     );
   };
 
-  const wikiCount = counts?.wiki ?? 0;
-  const viewLinks = <KnowledgeViews view={view} state={listState} pagesOffered={pagesOffered || wikiCount > 0} />;
   const readerBack = view === "graph" ? "图谱" : view === "pages" ? "知识页" : "知识库";
   const projectHref = (projectId: string) => listPath({ ...listState, scope: projectId, focus: null, depth: null });
   const projectLabel = scopeProjectId ? groups.labels.get(scopeProjectId) ?? "当前项目" : "";
@@ -450,7 +448,6 @@ function KnowledgeBase({ sourceId }: { sourceId: string | null }) {
       // Where the list is the page it keeps the page's column and gutter (`PageShell`'s); beside the pane it is a column of its own.
       <div className={cn("flex min-h-0 flex-1 flex-col", !split && "mx-auto w-full max-w-page px-4 md:px-6")}>
         <PageHeader title="知识库" actionPlan={firstRun ? undefined : { primary: { id: "add", label: "添加", items: addItems, disabled: !hasWebApi || uploading, loading: uploading } }} className={cn("shrink-0 pb-2 pt-5", split && "px-4")} />
-        <div className={cn("shrink-0 pb-2", split && "px-4")}>{viewLinks}</div>
         {view === "documents" && toolbar && <div className={cn("shrink-0 pb-2", split && "px-4")}><Toolbar {...toolbar} /></div>}
         <div ref={setListScroller} className={cn("min-h-0 flex-1 overflow-y-auto pb-6", split && "px-2")}>
           {view === "documents" && error && <LoadError message={error} onRetry={() => void load()} className="mb-4" />}

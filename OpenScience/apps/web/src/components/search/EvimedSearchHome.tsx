@@ -8,7 +8,7 @@ import { Note } from "@/components/ui/Note";
 import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { SearchComposer } from "@/components/ui/SearchComposer";
 import { Tag } from "@/components/ui/Tag";
-import { EVIMED_SEARCH_CATEGORIES, type EvimedSearchCategory } from "@/lib/evimedSearchClient";
+import { type EvimedSearchCategory } from "@/lib/evimedSearchClient";
 import { formatClock, formatDate, formatNumber } from "@/lib/format";
 import { useProjectStore } from "@/lib/projects";
 import { useEvimedSearchTopics } from "@/lib/useEvimedSearchTopics";
@@ -46,11 +46,10 @@ function EvidenceBackdrop() {
  * Responsive: Topic choices stack on narrow screens and use three columns from sm.
  * Verification: EvimedSearchHome.test.tsx and EvimedSearchPage.test.tsx cover reads, races, recovery and fill-only activation; browser/AT checks remain separate.
  */
-export function EvimedSearchHome({ category, draft, onDraftChange, onCategoryChange, onSubmit, onClear, onCompositionChange, focusQuery = false }: {
+export function EvimedSearchHome({ category, draft, onDraftChange, onSubmit, onClear, onCompositionChange, focusQuery = false }: {
   category: EvimedSearchCategory;
   draft: string;
   onDraftChange(value: string): void;
-  onCategoryChange(value: string): void;
   onSubmit(): void;
   onClear(): void;
   onCompositionChange(value: boolean): void;
@@ -82,7 +81,6 @@ export function EvimedSearchHome({ category, draft, onDraftChange, onCategoryCha
           <form role="search" aria-label="医学检索" className="mt-8 w-full" onSubmit={event => { event.preventDefault(); onSubmit(); }}>
             <SearchComposer ref={input} label="检索关键词" placeholder={prompt} value={draft} maxLength={200}
               onChange={event => onDraftChange(event.target.value)} onClear={onClear} onSubmit={onSubmit}
-              categories={{ label: "检索类别", items: EVIMED_SEARCH_CATEGORIES, value: category, onChange: onCategoryChange }}
               onCompositionStart={() => onCompositionChange(true)} onCompositionEnd={() => onCompositionChange(false)}
               onKeyDown={event => {
                 if (event.nativeEvent.isComposing || event.keyCode === 229) return;

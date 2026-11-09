@@ -124,3 +124,20 @@ describe("分享给平台里的人", () => {
     expect(client.listSentDeliveries).not.toHaveBeenCalled();
   });
 });
+
+
+it("delivery and link use the preview's exact scopes and private digests and reset consent only on success", async () => {
+  client.listSentDeliveries.mockResolvedValue([]); client.listShareLinks.mockResolvedValue([]);
+  client.deliverCapsule.mockResolvedValue({delivered:1,notDelivered:0,snapshot:null});
+  client.createShareLink.mockResolvedValue({path:"/app/memory/shared/test",link:{},snapshot:{}});
+  const includePrivateEntries=[{id:"native:nm_aaaaaaaaaaaaaaaaaaaaaaaa",sha256:"a".repeat(64)}];
+  const scopes=["workstyle","+knowledge"]; const onShared=vi.fn();
+  render(<CapsuleSharePanel capsuleId="cap-1" scopes={scopes} includePrivateEntries={includePrivateEntries} onShared={onShared}/>);
+  await userEvent.type(screen.getByLabelText("发给平台内的账号"),"Alice");
+  await userEvent.click(screen.getByRole("button",{name:"发送"}));
+  await waitFor(()=>expect(client.deliverCapsule).toHaveBeenCalledWith("cap-1",{recipients:["Alice"],scopes,includePrivateEntries}));
+  expect(onShared).toHaveBeenCalledTimes(1);
+  await userEvent.click(screen.getByRole("button",{name:"创建分享链接"}));
+  await waitFor(()=>expect(client.createShareLink).toHaveBeenCalledWith("cap-1",{scopes,includePrivateEntries}));
+  expect(onShared).toHaveBeenCalledTimes(2);
+});

@@ -7,12 +7,12 @@
  * (`preference.response_length`) is an identifier, never a name on screen: this is the name.
  */
 export const MEMORY_KINDS = Object.freeze([
-  "profile", "preference", "behavior", "project_fact", "analysis",
+  "profile", "person", "note", "preference", "behavior", "project_fact", "analysis",
   "decision", "correction", "follow_up", "run_summary",
 ]);
 
 /** What a person calls each kind — the memory page's own words. */
 export const MEMORY_KIND_LABELS_ZH = Object.freeze({
-  profile: "用户画像", preference: "偏好", behavior: "行为习惯", project_fact: "项目事实", analysis: "分析要素",
+  person: "人物", note: "其他记忆", profile: "用户画像", preference: "偏好", behavior: "行为习惯", project_fact: "项目事实", analysis: "分析要素",
   decision: "决定", correction: "纠正", follow_up: "待跟进", run_summary: "运行摘要",
 });

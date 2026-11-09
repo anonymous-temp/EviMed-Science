@@ -510,30 +510,24 @@ function quantile(sorted, fraction) {
 /**
  * What a balance permits.
  *
- * Two thresholds, and they are different on purpose. Autopilot pauses while
- * there is still money left, because unattended work that drains an account
- * overnight is the failure users never forgive; interactive work continues to
- * zero, because a person who is sitting there watching can decide for
- * themselves.
+ * Interactive work continues to zero, because a person who is sitting there
+ * watching can decide for themselves.
  *
  * @param {{ balance: number, dailyLimit: number, spentToday: number, weeklyLimit?: number, spentThisWeek?: number }} account
- * @returns {{ interactive: boolean, autopilot: boolean, reason: string | null, code: string | null }}
+ * @returns {{ interactive: boolean, reason: string | null, code: string | null }}
  */
 export function spendingPermission(account) {
   if (account.balance <= 0) {
-    return { interactive: false, autopilot: false, reason: '余额已用尽。', code: 'credits_exhausted' }
+    return { interactive: false, reason: '余额已用尽。', code: 'credits_exhausted' }
   }
   if (account.dailyLimit > 0 && account.spentToday >= account.dailyLimit) {
-    return { interactive: true, autopilot: false, reason: '今日额度上限已到。', code: 'credits_daily_limit_reached' }
+    return { interactive: true, reason: '今日额度上限已到。', code: 'credits_daily_limit_reached' }
   }
   const weeklyLimit = Number(account.weeklyLimit ?? account.dailyLimit * 7)
   if (weeklyLimit > 0 && Number(account.spentThisWeek ?? 0) >= weeklyLimit) {
-    return { interactive: true, autopilot: false, reason: '本周额度上限已到。', code: 'credits_weekly_limit_reached' }
+    return { interactive: true, reason: '本周额度上限已到。', code: 'credits_weekly_limit_reached' }
   }
-  if (account.dailyLimit > 0 && account.balance < account.dailyLimit) {
-    return { interactive: true, autopilot: false, reason: '余额不足一天的用量，定时任务已暂停。', code: null }
-  }
-  return { interactive: true, autopilot: true, reason: null, code: null }
+  return { interactive: true, reason: null, code: null }
 }
 
 /** Thresholds that produce an alert rather than a stop. */
@@ -551,7 +545,6 @@ export const SPEND_ALERTS = Object.freeze({
  * data kept without a reason is data kept until it leaks.
  */
 export const RETENTION_DAYS = Object.freeze({
-  autopilotEpisodeArtifacts: 90,
   notifications: 180,
   usageEvents: null,
   creditLedger: null,

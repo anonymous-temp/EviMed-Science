@@ -1,0 +1,7 @@
+- insert:
+    - id: evimed-virtual-trial
+      name: '@evimed/virtual-trial/plugin'
+      config:
+        mode: !!js process.env.VCR_PLUGIN_MODE || 'hosted'
+        workspace: !!js process.env.VCR_PLUGIN_WORKSPACE || ''
+        engineRoot: !!js process.env.VCR_ENGINE_ROOT || ''

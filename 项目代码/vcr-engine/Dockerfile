@@ -10,7 +10,8 @@
 #   step fails the build on a package that is missing, at another version, or
 #   installed without being listed. A lock file nobody checks is a comment.
 #     `R/package-lock.json` is the runtime lock: what `R/*.R` needs at run
-#     time (jsonlite, digest, mvtnorm, synthpop, and their closure). Its
+#     time (jsonlite, digest, mvtnorm, synthpop, rpact, dosresmeta, and their
+#     closure). Its
 #     package list is what `packageLockHash` in every manifest hashes.
 #     `tests/package-lock.crosscheck.json` is the cross-check lock: what the
 #     numeric acceptance cases load to check the engine against other software
@@ -104,7 +105,7 @@ RUN set -eux; \
     sh /usr/local/bin/vcr-configure-apt; \
     case "${WITH_CROSSCHECK}" in \
       0) extra="" ;; \
-      1) extra="libcurl4-openssl-dev libssl-dev libxml2-dev libv8-dev libuv1-dev cmake" ;; \
+      1) extra="libcurl4-openssl-dev libssl-dev libxml2-dev libv8-dev libuv1-dev libglpk-dev libpng-dev libjpeg-dev libtiff-dev cmake" ;; \
       *) echo "WITH_CROSSCHECK must be 0 or 1" >&2; exit 1 ;; \
     esac; \
     apt-get update; \

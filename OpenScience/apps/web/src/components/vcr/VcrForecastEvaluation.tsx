@@ -6,11 +6,15 @@ const labels: Record<string, string> = { mae: '平均绝对误差', rmse: '均�
 const baselines: Record<string, string> = { persistence: '最近一次观测', trend: '既往线性趋势', calibration_prevalence: '校准集事件比例', calibration_kaplan_meier: '校准集 Kaplan–Meier' };
 export const forecastIssue = (code: string) => ({ provider_rows_invalid: '云端返回的部分预测格式有误', canceled: '预测已停止', forecast_time_budget: '本次预测时间已用完', forecast_cost_budget: '本次预测预算已用完', provider_configuration_changed: '预测服务配置发生变化', provider_version_mismatch: '返回的模型版本与请求不符', target_identity_unknown: '部分证据缺少组别或时间点，请在研究对话中补充来源定位', target_identity_mismatch: '部分预测与证据的组别、终点或时间点不一致', actual_evidence_unverified: '部分实际效果尚未对应到可核对的来源', preserved_evidence_missing: '部分比较引用的证据尚未导入', split_not_declared: '部分试验尚未声明验证划分', trial_family_overlap: '部分试验家族同时出现在校准和测试数据中', comparison_invalid: '部分试验预测条目格式有误' }[code] ?? '部分记录暂不可用，具体原因可在研究对话中查看');
 
+/** An evaluation of a logged-action replay is told apart from the accuracy of a forecast that could have been made at the origin. */
+export const REPLAY_ACCURACY_NOTE = '这是按实际用药回放的检验：用了预测起点之后才记录的用药，准确度不能当作起点时就能得到的预测的准确度。';
+
 export function VcrForecastEvaluation({ record }: { record: LongitudinalRecord }) {
   const trial = record.kind === 'trial_evaluation';
   return <div className="flex flex-col gap-3">
     <h3 className="text-ui font-semibold text-text">{trial ? '与试验证据比较' : '与后续观测比较'}</h3>
     <p className="text-caption text-text-3">{record.summary.validationClass === 'engineering_synthetic' ? '模拟数据流程验证' : trial ? '独立试验基准' : '纵向数据验证'} · {record.summary.trainingOverlap === 'unknown' ? '模型训练数据重叠情况未知' : '训练数据重叠情况已记录'}</p>
+    {record.summary.actionContext && !record.summary.actionContext.deployable && <p data-vcr-replay-note="" className="text-caption text-text-2">{REPLAY_ACCURACY_NOTE}</p>}
     {trial && <p className="text-caption text-text-2">纳入 {number(record.summary.comparisons)} 条比较，排除 {number(record.summary.excluded)} 条。</p>}
     {record.summary.groups?.map((group, index) => <div key={`${group.horizonDays}:${index}`} className="flex flex-col gap-3">
       <h4 className="text-caption text-text">{group.horizonDays} 天{group.endpoint ? ` · ${group.endpoint} · ${group.scale} · ${group.unit}` : ''}</h4>

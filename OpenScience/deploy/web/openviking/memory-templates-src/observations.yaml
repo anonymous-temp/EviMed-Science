@@ -10,7 +10,7 @@ description: |
   Write one when a user-role message asks for work with a specific form, structure, tool,
   format, length or method and does not call it a rule ("做个 12 个月预算表，要有透视表",
   "月度汇总请做成折线图，不要表格", "参考文献用 APA"). The condition on one deliverable that the
-  other types never keep (its size, its colours, its page count) may be noted here too, as long
+  other types would usually omit (its size, its colours, its page count) may be noted here too, as long
   as it is a choice about how the work is made.
   One file per choice, named by the kind of task and the choice. Each conversation that shows
   the choice adds ITS OWN line to the file, also when a line for the choice already exists:

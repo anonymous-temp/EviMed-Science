@@ -439,3 +439,74 @@ test("native selected-scope export encrypts full engine bodies and imports throu
     await database.query("DELETE FROM evimed_control.users WHERE id=$1", [sharer]);
   }
 });
+
+
+test("people are selectable per share by full-body digest, survive import as person, and cannot carry stale or sensitive consent", options, async () => {
+  const { NativeMemoryStore, PAGE_KIND_OF_TYPE } = await import("../src/nativeMemoryStore.mjs");
+  const { migrateNativeMemory } = await import("../src/nativeMemoryPersistence.mjs");
+  const { nativeMemoryRoot, openVikingUserId, userRootUri } = await import("../src/openVikingLayout.mjs");
+  const { NativeMemoryOverlay } = await import("../src/nativeMemoryOverlay.mjs");
+  const { createHash } = await import("node:crypto");
+  await migrateNativeMemory(database);
+  assert.equal(PAGE_KIND_OF_TYPE.people, "person");
+  assert.equal(PAGE_KIND_OF_TYPE.notes, "note");
+  const root = nativeMemoryRoot(owner);
+  const bodies = new Map([[`${root}/people/a.md`, "Patient A: penicillin allergy"], [`${root}/people/b.md`, "Patient B: follow-up"], [`${root}/notes/topic.md`, "An ordinary useful note"], [`${root}/preferences/style.md`, "Use concise replies"]]);
+  const overlay = new NativeMemoryOverlay({ database });
+  const nativeMemory = new NativeMemoryStore({ sessions: { configured: true, memoryRoot: () => root, engineUser: openVikingUserId, userRoot: userRootUri,
+    tree: async () => [...bodies].map(([uri, body]) => ({ uri, isDir: false, size: body.length, modTime: "2026-11-05", tags: [] })), read: async (_user, uri) => bodies.get(uri) ?? null,
+    replace: async (_user, uri, body) => { bodies.set(uri, body); }, remove: async (_user, uri) => bodies.delete(uri) }, overlay });
+  const service = new CapsuleTransferService({ documents, capsules, identities, dataDir: directory, nativeMemory });
+  const capsule = await makeCapsule(capsules, owner, { title: "People consent" });
+  const scopes = ["workstyle", "+knowledge"];
+  const records = await nativeMemory.records(owner);
+  assert.equal(records.filter(row => row.kind === "person").length, 2);
+  assert.equal((await nativeMemory.search(owner, "Patient")).items.length, 2, "owner search still recalls both people");
+  assert.equal((await nativeMemory.profile(owner)).groups.person.length, 2, "owner page lists people");
+  assert.ok(records.filter(row => row.kind === "person").every(row => row.sensitive === false));
+  const preview = await service.exportPreview(owner, capsule.id, { scopes });
+  const people = preview.entries.filter(entry => entry.factKind === "person");
+  assert.equal(people.length, 2);
+  assert.ok(people.every(entry => entry.included === false && entry.requiresSelection === true));
+  assert.equal(preview.excluded.find(item => item.reason === "private").count, 2);
+  const a = people.find(entry => entry.content.includes("Patient A"));
+  const page = await nativeMemory.listRecords(owner, { pageSize: 1, kinds: ["person", "note"], allowRecord: row => row.kind !== "person" });
+  assert.equal(page[0].kind, "note", "private filtering happens before the page limit");
+  assert.equal(a.sha256, createHash("sha256").update(bodies.get(`${root}/people/a.md`)).digest("hex"));
+  const base = await service.export(owner, capsule.id, { password, scopes });
+  assert.ok(!(await service.preview(recipient, { archive: base.archive, password })).entries.some(entry => entry.factKind === "person"));
+  const includePrivateEntries = [{ id: a.id, sha256: a.sha256 }];
+  const selected = await service.export(owner, capsule.id, { password, scopes: ["workstyle"], includePrivateEntries });
+  const opened = await service.preview(recipient, { archive: selected.archive, password });
+  assert.deepEqual(opened.entries.filter(entry => entry.factKind === "person").map(entry => entry.content), [a.content]);
+  assert.ok(!opened.entries.some(entry => entry.factKind === "note"), "individual person consent does not select ordinary knowledge");
+  const imported = await service.import(recipient, { archive: selected.archive, password, expectedDigest: opened.archiveSha256, confirmed: true });
+  assert.ok((await capsules.entries(recipient, imported.id)).items.some(entry => entry.payload.factKind === "person"));
+  await capsules.enableReceived(recipient, imported.id);
+  assert.ok((await capsules.recall(recipient, { query: "Patient A", factKinds: ["person"] })).items.some(entry => entry.factKind === "person"), "the recipient's first-party recall can use an explicitly shared person");
+  const { recallForAgent } = await import("../src/agentMemoryRecall.mjs");
+  for (const capsuleIds of [undefined, [imported.id]]) {
+    const external = await recallForAgent({ capsules }, { user: { id: recipient } }, { query: "Patient A", methods: "none", capsuleIds });
+    assert.ok(!external.items.some(entry => entry.factKind === "person"), "received people cannot leak through an external recall key");
+  }
+  const fresh = await service.export(owner, capsule.id, { password, scopes, supersedes: selected.snapshot.id });
+  assert.ok(!(await service.preview(recipient, { archive: fresh.archive, password })).entries.some(entry => entry.factKind === "person"));
+  bodies.set(`${root}/people/a.md`, "Patient A: changed allergy");
+  await assert.rejects(service.export(owner, capsule.id, { password, scopes, includePrivateEntries }), { status: 409 });
+  bodies.set(`${root}/people/a.md`, a.content);
+  await overlay.upsertFile({ userId: owner, uri: `${root}/people/a.md`, memoryType: "people", sensitive: true });
+  await assert.rejects(service.export(owner, capsule.id, { password, scopes, includePrivateEntries }), { status: 409 });
+  await assert.rejects(service.export(owner, capsule.id, { password, scopes, includePrivateEntries: [{ id: "native:nm_ffffffffffffffffffffffff", sha256: a.sha256 }] }), { status: 409 });
+  await overlay.upsertFile({ userId: owner, uri: `${root}/people/a.md`, memoryType: "people", sensitive: false });
+  const current = (await nativeMemory.records(owner)).find(row => row.kind === "person" && row.value.includes("Patient A"));
+  const edited = await nativeMemory.update(owner, current.id, { value: "Patient A: corrected allergy", expectedVersion: current.version });
+  assert.equal(edited.value, "Patient A: corrected allergy");
+  const forgotten = await nativeMemory.update(owner, edited.id, { status: "archived", expectedVersion: edited.version });
+  assert.ok((await nativeMemory.forgotten(owner)).some(row => row.id === edited.id && row.kind === "person"));
+  const restored = await nativeMemory.undo(owner, edited.id, { expectedVersion: forgotten.version });
+  assert.equal(restored.record.kind, "person");
+  await nativeMemory.remove(owner, edited.id, { keepText: false });
+  assert.ok(!(await nativeMemory.records(owner)).some(row => row.id === edited.id));
+  assert.ok(!(await nativeMemory.forgotten(owner)).some(row => row.id === edited.id), "hard delete retains no restorable person body");
+
+});

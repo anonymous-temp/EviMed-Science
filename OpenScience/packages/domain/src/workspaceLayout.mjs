@@ -101,7 +101,7 @@ export const workspaceLayout = Object.freeze({
   capsuleProfileFile: `${CAPSULE_DIR}/profile.md`,
   /** Handle for the recall tool. */
   capsuleIndexFile: `${CAPSULE_DIR}/index.json`,
-  /** Agenda excerpt injected into an autopilot episode (§24.4.1). */
+  /** Agenda excerpt injected into a research run (§24.4.1). */
   agendaFile: `${BRIEF_DIR}/agenda.md`,
 })
 

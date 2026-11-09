@@ -1,0 +1,10 @@
+{"pmcid": "PMC12080054", "page": 4, "table": "Table 1", "caption": "Demographics of study population", "columns": ["Bridle (n=16)", "Tape (n=17)"], "keys": ["Bridle", "Tape"], "note": "small table in a two-column layout","rows":[
+["Age, years (min, max)", "6.5 (0.1, 17.1)", "9.1 (0.1, 17.7)"],
+["Male, n (%)", "12 (75)", "10 (58)"],
+["Weight, kg (min, max)", "35 (4, 111)", "41 (3.5, 110)"],
+["Post-pyloric, n (%)", "9 (56)", "6 (35)"],
+["Intubated, n (%)", "10 (63)", "5 (29)"],
+["Trauma", "9", "6"],
+["Medical", "4", "6"],
+["Congenital heart disease", "3", "5"]
+]}

@@ -46,7 +46,7 @@ describe("no amount is drawn with a currency sign", () => {
   it("walked the web app and the domain, and would see a sign in a string", () => {
     expect(webSources.length).toBeGreaterThan(150);
     expect(domainSources.length).toBeGreaterThan(50);
-    expect(webSources.map((path) => relative(SRC, path))).toEqual(expect.arrayContaining(["lib/format.ts", "components/settings/SimulatedAllowance.tsx", "app/routes/CapabilitiesPage.tsx"]));
+    expect(webSources.map((path) => relative(SRC, path))).toEqual(expect.arrayContaining(["lib/format.ts", "components/settings/SimulatedAllowance.tsx", "app/routes/FrontierPage.tsx"]));
     const probe = join(SRC, "app/noCurrencySymbol.test.ts");
     expect(strings(probe).some(({ text }) => text === OLD_SHAPE && SIGN.test(text))).toBe(true);
   });

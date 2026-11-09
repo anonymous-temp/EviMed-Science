@@ -82,12 +82,14 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
     legacy: 'the knowledge-base excerpts every dispatch used to carry, retired 2026-09-20 when kb_search became a tool the model chooses; transcripts from before still carry it',
   },
   { tag: 'evimed-specialist', role: 'injected', emitters: ['apps/server/src/researchContext.mjs'] },
-  // A scheduled execution's brief, in its run context (`episodeContextBlock`): the platform's words to the model, never the researcher's.
-  { tag: 'evimed-autopilot-brief', role: 'injected', emitters: ['apps/server/src/autopilotEpisodeScope.mjs'] },
-  // A bounded execution's tag, written into the run context beside the signed budget scope (`episodeContextBlock`), no longer
-  // into the message the researcher sees (2026-10-08): the first message of a scheduled execution is their own instruction.
-  { tag: 'evimed-autopilot-episode', role: 'injected', emitters: ['apps/server/src/autopilotEpisodeScope.mjs'] },
-  { tag: 'evimed-autopilot-verification', role: 'injected', emitters: ['apps/server/src/server.mjs'] },
+  // The retired scheduler's three tags (2026-11-05): its execution brief, its episode tag and its verification tag. Nothing writes them now, and the
+  // transcripts of the conversations it ran still carry them as machine text.
+  { tag: 'evimed-autopilot-brief', role: 'injected', emitters: [], legacy: 'a scheduled execution\'s brief in its run context, retired 2026-11-05 with the scheduler; transcripts from before still carry it' },
+  { tag: 'evimed-autopilot-episode', role: 'injected', emitters: [], legacy: 'a bounded execution\'s tag beside the signed budget scope, retired 2026-11-05 with the scheduler; transcripts from before still carry it' },
+  { tag: 'evimed-autopilot-verification', role: 'injected', emitters: [], legacy: 'an independent verification\'s tag, retired 2026-11-05 with the scheduler; transcripts from before still carry it' },
+  { tag: 'evimed-claim', role: 'injected', emitters: [], legacy: 'a claim handed to an independent verification, retired 2026-11-05 with the scheduler; transcripts from before still carry it' },
+  { tag: 'evimed-claim-source', role: 'injected', emitters: [], legacy: 'a source of that claim, retired 2026-11-05 with the scheduler; transcripts from before still carry it' },
+  { tag: 'evimed-claim-effect', role: 'injected', emitters: [], legacy: 'the effect of that claim, retired 2026-11-05 with the scheduler; transcripts from before still carry it' },
   // A platform dispatch's own tag, written whether or not a budget marker
   // rides along (2026-09-26 audit, M-2: a GEO brief sent into a runtime that
   // happened to be open carried no marker and was stored as the researcher's
@@ -115,9 +117,6 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   // is handed, so a question about the step is answered from the study and not from the stopped turn's history.
   { tag: 'evimed-vcr-stopped', role: 'injected', emitters: ['apps/server/src/vcrOrchestrator.mjs'] },
   { tag: 'evimed-budget-scope', role: 'injected', emitters: ['apps/server/src/modelGateway.mjs'] },
-  { tag: 'evimed-claim', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
-  { tag: 'evimed-claim-source', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
-  { tag: 'evimed-claim-effect', role: 'injected', emitters: ['apps/server/src/autopilotService.mjs'] },
   { tag: 'evimed-correction', role: 'user-wrapper', emitters: ['apps/server/src/server.mjs'] },
   // A learning step's brief — a distillation or a relations pass — as the
   // loop dispatches it into the account's learning project (2026-09-27).
@@ -221,7 +220,7 @@ export function stripPlatformTags(text) {
  * because those are the ones no researcher writes as research. A bare English
  * word the platform also happens to use is language and stays with the model:
  * `health` is an MCP tool and a word in half the questions this product is
- * asked, `analysis-plan` is a contract kind and a phrase, `deliverable` and
+ * asked, `analysis-plan` is a phrase in half the protocols, `deliverable` and
  * `gate` are how anyone would describe the machinery in prose.
  */
 const PLATFORM_IDENTIFIERS = Object.freeze([...new Set([
@@ -370,14 +369,59 @@ function luhnValid(digits) {
 }
 
 const RESIDENT_ID = /(?<![0-9A-Za-z])[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?![0-9A-Za-z])/g
-const MOBILE = /(?<![0-9])(?:\+?86[- ]?)?1[3-9]\d{9}(?![0-9])/g
 const CARD = /(?<![0-9])(?:\d[ -]?){15,18}\d(?![0-9])/g
-const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
 const KEY_FORMAT = /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}|\bAKIA[0-9A-Z]{16}\b|\bgh[pousr]_[A-Za-z0-9]{30,}|\bBearer\s+[A-Za-z0-9._~+/-]{20,}/g
-const KEY_ASSIGNMENT = /(?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌)\s*(?:is|为|是|[:=：])\s*\S{6,}/i
-// The same assignment, for masking: what is blanked is the value alone, and it is the run of printable ASCII after the label — a
-// password typed in a Chinese sentence ends where the sentence goes on, not at the next space (there may be none).
-const KEY_ASSIGNMENT_VALUE = /((?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌)\s*(?:is|为|是|[:=：])\s*)[\x21-\x7E]{6,}(?<![,.;:!?)\]}])/gi
+// Assignment labels are structural. A small value scanner is shared by detection and masking: quotes may contain
+// whitespace, escaped quotes and line breaks, while every ASCII punctuation character inside an unquoted token is secret.
+const SECRET_ASSIGNMENT_PREFIX = /(?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌|verification[ _-]?code|one[ -]?time[ _-]?(?:password|code)|OTP|验证码|校验码|动态口令)\s*(?:(?:is\b|为|是)\s*(?:[:=：]\s*)?|[:=：]\s*)/gi
+const IDENTIFIER_MASK = '[已省略]'
+const SECRET_QUOTES = new Map([['"', '"'], ["'", "'"], ['“', '”'], ['‘', '’']])
+
+/** The assigned values, including delimiters when quoted. @param {string} text @returns {{ start: number, end: number }[]} */
+function assignedSecretsIn(text) {
+  const spans = []
+  let coveredUntil = 0
+  for (const match of text.matchAll(SECRET_ASSIGNMENT_PREFIX)) {
+    if (match.index < coveredUntil) continue
+    const start = match.index + match[0].length
+    let end = start
+    const closeQuote = SECRET_QUOTES.get(text[start])
+    if (closeQuote) {
+      end += 1
+      while (end < text.length) {
+        const character = text[end++]
+        if (character === '\\' && end < text.length) end += 1
+        else if (character === closeQuote) break
+      }
+      // An unfinished quoted value consumes the remaining input; no suffix may escape as ordinary prose.
+    } else {
+      while (end < text.length && !/[\s，。；]/.test(text[end])) end += 1
+      // A final prose comma/semicolon followed by whitespace is outside the token. Internal punctuation is always kept
+      // inside the secret, and a punctuation-only password is still a value.
+      if (end > start + 1 && /[,;]$/.test(text.slice(start, end)) && /\s/.test(text.charAt(end))) end -= 1
+    }
+    coveredUntil = end
+    if (end > start && text.slice(start, end) !== IDENTIFIER_MASK) spans.push({ start, end })
+  }
+  return spans
+}
+
+/** Replace the same spans detection recognizes, skipping nested labels within an already masked value. @param {string} text */
+function maskAssignedSecrets(text) {
+  let masked = ''
+  let from = 0
+  for (const { start, end } of assignedSecretsIn(text)) {
+    if (start < from) continue
+    masked += text.slice(from, start) + IDENTIFIER_MASK
+    from = end
+  }
+  return masked + text.slice(from)
+}
+
+// Verification codes also occur directly after their label, without an assignment separator ("OTP 843021"). Explicit
+// alphanumeric assignments use the same grammar above; this numeric form does not reinterpret ordinary prose as a code.
+const VERIFICATION_CODE = /((?:verification[ _-]?code|one[ -]?time[ _-]?(?:password|code)|OTP|验证码|校验码|动态口令)\s*)\d{4,8}(?!\d)/gi
+
 const KEY_FORMAT_MORE = /\bxox[abeprs]-[A-Za-z0-9-]{10,}|\bAIza[0-9A-Za-z_-]{35}\b|\bglpat-[A-Za-z0-9_-]{20,}|\b[rsp]k_(?:live|test)_[A-Za-z0-9]{16,}/g
 // A bare run that may be a secret: the candidates are the long runs of the key alphabet, and `isTokenShaped` decides which of
 // them are. A 40-character slug (`pneumonia-associated-with-…`), a naming convention (`NOAC_AF_cohort_2018_2024_…_cleaned`) and a
@@ -439,9 +483,9 @@ function longTokensIn(value) {
  * that passes Luhn, an e-mail address, a provider key's format, a secret
  * assigned to a name, a long bare token. Format checks, like a DOI or a PMID —
  * decidable from the token itself (principle 5) — and the only part of 「never
- * keep a patient's or anyone's identifiers, or a credential」 code can hold; the
+ * keep government or bank numbers, or a credential」 code can hold; the
  * rest is the extraction model's (2026-10-12 replay: a patient's ID card,
- * phone and admission details reached project facts, and a regex over words
+ * government identifiers reached project facts, and a regex over words
  * like 「我患有」 had been standing in for the judgement).
  * @param {unknown} text @returns {string[]} the kinds found, in a fixed order
  */
@@ -450,10 +494,8 @@ export function identifierShapesIn(text) {
   /** @type {string[]} */
   const found = []
   if (new RegExp(RESIDENT_ID.source).test(value)) found.push('resident_id')
-  if (new RegExp(MOBILE.source).test(value)) found.push('mobile')
   if ([...value.matchAll(CARD)].some((match) => { const digits = match[0].replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) })) found.push('card')
-  if (new RegExp(EMAIL.source).test(value)) found.push('email')
-  if (new RegExp(KEY_FORMAT.source).test(value) || new RegExp(KEY_FORMAT_MORE.source).test(value) || KEY_ASSIGNMENT.test(value) || longTokensIn(value).length > 0) found.push('credential')
+  if (new RegExp(KEY_FORMAT.source).test(value) || new RegExp(KEY_FORMAT_MORE.source).test(value) || assignedSecretsIn(value).length > 0 || new RegExp(VERIFICATION_CODE.source, 'i').test(value) || longTokensIn(value).length > 0) found.push('credential')
   return found
 }
 
@@ -464,14 +506,12 @@ export function identifierShapesIn(text) {
  * @param {unknown} text @returns {string}
  */
 export function maskIdentifiers(text) {
-  const masked = '[已省略]'
-  return String(text ?? '')
+  const masked = IDENTIFIER_MASK
+  const safe = String(text ?? '')
     .replace(RESIDENT_ID, masked)
-    .replace(MOBILE, masked)
     .replace(CARD, (match) => { const digits = match.replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) ? masked : match })
-    .replace(EMAIL, masked)
     .replace(KEY_FORMAT, masked)
     .replace(KEY_FORMAT_MORE, masked)
-    .replace(KEY_ASSIGNMENT_VALUE, (_match, label) => `${label}${masked}`)
-    .replace(LONG_TOKEN, (run) => (isTokenShaped(run) ? masked : run))
+    .replace(VERIFICATION_CODE, (_match, label) => `${label}${masked}`)
+  return maskAssignedSecrets(safe).replace(LONG_TOKEN, (run) => (isTokenShaped(run) ? masked : run))
 }

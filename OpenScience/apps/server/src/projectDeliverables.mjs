@@ -9,7 +9,7 @@
  *   delivery gate and the result ledger know it, and enters the library only when the researcher presses 「存入知识库」 on it
  *   (which puts a copy in `knowledge-base/chat/`). The list is what the run ledger already says.
  * - **The researcher's own work.** The same runs the account's usage 明细 counts: a turn they
- *   asked for, finished, of a capability they use. A run a machine started (an autopilot episode, a continuation, a source
+ *   asked for, finished, of a capability they use. A run a machine started (a scheduled task's run, a continuation, a source
  *   being read), a capability that is the platform's own, a run the researcher deleted and a run that failed — which
  *   delivered nothing — are not listed.
  * - **One line per deliverable.** A package of a report, a matrix and a summary is one line, the file a reader opens first

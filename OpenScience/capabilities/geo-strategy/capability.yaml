@@ -58,11 +58,6 @@ inputs:
   - tier
   - minimal
   - engines
-autopilot:
-  taskTypes: []
-  costClass: medium
-  unattendedInputs:
-  - brandEntity
 estimatedMinutes:
 - 20
 - 90

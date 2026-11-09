@@ -250,6 +250,7 @@ test("the answer to a simulate status passes the boundary too: a run does not re
     async studyByRuntimeDispatch(userId,projectId,dispatchId){return userId===study.userId && projectId===study.projectId && dispatchId==='boundary-dispatch' ? study : null;},
     async one(sql) { return sql.includes("executions") ? { id: "exe_1" } : { checkpoint: {} }; },
     async allResults() { return [resultRow]; },
+    async resultForExecution(_study, executionId) { return ([resultRow]).find((row) => row?.executionId === executionId) ?? null; },
   };
   const svc = service();
   const handler = createVcrGatewayHandler({ vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:1/x" }, runtimeManager,
@@ -393,6 +394,7 @@ test("C3-12 a service without the boundary is a wiring fault: a simulate status 
     async studyByRuntimeDispatch(userId,projectId,dispatchId){return userId===study.userId && projectId===study.projectId && dispatchId==='boundary-dispatch' ? study : null;},
     async one(sql) { return sql.includes("executions") ? { id: "exe_1" } : { checkpoint: {} }; },
     async allResults() { return [resultRow]; },
+    async resultForExecution(_study, executionId) { return ([resultRow]).find((row) => row?.executionId === executionId) ?? null; },
   };
   const unguarded = { allows: () => true, counters: { reads: 0, writes: 0, writeIssues: 0 } };
   const handler = createVcrGatewayHandler({ vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:1/x" }, runtimeManager,

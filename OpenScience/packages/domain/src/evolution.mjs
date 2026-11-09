@@ -15,12 +15,12 @@ export const EVOLUTION_TOOL_HARM_TEST = METHOD_SCIENTIFIC_HARM_TEST
 /** Closed vocabularies and pure policy for the platform's literature-driven learning loop. */
 export const EVOLUTION_TRACKS = Object.freeze(['E', 'P', 'M', 'U', 'X', 'T'])
 export const EVOLUTION_GAP_CODES = Object.freeze(['connector', 'extraction', 'method-missing', 'method-implementation', 'routing', 'skill-instruction', 'writing', 'model-capability', 'outside-product'])
-export const EVOLUTION_LEAD_SOURCES = Object.freeze(['literature', 'runtime-failure', 'autopilot', 'evaluation', 'dataset',
+export const EVOLUTION_LEAD_SOURCES = Object.freeze(['literature', 'runtime-failure', 'evaluation', 'dataset',
   // The platform's own modules saying they could not do something (flywheel F20, 2026-10-06): the evidence programme, 循证 GEO and 虚拟临床研究.
   // Every lead of these three is reduced to a closed code and closed entity keys (`evolutionLeadSources.mjs`), never a researcher's words.
   // `evidence-programme` is retired (the programme was deleted on 2026-10-29): no module files it, the name stays for the leads it filed.
   'evidence-programme', 'communication', 'virtual-study'])
-export const EVOLUTION_JOB_KINDS = Object.freeze(['evolution-event', 'evolution-scout', 'evolution-build', 'evolution-evaluate', 'evolution-decision', 'evolution-digest', 'evolution-maintain', 'evolution-self-check', 'evolution-plan', 'evolution-mission', 'evolution-mission-heavy', 'evolution-meta', 'evolution-research', 'evolution-audit'])
+export const EVOLUTION_JOB_KINDS = Object.freeze(['evolution-event', 'evolution-scout', 'evolution-build', 'evolution-evaluate', 'evolution-decision', 'evolution-digest', 'evolution-maintain', 'evolution-plan', 'evolution-mission', 'evolution-mission-heavy', 'evolution-meta', 'evolution-research', 'evolution-audit'])
 /**
  * What a decision's option can do, as the control plane's executor knows it (`evolutionDecisions.mjs`). This list is
  * closed, and it is what stops the engine: an option whose operation is not here is refused when it is chosen, by a

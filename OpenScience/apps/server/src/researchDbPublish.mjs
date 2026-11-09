@@ -7,22 +7,22 @@ import { RESEARCH_DB_LIMIT_DEFAULTS } from './researchDbConfig.mjs';
 import { researchDbImportFacts, researchDbImportTitle, researchDbLogicalPath, researchDbSidecar, researchDbSidecarPath, researchDbSourceFacts } from './researchDbImport.mjs';
 
 /**
- * Publishing a snapshot: the CSV as a source of the project, the sidecar that says how much of the table it holds, and the
- * association with the study's question -- one transaction's worth of work, recoverable from a crash by the staging marker.
+ * Publishing a snapshot: the CSV as a source of the project and the sidecar that says how much of the table it holds -- one
+ * transaction's worth of work, recoverable from a crash by the staging marker.
  *
  * The CSV keeps one identity per connection + schema + table (`researchDbLogicalPath`): a second import of the same table is
  * a new VERSION of the same source (the registry retires the old version and tells what rests on it), and it takes the
- * place of the old version in the question's material instead of joining it.
+ * place of the old version.
  *
  * @param {{
- *   sourceService: any, database: any, credentials: any, staging: any, agenda: any, store: any,
+ *   sourceService: any, database: any, credentials: any, staging: any, store: any,
  *   write: (ctx: {user: any, project: any}, file: {root: string, rel: string, buffer: Buffer, meta?: Record<string, any>, register?: boolean, createAlias?: boolean}) => Promise<any>,
  *   limits?: import('./researchDbConfig.mjs').ResearchDbLimits, now?: () => Date,
  * }} dependencies
  */
-export function createResearchDbPublisher({ sourceService, database, credentials, staging, agenda, store, write, limits = RESEARCH_DB_LIMIT_DEFAULTS, now = () => new Date() }) {
-  /** @param {{user: any, project: any, connectionId: string, target: {host:string,port:number,database:string}, agendaId?: string, requestId: string, fingerprint: string, snapshot: any}} request */
-  return async function publish({ user, project, connectionId, target, agendaId, requestId, fingerprint, snapshot }) {
+export function createResearchDbPublisher({ sourceService, database, credentials, staging, store, write, limits = RESEARCH_DB_LIMIT_DEFAULTS, now = () => new Date() }) {
+  /** @param {{user: any, project: any, connectionId: string, target: {host:string,port:number,database:string}, requestId: string, fingerprint: string, snapshot: any}} request */
+  return async function publish({ user, project, connectionId, target, requestId, fingerprint, snapshot }) {
     const capturedAt = now().toISOString();
     const logicalPath = researchDbLogicalPath(target, snapshot.schema, snapshot.table);
     const bytes = researchTableCsv(snapshot);
@@ -41,10 +41,7 @@ export function createResearchDbPublisher({ sourceService, database, credentials
       await staging.lock(user.id, current.id, stageId, stagePath);
       if (previous) { await staging.complete(user.id, current.id, stageId); return previous; }
       await credentials.open(user.id, current.id, connectionId, database, true);
-      // No study named: the table goes to the project's knowledge base, where every research of the project reads it.
-      const question = agendaId ? await agenda.get(user.id, agendaId) : null;
-      if (question && question.projectId !== current.id) throw new HttpError(404, 'autopilot_material_not_found', 'The research question was not found.');
-      if (question) agenda.assertNotArchived(question);
+      // The table goes to the project's knowledge base, where every research of the project reads it.
       const ctx = { user, project: current };
       // The sidecar first, so a CSV is never visible without the note that says what it is. Neither is a source until the
       // CSV registers; a failure before that leaves both under the marker, and recovery removes both.
@@ -54,7 +51,6 @@ export function createResearchDbPublisher({ sourceService, database, credentials
       // durable staging sweep checks the source ledger before deletion.
       const saved = await write(ctx, { root: 'base', rel: logicalPath, buffer: bytes, meta: { title: researchDbImportTitle(facts), snapshot: sourceFacts }, createAlias: false });
       if (!saved?.source?.id) throw new HttpError(503, 'research_db_unavailable', 'The database snapshot could not be published.');
-      if (question) await agenda.addMaterials(user.id, question.id, { sourceIds: [saved.source.id] }, { replacingLogicalPath: logicalPath });
       const result = {
         sourceId: saved.source.id, capturedAt, title: researchDbImportTitle(facts), rowCount: snapshot.rows.length, columns: snapshot.columns.length,
         truncated: snapshot.truncated, oversizedValuesWithheld: snapshot.oversizedValuesWithheld,

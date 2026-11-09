@@ -21,7 +21,7 @@ import { createHash, createHmac } from "node:crypto";
  * @module openVikingLayout
  */
 
-/** `memory.custom_templates_dir`: the ten memory types' templates, mounted read-only. */
+/** `memory.custom_templates_dir`: the memory types' templates, mounted read-only. */
 export const OPENVIKING_MEMORY_TEMPLATES_DIR = "/app/memory-templates";
 
 /**
@@ -29,15 +29,15 @@ export const OPENVIKING_MEMORY_TEMPLATES_DIR = "/app/memory-templates";
  * of `deploy/web/openviking/memory-templates/`. Upstream's `identity`, `soul`,
  * `events`, `cases`, `trajectories`, `experiences`, `tools` and `skills` are left
  * out deliberately: `events` copies the quoted messages verbatim into the memory
- * file, which is how a phone number reached a memory in the control arm
- * (lab/memory/RESULTS.md, part 二).
+ * file without the shared retention and attribution policy. The open `people`
+ * and `notes` templates supply coverage without enabling that duplicate path.
  */
 export const OPENVIKING_MEMORY_TYPES = Object.freeze([
   "profile", "preferences", "entities", "corrections", "project_context", "decisions", "follow_ups", "project_facts",
   // 2026-10-25 (owner decision 6): `observations` is a choice the person made in a request and never called a rule, kept until a second
   // conversation shows it (`nativeMemoryObservations.mjs`) — never a fact, never read back; `recent_work` is what a project was last
   // worked on, at task level, three lines at most (the project card's 「最近在做」).
-  "observations", "recent_work",
+  "observations", "recent_work", "people", "notes",
 ]);
 /** Shared project extraction never writes a person's profile or preferences, nor `observations` — a person's own choice noted until a
  *  second conversation of theirs promotes it to a preference, which a shared project's namespace does not keep. */

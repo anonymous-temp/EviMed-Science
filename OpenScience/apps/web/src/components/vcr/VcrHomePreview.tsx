@@ -17,7 +17,7 @@ import { stepLabel } from "./vcrText";
 import { vcrTabPath } from "./vcrTabs";
 
 /**
- * What the 虚拟临床研究 home shows of one study beside the list, from what `GET /api/vcr/studies` already carries — a peek, not the
+ * What the 虚拟临床研究 home shows of one explicitly addressed study, from what `GET /api/vcr/studies` already carries — a peek, not the
  * study's page (`打开研究` goes there): its name and where it stands, what waits for the reader (each line with its way on), the
  * question, latest finding and requested or active work. Nothing is read a second time.
  */
@@ -86,10 +86,10 @@ export function stepMark(step: VcrStep | undefined): { state: RailState; word: s
 /**
  * Component: VcrStudyPreview; owner: VCR; rules: only actual or requested research work.
  * Anatomy: Study title, actions, findings, attention and optional progress.
- * Variants: Split preview and narrow detail.
+ * Variants: Addressed detail with optional heading and close control.
  * States: Empty, active, failed and finished work.
  * Hit area: Shared links and icon button.
- * Keyboard: Native links and Escape to close the split preview.
+ * Keyboard: Native links and Escape to return to records.
  * Long content: Titles and facts wrap.
  * Theme: Shared semantic tokens.
  * Responsive: Actions wrap and progress columns adapt.
@@ -100,8 +100,7 @@ export function VcrStudyPreview({ study, heading, onClose }: {
   /** Whether the preview names the study. */
   heading: boolean;
   /**
-   * Beside the list it has a 关闭 of its own, and Escape does the same — which gives the
-   * pane back to the task selector. On a narrow page the surrounding navigation returns to the list.
+   * The close control and Escape return to the records entry that opened this preview.
    */
   onClose?: () => void;
 }) {

@@ -136,15 +136,6 @@
   "packages": [
     {
       "schemaVersion": 1,
-      "id": "capability-skill/autopilot-episode",
-      "name": "autopilot-episode",
-      "origin": "capability-skill",
-      "source": {"kind":"release"},
-      "digest": "sha256:8938fb5b35a813afe6929e21d6f3a3d20f3b6c793c14b861b398bef853d6f4b9",
-      "digestAlgorithm": "release-directory-v1"
-    },
-    {
-      "schemaVersion": 1,
       "id": "capability-skill/biomedical-database-search",
       "name": "biomedical-database-search",
       "origin": "capability-skill",
@@ -211,9 +202,9 @@
       "origin": "capability",
       "version": "1.3.1",
       "source": {"kind":"release"},
-      "digest": "sha256:c4f10b6718a32e676b5b095eba726b36bf31d6b50167a62e1f1c71f1a3e1b5fb",
+      "digest": "sha256:52d91e07864ec8d18c511be3ffa8e90aea9c7413192521e306bc36a9fb6685ad",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"b5992dca09f2a561b6197c5c4a3ddb735cb73427c8c0a1cb69f8a83b4934e74b"}],
+      "references": [{"path":"capability.yaml","sha256":"e6f55bce53fc20ad8357d4d032f8dac70209e0a8874ee18d14bd257c0a7a3155"}],
       "dependencies": [
         {"kind":"platform-tool","name":"adr_case_query","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"adr_signal_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -246,7 +237,7 @@
             "backgroundDateTo",
             "uploadedFiles"
           ],
-          "produces": ["safety-report.md","signals.csv","agenda-delta.json"],
+          "produces": ["safety-report.md","signals.csv"],
           "limits": ["信号来自 FAERS 自发报告：报告数不等于发生率，不能单凭信号推断因果或比较两药风险。","国内药品不良反应监测数据不在数据源里。"]
         }
       ]
@@ -258,9 +249,9 @@
       "origin": "capability",
       "version": "1.1.1",
       "source": {"kind":"release"},
-      "digest": "sha256:e155eab69eb814160dec44f246cf0214b60d8c830736e2a8c589d4926e63b565",
+      "digest": "sha256:f850257ce9800a8ecee02d230b9c5f6eca523631de8ea3d7f1170d1e7a34b77d",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"170fd17c9874c8669bdfd75f2d0365c3d76f2b2fe1a528c8316f8edc75bd3413"}],
+      "references": [{"path":"capability.yaml","sha256":"2d328f8aba882a6d98bc8054438f16f10e6de1b596a1bdaa9972b1b7bfa9d516"}],
       "dependencies": [
         {"kind":"platform-tool","name":"bibliometric_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"data_source_catalog","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -276,7 +267,7 @@
           "summary": "基于可追溯的 PubMed 检索与清洗，分析发文趋势、合作网络、突现主题、演化路径和研究前沿。",
           "summaryZh": "分析研究领域的发文趋势、合作网络、主题热点及其演变。",
           "accepts": ["topic","dateFrom","dateTo","maxRecords","outputLanguage"],
-          "produces": ["bibliometric-analysis-report.md","bibliometric-analysis-run.json","agenda-delta.json"],
+          "produces": ["bibliometric-analysis-report.md","bibliometric-analysis-run.json"],
           "limits": ["独立复核发现过正文里手写的百分比与底层数据不一致；引用数字前请以分析记录为准。"]
         }
       ]
@@ -288,9 +279,9 @@
       "origin": "capability",
       "version": "3.0.1",
       "source": {"kind":"release"},
-      "digest": "sha256:7a841dc1a149375d30cb98f1aa47489a215a07bb4d13059df3001866a09d5bfe",
+      "digest": "sha256:60e774823a1983fdaaa9d577dff21f6c3647aa4581f42b209329ae0b2c472bbe",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"5c10e935060ffe8f2246252cff81f0020952799f7fb0b6c628f17ea54665faa6"}],
+      "references": [{"path":"capability.yaml","sha256":"01ac69c5f6042b745e2fc12da7911a1ee5b821417cc534c97f94adbd45de5925"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_snapshot","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -317,7 +308,7 @@
           "summary": "Transform an open-domain clinical question into a publication-grade deep evidence analysis with reproducible searches, verified citations, claim-level traceability, and a separate safety-first practical answer.",
           "summaryZh": "检索并综合研究文献，撰写有来源依据的叙述性或范围综述。",
           "accepts": ["question","reviewType","population","intervention","comparator","outcomes","careSetting","jurisdiction","outputLanguage"],
-          "produces": ["clinical-evidence-report.md","clinical-evidence-matrix.json","agenda-delta.json"],
+          "produces": ["clinical-evidence-report.md","clinical-evidence-matrix.json"],
           "limits": ["只读取可公开获取的全文；付费墙后的文献只能用摘要。","报告里标 ⚠ 的结论没能在保存的原文中逐字核对到，引用前请核对。","不提供个体诊疗建议。"]
         }
       ]
@@ -329,9 +320,9 @@
       "origin": "capability",
       "version": "2.5.1",
       "source": {"kind":"release"},
-      "digest": "sha256:766816f1973e539c0093a2b287bb2e527b6d23e2bdc91d49735c0814ea09ca7d",
+      "digest": "sha256:3c44ebb3007e9557d86b5a8ebd23a25c062ce148bae2f1c5af43fa138951918e",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"7373d33de03735b26e928a06e9f78fdaa1b6a58beb8beaff2d9b77074242597e"}],
+      "references": [{"path":"capability.yaml","sha256":"9033544feede79b6ac759ce21c451501ab9073d44d3dae41d6688a6ea5a2dec2"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -385,14 +376,14 @@
       "origin": "capability",
       "version": "1.9.0",
       "source": {"kind":"release"},
-      "digest": "sha256:92b8f9e2d7b200aec207961b8f5c6c99efa038957ef1899960e38f73d2613c61",
+      "digest": "sha256:05f23b57d44e100c71e605d1672cc0b2cb82aa0ee1ff7e048fed0d72fb4fde50",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
         {"path":"scripts/preflight.py","sha256":"d8b6628c3b7652b420c1f988689fc2a1bee6b6a2d59d6658a423f793d944908a"},
         {"path":"scripts/profile_dataset.py","sha256":"0185bb0c32c0ec8562f2583ee55d8f91e01553b6190eb52bbc53c32fcbe4aa25"}
       ],
-      "references": [{"path":"capability.yaml","sha256":"d33494a3eff2b657697207e1e7447eeaccfb3687de8045682810b0f378e76430"}],
+      "references": [{"path":"capability.yaml","sha256":"e1673e479183f6c3b96c4c0187fb04a67917cb96e3fad2113dc3815fcaf4d639"}],
       "dependencies": [
         {"kind":"platform-tool","name":"bibliometric_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -429,8 +420,7 @@
             "external-linkage.md",
             "research-portfolio.md",
             "study-protocol.md",
-            "scoping-run.json",
-            "agenda-delta.json"
+            "scoping-run.json"
           ],
           "limits": ["只判断这份数据能支撑什么；外部数据的链接与申请只作提示。"]
         }
@@ -443,9 +433,9 @@
       "origin": "capability",
       "version": "2.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:347f3973a75a47785cffcfa13a7f7fa825615cc257be64950aaafe37a102c4de",
+      "digest": "sha256:ae790e46598b38bb458c901550b68b484f6f0e47c5edc6763067dab2b69fbde5",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"f198211ef1092e2cda98cd127160387e344e4f657e163d40888359eb7560c6f4"}],
+      "references": [{"path":"capability.yaml","sha256":"03a9c5dda4d7cb07148e0edc8afb1d5bdaaa5ceb2c3358925df38378f256e3b6"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -497,9 +487,9 @@
       "origin": "capability",
       "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:e0371ae9a2bb6a18200c08f40b3795e02a189211839dbe5c9d253850f0e41e4c",
+      "digest": "sha256:0cbb0109100abf3ada3db785d4f93599e8f5e13f9c5e6d1d4d2079d010601c93",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"cae0ca0464f33bdfe432f547667c468ce9280a0ea9d944583352b69f1763dd75"}],
+      "references": [{"path":"capability.yaml","sha256":"35b697f80027680318c42140c603e1cf4929610e21bf98c3f2c4f77b3712eddc"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -573,9 +563,9 @@
       "origin": "capability",
       "version": "2.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:6ee9b7096f209157b57b050536b7c9cc07c3c1a587ffc69f6d167512c7201332",
+      "digest": "sha256:4cfdd287c1d1157a5010571b0b6b2086a9667f9377b32dcf33f7c60f810f8ba9",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"0b71f3bc6ed007e6b143260fd11a8c74d771aee9c03bd6562d5f71c70f3bfd6f"}],
+      "references": [{"path":"capability.yaml","sha256":"5e683f098f3b4727bbb4029b73158b36fe26c3946646f7315ad3049c1ff05c29"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"drug_label_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -613,9 +603,9 @@
       "origin": "capability",
       "version": "1.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:a99b2ba0d3400279e44e26d0d3290b2f84ca60256633b319b723bf94257d443d",
+      "digest": "sha256:c2a9c92b58fe4fdfb0a1fa5757250da583e6b20ded91a38eb572bfa6ef046d4f",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"a9b020847950234524ae1e4c83ef6243b2f6cd213619f91149acf6203494bcc5"}],
+      "references": [{"path":"capability.yaml","sha256":"253518cd13b420a94bb243c5f04f046e1c302cdd262a1daa028dcffc29002a32"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"drug_label_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -655,9 +645,9 @@
       "origin": "capability",
       "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:9ac57307db6ee81011b138addb326c40a33fda5faa1c85ae58f63ec77e11d429",
+      "digest": "sha256:3b9c70664f61bd0b74c266b657e65c66733734af34952f2f6c65a77ba331f20b",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"4b00ece24415aae71e2abe764fc80749f8d23f135a0722e76d9eb9fb79734872"}],
+      "references": [{"path":"capability.yaml","sha256":"aed2365811d06d2baaf0ad600678bde4352b75de9d55e0df8589c927f103e583"}],
       "dependencies": [
         {"kind":"platform-tool","name":"geo_read","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"geo_write","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -682,9 +672,9 @@
       "origin": "capability",
       "version": "1.3.0",
       "source": {"kind":"release"},
-      "digest": "sha256:baf48871fafbcbc5d9f56ff8a2c782fbdb1ece399bff2d308c05345563c2ea5e",
+      "digest": "sha256:8973cbad91a38143bdabb4060c8d63e07d0f4c8c33861a31b128c53ae37fdcd6",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"f436ddd991a6d1e511ae4585bb518effc7ac47b88089d6387021746e875d4362"}],
+      "references": [{"path":"capability.yaml","sha256":"fab6d22bc8b905bda5b5a90413b3c9645b5d84459f91f4950c6249ed04f6ef50"}],
       "dependencies": [
         {"kind":"platform-tool","name":"drug_label_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"geo_read","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -715,9 +705,9 @@
       "origin": "capability",
       "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:ce61ff17bc663c8337bf19cdf5ff0b80a2811056a47df6a5a3816a7780aab20b",
+      "digest": "sha256:ede2175dc314a605f2b7bd81246d5a542c2b1450cd5c860850531e72f255a1c8",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"65c8ad2d5134ef4fee6c19c92a89b4d4d5c9c1444186555b286797d02782d97d"}],
+      "references": [{"path":"capability.yaml","sha256":"4cebad688e93fae870ab2ed6733b8fc9359aa94c6a67c9ccefe30e1ca3d161af"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -737,15 +727,7 @@
           "kind": "deliverable",
           "summaryZh": "在你给定的资料范围内起草或修改论文的一节，每条结论都能追溯到资料。",
           "accepts": ["section","sources","existingDraft","manuscriptContext","reportingGuideline","targetJournal","wordBudget","outputLanguage"],
-          "produces": [
-            "manuscript-section.md",
-            "section-claims.json",
-            "citation-ledger.csv",
-            "reporting-checklist.md",
-            "revision-notes.md",
-            "delivery-summary.md",
-            "agenda-delta.json"
-          ],
+          "produces": ["manuscript-section.md","section-claims.json","citation-ledger.csv","reporting-checklist.md","revision-notes.md","delivery-summary.md"],
           "limits": ["只在你给的资料范围内写；资料里没有的数字留成〔待补〕占位，不会编造。"]
         }
       ]
@@ -757,9 +739,9 @@
       "origin": "capability",
       "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:e1eb25eeb747efef1d29e3a82312a087d09417956faa2dffda50f2dbf94d4c86",
+      "digest": "sha256:76a7386b7fb2b48986214b680dc82915c22cebb9f88cca33b7e08f4c2364fca2",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"7d83e6da9d56c8a30b71078a9f84032c5359cf51712d6ebd8e4f7869e449e123"}],
+      "references": [{"path":"capability.yaml","sha256":"ee1e7eb570621dd83f34cfb9fdbffa574bf56e2b98753af00154eff380ad2d6e"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"data_source_catalog","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -787,9 +769,9 @@
       "origin": "capability",
       "version": "1.1.4",
       "source": {"kind":"release"},
-      "digest": "sha256:4ed66d6483c24793bc9bd21beeb5d3c9f1e55d15dd16eb29029b3ff3cbc181b0",
+      "digest": "sha256:15aab80de998f98e7cb349b7b6155d5c3829409bbd79f8360cae2c43d30105fa",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"34e2ca651623b23c110e281f997395a6e0e537b26d834e7537f0e963bdc1275b"}],
+      "references": [{"path":"capability.yaml","sha256":"5e4a7eaf3f82285859ad4a1b7e5053f23995c4392f2fb452d7a7447be5e90fdf"}],
       "dependencies": [{"kind":"platform-tool","name":"meta_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"}],
       "operations": [
         {
@@ -798,7 +780,7 @@
           "summary": "Run a traceable systematic review and deterministic meta-analysis pipeline, with risk-of-bias, GRADE, manuscript, figures, and release gates.",
           "summaryZh": "检索和筛选相关研究，合并适用数据并生成图表与分析报告。",
           "accepts": ["topic","population","intervention","comparator","outcomes","studyDesign","analysisType","uploadedFiles","ipdData"],
-          "produces": ["meta-analysis-report.md","meta-analysis-run.json","agenda-delta.json"],
+          "produces": ["meta-analysis-report.md","meta-analysis-run.json"],
           "limits": ["完整流程可能需要数小时；超过运行时限会中止，已写出的文件保留在工作区。","统计合并由程序完成，但纳入研究的数据提取仍需人工抽查。"]
         }
       ]
@@ -850,9 +832,9 @@
       "origin": "capability",
       "version": "2.5.0",
       "source": {"kind":"release"},
-      "digest": "sha256:e772605f1c90f68377416e4bd6baca4f365e2f4be64e43b524d743915f55ac72",
+      "digest": "sha256:36171669f235d48b8e261b4dac4cee5b3b305ffd90246173e49afd2384eb247e",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"a969edb240327086246c3a2fdef26b5c16761adc23ba217240634142711a3711"}],
+      "references": [{"path":"capability.yaml","sha256":"abf2d06052e3a777b0e8f13874312239fd8b3cfcbc8f4f8e5f5d9b1272bd72db"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -889,9 +871,9 @@
       "origin": "capability",
       "version": "1.0.2",
       "source": {"kind":"release"},
-      "digest": "sha256:e3710761ce5eb8258b283ff2c4f9f10e41a366ea3b861b3f0527c18a5775534d",
+      "digest": "sha256:7be0cc94cec7c5c7611801e9a6961926c5c249b78e065a63466cedfb8f9316b1",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"0f4a538b1b5859c4f56dc30270a4eb280d5a087bee29f26b250108ccfaa52394"}],
+      "references": [{"path":"capability.yaml","sha256":"ef07d024734baefddc64d12ac97ceaeba6af655403bc55d4d57fd364e081d417"}],
       "dependencies": [
         {"kind":"platform-tool","name":"data_source_catalog","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"kb_browse","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -918,9 +900,9 @@
       "origin": "capability",
       "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:03bae85790d511ce1b86b7e48ed85af5d63db91ce89cef2a532305ab4f2fb65a",
+      "digest": "sha256:c1648e2fb5eed4c2d83d97086476db13a8302f56ff3e235bf4f76a27e2e0ef2a",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"b48b0b1fdae482fd07ddcbbb35d2642f634482375ebcf7808edb9728a7eb95f5"}],
+      "references": [{"path":"capability.yaml","sha256":"112009b12bef3ec0a93a12582366c20695d0ec20f5f3b255fcb4173836472fc1"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -952,8 +934,7 @@
             "citation-ledger.csv",
             "delivery-summary.md",
             "reporting-checklist.md",
-            "revision-notes.md",
-            "agenda-delta.json"
+            "revision-notes.md"
           ],
           "limits": ["指南要求逐字引自你给的指南；指南没写到的要求不会补充，以官方最新版为准。"]
         }
@@ -966,13 +947,13 @@
       "origin": "capability",
       "version": "1.5.0",
       "source": {"kind":"release"},
-      "digest": "sha256:7053b2b0eda0f5afaad0d4074db2cffe6f1c33c76c80c4b8fd310a3d1f72c430",
+      "digest": "sha256:dbbf47b30e406e992486812e217b582739e07522281852fca5d39c77d734e175",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
         {"path":"scripts/preflight.py","sha256":"f263b76c7a42afe7cd2b06375299889df21181cd0f1534305e57fee0a8faff2c"}
       ],
-      "references": [{"path":"capability.yaml","sha256":"17fb5d19d98c7207311ff8a33a8d429b8d8125862d178a01e48908b792beef71"}],
+      "references": [{"path":"capability.yaml","sha256":"ce1cabacd2a044949553a1015c017b5aca73b4be8fe21c9d0545f1c00c1d1754"}],
       "dependencies": [
         {"kind":"platform-tool","name":"bibliometric_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -994,7 +975,7 @@
           "summary": "梳理研究版图、矛盾、证据空白与可行性，把宽泛的生物医学方向转化为有证据依据且可检验的研究问题和优先议程。",
           "summaryZh": "梳理已有研究和证据缺口，提出有依据、可执行的科研选题。",
           "accepts": ["researchDirection","availableData","population","studySetting","resourceConstraints","outputLanguage","uploadedFiles"],
-          "produces": ["research-topic-report.md","evidence-map.md","research-topic-run.json","research-portfolio.json","evidence-records.json","agenda-delta.json"],
+          "produces": ["research-topic-report.md","evidence-map.md","research-topic-run.json","research-portfolio.json","evidence-records.json"],
           "limits": ["可执行性按公开证据判断；你所在机构的资源、病例量与伦理条件需要你在问题里说明。"]
         }
       ]
@@ -1065,18 +1046,18 @@
       "id": "capability/vcr-analysis",
       "name": "vcr-analysis",
       "origin": "capability",
-      "version": "1.8.2",
+      "version": "1.20.1",
       "source": {"kind":"release"},
-      "digest": "sha256:0198f43112afb9441c7704f3d5cc674b7f61c91afb359984b68e8b10905909ca",
+      "digest": "sha256:36b433a536b93c6b93926af08be012d0fade0f63fca738ca9f31a331c7230255",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"3cbb8ab92559f90d4890e549feb764e6ac9e6b67e2963821bf93a5250e642ac3"},
-        {"path":"references/comparators.md","sha256":"22f9d015f99d1663eb9582f9d0317a676d892d1b4b8431769e4d7d8c275251a3"},
+        {"path":"capability.yaml","sha256":"57dfdb561ca72f72648e0b7cb7408db0ecb08a3d39cc67d1ea028b37336bc9db"},
+        {"path":"references/comparators.md","sha256":"b9bf170808cdf1d262a31ab6728e1d5c1dc0e31fd26c07037c529f93a96e1897"},
         {"path":"references/delivery.md","sha256":"14bf6198c8ba48f89c93787ac473178b175403ffab9f33542df74724bbf525fe"},
-        {"path":"references/longitudinal.md","sha256":"241d2acf2d570afca6d25dc7b66d3f07c555afb8663e4acf4a00d095e0821695"},
-        {"path":"references/models.md","sha256":"1bc12035760ac0d76226ab363301caabd525f02b3ebe023e6df8e9b3cad6f56a"},
-        {"path":"references/populations-and-patients.md","sha256":"2ce702f5d66995beff49865103e07199269529ad262196fd61378e92a1b916d8"},
-        {"path":"references/trial-design.md","sha256":"427aec206bfccf28d2c533675ccb2d1c1a1f1032f8a322b6118c13488ffb1a0e"}
+        {"path":"references/longitudinal.md","sha256":"8f24303f06dbfa8e8e690dceddfae6249e9ac6985c8e7bc5ba6a31d478ccab01"},
+        {"path":"references/models.md","sha256":"bcbb585d15da300effc5838972f55658d919b09f49ed55186530118162643995"},
+        {"path":"references/populations-and-patients.md","sha256":"750bcd1080dfc6fc9410eb01ad8439ac5c7a26a068e5c12b291816ccaa8a6a5d"},
+        {"path":"references/trial-design.md","sha256":"8dbbae1311bdb37fd7b162b69f622101a00b5bfbd5cfd3b86d9d4b43a9f6aa10"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1129,11 +1110,11 @@
       "id": "capability/vcr-evidence",
       "name": "vcr-evidence",
       "origin": "capability",
-      "version": "1.5.1",
+      "version": "1.9.0",
       "source": {"kind":"release"},
-      "digest": "sha256:c271d84ab5e6cf79d81f397f822a3d24495c3c045baa255ae792248b4263ec11",
+      "digest": "sha256:866c702274cca8c4424f15d43e80e30ad1e36869b3fa187b8c7df7dcb2421763",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"1237f6752a0eb18ac67440afcd9d38ead2d70cb5abd409fbeac323e18c4cd6d0"}],
+      "references": [{"path":"capability.yaml","sha256":"0b7a7d6ab814064085719e38e09dbadc55d11bde45a76881c23e43d1ee9df80e"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"curve_digitize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1177,9 +1158,9 @@
       "origin": "capability",
       "version": "1.6.2",
       "source": {"kind":"release"},
-      "digest": "sha256:0aecc2680fbe9f864c3b469adb757a85205c253f76d6e89f5dcc57ac36c6a995",
+      "digest": "sha256:bfc342fd1faf7527717a595cda7b46307d283889e267f23f79009d14cd073ba5",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"5c5dec100a3f7a0e0e6993ad4d157bdebbf185eecba3a7b8c2e7d5b800e3b31a"}],
+      "references": [{"path":"capability.yaml","sha256":"aaae1a149d338a488503331ab87139e8adc1fd66d305f63fcfda18d8a5a81d52"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1212,9 +1193,9 @@
       "origin": "capability",
       "version": "1.2.1",
       "source": {"kind":"release"},
-      "digest": "sha256:c13d889f57940a47ad4842f0a8d27a66cca5a296ea8cf9440b8456c9093e3cdd",
+      "digest": "sha256:0bebdcab952f0ebeb527b3168f5462744a90f9cfe814b64178e99e292ffc5bef",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"4e8c355832e801a757290bdef0e6e838d0d91560c891635bcf6b6b564818e0c7"}],
+      "references": [{"path":"capability.yaml","sha256":"5dc2d998eeb7ad6aefe77b5a83a7af4aa8a834f61fe07ea604bafe1af9f17581"}],
       "dependencies": [
         {"kind":"platform-tool","name":"kb_browse","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"kb_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1243,10 +1224,10 @@
       "origin": "capability",
       "version": "1.4.5",
       "source": {"kind":"release"},
-      "digest": "sha256:62f357d317e4e5dd1f6d908a228988b2d533caaeea48667567afe6cb0e133091",
+      "digest": "sha256:fdb92427321809cff9017193004b5ad863b012e01d40d21b1079deaa633559ae",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"8d8a30b6afa56343c38e5e0e02f371e73081e57a2032bfbb3282dd9a7d093ad6"},
+        {"path":"capability.yaml","sha256":"cec7f1853e7983a22f71f348dfa5e8d7382920698f1fff4900057462eb2a1e06"},
         {"path":"references/operating-contract.md","sha256":"9050a5c45846c08a7f5676eff012a31701677be24c586f8806802c314f08e6aa"}
       ],
       "dependencies": [

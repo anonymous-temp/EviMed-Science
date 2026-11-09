@@ -33,7 +33,7 @@
  * @module methodReplay
  */
 
-import { identifierShapesIn, trajectoryDigest } from "@evimed/domain";
+import { methodSourceIdentifierShapesIn, trajectoryDigest } from "@evimed/domain";
 
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { CONVERSATION_SCOPE, methodScopeId } from "./learnedMethodMount.mjs";
@@ -80,7 +80,8 @@ export const REPLAY_INSTRUCTIONS = [
 const squashed = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
 
 /** Whether a text carries a credential or an identifier by shape: a quotation like that is counted as found and never kept in a result. @param {string} text */
-const unsafeToKeep = (text) => identifierShapesIn(text).length > 0;
+// a replay quotation can reach a method: contact formats stay out, as for every method source
+const unsafeToKeep = (text) => methodSourceIdentifierShapesIn(text).length > 0;
 
 /**
  * What the judge is shown of a method: what it is called, what it is for, when it applies and does not, and the steps themselves.

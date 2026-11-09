@@ -45,6 +45,12 @@ Hidden knowledge
   definition. When the measured start is within 0.02 of 1 the leading plateau is
   set to exactly 1 and the measurement is reported; farther than that is a
   calibration the reader should look at, and nothing is changed.
+- **Black, grey and frames.** A black curve and a black frame are one colour, so the frame's lines are cut from the mask on all four
+  sides (the crop starts and ends inside the axis lines, whose thickness grows with the resolution). A grey curve beside a black one is
+  told apart by what is much darker than it: the black line, and its anti-aliased edge, which is grey too, are held out (the grey
+  blend model alone takes the black line as "more of the same colour").
+- **A time is never negative.** A curve that starts on the zero tick can land half a pixel to its left when the axes run past the first
+  tick; the control plane refuses a curve with a negative time, so the first points are held at zero.
 - **It refuses what it cannot attribute.** Two panels with an axis each, two
   curves of one colour, a colour that is not in the figure, a legend that cannot
   be found, a curve that rises (a cumulative-incidence plot): each is a named
@@ -64,7 +70,7 @@ import sys
 from pathlib import Path
 
 NAME = "evimed-km-digitizer"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 PROTOCOL = 1
 
 # Every threshold the algorithm uses, recorded in the result so a point is
@@ -84,6 +90,7 @@ PARAMETERS = {
     "blendResidual": 60,       # distance from the colour-to-white blend line a pixel may have
     "coreWeight": 0.45,        # share of the colour a pixel needs to be part of the curve
     "coreWeightDark": 0.75,    # a black or grey curve: stricter, so a grey curve beside a black one is not it
+    "greyDarkerBy": 45,        # a grey curve ignores what is this much darker (luma) than it and the two pixels round it
     "paletteMinChroma": 60,    # a curve colour is saturated, not a pale halo
     "paletteMaxLuma": 215,
     "paletteMinShare": 0.12,   # of the largest colour's pixels
@@ -559,12 +566,12 @@ def choose_colour(selector: dict, colours, role: str):
         wanted = parse_color(stated)
         if sum(wanted) <= 150 and max(wanted) - min(wanted) < 40:
             return {"rgb": (0, 0, 0), "color": "#000000", "source": "stated", "dark": True}
-        if not colours:
-            raise Refusal("colour_not_found", "no coloured line was found in the plot area for %s." % role, palette=[])
         wanted_chroma = max(wanted) - min(wanted)
         if wanted_chroma < 40:
             # A stated grey that is not black: a grey curve, matched as itself.
             return {"rgb": wanted, "color": hex_color(wanted), "source": "stated", "dark": True}
+        if not colours:
+            raise Refusal("colour_not_found", "no coloured line was found in the plot area for %s." % role, palette=[])
         scores = []
         for entry in colours:
             hue_gap = abs(_hue(entry["rgb"]) - _hue(wanted))
@@ -658,16 +665,27 @@ def trace_curve(rgb, colour, region, mapping, role: str, params=PARAMETERS):
     patch = rgb[top:bottom, left:right]
     share, residual = blend_weights(patch, colour["rgb"])
     weight = np.where(residual <= params["blendResidual"], share, 0.0).astype(np.float32)
+    if colour["dark"] and max(colour["rgb"]) > 40:
+        # A grey curve beside a black one: a black line's anti-aliased edge is grey too, and the grey blend model also takes the black
+        # line itself (it is "more" of the same colour). What is within two pixels of anything much darker than the curve is the other
+        # line (or black text, or the frame), not this curve; it is held out of both the mask and the centre of mass.
+        luma = (patch[..., 0] * 0.299 + patch[..., 1] * 0.587 + patch[..., 2] * 0.114).astype(np.float32)
+        target = float(colour["rgb"][0] * 0.299 + colour["rgb"][1] * 0.587 + colour["rgb"][2] * 0.114)
+        shadow = ndimage.binary_dilation(luma < target - params["greyDarkerBy"], structure=np.ones((5, 5), dtype=bool))
+        weight = np.where(shadow, 0.0, weight).astype(np.float32)
     core = weight >= (params["coreWeightDark"] if colour["dark"] else params["coreWeight"])
     if colour["dark"]:
-        # A black curve and a black frame are one colour: the frame's top and right
-        # lines (long straight runs in the outer band of the plot area) are not it.
+        # A black curve and a black frame are one colour: the frame's lines (long straight runs in the outer band of the plot
+        # area, all four sides: the crop starts and ends inside the axis lines, whose thickness grows with the resolution)
+        # are not it.
         wide, tall = core.shape[1], core.shape[0]
-        for row in list(range(0, min(tall, pad + 3))):
+        rows_band = pad + 3 + int(math.ceil(0.006 * max(height, width)))
+        columns_band = 4 + int(math.ceil(0.003 * max(height, width)))
+        for row in list(range(0, min(tall, rows_band))) + list(range(max(0, tall - rows_band), tall)):
             starts, ends = _runs(core[row, :])
             if starts.size and (ends - starts).max() >= 0.85 * wide:
                 core[row, :] = False
-        for column in range(max(0, wide - 4), wide):
+        for column in list(range(0, min(wide, columns_band))) + list(range(max(0, wide - columns_band), wide)):
             starts, ends = _runs(core[:, column])
             if starts.size and (ends - starts).max() >= 0.85 * tall:
                 core[:, column] = False
@@ -790,7 +808,9 @@ def trace_curve(rgb, colour, region, mapping, role: str, params=PARAMETERS):
         held[0] = held[~np.isnan(held)][0]
         held = np.where(np.isnan(held), held[0], held)
     columns_x = np.arange(first, last + 1)
-    times = np.array([mapping.time(left + column + 0.5) for column in columns_x], dtype=np.float64)
+    # A curve that starts on the zero tick can land half a pixel to its left (axes that run past the first tick, a line cap): a survival
+    # time is not negative, and the control plane refuses a curve with one.
+    times = np.maximum(np.array([mapping.time(left + column + 0.5) for column in columns_x], dtype=np.float64), 0.0)
     raw = np.array([mapping.survival(value) for value in held], dtype=np.float64)
     tolerance = params["monotoneToleranceFactor"] * mapping.survival_per_pixel
     running = np.minimum.accumulate(raw)

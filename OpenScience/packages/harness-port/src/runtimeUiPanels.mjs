@@ -253,6 +253,53 @@ export function apply(ctx, _config, _target = globalThis, _require = undefined, 
     scope.effect(() => () => { if (sidebarRight === scope.sidebarRight) sidebarRight = null; });
   });
 
+  /**
+   * 「下载」 in the document preview's header (2026-11-05). The kernel's only download is the file card's context menu, which a
+   * person does not find; its preview header held one launcher, `open-in-app`, which opens an application on the serving machine
+   * and is off here. This is the same save the menu makes -- the file's original bytes through `workspaceFiles.readBytes` (held to
+   * the workspace by the proxy) handed to `fileActions.save(..., 'download')`, a browser download -- on a button.
+   * @type {{ save: (source: any, mode: string) => Promise<any> } | null}
+   */
+  let fileActions = null;
+  /** @type {any} */
+  let remote = null;
+  kit.withServices(['fileActions', 'remote', 'remote.workspaceFiles'], (/** @type {any} */ scope) => {
+    fileActions = scope.fileActions;
+    remote = scope.remote;
+    scope.effect(() => () => { if (fileActions === scope.fileActions) { fileActions = null; remote = null; } });
+  });
+  /** @param {{ sessionId?: string, absolutePath?: string, path?: string }} props the kernel's file owner for the open preview */
+  function DownloadAction(props) {
+    const [state, setState] = React.useState('idle');
+    const sessionId = props?.sessionId;
+    const path = props?.absolutePath ?? props?.path;
+    if (typeof sessionId !== 'string' || typeof path !== 'string' || !path) return null;
+    const name = path.slice(path.lastIndexOf('/') + 1);
+    const failed = state === 'failed';
+    const download = async () => {
+      if (!fileActions || !remote?.workspaceFiles || state === 'busy') return;
+      setState('busy');
+      try {
+        const result = await fileActions.save({ name, read: async (/** @type {AbortSignal} */ signal) => {
+          const read = await remote.workspaceFiles.readBytes(sessionId, path, {}, signal);
+          if (!read.ok) throw new Error('Original file unavailable');
+          return new globalThis.Blob([new Uint8Array(read.value.data)]);
+        } }, 'download');
+        setState(result?.status === 'cancelled' ? 'idle' : 'done');
+        setTimeout(() => setState('idle'), 1500);
+      } catch { setState('failed'); setTimeout(() => setState('idle'), 3000); }
+    };
+    const label = failed ? '没能下载，点击重试' : '下载文件';
+    return h('button', { type: 'button', 'aria-label': label, title: label, 'data-evimed-download': state, disabled: state === 'busy', onClick: () => void download(),
+      style: { flex: 'none', width: '24px', height: '24px', padding: 0, border: 'none', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        cursor: state === 'busy' ? 'progress' : 'pointer', background: 'transparent', color: failed ? 'var(--dsw-alias-state-warn-label)' : 'inherit', opacity: state === 'busy' ? 0.5 : 1 },
+      onMouseEnter: (/** @type {any} */ event) => { event.currentTarget.style.background = 'var(--dsw-alias-bg-layer-2)'; },
+      onMouseLeave: (/** @type {any} */ event) => { event.currentTarget.style.background = 'transparent'; } },
+    h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+      state === 'done' ? h('path', { d: 'M20 6 9 17l-5-5' }) : [h('path', { key: 'a', d: 'M12 3v12' }), h('path', { key: 'b', d: 'm7 10 5 5 5-5' }), h('path', { key: 'c', d: 'M5 21h14' })]));
+  }
+  kit.guarded('document download', () => kit.occupy({ slot: 'sidebar.right.tab.document.actions', id: 'evimed-download', order: 10 }, DownloadAction));
+
   function useLive() {
     const runState = kit.useFrameState((/** @type {any} */ state) => state.runState);
     const session = kit.useFrameState((/** @type {any} */ state) => state.session);

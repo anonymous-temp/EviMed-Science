@@ -171,7 +171,6 @@ test("outcome classification is total and lands each class on a real code", () =
   assert.equal(errorCodeOutcome("runtime_reserved_for_autopilot"), "capped");
   assert.equal(errorCodeOutcome("full_text_not_available"), "upstream");
   assert.equal(errorCodeOutcome("declared-appraisal-must-execute"), "gated");
-  assert.equal(errorCodeOutcome("verification_run_failed"), "stopped");
 });
 
 test("a run that shipped with reservations is not reported as a clean success", () => {

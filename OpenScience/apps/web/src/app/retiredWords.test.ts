@@ -137,9 +137,9 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   // `retiredNames.mjs`, on lines marked retired-word-ok.
   ["循证传播", "renamed 2026-10-07 by the owner: the module is 「循证 GEO」; its measurement screens are still 「AI 回答监测」"],
   ["虚拟临研", "renamed 2026-10-07 by the owner: the module is 「虚拟临床研究」, in full"],
-  // The comparison task (owner decision of 2026-11-01, remediation plan 7.6): 「合成对照」 was read as Medidata's historical-data control
-  // arm, and what the task does is compare the study with a control from elsewhere. The module's name did not change; a search still reads the old word.
-  ["合成对照", "renamed 2026-11-01 by the owner: the task is 「对照研究」; 「合成」 is kept for records that are synthetic"],
+  // The shorter former task name remains retired. The owner later explicitly named the entry 「合成对照臂」;
+  // only that complete name is excluded from this substring check.
+  ["合成对照", "the shorter retired term remains banned; only the complete owner-approved name is allowed"],
 ];
 
 /**
@@ -205,6 +205,8 @@ const DOMAIN_SOURCES = join(dirname(fileURLToPath(import.meta.url)), "../../../.
 const DOMAIN_EXEMPT = new Set(["候选"]);
 
 const comment = (line: string) => /^\s*(\/\/|\*|\/\*)/.test(line);
+// The owner explicitly restored the complete product name, not the retired shorter term.
+const hasRetiredWord = (line: string, word: string) => (word === "合成对照" ? line.replaceAll("合成对照臂", "") : line).includes(word);
 
 describe("the words the product retired", () => {
   const files = sources(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -223,6 +225,8 @@ describe("the words the product retired", () => {
   });
 
   it("finds a retired word where a reader would see it, and not in an identifier", () => {
+    expect(hasRetiredWord("合成对照臂", "合成对照")).toBe(false);
+    expect(hasRetiredWord("合成对照臂与合成对照", "合成对照")).toBe(true);
     expect(visibleText(`<p>已 approved</p>`).join("")).toContain("approved");
     expect(visibleText(`toast.success("方法已 approved");`).join("")).toContain("approved");
     expect(visibleText(`status: "candidate" | "approved" | "retired";`)).toEqual([]);
@@ -236,7 +240,7 @@ describe("the words the product retired", () => {
       // marked `retired-word-ok` may hold one as DATA about records written
       // before the rename; a string a reader can see may not.
       .filter(({ text }) => text.split("\n").some((line) =>
-        line.includes(word) && !comment(line) && !line.includes("retired-word-ok")))
+        hasRetiredWord(line, word) && !comment(line) && !line.includes("retired-word-ok")))
       .map(({ path }) => relative(path));
     expect(guilty, `${word}: ${why}`).toEqual([]);
   });
@@ -257,7 +261,7 @@ describe("the words the product retired", () => {
   it.each(RETIRED.filter(([word]) => !DOMAIN_EXEMPT.has(word)))("does not say 「%s」 in a domain sentence", (word, why) => {
     const guilty = domainTexts
       .filter(({ text }) => text.split("\n").some((line) =>
-        line.includes(word) && !comment(line) && !line.includes("retired-word-ok")))
+        hasRetiredWord(line, word) && !comment(line) && !line.includes("retired-word-ok")))
       .map(({ path }) => domainRelative(path));
     expect(guilty, `${word}: ${why}`).toEqual([]);
   });

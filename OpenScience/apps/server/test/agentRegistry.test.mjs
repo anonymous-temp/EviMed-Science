@@ -563,7 +563,6 @@ test("a capability that writes files declares its skills, its tools and every ou
   const clinicalEvidence = catalogue.find((entry) => entry.id === "clinical-evidence-synthesis").manifest;
   assert.deepEqual(clinicalEvidence.skills, [
     "clinical-evidence-synthesis",
-    "autopilot-episode",
     "deep-research",
     "biomedical-database-search",
     "citation-integrity",
@@ -571,15 +570,12 @@ test("a capability that writes files declares its skills, its tools and every ou
   ]);
   // The package is what a reader is handed and what verifies it. The six files
   // in which it described itself went optional on 2026-09-17 and were then
-  // deleted; only the autopilot's agenda delta remains optional.
+  // deleted.
   assert.deepEqual(
     clinicalEvidence.produces[0].outputs.filter((output) => output.required).map((output) => output.path),
     ["clinical-evidence-report.md", "clinical-evidence-matrix.json"],
   );
-  assert.deepEqual(
-    clinicalEvidence.produces[0].outputs.filter((output) => !output.required).map((output) => output.path),
-    ["agenda-delta.json"],
-  );
+  assert.deepEqual(clinicalEvidence.produces[0].outputs.filter((output) => !output.required).map((output) => output.path), []);
   const topic = catalogue.find((entry) => entry.id === "research-topic-selection").manifest;
   assert.ok(!topic.tools.includes("mcp__evimed__patent_search"), "a deployment-disabled tool cannot enter a delegated child");
   assert.deepEqual(

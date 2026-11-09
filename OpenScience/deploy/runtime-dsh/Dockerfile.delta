@@ -62,7 +62,7 @@ USER root
 
 # The sealed trees this delta rewrites, removed rather than written over.
 RUN set -eux; \
-  rm -rf /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills /opt/evimed/search-topics
+  rm -rf /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills /opt/evimed/search-topics /opt/evimed/research-source /opt/evimed/research-bundles
 
 # The baseline this delta must match is the one in the source being built, not
 # the one the base image was built against. A delta that changes the
@@ -76,12 +76,21 @@ COPY deploy/runtime-dsh/capabilities /opt/evimed/capabilities
 COPY capability-skills /opt/evimed/capability-skills
 COPY packages/domain /opt/evimed/socket/node_modules/@evimed/domain
 COPY packages/harness-port /opt/evimed/socket/node_modules/@evimed/harness-port
+COPY packages/research-plugin-runtime /opt/evimed/socket/node_modules/@evimed/research-plugin-runtime
 COPY packages/design-tokens /opt/evimed/socket/node_modules/@evimed/design-tokens
 # The full build copies the personal-skill validator into the socket tree (2026-10-02), and the line above this one wipes that
 # tree: every delta since dropped it, and the control plane's isolated skill validation (skillValidationController.mjs runs
 # this file in a disposable container of this image) failed until a hand hotfix put it back (2026-10-28).
 COPY scripts/runtime/validate-personal-skill.mjs /opt/evimed/socket/scripts/validate-personal-skill.mjs
 COPY packages/search-topics /opt/evimed/search-topics
+# The first release with native research bundles needs a full base. Thereafter
+# refresh each domain from source and remeasure the installed closure offline.
+COPY packages/virtual-trial /opt/evimed/research-source/virtual-trial
+COPY packages/virtual-cohort /opt/evimed/research-source/virtual-cohort
+COPY packages/virtual-patient /opt/evimed/research-source/virtual-patient
+COPY packages/synthetic-control /opt/evimed/research-source/synthetic-control
+COPY packages/virtual-research-suite /opt/evimed/research-source/virtual-research-suite
+COPY deploy/runtime-dsh/research-bundles.mjs /usr/local/bin/evimed-research-bundles.mjs
 RUN test "${SEARCH_TOPICS_VERSION}" = "$(node -p 'require("/opt/evimed/search-topics/package.json").version')" && \
   install -d -m 0755 /opt/evimed/search-topics-data && chmod -R a+rX,a-w /opt/evimed/search-topics
 
@@ -319,6 +328,11 @@ RUN set -eux; \
   env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_STATE_HOME HOME=/root DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --offline --ignore-scripts --store-dir "${recorded_store}" --save-prod --save-exact file:/opt/evimed/search-topics; \
   test -f "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@openviking/dsh-memory-plugin/package.json" \
     || { echo "this base image predates the OpenViking memory plugin the socket configures (deps-version.json openviking.plugin); build the full runtime image" >&2; exit 1; }; \
+  node /usr/local/bin/evimed-research-bundles.mjs install --offline; \
+  node /usr/local/lib/evimed/loopx-compat.mjs --order-profile "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"; \
+  node /usr/local/lib/evimed/install-openviking-plugin.mjs order "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"; \
+  node /usr/local/bin/evimed-research-bundles.mjs order; \
+  node -e 'const fs=require("node:fs");const file=process.argv[1],profile=JSON.parse(fs.readFileSync(file,"utf8")),name="@evimed/dsh-search-topics",bundles=profile.dsh.profile.bundles;if(bundles.filter(value=>value===name).length!==1)throw Error("Search topics bundle is not selected exactly once");profile.dsh.profile.bundles=[...bundles.filter(value=>value!==name),name];fs.writeFileSync(file,JSON.stringify(profile,null,2)+"\n")' "${DSH_HOME_SEED}/profiles/evimed-runtime/package.json"; \
   DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json 2> /opt/evimed/dump-config.stderr; \
   cat /opt/evimed/dump-config.stderr >&2; \
   if grep -E "patch( insert)?: entry .* not found" /opt/evimed/dump-config.stderr; then echo "a bundle patch names a row no earlier bundle makes" >&2; exit 1; fi; \
@@ -331,6 +345,7 @@ RUN set -eux; \
   chmod -R a+rX,a-w "${detached_skills}"; \
   rm -rf "${skill_source}"; mv "${detached_skills}" "${skill_source}"; \
   node /usr/local/bin/evimed-profile-seed.mjs seal "${DSH_HOME_SEED}" evimed-runtime; \
+  chmod -R a+rX,a-w /opt/evimed/research-source /opt/evimed/research-bundles; \
   chmod -R a-w "${DSH_HOME_SEED}"
 
 # The launcher and the files the model's shell commands run with (the `serve` phase of the full build; the

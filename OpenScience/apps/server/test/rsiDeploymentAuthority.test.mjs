@@ -78,9 +78,9 @@ test('independent signed evaluator receipt admits new campaign evidence only in 
 
 test('activation profiles reject unbounded or malformed exposure thresholds', () => {
   const policy = { mode: 'cohort', allowGlobal: false, allowExpansion: true, cohortPercent: 10, cohortSteps: [10,25,50,100], minExecutions: 200, minDays: 2, maxErrors: 0 };
-  assert.deepEqual(validateRsiActivationPolicies({ 'autopilot-planner': policy })['autopilot-planner'], policy);
+  assert.deepEqual(validateRsiActivationPolicies({ 'geo-supplements': policy })['geo-supplements'], policy);
   for (const patch of [{ minExecutions: 0 }, { minDays: 91 }, { maxErrors: -1 }, { cohortSteps: [10,5,100] }, { cohortSteps: [10,25,50] }, { cohortPercent: 25 }, { afterShadow: 'global' }, { arbitrary: true }]) {
-    assert.throws(() => validateRsiActivationPolicies({ 'autopilot-planner': { ...policy, ...patch } }), /activation_policy_invalid/);
+    assert.throws(() => validateRsiActivationPolicies({ 'geo-supplements': { ...policy, ...patch } }), /activation_policy_invalid/);
   }
 });
 

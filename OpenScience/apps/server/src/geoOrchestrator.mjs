@@ -86,7 +86,7 @@ const INSIGHT_STEPS = Object.freeze(["evidence", "journey", "questions"]);
 const FINISHED = new Set(["done", "minimal"]);
 const TERMINAL_RUN = new Set(["succeeded", "failed", "canceled", "cancelled"]);
 /** Dispatch refusals that will not clear by waiting a minute. */
-const TERMINAL_DISPATCH = new Set(["geo_unavailable", "geo_project_not_found", "project_not_found", "autopilot_capability_unavailable"]);
+const TERMINAL_DISPATCH = new Set(["geo_unavailable", "geo_project_not_found", "project_not_found"]);
 
 /** The platform's numbers for the schedules (plan §3.8, §6; geo-skills' monitor constants). */
 export const GEO_SCHEDULE = Object.freeze({

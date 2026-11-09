@@ -315,6 +315,19 @@
   "quality": null,
   "check": null,
   "premises": [],
+  "binding": {
+    "origin": "observed",
+    "originLabel": "真实患者队列",
+    "readiness": "descriptive_only",
+    "model": "二线 NSCLC 多西他赛组 PFS · Weibull",
+    "staleResults": 0,
+    "members": {
+      "observedPeople": 3412,
+      "virtualMembers": null,
+      "redrawn": null,
+      "stillBreaking": null
+    }
+  },
   "counts": {
     "generatedRecords": 0,
     "scope": null

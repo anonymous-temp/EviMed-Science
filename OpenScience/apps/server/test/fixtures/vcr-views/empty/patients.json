@@ -1,5 +1,6 @@
 {
   "model": null,
+  "premises": [],
   "selection": null,
   "records": null,
   "profile": [],
@@ -18,5 +19,7 @@
   "counts": null,
   "stale": null,
   "partial": null,
+  "progressions": [],
+  "splineFits": [],
   "sets": []
 }

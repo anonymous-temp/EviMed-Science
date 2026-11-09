@@ -297,10 +297,14 @@ test("the workflow that gates every PR runs the gates ci:web runs", async () => 
     "test:mcp:memory": /pnpm test:mcp\b/,
   };
 
+  const workflowScripts = [...workflow.matchAll(/pnpm (?:run )?([\w:-]+)/g)]
+    .map((match) => match[1]).filter((name) => Object.hasOwn(pkg.scripts ?? {}, name));
+  const invokedLeaves = new Set(workflowScripts.flatMap((name) => leaves(name)));
   const required = [...new Set(leaves("ci:web"))];
   assert.ok(required.length >= 8, `ci:web should expand to several gates, got ${JSON.stringify(required)}`);
 
   const missing = required.filter((name) => {
+    if (invokedLeaves.has(name)) return false;
     if (new RegExp(`pnpm (?:run )?${name.replace(/[:]/g, "[:]")}(?![\\w:-])`).test(workflow)) return false;
     const alt = equivalents[name];
     return !(alt && alt.test(workflow));
@@ -1192,7 +1196,7 @@ test("web deployment env example documents required hosted settings", async () =
   // launching the image it just built.
   const composeForEnv = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const composeRuntimeImage = composeForEnv.match(/\$\{OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-([^}]+)\}/)?.[1];
-  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.2.1-rc.5-uv-0.11.26");
+  assert.equal(composeRuntimeImage, "open-science-runtime:dsh-0.2.2-rc.1-uv-0.11.26");
   assert.match(env, new RegExp(`^OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE=${composeRuntimeImage.replace(/[.]/g, "\\.")}$`, "m"));
   assert.match(env, /OPEN_SCIENCE_RUNTIME_TRANSPORT=unix/);
   assert.match(env, /OPEN_SCIENCE_RUNTIME_NETWORK_MODE=open-science-runtime-internal/);
@@ -1594,6 +1598,16 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   assert.match(workflow, /--profile runtime-image --profile vcr build/);
   assert.match(workflow, /docker-compose\.result-replay\.yml/);
   assert.match(workflow, /Qualify isolated VCR candidate image without enabling the module/);
+  // (algorithm round G6) the runtime image runs a confirmatory design through service/run_job.R under the compose limits, and fails on a non-success
+  assert.match(workflow, /Run a confirmatory design inside the isolated VCR candidate image/);
+  assert.match(workflow, /--memory 4g --cpus 2 --tmpfs/);
+  assert.match(workflow, /ulimit -v 3145728; exec Rscript \/opt\/vcr-engine\/service\/run_job.R/);
+  assert.match(workflow, /service\/run_job\.R \/in\/job\.json \/out/);
+  // the job the step runs is one this build accepts: the first version of the step ran a job the domain had come to refuse, and failed with no words
+  const { validateEngineJob } = await import('@evimed/domain');
+  const smokeJob = JSON.parse(/<<'JSON'\n([\s\S]*?)\n\s*JSON\n/.exec(workflow.slice(workflow.indexOf('Run a confirmatory design inside the isolated VCR candidate image')))[1]);
+  assert.deepEqual(validateEngineJob(smokeJob), []);
+  assert.match(workflow, /library\(dosresmeta\)/);
   assert.match(workflow, /pnpm release:manifest/);
   assert.match(workflow, /pnpm verify:release-manifest/);
   assert.match(workflow, /pnpm configure:monitoring/);
@@ -2320,6 +2334,13 @@ test("a package that can be typechecked is typechecked by the pipeline", async (
     .map((entry) => entry.name);
   assert.ok(names.length >= 4, `only ${names.length} packages found — the scan did not read the workspace`);
 
+  const reachable = new Set();
+  const visit = (name) => {
+    if (reachable.has(name) || !Object.hasOwn(rootPackage.scripts ?? {}, name)) return;
+    reachable.add(name);
+    for (const match of String(rootPackage.scripts[name]).matchAll(/pnpm (?:run )?([\w:-]+)/g)) visit(match[1]);
+  };
+  visit("test:web");
   let checked = 0;
   for (const name of names) {
     let manifest;
@@ -2337,9 +2358,8 @@ test("a package that can be typechecked is typechecked by the pipeline", async (
     // which is the exact failure it was written to prevent.
     const invoked = Object.entries(rootPackage.scripts ?? {})
       .filter(([alias, body]) => (
-        pipeline.includes(`pnpm ${alias}`)
-        && String(body).includes(manifest.name)
-        && /(^|\s)typecheck(\s|$)/.test(String(body))
+        reachable.has(alias)
+        && new RegExp(`pnpm --filter ${manifest.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} typecheck(?:\\s|$)`).test(String(body))
       ))
       .map(([alias]) => alias);
     assert.ok(
@@ -2676,14 +2696,7 @@ test("every optional-channel lever the server reads is forwarded by compose", as
   // Both shapes the file uses. A lever read through `boolEnv`/`listEnv` was
   // invisible to a scan that only knew `process.env.X`, which is the exact way
   // a guard against a missing forward can itself go missing.
-  // `AUTOPILOT` joined the scan on 2026-09-08: its three levers were listed
-  // only by `docker-compose.ingestion.yml`, so a deployment without that
-  // overlay ran with autopilot defaulted on in production while an operator
-  // setting `OPEN_SCIENCE_AUTOPILOT_ENABLED=false` in `.env` changed nothing
-  // and was told nothing. A lever that cannot turn a subsystem off is the
-  // worse direction of this defect, and this scan was already the right guard
-  // — its family list just did not name this family.
-  const pattern = /(?:process\.env\.|(?:bool|list)Env\(")(OPEN_SCIENCE_(?:GEO_PROBE|WEB_SEARCH|RUNTIME_UI|SELF_REGISTRATION|AUTOPILOT)[A-Z0-9_]*)/g;
+  const pattern = /(?:process\.env\.|(?:bool|list)Env\(")(OPEN_SCIENCE_(?:GEO_PROBE|WEB_SEARCH|RUNTIME_UI|SELF_REGISTRATION)[A-Z0-9_]*)/g;
   const read = [...config.matchAll(pattern)].map((match) => match[1]);
   const names = [...new Set(read)].sort();
   assert.ok(
@@ -2693,7 +2706,6 @@ test("every optional-channel lever the server reads is forwarded by compose", as
   assert.ok(names.includes("OPEN_SCIENCE_GEO_PROBE_URL"), "the scan missed the GEO probe URL");
   assert.ok(names.includes("OPEN_SCIENCE_RUNTIME_UI_PORT"), "the scan missed the browser application's port");
   assert.ok(names.includes("OPEN_SCIENCE_SELF_REGISTRATION_ENABLED"), "the scan missed the registration switch");
-  assert.ok(names.includes("OPEN_SCIENCE_AUTOPILOT_ENABLED"), "the scan missed the autopilot switch");
   for (const name of names) {
     assert.ok(
       compose.includes(`\${${name}`),
@@ -2739,6 +2751,24 @@ test("every workspace package the runtime's frame bundle imports is packed into 
     const missing = [...imported].filter((name) => !packed.has(name)).sort();
     assert.deepEqual(missing, [], `${dockerfile} does not pack: ${missing.join(", ")}`);
   }
+});
+
+test("all copied runtime packages are checked for staleness and retained by the delta", async () => {
+  const full = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile"), "utf8");
+  const delta = await readFile(path.join(repoRoot, "deploy/runtime-dsh/Dockerfile.delta"), "utf8");
+  const checker = await readFile(path.join(repoRoot, "scripts/ops/check-runtime-image-current.mjs"), "utf8");
+  const copied = (text) => [...text.matchAll(/^COPY (packages\/[\w.-]+) (\/opt\/evimed\/\S+)$/gm)].map((m) => [m[1], m[2]]);
+  const expected = copied(full);
+  assert.ok(expected.length >= 9, "the complete native and shared package inventory must be read");
+  const retained = new Set(copied(delta).map((row) => row.join(" ")));
+  const checked = new Map([...checker.matchAll(/source: "([^"]+)", inside: "([^"]+)"/g)].map((m) => [m[1], m[2]]));
+  for (const [source, inside] of expected) {
+    assert.ok(retained.has(`${source} ${inside}`), `delta omits ${source}`);
+    assert.equal(checked.get(source), inside, `source verification omits or misaddresses ${source}`);
+  }
+  const refreshed = delta.indexOf("node /usr/local/bin/evimed-research-bundles.mjs install --offline");
+  assert.ok(refreshed > delta.indexOf("COPY packages/virtual-research-suite "));
+  assert.ok(refreshed < delta.indexOf("node /usr/local/bin/evimed-profile-seed.mjs seal"), "native receipt refresh must precede sealing");
 });
 
 test("the delta puts back everything the full build copies into the socket tree it wipes", async () => {

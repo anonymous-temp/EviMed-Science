@@ -10,7 +10,7 @@ const stub = (patch = {}) => ({ owner: async () => 'u', now: () => new Date('202
 test('serving worker claims only serving work and completes feedback continuation',async()=>{
  // `resolveWaiters` is the consumer's for the events that read waiters (`tool-ready`, `dataset-ready`); a feedback event matches none, so the worker does not call it.
  const calls=[]; const row={id:'event',payload:{type:'researcher-feedback',status:'pending'}};
- const service=stub({get:async(id)=>id==='event'?row:null,save:async(...args)=>calls.push(['save',...args]),resolveWaiters:async()=>calls.push(['wake']),jobs:{claim:async kinds=>{assert.deepEqual(kinds,['evolution-event','evolution-decision','evolution-digest','evolution-maintain']);return {id:'job',kind:'evolution-event',userId:'u',leaseToken:'lease',payload:{eventId:'event'}}},finish:async()=>calls.push(['finish']),fail:async()=>assert.fail('unexpected failure'),renew:async()=>true}});
+ const service=stub({get:async(id)=>id==='event'?row:null,save:async(...args)=>calls.push(['save',...args]),jobs:{claim:async kinds=>{assert.deepEqual(kinds,['evolution-event','evolution-decision','evolution-digest','evolution-maintain']);return {id:'job',kind:'evolution-event',userId:'u',leaseToken:'lease',payload:{eventId:'event'}}},finish:async()=>calls.push(['finish']),fail:async()=>assert.fail('unexpected failure'),renew:async()=>true}});
  const worker=createEvolutionServingWorker({service,config:{evolutionEnabled:true},logger:quiet,integration:{consume:async()=>calls.push(['consume'])}});
  await worker.tick(); assert.deepEqual(calls.map(c=>c[0]),['consume','save','finish']);assert.equal(worker.status().enabled,true);await worker.close();
 });

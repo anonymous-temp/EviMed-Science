@@ -220,7 +220,7 @@ test("failure cleanup cannot use an old account's path or scope after replacemen
 test("a late source completion or cancellation cannot release a newer scope", async t => {
   const f = await fixture(t);
   await f.runtime.dispatch(f.request);
-  f.state.scope = { runId: "new-autopilot-episode" };
+  f.state.scope = { runId: "new-bounded-run" };
   f.calls.length = 0;
   assert.equal(await f.runtime.complete(f.home, f.state.runs[0]), true);
   await f.runtime.cancel({ ...f.request, runId: "run-one", sessionId: "session-one" });

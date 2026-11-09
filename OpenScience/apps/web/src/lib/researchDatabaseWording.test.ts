@@ -14,7 +14,7 @@ const result = (patch: Partial<ResearchDatabaseSnapshot> = {}): ResearchDatabase
 describe("what a table import will leave out, before it is pressed", () => {
   it("states the deployment's own limits and says nothing more about a table that fits", () => {
     const notes = tableImportNotes(table(), limits);
-    expect(notes.limits).toBe("导入后存为知识库里的数据表，并加入本研究。单次最多导入 20,000 行、64 列；单个单元格超过 32 KB 的内容不会导入。");
+    expect(notes.limits).toBe("导入后存为知识库里的数据表。单次最多导入 20,000 行、64 列；单个单元格超过 32 KB 的内容不会导入。");
     expect([notes.rows, notes.overLimit, notes.unsupported]).toEqual([null, null, null]);
   });
 
@@ -59,7 +59,7 @@ describe("what a table import will leave out, before it is pressed", () => {
 describe("what an import came to", () => {
   it("keeps the one-line confirmation for a table that came over whole", () => {
     const outcome = importOutcome(result(), "cohort");
-    expect(outcome).toEqual({ text: "已导入 cohort：1,200 行 × 3 列，已加入本研究。", partial: false, notes: [] });
+    expect(outcome).toEqual({ text: "已导入 cohort：1,200 行 × 3 列，已存入知识库。", partial: false, notes: [] });
   });
 
   it("says plainly that only part of the table came over, how many rows of how many, and what else was left out", () => {
@@ -68,7 +68,7 @@ describe("what an import came to", () => {
       droppedColumns: [{ name: "notes", type: "jsonb", reason: "unsupported_type" }, { name: "stay", type: "interval", reason: "unsupported_type" }],
     }), "cohort");
     expect(outcome.partial).toBe(true);
-    expect(outcome.text).toBe("已导入 cohort，只导入了一部分：前 20,000 行（共 52,340 行） × 3 列；3 个单元格过大未导入；2 列类型不支持未导入。已加入本研究。");
+    expect(outcome.text).toBe("已导入 cohort，只导入了一部分：前 20,000 行（共 52,340 行） × 3 列；3 个单元格过大未导入；2 列类型不支持未导入。已存入知识库。");
     expect(outcome.notes).toContain("取的是表里靠前的行（按存放顺序，不是随机抽样），不能代表整张表。");
     expect(outcome.notes).toContain("未导入的列：notes、stay。");
   });
@@ -94,7 +94,7 @@ describe("what an import came to", () => {
       droppedColumns: [{ name: "notes", type: "jsonb", reason: "unsupported_type" }, { name: "w1", type: "integer", reason: "over_column_limit" }, { name: "w2", type: "integer", reason: "over_column_limit" }],
     }), "cohort");
     expect(outcome.partial).toBe(true);
-    expect(outcome.text).toBe("已导入 cohort，只导入了一部分：1,200 行 × 3 列；1 列类型不支持未导入；2 列超出列数上限未导入。已加入本研究。");
+    expect(outcome.text).toBe("已导入 cohort，只导入了一部分：1,200 行 × 3 列；1 列类型不支持未导入；2 列超出列数上限未导入。已存入知识库。");
     expect(outcome.notes).toEqual(["未导入的列：notes、w1、w2。"]);
   });
 
@@ -106,13 +106,13 @@ describe("what an import came to", () => {
   });
 
   it("says that a re-import is a new version that replaced the earlier one in the research, whole or not", () => {
-    expect(importOutcome(result({ version: 3 }), "cohort").notes).toEqual(["这是 cohort 的第 3 版，本研究里已改用这一版。"]);
+    expect(importOutcome(result({ version: 3 }), "cohort").notes).toEqual(["这是 cohort 的第 3 版，已改用这一版。"]);
     expect(importOutcome(result({ version: 1 }), "cohort").notes).toEqual([]);
-    expect(importOutcome(result({ version: 2, truncated: true, partial: true, rowCount: 20_000, totalRows: 30_000 }), "cohort").notes.at(-1)).toBe("这是 cohort 的第 2 版，本研究里已改用这一版。");
+    expect(importOutcome(result({ version: 2, truncated: true, partial: true, rowCount: 20_000, totalRows: 30_000 }), "cohort").notes.at(-1)).toBe("这是 cohort 的第 2 版，已改用这一版。");
   });
 
   it("reads a result without the newer fields as a whole import instead of failing", () => {
     const old = { sourceId: "s", capturedAt: "", rowCount: 1, truncated: false, oversizedValuesWithheld: false } as unknown as ResearchDatabaseSnapshot;
-    expect(importOutcome(old, "cohort")).toEqual({ text: "已导入 cohort：1 行，已加入本研究。", partial: false, notes: [] });
+    expect(importOutcome(old, "cohort")).toEqual({ text: "已导入 cohort：1 行，已存入知识库。", partial: false, notes: [] });
   });
 });

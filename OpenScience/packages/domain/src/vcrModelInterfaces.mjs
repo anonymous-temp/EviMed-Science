@@ -205,3 +205,30 @@ export function vcrEventHistoryScopeIssues(model, asked = {}) {
   }
   return issues
 }
+
+/**
+ * The mechanistic package contract the engine states (`VCR_MECHANISTIC_REQUIRED` and the host-solver list of
+ * `vcr_mechanistic_spec_issues` in `R/population.R`), held here so the control plane reads one view. A parity test reads the R
+ * file and fails when either list drifts; neither is typed in two places by hand. Parameter uncertainty and between-subject
+ * variability are two fields (`parameterUncertainty`, `betweenSubject`) and never one.
+ */
+export const VCR_MECHANISTIC_REQUIRED = frozen([
+  'modelKind', 'engine', 'engineVersion', 'modelHash', 'parameters', 'parameterUncertainty', 'betweenSubject',
+  'residual', 'covariatePopulation', 'events', 'outputs', 'vpopSelection', 'validation',
+])
+/** The five host-solver identifiers a package may declare. Declaring one does not install it (see {@link vcrMechanisticRuntimeIssues}). */
+export const VCR_MECHANISTIC_ENGINES = frozen(['mrgsolve', 'rxode2', 'nlmixr2', 'ospsuite', 'desolve'])
+
+/**
+ * Whether a mechanistic package's declared solver is installed in the runtime. A solver the runtime does not carry is an
+ * execution issue (that calculation cannot run), never a premise: no caveat cures missing code.
+ * @param {Record<string, any>} spec the package's declaration
+ * @param {Iterable<string>} installedPackages package names in the runtime lock
+ * @returns {Array<{ code: string, field: string, detail: string }>}
+ */
+export function vcrMechanisticRuntimeIssues(spec, installedPackages) {
+  const engine = String(object(spec).engine ?? '')
+  if (!engine || !VCR_MECHANISTIC_ENGINES.includes(engine)) return []
+  const installed = new Set([...installedPackages].map((name) => String(name).toLowerCase()))
+  return installed.has(engine.toLowerCase()) ? [] : [{ code: 'runtime_unavailable', field: 'engine', detail: `solver ${engine} is not installed in the runtime lock` }]
+}

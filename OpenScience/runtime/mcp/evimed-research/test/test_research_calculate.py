@@ -82,6 +82,17 @@ class ResearchCalculationTests(unittest.TestCase):
             self.assertEqual(result["status"], "error")
         self.assertEqual(Gateway.seen, [])
 
+    def test_a_status_that_also_names_the_method_is_told_what_status_takes_not_to_supply_the_id_it_already_gave(self):
+        # Live 2026-11-04: the model passed the job id and the method, and the refusal asked it to "supply the job identifier".
+        job = "replay_" + "a" * 64
+        for action in ("status", "cancel"):
+            result = self.server.call_tool("research_calculate", {"action": action, "jobId": job, "method": "comparator.evalue"})
+            self.assertEqual(result["status"], "error")
+            self.assertEqual(result["error"]["code"], "result_input_invalid")
+            self.assertIn("jobId alone", result["summary"])
+            self.assertIn("method", result["summary"])
+        self.assertEqual(Gateway.seen, [], "nothing was asked of the gateway")
+
     def test_status_and_cancel_expose_completed_partial_or_failed_outcome_without_withholding_prior_work(self):
         Gateway.answer = {"data": {"id": "calculation-job", "state": "succeeded", "resultVersionId": "rv_version", "artifacts": [{"path": "result.json"}]}}
         result = self.server.call_tool("research_calculate", {"action": "status", "jobId": "calculation-job"})

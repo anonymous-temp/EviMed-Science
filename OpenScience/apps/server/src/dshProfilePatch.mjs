@@ -27,7 +27,7 @@ import path from "node:path";
  */
 
 import { validatePluginConfig } from "./pluginService.mjs";
-import { MCP_SERVER_NAME } from "@evimed/domain";
+import { MCP_SERVER_NAME, RESEARCH_NATIVE_BUNDLES, nativeResearchToolProfileHolds } from "@evimed/domain";
 
 /** The reference name the kernel resolves the workload token through. */
 export const WORKLOAD_TOKEN_REF = "EVIMED_WORKLOAD_TOKEN";
@@ -90,7 +90,9 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} [platformSkillsDir]
  * @property {string} [personalSkillsDir]
  * @property {string[]} [disabledPlatformSkills]
+ * @property {any[]} [nativeResearchPlugins] verified frozen generation rows
  * @property {string} [extensionProjectionFile]
+ * @property {string} [vcrGatewayUrl]
  * @property {string} [extensionGatewayUrl]
  * @property {string} capsuleGatewayUrl
  * @property {string} [revisionGatewayUrl]
@@ -105,7 +107,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {{ deliveryAttemptLimit: number, maxChildrenTotal?: number, maxConcurrentChildren?: number, maxParallelChildren?: number, maxSteps: number, maxTokens: number, evidenceStaleMinutes: number, screeningBatchSize?: number }} limits
  *   `maxParallelChildren` is the retired single limit, read only as the
  *   fallback for the two that replaced it.
- * @property {{ hosted: boolean, askUser: boolean, askUserMode?: 'attended'|'timed', review: boolean, capsule: boolean, operator?: boolean, requiredEnforcement: 'full'|'partial' }} flags
+ * @property {{ hosted: boolean, askUser: boolean, askUserMode?: 'attended'|'timed', scheduleNewSessionIntervalSeconds?: number, review: boolean, capsule: boolean, operator?: boolean, requiredEnforcement: 'full'|'partial' }} flags
  * @property {readonly string[]} [disabledClientBundles] ids of `COMMUNITY_CLIENT_BUNDLE_ROWS`
  *   the deployment switched off; each becomes a `disabled: true` row
  */
@@ -300,6 +302,14 @@ export function renderProfilePatch(input) {
     `    transcriptView: ${CHAT_PRESENTATION.transcriptView}`,
     `    linkOpening: ${CHAT_PRESENTATION.linkOpening}`,
     "",
+    "# The shared developer-tools preference. The conversation's 「运行」 tab (the kernel's trajectory), the code diff",
+    "# of a turn's changes and the interactive HTML preview all read this one boolean, and the page reads a namespace",
+    "# the proxy does not forward as false. The kernel's default is true; it is written down so a changed default",
+    "# upstream does not take the tab away again. Writes stay refused.",
+    "- id: ui-settings",
+    "  config:",
+    "    enabled: true",
+    "",
     "# The preset a session gets when it names none. Since DSH 0.1.7 a preset is",
     "# a row of the composition -- the socket ships `evimed-universal` in its own",
     "# bundle patch -- and the registry that chooses among the declared ones reads",
@@ -341,6 +351,7 @@ export function renderProfilePatch(input) {
     ...presetRows(input),
     ...hostedBrowserPanelRows(input),
     ...clientBundleRows(input),
+    ...nativeResearchRows(input),
   ];
   return `${rows.join("\n")}\n`;
 }
@@ -363,6 +374,19 @@ function clientBundleRows(input) {
     "# (OPEN_SCIENCE_RUNTIME_<NAME>_ENABLED=false).",
     ...off.flatMap((id) => [`- id: ${COMMUNITY_CLIENT_BUNDLE_ROWS[/** @type {keyof typeof COMMUNITY_CLIENT_BUNDLE_ROWS} */ (id)]}`, "  disabled: true"]),
   ];
+}
+
+/** Only preinstalled fixed rows can be selected; hosted settings override package environment defaults.
+ * @param {ProfilePatchInput} input */
+function nativeResearchRows(input) {
+  const selected = input.nativeResearchPlugins ?? [];
+  if (selected.length > 5 || new Set(selected.map(row => row.extensionId)).size !== selected.length
+    || selected.some(row => !nativeResearchToolProfileHolds(row))) throw new Error('extension_contract_invalid');
+  return Object.entries(RESEARCH_NATIVE_BUNDLES).flatMap(([id, spec]) => [
+    `- id: ${spec.row}`,
+    `  disabled: ${!selected.some(row => row.extensionId === id && row.enabled)}`,
+    '  config:', '    mode: hosted', "    workspace: ''", "    engineRoot: ''", '    rscript: Rscript',
+  ]);
 }
 
 /**
@@ -452,10 +476,6 @@ export const HOSTED_DISABLED_BROWSER_PANELS = Object.freeze([
   // the item never draws; hidden anyway, because the preference it would write is the
   // one a hosted runtime must not have a button for.
   "ui-settings-session-log",
-  // 0.2.1: the "automation tasks" page, its right-sidebar tab and the header clock — cron-like prompts
-  // the kernel runs itself, over `schedule/*`. The `schedule` row behind it is disabled in the socket's
-  // bundle; the platform's own scheduled tasks are control-plane jobs, opened from its own pages.
-  "ui-schedule",
   // 0.2.1-rc.4: the "More" menus of the left sidebar, the conversation's view tabs and the right sidebar's guide, with
   // two items each: "Browse other plugins" (opens the plugin manager's page, hidden above with its service) and "Create
   // your plugin" (opens a blank session on the plugin-writing preset, which this composition does not declare). Both
@@ -711,7 +731,7 @@ export const SOCKET_PLUGIN_SWITCHES = Object.freeze({
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'disabledPlatformSkills'|'disabledClientBundles'|'extensionProjectionFile'|'extensionGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'attendanceAuthority'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[], loopxEnabled?: boolean, geoSkills?: boolean }} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'disabledPlatformSkills'|'disabledClientBundles'|'extensionProjectionFile'|'extensionGatewayUrl'|'vcrGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'attendanceAuthority'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[], loopxEnabled?: boolean, geoSkills?: boolean }} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
@@ -759,6 +779,7 @@ export function runtimeEnvironment(input) {
     EVIMED_DISABLED_CLIENT_BUNDLES: JSON.stringify(input.disabledClientBundles ?? []),
     EVIMED_EXTENSION_PROJECTION_FILE: input.extensionProjectionFile ?? '',
     EVIMED_EXTENSION_GATEWAY_URL: input.extensionGatewayUrl ?? '',
+    EVIMED_VCR_GATEWAY_URL: input.vcrGatewayUrl ?? '',
     EVIMED_CAPSULE_GATEWAY_URL: input.capsuleGatewayUrl,
     EVIMED_REVISION_AUTHORIZE_URL: input.revisionGatewayUrl ?? "",
     EVIMED_PUBLIC_SOURCE_GATEWAY_URL: input.publicSourceGatewayUrl ?? "",
@@ -777,6 +798,8 @@ export function runtimeEnvironment(input) {
     // Always sent, like every switch: the preset's `tool-ask-user` row reads it, and a name that is sent only when a caller
     // passes it would leave the row on the blocking tool while the deployment believes it chose the other.
     EVIMED_ASK_USER_MODE: input.flags.askUserMode === "timed" ? "timed" : "attended",
+    // The `schedule` row of the socket's bundle reads it; 900 is the same default as the row's own.
+    EVIMED_SCHEDULE_NEW_SESSION_INTERVAL_SECONDS: String(input.flags.scheduleNewSessionIntervalSeconds ?? 900),
     EVIMED_CAPSULE_ACTIVE: input.flags.capsule ? "1" : "0",
     EVIMED_REVIEW_ENABLED: input.flags.review ? "1" : "0",
     // Where the control plane wrote the tools this runtime does not offer

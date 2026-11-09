@@ -113,6 +113,9 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
     // The patients the study holds and the trials judged for them (「给患者找试验」), as the module's seams answer.
     packages: {
       longitudinal: overrides.longitudinal,
+      // the lab's read models (`vcrExperiments.mjs`), as the routes call them
+      experiments: { async list() { return []; }, async view(/** @type {any} */ _study, /** @type {string} */ id) { return { id }; },
+        async cancel(/** @type {any} */ _study, /** @type {string} */ id) { calls.push(["experiments.cancel", id]); return { id, status: "stopped" }; } },
       matchStore: { async candidateSubjects() { return ["P-0192"]; } },
       patientTrials: { counters: { searches: 0 }, async evaluate(/** @type {any} */ _study, /** @type {any} */ input) { calls.push(["patientTrials.evaluate", ...input.subjectKeys]); return { evaluated: [{}, {}], unavailable: [], notes: [] }; } },
     },
@@ -470,6 +473,7 @@ test("the study lead holds review_any: it countersigns every kind, which no othe
 const REQUESTS = {
   "GET /studies/:id/followup-history": ["GET", "/api/vcr/studies/std_1/followup-history", undefined],
   "GET /studies/:id/longitudinal": ["GET", "/api/vcr/studies/std_1/longitudinal", undefined],
+  "GET /studies/:id/longitudinal/:prediction/subjects": ["GET", "/api/vcr/studies/std_1/longitudinal/prd_1/subjects", undefined],
   "POST /studies/:id/longitudinal/histories": ["POST", "/api/vcr/studies/std_1/longitudinal/histories", {}],
   "POST /studies/:id/longitudinal/predictions": ["POST", "/api/vcr/studies/std_1/longitudinal/predictions", {}],
   "POST /studies/:id/longitudinal/benchmarks": ["POST", "/api/vcr/studies/std_1/longitudinal/benchmarks", {}],
@@ -493,6 +497,9 @@ const REQUESTS = {
   "POST /studies/:id/method-configurations": ["POST", "/api/vcr/studies/std_1/method-configurations", { method: "profile.snapshot", name: "Profile", scenario: {} }],
   "POST /studies/:id/jobs": ["POST", "/api/vcr/studies/std_1/jobs", { kind: "design_simulation", scenario: {} }],
   "POST /studies/:id/jobs/:job/cancel": ["POST", "/api/vcr/studies/std_1/jobs/job_1/cancel", {}],
+  "GET /studies/:id/experiments": ["GET", "/api/vcr/studies/std_1/experiments", undefined],
+  "GET /studies/:id/experiments/:experiment": ["GET", "/api/vcr/studies/std_1/experiments/cmp_1", undefined],
+  "POST /studies/:id/experiments/:experiment/cancel": ["POST", "/api/vcr/studies/std_1/experiments/cmp_1/cancel", {}],
   "POST /studies/:id/budget": ["POST", "/api/vcr/studies/std_1/budget", { cpuSeconds: 600 }],
   "POST /studies/:id/assumptions": ["POST", "/api/vcr/studies/std_1/assumptions", { key: "dropout" }],
   "POST /studies/:id/model-assessments": ["POST", "/api/vcr/studies/std_1/model-assessments", { key: "pfs_projection", influence: "low" }],
@@ -548,7 +555,7 @@ function composedHooks() {
   const ok = async () => ({ ok: true, released: [], removed: 1, job: { id: "job_1" }, created: true, export: { id: "exp_1" } });
   return {
     corrections: { exportDataset: ok, readDataset: ok, replay: ok },
-    longitudinal: {view: async () => ({records:[],providers:[]}), freezeHistory:ok, importPrediction:ok, importBenchmark:ok},
+    longitudinal: {view: async () => ({records:[],providers:[]}), subjectPage: async () => ({lines:[]}), freezeHistory:ok, importPrediction:ok, importBenchmark:ok},
     evidence: { curves: { recordSelection: async () => ({ id: "curve", origin: "human_click" }), receipts: async () => [] } },
     startStudy: ok,
     orchestrator: { runStep: ok, recomputeAfterChange: ok, requestTrialSearch: async () => ({ sessionId: "ses_1", runId: "run_1", deferred: null }) },
@@ -1259,4 +1266,22 @@ test("Start requires run and write; naming also requires the lead and the origin
   await assert.rejects(f.routes(request("POST", "/api/vcr/studies/std_1/start", { brief, name: "Renamed", requestId: "request_124" }), response()), { status: 403 });
   assert.equal(received.length, 1);
   await assert.rejects(f.routes(request("POST", "/api/vcr/studies/std_1/start", { brief, requestId: "request_124", sessionId: "foreign" }), response()), { status: 400 });
+});
+
+test("the per-person trajectory page is the owner's read: filters and the acting account reach the reader, another account's study is not found", async () => {
+  /** @type {any[]} */
+  const seen = [];
+  const { routes, as } = fixture({ roles: { member: ["viewer"] }, overrides: { longitudinal: { subjectPage: async (/** @type {any} */ study, /** @type {string} */ id, /** @type {string} */ actor, /** @type {any} */ filter) => {
+    seen.push([study.id, id, actor, filter]); return { id, lines: [], total: 0 };
+  } } } });
+  const res = response();
+  await routes(request("GET", "/api/vcr/studies/std_1/longitudinal/prd_1/subjects?status=failed&reason=unit_not_convertible&offset=50&limit=25", undefined), res);
+  assert.equal(res.status, 200);
+  assert.deepEqual(seen, [["std_1", "prd_1", OWNER, { status: "failed", reason: "unit_not_convertible", offset: 50, limit: 25 }]]);
+  // a member who may read the study but not its people's records is refused at the route (review eng P2-3)
+  as("member");
+  await assert.rejects(routes(request("GET", "/api/vcr/studies/std_1/longitudinal/prd_1/subjects", undefined), response()), { status: 403, code: "vcr_forbidden" });
+  as("stranger");
+  await assert.rejects(routes(request("GET", "/api/vcr/studies/std_1/longitudinal/prd_1/subjects", undefined), response()), { status: 404, code: "vcr_study_not_found" });
+  assert.equal(seen.length, 1, "the reader was not asked for a member without the ability or a stranger");
 });

@@ -59,6 +59,8 @@ export const VCR_SCHEMA = "evimed_vcr";
  * library's own reader asks for it by name.
  */
 export const VCR_COMPARISON_RESULT_KIND = "definition_comparison";
+/** A design-search candidate's result (`vcrExperiments.mjs`): filed per candidate, never superseded, read through its experiment. */
+export const VCR_EXPERIMENT_CANDIDATE_KIND = "experiment_candidate";
 
 /**
  * What a column of a source is *for* in the study: `VCR_FIELD_ROLES` in `@evimed/domain`
@@ -91,6 +93,7 @@ export const VCR_TABLES = Object.freeze([
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
   "model_assessments", "model_plan_versions", "published_simulations",
   "precedent_candidates", "evidence_signals", "frontier_scans", "platform_packs", "pack_promotions",
+  "evidence_second_reads", "experiments",
 ]);
 
 const migrations = new WeakMap();
@@ -981,6 +984,26 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.results (
 CREATE INDEX IF NOT EXISTS vcr_results_execution_idx ON evimed_vcr.results (execution_id);
 CREATE INDEX IF NOT EXISTS vcr_results_study_idx ON evimed_vcr.results (study_id, kind, created_at DESC);
 
+-- A virtual-lab experiment or a design-search campaign (plan T09, T10, vcrExperiments.mjs): the frozen manifest and the identity that
+-- is its hash are written once and never changed (a changed manifest is a new row), the progress is replaced by compare-and-set on
+-- \`revision\`. Its engine runs are ordinary jobs and results (kind experiment_candidate) and go with the study.
+CREATE TABLE IF NOT EXISTS evimed_vcr.experiments (
+  id         text PRIMARY KEY,
+  study_id   text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id    text NOT NULL,
+  kind       text NOT NULL CHECK (kind IN ('experiment', 'campaign')),
+  identity   text NOT NULL,
+  manifest   jsonb NOT NULL,
+  state      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status     text NOT NULL DEFAULT 'running' CHECK (status IN ('running', 'stopped')),
+  revision   integer NOT NULL DEFAULT 1,
+  origin     jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (study_id, kind, identity)
+);
+CREATE INDEX IF NOT EXISTS vcr_experiments_running_idx ON evimed_vcr.experiments (updated_at) WHERE status = 'running';
+
 -- A prediction registered before the outcome it predicts, with the timestamp
 -- and hash that prove the order (plan §5.4, AC-23).
 CREATE TABLE IF NOT EXISTS evimed_vcr.longitudinal_artifacts (
@@ -1546,6 +1569,23 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.evidence_signals (
   UNIQUE (study_id, assumption_key, assumption_version, identifier, cause)
 );
 CREATE INDEX IF NOT EXISTS vcr_evidence_signals_study_idx ON evimed_vcr.evidence_signals (study_id, state, noticed_at DESC);
+
+-- A second, independent reading of the passage one extracted value was read from (algorithm round E1, 2026-11-03): what a model, not shown the
+-- first reading, read in the same preserved text, and whether the two agreed. Beside \`evidence_items\`, which is append-only and never updated;
+-- one row per value. A read that failed leaves no row. The page shows a disagreement as a warning on the cards that cite the value; nothing
+-- reads a row to decide a pool, a card or a result.
+CREATE TABLE IF NOT EXISTS evimed_vcr.evidence_second_reads (
+  id          text PRIMARY KEY,
+  study_id    text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id     text NOT NULL,
+  evidence_id text NOT NULL REFERENCES evimed_vcr.evidence_items(id) ON DELETE CASCADE,
+  outcome     text NOT NULL CHECK (outcome IN ('agree', 'differ', 'inconclusive')),
+  reading     jsonb NOT NULL DEFAULT '{}'::jsonb,
+  model       text NOT NULL DEFAULT '',
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (evidence_id)
+);
+CREATE INDEX IF NOT EXISTS vcr_evidence_second_reads_study_idx ON evimed_vcr.evidence_second_reads (study_id, outcome);
 
 -- A knowledge pack an account's study lead curated and the platform re-checked, copied as the platform's own immutable version
 -- (flywheel F26, 2026-10-06). The copy is a row of \`knowledge_packs\` owned by the platform publisher account, so every reader of a pack

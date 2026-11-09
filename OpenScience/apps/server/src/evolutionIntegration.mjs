@@ -52,22 +52,6 @@ export class EvolutionIntegration {
     catch (error) { this.counters.failed++; this.report(error?.code ?? "evolution_event_unavailable"); return null; }
   }
 
-  /** @param {any} agenda */
-  async availableTools(agenda) {
-    const capabilities = (agenda.payload?.taskTypes ?? []).map(autopilotEpisodeCapability).filter(Boolean);
-    const tools = await this.service.availableTools();
-    return tools.filter((tool) => !tool.capabilityIds?.length || tool.capabilityIds.some((id) => capabilities.includes(id)));
-  }
-
-  /** No researcher prose is copied into a shared lead. @param {any} input */
-  async plannerStopped(input) {
-    if (isInternalProject(input.projectId)) return;
-    return this.publish({ id: `autopilot:${input.agendaId}:${input.episodeId}`, type: "autopilot-gap", userId: input.userId,
-      projectId: input.projectId, agendaId: input.agendaId, sourceEpisodeId: input.episodeId,
-      gapCode: input.resourceNeed.kind === "tool" ? "method-missing" : "connector", waiting: input.resourceNeed,
-      origin: "platform-inference" });
-  }
-
   /** @param {any} input */
   async datasetChanged(input) {
     if (isInternalProject(input.projectId)) return;

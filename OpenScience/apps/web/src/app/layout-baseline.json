@@ -1,13 +1,12 @@
 {
   "greySentences": {
-    "total": 58,
+    "total": 57,
     "files": {
       "app/extensions/ExtensionDrawer.tsx": 3,
       "app/extensions/SkillImport.tsx": 2,
       "app/routes/GalleryPage.tsx": 1,
       "app/routes/RunFilePage.tsx": 1,
       "app/routes/SimulatedWalletPage.tsx": 1,
-      "components/autopilot/TaskForm.tsx": 1,
       "components/frontier/EvidenceChallenge.tsx": 1,
       "components/frontier/EvidenceEditors.tsx": 1,
       "components/frontier/FrontierFeed.tsx": 1,

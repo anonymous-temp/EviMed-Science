@@ -61,7 +61,6 @@
  * @module evimedCreditsService
  */
 
-import { createHash } from "node:crypto";
 import {
   CAPABILITY_DISPLAY, CREDIT_NOT_CHARGED_REASONS, CREDIT_SOURCE_LABELS, RESEARCH_BILLING_VERSION_WHOLE_CREDIT,
   SIMULATED_LOW_CREDITS, SIMULATED_WALLET_LABEL, WALLET_CONTRACT_EXACT, WALLET_CONTRACT_WHOLE_CREDIT,
@@ -72,7 +71,7 @@ import { HttpError } from "./security.mjs";
 import { productId } from "./productPersistence.mjs";
 import { EvimedCreditsError } from "./evimedCreditsClient.mjs";
 import { SIMULATED_INCARNATION_SQL, SimulatedWalletRefusal, simulatedPayerId } from "./evimedCreditsSimulator.mjs";
-import { runUsageKeys, autopilotUsageScope } from "./runUsage.mjs";
+import { runUsageKeys } from "./runUsage.mjs";
 import { exactBillingPolicy, migrateEvimedCredits, researchBillingPolicy } from "./evimedCreditsPersistence.mjs";
 import { OPEN_DOMAIN_ANSWER_AGENT_ID } from "./specialistRouting.mjs";
 import { vcrRunUsageScope } from "./vcrUsageScope.mjs";
@@ -499,8 +498,7 @@ export class EvimedCreditsService {
     const userId = productId(run.userId, 'user');
     const physicalId = productId(run.runId, 'run');
     const successful = ['completed', 'succeeded'].includes(run.status);
-    const logical = successful ? autopilotUsageScope(run) : null;
-    const runId = logical ? `research_${createHash('sha256').update(`${userId}\0${logical}`).digest('hex')}` : physicalId;
+    const runId = physicalId;
     await migrateEvimedCredits(this.database);
     // A 虚拟临床研究 module run also settles what its study's own model calls cost that no run asked for
     // (`vcrUsageScope.mjs`): each request is attributed once, to whichever of the study's runs settles first.
@@ -531,7 +529,7 @@ export class EvimedCreditsService {
         billing_eligible: researcherOwned && Date.parse(request.created_at) >= Date.parse(policy.activated_at),
         not_billable_reason: !researcherOwned ? 'platform_task' : Date.parse(request.created_at) >= Date.parse(policy.activated_at) ? undefined : 'before_policy_activation' }));
       const evidence = { ...researchTaskCharge(pricedRows, { owned, mode: WALLET_CONTRACT_WHOLE_CREDIT }), physicalRunId: physicalId,
-        logicalTaskId: logical, policyActivatedAt: new Date(policy.activated_at).toISOString() };
+        policyActivatedAt: new Date(policy.activated_at).toISOString() };
       const credits = Number(researchMoneyUnits(evidence.creditsAmount) / 100_000_000n);
       if (!Number.isSafeInteger(credits) || credits > 10_000_000) throw new RangeError('Invalid task credit amount.');
       const at = this.now();
@@ -593,11 +591,9 @@ export class EvimedCreditsService {
       // cancellation, and charging one now with the old rounding would be a rule neither version has. Only runs alive
       // across the activation are ever here.
       if (!exact && decision.basis === 'user_stop') decision = { charges: false, basis: 'not_charged', reason: 'earlier_rule_stop' };
-      const logical = decision.basis === 'completed' ? autopilotUsageScope(run) : null;
-      const runId = logical ? `research_${createHash('sha256').update(`${userId}\0${logical}`).digest('hex')}` : physicalId;
+      const runId = physicalId;
       await migrateEvimedCredits(this.database);
-      // What a run used: all of it for a run that completed (a bounded run's calls sit under its dispatch id, an
-      // autopilot episode's under the logical task); only its own two ids for a stop, so a stopped attempt is never
+      // What a run used: all of it for a run that completed (a bounded run's calls sit under its dispatch id); only its own two ids for a stop, so a stopped attempt is never
       // charged for a sibling's spend; and only its own id where nothing is charged and the calls are kept as evidence.
       // A completed 虚拟临床研究 module run also settles what its study's own model calls cost that no run asked for
       // (`vcrUsageScope.mjs`): each request is attributed once, to whichever of the study's runs settles first.
@@ -627,7 +623,7 @@ export class EvimedCreditsService {
           billing_eligible: researcherOwned && Date.parse(request.created_at) >= activated,
           not_billable_reason: !researcherOwned ? 'platform_task' : Date.parse(request.created_at) >= activated ? undefined : 'before_policy_activation' }));
         const evidence = { ...researchTaskCharge(pricedRows, { owned: decision.charges, mode }), physicalRunId: physicalId,
-          logicalTaskId: logical, policyActivatedAt: new Date(policy.activated_at).toISOString() };
+          policyActivatedAt: new Date(policy.activated_at).toISOString() };
         const requested = researchMoneyUnits(evidence.creditsAmount);
         if (requested > 10_000_000n * 100_000_000n) throw new RangeError('Invalid task credit amount.');
         /** @type {{ taken: string, shortfall: string, lots: any[], balance: string | null, receiptId: string | null, at?: string }} */

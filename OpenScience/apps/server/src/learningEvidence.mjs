@@ -55,7 +55,7 @@
 
 import {
   LEARNING_CORRECTION_VERDICTS, LEARNING_EVIDENCE_VERDICTS, LEARNING_FOLLOW_UP_WINDOW_MS, LEARNING_RULE_VERDICTS, LEARNING_STEER_VERDICTS,
-  identifierShapesIn, isLearningCorrection, isResearcherOwnedWork, learningRunOutcome,
+  isLearningCorrection, methodSourceIdentifierShapesIn, isResearcherOwnedWork, learningRunOutcome,
 } from "@evimed/domain";
 import { followUpAnchors, renderFollowUpAnchors } from "@evimed/domain/follow-up-examples";
 import { readArtifactShapes } from "./artifactShapes.mjs";
@@ -124,13 +124,14 @@ const squashed = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
 
 /**
  * Whether a text carries a credential or an identifier, by shape: the checks the memory path applies to anything it would keep
- * (`identifierShapesIn`: a resident ID, a phone, a card, an e-mail, a provider key, a secret assigned to a name, a long bare token). Not a
+ * (`methodSourceIdentifierShapesIn`: a resident ID, a phone, a card, an e-mail, a provider key, a secret assigned to a name, a long bare token). Not a
  * word list — a keyword pattern over language (`password`, 密码, 我患有) refused a follow-up like 「把密码列去掉」 and decided what a
  * sentence was about, which is the model's (owner decision 2026-10-25, E6).
  * @param {unknown} text @returns {boolean}
  */
 export function unsafeToKeep(text) {
-  return identifierShapesIn(String(text ?? "")).length > 0;
+  // a learning quotation can reach a method, which must not carry a person: contact formats stay out (methodSourcePrivacy)
+  return methodSourceIdentifierShapesIn(String(text ?? "")).length > 0;
 }
 
 /**

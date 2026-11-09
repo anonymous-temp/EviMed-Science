@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import { vcrWorkspaceAreaPath } from "@/lib/vcrWorkspaceNavigation";
 import { ExternalLink, UsersRound } from "lucide-react";
 import {
   bindVcrPack,
@@ -34,7 +35,7 @@ import { Section } from "@/components/ui/Section";
 import { Tag } from "@/components/ui/Tag";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { VcrSmdDot } from "./VcrDiagrams";
-import { VCR_HOME_PATH, vcrTabPath } from "./vcrTabs";
+import { vcrTabPath } from "./vcrTabs";
 import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { numberText } from "./vcrText";
@@ -550,7 +551,7 @@ export function VcrDefinitionsPanel() {
       <EmptyState
         icon={UsersRound}
         title="还没有人群定义"
-        action={<Link to={VCR_HOME_PATH} className={buttonClasses({ variant: "secondary" })}>去研究里存入</Link>}
+        action={<Link to={vcrWorkspaceAreaPath("records")} className={buttonClasses({ variant: "secondary" })}>去研究里存入</Link>}
       />
     );
   }

@@ -9,15 +9,16 @@ description: |
   states something standing about it: what it is for, what material or data it uses, what
   has been decided, where it stands and what is open, what limits it. A question the user
   asks, a paper, trial, product or law they ask about, a document they paste, a request
-  scoped to one answer, and anything the assistant proposed are NOT a description of their
-  project: they never create a card and never change one. One deliverable asked for in a
+  scoped to one answer, or an assistant suggestion alone does not establish the project
+  as a fact. Retain useful sourced details or suggestions with attribution in NOTES. One deliverable asked for in a
   single message (an email, a slide deck, a table, a poster) is a request, not a project: a
   card is written only when the conversation is held inside one of the user's named projects,
   or the user describes a piece of work that goes on beyond this one deliverable. The
-  conditions of one request (its page count, length, price, deadline, what to leave out this
-  time) never go into a card, not even into 约束.
+  conditions of one request usually need no card entry; when useful to ongoing work, keep
+  them with their request scope and date, without turning them into a standing preference.
 
-  The card has up to six sections and every one is optional: write a section only when the
+  The following sections are examples; add headings for useful unlisted information
+  (project.ext.* remains open). Every section is optional: write a section only when the
   user stated something for it, and never fill one from the topic of a question.
   The platform may begin a conversation with one line of its own naming the project the
   conversation is held in ("（平台信息，不是用户说的话）这段对话在用户的项目「…」里进行。"). That line tells you
@@ -30,11 +31,12 @@ description: |
   - 目标: what the work is meant to find out, build or deliver.
   - 范围或对象: what the work is about or aimed at: the subject, case, product, system,
     audience or population it covers, and what the user said is outside it; the people who
-    work on it or read it, by role and working convention ("导师要先看摘要"), never by contact
-    or private detail.
+    work on it or read it, by role and working convention ("导师要先看摘要"). Preserve useful
+    personal details in PEOPLE, linked by the user's label.
   - 材料与数据: what it works on: data sources, cohorts, corpora, systems, documents, their
     period and size. Describe a dataset by what it is (source, years, size, kinds of
-    variables), not by its file or column names and never by its rows.
+    variables); useful precise names can be kept. Personal records belong in PEOPLE; sealed
+    VCR data remains excluded.
   - 已定事项: choices the user or their team made between options for this work ("先做
     Excel 导出", "use Airflow"), one line each, with the reason when they gave one. A choice
     stated and then questioned in the same message ("行，先做 Excel，CSV 放到下个迭代。这样排期

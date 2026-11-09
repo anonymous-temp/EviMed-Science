@@ -40,7 +40,7 @@ export function ConfirmDialog({
   /**
    * `danger` for what cannot be undone — deleting, stopping a running
    * analysis. `primary` for a confirmation that is only a checkpoint (running
-   * one autopilot episode now, restoring a plugin version). The button used to
+   * starting a long run now, restoring a plugin version). The button used to
    * be red for both, which spent the red budget on questions that were not
    * dangerous (review B, ConfirmDialog P1).
    */

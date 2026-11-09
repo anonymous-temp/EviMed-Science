@@ -183,7 +183,7 @@ vcr_job_apply_prognostic_model <- function(job, output_dir = NULL, ...) {
   source <- vcr_table_source(data)
   cohort <- vcr_apply_downstream_cohort(data, sc[["cohortRules"]])
   data <- cohort[["data"]]; attr(data, "vcrSource") <- source
-  vcr_require_individual(data, "Published prognostic equation", "model.prognostic_apply")
+  vcr_require_individual(data, if (vcr_job_at_least(job, "1.2.0")) "Prognostic equation" else "Published prognostic equation", "model.prognostic_apply")
   id_col <- as.character(sc[["idColumn"]])
   if (identical(id_col, "__generated_patient_id") && identical(source, "synthetic")) {
     ids <- vcr_patient_ids(job, data, nrow(data))
@@ -194,8 +194,10 @@ vcr_job_apply_prognostic_model <- function(job, output_dir = NULL, ...) {
   if (anyNA(ids) || any(!nzchar(ids)) || anyDuplicated(ids)) vcr_abort("scenario_value_invalid", "scenario.idColumn", "Exactly one baseline row per patient is required.")
   used <- vcr_used_sources(list(list(df = data, columns = unique(c(vapply(sc[["model"]][["terms"]], function(term) as.character(term[["column"]]), character(1)))))))
   applied <- vcr_apply_prognostic_equation(data, sc[["model"]], sc[["inputUnits"]])
+  # The engine receives coefficients, not verified model provenance. Older releases retain their exact labels for replay.
+  model_tier <- if (vcr_job_at_least(job, "1.2.0")) NA_character_ else "literature"
   output <- data.frame(patientId = ids, score = applied[["score"]], prediction = applied[["prediction"]],
-    reason = applied[["reasons"]], source = "predicted", modelTier = "literature", stringsAsFactors = FALSE)
+    reason = applied[["reasons"]], source = "predicted", modelTier = model_tier, stringsAsFactors = FALSE)
   measures <- list()
   if (!is.null(applied[["meanPrediction"]])) measures <- c(measures, list(vcr_measure("predicted_population_mean", applied[["meanPrediction"]], source = "predicted")))
   if (!is.null(applied[["outcomeSd"]])) measures <- c(measures, list(vcr_measure("predicted_outcome_sd", applied[["outcomeSd"]], source = "predicted")))
@@ -212,7 +214,7 @@ vcr_job_apply_prognostic_model <- function(job, output_dir = NULL, ...) {
   counts <- vcr_table_counts(data)
   list(status = "succeeded", conclusion = if (applied[["valid"]] > 0) "limited" else "not_estimable",
     notEstimableRule = if (applied[["valid"]] > 0) NULL else "nuisance_model_not_estimable", counts = counts, measures = measures,
-    diagnostics = c(list(modelScope = "published_prognostic_equation", valueSourcesUsed = vcr_value_sources_used(used), cohort = cohort[["info"]], sourceCondition = sc[["sourceCondition"]],
+    diagnostics = c(list(modelScope = if (vcr_job_at_least(job, "1.2.0")) "prognostic_equation_source_unknown" else "published_prognostic_equation", valueSourcesUsed = vcr_value_sources_used(used), cohort = cohort[["info"]], sourceCondition = sc[["sourceCondition"]],
       family = sc[["model"]][["family"]], endpoint = sc[["endpoint"]], validPredictions = applied[["valid"]], invalidPredictions = applied[["invalid"]],
       absoluteRiskAvailable = applied[["absoluteRiskAvailable"]], causalEffectIdentified = FALSE,
       coefficientUncertainty = applied[["coefficientUncertainty"]], clinicallyValidated = FALSE,

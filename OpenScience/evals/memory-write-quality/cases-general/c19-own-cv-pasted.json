@@ -2,9 +2,9 @@
   "id": "c19-own-cv-pasted",
   "class": "refuse-own-cv-pasted",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C19); every name, number and identifier is invented",
-  "expected": "Nothing is written: what a pasted CV says is the document's; polishing it states nothing about the person.",
-  "decidable": true,
-  "judge": "Is any line about the person's role, employer or publication count written from the pasted CV? None may be (owner decision: the CV is not the person's statement).",
+  "expected": "Useful CV facts may be retained with CV attribution. Pasted biographical claims are not independently verified facts.",
+  "decidable": false,
+  "judge": "Does the memory preserve useful information with the origin, limited scope, uncertainty and current-vs-historical distinction described in expected, without promoting a claim to an established fact or permission?",
   "replay": {
     "synthetic": true,
     "projectId": "default",
@@ -22,6 +22,11 @@
     ]
   },
   "expect": {
-    "atMostRecords": 0
-  }
+    "requireTextContains": [
+      "心内科",
+      "8"
+    ]
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }

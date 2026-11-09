@@ -6,11 +6,13 @@ import { promisify } from 'node:util';
 import { canonicalJson, roleAllows } from '@evimed/domain';
 import { ControlPlaneDatabase } from './controlPlaneDatabase.mjs';
 import { ProductJobs } from './productStore.mjs';
+import { migrateProductStore } from './productPersistence.mjs';
 import { ExtensionOperationGrants } from './extensionOperationGrants.mjs';
 import { ExtensionToolController, extensionExecutionIdentity } from './extensionToolController.mjs';
 import { deploymentGenerationIdentities } from './extensionDeployment.mjs';
 import { verifyExtensionGeneration, extractExtensionGenerationOperationIdentity } from './extensionGenerationService.mjs';
 import { HttpError } from './security.mjs';
+import { attachNativePreparation } from './controllerNativePreparation.mjs';
 
 const execute = promisify(execFile);
 const refused = () => new HttpError(403, 'extension_access_denied', 'The extension attempt is unavailable.');
@@ -24,6 +26,10 @@ export function createControllerExtensionComposition({ config, deployment, datab
   if (deployment.status !== 'configured' || !config.databaseUrl || typeof config.modelGatewaySigningSecret !== 'string'
     || config.modelGatewaySigningSecret.length < 32) return null;
   const database = supplied ?? new ControlPlaneDatabase({ ...config, databasePoolMax: 2 });
+  // Finish DDL before the controller accepts a leased request. Running the
+  // first migration inside preparation can deadlock against the app's job
+  // transaction, which already holds product and control table locks.
+  const ready = (async () => { await database.migrate(); await migrateProductStore(database); })();
   const jobs = new ProductJobs(database);
   const imageId = async () => {
     const result = await execute(config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', config.runtimeContainerImage],
@@ -34,7 +40,7 @@ export function createControllerExtensionComposition({ config, deployment, datab
    * @param {any} scope @param {any} request */
   const authorize = async (scope, request) => {
     try {
-      await database.migrate();
+      await ready;
       const job = (await database.query(`SELECT payload FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-execute'
         AND status='running' AND lease_expires_at>clock_timestamp() AND payload->'scope'=$2::jsonb
         AND payload->'request'=$3::jsonb AND payload->>'cancelRequested'='false' LIMIT 2`, [scope.ownerId, canonicalJson(scope), canonicalJson(request)])).rows;
@@ -108,13 +114,8 @@ export function createControllerExtensionComposition({ config, deployment, datab
     if (verified.scope.descriptorId !== expected.descriptorId || verified.scope.artifactDigest !== expected.artifactDigest) throw refused();
     return verified.scope;
   };
-  const tools = new ExtensionToolController({ admittedDescriptors: deployment.admittedDescriptors,
-    stateRoot: path.join(config.dataDir, '.openscience', 'extension-controller'),
-    dataDir: config.dataDir, runtimeDataVolume: config.runtimeDataVolume,
-    adapterRoot: fileURLToPath(new URL('../../../scripts/runtime/extensions/cowork/', import.meta.url)),
-    inputRoot: grants.root, withOperationAdmission: (_identity,work)=>database.transaction(client=>database.withTransactionClient(client,work)), dockerBin: config.runtimeContainerBin, resolveOperation,
-    resolvePreparation: async (identity, descriptor) => {
-      await database.migrate();
+  const resolvePreparation = async (identity, descriptor) => {
+      await ready;
       const located = (await database.query("SELECT user_id FROM evimed_product.jobs WHERE id=$1 AND kind='extension-prepare'", [identity.jobId])).rows[0];
       if (!located) throw refused();
       const job = await jobs.get(located.user_id, identity.jobId);
@@ -139,7 +140,13 @@ export function createControllerExtensionComposition({ config, deployment, datab
         if (!project || project.epoch !== identity.projectTarget.projectCreatedAt) throw refused();
       }
       return { identity, descriptorId: descriptor.id, artifactDigest: descriptor.artifactDigest };
-    },
+  };
+  const tools = new ExtensionToolController({ admittedDescriptors: deployment.admittedDescriptors,
+    stateRoot: path.join(config.dataDir, '.openscience', 'extension-controller'),
+    dataDir: config.dataDir, runtimeDataVolume: config.runtimeDataVolume,
+    adapterRoot: fileURLToPath(new URL('../../../scripts/runtime/extensions/cowork/', import.meta.url)),
+    inputRoot: grants.root, withOperationAdmission: (_identity,work)=>database.transaction(client=>database.withTransactionClient(client,work)), dockerBin: config.runtimeContainerBin, resolveOperation,
+    resolvePreparation,
     canRetireAttempt: async identity => {
       const row = (await database.query("SELECT user_id,status,lease_token,attempts,payload FROM evimed_product.jobs WHERE id=$1", [identity.jobId])).rows[0];
       if (!row) return true;
@@ -155,5 +162,6 @@ export function createControllerExtensionComposition({ config, deployment, datab
       return grants.inputSnapshot(operationId, job.payload.request, resourceId, job.payload.scope);
     },
   });
-  return { tools, verifyGeneration: (project, reference) => verifyExtensionGeneration(config,project,reference,{assessmentAuthority}), close: async () => { await tools.close(); if (!supplied) await database.close(); } };
+  attachNativePreparation(tools, { nativeBundles: deployment.admittedNativeBundles ?? [], imageId, resolvePreparation });
+  return { tools, ready, verifyGeneration: (project, reference) => verifyExtensionGeneration(config,project,reference,{assessmentAuthority}), close: async () => { await tools.close(); if (!supplied) await database.close(); } };
 }

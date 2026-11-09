@@ -272,12 +272,14 @@ test("the two recorded sets are whole, name the pinned image and carry no creden
 test("the recorded engine is the one the layout and the pin describe", async () => {
   // A registered user's settings read back the types of the mounted template directory — the allowlist of
   // `server.user_config_defaults`, in the order the server sorts them. The recording was made with the eight types the pin shipped
-  // with; `observations` and `recent_work` (2026-10-25) are added to the layout and to the directory, and a re-recording lists ten.
+  // with; `observations` and `recent_work` (2026-10-25) are added to the layout and to the directory, and the v0.5.3 re-recording
+  // (2026-11-05) lists those ten. `people` and `notes` (2026-11-04 plan) came after it: a recording lists a prefix of the layout that
+  // ends at one of those dates, or the whole list once it is re-recorded against the mounted twelve.
   const settings = await readJson("./fixtures/memory/admin-user-settings-get.json");
   const recorded = settings.response.result.memory_policy.memory_types;
   const eight = ["profile", "preferences", "entities", "corrections", "project_context", "decisions", "follow_ups", "project_facts"];
-  assert.ok(recorded.length === 8 || recorded.length === OPENVIKING_MEMORY_TYPES.length, "the recording lists the eight types or the layout's whole list");
-  assert.deepEqual(recorded, [...(recorded.length === 8 ? eight : OPENVIKING_MEMORY_TYPES)].sort());
+  assert.ok([8, 10, OPENVIKING_MEMORY_TYPES.length].includes(recorded.length), "the recording lists the eight types, the ten of 2026-10-25 or the layout's whole list");
+  assert.deepEqual(recorded, [...OPENVIKING_MEMORY_TYPES.slice(0, recorded.length)].sort());
   assert.deepEqual(OPENVIKING_MEMORY_TYPES.slice(0, 8), eight, "the first eight types are the recorded ones, in the layout's order");
   // The admin routes do not know a trusted user until it is registered, and say so with a 404 the client names.
   assert.equal((await readJson("./fixtures/memory/admin-user-settings-get-unregistered.json")).status, 404);
@@ -308,40 +310,36 @@ test("replace creates a file that is not there and create overwrites one that is
   assert.equal((await readJson("./fixtures/memory/content-write-create-conflict.json")).status, 200);
 });
 
-test("a write that names the hash of the file it replaces is a checked write: written, refused when the page changed or is gone, listed when skipped, refused while the directory is busy", async () => {
+test("the engine no longer checks a write-back: the hash key is refused, and the control plane's own check rests on the bytes content/download returns", async () => {
+  // v0.5.1.1 and v0.5.2 checked `expected_sha256` per batch-write operation (409 `Content revision changed`); v0.5.3 removed it (PR #6615)
+  // and forbids the key, so `OpenVikingResources.writePage` downloads the page, compares, and sends the unconditional replace.
   const recorded = (await readJson("./fixtures/knowledge/provenance.json")).fixtures;
   const read = (name) => readJson(`./fixtures/knowledge/${name}.json`);
-  const operation = recorded["content-batch-write-checked"].request_body.operations[0];
+  const refused = recorded["content-batch-write-key-refused"];
+  const operation = refused.request_body.operations[0];
   assert.equal(operation.mode, "replace");
-  // The hash is the sha256 of the bytes `content/download` returns for the page: what a mirror has in hand.
+  assert.equal(refused.status, 400);
+  const body = await read("content-batch-write-key-refused");
+  assert.equal(body.error.code, "INVALID_ARGUMENT");
+  assert.deepEqual(body.error.details.validation_errors.map((error) => [error.loc.join("."), error.type]), [["body.operations.0.expected_sha256", "extra_forbidden"]]);
+  // The hash a mirror holds is the sha256 of the bytes `content/download` returns for the page.
   const downloaded = await readFile(new URL("./fixtures/knowledge/content-download-page.bin", import.meta.url));
   assert.equal(createHash("sha256").update(downloaded).digest("hex"), operation.expected_sha256);
-  assert.equal(recorded["content-batch-write-checked"].request_body.root_uri, operation.uri.slice(0, operation.uri.lastIndexOf("/")), "the root is the page's own directory");
+  assert.equal(refused.request_body.root_uri, operation.uri.slice(0, operation.uri.lastIndexOf("/")), "the root is the page's own directory");
 
-  const written = await read("content-batch-write-checked");
-  assert.deepEqual([recorded["content-batch-write-checked"].status, written.result.updated, written.result.created], [200, [operation.uri], []]);
+  // What the control plane sends instead: no key, answered when the summary and the vector are done.
+  const sent = recorded["content-batch-write-page"].request_body.operations[0];
+  assert.deepEqual(Object.keys(sent).sort(), ["content", "mode", "uri"]);
+  const written = await read("content-batch-write-page");
+  assert.deepEqual([recorded["content-batch-write-page"].status, written.result.updated, written.result.created], [200, [sent.uri], []]);
   assert.equal(written.result.semantic_status, "complete", "wait: true answers when the summary and the vector are done");
 
-  const stale = await read("content-batch-write-checked-stale");
-  assert.deepEqual([recorded["content-batch-write-checked-stale"].status, stale.error.code], [409, "CONFLICT"]);
-  assert.match(stale.error.message, /Content revision changed/);
-  assert.equal(stale.error.details.conflict_type, undefined, "a changed page is not the busy refusal");
-
-  const skipped = await read("content-batch-write-checked-stale-skipped");
-  assert.equal(recorded["content-batch-write-checked-stale-skipped"].status, 200);
-  assert.deepEqual(skipped.result.updated, []);
-  assert.deepEqual(skipped.result.conflicts.map((conflict) => [conflict.uri, conflict.code]), [[operation.uri, "CONFLICT"]]);
-
-  const missing = await read("content-batch-write-checked-missing");
-  assert.deepEqual([recorded["content-batch-write-checked-missing"].status, missing.error.code], [409, "CONFLICT"]);
-  assert.match(missing.error.message, /Expected content no longer exists/);
-
   // While the previous write's summary and vector are processed, the next write to the same directory is refused as busy.
-  const first = await read("content-batch-write-checked-busy-first");
+  const first = await read("content-batch-write-page-busy-first");
   assert.equal(first.result.semantic_status, "queued");
   assert.ok(first.result.task_id);
-  const busy = await read("content-batch-write-checked-busy");
-  assert.deepEqual([recorded["content-batch-write-checked-busy"].status, busy.error.code, busy.error.details.conflict_type, busy.error.details.retryable], [409, "CONFLICT", "path_busy", true]);
+  const busy = await read("content-batch-write-page-busy");
+  assert.deepEqual([recorded["content-batch-write-page-busy"].status, busy.error.code, busy.error.details.conflict_type, busy.error.details.retryable], [409, "CONFLICT", "path_busy", true]);
 });
 
 test("a compile reports its tokens under meta.pipeline.tokens, and the request is the one the control plane builds", async () => {
@@ -365,5 +363,6 @@ test("a recorded memory consolidation is read into the task the native worker se
   const task = memoryConsolidationTask(fixture.response.result);
   assert.equal(task.status, "completed");
   assert.equal(task.terminal, true);
+  assert.match(String(task.target), /\/memories\/preferences$/, "v0.5.3 consolidates a memory type's directory; the memories root fails");
   assert.deepEqual([task.result.adds, task.result.updates, task.result.deletes, task.result.errors], [[], [], [], []]);
 });

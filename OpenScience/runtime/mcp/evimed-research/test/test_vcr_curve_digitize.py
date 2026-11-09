@@ -508,5 +508,114 @@ class Entry(unittest.TestCase):
         self.assertEqual(digitizer.PROTOCOL, 1)
 
 
+CURVE_A = [(0, 1.0), (2, 0.9), (5, 0.75), (9, 0.55), (14, 0.4), (20, 0.3)]
+CURVE_B = [(0, 1.0), (3, 0.95), (8, 0.8), (12, 0.7), (18, 0.55)]
+
+
+def draw_journal_figure(path, curves, *, scale=1, frame=False, padded=False):
+    """A black-and-white journal figure drawn with Pillow from known step functions, 0 to 24 months and 0 to 1.
+
+    ``scale`` is the resolution (every length is multiplied by it, so lines and frame get thicker as at 300 dpi), ``frame`` closes the
+    plot with a top and a right line, ``padded`` runs the axes past the first and last tick (and starts each curve a pixel left of the
+    zero tick, as a line cap does). ``curves`` is a list of ``(rgb, knots)``.
+    """
+    from PIL import Image, ImageDraw
+
+    width, height = 900 * scale, 700 * scale
+    image = Image.new("RGB", (width, height), (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    left, right, top, bottom = 100 * scale, 800 * scale, 100 * scale, 600 * scale
+    axis, line = 3 * scale, 3 * scale
+    ax_left, ax_bottom, ax_right = (80 * scale, 620 * scale, 820 * scale) if padded else (left, bottom, right)
+    draw.line([(ax_left, ax_bottom - (0 if padded else 0)), (ax_right, ax_bottom)], fill=(0, 0, 0), width=axis)
+    draw.line([(ax_left, top if not padded else 80 * scale), (ax_left, ax_bottom)], fill=(0, 0, 0), width=axis)
+    for tick in range(5):
+        x = left + tick * (right - left) // 4
+        draw.line([(x, ax_bottom), (x, ax_bottom + 9 * scale)], fill=(0, 0, 0), width=axis)
+    for tick in range(6):
+        y = bottom - tick * (bottom - top) // 5
+        draw.line([(ax_left, y), (ax_left - 9 * scale, y)], fill=(0, 0, 0), width=axis)
+    if frame:
+        draw.line([(left, top), (right, top)], fill=(0, 0, 0), width=4 * scale)
+        draw.line([(right, top), (right, bottom)], fill=(0, 0, 0), width=4 * scale)
+    for color, knots in curves:
+        points = []
+        for index, (time, surv) in enumerate(knots):
+            x = left + time * (right - left) / 24.0
+            y = bottom - surv * (bottom - top)
+            if index == 0 and padded:
+                x -= 1
+            if points:
+                points.append((x, points[-1][1]))
+            points.append((x, y))
+        points.append((left + 24 * (right - left) / 24.0 - 40 * scale, points[-1][1]))
+        draw.line(points, fill=color, width=line)
+    image.save(path)
+
+
+def step_value(knots, time):
+    value = 1.0
+    for knot_time, surv in knots:
+        if knot_time <= time:
+            value = surv
+    return value
+
+
+def worst_survival_error(points, knots, start=1.0, stop=19.0):
+    """Largest survival error between a digitized curve and its known step function, away from the steps themselves (0.4 months)."""
+    worst = 0.0
+    for point in points:
+        if not start <= point["time"] <= stop:
+            continue
+        if any(abs(point["time"] - knot_time) < 0.4 for knot_time, _ in knots[1:]):
+            continue
+        worst = max(worst, abs(point["surv"] - step_value(knots, point["time"])))
+    return worst
+
+
+@unittest.skipUnless(HAVE_LIBRARIES, "numpy, Pillow and scipy are the runtime image's")
+class JournalFigures(unittest.TestCase):
+    """What the figure-style rig (``evals/vcr-km-rig``) found refused or wrong for an avoidable reason, drawn from known curves."""
+
+    calibration = {"x": {"min": 0, "max": 24, "unit": "months"}, "y": {"min": 0, "max": 1, "scale": "fraction"}}
+
+    def digitize(self, name, curves, **draw_options):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / (name + ".png")
+            draw_journal_figure(path, curves, **draw_options)
+            colours = ["#%02x%02x%02x" % rgb for rgb, _ in curves]
+            return digitizer.digitize({"calibration": self.calibration, "curves": [{"color": c} for c in colours]}, path)
+
+    def test_a_grey_curve_beside_a_black_one_is_traced_not_refused(self):
+        # Black and grey is the commonest print palette. The grey stated colour used to be refused as "no coloured line" because no
+        # saturated colour was in the plot, and a grey blend model takes the black line too; the grey curve now ignores what is
+        # much darker than itself and the two pixels round it.
+        result = self.digitize("black_grey", [((0, 0, 0), CURVE_A), ((128, 128, 128), CURVE_B)])
+        self.assertEqual(result["outcome"], "digitized", result.get("message"))
+        black, grey = result["curves"]
+        self.assertLess(worst_survival_error(black["points"], CURVE_A), 0.02)
+        self.assertLess(worst_survival_error(grey["points"], CURVE_B), 0.02)
+
+    def test_a_black_curve_in_a_thick_frame_is_not_two_lines(self):
+        # At print resolution the axis and frame lines are thick enough to leave a full-width row inside the crop, which then
+        # read as a second line of the curve's own colour (curve_ambiguous). (Axis lines thicker than six pixels, a 600 dpi scan,
+        # are not recognised as axes at all: no pair of axis lines is found.)
+        for scale in (1, 2):
+            result = self.digitize("framed_%d" % scale, [((0, 0, 0), CURVE_A)], scale=scale, frame=True)
+            self.assertEqual(result["outcome"], "digitized", (scale, result.get("message")))
+            self.assertLess(worst_survival_error(result["curves"][0]["points"], CURVE_A), 0.02, scale)
+
+    def test_axes_that_run_past_the_zero_tick_never_give_a_negative_time(self):
+        # A curve starting a pixel left of the zero tick came out with a time below zero, and the control plane refuses a curve
+        # with one ("the digitizer returned a result that does not hold together"): the whole figure was lost for half a pixel.
+        result = self.digitize("padded", [((31, 119, 180), CURVE_A)], padded=True)
+        self.assertEqual(result["outcome"], "digitized", result.get("message"))
+        self.assertEqual(result["anchor"], "ticks")
+        points = result["curves"][0]["points"]
+        self.assertGreaterEqual(min(point["time"] for point in points), 0.0)
+        self.assertEqual(points[0]["time"], 0.0)
+        self.assertLess(worst_survival_error(points, CURVE_A), 0.02)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

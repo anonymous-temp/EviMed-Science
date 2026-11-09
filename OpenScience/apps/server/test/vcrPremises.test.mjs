@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES, vcrAppliedDefaults } from "@evimed/domain";
-import { finishPremises, premiseSourceOfCard, vcrPremises } from "../src/vcrPremises.mjs";
+import { finishPremises, modelUsePremises, premiseSourceOfCard, vcrPremises } from "../src/vcrPremises.mjs";
 import { presentComparatorTab, presentPopulationTab, presentTrialTab } from "../src/vcrViewsTabs.mjs";
 
 /** The two-arm survival design that states six values and nothing else. */
@@ -265,8 +265,9 @@ test("the population page and the comparator page carry the same block", () => {
   const result = { id: "res_pop", version: 1, kind: "population", conclusion: "estimable", counts: {}, measures: [], createdAt: "2026-11-01T11:00:00.000Z",
     diagnostics: { correlationVerification: "independence_assumed", columnSources: { age: "aggregate", "(correlation)": "assumed" }, parameterDraws: 1 } };
   const tab = presentPopulationTab({ ...emptyBundle(), populations: [population], results: [result], allResults: [result] });
-  assert.deepEqual(tab.premises.map((row) => row.key), ["correlation", "similarity", "sampling"]);
-  assert.equal(tab.premises[0].value, "假设相互独立");
+  // a generated population also says what it is and what a computation may do with it (T07): the two binding rows join the same block
+  assert.deepEqual(tab.premises.map((row) => row.key), ["binding:readiness", "correlation", "similarity", "sampling", "binding:origin"]);
+  assert.equal(tab.premises.find((row) => row.key === "correlation").value, "假设相互独立");
   assert.deepEqual(presentPopulationTab({ ...emptyBundle(), populations: [{ ...population, kind: "real" }], results: [result], allResults: [result] }).premises, []);
   assert.deepEqual(presentComparatorTab(emptyBundle()).premises, []);
 });
@@ -372,9 +373,20 @@ test("a sequential design carries the fixed-sample design as a marked baseline r
 
 test("the trade-off is drawn against an objective taken from alpha and the target power, and names which bound each design meets (C7)", () => {
   const tab = presentTrialTab(withAnalyticExtras({ appliedDefaults: [{ path: "analysis.power", value: 0.9 }] }));
-  assert.deepEqual(tab.objective, { source: "default", alpha: 2.5, power: 90, sided: 1, text: "I 类错误不超过 单侧 2.5%，功效不低于 90%" });
-  // The design measured 90% power (±0.4) and a type I error of 2.46% (±0.11): both bounds are met.
-  assert.deepEqual(tab.designs[0].meets, { typeOneError: "ok", power: "ok" });
+  // Live D8 (2026-11-07): the line under the chart is the requirement the designs are held to, said as one, never as a design's result.
+  assert.deepEqual(tab.objective, { source: "default", alpha: 2.5, power: 90, sided: 1, text: "要求：I 类错误不超过单侧 2.5%，功效不低于 90%" });
+  // The design measured 90% power (±0.4) and a type I error of 2.46% (±0.11). The power bound is met; the type I error is an error-control
+  // bound, judged as the lab judges one, on its conservative bound (2.46 + 1.96 × 0.11 = 2.68% > 2.5%): the simulation cannot tell. Before
+  // D8 a point estimate under the level read "met" (changed on purpose).
+  assert.deepEqual(tab.designs[0].meets, { typeOneError: "undecided", power: "ok", typeOneErrorText: "无法确定是否不超过 2.5%（模拟 2.46% ± 0.11%）" });
+  const nullOf = (/** @type {Record<string, any>} */ bundle) => bundle.allResults[0].diagnostics.stageResults.simulation_null.measures.find((/** @type {any} */ measure) => measure.name === "type_one_error");
+  const clear = withAnalyticExtras({ appliedDefaults: [{ path: "analysis.power", value: 0.9 }] });
+  Object.assign(nullOf(clear), { value: 0.0205, mcse: 0.001 });
+  assert.equal(presentTrialTab(clear).designs[0].meets.typeOneError, "ok", "met only when even its upper bound is within the level");
+  const over = withAnalyticExtras({ appliedDefaults: [{ path: "analysis.power", value: 0.9 }] });
+  Object.assign(nullOf(over), { value: 0.031, mcse: 0.0012 });
+  assert.equal(presentTrialTab(over).designs[0].meets.typeOneError, "no");
+  assert.equal(presentTrialTab(over).designs[0].meets.typeOneErrorText, "超过 2.5%（模拟 3.10% ± 0.12%）");
   // A researcher's own comparison goal is the objective when there is one, and the bounds are still read for the designs.
   const written = designBundle({ withNull: true });
   written.decisions = [{ id: "dec_1", question: "I 类错误不超过 2.5%，功效尽量高", createdAt: "2026-11-01T11:30:00.000Z", chosen: {} }];
@@ -401,4 +413,31 @@ test("D1: a hazard ratio that changes over time is the effect premise, in the wo
   // one ratio is still the ordinary effect row, and a law that does not hold together says nothing
   assert.equal(rows({ hazardRatio: 0.7, controlMedian: 12 }).find((row) => row.key === "effect").label, "真实效应（风险比）");
   assert.equal(rows({ treatmentHazardRatios: { breaks: [6], ratios: [1] }, controlMedian: 12 }).find((row) => row.key === "effect"), undefined);
+});
+
+test("a premise with no number is one sentence in the same block: never dropped, never a number, and the five-decisive limit still holds", () => {
+  const rows = vcrPremises("trial", trialInput({ modelUse: [
+    { code: "use_not_validated" }, { code: "horizon_beyond_validation" }, { code: "no_such_finding" },
+  ] }));
+  const use = rows.filter((row) => row.key.startsWith("use:"));
+  assert.deepEqual(use.map((row) => row.key), ["use:use_not_validated", "use:horizon_beyond_validation"]);
+  assert.equal(use[0].value, "这个模型没有为这种用途验证过；结果只说明按它的设定会怎样，不能当作经过验证的预测。");
+  assert.equal(use[0].decisive, true);
+  assert.ok(rows.filter((row) => row.decisive).length <= VCR_PREMISES_DECISIVE_MAX);
+  for (const row of use) assert.doesNotMatch(row.value, /use_not_validated|horizon_beyond|job|tool|[0-9]+(\.[0-9]+)?%/);
+});
+
+test("a model run outside its fitted range or horizon is told in a plain sentence, and a population or endpoint it was never validated on is as decisive as an unvalidated use", () => {
+  const found = vcrPremises("trial", trialInput({ modelUse: [
+    { code: "input_out_of_range", field: "age", limits: [18, 85] }, { code: "horizon_exceeded" },
+    { code: "population_outside_validation" }, { code: "endpoint_outside_validation" }, { code: "horizon_beyond_validation" },
+  ] })).filter((row) => row.key.startsWith("use:"));
+  const byCode = Object.fromEntries(found.map((row) => [row.key, row]));
+  assert.equal(byCode["use:input_out_of_range"].value, "有变量超出了模型声明的取值范围（18–85）；超出的部分是外推。");
+  assert.equal(byCode["use:horizon_exceeded"].value, "这次推演的时长超过了模型声明的最长时长；超出的部分是外推。");
+  assert.equal(new Set(found.map((row) => row.label)).size, found.length, "adjacent rows are labelled by what they state");
+  for (const row of found) assert.doesNotMatch(row.value + row.label, /age|[「」]/);
+  // decisive: each of these bears on whether the conclusion reaches the people it is about
+  const flags = Object.fromEntries(modelUsePremises([{ code: "population_outside_validation" }, { code: "endpoint_outside_validation" }, { code: "horizon_beyond_validation" }, { code: "no_independent_data" }]).map((row) => [row.key, row.decisive]));
+  assert.deepEqual(flags, { "use:population_outside_validation": true, "use:endpoint_outside_validation": true, "use:horizon_beyond_validation": true, "use:no_independent_data": false });
 });

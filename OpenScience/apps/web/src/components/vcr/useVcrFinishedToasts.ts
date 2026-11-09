@@ -17,11 +17,8 @@ export function vcrNoticeTarget(item: Pick<InboxItem, "source">): { studyId: str
   return { studyId, tab: isVcrTab(tab) ? tab : "overview" };
 }
 
-/** The study a route is about, when the reader is on one's page: `/app/virtual-research/:studyId[/:tab]`. */
-export function studyOfPath(pathname: string): string | null {
-  const match = /^\/app\/virtual-research\/([^/]+)/.exec(pathname);
-  return match ? decodeURIComponent(match[1]) : null;
-}
+export { studyIdFromPath as studyOfPath } from "@/lib/studyLocation";
+import { studyIdFromPath as studyOfPath } from "@/lib/studyLocation";
 
 /**
  * A finished computation, said where the reader is looking.

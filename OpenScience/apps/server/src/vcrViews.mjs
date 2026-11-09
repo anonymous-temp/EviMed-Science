@@ -89,10 +89,12 @@ export function budgetView(budget) {
 
 /** The words a job kind is shown as. */
 export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
-  fit_survival_model: "拟合人群生存模型", apply_prognostic_model: "应用已发表的预后模型",
+  fit_survival_model: "拟合人群生存模型", apply_prognostic_model: "应用预后模型", train_prognostic_model: "用自己的历史数据训练预后模型", generate_progression: "人群层面的疾病进展模拟",
   forecast_trajectories: '纵向结果预测', evaluate_forecast: '预测与观测验证', compare_forecasts: '预测情景比较', benchmark_trial_effect: '试验效果预测验证',
   profile_snapshot: "数据快照画像", build_cohort: "构建队列", generate_population: "生成情景人群",
-  literature_population: "文献人群", synthesize_population: "合成人群", population_quality: "人群质量报告", population_check: "与第二份基线表对照",
+  literature_population: "文献人群", synthesize_population: "合成人群", population_quality: "人群质量报告", population_check: "与第二份基线表对照", design_confirmatory: "确认性设计", design_dose: "剂量探索设计", design_bayesian: "贝叶斯设计", design_win_ratio: "胜率比设计",
+  bias_analysis: "未测混杂的偏倚分析", borrowing_prior: "外部对照的动态借用", stc_comparator: "模拟治疗比较（G 计算）", target_trial_emulation: "目标试验模拟",
+  network_meta: "网络荟萃分析", dose_response_meta: "剂量反应荟萃分析", effect_shrinkage: "已发表效应的经验收缩",
   generate_patients: "生成虚拟患者", generate_patients_continuous: "生成虚拟患者（连续终点）",
   generate_patients_binary: "生成虚拟患者（二分类终点）", generate_patients_longitudinal: "生成虚拟患者（纵向轨迹）", reconstruct_km: "重建生存曲线", pool_evidence: "合并证据",
   weight_comparator: "熵平衡加权", propensity_weight_comparator: "倾向评分加权", maic_comparator: "匹配调整间接比较",
@@ -464,9 +466,43 @@ export function conclusionOf({ designs, results, allResults, comparators }) {
  * @param {Record<string, any>} scenario @param {string} code
  */
 export function designName(scenario, code) {
-  const full = scenarioName(scenario);
+  const full = generatedLabel(scenario) ? describeDesign(scenario) ?? scenarioName(scenario) : scenarioName(scenario);
   const stripped = full.replace(new RegExp(`^\\s*(方案\\s*)?${code}(?![A-Za-z0-9])[\\s:：、.\\-]*`), "").trim();
   return stripped || full;
+}
+
+/** A label the platform numbered itself (「试验方案 3」, made when a conversation computed a design and named nothing), not one a person wrote. @param {Record<string, any>} scenario */
+const generatedLabel = (scenario) => { const label = text(scenario.label); return label === null || /^试验方案\s*\d*$/.test(label); };
+
+/**
+ * What a design IS, said from its configuration, for a page of several designs that were all numbered: 「非劣效，界值 10%」, 「成组序贯，2 次分析」,
+ * 「固定样本两组比较，风险比 0.75」. The label stays the design's identity (it keys the versions); only the page reads this. Null when the
+ * configuration says nothing to name it by.
+ * @param {Record<string, any>} scenario
+ */
+export function describeDesign(scenario) {
+  const configuration = object(scenario.configuration);
+  const design = object(configuration.design);
+  const hypothesis = object(configuration.hypothesis);
+  const truth = object(configuration.truth);
+  const type = String(scenario.endpointType ?? object(configuration.endpoint).type ?? "");
+  const kind = String(scenario.design ?? design.kind ?? "");
+  const percent = (/** @type {number} */ x) => `${Math.round(x * 1000) / 10}%`;
+  /** @type {string[]} */
+  const parts = [];
+  const margin = numeric(hypothesis.margin);
+  if (hypothesis.kind === "non_inferiority" && margin !== null) parts.push("非劣效", `界值 ${type === "binary" ? percent(margin) : String(margin)}`);
+  else if (kind === "group_sequential" && Array.isArray(design.informationRates)) parts.push("成组序贯", `${design.informationRates.length} 次分析`);
+  else if (/** @type {Record<string, string>} */ (VCR_TRIAL_DESIGN_LABELS_ZH)[kind]) parts.push(/** @type {Record<string, string>} */ (VCR_TRIAL_DESIGN_LABELS_ZH)[kind]);
+  else return null;
+  if (hypothesis.kind !== "non_inferiority") {
+    const hazard = numeric(truth.hazardRatio); const effect = numeric(truth.effect);
+    const control = numeric(truth.controlRate); const treated = numeric(truth.treatmentRate);
+    if (type === "time_to_event" && hazard !== null) parts.push(`风险比 ${hazard}`);
+    else if (type === "binary" && control !== null && treated !== null) parts.push(`${percent(control)} 对 ${percent(treated)}`);
+    else if (type === "continuous" && effect !== null) parts.push(`均数差 ${effect}`);
+  } else if (kind === "group_sequential") parts.push("成组序贯");
+  return parts.join("，");
 }
 
 /** What a trial scenario is called on a page. @param {Record<string, any>} scenario */
@@ -765,7 +801,7 @@ function headlineScope(headline, rows) {
 export function designsSentence(designs) {
   // A design counts as simulated when it has a number from a result — one with only its
   // configured sample size (or cost) has been written, not run.
-  const live = designs.filter((design) => !design.dominated && Object.keys(object(design.measures)).some((key) => !["sample_size", "cost"].includes(key)));
+  const live = designs.filter((design) => !design.dominated && Object.keys(object(design.measures)).some((key) => !["sample_size", "cost", "expected_sample_size_null", "first_stage_stop_probability_null"].includes(key)));
   if (!live.length) return null;
   const pick = (/** @type {string} */ key) => live.map((design) => numeric(design.measures[key]?.value)).filter((value) => value !== null);
   const assurance = pick("assurance");
@@ -1013,10 +1049,38 @@ function designMethod(stages) {
  * @param {ReturnType<typeof designStages>["stages"]} stages
  */
 function designNote(stages) {
+  const simon = simonOf(stages);
+  if (simon) return simonBoundaryText(simon.optimal);
   const boundaries = (stages.analytic?.measures ?? []).map(object).filter((measure) => /^boundary_\d+$/.test(String(measure.name)) && finite(measure.value) !== null)
     .sort((a, b) => Number(String(a.name).slice(9)) - Number(String(b.name).slice(9)));
   return boundaries.length > 1 ? `期中界值 z = ${roundTo(Number(boundaries[0].value), 2)}` : null;
 }
+
+/**
+ * Simon's two-stage design as the analytic stage returned it: the optimal design (the fewest expected patients under the null) and the minimax
+ * one (the fewest in all), the numbers a protocol states -- the stage sizes, the two boundaries, the expected size and the chance of stopping
+ * early under the null, the type I error and the power. Null when the stage is not Simon's or found no design. The minimax is left out when
+ * it is the optimal design again.
+ * @param {ReturnType<typeof designStages>["stages"]} stages
+ */
+export function simonOf(stages) {
+  const simon = object(stages.analytic?.diagnostics?.simon);
+  const read = (/** @type {unknown} */ raw) => {
+    const entry = object(raw);
+    const [n1, n, r1, r] = [entry.n1, entry.n, entry.r1, entry.r].map(finite);
+    if (n1 === null || n === null || r1 === null || r === null) return null;
+    return { n1, n, r1, r, expectedNull: finite(entry.EN0), earlyStopNull: finite(entry.PET0), typeOneError: finite(entry.alpha), power: finite(entry.power) };
+  };
+  const optimal = read(simon.optimal);
+  if (!optimal) return null;
+  const minimax = read(simon.minimax);
+  const same = minimax && minimax.n === optimal.n && minimax.n1 === optimal.n1 && minimax.r === optimal.r && minimax.r1 === optimal.r1;
+  return { optimal, minimax: same ? null : minimax };
+}
+
+/** The two boundaries of a Simon design in the words of a protocol. @param {{ n1: number, n: number, r1: number, r: number }} design */
+export const simonBoundaryText = (design) =>
+  `第一阶段 ${design.n1} 例，应答不超过 ${design.r1} 例就停止；共 ${design.n} 例，应答超过 ${design.r} 例才判有效`;
 
 /**
  * The closed form held against the simulation, when the engine computed both for the same size: the analytic value, the simulated
@@ -1185,6 +1249,17 @@ export function presentDesigns(bundle) {
       measures.cost = { value: cost, text: null, unit: "万元", source: "assumed", interval: null, mcse: null, review: null, precision: 0,
         reason: null, stale: false, detail: null };
     }
+    // A Simon design has no simulated measure to show: the size, the expected size and the chance of stopping early under the null are the
+    // closed form's own (the type I error and the power are in the first sentence). Without them its row was empty.
+    const simon = simonOf(stages);
+    if (simon && stages.analytic) {
+      const at = { kind: "trial_scenario", result: stages.analytic.result, execution: executionOfStage("analytic") ?? execution, staleMark, tab: "trial" };
+      /** @param {string} key @param {string} name @param {unknown} raw */
+      const calculated = (key, name, raw) => { if (finite(raw) !== null && !measures[key]) measures[key] = measureValue({ name, value: raw, source: "calculated" }, at); };
+      calculated("sample_size", "required_total", simon.optimal.n);
+      calculated("expected_sample_size_null", "expected_sample_size_null", simon.optimal.expectedNull);
+      calculated("first_stage_stop_probability_null", "first_stage_stop_probability_null", simon.optimal.earlyStopNull);
+    }
     const beaten = dominated.get(scenario.id) ?? null;
     const computationBasis = beaten || !stages.analytic ? null : vcrAnalyticComputationBasis({ ...stages.analytic.result, measures: stages.analytic.measures, diagnostics: stages.analytic.diagnostics }, executionOfStage("analytic"));
     return {
@@ -1195,6 +1270,7 @@ export function presentDesigns(bundle) {
       dominatedBy: beaten ? beaten.code : null,
       chosen: chosenId ? chosenId === scenario.id : chosenCode ? chosenCode === code : false,
       note: beaten ? `在比较目标的全部指标上都不优于 ${beaten.code}` : designNote(stages) ?? simulatedOnlyNote(scenario),
+      ...(simon && !beaten ? { simon } : {}),
       measures: beaten ? {} : measures,
       method: beaten ? null : designMethod(stages),
       replicates: beaten ? null : (executionOfStage("simulation")?.replicates ?? null),
@@ -1532,6 +1608,8 @@ export function presentExport(row, bundle) {
     if (!Object.hasOwn(model, 'inputVersions')) delete result.inputVersions;
     // A package frozen before the visit schedule and the regulatory log were part of it is not "changed" by their being there now.
     for (const key of ['schedule', 'regulatoryContacts']) if (!Object.hasOwn(model, key)) delete result[key];
+    // the lab block is read live by `reportModel` and is not among the inputs this comparison rebuilds: its being there or not is no change
+    delete result.lab;
     result.review = { ...result.review, records: list(result.review?.records).map((review, position) => {
       const entry = { ...review };
       if (!Object.hasOwn(model.review?.records?.[position] ?? {}, 'current')) delete entry.current;

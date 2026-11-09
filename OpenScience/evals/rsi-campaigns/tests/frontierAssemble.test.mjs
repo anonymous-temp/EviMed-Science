@@ -423,7 +423,7 @@ test('an incumbent the export carries must be one of the two forms the serving l
   delete absent.incumbent;
   for (const document of [absent, { ...exportDocument(), incumbent: null }]) await withExport(async ({ gz }) => assert.equal((await planCampaign({ exportPath: gz, month: '2026-10' })).incumbent, null), document);
   for (const incumbent of [{ revisionId: 'threshold-64-release-test.1', threshold: BASELINE }, { revisionId: 'default:abc', threshold: BASELINE }, { revisionId: 'evolution-module-policy-frontier:0', threshold: BASELINE },
-    { revisionId: 'evolution-module-policy-autopilot:3', threshold: BASELINE }, { revisionId: INCUMBENT.revisionId, threshold: 70 }, { revisionId: INCUMBENT.revisionId }, 'default']) {
+    { revisionId: 'evolution-module-policy-geo:3', threshold: BASELINE }, { revisionId: INCUMBENT.revisionId, threshold: 70 }, { revisionId: INCUMBENT.revisionId }, 'default']) {
     await withExport(async ({ gz }) => assert.rejects(planCampaign({ exportPath: gz, month: '2026-10' }), { message: 'campaign_export_incumbent_invalid' }, JSON.stringify(incumbent)), { ...exportDocument(), incumbent });
   }
   await withExport(async ({ gz }) => {

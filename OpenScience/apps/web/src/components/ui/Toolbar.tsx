@@ -1039,10 +1039,10 @@ export function Toolbar({ label = "筛选与操作", views, filters: declared = 
       {/* Keep pinned controls in the same child slot when late filters fold or unfold the row, including an open menu's focus. */}
       {declared.map((filter, index) => (!isFolded(filter)
         ? oneLine ? <div key={`${filter.kind}-${filter.label}-${index}`} className="shrink-0"><Inline filter={filter} /></div> : <Fragment key={`${filter.kind}-${filter.label}-${index}`}><Inline filter={filter} /></Fragment> : null))}
-      {filters.length > 0 && (
+      {(filters.length > 0 || (narrow && sheetLead)) && (
         // Under the tabs (a phone) the folded chip is the row's first thing, and its text is 12 px in from its ground: it steps out so
         // the text stands on the page's left edge. Without views (or on a row of its own) the whole row does (below).
-        <FoldChip filters={filters} count={folded} narrow={narrow} onReset={reset} open={foldOpen} onOpenChange={setFoldOpen}
+        <FoldChip filters={filters} count={folded} narrow={narrow} onReset={reset} open={foldOpen} onOpenChange={setFoldOpen} lead={narrow ? sheetLead : undefined}
           stepOut={Boolean(views) && narrow && declared.every((filter) => isFolded(filter))} />
       )}
       {groupsOf(filters).map(groupToken).filter((token): token is ToolbarToken => token !== null).map((token, index) => <TokenChip key={`applied-${index}`} token={token} />)}

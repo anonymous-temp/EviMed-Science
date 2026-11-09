@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Memory policy evaluation: what the platform keeps and what it never keeps, read from the memory it shows afterwards.
 
-A throwaway self-registered account says the turns of `cases.json` (keep, never keep, correct, forget, scope, a scheduled task's
-instruction) in separate conversations, waits until the memory has settled, reads it back through the memory page's own API
+A throwaway self-registered account says the turns of `cases.json` (keep, never keep, correct, forget, scope) in separate conversations, waits until the memory has settled, reads it back through the memory page's own API
 (`/api/memory/profile` and each project's `/api/memory/projects/<id>/overview`) and scores every case. Every check is a substring
 or a pattern over that text, never a model's judgement, and the statements are invented. Projects and account are deleted at
 the end. The password and the session cookie are never printed or written.
@@ -32,7 +31,7 @@ import urllib.error
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FAMILIES = ("keep", "never", "correct", "forget", "scope", "task")
+FAMILIES = ("keep", "never", "correct", "forget", "scope")
 RUNNING = {"running", "queued", "planned", "dispatching", "starting", "waiting", "pending", "scheduled", "dispatched", "verifying"}
 
 
@@ -156,8 +155,8 @@ def check_cases(document):
             problems.append(f"{name}: family {case.get('family')!r}")
         if case.get("domain") not in ("general", "medical"):
             problems.append(f"{name}: domain {case.get('domain')!r}")
-        if bool(case.get("turns")) == bool(case.get("task")):
-            problems.append(f"{name}: needs turns or a task, not both")
+        if not case.get("turns"):
+            problems.append(f"{name}: needs turns")
         for turn in case.get("turns") or []:
             if not str(turn.get("say") or "").strip():
                 problems.append(f"{name}: an empty turn")
@@ -176,7 +175,7 @@ def check_cases(document):
             problems.append(f"{name}: a {case.get('family')} case needs a keep")
         if case.get("family") == "never" and not (checks.get("never") or checks.get("neverEpisode")):
             problems.append(f"{name}: a never case needs a never")
-    chinese = sum(1 for case in cases if any(re.search(r"[一-鿿]", str(t.get("say"))) for t in case.get("turns") or []) or case.get("task"))
+    chinese = sum(1 for case in cases if any(re.search(r"[一-鿿]", str(t.get("say"))) for t in case.get("turns") or []))
     if chinese < len(cases) - 2:
         problems.append("the cases are written in Chinese (one or two may be English)")
     general = [c for c in cases if c.get("domain") == "general"]
@@ -242,17 +241,11 @@ def summarise(rows):
 
 
 # ---------------------------------------------------------------------------------------------------------------------- HTTP
-RESERVED_FOR_AUTOPILOT = "runtime_reserved_for_autopilot"
-
-
 class Api:
-    def __init__(self, base, insecure=False, reserved_wait=900, poll=15, sleep=time.sleep, clock=time.monotonic):
+    def __init__(self, base, insecure=False):
         self.base = base.rstrip("/")
         self.csrf = None
         self.project = None
-        # A case's own scheduled research reserves its project's runtime for the episode (423 runtime_reserved_for_autopilot);
-        # the episode ends by itself, so the runner waits for it instead of skipping the cases after it (R19.1 production run).
-        self.reserved_wait, self.poll, self.sleep, self.clock = reserved_wait, poll, sleep, clock
         context = ssl.create_default_context()
         if insecure:
             context.check_hostname = False
@@ -266,26 +259,21 @@ class Api:
         if self.csrf:
             headers["x-open-science-csrf"] = self.csrf
         body = None if data is None else json.dumps(data).encode()
-        deadline = self.clock() + self.reserved_wait
-        while True:
-            request = urllib.request.Request(self.base + route, body, headers, method=method)
-            try:
-                with self.opener.open(request, timeout=timeout) as response:
-                    raw = response.read()
-                    return json.loads(raw) if raw else {}
-            except urllib.error.HTTPError as error:
-                detail = error.read().decode(errors="replace")
-                if error.code == 423 and RESERVED_FOR_AUTOPILOT in detail and self.clock() < deadline:
-                    self.sleep(self.poll)
-                    continue
-                text = f"{error.code} {route.split('?')[0][:80]} {detail[:200]}"
-                if tolerate:
-                    return {"error": text}
-                raise RuntimeError(text) from None
-            except (urllib.error.URLError, TimeoutError, OSError) as error:
-                if tolerate:
-                    return {"error": f"{route.split('?')[0][:80]} {error}"}
-                raise
+        request = urllib.request.Request(self.base + route, body, headers, method=method)
+        try:
+            with self.opener.open(request, timeout=timeout) as response:
+                raw = response.read()
+                return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode(errors="replace")
+            text = f"{error.code} {route.split('?')[0][:80]} {detail[:200]}"
+            if tolerate:
+                return {"error": text}
+            raise RuntimeError(text) from None
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            if tolerate:
+                return {"error": f"{route.split('?')[0][:80]} {error}"}
+            raise
 
 
 class Session:
@@ -359,36 +347,6 @@ class Session:
             time.sleep(self.args.poll)
         return False
 
-    def run_task(self, case):
-        task = case["task"]
-        project = self.project(case.get("project", "A"))
-        body = {"projectId": project, "title": task["title"], "prompt": task["prompt"], "taskTypes": [task["taskType"]],
-                "maxEpisodeCny": 100, "dailyBudgetCny": 500, "weeklyBudgetCny": 3000,
-                "schedule": {"kind": "daily", "time": "03:00", "timeZone": "Asia/Shanghai"}}
-        agenda = self.api.call("/api/autopilot/agendas", body, tolerate=True)
-        if "error" in agenda:
-            return f"scheduled tasks unavailable: {agenda['error']}"
-        record = agenda["data"]
-        started = self.api.call(f"/api/autopilot/agendas/{record['id']}/start", {"expectedRevision": record.get("revision")}, tolerate=True)
-        if "error" in started:
-            return f"the task would not start: {started['error']}"
-        for number in range(task.get("runs", 2)):
-            run = self.api.call(f"/api/autopilot/agendas/{record['id']}/run-now", {"requestId": f"mempol-{case['id']}-{number}-{secrets.token_hex(3)}"}, tolerate=True)
-            if "error" in run:
-                return f"run-now refused: {run['error']}"
-            episode = ((run.get("data") or {}).get("episode") or {}).get("id")
-            deadline = time.time() + self.args.task_wait
-            while time.time() < deadline:
-                page = self.api.call(f"/api/autopilot/episodes?projectId={project}&agendaId={record['id']}", tolerate=True)
-                items = (page.get("data") or {}).get("items") or []
-                mine = next((item for item in items if item["id"] == episode), None)
-                if mine and str((mine.get("payload") or {}).get("status")) not in RUNNING:
-                    break
-                time.sleep(10)
-            else:
-                return f"execution {number + 1} did not finish in {self.args.task_wait} s"
-        return None
-
     def cleanup(self, delete_account, user_id, password):
         notes = []
         for project in self.created:
@@ -437,7 +395,7 @@ def run(args, log=print):
             log(f"CASE {case['id']}")
             view_fn = lambda snap: build_view(snap, session.projects)  # noqa: E731
             try:
-                skipped_reason = session.run_task(case) if case.get("task") else session.run_turns(case, view_fn)
+                skipped_reason = session.run_turns(case, view_fn)
             except Exception as error:  # noqa: BLE001 - one case's failure is that case's result
                 skipped_reason = f"the case could not be run: {str(error)[:160]}"
             if skipped_reason:
@@ -492,7 +450,6 @@ def parse(argv):
     parser.add_argument("--settle", type=int, default=900)
     parser.add_argument("--stable-polls", type=int, default=3)
     parser.add_argument("--checkpoint-wait", type=int, default=900)
-    parser.add_argument("--task-wait", type=int, default=900)
     parser.add_argument("--insecure", action="store_true", help="accept a self-signed certificate (a local stack)")
     args = parser.parse_args(argv)
     # The runner speaks as a person (memory learns only from attended turns), so it may only ever speak as an account it made

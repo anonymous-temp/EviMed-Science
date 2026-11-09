@@ -86,15 +86,6 @@ inputs:
   - platforms
   - deepMode
   - outputLanguage
-autopilot:
-  # Monitoring moved to the GEO module's own scheduler (weekly re-measurement,
-  # post-publication checks, the next batch), so this capability declares no
-  # autopilot task type. It used to declare signal-monitoring, which the
-  # allocator dispatches to adverse-event analysis — GEO monitoring never ran.
-  taskTypes: []
-  costClass: high
-  unattendedInputs:
-  - brandEntity
 estimatedMinutes:
 - 30
 - 150

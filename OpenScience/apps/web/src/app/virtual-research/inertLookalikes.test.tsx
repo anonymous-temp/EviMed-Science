@@ -46,24 +46,18 @@ describe("nothing that looks pressed is inert", () => {
   });
 
   it("the list of studies", async () => {
-    drawStudy("/app/virtual-research");
+    drawStudy("/app/virtual-research?area=records");
     await screen.findByRole("list", { name: "研究" });
     expect(inertLookalikes(document.body).map(describeEach)).toEqual([]);
   });
 
-  it("the list of studies with one chosen beside its preview: the open row is a row, and the steps' marks are marks", async () => {
-    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      return { width: this.hasAttribute("data-master-detail") ? 1100 : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
-    });
-    try {
-      drawStudy("/app/virtual-research");
-      await userEvent.click(await screen.findByRole("link", { name: /EV-201 二线/ }));
-      await screen.findByRole("list", { name: "研究进度" });
-      expect(screen.getByRole("link", { name: /EV-201 二线/ })).toHaveAttribute("aria-current", "true");
-      expect(inertLookalikes(document.body).map(describeEach)).toEqual([]);
-    } finally {
-      rect.mockRestore();
-    }
+  it("the addressed preview has usable actions and its progress marks are not inert controls", async () => {
+    drawStudy("/app/virtual-research?area=records");
+    await userEvent.click(await screen.findByRole("link", { name: /EV-201 二线/ }));
+    await screen.findByRole("list", { name: "研究进度" });
+    expect(screen.queryByRole("list", { name: "研究" })).toBeNull();
+    expect(screen.getByRole("link", { name: "打开研究" })).toHaveAttribute("href", `/app/virtual-research/${STUDY_ID}`);
+    expect(inertLookalikes(document.body).map(describeEach)).toEqual([]);
   });
 
   it("the rule sees one: a card with a selected ground that does nothing", () => {

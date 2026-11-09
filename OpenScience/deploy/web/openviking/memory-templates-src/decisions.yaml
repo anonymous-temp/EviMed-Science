@@ -8,7 +8,8 @@ description: |
   project's PROJECT_CONTEXT card and is not written here as well (a rule for what one project
   delivers — its language, format, house style — is that card's 约束). A personal working style is a
   PREFERENCE. Only a decision the user stated in a user-role message; never a suggestion the
-  assistant made, and never an option still under discussion. When the user agrees to
+  assistant made, and never an option still under discussion. Useful suggestions or open options
+  may be retained in NOTES, attributed as "assistant suggested", without claiming a decision. When the user agrees to
   something the assistant proposed ("好，就这么定"), their reply is the evidence and the memory
   states it as their decision. A choice the user states and then asks the assistant to check
   ("就这么定了，这样合理吗？") is taken, not under discussion.

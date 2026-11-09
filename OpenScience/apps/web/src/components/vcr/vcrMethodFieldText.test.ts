@@ -42,6 +42,41 @@ describe("method-context scientific field meanings", () => {
     expect(text("comparator.rmst", "tau", { timeUnit: "cycles" }).unit).toBe("cycles（自定义单位，未换算）");
     expect(text("patients.longitudinal", "truth.effect", {}, "outcome units per time unit")).toMatchObject({ label: "干预对结局变化速率的效应", unit: "结局原单位／所设时间单位" });
   });
+  it("words the win-ratio design's levels and parameters in its own terms, not as raw keys or another method's meaning", () => {
+    expect(text("design.win_ratio", "truth.events").label).toBe("事件次数层");
+    expect(text("design.win_ratio", "truth.correlation").label).toBe("三层之间的相关");
+    expect(text("design.win_ratio", "truth.death.controlRisk")).toMatchObject({ label: "对照组随访期内的死亡比例", unit: "比例" });
+    expect(text("design.win_ratio", "truth.score.threshold")).toMatchObject({ label: "平局阈值（相差不超过它算平局）", unit: "评分单位" });
+    expect(text("design.win_ratio", "design.maxPerArm").unit).toBe("人／组");
+    // Another method's field of the same name keeps its own words.
+    expect(text("design.analytic", "truth.correlation").label).toBe("原标签");
+    for (const row of vcrScenarioRows("design.win_ratio").rows) {
+      if (row.path.startsWith("truth.")) expect(text("design.win_ratio", row.path, {}, row.unit).label, row.path).toMatch(/[\u3400-\u9fff]/);
+    }
+  });
+  it("words the modestly weighted test's weight cap and the longitudinal generator's curve, dropout and rescue objects", () => {
+    for (const method of ["design.simulate", "design.grid"]) {
+      const cap = vcrScenarioRows(method).rows.find((row) => row.path.endsWith("analysis.sStar"));
+      expect(cap, method).toBeDefined();
+      const shown = text(method, cap?.path ?? "", {}, cap?.unit);
+      expect(shown.label).toBe("权重上限的倒数");
+      expect(shown.unit).toBeUndefined();
+    }
+    expect(text("patients.longitudinal", "trajectory").label).toBe("病程曲线形状");
+    expect(text("patients.longitudinal", "dropoutModel").label).toBe("脱落与结局的关系");
+    expect(text("patients.longitudinal", "rescue").label).toBe("救援用药");
+    expect(text("patients.longitudinal", "trajectory.halfTime", {}, "time units")).toMatchObject({ label: "趋平：达到一半变化所需的时间", unit: "所设时间单位" });
+    expect(text("patients.longitudinal", "rescue.perVisit", {}, "probability of starting rescue before each follow-up visit").unit).toBe("每次随访前开始用药的概率");
+    // Every new row has Chinese words and no unit is left in English.
+    for (const row of vcrScenarioRows("patients.longitudinal").rows) {
+      if (!/^(trajectory|dropoutModel|rescue)(\.|$)/.test(row.path)) continue;
+      const shown = text("patients.longitudinal", row.path, {}, row.unit);
+      expect(shown.label, row.path).toMatch(/[\u3400-\u9fff]/);
+      if (shown.unit) expect(shown.unit, row.path).toMatch(/[\u3400-\u9fff]/);
+    }
+    // The same key on another method keeps its own words.
+    expect(text("design.analytic", "rescue").label).toBe("原标签");
+  });
   it("audits every supported schema: significance labels occur only at test-alpha paths and canonical units remain visible", () => {
     for (const method of Object.keys(VCR_SCENARIO_SCHEMAS)) {
       for (const row of vcrScenarioRows(method).rows) {

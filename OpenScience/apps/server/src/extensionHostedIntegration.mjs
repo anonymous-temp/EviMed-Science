@@ -46,6 +46,7 @@ export function composeExtensionExecution({config,database,store,agentRuns,runti
   runtimeManager.markPersonalCompositeEffective = (project, candidate, proof, client) => generations.markEffective(project, candidate, proof, client);
   extensions.proofAuthority = entry => qualification.authority(entry);
   runtimeManager.extensionArtifacts = new Map(deployment.admittedDescriptors.map(item => [item.id, item]));
+  runtimeManager.extensionNativeBundles = new Map((deployment.admittedNativeBundles ?? []).map(item => [item.id, item]));
   runtimeManager.extensionGenerationResolver = async project => {
     const state = await generations.current(project), candidate = state?.payload.effective;
     if (!candidate) return null;

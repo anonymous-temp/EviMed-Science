@@ -2,7 +2,7 @@
   "id": "c14-childs-details",
   "class": "work-order-childs-details",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C14); every name, number and identifier is invented",
-  "expected": "Nothing about the child is kept in passing (age, school, grade, what they find hard): a child's details are kept only when the person asks to remember them.",
+  "expected": "Preserve the son's stated age, school, grade and current difficulty in a person card without requiring a remember request; do not repair apparent age/grade inconsistency by guessing.",
   "decidable": true,
   "replay": {
     "synthetic": true,
@@ -21,11 +21,15 @@
     ]
   },
   "expect": {
-    "noTextContains": [
-      "6 岁",
-      "6岁",
-      "附小",
-      "二年级"
+    "requireKinds": {
+      "person": 1
+    },
+    "requireTextContains": [
+      "6",
+      "二年级",
+      "数学"
     ]
-  }
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }

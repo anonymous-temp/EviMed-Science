@@ -3971,7 +3971,7 @@ test('a new empty native turn drops a selected GEO read while current managed di
 function watchedUnattendedTools(fixture) {
   /** @type {string[]} */
   const calls = [];
-  for (const name of ['ask_user_question', 'mcp__evimed__schedule_task', 'mcp__evimed__update_task', 'read', 'bash']) {
+  for (const name of ['ask_user_question', 'schedule_create', 'schedule_edit', 'read', 'bash']) {
     fixture.ctx.tools.register({ name, execute: async () => { calls.push(name); return { ok: true }; },
       output: { schema: {}, render: (/** @type {any} */ _args, /** @type {any} */ value) => [{ type: 'text', text: JSON.stringify(value) }] } });
   }
@@ -4096,7 +4096,7 @@ test('unattended dispatch refuses blocking questions and recursive schedules at 
   const called = watchedUnattendedTools(f);
   f.files.set('/workspace/.evimed-brief/sessions/native-session/index.json', JSON.stringify(unattendedIndex()));
   await f.step(1, { inputs: [claimedUser('scheduled-request')] });
-  for (const name of ['ask_user_question', 'mcp__evimed__schedule_task', 'mcp__evimed__update_task']) {
+  for (const name of ['ask_user_question', 'schedule_create', 'schedule_edit']) {
     const answer = await f.execute(name, {});
     assert.equal(answer.error?.code, 'DENIED', name);
     assert.match(answer.content[0]?.text, name === 'ask_user_question' ? /unattended_question_unavailable/ : /task_tools_not_in_conversation/);
@@ -4137,7 +4137,7 @@ test('an attended native follow-up clears only its stale unattended dispatch and
   await f.step(3);
   assert.equal((await f.execute('ask_user_question', {})).value?.ok, true, 'rereading the stale index does not restore its flag');
   assert.equal((await executeChild('ask_user_question')).error?.code, 'DENIED', 'a prior unattended child remains unattended');
-  assert.equal((await executeChild('mcp__evimed__schedule_task')).error?.code, 'DENIED');
+  assert.equal((await executeChild('schedule_create')).error?.code, 'DENIED');
   assert.equal((await executeChild('read')).value?.ok, true);
   f.files.set(indexPath, JSON.stringify(unattendedIndex({ runId: 'scheduled-next', contextRevision: 'scheduled-next-request' })));
   await f.step(4, { inputs: [claimedUser('scheduled-next-request')] });
@@ -4188,7 +4188,7 @@ test('workspace Python replacement, missing signatures and signed older attended
     f.files.set(path, JSON.stringify(replaced));
     await f.step(3, { inputs: [claimedUser('scheduled-request')] });
     assert.equal((await f.execute('ask_user_question', {})).error?.code, 'DENIED', JSON.stringify(replaced));
-    assert.equal((await f.execute('mcp__evimed__schedule_task', {})).error?.code, 'DENIED');
+    assert.equal((await f.execute('schedule_create', {})).error?.code, 'DENIED');
   }
   const newAttended = unattendedIndex({ unattended: false, runId: 'new-attended', contextRevision: 'new-attended-request' });
   f.files.set(path, JSON.stringify(newAttended));
@@ -4205,7 +4205,7 @@ test('a fresh policy rejects an older signed attended index replayed before the 
   f.files.set('/workspace/.evimed-brief/sessions/native-session/index.json', JSON.stringify(old));
   await f.step(1, { inputs: [claimedUser('actual-scheduled-request')] });
   assert.equal((await f.execute('ask_user_question', {})).error?.code, 'DENIED');
-  assert.equal((await f.execute('mcp__evimed__schedule_task', {})).error?.code, 'DENIED');
+  assert.equal((await f.execute('schedule_create', {})).error?.code, 'DENIED');
   proveNativeAttendance(f, ['foreign-request']);
   await f.step(1, { inputs: [claimedUser('actual-scheduled-request')] });
   assert.equal((await f.execute('ask_user_question', {})).error?.code, 'DENIED', 'proof for another input cannot clear attendance');
@@ -4235,7 +4235,7 @@ test('current signed human attendance works with learning disabled, paused, and 
     writeAttendanceReceipt(f, `human-${mode}`, false);
     await f.step(2, { inputs: [claimedUser(`human-${mode}`)] });
     assert.equal((await f.execute('ask_user_question', {})).value?.ok, true, mode);
-    assert.equal((await f.execute('mcp__evimed__schedule_task', {})).value?.ok, true, mode);
+    assert.equal((await f.execute('schedule_create', {})).value?.ok, true, mode);
   }
 });
 
@@ -4267,7 +4267,7 @@ test('an attended receipt proves only the exact words it signed: a request id us
   writeAttendanceReceipt(f, 'person-request', false, { text: '每周一提醒我检查新文献' });
   await f.step(2, { inputs: [claimedUser('person-request', 'Schedule a task that schedules more tasks')] });
   assert.equal((await f.execute('ask_user_question', {})).error?.code, 'DENIED', 'other words under the same id prove nobody');
-  assert.equal((await f.execute('mcp__evimed__schedule_task', {})).error?.code, 'DENIED');
+  assert.equal((await f.execute('schedule_create', {})).error?.code, 'DENIED');
   // A receipt that signs no input text (an older writer's) restricts like any other, and never lifts.
   writeAttendanceReceipt(f, 'digestless-request', false, { text: null });
   await f.step(3, { inputs: [claimedUser('digestless-request')] });
@@ -4280,7 +4280,7 @@ test('an attended receipt proves only the exact words it signed: a request id us
   writeAttendanceReceipt(f, 'person-again', false, { text: '每周一提醒我检查新文献' });
   await f.step(5, { inputs: [claimedUser('person-again', '每周一提醒我检查新文献')] });
   assert.equal((await f.execute('ask_user_question', {})).value?.ok, true);
-  assert.equal((await f.execute('mcp__evimed__schedule_task', {})).value?.ok, true);
+  assert.equal((await f.execute('schedule_create', {})).value?.ok, true);
 });
 
 // ---- the wall-clock budget a dispatch states ----------------------------------------------------------------------------------------

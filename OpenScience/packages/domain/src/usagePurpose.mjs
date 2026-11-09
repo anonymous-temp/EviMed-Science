@@ -30,12 +30,9 @@
  *  researcher's caps. `web-search` is the web-search gateway's own model call
  *  — Bailian's web search rides on a Qwen request whose prompt the retrieved
  *  pages are billed into — made for a researcher's run and charged to it like
- *  the kernel's calls, caps included. `autopilot` is the one decision a
- *  scheduled research agenda makes before each episode — what the next
- *  episode should do, from the progress so far — made on a researcher's own
- *  agenda and charged to them like the episode it chooses for, caps included;
- *  a line of its own so what choosing costs is never folded into what
- *  researching costs. `evidence` is the platform's own evidence programme
+ *  the kernel's calls, caps included. `autopilot` is a purpose of the retired
+ *  scheduler (until 2026-11-05 the decision before each of its episodes); no
+ *  dispatcher writes it now and it stays only because older ledger rows carry it. `evidence` is the platform's own evidence programme
  *  (2026-10-05, evidence-flywheel plan §5.1, B7): the topic selector and the
  *  agendas the publisher account runs in its internal `evimed-evidence`
  *  project, held by the programme's own daily budget like `frontier` and
@@ -205,11 +202,11 @@ export function isChargeableResearchRun(run) {
  */
 export function isResearcherOwnedWork(run) {
   if (!run || usagePurposeOfRun(run) !== 'kernel') return false
-  // The independent re-check of a scheduled task's claim is the platform's own work on the researcher's behalf, paid from the
-  // task's budget but never something they asked or did: it teaches nothing and is no interest of theirs.
+  // The independent re-check of a claim, which the retired scheduler ran, was the platform's own work on the researcher's behalf:
+  // never something they asked or did, it teaches nothing and is no interest of theirs.
   if (isVerificationRun(run)) return false
   const route = String(run.effectiveRouteReason ?? '')
-  const managedResearch = route.startsWith('geo:') || route.startsWith('autopilot:') || route.startsWith('vcr:')
+  const managedResearch = route.startsWith('geo:') || route.startsWith('vcr:')
   return run.automated !== true || managedResearch
 }
 
@@ -234,21 +231,19 @@ export const PLATFORM_ROUTE_PURPOSES = Object.freeze(/** @type {Record<string, U
 }))
 
 /**
- * The route reasons of the platform's own evidence programme (evidence-flywheel plan §5.1, F01, 2026-10-05): the
- * episodes of an agenda the publisher account runs in its internal `evimed-evidence` project, and the independent
- * verifications of their claims. They keep the `autopilot:` family's prefix on purpose — the completion fold, the
- * usage keys of a bounded runtime and the dispatch recovery all recognise an autopilot run by it — and add the one word
+ * The route reasons of the platform's evidence programme (evidence-flywheel plan §5.1, F01, 2026-10-05, deleted
+ * 2026-10-29), which older ledgers still carry: the episodes of an agenda the publisher account ran in its internal
+ * `evimed-evidence` project, and the independent verifications of their claims. They keep the `autopilot:` family's prefix on purpose — the readers of older ledgers
+ * recognise a scheduler run by it — and add the one word
  * that makes the run the platform's: `usagePurposeOfRun` reads these as `evidence`, so none of the programme's
  * model spend is a researcher's to pay or counts against anyone's caps, and `isChargeableResearchRun` is false for it.
- * Only the control plane's own dispatcher (`server.mjs`, for an agenda owned by the publisher in that project) writes
- * them; the public dispatch route computes its own reasons and never takes one from a caller.
+ * No dispatcher writes them any more; the public dispatch route computes its own reasons and never takes one from a caller.
  */
 export const EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX = 'autopilot:evidence:'
 export const EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON = 'autopilot-verify:evidence'
 
 /**
- * What the control plane stamps on the independent re-check of one claim of a scheduled execution (`dispatchVerification` in
- * `server.mjs`): a run of its own in a scratch workspace and a bounded runtime, with the claim and its sources as its whole
+ * What the retired scheduler's control plane stamped on the independent re-check of one claim of a scheduled execution (older ledgers carry it): a run of its own in a scratch workspace and a bounded runtime, with the claim and its sources as its whole
  * question. Deliberately not an `autopilot:` reason (the completion fold reads that prefix as an episode). The platform's own
  * programme stamps `EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON` on its own. Both are written by the control plane alone.
  */

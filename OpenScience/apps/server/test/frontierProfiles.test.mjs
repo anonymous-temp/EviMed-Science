@@ -352,3 +352,7 @@ test("the block: a demoted specialty falls in the rank, in the editor's order an
   assert.deepEqual(explore({}), [["a", "editorial"], ["b", "explore"]]);
   assert.deepEqual(explore({ oncology: 0.2 }), [["b", "editorial"], ["c", "explore"]], "the lowered item is neither the editor's pick nor the first drawn");
 });
+
+test("people and ordinary notes never feed frontier personalization", () => {
+ assert.deepEqual(frontierProfileMemories([file("people/a.md", "Patient allergy", { type: "people" }), file("notes/a.md", "Private note", { type: "notes" })]), []);
+});

@@ -31,7 +31,7 @@ import { HttpError } from './security.mjs';
  *    (a paused account or project, a trial, a conversation that read a patient record, the platform's own projects and a
  *    sub-agent are withheld), the same hourly bound, and the ledger row (`native_commits`, origin `gateway`) that the
  *    worker settles, replays and ingests.
- *  - **Never for a turn the platform started.** An automated run, a scheduled task (`autopilot:*`) and a LoopX continuation
+ *  - **Never for a turn the platform started.** An automated run, a scheduled task (route `schedule`) and a LoopX continuation
  *    start no commit. The gateway lets a commit pass while such a turn is running — what the session holds is only the
  *    person's earlier words, since a platform-started turn's own messages are never forwarded — so a continuation that
  *    starts inside the quiet does not strand the attended turn before it.

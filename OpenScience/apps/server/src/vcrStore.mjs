@@ -44,11 +44,11 @@ import {
   normalizeVcrAssessment, roleAllows, useWithin,
 } from "@evimed/domain";
 
-import { VCR_BENCHMARK_ONLY_USE_CEILING, vcrBenchmarkBasis } from "@evimed/domain";
+import { VCR_BENCHMARK_ONLY_USE_CEILING, VCR_RESULT_KIND_TABS, vcrBenchmarkBasis } from "@evimed/domain";
 import { DISPLAY_TIME_ZONE, VCR_CONVERSATION_STUDY_NAME, VCR_CONVERSATION_TASK_NAMES_ZH, VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME, VCR_STUDY_NAME_FROM_QUESTION_MAX, maskIdentifierSpans } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
-import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
+import { VCR_COMPARISON_RESULT_KIND, VCR_EXPERIMENT_CANDIDATE_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
 import { addRegulatoryContact, regulatoryContacts } from "./vcrRegulatory.mjs";
 import { carryScheduleForward, saveScheduleVisits, visitsFromRows } from "./vcrSchedule.mjs";
@@ -73,7 +73,10 @@ const list = (value) => (Array.isArray(value) ? value : []);
  */
 export const VCR_RESULT_KINDS = Object.freeze([
   "population", "patient_set", "comparator", "trial_scenario", "design_grid", "model_fit", "model_prediction",
-  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal", "population_quality", "population_check", "match_extract",
+  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal", "population_quality", "population_check", "match_extract", "design_confirmatory", "design_dose", "design_bayesian", "design_win_ratio",
+  "network_meta", "dose_response_meta", "effect_shrinkage", "prognostic_training", "progression_simulation",
+  // one evaluation of one candidate of a design-search campaign (`vcrExperiments.mjs`), screening or final; read by its campaign only
+  "experiment_candidate",
 ]);
 
 /** Which lineage node kind each research object is. */
@@ -163,9 +166,23 @@ const VCR_CONVERSATION_STUDY_CONTENT = Object.freeze([
     "source_files", "snapshots", "analysis_tables", "study_packs"]],
 ]);
 
+/**
+ * The result kinds a tab shows whose result is filed under no object of the study: a dose-finding, Bayesian, win-ratio or confirmatory design,
+ * a network or dose-response meta-analysis, a shrunk effect. A study that holds only one of these holds a result and no row of the tables above
+ * (found live 2026-11-04: a 3+3 against BOIN comparison was answered with a link to its page and was not on the module's home). The matching
+ * tab keeps its own tables: its results are written with them. The kinds are the domain's one table, quoted here as closed words.
+ * @param {string} tab @returns {string[]}
+ */
+const resultOnlyKinds = (tab) => tab === "matching" ? [] : Object.entries(/** @type {Record<string, string>} */ (VCR_RESULT_KIND_TABS))
+  .filter(([kind, held]) => held === tab && /^[a-z_]+$/.test(kind)).map(([kind]) => kind);
+
 /** The tabs of the study `s` that hold something: one `EXISTS` per table, an array of the tab names in order. */
-const VCR_HELD_TABS_SQL = `ARRAY_REMOVE(ARRAY[${VCR_CONVERSATION_STUDY_CONTENT.map(([tab, tables]) =>
-  `CASE WHEN ${tables.map((table) => `EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.${table} x WHERE x.study_id = s.id)`).join(" OR ")} THEN '${tab}' END`).join(", ")}], NULL)`;
+const VCR_HELD_TABS_SQL = `ARRAY_REMOVE(ARRAY[${VCR_CONVERSATION_STUDY_CONTENT.map(([tab, tables]) => {
+  const kinds = resultOnlyKinds(tab);
+  const tests = [...tables.map((table) => `EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.${table} x WHERE x.study_id = s.id)`),
+    ...(kinds.length ? [`EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.results x WHERE x.study_id = s.id AND x.kind IN (${kinds.map((kind) => `'${kind}'`).join(", ")}))`] : [])];
+  return `CASE WHEN ${tests.join(" OR ")} THEN '${tab}' END`;
+}).join(", ")}], NULL)`;
 
 /** The longest a study's name is, in characters: the project's own limit (`projectDisplayName`), because the project carries the same name. */
 const VCR_STUDY_NAME_MAX = 40;
@@ -323,6 +340,14 @@ function comparatorFromRow(row) {
 }
 
 /** @param {any} row */
+/** A design grid as the store reads it. @param {any} row */
+function designGridFromRow(row) {
+  if (!row) return null;
+  return { id: String(row.id), studyId: String(row.study_id), version: Number(row.version), name: text(row.name) ?? `Design grid v${row.version}`, dimensions: object(row.dimensions),
+    truthScenarios: list(row.truth_scenarios), comparisonGoal: row.comparison_goal == null ? null : object(row.comparison_goal),
+    cells: list(row.cells), createdAt: iso(row.created_at) };
+}
+
 function scenarioFromRow(row) {
   if (!row) return null;
   return {
@@ -1328,11 +1353,16 @@ export class VcrStore extends VcrStoreBase {
 
   /** @param {string} studyId */
   async latestDesignGrid(studyId) {
-    const row = await this.one(`SELECT * FROM ${VCR_SCHEMA}.design_grids WHERE study_id = $1 ORDER BY version DESC LIMIT 1`, [studyId]);
-    if (!row) return null;
-    return { id: String(row.id), studyId: String(row.study_id), version: Number(row.version), name: text(row.name) ?? `Design grid v${row.version}`, dimensions: object(row.dimensions),
-      truthScenarios: list(row.truth_scenarios), comparisonGoal: row.comparison_goal == null ? null : object(row.comparison_goal),
-      cells: list(row.cells), createdAt: iso(row.created_at) };
+    return designGridFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.design_grids WHERE study_id = $1 ORDER BY version DESC LIMIT 1`, [studyId]));
+  }
+
+  /**
+   * One grid of a study by its id, with its cells: a study holds a grid per set of defining inputs, the pages read the newest, and a
+   * link that names an earlier one reads that one.
+   * @param {string} studyId @param {string} id
+   */
+  async designGrid(studyId, id) {
+    return designGridFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.design_grids WHERE study_id = $1 AND id = $2`, [studyId, id]));
   }
 
   /**
@@ -1548,18 +1578,28 @@ export class VcrStore extends VcrStoreBase {
     return resultFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND id = $2`, [studyId, id]));
   }
 
-  /** Current results (nothing superseded), newest first. @param {string} studyId @param {string | null} [kind] */
+  /**
+   * Current results (nothing superseded), newest first. A design search files one `experiment_candidate` result per candidate and none is
+   * ever superseded, so a single campaign would push the study's own results out of the newest 200: candidates are read by the lab through
+   * their own experiment, and here only when asked for by kind. @param {string} studyId @param {string | null} [kind]
+   */
   async results(studyId, kind = null) {
     const rows = await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results
-      WHERE study_id = $1 AND superseded_by IS NULL AND ($2::text IS NULL OR kind = $2) AND kind <> $3
-      ORDER BY created_at DESC LIMIT 200`, [studyId, kind, VCR_COMPARISON_RESULT_KIND]);
+      WHERE study_id = $1 AND superseded_by IS NULL AND ($2::text IS NULL OR kind = $2) AND kind <> $3 AND ($2::text IS NOT NULL OR kind <> $4)
+      ORDER BY created_at DESC LIMIT 200`, [studyId, kind, VCR_COMPARISON_RESULT_KIND, VCR_EXPERIMENT_CANDIDATE_KIND]);
     return rows.map(resultFromRow);
   }
 
-  /** Every result of a study including superseded ones (the package's history). @param {string} studyId */
+  /** Every result of a study including superseded ones (the package's history), design-search candidates aside. @param {string} studyId */
   async allResults(studyId) {
-    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND kind <> $2 ORDER BY created_at DESC LIMIT 500`,
-      [studyId, VCR_COMPARISON_RESULT_KIND])).map(resultFromRow);
+    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND kind <> $2 AND kind <> $3 ORDER BY created_at DESC LIMIT 500`,
+      [studyId, VCR_COMPARISON_RESULT_KIND, VCR_EXPERIMENT_CANDIDATE_KIND])).map(resultFromRow);
+  }
+
+  /** The result one execution wrote, whatever its kind. @param {string} studyId @param {string} executionId */
+  async resultForExecution(studyId, executionId) {
+    return resultFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND execution_id = $2 ORDER BY created_at DESC LIMIT 1`,
+      [studyId, String(executionId)]));
   }
 
   // --- forecasts (AC-23) ---------------------------------------------------------------

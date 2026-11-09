@@ -67,7 +67,7 @@ test("an isolated tool needs its descriptor, artifact and surface, and the loade
   const next = withPackage(manifest, isolated());
   assert.deepEqual(loaderAccepts(next), { ok: true, catalogue: 1 });
   assert.deepEqual(listing(next).map((row) => [row.id, row.admitted]), [["tool-pack", true]]);
-  assert.throws(() => withPackage(manifest, { ...viewer(), surface: { client: false } }), /Only an isolated tool/);
+  assert.throws(() => withPackage(manifest, { ...viewer(), surface: { client: false } }), /cannot carry/);
 });
 
 test("a package whose digests do not bind is refused before anything is written", () => {
@@ -115,4 +115,26 @@ test("the runbook names the command and the file it writes", () => {
   const runbook = fs.readFileSync(new URL("../../../docs/WEB_OPERATIONS_RUNBOOK.md", import.meta.url), "utf8");
   assert.match(runbook, /extension-catalogue\.mjs/);
   assert.match(runbook, /extensions-deployment\.json/);
+});
+
+test("native packages are admitted only with the fixed protected bundle and artifact", async () => {
+  const { RESEARCH_NATIVE_BUNDLES, researchNativeReceiptDigest, researchNativeArtifactDigest } = await import("@evimed/domain");
+  const digest = text => `sha256:${sha(text)}`, id = "virtual-trial", spec = RESEARCH_NATIVE_BUNDLES[id];
+  const receipt = { schemaVersion: 1, id, coordinate: { kind: "npm", name: spec.name, version: "0.1.0" }, integrity: digest("package"), closureDigest: digest("closure"), row: spec.row, tools: [...spec.tools] };
+  const nativeBundle = { ...receipt, receiptDigest: researchNativeReceiptDigest(receipt, digest), adapterRevision: digest("adapter"), suiteRevision: digest("suite") };
+  delete nativeBundle.schemaVersion;
+  nativeBundle.artifactDigest = researchNativeArtifactDigest(nativeBundle, digest);
+  const artifact = { coordinate: receipt.coordinate, integrity: receipt.integrity, artifactDigest: nativeBundle.artifactDigest, adapterRevision: nativeBundle.adapterRevision, suiteRevision: nativeBundle.suiteRevision };
+  const reviewed = { catalogue: { id, title: "Trial", coordinate: receipt.coordinate, executionClass: "managed-native", integrity: receipt.integrity, settingsSchema: {} }, nativeBundle, artifact };
+  const legacy = emptyManifest(); delete legacy.admittedNativeBundles;
+  const manifest = withPackage(legacy, reviewed);
+  assert.equal(loaderAccepts(manifest).ok, true);
+  assert.equal(listing(manifest)[0].admitted, true);
+  assert.equal(manifest.surfaces.length, 0);
+  assert.equal(withoutPackage(manifest, id).admittedNativeBundles.length, 0);
+  assert.throws(() => withPackage(emptyManifest(), { ...reviewed, nativeBundle: undefined }), /nativeBundle/);
+  assert.throws(() => withPackage(emptyManifest(), { ...reviewed, surface: {} }), /cannot carry/);
+  const forged = structuredClone(reviewed); forged.nativeBundle.row = "forged";
+  assert.equal(loaderAccepts(withPackage(emptyManifest(), forged)).ok, false);
+  assert.throws(() => writeManifest(dataDir(), withPackage(emptyManifest(), forged)), /refused/);
 });

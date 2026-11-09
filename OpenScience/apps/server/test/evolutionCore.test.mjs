@@ -177,7 +177,7 @@ test('staged V2 tools cannot be discovered or wake agendas until activation', as
   await f.service.resolveWaiters({type:'tool-ready',toolId:'staged-tool'});
   assert.equal(woke,0);assert.equal((await f.service.availableTools()).length,0);
   const row=await f.service.get('staged-tool');await f.service.save('tool',row.id,{...row.payload,status:'active'},row);
-  await f.service.resolveWaiters({type:'tool-ready',toolId:'staged-tool'});assert.equal(woke,1);assert.equal((await f.service.availableTools()).length,1);
+  assert.equal((await f.service.availableTools()).length,1);
 });
 test('a concluded harm test is not restarted: later corrections are counted and do not retire', async () => {
   // This case used to assert the opposite ("completed clear epochs cannot hide later harm"): a fresh test

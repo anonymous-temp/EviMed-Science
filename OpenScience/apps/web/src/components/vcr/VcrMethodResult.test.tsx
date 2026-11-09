@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
 import { VcrMethodResult } from "./VcrMethodResult";
 import { VcrMethodResultCharts, readMethodResultSeries, readFittedSurvivalSeries } from "./VcrMethodResultCharts";
+import { ConclusionChip } from "./VcrMarks";
 import { DistributionGrid } from "./patients/DistributionGrid";
 import type { VcrGeneratedRow } from "@/lib/vcrClient";
 const api = vi.hoisted(() => ({ getVcrMethodResult: vi.fn(), getVcrPatients: vi.fn(), getVcrTrial: vi.fn() }));
@@ -123,4 +124,16 @@ it("distinguishes fitted parameter uncertainty and extrapolation from patient pe
   expect(screen.getByText("10% 参数分位")).toBeInTheDocument();
   expect(screen.queryByText(/患者.*百分位/)).toBeNull();
   expect(screen.queryByRole("group", { name: "风险人数" })).toBeNull();
+});
+
+it("shows unavailable quality and red findings without calling a completed computation a quality pass", () => {
+  render(<VcrMethodResultCharts method="population.synthpop" result={{ id: "quality-unavailable", kind: "population", conclusion: "estimable", diagnostics: { quality: { fidelity: { global: { available: false, n: 8000, designColumns: 3161, sPMSE: null, propensityAuc: null } }, bands: { sPMSE: "unknown", worstKsD: "red" } } } }} />);
+  expect(screen.getByText(/计算完成不代表质量结论/)).toBeInTheDocument();
+  expect(screen.getByText(/部分质量指标超出提示范围/)).toBeInTheDocument();
+  expect(screen.getByText(/未计算.*8000 行、3161 列/)).toBeInTheDocument();
+});
+
+it("keeps estimability visually neutral rather than implying a quality pass", () => {
+  render(<ConclusionChip state="estimable" />);
+  expect(screen.getByText("可估计")).not.toHaveClass("bg-ok-soft");
 });

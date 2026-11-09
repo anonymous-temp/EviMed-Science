@@ -1,0 +1,6 @@
+[
+  {"id":"chain-trial","intent":"native_chain","prompt":"这是合成验收任务。请通过 virtual_trial 的 describe 查询 design.analytic，使用 start 提交两组生存设计（对照中位生存12个月、HR 0.7、入组12个月、随访24个月、alpha 0.025、power 0.9），通过 read 等待结果，再调用 report 展示该任务的结果。"},
+  {"id":"chain-cohort","intent":"native_chain","prompt":"这是合成验收任务。请通过 virtual_cohort 的 describe 查询 population.scenario，用 start 生成200人的年龄队列（正态均值60、标准差9），通过 read 等待结果，再用 report 展示该任务的结果。"},
+  {"id":"chain-patient","intent":"native_chain","prompt":"这是合成验收任务。请通过 virtual_patient 的 describe 查询 patients.binary，用 start 提交完整合成场景并让平台自动创建患者集，模拟两组各40人（事件率0.30和0.45），通过 read 等待结果，再用 report 展示该任务的结果。"},
+  {"id":"chain-control","intent":"native_chain","prompt":"这是合成验收任务。请通过 synthetic_control 的 describe 查询 comparator.evalue，用 start 计算风险比3.9及置信限1.8的E-value，通过 read 等待结果，再用 report 展示该任务的结果；如需研究主体，先创建并绑定它。"}
+]

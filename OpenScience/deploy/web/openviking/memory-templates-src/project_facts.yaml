@@ -9,8 +9,8 @@ description: |
   PROJECT_CONTEXT card and is not written here as well (a rule for what one project delivers —
   its language, format, house style, a date the user set — is that card's 约束); if it is about how the user's team or
   practice works across projects, it is written here.
-  Only what the user stated in a user-role message. People appear by role and working
-  responsibility or working convention only: no contact details, no health, no private details.
+  Keep useful facts with their origin explicit. Personal details, including useful contact
+  details or health context, belong in PEOPLE under the user's label rather than being discarded.
   One file per subject; update it when the fact changes.
 
   __NEVER_KEEP__

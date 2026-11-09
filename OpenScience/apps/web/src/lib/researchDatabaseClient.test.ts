@@ -22,7 +22,7 @@ describe("research database client", () => {
     const connection = { projectId: "p1", requestId: "r1", host: "db.example.org", port: 5432, database: "research", username: "reader", password: "secret-for-test" };
     await saveResearchDatabase(connection);
     expect(request).toHaveBeenLastCalledWith("/research-databases", "POST", connection);
-    const input = { projectId: "p1", requestId: "r2", agendaId: "a1", schema: "public", table: "cohort", columns: ["age"] };
+    const input = { projectId: "p1", requestId: "r2", schema: "public", table: "cohort", columns: ["age"] };
     await snapshotResearchDatabase("conn/one", input);
     expect(request).toHaveBeenLastCalledWith("/research-databases/conn%2Fone/snapshot", "POST", input);
     await removeResearchDatabase("conn/one", "p1");
@@ -50,6 +50,6 @@ describe("research database client", () => {
       sidecar: "knowledge-base/databases/public.cohort-1a2b3c4d.import.json", version: 2,
     };
     request.mockResolvedValue(result);
-    expect(await snapshotResearchDatabase("conn-one", { projectId: "p1", requestId: "r1", agendaId: "a1", schema: "public", table: "cohort", columns: [] })).toBe(result);
+    expect(await snapshotResearchDatabase("conn-one", { projectId: "p1", requestId: "r1", schema: "public", table: "cohort", columns: [] })).toBe(result);
   });
 });

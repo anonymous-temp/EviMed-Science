@@ -77,7 +77,6 @@ export function modelGatewayFilesRefusals() {
   return filesRefusals;
 }
 const budgetMarkerPattern = /<evimed-budget-scope>([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)<\/evimed-budget-scope>/g;
-const autopilotIntentPattern = /<evimed-autopilot-episode>[a-zA-Z0-9_-]{1,160}<\/evimed-autopilot-episode>/g;
 const allowedRequestFields = new Set([
   "model",
   "messages",
@@ -152,21 +151,15 @@ function currentUserMessageIndex(messages) {
 
 function consumeBudgetScope(request, caller, config) {
   const scopes = [];
-  let requiresScope = false;
-  // An interactive runtime's token names no run. A marker or an autopilot
-  // intent in an earlier message is history: the user continuing, in the
-  // chat, a conversation a bounded run started (a GEO step, an autopilot
-  // episode, a verification). On 2026-09-25 every such follow-up failed with
-  // budget_scope_invalid. History is stripped and neither honoured nor
-  // refused: the turn is the user's, under the user's own caps. In the newest
-  // user message they belong to this turn and are held to the rules below.
+  // An interactive runtime's token names no run. A marker in an earlier message is history: the user continuing, in the
+  // chat, a conversation a bounded run started (a GEO step, a verification). On 2026-09-25 every such follow-up failed with
+  // budget_scope_invalid. History is stripped and neither honoured nor refused: the turn is the user's, under the user's
+  // own caps. In the newest user message they belong to this turn and are held to the rules below.
   const current = caller.runId == null ? currentUserMessageIndex(request.messages) : -1;
   const scrub = (value, index) => {
     if (typeof value !== "string") return value;
-    if (caller.runId == null && index !== current) return value.replace(autopilotIntentPattern, "").replace(budgetMarkerPattern, "");
-    if (autopilotIntentPattern.test(value)) requiresScope = true;
-    autopilotIntentPattern.lastIndex = 0;
-    return value.replace(autopilotIntentPattern, "").replace(budgetMarkerPattern, (_match, encoded, signature) => {
+    if (caller.runId == null && index !== current) return value.replace(budgetMarkerPattern, "");
+    return value.replace(budgetMarkerPattern, (_match, encoded, signature) => {
       scopes.push(verifiedBudgetScope(encoded, signature, caller, config));
       return "";
     });
@@ -178,9 +171,6 @@ function consumeBudgetScope(request, caller, config) {
       : message.content }));
   if (scopes.length > 1 && scopes.some((scope) => JSON.stringify(scope) !== JSON.stringify(scopes[0]))) {
     throw gatewayError(400, "model_gateway_budget_scope_conflict", "Model request contains conflicting budget scopes.");
-  }
-  if (requiresScope && scopes.length === 0) {
-    throw gatewayError(401, "model_gateway_budget_scope_required", "Autopilot model requests require a signed budget scope.");
   }
   if (scopes[0]) {
     if (caller.runId == null || ["runId", "dailyLimit", "weeklyLimit", "runLimit"].some((field) => caller[field] !== scopes[0][field])) {
@@ -244,7 +234,7 @@ function gatewayError(status, code, message) {
  * budget refused was recorded by the kernel — and shown in the kernel's own
  * conversation window — as "The model gateway is temporarily unavailable.",
  * which tells the reader to wait for something that is not coming back
- * (2026-10-05: an autopilot episode with a CNY 1.11 budget, refused on its
+ * (2026-10-05: a bounded run with a CNY 1.11 budget, refused on its
  * second call). The ledger knows which limit it was; the body says so.
  * @param {any} error
  * @returns {string | null}
@@ -936,21 +926,12 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
  * @param {{ fetchImpl?: typeof fetch, usageLedger?: any, assertModelAccess?: ((caller:any,body:any)=>Promise<void>)|null,
  *           attributeRun?: (caller: { userId: string, projectId: string, sessionId?: string | null }) => Promise<string | null>,
  *           runPurpose?: (request: { userId: string, projectId: string, runId: string | null }) => Promise<string>,
- *           runScope?: (request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null>,
  *           serviceCaller?: { identify: (token: string) => { service: string, purpose: string, maxBodyBytes: number } | null,
  *             admit: (caller: { purpose: string }, estimatedCost: number) => Promise<{ userId: string, projectId: string }> } | null }} [options]
  *   `attributeRun` names the ledger run an interactive runtime's request
  *   belongs to (see below); a bounded runtime's token already carries one.
  *   `runPurpose` says what that run's requests are for in the usage ledger:
  *   `kernel`, unless the run is source understanding (`usagePurposeOfRun`).
- *   `runScope` is the cap a token cannot carry: an interactive runtime's token
- *   is per project, so a run the control plane started *inside* it (a scheduled
- *   task's execution in the researcher's open runtime) would otherwise spend
- *   under no limit at all. Asked only for a request attributed to a running
- *   ledger run; the control plane answers from its own record of that run —
- *   never from the conversation's text — with the run id the spend is booked
- *   under and the limit it is held to, or null for an ordinary run. It may
- *   throw to refuse the call (a run whose cap cannot be read is not run).
  *   `serviceCaller` is the one caller that is neither a runtime nor an engine job: the OpenViking service, whose own
  *   extraction, summaries and Compile reach a model through this route with a static service bearer
  *   (`openVikingModelCaller.mjs`, where the reasons are). It is asked first and only on the chat route; a bearer it
@@ -960,7 +941,7 @@ export async function pipeModelGatewayBody(body, res, signal, maxBytes, onChunk 
  *   module's daily budget instead of anyone's caps.
  */
 export function createModelGatewayHandler(config, runtimeManager, {
-  fetchImpl = fetch, usageLedger = null, attributeRun = null, runPurpose = null, runScope = null, assertModelAccess = null,
+  fetchImpl = fetch, usageLedger = null, attributeRun = null, runPurpose = null, assertModelAccess = null,
   serviceCaller = null,
 } = {}) {
   const prefixes = new PromptPrefixMemo();
@@ -1091,7 +1072,7 @@ export function createModelGatewayHandler(config, runtimeManager, {
         prefixes.remember(prefixKey, estimate.promptTokens);
         const fingerprint = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
         reservationUserId = caller.userId;
-        // Which run this request is part of. A bounded runtime (autopilot,
+        // Which run this request is part of. A bounded runtime (a
         // verification, learning, source understanding) is minted per run and
         // its token says so. An interactive runtime's token is per project,
         // so every one of its requests reached the ledger with no run at all:
@@ -1113,23 +1094,8 @@ export function createModelGatewayHandler(config, runtimeManager, {
         const attributed = caller.runId == null && attributeRun && !caller.engine && !caller.service
           ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: kernelSessionId(req) }).catch(() => null)
           : null;
-        let runId = caller.runId ?? attributed ?? null;
-        let runLimit = caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0);
-        // An execution the control plane started in the researcher's own runtime: booked under its own id, held to its own
-        // cap. Keyed by the run the kernel's session belongs to, so a later turn the researcher types into the same
-        // conversation is a different run and is neither capped by it nor charged to it.
-        if (caller.runId == null && attributed && runScope && !caller.engine) {
-          // Fail closed. A run whose cap cannot be read is not run: the alternative is a scheduled execution that spends under no
-          // limit because a lookup failed, which is the one outcome this hook exists to make impossible.
-          const scope = await runScope({ userId: caller.userId, projectId: caller.projectId, runId: attributed }).catch((cause) => {
-            throw gatewayError(503, "model_gateway_run_scope_unavailable",
-              `The spending limit of this run could not be read; nothing was sent to the provider (${typeof cause?.code === "string" ? cause.code : "unreadable"}).`);
-          });
-          if (scope) {
-            runId = scope.usageRunId;
-            runLimit = Number(scope.runLimit) || 0;
-          }
-        }
+        const runId = caller.runId ?? attributed ?? null;
+        const runLimit = caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0);
         // A call with no run yet keeps its session, so the run can be named once
         // it is known (`UsageLedger.attributeSession`): the first calls of a
         // conversation typed into the kernel's own window, a subagent's first
@@ -1356,7 +1322,7 @@ const CONTROL_PLANE_NEVER_SENT = /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREA
  * made for, counted over that unit's own rows. A scheduled agenda's next-action
  * decision carries its episode's envelope there; the agenda's own daily and
  * weekly caps are never passed as `daily` and `weekly`, which sum everything
- * the account spent (`autopilotNextAction.mjs`).
+ * the account spent.
  *
  * @param {{ config: any, usageLedger: any, fetchImpl?: typeof fetch }} deps
  * @param {{ userId: string, projectId: string, runId?: string | null, purpose?: string, body: any,

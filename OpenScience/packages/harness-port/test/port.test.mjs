@@ -203,17 +203,29 @@ function fakeContext(overrides = {}) {
   services.set("tools", {
     register(/** @type {any} */ tool) { registered.set(tool.name, tool); return () => registered.delete(tool.name); },
     guard: () => () => {},
-    async execute(/** @type {any} */ input) {
-      const chain = listeners.get(SEAMS.events.toolPolicy) ?? [];
-      let index = 0;
-      const next = async () => (index < chain.length ? chain[index++](input, next) : { kind: "allow" });
-      const decision = await next();
-      if (decision?.kind === "deny") return { error: { name: "Denied", code: "DENIED" }, content: [] };
-      const tool = registered.get(input.name);
-      const value = await tool.execute(input.arguments ?? {}, { ...input, concludeTurn() {} });
-      const result = { value, content: tool.output?.render?.(input.arguments ?? {}, value) ?? [] };
-      for (const handler of listeners.get(SEAMS.events.toolObserved) ?? []) handler(input, result);
-      return result;
+    // The kernel's shape from 0.2.2: a batch of calls whose arguments are JSON text, each settled to `{ result }`. A call in any
+    // other shape is the kernel's own refusal, before a seam fires, which is what the startup probe has to be held to.
+    async execute(/** @type {any} */ batch) {
+      if (!Array.isArray(batch?.calls)) throw new Error("Tool batch execution failed");
+      /** @type {{ result: any }[]} */
+      const results = [];
+      for (const call of batch.calls) {
+        const input = { callId: call.id, name: call.name, arguments: JSON.parse(call.arguments), signal: batch.signal };
+        const chain = listeners.get(SEAMS.events.toolPolicy) ?? [];
+        let index = 0;
+        const next = async () => (index < chain.length ? chain[index++](input, next) : { kind: "allow" });
+        const decision = await next();
+        if (decision?.kind === "deny") {
+          results.push({ result: { error: { name: "Denied", code: "DENIED" }, content: [] } });
+          continue;
+        }
+        const tool = registered.get(input.name);
+        const value = await tool.execute(input.arguments, { ...input, concludeTurn() {} });
+        const result = { value, content: tool.output?.render?.(input.arguments, value) ?? [] };
+        for (const handler of listeners.get(SEAMS.events.toolObserved) ?? []) handler(input, result);
+        results.push({ result });
+      }
+      return { results };
     },
   });
   // The shape the harness actually returns: `{ mode, denied, enforcement?,
@@ -496,11 +508,11 @@ test("a policy listener that denies still delegates the rest of the waterfall", 
   // and asserting the shape here is what the case is about.
   const tools = /** @type {{ register: (tool: any) => void, execute: (input: any) => Promise<any> }} */ (ctx.get("tools"));
   tools.register(tool);
-  await tools.execute({ callId: "1", name: "allowed", arguments: {}, signal: AbortSignal.timeout(100) });
+  await tools.execute({ calls: [{ type: "tool-call", id: "1", name: "allowed", arguments: "{}" }], signal: AbortSignal.timeout(100) });
   assert.equal(seen, 1);
   assert.deepEqual(observed, ["allowed"]);
-  const denied = await tools.execute({ callId: "2", name: "blocked", arguments: {}, signal: AbortSignal.timeout(100) });
-  assert.equal(denied.error.code, "DENIED");
+  const denied = await tools.execute({ calls: [{ type: "tool-call", id: "2", name: "blocked", arguments: "{}" }], signal: AbortSignal.timeout(100) });
+  assert.equal(denied.results[0].result.error.code, "DENIED");
 });
 
 test("onTurnEnd fires only for turn/end and classifies it", () => {

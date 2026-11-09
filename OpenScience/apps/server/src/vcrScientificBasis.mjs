@@ -1,7 +1,13 @@
+import { VCR_ENGINE_METHODS } from "@evimed/domain";
+
+// The releases of design.analytic that write the integer-allocation sizing basis: the current one and the ones it replays. Read from the
+// domain, because a list typed here went stale at 1.4.0 and the page lost its sizing line without any error; 1.0.0 and 1.1.0 never wrote it.
+const SIZING_BASIS_VERSIONS = [VCR_ENGINE_METHODS["design.analytic"].version, ...VCR_ENGINE_METHODS["design.analytic"].compatibleVersions];
+
 /** The analytic sizing basis is scientific output, never arbitrary engine prose.
  * @param {any} result @param {any} [execution] */
 export function vcrAnalyticComputationBasis(result, execution = null) {
-  if ((execution?.method ?? result?.method) !== "design.analytic" || !["1.2.0", "1.3.0"].includes(String(execution?.methodVersion ?? result.methodVersion))) return null;
+  if ((execution?.method ?? result?.method) !== "design.analytic" || !SIZING_BASIS_VERSIONS.includes(String(execution?.methodVersion ?? result.methodVersion))) return null;
   const s = result.diagnostics?.sampleSize;
   if (!s || !["normal_approximation", "schoenfeld_event_probability"].includes(s.basis) || s.rounding !== "ceiling_each_arm_then_sum"
     || !["two_sample_means_normal_approximation", "two_proportion_normal_approximation", "schoenfeld_lachin_foulkes"].includes(s.formula)) return null;

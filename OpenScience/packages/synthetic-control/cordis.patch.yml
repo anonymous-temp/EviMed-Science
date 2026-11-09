@@ -1,0 +1,7 @@
+- insert:
+    - id: evimed-synthetic-control
+      name: '@evimed/synthetic-control/plugin'
+      config:
+        mode: !!js process.env.VCR_PLUGIN_MODE || 'hosted'
+        workspace: !!js process.env.VCR_PLUGIN_WORKSPACE || ''
+        engineRoot: !!js process.env.VCR_ENGINE_ROOT || ''

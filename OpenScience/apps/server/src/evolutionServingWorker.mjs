@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { HttpError } from './security.mjs';
 export const EVOLUTION_SERVING_EVENT_TYPES = Object.freeze(['researcher-feedback','runtime-gap','autopilot-gap','dataset-ready','tool-ready']);
 /** The serving continuation of published state: events, decision expiries, the operators' digest, a retirement's completion and the
- * metrics-only month; and a self-check, an already published tool run in the isolated executor on a researcher's dataset. */
+ * metrics-only month. */
 export const EVOLUTION_SERVING_LIGHT_KINDS = Object.freeze(['evolution-event','evolution-decision','evolution-digest','evolution-maintain']);
 export const EVOLUTION_SERVING_SELF_CHECK_KIND = 'evolution-self-check';
 /** A request a retry cannot change: the job fails at once. */
@@ -53,13 +53,6 @@ export function createEvolutionServingWorker({service,integration,decisions=null
    for(const metricsMonth of [...months].sort())if(!await service.get(`evolution-monthly-metrics-${metricsMonth}`))await service.enqueue('maintain',{metricsMonth,metricsOnly:true},`serving-metrics:${metricsMonth}`);
   });
  }
- /** At most `evolutionMaxConcurrency` self-checks run across the deployment's processes; each holds the isolated executor. @param {any} client */
- const selfCheckAdmission=async client=>{
-  if(!await canRun(client))return false;
-  await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-evolution-self-check-admission'))");
-  const live=await client.query("SELECT count(*)::integer AS count FROM evimed_product.jobs WHERE kind=$1 AND status='running' AND lease_expires_at>clock_timestamp()",[EVOLUTION_SERVING_SELF_CHECK_KIND]);
-  return Number(live.rows[0]?.count??0)<(config.evolutionMaxConcurrency??1);
- };
  /** @param {any} job */
  async function execute(job) {
   const p=job.payload;
@@ -79,11 +72,6 @@ export function createEvolutionServingWorker({service,integration,decisions=null
    // A monthly pass queued before cutover keeps its identity and runs as serving does: the figures only.
    return {metricsId:(await maintenance.monthly(p))?.id??null};
   }
-  if(job.kind===EVOLUTION_SERVING_SELF_CHECK_KIND){
-   const result=await selfCheck.run(p);
-   const completed=await service.completeSelfCheck(p,result);
-   return {selfCheckId:result?.id??null,status:result?.payload?.status??null,resumed:completed?.resumed===true};
-  }
   const row=await service.get(p.eventId,p.eventOwnerId);
   if(!row||['processed','closed'].includes(row.payload.status))return {eventId:p.eventId};
   if(!EVOLUTION_SERVING_EVENT_TYPES.includes(row.payload.type)){
@@ -102,8 +90,7 @@ export function createEvolutionServingWorker({service,integration,decisions=null
   // A housekeeping block that failed is tried again on the next poll; it never stops the claims.
   try{await housekeeping();}catch(error){counters.housekeepingFailed++;logger.error('Evolution serving housekeeping failed',{code:error?.code??'evolution_serving_housekeeping_failed'});}
   const ownerId=await service.owner();
-  const job=await service.jobs.claim([...EVOLUTION_SERVING_LIGHT_KINDS],workerId,{ownerId,leaseMs:leaseMs(),admission:canRun})
-   ??(selfCheck?await service.jobs.claim([EVOLUTION_SERVING_SELF_CHECK_KIND],workerId,{ownerId,leaseMs:leaseMs(),admission:selfCheckAdmission}):null);
+  const job=await service.jobs.claim([...EVOLUTION_SERVING_LIGHT_KINDS],workerId,{ownerId,leaseMs:leaseMs(),admission:canRun});
   if(!job)return null;
   let lost=false;
   const heartbeat=setInterval(()=>{service.jobs.renew(job.userId,job.id,job.leaseToken,leaseMs()).then(owned=>{if(!owned)lost=true;}).catch(()=>{lost=true;});},Math.max(1000,Math.floor(leaseMs()/4)));

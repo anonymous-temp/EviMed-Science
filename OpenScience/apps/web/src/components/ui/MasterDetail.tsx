@@ -3,8 +3,8 @@ import { cn } from "@/lib/cn";
 import { Drawer } from "@/components/ui/Drawer";
 
 /**
- * A list on the left and one record on the right (R19, plan §2.1 T2) — the scheduled tasks, the method library, the assumption
- * cards. Extracted from `AutopilotPage`, which was the one page that did it right: the split is decided by the room *the page
+ * A list on the left and one record on the right (R19, plan §2.1 T2) — the method library, the assumption
+ * cards. The split is decided by the room *the page
  * itself* has (the shell's sidebar takes up to 340 px of the window), not by the window, and the list column and the detail
  * each have their own scroll.
  *
@@ -15,10 +15,10 @@ import { Drawer } from "@/components/ui/Drawer";
  *    and a drawer never holds a conversation — `DESIGN.md` 「页面结构」 rule 2).
  *
  * `list` and `detail` may be functions of `{ split }`, for the page that words something differently beside the list than
- * without it (a 「回到定时任务」 link that is only needed when the list is not beside the record).
+ * without it (a 「回到列表」 link that is only needed when the list is not beside the record).
  *
  * `modeAttribute` names a data attribute that carries `split` / `single` on the root, for pages whose tests and walk probes
- * already address the layout by their own name (`data-autopilot-layout`). `data-master-detail` is always there.
+ * already address the layout by their own name (`data-knowledge-layout`). `data-master-detail` is always there.
  *
  * ```tsx
  * <MasterDetail
@@ -78,7 +78,7 @@ export function MasterDetail({
   detailLabel: string;
   /**
    * The list column's width, 320–360 px, and the least the detail is given: the two together are the page's own width from which
-   * they sit side by side — 340 + 684 = 1024 by default. (A conversation needs 640 beside a 300 list: `AutopilotPage` says so.)
+   * they sit side by side — 340 + 684 = 1024 by default.
    */
   listWidth?: number;
   detailMin?: number;

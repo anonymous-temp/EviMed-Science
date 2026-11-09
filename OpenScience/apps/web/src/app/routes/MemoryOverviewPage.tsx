@@ -10,7 +10,8 @@ import { MapDrawer } from "@/components/memory/map/MapDrawer";
 import { derivedTopics, narrowMap } from "@/components/memory/map/mapModel";
 import { useStarAllowed } from "@/components/memory/map/star/starSupport";
 import { useMemoryMap } from "@/components/memory/map/useMemoryMap";
-import { MemoryFrame, memoryTabAddress } from "@/components/memory/MemoryFrame";
+import { MemoryFrame } from "@/components/memory/MemoryFrame";
+import { memoryTabAddress } from "@/components/memory/memoryTabs";
 import { headerControls, MemoryHeaderDrawers, type HeaderDrawer } from "@/components/memory/MemoryHeaderActions";
 import { ChangeChart } from "@/components/memory/overview/ChangeChart";
 import { ChangesTable } from "@/components/memory/overview/ChangesTable";
@@ -293,10 +294,9 @@ function Overview() {
   );
 
   const pack = drawer.value?.startsWith("pack:") ? received.data?.find((item) => `pack:${item.id}` === drawer.value) ?? null : null;
-  const tabCounts = { self: about ?? undefined, methods: methodCount ?? undefined, received: packs?.enabled };
   return (
     <MemoryFrame
-      tab="overview" overview counts={tabCounts} toolbar={toolbar}
+      tab="overview" toolbar={toolbar}
       controls={headerControls({ onChanged: reloadAll, onDrawer: setHeader })}
       headline={headline ? { parts: headline, id: "memory-overview-headline" } : undefined}
     >

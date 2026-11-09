@@ -180,3 +180,8 @@ describe("the replay", () => {
     expect(markAt({ state: "current" }, Date.parse("2020-01-01T00:00:00.000Z"))).toBe("current");
   });
 });
+
+it("gives people and notes explicit legend families", () => {
+ expect(familyOf({type:"memory",subtype:"person"})).toBe("person");
+ expect(familyOf({type:"memory",subtype:"note"})).toBe("note");
+});

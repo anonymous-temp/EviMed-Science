@@ -73,6 +73,9 @@ export function ReportReader({
   /** An enclosing inspector owns the combined export menu and print action. */
   externalExportActions?: boolean;
 }) {
+  // Pictures a report names by relative path are read from its own folder in this workspace. A historical version or a scoped
+  // reader has bytes of its own and never reaches for the live workspace.
+  const assetBase = useMemo(() => (immutableVersion || onDownload ? undefined : { path, root }), [immutableVersion, onDownload, path, root]);
   const { document: matrix, verification, verified, verificationState, retry: retryChecks } = useClaimMatrix(path, root, !immutableVersion, immutableVersion);
   const [view, setView] = useState<"report" | "matrix">("report");
   const wide = useWide();
@@ -208,7 +211,7 @@ export function ReportReader({
         </section>
       )}
       <div ref={articleRef} data-result-rendered={immutableVersion ? "" : undefined}>
-        <MarkdownViewer variant="document" claims={matrix?.claims} claimStatuses={statuses} reading={reading}>{text}</MarkdownViewer>
+        <MarkdownViewer variant="document" claims={matrix?.claims} claimStatuses={statuses} reading={reading} assetBase={assetBase}>{text}</MarkdownViewer>
       </div>
       {/* The sources the report stands on, as cards (融合方案 §8.3): what kind
         * of study each is, whether its quotation is in it, and whether it has
@@ -271,7 +274,7 @@ export function ReportReader({
           <div className={cn("mx-auto", view === "report" ? "max-w-read" : "max-w-none")}>{body}</div>
         </div>
       )}
-      {printing && <PrintCopy facts={isReport ? facts : []} text={text} matrix={matrix} statuses={statuses} reading={reading} />}
+      {printing && <PrintCopy facts={isReport ? facts : []} text={text} matrix={matrix} statuses={statuses} reading={reading} assetBase={assetBase} />}
     </>
   );
 }
@@ -301,12 +304,13 @@ function ReportFacts({ facts, onJump }: { facts: ReportFact[]; onJump: (id: stri
  * the theme (`data-theme="light"` re-scopes the tokens), each 依据 mark a
  * plain word. Hidden on screen; the print stylesheet hides everything else.
  */
-function PrintCopy({ facts, text, matrix, statuses, reading }: {
+function PrintCopy({ facts, text, matrix, statuses, reading, assetBase }: {
   facts: ReportFact[];
   text: string;
   matrix: ReturnType<typeof useClaimMatrix>["document"];
   statuses: Map<string, string>;
   reading: ClaimReading;
+  assetBase?: { path: string; root?: FileRoot };
 }) {
   if (typeof document === "undefined") return null;
   return createPortal(
@@ -319,7 +323,7 @@ function PrintCopy({ facts, text, matrix, statuses, reading }: {
           </div>
         ))}
       </dl>
-      <MarkdownViewer variant="document" claims={matrix?.claims} claimStatuses={statuses} reading={{ ...reading, print: true }}>{text}</MarkdownViewer>
+      <MarkdownViewer variant="document" claims={matrix?.claims} claimStatuses={statuses} reading={{ ...reading, print: true }} assetBase={assetBase}>{text}</MarkdownViewer>
     </div>,
     document.body,
   );

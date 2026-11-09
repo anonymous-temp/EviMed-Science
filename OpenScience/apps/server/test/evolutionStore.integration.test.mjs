@@ -6,7 +6,6 @@ import {ProductDocuments, ProductJobs} from '../src/productStore.mjs';
 import {NotificationService} from '../src/notificationService.mjs';
 import {UsageLedger} from '../src/usageLedger.mjs';
 import {EvolutionService} from '../src/evolutionService.mjs';
-import {AutopilotService} from '../src/autopilotService.mjs';
 import {EvolutionIntegration, evolutionDatasetMetadata} from '../src/evolutionIntegration.mjs';
 import {EvolutionMaintenance} from '../src/evolutionMaintenance.mjs';
 import {EvolutionDecisions} from '../src/evolutionDecisions.mjs';

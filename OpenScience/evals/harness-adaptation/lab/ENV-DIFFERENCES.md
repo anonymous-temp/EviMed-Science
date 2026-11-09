@@ -15,7 +15,7 @@ levers, `TZ`: nothing reads them, in production either).
 - `NODE_ENV=production`, the controlled-pilot profile, local authentication with self-registration, PostgreSQL (the pgvector image),
   the runtime controller behind its unix socket, runtimes launched by it on the internal network with no egress, read-only root, 2 CPUs,
   3 GB, 1024 pids, 64 MB `/tmp`, the sandbox enforcement the code demands in production.
-- The context engine: OpenViking, the image exactly as `deps-version.json` pins it (`ghcr.io/volcengine/openviking:v0.5.1.1@sha256:551b1ae0…`,
+- The context engine: OpenViking, the image exactly as `deps-version.json` pins it (`ghcr.io/volcengine/openviking:v0.5.3@sha256:57d3fd88…`,
   `stack.py openviking_image()`; a test holds it equal to the base stack's own default), with its `ov.conf` rendered by `configure:production-state` from the
   DashScope key, started before the web service as in production, memory on (`OPEN_SCIENCE_MEMORY_INDEX_PROVIDER=openviking`, the account `evimed`, the reranker and the
   recall budgets production sets). Every request is `automated` on a throwaway account, so the engine is handed no resident profile and no turn is committed to it, and the

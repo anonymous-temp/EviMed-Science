@@ -108,3 +108,12 @@ test('a kernel human input not yet adopted in the run ledger prevents an outdate
  f.service.dispatch=async(_u,_p,_sid,_id,_text,options)=>{await options.beforeReserve({runs:[original]});await options.beforePrompt();paid++;return{dispatchStatus:'accepted'};};
  await f.service.deliver();assert.equal(paid,0);assert.equal(notices,1);
 });
+
+test('a result completed in a busy turn is disclosed once after the unread turn ends',async()=>{
+ const f=fixture();let notices=0;const now=Date.now();f.row.payload.completedAt=new Date(now-2000).toISOString();
+ let status='running';f.service.readOrigin=async()=>({id:'run',status,finishedAt:status==='running'?null:new Date(now-1000).toISOString()});
+ f.service.readAcknowledgment=async()=>({observed:false});f.service.notify=async()=>{notices++;};
+ await f.service.deliver();assert.equal(f.row.state,'pending');assert.equal(notices,0);assert.equal(f.count(),0);
+ status='succeeded';f.setInbox({running:false,queued:0});await f.service.deliver();
+ assert.equal(f.row.state,'delivered');assert.equal(notices,1);assert.equal(f.count(),0);
+});

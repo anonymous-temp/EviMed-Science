@@ -259,6 +259,25 @@ vcr_test_apply_schema_additions <- function(root) {
 #' One valid job for each of the engine's methods (every handler), as
 #' `list(method, scenario, inputs, replicates)`. E05 runs them as they are; E10
 #' breaks them one field at a time.
+#' A small person-period table as the data plane files it (one row per person, period and parameter): treatment starts at a hazard that rises with the
+#' covariate, the event hazard falls after it starts, eligibility is the first period. Returns the long table and the wide one.
+vcr_test_person_period <- function(n, periods, seed = 1L, effect = -0.7) {
+  set.seed(seed, kind = VCR_RNG_KIND)
+  rows <- list()
+  for (i in seq_len(n)) {
+    x <- stats::rnorm(1L); started <- FALSE
+    for (u in 0:(periods - 1L)) {
+      if (!started && stats::runif(1L) < stats::plogis(-1.6 + 0.5 * x)) started <- TRUE
+      ev <- stats::runif(1L) < stats::plogis(-3 + 0.6 * x + (if (started) effect else 0))
+      rows[[length(rows) + 1L]] <- data.frame(id = sprintf("P%03d", i), period = u, treatment = as.integer(started), outcome = as.integer(ev), eligible = as.integer(u == 0L), x = x)
+      if (ev) break
+    }
+  }
+  wide <- do.call(rbind, rows)
+  long <- do.call(rbind, lapply(c("treatment", "outcome", "eligible", "x"), function(p) data.frame(USUBJID = wide$id, PARAMCD = p, AVAL = wide[[p]], ADT = wide$period)))
+  list(long = long, wide = wide)
+}
+
 vcr_test_handler_jobs <- function() {
   set.seed(5L, kind = VCR_RNG_KIND)
   n <- 120L
@@ -280,6 +299,9 @@ vcr_test_handler_jobs <- function() {
   in_cmp_ev <- vcr_test_input(cmp_ev, "snp_e05c:events", "event")
   # a time-to-event MAIC: the study's patients (covariates centred on the aggregate means) and a reconstruction's pseudo-patients
   in_pseudo <- vcr_test_input(data.frame(time = stats::rexp(50L, 0.1) + 0.5, status = stats::rbinom(50L, 1L, 0.7)), "rec_e05c:1", source = "reconstructed")
+  # a small person-period table in the data plane's longitudinal shape (USUBJID, PARAMCD, AVAL, ADT = the period) for the target-trial emulation
+  pp <- vcr_test_person_period(40L, 7L, seed = 11L)
+  in_pp <- vcr_test_input(pp$long, "snp_e05t:longitudinal", "long")
   sites <- lapply(1:8, function(i) list(id = sprintf("s%d", i), alpha = 2, beta = 2.5, startTime = 0))
   curve_arm <- function(med) {
     t <- seq(0, 24, by = 0.5); tr <- c(0, 6, 12, 18, 24)
@@ -289,6 +311,12 @@ vcr_test_handler_jobs <- function() {
   cases <- list(
     list("model.survival_fit", list(inputId = in_event$id, idColumn = "USUBJID", timeColumn = "AVAL", statusColumn = "CNSR", statusEncoding = "censor", distribution = "weibull", timeUnit = "months", horizons = c(3, 9, 18), sourceCondition = "control", armColumn = "PARAMCD", armValue = "OS"), list(in_event)),
     list("model.prognostic_apply", list(inputId = in_subj$id, idColumn = "USUBJID", sourceCondition = "control", endpoint = list(type = "binary", horizon = 12, timeUnit = "months"), inputUnits = list(age = "years"), model = list(family = "logistic", intercept = -1, terms = list(list(column = "age", coefficient = .03, transform = "identity", unit = "years", center = 60, scale = 1)))), list(in_subj)),
+    list("model.prognostic_train", list(inputId = in_subj$id, idColumn = "USUBJID", sourceCondition = "natural_history", endpoint = list(type = "continuous", outcomeColumn = "y", horizon = 12, timeUnit = "months"),
+                                        predictors = list(list(column = "age", unit = "years"), list(column = "male", unit = "category")), folds = 3L, comparison = list(ranger = FALSE)), list(in_subj)),
+    list("patients.progression", list(endpoint = list(type = "continuous"), design = list(nTreat = 20L, nControl = 20L), timeUnit = "months", visits = c(0, 6, 12),
+                                      model = list(family = "linear", slope = list(value = 0.1, basis = "assumed"), betweenPersonSd = list(value = 0.05, basis = "assumed")),
+                                      baseline = list(mean = list(value = 3, basis = "assumed"), sd = list(value = 1, basis = "assumed")), residualSd = list(value = 0.5, basis = "assumed"),
+                                      treatment = list(slowing = list(value = 0.3, basis = "assumed"))), NULL),
     list("profile.snapshot", vcr_empty_object(), list(in_subj)),
     list("cohort.build", list(rules = list(list(name = "adult", rule = list(op = "compare", column = "age", comparator = "gte", value = 40)))), list(in_subj)),
     list("population.scenario", list(n = 200L, population = list(variables = list(list(name = "age", family = "normal", mean = 60, sd = 9)))), NULL),
@@ -302,6 +330,19 @@ vcr_test_handler_jobs <- function() {
     list("patients.binary", list(design = list(nTreat = 40, nControl = 40), endpoint = list(type = "binary"), truth = list(controlRate = 0.3, treatmentRate = 0.45)), NULL),
     list("patients.time_to_event", list(design = list(nTreat = 40, nControl = 40), endpoint = list(type = "time_to_event"), truth = list(controlMedian = 12, hazardRatio = 0.7), accrual = list(kind = "uniform", duration = 6, followup = 12)), NULL),
     list("evidence.pool", list(studies = list(list(studyId = "a", estimate = -0.4, se = 0.2), list(studyId = "b", estimate = -0.6, se = 0.15), list(studyId = "c", estimate = -0.3, se = 0.25)), method = "random_effects_dl", scale = "log"), NULL),
+    # the evidence methods of the algorithm round: a network, a dose-response (the package's small data in the scenario's own form) and a shrinkage
+    list("evidence.network", list(measure = "log_ratio", direction = "lower_better", studies = list(
+           list(studyId = "s1", contrasts = list(list(treatment = "B", comparator = "A", effect = -0.30, se = 0.15))),
+           list(studyId = "s2", contrasts = list(list(treatment = "C", comparator = "A", effect = -0.50, se = 0.20))),
+           list(studyId = "s3", contrasts = list(list(treatment = "C", comparator = "B", effect = -0.15, se = 0.18))),
+           list(studyId = "s4", contrasts = list(list(treatment = "B", comparator = "A", effect = -0.25, se = 0.22)))), reference = "A"), NULL),
+    list("evidence.dose_response", list(studies = list(
+           list(studyId = "d1", type = "ir", rows = list(list(dose = 0, effect = 0, cases = 28, n = 22186), list(dose = 9, effect = -0.40, se = 0.25, cases = 43, n = 53089),
+                                                          list(dose = 23, effect = -0.49, se = 0.26, cases = 32, n = 45348), list(dose = 36, effect = -0.28, se = 0.32, cases = 16, n = 19791))),
+           list(studyId = "d2", type = "ir", rows = list(list(dose = 0, effect = 0, cases = 100, n = 80000), list(dose = 10, effect = 0.05, se = 0.18, cases = 65, n = 60000),
+                                                          list(dose = 25, effect = 0.20, se = 0.20, cases = 104, n = 70000), list(dose = 40, effect = 0.30, se = 0.22, cases = 63, n = 40000)))),
+         model = list(kind = "linear")), NULL),
+    list("evidence.shrinkage", list(scale = "log", values = list(list(id = "phase2", estimate = log(0.66), se = 0.19, futureSe = 0.12))), NULL),
     list("evidence.reconstruct_km", list(curve = curve_arm(12)$curve, riskTable = curve_arm(12)$riskTable, provenance = list(kind = "digitizer", tool = "e05-digitizer")), list(list(kind = "evidence", id = "ev_e05@1"))),
     list("comparator.entropy_balance", list(covariates = list("age", "male"), treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous")), list(in_subj)),
     list("comparator.propensity_weight", list(covariates = list("age", "male"), treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous")), list(in_subj)),
@@ -321,6 +362,22 @@ vcr_test_handler_jobs <- function() {
     list("design.simulate", list(design = list(kind = "two_arm_fixed", nTreat = 50, nControl = 50), endpoint = list(type = "continuous"), truth = list(effect = 0.4, sd = 1), analysis = list(method = "ttest", alpha = 0.025, sided = 1), performance = list("power")), NULL, 400L),
     list("design.grid", list(design = list(kind = "two_arm_fixed", nTreat = 30, nControl = 30), endpoint = list(type = "continuous"), analysis = list(method = "ttest", alpha = 0.025, sided = 1), performance = list("power"), truth = list(effect = 0.4, sd = 1),
                              designs = list(list(nTreat = 30, nControl = 30), list(nTreat = 60, nControl = 60)), truths = list(list(effect = 0.4))), NULL, 300L),
+    # the confirmatory designs: the futility boundary is the cheap one (an analytic design); the simulated kinds have their own cases (N65-N68)
+    list("design.confirmatory", list(design = list(kind = "futility_group_sequential", informationRates = c(0.5, 1)), endpoint = list(type = "continuous"), hypothesis = list(direction = "higher_better"), truth = list(plannedEffect = 0.4, sd = 1), analysis = list(alpha = 0.025, power = 0.9)), NULL),
+    # dose-finding and Bayesian designs: small trials, the exact phase II search at a small size (the simulated curves have their own cases, N81-N83)
+    list("design.dose", list(design = list(kind = "boin", compare = list("three_plus_three"), maxPatients = 12), truth = list(toxicity = c(0.1, 0.3, 0.5))), NULL, 200L),
+    list("design.bayesian", list(design = list(kind = "bop2", maxN = 20, lookEvery = 10), truth = list(nullRate = 0.1, alternativeRate = 0.4), analysis = list(alpha = 0.1, power = 0.8)), NULL),
+    list("design.win_ratio", list(design = list(nTreat = 30, nControl = 30, followup = 12), truth = list(death = list(controlRisk = 0.2, hazardRatio = 0.7), events = list(controlRate = 0.05, rateRatio = 0.8), score = list(shift = 0.3))), NULL, 20L),
+    # quantitative bias analysis (a stated estimate; the probabilistic part simulates, at the domain's floor of draws) and the G-computation simulated treatment comparison
+    list("comparator.bias_analysis", list(scale = "hazard_ratio", estimate = 0.7, lower = 0.5, upper = 0.98, shiftedNull = list(biases = list(1.1, 1.25)),
+                                          probabilistic = list(bias = list(family = "uniform", min = 1, max = 1.3))), NULL, 20000L),
+    list("comparator.stc", list(covariates = list("age", "male"), aggregateCovariates = list(list(variable = "age", mean = 58, sd = 8), list(variable = "male", proportion = 0.5)),
+                                treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous"), anchored = FALSE, aggregateOutcome = 1.2, aggregateSe = 0.1, size = 1000L), list(in_subj)),
+    # dynamic borrowing: a self-adapting mixture prior at a small size (exact: no replicates)
+    list("comparator.borrowing", list(endpoint = list(type = "binary"), historical = list(responders = 30, n = 100), current = list(responders = 12, n = 40),
+                                      treatment = list(responders = 18, n = 40), prior = list(kind = "sam", delta = 0.1),
+                                      operatingCharacteristics = list(nControl = 40, nTreatment = 40, drifts = list(0, 0.1), effect = 0.2)), NULL),
+    list("comparator.target_trial", list(covariates = list("x"), strategy = list(kind = "clone_censor_weight", gracePeriod = 2L), horizon = 4L), list(in_pp)),
     list("design.assurance", list(design = list(nTreat = 200, nControl = 200), endpoint = list(type = "continuous"), truth = list(sd = 1), designPrior = list(mean = 0.3, sd = 0.15), analysis = list(alpha = 0.025)), NULL),
     list("design.procova", list(design = list(allocation = 0.5), truth = list(effect = 0.3, sd = 1), analysis = list(alpha = 0.025, power = 0.9), prognostic = list(rho = 0.6, lambda = 0.9)), NULL),
     list("accrual.poisson_gamma", list(sites = sites, target = 60L), NULL, 500L),
@@ -336,4 +393,13 @@ vcr_test_handler_jobs <- function() {
   cases <- c(cases, vcr_test_extension_handler_jobs())
   # --- end extensions ---
   cases
+}
+
+
+#' A confirmatory scenario with the direction its tests do not care about stated (a mean or a risk is better when it is higher): the five
+#' kinds REQUIRE `hypothesis.direction` for a mean or a risk (the same sign is a benefit one way and a harm the other), and the cases that
+#' hold something else to a reference say it once here. A case about the direction builds its scenario without this.
+vcr_test_conf_scenario <- function(sc, direction = "higher_better") {
+  if (is.null(sc[["hypothesis"]]) && isTRUE(sc$endpoint$type %in% c("continuous", "binary"))) sc$hypothesis <- list(direction = direction)
+  sc
 }

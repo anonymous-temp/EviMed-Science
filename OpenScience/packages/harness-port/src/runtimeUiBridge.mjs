@@ -97,6 +97,22 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (attached.workspaceId !== workspace.workspaceId || !workspaceContains(attached, sessionId)) throw new Error('Native workspace attachment unavailable');
     return sessionId;
   }
+  /** The kernel's automation-tasks page (`PANEL_ID` of `dsh-client-ui-schedule`). Inside the body: bodies travel as text, without their module. */
+  const SCHEDULED_TASKS_PANEL = 'schedules';
+  /** Optional, like every service of a page (`RUNTIME_UI_OPTIONAL_SERVICES`): a required one that is absent would park this whole bridge. @type {any} */
+  let layout = null;
+  ctx.inject?.(['layout'], (/** @type {any} */ scope) => { layout = scope.layout; });
+  /**
+   * Show one of the kernel's main-view pages. Its row registers the page in its own time, and `selectPanel` throws on one it does not
+   * know yet. A page that never comes leaves the conversation open, which is what the person would have without it.
+   * @param {string} panel
+   */
+  async function showPanel(panel) {
+    for (let attempt = 0; attempt < 50 && !disposed; attempt += 1) {
+      if (layout?.hasMainPanel(panel)) { layout.selectPanel(panel); return; }
+      await new Promise(resolve => (target.setTimeout ?? globalThis.setTimeout)(resolve, 100));
+    }
+  }
   /** @param {any} command */
   function schedule(command) {
     const { requestId, intent, request } = command;
@@ -151,6 +167,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         // scope (and so its composer) exist for the draft below.
         target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_GEO_PLAN__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear();
         ctx.uiWorkspace.openSession(sessionId);
+        // After the open, which clears the main view's panel: the kernel's own task page, the one global page the shell asks for.
+        if (intent.panel === SCHEDULED_TASKS_PANEL) await showPanel(SCHEDULED_TASKS_PANEL);
         let draftRestored;
         if (intent.draft !== undefined || intent.resultRevision || intent.geoPlanContext || (Array.isArray(intent.references) && intent.references.length)) {
           const scope = ctx.sessions.scope(sessionId);
@@ -529,6 +547,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const intent = data.intent;
     if (!intent || !['create', 'open'].includes(intent.kind)
       || typeof intent.sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)
+      || (intent.panel !== undefined && intent.panel !== SCHEDULED_TASKS_PANEL)
       || (intent.draft !== undefined && (typeof intent.draft !== 'string' || intent.draft.length > 100_000))) return;
     // Knowledge-base sources the conversation is opened with: ids and titles,
     // rebuilt from a closed shape (this is another origin's payload).
@@ -585,17 +604,14 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
      *   meaningful for `new-task`; the shell sends it back in as the
      *   navigation intent's draft. Bounded here as well as there, because this
      *   side runs third-party-composed code.
-     * @param {{ tab?: string, taskId?: string }} [options] for `geo`: which tab of the
-     *   project to open (a report linking to 诊断); one of `GEO_TABS`. For `autopilot`: which scheduled task to
-     *   open (the card a conversation draws for a task it made), an id of the shape the control plane issues; the
-     *   shell opens it in the project it is showing, and a task of another project is simply not found there.
+     * @param {{ tab?: string }} [options] for `geo`: which tab of the
+     *   project to open (a report linking to 诊断); one of `GEO_TABS`.
      */
     navigate(destination, draft = undefined, options = {}) {
       if (typeof destination !== 'string' || !SHELL_DESTINATIONS.includes(destination)) return;
       if (draft !== undefined && (typeof draft !== 'string' || !draft || draft.length > 100_000)) return;
       const tab = destination === 'geo' && typeof options?.tab === 'string' && GEO_TABS.includes(options.tab) ? options.tab : undefined;
-      const taskId = destination === 'autopilot' && typeof options?.taskId === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(options.taskId) ? options.taskId : undefined;
-      post('shell-navigate', { destination, ...(draft === undefined ? {} : { draft }), ...(tab ? { tab } : {}), ...(taskId ? { taskId } : {}) });
+      post('shell-navigate', { destination, ...(draft === undefined ? {} : { draft }), ...(tab ? { tab } : {}) });
     },
   };
 

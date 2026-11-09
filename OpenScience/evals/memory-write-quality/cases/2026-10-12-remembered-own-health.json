@@ -4,7 +4,7 @@
   "observedIn": "production 2026-10-12 (a throwaway account said 「记住我对青霉素过敏」: the note tool filed it as a project_fact in that project's notes, and a question about antibiotics in a second project did not see it) and a synthetic replay the same day, deepseek-flash, temperature 0; the extractor as it stood before the change wrote nothing in 3 of 3 samples",
   "written": [],
   "whyItIsWrong": "The owner ruled on 2026-10-12 that a researcher who says 「记住我对青霉素过敏」 is to be remembered. The extractor was told to leave the researcher's own health to the note tool, and the note tool keeps a project's notes: the fact sat in one project, filed as a project fact, absent from 「关于你」 and unread everywhere else.",
-  "expected": "One profile record at user scope carrying the allergy, in the researcher's words, not flagged sensitive.",
+  "expected": "Keep the exact penicillin allergy in the user's profile, eligible without a special request and sensitive for external use.",
   "decidable": true,
   "preChange": "failed",
   "replay": {
@@ -30,5 +30,7 @@
     "requireTextContains": [
       "青霉素"
     ]
-  }
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }

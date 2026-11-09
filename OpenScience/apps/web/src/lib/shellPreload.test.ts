@@ -3,12 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ warm: vi.fn(), list: vi.fn() }));
 vi.mock("@/lib/apiClient", () => ({ warmWebRuntime: mocks.warm, listRuntimeUiPreload: mocks.list }));
 vi.mock("@/app/routes/FrontierPage", () => ({}));
-vi.mock("@/app/routes/CapabilitiesPage", () => ({}));
 vi.mock("@/app/routes/KnowledgePage", () => ({}));
 vi.mock("@/app/routes/MemoryHubPage", () => ({}));
 vi.mock("@/app/virtual-research/VcrHomePage", () => ({}));
 vi.mock("@/app/routes/GeoHomePage", () => ({}));
-vi.mock("@/app/routes/AutopilotPage", () => ({}));
 
 import { preloadAllowed, preloadConversationAssets, resetShellHeadStartForTests, startShellHeadStart } from "./shellPreload";
 import { holdStaleChunkReload, installStaleChunkReload } from "./staleChunk";

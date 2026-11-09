@@ -19,8 +19,8 @@ import { canonicalJson } from "@evimed/domain";
 import { identifierKeys } from "@evimed/domain/entity-keys";
 import { HttpError } from "./security.mjs";
 
-/** Who may file a prediction: a virtual clinical study, or an agenda (the programme's or a researcher's). */
-export const PREDICTION_SOURCES = Object.freeze(["vcr", "agenda"]);
+/** Who may file a prediction: a virtual clinical study. */
+export const PREDICTION_SOURCES = Object.freeze(["vcr"]);
 /** How far into the future a filing's own clock may be before it is refused. */
 const CLOCK_SKEW_MS = 5 * 60_000;
 
@@ -38,10 +38,9 @@ const text = (value, max) => (typeof value === "string" && value.trim() && value
  */
 export function normalizePrediction(input, recordedAt) {
   if (!input || typeof input !== "object") throw invalid("a registration is an object");
-  if (!PREDICTION_SOURCES.includes(input.source)) throw invalid("source is vcr or agenda");
-  const link = input.source === "vcr" ? "studyId" : "agendaId";
-  const linked = text(input[link], 200);
-  if (!linked) throw invalid(`${link} names the ${input.source === "vcr" ? "study" : "agenda"}`);
+  if (!PREDICTION_SOURCES.includes(input.source)) throw invalid("source is vcr");
+  const linked = text(input.studyId, 200);
+  if (!linked) throw invalid("studyId names the study");
   const accountId = text(input.accountId, 200);
   const projectId = text(input.projectId, 200);
   if (!accountId || !projectId) throw invalid("accountId and projectId name who files it and where");
@@ -63,7 +62,7 @@ export function normalizePrediction(input, recordedAt) {
   for (const key of ["engineJobId", "receiptId", "methodId"]) if (input[key] != null && !text(input[key], 200)) throw invalid(`${key} is a short identifier`);
   const prediction = { ...(hasEstimate ? { estimate: input.estimate } : {}), ...(input.interval != null ? { interval: [input.interval[0], input.interval[1]] } : {}), ...(hasProbability ? { probability: input.probability } : {}) };
   const payload = {
-    source: input.source, [link]: linked, accountId, projectId, registryId: registryKey.slice("reg:".length), registryKey,
+    source: input.source, studyId: linked, accountId, projectId, registryId: registryKey.slice("reg:".length), registryKey,
     endpoint, endpointKey: endpoint.toLowerCase().replace(/\s+/g, " "), prediction,
     ...(input.methodId != null ? { methodId: input.methodId } : {}), ...(input.engineJobId != null ? { engineJobId: input.engineJobId } : {}), ...(input.receiptId != null ? { receiptId: input.receiptId } : {}),
     filedAt: new Date(filedAt).toISOString(),
@@ -85,7 +84,7 @@ export function createPredictionRegistry({ config, evolution, now = () => new Da
 
   /**
    * File a prediction: checked, stamped, hashed and stored once. Another filing of the same trial, endpoint and source is another row.
-   * @param {any} input `{ source, studyId | agendaId, projectId, accountId, registryId, endpoint, estimate?, interval?, probability?, engineJobId?, receiptId?, methodId?, filedAt }`
+   * @param {any} input `{ source, studyId, projectId, accountId, registryId, endpoint, estimate?, interval?, probability?, engineJobId?, receiptId?, methodId?, filedAt }`
    */
   async function register(input) {
     if (!enabled) throw off();

@@ -1,0 +1,13 @@
+root <- '/repo/项目代码/vcr-engine'; source(file.path(root,'R/engine.R')); vcr_engine_load(root)
+base <- '/clinical'; prefix <- Sys.getenv('EVAL_PREFIX', 'full'); input <- Sys.getenv('EVAL_TRAIN_FILE', 'engine_train.csv'); path <- file.path(base,input)
+sha <- digest::digest(file=path, algo='sha256', serialize=FALSE)
+inp <- list(kind='analysis_table',id='snp_eval:subject',shape='subject',location=input,hash=sha,valueSource='observed')
+recipe <- jsonlite::fromJSON(file.path(base,'preprocessing.json'),simplifyVector=FALSE)$recipe
+imp <- lapply(names(recipe),function(nm) if (isTRUE(recipe[[nm]]$missingIndicator)) list(valueColumn=nm,indicatorColumn=paste0(nm,'_missing'),imputedValue=recipe[[nm]]$median,missingValue=1L) else NULL)
+imp <- Filter(Negate(is.null),imp)
+job <- list(jobId='job_external_a',studyId='std_external',kind='synthesize_population',method='population.synthpop',methodVersion=vcr_domain()$methods[['population.synthpop']]$version,protocolVersion=1L,scenario=list(holdoutShare=0,m=5L,imputationRules=imp),inputs=list(inp),seed=20261029L,cpuSecondsLimit=2400,cores=2L)
+job <- jsonlite::fromJSON(jsonlite::toJSON(job,auto_unbox=TRUE,digits=NA),simplifyVector=FALSE)
+dir.create(file.path(base,paste0(prefix,'-engine-output')),showWarnings=FALSE)
+started <- Sys.time(); res <- vcr_run_job(job,output_dir=file.path(base,paste0(prefix,'-engine-output'))); elapsed <- as.numeric(difftime(Sys.time(),started,units='secs'))
+writeLines(jsonlite::toJSON(res,auto_unbox=TRUE,null='null',na='null',digits=NA,pretty=TRUE),file.path(base,paste0(prefix,'-synth-result.json')))
+cat('SYNTH_STATUS',res$status,'CONCLUSION',res$conclusion %||% 'none','ELAPSED',round(elapsed,2),'ISSUES',paste(vapply(res$diagnostics$issues %||% list(),function(x) x$code,character(1)),collapse=','),'\n')

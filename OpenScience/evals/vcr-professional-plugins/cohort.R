@@ -1,0 +1,6 @@
+root <- '/repo/项目代码/vcr-engine'; source(file.path(root,'R/engine.R')); vcr_engine_load(root); source(file.path(root,'tests/helpers/harness.R')); invisible(vcr_test_data_root())
+x <- do.call(rbind,lapply(c('a','b','c'),function(g){d<-read.csv(paste0('/clinical/phys_',g,'_features.csv'));data.frame(USUBJID=d$USUBJID,age=d$Age,icu=d$ICUType,split=g)}))
+stopifnot(nrow(x)==12000,!anyDuplicated(x$USUBJID));inp<-vcr_test_input(x,'snp_phys:subject','subject')
+p<-vcr_test_run(vcr_test_job('profile.snapshot',vcr_empty_object(),list(inp),job_id='job_phys_profile'))
+c<-vcr_test_run(vcr_test_job('cohort.build',list(rules=list(list(name='age65',rule=list(op='compare',column='age',comparator='gte',value=65)))),list(inp),job_id='job_phys_cohort'))
+writeLines(jsonlite::toJSON(list(rows=nrow(x),reference_age65=sum(x$age>=65,na.rm=TRUE),reference_missing_age=sum(is.na(x$age)),profile=p,cohort=c),auto_unbox=TRUE,null='null',na='null',digits=NA,pretty=TRUE),'/clinical/cohort-result.json')

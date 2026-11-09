@@ -1,6 +1,6 @@
 import { fetchWithWebAuth, WebApiError, webApiBase } from "./apiClient";
 import {
-  productRequest, type CapsuleCard, type CapsuleExportSnapshot, type CapsuleRecord, type CapsuleTransferPreview,
+  productRequest, type PrivateMemorySelection, type CapsuleCard, type CapsuleExportSnapshot, type CapsuleRecord, type CapsuleTransferPreview,
 } from "./productClient";
 
 /**
@@ -35,11 +35,11 @@ export interface PendingDelivery { id: string; state: DeliveryState; createdAt: 
 
 const enc = encodeURIComponent;
 
-export const deliverCapsule = (capsuleId: string, input: { recipients: string[]; scopes?: string[]; card?: CapsuleCard; excludeEntryIds?: string[] }) =>
+export const deliverCapsule = (capsuleId: string, input: { recipients: string[]; scopes?: string[]; card?: CapsuleCard; excludeEntryIds?: string[]; includePrivateEntries?: PrivateMemorySelection[] }) =>
   productRequest<DeliveryAnswer>(`/capsules/${enc(capsuleId)}/deliveries`, "POST", input);
 export const listSentDeliveries = (capsuleId: string) => productRequest<SentDelivery[]>(`/capsules/${enc(capsuleId)}/deliveries`);
 
-export const createShareLink = (capsuleId: string, input: { scopes?: string[]; maxUses?: number; ttlDays?: number; card?: CapsuleCard; excludeEntryIds?: string[] } = {}) =>
+export const createShareLink = (capsuleId: string, input: { scopes?: string[]; maxUses?: number; ttlDays?: number; card?: CapsuleCard; excludeEntryIds?: string[]; includePrivateEntries?: PrivateMemorySelection[] } = {}) =>
   productRequest<CreatedShareLink & { snapshot: CapsuleExportSnapshot }>(`/capsules/${enc(capsuleId)}/links`, "POST", input);
 export const listShareLinks = (capsuleId: string) => productRequest<ShareLink[]>(`/capsules/${enc(capsuleId)}/links`);
 export const revokeShareLink = (capsuleId: string, linkId: string) => productRequest<ShareLink>(`/capsules/${enc(capsuleId)}/links/${enc(linkId)}`, "DELETE", {});

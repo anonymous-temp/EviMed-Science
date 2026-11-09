@@ -1,0 +1,5 @@
+- insert:
+    - id: evimed-virtual-research-suite
+      name: '@evimed/virtual-research-suite/plugin'
+  config:
+    mode: !!js process.env.VCR_PLUGIN_MODE || 'hosted'

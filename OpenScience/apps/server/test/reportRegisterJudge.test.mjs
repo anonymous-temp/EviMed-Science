@@ -122,10 +122,9 @@ test("internal projects, internal capabilities and the platform's own evaluation
     assert.deepEqual(judge.skips, [["J4", "run_out_of_scope", 1]], `${name} is counted as out of scope`);
   }
   // Work done for a researcher stays in scope even when the platform started it:
-  // a GEO step, a proactive episode, and a plain researcher run.
+  // a GEO step and a plain researcher run.
   for (const run of [
     { ...base, automated: true, effectiveRouteReason: "geo:geo-content" },
-    { ...base, automated: true, effectiveRouteReason: "autopilot:literature-sentinel" },
     { ...base, effectiveAgentId: "clinical-evidence-synthesis", effectiveRouteReason: "llm:0.9" },
   ]) {
     const judge = recordingJudge(() => false);
@@ -183,8 +182,6 @@ test("the run store applies the scope and the cap it was configured with when a 
   // Managed research a researcher reads is also dispatched by the platform, and stays in scope.
   const managed = await finishWith("geo-run", {}, { automated: true, effectiveRouteReason: "geo:geo-content" });
   assert.equal(managed.judge.calls.length, 8, "a GEO step is a researcher's report");
-  const proactive = await finishWith("proactive-run", {}, { automated: true, effectiveRouteReason: "autopilot:literature-sentinel" });
-  assert.equal(proactive.judge.calls.length, 8, "a proactive episode is a researcher's report");
   // A conversation no capability took wrote its own file, not a report.
   const bare = await finishWith("bare-conversation", {}, { bare: true });
   assert.deepEqual(bare.judge.calls, [], "an ordinary conversation's file is not read as report prose");
