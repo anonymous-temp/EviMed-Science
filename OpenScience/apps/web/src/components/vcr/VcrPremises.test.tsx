@@ -131,4 +131,19 @@ describe("这个结论的前提", () => {
     expect(new Set(ids).size).toBe(2);
     for (const id of ids) expect(container.querySelector(`[id="${id}"]`)).not.toBeNull();
   });
+  it("reads a value derived from the person's own rate as 由你给的数据算出, beside the rate it came from (plan R12)", () => {
+    const rows = readPremises([
+      { key: "accrualRate", label: "入组速度", value: "每月 20 人", source: "given", decisive: true },
+      { key: "accrual", label: "入组时长", value: "30 个月", source: "derived", from: "accrualRate", reason: "由每月 20 人和两组的计划人数算出", decisive: false },
+    ]);
+    expect(rows.map((row) => row.source)).toEqual(["given", "derived"]);
+    expect(rows[1].from).toBe("accrualRate");
+    const { container } = render(<VcrPremises premises={rows} onChange={null} />);
+    const rate = container.querySelector("[data-vcr-premise='accrualRate']") as HTMLElement;
+    expect(within(rate).getByText("你给的数据")).toBeInTheDocument();
+    const rest = container.querySelector("details") as HTMLElement;
+    const duration = rest.querySelector("[data-vcr-premise='accrual']") as HTMLElement;
+    expect(duration.getAttribute("data-vcr-premise-source")).toBe("derived");
+    expect(within(duration).getByText("由你给的数据算出")).toBeInTheDocument();
+  });
 });

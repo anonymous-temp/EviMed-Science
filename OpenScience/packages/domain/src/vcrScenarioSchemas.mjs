@@ -322,6 +322,10 @@ const SIMULATED_ACCRUAL = gated({
   variants: {
     uniform: {
       duration: number({ min: 0, default: 0, unit: 'time units' }),
+      // the rate a person states (「每月入组 20 人」): the platform derives `duration` from it and the stated sizes before the scenario is frozen
+      // (vcrAccrualRate.mjs); the engine reads the duration, never the rate
+      rate: number({ gt: 0, unit: 'people per rateUnit' }),
+      rateUnit: string({ values: [...VCR_TIME_UNITS] }),
       followup: number({ min: 0, unit: 'time units' }),
       dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per year' }),
       maxFollowup: number({ gt: 0, unit: 'time units' }),
@@ -2498,6 +2502,11 @@ export function validateScenario(method, scenario, { inputIds = null, path = 'sc
     ctx.issues.push({ code: 'rule_expression_forbidden', field: holder, detail: 'A scenario never carries an expression: rules are data in a closed grammar.' })
   }
   checkObject(schema, scenario, path, ctx)
+  // a stated accrual rate is turned into the duration by the platform before the job is frozen (vcrAccrualRate.mjs); a job that reaches the
+  // engine with the rate alone would run with a duration it never stated, so it is refused (mirrored in R/protocol.R)
+  if (isObject(scenario?.accrual) && scenario.accrual.rate !== undefined && scenario.accrual.duration === undefined) {
+    raise(ctx, 'scenario_field_missing', at(path, 'accrual.duration'), 'A rate gives the duration only through the platform, before the job is frozen: state accrual.duration too.')
+  }
   if (method === 'design.simulate' || method === 'design.grid' || method === 'design.analytic') checkDesignSemantics(scenario, path, ctx)
   if (method === 'design.confirmatory') checkConfirmatorySemantics(scenario, path, ctx)
   if (method === 'design.dose') checkDoseSemantics(scenario, path, ctx)

@@ -64,7 +64,7 @@ test("the incident: accrual reads duration, followup and dropoutAnnual with thei
   assert.deepEqual(rows.find((row) => row.path === "accrual")?.when, [{ path: "endpoint.type", in: ["time_to_event"] }], "accrual belongs to the time-to-event endpoint");
   // The simulated generators read a variant: uniform and piecewise accrual.
   const simulated = vcrScenarioRows("design.simulate").rows.filter((row) => row.path.startsWith("accrual."));
-  assert.deepEqual(simulated.map((row) => row.path), ["accrual.kind", "accrual.duration", "accrual.followup", "accrual.dropoutAnnual", "accrual.maxFollowup",
+  assert.deepEqual(simulated.map((row) => row.path), ["accrual.kind", "accrual.duration", "accrual.rate", "accrual.rateUnit", "accrual.followup", "accrual.dropoutAnnual", "accrual.maxFollowup",
     "accrual.breaks", "accrual.rates", "accrual.tail"]);
   assert.deepEqual(simulated.find((row) => row.path === "accrual.breaks")?.variant, { on: "accrual.kind", is: ["piecewise"], default: "uniform" });
   assert.equal(simulated.find((row) => row.path === "accrual.followup")?.variant, undefined, "shared by both variants, so it carries no variant");
@@ -256,7 +256,7 @@ test("a design method's help says which designs run on which endpoints, from the
 test("the keys read inside a node answer a refusal, and a gate that does not hold leaves a key out", () => {
   assert.deepEqual(vcrScenarioChildKeys(["design.analytic"], "accrual").map((entry) => entry.key), ["duration", "followup", "dropoutAnnual"]);
   assert.deepEqual(vcrScenarioChildKeys(["design.analytic", "design.simulate"], "accrual").map((entry) => entry.key),
-    ["duration", "followup", "dropoutAnnual", "kind", "maxFollowup", "breaks", "rates", "tail"]);
+    ["duration", "followup", "dropoutAnnual", "kind", "rate", "rateUnit", "maxFollowup", "breaks", "rates", "tail"]);
   assert.deepEqual(vcrScenarioChildKeys(["design.simulate"], "accrual").find((entry) => entry.key === "breaks")?.variant, ["piecewise"]);
   assert.deepEqual(vcrScenarioChildKeys(["design.analytic"], "accrual", { endpoint: { type: "binary" } }), [], "accrual is not read for a binary endpoint");
   assert.deepEqual(vcrScenarioChildKeys(["design.analytic"], "truth", { endpoint: { type: "binary" }, design: { kind: "two_arm_fixed" } }).map((entry) => entry.key),

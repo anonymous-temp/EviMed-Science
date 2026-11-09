@@ -391,11 +391,13 @@ export interface VcrPremise {
   key: string;
   label: string;
   value: string;
-  /** 文献 / 假设 / 默认 / 你给的数据. */
-  source: "literature" | "assumed" | "default" | "given";
+  /** 文献 / 假设 / 默认 / 你给的数据 / 由你给的数据算出. */
+  source: "literature" | "assumed" | "default" | "given" | "derived";
   decisive: boolean;
   /** One short line of why, where the premise is a reason and not a number (「成功把握」 not computed). */
   reason?: string | null;
+  /** The key of the premise this one is derived from (source `derived`). */
+  from?: string;
 }
 
 /** A design on the trade-off scatter and in the grid. */
@@ -2358,11 +2360,12 @@ function readOperatingCharacteristics(raw: unknown): VcrOperatingCharacteristics
 
 /** 「这个结论的前提」: only well-formed rows, with a source the page has a word for; nothing is made up for a row that lacks one. */
 export function readPremises(raw: unknown): VcrPremise[] {
-  const sources = ["literature", "assumed", "default", "given"] as const;
+  const sources = ["literature", "assumed", "default", "given", "derived"] as const;
   return arr(raw).flatMap((row) => {
     const key = text(row.key), label = text(row.label), value = text(row.value);
     const source = sources.find((entry) => entry === row.source);
-    return key && label && value && source ? [{ key, label, value, source, decisive: row.decisive === true, reason: text(row.reason) }] : [];
+    const from = text(row.from);
+    return key && label && value && source ? [{ key, label, value, source, decisive: row.decisive === true, reason: text(row.reason), ...(from ? { from } : {}) }] : [];
   });
 }
 

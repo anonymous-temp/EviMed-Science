@@ -1726,6 +1726,25 @@
           "fieldRole": "defaultable"
         },
         {
+          "path": "accrual.rate",
+          "type": "number",
+          "gt": 0,
+          "unit": "people per rateUnit",
+          "within": "accrual",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "accrual.rateUnit",
+          "type": "string",
+          "values": ["days","weeks","months","years"],
+          "within": "accrual",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},
+          "fieldRole": "defaultable"
+        },
+        {
           "path": "accrual.followup",
           "type": "number",
           "min": 0,
@@ -1944,6 +1963,25 @@
           "fieldRole": "defaultable"
         },
         {
+          "path": "accrual.rate",
+          "type": "number",
+          "gt": 0,
+          "unit": "people per rateUnit",
+          "within": "accrual",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "accrual.rateUnit",
+          "type": "string",
+          "values": ["days","weeks","months","years"],
+          "within": "accrual",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},
+          "fieldRole": "defaultable"
+        },
+        {
           "path": "accrual.followup",
           "type": "number",
           "min": 0,
@@ -2156,6 +2194,25 @@
           "min": 0,
           "unit": "time units",
           "default": 0,
+          "within": "accrual",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "accrual.rate",
+          "type": "number",
+          "gt": 0,
+          "unit": "people per rateUnit",
+          "within": "accrual",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "accrual.rateUnit",
+          "type": "string",
+          "values": ["days","weeks","months","years"],
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},
@@ -3462,6 +3519,25 @@
           "min": 0,
           "unit": "time units",
           "default": 0,
+          "within": "accrual",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "accrual.rate",
+          "type": "number",
+          "gt": 0,
+          "unit": "people per rateUnit",
+          "within": "accrual",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "accrual.rateUnit",
+          "type": "string",
+          "values": ["days","weeks","months","years"],
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},
@@ -5258,6 +5334,25 @@
           "min": 0,
           "unit": "time units",
           "default": 0,
+          "within": "accrual",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "accrual.rate",
+          "type": "number",
+          "gt": 0,
+          "unit": "people per rateUnit",
+          "within": "accrual",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "accrual.rateUnit",
+          "type": "string",
+          "values": ["days","weeks","months","years"],
           "within": "accrual",
           "when": [{"path":"endpoint.type","in":["time_to_event"]}],
           "variant": {"on":"accrual.kind","is":["uniform"],"default":"uniform"},

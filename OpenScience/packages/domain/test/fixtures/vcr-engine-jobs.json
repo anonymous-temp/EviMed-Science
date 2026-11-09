@@ -31313,6 +31313,70 @@
       "expected": [
         "scenario_field_unknown@scenario.evaluation"
       ]
+    },
+    {
+      "name": "an accrual rate that reached the engine without the duration the platform derives from it",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "accrual": {
+            "kind": "uniform",
+            "rate": 20,
+            "followup": 12
+          },
+          "performance": [
+            "power",
+            "bias",
+            "coverage"
+          ],
+          "targetMcse": 0.005,
+          "costs": {
+            "perPatient": 12000,
+            "perSite": 50000,
+            "perMonth": 8000,
+            "sites": 20
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_dropout@2",
+            "hash": null,
+            "value": {
+              "key": "dropout",
+              "pointValue": 0.1
+            }
+          }
+        ],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_field_missing@scenario.accrual.duration"
+      ]
     }
   ],
   "validResults": [

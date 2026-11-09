@@ -6,7 +6,7 @@
  * turns the facts of a result (the scenario, the cards bound into it, the defaults the engine applied) into the list the page
  * shows, once per page and the same for the trial, the population and the comparator:
  *
- *   `{ key, label, value, source, decisive, reason? }` — `source` is one of 文献 / 假设 / 默认 / 你给的数据 (`VCR_PREMISE_SOURCES`).
+ *   `{ key, label, value, source, decisive, reason? }` — `source` is one of 文献 / 假设 / 默认 / 你给的数据 / 由你给的数据算出 (`VCR_PREMISE_SOURCES`; a derived row's `from` is its parent's key).
  *
  * Rules the list keeps (the plan's presentation rule, which comes before each item's own "put it on the page"):
  *
@@ -27,7 +27,7 @@
  * @module vcrPremises
  */
 
-import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_MIN_CELL_SIZE, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
+import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_MIN_CELL_SIZE, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES, vcrTimeUnitOf } from "@evimed/domain";
 import { VCR_USE_TEXT_ZH } from "./vcrModelApplicability.mjs";
 import { personWord, personMappingPremises } from "./vcrPersonStated.mjs";
 import { imputationPremise } from "./vcrImputationView.mjs";
@@ -37,8 +37,8 @@ import { biasEstimatePhrase, biasStatedWords } from "./vcrBiasAnalysis.mjs";
 import { borrowingPremises } from "./vcrBorrowing.mjs";
 
 /**
- * @typedef {{ key: string, label: string, value: string, source: 'literature' | 'assumed' | 'default' | 'given', decisive: boolean,
- *   reason: string | null }} VcrPremise
+ * @typedef {{ key: string, label: string, value: string, source: 'literature' | 'assumed' | 'default' | 'given' | 'derived', decisive: boolean,
+ *   reason: string | null, from?: string }} VcrPremise
  */
 
 /**
@@ -50,7 +50,7 @@ const PRIORITY = Object.freeze([
   "use:use_not_validated",
   // what the people of a population are and what a computation may do with them, then the control of a comparison
   "binding:readiness", "binding:stale_model", "binding:stale_population", "origin:simulated", "origin:model_predicted", "origin:reconstructed", "origin:aggregate",
-  "effect", "control", "dropout", "correlation", "similarity", "sampling", "accrual", "alpha", "assurance",
+  "effect", "control", "dropout", "correlation", "similarity", "sampling", "accrualRate", "accrual", "followup", "alpha", "assurance",
   // a comparison: how suitable it is, how far the target trial is emulated, what an indirect comparison leaves unadjusted, what a
   // borrowed prior rests on, how strong an unmeasured confounder would have to be
   "applicability", "targetTrial", "trimmedPopulation", "missingAtRandom", "trialStrategy", "trialWeights", "maicTarget", "maicModifiers", "residual", "borrowedHistory", "priorWorth", "unmeasured",
@@ -86,7 +86,7 @@ export function finishPremises(rows, personStated = null) {
     if (!key || !label || !value || byKey.has(key)) continue;
     const source = /** @type {readonly string[]} */ (VCR_PREMISE_SOURCES).includes(String(row.source)) ? /** @type {VcrPremise["source"]} */ (row.source) : "assumed";
     const rank = PRIORITY.indexOf(key);
-    byKey.set(key, { key, label, value, source, decisive: row.decisive === true, reason: text(row.reason), rank: rank < 0 ? PRIORITY.length : rank });
+    byKey.set(key, { key, label, value, source, decisive: row.decisive === true, reason: text(row.reason), ...(text(row.from) ? { from: text(row.from) } : {}), rank: rank < 0 ? PRIORITY.length : rank });
   }
   const ordered = [...byKey.values()].sort((a, b) => Number(b.decisive) - Number(a.decisive) || a.rank - b.rank);
   let open = 0;
@@ -302,10 +302,22 @@ function trialPremises(input) {
   if (type === "time_to_event") {
     const duration = numeric(accrual.duration);
     const followup = numeric(accrual.followup);
-    const parts = [duration !== null ? `入组 ${plain(duration)} ${time}` : null, followup !== null ? `随访 ${plain(followup)} ${time}` : null].filter(Boolean);
-    // the person's when every time it states is in their own messages (live D4, 2026-11-07: 「入组期 12 个月」 read 假设)
-    const said = [duration !== null ? "accrual.duration" : null, followup !== null ? "accrual.followup" : null].filter((path) => path !== null);
-    if (parts.length) rows.push({ key: "accrual", label: "入组与随访", value: parts.join("，"), source: personWord(input.personStated, /** @type {string[]} */ (said), "assumed"), decisive: true });
+    const rate = numeric(accrual.rate);
+    if (rate !== null && duration !== null) {
+      // A rate the person stated: the rate is the premise they gave, the duration is code's quotient of it and the stated sizes, and
+      // reads 「由你给的数据算出」 only while its parent is the person's (a derived value of an assumed rate is an assumption).
+      const per = (TIME_UNIT_WORDS[String(vcrTimeUnitOf(accrual.rateUnit) ?? vcrTimeUnitOf(configuration.timeUnit) ?? "months")] ?? TIME_UNIT_WORDS.months).bare;
+      const parent = personWord(input.personStated, "accrual.rate", "assumed");
+      rows.push({ key: "accrualRate", label: "入组速度", value: `每${per} ${plain(rate)} 人`, source: parent, decisive: true });
+      rows.push({ key: "accrual", label: "入组时长", value: `${plain(duration)} ${time}`, source: parent === "given" ? "derived" : parent, from: "accrualRate",
+        reason: `由每${per} ${plain(rate)} 人和两组的计划人数算出`, decisive: false });
+      if (followup !== null) rows.push({ key: "followup", label: "随访时长", value: `${plain(followup)} ${time}`, source: personWord(input.personStated, "accrual.followup", "assumed"), decisive: true });
+    } else {
+      const parts = [duration !== null ? `入组 ${plain(duration)} ${time}` : null, followup !== null ? `随访 ${plain(followup)} ${time}` : null].filter(Boolean);
+      // the person's when every time it states is in their own messages (live D4, 2026-11-07: 「入组期 12 个月」 read 假设)
+      const said = [duration !== null ? "accrual.duration" : null, followup !== null ? "accrual.followup" : null].filter((path) => path !== null);
+      if (parts.length) rows.push({ key: "accrual", label: "入组与随访", value: parts.join("，"), source: personWord(input.personStated, /** @type {string[]} */ (said), "assumed"), decisive: true });
+    }
   }
 
   // The error rates the decision is made at.

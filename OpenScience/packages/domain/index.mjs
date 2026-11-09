@@ -2358,6 +2358,9 @@ export {
 // of them (read as that one, and said), so a spelling costs no round
 export {
   VCR_WRITE_WORDS,
+// vcrAccrualRate — 1 export: the accrual duration a stated rate gives (people / rate), derived by code before the scenario is frozen
+export { vcrDeriveAccrualDuration } from './src/vcrAccrualRate.mjs'
+
   vcrNormalizeWriteRow,
   vcrReadWord,
   vcrWordKey,

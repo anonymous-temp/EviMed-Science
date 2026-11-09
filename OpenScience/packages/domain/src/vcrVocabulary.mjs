@@ -54,9 +54,11 @@ export const VCR_VALUE_SOURCE_LABELS_ZH = Object.freeze({
  * Where a premise of a result comes from (remediation plan 5.2): the literature (a value an extraction and a pooling stand behind),
  * an assumption (a value somebody stated, a model or the researcher, with no evidence under it), a default (a value the platform
  * filled in because the scenario stated none) or the researcher's own data. The page's one block 「这个结论的前提」 names each premise
- * by it; the four are all it says about where a number came from.
+ * by it; the four are all it says about where a number came from. A fifth, `derived` (由你给的数据算出), is a value code computed from another
+ * premise of the same block that is 「你给的数据」 (a duration from a stated rate and the stated sizes); its row points at that parent (`from`),
+ * and a value derived from an assumed parent is that parent's word, never this one.
  */
-export const VCR_PREMISE_SOURCES = frozen(['literature', 'assumed', 'default', 'given'])
+export const VCR_PREMISE_SOURCES = frozen(['literature', 'assumed', 'default', 'given', 'derived'])
 /**
  * Where a premise of a result comes from, in the page's words. The meaning of `given` (你给的数据) is stated here and nowhere else: the value comes from
  * a table or a record the person supplied, or the number is literally in a message the person typed in this conversation (the control plane lays a
@@ -64,7 +66,7 @@ export const VCR_PREMISE_SOURCES = frozen(['literature', 'assumed', 'default', '
  * is `assumed` (假设), a conversation whose messages cannot be read gives nothing the stronger word, and a result from before the record was kept
  * reads as it read.
  */
-export const VCR_PREMISE_SOURCE_LABELS_ZH = Object.freeze({ literature: '文献', assumed: '假设', default: '默认', given: '你给的数据' })
+export const VCR_PREMISE_SOURCE_LABELS_ZH = Object.freeze({ literature: '文献', assumed: '假设', default: '默认', given: '你给的数据', derived: '由你给的数据算出' })
 /** At most this many premises stand open in the block; the rest are folded into one disclosure. */
 export const VCR_PREMISES_DECISIVE_MAX = 5
 /** Sources that are a record of a real person: they may enter `realPatients`. */

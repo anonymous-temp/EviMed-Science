@@ -19,6 +19,7 @@
  */
 
 import { whenHolds } from './vcrScenarioSchemas.mjs'
+import { vcrDeriveAccrualDuration } from './vcrAccrualRate.mjs'
 
 /** @param {unknown} value @returns {value is Record<string, any>} */
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -90,5 +91,7 @@ export function vcrNormalizeScenarioKeys(method, scenario) {
     applied.push({ field: `${listKey}[].label`, value: entries.filter((entry) => isObject(entry) && typeof entry.label === 'string').map((entry) => entry.label),
       took: 'left out: a label is for the page that shows the entry; the engine reads none of it' })
   }
-  return { scenario: out, applied, conflicts }
+  // an accrual stated by its rate gets its duration here, by code (`vcrAccrualRate.mjs`)
+  const rated = vcrDeriveAccrualDuration(method, out)
+  return { scenario: rated.scenario, applied: [...applied, ...rated.applied], conflicts: [...conflicts, ...rated.conflicts] }
 }

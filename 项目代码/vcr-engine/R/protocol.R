@@ -1058,6 +1058,9 @@ vcr_validate_scenario <- function(method, scenario, input_ids = NULL, path = "sc
     ctx$raise("rule_expression_forbidden", holder, "A scenario never carries an expression.")
   }
   .vcrp_check_object(schema, scenario, path, ctx)
+  # a stated accrual rate is turned into the duration by the platform before the job is frozen; mirrors the domain's check
+  acc <- .vcrp_get(scenario, "accrual")
+  if (.vcrp_named(acc) && !is.null(acc[["rate"]]) && is.null(acc[["duration"]])) ctx$raise("scenario_field_missing", .vcrp_at(path, "accrual.duration"), "A rate gives the duration only through the platform, before the job is frozen: state accrual.duration too.")
   if (method %in% c("design.simulate","design.grid","design.analytic")) .vcrp_check_design_semantics(scenario,path,ctx)
   if (identical(method,"design.confirmatory")) .vcrp_check_confirmatory(scenario,path,ctx)
   if (identical(method,"design.dose")) .vcrp_check_dose(scenario,path,ctx)

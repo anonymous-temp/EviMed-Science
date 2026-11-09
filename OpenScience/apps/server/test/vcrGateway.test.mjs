@@ -2106,3 +2106,45 @@ test("live D8: a finished type I simulation is handed over with its verdict on t
   const power = await statusOf({ name: "power", value: 0.838, mcse: 0.0037, simulated: true }, { analysis: { alpha: 0.025 } });
   assert.equal("typeOneError" in power, false, "a result with no type I error carries no verdict");
 });
+
+test("「每月入组 20 人」 started in a conversation: the rate reaches the job as stated, the duration is derived by code, and the premises tell them apart (plan R12)", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_r", state: "queued", progress: {}, checkpoint: input.detail }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_r", state: "canceled" }, canceled: true }; },
+  };
+  const held = { id: "scn_300", version: 1, label: "设计 1", design: "two_arm_fixed", endpointType: "time_to_event", configuration: { design: { kind: "two_arm_fixed", nTreat: 300, nControl: 300 } } };
+  const made = fixture({ jobs, store: { ...fixture().vcr.store, async trialScenarios() { return [held]; } }, orchestrator: { async inFlightStage() { return null; }, async noteRuntimeJob() {} } });
+  made.vcr.store.taskContext = async (/** @type {any} */ origin) => ({ id: "std_task", userId: "u1", projectId: "prj_1", scope: "conversation", purpose: "task", conversationSessionId: origin.rootSessionId });
+  const handler = createVcrGatewayHandler(config, runtimeManager, { vcr: made.vcr,
+    resolveInvocation: async () => ({ userId: "u1", projectId: "prj_1", runId: "run_1", rootSessionId: "sess_1", callId: "call_1" }),
+    readPersonMessages: async () => [{ sessionId: "sess_1", messageSeq: 5, text: "两臂生存期试验，每组 300 人，每月入组 20 人，入组完后再随访 24 个月；对照组中位生存期 12 个月，预期 HR 0.75。请用模拟看看把握度" }] });
+  const start = async (/** @type {string} */ kind, /** @type {any} */ scenario) => {
+    const res = response();
+    await handler(request("/internal/vcr/v1/simulate", { action: "start", kind, subjectId: "scn_300", scenario }, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
+    return res;
+  };
+  const model = { design: { kind: "two_arm_fixed", nTreat: 300, nControl: 300 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.75, controlMedian: 12 },
+    analysis: { alpha: 0.025, sided: 1 }, accrual: { rate: 20, followup: 24 }, timeUnit: "months" };
+  const ok = await start("design_simulation", model);
+  assert.equal(ok.status, 200, ok.body);
+  const frozen = queued.at(-1);
+  assert.equal(frozen.scenario.accrual.rate, 20, "the rate is kept as the person stated it");
+  assert.equal(frozen.scenario.accrual.duration, 30, "600 people at 20 a month, derived by code");
+  assert.deepEqual(frozen.detail.normalizedKeys.map((/** @type {any} */ entry) => entry.field), ["accrual.duration"]);
+  const { vcrPremises } = await import("../src/vcrPremises.mjs");
+  const premises = vcrPremises("trial", { endpointType: "time_to_event", designKind: "two_arm_fixed", configuration: frozen.scenario, diagnostics: {}, cards: [], bound: [],
+    appliedDefaults: [], personStated: frozen.detail.personStated });
+  const byKey = Object.fromEntries(premises.map((/** @type {any} */ row) => [row.key, row]));
+  assert.equal(byKey.accrualRate.source, "given", "你给的数据");
+  assert.equal(byKey.accrual.source, "derived", "由你给的数据算出");
+  assert.equal(byKey.accrual.from, "accrualRate");
+  // a method that computes the people cannot take a duration from them: refused by name, nothing queued
+  const before = queued.length;
+  const refused = await start("design_analytic", { design: { kind: "two_arm_fixed" }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.75, controlMedian: 12 },
+    analysis: { alpha: 0.025, power: 0.9, sided: 1 }, accrual: { rate: 20, followup: 24 }, timeUnit: "months" });
+  assert.equal(refused.status, 400, refused.body);
+  assert.match(refused.body, /accrual\.rate/);
+  assert.equal(queued.length, before);
+});

@@ -11,7 +11,7 @@ import { DRAFT_PREFIX } from "./vcrActionWords";
  * 「这个结论的前提」 — the one block a result page opens with its assumptions (remediation plan 5.2), the same on the trial, the
  * population and the comparator.
  *
- * The server hands over every premise of the result with its value, where it came from (文献 / 假设 / 默认 / 你给的数据) and whether
+ * The server hands over every premise of the result with its value, where it came from (文献 / 假设 / 默认 / 你给的数据 / 由你给的数据算出) and whether
  * the conclusion turns on it; this shows the decisive ones, at most five, and folds every other into one disclosure. There is no
  * banner and no general caveat: a row is a premise because a number stands behind it, and it carries the one way to change it — the
  * draft into the conversation's own composer, prefilled with the premise's name (`premiseDraft`), which the researcher completes
@@ -33,7 +33,7 @@ export const premiseDraft = (premise: Pick<VcrPremise, "label" | "value">): stri
 const SENTENCE_ROW = /^(use|binding|origin|campaign|lab|trajectory):|^progression:ad:(parameters|regulatory|scope|curves)$/;
 export const premiseCarriesValue = (key: string): boolean => !SENTENCE_ROW.test(key);
 
-const TONES: Record<VcrPremise["source"], TagTone> = { literature: "neutral", assumed: "neutral", default: "warn", given: "neutral" };
+const TONES: Record<VcrPremise["source"], TagTone> = { literature: "neutral", assumed: "neutral", default: "warn", given: "neutral", derived: "neutral" };
 
 function PremiseRow({ premise, onChange }: { premise: VcrPremise; onChange: ((premise: VcrPremise) => void) | null }) {
   return (
