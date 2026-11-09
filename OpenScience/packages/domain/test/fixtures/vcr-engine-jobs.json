@@ -30245,7 +30245,7 @@
             }
           },
           "analysis": {
-            "kind": "mmrm"
+            "kind": "bootstrap"
           }
         },
         "inputs": []
