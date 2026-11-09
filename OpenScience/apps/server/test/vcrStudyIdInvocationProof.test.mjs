@@ -93,3 +93,21 @@ test("without a grant the same call is refused by name, and a study id the pendi
   await assert.rejects(proof({ what: "study", studyId: "std_old" }, { what: "study", studyId: "std_other" }), { code: "vcr_invocation_unavailable" });
   await assert.rejects(proof({ what: "study", studyId: "std_old" }, { what: "study" }), { code: "vcr_invocation_unavailable" });
 });
+
+test("the research plugin tools carry the same studyId: the call, its projection and the pending call must agree", async () => {
+  const project = { id: "prj_1", userId: "u1" };
+  const proof = (/** @type {string} */ tool, /** @type {Record<string, any>} */ input, /** @type {Record<string, any>} */ body) => verifyVcrInvocation({
+    header: JSON.stringify({ v: 1, sessionId: "root", callId: "call_p" }), operation: "simulate", body, project, assertResearchPluginSelection: async () => {},
+    runtimeManager: { sessionTranscript: async (/** @type {any} */ _p, /** @type {string} */ sessionId) => ({ sessionId, truncated: false, turns: [{ startSeq: 1, end: null }],
+      messages: [{ turnStartSeq: 1, role: "assistant", parts: [{ type: "tool", callId: "call_p", status: "pending", tool, input }] }] }) },
+    resolveSession: () => ({ runId: "run_p" }), runs: [{ id: "run_p", sessionId: "root" }] });
+  const read = { jobId: "job_1", studyId: "std_old" };
+  assert.equal((await proof("virtual_trial_read", read, { action: "status", jobId: "job_1", studyId: "std_old" })).runId, "run_p");
+  const search = { campaignId: "cmp_1", studyId: "std_old" };
+  assert.equal((await proof("virtual_trial_search", search, { action: "search_status", campaignId: "cmp_1", studyId: "std_old" })).runId, "run_p");
+  // a request that drops the study, names another or adds one the call never held is forged
+  await assert.rejects(proof("virtual_trial_read", read, { action: "status", jobId: "job_1" }), { code: "vcr_invocation_unavailable" });
+  await assert.rejects(proof("virtual_trial_read", read, { action: "status", jobId: "job_1", studyId: "std_other" }), { code: "vcr_invocation_unavailable" });
+  await assert.rejects(proof("virtual_trial_read", { jobId: "job_1" }, { action: "status", jobId: "job_1", studyId: "std_old" }), { code: "vcr_invocation_unavailable" });
+  await assert.rejects(proof("virtual_trial_read", { jobId: "job_1", studyId: "bad id" }, { action: "status", jobId: "job_1", studyId: "bad id" }), { code: "vcr_invocation_unavailable" });
+});

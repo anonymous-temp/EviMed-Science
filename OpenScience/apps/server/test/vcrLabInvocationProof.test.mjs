@@ -51,6 +51,9 @@ const LAB_CALLS = {
   search_cancel: { action: "search_cancel", campaignId: "cmp_live1" },
   compare: { action: "compare", experiment: EXPERIMENT },
   compare_status: { action: "compare_status", experimentId: "exp_live1" },
+  // a record of virtual people (plan R23), and the comparison that runs on it
+  instantiate: { action: "instantiate", people: { n: 400, uncertainty: "new_study" } },
+  compare_on_people: { action: "compare", experiment: { ...EXPERIMENT, people: { recordId: "res_people1", mode: "paired_counterfactual" } } },
 };
 
 /** A control plane with the real gateway and the real proof; the kernel's transcript holds one pending call, which a test sets. */
@@ -68,6 +71,8 @@ async function controlPlane(t) {
     experiments: {
       startCampaign: async (/** @type {any} */ _study, /** @type {any} */ manifest) => { reached.push(["search", manifest]); return answer("campaign", "cmp_live1"); },
       startExperiment: async (/** @type {any} */ _study, /** @type {any} */ experiment) => { reached.push(["compare", experiment]); return answer("experiment", "exp_live1"); },
+      instantiatePeople: async (/** @type {any} */ _study, /** @type {any} */ request) => { reached.push(["instantiate", request]); return { jobId: "job_people1", state: "queued", created: true, identity: "abc" }; },
+      peopleRecords: async () => [{ id: "res_people1", people: 400 }],
       cancel: async (/** @type {any} */ _study, /** @type {string} */ id) => { reached.push(["search_cancel", id]); return answer("campaign", id); },
       view: async (/** @type {any} */ _study, /** @type {string} */ id) => { reached.push(["view", id]); return answer(id.startsWith("cmp_") ? "campaign" : "experiment", id); },
     },
@@ -126,8 +131,10 @@ test("every lab action sent through vcr_simulate by the research MCP server is p
   }
   // What reached the lab is what the model sent, whole.
   assert.deepEqual(reached.find(([what]) => what === "compare")?.[1], EXPERIMENT);
+  assert.deepEqual(reached.find(([what]) => what === "instantiate")?.[1], LAB_CALLS.instantiate.people);
+  assert.deepEqual(reached.filter(([what]) => what === "compare").at(-1)?.[1].people, { recordId: "res_people1", mode: "paired_counterfactual" }, "people {recordId, mode} reaches the comparison whole");
   assert.deepEqual(reached.find(([what]) => what === "search")?.[1], MANIFEST);
-  assert.deepEqual(reached.filter(([what]) => what !== "compare" && what !== "search").map(([, id]) => id), ["cmp_live1", "cmp_live1", "exp_live1"]);
+  assert.deepEqual(reached.filter(([what]) => !["compare", "search", "instantiate"].includes(what)).map(([, id]) => id), ["cmp_live1", "cmp_live1", "exp_live1"]);
 });
 
 test("a lab request that is not the pending call is refused", async () => {
@@ -147,6 +154,8 @@ test("a lab request that is not the pending call is refused", async () => {
     [LAB_CALLS.search_status, { action: "search_cancel", campaignId: "cmp_live1" }],
     [LAB_CALLS.compare_status, { action: "compare_status", experimentId: "exp_other" }],
     [LAB_CALLS.compare, { action: "compare" }],
+    [LAB_CALLS.instantiate, { action: "instantiate", people: { n: 40000 } }],
+    [LAB_CALLS.compare_on_people, { ...LAB_CALLS.compare_on_people, experiment: { ...LAB_CALLS.compare_on_people.experiment, people: { recordId: "res_other", mode: "paired_counterfactual" } } }],
   ];
   for (const [input, body] of forged) await assert.rejects(proof(input, body), { code: "vcr_invocation_unavailable" }, JSON.stringify(body).slice(0, 120));
   // A key the MCP server never forwards for that action is not projected either: the call may carry it, the request does not.

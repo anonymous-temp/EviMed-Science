@@ -383,7 +383,9 @@ const POOL_REQUEST_FIELDS = VCR_RUN_SCENARIO_FIELDS.pool_evidence;
  * `vcr_simulate` call through the same lists, so a field read here is a field proved there.
  */
 export const VCR_LAB_ACTION_FIELDS = Object.freeze({ search: Object.freeze(["action", "manifest"]), search_status: Object.freeze(["action", "campaignId"]),
-  search_cancel: Object.freeze(["action", "campaignId"]), compare: Object.freeze(["action", "experiment"]), compare_status: Object.freeze(["action", "experimentId"]) });
+  search_cancel: Object.freeze(["action", "campaignId"]), compare: Object.freeze(["action", "experiment"]), compare_status: Object.freeze(["action", "experimentId"]),
+  // a record of virtual people (plan R23): the request object, answered with the job that makes it and the records the study holds
+  instantiate: Object.freeze(["action", "people"]) });
 const LAB_ACTIONS = Object.freeze(Object.keys(VCR_LAB_ACTION_FIELDS));
 
 /** @param {Record<string, any>} body */
@@ -397,9 +399,9 @@ function simulateRequest(body) {
   // and the read and the stop of each. Code evaluates; the call carries the manifest and reads what came back.
   if (LAB_ACTIONS.includes(action)) {
     onlyFields(body, [.../** @type {Record<string, readonly string[]>} */ (VCR_LAB_ACTION_FIELDS)[action]]);
-    const payload = action === "search" ? body.manifest : action === "compare" ? body.experiment : null;
-    if ((action === "search" || action === "compare") && (!payload || typeof payload !== "object" || Array.isArray(payload))) {
-      throw gatewayError(400, "vcr_simulate_payload_invalid", action === "search" ? "manifest is the frozen campaign object." : "experiment is the object of named arms and their comparison.");
+    const payload = action === "search" ? body.manifest : action === "compare" ? body.experiment : action === "instantiate" ? body.people : null;
+    if (["search", "compare", "instantiate"].includes(action) && (!payload || typeof payload !== "object" || Array.isArray(payload))) {
+      throw gatewayError(400, "vcr_simulate_payload_invalid", action === "search" ? "manifest is the frozen campaign object." : action === "compare" ? "experiment is the object of named arms and their comparison." : "people is the request for a record of virtual people: n, or populationId with columns.");
     }
     const ref = action === "search_status" || action === "search_cancel" ? body.campaignId : action === "compare_status" ? body.experimentId : null;
     if (ref !== null && (typeof ref !== "string" || !ID.test(ref))) throw gatewayError(400, "vcr_simulate_payload_invalid", "The id is the one the start answered with.");
@@ -2892,6 +2894,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             const who = { userId: study.userId, origin: study.completionOrigin ?? null };
             const answer = lab.action === "search" ? await vcr.experiments.startCampaign(study, lab.payload, who)
               : lab.action === "compare" ? await vcr.experiments.startExperiment(study, lab.payload, who)
+              // asking again with the same request is the same job, so this is also how a run reads back the record's id
+              : lab.action === "instantiate" ? { kind: "people", ...await vcr.experiments.instantiatePeople(study, lab.payload, who), records: (await vcr.experiments.peopleRecords(study)).slice(0, 10) }
               : lab.action === "search_cancel" ? await vcr.experiments.cancel(study, lab.ref, { actor: "runtime" })
               : await vcr.experiments.view(study, lab.ref);
             if (["search", "compare"].includes(lab.action)) await nameWhatItHolds(vcr, study);

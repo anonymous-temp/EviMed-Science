@@ -133,7 +133,7 @@ TAU_PRIOR_KINDS = ("turner_2015", "turner_2015_generic", "bartos_2023")
 # The virtual lab's actions (F4): the same operation the trial plugin's `virtual_trial_search` / `virtual_trial_compare` reach, so a study
 # conversation without that plugin runs a design search or a design comparison through this one tool. They take a frozen manifest or an
 # experiment and an id, never a job id; the lab answers them whole (a campaign advances on the platform, not in this call).
-LAB_ACTIONS = ("search", "search_status", "search_cancel", "compare", "compare_status")
+LAB_ACTIONS = ("search", "search_status", "search_cancel", "compare", "compare_status", "instantiate")
 SIMULATE_ACTIONS = ("start", "status", "cancel", "shape", "validate", *LAB_ACTIONS)
 # The objects `vcr_write` takes whose configuration, scenario or definition carries the keys of a job kind's scenario (the
 # platform projects the object onto that kind's schema and refuses what it does not read): where to look a shape up before
@@ -370,7 +370,7 @@ def _detailed_tool_definitions():
                 "type": "object",
                 "properties": {
                     "action": {"type": "string", "enum": list(SIMULATE_ACTIONS), "default": "start"},
-                    "kind": {"type": "string", "enum": [*JOB_KINDS, "search"]},
+                    "kind": {"type": "string", "enum": [*JOB_KINDS, "search", "people"]},
                     "scenario": {"type": "object"},
                     "inputs": {"type": "array", "maxItems": 200, "items": {"type": "object"}},
                     "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
@@ -393,6 +393,7 @@ def _detailed_tool_definitions():
                     "campaignId": ID,
                     "experiment": {"type": "object"},
                     "experimentId": ID,
+                    "people": {"type": "object"},
                     "sources": {"type": "array", "maxItems": 8, "description": (
                         "A number you read in a paper and wrote into the scenario: [{field: its path in the scenario, e.g. truth.controlMedian, "
                         "publication: PMID or DOI, quote: the sentence that prints it}]. For a user-stated parameter, optionally use "
@@ -1154,7 +1155,12 @@ LAB_SHAPES = {
     "compare": "action compare with experiment {question, arms [{name, resultId} | {name, method, scenario}], comparison {measures, reference}}: saved "
                "design results attach by id and are never rerun. A design this conversation cannot read by id (computed in another conversation) is "
                "an arm {name, method, scenario} stated again from its numbers. The arms of a disease experiment are {name, method: "
-               "\"patients.progression\", scenario} that differ only in treatment. Read with compare_status {experimentId}.",
+               "\"patients.progression\", scenario} that differ only in treatment. Read with compare_status {experimentId}. To give every arm the "
+               "same virtual people, add people {recordId, mode: paired_counterfactual | resampled_trials} (recordId from action instantiate).",
+    "instantiate": "action instantiate with people = {n} or {populationId, columns {mmse, age, apoe4, female: the population's column names}}, "
+                   "optional uncertainty (new_study | typical_study), seed: makes one record of virtual people for the Alzheimer progression model, "
+                   "drawn once. The same request is the same record; ask again to read the record's id from records, then compare with people "
+                   "{recordId, mode}. action shape kind people gives a filled example.",
 }
 
 
@@ -1197,6 +1203,34 @@ def _search_shape() -> dict:
     }
 
 
+# A filled request for `action instantiate`; `test_vcr_platform.py` holds it to the domain's request check (`vcrPeopleInstantiateRequest`, through node).
+PEOPLE_EXAMPLE = {"n": 400, "uncertainty": "new_study"}
+
+
+def _people_shape() -> dict:
+    """``vcr_simulate`` action shape, kind people: the request for a record of virtual people, with an example. Asks the platform nothing."""
+    return {
+        "status": "success",
+        "summary": "A record of virtual people: n people of the disease-progression model, drawn once so that every arm of a comparison runs on the same ones.",
+        "data": {
+            "kind": "people", "action": "instantiate", "people": PEOPLE_EXAMPLE,
+            "keys": [
+                "n: whole number from 2 to 50000 (the model's own covariate model draws them), or populationId with columns",
+                "populationId + columns {mmse, age, apoe4, female}: the covariates a generated population version holds, each named by its column; an observed cohort is never used",
+                "uncertainty (optional): new_study (default; one study's parameters drawn) | typical_study",
+                "seed (optional): a different seed is a different record",
+            ],
+            "notes": [
+                "The same request is the same record. Call again to read recordId from records once the job has finished.",
+                "Then compare: action compare, experiment {arms: [{name, method: patients.progression, scenario}], people: {recordId, mode}}; "
+                "paired_counterfactual runs each person under every arm, resampled_trials draws each simulated trial's people from the record.",
+            ],
+        },
+        "warnings": [],
+        "next_actions": ["Call vcr_simulate with action instantiate and people set to the request."],
+    }
+
+
 def shape(arguments: dict) -> dict:
     """``vcr_simulate`` action shape: what a job kind's scenario reads, rendered from the generated help. Asks the
     platform nothing, so it answers with the module off too."""
@@ -1218,6 +1252,8 @@ def shape(arguments: dict) -> dict:
         }
     if kind == "search":
         return _search_shape()
+    if kind == "people":
+        return _people_shape()
     if kind not in JOB_KINDS:
         raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
     control = _control_plane_shape(kind)
@@ -1420,7 +1456,7 @@ def simulate(arguments: dict) -> dict:
 
 # What each lab action takes: the one object that names the work, or the id that reads or stops it. The keys inside a manifest are the
 # lab's (`shape` with no kind answers them), not the scenario help's.
-_LAB_INPUT = {"search": "manifest", "compare": "experiment", "search_status": "campaignId", "search_cancel": "campaignId", "compare_status": "experimentId"}
+_LAB_INPUT = {"search": "manifest", "compare": "experiment", "search_status": "campaignId", "search_cancel": "campaignId", "compare_status": "experimentId", "instantiate": "people"}
 
 
 def lab(arguments: dict, action: str) -> dict:
@@ -1428,11 +1464,12 @@ def lab(arguments: dict, action: str) -> dict:
     here: the platform evaluates every candidate on the engine, one unit at a time, and says why it stopped."""
     key = _LAB_INPUT[action]
     value = arguments.get(key)
-    if action in ("search", "compare"):
+    if action in ("search", "compare", "instantiate"):
         if not isinstance(value, dict) or not value:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "%s is the %s object; action shape %s says what it holds." % (
-                key, "short search form or frozen campaign" if action == "search" else "experiment of named arms and their comparison",
-                "kind search" if action == "search" else "with no kind"))
+                key, {"search": "short search form or frozen campaign", "compare": "experiment of named arms and their comparison",
+                      "instantiate": "request for a record of virtual people"}[action],
+                {"search": "kind search", "compare": "with no kind", "instantiate": "kind people"}[action]))
     elif not isinstance(value, str) or not value:
         raise VcrPlatformError("vcr_simulate_payload_invalid", "%s is the id %s answered with." % (key, "search" if key == "campaignId" else "compare"))
     try:
@@ -1445,6 +1482,17 @@ def lab(arguments: dict, action: str) -> dict:
 
 
 def _lab_answer(data: dict, action: str) -> dict:
+    if action == "instantiate":
+        return {
+            "status": "success",
+            "summary": "Record of virtual people %s (job %s)." % (data.get("state") or "queued", data.get("jobId") or ""),
+            "data": data, "warnings": [],
+            "next_actions": [
+                "The record is made once by the engine; the same request is the same record. Read its id from data.records by asking again, and do not "
+                "loop: the researcher sees it on the study page.",
+                "Compare drugs on it with action compare and people {recordId, mode}; give no number of your own for the people.",
+            ],
+        }
     stop = data.get("stop") if isinstance(data.get("stop"), dict) else None
     status = str(data.get("status") or "")
     ident = str(data.get("id") or data.get("campaignId") or data.get("experimentId") or "")

@@ -8,12 +8,29 @@ export const hostedReferenceParameters = Object.freeze({
   reconstructionResultId: { type: 'string', description: 'Hosted preserved reconstruction result identifier.' },
 })
 
+/** The study a call names explicitly (one handed to this conversation, plan R11): an addressing field of every research call, the same one the
+ * three vcr tools carry. It is proved with the rest of the call, and the gateway judges the grant; the tool schemas list it without a description
+ * (the staged selection teaches it, as it does for the vcr tools). */
+export const hostedStudyParameter = Object.freeze({ studyId: { type: 'string' } })
+/** The gateway's id pattern. @param {unknown} value */
+const studyIdValid = value => typeof value === 'string' && /^[A-Za-z0-9_.:@-]{1,160}$/.test(value)
+
 /** One projection shared by the runtime sender and native transcript verifier.
  * It grants nothing: the existing VCR gateway still authenticates the workload,
  * conversation, source grants and owned job on every operation.
  * @param {string} tool @param {Record<string,any>} args
  * @param {{jobMethods:Record<string,string>,methods:Record<string,any>}} registry */
-export function projectResearchInvocation(tool, args, { jobMethods, methods }) {
+export function projectResearchInvocation(tool, args, registry) {
+  if (!args || typeof args !== 'object' || Array.isArray(args) || args.studyId === undefined) return projectResearchCall(tool, args, registry)
+  if (!studyIdValid(args.studyId)) throw new Error('research_invocation_invalid')
+  const { studyId, ...rest } = args
+  const projected = projectResearchCall(tool, rest, registry)
+  return { ...projected, body: { ...projected.body, studyId } }
+}
+
+/** @param {string} tool @param {Record<string,any>} args
+ * @param {{jobMethods:Record<string,string>,methods:Record<string,any>}} registry */
+function projectResearchCall(tool, args, { jobMethods, methods }) {
   // The virtual lab's two trial-only tools: a design-search campaign and a comparison of named arms. The manifest and the
   // experiment are forwarded whole; the gateway validates and freezes them, and code evaluates every candidate.
   const lab = /^virtual_trial_(search|compare)$/.exec(tool)

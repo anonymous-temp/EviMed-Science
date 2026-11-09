@@ -271,8 +271,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertGreaterEqual(len(kinds), 24, "the first release's twenty-four, then the kinds appended after them")
         self.assertEqual(list(vcr_platform.JOB_KINDS), kinds)
         simulate = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]
-        # the job kinds, and `search` for action shape alone (the short form of a design search): it is no job kind and start refuses it
-        self.assertEqual(simulate["inputSchema"]["properties"]["kind"]["enum"], [*kinds, "search"])
+        # the job kinds, and `search` for action shape alone (the short form of a design search) and `people` (the request for a record of virtual people): neither is a job kind and start refuses it
+        self.assertEqual(simulate["inputSchema"]["properties"]["kind"]["enum"], [*kinds, "search", "people"])
 
     def test_simulate_description_is_short_and_sends_the_run_to_the_shape_action_instead_of_typing_the_shapes(self):
         # A description rides every request of the run; the per-method shapes are served on demand from the generated help.
@@ -316,7 +316,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
             rendered = {line.split(":", 1)[0].replace("[]", "") for line in lines}
             self.assertEqual(rendered, oracle[kind], kind)
             walked += len(rendered)
-            for guess in ("accrual.months", "accrual.rate", "dropoutRate", "truth.isNull", "enrolment"):
+            # `accrual.rate` is a real key wherever the domain's schema reads it (the equality above is the proof); a guess is a key it does not
+            for guess in ("accrual.months", "dropoutRate", "truth.isNull", "enrolment"):
                 self.assertNotIn(guess, rendered, kind)
                 self.assertFalse(any(line.startswith(guess + ":") for line in lines), kind)
         self.assertGreater(walked, 500, "the walk proves it walked")
@@ -844,28 +845,36 @@ class VcrSimulateTests(_GatewayCase):
         self.server.call_tool("vcr_simulate", {"action": "compare", "experiment": {"arms": []}})
         self.server.call_tool("vcr_simulate", {"action": "compare_status", "experimentId": "exp_1"})
         self.assertEqual([seen["body"]["action"] for seen in _Gateway.seen[3:]], ["compare", "compare_status"])
-        for bad in ({"action": "search"}, {"action": "search", "manifest": {}}, {"action": "search_status"}, {"action": "compare_status", "campaignId": "x"}):
+        _Gateway.answers["simulate"] = (200, {"data": {"kind": "people", "jobId": "job_p", "state": "queued", "records": [{"id": "res_p", "people": 400}]}})
+        asked = vcr_platform.simulate({"action": "instantiate", "people": {"n": 400}})
+        self.assertEqual(_Gateway.seen[-1]["body"], {"action": "instantiate", "people": {"n": 400}})
+        self.assertEqual(asked["data"]["records"][0]["id"], "res_p")
+        self.assertTrue(any("action compare" in line and "recordId" in line for line in asked["next_actions"]))
+        for bad in ({"action": "search"}, {"action": "search", "manifest": {}}, {"action": "search_status"}, {"action": "compare_status", "campaignId": "x"},
+                    {"action": "instantiate"}, {"action": "instantiate", "people": {}}):
             with self.assertRaises(vcr_platform.VcrPlatformError):
                 vcr_platform.simulate(bad)
 
     def test_the_lab_shapes_are_answered_by_shape_so_the_description_does_not_grow(self):
         lab = vcr_platform.shape({})["data"]["lab"]
-        self.assertEqual(set(lab), {"search", "compare"})
+        self.assertEqual(set(lab), {"search", "compare", "instantiate"})
+        self.assertIn("people {recordId, mode", lab["compare"])
+        self.assertIn("action shape kind people", lab["instantiate"])
         for fragment in ("never relaxed", "analysis.alpha", "A changed manifest is a new campaign", "search_status {campaignId}"):
             self.assertIn(fragment, lab["search"])
         definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
         properties = definitions["vcr_simulate"]["inputSchema"]["properties"]
-        self.assertEqual(properties["action"]["enum"][-5:], list(vcr_platform.LAB_ACTIONS))
-        for key in ("manifest", "campaignId", "experiment", "experimentId"):
+        self.assertEqual(properties["action"]["enum"][-6:], list(vcr_platform.LAB_ACTIONS))
+        for key in ("manifest", "campaignId", "experiment", "experimentId", "people"):
             self.assertIn(key, properties)
         # The line names searching for a design and comparing saved ones in a person's words (live 2026-11-07); the lab's forms stay in shape.
         for word in ("manifest", "campaign", "experiment"):
             self.assertNotIn(word, definitions["vcr_simulate"]["description"], "the lab is in the schema and in shape, not in what rides every request")
         for fragment in ("another conversation", "stated again", "patients.progression", "differ only in treatment"):
             self.assertIn(fragment, lab["compare"])
-        # the tool catalogue the root conversation sees: the five actions and four keys are the whole growth (13,159 -> 13,475 bytes compact)
+        # the tool catalogue the root conversation sees: the five actions and four keys are the whole growth (13,159 -> 13,475 bytes compact), and instantiate with its `people` key and the `people` kind are about 90 more
         import json
-        self.assertLess(len(json.dumps(list(definitions.values()), separators=(",", ":"))), 13_600)
+        self.assertLess(len(json.dumps(list(definitions.values()), separators=(",", ":"))), 13_700)
 
     def test_shape_kind_search_gives_a_filled_form_the_domain_compiles(self):
         answer = vcr_platform.shape({"kind": "search"})
@@ -886,6 +895,22 @@ class VcrSimulateTests(_GatewayCase):
         # the example is what the domain's compile accepts, so the run that copies it is not refused
         node = shutil.which("node")
         script = "import('@evimed/domain').then((m) => { const out = m.vcrCampaignFromInput(JSON.parse(process.argv[1])); console.log(JSON.stringify({ issues: out.issues, ok: Boolean(out.manifest) })) })"
+        out = subprocess.run([node, "--input-type=module", "-e", script, json.dumps(example)], cwd=OPEN_SCIENCE / "apps" / "server",
+                             capture_output=True, text=True, timeout=60, check=True)
+        self.assertEqual(json.loads(out.stdout.strip().splitlines()[-1]), {"issues": [], "ok": True})
+
+    def test_shape_kind_people_gives_a_filled_request_the_domain_accepts(self):
+        answer = vcr_platform.shape({"kind": "people"})
+        self.assertEqual(answer["status"], "success")
+        example = answer["data"]["people"]
+        self.assertEqual(self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "people"})["data"]["people"], example)
+        self.assertTrue(any("recordId" in note and "paired_counterfactual" in note for note in answer["data"]["notes"]))
+        for action in ("start", "validate"):
+            with self.assertRaises(vcr_platform.VcrPlatformError):
+                vcr_platform.simulate({"action": action, "kind": "people", "scenario": {}})
+        node = shutil.which("node")
+        script = ("import('./src/vcrPeople.mjs').then((m) => { const out = m.vcrPeopleInstantiateRequest(JSON.parse(process.argv[1]), null); "
+                  "console.log(JSON.stringify({ issues: out.issues, ok: Boolean(out.request) })) })")
         out = subprocess.run([node, "--input-type=module", "-e", script, json.dumps(example)], cwd=OPEN_SCIENCE / "apps" / "server",
                              capture_output=True, text=True, timeout=60, check=True)
         self.assertEqual(json.loads(out.stdout.strip().splitlines()[-1]), {"issues": [], "ok": True})
@@ -1008,7 +1033,7 @@ class VcrSimulateTests(_GatewayCase):
         result = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "generate_patients",
                                                         "scenario": {"endpoint": {"type": "time_to_event"}, "accrual": {"months": 24}}})
         self.assertEqual(result["error"]["code"], "vcr_simulate_payload_invalid")
-        self.assertIn("inside accrual the engine reads: kind, duration[uniform], followup, dropoutAnnual, maxFollowup, breaks[piecewise], rates[piecewise], tail[piecewise]", result["error"]["message"])
+        self.assertIn("inside accrual the engine reads: kind, duration[uniform], rate[uniform], rateUnit[uniform], followup, dropoutAnnual, maxFollowup, breaks[piecewise], rates[piecewise], tail[piecewise]", result["error"]["message"])
 
     def test_a_refusal_without_findings_or_for_a_kind_the_platform_builds_is_passed_on_as_it_came(self):
         _Gateway.answers["simulate"] = (400, {"error": "合并只写 parameter、endpointKey：要合并的值来自本研究已通过核对的抽取值，不要自己带数。", "code": "vcr_simulate_payload_invalid"})
