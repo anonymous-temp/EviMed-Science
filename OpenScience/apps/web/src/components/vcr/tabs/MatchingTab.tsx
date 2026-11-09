@@ -71,7 +71,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   const [trial, setTrial] = useState<string | null>(null);
   const [protocolVersionId, setProtocolVersionId] = useState<string | null>(null);
   const frame = useStudyFrame();
-  const { state, reload, last } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}`, () => {
+  const { state, reload, carried: last } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}`, () => {
     const askedFor = view === "matching" && candidate ? candidate : null;
     const askedTrial = view === "matching" && direction === "patient_to_trial" && askedFor && trial ? trial : null;
     return getVcrMatching(studyId, {
@@ -103,6 +103,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     setCandidate(opensOn);
   }, [opensOn]);
 
+  // (`carried`, not `last`: this is the controls' own memory across a key change, and no result is drawn from it.)
   // The controls are the reader's own instrument: the chip they just used, the patient they are filling in. They are drawn from this
   // key's page once it has arrived and from the newest one before that — also when this one could not be read — so a change of
   // protocol or direction never unmounts them (focus falls to <body>, a half-made choice is lost; review V-M2).

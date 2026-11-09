@@ -279,7 +279,7 @@ const useLabSwitcher = () => useContext(LabContext).switcher;
 export function VirtualLabWorkspace({ studyId, canRun = true, switcher = null }: { studyId: string; canRun?: boolean; switcher?: ToolbarChips | null }) {
   const list = useVcrLoad(`${studyId}:lab:list`, () => listVcrLabExperiments(studyId));
   const [chosen, setChosen] = useState("");
-  const entries: VcrLabEntry[] = list.state.kind === "ready" ? list.state.data.experiments : list.last?.experiments ?? [];
+  const entries: VcrLabEntry[] = list.last?.experiments ?? [];
   const selected = entries.find((entry) => entry.id === chosen) ?? entries[0];
   const detail = useVcrLoad(`${studyId}:lab:${selected?.id ?? "none"}`, () => (selected ? getVcrLabExperiment(studyId, selected.id) : Promise.resolve(null)));
   const view = detail.state.kind === "ready" ? detail.state.data : null;
@@ -299,7 +299,7 @@ export function VirtualLabWorkspace({ studyId, canRun = true, switcher = null }:
   let body;
   // While there is no object to draw (loading, an error) the band still carries the lab's switch, so the reader can go back.
   if (list.state.kind === "loading") body = <><SwitcherOnly /><VcrTabSkeleton /></>;
-  else if (list.state.kind === "error" && !entries.length) body = <><SwitcherOnly /><VcrTabError message={list.state.message} onRetry={list.reload} /></>;
+  else if (list.state.kind === "error") body = <><SwitcherOnly /><VcrTabError message={list.state.message} onRetry={list.reload} /></>;
   else if (!selected) body = <LabEmpty studyId={studyId} canRun={canRun} />;
   else if (detail.state.kind === "loading") body = <><SwitcherOnly /><VcrTabSkeleton /></>;
   else if (detail.state.kind === "error") body = <><SwitcherOnly /><VcrTabError message={detail.state.message} onRetry={detail.reload} /></>;

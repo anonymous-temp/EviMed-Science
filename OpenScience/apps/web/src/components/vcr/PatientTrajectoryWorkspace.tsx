@@ -15,7 +15,7 @@ import { VcrTrajectoryChart } from './VcrCharts';
 import { VcrPremises } from './VcrPremises';
 import { VcrLongitudinalPanel } from './VcrLongitudinalPanel';
 import { forecastIssue } from './VcrForecastEvaluation';
-import { useVcrLoad, VcrTabError } from './vcrTabKit';
+import { useVcrLoad, VcrRefreshingNote, VcrTabError } from './vcrTabKit';
 
 /**
  * 患者轨迹预测 — the result surface of a batch forecast inside a study (plan T08, A05/A06/A12/A13).
@@ -84,8 +84,9 @@ export function PatientTrajectoryWorkspace({ studyId, canRun, canManage = false,
   const counts = summary?.accounting;
   const page = useVcrLoad(`${studyId}:trajectory:${selected?.id ?? 'none'}:${status}:${offset}`,
     () => selected ? getVcrTrajectorySubjects(studyId, selected.id, { status: status === 'all' ? undefined : status, offset, limit: PAGE }) : Promise.resolve(null));
-  const lines = page.state.kind === 'ready' ? page.state.data?.lines ?? [] : page.last?.lines ?? [];
-  const shown = page.state.kind === 'ready' ? page.state.data : page.last;
+  // Only this exact request's page (prediction, status filter, offset) is drawn; another key's rows or a failed read's never are.
+  const shown = page.last;
+  const lines = shown?.lines ?? [];
   const timeline = person ? shown?.trajectories?.[person] : undefined;
   const series: VcrSeries[] = timeline?.length ? [{ key: person, label: '模型预测', source: 'predicted', ours: true,
     points: timeline.map(p => ({ x: p.horizonDays, y: p.point,
@@ -151,11 +152,12 @@ export function PatientTrajectoryWorkspace({ studyId, canRun, canManage = false,
 
     <Section title="逐人去向" level="sub" count={shown?.matching ?? counts?.submitted}>
       <div className="flex flex-col gap-3">
-        {page.state.kind === 'error' && !shown
+        {page.refreshing && <VcrRefreshingNote />}
+        {page.state.kind === 'error'
           ? (page.state.missing || page.state.off
             ? <Note action={<Button size="sm" variant="secondary" onClick={page.reload}>重试</Button>}>逐人的列表暂时无法读取；上面的人数和汇总仍然有效。</Note>
             : <VcrTabError message={page.state.message} onRetry={page.reload} />)
-          : <DataTable label="逐人预测去向" rows={lines} rowKey={line => line.subjectKey} columns={columns} state={page.state.kind === 'loading' && !shown ? 'loading' : 'content'}
+          : <DataTable label="逐人预测去向" rows={lines} rowKey={line => line.subjectKey} columns={columns} state={page.state.kind === 'loading' ? 'loading' : 'content'}
             emptyText="没有符合这个状态的人。" highlight={line => line.subjectKey === person}
             footnote={shown ? `第 ${shown.offset + 1}–${shown.offset + lines.length} 人，共 ${shown.matching} 人` : undefined} />}
         {shown && (shown.more || shown.offset > 0) && <div className="flex gap-2">
