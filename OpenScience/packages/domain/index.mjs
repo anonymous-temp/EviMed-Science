@@ -2082,9 +2082,12 @@ export {
 export {
   VCR_EXECUTION_ISSUE_CODES,
   VCR_PREDICTION_MODES,
+  VCR_CREDIBILITY_FIELDS,
   VCR_PREMISE_CODES,
   VCR_UNIT_DIMENSIONS,
   assessModelUse,
+  vcrCredibilityRecord,
+  vcrExternalValidation,
   vcrUnitsConvertible,
 } from './src/vcrModelUse.mjs'
 

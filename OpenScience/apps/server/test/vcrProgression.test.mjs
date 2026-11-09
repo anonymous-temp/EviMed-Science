@@ -99,7 +99,8 @@ test("the Alzheimer model (beta_logit) says what it rests on: the person's hypot
   assert.equal(card.expected.value.unit, "分");
   assert.ok(Math.abs(card.table.rows[0].gap.value) < 1e-12, "the arms start alike");
   const decisive = card.premises.filter((premise) => premise.decisive).map((premise) => premise.key);
-  assert.deepEqual(decisive, ["progression:ad:effect", "progression:ad:parameters", "progression:ad:scope", "progression:ad:mmse"]);
+  // R27: the external validation of the placebo progression is the fifth decisive premise of every Alzheimer page
+  assert.deepEqual(decisive, ["progression:ad:effect", "progression:ad:parameters", "progression:ad:scope", "progression:ad:mmse", "credibility:validation"]);
   const byKey = Object.fromEntries(card.premises.map((premise) => [premise.key, premise]));
   assert.match(byKey["progression:ad:effect"].value, /你设定的假设，不是对某个药物疗效的预测/);
   assert.match(byKey["progression:ad:effect"].value, /减慢 30%/);

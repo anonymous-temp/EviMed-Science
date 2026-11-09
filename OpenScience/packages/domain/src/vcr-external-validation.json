@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "protocol": "evals/vcr-in-silico/external-validation",
+  "resultSha256": "8984dd9889a9cae096336e5425733bae886e3bf74b1bb90f7f65b43b67c77c66",
+  "ranOn": "2026-11-09",
+  "arms": 8,
+  "primary": {
+    "long": {
+      "weeks": "76 to 78",
+      "arms": 4,
+      "meanBias": -1.51,
+      "meanAbsoluteBias": 1.51,
+      "rmse": 1.688,
+      "meanZ": 0.6922,
+      "covered": 4
+    },
+    "short": {
+      "weeks": "24",
+      "arms": 4,
+      "meanBias": 0.7405,
+      "meanAbsoluteBias": 0.7405,
+      "rmse": 0.7709,
+      "meanZ": -0.8945,
+      "covered": 4
+    },
+    "all": {
+      "arms": 8,
+      "meanBias": -0.3847,
+      "meanAbsoluteBias": 1.125,
+      "rmse": 1.312,
+      "meanZ": -0.1012,
+      "covered": 8
+    }
+  },
+  "noBackground": {
+    "long": {
+      "arms": 4,
+      "meanBias": -1.23,
+      "meanAbsoluteBias": 1.23,
+      "rmse": 1.444,
+      "meanZ": 0.5664,
+      "covered": 4
+    },
+    "short": {
+      "arms": 4,
+      "meanBias": 0.9717,
+      "meanAbsoluteBias": 0.9717,
+      "rmse": 0.9955,
+      "meanZ": -1.192,
+      "covered": 4
+    },
+    "all": {
+      "arms": 8,
+      "meanBias": -0.1294,
+      "meanAbsoluteBias": 1.101,
+      "rmse": 1.24,
+      "meanZ": -0.313,
+      "covered": 8
+    }
+  },
+  "secondStructure": {
+    "name": "Conrado et al. 2014",
+    "long": {
+      "arms": 4,
+      "meanBias": 0.1217,
+      "meanAbsoluteBias": 0.4997,
+      "rmse": 0.6784,
+      "meanZ": -0.242,
+      "covered": 3
+    },
+    "short": {
+      "arms": 4,
+      "meanBias": 1.65,
+      "meanAbsoluteBias": 1.65,
+      "rmse": 1.659,
+      "meanZ": -5.462,
+      "covered": 0
+    },
+    "all": {
+      "arms": 8,
+      "meanBias": 0.8859,
+      "meanAbsoluteBias": 1.075,
+      "rmse": 1.267,
+      "meanZ": -2.852,
+      "covered": 3
+    },
+    "meanAbsoluteDifferenceFromPrimary": {
+      "long": 1.632,
+      "short": 0.9095
+    }
+  },
+  "domain": {
+    "mmseHull": [
+      12,
+      26
+    ],
+    "horizonsWeeks": [
+      24,
+      76,
+      78
+    ],
+    "onlyPlacebo": true
+  }
+}

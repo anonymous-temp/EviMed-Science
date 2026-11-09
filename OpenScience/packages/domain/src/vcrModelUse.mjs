@@ -18,8 +18,19 @@
  * - **Pure and closed.** Units are converted only inside one dimension of a closed table (data, not language); nothing is read
  *   from a store and nothing is parsed from prose.
  *
+ * - **The credibility record is computed where it can be and stated where it cannot** (plan R28, ICH M15 Step 5, section 2.1 and 3): the question of
+ *   interest and the context of use are the person's, the model's influence on the decision and the consequence of a wrong one are the person's judgement
+ *   (never defaulted: the stored model assessment record of `vcrModelAssessment.mjs` supplies them and its `vcrModelRisk` derives the risk, M15 section 2.1.5), verification is what the engine's own result records (the tables of the published
+ *   opinion it reproduces, the simulation error of its numbers), validation is the external validation of the placebo progression read from
+ *   `vcr-external-validation.json` (made from the committed result by `evals/vcr-in-silico/external-validation/summarise.mjs`, never typed), and applicability
+ *   is range checks of the run's population and horizon against what that validation covered. M15 prescribes no method for model-form uncertainty,
+ *   averaging or transportability: the second published structure is shown beside the first and nothing is averaged.
+ *
  * @module @evimed/domain/vcrModelUse
  */
+
+import externalValidation from './vcr-external-validation.json' with { type: 'json' }
+import { normalizeVcrAssessment } from './vcrModelAssessment.mjs'
 
 /** @param {readonly string[]} list */
 const frozen = (list) => Object.freeze([...list])
@@ -143,4 +154,48 @@ export function assessModelUse(pack, request) {
     }
   }
   return { executionIssues, premises }
+}
+
+/** The eight fields of the credibility record, in M15's order. */
+export const VCR_CREDIBILITY_FIELDS = frozen(['question_of_interest', 'context_of_use', 'model_influence', 'decision_consequence', 'model_risk', 'verification', 'validation', 'applicability'])
+/** The external validation of the placebo progression, as made from the committed result (see the header). */
+export function vcrExternalValidation() {
+  return externalValidation
+}
+
+/**
+ * The ICH M15 credibility record of one Alzheimer result: eight entries, each `computed` (read from the result and the validation), `stated` (the person's) or
+ * `not_stated` (nothing was said and nothing is assumed). The applicability checks compare the run with what the validation covered.
+ * @param {Record<string, any>} [input] `{ assessment?: a stored model assessment record (the person's or the AI's own: question, context, the two ratings), population?: { mmseRange?: [number, number] }, lastVisitWeeks?, reproduced?: string[], replicates?, hasDrugEffect? }`
+ * @returns {{ items: Array<{ field: string, basis: 'computed' | 'stated' | 'not_stated', decisive: boolean, data: Record<string, any> }>, risk: { risk: string, rule: string } | null, applicability: Array<{ check: string, inside: boolean, value: any, range: any }> }}
+ */
+export function vcrCredibilityRecord(input = {}) {
+  const asked = object(input)
+  const validation = externalValidation
+  const checks = []
+  const mmse = Array.isArray(asked.population?.mmseRange) ? asked.population.mmseRange.map(Number) : null
+  if (mmse && mmse.length === 2 && mmse.every(Number.isFinite)) {
+    const hull = validation.domain.mmseHull
+    checks.push({ check: 'mmse_range', inside: mmse[0] >= hull[0] && mmse[1] <= hull[1], value: mmse, range: hull })
+  }
+  if (Number.isFinite(asked.lastVisitWeeks)) {
+    const longest = Math.max(...validation.domain.horizonsWeeks)
+    checks.push({ check: 'horizon_weeks', inside: asked.lastVisitWeeks <= longest, value: asked.lastVisitWeeks, range: [0, longest] })
+  }
+  if (asked.hasDrugEffect === true) checks.push({ check: 'drug_effect_validated', inside: false, value: 'drug effect', range: 'placebo arms only' })
+  const given = asked.assessment ? normalizeVcrAssessment(asked.assessment) : null
+  const risk = given && given.risk ? { risk: given.risk, rule: String(given.riskRule) } : null
+  const stated = (/** @type {unknown} */ x) => (typeof x === 'string' && x.trim() ? x.trim() : null)
+  /** @type {Array<{ field: string, basis: 'computed' | 'stated' | 'not_stated', decisive: boolean, data: Record<string, any> }>} */
+  const items = [
+    { field: 'question_of_interest', basis: stated(given?.questionOfInterest) ? 'stated' : 'not_stated', decisive: false, data: { text: stated(given?.questionOfInterest) } },
+    { field: 'context_of_use', basis: stated(given?.contextOfUse) ? 'stated' : 'not_stated', decisive: false, data: { text: stated(given?.contextOfUse) } },
+    { field: 'model_influence', basis: given?.influence ? 'stated' : 'not_stated', decisive: false, data: { level: given?.influence || null } },
+    { field: 'decision_consequence', basis: given?.consequence ? 'stated' : 'not_stated', decisive: false, data: { level: given?.consequence || null } },
+    { field: 'model_risk', basis: risk ? 'computed' : 'not_stated', decisive: risk?.risk === 'high', data: { level: risk?.risk ?? null, rule: risk?.rule ?? null } },
+    { field: 'verification', basis: Array.isArray(asked.reproduced) && asked.reproduced.length ? 'computed' : 'not_stated', decisive: false, data: { reproduced: Array.isArray(asked.reproduced) ? asked.reproduced : [], replicates: Number.isFinite(asked.replicates) ? asked.replicates : null } },
+    { field: 'validation', basis: 'computed', decisive: true, data: { arms: validation.arms, long: validation.primary.long, short: validation.primary.short, secondStructure: validation.secondStructure.meanAbsoluteDifferenceFromPrimary, onlyPlacebo: validation.domain.onlyPlacebo } },
+    { field: 'applicability', basis: checks.length ? 'computed' : 'not_stated', decisive: checks.some((c) => !c.inside), data: { checks } },
+  ]
+  return { items, risk, applicability: checks }
 }

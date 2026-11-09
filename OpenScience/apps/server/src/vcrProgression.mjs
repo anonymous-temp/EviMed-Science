@@ -32,6 +32,7 @@ import { createHash } from "node:crypto";
 import { VCR_RESULT_QUANTITY_LABELS_ZH, VCR_SIMULATION_ERROR_SENTENCE_ZH, VCR_UNCERTAINTY_MODE_QUANTITY, vcrEstimandAlignment } from "@evimed/domain";
 import { finishPremises } from "./vcrPremises.mjs";
 import { drugOriginPremises } from "./vcrDrugOriginPremises.mjs";
+import { credibilityPremises } from "./vcrCredibilityPremises.mjs";
 import { researchQuestionPremises, resultQuestionInput } from "./vcrResearchQuestionView.mjs";
 import { list, markFor, measureValue, numeric, object, text, zhUnit } from "./vcrViewsKit.mjs";
 
@@ -247,6 +248,7 @@ function alzheimerPremisesOf(progression) {
   rows.push({ key: "progression:ad:curves", label: "曲线怎么算的", source: "default",
     value: "平均病程按典型研究、用参数的中位数精确计算；检验的把握度和估计差值是模拟的" });
   rows.push(...drugOriginPremises(progression));
+  rows.push(...credibilityPremises(progression));
   rows.push({ key: "lab:replicates", label: "模拟的误差", source: "default", decisive: false, value: VCR_SIMULATION_ERROR_SENTENCE_ZH });
   return finishPremises(rows);
 }

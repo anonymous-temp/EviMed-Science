@@ -1,0 +1,83 @@
+/**
+ * What an Alzheimer result page says about how far the model can be trusted for this use (plan R27, R28; ICH M15 Step 5 sections 2.1 and 3): the credibility
+ * record of `@evimed/domain` in the one block of premises the page already has.
+ *
+ * Hidden knowledge:
+ *
+ * - **Computed where it is computable, said where it is not.** The validation sentence's numbers are the domain's copy of the committed external validation
+ *   (made from the result file by a script, never typed here); the applicability checks compare this run's MMSE range and last visit with what that validation
+ *   covered; the verification row is what the result itself records. The person's own judgement of the model's influence on their decision and of the
+ *   consequence of a wrong one is not guessed: with neither stated, no risk level is shown, and the row folded says so.
+ * - **Only placebo arms were validated.** The sentence says so in its own words, so a drug effect on the page is never read as covered by it.
+ * - **The second structure is a spread, not an average.** Nothing is weighted: no weights are validated.
+ * - **Three to five decisive rows**: the validation sentence, and the applicability row only when a check falls outside; the rest are folded.
+ *
+ * @module vcrCredibilityPremises
+ */
+
+import { vcrCredibilityRecord } from "@evimed/domain";
+import { list, numeric, object } from "./vcrViewsKit.mjs";
+
+/** @param {number} value @param {number} [digits] */
+const plain = (value, digits = 3) => String(Number(value.toPrecision(digits)));
+/** @param {number} value */
+const signed = (value) => (value > 0 ? `+${plain(value)}` : value < 0 ? `−${plain(Math.abs(value))}` : "0");
+/** @param {any} horizon */
+const horizonWords = (horizon) => `${String(horizon.weeks).replace(" to ", "–")} 周`;
+
+/**
+ * @param {Record<string, any>} progression the result's `diagnostics.progression`
+ * @returns {Array<Record<string, any>>} premise rows (`key`, `label`, `value`, `source`, `decisive`), for `finishPremises`
+ */
+export function credibilityPremises(progression) {
+  const population = object(progression.population);
+  const extrapolation = object(progression.extrapolation);
+  const treatment = object(progression.treatment);
+  const mmse = list(population.mmseRange).map(Number);
+  const hasDrugEffect = Math.abs(numeric(treatment.symptomaticLogitEmax) ?? 0) > 0 || (numeric(treatment.diseaseModifyingFraction) ?? 0) > 0
+    || Boolean(object(treatment.reference).drug) || list(progression.effectDistributions).length > 0;
+  const record = vcrCredibilityRecord({
+    population: { mmseRange: mmse.length === 2 ? mmse : undefined }, lastVisitWeeks: numeric(extrapolation.lastVisit) ?? undefined,
+    reproduced: list(object(progression.reproduction).reproduced), replicates: numeric(progression.trials) ?? undefined, hasDrugEffect,
+  });
+  const field = (/** @type {string} */ name) => record.items.find((item) => item.field === name);
+  const validation = object(field("validation")?.data);
+  const long = object(validation.long); const short = object(validation.short);
+  /** @type {Array<Record<string, any>>} */
+  const rows = [];
+  rows.push({
+    key: "credibility:validation", label: "在没见过的试验上的检验", decisive: true, source: "derived",
+    value: `在 ${validation.arms} 项模型没见过的试验的安慰剂组上，预测的 ${horizonWords(long)}变化平均偏差 ${signed(Number(long.meanBias))} 分（正数是预测比观察到的多恶化；平均绝对偏差 ${plain(Number(long.meanAbsoluteBias))} 分，预测区间包住了 ${long.covered}/${long.arms} 项），${horizonWords(short)}变化平均偏差 ${signed(Number(short.meanBias))} 分（${short.covered}/${short.arms} 项）。只检验了安慰剂组，没有检验任何药物的效果`,
+  });
+  const second = object(validation.secondStructure);
+  if (numeric(second.long) !== null && numeric(second.short) !== null) {
+    rows.push({
+      key: "credibility:structure", label: "换一种已发表的模型形式", decisive: false, source: "derived",
+      value: `另一种已发表的模型形式（Conrado 等，2014；用同一个 CAMD 数据库，形式不同）预测的平均变化与这里相差 ${plain(Number(second.long))} 分（${horizonWords(long)}）和 ${plain(Number(second.short))} 分（${horizonWords(short)}）；两者没有取平均，因为没有经过验证的权重`,
+    });
+  }
+  const checks = record.applicability;
+  if (checks.length) {
+    const out = checks.filter((check) => !check.inside);
+    const words = (/** @type {{ check: string, inside: boolean, value: any, range: any }} */ c) => c.check === "mmse_range"
+      ? `基线 MMSE ${plain(c.value[0])}–${plain(c.value[1])} 分${c.inside ? "在" : "超出了"}验证过的 ${plain(c.range[0])}–${plain(c.range[1])} 分内`
+      : c.check === "horizon_weeks" ? `最后一次随访在第 ${plain(c.value)} 周，${c.inside ? "没有超过" : "超过了"}验证过的最长 ${plain(c.range[1])} 周`
+        : "药物效果没有被这些检验覆盖（它们只看安慰剂组）";
+    rows.push({
+      key: "credibility:applicability", label: "这次的人群和时间落在检验过的范围里吗", decisive: out.length > 0 && out.some((c) => c.check !== "drug_effect_validated"), source: "derived",
+      value: checks.map(words).join("；"),
+    });
+  }
+  const reproduced = list(field("verification")?.data.reproduced);
+  if (reproduced.length) {
+    rows.push({
+      key: "credibility:verification", label: "这个模型的计算核对过什么", decisive: false, source: "derived",
+      value: `模型的实现已按公开的数字核对过（${reproduced.join("、")}）；这次的数字来自 ${field("verification")?.data.replicates ?? "?"} 次模拟，模拟越多只减小模拟的误差，不改变模型形式或药效假设带来的误差`,
+    });
+  }
+  rows.push({
+    key: "credibility:risk", label: "模型对决定的影响和出错的后果", decisive: false, source: "default",
+    value: "模型在你的决定里占多大分量、决定出错的后果有多严重，要由你来判断；没有说明时这里不给模型风险等级",
+  });
+  return rows;
+}
