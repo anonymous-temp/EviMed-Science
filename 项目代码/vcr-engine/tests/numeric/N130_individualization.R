@@ -10,7 +10,7 @@
 #   c  the linear mixed model on held-out visits of fresh people: coverage of the 50/80/95% intervals within three Monte Carlo SE of nominal,
 #      for the individualized and for the population forecast, and individualization beats the population forecast on error
 #   d  the beta_logit Laplace posterior of the intercept and slope against a two-dimensional grid integration of the same posterior
-#   e  the beta_logit predictive intervals on held-out visits of 4,000 simulated people: coverage within three Monte Carlo SE of nominal
+#   e  the beta_logit predictive intervals on held-out visits of 16,000 simulated people: coverage within the family-wise bound of nominal (below)
 #   f  no history is the population forecast to the bit; more history narrows the posterior; the same seed gives the same draws
 
 .n130_sim <- function(n, seed, times = 0:4, drop = 0) {
@@ -130,22 +130,33 @@ vcr_case("N130d", c("AC-04"), function() {
        detail = sprintf("6 simulated people, 3 visits: the MAP is within %.2f posterior SD of the grid posterior mean (limit 0.35) and the Laplace SD within %.1f%% of the grid SD (limit 20%%)", worst_mean, 100 * worst_sd))
 })
 
+# N130e is six comparisons (three levels at two horizons), so one per-comparison limit of three Monte Carlo SE fails by chance about one run in sixty
+# even for a perfect method (it did, once, at 3.33 SE, 2026-11-09). Two things were wrong with the first form, and both are named here instead of
+# widened away: (1) the target. An interval cut from `m` exchangeable draws covers a fresh draw with probability (m - 1) / (m + 1) * level (type-7
+# quantiles), not `level`: at m = 500 that is .9463 for a 95% interval, a built-in 1.1 SE shortfall at 4,000 people that had nothing to do with the
+# method. The case uses m = 1,000 draws and holds coverage to that exact target. (2) the bound. The limit is the Bonferroni bound for the six
+# comparisons at a family-wise 1% (z = 3.14), and the number of people is 16,000 so that the SE (.0017 at 95%) is small against any shortfall that
+# matters. Measured at m = 1,000, 16,000 people, seven seeds (14 horizon-by-seed rows): the 95% interval covered .947-.951, mean .9488 against the
+# target .9481; the largest deviation of the 42 comparisons was 1.9 SE. (At m = 500 and 4,000 people, over seven seeds, four of the 14 rows had their 95% interval beyond 3 SE below nominal.)
 vcr_case("N130e", c("AC-04", "AC-28"), function() {
   m <- .n130_bl(); par <- m$par; study <- m$study
-  set.seed(13007L); n <- 4000L
+  set.seed(13007L); n <- 16000L; n_draws <- 1000L
   q <- .vcr_bl_draw_people(par, study, n)
   th <- function(t) stats::plogis(q$eta + q$alpha * t + vcr_beta_logit_placebo(par, t))
   hist_t <- c(0, 13, 26); new_t <- c(52, 78)
   sc <- vapply(c(hist_t, new_t), function(t) vcr_beta_logit_scores(th(t), study$tau), numeric(n))
   ind <- lapply(seq_len(n), function(i)
-    vcr_beta_logit_individual_predict(par, study, list(mmse = q$mmse[i], age = q$age[i], apoe = q$apoe[i], female = q$female[i]), hist_t, sc[i, 1:3], new_t, 500L))
+    vcr_beta_logit_individual_predict(par, study, list(mmse = q$mmse[i], age = q$age[i], apoe = q$apoe[i], female = q$female[i]), hist_t, sc[i, 1:3], new_t, n_draws))
   cov_j <- lapply(1:2, function(j) vcr_interval_coverage(lapply(ind, function(d) d[, j]), sc[, 3 + j]))
-  dev <- unlist(lapply(cov_j, function(cv) abs(cv$coverage - cv$level) / cv$mcse))
+  target <- function(level) (n_draws - 1) / (n_draws + 1) * level
+  z_limit <- stats::qnorm(1 - 0.01 / (2 * 6))
+  dev <- unlist(lapply(cov_j, function(cv) abs(cv$coverage - target(cv$level)) / cv$mcse))
   ok_laplace <- mean(vapply(ind, function(d) isTRUE(attr(d, "laplaceOk")), logical(1)))
-  list(pass = max(dev) <= 3 && ok_laplace > 0.99,
-       detail = sprintf("held-out week 52: %s; week 78: %s (nominal .50/.80/.95, n = %d, MCSE %.4f-%.4f); largest deviation %.2f MCSE (limit 3); Laplace curvature positive definite for %.1f%% of people",
-                        paste(sprintf("%.3f", cov_j[[1]]$coverage), collapse = "/"), paste(sprintf("%.3f", cov_j[[2]]$coverage), collapse = "/"), n,
-                        min(cov_j[[1]]$mcse, cov_j[[2]]$mcse), max(cov_j[[1]]$mcse, cov_j[[2]]$mcse), max(dev), 100 * ok_laplace))
+  list(pass = max(dev) <= z_limit && ok_laplace > 0.99,
+       detail = sprintf("held-out week 52: %s; week 78: %s (nominal .50/.80/.95, target for %d draws %s, n = %d, MCSE %.4f-%.4f); largest deviation from the target %.2f MCSE (family-wise limit %.2f for six comparisons at 1%%); Laplace curvature positive definite for %.1f%% of people",
+                        paste(sprintf("%.3f", cov_j[[1]]$coverage), collapse = "/"), paste(sprintf("%.3f", cov_j[[2]]$coverage), collapse = "/"), n_draws,
+                        paste(sprintf("%.4f", target(c(0.5, 0.8, 0.95))), collapse = "/"), n,
+                        min(cov_j[[1]]$mcse, cov_j[[2]]$mcse), max(cov_j[[1]]$mcse, cov_j[[2]]$mcse), max(dev), z_limit, 100 * ok_laplace))
 })
 
 vcr_case("N130f", c("AC-04"), function() {

@@ -417,7 +417,7 @@ export const NUMERIC_REFERENCES = {
   N130b: { methods: ['patients.longitudinal'], anchors: ['brute <- solve(crossprod(Z) / f2$sigma^2 + solve(G))'] },
   N130c: { methods: ['patients.longitudinal'], anchors: ['z <- function(cv) max(abs(cv["p", ] - c(0.5, 0.8, 0.95)) / (cv["se", ] * sqrt(2)))'] },
   N130d: { methods: ['patients.progression'], anchors: ['# the independent computation: the posterior on a fine grid of (intercept, slope), normalised by summation'] },
-  N130e: { methods: ['patients.progression'], anchors: ['dev <- unlist(lapply(cov_j, function(cv) abs(cv$coverage - cv$level) / cv$mcse))'] },
+  N130e: { methods: ['patients.progression'], anchors: ['dev <- unlist(lapply(cov_j, function(cv) abs(cv$coverage - target(cv$level)) / cv$mcse))'] },
   N130f: { methods: ['patients.progression'], anchors: ['all(diff(sds) < 0)'] },
   // the individualized forecast of a batch through its job (plan R32 compute path): the job equals the statistics called by hand, known truth through the job, what is left out by name, determinism
   N210a: { methods: ['forecast.individualize'], anchors: ['m <- nlme::lme(y ~ t, random = ~ t | id, data = long, method = "REML")', 'list(pass = gap < 1e-9 && ngap < 1e-3 && all(tbl$status == "ok") && nrow(tbl) == 300L,'] },
