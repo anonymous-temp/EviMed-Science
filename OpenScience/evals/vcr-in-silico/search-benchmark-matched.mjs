@@ -417,7 +417,7 @@ async function calibrate() {
   const world = await loadWorld('survival');
   const index = world.items.findIndex((c) => c.set['design.nTreat'] === 200 && c.set['accrual.duration'] === 24);
   const truth = world.items[index];
-  const { manifest } = vcrCampaignManifest(baseManifest({ label: 'survival', candidates: SPACES.survival.candidates(), screeningReplicates: FROZEN.calibration.screeningReplicates, finalCount: 3, cpuSeconds: 1e6, ...SPACES.survival.scenario }));
+  const { manifest } = vcrCampaignManifest(baseManifest({ label: 'survival', candidates: SPACES.survival.candidates(), screeningReplicates: FROZEN.calibration.screeningReplicates, finalCount: 3, cpuSeconds: 3600, ...SPACES.survival.scenario }));
   const identity = sha256(vcrCampaignCanonical(manifest));
   const candidate = vcrCampaignCandidates(manifest)[index];
   const scratch = await fs.mkdtemp(path.join(process.env.TMPDIR || os.tmpdir(), 'vcr-search-calib-'));

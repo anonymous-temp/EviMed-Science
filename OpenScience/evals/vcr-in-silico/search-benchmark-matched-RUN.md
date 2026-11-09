@@ -70,6 +70,22 @@ Where ours is worse than a simple arm the finding stands as a measurement of the
 as showing a staged search to be better than ordinary search: that benchmark compared against grid and random at one budget with one random
 order and found nothing either.
 
+## Validation of the simulated world against the real engine (frozen criteria, passed)
+
+Real `design.simulate` 1.5.0 through `service/run_job.R`, the design 200 per arm / 24 months (survival world), new seeds 1001+, under the heavy lock
+(`results/search-benchmark-matched-calibration-20261109.json`). The first attempt of `--calibrate` failed before any engine call (a manifest built with an
+out-of-range CPU ceiling in the calibration path only; no result was produced); the fix changes that one line and none of the benchmark's logic or numbers.
+
+| Case | Seeds | Engine mean | Table value | SD of engine estimates | Binomial SD | SD ratio (criterion 0.8–1.25) | Mean difference in combined SE (criterion within 3) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| screening, 300 replicates, power | 30 | 0.8291 | 0.8382 | 0.0200 | 0.0213 | 0.94 | -1.43 |
+| final, 5,000 replicates, power | 10 | 0.8268 | 0.8382 | 0.0050 | 0.0052 | 0.97 | -2.09 |
+| final, 20,000 replicates, type I error | 5 | 0.0239 | 0.0249 | 0.0012 | 0.0011 | 1.08 | -0.81 |
+
+Both criteria hold: the engine's replicate noise is the binomial noise the benchmark draws. The engine's means sit below the table value in all three
+cases (about one point of power, 0.1 of type I error): the table is one run's estimate and was probably on the high side, the limitation stated
+above; it does not change the noise model, and it would move true feasibility, not the comparison of arms on the same world.
+
 ## Tables (every arm, every budget; generated)
 
 ## survival world
