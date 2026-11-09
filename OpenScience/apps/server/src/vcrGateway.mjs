@@ -87,6 +87,8 @@ import { vcrConfirmatorySubjectId } from "./vcrConfirmatory.mjs";
 import { vcrDoseSubjectId } from "./vcrDoseFinding.mjs";
 import { vcrBayesianSubjectId } from "./vcrBayesianDesign.mjs";
 import { vcrWinRatioSubjectId } from "./vcrWinRatio.mjs";
+import { vcrVoiSubjectId } from "./vcrValueOfInformation.mjs";
+import { vcrPbpkSubjectId } from "./vcrPbpk.mjs";
 import { vcrPrognosticSubjectId } from "./vcrPrognosticTraining.mjs";
 import { vcrProgressionSubjectId, vcrProgressionWithDifferences } from "./vcrProgression.mjs";
 import { vcrTypeOneLevel, vcrTypeOneVerdict, vcrWithTypeOneVerdicts } from "./vcrTypeOneVerdict.mjs";
@@ -3257,6 +3259,10 @@ async function startJob(vcr, study, request, { personMessages = null } = {}) {
   if (request.kind === "design_bayesian" && !detail.subjectId) detail = { ...detail, subjectId: vcrBayesianSubjectId(scenario) };
   // and a hierarchical composite compared by win ratio (the scenario it was asked on)
   if (request.kind === "design_win_ratio" && !detail.subjectId) detail = { ...detail, subjectId: vcrWinRatioSubjectId(scenario) };
+  // and the value of information of a decision (the decision, its inputs and its studies it was asked on)
+  if (request.kind === "decision_voi" && !detail.subjectId) detail = { ...detail, subjectId: vcrVoiSubjectId(scenario) };
+  // and the published PBPK model of a drug after a perpetrator (the regimen it was asked on)
+  if (request.kind === "pk_interaction" && !detail.subjectId) detail = { ...detail, subjectId: vcrPbpkSubjectId(scenario) };
   // a prognostic model trained on the person's own table (the configuration it was trained on) and a progression simulation (the scenario it was asked on)
   if (request.kind === "train_prognostic_model" && !detail.subjectId) detail = { ...detail, subjectId: vcrPrognosticSubjectId(scenario) };
   if (request.kind === "generate_progression" && !detail.subjectId) detail = { ...detail, subjectId: vcrProgressionSubjectId(scenario) };

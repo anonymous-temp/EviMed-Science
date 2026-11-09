@@ -62,6 +62,8 @@ import { presentConfirmatoryDesigns } from "./vcrConfirmatory.mjs";
 import { presentDoseDesigns } from "./vcrDoseFinding.mjs";
 import { presentBayesianDesigns } from "./vcrBayesianDesign.mjs";
 import { presentWinRatioDesigns } from "./vcrWinRatio.mjs";
+import { presentValueOfInformation } from "./vcrValueOfInformation.mjs";
+import { presentPbpkInteractions } from "./vcrPbpk.mjs";
 import { vcrTypeOneVerdict } from "./vcrTypeOneVerdict.mjs";
 import { presentPrognosticModels } from "./vcrPrognosticTraining.mjs";
 import { presentProgressions } from "./vcrProgression.mjs";
@@ -657,6 +659,8 @@ export function presentPatientsTab(bundle) {
     partial: partialOf(bundle, ["patient_set"], "这次生成"),
     // Population-level progression simulations (P4) the conversation computed: a card each, curves and power.
     progressions: presentProgressions(bundle, { nodeOf: resultNode }),
+    // A published PBPK model of a drug after a perpetrator (R38) the conversation computed: a card each, the curves alone and after.
+    pbpkInteractions: presentPbpkInteractions(bundle, { nodeOf: resultNode }),
     // Survival fits with a spline (C13) the conversation computed: the curve beyond the data, with how far beyond, and the premises.
     splineFits: presentSplineFits(bundle, { nodeOf: resultNode }),
     sets: patientSets.map((/** @type {any} */ set) => ({ id: set.id, version: set.version, ...(set.resultId ? { resultId: set.resultId, resultVersion: resultById(bundle, set.resultId)?.version } : {}), label: `虚拟患者集 v${set.version}`, stale: Boolean(markFor(stale, vcrObjectNode("patient_set", set))) })),
@@ -1250,6 +1254,7 @@ export function presentTrialTab(bundle) {
     doseDesigns: presentDoseDesigns(bundle, { nodeOf: resultNode }),
     bayesianDesigns: presentBayesianDesigns(bundle, { nodeOf: resultNode }),
     winRatioDesigns: presentWinRatioDesigns(bundle, { nodeOf: resultNode }),
+    valueOfInformation: presentValueOfInformation(bundle, { nodeOf: resultNode }),
   };
   const everyResult = allResultsOf(bundle);
   const cardRows = Object.values(cards).flat().map((card) => {
@@ -1373,6 +1378,8 @@ export function presentTrialTab(bundle) {
     bayesianDesigns: cards.bayesianDesigns,
     // The hierarchical composite endpoints compared by win ratio (design_win_ratio) the conversation computed: a card each.
     winRatioDesigns: cards.winRatioDesigns,
+    // the value of information of a decision (decision_voi) the conversation computed: a card each
+    valueOfInformation: cards.valueOfInformation,
     milestones,
     // The protocol's visit schedule (「访视日程」) and the study's regulatory contacts (「监管沟通记录」): records, not results.
     schedule: reportSchedule(bundle.schedule),

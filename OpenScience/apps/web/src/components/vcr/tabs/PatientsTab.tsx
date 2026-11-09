@@ -40,6 +40,7 @@ import { PatientRecordDrawer } from "../patients/PatientRecordDrawer";
 import { PatientTable } from "../patients/PatientTable";
 import { baselineVariables, variableFilters, variableLabels } from "../patients/patientFilters";
 import { intervalText, numberText } from "../vcrText";
+import { VcrPbpkInteractions } from "../VcrPbpkInteractions";
 import { VcrProgressions } from "../VcrProgressions";
 import { VcrSplineFit } from "../VcrSplineFit";
 
@@ -146,7 +147,7 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
   const working = stepStatus === "running" || stepStatus === "queued";
   const assessed = data.assessments.records.length > 0;
   // What the step has produced: with none of it the tab is the step's own recipe or activity and nothing more.
-  const nothing = !data.model && !data.trajectories && !data.example && data.panels.length === 0 && !data.sensitivity && !data.records && !data.progressions?.length && !data.splineFits?.length;
+  const nothing = !data.model && !data.trajectories && !data.example && data.panels.length === 0 && !data.sensitivity && !data.records && !data.progressions?.length && !data.pbpkInteractions?.length && !data.splineFits?.length;
   const records = data.records;
   const arms = records?.arms ?? [];
   const labels = useMemo(() => variableLabels(data.profile), [data.profile]);
@@ -316,7 +317,7 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
 
           {/* What the model behind these results was and was not validated for: the same block every result page has. */}
           {/* A progression card carries its own block; the page's would then be a second one, so it shows only when no card does. */}
-          {!(data.progressions ?? []).some((card) => (card.premises?.length ?? 0) > 0) && <VcrPremises premises={data.premises} />}
+          {![...(data.progressions ?? []), ...(data.pbpkInteractions ?? [])].some((card) => (card.premises?.length ?? 0) > 0) && <VcrPremises premises={data.premises} />}
 
           {gridRows.length > 0 && <ChartGrid rows={gridRows} />}
 
@@ -389,6 +390,8 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
           )}
 
           <VcrProgressions cards={data.progressions ?? []} />
+
+          <VcrPbpkInteractions cards={data.pbpkInteractions ?? []} />
 
           {(data.splineFits ?? []).map((block, index) => <VcrSplineFit key={index} block={block} />)}
         </div>

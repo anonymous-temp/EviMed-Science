@@ -605,6 +605,10 @@ export function vcrResultKindFor(kind) {
   if (kind === "design_confirmatory") return "design_confirmatory";
   // The dose-finding designs, the Bayesian designs without MCMC (algorithm round T7, T15, T8, T10) and the win-ratio design (T9): each its own result, filed under what it is about.
   if (kind === "design_dose" || kind === "design_bayesian" || kind === "design_win_ratio") return kind;
+  // The value of information of a decision (in-silico round 2, R35): its own result, filed under the decision it was asked on, read on the trial tab.
+  if (kind === "decision_voi") return kind;
+  // The published PBPK model of a drug after a perpetrator (round 2, R38): its own result, filed under the regimen it was asked on, read on the patients tab.
+  if (kind === "pk_interaction") return kind;
   // Evidence synthesis beyond a pairwise pool (algorithm round C5, C6, E8): each its own result, filed under what it is about, read on the evidence tab.
   if (["network_meta", "dose_response_meta", "effect_shrinkage"].includes(kind)) return kind;
   if (["pool_evidence", "reconstruct_km"].includes(kind)) return "evidence_pool";

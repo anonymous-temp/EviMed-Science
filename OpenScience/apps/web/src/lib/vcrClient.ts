@@ -994,6 +994,7 @@ export interface VcrPatientsTab {
   premises?: VcrPremise[];
   /** Population-level progression simulations (P4): a card each. */
   progressions?: VcrProgressionCard[];
+  pbpkInteractions?: VcrPbpkInteractionCard[];
   /** The survival fits with a spline the study holds now (C13), newest first: the curve beyond the data with how far beyond, and the premises. */
   splineFits?: VcrSplineFitBlock[];
   /** The people the set holds, as a list (`GET …/patients/rows?result=`): which result, how many, and the arms with their events. */
@@ -1586,6 +1587,32 @@ export interface VcrValueOfInformationCard {
     flips: Array<{ value: VcrValue; from: string; to: string }>;
   }>;
   studies: Array<{ key: string; label: string; observes: string; size: number | null; evsi: VcrValue; share: number | null; ceiling: VcrValue | null }>;
+  premises: VcrPremise[];
+  limited: string | null;
+}
+
+/**
+ * A drug given after a perpetrator of CYP3A4, run on one published whole-body PBPK model (in-silico round 2, R38): the concentration curve alone and
+ * after, the area and peak ratios and the enzyme activity at the dose. The ratios are the model's typical value for a healthy adult, and say so.
+ */
+export interface VcrPbpkInteractionCard {
+  id: string;
+  version: number;
+  form: "pbpk_interaction";
+  title: string;
+  question: string;
+  victim: string;
+  perpetrator: string;
+  route: "oral" | "iv";
+  weightKg: number | null;
+  horizonH: number | null;
+  headline: Array<{ key: string; label: string; value: VcrValue }>;
+  /** The sentence that says what the ratio is and what moved it; null when no ratio was computed. */
+  lead: string | null;
+  /** Concentration (ng/mL) by hours after the dose: one line alone, one after the perpetrator. */
+  series: VcrSeries[];
+  table: Array<{ key: string; hour: number; alone: VcrValue; withPerpetrator: VcrValue }>;
+  citation: string | null;
   premises: VcrPremise[];
   limited: string | null;
 }
@@ -2643,7 +2670,7 @@ function readWinRatioDesigns(raw: unknown): VcrWinRatioCard[] {
 }
 
 /** The value-of-information cards; a card without a name or the known form, or with no options, and anything of an unknown shape, is left out. */
-function readValueOfInformation(raw: unknown): VcrValueOfInformationCard[] {
+export function readValueOfInformationCards(raw: unknown): VcrValueOfInformationCard[] {
   return arr(raw).flatMap((card) => {
     const id = text(card.id), title = text(card.title);
     const options = arr(card.options).flatMap((row) => {
@@ -2674,6 +2701,25 @@ function readValueOfInformation(raw: unknown): VcrValueOfInformationCard[] {
       }),
       premises: readPremises(card.premises),
       limited: text(card.limited),
+    }];
+  });
+}
+
+/** The PBPK interaction cards; a card without a name, the known form or a ratio line, and anything of an unknown shape, is left out. */
+export function readPbpkInteractionCards(raw: unknown): VcrPbpkInteractionCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    if (!id || !title || card.form !== "pbpk_interaction") return [];
+    return [{
+      id, version: finite(card.version) ?? 1, form: "pbpk_interaction" as const, title, question: text(card.question) ?? "",
+      victim: text(card.victim) ?? "", perpetrator: text(card.perpetrator) ?? "", route: card.route === "iv" ? "iv" as const : "oral" as const,
+      weightKg: finite(card.weightKg), horizonH: finite(card.horizonH), headline: readHeadlineLines(card.headline), lead: text(card.lead),
+      series: readSeries(card.series),
+      table: arr(card.table).flatMap((row) => {
+        const hour = finite(row.hour);
+        return hour !== null && row.alone && row.withPerpetrator ? [{ key: text(row.key) ?? String(hour), hour, alone: readVcrValue(row.alone), withPerpetrator: readVcrValue(row.withPerpetrator) }] : [];
+      }),
+      citation: text(card.citation), premises: readPremises(card.premises), limited: text(card.limited),
     }];
   });
 }
@@ -3490,6 +3536,7 @@ export function readVcrPatients(raw: unknown): VcrPatientsTab {
     partial: readPartial(value.partial),
     sets: arr(value.sets) as unknown as VcrPatientsTab["sets"],
     progressions: readProgressions(value.progressions),
+    pbpkInteractions: readPbpkInteractionCards(value.pbpkInteractions),
     splineFits: arr(value.splineFits).flatMap((block) => { const read = readSplineFit(block); return read ? [read] : []; }),
   };
 }
@@ -3563,7 +3610,7 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
     doseDesigns: readDoseDesigns(value.doseDesigns),
     bayesianDesigns: readBayesianDesigns(value.bayesianDesigns),
     winRatioDesigns: readWinRatioDesigns(value.winRatioDesigns),
-    valueOfInformation: readValueOfInformation(value.valueOfInformation),
+    valueOfInformation: readValueOfInformationCards(value.valueOfInformation),
     successRates: readSuccessRates(value.successRates),
     designs: arr(value.designs).map(readDesign),
     columns: arr(value.columns) as unknown as VcrTrialTab["columns"],

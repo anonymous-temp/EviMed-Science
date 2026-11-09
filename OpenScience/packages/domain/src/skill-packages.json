@@ -1046,18 +1046,18 @@
       "id": "capability/vcr-analysis",
       "name": "vcr-analysis",
       "origin": "capability",
-      "version": "1.20.1",
+      "version": "1.20.3",
       "source": {"kind":"release"},
-      "digest": "sha256:36b433a536b93c6b93926af08be012d0fade0f63fca738ca9f31a331c7230255",
+      "digest": "sha256:7c1118dec1eb9d8ead485364f10a35e44c634a18b3639a83f00e78ed12b453fe",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"57dfdb561ca72f72648e0b7cb7408db0ecb08a3d39cc67d1ea028b37336bc9db"},
+        {"path":"capability.yaml","sha256":"286110c8fdc1762426b349957036fd257ee3bfb37f258e2e261949bc74514e43"},
         {"path":"references/comparators.md","sha256":"b9bf170808cdf1d262a31ab6728e1d5c1dc0e31fd26c07037c529f93a96e1897"},
         {"path":"references/delivery.md","sha256":"14bf6198c8ba48f89c93787ac473178b175403ffab9f33542df74724bbf525fe"},
         {"path":"references/longitudinal.md","sha256":"8f24303f06dbfa8e8e690dceddfae6249e9ac6985c8e7bc5ba6a31d478ccab01"},
         {"path":"references/models.md","sha256":"bcbb585d15da300effc5838972f55658d919b09f49ed55186530118162643995"},
-        {"path":"references/populations-and-patients.md","sha256":"750bcd1080dfc6fc9410eb01ad8439ac5c7a26a068e5c12b291816ccaa8a6a5d"},
-        {"path":"references/trial-design.md","sha256":"8dbbae1311bdb37fd7b162b69f622101a00b5bfbd5cfd3b86d9d4b43a9f6aa10"}
+        {"path":"references/populations-and-patients.md","sha256":"b3679cfa7564db9e0d7f97766a314f0b6e14991fc00b8e3e66818b6c0c96d6d1"},
+        {"path":"references/trial-design.md","sha256":"1d2ceb14f3f0c1173df7f5395314ffd00877553ce288e748a2e8aa26a2485a4a"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1193,7 +1193,7 @@
       "origin": "capability",
       "version": "1.2.1",
       "source": {"kind":"release"},
-      "digest": "sha256:0bebdcab952f0ebeb527b3168f5462744a90f9cfe814b64178e99e292ffc5bef",
+      "digest": "sha256:bb0eb66937bd6f118c75c3e0e7500a0316476f771206ca6b12bba8a3e8f7e9d1",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"5dc2d998eeb7ad6aefe77b5a83a7af4aa8a834f61fe07ea604bafe1af9f17581"}],
       "dependencies": [

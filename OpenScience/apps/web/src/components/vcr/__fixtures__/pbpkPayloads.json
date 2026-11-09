@@ -1,0 +1,1636 @@
+{
+ "oral": {
+  "id": "res_oral-7-days",
+  "version": 1,
+  "form": "pbpk_interaction",
+  "title": "利福平合用后，咪达唑仑的暴露会怎样变化",
+  "question": "先用利福平，再给咪达唑仑，药物在体内的量会比单用时多还是少、多多少",
+  "victim": "咪达唑仑",
+  "perpetrator": "利福平",
+  "route": "oral",
+  "weightKg": 80,
+  "horizonH": 48,
+  "headline": [
+   {
+    "key": "auc_ratio",
+    "label": "曲线下面积之比（合用 ÷ 单用）",
+    "value": {
+     "value": 0.24225726,
+     "text": null,
+     "unit": "倍",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "cmax_ratio",
+    "label": "峰浓度之比（合用 ÷ 单用）",
+    "value": {
+     "value": 0.3626278,
+     "text": null,
+     "unit": "倍",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "victim_auc_alone",
+    "label": "单用时的曲线下面积",
+    "value": {
+     "value": 32.23337737,
+     "text": null,
+     "unit": "ng/mL·h",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "victim_auc_with_perpetrator",
+    "label": "合用后的曲线下面积",
+    "value": {
+     "value": 7.80876971,
+     "text": null,
+     "unit": "ng/mL·h",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "victim_cmax_alone",
+    "label": "单用时的峰浓度",
+    "value": {
+     "value": 6.0095577,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "victim_cmax_with_perpetrator",
+    "label": "合用后的峰浓度",
+    "value": {
+     "value": 2.17923271,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "cyp3a4_liver_activity",
+    "label": "给药时肝脏 CYP3A4 活性（相对用药前）",
+    "value": {
+     "value": 2.25403131,
+     "text": null,
+     "unit": "倍",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "cyp3a4_gut_activity",
+    "label": "给药时肠壁 CYP3A4 活性（相对用药前）",
+    "value": {
+     "value": 2.15335059,
+     "text": null,
+     "unit": "倍",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   }
+  ],
+  "lead": "合用后，咪达唑仑的曲线下面积降到单用时的 24.2%，峰浓度降到 36.3%。这是酶被诱导的结果：给药时肝脏 CYP3A4 活性是用药前的 2.25 倍，肠壁是 2.15 倍。这是模型对典型健康成人的值。",
+  "series": [
+   {
+    "key": "alone",
+    "label": "单用咪达唑仑",
+    "source": "predicted",
+    "ours": false,
+    "points": [
+     {
+      "x": 0,
+      "y": 0
+     },
+     {
+      "x": 0.25,
+      "y": 3.9655236517598564
+     },
+     {
+      "x": 0.5,
+      "y": 5.619148355848521
+     },
+     {
+      "x": 0.75,
+      "y": 6.006793811823304
+     },
+     {
+      "x": 1,
+      "y": 5.873962801773754
+     },
+     {
+      "x": 1.5,
+      "y": 5.133443995002665
+     },
+     {
+      "x": 2,
+      "y": 4.335573234817244
+     },
+     {
+      "x": 3,
+      "y": 3.1153370757382306
+     },
+     {
+      "x": 4,
+      "y": 2.357232689871283
+     },
+     {
+      "x": 6,
+      "y": 1.558435577608681
+     },
+     {
+      "x": 8,
+      "y": 1.1440200428765286
+     },
+     {
+      "x": 12,
+      "y": 0.6861688570839168
+     },
+     {
+      "x": 16,
+      "y": 0.4319430067814275
+     },
+     {
+      "x": 24,
+      "y": 0.17755762299027947
+     },
+     {
+      "x": 36,
+      "y": 0.04749858373239229
+     },
+     {
+      "x": 48,
+      "y": 0.012722874837589682
+     }
+    ]
+   },
+   {
+    "key": "with",
+    "label": "利福平合用后",
+    "source": "predicted",
+    "ours": true,
+    "points": [
+     {
+      "x": 0,
+      "y": 0
+     },
+     {
+      "x": 0.25,
+      "y": 1.58347516432968
+     },
+     {
+      "x": 0.5,
+      "y": 2.120953091203459
+     },
+     {
+      "x": 0.75,
+      "y": 2.163927601873839
+     },
+     {
+      "x": 1,
+      "y": 2.0308573317609766
+     },
+     {
+      "x": 1.5,
+      "y": 1.649724649725965
+     },
+     {
+      "x": 2,
+      "y": 1.302738545243704
+     },
+     {
+      "x": 3,
+      "y": 0.8268207221870643
+     },
+     {
+      "x": 4,
+      "y": 0.5620593689840276
+     },
+     {
+      "x": 6,
+      "y": 0.3171036881304323
+     },
+     {
+      "x": 8,
+      "y": 0.20821932040762117
+     },
+     {
+      "x": 12,
+      "y": 0.10540552437002776
+     },
+     {
+      "x": 16,
+      "y": 0.0576919107913424
+     },
+     {
+      "x": 24,
+      "y": 0.01858661568464899
+     },
+     {
+      "x": 36,
+      "y": 0.003607138145098512
+     },
+     {
+      "x": 48,
+      "y": 0.0007300578376566317
+     }
+    ]
+   }
+  ],
+  "table": [
+   {
+    "key": "0",
+    "hour": 0,
+    "alone": {
+     "value": 0,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "0.25",
+    "hour": 0.25,
+    "alone": {
+     "value": 3.96552365,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 1.58347516,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "0.5",
+    "hour": 0.5,
+    "alone": {
+     "value": 5.61914836,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 2.12095309,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "0.75",
+    "hour": 0.75,
+    "alone": {
+     "value": 6.00679381,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 2.1639276,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "1",
+    "hour": 1,
+    "alone": {
+     "value": 5.8739628,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 2.03085733,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "1.5",
+    "hour": 1.5,
+    "alone": {
+     "value": 5.133444,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 1.64972465,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "2",
+    "hour": 2,
+    "alone": {
+     "value": 4.33557323,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 1.30273855,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "3",
+    "hour": 3,
+    "alone": {
+     "value": 3.11533708,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0.82682072,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "4",
+    "hour": 4,
+    "alone": {
+     "value": 2.35723269,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0.56205937,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "6",
+    "hour": 6,
+    "alone": {
+     "value": 1.55843558,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0.31710369,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "8",
+    "hour": 8,
+    "alone": {
+     "value": 1.14402004,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0.20821932,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "12",
+    "hour": 12,
+    "alone": {
+     "value": 0.68616886,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0.10540552,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "16",
+    "hour": 16,
+    "alone": {
+     "value": 0.43194301,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0.05769191,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "24",
+    "hour": 24,
+    "alone": {
+     "value": 0.17755762,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0.01858662,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "36",
+    "hour": 36,
+    "alone": {
+     "value": 0.04749858,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0.00360714,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "48",
+    "hour": 48,
+    "alone": {
+     "value": 0.01272287,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0.00073006,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   }
+  ],
+  "citation": "Asaumi 等，2018，CPT: Pharmacometrics & Systems Pharmacology 7(3):186-196",
+  "premises": [
+   {
+    "key": "pbpk_model",
+    "label": "用的是什么模型",
+    "value": "已发表的全身生理药代动力学模型（Asaumi 等，2018，CPT: Pharmacometrics & Systems Pharmacology）：利福平反复给药诱导肠壁和肝脏的 CYP3A4，咪达唑仑在同一套生理参数上被代谢；参数和方程取自作者公开的模型代码，没有改动",
+    "source": "literature",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "pbpk_person",
+    "label": "模拟的是谁",
+    "value": "一个体重 80 kg 的典型健康成人：没有个体差异、基因型和疾病，所以这里的倍数是模型的典型值，不是某个患者会得到的值",
+    "source": "default",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "pbpk_regimen",
+    "label": "给药方案",
+    "value": "利福平 75 mg，每 24 小时一次，共 7 次；咪达唑仑口服 3 mg，在最后一次利福平后 12 小时给药",
+    "source": "given",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "pbpk_clinical",
+    "label": "和临床研究比",
+    "value": "已发表的临床研究里，利福平合用后口服咪达唑仑的面积比彼此相差近八倍；模型给出的是它们之间的一个典型值，对诱导最强的几项研究偏高。论文本身没有给出合用后面积比的数值，只说拟合“吻合良好”",
+    "source": "literature",
+    "decisive": false,
+    "reason": null
+   },
+   {
+    "key": "pbpk_scope",
+    "label": "模型里有什么、没有什么",
+    "value": "只有利福平的诱导：肠壁和肝脏 CYP3A4 的合成按它在细胞里的游离浓度上升，降解速率不变；没有抑制剂，也没有其他诱导剂",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   },
+   {
+    "key": "assumed_victim.route",
+    "label": "给药途径",
+    "value": "口服（the usual way midazolam is given in an interaction study）",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   },
+   {
+    "key": "assumed_weightKg",
+    "label": "体重",
+    "value": "80 kg（the body weight of the published code (every clearance, flow and volume of the model is per kilogram)）",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   },
+   {
+    "key": "assumed_horizonH",
+    "label": "观察时长",
+    "value": "48 小时（long enough for the area under the curve to be complete: midazolam's half-life is a few hours）",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   },
+   {
+    "key": "assumed_perpetrator.intervalH",
+    "label": "合用药物的给药间隔",
+    "value": "24 小时（once a day）",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   },
+   {
+    "key": "assumed_perpetrator.gapH",
+    "label": "最后一次合用药物到服药的间隔",
+    "value": "12 小时（midazolam is given 12 hours after the last dose of the perpetrator）",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   }
+  ],
+  "limited": null
+ },
+ "iv": {
+  "id": "res_iv-outside-fit",
+  "version": 1,
+  "form": "pbpk_interaction",
+  "title": "利福平合用后，咪达唑仑的暴露会怎样变化",
+  "question": "先用利福平，再给咪达唑仑，药物在体内的量会比单用时多还是少、多多少",
+  "victim": "咪达唑仑",
+  "perpetrator": "利福平",
+  "route": "iv",
+  "weightKg": 70,
+  "horizonH": 24,
+  "headline": [
+   {
+    "key": "auc_ratio",
+    "label": "曲线下面积之比（合用 ÷ 单用）",
+    "value": {
+     "value": 0.51081014,
+     "text": null,
+     "unit": "倍",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "cmax_ratio",
+    "label": "峰浓度之比（合用 ÷ 单用）",
+    "value": {
+     "value": 0.88541139,
+     "text": null,
+     "unit": "倍",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "victim_auc_alone",
+    "label": "单用时的曲线下面积",
+    "value": {
+     "value": 359.41588193,
+     "text": null,
+     "unit": "ng/mL·h",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "victim_auc_with_perpetrator",
+    "label": "合用后的曲线下面积",
+    "value": {
+     "value": 183.5932773,
+     "text": null,
+     "unit": "ng/mL·h",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "victim_cmax_alone",
+    "label": "单用时的峰浓度",
+    "value": {
+     "value": 147.37081304,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "victim_cmax_with_perpetrator",
+    "label": "合用后的峰浓度",
+    "value": {
+     "value": 130.48379679,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "cyp3a4_liver_activity",
+    "label": "给药时肝脏 CYP3A4 活性（相对用药前）",
+    "value": {
+     "value": 3.01654414,
+     "text": null,
+     "unit": "倍",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "cyp3a4_gut_activity",
+    "label": "给药时肠壁 CYP3A4 活性（相对用药前）",
+    "value": {
+     "value": 3.38330444,
+     "text": null,
+     "unit": "倍",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   }
+  ],
+  "lead": "合用后，咪达唑仑的曲线下面积降到单用时的 51.1%，峰浓度降到 88.5%。这是酶被诱导的结果：给药时肝脏 CYP3A4 活性是用药前的 3.02 倍，肠壁是 3.38 倍。这是模型对典型健康成人的值。",
+  "series": [
+   {
+    "key": "alone",
+    "label": "单用咪达唑仑",
+    "source": "predicted",
+    "ours": false,
+    "points": [
+     {
+      "x": 0,
+      "y": 0
+     },
+     {
+      "x": 0.25,
+      "y": 91.24429579423433
+     },
+     {
+      "x": 0.5,
+      "y": 147.37081304270146
+     },
+     {
+      "x": 0.75,
+      "y": 96.12550640221728
+     },
+     {
+      "x": 1,
+      "y": 71.67968726595639
+     },
+     {
+      "x": 1.5,
+      "y": 50.29251299931773
+     },
+     {
+      "x": 2,
+      "y": 40.26421990876739
+     },
+     {
+      "x": 3,
+      "y": 29.33889414449462
+     },
+     {
+      "x": 4,
+      "y": 23.187142860788782
+     },
+     {
+      "x": 6,
+      "y": 16.27810272443114
+     },
+     {
+      "x": 8,
+      "y": 12.239661138731659
+     },
+     {
+      "x": 12,
+      "y": 7.451153867229486
+     },
+     {
+      "x": 16,
+      "y": 4.710730533852239
+     },
+     {
+      "x": 24,
+      "y": 1.94020846982598
+     }
+    ]
+   },
+   {
+    "key": "with",
+    "label": "利福平合用后",
+    "source": "predicted",
+    "ours": true,
+    "points": [
+     {
+      "x": 0,
+      "y": 0
+     },
+     {
+      "x": 0.25,
+      "y": 85.80198865799919
+     },
+     {
+      "x": 0.5,
+      "y": 130.4837967903305
+     },
+     {
+      "x": 0.75,
+      "y": 72.69096203210228
+     },
+     {
+      "x": 1,
+      "y": 48.3113095862147
+     },
+     {
+      "x": 1.5,
+      "y": 29.531555476834495
+     },
+     {
+      "x": 2,
+      "y": 21.561339490101094
+     },
+     {
+      "x": 3,
+      "y": 13.602375522892071
+     },
+     {
+      "x": 4,
+      "y": 9.639271758347595
+     },
+     {
+      "x": 6,
+      "y": 5.763427417805851
+     },
+     {
+      "x": 8,
+      "y": 3.8184090904018584
+     },
+     {
+      "x": 12,
+      "y": 1.8860269426378424
+     },
+     {
+      "x": 16,
+      "y": 0.9974237188933995
+     },
+     {
+      "x": 24,
+      "y": 0.29873144457280154
+     }
+    ]
+   }
+  ],
+  "table": [
+   {
+    "key": "0",
+    "hour": 0,
+    "alone": {
+     "value": 0,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "0.25",
+    "hour": 0.25,
+    "alone": {
+     "value": 91.24429579,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 85.80198866,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "0.5",
+    "hour": 0.5,
+    "alone": {
+     "value": 147.37081304,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 130.48379679,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "0.75",
+    "hour": 0.75,
+    "alone": {
+     "value": 96.1255064,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 72.69096203,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "1",
+    "hour": 1,
+    "alone": {
+     "value": 71.67968727,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 48.31130959,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "1.5",
+    "hour": 1.5,
+    "alone": {
+     "value": 50.292513,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 29.53155548,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "2",
+    "hour": 2,
+    "alone": {
+     "value": 40.26421991,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 21.56133949,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "3",
+    "hour": 3,
+    "alone": {
+     "value": 29.33889414,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 13.60237552,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "4",
+    "hour": 4,
+    "alone": {
+     "value": 23.18714286,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 9.63927176,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "6",
+    "hour": 6,
+    "alone": {
+     "value": 16.27810272,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 5.76342742,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "8",
+    "hour": 8,
+    "alone": {
+     "value": 12.23966114,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 3.81840909,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "12",
+    "hour": 12,
+    "alone": {
+     "value": 7.45115387,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 1.88602694,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "16",
+    "hour": 16,
+    "alone": {
+     "value": 4.71073053,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0.99742372,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "key": "24",
+    "hour": 24,
+    "alone": {
+     "value": 1.94020847,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "withPerpetrator": {
+     "value": 0.29873144,
+     "text": null,
+     "unit": "ng/mL",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   }
+  ],
+  "citation": "Asaumi 等，2018，CPT: Pharmacometrics & Systems Pharmacology 7(3):186-196",
+  "premises": [
+   {
+    "key": "pbpk_model",
+    "label": "用的是什么模型",
+    "value": "已发表的全身生理药代动力学模型（Asaumi 等，2018，CPT: Pharmacometrics & Systems Pharmacology）：利福平反复给药诱导肠壁和肝脏的 CYP3A4，咪达唑仑在同一套生理参数上被代谢；参数和方程取自作者公开的模型代码，没有改动",
+    "source": "literature",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "pbpk_person",
+    "label": "模拟的是谁",
+    "value": "一个体重 70 kg 的典型健康成人：没有个体差异、基因型和疾病，所以这里的倍数是模型的典型值，不是某个患者会得到的值",
+    "source": "default",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "pbpk_regimen",
+    "label": "给药方案",
+    "value": "利福平 900 mg，每 24 小时一次，共 2 次；咪达唑仑静脉滴注 0.5 小时 10 mg，在最后一次利福平后 24 小时给药",
+    "source": "given",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "pbpk_outside_perpetrator_dose",
+    "label": "超出模型验证过的范围",
+    "value": "利福平的剂量超出了论文拟合过的范围（5 到 600 mg），超出的部分是模型的外推。",
+    "source": "assumed",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "pbpk_outside_victim_dose",
+    "label": "超出模型验证过的范围",
+    "value": "咪达唑仑的剂量超出了论文拟合过的范围（口服 3 到 6 mg，静脉 1 mg 或每公斤体重 0.05 mg），超出的部分是模型的外推。",
+    "source": "assumed",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "pbpk_clinical",
+    "label": "和临床研究比",
+    "value": "已发表的临床研究里，利福平合用后口服咪达唑仑的面积比彼此相差近八倍；模型给出的是它们之间的一个典型值，对诱导最强的几项研究偏高。论文本身没有给出合用后面积比的数值，只说拟合“吻合良好”",
+    "source": "literature",
+    "decisive": false,
+    "reason": null
+   },
+   {
+    "key": "pbpk_scope",
+    "label": "模型里有什么、没有什么",
+    "value": "只有利福平的诱导：肠壁和肝脏 CYP3A4 的合成按它在细胞里的游离浓度上升，降解速率不变；没有抑制剂，也没有其他诱导剂",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   },
+   {
+    "key": "assumed_perpetrator.intervalH",
+    "label": "合用药物的给药间隔",
+    "value": "24 小时（once a day）",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   }
+  ],
+  "limited": null
+ }
+}

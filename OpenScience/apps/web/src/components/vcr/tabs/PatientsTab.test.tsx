@@ -6,6 +6,7 @@ import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { PatientsTab } from "./PatientsTab";
 import { renderTab } from "../__fixtures__/tabFrame";
 import borrowingPayloads from "../__fixtures__/borrowingPayloads.json";
+import pbpkPayloads from "../__fixtures__/pbpkPayloads.json";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
 
 /**
@@ -586,5 +587,23 @@ describe("虚拟患者 · a spline survival fit made in the conversation", () =>
     expect(container.querySelectorAll("[data-vcr-premises]")).toHaveLength(1);
     // the premises block can be drawn before the people's table: wait for the table rather than read it in the same tick
     expect(await screen.findByRole("table", { name: "患者" })).toBeInTheDocument();
+  });
+});
+
+describe("虚拟患者 · a drug-interaction exposure predicted in the conversation", () => {
+  it("is on the page with its own premises block, and is not an empty tab when it is the only result", async () => {
+    const raw = fixture("empty/patients.json");
+    raw.pbpkInteractions = [pbpkPayloads.oral];
+    installVcrServer(network.productRequest, { [tab("patients")]: raw });
+    const { container } = draw();
+    const block = await waitFor(() => {
+      const found = container.querySelector("[data-vcr-pbpk]") as HTMLElement | null;
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    expect(block).toHaveTextContent("利福平合用后，咪达唑仑的暴露会怎样变化");
+    expect(block).toHaveTextContent("典型健康成人");
+    expect(container.querySelectorAll("[data-vcr-premises]")).toHaveLength(1);
+    expect(screen.queryByText(/还没有|尚未/)).toBeNull();
   });
 });

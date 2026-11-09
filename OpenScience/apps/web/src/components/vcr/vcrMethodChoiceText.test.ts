@@ -18,7 +18,7 @@ function choices(node: Schema, path = ""): Choice[] {
 }
 it("covers all declared choices and authored examples of all preserved method-form choices", () => {
   const methods = Object.values(VCR_JOB_METHODS).filter(method => !method.startsWith("forecast.") && !method.startsWith("model.") && method !== "matching.extract");
-  expect(methods).toHaveLength(45);
+  expect(methods).toHaveLength(47);
   let count = 0; const values = new Set<string>();
   for (const method of methods) {
     for (const row of choices((VCR_SCENARIO_SCHEMAS as Record<string, unknown>)[method] as Schema)) {
@@ -31,7 +31,7 @@ it("covers all declared choices and authored examples of all preserved method-fo
     }
     for (const example of VCR_SCENARIO_EXAMPLES[method]) expect(methodExampleLabel(method, example.label), `${method}:${example.label}`).toMatch(/[\u3400-\u9fff]/);
   }
-  expect(count).toBe(234); expect(values.size).toBe(243); expect(methods.flatMap(method => VCR_SCENARIO_EXAMPLES[method])).toHaveLength(89);
+  expect(count).toBe(261); expect(values.size).toBe(270); expect(methods.flatMap(method => VCR_SCENARIO_EXAMPLES[method])).toHaveLength(95);
   for (const value of [...VCR_ROW_RULE_OPS, ...VCR_ROW_RULE_COMPARATORS]) expect(ruleChoiceLabel(value)).not.toBe(value);
   expect(Object.keys(VCR_LONGITUDINAL_METHODS)).toHaveLength(4);
 });

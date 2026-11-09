@@ -48,6 +48,9 @@ const labels: Record<string, string> = {
   max_power: "功效最大", min_expected_n: "期望样本量最少",
   // survival analyses declared on a synthetic population (population.synthpop / population.quality 1.1.0) and the progression simulator (algorithm round P1, P4)
   cox: "Cox 回归（对数风险比）", change: "基线到所选随访的变化", slope: "每个人的进展斜率", emax: "Emax（逐渐饱和）", literature: "文献", data: "你自己的数据",
+  // the beta_logit family's estimators and the data they read (plan R26): the names are the page's own words
+  mmrm: "混合效应模型（MMRM）", cmi_jump_to_reference: "参照组插补：停药后跳到对照组", cmi_copy_reference: "参照组插补：整个病程复制对照组",
+  all_observed: "所有收集到的数据，停药之后的也算", on_treatment: "只用停药之前（用药期间）的数据",
 };
 /** The selection rule of a multi-arm design: its words are short and ordinary, so they are read only at that path. */
 const selectionRules: Record<string, string> = { best: "只留中期估计最好的臂", rbest: "留最好的几个臂", epsilon: "留与最好的相差不大的臂", all: "全部保留" };
@@ -57,6 +60,17 @@ const ruleLabels: Record<string, string> = {
 };
 /** Words read only at their own path, because the same short word means something else elsewhere: the shape of a mean curve, and which value a dropout looks at. */
 const pathLabels: Record<string, Record<string, string>> = {
+  "pk.interaction:victim.drug": { midazolam: "咪达唑仑" },
+  "pk.interaction:perpetrator.drug": { rifampicin: "利福平" },
+  "pk.interaction:victim.route": { oral: "口服", iv: "静脉" },
+  "decision.value_of_information:source": { two_arm_continuous: "两组连续终点试验的功效（引擎按每个选项的人数计算）", table: "调用方给出的收益和输入抽样" },
+  "decision.value_of_information:utility": { success_probability: "试验成功的概率", net_benefit: "净收益（成功的价值减去入组成本）" },
+  "decision.value_of_information:effectScale": { absolute: "绝对差值", proportional_slowing: "占对照组恶化幅度的比例" },
+  "decision.value_of_information:studies[].kind": { phase2_effect: "II 期研究（观察药物效应）", natural_history_control: "自然病程队列（观察对照组恶化幅度）", normal_known: "按已知标准差观察某个输入" },
+  "decision.value_of_information:inputs.effect.family": { fixed: "固定值", normal: "正态分布", lognormal: "对数正态分布", beta: "Beta 分布", uniform: "均匀分布", range: "只给乐观、基线、悲观三个值（没有概率分布）" },
+  "decision.value_of_information:inputs.sd.family": { fixed: "固定值", normal: "正态分布", lognormal: "对数正态分布", beta: "Beta 分布", uniform: "均匀分布", range: "只给乐观、基线、悲观三个值（没有概率分布）" },
+  "decision.value_of_information:inputs.dropoutShare.family": { fixed: "固定值", normal: "正态分布", lognormal: "对数正态分布", beta: "Beta 分布", uniform: "均匀分布", range: "只给乐观、基线、悲观三个值（没有概率分布）" },
+  "decision.value_of_information:inputs.controlProgression.family": { fixed: "固定值", normal: "正态分布", lognormal: "对数正态分布", beta: "Beta 分布", uniform: "均匀分布", range: "只给乐观、基线、悲观三个值（没有概率分布）" },
   "comparator.borrowing:prior.kind": { power: "固定折扣（幂先验）", sam: "自适应混合先验（SAM）", elastic: "弹性先验" },
   "comparator.borrowing:prior.function": { logistic: "逻辑斯蒂函数", step: "阶梯函数" },
   "patients.progression:model.family": { linear: "线性", exponential: "指数", logistic: "逻辑斯蒂（S 形）", emax: "Emax（逐渐饱和）", beta_logit: "阿尔茨海默病 ADAS-cog 11（CAMD 模型）" },
@@ -64,7 +78,12 @@ const pathLabels: Record<string, Record<string, string>> = {
   "patients.progression:model.parameterSet.version": { "adsim-3.0": "作者 2013 年 8 月公开的参数" },
   "patients.progression:model.uncertainty": { new_study: "每次模拟一项新研究", typical_study: "典型研究，不考虑研究之间的差异", posterior_draws: "每次模拟先抽一组后验参数，再抽一项新研究" },
   "patients.progression:dropoutModel": { parameter_set: "按模型的脱落规律", none: "不考虑脱落" },
+  "patients.progression:estimand.strategy": { treatment_policy: "不论是否停药（治疗策略）", hypothetical: "假如没有人停药（假想情境）" },
   "patients.progression:people.mode": { paired_counterfactual: "同一批人，每个人都用每一组的治疗（模型推算）", resampled_trials: "每次模拟试验从这批人里抽人并随机分组" },
+  "patients.progression:treatment.reference.drug": { donepezil: "多奈哌齐", galantamine: "加兰他敏", rivastigmine: "卡巴拉汀" },
+  "patients.progression:treatment.background.drug": { donepezil: "多奈哌齐", galantamine: "加兰他敏", rivastigmine: "卡巴拉汀" },
+  "patients.progression:treatment.mechanism.drug": { aducanumab: "aducanumab（剂量、血药浓度、淀粉样蛋白、认知量表的完整链）", lecanemab: "lecanemab（只发表了血药浓度模型，这条链算不了）" },
+  "patients.progression:treatment.mechanism.link": { pang_2023: "Pang 等 2023：每降低 0.1 的 SUVR，ADAS-Cog 恶化少 0.33 分" },
   "patients.progression:treatment.symptomatic.pointsAt.distribution.family": { fixed: "固定值", normal: "正态分布", truncated_normal: "截断正态分布", lognormal: "对数正态分布", beta: "Beta 分布", uniform: "均匀分布", empirical_draws: "一组给定的抽样值" },
   "patients.progression:treatment.symptomatic.pointsAt.distribution.tier": { A: "A 级：已发表的同类药物拟合", B: "B 级：机制链推算", C: "C 级：只有文献估计，没有模型", stated: "你自己设定" },
   "patients.progression:treatment.symptomatic.pointsAt.distribution.source.kind": { literature: "文献", model_result: "另一个模型的结果", stated: "你自己设定" },
@@ -219,6 +238,14 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "the same for a hazard ratio from 200 events (the log hazard ratio under a normal prior)": "同样的问题，用于 200 个事件的风险比（对数风险比取正态先验）",
     "the same for two beta-binomial arms of 60 and a non-inferiority margin of 10 points on the risk difference": "同样的问题，用于两组各 60 人的 Beta-二项模型，风险差的非劣效界值为 10 个百分点"
   },
+  "decision.value_of_information": {
+    "whether to run a 150, 300 or 450 per arm phase 3 (or none): the effect, the standard deviation and the dropout are uncertain, the net benefit is the value of success less the cost of the people, and one phase 2 of 80 per arm is asked about": "是否做每组 150、300 或 450 人的 III 期（或不做）：效应、标准差和脱落都不确定，净收益是成功的价值减去入组成本，并问一项每组 80 人的 II 期值多少",
+    "an effect that is a share of the control arm's worsening, with the share given only as optimistic, base and pessimistic values (a threshold is reported, never a probability), the control worsening uncertain, and a natural-history cohort of 200": "效应是对照组恶化幅度的一个比例，只给乐观、基线、悲观三个值（只报转折点，不给概率），对照组恶化幅度不确定，并问一个 200 人的自然病程队列值多少"
+  },
+  "pk.interaction": {
+    "a 3 mg oral midazolam dose 12 hours after the last of seven daily 75 mg rifampicin doses, over 48 hours, in an 80 kg adult": "利福平每天 75 mg、连用 7 天，最后一次后 12 小时口服咪达唑仑 3 mg，观察 48 小时，体重 80 kg 的成人",
+    "the same victim as a 30-minute intravenous infusion of 2 mg after 600 mg rifampicin daily for ten days, a 70 kg adult": "利福平每天 600 mg、连用 10 天，最后一次后 24 小时静脉滴注咪达唑仑 2 mg（30 分钟），体重 70 kg 的成人"
+  },
   "design.win_ratio": {
     "death, then hospitalisations, then a score (KCCQ-like, 5 points matter, SD 20): 300 patients per arm followed for 24 months, the power of the win-ratio test": "先比死亡，再比住院次数，最后比评分（类似 KCCQ，相差不到 5 分算平局，标准差 20）：每组 300 人随访 24 个月，求胜率比检验的功效",
     "the same hierarchy: how many patients per arm for 90% power": "同样的三层比较：功效要达到 90%，每组需要多少人",
@@ -242,6 +269,8 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "a saturating (Emax) progression, tested by the per-person slope": "逐渐饱和（Emax）的进展，用每个人的斜率检验",
     "mild to moderate Alzheimer disease on ADAS-cog 11 (the CAMD model with its released parameters): a hypothetical drug 2.5 points better at week 24 plus 30% slower decline, 78 weeks, 200 per arm": "轻中度阿尔茨海默病 ADAS-cog 11（CAMD 模型和它公开的参数）：假设的药物第 24 周好 2.5 分、病情恶化减慢 30%，78 周，每组 200 人",
     "the same trial with the symptomatic effect stated as a distribution instead of one number (the result is an assurance: the chance of a significant benefit averaged over what the effect might be)": "同一个试验，对症效果写成一个分布而不是一个数（结果是按效果的不确定性平均后的把握度）",
+    "donepezil 10 mg a day as the treated arm (the posterior's own fitted effect, with its parameter uncertainty), 26 weeks, 150 per arm": "多奈哌齐每天 10 mg 作为治疗组（用模型自己拟合的效果，带参数的不确定性），26 周，每组 150 人",
+    "aducanumab titrated to 10 mg/kg every 4 weeks, effect on ADAS-cog 11 at week 78 through the published exposure, amyloid and clinical chain (an assurance that holds only if the chain holds)": "aducanumab 逐步加量到每 4 周 10 mg/kg，经已发表的血药浓度、淀粉样蛋白和临床的关联链推算第 78 周对 ADAS-cog 11 的效果（只有这条链成立，这个把握度才成立）",
   },
   "population.check": {
     "a generated population against a second, independent baseline table (the platform fills `generated` from the population subjectId names)": "生成的人群与第二份基线表对照"
