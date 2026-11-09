@@ -81,7 +81,7 @@ test('the frontier jury is the one non-Claude adjudicator (owner 2026-11-03, aft
   assert.equal(rsiOfflineRoleIssue('judge', QWEN_JURY, 'frontier-selection'), null)
   assert.equal(rsiOfflineRoleIssue('judge', { role: 'jury', provider: 'dashscope', model: 'qwen3.8-max' }, 'frontier-selection'), null, 'its id is optional like any judge\'s')
   // refused on every other surface, in the manifest and as a role
-  for (const surface of ['harness-patch', 'tool-patch', 'capability-skill', 'frontier-screen', 'isolated-tool']) {
+  for (const surface of ['harness-patch', 'tool-patch', 'capability-skill', 'frontier-screen']) {
     assert.ok(rsiCampaignIssues(onSurface(surface, [{ ...QWEN_JURY }])).includes('campaign_judge_refused'), surface)
     assert.equal(rsiOfflineRoleIssue('judge', QWEN_JURY, surface), 'campaign_judge_refused', surface)
   }

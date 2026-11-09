@@ -104,6 +104,11 @@ BEGIN
       CHECK (severity IN ('safety','attention','info'));
   END IF;
 END $foreign_keys$;
+-- 2026-11-09: 循证进化's decision cards went with tool serving, and nothing executes an option any more. A card still open would offer buttons that only
+-- close the notice, so it is closed here, as decided by no one (source "retired"); its title and body stay readable.
+UPDATE evimed_inbox.notifications SET read_at=coalesce(read_at,clock_timestamp()),resolved_at=clock_timestamp(),
+  resolution=jsonb_build_object('actionId','retired','source','retired'),due_at=NULL,default_action=NULL,revision=revision+1,updated_at=clock_timestamp()
+  WHERE resolved_at IS NULL AND source->>'type'='system' AND source->>'id' LIKE 'evolution-decision-%';
 `;
 
 /** @param {any} database */

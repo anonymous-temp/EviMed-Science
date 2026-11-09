@@ -77,7 +77,7 @@ export async function harnessReport(dir, month) {
   // What a module round proposes: one component's text, by its digest. The text itself travels with the campaign's inputs and goes in the pull request.
   const frozenPolicy = modulePolicy && frozen ? Object.values(inputs?.sources ?? {}).find((source) => source?.role === 'development')?.arms?.[frozen.arm]?.harness?.policy ?? null : null;
   if (frozenPolicy && report.frozen) Object.assign(report.frozen, { component: frozenPolicy.component, textSha256: createHash('sha256').update(frozenPolicy.text).digest('hex') });
-  const floorNote = { 'autopilot-checklist': '逐条对照用例写明的预期动作，代码判定，不用裁判。', 'frontier-numbers': '这是下限：数字、单位、预期栏目与复核结果由代码判定，改写是否忠于原文它看不出来。', 'frontier-source': '代码下限乘以裁判的忠实度判定。' }[report.scorer] ?? null;
+  const floorNote = { 'frontier-numbers': '这是下限：数字、单位、预期栏目与复核结果由代码判定，改写是否忠于原文它看不出来。', 'frontier-source': '代码下限乘以裁判的忠实度判定。' }[report.scorer] ?? null;
   const directionalWhy = { campaign_directional_confirmation_not_sealed: '确认集来自仓库里的用例，改进者读得到它们的答案，不算封存', campaign_directional_export_floor_only: '导出条目没有标准答案，frontier-numbers 在这里只是代码下限，没有东西与它相抗；能合格的是带裁判的 frontier-source' }[directionalCode]
     ?? `确认集 ${groups} 组、失败子集 ${sliceGroups} 组，低于登记统计程序的 ${minimum} 组下限`;
   const lines = [

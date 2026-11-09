@@ -7,8 +7,7 @@ import { rsiDigest } from './rsiCampaignBundle.mjs'
 
 /**
  * The module policies a campaign can change (evals/rsi-campaigns/module_campaign.mjs): what the prompt under test runs in, from the class that sends it. security.mjs's filesystem
- * helpers, and on the planner's graph (through the progress snapshot's source states) researchContext, sourceMaterials and the VCR intake modules read caller-owned
- * workspace, source and intake files, never an executable or configuration input to a decision: the planner and the editor are handed their input. Re-audit when the digest moves.
+ * helpers read caller-owned workspace files, never an executable or configuration input to a decision: the editor is handed its input. Re-audit when the digest moves.
  */
 const moduleResources = Object.freeze(['apps/server/package.json', 'packages/domain/package.json', 'pnpm-lock.yaml'])
 const securityFiles = Object.freeze({ 'apps/server/src/security.mjs': { sourceDigest: 'f8c3dcffa6309eb9529a31c5b1f7d2e89c4df24e978eb27bcc0dd7a3601d8582', resources: [] } })
@@ -17,13 +16,6 @@ const frontierEditorProfile = Object.freeze({ roots: ['apps/server/src/frontierE
 export const RSI_DEPENDENCY_PROFILES = Object.freeze({
   'frontier-screen': frontierEditorProfile,
   'frontier-edit': frontierEditorProfile,
-  'autopilot-planner': { roots: ['apps/server/src/autopilotNextAction.mjs'], resources: moduleResources, requiredSettings: ['model', 'provider'], requiredPins: [], runtimeFileDependencies: {
-    ...securityFiles,
-    'apps/server/src/researchContext.mjs': { sourceDigest: 'ce0e328118d0cfe19384564fd40422734b45a2f345df350ccace108e0dad51f6', resources: [] },
-    'apps/server/src/sourceMaterials.mjs': { sourceDigest: '7d6403e1840ae9b1b110840d180292da098df718aeefc4f6b3b7acaea00f0e28', resources: [] },
-    'apps/server/src/vcrIntakeStage.mjs': { sourceDigest: '12ffe311929c33d2587dd044a3de88e7f8b232629048b3d7841965d1dfb556c6', resources: [] },
-    'apps/server/src/vcrIntakeController.mjs': { sourceDigest: 'b7ebae2dfe7635aa5b651f86fd66ac087c56f6b6bfb27ff522cb422853ec89e6', resources: [] },
-  } },
   // What decides selection and nothing beside it (frontierSelection.mjs, 2026-11-05): no resource, no runtime file, no external package. What a score means is the third setting.
   'frontier-selection': { roots: ['apps/server/src/frontierSelection.mjs', 'packages/domain/src/frontierMix.mjs'], requiredSettings: ['model', 'provider', 'scoreVersion'], requiredPins: [] },
 })

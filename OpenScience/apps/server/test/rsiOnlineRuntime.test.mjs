@@ -69,10 +69,11 @@ test('maintenance admission is checked both before and inside the online queue c
   allowed = true; await worker.tick(); assert.equal(claimed, 1);
   await worker.close();
 });
-test('production server composes the serving part of evolution and nothing else, and declares dedicated online queues', async () => {
+test('production server composes the signal store of evolution and no tool serving, and declares dedicated online queues', async () => {
   const code = await readFile(new URL('../src/server.mjs', import.meta.url), 'utf8');
-  // Owner, 2026-11-04: the online experiment engine and its switch are deleted, so the serving part is the only composition there is.
-  assert.match(code, /createEvolutionServing\(/);
+  // Owner, 2026-11-04 and 2026-11-09: the online experiment engine and then tool serving are deleted; what is composed is the closed-code signal store.
+  assert.match(code, /new EvolutionLedger\(/);
+  assert.doesNotMatch(code, /createEvolutionServing\(|evolutionServing\.mjs|evolutionGateway\.mjs/);
   assert.doesNotMatch(code, /composeEvolution\(|createEvolution\(/);
   assert.doesNotMatch(code, /evolution\.model\(|evolution\.loops|evolution\.budgeted\(|evolution\.runtimeSession/);
   assert.ok(PRODUCT_JOB_KINDS.includes('rsi-incident-export'));

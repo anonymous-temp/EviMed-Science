@@ -150,7 +150,6 @@ export function readPreset(text) {
     if (preset) { roots.push({ id: preset[1], mount: preset[1] + (preset[2] ?? ""), gate: /EVIMED_GEO_SKILLS/.test(expression) ? "geoProject" : null }); continue; }
     if (/EVIMED_LOOPX_ROOT/.test(expression)) { roots.push({ id: "loopx", mount: "loopx/skills", gate: "loopxEnabled" }); continue; }
     if (/EVIMED_PERSONAL_SKILLS_DIR/.test(expression)) { roots.push({ id: "personal", mount: "personal-skills", gate: null }); continue; }
-    if (/EVIMED_PLATFORM_SKILLS_DIR/.test(expression)) { roots.push({ id: "platform-learned", mount: "platform-skills", gate: null }); continue; }
     throw new Error(`${PRESET_FILE}: a skill root this generator does not know — ${entry[1].slice(0, 80)} — say where it comes from in readPreset`);
   }
   if (roots.length < 6) throw new Error(`${PRESET_FILE}: read ${roots.length} skill roots; the file's shape is not the one this reads`);
@@ -166,7 +165,6 @@ function describeRoot(root) {
   if (root.id === "loopx") return { ...root, kind: "contract", source: LOOPX_SKILLS_FILE };
   if (root.id === "geo-private") return { ...root, kind: "private-index", source: GEO_PACK_INDEX_PATH };
   if (root.id === "personal") return { ...root, kind: "account", source: null };
-  if (root.id === "platform-learned") return { ...root, kind: "learned", source: null };
   const known = RUNTIME_SKILL_ROOTS.find((family) => family.family === root.id);
   return { ...root, kind: "repo", source: known ? known.source : `runtime/skills/${root.id}` };
 }

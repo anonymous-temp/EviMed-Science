@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { fetchWebMe, getWebProjectId } from "@/lib/apiClient";
-import { EvolutionPanel } from "@/components/evolution/EvolutionPanel";
 import { WebReadinessCard } from "@/components/settings/WebReadinessCard";
 import { WebResourcesCard } from "@/components/settings/WebResourcesCard";
 import { WebAuditCard } from "@/components/settings/WebAuditCard";
@@ -24,11 +23,9 @@ import { Section } from "@/components/ui/Section";
  * Verification: Operator-card tests and route authorization tests.
  *
  * 「运维」 in 设置: the deployment's console, offered only to an operator
- * account — the runtime's state, the configuration check, the three operations ledgers, 前沿动态's tag tree, and
- * 「循证进化」, the published tools (it sat under the
- * research-tool grid until 2026-10-07: an operator's panel beneath a
- * researcher's page, and it had no business there). The project plugins that
- * were here are on 插件与技能 now, where the one switch a researcher has lives.
+ * account — the runtime's state, the configuration check, the three operations ledgers, 前沿动态's tag tree.
+ * The project plugins that were here are on 插件与技能 now, where the one
+ * switch a researcher has lives.
  *
  * Presentation only. `config.operatorUsers` decides who is offered the
  * section; every route these cards call keeps its own authorization, so an
@@ -70,7 +67,6 @@ export function OpsPage() {
       </Section>
       <GeoMarketCard />
       <FrontierTagsCard />
-      <EvolutionPanel />
     </div>
   );
 }

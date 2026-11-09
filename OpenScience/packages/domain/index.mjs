@@ -2587,9 +2587,6 @@ export {
   summarizeSemantics,
 } from './src/dataSemantics.mjs'
 
-// evolution — the sequential test a published tool's real use is read with (the rest of the module's vocabulary is exported at the end of this file)
-export { EVOLUTION_TOOL_HARM_TEST } from './src/evolution.mjs'
-
 // geneExpression — NCBI Gene Expression Omnibus series to differential expression (plan 2026-10-02 §11.3 N17): the
 // accessions, the six limits, the tool's refusals and the advisory findings over its package. Not 「循证 GEO」.
 export {
@@ -2615,7 +2612,7 @@ export {
   geneExpressionFindings,
 } from './src/geneExpression.mjs'
 
-export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_JOB_KINDS, EVOLUTION_EXECUTABLE_OPERATIONS, evolutionToolVisible, evolutionMethodFields, evolutionDataMatch } from './src/evolution.mjs'
+export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_JOB_KINDS, evolutionMethodFields } from './src/evolution.mjs'
 
 // geoEvidenceChain — 「循证 GEO」 as one evidence chain (flywheel F21, F28, 2026-10-06): the product zone's cards made from a
 // project's verified claims, the closed vocabulary of how a difference is known, the producer settings and the disclosure's

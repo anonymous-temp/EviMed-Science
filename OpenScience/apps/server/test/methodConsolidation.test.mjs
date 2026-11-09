@@ -90,7 +90,6 @@ function consolidation(options) {
       judgeService: options.judgeService ?? null,
       jobs: options.jobs ?? null,
       audit: options.audit ?? null,
-      ...(options.platformTools ? { platformTools: options.platformTools } : {}),
       now: () => new Date("2026-09-07T00:00:00.000Z"),
     }),
   };
@@ -195,23 +194,10 @@ test("with the evolution module off the relation brief is byte for byte the one 
     readResult: async () => ({ status: "succeeded", output: { relations: [], assignments: [] } }) });
   await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
   const decide = dispatched.find((call) => call.input.action === "decide");
-  // The shape d4ed5fd82 built: no platformTools key at all, and the keys in this order.
+  // The relation brief's keys, in this order.
   const methods = learning.items.map((item) => ({ id: item.id, name: item.payload.frontmatter.name, description: item.payload.frontmatter.description,
     digest: item.payload.contentDigest, body: item.payload.body }));
   assert.equal(JSON.stringify(decide.input), JSON.stringify({ schemaVersion: 1, action: "decide", relationTypes: [...METHOD_RELATION_TYPES], methods }));
-});
-
-test("with the module on, the relation brief names the tools declared for the group's capability and no others", async () => {
-  const learning = fakeLearning([doc("m1", "resolve-claim-span", { capabilityId: "statistical-analysis" }), doc("m2", "resolve-claim-anchor", { capabilityId: "statistical-analysis" })]);
-  const { instance, dispatched } = consolidation({ learning, platformTools: async () => [
-    { id: "tool-a", capabilityIds: ["statistical-analysis"], description: "Public description", artifactDigest: "sha256:a", revision: 2, papers: ["secret"] },
-    { id: "tool-b", capabilityIds: ["meta-analysis"], description: "Other capability" }],
-  readResult: async () => ({ status: "succeeded", output: { relations: [], assignments: [] } }) });
-  await instance.sleep({ job: { id: "job_1", userId: "u1", projectId: "p1", payload: { action: "sleep" } } });
-  const { platformTools } = dispatched.find((call) => call.input.action === "decide").input;
-  assert.deepEqual(platformTools.items.map((tool) => tool.id), ["tool-a"]);
-  assert.equal(platformTools.irrelevant, 1);
-  assert.ok(!JSON.stringify(platformTools).includes("secret"));
 });
 
 test("the semantic screen precedes the two bounded capability runs", async () => {

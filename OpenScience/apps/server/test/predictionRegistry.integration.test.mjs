@@ -1,10 +1,10 @@
-// The prediction registry over real PostgreSQL and the evolution module's own service (evidence-flywheel plan §5.2, F25): a filing is a tenant's immutable row.
+// The prediction registry over real PostgreSQL and the evolution ledger (evidence-flywheel plan §5.2, F25): a filing is a tenant's immutable row.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
-import { EvolutionService } from "../src/evolutionService.mjs";
+import { ProductDocuments } from "../src/productStore.mjs";
+import { EvolutionLedger } from "../src/evolutionLedger.mjs";
 import { createPredictionRegistry } from "../src/predictionRegistry.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -15,7 +15,7 @@ const refused = (code) => (error) => error?.code === code;
 
 let database, documents, service, clock;
 const config = { predictionRegistryEnabled: true, operatorUsers: [operator] };
-const makeRegistry = () => createPredictionRegistry({ config, evolution: service, now: () => clock });
+const makeRegistry = () => createPredictionRegistry({ config, ledger: service, now: () => clock });
 
 before(async () => {
   if (!url) return;
@@ -23,7 +23,7 @@ before(async () => {
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Operator','development'),($2,'Alice','development'),($3,'Bob','development')", [operator, alice, bob]);
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,'evimed-evolution','Evolution',1048576),($2,'vcr-study','Study',1048576),($3,'vcr-study','Study',1048576)", [operator, alice, bob]);
   documents = new ProductDocuments(database);
-  service = new EvolutionService({ documents, jobs: new ProductJobs(database), ownerId: operator, now: () => clock });
+  service = new EvolutionLedger({ documents, ownerId: operator, now: () => clock });
 });
 after(async () => { if (database) { await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[operator, alice, bob]]); await database.close(); } });
 

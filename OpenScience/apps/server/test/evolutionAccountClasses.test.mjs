@@ -18,6 +18,9 @@ test('the setting is read from the environment and held to one to five', () => {
   try {
     delete process.env[name]; assert.equal(loadConfig().evolutionOperatorSignalFloor, 1);
     process.env[name] = '2'; assert.equal(loadConfig().evolutionOperatorSignalFloor, 2); assert.deepEqual(validateEvolutionConfiguration(loadConfig()), []);
-    for (const bad of ['0', '6', '1.5']) { process.env[name] = bad; assert.ok(validateEvolutionConfiguration(loadConfig()).some(issue => issue.key === 'evolutionOperatorSignalFloor'), bad); }
+    for (const bad of ['0', '6', '1.5']) {
+      assert.ok(validateEvolutionConfiguration({ evolutionOperatorSignalFloor: Number(bad) }).some(issue => issue.key === 'evolutionOperatorSignalFloor'), bad);
+      process.env[name] = bad; assert.equal(loadConfig().evolutionOperatorSignalFloor, 1, `${bad}: the default replaces it at start`);
+    }
   } finally { if (prior === undefined) delete process.env[name]; else process.env[name] = prior; }
 });

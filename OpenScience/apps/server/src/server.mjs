@@ -65,9 +65,13 @@ import { DocumentExportWorker } from "./documentExportWorker.mjs";
 import { createDocumentExportRoutes } from "./documentExportRoutes.mjs";
 import { createVcrDocumentAdapter } from "./vcrDocumentExport.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
-import { createEvolutionServing } from "./evolutionServing.mjs";
+import { EvolutionLedger } from "./evolutionLedger.mjs";
+import { evolutionOpsMetricFamilies } from "./evolutionOpsMetrics.mjs";
+import { createEvolutionSignals } from "./evolutionSignals.mjs";
+import { createEvolutionRunSignals, evolutionRunGap } from "./evolutionRunSignals.mjs";
+import { createEvolutionRetentionRunner } from "./evolutionRetentionRunner.mjs";
+import { evolutionAccountFloors } from "./evolutionAccountClasses.mjs";
 import { createRsiOnlineRuntime, createRsiSourceInvalidation } from "./rsiOnlineRuntime.mjs";
-import { EVOLUTION_GATEWAY_PATH } from "./evolutionGateway.mjs";
 import { heavyWorkAdmission, heavyWorkBlockerCount } from "./heavyWorkAdmission.mjs";
 import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
@@ -111,9 +115,8 @@ import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
 import { openVikingBackupReadiness } from "./openVikingBackupReadiness.mjs";
-import { EVIDENCE_PROJECT_ID, LEARNING_PROJECT_ID, assertClientProject, ensureEvidenceProject, ensureOpenVikingProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
+import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, LEARNING_PROJECT_ID, assertClientProject, ensureEvidenceProject, ensureOpenVikingProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
-import { createEvolutionPositiveEvidence } from "./evolutionPositiveEvidence.mjs";
 import { PROMOTION_CLASSES, createOfficialPromotion, officialPromotionMetricFamilies, projectFactsReader, promotionJudgeMessages } from "./officialPromotion.mjs";
 import { retireHandbookArm } from "./handbookArmRetirement.mjs";
 import { evidenceEstablishedAuthors } from "./evidenceAuthorStanding.mjs";
@@ -123,7 +126,6 @@ import { createCalculationReceiptReader } from "./evidenceCalculationReceipts.mj
 import { createPredictionRegistry, predictionRegistryMetricFamilies } from "./predictionRegistry.mjs";
 import { evidenceCardMetricFamilies } from "./evidenceCardMetrics.mjs";
 import { assertNotPlatformAccount } from "./platformAccount.mjs";
-import { evolutionRunGap } from './evolutionIntegration.mjs';
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, readRunStateProjection, readDeliveryReceipt,runHistory } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
@@ -432,7 +434,6 @@ import { createGeoNotifier } from "./geoNotify.mjs";
 import { composeVcr, vcrMetricFamilies, vcrMetricsSnapshot, withVcrEngineWarnings } from "./vcrComposition.mjs";
 import { createAvailability } from "./availabilityModule.mjs";
 import { availabilityMetricFamilies } from "./availabilityService.mjs";
-import { evolutionOpsMetricFamilies, evolutionOpsSnapshot } from "./evolutionOpsMetrics.mjs";
 import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
 import { VcrOrchestrator, vcrBriefBlock, vcrRunId, vcrStoppedBlock } from "./vcrOrchestrator.mjs";
@@ -770,7 +771,7 @@ function routePattern(pathname) {
   // into `:action` so a caller cannot mint labels. Until 2026-10-10 these fell through to "/static" too
   // (production: 181 workload-token refusals in a day filed as static traffic, their gateway unknowable).
   if (pathname === JUDGE_GATEWAY_PATH || pathname === TOOL_UNIVERSE_GATEWAY_PATH) return pathname;
-  for (const prefix of [DATA_SEMANTICS_GATEWAY_PATH, EVOLUTION_GATEWAY_PATH, EXTENSION_GATEWAY_PATH, RESULT_GATEWAY_PATH]) {
+  for (const prefix of [DATA_SEMANTICS_GATEWAY_PATH, EXTENSION_GATEWAY_PATH, RESULT_GATEWAY_PATH]) {
     if (pathname === prefix || pathname.startsWith(`${prefix}/`)) return `${prefix}/:action`;
   }
   if (pathname.startsWith(REVIEW_GATEWAY_PREFIX)) return pathname.startsWith(`${REVIEW_GATEWAY_PREFIX}deliverables/`) ? `${REVIEW_GATEWAY_PREFIX}deliverables/:id` : pathname;
@@ -1076,7 +1077,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // What the person's own lists leave out: the platform's projects, and the data-analysis API's (made and deleted through that API, kept in
   // the person's account for their own data). Not `internalFor`: an analysis's runs are the person's, charged and counted like any other.
   const hiddenFor = (/** @type {unknown} */ userId, /** @type {unknown} */ projectId) => internalFor(userId, projectId) || isDataAnalysisProject(String(projectId));
-  if (config.evolutionRefusal) process.stderr.write(`evolution: ${config.evolutionRefusal.code} (${config.evolutionRefusal.key}); the module stays off and the platform starts\n`);
   const managedBrowser = overrides.managedBrowserService ?? createManagedBrowserService(config);
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs, capabilityDirs: config.capabilityDirs });
   const store = createStore(config, { databasePool: overrides.databasePool });
@@ -1095,15 +1095,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       })
       : null);
   let maintenanceService = null;
-  /** @type {ReturnType<typeof createEvolutionServing> | null} */
-  let evolution = null;
+  /** The closed-code signal store (`evolutionLedger.mjs`) and what is built on it, composed with the product ledger further down; `evolutionSignals` reads them lazily. @type {EvolutionLedger | null} */
+  let evolutionLedger = null;
+  /** @type {ReturnType<typeof createEvolutionSignals> | null} */ let evolutionSignalStore = null;
+  /** @type {ReturnType<typeof createEvolutionRunSignals> | null} */ let evolutionRunSignals = null;
+  /** @type {ReturnType<typeof createEvolutionRetentionRunner> | null} */ let evolutionRetention = null;
   /** @type {any} */ let rsiOnline = null;
   /** @type {any} */ let rsiServingAdapters = null;
   // A source deletion never waits on the optional RSI layer succeeding: a failure is said with a closed code and retried
   // from a deployment-owned job (`createRsiSourceInvalidation` never throws). The job store is read when it is called.
   const invalidateRsiSource = createRsiSourceInvalidation({ initialize: () => initializeRsiOnline(), jobs: () => productJobs,
     report: code => process.stderr.write(`rsi: ${code}\n`) });
-  const evolutionSignals = {record: async input => evolution?.signals.record(input)};
+  const evolutionSignals = {record: async input => evolutionSignalStore?.record(input)};
   // A module's serving policy is a campaign's (`rsiServingAdapters.mjs`), or its code default; 循证 GEO's supplements stay the code default.
   const evolutionModulePolicies = createModuleEvolutionPolicies({readPolicy: async (moduleId, policyScope) => moduleId !== 'geo' && rsiServingAdapters ? rsiServingAdapters.readPolicy(moduleId, policyScope) : null});
   /** @type {ReturnType<typeof createPredictionRegistry> | null} */
@@ -1441,16 +1444,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       onRecorded: async event => {
         // A correction of a run that opened a received pack's method is that pack's `corrected` in the sharing funnel; counting never fails the record.
         packOutcomes?.onEvidence(event);
-        // The learning loop's own evidence (a row per run reacted to, `learningEvidence.mjs`) is not a researcher-feedback signal of the evolution module.
-        if (!config.evolutionEnabled || !evolution || !event.runId || !event.projectId || event.trigger === "learning-evidence") return;
-        try {
-          await evolution.service.ingestEvent({ id: `feedback:${event.id}`, type: "researcher-feedback", userId: event.userId,
-            projectId: event.projectId, runId: event.runId, sourceFeedbackId: event.id, trigger: event.trigger,
-            correctionKind: event.detail?.kind ?? null, occurredAt: event.occurredAt, origin: "user-statement" });
-        } catch (error) {
-          await securityAudit(config, "evolution.feedback", "failed", { userId: event.userId,
-            code: typeof error?.code === "string" ? error.code : "evolution_event_unavailable" });
-        }
       } }) : null;
   /** Optional infrastructure says so, rather than answering 500 to a valid request. */
   function requireFeedbackEvents() {
@@ -2811,7 +2804,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The learning package's prediction registry (flywheel F25) is given here when it exists; without one the filing route is absent.
     // The prediction registry is composed with the evolution module, after this: the filing route asks for it when a prediction is filed.
     // Given only where its two switches say it will exist, so that off the filing route stays absent as the module rules.
-    predictionRegistry: overrides.vcrPredictionRegistry ?? (config.predictionRegistryEnabled && config.evolutionEnabled ? { register: async (/** @type {Record<string, any>} */ prediction) => {
+    predictionRegistry: overrides.vcrPredictionRegistry ?? (config.predictionRegistryEnabled && productDatabase ? { register: async (/** @type {Record<string, any>} */ prediction) => {
       if (!predictionRegistry) throw Object.assign(new Error("The prediction registry is not enabled."), { status: 404, code: "prediction_registry_disabled" });
       return predictionRegistry.register(prediction);
     } } : null),
@@ -3069,9 +3062,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const documentExportRoutes = createDocumentExportRoutes({ store, service: documentExportService });
   // What a project's datasets mean: one ledger document per dataset, read and written by the two data capabilities
   // through their tool's gateway and shown beside the dataset on the files page. No patient row is ever in it.
-  const dataSemantics = productDocuments && config.dataSemanticsEnabled ? new DataSemanticsService({ evolutionSignals, documents: productDocuments,
-    // The consumer's failure is not the dataset write's: the record is already saved, and the integration reports its own.
-    onChanged: async event => { await evolution?.integration.datasetChanged(event).catch(() => {}); } }) : null;
+  const dataSemantics = productDocuments && config.dataSemanticsEnabled ? new DataSemanticsService({ evolutionSignals, documents: productDocuments }) : null;
   const dataSemanticsRoutes = createDataSemanticsRoutes({ store, service: dataSemantics, maxJsonBytes: config.maxJsonBytes });
   const resultProvenance = productDocuments && config.resultsEnabled ? new ResultProvenanceService({
     documents: productDocuments, config, maxSnapshotBytes: config.resultSnapshotMaxBytes,
@@ -3189,11 +3180,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const resultReplays = resultProvenance && productJobs ? new ResultReplayService({ results: resultProvenance,
     documents: productDocuments, jobs: productJobs, engine: resultEngine, config,
     // What a recalculation found, carried to the learned methods the original's run read (methodFeedback.mjs, N14).
-    compared: async input => {
-      await methodFeedback?.fromReplay(input);
-      const runId=input.original?.producer?.runId;
-      if(runId)await evolution?.observeVerifiedRun({id:runId,userId:input.project.userId,projectId:input.project.id});
-    } }) : null;
+    compared: async input => { await methodFeedback?.fromReplay(input); } }) : null;
   if (resultProvenance && resultReplays) resultProvenance.deriveEligibility = (userId, version) => resultReplays.eligibility(userId, version);
   const resultReplayWorker = resultReplays ? new ResultReplayWorker({ service: resultReplays, jobs: productJobs,
     engine: resultEngine, config, admission: client => heavyWorkAdmission(client, "replay"),
@@ -3244,12 +3231,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const evidenceUpkeepRoutes = createEvidenceUpkeepRoutes({ store, service: frontier?.evidenceZones ?? null, frontier: frontier?.service ?? null, config,
     challenges: evidenceUpkeep?.challenges ?? null, upkeep: evidenceUpkeep?.upkeep ?? null, changeLog: evidenceUpkeep?.changeLog ?? null, maxJsonBytes: config.maxJsonBytes });
   // The engine receipts a first-hand card's calculated claims are read back from (evidenceCalculationReceipts.mjs): the platform's own
-  // internal evidence project and never another account's, and the evolution module's recalculation receipts. Reading is lazy, so
-  // the evolution module composed further down is found when a card is read; with it off a recalculation receipt reads as unavailable.
+  // internal evidence project and never another account's, and the evolution ledger's recalculation receipts. Reading is lazy, so
+  // the ledger composed further down is found when a card is read; without a product database a recalculation receipt reads as unavailable.
   if (frontier && resultProvenance) {
     frontier.evidenceZones.calculationReceipts = createCalculationReceiptReader({
       results: resultProvenance, scopes: [{ userId: PLATFORM_PUBLISHER_USER_ID, projectId: EVIDENCE_PROJECT_ID }],
-      evolution: { get: (/** @type {string} */ id) => (evolution?.service ? evolution.service.get(id) : Promise.resolve(null)) },
+      evolution: { get: (/** @type {string} */ id) => (evolutionLedger ? evolutionLedger.get(id) : Promise.resolve(null)) },
     });
   }
   // The numerical chain: which calculation a printed number came from, and the platform writing a report's numbers itself.
@@ -4266,11 +4253,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The independent reviewer's findings, first in a finished run's notices.
     ...(review ? { reviewNotices: (project, runId) => review.service.reviewNoticesForRun(project.userId, project.id, runId) } : {}),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
-    runtimePlatformSkills: (project) => runtimeManager.runtimePlatformSkills(project),
-    // Only where there are platform skills to scope (循证进化 on): otherwise the call would keep a capability per project for a supply that does not exist.
-    setRuntimePlatformSkillScope: (project, capabilityId) => runtimeManager.platformSkillSupply ? runtimeManager.setPlatformSkillScope(project, capabilityId) : undefined,
-    onPlatformSkillExecution: (event) => evolution?.onExecution(event),
-    onPlatformSkillRetrieval: (event) => evolution?.onRetrieval(event),
     runtimePersonalSkills: (project, observation = {}) => {
       if (observation.nativeTurn) {
         const runtime = runtimeManager.runtimes.get(runtimeManager.key(project));
@@ -4392,10 +4374,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // its one settings read is not a reason for the rest of this completion to wait).
       await step("memory.native_turn_commit", () => { void nativeTurnCommit.noteRunFinished(project, run); });
       try {
-      const gapCode = evolution && !internalFor(project.userId, project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
+      const gapCode = evolutionLedger && !internalFor(project.userId, project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
       if (gapCode) {
-        await step("evolution.gap", () => evolution.integration.publish({ id: `run-gap:${project.id}:${run.id}`, type: "runtime-gap", gapCode, userId:project.userId,projectId:project.id,
-          code: gapCode, track: "M", origin: "platform-inference" }));
+        await step("evolution.gap", () => evolutionLedger?.addLead({ source: "runtime-failure", track: "M", gapCode, code: gapCode,
+          userId: project.userId, projectId: project.id, sourceEventId: `run-gap:${project.id}:${run.id}` }));
       }
       if (resultProvenance) {
         await step("results.drain", () => resultCaptureQueue.drain());
@@ -4564,7 +4546,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const receipt = await persistRunTranscript({ project, run, sessions, ownedChildSessionIds: children.map(child => child.sessionId) });
           await agentRuns.recordLearning(project, run.id, { transcript: receipt });
           await rsiOnline?.offerRun(project, run.id).catch(error => securityAudit(config, "rsi.incident.offer", "failed", { code: error?.code ?? "rsi_incident_unavailable" }));
-          if (evolution && reusableClinicalContext) await evolution.finishRun(project, run).catch(error => securityAudit(config, "evolution.outcome", "failed", { code: error?.code ?? "evolution_outcome_unavailable" }));
+          if (evolutionRunSignals && reusableClinicalContext) await evolutionRunSignals.record(project, run).catch(error => securityAudit(config, "evolution.outcome", "failed", { code: error?.code ?? "evolution_outcome_unavailable" }));
           // The web pages the run read (contract X5), off the same transcript:
           // each `web_read` result carries the gateway's receipt. A write of
           // its own, so a ledger at its ceiling costs this list and never the
@@ -4916,7 +4898,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       onRelation: (type, times) => learningMetrics.observeRelation(type, times),
       judgeService,
       screenBaseline: createMethodScreenBaseline({ config, usageLedger }),
-      platformTools: async () => evolution ? evolution.service.availableTools({}) : [],
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-relations" }),
       learning: learningService, jobs: productJobs,
@@ -5403,7 +5384,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const project = await sourceProject({ userId: study.userId, projectId: study.projectId });
       const run = (await agentRuns.list(project)).find(row => row.id === runId);
       return run ? { id: run.id, sessionId: run.sessionId ?? null, agentId: run.agentId ?? null, model: run.model ?? null,
-        platformSkills: run.platformSkillGeneration ?? null, personalSkills: run.personalSkillGeneration ?? null,
+        personalSkills: run.personalSkillGeneration ?? null,
         methods: run.methodsLoaded ?? [] } : null;
     },
   });
@@ -5450,7 +5431,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     };
     /** @type {GeoOrchestrator | null} */
     let orchestrator = null;
-    const geoLearning = createGeoLearningSignals({ database: productDatabase, signals: () => evolution?.signals, sourceChanges });
+    const geoLearning = createGeoLearningSignals({ database: productDatabase, signals: () => evolutionSignalStore, sourceChanges });
     const measureDeps = {
       judgeService,
       store: new GeoMeasureStore(productDatabase, {policies:evolutionModulePolicies}), config, usageLedger, inclusion, state: geoMeasureState(),
@@ -5896,27 +5877,27 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   // A submission's independent review: started, asked after, answered
   // (reviewGateway.mjs); off, it answers `review_disabled`.
-  const resolvePositiveEvidence = createEvolutionPositiveEvidence({
-    loadMethod: async (run,use) => {
-      const tool=await evolution?.service.get(use.toolId);
-      const methodId=use.methodId??tool?.payload?.methodId;
-      if(methodId&&learningService)return learningService.getMethod(run.userId,methodId).catch(()=>null);
-      return null;
-    },
-    loadResult: (run,id) => resultProvenance?.get(run.userId,run.projectId,id).catch(()=>null)??Promise.resolve(null),
-    hasCorrection: async (run,id) => { if(!resultCorrections)return true; const {items=[]}=await resultCorrections.read(run.userId,run.projectId,id); return items.length>0; },
-  });
-  // 循证进化 online is its serving part only; the experiment engine is offline (`evals/rsi-campaigns`).
-  evolution = createEvolutionServing({ config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
-    notifications: notificationService, registry: agentRegistry, runtimeManager, agentRuns,
-    dataSemantics, resolvePositiveEvidence, sourceChanges,
-    controller: overrides.evolutionController ?? new RuntimeControllerClient(config),
-    canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
-    report: code => process.stderr.write(`evolution: ${code}\n`) });
-  if (evolution) {
-    runtimeManager.platformSkillSupply = evolution.supply;
+  // 循证进化's closed-code signal store (`evolutionLedger.mjs`): what the offline lab's export reads (signals, leads), the retention of it and the prediction registry's filings.
+  // Published tools are not served (deleted 2026-11-09), so there is no module to switch: the store exists wherever the product ledger does.
+  if (productDocuments && productDatabase) {
+    const ensureOwner = async () => {
+      const owner = config.operatorUsers[0], user = owner && await store.userById(owner);
+      if (!user) throw new HttpError(503, "evolution_owner_missing", "Evolution requires a configured platform operator.");
+      await store.projectFor(user, EVOLUTION_PROJECT_ID, "EviMed 循证进化");
+      return owner;
+    };
+    evolutionLedger = new EvolutionLedger({ documents: productDocuments, config, ensureOwner });
+    evolutionSignalStore = createEvolutionSignals({ ledger: evolutionLedger, capabilityIds: async () => (await agentRegistry).list({ includeInternal: false }).map((/** @type {any} */ item) => item.id),
+      operatorIds: () => config.operatorUsers ?? [], floors: evolutionAccountFloors(config) });
+    evolutionRunSignals = createEvolutionRunSignals({ signals: evolutionSignalStore });
+    // The day's claim is a record of the operator's, so a deployment with no operator runs no pass (it never did: the serving worker that ran it needed one too)
+    // and says so once here instead of failing every poll.
+    if (!config.operatorUsers?.[0]) process.stderr.write("evolution retention: no operator configured, no daily pass\n");
+    else evolutionRetention = createEvolutionRetentionRunner({ database: productDatabase, ledger: evolutionLedger, config,
+      canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : Promise.resolve(true),
+      logger: { error: (message, detail) => process.stderr.write(`${message} ${JSON.stringify(detail ?? {})}\n`) } });
     // A virtual study files a prediction here. Scoring a published result was an experiment and is gone, so a filing is filed and nothing more.
-    if (config.predictionRegistryEnabled) predictionRegistry = createPredictionRegistry({ config, evolution: evolution.service });
+    if (config.predictionRegistryEnabled) predictionRegistry = createPredictionRegistry({ config, ledger: evolutionLedger });
   }
   /** @type {Promise<any>|null} */ let rsiInitialization = null;
   async function initializeRsiOnline() {
@@ -5925,8 +5906,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const report = (/** @type {string} */ code) => process.stderr.write(`rsi: ${code}\n`);
       // Opt-in: without the deployment file no serving adapter or importer exists and module policy reads keep their own path. The adapters
       // (and the source-graph reader and lockfile parser behind their dependency closure) are loaded only for a deployment that opted in.
-      const servingAdapters = evolution && config.rsiOnlineConfigFile ? (await import("./rsiServingAdapters.mjs")).createRsiServingAdapters({ config, service: evolution.service,
-        documents: productDocuments, database: productDatabase, supply: evolution.supply, store, runtimeManager, sourceChanges, report }) : null;
+      // The adapters read module policies under the first configured operator, as `scripts/ops/rsi-frontier-export.mjs` does.
+      const servingAdapters = config.rsiOnlineConfigFile ? (await import("./rsiServingAdapters.mjs")).createRsiServingAdapters({ config, service: { owner: async () => config.operatorUsers[0] },
+        documents: productDocuments, database: productDatabase, report }) : null;
       const online = await (overrides.rsiOnlineRuntimeFactory ?? createRsiOnlineRuntime)({ config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
         agentRuns, assertModelAccess: assertVcrCloudAccess, usageLedger, servingAdapters,
         canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase, report });
@@ -5947,7 +5929,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     evidenceFlywheel = createEvidenceFlywheelMetrics({
       database: productDatabase, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID,
       citationReaders: { communication: geo ? createGeoCardCitationReader({ database: productDatabase }) : null },
-      evolutionTools: evolution ? async () => (await evolution?.service.tools() ?? []).map((/** @type {any} */ row) => row.payload) : null,
       // The platform's question bank (循证 GEO, F22): this month's rounds and the share of the assistants' cited answers that cited an EviMed page.
       assistantCoverage: geo && config.geoQuestionBankEnabled ? async () => {
         const summary = await questionBankSummary(productDatabase, { publicUrl: config.publicUrl });
@@ -6021,8 +6002,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           knowledgePagesWorker?.status?.().running,
           sourceSyncWorker?.status?.().running,
           learningWorker?.status?.().running,
-          evolution?.worker.status().running,
           rsiOnline?.worker.status().running,
+          evolutionRetention?.status().running,
           frontier?.worker.status().running,
           review?.worker.status().running,
           geo?.worker?.status?.().running,
@@ -6408,9 +6389,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         upstream: failure?.upstream ?? null,
       });
     };
-    const gateway = pathname.startsWith(`${EVOLUTION_GATEWAY_PATH}/`)
-      ? (request, response, onFailure) => evolution ? evolution.gateway(request, response, onFailure) : sendError(response, new HttpError(404, "evolution_disabled", "Evolution is disabled."))
-      : pathname.startsWith(`${RESULT_GATEWAY_PATH}/`)
+    const gateway = pathname.startsWith(`${RESULT_GATEWAY_PATH}/`)
       ? resultGatewayHandler
       : pathname.startsWith(`${DATA_SEMANTICS_GATEWAY_PATH}/`)
       ? dataSemanticsGatewayHandler
@@ -6552,7 +6531,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
       if (await learningRoutes(req, res)) return;
-      if (evolution && await evolution.routes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
       if (knowledgePageRoutes && await knowledgePageRoutes(req, res)) return;
       if (await personalLibraryRoutes(req, res)) return;
@@ -6639,7 +6617,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           alertReceiver,
           availability,
           eventPump: runtimeEventPump,
-          evolution,
+          evolutionSignals: evolutionSignalStore,
+          evolutionRetention,
           evidenceBudget,
           predictionRegistry,
           entityVocabulary,
@@ -6899,7 +6878,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // and every route the page calls keeps its own authorization, so a
             // browser that sets this to true by hand gains a link, not access.
             operator: config.operatorUsers.includes(user.id),
-            evolutionEnabled: Boolean(evolution),
             // Which optional modules this account sees. Presentation too: the
             // module's own routes answer 404 to anyone it does not.
             // `openList`: whether 连接网盘 has anything to import — OpenList
@@ -8618,14 +8596,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     recurringWorkStarted = false;
     void researchGoals?.stop();
     void scheduleWakes?.stop();
-    evolution?.worker.stop();
+    evolutionRetention?.stop();
     rsiOnline?.worker.stop();
     sourceSyncWorker?.pause();
     void Promise.resolve(managedBrowser.pause?.()).catch(() => {
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
     for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, nativeMemoryWorker, sourceWorker, knowledgePagesWorker, sourceSyncWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
-      geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker]) {
+      geo?.worker, vcr?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -8750,7 +8728,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       sourceSyncWorker?.start();
       kbIndex?.start();
       learningWorker?.start();
-      evolution?.worker.start();
+      evolutionRetention?.start();
       rsiOnline?.worker.start();
       im.worker?.start();
       frontier?.worker.start();
@@ -8907,7 +8885,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // `app.learningWorker`, got `undefined`, filtered it out and passed on an
     // empty list — a test of a collision that could not see either side of it.
     learningWorker,
-    evolution,
+    evolutionLedger,
     // The opt-in RSI layer's composition, as tests and operators read it; null pieces were never created.
     rsi: { status: () => ({ runtime: Boolean(rsiOnline), configured: Boolean(rsiOnline?.configured?.()), importer: Boolean(rsiOnline?.importer),
       servingAdapters: Boolean(rsiServingAdapters), frontierSelection: typeof evolutionModulePolicies.evaluateFrontierSelection === "function" }),
@@ -9021,7 +8999,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // First, so a job the shutdown ends is handed back as a restart and not
       // counted against its three attempts.
       learningWorker?.interrupt();
-      evolution?.worker.stop();
+      evolutionRetention?.stop();
       rsiOnline?.worker.stop();
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
@@ -9044,7 +9022,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await sourceSyncWorker?.close();
       await kbIndex?.close();
       await learningWorker?.close();
-      await evolution?.worker.close();
+      await evolutionRetention?.close();
       await rsiOnline?.worker.close();
       await im.worker?.close();
       await frontier?.worker.close();
@@ -9882,7 +9860,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memoryIndexProvider = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceFeed = null, evidencePublic = null, predictionRegistry = null, evidenceFlywheel = null, evidenceOutcomes = null, officialPromotion = null, capsuleService = null, officialPacks = null, researchDb = null }) {
+async function operatorMetricsText({ webVitals = null, judgeService = null, openViking = null, config, store, taskManager, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memoryIndexProvider = null, runMetrics = null, imMetrics = null, webReader = null, deepseekTools = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, alertReceiver = null, availability = null, eventPump = null, evolutionSignals = null, evolutionRetention = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceFeed = null, evidencePublic = null, predictionRegistry = null, evidenceFlywheel = null, evidenceOutcomes = null, officialPromotion = null, capsuleService = null, officialPacks = null, researchDb = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, memorySettings, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memoryIndexProvider, frontier, review, geo, vcr, credits, judgeService, capsuleService, openViking, researchDb);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -10497,10 +10475,8 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // `enabled` gauge alone.
   const availabilitySnapshot = availability ? await availability.service.metrics().catch(() => null) : null;
   for (const family of availabilityMetricFamilies(Boolean(availability), availabilitySnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
-  // 循证进化's limits (evolutionOpsMetrics.mjs): the tool gateway's admission, the platform-skill supply's fallbacks, the serving worker and the
-  // tool executor's slots and timeout. `open_science_evolution_enabled 0` when it is off.
-  const evolutionSnapshot = await evolutionOpsSnapshot({ evolution }).catch(() => null);
-  for (const family of evolutionOpsMetricFamilies(Boolean(evolution), evolutionSnapshot, config.evolutionRefusal ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // 循证进化's limits (evolutionOpsMetrics.mjs): the signal groups held back below their floor and the retention pass.
+  for (const family of evolutionOpsMetricFamilies({ signals: evolutionSignals, retention: evolutionRetention })) addMetric(lines, family.name, family.help, family.type, family.series);
   // The independent reviewer: reviews, findings by kind, answers, reply
   // checks and safety alerts (reviewService.mjs `reviewMetricFamilies`).
   for (const family of reviewMetricFamilies(Boolean(review), review ? review.service.stats() : null)) addMetric(lines, family.name, family.help, family.type, family.series);

@@ -2,9 +2,9 @@ import {before,after,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {ControlPlaneDatabase} from '../src/controlPlaneDatabase.mjs';
-import {ProductDocuments,ProductJobs} from '../src/productStore.mjs';
+import {ProductDocuments} from '../src/productStore.mjs';
 import {migrateProductStore} from '../src/productPersistence.mjs';
-import {EvolutionService} from '../src/evolutionService.mjs';
+import {EvolutionLedger} from '../src/evolutionLedger.mjs';
 const url=process.env.OPEN_SCIENCE_TEST_POSTGRES_URL??'';
 if(url){const parsed=new URL(url);assert.ok(['localhost','127.0.0.1','::1'].includes(parsed.hostname));assert.match(parsed.pathname,/evimed_test/);}
 const options={skip:!url&&'A disposable localhost test PostgreSQL database is required'};
@@ -13,8 +13,8 @@ const options={skip:!url&&'A disposable localhost test PostgreSQL database is re
 // What the floors still decide is a lead: the signal summaries, the growth collector and the completed-research count that read them left with the experiment engine.
 const owner=`evolution_${randomUUID()}`,secondOperator=`operator_${randomUUID()}`,researchers=Array.from({length:5},()=>`researcher_${randomUUID()}`);
 const operators=[owner,secondOperator];
-let database,documents,jobs,service;
-const make=(config={})=>new EvolutionService({documents,jobs,ownerId:owner,config:{operatorUsers:operators,...config}});
+let database,documents,service;
+const make=(config={})=>new EvolutionLedger({documents,ownerId:owner,config:{operatorUsers:operators,...config}});
 before(async()=>{
  if(!url)return;
  database=new ControlPlaneDatabase({databaseUrl:url,databasePoolMax:8,databaseConnectionTimeoutMs:3000});
@@ -23,7 +23,7 @@ before(async()=>{
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Signal floor test','development')",[id]);
   for(const project of id===owner?['evimed-evolution','research']:['research'])await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'Floors',1048576)",[id,project]);
  }
- documents=new ProductDocuments(database);jobs=new ProductJobs(database);
+ documents=new ProductDocuments(database);
  service=make();
 });
 after(async()=>{if(database){await database.query('DELETE FROM evimed_control.users WHERE id=ANY($1::text[])',[[owner,secondOperator,...researchers]]);await database.close();}});

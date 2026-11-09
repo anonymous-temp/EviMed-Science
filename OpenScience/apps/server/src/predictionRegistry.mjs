@@ -1,6 +1,6 @@
 /**
  * The prediction registry (evidence-flywheel plan §5.2, F25, 2026-10-06): the platform's estimate of a trial's primary endpoint, filed before the result exists, time-stamped
- * and immutable. It is the evolution module's prospective registration, not a second registry: a filing is an `evolution-prospective` record, status `waiting-publication`.
+ * and immutable. It is the evolution ledger's prospective registration, not a second registry: a filing is an `evolution-prospective` record, status `waiting-publication`.
  * Scoring a filing against a published result was an experiment and left with the online engine (2026-11-04), and everything that waited for a score went with it, so online a
  * filing is filed and nothing more: no read, no calibration.
  *
@@ -71,14 +71,14 @@ export function normalizePrediction(input, recordedAt) {
 }
 
 /**
- * The registry, off unless its switch is on and the evolution module that holds the records is composed.
+ * The registry, off unless its switch is on and the evolution ledger that holds the records is composed.
  *
  * @param {{
- *   config: any, evolution: any,
+ *   config: any, ledger: any,
  *   now?: () => Date }} dependencies
  */
-export function createPredictionRegistry({ config, evolution, now = () => new Date() }) {
-  const enabled = config?.predictionRegistryEnabled === true && Boolean(evolution);
+export function createPredictionRegistry({ config, ledger, now = () => new Date() }) {
+  const enabled = config?.predictionRegistryEnabled === true && Boolean(ledger);
   const counters = { registered: 0 };
   const off = () => new HttpError(404, "prediction_registry_disabled", "The prediction registry is not enabled.");
 
@@ -91,9 +91,9 @@ export function createPredictionRegistry({ config, evolution, now = () => new Da
     const recordedAt = now();
     const { payload, payloadHash } = normalizePrediction(input, recordedAt);
     const id = `evolution-prospective-${sha(payload)}`;
-    const prior = await evolution.get(id, payload.accountId);
+    const prior = await ledger.get(id, payload.accountId);
     if (prior) return { id, status: prior.payload.status, payloadHash: prior.payload.payloadHash, recordedAt: prior.payload.recordedAt, existing: true };
-    const saved = await evolution.save("prospective", id, { ...payload, registryVersion: 1, payloadHash, recordedAt: recordedAt.toISOString(), status: "waiting-publication", registrationEligible: true, origin: "platform-inference" }, null, payload.accountId);
+    const saved = await ledger.save("prospective", id, { ...payload, registryVersion: 1, payloadHash, recordedAt: recordedAt.toISOString(), status: "waiting-publication", registrationEligible: true, origin: "platform-inference" }, null, payload.accountId);
     counters.registered += 1;
     return { id, status: saved.payload.status, payloadHash, recordedAt: saved.payload.recordedAt, existing: false };
   }

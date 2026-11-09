@@ -7,7 +7,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { AUTOPILOT_PLANNER_INSTRUCTIONS } from '../../../apps/server/src/autopilotNextAction.mjs';
 import { FRONTIER_EDITOR_VERSION, FRONTIER_EDIT_INSTRUCTIONS, FRONTIER_SCREEN_INSTRUCTIONS } from '../../../apps/server/src/frontierEditor.mjs';
 import { REFERENCE_PRICE_LIST } from '../../../packages/domain/src/metering.mjs';
 import { buildHarnessCampaign, developmentOnly, readChecked } from '../harness_assemble.mjs';
@@ -27,20 +26,19 @@ const KEY = 'sk-a-key-nothing-may-print';
 const usage = { prompt_tokens: 3000, prompt_cache_hit_tokens: 1000, prompt_cache_miss_tokens: 2000, completion_tokens: 400 };
 const answer = (content, extra = {}) => ({ id: 'x', model: 'deepseek-flash', choices: [{ finish_reason: 'stop', message: { content: typeof content === 'string' ? content : JSON.stringify(content) } }], usage, ...extra });
 
-/** A planner model: it answers from the case's own expectation so a baseline passes, and records what it was sent. */
-function plannerModel({ decide = (context) => ({ action: 'run', taskType: context.taskTypes.find((type) => type.state === 'available').id, focus: 'f', reason: 'r' }), seen = [] } = {}) {
+/** A frontier editor model: every edit gets one clean rewrite (no figure in it, so the number check has nothing to repair and a run is one call), and it records what it was sent. */
+const rewriteOf = (summary = '这种补充剂被召回，生产商提醒消费者停止使用。') => ({ scores: { impact: 10, novelty: 10, relevance: 10 }, practice: { changing: false, reason_zh: '' }, genre: 'safety', industry_kind: '', title_zh: '补充剂因毒性被召回', summary_zh: summary, reason_zh: '', tags: [], lane: 'safety', specialties: [], evidence_type: 'safety-notice', entities: { drugs: [], trials: [], orgs: [], diseases: [] }, flags: [] });
+function editModel({ seen = [], rewrite = rewriteOf() } = {}) {
   return async (_dependencies, call) => {
     seen.push(call);
-    return answer(decide(JSON.parse(call.body.messages[1].content), call));
+    return answer(rewrite);
   };
 }
+const CANDIDATE = `${FRONTIER_EDIT_INSTRUCTIONS}\nOne more rule.`;
 const round = (surface, scorer, pool, changes = {}) => moduleRound({ surface, scorer, round: 'b2-arms', salt: 'test-salt', pool, developmentCount: pool.length, registeredAt: '2026-11-01T00:00:00Z', ...changes });
 const incumbentOf = (surface) => moduleIncumbent(surface);
 
-test('the case files read as rows: the planner\'s 9, the frontier editor\'s four kinds, the screen\'s lane cases, gold as closed expectations', async () => {
-  const planner = await moduleCasePool('autopilot-planner');
-  assert.equal(planner.length, 9);
-  assert.ok(planner.every((row) => row.gold.expect.length && ['run', 'stop'].includes(row.category) && row.variants.length === 1));
+test('the case files read as rows: the frontier editor\'s four kinds, the screen\'s lane cases, gold as closed expectations', async () => {
   const edit = await moduleCasePool('frontier-edit'), screen = await moduleCasePool('frontier-screen');
   assert.deepEqual([...new Set(edit.map((row) => row.category))].sort(), ['evidence_type', 'flags', 'industry_kind', 'lane']);
   assert.equal(edit.length, 5 + 9 + 6 + 16);
@@ -50,53 +48,53 @@ test('the case files read as rows: the planner\'s 9, the frontier editor\'s four
   assert.deepEqual(edit.find((row) => row.id === 'kind-control-paper').gold, { kind: 'industry_kind', expect: [null] });
 });
 
-test('the arms run production\'s planner on production\'s prompt: a candidate reaches it as a served policy, nothing is copied, and the source is one the lab reads', async () => {
-  const pool = (await moduleCasePool('autopilot-planner')).slice(0, 3), seen = [];
-  const candidates = [{ title: 'c', policy: { plannerInstructions: 'A candidate text for the planner.' } }];
-  const { source, gold, missing } = await runModuleArms({ surface: 'autopilot-planner', role: 'development', scorerId: 'autopilot-checklist', rows: pool, repeats: 2, candidates, incumbent: incumbentOf('autopilot-planner'), image: IMAGE, apiKey: KEY, callModel: plannerModel({ seen }) });
+test('the arms run production\'s editor on production\'s prompt: a candidate reaches it as a served policy, nothing is copied, and the source is one the lab reads', async () => {
+  const pool = (await moduleCasePool('frontier-edit')).slice(0, 3), seen = [];
+  const candidates = [{ title: 'c', policy: { editInstructions: CANDIDATE } }];
+  const { source, gold, missing } = await runModuleArms({ surface: 'frontier-edit', role: 'development', scorerId: 'frontier-numbers', rows: pool, repeats: 2, candidates, incumbent: incumbentOf('frontier-edit'), image: IMAGE, apiKey: KEY, callModel: editModel({ seen }) });
   assert.deepEqual(missing, []);
   assert.equal(gold, null, 'development rows carry their gold');
   assert.equal(seen.length, 3 * 3 * 2, 'baseline, aa and the candidate on every case and repeat');
   const systems = new Set(seen.map((call) => call.body.messages[0].content));
-  assert.ok([...systems].some((text) => text.startsWith(AUTOPILOT_PLANNER_INSTRUCTIONS)), 'the baseline is the text production ships');
-  assert.ok([...systems].some((text) => text.startsWith('A candidate text for the planner.')), 'the candidate is the text it says');
+  assert.ok(systems.has(FRONTIER_EDIT_INSTRUCTIONS), 'the baseline is the text production ships');
+  assert.ok(systems.has(CANDIDATE), 'the candidate is the text it says');
   assert.ok(seen.every((call) => call.body.model === 'deepseek-flash' && call.body.temperature === 0), 'production\'s call');
   const armId = Object.keys(source.arms).find((id) => id.startsWith('cand-'));
-  assert.equal(source.arms[armId].harness.policy.component, 'plannerInstructions');
+  assert.equal(source.arms[armId].harness.policy.component, 'editInstructions');
   for (const run of source.runs) {
     assert.equal(run.status, 'succeeded');
     assert.equal(run.calls.length, 1);
     assert.deepEqual([run.calls[0].cacheHit, run.calls[0].cacheMiss, run.calls[0].output], [1000, 2000, 400]);
     assert.ok(run.cost > 0);
-    if (run.arm === armId) assert.equal(run.policyRevisionId, armId, 'production\'s class says it served the candidate');
-    else assert.match(run.policyRevisionId, /^default:/, 'and its code default to the baseline and the control');
+    if (run.arm === armId) assert.match(run.policyRevisionId, /^frontier-editor-policy\./, 'production\'s class says it served the candidate\'s text');
+    else assert.equal(run.policyRevisionId, FRONTIER_EDITOR_VERSION, 'and its shipped version to the baseline and the control');
   }
   assert.equal(source.priceVersion, REFERENCE_PRICE_LIST.version);
   // The lab's own validation reads what the arms wrote.
-  const registered = round('autopilot-planner', 'autopilot-checklist', pool);
+  const registered = round('frontier-edit', 'frontier-numbers', pool);
   const development = { ...source, image: IMAGE };
-  assert.deepEqual(harnessArmsIssues(development, { surface: 'autopilot-planner', scorer: 'autopilot-checklist' }, MODULE_KIT), []);
+  assert.deepEqual(harnessArmsIssues(development, { surface: 'frontier-edit', scorer: 'frontier-numbers' }, MODULE_KIT), []);
   const preview = developmentOnly({ development, registration: registered, improvement: improvementOf(), month: '2026-11' });
   assert.equal(preview.supply.developmentChoice.controls[0].arm, 'aa');
   assert.ok(Number.isFinite(preview.supply.developmentChoice.noiseFloor));
 });
 
 test('no arm always goes first on a case: the provider\'s cache would hand it to the second arm of every cost comparison', async () => {
-  const pool = await moduleCasePool('autopilot-planner'), seen = [], candidate = 'The planner text under test.';
-  await runModuleArms({ surface: 'autopilot-planner', role: 'confirmation', scorerId: 'autopilot-checklist', rows: pool, repeats: 3, candidates: [{ policy: { plannerInstructions: candidate } }], incumbent: incumbentOf('autopilot-planner'), image: IMAGE, apiKey: KEY, concurrency: 1, callModel: plannerModel({ seen }) });
+  const pool = (await moduleCasePool('frontier-edit')).slice(0, 9), seen = [];
+  await runModuleArms({ surface: 'frontier-edit', role: 'confirmation', scorerId: 'frontier-numbers', rows: pool, repeats: 3, candidates: [{ policy: { editInstructions: CANDIDATE } }], incumbent: incumbentOf('frontier-edit'), image: IMAGE, apiKey: KEY, concurrency: 1, callModel: editModel({ seen }) });
   // Two arms in turn: every odd call opens a case and repeat.
-  const firsts = seen.filter((_, at) => at % 2 === 0).map((call) => call.body.messages[0].content.startsWith(candidate));
+  const firsts = seen.filter((_, at) => at % 2 === 0).map((call) => call.body.messages[0].content === CANDIDATE);
   assert.equal(firsts.length, 27);
   assert.ok(firsts.includes(true) && firsts.includes(false), 'each arm opens some');
   assert.ok(Math.abs(firsts.filter(Boolean).length - 13.5) < 7, `the candidate opens ${firsts.filter(Boolean).length} of 27`);
 });
 
 test('an infrastructure failure is never scored: exit 3 and nothing written; --allow-incomplete writes what exists and says so; the same command runs only what is missing', async () => {
-  const pool = (await moduleCasePool('autopilot-planner')).slice(0, 2), journalPath = nextPath('arms.journal.jsonl'), out = nextPath();
-  let refusals = 2, calls = 0;
-  const flaky = plannerModel();
-  const callModel = async (dependencies, call) => { calls += 1; if (refusals > 0) { refusals -= 1; throw Object.assign(new Error(`upstream said ${KEY}`), { code: 'model_gateway_upstream_error' }); } return flaky(dependencies, call); };
-  const shared = { surface: 'autopilot-planner', role: 'development', scorerId: 'autopilot-checklist', rows: pool, repeats: 1, incumbent: incumbentOf('autopilot-planner'), image: IMAGE, apiKey: KEY, journalPath, concurrency: 1 };
+  const pool = (await moduleCasePool('frontier-edit')).slice(0, 2), journalPath = nextPath('arms.journal.jsonl'), out = nextPath();
+  let down = true, calls = 0;
+  const flaky = editModel(), unreachable = pool[0].variants[0].input.edit.titleRaw;
+  const callModel = async (dependencies, call) => { calls += 1; if (down && call.body.messages[1].content.includes(unreachable)) throw Object.assign(new Error(`upstream said ${KEY}`), { code: 'model_gateway_upstream_error' }); return flaky(dependencies, call); };
+  const shared = { surface: 'frontier-edit', role: 'development', scorerId: 'frontier-numbers', rows: pool, repeats: 1, incumbent: incumbentOf('frontier-edit'), image: IMAGE, apiKey: KEY, journalPath, concurrency: 1 };
   const first = await runModuleArms({ ...shared, callModel });
   assert.equal(first.missing.length, 2, 'two runs met the provider');
   assert.deepEqual([...new Set(first.missing.map((row) => row.reason))], ['model_gateway_upstream_error'], 'by closed code');
@@ -106,15 +104,16 @@ test('an infrastructure failure is never scored: exit 3 and nothing written; --a
   // What the lab would say of it if it were written.
   const allowed = nextPath();
   assert.equal(await writeArmsOutcome({ out: allowed, ...first, allowIncomplete: true }), EXIT_INCOMPLETE);
-  assert.deepEqual(harnessArmsIssues(JSON.parse(await readFile(allowed, 'utf8')), { surface: 'autopilot-planner', scorer: 'autopilot-checklist' }, MODULE_KIT), ['harness_arms_runs_incomplete']);
+  assert.deepEqual(harnessArmsIssues(JSON.parse(await readFile(allowed, 'utf8')), { surface: 'frontier-edit', scorer: 'frontier-numbers' }, MODULE_KIT), ['harness_arms_runs_incomplete']);
   assert.equal(JSON.parse(await readFile(`${allowed}.incomplete.json`, 'utf8')).length, 2);
   // Resuming pays for the two missing runs and nothing else.
+  down = false;
   const before = calls;
   const second = await runModuleArms({ ...shared, callModel });
   assert.deepEqual(second.missing, []);
   assert.equal(calls - before, 2);
   assert.equal(second.source.runs.length, 4);
-  assert.deepEqual(harnessArmsIssues(second.source, { surface: 'autopilot-planner', scorer: 'autopilot-checklist' }, MODULE_KIT), []);
+  assert.deepEqual(harnessArmsIssues(second.source, { surface: 'frontier-edit', scorer: 'frontier-numbers' }, MODULE_KIT), []);
   // A journal of another campaign is not resumed.
   await assert.rejects(runModuleArms({ ...shared, repeats: 2, callModel }), { message: 'module_arms_journal_mismatch' });
   // The key is in nothing written, whatever a provider's error said.
@@ -122,20 +121,21 @@ test('an infrastructure failure is never scored: exit 3 and nothing written; --a
 });
 
 test('a solver\'s own non-delivery is a run that scores 0, kept with its cost; a response with no usage stops the command: a cost that cannot be priced is not a cost', async () => {
-  const pool = (await moduleCasePool('autopilot-planner')).slice(0, 1);
-  const shared = { surface: 'autopilot-planner', role: 'development', scorerId: 'autopilot-checklist', rows: pool, repeats: 1, incumbent: incumbentOf('autopilot-planner'), image: IMAGE, apiKey: KEY };
-  const invalid = await runModuleArms({ ...shared, callModel: async () => answer('this is not a decision') });
+  const pool = (await moduleCasePool('frontier-screen')).slice(0, 1);
+  const shared = { surface: 'frontier-screen', role: 'development', scorerId: 'frontier-numbers', rows: pool, repeats: 1, incumbent: incumbentOf('frontier-screen'), image: IMAGE, apiKey: KEY };
+  const invalid = await runModuleArms({ ...shared, callModel: async () => answer('this is not a verdict') });
   assert.deepEqual(invalid.missing, []);
-  assert.ok(invalid.source.runs.every((run) => run.status === 'failed' && run.answer === null && run.solverCode === 'autopilot_planner_invalid' && run.cost > 0));
-  await assert.rejects(runModuleArms({ ...shared, callModel: async () => ({ ...answer({ action: 'stop', stopKind: 'answered', reason: 'r' }), usage: undefined }) }), { message: 'module_arms_cost_unpriced' });
-  await assert.rejects(runModuleArms({ ...shared, callModel: async () => ({ ...answer({ action: 'stop', stopKind: 'answered', reason: 'r' }), usage: { prompt_tokens: 10 } }) }), { message: 'module_arms_cost_unpriced' });
+  assert.ok(invalid.source.runs.every((run) => run.status === 'failed' && run.answer === null && run.solverCode === 'frontier_screen_invalid' && run.cost > 0));
+  const verdict = { items: [{ id: '1', medical: true, news: true, lane: 'regulatory', specialties: [], language: 'en', digest: false }] };
+  await assert.rejects(runModuleArms({ ...shared, callModel: async () => ({ ...answer(verdict), usage: undefined }) }), { message: 'module_arms_cost_unpriced' });
+  await assert.rejects(runModuleArms({ ...shared, callModel: async () => ({ ...answer(verdict), usage: { prompt_tokens: 10 } }) }), { message: 'module_arms_cost_unpriced' });
 });
 
 test('one candidate in a confirmation, its rows sealed, its gold apart; a file nobody can verify is refused by the assembly\'s own check', async () => {
-  const pool = (await moduleCasePool('autopilot-planner')).slice(0, 2);
-  const shared = { surface: 'autopilot-planner', role: 'confirmation', scorerId: 'autopilot-checklist', rows: pool, repeats: 3, incumbent: incumbentOf('autopilot-planner'), image: IMAGE, apiKey: KEY, callModel: plannerModel() };
+  const pool = (await moduleCasePool('frontier-edit')).slice(0, 2);
+  const shared = { surface: 'frontier-edit', role: 'confirmation', scorerId: 'frontier-numbers', rows: pool, repeats: 3, incumbent: incumbentOf('frontier-edit'), image: IMAGE, apiKey: KEY, callModel: editModel() };
   await assert.rejects(runModuleArms(shared), { message: 'module_arms_confirmation_one_candidate' });
-  const made = await runModuleArms({ ...shared, candidates: [{ policy: { plannerInstructions: 'The frozen text.' } }] });
+  const made = await runModuleArms({ ...shared, candidates: [{ policy: { editInstructions: CANDIDATE } }] });
   assert.equal(made.source.rows.some((row) => Object.hasOwn(row, 'gold')), false, 'the rows travel without gold');
   assert.equal(Object.hasOwn(made.source.arms, 'aa'), false, 'no control arm in a confirmation');
   assert.deepEqual(Object.keys(made.gold.gold).sort(), pool.map((row) => row.id).sort());
@@ -172,8 +172,8 @@ test('frontier-edit: production\'s editor, its number check on the rewrite, its 
   assert.ok(served.source.runs.filter((run) => run.arm === armId).every((run) => /^frontier-editor-policy\./.test(run.policyRevisionId)), 'the editor stamps what it wrote with the text it used');
   assert.ok(served.source.runs.filter((run) => run.arm !== armId).every((run) => run.policyRevisionId === FRONTIER_EDITOR_VERSION));
   assert.deepEqual(harnessArmsIssues(served.source, { surface: 'frontier-edit', scorer: 'frontier-numbers' }, MODULE_KIT), []);
-  // One component: a planner's text is not an editor candidate.
-  await assert.rejects(runModuleArms({ ...shared, callModel: async () => answer(rewrite('s')), candidates: [{ policy: { plannerInstructions: 'x' } }] }), { message: 'module_candidate_not_one_component' });
+  // One component: the screen's text is not an edit candidate.
+  await assert.rejects(runModuleArms({ ...shared, callModel: async () => answer(rewrite('s')), candidates: [{ policy: { screenInstructions: 'x' } }] }), { message: 'module_candidate_not_one_component' });
 });
 
 test('frontier-screen: the screen under test feeds the edit, both are production\'s, and the screen\'s own lane is in the unit', async () => {
@@ -193,7 +193,7 @@ test('frontier-screen: the screen under test feeds the edit, both are production
 });
 
 test('the baseline is the text a proposal would replace: the code\'s own, named by its digest, and no production revision is claimed', () => {
-  for (const [surface, text] of [['autopilot-planner', AUTOPILOT_PLANNER_INSTRUCTIONS], ['frontier-screen', FRONTIER_SCREEN_INSTRUCTIONS], ['frontier-edit', FRONTIER_EDIT_INSTRUCTIONS]]) {
+  for (const [surface, text] of [['frontier-screen', FRONTIER_SCREEN_INSTRUCTIONS], ['frontier-edit', FRONTIER_EDIT_INSTRUCTIONS]]) {
     assert.deepEqual(moduleIncumbent(surface), { revisionId: `code-default:${sha256(text).slice(0, 16)}`, componentSha256: sha256(text) }, surface);
   }
 });
@@ -211,10 +211,10 @@ test('a rewrite\'s source says how many numbers it holds, by the editor\'s own c
 });
 
 test('a torn last line of the journal is dropped with a note and its run is run again; the paid runs before it are kept', async () => {
-  const pool = (await moduleCasePool('autopilot-planner')).slice(0, 2), journalPath = nextPath('torn.journal.jsonl'), notes = [];
+  const pool = (await moduleCasePool('frontier-edit')).slice(0, 2), journalPath = nextPath('torn.journal.jsonl'), notes = [];
   let calls = 0;
-  const model = plannerModel(), callModel = async (dependencies, call) => { calls += 1; return model(dependencies, call); };
-  const shared = { surface: 'autopilot-planner', role: 'development', scorerId: 'autopilot-checklist', rows: pool, repeats: 1, incumbent: incumbentOf('autopilot-planner'), image: IMAGE, apiKey: KEY, journalPath, concurrency: 1, callModel, note: (text) => notes.push(text) };
+  const model = editModel(), callModel = async (dependencies, call) => { calls += 1; return model(dependencies, call); };
+  const shared = { surface: 'frontier-edit', role: 'development', scorerId: 'frontier-numbers', rows: pool, repeats: 1, incumbent: incumbentOf('frontier-edit'), image: IMAGE, apiKey: KEY, journalPath, concurrency: 1, callModel, note: (text) => notes.push(text) };
   const first = await runModuleArms(shared);
   assert.equal(first.source.runs.length, 4);
   const text = await readFile(journalPath, 'utf8'), lines = text.split('\n').filter(Boolean);
@@ -225,7 +225,7 @@ test('a torn last line of the journal is dropped with a note and its run is run 
   const second = await runModuleArms(shared);
   assert.equal(calls - before, 1, 'one run is run again, the three before it are not paid for twice');
   assert.equal(second.source.runs.length, 4);
-  assert.deepEqual(harnessArmsIssues(second.source, { surface: 'autopilot-planner', scorer: 'autopilot-checklist' }, MODULE_KIT), []);
+  assert.deepEqual(harnessArmsIssues(second.source, { surface: 'frontier-edit', scorer: 'frontier-numbers' }, MODULE_KIT), []);
   assert.equal(notes.length, 1);
   assert.match(notes[0], /module_arms_journal_torn_line/);
   // The journal it leaves reads whole: the next start pays for nothing.
@@ -279,15 +279,15 @@ test('a confirmation supply from the export: ascending sha256(salt|id), never wh
 });
 
 test('the registration names rows by hash order, development apart from confirmation, and the assembly takes it', async () => {
-  const pool = await moduleCasePool('autopilot-planner');
-  const made = round('autopilot-planner', 'autopilot-checklist', pool, { developmentCount: 6, confirmationCount: 3 });
+  const pool = await moduleCasePool('frontier-edit');
+  const made = round('frontier-edit', 'frontier-numbers', pool, { developmentCount: 6, confirmationCount: 3 });
   assert.equal(made.rows.development.length, 6);
   assert.equal(made.rows.confirmation.length, 3);
   assert.equal(new Set([...made.rows.development, ...made.rows.confirmation]).size, 9);
-  assert.equal(made.groupsBelowMinimum, true, 'the 9 cases can only ever be directional');
-  assert.deepEqual(made.failureSlice, ['run', 'stop']);
-  assert.throws(() => round('autopilot-planner', 'autopilot-checklist', pool, { failureSlice: ['no-such-kind'] }), { message: 'campaign_registration_invalid' });
-  assert.throws(() => round('autopilot-planner', 'frontier-numbers', pool), { message: 'campaign_scorer_not_qualified' });
+  assert.equal(made.groupsBelowMinimum, true, '3 cases confirm only directionally');
+  assert.deepEqual(made.failureSlice, ['evidence_type', 'flags', 'industry_kind', 'lane']);
+  assert.throws(() => round('frontier-edit', 'frontier-numbers', pool, { failureSlice: ['no-such-kind'] }), { message: 'campaign_registration_invalid' });
+  assert.throws(() => round('frontier-screen', 'frontier-source', pool), { message: 'campaign_scorer_not_qualified' });
   const drawn = drawExportItems(exportFixture(), { sample: 30, salt: 'm' }).rows;
   const edit = round('frontier-edit', 'frontier-numbers', await moduleCasePool('frontier-edit'), { drawn });
   assert.equal(edit.rows.confirmation.length, 30);
@@ -331,9 +331,9 @@ test('the commands: register and draw from a gzipped export, on the file system,
   const written = JSON.parse(await readChecked(out));
   assert.ok(written.digest);
   assert.deepEqual([written.confirmationDraw.exportSha256, written.confirmationDraw.salt, written.confirmationDraw.sample], [sha256(await readFile(exportPath)), 'm', 30], 'what binds rows with no gold: the export, the salt');
-  const refused = spawnSync(process.execPath, [tool, 'register', '--surface', 'autopilot-planner', '--scorer', 'autopilot-checklist', '--round', 'r', '--salt', 'm', '--items-from-export', exportPath, '--sample', '3', '--out', nextPath()], { encoding: 'utf8' });
+  const refused = spawnSync(process.execPath, [tool, 'register', '--surface', 'frontier-screen', '--scorer', 'frontier-numbers', '--round', 'r', '--salt', 'm', '--items-from-export', exportPath, '--sample', '3', '--out', nextPath()], { encoding: 'utf8' });
   assert.equal(refused.status, 2);
-  assert.equal(JSON.parse(refused.stderr).reason, 'module_arms_export_not_supported', 'an export has no expected lanes for a screen or a planner to be right about');
+  assert.equal(JSON.parse(refused.stderr).reason, 'module_arms_export_not_supported', 'an export has no expected lanes for a screen to be right about');
   const noRegistration = spawnSync(process.execPath, [tool, 'nonsense'], { encoding: 'utf8' });
   assert.equal(noRegistration.status, 2);
 });
@@ -422,16 +422,16 @@ test('the operator\'s whole judged path on files: claude_judge.py takes the pack
   assert.deepEqual(harnessArmsIssues({ ...verdicts.source, judged: { ...verdicts.source.judged, records: verdicts.text.split('\n').filter(Boolean).map((line) => JSON.parse(line)) } }, { surface: 'frontier-edit', scorer: 'frontier-source', judge: block }, MODULE_KIT), []);
 });
 
-test('a whole assembly from the arms\' own outputs: a directional planner campaign on the 9 cases, fake model, real validation', async () => {
-  const pool = await moduleCasePool('autopilot-planner');
-  const registered = round('autopilot-planner', 'autopilot-checklist', pool, { developmentCount: 6, confirmationCount: 3 });
+test('a whole assembly from the arms\' own outputs: a directional edit campaign on the repository\'s cases, fake model, real validation', async () => {
+  const pool = await moduleCasePool('frontier-edit');
+  const registered = round('frontier-edit', 'frontier-numbers', pool, { developmentCount: 6, confirmationCount: 3 });
   const byId = new Map(pool.map((row) => [row.id, row]));
-  const text = 'The planner text a Claude session wrote.', candidates = [{ title: 't', policy: { plannerInstructions: text } }];
-  const shared = { surface: 'autopilot-planner', scorerId: 'autopilot-checklist', incumbent: incumbentOf('autopilot-planner'), image: IMAGE, apiKey: KEY, candidates, callModel: plannerModel({ decide: (context, call) => (call.body.messages[0].content.startsWith(text) ? { action: 'stop', stopKind: 'answered', reason: 'r' } : { action: 'run', taskType: context.taskTypes[0].id, focus: 'f', reason: 'r' }) }) };
+  const candidates = [{ title: 't', policy: { editInstructions: CANDIDATE } }];
+  const shared = { surface: 'frontier-edit', scorerId: 'frontier-numbers', incumbent: incumbentOf('frontier-edit'), image: IMAGE, apiKey: KEY, candidates, callModel: editModel() };
   const development = await runModuleArms({ ...shared, role: 'development', rows: registered.rows.development.map((id) => byId.get(id)), repeats: registered.repeats.development });
   const confirmation = await runModuleArms({ ...shared, role: 'confirmation', rows: registered.rows.confirmation.map((id) => byId.get(id)), repeats: registered.repeats.confirmation });
   const built = await buildHarnessCampaign({ development: development.source, confirmation: confirmation.source, confirmationGold: confirmation.gold, registration: registered, month: '2026-11', pilotRationale: 'Fake model, real validation.', now: '2026-10-26T00:00:00Z', improvement: improvementOf() });
-  assert.equal(built.manifest.surface, 'autopilot-planner');
+  assert.equal(built.manifest.surface, 'frontier-edit');
   assert.equal(built.manifest.candidateKind, 'policy');
   assert.equal(built.manifest.target.baselineRevision, shared.incumbent.revisionId);
   assert.equal(built.manifest.target.dependencyDigest, IMAGE.digest);

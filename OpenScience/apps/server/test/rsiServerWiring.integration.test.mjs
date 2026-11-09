@@ -21,7 +21,7 @@ after(async () => { await isolated?.drop(); });
 async function withApp(overrides, operation) {
   const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-rsi-wiring-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
-    stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url, evolutionEnabled: true, operatorUsers: [], rsiOnlineConfigFile: "", ...overrides });
+    stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url, operatorUsers: [], rsiOnlineConfigFile: "", ...overrides });
   const said = /** @type {string[]} */ ([]);
   const write = process.stderr.write.bind(process.stderr);
   process.stderr.write = /** @type {any} */ ((chunk) => { said.push(String(chunk)); return true; });
@@ -29,8 +29,8 @@ async function withApp(overrides, operation) {
   finally { process.stderr.write = write; await app.close(); await rm(dataDir, { recursive: true, force: true }); }
 }
 
-test("without the deployment file the RSI layer is inert even with evolution on: no serving adapter, importer or policy hook", options, () => withApp({}, async (app, said) => {
-  assert.ok(app.evolution, "evolution serving is composed");
+test("without the deployment file the RSI layer is inert: no serving adapter, importer or policy hook", options, () => withApp({}, async (app, said) => {
+  assert.ok(app.evolutionLedger, "the signal store is composed with the product ledger");
   await app.listen(0, "127.0.0.1");
   assert.deepEqual(app.rsi.status(), { runtime: true, configured: false, importer: false, servingAdapters: false, frontierSelection: false });
   assert.deepEqual(said.filter((line) => line.startsWith("rsi:")), []);

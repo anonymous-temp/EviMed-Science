@@ -54,8 +54,9 @@ test("every call that sends a prompt to a kernel states whether a person is in t
   }
   assert.deepEqual(silent, [], "each of these sends a prompt without saying whether anybody attends it");
   // The walk proves it walked: the dispatch paths as of 2026-10-25 (chat, channel and its steer, the steer route, a personal skill,
-  // the scheduled execution and its re-check, a 虚拟临床研究 and a GEO step, evolution, learning and source reading).
-  assert.ok(sites.length >= 12, `found only ${sites.length} dispatch sites`);
+  // the scheduled execution and its re-check, a 虚拟临床研究 and a GEO step, evolution, learning and source reading); 2026-11-09, with the scheduler
+  // retired and 循证进化's runs gone, eleven.
+  assert.ok(sites.length >= 11, `found only ${sites.length} dispatch sites`);
   // The person-initiated paths say so; everything else is a turn nobody attends unless the caller's own decision says otherwise.
   const attended = sites.filter((item) => item.value === "false").map((item) => item.site.split(":")[0]);
   assert.deepEqual([...new Set(attended)].sort(), ["runtimeManager.mjs", "server.mjs"]);

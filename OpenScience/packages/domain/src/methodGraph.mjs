@@ -534,8 +534,7 @@ export function methodStrength(observations, nowMs, tauDays = MEMORY_STRENGTH_TA
  * martingale: this tests the method's rate over its record, not a change in it,
  * so a long clean record takes a long run of corrections to overturn. A test
  * restarted after each verdict, or read over a window that slides, has no
- * such bound and its false alarms grow with use (`evolutionMaintenance.mjs`,
- * B3; `trimObservations`).
+ * such bound and its false alarms grow with use (B3; `trimObservations`).
  *
  * Only observations where the method was *used* are read — `invoked`, which
  * `runMethodObservations` sets when the session called the method through the

@@ -34,7 +34,7 @@ const run = (campaign, environment = runnerEnvironment()) => runCampaign({ manif
 // ------------------------------------------------------------------------------------------------------------------ the candidate
 
 test('what the consumer calls a surface\'s component is what the serving layer lets that surface supply', () => {
-  assert.deepEqual(Object.keys(MODULE_SURFACES).sort(), ['autopilot-planner', 'frontier-edit', 'frontier-screen']);
+  assert.deepEqual(Object.keys(MODULE_SURFACES).sort(), ['frontier-edit', 'frontier-screen']);
   for (const [surface, { component }] of Object.entries(MODULE_SURFACES)) {
     assert.ok(Object.hasOwn(RSI_CAMPAIGN_SURFACES, surface), surface);
     assert.deepEqual(parseRsiPolicyCandidate(surface, [{ path: 'policy.json', content: canonicalRsiJson({ [component]: 'text' }) }]), { [component]: 'text' });
@@ -80,33 +80,13 @@ test('the digest binds surface, component, text and the consumer\'s dependency d
 // ----------------------------------------------------------------------------------------------------------------------- the table
 
 test('the scorer table is closed, a scorer measures only its surfaces, and the two consumers\' tables never cross', async () => {
-  assert.deepEqual(Object.keys(MODULE_SCORERS).sort(), ['autopilot-checklist', 'frontier-numbers', 'frontier-source']);
+  assert.deepEqual(Object.keys(MODULE_SCORERS).sort(), ['frontier-numbers', 'frontier-source']);
   assert.ok(Object.isFrozen(MODULE_SCORERS));
-  assert.equal(moduleScorer({ scorer: 'autopilot-checklist', surface: 'autopilot-planner' }).id, 'autopilot-checklist');
-  for (const refused of [{ scorer: 'autopilot-checklist', surface: 'frontier-edit' }, { scorer: 'frontier-source', surface: 'frontier-screen' }, { scorer: 'medcalc', surface: 'frontier-edit' }, { scorer: 'frontier-numbers' }, { surface: 'frontier-edit' }, { scorer: '__proto__', surface: 'frontier-edit' }])
+  assert.equal(moduleScorer({ scorer: 'frontier-numbers', surface: 'frontier-screen' }).id, 'frontier-numbers');
+  for (const refused of [{ scorer: 'frontier-source', surface: 'frontier-screen' }, { scorer: 'medcalc', surface: 'frontier-edit' }, { scorer: 'frontier-numbers' }, { surface: 'frontier-edit' }, { scorer: '__proto__', surface: 'frontier-edit' }])
     assert.equal(moduleScorer(refused), null, JSON.stringify(refused));
   await assert.rejects(moduleFixture('frontier-edit', { mutateRound: (round) => { round.scorer = 'medcalc'; } }), { message: 'campaign_scorer_not_qualified' });
   await assert.rejects(harnessCampaignConsumerIdentity({ scorer: 'frontier-numbers' }), { message: 'campaign_scorer_not_qualified' }, 'a harness registration cannot name a module\'s scorer');
-});
-
-test('autopilot-checklist: a decision meets one of the case\'s closed expected actions, and the variants of a case are one group', () => {
-  const { score, validRow, validAnswer } = MODULE_SCORERS['autopilot-checklist'];
-  const row = { id: 'c', category: 'run', gold: { expect: [{ action: 'run', taskType: 'evidence-update' }, { action: 'stop', stopKind: 'answered' }] } };
-  const unit = (decision, variant = 'case') => ({ variant, inputSha256: 'a', decision: { reason: 'free text', ...decision } });
-  assert.equal(score({ units: [unit({ action: 'run', taskType: 'evidence-update' })] }, row), 1);
-  assert.equal(score({ units: [unit({ action: 'stop', stopKind: 'answered' })] }, row), 1);
-  assert.equal(score({ units: [unit({ action: 'run', taskType: 'writing-pipeline' })] }, row), 0);
-  assert.equal(score({ units: [unit({ action: 'stop', stopKind: 'exhausted' })] }, row), 0, 'every key of an expected action must be equal');
-  assert.equal(score({ units: [unit({ action: 'run', taskType: 'evidence-update' }), unit({ action: 'run', taskType: 'writing-pipeline' }, 'equivalent')] }, row), 0.5, 'one group: the share of its variants met');
-  assert.equal(score(null, row), 0, 'a run that delivered no decision met nothing');
-  assert.equal(validRow(row), true);
-  assert.equal(validRow({ ...row, gold: { expect: [] } }), false);
-  assert.equal(validRow({ ...row, gold: { expect: [{}] } }), false, 'an empty expectation would meet anything');
-  assert.equal(validAnswer({ units: [] }), false);
-  assert.equal(validAnswer({ units: [unit({ action: 'maybe' })] }), false, 'a closed vocabulary');
-  assert.equal(validAnswer(null), true);
-  assert.equal(MODULE_SCORERS['autopilot-checklist'].deterministicPassed, undefined, 'a checklist claims no deterministic flag of its own');
-  assert.equal(MODULE_SCORERS['autopilot-checklist'].judged, undefined, 'no judge where none is needed');
 });
 
 test('frontier-numbers: every number and unit in the source, the expected answer right, verification passed or repaired; abstention as the case says; a floor', () => {
@@ -209,9 +189,7 @@ test('a candidate that gains but whose numbers check out worse than the incumben
   assert.ok(shared.supply.developmentChoice.candidates.some((candidate) => candidate.deterministic.eligible), 'no regression');
   // A registration whose development cannot be read by the bar is refused before anything is paid for or scored.
   await assert.rejects(moduleFixture('frontier-edit', { repeatsDevelopment: 1 }), { message: 'campaign_repeats_unregistered' });
-  const planner = await moduleFixture('autopilot-planner', { repeatsDevelopment: 1 });
-  assert.equal(planner.supply.developmentChoice.candidates[0].deterministic, undefined, 'a checklist has no bar, and a single repeat serves it');
-  await assert.rejects(moduleFixture('autopilot-planner', { repeatsConfirmation: 2 }), { message: 'campaign_repeats_unregistered' }, 'the statistics read three repeats of a confirmation');
+  await assert.rejects(moduleFixture('frontier-edit', { repeatsConfirmation: 2 }), { message: 'campaign_repeats_unregistered' }, 'the statistics read three repeats of a confirmation');
   // In confirmation: the same frozen arm against a baseline that never fails the check, on a source where the arm's rewrites do.
   const campaign = await moduleFixture('frontier-edit');
   const frozen = campaign.supply.developmentChoice.frozen;
@@ -293,7 +271,7 @@ test('the one evaluator recomputes what the runner reports for a module campaign
 });
 
 test('the same command as every other surface: evaluator.mjs signs a module campaign\'s receipt the runner accepts, and refuses it the finalizer\'s input', async () => {
-  const fixture = await moduleFixture('autopilot-planner'), store = memoryCampaignStore(), now = tickingClock(), environment = runnerEnvironment({ store, now });
+  const fixture = await moduleFixture('frontier-edit'), store = memoryCampaignStore(), now = tickingClock(), environment = runnerEnvironment({ store, now });
   const awaiting = await run(fixture, environment), dir = nextDir(), tool = fileURLToPath(new URL('../evaluator.mjs', import.meta.url));
   await mkdir(dir, { recursive: true });
   const key = generateEvaluatorKey(), path = (name) => join(dir, name);
@@ -307,7 +285,7 @@ test('the same command as every other surface: evaluator.mjs signs a module camp
   // A receipt issued at the command's own clock: the lab's clock, from the moment it signed.
   const issuedAt = new Date().toISOString(), attest = await signedEvaluatorReceipt({ publicKeyPath: path('evaluator.pub.pem'), publicKeySha256: key.publicKeySha256, receiptPath: path('receipt.json') }, () => issuedAt);
   assert.equal((await attest(awaiting.request)).type, 'rsi-evaluator-receipt-v1');
-  assert.deepEqual((await attest(awaiting.request)).consumer.surface, 'autopilot-planner');
+  assert.deepEqual((await attest(awaiting.request)).consumer.surface, 'frontier-edit');
   const refused = spawnSync(process.execPath, [tool, 'receipt', path('manifest.json'), path('inputs.json'), path('manifest.json'), path('checkpoint.json'), path('key.pem'), path('other.json')], { encoding: 'utf8' });
   assert.equal(refused.status, 1);
   assert.equal(JSON.parse(refused.stderr).reason, 'campaign_evaluator_binding_changed', 'by closed code');
@@ -335,7 +313,7 @@ const reportOf = async (campaign, completed) => {
 
 test('a confirmation drawn from the repo\'s cases is not sealed, whatever its count: the improver reads them with their gold, so it is directional, draws no α and says why', async () => {
   // 32 groups: the count would have let it qualify.
-  const campaign = await moduleFixture('autopilot-planner');
+  const campaign = await moduleFixture('frontier-edit');
   assert.equal(campaign.fixture, undefined);
   assert.equal(campaign.manifest.data.sources.find((row) => row.role === 'confirmation').exposure, 'exposed', 'the manifest does not claim a seal');
   assert.equal(campaign.supply.directional, true);
@@ -351,7 +329,7 @@ test('a confirmation drawn from the repo\'s cases is not sealed, whatever its co
   const { report, text } = await reportOf(campaign, completed);
   assert.equal(report.type, 'rsi-module-policy-report-v1');
   assert.equal(report.directional.code, 'campaign_directional_confirmation_not_sealed');
-  assert.match(text, /^# 模块策略 RSI 活动报告 · autopilot-planner/);
+  assert.match(text, /^# 模块策略 RSI 活动报告 · frontier-edit/);
   assert.match(text, /结论：方向性参考，不是合格结论（确认集来自仓库里的用例/);
   assert.match(text, /本活动未动用本季度 α/);
   assert.match(text, /A\/A 对照 aa/);
@@ -423,12 +401,12 @@ test('a confirmation export cannot be scored on its own, nothing scores it befor
 
 test('the A/A control can never be chosen, a candidate has to beat what it shows, and no candidate opens nothing', async () => {
   // Nothing moves but the noise: a candidate that is the baseline's twin.
-  const flat = await moduleFixture('autopilot-planner', { p: () => 0.5 });
+  const flat = await moduleFixture('frontier-edit', { p: () => 0.5 });
   const choice = flat.supply.developmentChoice;
   assert.ok(choice.controls[0].arm === 'aa');
   assert.ok(choice.candidates.every((candidate) => candidate.arm !== 'aa'));
   // A control whose apparent gain is larger than the candidate's leaves it ineligible.
-  const noisy = await moduleFixture('autopilot-planner', { p: (arm, inSlice) => (arm === 'aa' ? 0.95 : arm.startsWith('cand-') ? (inSlice ? 0.5 : 0.85) : 0.35) });
+  const noisy = await moduleFixture('frontier-edit', { p: (arm, inSlice) => (arm === 'aa' ? 0.95 : arm.startsWith('cand-') ? (inSlice ? 0.5 : 0.85) : 0.35) });
   const read = noisy.supply.developmentChoice;
   assert.ok(read.noiseFloor > 0.3, String(read.noiseFloor));
   assert.equal(read.frozen, null);
@@ -447,17 +425,17 @@ test('the A/A control can never be chosen, a candidate has to beat what it shows
 
 test('an infrastructure failure is never scored: a run not delivered by the solver is a 0, one the infrastructure ate is no source at all', async () => {
   // The solver's non-delivery: the run stays, scores 0, its cost is the calls it made.
-  const failed = await moduleFixture('autopilot-planner', { status: (arm, row, repeat) => (arm === 'baseline' && row.id === 'case-1000' && repeat === 0 ? 'failed' : 'succeeded') });
+  const failed = await moduleFixture('frontier-edit', { status: (arm, row, repeat) => (arm === 'baseline' && row.id === 'case-1000' && repeat === 0 ? 'failed' : 'succeeded') });
   assert.equal(failed.inputs.sources[DEV].runs.find((entry) => entry.status === 'failed').answer, null);
   // Anything else is not a measurement.
-  await assert.rejects(moduleFixture('autopilot-planner', { status: (arm, row, repeat) => (arm === 'baseline' && row.id === 'case-1000' && repeat === 0 ? 'driver_error' : 'succeeded') }), { message: 'harness_arms_runs_infrastructure' });
-  await assert.rejects(moduleFixture('autopilot-planner', { status: (arm, row, repeat) => (arm === 'baseline' && row.id === 'case-1000' && repeat === 0 ? 'timeout' : 'succeeded') }), { message: 'harness_arms_runs_infrastructure' }, 'the arms runner writes no timeout: the provider did not answer');
-  await assert.rejects(moduleFixture('autopilot-planner', { mutateExports: (exports) => { exports.development.source.runs.pop(); } }), { message: 'harness_arms_runs_incomplete' });
-  await assert.rejects(moduleFixture('autopilot-planner', { mutateExports: (exports) => { exports.confirmation.source.runs.shift(); } }), { message: 'harness_arms_runs_incomplete' });
+  await assert.rejects(moduleFixture('frontier-edit', { status: (arm, row, repeat) => (arm === 'baseline' && row.id === 'case-1000' && repeat === 0 ? 'driver_error' : 'succeeded') }), { message: 'harness_arms_runs_infrastructure' });
+  await assert.rejects(moduleFixture('frontier-edit', { status: (arm, row, repeat) => (arm === 'baseline' && row.id === 'case-1000' && repeat === 0 ? 'timeout' : 'succeeded') }), { message: 'harness_arms_runs_infrastructure' }, 'the arms runner writes no timeout: the provider did not answer');
+  await assert.rejects(moduleFixture('frontier-edit', { mutateExports: (exports) => { exports.development.source.runs.pop(); } }), { message: 'harness_arms_runs_incomplete' });
+  await assert.rejects(moduleFixture('frontier-edit', { mutateExports: (exports) => { exports.confirmation.source.runs.shift(); } }), { message: 'harness_arms_runs_incomplete' });
 });
 
 test('a cost is what the tokens come to at the named price list: never typed, never unpriced, never null', async () => {
-  const campaign = await moduleFixture('autopilot-planner'), source = campaign.inputs.sources[DEV], registration = campaign.inputs.registration;
+  const campaign = await moduleFixture('frontier-edit'), source = campaign.inputs.sources[DEV], registration = campaign.inputs.registration;
   const calls = [{ cacheHit: 1000, cacheMiss: 2000, output: 500, peak: true }];
   // 1000 * 0.04 + 2000 * 2 + 500 * 8 per million, at the row of the current reference list.
   assert.equal(moduleRunCost(calls, 'deepseek-flash', REFERENCE_PRICE_LIST), 0.00804);
@@ -515,8 +493,8 @@ test('frontier-source: a judge that is not Claude, or not qualified by the code\
   const pairwise = judgeOf({ form: 'pairwise', passes: 4, qualification: { ...judgeOf().qualification, form: 'pairwise' } });
   assert.equal(harnessJudgeRegistrationIssue(pairwise, 0.05), null, 'a form the harness consumer has');
   assert.equal(MODULE_KIT.developmentIssue({ surface: 'frontier-edit', scorer: 'frontier-source', judge: pairwise, repeats: { confirmation: 3 } }, { repeats: 2 }), 'campaign_judge_unregistered', 'and fidelity has no parity to prefer');
-  const planner = await moduleFixture('autopilot-planner');
-  assert.equal(harnessDevelopmentIssue({ ...planner.inputs.registration, judge: judgeOf() }, planner.inputs.sources[DEV], MODULE_KIT), 'campaign_judge_unexpected', 'a code scorer names no judge');
+  const numbers = await moduleFixture('frontier-edit');
+  assert.equal(harnessDevelopmentIssue({ ...numbers.inputs.registration, judge: judgeOf() }, numbers.inputs.sources[DEV], MODULE_KIT), 'campaign_judge_unexpected', 'a code scorer names no judge');
   // A verdict file that changed after its digest; a confirmation that arrives with its records in it.
   await assert.rejects(moduleFixture('frontier-edit', { scorer: 'frontier-source', mutateExports: (exports) => { exports.development.verdicts += '\n'; } }), { message: 'campaign_judge_verdicts_changed' });
   await assert.rejects(moduleFixture('frontier-edit', { scorer: 'frontier-source', mutateExports: (exports) => { exports.confirmation.source.judged.records = []; } }), { message: 'harness_confirmation_not_sealed' });
@@ -525,11 +503,11 @@ test('frontier-source: a judge that is not Claude, or not qualified by the code\
 
 // ---------------------------------------------------------------------------------------------------------------- identity, refusals by name
 
-test('the consumer identity binds the surface, the scorer and the files; a planner registration never certifies an editor candidate', async () => {
-  const planner = await moduleCampaignConsumerIdentity({ surface: 'autopilot-planner', scorer: 'autopilot-checklist' }), edit = await moduleCampaignConsumerIdentity({ surface: 'frontier-edit', scorer: 'frontier-numbers' }), screen = await moduleCampaignConsumerIdentity({ surface: 'frontier-screen', scorer: 'frontier-numbers' }), judged = await moduleCampaignConsumerIdentity({ surface: 'frontier-edit', scorer: 'frontier-source' });
-  assert.equal(new Set([planner, edit, screen, judged].map((row) => row.implementationSha256)).size, 4);
-  assert.equal(planner.revision, 'module-arms-v1');
-  assert.ok(planner.components.some((row) => row.path.endsWith('module_scorers.mjs')) && planner.components.some((row) => row.path.endsWith('harness_campaign.mjs')));
+test('the consumer identity binds the surface, the scorer and the files; a screen registration never certifies an edit candidate', async () => {
+  const edit = await moduleCampaignConsumerIdentity({ surface: 'frontier-edit', scorer: 'frontier-numbers' }), screen = await moduleCampaignConsumerIdentity({ surface: 'frontier-screen', scorer: 'frontier-numbers' }), judged = await moduleCampaignConsumerIdentity({ surface: 'frontier-edit', scorer: 'frontier-source' });
+  assert.equal(new Set([edit, screen, judged].map((row) => row.implementationSha256)).size, 3);
+  assert.equal(edit.revision, 'module-arms-v1');
+  assert.ok(edit.components.some((row) => row.path.endsWith('module_scorers.mjs')) && edit.components.some((row) => row.path.endsWith('harness_campaign.mjs')));
   await assert.rejects(moduleCampaignConsumerIdentity({ surface: 'frontier-edit', scorer: 'medcalc' }), { message: 'campaign_scorer_not_qualified' });
   const campaign = await moduleFixture('frontier-edit');
   assert.equal(campaign.inputs.registration.statistics.consumer_id, (await moduleCampaignConsumerIdentity(campaign.inputs.registration)).implementationSha256);
@@ -543,7 +521,7 @@ test('the consumer identity binds the surface, the scorer and the files; a plann
 });
 
 test('the registration is held to its design, and the confirmation to what development froze: every refusal the preview, --development-only, the assembly and the runner share', async () => {
-  const refused = async (mutateRound, code, label = code) => assert.rejects(moduleFixture('autopilot-planner', { mutateRound }), { message: code }, label);
+  const refused = async (mutateRound, code, label = code) => assert.rejects(moduleFixture('frontier-edit', { mutateRound }), { message: code }, label);
   await refused((round) => { round.candidatesMax = 1; }, 'campaign_candidates_exceed_registration', 'K');
   await refused((round) => { round.costRatio = 1.5; }, 'campaign_cost_ratio_unsupported');
   await refused((round) => { round.rows.development = round.rows.development.slice(1); }, 'campaign_rows_unregistered');
@@ -551,24 +529,23 @@ test('the registration is held to its design, and the confirmation to what devel
   await refused((round) => { round.alpha.perCampaign = 0.06; }, 'campaign_alpha_registration_invalid');
   await refused((round) => { round.failureSlice = []; }, 'campaign_registration_invalid');
   await refused((round) => { round.failureSliceKey = 'failureCalculators'; }, 'campaign_registration_invalid');
-  await assert.rejects(moduleFixture('autopilot-planner', { improvement: {} }), { message: 'campaign_improvement_missing' });
-  await assert.rejects(moduleFixture('autopilot-planner', { improvement: improvementOf({ improvers: [{ role: 'writing', provider: 'deepseek', model: 'deepseek-flash' }] }) }), { message: 'campaign_improver_refused' }, 'the improvers are the round\'s Claude session');
-  await assert.rejects(moduleFixture('autopilot-planner', { improvement: improvementOf({ improvers: [{ role: 'writing', provider: 'dashscope', model: 'qwen3.8-max' }] }) }), { message: 'campaign_improver_refused' });
-  const campaign = await moduleFixture('autopilot-planner');
+  await assert.rejects(moduleFixture('frontier-edit', { improvement: {} }), { message: 'campaign_improvement_missing' });
+  await assert.rejects(moduleFixture('frontier-edit', { improvement: improvementOf({ improvers: [{ role: 'writing', provider: 'deepseek', model: 'deepseek-flash' }] }) }), { message: 'campaign_improver_refused' }, 'the improvers are the round\'s Claude session');
+  await assert.rejects(moduleFixture('frontier-edit', { improvement: improvementOf({ improvers: [{ role: 'writing', provider: 'dashscope', model: 'qwen3.8-max' }] }) }), { message: 'campaign_improver_refused' });
+  const campaign = await moduleFixture('frontier-edit');
   assert.equal(developmentOnly({ development: campaign.exports.development.source, registration: campaign.round, improvement: improvementOf(), month: '2026-11' }).status, 'development-only', 'the preview reads what the run reads');
   // A candidate other than the frozen one, a dependency closure that moved, a registration rewritten afterwards.
-  const other = rebind(campaign, ({ inputs }) => { const source = inputs.sources[CONF], armId = campaign.good.arm, swapped = candidateOn('autopilot-planner', 'Yet another text.', campaign.image); source.arms[swapped.arm] = { harness: swapped.harness }; delete source.arms[armId]; for (const entry of source.runs) if (entry.arm === armId) { entry.arm = swapped.arm; if (entry.policyRevisionId) entry.policyRevisionId = swapped.arm; } });
+  const other = rebind(campaign, ({ inputs }) => { const source = inputs.sources[CONF], armId = campaign.good.arm, swapped = candidateOn('frontier-edit', 'Yet another text.', campaign.image); source.arms[swapped.arm] = { harness: swapped.harness }; delete source.arms[armId]; for (const entry of source.runs) if (entry.arm === armId) { entry.arm = swapped.arm; if (entry.policyRevisionId) entry.policyRevisionId = swapped.arm; } });
   assert.equal((await run(other)).reason, 'campaign_confirmation_candidate_mismatch');
   const moved = rebind(campaign, ({ inputs }) => { inputs.sources[CONF].image = { ...inputs.sources[CONF].image, digest: 'e'.repeat(64) }; });
   assert.equal((await run(moved)).reason, 'campaign_source_invalid', 'the candidate\'s digest binds the consumer it ran on');
   assert.equal((await run({ ...campaign, inputs: { ...campaign.inputs, registration: { ...campaign.inputs.registration, margin: 0.2 } } })).reason, 'campaign_registration_changed');
 });
 
-test('frontier-screen and frontier-edit are one consumer on one quarter: one class, one policy document; the planner is another', () => {
+test('frontier-screen and frontier-edit are one consumer on one quarter: one class, one policy document', () => {
   const ledger = (surface) => alphaLedger({ id: 'campaign', surface, data: { classification: 'public' } }).ledger;
   assert.equal(ledger('frontier-screen'), ledger('frontier-edit'), 'a new surface name never buys a fresh α');
   assert.equal(ledger('frontier-edit'), RSI_CAMPAIGN_SURFACES['frontier-edit'].consumer);
-  assert.notEqual(ledger('frontier-edit'), ledger('autopilot-planner'));
   assert.notEqual(ledger('frontier-edit'), ledger('frontier-selection'), 'selection is the feed\'s mix, another consumer');
   const rehearsal = alphaLedger({ id: 'rehearsal-x', surface: 'frontier-screen', data: { classification: 'public' } });
   assert.equal(rehearsal.ledger, `rehearsal:${ledger('frontier-screen')}`, 'a rehearsal keeps its own');

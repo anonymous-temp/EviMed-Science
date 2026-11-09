@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { before, after, test } from 'node:test';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
-import { ProductDocuments, ProductJobs } from '../src/productStore.mjs';
-import { EvolutionService } from '../src/evolutionService.mjs';
+import { ProductDocuments } from '../src/productStore.mjs';
+import { EvolutionLedger } from '../src/evolutionLedger.mjs';
 import { createEvolutionSignals } from '../src/evolutionSignals.mjs';
 import { GeoMeasureStore } from '../src/geoMeasureStore.mjs';
 import { GeoStore } from '../src/geoStore.mjs';
@@ -24,8 +24,8 @@ before(async () => {
   store = new GeoMeasureStore(database); await store.ready();
   await seedGeoProject(database, { id: geoId, userId, projectId, engines: ['deepseek'], groups: [], questions: [] });
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'evimed-evolution','Learning',1048576)", [userId]);
-  evolution = new EvolutionService({ documents: new ProductDocuments(database), jobs: new ProductJobs(database), ownerId: userId });
-  signals = createEvolutionSignals({ service: evolution, capabilityIds: async () => ['geo-content'], operatorIds: () => [userId] });
+  evolution = new EvolutionLedger({ documents: new ProductDocuments(database), ownerId: userId });
+  signals = createEvolutionSignals({ ledger: evolution, capabilityIds: async () => ['geo-content'], operatorIds: () => [userId] });
   learning = createGeoLearningSignals({ database, signals: () => signals });
 });
 after(async () => { await database?.close(); await isolated?.drop(); });

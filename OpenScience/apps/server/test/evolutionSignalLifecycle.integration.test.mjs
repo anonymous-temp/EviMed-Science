@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { before, after, test } from 'node:test';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
-import { ProductDocuments, ProductJobs } from '../src/productStore.mjs';
+import { ProductDocuments } from '../src/productStore.mjs';
 import { migrateProductStore } from '../src/productPersistence.mjs';
-import { EvolutionService } from '../src/evolutionService.mjs';
+import { EvolutionLedger } from '../src/evolutionLedger.mjs';
 import { createEvolutionSignals } from '../src/evolutionSignals.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
@@ -20,8 +20,8 @@ before(async () => {
     await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Lifecycle','development')", [user]);
     for (const project of ['research', 'evimed-evolution']) await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'Lifecycle',1048576)", [user, project]);
   }
-  service = new EvolutionService({ documents: new ProductDocuments(database), jobs: new ProductJobs(database), ownerId: owner });
-  signals = createEvolutionSignals({ service, capabilityIds: async () => ['geo-content'] });
+  service = new EvolutionLedger({ documents: new ProductDocuments(database), ownerId: owner });
+  signals = createEvolutionSignals({ ledger: service, capabilityIds: async () => ['geo-content'] });
 });
 after(async () => { await database?.close(); await isolated?.drop(); });
 const input = (eventId, extra = {}) => ({ userId: owner, projectId: 'research', eventId, kind: 'geo-misconception', moduleId: 'geo', capability: 'geo-content', operation: 'synthesize', dataShape: 'text', reason: 'unsupported', version: 'private-assessment-v1', sourceRevision: 1, ...extra });

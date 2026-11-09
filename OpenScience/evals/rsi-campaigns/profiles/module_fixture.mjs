@@ -37,8 +37,6 @@ const tokensFor = (random) => [{ cacheHit: Math.round(2000 * (0.8 + 0.4 * random
 
 /** What differs between the scorers: a row, a right or wrong answer unit (`right`), and whether its code check passed (`numbers`). */
 export const KITS = {
-  'autopilot-checklist': { row: (id, inSlice) => ({ id, category: inSlice ? 'run' : 'stop', gold: { expect: inSlice ? [{ action: 'run', taskType: 'literature-sentinel' }] : [{ action: 'stop', stopKind: 'answered' }] } }),
-    unit: (row, right) => ({ decision: right ? { ...row.gold.expect[0], reason: 'r' } : { action: 'run', taskType: 'writing-pipeline', reason: 'r' } }) },
   'frontier-numbers': { row: (id, inSlice) => ({ id, category: inSlice ? 'lane' : 'flags', gold: inSlice ? { kind: 'lane', expect: ['safety'] } : { kind: 'flags', expect: [] } }),
     unit: (row, right, numbers, drop) => ({ verification: right ? 'passed' : 'title-only', numbers: { checked: drop ? 0 : 3, source: 3, missing: numbers ? [] : ['12%'], unitMismatches: [] }, output: { lane: row.gold.kind === 'lane' ? 'safety' : 'evidence', titleZh: 't', summaryZh: right ? 's' : null, reasonZh: null, evidenceType: null, flags: [], genre: 'paper', industryKind: null } }) },
 };
@@ -49,13 +47,13 @@ function exportOf({ surface, scorer, role, ids, sliceShare, arms, repeats, seed,
   const kit = KITS[scorer], random = generator(seed), rows = ids.map((id, at) => (fromExport ? { id: `export-${id}`, category: 'export', gold: {} } : kit.row(`case-${id}`, at < Math.round(ids.length * sliceShare))));
   const runs = [];
   for (const row of rows) for (const arm of arms) for (let repeat = 0; repeat < repeats; repeat += 1) {
-    const right = random() < p(arm.arm, ['lane', 'run', 'export'].includes(row.category)), passed = random() < numbers(arm.arm), drop = random() < drops(arm.arm), calls = tokensFor(random), state = status(arm.arm, row, repeat);
+    const right = random() < p(arm.arm, ['lane', 'export'].includes(row.category)), passed = random() < numbers(arm.arm), drop = random() < drops(arm.arm), calls = tokensFor(random), state = status(arm.arm, row, repeat);
     const delivered = state === 'succeeded';
     const run = { row: row.id, arm: arm.arm, repeat, runId: `module-${row.id}-${arm.arm}-${repeat}`, status: state, cost: moduleRunCost(calls, 'deepseek-flash', REFERENCE_PRICE_LIST), calls,
       answer: delivered ? { units: [{ variant: 'case', inputSha256: sha256(row.id), ...kit.unit(row, right, passed, drop) }] } : null, policyRevisionId: !delivered ? null : arm.harness ? arm.arm : INCUMBENT.revisionId };
     runs.push(mutateRun?.(run) ?? run);
   }
-  const source = { kind: 'module-arms', schema: 1, role, surface, benchmark: scorer === 'autopilot-checklist' ? 'autopilot-next-action' : 'frontier-editing', image, incumbent, model: 'deepseek-flash', priceVersion: REFERENCE_PRICE_LIST.version, repeats,
+  const source = { kind: 'module-arms', schema: 1, role, surface, benchmark: 'frontier-editing', image, incumbent, model: 'deepseek-flash', priceVersion: REFERENCE_PRICE_LIST.version, repeats,
     rows, arms: Object.fromEntries(arms.map(({ arm, harness, control }) => [arm, control ? { harness, control } : { harness }])), runs };
   if (role !== 'confirmation') return { source, gold: null, rows };
   return { source: { ...source, rows: rows.map(({ gold, ...rest }) => rest) }, gold: { kind: 'harness-gold', schema: 1, benchmark: source.benchmark, gold: Object.fromEntries(rows.map((row) => [row.id, row.gold])) }, rows };
@@ -77,7 +75,7 @@ function judgedExport(made, judge, supported, seed) {
  * A complete campaign as an operator assembles it, plus its exports. Defaults measure a candidate that repairs the failure slice and keeps its numbers, 32 confirmation groups of which 85% in the slice.
  * @param {string} surface @param {any} [options]
  */
-export async function moduleFixture(surface = 'frontier-edit', { scorer = surface === 'autopilot-planner' ? 'autopilot-checklist' : 'frontier-numbers', confirmationFrom = scorer === 'frontier-source' ? 'export' : 'cases', developmentRows = 30, confirmationRows = 32, sliceShareDevelopment = 0.6, sliceShareConfirmation = 0.85, repeatsDevelopment = 2, repeatsConfirmation = 3,
+export async function moduleFixture(surface = 'frontier-edit', { scorer = 'frontier-numbers', confirmationFrom = scorer === 'frontier-source' ? 'export' : 'cases', developmentRows = 30, confirmationRows = 32, sliceShareDevelopment = 0.6, sliceShareConfirmation = 0.85, repeatsDevelopment = 2, repeatsConfirmation = 3,
   goodText = 'A better version of the component under test.', weakText = 'A different version of the component that changes nothing.', p, numbers, drops = () => 0, supported = (arm) => (arm === 'baseline' ? 0.5 : 0.9), status = () => 'succeeded', month = '2026-11', now = '2026-10-26T00:00:00Z', improvement = improvementOf(), judge = scorer === 'frontier-source' ? judgeOf() : undefined, seeds = {}, incumbent = INCUMBENT,
   mutateRound, mutateExports, mutateRun } = {}) {
   const image = await closureImage(surface);

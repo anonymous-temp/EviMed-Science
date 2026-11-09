@@ -60,15 +60,15 @@ test('develop: the same command on the same inbox recomputes the module\'s gate,
 });
 
 test('run: the assembly takes the sealed confirmation and its gold, the receipt is the one evaluator command, and no step holds a provider credential', async () => {
-  const fixture = await moduleFixture('autopilot-planner', { developmentRows: 6, confirmationRows: 3, sliceShareDevelopment: 0.7, sliceShareConfirmation: 0.7 }), t = await labTree(fixture, 'autopilot-planner');
+  const fixture = await moduleFixture('frontier-edit', { developmentRows: 6, confirmationRows: 3, sliceShareDevelopment: 0.7, sliceShareConfirmation: 0.7 }), t = await labTree(fixture, 'frontier-edit');
   const first = await t.lab('run');
   assert.equal(first.code, 0, first.stderr);
   const manifest = JSON.parse(await readFile(join(t.state, 'manifest.json'), 'utf8'));
   assert.deepEqual(rsiCampaignIssues(manifest), []);
-  assert.deepEqual([manifest.surface, manifest.candidateKind, manifest.target.baselineRevision], ['autopilot-planner', 'policy', fixture.manifest.target.baselineRevision]);
+  assert.deepEqual([manifest.surface, manifest.candidateKind, manifest.target.baselineRevision], ['frontier-edit', 'policy', fixture.manifest.target.baselineRevision]);
   const sealed = JSON.parse(await readFile(join(t.state, 'inputs.json'), 'utf8')).sources[`confirmation-${MONTH}`];
   assert.ok(sealed.rows.every((row) => row.gold), 'the gold joined in the lab');
-  assert.ok(JSON.parse(await readFile(join(t.root, 'inbox', `harness-autopilot-planner-${MONTH}`, 'confirmation.json'), 'utf8')).rows.every((row) => !row.gold), 'and only there');
+  assert.ok(JSON.parse(await readFile(join(t.root, 'inbox', `harness-frontier-edit-${MONTH}`, 'confirmation.json'), 'utf8')).rows.every((row) => !row.gold), 'and only there');
   // The stand-in runner ended it there; a campaign the runner parks for its receipt goes on with the command every surface's receipt takes.
   await appendFile(join(t.state, 'STATUS'), 'run ok 2026-11-05T00:00:00Z\n');
   await writeFile(join(t.state, 'run', 'run.json'), JSON.stringify({ status: 'awaiting-evaluation' }));
@@ -83,15 +83,15 @@ test('run: the assembly takes the sealed confirmation and its gold, the receipt 
   assert.ok(calls.every((call) => !call.mounts.some((mount) => /credential|dashscope|deepseek/i.test(mount))), 'no provider credential in any step');
   assert.ok(!(await readFile(join(t.root, '..', 'etc', 'secrets', 'lab.env'), 'utf8')).match(/KEY|TOKEN/), 'nor a provider key in what the steps read');
   assert.ok(calls.every((call) => !/module_arms/.test(call.script)), 'no model on the lab: the arms ran on the operator\'s box');
-  assert.match(await readFile(join(t.outbox, 'report.md'), 'utf8'), /^# 模块策略 RSI 活动报告 · autopilot-planner/);
+  assert.match(await readFile(join(t.outbox, 'report.md'), 'utf8'), /^# 模块策略 RSI 活动报告 · frontier-edit/);
 });
 
 test('improvement.json is required as for any family, a module judged scorer needs both its gold and its records, and a code scorer needs no records', async () => {
-  const code = await moduleFixture('autopilot-planner', { developmentRows: 6, confirmationRows: 3, sliceShareDevelopment: 0.7, sliceShareConfirmation: 0.7 });
-  const noRecord = await (await labTree(code, 'planner-a', { omit: ['improvement.json'] })).lab('develop');
+  const code = await moduleFixture('frontier-edit', { developmentRows: 6, confirmationRows: 3, sliceShareDevelopment: 0.7, sliceShareConfirmation: 0.7 });
+  const noRecord = await (await labTree(code, 'edit-a', { omit: ['improvement.json'] })).lab('develop');
   assert.equal(noRecord.code, 3);
   assert.match(noRecord.stderr, /inputs missing or checksum mismatch/);
-  const noGold = await (await labTree(code, 'planner-b', { omit: ['confirmation.gold.json'] })).lab('run');
+  const noGold = await (await labTree(code, 'edit-b', { omit: ['confirmation.gold.json'] })).lab('run');
   assert.equal(noGold.code, 3, 'a code scorer\'s sealed confirmation needs its gold');
   const judged = await moduleFixture('frontier-edit', { scorer: 'frontier-source', seeds: { confirmation: 12 } });
   const t = await labTree(judged, 'source', { omit: ['confirmation.gold.json'] });
@@ -142,10 +142,10 @@ test('a qualified module round ends at the signed report, a pull-request proposa
 });
 
 test('a directional round ends the same way, and its report says 方向性参考', async () => {
-  const fixture = await moduleFixture('autopilot-planner', { developmentRows: 6, confirmationRows: 3, sliceShareDevelopment: 0.7, sliceShareConfirmation: 0.7 });
+  const fixture = await moduleFixture('frontier-edit', { developmentRows: 6, confirmationRows: 3, sliceShareDevelopment: 0.7, sliceShareConfirmation: 0.7 });
   const { completed } = await runToVerdict(fixture, { dir: join(scratch, 'verdict-d'), store: memoryCampaignStore(), now: tickingClock() });
   assert.equal(completed.qualification, 'inconclusive');
-  const t = await atVerdict(fixture, completed, { family: 'autopilot-planner' });
+  const t = await atVerdict(fixture, completed, { family: 'frontier-edit' });
   const done = await t.lab('run');
   assert.equal(done.code, 0, done.stderr);
   await noImport(t);

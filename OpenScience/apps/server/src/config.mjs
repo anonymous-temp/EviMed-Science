@@ -8,7 +8,7 @@ import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 import { researchDbSettings } from "./researchDbConfig.mjs";
-import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
+import { EVOLUTION_CONFIG_SCHEMA, validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
 import { REGISTER_JUDGE_MAX_LINES } from "./reportRegisterJudge.mjs";
 import { PINNED } from "./pinnedVersions.mjs";
 
@@ -3154,38 +3154,18 @@ export function loadConfig(overrides = {}) {
     // under a budget it shares with the researcher cannot be tested at all.
     // Both remain settable; setting `OPEN_SCIENCE_LEARNING_ENABLED=false`
     // still turns the loop off.
-    // Literature-driven platform development (循证进化) has its own accounting. On by default since
-    // 2026-10-07 (owner: 「循证进化默认打开」); it still needs PostgreSQL and the product ledger, and
-    // `OPEN_SCIENCE_EVOLUTION_ENABLED=false` turns it off.
-    rsiOnlineConfigFile: overrides.rsiOnlineConfigFile ?? process.env.OPEN_SCIENCE_RSI_ONLINE_CONFIG_FILE ?? "",
-    evolutionEnabled: overrides.evolutionEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_ENABLED", true),
+    // 循证进化's closed-code signal store and the code skills' executor (the module that served published tools was deleted 2026-11-09, and its switch with it).
     // Defaults live in `evolutionConfiguration.mjs`'s schema, with the reasons and the bounds; the defaults written here must equal it (`evolutionConfiguration.test.mjs` holds them equal).
-    evolutionMaxConcurrency: Number(overrides.evolutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY ?? 1),
-    evolutionMaxDecisionCards: Number(overrides.evolutionMaxDecisionCards ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS ?? 3),
+    rsiOnlineConfigFile: overrides.rsiOnlineConfigFile ?? process.env.OPEN_SCIENCE_RSI_ONLINE_CONFIG_FILE ?? "",
     // How many different accounts of the operator class a lead needs before it reads as ready for the offline lab; researchers are counted on their own (1 to 5).
     evolutionOperatorSignalFloor: Number(overrides.evolutionOperatorSignalFloor ?? process.env.OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR ?? 1),
     evolutionSignalRetentionDays: Number(overrides.evolutionSignalRetentionDays ?? process.env.OPEN_SCIENCE_EVOLUTION_SIGNAL_RETENTION_DAYS ?? 180),
     evolutionRetentionBatchRows: Number(overrides.evolutionRetentionBatchRows ?? process.env.OPEN_SCIENCE_EVOLUTION_RETENTION_BATCH_ROWS ?? 5000),
-    evolutionDecisionTimeoutMs: Number(overrides.evolutionDecisionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS ?? 86_400_000),
-    evolutionPollMs: Number(overrides.evolutionPollMs ?? process.env.OPEN_SCIENCE_EVOLUTION_POLL_MS ?? 15_000),
-    evolutionLeaseMs: Number(overrides.evolutionLeaseMs ?? process.env.OPEN_SCIENCE_EVOLUTION_LEASE_MS ?? 120_000),
-    evolutionRetryMs: Number(overrides.evolutionRetryMs ?? process.env.OPEN_SCIENCE_EVOLUTION_RETRY_MS ?? 60_000),
-    evolutionMaxJobAttempts: Number(overrides.evolutionMaxJobAttempts ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_JOB_ATTEMPTS ?? 3),
-    // Candidate execution has its own controller instance, slots and timeout (`evolutionVerificationController.mjs`):
-    // static checks, self tests, hidden-case replicates and every tenant call of a published tool are one disposable
-    // container each, hundreds per build cycle, and they must never share a slot, an admission lock or the
-    // sticky `blocked` latch with the document tools tenants use (S2).
+    // Code execution has its own controller instance, slots and timeout (`evolutionVerificationController.mjs`): a learned method's scripts run in one disposable
+    // container each, and must never share a slot, an admission lock or the sticky `blocked` latch with the document tools tenants use (S2).
     evolutionExecutionMaxConcurrency: Number(overrides.evolutionExecutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY ?? 1),
     evolutionExecutionTimeoutMs: Number(overrides.evolutionExecutionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS ?? 30_000),
-    // What one tenant project may ask of a published tool through the gateway, so one run's loop cannot queue every
-    // other tenant behind it: calls in flight at once, and calls in a minute (S4).
-    evolutionToolMaxConcurrentPerProject: Number(overrides.evolutionToolMaxConcurrentPerProject ?? process.env.OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT ?? 2),
-    evolutionToolCallsPerMinute: Number(overrides.evolutionToolCallsPerMinute ?? process.env.OPEN_SCIENCE_EVOLUTION_TOOL_CALLS_PER_MINUTE ?? 60),
     evolutionDependencyAllowlist: dependencyAllowlist.value,
-    // Why the module is off although it was switched on: the first thing wrong with its settings
-    // (`{ code, key }`, never a value), or null. A module that is wrongly configured refuses to
-    // start and says why; it never stops the platform (principle 14).
-    evolutionRefusal: null,
     learningEnabled: overrides.learningEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_ENABLED", true),
     learningPollMs: Number(overrides.learningPollMs ?? process.env.OPEN_SCIENCE_LEARNING_POLL_MS ?? 5_000),
     learningLeaseMs: Number(overrides.learningLeaseMs ?? process.env.OPEN_SCIENCE_LEARNING_LEASE_MS ?? 900_000),
@@ -3695,19 +3675,11 @@ export function loadConfig(overrides = {}) {
     runtimeAnnotationEnabled: overrides.runtimeAnnotationEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ANNOTATION_ENABLED", true),
     runtimeMermaidEnabled: overrides.runtimeMermaidEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED", true),
   };
-  if (config.evolutionEnabled) {
-    // The module is on: anything wrong with its settings keeps it off, with the code and key of
-    // the first finding in `evolutionRefusal` for the entrypoints to report. It used to throw
-    // here, which stopped the API and the runtime controller — research included — for a
-    // setting of an optional module.
-    const issues = [
-      ...(dependencyAllowlist.issue ? [{ code: "evolution_dependency_allowlist_invalid", key: "evolutionDependencyAllowlist" }] : []),
-      ...validateEvolutionConfiguration(config),
-    ];
-    if (issues.length) {
-      config.evolutionEnabled = false;
-      config.evolutionRefusal = { code: issues[0].code, key: issues[0].key };
-    }
+  // A wrong setting of the signal store or the code executor never stops the platform (principle 14): it is said by key (never its value) and the default is used.
+  // An invalid dependency allowlist admits nothing.
+  for (const issue of [...(dependencyAllowlist.issue ? [{ code: "evolution_dependency_allowlist_invalid", key: "evolutionDependencyAllowlist" }] : []), ...validateEvolutionConfiguration(config)]) {
+    process.stderr.write(`evolution: ${issue.code} (${issue.key}); the default is used\n`);
+    /** @type {Record<string, any>} */ (config)[issue.key] = issue.key === "evolutionDependencyAllowlist" ? [] : /** @type {Record<string, any>} */ (EVOLUTION_CONFIG_SCHEMA)[issue.key].default;
   }
   return config;
 }

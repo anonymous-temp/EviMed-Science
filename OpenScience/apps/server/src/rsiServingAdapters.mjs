@@ -317,7 +317,7 @@ export function createRsiServingAdapters({ config, service, database, documents 
       const stored = await read(options.transactionClient ?? database, proof.id)
       return stored?.payload.operationId === row.operationId ? stored.payload : null
     },
-    adapters: { policy, skill: unsupported, 'isolated-tool': unsupported }, readPolicy,
+    adapters: { policy, skill: unsupported }, readPolicy,
     /** @param {any} value */ connectImporter(value) { importer = value },
     /** @param {string} moduleId @param {any} _defaults @param {any} context */
     async resolvePolicy(moduleId, _defaults, context = {}) { return readPolicy(moduleId, context) },

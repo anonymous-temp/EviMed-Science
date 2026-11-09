@@ -329,3 +329,18 @@ test("a notice for an account that no longer exists is refused by name and write
   // The account that exists is unaffected.
   assert.ok((await service.create(owner, { noticeType: "notify", title: "Still delivered", body: "Here." })).id);
 });
+
+test("an open 循证进化 decision card is closed at the next start, readable, and nothing else is touched", options, async () => {
+  const card = await service.create(owner, { noticeType: "review", title: "Keep or retire", body: "A decision about a tool.",
+    actions: [{ id: "keep", label: "Keep" }, { id: "retire", label: "Retire" }], source: { type: "system", id: "evolution-decision-abc" } });
+  const question = await service.create(owner, { noticeType: "question", title: "Pick one", body: "Still open.",
+    actions: [{ id: "a", label: "A" }], source: { type: "system", id: "other-decision" } });
+  const next = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 2_000 });
+  try { await new NotificationService(next).list(owner); } finally { await next.close(); }
+  const rows = (await database.query("SELECT id,resolved_at,resolution,title,body FROM evimed_inbox.notifications WHERE id=ANY($1::text[])", [[card.id, question.id]])).rows;
+  const closed = rows.find((row) => row.id === card.id), open = rows.find((row) => row.id === question.id);
+  assert.ok(closed.resolved_at);
+  assert.deepEqual(closed.resolution, { actionId: "retired", source: "retired" });
+  assert.deepEqual([closed.title, closed.body], ["Keep or retire", "A decision about a tool."]);
+  assert.equal(open.resolved_at, null);
+});

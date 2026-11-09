@@ -1,4 +1,4 @@
-// A published tool with dependencies keeps working after the runtime image changes (review of
+// A code skill with dependencies keeps working after the runtime image changes (review of
 // 「循证进化」, 2026-10-05, S6). The prepared set is keyed by the image's identity, so every release
 // that changes the image leaves it unprepared; only the build path ever prepared, and the tenant
 // gateway's execute failed with a raw ENOENT (a 500) until something else prepared again.
@@ -30,7 +30,7 @@ async function fixture(run) {
       return 'ok';
     },
   };
-  const controller = createEvolutionVerificationController({ dataDir, evolutionEnabled: true, evolutionDependencyAllowlist: [entry] }, { tools, imageId: async () => state.image });
+  const controller = createEvolutionVerificationController({ dataDir, evolutionDependencyAllowlist: [entry] }, { tools, imageId: async () => state.image });
   try { await run({ controller, state }); } finally { await fs.rm(dataDir, { recursive: true, force: true }); }
 }
 const execute = (controller) => controller.execute({ files: { 'scripts/x.py': 'value=1' }, code: 'print(1)', dependencyIds: [request] });

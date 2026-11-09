@@ -252,7 +252,6 @@ const consumers = Object.freeze({
   * identity, and the runtime image's error budget, shared with harness-patch (`alphaLedger`).
   */
  'tool-patch': {...harnessConsumer,identity:toolPatchCampaignConsumerIdentity},
- 'autopilot-planner': moduleConsumer,
  'frontier-screen': moduleConsumer,
  'frontier-edit': moduleConsumer,
 });

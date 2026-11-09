@@ -6,13 +6,13 @@
  *
  *  - the candidate: `arms[id].harness = {digest, chars, alwaysOnChars, title, policy: {surface, component, text}}`, exactly one component, the surface's, valid by the
  *    function serving uses (`validateModuleEvolutionPolicy`), and not the incumbent's text; the digest is over surface, component, text and the consumer's dependency
- *    digest (`image.digest`, computed by `computeRsiDependencyClosure`: the same text over another planner is another candidate);
+ *    digest (`image.digest`, computed by `computeRsiDependencyClosure`: the same text over another editor is another candidate);
  *  - the sources: `kind: module-arms`, written by module_arms.mjs on the operator's box, which runs production's own classes on `deepseek-flash`. A run carries its
  *    decisions or rewrites (`answer.units`, one per variant of the case, the variants being one group), its tokens call by call, the cost those tokens come to at the
  *    reference price list (recomputed here, so a cost is never typed), and the policy revision production's class says it served;
  *  - the scorers: the closed table of module_scorers.mjs, and for a scorer that rests on a model's writing the bar `moduleDeterministicChecks`: a candidate whose
  *    deterministic pass share is worse than the incumbent's beyond the noise of the incumbent's own repeats is not eligible, and not confirmed;
- *  - the error budget is the consumer's (`RSI_CAMPAIGN_SURFACES[surface].consumer`): the planner has its own, and frontier-screen and frontier-edit, one class and one policy document, share one;
+ *  - the error budget is the consumer's (`RSI_CAMPAIGN_SURFACES[surface].consumer`): frontier-screen and frontier-edit, one class and one policy document, share one;
  *  - what can qualify: `moduleDirectional` below. Every other round is a directional reading, however many groups it has;
  *  - the end: a qualified round is a pull-request proposal, like a patch of the image, and the signed report (`harness_report.mjs`, component and text digest named) is the evidence it cites.
  *    Nothing is imported: production's fuses and witnesses do not exist for these surfaces, and the text lives in code a reviewed release ships. The target's baseline is that code's own text.
@@ -39,7 +39,6 @@ export const MODULE_SOURCE_KIND = 'module-arms';
 export const MODULE_COST_IDENTITY = 'operator-box-reference-price-cny';
 /** What a surface changes of its module's policy: the one component the serving layer lets it supply, read from no other table on purpose (tests/moduleCampaign.test.mjs holds it to `parseRsiPolicyCandidate`). */
 export const MODULE_SURFACES = Object.freeze({
-  'autopilot-planner': Object.freeze({ moduleId: 'autopilot', component: 'plannerInstructions' }),
   'frontier-screen': Object.freeze({ moduleId: 'frontier', component: 'screenInstructions' }),
   'frontier-edit': Object.freeze({ moduleId: 'frontier', component: 'editInstructions' }),
 });

@@ -1617,19 +1617,6 @@ test("a request over the runtime socket carries the authority the cookie was min
 });
 
 
-test('the evolution admission endpoint takes no parameters and answers the executor\'s counters', async t => {
-  const tmp=await shortTempDir('evolution-admission-'),dataDir=path.join(tmp,'data'),socketPath=path.join(tmp,'c.sock');
-  await mkdir(dataDir,{recursive:true});const dockerBin=await fakeDocker(tmp);
-  const controller=createRuntimeController({...controllerConfig({dataDir,socketPath,dockerBin}),evolutionEnabled:true});
-  t.after(async()=>{await controller.close();await rm(tmp,{recursive:true,force:true});});
-  await controller.listen();const client=new RuntimeControllerClient({runtimeControllerSocket:socketPath});
-  await assert.rejects(()=>client.request('POST','/v1/runtime/evolution-admission',{command:'docker ps'}),error=>error.status===400);
-  const answer=await client.evolutionAdmissionAvailable();
-  assert.deepEqual(Object.keys(answer),['executor']);
-  assert.equal(typeof answer.executor,'object');
-  assert.notEqual(answer.executor,null,'the executor exposes its counters through here and nowhere else');
-});
-
 test("release gate profile crosses the actual controller socket and changes only the model target", async (t) => {
   const tmp = await shortTempDir("gate-socket-");
   const dataDir = path.join(tmp, "data");

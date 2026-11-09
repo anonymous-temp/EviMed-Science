@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * The arms of a module-policy campaign (module_campaign.mjs, 2026-11-04). It runs on the operator's box, because the lab holds no DeepSeek key: production's own classes
- * (`AutopilotPlanner` with `buildPlannerContext`, `FrontierEditor`) on `deepseek-flash`, so the prompt under test is the one that ships and nothing is copied; a candidate reaches
+ * (`FrontierEditor`) on `deepseek-flash`, so the prompt under test is the one that ships and nothing is copied; a candidate reaches
  * them the way a served policy does, through `createModuleEvolutionPolicies`. No usage ledger, no account, nothing of production touched. Commands, each printing one JSON line:
  *
- *   node module_arms.mjs register --surface autopilot-planner --scorer autopilot-checklist --round r1 --salt s [--development 6] [--confirmation 3] [--repeats-development 2] [--repeats-confirmation 3]
+ *   node module_arms.mjs register --surface frontier-edit --scorer frontier-numbers --round r1 --salt s [--development 6] [--confirmation 3] [--repeats-development 2] [--repeats-confirmation 3]
  *        [--failure-slice a,b] [--margin 0.05] [--campaigns-per-quarter 3] [--candidates-max 3] [--judge judge.json --judge-noise judge-noise.json] [--items-from-export f --sample n] [--exclude-from f ...] --out round.json
  *   node module_arms.mjs run --registration round.json --role development|confirmation --key-file k --out out.json [--candidates c.json] [--items-from-export f] [--concurrency 4] [--allow-incomplete]
  *   node module_arms.mjs draw --items-from-export f --sample n --salt s [--exclude-from f ...]    (the supply: counts only, no text)
@@ -32,7 +32,6 @@ import { parseArgs } from 'node:util';
 import { canonicalRsiJson } from '../../apps/server/src/rsiCampaignBundle.mjs';
 import { rsiClosureSettings } from '../../apps/server/src/rsiClosureSettings.mjs';
 import { computeRsiDependencyClosure } from '../../apps/server/src/rsiDependencyClosure.mjs';
-import { AUTOPILOT_PLANNER_INSTRUCTIONS, AutopilotPlanner, buildPlannerContext, eligibleTaskTypes } from '../../apps/server/src/autopilotNextAction.mjs';
 import { FRONTIER_EDITOR_VERSION, FRONTIER_EDIT_INSTRUCTIONS, FRONTIER_SCREEN_INSTRUCTIONS, FrontierEditor, editNumberSource, frontierEditPolicyCurrent, isChineseTitle } from '../../apps/server/src/frontierEditor.mjs';
 import { checkNumbers } from '../../apps/server/src/frontierNumbers.mjs';
 import { createModuleEvolutionPolicies } from '../../apps/server/src/moduleEvolutionPolicies.mjs';
@@ -52,7 +51,7 @@ const record = (value) => value !== null && typeof value === 'object' && !Array.
 const MODEL = HARNESS_SOLVER.model;
 export const EXIT_INCOMPLETE = 3, EXIT_UNPRICED = 4;
 /** What the provider's answer can end in that is the solver's and not the infrastructure's: a non-delivery the lab scores 0. Every other failure is never a measurement. */
-const SOLVER_CODES = new Set(['autopilot_planner_invalid', 'autopilot_planner_incomplete', 'frontier_model_incomplete', 'frontier_screen_invalid']);
+const SOLVER_CODES = new Set(['frontier_model_incomplete', 'frontier_screen_invalid']);
 const closedCode = (error) => (typeof error?.code === 'string' && /^[a-z0-9_]{1,80}$/.test(error.code) ? error.code : 'module_arms_call_failed');
 
 // ------------------------------------------------------------------------------------------------------------------ the cases
@@ -72,14 +71,11 @@ const FRONTIER_KINDS = Object.freeze({
 
 /**
  * The cases a surface can read from their eval files, as rows of a source plus what each variant runs on: `{id, category, gold, variants}`. The category is the failure
- * slice's stratum: a planner case's closed kind of answer, a frontier case's kind.
+ * slice's stratum: a frontier case's kind.
  * @param {string} surface
  */
 export async function moduleCasePool(surface) {
   const json = async (name) => JSON.parse(await readFile(join(openScience, 'evals', name, 'cases.json'), 'utf8'));
-  if (surface === 'autopilot-planner') {
-    return (await json('autopilot-next-action')).cases.map((item) => ({ id: item.id, category: item.expect.every((want) => want.action === 'stop') ? 'stop' : 'run', gold: { expect: item.expect }, variants: variantsOf(item, (variant) => variant) }));
-  }
   const cases = await json('frontier-editing');
   const rows = Object.entries(FRONTIER_KINDS).filter(([kind]) => surface === 'frontier-edit' || kind === 'lane').flatMap(([kind, shape]) => (cases[shape.list] ?? []).map((item) => ({ id: item.id, category: kind, gold: { ...shape.gold(item), ...abstention(item) },
     variants: variantsOf(item, (variant) => ({ edit: variant.edit, screen: variant.screen ?? null, allowedLanes: shape.lanes(), lane: shape.lane() })) })));
@@ -135,18 +131,6 @@ const sourceNumbers = (modelInput) => { const text = editNumberSource(modelInput
 
 /** What a surface's arm does with one variant: production's call, the answer as the lab reads it. Each returns `{unit}` or `{solverCode}`, and throws nothing of the provider's: the meter saw it. */
 const VARIANT_RUNNERS = Object.freeze({
-  async 'autopilot-planner'({ input, config, callModel, policies, episodeId }) {
-    const planner = new AutopilotPlanner(config, { usageLedger: null, callModel, policies });
-    const agenda = { id: 'agenda-module-arm', projectId: 'module-arm', payload: { ...input.agenda, taskTypeState: {} } };
-    const eligible = eligibleTaskTypes(agenda.payload), pauseAllowed = input.pauseAllowed === true;
-    const context = buildPlannerContext({ agenda, progress: input.progress, eligible, date: input.date ?? '2026-10-04', trigger: input.trigger ?? 'scheduled', note: input.note ?? null, reducedPriority: false, stopAllowed: input.stopAllowed, pauseAllowed });
-    const inputSha256 = sha256(JSON.stringify(context));
-    try {
-      const decision = await planner.decide({ userId: 'module-arm', projectId: 'module-arm', episodeId, context, eligible, stopAllowed: input.stopAllowed, pauseAllowed });
-      const { model, policyRevisionId, ...answer } = decision;
-      return { unit: { inputSha256, decision: answer }, policyRevisionId };
-    } catch (error) { return { solverCode: closedCode(error) }; }
-  },
   async 'frontier-edit'({ input, config, callModel, policies, defaultsLane = input.lane }) {
     const editor = new FrontierEditor(config, { usageLedger: null, owner: { userId: 'module-arm', projectId: 'module-arm' }, callModel, policies });
     const edited = await editor.edit({ ...input.edit, allowedLanes: input.allowedLanes, defaults: { lane: defaultsLane } });
@@ -190,7 +174,7 @@ async function runOne({ surface, row, armId, repeat, revision, config, callModel
   const units = [], inputs = {};
   let policyRevisionId = null, solverCode = null;
   for (const { variant, input } of row.variants) {
-    const done = await VARIANT_RUNNERS[surface]({ input, config, callModel: metered, policies, episodeId: `module-arm-${randomUUID()}` });
+    const done = await VARIANT_RUNNERS[surface]({ input, config, callModel: metered, policies });
     if (done.solverCode) { solverCode = done.solverCode; break; }
     units.push({ variant, ...done.unit });
     policyRevisionId = done.policyRevisionId;
@@ -202,7 +186,7 @@ async function runOne({ surface, row, armId, repeat, revision, config, callModel
   const cost = moduleRunCost(meter.calls, MODEL, REFERENCE_PRICE_LIST);
   if (cost === null) throw new ArmsStop('module_arms_cost_unpriced');
   // A candidate production's class did not serve is a mismeasurement of the whole arm, not a bad run: the editor falls back to its code default when instructions lack an answer key, and says so by
-  // stamping what it wrote with the shipped version (the editor's stamp is of the text it used; the planner's is the revision it resolved).
+  // stamping what it wrote with the shipped version (the editor's stamp is of the text it used).
   if (!solverCode && !['baseline', 'aa'].includes(armId) && (policyRevisionId === FRONTIER_EDITOR_VERSION || String(policyRevisionId).startsWith('default:'))) throw new ArmsStop('module_arms_candidate_not_served');
   return { inputs, run: { row: row.id, arm: armId, repeat, runId: `module-${row.id}-${armId}-${repeat}`, status: solverCode ? 'failed' : 'succeeded', answer: solverCode ? null : { units }, cost, calls: meter.calls, policyRevisionId: solverCode ? null : policyRevisionId, ...(solverCode ? { solverCode } : {}) } };
 }
@@ -291,7 +275,7 @@ export async function runModuleArms({ surface, role, scorerId, rows, repeats, ca
  * @param {string} surface
  */
 export function moduleIncumbent(surface) {
-  const defaults = { plannerInstructions: AUTOPILOT_PLANNER_INSTRUCTIONS, screenInstructions: FRONTIER_SCREEN_INSTRUCTIONS, editInstructions: FRONTIER_EDIT_INSTRUCTIONS };
+  const defaults = { screenInstructions: FRONTIER_SCREEN_INSTRUCTIONS, editInstructions: FRONTIER_EDIT_INSTRUCTIONS };
   const componentSha256 = sha256(defaults[MODULE_SURFACES[surface].component]);
   return { revisionId: `code-default:${componentSha256.slice(0, 16)}`, componentSha256 };
 }

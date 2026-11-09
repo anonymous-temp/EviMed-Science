@@ -1,13 +1,12 @@
 import { maintenanceAllowsClaims } from './maintenanceService.mjs';
 
 /**
- * The bound on what serving writes at a rate. What it writes per researcher action and nothing reads for ever carries `retainUntil` from the day it is written, and a daily pass
- * deletes it past that date, with its revisions (the foreign key) and, for an event, its finished job. Three record types:
- *  - a processed event of a type no later step reads: its one reader was the worker, once. A repeat of the event after that would consume it again, and consuming is idempotent;
+ * The bound on what the signal store writes at a rate. What it writes per researcher action and nothing reads for ever carries `retainUntil` from the day it is written, and a daily
+ * pass (`evolutionRetentionRunner.mjs`) deletes it past that date, with its revisions (the foreign key) and, for an event, its finished job. Three record types:
+ *  - a processed event: tool serving wrote them and was deleted (2026-11-09), so nothing writes one now; the rows it dated are still deleted on their date, with their finished jobs;
  *  - a signal and a lead occurrence: read by the offline lab's export (`scripts/ops/rsi-signals-export.mjs`) over a window of the retention period. A versioned signal (a GEO
  *    misconception, which `geoLearningSignals.mjs` withdraws by identity) carries no date: it is one row per assessed statement, not per action.
- * A row with no `retainUntil` is never touched: every row written before this existed stays as it was, and so does a `dataset-ready` event until a newer revision of its dataset
- * dates it (`EvolutionIntegration.datasetChanged`).
+ * A row with no `retainUntil` is never touched: every row written before this existed stays as it was, and so does a `dataset-ready` event that was never dated.
  */
 const DAY_MS = 86_400_000;
 

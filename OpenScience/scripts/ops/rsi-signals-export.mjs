@@ -9,8 +9,8 @@
  *   - `signals`: the platform's own signal records (`evolutionSignals.mjs`), counted by module, kind, capability, operation, data shape and
  *     reason. Every code is projected through the release's closed vocabularies in the statement itself — a value outside one is `unknown`,
  *     a record of another module or kind is not read — so nothing an account wrote can reach the output through a code.
- *   - `leads`: what the platform's modules and runs filed as a gap they could not fill (`evolutionService.addLead`: autopilot and runtime-failure
- *     leads today; the 虚拟临床研究 missing-method and 循证 GEO analysis-not-offered leads of the retired module adapters are history that stays
+ *   - `leads`: what the platform's modules and runs filed as a gap they could not fill (`evolutionLedger.addLead`: a failed run's gap
+ *     today; the scheduler's autopilot leads, and the 虚拟临床研究 missing-method and 循证 GEO analysis-not-offered leads of the retired module adapters are history that stays
  *     readable), by source, track, gap code, closed lead code and endpoint, counted over the accounts that met it.
  *
  * What a row carries is a combination of codes and two counts: `accounts` (distinct) and `occurrences`. A combination fewer than five

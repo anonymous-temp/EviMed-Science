@@ -1,12 +1,8 @@
 /**
- * The yardsticks of the platform's own modules (2026-11-04): what the online experiment engine measured them by (`autopilot-checklist-v1`,
- * `frontier-source-v1`), as an offline campaign's closed scorer table. `registration.scorer` holds an id of the frozen table below, the
+ * The yardsticks of the platform's own modules (2026-11-04): what the online experiment engine measured them by (`frontier-source-v1`), as an offline campaign's closed scorer table. `registration.scorer` holds an id of the frozen table below, the
  * registration's `surface` must be one the scorer measures, and anything else is `campaign_scorer_not_qualified`: no executable path, no
  * dynamic import, no function handed in. Bound into the consumer identity (module_campaign.mjs), like harness_scorers.mjs.
  *
- *  - `autopilot-checklist`  a decision meets a case's closed expected actions (`gold.expect`, any one of them, every key equal). A written
- *                           checklist, not a model's grade: no judge to calibrate, and no number check of its own. The variants of a case are
- *                           one group: the run's score is the share of its variants met.
  *  - `frontier-numbers`     every number and unit of the rewrite is in its source (`frontierNumbers.mjs`, the editor's own check, as `unit.numbers`),
  *                           the closed answer right where the case expects one (the lane, and for the other kinds of frontier-editing/cases.json the
  *                           evidence type, the flags, the industry kind), verification `passed` or `repaired`. A FLOOR of quality, not a measure of it:
@@ -37,13 +33,6 @@ function share(answer, check) {
   const units = unitsOf(answer);
   return units.length ? units.filter(check).length / units.length : 0;
 }
-
-// ------------------------------------------------------------------------------------------------------------------ autopilot
-
-/** @param {any} decision @param {any[]} expect */
-const decisionMet = (decision, expect) => expect.some((want) => Object.entries(want).every(([key, value]) => decision?.[key] === value));
-const autopilotRow = (row) => present(row?.id) && present(row?.category) && record(row?.gold) && Array.isArray(row.gold.expect) && row.gold.expect.length > 0 && row.gold.expect.every((want) => record(want) && Object.keys(want).length > 0);
-const autopilotAnswer = (answer) => answer === null || (unitsOf(answer).length > 0 && unitsOf(answer).every((unit) => present(unit?.variant) && present(unit?.inputSha256) && record(unit?.decision) && ['run', 'stop'].includes(unit.decision.action)));
 
 // ------------------------------------------------------------------------------------------------------------------- frontier
 
@@ -91,8 +80,6 @@ const stratum = Object.freeze({ registration: 'failureSlice', key: String, valid
  * `deterministicPassed` is the unit's code check, present where the score rests on a model's writing: the bar (`moduleDeterministicChecks`) reads it.
  */
 export const MODULE_SCORERS = Object.freeze({
-  'autopilot-checklist': Object.freeze({ id: 'autopilot-checklist', benchmark: 'autopilot-next-action', benchmarks: Object.freeze(['autopilot-next-action']), family: 'autopilot', surfaces: Object.freeze(['autopilot-planner']),
-    slice: stratum, validRow: autopilotRow, validAnswer: autopilotAnswer, score: (answer, row) => share(answer, (unit) => decisionMet(unit.decision, row.gold.expect)) }),
   'frontier-numbers': Object.freeze({ id: 'frontier-numbers', benchmark: 'frontier-editing', benchmarks: Object.freeze(['frontier-editing']), family: 'frontier', surfaces: Object.freeze(['frontier-edit', 'frontier-screen']),
     slice: stratum, validRow: frontierRow, validAnswer: frontierAnswer, score: frontierFloor, deterministicPassed: frontierNumbersPassed }),
   'frontier-source': Object.freeze({ id: 'frontier-source', benchmark: 'frontier-editing', benchmarks: Object.freeze(['frontier-editing']), family: 'frontier', surfaces: Object.freeze(['frontier-edit']),

@@ -30,6 +30,8 @@ import { VCR_INTAKE_LONG_KINDS } from "./vcrIntakeLayout.mjs";
 // Version 17 changes launch semantics with no new field: the controller derives the disabled platform skills and client bundles
 // (`EVIMED_DISABLED_PLATFORM_SKILLS` / `EVIMED_DISABLED_CLIENT_BUNDLES`) from the verified personal generation's manifest, so a
 // web image refuses an older controller that would launch without them instead of mis-launching the project's choices.
+// Not a bump (2026-11-09): the start field `platformSkillGeneration` and the `evolution-admission` operation were removed with
+// published-tool serving. The field was sent only for a published generation, and none exists; no new web image calls the operation.
 export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 17;
 
 function controllerError(code, message, status = 503) {
@@ -257,9 +259,6 @@ export class RuntimeControllerClient {
 
   execVerify(body, { signal = undefined } = {}) { return this.request("POST", "/v1/runtime/exec-verify", body, { signal, timeoutMs: 75000, maxResponseBytes: 128 * 1024 }); }
 
-
-  evolutionAdmissionAvailable() { return this.request("POST", "/v1/runtime/evolution-admission", {}); }
-
   extensionToolAdmission() { return this.request("POST", "/v1/extensions/tool/admission", {}); }
   async admissionAvailable() { return (await this.extensionToolAdmission())?.available === true; }
 
@@ -310,11 +309,11 @@ export class RuntimeControllerClient {
 
   /** @param {any} project @param {number} port @param {string} password @param {string} [capsuleGatewayUrl]
    * @param {string} [revisionGatewayUrl] @param {string} [publicSourceGatewayUrl] @param {any} [pluginConfig]
-   * @param {any} [personalSkillGeneration] @param {any} [extensionGeneration] @param {any} [platformSkillGeneration]
+   * @param {any} [personalSkillGeneration] @param {any} [extensionGeneration]
    * @param {string} [memoryGatewayUrl] @param {boolean} [geoSkills] @param {string} [modelGatewayProfile]
    * @param {any} [contextGeneration] @param {string} [attendancePublicKey]
    * The controller gets only an Ed25519 public verifier; the API's signing secret stays in the API process. */
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = undefined, contextGeneration = null, attendancePublicKey = "") {
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = undefined, contextGeneration = null, attendancePublicKey = "") {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -326,7 +325,6 @@ export class RuntimeControllerClient {
       pluginConfig,
       ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
       ...(extensionGeneration ? { extensionGeneration } : {}),
-      ...(platformSkillGeneration ? { platformSkillGeneration } : {}),
       ...(contextGeneration ? { contextGeneration } : {}),
       // Protocol 13: the account's memory engine, as the memory gateway's base for one on the native engine. Sent only
       // then; absent, the runtime is launched for the legacy path.

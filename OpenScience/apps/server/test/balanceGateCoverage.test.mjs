@@ -47,7 +47,8 @@ test("every researcher-owned dispatch asks the allowance first, and the platform
       sites.push({ file: name, holder, before: text.slice(anchor.index, match.index) });
     }
   }
-  assert.ok(sites.length >= 8, `${sites.length} dispatch sites found; the scan did not walk`);
+  // Seven since 2026-11-09 (the scheduler and 循证进化's runs no longer dispatch): five in server.mjs and the two internal jobs.
+  assert.ok(sites.length >= 7, `${sites.length} dispatch sites found; the scan did not walk`);
 
   const inServer = sites.filter((site) => site.file === "server.mjs");
   assert.deepEqual(inServer.map((site) => site.holder).sort(), [...RESEARCHER_OWNED].sort(),

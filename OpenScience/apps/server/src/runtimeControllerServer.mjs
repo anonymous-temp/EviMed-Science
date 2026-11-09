@@ -1,6 +1,5 @@
 import { verifyContextGeneration } from './runtimeContextGeneration.mjs';
 import { createOpenVikingCompileObserver } from "./openVikingCompileObserver.mjs";
-import { verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
 import { createEvolutionVerificationController } from "./evolutionVerificationController.mjs";
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
 import { createDocumentRenderController } from "./documentRenderController.mjs";
@@ -419,9 +418,6 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
   // is background work only for an operator, from the same setting.
   const isBackground = (userId, projectId) => isInternalProjectOf(config, userId, projectId);
 
-  /** What the tool executor has done and refused, for the control plane's metrics: this process exposes none of its own. */
-  function evolutionAdmissionAvailable() { return { executor: evolutionVerification.counters?.() ?? null }; }
-
   function reserveRuntimeCapacity(project) {
     const limits = runtimeCapacityLimits(config);
     const inventory = dockerRuntimeInventory(config);
@@ -584,16 +580,14 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         throw controllerFailure(400, 'extension_contract_invalid', 'Selected tool bridge is unavailable.');
       }
     }
-    const platform = payload.platformSkillGeneration ? await verifyPlatformSkillGeneration(config, payload.platformSkillGeneration) : null;
     const personal = payload.personalSkillGeneration ? await verifyPersonalSkillGeneration(config, project, payload.personalSkillGeneration) : null;
     if (personal) {
       const existing = spawnSync(config.runtimeContainerBin, ['image', 'inspect', '--format', '{{.Id}}', personal.identity.baseRuntimeImageDigest], { encoding: 'utf8', timeout: 5000, maxBuffer: 65536 });
       if (existing.status !== 0 || existing.stdout.trim() !== personal.identity.baseRuntimeImageDigest) throw controllerFailure(503, 'runtime_image_unavailable', 'The pinned personal skill runtime image is unavailable.');
     }
     const contextGeneration = payload.contextGeneration ? await verifyContextGeneration(config, project, payload.contextGeneration) : null;
-    const plan = buildRuntimeLaunchPlan(config, project, port, { modelGatewayProfile: payload.modelGatewayProfile ?? "", contextGeneration, capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, attendancePublicKey, geoSkills, pluginConfig, platformSkillGeneration: platform?.reference ?? null, disabledPlatformSkills: personal?.platformSkills?.disabled ?? [], disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? [],
+    const plan = buildRuntimeLaunchPlan(config, project, port, { modelGatewayProfile: payload.modelGatewayProfile ?? "", contextGeneration, capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, memoryGatewayUrl, attendancePublicKey, geoSkills, pluginConfig, disabledPlatformSkills: personal?.platformSkills?.disabled ?? [], disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? [],
       personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null });
-    plan.platformSkillGeneration = platform;
     plan.extensionGeneration = extension;
     if (plan.releaseProvenance) logUnverifiedRelease(project, plan.releaseProvenance);
     await cleanupRuntime(project);
@@ -730,10 +724,6 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         if (url.search) throw controllerFailure(400, "runtime_controller_payload_invalid", "This observation takes no parameters.");
         sendJson(res, 200, { data: await observeOpenVikingCompile() });
         return;
-      }
-      if(req.method==='POST'&&url.pathname==='/v1/runtime/evolution-admission'){
-        const payload=await readJson(req,1024);assertExactKeys(payload,[]);
-        sendJson(res,200,{data:evolutionAdmissionAvailable()});return;
       }
       if (req.method === "GET" && url.pathname === "/v1/health") {
         const docker = dockerInfo(config);
@@ -888,7 +878,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         // Protocol 8 deliberately accepts this exact version-7 citation shape;
         // Selected extension generations add only a fixed opaque immutable reference.
         const allowed = url.pathname === "/v1/runtime/start"
-          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile", "contextGeneration", "attendancePublicKey"]
+          ? ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile", "contextGeneration", "attendancePublicKey"]
           : ["userId", "projectId", "activeWorkspace"];
         assertExactKeys(payload, allowed);
         const project = await projectFromReference(config, payload);
@@ -937,7 +927,6 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
   return {
     config,
     socketPath,
-    evolutionAdmissionAvailable,
     async listen() {
       if (server.listening || ownedSocket) {
         throw controllerFailure(409, "runtime_controller_already_running", "Runtime controller is already listening.");

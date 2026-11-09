@@ -1,5 +1,4 @@
 import { isDataAnalysisProject } from '../internalProjects.mjs';
-import {platformSkillGenerationRoot,verifyPlatformSkillGeneration} from "../platformSkillSupply.mjs";
 import { verifyPersonalSkillGeneration } from '../personalSkillGenerationService.mjs';
 import { openScopedFileNoFollow, readStableFileHandle } from '../security.mjs';
 /**
@@ -481,8 +480,8 @@ export class AgentBayRuntimeProvider {
     return result.stdout.slice(-4096);
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean }} input */
-  async prepare(project, { pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean }} input */
+  async prepare(project, { pluginConfig, capsuleMethodsMounted, personalSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false }) {
     this.assertConfigured();
     const identity = await this.manager.generationImageIdentity();
     const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference, identity.imageId) : null;
@@ -544,8 +543,6 @@ export class AgentBayRuntimeProvider {
       pluginConfig,
       personalSkillGeneration: personal ? { ...personalSkillGeneration, platformSkills: personal.platformSkills } : null,
       personalSkillsRuntimeDir: personal ? `/opt/evimed/personal-skill-generations/${personal.reference.ownerHash}/${personal.reference.projectHash}/${personal.reference.generationHash}/skills` : '/opt/evimed/personal-skills',
-      platformSkillGeneration,
-      platformSkillsRuntimeDir: platformSkillGeneration ? `/opt/evimed/platform-skill-generations/${platformSkillGeneration.reference.generationHash}/skills` : "",
       gateways: publicRuntimeGatewayUrls(this.config),
       // The memory engine, as the address a session outside this host reaches the memory gateway at: the public prefix's when
       // the deployment has one, empty otherwise (`RuntimeManager.memoryGatewayUrlFor`).
@@ -596,24 +593,6 @@ export class AgentBayRuntimeProvider {
     files.set("bridge.secret", `${ab.bridgeSecret}\n`);
     files.set("kernel.env", renderKernelEnvironment(this.kernelEnvironment(project, plan)));
     if (plan.personalSkillGeneration?.reference) await this.syncPersonalGeneration(project, plan);
-    if (plan.platformSkillGeneration) {
-      const selected = await verifyPlatformSkillGeneration(this.config, plan.platformSkillGeneration.reference);
-      const host = platformSkillGenerationRoot(this.config, selected.reference);
-      const directories = new Set([plan.platformSkillsRuntimeDir]);
-      for (const pin of selected.pins) for (const file of pin.files) {
-        const relative = `${pin.nativeName}/${file.path}`, target = `${plan.platformSkillsRuntimeDir}/${relative}`;
-        let directory = path.posix.dirname(target);
-        while (directory.startsWith(plan.platformSkillsRuntimeDir)) { directories.add(directory); if (directory === plan.platformSkillsRuntimeDir) break; directory = path.posix.dirname(directory); }
-      }
-      const made = await this.command(ab.session, `install -d -m 0755 ${[...directories].sort().map(item => "'"+item+"'").join(' ')}`);
-      if (!made.ok) throw new HttpError(502, "agentbay_file_write_failed", "The immutable platform generation could not be prepared.");
-      for (const pin of selected.pins) for (const file of pin.files) {
-        const relative = `${pin.nativeName}/${file.path}`, target = `${plan.platformSkillsRuntimeDir}/${relative}`;
-        await this.writeSessionFile(ab.session, target, await fs.readFile(path.join(host, 'skills', relative), 'utf8'));
-        const hardened = await this.command(ab.session, `chmod 0444 '${target}' && chown 0:0 '${target}' && sha256sum '${target}'`);
-        if (!hardened.ok || hardened.stdout.trim().split(/\s+/)[0] !== file.digest.slice(7)) throw new HttpError(502, "agentbay_file_write_failed", "The immutable platform file could not be protected.");
-      }
-    }
     const methods = await this.capsuleMethodsBundle(project);
     if (methods) files.set("capsule-methods.json", methods);
     await this.command(ab.session, `mkdir -p ${SESSION_PATHS.incoming} && chmod 0700 ${SESSION_PATHS.incoming}`);
@@ -647,8 +626,6 @@ export class AgentBayRuntimeProvider {
         disabledPlatformSkills: plan.personalSkillGeneration?.platformSkills?.disabled ?? [],
         disabledClientBundles: [...new Set([...(plan.personalSkillGeneration?.platformSkills?.disabledPlugins ?? []),
           ...(config.runtimeAnnotationEnabled === false ? ['annotation'] : []), ...(config.runtimeMermaidEnabled === false ? ['mermaid'] : [])])],
-        platformSkillsDir: plan.platformSkillsRuntimeDir ?? "",
-        evolutionGatewayUrl: plan.platformSkillGeneration ? gateways.evolution : "",
         capsuleMethodsDir: plan.capsuleMethodCount ? SESSION_PATHS.capsuleMethods : "",
         capsuleGatewayUrl: gateways.capsule,
         attendanceAuthority: { publicKey: plan.attendancePublicKey ?? (config.modelGatewaySigningSecret ? runContextAuthorityPublicKey(config.modelGatewaySigningSecret) : ""),

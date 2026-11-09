@@ -46,7 +46,7 @@ async function application(t, { budget }) {
     modelGatewaySigningSecret: randomBytes(32).toString("hex"), evimedWorkloadSigningSecret: randomBytes(32).toString("hex"),
     requireDurableUsageLedger: true, operatorMetricsToken: operatorToken,
     openVikingModelKey: serviceKey, openVikingModelDailyBudgetCny: budget, openVikingEngine: engineStub,
-    evolutionEnabled: false, learningEnabled: false,
+    learningEnabled: false,
   });
   const address = await app.listen(0, "127.0.0.1");
   const base = `http://127.0.0.1:${address.port}`;

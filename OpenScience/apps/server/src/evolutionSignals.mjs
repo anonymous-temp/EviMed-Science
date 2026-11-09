@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { GEO_ERROR_TYPES, GEO_STATEMENT_TOPICS } from '@evimed/domain';
-import { evolutionKey } from './evolutionService.mjs';
+import { evolutionKey } from './evolutionLedger.mjs';
 import { EVOLUTION_MODULE_IDS } from './evolutionUsage.mjs';
 import { isInternalProject } from './internalProjects.mjs';
 import { evolutionAccountFloors } from './evolutionAccountClasses.mjs';
@@ -14,8 +14,8 @@ export const EVOLUTION_SIGNAL_KINDS = Object.freeze(['unmet-demand', 'route-over
 /** All user signals stay owner scoped, closed codes only, for the offline lab; they stay for the retention period (`evolutionRetention.mjs`) unless versioned.
  * `aggregate` is GEO's outbox's (`geoLearningSignals.mjs`): the summaries of the signals in force, reconciled in the commit that withdraws one. `operatorIds` names the
  * accounts of the operator class and `floors` the number of different accounts each class needs (`evolutionAccountFloors`).
- * @param {{service:any,capabilityIds:()=>Promise<string[]>,operatorIds?:()=>string[],floors?:{user:number,operator:number}}} dependencies */
-export function createEvolutionSignals({ service, capabilityIds, operatorIds = () => [], floors = evolutionAccountFloors() }) {
+ * @param {{ledger:any,capabilityIds:()=>Promise<string[]>,operatorIds?:()=>string[],floors?:{user:number,operator:number}}} dependencies */
+export function createEvolutionSignals({ ledger, capabilityIds, operatorIds = () => [], floors = evolutionAccountFloors() }) {
   const versioned = input => Number.isSafeInteger(input.sourceRevision) && input.sourceRevision > 0;
   const signalId = input => `evolution-signal-${evolutionKey([input.userId, ...(versioned(input) ? [input.projectId] : []), input.eventId, input.kind])}`;
   /** What the last `aggregate()` did with the groups it saw, per class: written as a summary, or held back below the class's floor
@@ -35,17 +35,17 @@ export function createEvolutionSignals({ service, capabilityIds, operatorIds = (
       topic: GEO_STATEMENT_TOPICS.includes(input.topic) ? input.topic : 'other',
     });
     const id = signalId(input);
-    return service.withLock(`signal:${input.userId}:${id}`,async()=>{
-    const previous = await service.get(id, input.userId);
+    return ledger.withLock(`signal:${input.userId}:${id}`,async()=>{
+    const previous = await ledger.get(id, input.userId);
     if (previous && (!versioned(input) || Number(previous.payload.sourceRevision ?? 0) >= input.sourceRevision)) return previous;
     const payload = { kind: input.kind, moduleId: input.moduleId, codes, projectId: input.projectId,
       sourceEventId: input.eventId, sourceVersion: String(input.version ?? '').slice(0, 128),
       ...(versioned(input) ? { sourceRevision: input.sourceRevision, state: 'active',
         ...(typeof input.provenanceRef === 'string' ? { provenanceRef: input.provenanceRef } : {}),
-        ...(previous ? { supersedesVersion: previous.payload.sourceVersion } : {}) } : { retainUntil: evolutionRetainUntil(service.config ?? {}, service.now()) }),
+        ...(previous ? { supersedesVersion: previous.payload.sourceVersion } : {}) } : { retainUntil: evolutionRetainUntil(ledger.config ?? {}, ledger.now()) }),
       ...(input.kind === 'route-override' ? { fromCapability: allowed.includes(input.fromCapability) ? input.fromCapability : 'unknown' } : {}),
-      firstSeenAt: previous?.payload.firstSeenAt ?? service.now().toISOString(), count: 1, scope: 'owner' };
-    return service.save('signal', id, payload, previous, input.userId);
+      firstSeenAt: previous?.payload.firstSeenAt ?? ledger.now().toISOString(), count: 1, scope: 'owner' };
+    return ledger.save('signal', id, payload, previous, input.userId);
     });
   }
 
@@ -53,20 +53,20 @@ export function createEvolutionSignals({ service, capabilityIds, operatorIds = (
   async function transition(input) {
     if (!versioned(input) || !['suspended', 'invalidated'].includes(input.state)) return null;
     const id = signalId(input);
-    return service.withLock(`signal:${input.userId}:${id}`, async () => {
-      const previous = await service.get(id, input.userId);
+    return ledger.withLock(`signal:${input.userId}:${id}`, async () => {
+      const previous = await ledger.get(id, input.userId);
       if (!previous || previous.payload.projectId !== input.projectId || previous.payload.sourceVersion !== input.expectedVersion
         || (input.expectedRevision !== undefined && previous.revision !== input.expectedRevision)) return null;
       if (previous.payload.state === 'invalidated' || previous.payload.state === input.state) return previous;
-      return service.save('signal', id, { ...previous.payload, state: input.state, stateChangedAt: service.now().toISOString() }, previous, input.userId);
+      return ledger.save('signal', id, { ...previous.payload, state: input.state, stateChangedAt: ledger.now().toISOString() }, previous, input.userId);
     });
   }
 
   async function aggregate() {
-    const db = service.documents.database;
+    const db = ledger.documents.database;
     if (!db) return [];
     const operators = [...new Set(operatorIds().map(String).filter(Boolean))];
-    return service.withLock('signal-aggregate',async()=>{
+    return ledger.withLock('signal-aggregate',async()=>{
     // SQL returns only aggregates; project ids and account ids are not selected. Accounts are counted inside their class: the
     // operator class on its own, everyone else on theirs, so a researcher is never counted towards an operator's floor.
     const rows = await db.query(`SELECT module_id, kind, codes, from_capability, operator_class,
@@ -88,22 +88,22 @@ export function createEvolutionSignals({ service, capabilityIds, operatorIds = (
       counters.aggregated[accountClass]++;
       // A researcher's summary keeps the identity it had before the classes existed; the operator class has its own.
       const key = [row.module_id, row.kind, row.codes, row.from_capability ?? null, ...(accountClass === 'operator' ? ['operator'] : [])];
-      const id = `evolution-signal-summary-${evolutionKey(key)}`, prior = await service.get(id);
+      const id = `evolution-signal-summary-${evolutionKey(key)}`, prior = await ledger.get(id);
       active.add(id);
       // Membership fingerprints remain internal. The public summary carries an unrelated opaque generation.
-      const stateId = `evolution-signal-membership-${evolutionKey(id)}`, state = await service.get(stateId);
+      const stateId = `evolution-signal-membership-${evolutionKey(id)}`, state = await ledger.get(stateId);
       if (state?.payload.membership === row.membership && prior?.payload.state === 'active'
         && prior.payload.occurrences === row.occurrences && prior.payload.distinctAccounts === row.accounts) { result.push(prior); continue; }
-      await service.save('signal-membership', stateId, { membership: row.membership }, state);
-      result.push(await service.save('signal-summary', id, { moduleId: row.module_id, kind: row.kind, codes: row.codes,
+      await ledger.save('signal-membership', stateId, { membership: row.membership }, state);
+      result.push(await ledger.save('signal-summary', id, { moduleId: row.module_id, kind: row.kind, codes: row.codes,
         ...(row.from_capability ? { fromCapability: row.from_capability } : {}), accountClass, state: 'active', generation: randomUUID(),
         occurrences: row.occurrences, distinctAccounts: row.accounts, firstSeenAt: new Date(row.first_seen).toISOString(),
         lastSeenAt: new Date(row.last_seen).toISOString(), scope: 'platform-aggregate' }, prior));
     }
-    for (const prior of await service.list('signal-summary')) {
+    for (const prior of await ledger.list('signal-summary')) {
       if (active.has(prior.id) || prior.payload.state === 'inactive') continue;
       const { occurrences: _occurrences, distinctAccounts: _accounts, ...payload } = prior.payload;
-      await service.save('signal-summary', prior.id, { ...payload, state: 'inactive', generation: randomUUID(), retiredAt: service.now().toISOString() }, prior);
+      await ledger.save('signal-summary', prior.id, { ...payload, state: 'inactive', generation: randomUUID(), retiredAt: ledger.now().toISOString() }, prior);
     }
     return result;
     });

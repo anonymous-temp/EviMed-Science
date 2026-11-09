@@ -6420,13 +6420,12 @@ test("the internal gateways are labelled and ledgered like every other route", a
 
 test("every other internal gateway gets its own label, never /static", async () => {
   // Production 2026-10-09/10: 181 workload-token refusals were filed as "POST /static" because the judge,
-  // ToolUniverse, semantics, evolution, extension and result gateways had no label.
+  // ToolUniverse, semantics, extension and result gateways had no label.
   await withApp(async ({ base, dataDir }) => {
     const expected = new Map([
       ["/internal/judge/v1/ask", "/internal/judge/v1/ask"],
       ["/internal/tooluniverse/v1/rpc", "/internal/tooluniverse/v1/rpc"],
       ["/internal/semantics/v1/read", "/internal/semantics/v1/:action"],
-      ["/internal/evolution/v1/status", "/internal/evolution/v1/:action"],
       ["/internal/extensions/v1/x", "/internal/extensions/v1/:action"],
       ["/internal/results/v1/rows", "/internal/results/v1/:action"],
     ]);
