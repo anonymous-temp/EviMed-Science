@@ -207,6 +207,8 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'decision.value_of_information': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['voi 1.0.3 (evppi and evsi on the same utility matrix and the same regression formula)', 'closed forms of a normal-normal two-decision problem (EVPI, EVPPI of each input, EVPPI of a group)', 'Strong, Oakley & Brennan (2014), case study 1: the overall EVPI of the decision tree and its partial EVPIs against the printed gold standard', 'closed form of the expected power under a normal design prior (the assurance integral)']), modelTier: 'scenario' },
   // A published whole-body PBPK model (Asaumi et al. 2018): midazolam, oral or intravenous, after repeated rifampicin (induction of CYP3A4 in gut wall and liver).
   'pk.interaction': { version: '1.1.0', endpoints: frozen([]), crossChecks: frozen(['deSolve (its stiff integrator on the same equations, the doses as events: the 41 states and the area under the curve, to 1e-6; and the 12 states of the ketoconazole inhibition model, to 1e-6)', 'the inhibition models\' own published predictions (Quinney et al. 2013, Table 4: the intravenous midazolam area ratio after ketoconazole 200 mg daily for six days, 2.5 mixed and 2.0 noncompetitive) and the closed-form static mechanistic ratio of the same equations with the inhibitor held constant', 'the authors\' own simulation of the model (the Metrum Research Group\'s open vignette: the 3 mg midazolam area after 75 mg rifampicin daily for 7 days, 24.70 and 6.84 ng/mL*h, and its dose-response)']), modelTier: 'literature' },
+  // A batch of people's own histories turned into one forecast per person (plan R32): a linear mixed model (continuous endpoints) or the Alzheimer model's individual posterior. R/individualize.R holds the statistics and is called, never edited; the control plane's local forecast provider is the only caller.
+  'forecast.individualize': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['nlme::lme (REML fixed effects, variance components and the best linear unbiased predictions of the random effects, the same table)', 'the exact Gaussian conditional distribution of the random effects of a person (a conjugate update written out by hand)', 'known-truth simulation: the coverage of the 50, 80 and 95 per cent predictive intervals of held-out values', 'a numerical integration of the Alzheimer model\'s intercept-and-slope density (the Laplace approximation held to it)']), modelTier: 'data' },
 })
 
 export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
@@ -279,6 +281,8 @@ export const VCR_JOB_METHODS = Object.freeze({
   decision_voi: 'decision.value_of_information',
   // a published whole-body PBPK model: midazolam with rifampicin's CYP3A4 induction (2026-11-09)
   pk_interaction: 'pk.interaction',
+  // a batch of people's histories into one forecast per person; run by the control plane's local forecast provider (2026-11-09, R32)
+  individualize_forecast: 'forecast.individualize',
   // The batch reading of patient records (D4): run by the control plane on its slow local lane, never by the R engine.
   ...VCR_MATCH_BATCH_JOBS,
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).
@@ -291,6 +295,8 @@ export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
   'profile_snapshot', 'build_cohort', 'synthesize_population', 'population_quality',
   'weight_comparator', 'propensity_weight_comparator', 'rmst', 'match_criteria', 'weighted_cox_comparator',
   'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator', 'stc_comparator', 'target_trial_emulation',
+  // it reads the people's events the control plane projected (pseudonyms, cut at the origin)
+  'individualize_forecast',
   // robustness methods
   'prognostic_adjustment_comparator',
 ])

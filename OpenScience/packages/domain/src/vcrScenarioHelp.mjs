@@ -399,6 +399,12 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
     { label: 'the same victim as a 30-minute intravenous infusion of 2 mg after 600 mg rifampicin daily for ten days, a 70 kg adult', scenario: {
       victim: { drug: 'midazolam', doseMg: 2, route: 'iv', infusionH: 0.5 }, perpetrator: { drug: 'rifampicin', doseMg: 600, doses: 10, gapH: 24 }, weightKg: 70 } },
   ],
+  'forecast.individualize': [
+    { label: 'a linear mixed model of a laboratory value, each person\'s own earlier values updating that person\'s forecast at 90 and 180 days', scenario: {
+      family: 'linear_mixed', inputId: 'snp_events', endpoint: { type: 'continuous', code: 'cd4', unit: 'cells/uL' }, horizonsDays: [90, 180] } },
+    { label: 'the Alzheimer ADAS-cog 11 model\'s individual posterior 182 and 364 days after the forecast origin, 400 draws per person', scenario: {
+      family: 'beta_logit', inputId: 'snp_events', endpoint: { type: 'continuous', code: 'adas_cog_11', unit: 'points' }, horizonsDays: [182, 364], draws: 400 } },
+  ],
   'evidence.reconstruct_km': [{ label: 'one digitized arm and its risk table', scenario: {
     curve: [{ time: 0, surv: 1 }, { time: 12, surv: 0.55 }, { time: 24, surv: 0.3 }],
     riskTable: [{ time: 0, atRisk: 150 }, { time: 12, atRisk: 70 }, { time: 24, atRisk: 20 }],
@@ -780,6 +786,12 @@ const PK_INTERACTION_NOTES = Object.freeze([
   'It is a typical healthy adult: for rifampicin every clearance, flow and volume is per kilogram and weightKg (default 80) is the only person; for ketoconazole the volumes and flows are the typical adult\'s. There is no between-person variability, genotype or disease, so the ratio is the model\'s typical value and not a prediction interval. The rifampicin paper prints no ratio (the model reproduces its authors\' own simulation to the digit); the ketoconazole model reproduces the paper\'s Table 4 for the mixed and noncompetitive models (the competitive one is 9% below the printed 4.5). A comparison with a clinical study is a separate, labelled thing. Say that when you report it.',
 ])
 
+const INDIVIDUALIZE_NOTES = Object.freeze([
+  'It is run by the platform\'s local forecast provider on the people\'s own earlier records and never started from a conversation: the table it reads is the platform\'s projection (the records before the forecast origin, in the endpoint\'s unit, under study pseudonyms).',
+  'Each person\'s own earlier values update the forecast of that person (an empirical-Bayes forecast under a model fitted on the batch itself); a person with no value of their own is not forecast and says so. Nothing leaves the deployment.',
+  'linear_mixed fits a straight line with a random intercept and slope by REML (years from the origin) and treats the fitted covariance as known, so its intervals are slightly narrow for a small batch; beta_logit runs the Alzheimer model (a first observed score is study week 0; baseline MMSE, age, ApoE4 count and sex are read from the person\'s own records, and a person without them is not forecast).',
+])
+
 const SHRINKAGE_NOTES = Object.freeze([
   'It reads a published effect (a difference, or the log of a ratio; the estimate and its standard error) against the primary efficacy results of 23,551 randomized trials of the Cochrane Database (van Zwet et al. 2023): the effect shrunk toward no effect, how much larger the estimate probably is than the truth (the exaggeration, median and quartiles), the probability that its sign is right, and the probability that an exact replication of the same precision reaches two-sided significance in the same direction. futureSe asks the last for a later trial with another standard error (the true effect held).',
   'It is a comparison beside the stated value and never replaces it: the reference is every kind of trial in the database, so it describes a typical trial with this z statistic, not this drug, and it may shrink a trial of a drug with a strong mechanism more than it deserves. Say that when you report it.',
@@ -846,6 +858,7 @@ const METHOD_NOTES = Object.freeze({
   'evidence.shrinkage': SHRINKAGE_NOTES,
   'decision.value_of_information': VOI_NOTES,
   'pk.interaction': PK_INTERACTION_NOTES,
+  'forecast.individualize': INDIVIDUALIZE_NOTES,
   'comparator.maic_time_to_event': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, ...UNANCHORED_NOTES]),
   'comparator.rmst': COMPARATOR_TIME_UNIT_NOTES,
   'comparator.tipping_point': ROBUSTNESS_TIME_UNIT_NOTES,

@@ -126,6 +126,8 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "decision_voi",
     # a published whole-body PBPK model: an oral drug after a CYP3A4 perpetrator (midazolam after rifampicin) (2026-11-09)
     "pk_interaction",
+    # one forecast per person from a batch of people's own histories; the platform's local forecast provider queues it, a conversation does not (2026-11-09)
+    "individualize_forecast",
     # the batch reading of patient records for the criteria's facts (2026-11-01)
     "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",

@@ -780,6 +780,19 @@
         "the authors' own simulation of the model (the Metrum Research Group's open vignette: the 3 mg midazolam area after 75 mg rifampicin daily for 7 days, 24.70 and 6.84 ng/mL*h, and its dose-response)"
       ],
       "modelTier": "literature"
+    },
+    "forecast.individualize": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous"
+      ],
+      "crossChecks": [
+        "nlme::lme (REML fixed effects, variance components and the best linear unbiased predictions of the random effects, the same table)",
+        "the exact Gaussian conditional distribution of the random effects of a person (a conjugate update written out by hand)",
+        "known-truth simulation: the coverage of the 50, 80 and 95 per cent predictive intervals of held-out values",
+        "a numerical integration of the Alzheimer model's intercept-and-slope density (the Laplace approximation held to it)"
+      ],
+      "modelTier": "data"
     }
   },
   "jobMethods": {
@@ -832,7 +845,8 @@
     "train_prognostic_model": "model.prognostic_train",
     "generate_progression": "patients.progression",
     "decision_voi": "decision.value_of_information",
-    "pk_interaction": "pk.interaction"
+    "pk_interaction": "pk.interaction",
+    "individualize_forecast": "forecast.individualize"
   },
   "patientLevelJobKinds": [
     "fit_survival_model",
@@ -852,6 +866,7 @@
     "covariate_set_comparator",
     "stc_comparator",
     "target_trial_emulation",
+    "individualize_forecast",
     "prognostic_adjustment_comparator"
   ],
   "observedOnlyMethods": [
@@ -15011,6 +15026,94 @@
         }
       }
     },
+    "forecast.individualize": {
+      "t": "object",
+      "fields": {
+        "family": {
+          "t": "string",
+          "values": [
+            "linear_mixed",
+            "beta_logit"
+          ],
+          "req": true
+        },
+        "inputId": {
+          "t": "string",
+          "ref": "input",
+          "maxLength": 141,
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous"
+              ],
+              "req": true
+            },
+            "code": {
+              "t": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "req": true
+            },
+            "unit": {
+              "t": "string",
+              "maxLength": 40
+            }
+          },
+          "req": true
+        },
+        "horizonsDays": {
+          "t": "array",
+          "items": {
+            "t": "number",
+            "gt": 0,
+            "max": 36500,
+            "unit": "days"
+          },
+          "min": 1,
+          "max": 24,
+          "increasing": true,
+          "req": true
+        },
+        "draws": {
+          "t": "integer",
+          "min": 100,
+          "max": 4000,
+          "default": 400,
+          "when": {
+            "path": "family",
+            "in": [
+              "beta_logit"
+            ]
+          }
+        },
+        "parameterSet": {
+          "t": "object",
+          "fields": {
+            "id": {
+              "t": "string",
+              "maxLength": 64,
+              "req": true
+            },
+            "version": {
+              "t": "string",
+              "maxLength": 64,
+              "req": true
+            }
+          },
+          "when": {
+            "path": "family",
+            "in": [
+              "beta_logit"
+            ]
+          }
+        }
+      }
+    },
     "accrual.poisson_gamma": {
       "t": "object",
       "fields": {
@@ -15978,7 +16081,8 @@
     "train_prognostic_model",
     "generate_progression",
     "decision_voi",
-    "pk_interaction"
+    "pk_interaction",
+    "individualize_forecast"
   ],
   "endpointTypes": [
     "continuous",

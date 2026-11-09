@@ -340,6 +340,10 @@ vcr_test_handler_jobs <- function() {
   in_subj <- vcr_test_input(subj, "snp_e05:subject", "subject")
   in_event <- vcr_test_input(ev, "snp_e05:event", "event")
   in_file <- vcr_test_input(subj, "snp_e05:1")
+  # a projected history for the individualized forecast: 12 people, 3 visits each, built without a draw so the other cases' random tables do not move
+  hist <- data.frame(subject = rep(sprintf("P%02d", 1:12), each = 3L), code = "cd4", day = rep(c(-120, -60, 0), 12L), stringsAsFactors = FALSE)
+  hist$value <- 400 + 12 * (as.integer(substr(hist$subject, 2, 3)) %% 5) * 10 + (hist$day / 30) * (3 + (as.integer(substr(hist$subject, 2, 3)) %% 3)) + ((seq_len(nrow(hist)) * 7L) %% 11) - 5
+  in_hist <- vcr_test_input(hist, "snp_e05:hist")
   in_syn <- vcr_test_input(subj[, c("age", "male", "y")], "pop_e05@1", source = "synthetic", kind = "snapshot_file")
   # the comparator-effect methods read a small trial/external-control table of their own
   n2 <- 90L
@@ -400,6 +404,8 @@ vcr_test_handler_jobs <- function() {
            inputs = list(effect = list(family = "normal", mean = 0.5, sd = 0.3), sd = list(family = "fixed", value = 1))), NULL, 60L),
     # the published PBPK model: one rifampicin dose and an intravenous bolus, the cheap path of the family (the 7-day regimen is the case's)
     list("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 1, route = "iv"), perpetrator = list(drug = "rifampicin", doseMg = 600, doses = 1), horizonH = 6), NULL),
+    # the individualized forecast of a batch (R32): the cheap path is the closed-form linear mixed model; the Alzheimer family is the case's
+    list("forecast.individualize", list(family = "linear_mixed", inputId = in_hist$id, endpoint = list(type = "continuous", code = "cd4", unit = "cells/uL"), horizonsDays = c(90, 180)), list(in_hist)),
     list("evidence.reconstruct_km", list(curve = curve_arm(12)$curve, riskTable = curve_arm(12)$riskTable, provenance = list(kind = "digitizer", tool = "e05-digitizer")), list(list(kind = "evidence", id = "ev_e05@1"))),
     list("comparator.entropy_balance", list(covariates = list("age", "male"), treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous")), list(in_subj)),
     list("comparator.propensity_weight", list(covariates = list("age", "male"), treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous")), list(in_subj)),

@@ -37,12 +37,13 @@ test("the people-count keys are the contract's, and the floor is ten", () => {
   assert.deepEqual([...VCR_PEOPLE_COUNT_MAP_KEYS], ["levels", "people", "readable", "startsByArm", "accountingReasons", "eventsByArm"]);
   assert.deepEqual([...VCR_PEOPLE_COUNT_SCALAR_FIELDS], ["rows", "startingRows", "keptRows", "trainingObservations", "effectiveSampleSize",
     "requestedSubjects", "batchSubjects", "batchEvaluated", "batchUnavailable", "outsideBatch", "subjectsNotEvaluated",
+    "peopleInTable", "forecastPeople", "peoplePlanned", "peopleDone", "laplaceNotTrusted",
     "peopleSelected", "recordsToRead", "recordsRead", "recordsAlreadyRead", "prefiltered",
     "removedTotal", "keptTotal", "rowsAnalysed", "rowsIncomplete", "droppedRows", "inputRows", "usedRows", "excludedRows", "persons", "personsInTable", "personPeriods",
     "personTrials", "expandedRows", "eligiblePeriods", "recordsCutShort", "rowsDroppedWhereCut", "rowsAfterEventDropped", "observedRows", "nTraining", "nHoldout",
     "holdoutRows", "referenceSize", "leftOut", "smallerGroup", "rowsUsed", "rowsOtherArm", "controlPeopleUsed", "observedPeople"]);
   assert.deepEqual([...VCR_PEOPLE_COUNT_MEASURES], ["rows", "cohort_size", "cohort_size_strict", "cohort_size_lenient", "training_observations", "effective_sample_size",
-    "eligible", "ineligible", "insufficient_evidence", "pending", "records_read", "records_already_read", "trimmed_treated", "trimmed_control"]);
+    "eligible", "ineligible", "insufficient_evidence", "pending", "records_read", "records_already_read", "trimmed_treated", "trimmed_control", "people_forecast", "people_without_forecast"]);
   assert.deepEqual(Object.fromEntries(Object.entries(VCR_PEOPLE_COUNT_BLOCK_FIELDS).map(([block, keys]) => [block, [...keys]])),
     { byYear: ["treated", "control"], estimate: ["people", "records"], plan: ["toRead", "alreadyRead", "prefiltered", "noDocuments", "deferred"],
       covariates: ["missing"], design: ["people"], waitingTime: ["people"],

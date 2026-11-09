@@ -419,6 +419,12 @@ export const NUMERIC_REFERENCES = {
   N130d: { methods: ['patients.progression'], anchors: ['# the independent computation: the posterior on a fine grid of (intercept, slope), normalised by summation'] },
   N130e: { methods: ['patients.progression'], anchors: ['dev <- unlist(lapply(cov_j, function(cv) abs(cv$coverage - cv$level) / cv$mcse))'] },
   N130f: { methods: ['patients.progression'], anchors: ['all(diff(sds) < 0)'] },
+  // the individualized forecast of a batch through its job (plan R32 compute path): the job equals the statistics called by hand, known truth through the job, what is left out by name, determinism
+  N210a: { methods: ['forecast.individualize'], anchors: ['m <- nlme::lme(y ~ t, random = ~ t | id, data = long, method = "REML")', 'list(pass = gap < 1e-9 && ngap < 1e-3 && all(tbl$status == "ok") && nrow(tbl) == 300L,'] },
+  N210b: { methods: ['forecast.individualize'], anchors: ['good <- .n210_coverage(d, "snp_n210b:1")', 'list(pass = worst < 2.64 && e_ind < e_pop,'] },
+  N210c: { methods: ['forecast.individualize'], anchors: ['p <- vcr_with_stream(streams[[k]], function(.) vcr_beta_logit_individual_predict(d$par, d$study, cov, t_obs, o$value, (7 * 26 - day0) / 7, 400L), k)', 'list(pass = gap < 1e-12 && worst < 2.24 && all(tbl$status == "ok"),'] },
+  N210d: { methods: ['forecast.individualize'], anchors: ['c1 <- at$status[at$subject == ad$ids[1]] == "covariates_missing"', 'c2 <- identical(r1$status, "failed") && grepl("input_shape_invalid", codes(r1))'] },
+  N210e: { methods: ['forecast.individualize'], anchors: ['same <- identical(vcr_file_sha256(file.path(one$dir, "person-forecasts.csv"))', 'shape <- identical(names(a), c("subject", "horizonDays", "status"'] },
   // what 1.2.0 did not change
   N105a: { methods: ['patients.progression'], anchors: ['null_new = list(sc("new_study"), "3d355061d1e5a8a507a86121e6f187eff096de74a1028ae03e60be05e5294f42")', 'identical(unname(got), unname(want))'] },
   // the people of an adaptive design whose answer is in events (live check 2026-11-04, design.confirmatory 1.2.0): patient-level simulations and the Lachin-Foulkes chance of an event written out

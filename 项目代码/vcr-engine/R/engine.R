@@ -107,6 +107,7 @@ vcr_engine_handlers <- function() list(
   "design.assurance" = vcr_job_assurance,
   "decision.value_of_information" = vcr_job_decision_voi,
   "pk.interaction" = vcr_job_pk_interaction,
+  "forecast.individualize" = vcr_job_forecast_individualize,
   "design.procova" = vcr_job_procova,
   "accrual.poisson_gamma" = vcr_job_accrual,
   "matching.evaluate" = vcr_job_match_criteria,
@@ -202,6 +203,9 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "individualize")
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression_intercurrent")
 # --- end intercurrent ---
 # --- end individualization ---
+# --- its compute path (plan R32, wave 5): a batch of events in, one forecast per person out, a kept table ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "forecast_individualize")
+# --- end individualization compute path ---
 # --- a second published ADAS-cog structure (plan R28, 2026-11-09) ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression_alternative")
 # --- end alternative ---

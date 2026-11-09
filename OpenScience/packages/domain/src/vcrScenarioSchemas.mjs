@@ -1724,6 +1724,18 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     horizonH: number({ gt: 1, max: 96, default: 48, unit: 'h' }),
   }),
 
+  // One forecast per person from a batch of people's own histories (plan R32). The table is the control plane's projection (one row per event: subject,
+  // code, value, day <= 0 from the origin); the family says which individual posterior is run: the linear mixed model of a continuous endpoint, or the
+  // Alzheimer model's, whose parameter set is the engine's own (the draws are the posterior predictive draws per person).
+  'forecast.individualize': object({
+    family: req(string({ values: ['linear_mixed', 'beta_logit'] })),
+    inputId: req(INPUT_REF),
+    endpoint: req(object({ type: req(string({ values: ['continuous'] })), code: req(string({ minLength: 1, maxLength: 64 })), unit: string({ maxLength: 40 }) })),
+    horizonsDays: req(array(number({ gt: 0, max: 36500, unit: 'days' }), { min: 1, max: 24, increasing: true })),
+    draws: gated(integer({ min: 100, max: 4000, default: 400 }), is('family', 'beta_logit')),
+    parameterSet: gated(object({ id: req(string({ maxLength: 64 })), version: req(string({ maxLength: 64 })) }), is('family', 'beta_logit')),
+  }),
+
   'accrual.poisson_gamma': object({
     sites: req(array(object({
       id: req(string({ minLength: 1, maxLength: 80 })),

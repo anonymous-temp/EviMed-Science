@@ -7824,6 +7824,77 @@
           }
         }
       }
+    },
+    {
+      "name": "forecast.individualize: a linear mixed model of a laboratory value",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:events",
+            "location": "studies/std_1/views/hist_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ],
+        "kind": "individualize_forecast",
+        "method": "forecast.individualize",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "family": "linear_mixed",
+          "inputId": "snp_1:events",
+          "endpoint": {
+            "type": "continuous",
+            "code": "cd4",
+            "unit": "cells/uL"
+          },
+          "horizonsDays": [
+            90,
+            180
+          ]
+        }
+      }
+    },
+    {
+      "name": "forecast.individualize: the Alzheimer individual posterior",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:events",
+            "location": "studies/std_1/views/hist_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ],
+        "kind": "individualize_forecast",
+        "method": "forecast.individualize",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "family": "beta_logit",
+          "inputId": "snp_1:events",
+          "endpoint": {
+            "type": "continuous",
+            "code": "adas_cog_11",
+            "unit": "points"
+          },
+          "horizonsDays": [
+            182,
+            364
+          ],
+          "draws": 400
+        }
+      }
     }
   ],
   "invalid": [
@@ -31996,6 +32067,195 @@
       },
       "expected": [
         "scenario_field_missing@scenario.perpetrator.doses"
+      ]
+    },
+    {
+      "name": "forecast.individualize: a family the method does not run",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:events",
+            "location": "studies/std_1/views/hist_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ],
+        "kind": "individualize_forecast",
+        "method": "forecast.individualize",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "family": "kalman",
+          "inputId": "snp_1:events",
+          "endpoint": {
+            "type": "continuous",
+            "code": "cd4",
+            "unit": "cells/uL"
+          },
+          "horizonsDays": [
+            90,
+            180
+          ]
+        }
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.family"
+      ]
+    },
+    {
+      "name": "forecast.individualize: draws belong to the Alzheimer family only",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:events",
+            "location": "studies/std_1/views/hist_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ],
+        "kind": "individualize_forecast",
+        "method": "forecast.individualize",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "family": "linear_mixed",
+          "inputId": "snp_1:events",
+          "endpoint": {
+            "type": "continuous",
+            "code": "cd4",
+            "unit": "cells/uL"
+          },
+          "horizonsDays": [
+            90,
+            180
+          ],
+          "draws": 400
+        }
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.draws"
+      ]
+    },
+    {
+      "name": "forecast.individualize: horizons must increase",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:events",
+            "location": "studies/std_1/views/hist_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ],
+        "kind": "individualize_forecast",
+        "method": "forecast.individualize",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "family": "linear_mixed",
+          "inputId": "snp_1:events",
+          "endpoint": {
+            "type": "continuous",
+            "code": "cd4",
+            "unit": "cells/uL"
+          },
+          "horizonsDays": [
+            180,
+            90
+          ]
+        }
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.horizonsDays"
+      ]
+    },
+    {
+      "name": "forecast.individualize: a categorical endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:events",
+            "location": "studies/std_1/views/hist_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ],
+        "kind": "individualize_forecast",
+        "method": "forecast.individualize",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "family": "linear_mixed",
+          "inputId": "snp_1:events",
+          "endpoint": {
+            "type": "binary",
+            "code": "cd4"
+          },
+          "horizonsDays": [
+            90,
+            180
+          ]
+        }
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.endpoint.type",
+        "endpoint_not_supported@scenario.endpoint.type"
+      ]
+    },
+    {
+      "name": "forecast.individualize: no events table",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "individualize_forecast",
+        "method": "forecast.individualize",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "family": "linear_mixed",
+          "inputId": "snp_1:events",
+          "endpoint": {
+            "type": "continuous",
+            "code": "cd4",
+            "unit": "cells/uL"
+          },
+          "horizonsDays": [
+            90,
+            180
+          ]
+        }
+      },
+      "expected": [
+        "patient_input_required@inputs",
+        "scenario_value_invalid@scenario.inputId"
       ]
     }
   ],

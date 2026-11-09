@@ -52,6 +52,7 @@
     "generate_progression": {"method":"patients.progression"},
     "decision_voi": {"method":"decision.value_of_information"},
     "pk_interaction": {"method":"pk.interaction"},
+    "individualize_forecast": {"method":"forecast.individualize"},
     "match_extract": {"method":"matching.extract","platformBuilt":[]},
     "forecast_trajectories": {"method":"forecast.trajectories"},
     "evaluate_forecast": {"method":"forecast.evaluate"},
@@ -8961,6 +8962,61 @@
         {
           "label": "the same victim as a 30-minute intravenous infusion of 2 mg after 600 mg rifampicin daily for ten days, a 70 kg adult",
           "scenario": {"victim":{"drug":"midazolam","doseMg":2,"route":"iv","infusionH":0.5},"perpetrator":{"drug":"rifampicin","doseMg":600,"doses":10,"gapH":24},"weightKg":70}
+        }
+      ]
+    },
+    "forecast.individualize": {
+      "endpoints": ["continuous"],
+      "notes": [
+        "It is run by the platform's local forecast provider on the people's own earlier records and never started from a conversation: the table it reads is the platform's projection (the records before the forecast origin, in the endpoint's unit, under study pseudonyms).",
+        "Each person's own earlier values update the forecast of that person (an empirical-Bayes forecast under a model fitted on the batch itself); a person with no value of their own is not forecast and says so. Nothing leaves the deployment.",
+        "linear_mixed fits a straight line with a random intercept and slope by REML (years from the origin) and treats the fitted covariance as known, so its intervals are slightly narrow for a small batch; beta_logit runs the Alzheimer model (a first observed score is study week 0; baseline MMSE, age, ApoE4 count and sex are read from the person's own records, and a person without them is not forecast)."
+      ],
+      "rows": [
+        {"path":"family","type":"string","values":["linear_mixed","beta_logit"],"required":true,"fieldRole":"defaultable"},
+        {"path":"inputId","type":"string","maxLength":141,"role":"input id","required":true,"fieldRole":"research_fact"},
+        {"path":"endpoint","type":"object","required":true},
+        {"path":"endpoint.type","type":"string","values":["continuous"],"required":true,"fieldRole":"defaultable"},
+        {"path":"endpoint.code","type":"string","minLength":1,"maxLength":64,"required":true,"fieldRole":"research_fact"},
+        {"path":"endpoint.unit","type":"string","maxLength":40,"fieldRole":"defaultable"},
+        {
+          "path": "horizonsDays",
+          "type": "list",
+          "count": {"min":1,"max":24},
+          "items": {"type":"number","max":36500,"gt":0,"unit":"days"},
+          "increasing": true,
+          "required": true,
+          "fieldRole": "research_fact"
+        },
+        {"path":"draws","type":"integer","min":100,"max":4000,"default":400,"when":[{"path":"family","in":["beta_logit"]}],"fieldRole":"defaultable"},
+        {"path":"parameterSet","type":"object","when":[{"path":"family","in":["beta_logit"]}]},
+        {
+          "path": "parameterSet.id",
+          "type": "string",
+          "maxLength": 64,
+          "required": true,
+          "within": "parameterSet",
+          "when": [{"path":"family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "parameterSet.version",
+          "type": "string",
+          "maxLength": 64,
+          "required": true,
+          "within": "parameterSet",
+          "when": [{"path":"family","in":["beta_logit"]}],
+          "fieldRole": "research_fact"
+        }
+      ],
+      "examples": [
+        {
+          "label": "a linear mixed model of a laboratory value, each person's own earlier values updating that person's forecast at 90 and 180 days",
+          "scenario": {"family":"linear_mixed","inputId":"snp_events","endpoint":{"type":"continuous","code":"cd4","unit":"cells/uL"},"horizonsDays":[90,180]}
+        },
+        {
+          "label": "the Alzheimer ADAS-cog 11 model's individual posterior 182 and 364 days after the forecast origin, 400 draws per person",
+          "scenario": {"family":"beta_logit","inputId":"snp_events","endpoint":{"type":"continuous","code":"adas_cog_11","unit":"points"},"horizonsDays":[182,364],"draws":400}
         }
       ]
     }

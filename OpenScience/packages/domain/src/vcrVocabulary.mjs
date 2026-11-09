@@ -922,6 +922,8 @@ export const VCR_JOB_KINDS = frozen([
   'decision_voi',
   // --- appended (2026-11-09): a published whole-body PBPK model of an oral drug with a CYP3A4 perpetrator (in-silico round 2, R38) ---
   'pk_interaction',
+  // --- appended (2026-11-09): the individualized forecast of a batch of people, run by the local forecast provider (in-silico round 2, R32) ---
+  'individualize_forecast',
   // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
   'match_extract',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
@@ -1435,6 +1437,8 @@ export const VCR_PEOPLE_COUNT_WITHHELD_BLOCKS = Object.freeze({
 export const VCR_PEOPLE_COUNT_SCALAR_FIELDS = frozen([
   'rows', 'startingRows', 'keptRows', 'trainingObservations', 'effectiveSampleSize',
   'requestedSubjects', 'batchSubjects', 'batchEvaluated', 'batchUnavailable', 'outsideBatch', 'subjectsNotEvaluated',
+  // the people of an individualized forecast's table, those it forecast, those it had reached when it stopped and those whose posterior was approximated badly
+  'peopleInTable', 'forecastPeople', 'peoplePlanned', 'peopleDone', 'laplaceNotTrusted',
   // a batch reading of patient records (`matching.extract`): the people and the records it was asked to read, the records read and
   // the ones read before, and the people the table had already decided against (their records are left unread)
   'peopleSelected', 'recordsToRead', 'recordsRead', 'recordsAlreadyRead', 'prefiltered',
@@ -1471,6 +1475,8 @@ export const VCR_PEOPLE_COUNT_MEASURES = frozen([
   'records_read', 'records_already_read',
   // the people a propensity trimming removed from each arm
   'trimmed_treated', 'trimmed_control',
+  // the people an individualized forecast was made for and the people it left out
+  'people_forecast', 'people_without_forecast',
 ])
 
 /**
