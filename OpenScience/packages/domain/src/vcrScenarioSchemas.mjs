@@ -811,6 +811,38 @@ const BETA_LOGIT = is('model.family', 'beta_logit')
 const PROGRESSION_LIST = (/** @type {Record<string, any>} */ range, /** @type {number} */ n) => object({
   value: req(array(number(range), { min: n, max: n })), basis: req(string({ values: ['literature', 'assumed', 'data'] })), citation: string({ maxLength: 300 }),
 })
+/** The families an effect distribution may have (plan R25), the tiers of what stands behind it and the kinds of source it names. */
+export const VCR_EFFECT_DISTRIBUTION_FAMILIES = Object.freeze(['fixed', 'normal', 'truncated_normal', 'lognormal', 'beta', 'uniform', 'empirical_draws'])
+export const VCR_EFFECT_DISTRIBUTION_TIERS = Object.freeze(['A', 'B', 'C', 'stated'])
+export const VCR_EFFECT_SOURCE_KINDS = Object.freeze(['literature', 'model_result', 'stated'])
+/** The two ways a run uses a record of virtual patients (plan R23): every person under every arm, or a trial's worth drawn from it. */
+export const VCR_PEOPLE_MODES = Object.freeze(['paired_counterfactual', 'resampled_trials'])
+/** The parameter sets of the beta_logit family the engine carries, by id (the version of each): a record of people made for another one is made for an earlier model. */
+export const VCR_PROGRESSION_PARAMETER_SETS = Object.freeze({ 'camd-adas-cog-11': 'adsim-3.0' })
+/** An effect stated as a distribution drawn once per simulated trial: `{ family, parameters, source, tier }`; `at` is the effect's own path, which gates its parameters. */
+const EFFECT_DISTRIBUTION = (/** @type {string} */ at) => {
+  const family = (/** @type {string[]} */ ...names) => is(`${at}.distribution.family`, ...names)
+  return object({
+    family: req(string({ values: [...VCR_EFFECT_DISTRIBUTION_FAMILIES] })),
+    parameters: req(object({
+      value: req(gated(number(), family('fixed'))),
+      mean: req(gated(number(), family('normal', 'truncated_normal'))), sd: req(gated(number({ gt: 0 }), family('normal', 'truncated_normal'))),
+      lower: req(gated(number(), family('truncated_normal'))), upper: req(gated(number(), family('truncated_normal'))),
+      meanlog: req(gated(number(), family('lognormal'))), sdlog: req(gated(number({ gt: 0 }), family('lognormal'))),
+      shape1: req(gated(number({ gt: 0 }), family('beta'))), shape2: req(gated(number({ gt: 0 }), family('beta'))),
+      min: req(gated(number(), family('uniform'))), max: req(gated(number(), family('uniform'))),
+      values: req(gated(array(number(), { min: 2, max: 10_000 }), family('empirical_draws'))),
+    })),
+    source: req(object({
+      kind: req(string({ values: [...VCR_EFFECT_SOURCE_KINDS] })), citation: string({ maxLength: 300 }), objectRef: string({ maxLength: 120 }), note: string({ maxLength: 300 }),
+    }, { atLeastOne: [['citation', 'objectRef', 'note']] })),
+    tier: req(string({ values: [...VCR_EFFECT_DISTRIBUTION_TIERS] })),
+  })
+}
+/** A progression effect: one number with where it came from, or (1.2.0) a distribution. */
+const EFFECT_PARAM = (/** @type {Record<string, any>} */ range, /** @type {string} */ at) => object({
+  value: number(range), basis: string({ values: ['literature', 'assumed', 'data'] }), citation: string({ maxLength: 300 }), distribution: EFFECT_DISTRIBUTION(at),
+}, { exactlyOne: [['value', 'distribution']], requires: { value: ['basis'] } })
 const PROGNOSTIC_TERMS = req(array(PROGNOSTIC_TERM, { min: 1, max: 100 }));
 const PROGNOSTIC_MODEL = { t: 'variant', on: 'family', variants: {
   linear: { intercept: req(number()), residualSd: number({ gt: 0 }), terms: PROGNOSTIC_TERMS },
@@ -883,10 +915,11 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
   // population it is run on (each override with its basis), the placebo and dropout switches, and a symptomatic effect (points at a week for a reference score, or a logit
   // Emax) and/or a disease-modifying share of the mean slope, both hypotheses the run states; the engine runs it in weeks, the unit its parameters were estimated in.
   'patients.progression': object({
-    endpoint: req(object({ type: req(string({ values: ['continuous'] })), unit: string({ maxLength: 40 }) })),
-    design: req(object({ nTreat: req(integer({ min: 2, max: 100_000 })), nControl: req(integer({ min: 2, max: 100_000 })) })),
+    // a record of people (`instantiate`) runs no trial, so it needs no endpoint, design or visits; a paired run takes its n from the record
+    endpoint: { ...object({ type: req(string({ values: ['continuous'] })), unit: string({ maxLength: 40 }) }), reqWhen: has('instantiate', false) },
+    design: { ...object({ nTreat: req(integer({ min: 2, max: 100_000 })), nControl: req(integer({ min: 2, max: 100_000 })) }), reqWhen: [has('instantiate', false), isNot('people.mode', 'paired_counterfactual')] },
     timeUnit: req(string({ values: [...VCR_TIME_UNITS] })),
-    visits: req(array(number({ min: 0 }), { min: 3, max: 40, increasing: true })),
+    visits: { ...array(number({ min: 0 }), { min: 3, max: 40, increasing: true }), reqWhen: has('instantiate', false) },
     model: req(object({
       family: req(string({ values: ['linear', 'exponential', 'logistic', 'emax', 'beta_logit'] })),
       // the amplitude is the slope (linear, exponential: initial slope, with `acceleration` k) or the plateau (logistic: `midpoint` and `steepness`; emax: `halfTime`)
@@ -898,7 +931,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       midpoint: req(gated(PROGRESSION_PARAM(), is('model.family', 'logistic'))),
       steepness: req(gated(PROGRESSION_PARAM({ gt: 0 }), is('model.family', 'logistic'))),
       halfTime: req(gated(PROGRESSION_PARAM({ gt: 0 }), is('model.family', 'emax'))),
-      parameterSet: req(gated(object({ id: req(string({ values: ['camd-adas-cog-11'] })), version: req(string({ values: ['adsim-3.0'] })) }), BETA_LOGIT)),
+      parameterSet: req(gated(object({ id: req(string({ values: Object.keys(VCR_PROGRESSION_PARAMETER_SETS) })), version: req(string({ values: Object.values(VCR_PROGRESSION_PARAMETER_SETS) })) }), BETA_LOGIT)),
       // one study drawn per simulated trial (adsim's default), the typical study at the posterior medians, or a posterior draw and then a study per trial
       uncertainty: gated(string({ values: ['new_study', 'typical_study', 'posterior_draws'], default: 'new_study' }), BETA_LOGIT),
     })),
@@ -910,6 +943,18 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       mmseRange: PROGRESSION_LIST({ min: 0, max: 30 }, 2), ageBounds: PROGRESSION_LIST({ min: 0, max: 130 }, 2), apoe4: PROGRESSION_LIST({ min: 0, max: 1 }, 3),
       femaleShare: PROGRESSION_PARAM({ min: 0, max: 1 }), ageMeanByApoe4: PROGRESSION_LIST({ gt: 0, max: 130 }, 3), ageSd: PROGRESSION_PARAM({ gt: 0 }),
     }), BETA_LOGIT),
+    // 1.2.0 (plan R23): a table of virtual people made by `instantiate` (an input of this job) and how the run uses it: every person under every arm
+    // (`paired_counterfactual`) or n people drawn from it per simulated trial (`resampled_trials`); the table fixes the people and the study they were made in
+    people: gated(object({ inputId: req(INPUT_REF), mode: req(string({ values: [...VCR_PEOPLE_MODES] })) }), BETA_LOGIT),
+    // 1.2.0: make that table. n people from the model's covariate model (or the `population` block), or the covariates of a generated population table named
+    // by its columns (any covariate not named is drawn); one study and each person's intercept and slope are drawn once with the job's seed
+    instantiate: gated(object({
+      n: integer({ min: 2, max: 50_000 }),
+      covariates: object({
+        inputId: req(INPUT_REF),
+        columns: req(object({ mmse: COLUMN, age: COLUMN, apoe4: COLUMN, female: COLUMN }, { atLeastOne: [['mmse', 'age', 'apoe4', 'female']] })),
+      }),
+    }, { atLeastOne: [['n', 'covariates']] }), BETA_LOGIT),
     placebo: gated(boolean({ default: true }), BETA_LOGIT),
     // who leaves: the parameter set's Weibull model (age and MMSE, not arm or outcome), or nobody
     dropoutModel: gated(string({ values: ['parameter_set', 'none'], default: 'parameter_set' }), BETA_LOGIT),
@@ -918,11 +963,11 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
         slowing: req(gated(PROGRESSION_PARAM({ min: 0, lt: 1 }), PROGRESSION_SHAPES)),
         // a change in points (treated less untreated; negative is better) at `atWeek` for a person at `referenceAdas`, or the logit Emax itself
         symptomatic: gated(object({
-          pointsAt: PROGRESSION_PARAM({ gt: -70, lt: 70 }), atWeek: number({ gt: 0 }), referenceAdas: number({ gt: 0, lt: 70 }), logitEmax: PROGRESSION_PARAM(),
+          pointsAt: EFFECT_PARAM({ gt: -70, lt: 70 }, 'treatment.symptomatic.pointsAt'), atWeek: number({ gt: 0 }), referenceAdas: number({ gt: 0, lt: 70 }), logitEmax: PROGRESSION_PARAM(),
           et50Weeks: req(PROGRESSION_PARAM({ gt: 0 })), washoutHalfLifeWeeks: PROGRESSION_PARAM({ gt: 0 }),
         }, { exactlyOne: [['pointsAt', 'logitEmax']], requires: { pointsAt: ['atWeek', 'referenceAdas'] } }), BETA_LOGIT),
         // the share of the study's covariate-adjusted mean slope taken away while on drug, held after the dose ends
-        diseaseModifying: gated(object({ fraction: req(PROGRESSION_PARAM({ min: 0, lt: 1 })) }), BETA_LOGIT),
+        diseaseModifying: gated(object({ fraction: req(EFFECT_PARAM({ min: 0, lt: 1 }, 'treatment.diseaseModifying.fraction')) }), BETA_LOGIT),
         doseBegin: gated(number({ min: 0, default: 0 }), BETA_LOGIT), doseEnd: gated(number({ gt: 0 }), BETA_LOGIT),
       }),
       reqWhen: PROGRESSION_SHAPES,

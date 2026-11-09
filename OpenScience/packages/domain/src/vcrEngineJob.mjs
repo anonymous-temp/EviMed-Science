@@ -108,7 +108,9 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // A population-level disease-progression simulator from a published model family (algorithm round P4): linear, exponential, logistic or Emax progression, treatment as the clock slowed, power by simulation with its error. No disease is built in.
   // 1.1.0 (plan T06, 2026-11-07): the `beta_logit` family, the CAMD/C-Path ADAS-cog 11 drug-disease-trial model of mild and moderate Alzheimer disease executed with the posterior its authors released in
   // adsim 3.0 (a parameter file in the engine); a stated symptomatic and/or disease-modifying effect, placebo, dropout and three kinds of uncertainty. The four other families are unchanged.
-  'patients.progression': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen(['the moments of the outcome at every visit in closed form', 'the closed-form power of the same test (noncentral t with Welch degrees of freedom)',
+  // 1.2.0 (plan R23, R25, 2026-11-09): the beta_logit family accepts an effect as a distribution drawn once per simulated trial (its result is an assurance), makes a record of
+  // virtual people once (`instantiate`) and runs on it as an input in two modes: every person under every arm, or a trial's worth of people drawn from it. Nothing of 1.1.0 changes.
+  'patients.progression': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous']), crossChecks: frozen(['the moments of the outcome at every visit in closed form', 'the closed-form power of the same test (noncentral t with Welch degrees of freedom)',
     'EMA qualification opinion 2013 Table 7: the covariate model (ApoE4 alleles, sex, age by genotype)', 'EMA qualification opinion 2013 Table 9: the expected ADAS-cog 11 intercept by baseline MMSE in a new study',
     'EMA qualification opinion 2013 Table 11: the expected one-year change by baseline MMSE, sex and ApoE4 in a new study', 'EMA qualification opinion 2013 Table 8 medians of dropout, under a stated covariate reading',
     'adsim 3.0 training manual: three printed numbers (Listings 2.6, 2.8 and 4.6)', 'closed forms of the beta observation, the Bateman placebo integral and the symptomatic and disease-modifying terms']), modelTier: 'scenario' },
@@ -840,6 +842,17 @@ function usesLongitudinalBeyond1_1_0(scenario) {
 }
 
 /**
+ * Does a progression scenario ask for what patients.progression 1.2.0 added: an effect as a distribution, a record of people to run on or the step that makes one?
+ * Mirrored by `.vcrp_uses_progression_beyond_1_1_0` in protocol.R.
+ * @param {any} scenario
+ */
+function usesProgressionBeyond1_1_0(scenario) {
+  if (scenario?.people !== undefined || scenario?.instantiate !== undefined) return true
+  const treatment = scenario?.treatment
+  return treatment?.symptomatic?.pointsAt?.distribution !== undefined || treatment?.diseaseModifying?.fraction?.distribution !== undefined
+}
+
+/**
  * Does a confirmatory scenario ask for what design.confirmatory 1.1.0 added: a promising zone, an event-time multi-arm or enrichment
  * design, or the direction of a mean or risk difference (`hypothesis`)? Mirrored by `.vcrp_uses_confirmatory_beyond_1_0_0` in protocol.R.
  * @param {any} scenario
@@ -918,6 +931,8 @@ function legacyDesignVersionMatches(job) {
     if (job.method === 'patients.longitudinal' && usesLongitudinalBeyond1_1_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.2.0')) return false
     // and 1.5.0 the modestly weighted test
     if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesWeightedBeyond1_4_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.5.0')) return false
+    // and patients.progression 1.2.0 the effect distribution and the record of people
+    if (job.method === 'patients.progression' && usesProgressionBeyond1_1_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.2.0')) return false
     // and model.survival_fit 1.1.0 the spline family
     if (job.method === 'model.survival_fit' && (job.scenario?.distribution === 'spline' || job.scenario?.knots !== undefined)) return false
     // and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds

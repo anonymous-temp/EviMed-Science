@@ -1,14 +1,16 @@
 /**
- * The immutable experiment version: what a researcher asked, frozen, and the identity of it.
+ * The frozen record of an experiment: what a researcher asked, frozen, and the identity of it (`vcrDesignExperimentCanonical`).
  *
  * Hidden knowledge:
  *
- * - **An identity is the canonical bytes of what was frozen.** The record holds the question, the population and model
- *   references (id and version), the arms, the action times, the observation schedule, the endpoints, the horizon, the analysis,
- *   the seeds, the budget, the source bindings and the purpose; its `experimentHash` is the sha256 of the canonical JSON (the
- *   engine's `canonicalScenarioJson`: sorted keys, no `undefined`). Key order never changes it; a seed, an action time or a
- *   model version always does.
- * - **`predictionMode` is the applicability check's `request.mode`**, one of `VCR_PREDICTION_MODES`; they are not two settings.
+ * - **There is one launch record, and it is the design experiment's.** An earlier `vcrExperimentRecord` (a population reference, a model
+ *   reference, a prediction mode, an observation schedule ...) was declared in round 1 and never read by any server code: every arm job was
+ *   enqueued with no inputs and a seed of its own, so the "same people" it promised were only the same definitions. It was deleted in round 2
+ *   (plan R23, "build to delete") and the one thing it stood for became real here: a disease experiment may name `people`, a record of virtual
+ *   patients made once by the engine (`patients.progression` 1.2.0, `instantiate`) and how every arm uses it. The record is an input of every
+ *   arm's job, with its hash, so the same people stand in every arm by construction, and the experiment's identity follows it.
+ * - **An identity is the canonical bytes of what was frozen.** `vcrDesignExperimentCanonical` is the engine's `canonicalScenarioJson` of the
+ *   record (sorted keys, no `undefined`); key order never changes it; a seed, an arm, a comparison or the record of people always does.
  * - **This package cannot hash** (it is browser-safe), so it returns the canonical bytes and the caller hashes them, the way
  *   `vcrResultOutputPayload` does. A record is a value: nothing here is stored.
  *
@@ -16,56 +18,11 @@
  */
 
 import { canonicalScenarioJson } from './vcrEngineJob.mjs'
-import { VCR_PREDICTION_MODES } from './vcrModelUse.mjs'
+import { VCR_PEOPLE_MODES } from './vcrScenarioSchemas.mjs'
 import { VCR_PEOPLE_COUNT_MEASURES } from './vcrVocabulary.mjs'
-
-/** The fields a version freezes, in the order the record is written. */
-export const VCR_EXPERIMENT_FIELDS = Object.freeze([
-  'question', 'populationRef', 'modelRef', 'predictionMode', 'arms', 'actionTimes', 'observationSchedule', 'endpoints', 'horizon',
-  'analysis', 'seeds', 'budget', 'sourceBindings', 'purpose',
-])
 
 /** @param {unknown} value */
 const object = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {})
-
-/**
- * The frozen record of an experiment version: only the known fields, each as given (`null` when absent), plus the schema version.
- * @param {Record<string, any>} input
- * @returns {Record<string, any>}
- */
-export function vcrExperimentRecord(input) {
-  const source = object(input)
-  /** @type {Record<string, any>} */
-  const record = { schemaVersion: 1 }
-  for (const field of VCR_EXPERIMENT_FIELDS) record[field] = source[field] ?? null
-  return record
-}
-
-/**
- * What is wrong with a record as a frozen question: a mode outside the vocabulary, a reference without an id and a version.
- * @param {Record<string, any>} record
- * @returns {Array<{ code: string, field: string }>}
- */
-export function vcrExperimentIssues(record) {
-  const issues = []
-  if (!VCR_PREDICTION_MODES.includes(record?.predictionMode)) issues.push({ code: 'prediction_mode_unknown', field: 'predictionMode' })
-  for (const field of ['populationRef', 'modelRef']) {
-    const ref = object(record?.[field])
-    if (record?.[field] != null && !(typeof ref.id === 'string' && ref.id && ref.version != null && ref.version !== '')) {
-      issues.push({ code: 'reference_incomplete', field })
-    }
-  }
-  return issues
-}
-
-/**
- * The canonical bytes an experiment version's hash is the sha256 of.
- * @param {Record<string, any>} input
- * @returns {string}
- */
-export function vcrExperimentCanonical(input) {
-  return canonicalScenarioJson(vcrExperimentRecord(input))
-}
 
 // ---------------------------------------------------------------------------
 // Design experiments (plan T09): named arms of existing design methods over one frozen endpoint and analysis
@@ -89,7 +46,8 @@ const pathValue = (source, path) => path.split('.').reduce((/** @type {any} */ n
 
 /**
  * A design experiment as it is frozen: the question, the arms (each either an existing saved result by id, or a design method,
- * its version and its scenario to run), and the comparison (which measures, against which arm). Only known fields; a changed arm, a
+ * its version and its scenario to run), the comparison (which measures, against which arm) and, for a disease experiment, the record of
+ * virtual people every arm runs on and the mode (`VCR_PEOPLE_MODES`). Only known fields; a changed arm, a
  * changed scenario or a changed comparison is a new experiment.
  *
  * The comparison reads only what a design states about itself (review eng P0-1): a measure that counts a study's people
@@ -134,6 +92,27 @@ export function vcrDesignExperiment(input, { methods, measures: declared = {} })
   if (disease && running.some((arm) => !VCR_DISEASE_EXPERIMENT_METHODS.includes(/** @type {any} */ (arm).method))) {
     bad('experiment_arms_mixed', 'arms', 'An experiment compares disease-response hypotheses or trial designs, not both: a design arm and a disease arm answer different questions.')
   }
+  // R23: a disease experiment may run every arm on one record of virtual people (an id of a result of this study, never a path or a hash)
+  /** @type {{ recordId: string, mode: string } | null} */
+  let people = null
+  if (src.people !== undefined && src.people !== null) {
+    const asked = object(src.people)
+    const recordId = typeof asked.recordId === 'string' ? asked.recordId : ''
+    if (!disease) bad('experiment_people_unsupported', 'people', 'Virtual people belong to a comparison of disease-response hypotheses (patients.progression); a design comparison has no people.')
+    else if (!ID.test(recordId)) bad('experiment_value_invalid', 'people.recordId', 'The record of people is named by the id of its result in this study.')
+    else if (!VCR_PEOPLE_MODES.includes(asked.mode)) bad('experiment_value_invalid', 'people.mode', `A run on a record is ${VCR_PEOPLE_MODES.join(' or ')}.`)
+    else {
+      people = { recordId, mode: String(asked.mode) }
+      running.forEach((arm) => {
+        const scenario = object(/** @type {any} */ (arm).scenario)
+        // the record is the covariates and the study; an arm that states them too would be silently overruled
+        for (const key of ['population', 'people', 'instantiate']) {
+          if (scenario[key] !== undefined) bad('experiment_people_conflict', `arms[${arms.indexOf(arm)}].scenario.${key}`, 'An experiment on a record of people takes the people from the record: an arm does not state them.')
+        }
+        if (scenario.model?.uncertainty !== undefined) bad('experiment_people_conflict', `arms[${arms.indexOf(arm)}].scenario.model.uncertainty`, 'A run on a record is on the study the record was made in; the study is not drawn again.')
+      })
+    }
+  }
   const comparisonIn = object(src.comparison)
   const measures = Array.isArray(comparisonIn.measures) ? comparisonIn.measures.map(String) : []
   if (!measures.length || measures.length > L.maxMeasures || measures.some((name) => !/^[a-z][a-z0-9_]{0,63}$/.test(name))) {
@@ -153,7 +132,7 @@ export function vcrDesignExperiment(input, { methods, measures: declared = {} })
   if (!arms.some((arm) => arm.name === reference)) bad('experiment_value_invalid', 'comparison.reference', 'The contrast is against one of the arms.')
   if (issues.length) return { record: null, issues }
   return { record: { schemaVersion: 1, kind: disease ? 'disease' : 'design', question: typeof src.question === 'string' ? src.question.slice(0, L.questionMax) : '',
-    purpose: typeof src.purpose === 'string' ? src.purpose.slice(0, 200) : '', arms, comparison: { measures, reference } }, issues }
+    purpose: typeof src.purpose === 'string' ? src.purpose.slice(0, 200) : '', arms, comparison: { measures, reference }, ...(people ? { people } : {}) }, issues }
 }
 
 /** The canonical bytes a design experiment's identity is the sha256 of. @param {Record<string, any>} record */

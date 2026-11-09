@@ -102,6 +102,9 @@ export const VCR_CAMPAIGN_METHODS = Object.freeze({
     measures: Object.freeze({
       power: 'proportion', type_one_error: 'error_rate', expected_difference: 'exact', expected_control_change: 'exact', expected_treated_change: 'exact',
       simulated_difference: 'mean', total_sample_size: 'exact', last_visit_weeks: 'exact',
+      // 1.2.0: the assurance of an effect stated as a distribution, and the paired mode's contrast over one record of people (R23, R25)
+      assurance: 'proportion', paired_mean_contrast: 'mean', paired_latent_mean_contrast: 'mean', paired_latent_sd: 'mean', paired_latent_q10: 'mean',
+      paired_latent_q50: 'mean', paired_latent_q90: 'mean', paired_share_improved: 'proportion', paired_observed_share: 'proportion',
     }) }),
   'design.analytic': Object.freeze({ exact: true, measures: Object.freeze({
     required_events: 'exact', required_events_exact: 'exact', required_patients: 'exact', sample_size: 'exact', max_events: 'exact',

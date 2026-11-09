@@ -2076,7 +2076,6 @@ export {
 
 // vcrExperiment — the immutable experiment version record and the canonical bytes its identity is the hash of
 export {
-  VCR_EXPERIMENT_FIELDS,
   VCR_DESIGN_EXPERIMENT_LIMITS,
   VCR_EXPERIMENT_ALIGNED_FIELDS,
   VCR_DISEASE_EXPERIMENT_ALIGNED_FIELDS,
@@ -2085,9 +2084,6 @@ export {
   vcrDesignExperimentCanonical,
   vcrDiseaseHypothesis,
   vcrExperimentAlignment,
-  vcrExperimentCanonical,
-  vcrExperimentIssues,
-  vcrExperimentRecord,
 } from './src/vcrExperiment.mjs'
 
 // vcrExperimentSearch — a bounded design-search campaign: frozen manifest, candidates, staged precision, conservative constraint verdicts, stop reasons
@@ -2347,6 +2343,11 @@ export {
 // vcrScenarioSchemas — 4 exports: the walker that checks a scenario against its method's schema, and the two tables of
 // which analysis a design may run
 export {
+  VCR_EFFECT_DISTRIBUTION_FAMILIES,
+  VCR_EFFECT_DISTRIBUTION_TIERS,
+  VCR_EFFECT_SOURCE_KINDS,
+  VCR_PEOPLE_MODES,
+  VCR_PROGRESSION_PARAMETER_SETS,
   VCR_SINGLE_ARM_ANALYSIS_METHODS,
   VCR_TWO_ARM_ANALYSIS_METHODS,
   validateScenario,

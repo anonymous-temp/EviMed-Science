@@ -1266,6 +1266,13 @@ vcr_job_at_least <- function(job, from) {
   any(vapply(truths,function(t).vcrp_named(t) && "treatmentHazardRatios" %in% names(t),logical(1))) || identical(.vcrp_get(.vcrp_get(sc,"analysis"),"method"),"maxcombo")
 }
 
+# Does a progression scenario ask for what patients.progression 1.2.0 added (an effect distribution, a record of people, the step that makes one)? Mirrors usesProgressionBeyond1_1_0 in the domain.
+.vcrp_uses_progression_beyond_1_1_0 <- function(sc) {
+  if (!is.null(.vcrp_get(sc, "people")) || !is.null(.vcrp_get(sc, "instantiate"))) return(TRUE)
+  tr <- .vcrp_get(sc, "treatment")
+  !is.null(.vcrp_get(.vcrp_get(.vcrp_get(tr, "symptomatic"), "pointsAt"), "distribution")) || !is.null(.vcrp_get(.vcrp_get(.vcrp_get(tr, "diseaseModifying"), "fraction"), "distribution"))
+}
+
 # Does a confirmatory scenario ask for what design.confirmatory 1.1.0 added? Mirrors usesConfirmatoryBeyond1_0_0 in the domain.
 .vcrp_uses_confirmatory_beyond_1_0_0 <- function(sc) {
   design <- .vcrp_get(sc, "design")
@@ -1316,6 +1323,8 @@ vcr_job_at_least <- function(job, from) {
     if (identical(job[["method"]],"patients.longitudinal") && .vcrp_uses_longitudinal_beyond_1_1_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.2.0")<0) return(FALSE)
     # and 1.5.0 the modestly weighted test
     if (job[["method"]] %in% c("design.simulate","design.grid") && .vcrp_uses_weighted_beyond_1_4_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.5.0")<0) return(FALSE)
+    # and patients.progression 1.2.0 the effect distribution and the record of people
+    if (identical(job[["method"]],"patients.progression") && .vcrp_uses_progression_beyond_1_1_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.2.0")<0) return(FALSE)
     # and model.survival_fit 1.1.0 the spline family
     if (identical(job[["method"]], "model.survival_fit") && (identical(.vcrp_get(job$scenario, "distribution"), "spline") || !is.null(.vcrp_get(job$scenario, "knots")))) return(FALSE)
     # and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds

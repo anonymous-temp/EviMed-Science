@@ -47,7 +47,8 @@ export const REQUIRED_CURRENT_REFERENCES = {
   'model.survival_fit': ['N52a', 'N52b', 'N52k'],
   'model.prognostic_apply': ['N52d'],
   // 1.1.0's beta_logit family: the parameter file and the training manual's printed numbers, EMA Tables 9 and 11
-  'patients.progression': ['N101a', 'N101c', 'N101d'],
+  // 1.2.0 (plan R23, R25) adds the people table's paired contrast against its closed form (N103c) and the assurance against an independent quadrature of its integral (N104b)
+  'patients.progression': ['N101a', 'N101c', 'N101d', 'N103c', 'N104b'],
 };
 export const NUMERIC_REFERENCES = {
   N53e: { methods: ['design.analytic'], anchors: ['Independently integrate arm event probabilities', 'abs(at$y-checked)<1e-10'] },
@@ -349,6 +350,24 @@ export const NUMERIC_REFERENCES = {
   N101k: { methods: ['patients.progression'], anchors: ['identical(tampered, "input_hash_mismatch@scenario.model.parameterSet")'] },
   N101l: { methods: ['patients.progression'], anchors: ['linear = list(sc("linear", 0.25, 60L), "aa19d54aae7038ba4ca8b61e9c9083e364a3f563cd12c3ceedf9fc411f75cc8b"),', 'list(pass = identical(unname(got), want),'] },
   N101m: { methods: ['patients.progression'], anchors: ['pg$trials < pg$trialsRequested && pg$trials %% 500L == 0L && pg$trials >= 500L'] },
+  // 1.2.0 (plan R23): one executable set of patients, held to closed forms written from the table's own columns and to the test's nominal level
+  N103a: { methods: ['patients.progression'], anchors: ['# the model\'s covariate model at the medians, over 20,000 people', 'apoe_ok <- all(abs(share - c(0.42, 0.44, 0.14))'] },
+  N103b: { methods: ['patients.progression'], anchors: ['fields <- c("y0", "leaves", "mmse", "age", "apoe", "female", "eta", "alpha", "meanSlope", "treated")', 'identical(obs(r0), obs(r1))'] },
+  N103c: { methods: ['patients.progression'], anchors: ['# the closed form, from the table\'s columns: the expected score of each person at week 78', 'exact <- abs(lat$value - truth) < 1e-9 && lat$mcse < 1e-9 && abs(sd$value - truth_sd) < 1e-9'] },
+  N103d: { methods: ['patients.progression'], anchors: ['closed <- sqrt(sum(v(ctl$theta) + v(trt$theta))) / nrow(tab)', 'smaller <- common[["sd"]] < independent[["sd"]]'] },
+  N103e: { methods: ['patients.progression'], anchors: ['outside <- sum(inst$table$MMSE < 16 | inst$table$MMSE > 26)', 'identical(bad_mmse, "input_shape_invalid@scenario.people.inputId")'] },
+  N103f: { methods: ['patients.progression'], anchors: ['abs(t1$value - 0.05) <= 3.5 * t1$mcse && pg$trials >= 20000L'] },
+  N103g: { methods: ['patients.progression'], anchors: ['verbatim <- identical(tab$MMSE, pop$Mmse)'] },
+  N103h: { methods: ['patients.progression'], anchors: ['any(grepl("earlier parameter file", unlist(other$diagnostics$progression$limits), fixed = TRUE))'] },
+  // 1.2.0 (plan R25): an effect distribution, held to the fixed-effect power, an independent quadrature, the families' own closed forms
+  N104a: { methods: ['patients.progression'], anchors: ['same(fixed, tiny, "assurance")'] },
+  N104b: { methods: ['patients.progression'], anchors: ['# the independent computation: Gauss-Hermite quadrature of the power at a fixed effect over the same normal prior', 'abs(m$value - quad) <= tol'] },
+  N104c: { methods: ['patients.progression'], anchors: ['mass <- stats::pnorm((hi - mu) / s) - stats::pnorm((lo - mu) / s)', 'abs(rep$drawMean - tmean) <= 4 * tsd / sqrt(trials)'] },
+  N104d: { methods: ['patients.progression'], anchors: ['list("beta", list(shape1 = 3, shape2 = 9), 3 / 12, sqrt(3 * 9 / (12^2 * 13)))'] },
+  N104e: { methods: ['patients.progression'], anchors: ['identical(rep$tier, "B") && identical(rep$source$kind, "model_result")'] },
+  N104f: { methods: ['patients.progression'], anchors: ['identical(old, "method_version_mismatch@methodVersion")'] },
+  // what 1.2.0 did not change
+  N105a: { methods: ['patients.progression'], anchors: ['null_new = list(sc("new_study"), "3d355061d1e5a8a507a86121e6f187eff096de74a1028ae03e60be05e5294f42")', 'identical(unname(got), unname(want))'] },
   // the people of an adaptive design whose answer is in events (live check 2026-11-04, design.confirmatory 1.2.0): patient-level simulations and the Lachin-Foulkes chance of an event written out
   N100a: { methods: ['design.confirmatory'], anchors: ['sim <- lapply(c(0.5, 1), function(rate) .n100_enrolled(n, 0.5, hr, rate * max_events))', 'expected <- ended[1] * got[1] + (1 - ended[1]) * got[2]'] },
   N100b: { methods: ['design.confirmatory'], anchors: ['closed <- p1$value * at_interim[["mean"]] + (1 - p1$value) * n0', 'n0 <- ceiling(plan / per_head); cap <- ceiling(1.0001 * plan)'] },

@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
-  VCR_MECHANISTIC_ENGINES, VCR_MECHANISTIC_REQUIRED, VCR_PREDICTION_MODES, assessModelUse, vcrExperimentCanonical, vcrExperimentIssues,
-  vcrExperimentRecord, vcrMechanisticRuntimeIssues, vcrUnitsConvertible,
+  VCR_MECHANISTIC_ENGINES, VCR_MECHANISTIC_REQUIRED, VCR_PREDICTION_MODES, assessModelUse, vcrMechanisticRuntimeIssues, vcrUnitsConvertible,
 } from '../index.mjs'
 
 const pack = {
@@ -59,20 +57,6 @@ test('only real execution issues refuse, each by its own code', () => {
 
 test('an old card with none of the new fields is asked for nothing', () => {
   assert.deepEqual(assessModelUse({ name: 'old', card: {} }, { mode: 'factual_forecast' }), { executionIssues: [], premises: [] })
-})
-
-test('an experiment version has an identity that ignores key order and follows every frozen field', () => {
-  const base = { question: 'q', populationRef: { id: 'p', version: '1' }, modelRef: { id: 'm', version: '2' }, predictionMode: 'conditional_forecast',
-    actionTimes: [0, 12], seeds: [1, 2], horizon: { value: 52, unit: 'weeks' } }
-  const hash = (/** @type {any} */ value) => createHash('sha256').update(vcrExperimentCanonical(value)).digest('hex')
-  const reordered = Object.fromEntries(Object.entries(base).reverse())
-  assert.equal(hash(base), hash(reordered))
-  assert.notEqual(hash(base), hash({ ...base, seeds: [1, 3] }))
-  assert.notEqual(hash(base), hash({ ...base, actionTimes: [0, 24] }))
-  assert.notEqual(hash(base), hash({ ...base, modelRef: { id: 'm', version: '3' } }))
-  assert.equal(vcrExperimentRecord({ ...base, extra: 1 }).extra, undefined)
-  assert.deepEqual(vcrExperimentIssues(vcrExperimentRecord(base)), [])
-  assert.deepEqual(vcrExperimentIssues(vcrExperimentRecord({ ...base, predictionMode: 'x', modelRef: { id: 'm' } })).map((i) => i.code), ['prediction_mode_unknown', 'reference_incomplete'])
 })
 
 test('the control plane view of the mechanism contract equals the engine source', () => {

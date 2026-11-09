@@ -30,7 +30,7 @@
       "modelTier": "data"
     },
     "patients.progression": {
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": [
         "continuous"
       ],
@@ -46,7 +46,8 @@
       ],
       "modelTier": "scenario",
       "compatibleVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     "model.prognostic_apply": {
@@ -1749,7 +1750,10 @@
               "maxLength": 40
             }
           },
-          "req": true
+          "reqWhen": {
+            "path": "instantiate",
+            "present": false
+          }
         },
         "design": {
           "t": "object",
@@ -1767,7 +1771,18 @@
               "req": true
             }
           },
-          "req": true
+          "reqWhen": [
+            {
+              "path": "instantiate",
+              "present": false
+            },
+            {
+              "path": "people.mode",
+              "notIn": [
+                "paired_counterfactual"
+              ]
+            }
+          ]
         },
         "timeUnit": {
           "t": "string",
@@ -1788,7 +1803,10 @@
           "min": 3,
           "max": 40,
           "increasing": true,
-          "req": true
+          "reqWhen": {
+            "path": "instantiate",
+            "present": false
+          }
         },
         "model": {
           "t": "object",
@@ -2349,6 +2367,98 @@
             ]
           }
         },
+        "people": {
+          "t": "object",
+          "fields": {
+            "inputId": {
+              "t": "string",
+              "ref": "input",
+              "maxLength": 141,
+              "req": true
+            },
+            "mode": {
+              "t": "string",
+              "values": [
+                "paired_counterfactual",
+                "resampled_trials"
+              ],
+              "req": true
+            }
+          },
+          "when": {
+            "path": "model.family",
+            "in": [
+              "beta_logit"
+            ]
+          }
+        },
+        "instantiate": {
+          "t": "object",
+          "fields": {
+            "n": {
+              "t": "integer",
+              "min": 2,
+              "max": 50000
+            },
+            "covariates": {
+              "t": "object",
+              "fields": {
+                "inputId": {
+                  "t": "string",
+                  "ref": "input",
+                  "maxLength": 141,
+                  "req": true
+                },
+                "columns": {
+                  "t": "object",
+                  "fields": {
+                    "mmse": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64
+                    },
+                    "age": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64
+                    },
+                    "apoe4": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64
+                    },
+                    "female": {
+                      "t": "string",
+                      "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                      "maxLength": 64
+                    }
+                  },
+                  "atLeastOne": [
+                    [
+                      "mmse",
+                      "age",
+                      "apoe4",
+                      "female"
+                    ]
+                  ],
+                  "req": true
+                }
+              }
+            }
+          },
+          "atLeastOne": [
+            [
+              "n",
+              "covariates"
+            ]
+          ],
+          "when": {
+            "path": "model.family",
+            "in": [
+              "beta_logit"
+            ]
+          }
+        },
         "placebo": {
           "t": "boolean",
           "default": true,
@@ -2416,8 +2526,7 @@
                     "value": {
                       "t": "number",
                       "gt": -70,
-                      "lt": 70,
-                      "req": true
+                      "lt": 70
                     },
                     "basis": {
                       "t": "string",
@@ -2425,13 +2534,222 @@
                         "literature",
                         "assumed",
                         "data"
-                      ],
-                      "req": true
+                      ]
                     },
                     "citation": {
                       "t": "string",
                       "maxLength": 300
+                    },
+                    "distribution": {
+                      "t": "object",
+                      "fields": {
+                        "family": {
+                          "t": "string",
+                          "values": [
+                            "fixed",
+                            "normal",
+                            "truncated_normal",
+                            "lognormal",
+                            "beta",
+                            "uniform",
+                            "empirical_draws"
+                          ],
+                          "req": true
+                        },
+                        "parameters": {
+                          "t": "object",
+                          "fields": {
+                            "value": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.symptomatic.pointsAt.distribution.family",
+                                "in": [
+                                  "fixed"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "mean": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.symptomatic.pointsAt.distribution.family",
+                                "in": [
+                                  "normal",
+                                  "truncated_normal"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "sd": {
+                              "t": "number",
+                              "gt": 0,
+                              "when": {
+                                "path": "treatment.symptomatic.pointsAt.distribution.family",
+                                "in": [
+                                  "normal",
+                                  "truncated_normal"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "lower": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.symptomatic.pointsAt.distribution.family",
+                                "in": [
+                                  "truncated_normal"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "upper": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.symptomatic.pointsAt.distribution.family",
+                                "in": [
+                                  "truncated_normal"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "meanlog": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.symptomatic.pointsAt.distribution.family",
+                                "in": [
+                                  "lognormal"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "sdlog": {
+                              "t": "number",
+                              "gt": 0,
+                              "when": {
+                                "path": "treatment.symptomatic.pointsAt.distribution.family",
+                                "in": [
+                                  "lognormal"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "shape1": {
+                              "t": "number",
+                              "gt": 0,
+                              "when": {
+                                "path": "treatment.symptomatic.pointsAt.distribution.family",
+                                "in": [
+                                  "beta"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "shape2": {
+                              "t": "number",
+                              "gt": 0,
+                              "when": {
+                                "path": "treatment.symptomatic.pointsAt.distribution.family",
+                                "in": [
+                                  "beta"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "min": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.symptomatic.pointsAt.distribution.family",
+                                "in": [
+                                  "uniform"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "max": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.symptomatic.pointsAt.distribution.family",
+                                "in": [
+                                  "uniform"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "values": {
+                              "t": "array",
+                              "items": {
+                                "t": "number"
+                              },
+                              "min": 2,
+                              "max": 10000,
+                              "when": {
+                                "path": "treatment.symptomatic.pointsAt.distribution.family",
+                                "in": [
+                                  "empirical_draws"
+                                ]
+                              },
+                              "req": true
+                            }
+                          },
+                          "req": true
+                        },
+                        "source": {
+                          "t": "object",
+                          "fields": {
+                            "kind": {
+                              "t": "string",
+                              "values": [
+                                "literature",
+                                "model_result",
+                                "stated"
+                              ],
+                              "req": true
+                            },
+                            "citation": {
+                              "t": "string",
+                              "maxLength": 300
+                            },
+                            "objectRef": {
+                              "t": "string",
+                              "maxLength": 120
+                            },
+                            "note": {
+                              "t": "string",
+                              "maxLength": 300
+                            }
+                          },
+                          "atLeastOne": [
+                            [
+                              "citation",
+                              "objectRef",
+                              "note"
+                            ]
+                          ],
+                          "req": true
+                        },
+                        "tier": {
+                          "t": "string",
+                          "values": [
+                            "A",
+                            "B",
+                            "C",
+                            "stated"
+                          ],
+                          "req": true
+                        }
+                      }
                     }
+                  },
+                  "exactlyOne": [
+                    [
+                      "value",
+                      "distribution"
+                    ]
+                  ],
+                  "requires": {
+                    "value": [
+                      "basis"
+                    ]
                   }
                 },
                 "atWeek": {
@@ -2541,8 +2859,7 @@
                     "value": {
                       "t": "number",
                       "min": 0,
-                      "lt": 1,
-                      "req": true
+                      "lt": 1
                     },
                     "basis": {
                       "t": "string",
@@ -2550,13 +2867,222 @@
                         "literature",
                         "assumed",
                         "data"
-                      ],
-                      "req": true
+                      ]
                     },
                     "citation": {
                       "t": "string",
                       "maxLength": 300
+                    },
+                    "distribution": {
+                      "t": "object",
+                      "fields": {
+                        "family": {
+                          "t": "string",
+                          "values": [
+                            "fixed",
+                            "normal",
+                            "truncated_normal",
+                            "lognormal",
+                            "beta",
+                            "uniform",
+                            "empirical_draws"
+                          ],
+                          "req": true
+                        },
+                        "parameters": {
+                          "t": "object",
+                          "fields": {
+                            "value": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.diseaseModifying.fraction.distribution.family",
+                                "in": [
+                                  "fixed"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "mean": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.diseaseModifying.fraction.distribution.family",
+                                "in": [
+                                  "normal",
+                                  "truncated_normal"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "sd": {
+                              "t": "number",
+                              "gt": 0,
+                              "when": {
+                                "path": "treatment.diseaseModifying.fraction.distribution.family",
+                                "in": [
+                                  "normal",
+                                  "truncated_normal"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "lower": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.diseaseModifying.fraction.distribution.family",
+                                "in": [
+                                  "truncated_normal"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "upper": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.diseaseModifying.fraction.distribution.family",
+                                "in": [
+                                  "truncated_normal"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "meanlog": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.diseaseModifying.fraction.distribution.family",
+                                "in": [
+                                  "lognormal"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "sdlog": {
+                              "t": "number",
+                              "gt": 0,
+                              "when": {
+                                "path": "treatment.diseaseModifying.fraction.distribution.family",
+                                "in": [
+                                  "lognormal"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "shape1": {
+                              "t": "number",
+                              "gt": 0,
+                              "when": {
+                                "path": "treatment.diseaseModifying.fraction.distribution.family",
+                                "in": [
+                                  "beta"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "shape2": {
+                              "t": "number",
+                              "gt": 0,
+                              "when": {
+                                "path": "treatment.diseaseModifying.fraction.distribution.family",
+                                "in": [
+                                  "beta"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "min": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.diseaseModifying.fraction.distribution.family",
+                                "in": [
+                                  "uniform"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "max": {
+                              "t": "number",
+                              "when": {
+                                "path": "treatment.diseaseModifying.fraction.distribution.family",
+                                "in": [
+                                  "uniform"
+                                ]
+                              },
+                              "req": true
+                            },
+                            "values": {
+                              "t": "array",
+                              "items": {
+                                "t": "number"
+                              },
+                              "min": 2,
+                              "max": 10000,
+                              "when": {
+                                "path": "treatment.diseaseModifying.fraction.distribution.family",
+                                "in": [
+                                  "empirical_draws"
+                                ]
+                              },
+                              "req": true
+                            }
+                          },
+                          "req": true
+                        },
+                        "source": {
+                          "t": "object",
+                          "fields": {
+                            "kind": {
+                              "t": "string",
+                              "values": [
+                                "literature",
+                                "model_result",
+                                "stated"
+                              ],
+                              "req": true
+                            },
+                            "citation": {
+                              "t": "string",
+                              "maxLength": 300
+                            },
+                            "objectRef": {
+                              "t": "string",
+                              "maxLength": 120
+                            },
+                            "note": {
+                              "t": "string",
+                              "maxLength": 300
+                            }
+                          },
+                          "atLeastOne": [
+                            [
+                              "citation",
+                              "objectRef",
+                              "note"
+                            ]
+                          ],
+                          "req": true
+                        },
+                        "tier": {
+                          "t": "string",
+                          "values": [
+                            "A",
+                            "B",
+                            "C",
+                            "stated"
+                          ],
+                          "req": true
+                        }
+                      }
                     }
+                  },
+                  "exactlyOne": [
+                    [
+                      "value",
+                      "distribution"
+                    ]
+                  ],
+                  "requires": {
+                    "value": [
+                      "basis"
+                    ]
                   },
                   "req": true
                 }

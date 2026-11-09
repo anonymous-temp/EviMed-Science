@@ -179,6 +179,10 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression")
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression_beta_logit")
 # --- end beta_logit ---
 
+# --- its 1.2.0: effect distributions (plan R25) and the virtual patient record with its two modes (plan R23, 2026-11-09) ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression_effects", "patients_progression_people")
+# --- end people ---
+
 #' Startup self-check: the local registry and the domain must agree, exactly.
 vcr_engine_self_check <- function() {
   d <- vcr_domain()
