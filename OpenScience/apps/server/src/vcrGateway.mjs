@@ -1778,7 +1778,6 @@ const WRITERS = {
     return saved.id;
   },
 
-  async decision(item, { store, study }) {
   /**
    * The study's research question (R22), a field at a time from what the person said. Every field is optional; a patch that changes
    * something is the next version, a field the person edited on the page is kept and named back (`kept`) rather than overwritten, and
@@ -1804,6 +1803,7 @@ const WRITERS = {
     return `${key}@${version}`;
   },
 
+  async decision(item, { store, study }) {
     if (!item.only(VCR_WRITE_FIELDS.decision)) return null;
     const question = item.str("question", { max: 400, required: true });
     const chosen = item.obj("chosen") ?? {};

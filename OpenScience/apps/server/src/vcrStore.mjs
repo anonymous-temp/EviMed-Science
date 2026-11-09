@@ -1606,6 +1606,34 @@ export class VcrStore extends VcrStoreBase {
     return rows.map((row) => lineageNode("result", String(row.id), Number(row.version)));
   }
 
+  /** One result row through the same lineage judgement, or null. @param {any} row */
+  async #permitted(row) { return row ? (await this.#inLineage([row]))[0] ?? null : null; }
+
+  /**
+   * A result made from patient-derived forecasts carries that lineage on the job that wrote it (`checkpoint.forecastLineage`), and every
+   * read of the result judges it again with the one check the artifacts use (`longitudinalGuard`): a result whose snapshot, source grant
+   * or field binding is gone is not served, whatever stored summary it holds. Rows with no such job pass untouched, in one query.
+   * @template {{ id: string, study_id: string }} T @param {T[]} rows @returns {Promise<T[]>}
+   */
+  async #inLineage(rows) {
+    if (!this.longitudinalGuard || !rows.length) return rows;
+    const held = await this.rows(`SELECT r.id, j.checkpoint->'forecastLineage' AS lineage FROM ${VCR_SCHEMA}.results r
+      JOIN ${VCR_SCHEMA}.executions e ON e.id = r.execution_id JOIN ${VCR_SCHEMA}.jobs j ON j.id = e.job_id
+      WHERE r.id = ANY($1::text[]) AND j.checkpoint ? 'forecastLineage'`, [rows.map((row) => String(row.id))]);
+    if (!held.length) return rows;
+    const lineage = new Map(held.map((row) => [String(row.id), object(row.lineage)]));
+    const denied = new Set();
+    for (const studyId of new Set(rows.filter((row) => lineage.has(String(row.id))).map((row) => String(row.study_id)))) {
+      const pseudo = rows.filter((row) => String(row.study_id) === studyId && lineage.has(String(row.id))).map((row) => {
+        const found = /** @type {Record<string, any>} */ (lineage.get(String(row.id)));
+        return { id: String(row.id), snapshot_ids: list(found.snapshotIds), source_ids: list(found.sourceIds), bindings: list(found.bindings) };
+      });
+      const allowed = await this.longitudinalGuard(studyId, pseudo, null);
+      for (const row of pseudo) if (!allowed.has(row.id)) denied.add(row.id);
+    }
+    return denied.size ? rows.filter((row) => !denied.has(String(row.id))) : rows;
+  }
+
   /**
    * The result one job produced, found through the execution it wrote — a
    * finished job's, a failed one's partial one, and the partial result of a
@@ -1646,34 +1674,6 @@ export class VcrStore extends VcrStoreBase {
   async resultForExecution(studyId, executionId) {
     return resultFromRow(await this.#permitted(await this.one(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND execution_id = $2 ORDER BY created_at DESC LIMIT 1`,
       [studyId, String(executionId)])));
-  }
-
-  /** One result row through the same lineage judgement, or null. @param {any} row */
-  async #permitted(row) { return row ? (await this.#inLineage([row]))[0] ?? null : null; }
-
-  /**
-   * A result made from patient-derived forecasts carries that lineage on the job that wrote it (`checkpoint.forecastLineage`), and every
-   * read of the result judges it again with the one check the artifacts use (`longitudinalGuard`): a result whose snapshot, source grant
-   * or field binding is gone is not served, whatever stored summary it holds. Rows with no such job pass untouched, in one query.
-   * @template {{ id: string, study_id: string }} T @param {T[]} rows @returns {Promise<T[]>}
-   */
-  async #inLineage(rows) {
-    if (!this.longitudinalGuard || !rows.length) return rows;
-    const held = await this.rows(`SELECT r.id, j.checkpoint->'forecastLineage' AS lineage FROM ${VCR_SCHEMA}.results r
-      JOIN ${VCR_SCHEMA}.executions e ON e.id = r.execution_id JOIN ${VCR_SCHEMA}.jobs j ON j.id = e.job_id
-      WHERE r.id = ANY($1::text[]) AND j.checkpoint ? 'forecastLineage'`, [rows.map((row) => String(row.id))]);
-    if (!held.length) return rows;
-    const lineage = new Map(held.map((row) => [String(row.id), object(row.lineage)]));
-    const denied = new Set();
-    for (const studyId of new Set(rows.filter((row) => lineage.has(String(row.id))).map((row) => String(row.study_id)))) {
-      const pseudo = rows.filter((row) => String(row.study_id) === studyId && lineage.has(String(row.id))).map((row) => {
-        const found = /** @type {Record<string, any>} */ (lineage.get(String(row.id)));
-        return { id: String(row.id), snapshot_ids: list(found.snapshotIds), source_ids: list(found.sourceIds), bindings: list(found.bindings) };
-      });
-      const allowed = await this.longitudinalGuard(studyId, pseudo, null);
-      for (const row of pseudo) if (!allowed.has(row.id)) denied.add(row.id);
-    }
-    return denied.size ? rows.filter((row) => !denied.has(String(row.id))) : rows;
   }
 
   // --- forecasts (AC-23) ---------------------------------------------------------------
@@ -1881,6 +1881,23 @@ export class VcrStore extends VcrStoreBase {
     return regulatoryContacts(this, studyId, limit);
   }
 
+  // --- the research question (R22): versions of 「研究问题与假设」, `vcrResearchQuestions.mjs` ---------
+
+  /** @param {Parameters<typeof saveResearchQuestion>[1]} input */
+  saveResearchQuestion(input) {
+    return saveResearchQuestion(this, input);
+  }
+
+  /** The current version of every question of the study, the default first. @param {string} studyId */
+  researchQuestions(studyId) {
+    return researchQuestions(this, studyId);
+  }
+
+  /** The question a new job answers, as `{ id, version }`, or null. @param {string} studyId */
+  currentQuestionRef(studyId) {
+    return currentQuestionRef(this, studyId);
+  }
+
   // --- model assessments and frozen model analysis plans (ICH M15) ---------------------------
 
   /**
@@ -1951,23 +1968,6 @@ export class VcrStore extends VcrStoreBase {
     return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.model_plan_versions WHERE study_id = $1
       ORDER BY version DESC LIMIT 50`, [studyId])).map((row) => modelPlanVersionFromRow(row));
   }
-  // --- the research question (R22): versions of 「研究问题与假设」, `vcrResearchQuestions.mjs` ---------
-
-  /** @param {Parameters<typeof saveResearchQuestion>[1]} input */
-  saveResearchQuestion(input) {
-    return saveResearchQuestion(this, input);
-  }
-
-  /** The current version of every question of the study, the default first. @param {string} studyId */
-  researchQuestions(studyId) {
-    return researchQuestions(this, studyId);
-  }
-
-  /** The question a new job answers, as `{ id, version }`, or null. @param {string} studyId */
-  currentQuestionRef(studyId) {
-    return currentQuestionRef(this, studyId);
-  }
-
 
   /** @param {{ studyId: string, userId: string, kind: string, cover?: Record<string, any> }} input
    * @param {{client?:any}} [options] */

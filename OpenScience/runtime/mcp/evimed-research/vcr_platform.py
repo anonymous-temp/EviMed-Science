@@ -1158,14 +1158,6 @@ LAB_SHAPES = {
 }
 
 
-def shape(arguments: dict) -> dict:
-    """``vcr_simulate`` action shape: what a job kind's scenario reads, rendered from the generated help. Asks the
-    platform nothing, so it answers with the module off too."""
-    kind = arguments.get("kind")
-    help_ = scenario_help()
-    if kind is None:
-        return {
-            "status": "success",
 # A filled short form, for `shape` kind search. `test_vcr_platform.py` holds it to the domain's compile (`vcrSearchFromForm`, through node), so the
 # example a run copies is one the platform accepts.
 SEARCH_EXAMPLE = {
@@ -1205,6 +1197,14 @@ def _search_shape() -> dict:
     }
 
 
+def shape(arguments: dict) -> dict:
+    """``vcr_simulate`` action shape: what a job kind's scenario reads, rendered from the generated help. Asks the
+    platform nothing, so it answers with the module off too."""
+    kind = arguments.get("kind")
+    help_ = scenario_help()
+    if kind is None:
+        return {
+            "status": "success",
             "summary": "%d job kinds; ask for one with action shape and its kind." % len(help_["kinds"]),
             "data": {
                 "kinds": {name: "%s%s" % (entry["method"], " (%s)" % "|".join(help_["methods"][entry["method"]].get("endpoints", []))
@@ -1216,6 +1216,8 @@ def _search_shape() -> dict:
             "warnings": [],
             "next_actions": ["Call vcr_simulate with action shape and the kind you are about to write or queue."],
         }
+    if kind == "search":
+        return _search_shape()
     if kind not in JOB_KINDS:
         raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
     control = _control_plane_shape(kind)
@@ -1224,8 +1226,6 @@ def _search_shape() -> dict:
     if kind == "match_extract":
         # Not an engine method and not a stored-record scenario: the platform plans the reading from the study and takes a selection only.
         return {
-    if kind == "search":
-        return _search_shape()
             "status": "success",
             "summary": "match_extract is built by the platform from the study; you state nothing in a scenario, only a selection.",
             "data": {"kind": kind, "method": "matching.extract", "builtByPlatform": True, "runStates": [], "keys": [],
@@ -1648,14 +1648,6 @@ def _with_entry(answer: dict, data: dict) -> dict:
     return {**answer, "next_actions": [*answer.get("next_actions", []), line]}
 
 
-def _job_answer(data: dict, action: str) -> dict:
-    state = str(data.get("state") or "queued")
-    job_id = str(data.get("jobId") or "")
-    if state == "not_started":
-        reason = str(data.get("reason") or "")
-        return {
-            "status": "warning",
-            "summary": "Nothing was started%s." % (": %s" % reason if reason else ""),
 # Live 2026-11-07: asked for the smallest design, the model iterated single designs and grids and never started the search that does it. The
 # pointer rides on the result of a grid and on the second design of a conversation, where the model is already comparing designs by hand.
 SEARCH_POINTER = ("When the aim is the smallest design that meets stated requirements across ranges, vcr_simulate action search finds it in one "
@@ -1677,6 +1669,14 @@ def _repeated_design(job_id: str) -> bool:
     return repeated
 
 
+def _job_answer(data: dict, action: str) -> dict:
+    state = str(data.get("state") or "queued")
+    job_id = str(data.get("jobId") or "")
+    if state == "not_started":
+        reason = str(data.get("reason") or "")
+        return {
+            "status": "warning",
+            "summary": "Nothing was started%s." % (": %s" % reason if reason else ""),
             "data": data,
             "warnings": [str(data.get("message") or "The platform did not queue this computation.")],
             "next_actions": [
@@ -1745,6 +1745,8 @@ def _repeated_design(job_id: str) -> bool:
         # Live D6 (2026-11-07): three Alzheimer arms were compared by a reply that subtracted the arms' means itself.
         actions.append(PROGRESSION_DIFFERENCE_LINE)
     if result.get("kind") in ("trial_scenario", "design_grid"):
+        if result.get("kind") == "design_grid" or _repeated_design(job_id):
+            actions.append(SEARCH_POINTER)
         # A design is chosen by the researcher: the reply recommends one in a sentence and says which bound decided it.
         actions.append("When designs are compared, close with one sentence of recommendation that says which constraint decided it (the type I error "
                        "bound, the target power, the sample size or the duration), from the numbers in the result; the platform does not pick the design.")
@@ -1753,8 +1755,6 @@ def _repeated_design(job_id: str) -> bool:
                        "derived figure of your own: a further number is another start.")
     return {
         "status": "success",
-        if result.get("kind") == "design_grid" or _repeated_design(job_id):
-            actions.append(SEARCH_POINTER)
         "summary": "Job %s succeeded." % job_id if action != "cancel" else "Job %s is cancelled." % job_id,
         "data": data,
         "warnings": [],

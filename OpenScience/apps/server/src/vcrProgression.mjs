@@ -31,8 +31,8 @@
 import { createHash } from "node:crypto";
 import { VCR_RESULT_QUANTITY_LABELS_ZH, VCR_SIMULATION_ERROR_SENTENCE_ZH, VCR_UNCERTAINTY_MODE_QUANTITY } from "@evimed/domain";
 import { finishPremises } from "./vcrPremises.mjs";
-import { list, markFor, measureValue, numeric, object, text, zhUnit } from "./vcrViewsKit.mjs";
 import { researchQuestionPremises, resultQuestionInput } from "./vcrResearchQuestionView.mjs";
+import { list, markFor, measureValue, numeric, object, text, zhUnit } from "./vcrViewsKit.mjs";
 
 /** @param {unknown} value @returns {unknown} the value with every object's keys in order, so the same scenario is the same text */
 function ordered(value) {

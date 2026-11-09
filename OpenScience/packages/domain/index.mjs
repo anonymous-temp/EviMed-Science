@@ -2105,18 +2105,18 @@ export {
   vcrCampaignCanonical,
   vcrCampaignDrawKey,
   vcrCampaignInitialState,
+  vcrCampaignFromInput,
   vcrCampaignManifest,
+  vcrSearchFromForm,
+  VCR_SEARCH_FORM_KEYS,
+  VCR_SEARCH_FORM_DEFAULTS,
   vcrCampaignRecord,
   vcrCampaignSeed,
   vcrCampaignUnit,
   vcrCampaignVerdict,
   vcrCandidateScenario,
   vcrCandidateVerdicts,
-  vcrCampaignFromInput,
   vcrClopperPearson,
-  vcrSearchFromForm,
-  VCR_SEARCH_FORM_KEYS,
-  VCR_SEARCH_FORM_DEFAULTS,
   vcrEvaluationContrast,
   vcrEvaluationMeasure,
   vcrJudgeConstraint,
@@ -2366,13 +2366,13 @@ export {
   vcrNormalizeScenarioKeys,
 } from './src/vcrScenarioDescriptive.mjs'
 
+// vcrAccrualRate — 1 export: the accrual duration a stated rate gives (people / rate), derived by code before the scenario is frozen
+export { vcrDeriveAccrualDuration } from './src/vcrAccrualRate.mjs'
+
 // vcrWriteWords — 5 exports: the closed words of a write's fields with what each means, and the near-miss spellings that mean exactly one
 // of them (read as that one, and said), so a spelling costs no round
 export {
   VCR_WRITE_WORDS,
-// vcrAccrualRate — 1 export: the accrual duration a stated rate gives (people / rate), derived by code before the scenario is frozen
-export { vcrDeriveAccrualDuration } from './src/vcrAccrualRate.mjs'
-
   vcrNormalizeWriteRow,
   vcrReadWord,
   vcrWordKey,

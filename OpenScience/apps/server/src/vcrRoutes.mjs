@@ -131,9 +131,9 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_review_kind_invalid",
   "vcr_decision_invalid",
   "vcr_regulatory_contact_invalid",
+  "vcr_research_question_invalid",
   "vcr_export_kind_invalid",
   "vcr_export_not_found",
-  "vcr_research_question_invalid",
   "vcr_model_invalid",
   "vcr_model_exists",
   "vcr_member_role_invalid",
@@ -212,10 +212,10 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/reviews data": ["write", "review_any"],
   "POST /studies/:id/decisions": ["write"],
   "POST /studies/:id/regulatory-contacts": ["write"],
-  "POST /studies/:id/export": ["export"],
-  "GET /studies/:id/export/:export": ["read"],
   "GET /studies/:id/research-question": ["read"],
   "POST /studies/:id/research-question": ["write"],
+  "POST /studies/:id/export": ["export"],
+  "GET /studies/:id/export/:export": ["read"],
   "GET /studies/:id/records/:result.csv": ["read"],
   "GET /studies/:id/records/:result.quality.json": ["read"],
   "GET /studies/:id/publications": ["read"],
@@ -1525,10 +1525,6 @@ export function createVcrRoutes(dependencies) {
       return reply(saved, saved.existing ? 200 : 201);
     }
 
-    // --- 模拟研究: the lead publishes one of the study's reports to the public column --------------------
-    if (section === "publications") {
-      // Off is invisible: the module's own not-enabled answer, before the study is even looked up.
-      if (!config.vcrPublicSimulationsEnabled || !hooks.publications) throw new HttpError(404, "vcr_publications_not_enabled", "模拟研究 is not enabled.");
     // --- 研究问题与假设: read by anyone who reads the study; an edit on the page is the person's basis, the strongest one ------
     // Only the fields the person changed are sent; a field nobody wrote stays a default. A patch that changes nothing is no version.
     if (parts.length === 3 && section === "research-question" && ["GET", "POST"].includes(method)) {
@@ -1546,6 +1542,10 @@ export function createVcrRoutes(dependencies) {
       return reply({ question: presentResearchQuestion(saved.question), created: saved.created }, saved.created ? 201 : 200);
     }
 
+    // --- 模拟研究: the lead publishes one of the study's reports to the public column --------------------
+    if (section === "publications") {
+      // Off is invisible: the module's own not-enabled answer, before the study is even looked up.
+      if (!config.vcrPublicSimulationsEnabled || !hooks.publications) throw new HttpError(404, "vcr_publications_not_enabled", "模拟研究 is not enabled.");
       if (parts.length === 3 && method === "GET") {
         const { study } = await authorize(id, "read");
         return reply({ publications: await hooks.publications.forStudy(study.id) });

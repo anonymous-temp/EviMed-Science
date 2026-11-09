@@ -1432,9 +1432,9 @@ function trialPremiseInput(bundle, row) {
     assuranceReason: "没有算：效应只有一个值，没有可以积分的预测分布",
     // The power the design keeps at the effect reduced by the published gap, from the analytic stage (C6); absent where there is none.
     effectDiscount: object(stages.analytic?.diagnostics?.sensitivity).discount ?? null,
+    researchQuestion: resultQuestionInput(bundle, { executionId: stage?.result?.executionId ?? row._result?.executionId ?? null }),
   };
 }
-    researchQuestion: resultQuestionInput(bundle, { executionId: stage?.result?.executionId ?? row._result?.executionId ?? null }),
 
 /**
  * The enrolment-year row of the balance plot (remediation plan D6): the two arms' mean calendar year of the time-zero date, the

@@ -103,14 +103,14 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
       calls.push(["vcr.assessment", input.actor, input.record.key, input.record.influence, input.record.consequence, input.record.modelName, input.record.influenceJustification]);
       return { id: "mia_1", key: input.record.key, version: 2, risk: "high", riskRule: "driven_by_consequence" };
     },
-    async addReview(/** @type {any} */ input) { calls.push(["vcr.review", input.kind, input.reviewer]); return { id: "rvw_1", ...input }; },
-    async addDecision(/** @type {any} */ input) { calls.push(["vcr.decision", input.decidedBy]); return { id: "dec_1", ...input }; },
-    async addRegulatoryContact(/** @type {any} */ input) { calls.push(["vcr.regulatory", input.actor, input.agency]); return { id: "reg_1", existing: input.agency === "FDA", ...input }; },
     async researchQuestions() { calls.push(["vcr.questions"]); return [{ id: "main", version: 2, studyId: "std_1", fields: { question: "q" }, bases: { question: "person_stated" }, written: ["question"], by: OWNER, createdAt: null }]; },
     async saveResearchQuestion(/** @type {any} */ input) {
       calls.push(["vcr.question", input.actor, input.basis, input.key ?? null, Object.keys(input.patch).join(",")]);
       return { question: { id: input.key ?? "main", version: 3, studyId: "std_1", fields: input.patch, bases: {}, written: Object.keys(input.patch), by: input.actor, createdAt: null }, created: true, kept: [] };
     },
+    async addReview(/** @type {any} */ input) { calls.push(["vcr.review", input.kind, input.reviewer]); return { id: "rvw_1", ...input }; },
+    async addDecision(/** @type {any} */ input) { calls.push(["vcr.decision", input.decidedBy]); return { id: "dec_1", ...input }; },
+    async addRegulatoryContact(/** @type {any} */ input) { calls.push(["vcr.regulatory", input.actor, input.agency]); return { id: "reg_1", existing: input.agency === "FDA", ...input }; },
     async exportRow(/** @type {string} */ _studyId, /** @type {string} */ id) {
       calls.push(["vcr.export", id]);
       if (id === "exp_sim") return { id: "exp_sim", kind: "simulation_report", state: "ready" };
@@ -522,12 +522,12 @@ const REQUESTS = {
   "POST /studies/:id/reviews data": ["POST", "/api/vcr/studies/std_1/reviews", { kind: "data", nodes: ["result:res_1@1"] }],
   "POST /studies/:id/decisions": ["POST", "/api/vcr/studies/std_1/decisions", { question: "q" }],
   "POST /studies/:id/regulatory-contacts": ["POST", "/api/vcr/studies/std_1/regulatory-contacts", { date: "2026-08-14", agency: "NMPA-CDE", type: "Pre-IND" }],
+  "GET /studies/:id/research-question": ["GET", "/api/vcr/studies/std_1/research-question", undefined],
+  "POST /studies/:id/research-question": ["POST", "/api/vcr/studies/std_1/research-question", { question: "多奈哌齐能否延缓恶化" }],
   "POST /studies/:id/export": ["POST", "/api/vcr/studies/std_1/export", { kind: "study_package" }],
   "GET /studies/:id/export/:export": ["GET", "/api/vcr/studies/std_1/export/exp_1", undefined],
   "GET /studies/:id/records/:result.csv": ["GET", "/api/vcr/studies/std_1/records/res_1.csv", undefined],
   "GET /studies/:id/records/:result.quality.json": ["GET", "/api/vcr/studies/std_1/records/res_1.quality.json", undefined],
-  "GET /studies/:id/research-question": ["GET", "/api/vcr/studies/std_1/research-question", undefined],
-  "POST /studies/:id/research-question": ["POST", "/api/vcr/studies/std_1/research-question", { question: "多奈哌齐能否延缓恶化" }],
   "GET /studies/:id/publications": ["GET", "/api/vcr/studies/std_1/publications", undefined],
   "POST /studies/:id/publications": ["POST", "/api/vcr/studies/std_1/publications", { exportId: "exp_1", title: "EV-201 模拟", summary: "" }],
   "POST /studies/:id/predictions": ["POST", "/api/vcr/studies/std_1/predictions", { scenarioId: "scn_1", registryId: "NCT02296125", endpoint: "PFS", resultPath: "measure(power)" }],

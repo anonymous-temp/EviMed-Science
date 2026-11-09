@@ -67,8 +67,8 @@ import { dominatedScenarioMap, numeric, withReviewState, zhUnit } from "./vcrVie
 import { vcrExecutionInputs, vcrPopulationsWithOwnResults } from "./vcrSnapshotBinding.mjs";
 import { vcrReportModel } from "./vcrRender.mjs";
 import { readSchedule } from "./vcrScheduleView.mjs";
-import { vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { presentResearchQuestion } from "./vcrResearchQuestionView.mjs";
+import { vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { buildModelAnalysis, isModelDocumentKind, readModelAnalysisInputs } from "./vcrModelDocuments.mjs";
 import { buildVcrActivity, readRunMarks } from "./vcrStudyStatus.mjs";
 
@@ -1070,9 +1070,9 @@ export class VcrService {
       criteria: protocol ? await this.store.criteria(protocol.id) : [], jobMarks,
       currentNodes,
     };
-    // The saved comparison a link names (`?object=`): the comparison tab's headline follows it, and the newest stays without one.
     // The research question the premises of a result page name (R22): only the pages that print premises read it.
     if (["trial", "population", "comparator", "patients"].includes(tab)) bundle.researchQuestion = (await this.store.researchQuestions?.(study.id).catch(() => []))?.[0] ?? null;
+    // The saved comparison a link names (`?object=`): the comparison tab's headline follows it, and the newest stays without one.
     if (tab === "comparator" && typeof query.object === "string") bundle.askedComparator = query.object;
     // and the trial tab's (a saved design's id, or the key a computed design is filed under): the first sentence and the premises follow it
     if (tab === "trial" && typeof query.object === "string") bundle.askedObject = query.object;
@@ -1853,7 +1853,6 @@ export class VcrService {
         return readSchedule({ protocol: protocol ? { id: String(protocol.id), version: Number(protocol.version), title: String(protocol.title ?? "") } : null,
           visits: protocol ? await this.store.schedule(protocol.id) : [] });
       }
-      case "regulatory_contacts": {
       case "research_question": {
         // The study's question as it stands: what is written and by whom, what is still open (a gap is a default, not a defect) and which
         // events this simulation can represent. `modelId` judges the events against one model; without it, the platform's general handling.
@@ -1861,6 +1860,7 @@ export class VcrService {
         const questions = (await this.store.researchQuestions(study.id)).map((question) => presentResearchQuestion(question, { modelId }));
         return { questions: questions.slice(0, limit), more: questions.length > limit };
       }
+      case "regulatory_contacts": {
         const contacts = await this.store.regulatoryContacts(study.id, limit + 1);
         return { contacts: contacts.slice(0, limit), more: contacts.length > limit };
       }

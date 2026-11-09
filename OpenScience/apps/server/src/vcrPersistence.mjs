@@ -1485,18 +1485,6 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.model_assessments (
 -- existed, so a version written before it reads as empty (nobody is named, not the run).
 ALTER TABLE evimed_vcr.model_assessments ADD COLUMN IF NOT EXISTS saved_by text NOT NULL DEFAULT '';
 
--- A model analysis plan, frozen: the content, its hash, when and by whom, at the
--- moment the analysis plan itself froze (vcrSeal.freezePlan) and so before any
--- sealed outcome is opened. A later change is the next version with what
--- changed; an earlier version is never edited, which the trigger below makes a
--- fact of the database and not a habit of the code.
-CREATE TABLE IF NOT EXISTS evimed_vcr.model_plan_versions (
-  id                    text PRIMARY KEY,
-  study_id              text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
-  user_id               text NOT NULL,
-  version               integer NOT NULL,
-  content               jsonb NOT NULL,
-  content_hash          text NOT NULL,
 -- The research question of a study (round-2 R22), one row per version of a question key: the whole question as it stood, who wrote
 -- each field (\`bases\`) and which fields this version changed. A row is never updated, so a result that recorded the version keeps
 -- reading the question it answered.
@@ -1514,6 +1502,18 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.research_questions (
   UNIQUE (study_id, key, version)
 );
 
+-- A model analysis plan, frozen: the content, its hash, when and by whom, at the
+-- moment the analysis plan itself froze (vcrSeal.freezePlan) and so before any
+-- sealed outcome is opened. A later change is the next version with what
+-- changed; an earlier version is never edited, which the trigger below makes a
+-- fact of the database and not a habit of the code.
+CREATE TABLE IF NOT EXISTS evimed_vcr.model_plan_versions (
+  id                    text PRIMARY KEY,
+  study_id              text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id               text NOT NULL,
+  version               integer NOT NULL,
+  content               jsonb NOT NULL,
+  content_hash          text NOT NULL,
   seal_plan_version     integer NOT NULL DEFAULT 0,
   seal_plan_hash        text NOT NULL DEFAULT '',
   frozen_at             timestamptz NOT NULL,
