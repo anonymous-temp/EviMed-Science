@@ -24,7 +24,7 @@
 
 import { createHash } from "node:crypto";
 import { VCR_MIN_CELL_SIZE } from "@evimed/domain";
-import { finishPremises } from "./vcrPremises.mjs";
+import { finishPremises, withQuestionPremisesAll } from "./vcrPremises.mjs";
 import { list, markFor, measureLabel, measureValue, numeric, object, text } from "./vcrViewsKit.mjs";
 
 /** @param {unknown} value @returns {unknown} the value with every object's keys in order, so the same configuration is the same text */
@@ -167,7 +167,7 @@ function cardOf(result, staleMark) {
 export function presentPrognosticModels(bundle, { nodeOf }) {
   const results = list(bundle.allResults ?? bundle.results).map(object).filter((row) => row.kind === "prognostic_training" && !row.supersededBy)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 8);
-  return results.map((result) => cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)))).filter(Boolean);
+  return withQuestionPremisesAll(results.map((result) => cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)))).filter(Boolean), bundle, results);
 }
 
 /** @param {Record<string, any>} result @param {any} staleMark exported for the tests that read one result */

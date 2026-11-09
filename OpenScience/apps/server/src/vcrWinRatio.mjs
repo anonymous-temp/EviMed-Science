@@ -22,7 +22,7 @@
  * @module vcrWinRatio
  */
 
-import { finishPremises } from "./vcrPremises.mjs";
+import { finishPremises, withQuestionPremisesAll } from "./vcrPremises.mjs";
 import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
 import { personWord } from "./vcrPersonStated.mjs";
 import { list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
@@ -160,5 +160,5 @@ function cardOf(result, staleMark) {
 export function presentWinRatioDesigns(bundle, { nodeOf }) {
   const results = list(bundle.allResults ?? bundle.results).map(object).filter((row) => row.kind === "design_win_ratio" && !row.supersededBy)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 8);
-  return results.map((result) => cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)))).filter(Boolean);
+  return withQuestionPremisesAll(results.map((result) => cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)))).filter(Boolean), bundle, results);
 }

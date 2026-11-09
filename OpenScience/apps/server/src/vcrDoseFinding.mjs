@@ -26,7 +26,7 @@
  * @module vcrDoseFinding
  */
 
-import { finishPremises } from "./vcrPremises.mjs";
+import { finishPremises, withQuestionPremisesAll } from "./vcrPremises.mjs";
 import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
 import { personWord } from "./vcrPersonStated.mjs";
 import { list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
@@ -260,11 +260,11 @@ function selectionPayload(result, staleMark) {
 export function presentDoseDesigns(bundle, { nodeOf }) {
   const results = list(bundle.allResults ?? bundle.results).map(object).filter((row) => row.kind === "design_dose" && !row.supersededBy)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 8);
-  return results.map((result) => {
+  return withQuestionPremisesAll(results.map((result) => {
     const staleMark = markFor(bundle.stale ?? [], nodeOf(result));
     const diagnostics = object(result.diagnostics);
     if (diagnostics.doseSelection) return selectionPayload(result, staleMark);
     if (diagnostics.doseFinding) return dosePayload(result, staleMark);
     return null;
-  }).filter(Boolean);
+  }).filter(Boolean), bundle, results);
 }

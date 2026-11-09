@@ -23,7 +23,7 @@
  */
 
 import { personWord } from "./vcrPersonStated.mjs";
-import { finishPremises } from "./vcrPremises.mjs";
+import { finishPremises, withQuestionPremisesAll } from "./vcrPremises.mjs";
 import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
 import { TIME_UNIT_WORDS, list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
 
@@ -270,7 +270,7 @@ function titleOf(design, title, confirmatory) {
 export function presentConfirmatoryDesigns(bundle, { nodeOf }) {
   const results = list(bundle.allResults ?? bundle.results).map(object).filter((row) => row.kind === "design_confirmatory" && !row.supersededBy)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 8);
-  return results.map((result) => {
+  return withQuestionPremisesAll(results.map((result) => {
     const confirmatory = object(object(result.diagnostics).confirmatory);
     const design = String(confirmatory.kind ?? "");
     const words = KIND_WORDS[design];
@@ -327,5 +327,5 @@ export function presentConfirmatoryDesigns(bundle, { nodeOf }) {
       unit: events ? "events" : "patients", headline, premises: premisesOf(confirmatory, object(result.diagnostics).personStated), looks, baselines, limited,
       table: rows.length ? { columns: columns.map(({ key, label, group }) => ({ key, label, group: group ?? null })), rows } : null,
     };
-  }).filter(Boolean);
+  }).filter(Boolean), bundle, results);
 }

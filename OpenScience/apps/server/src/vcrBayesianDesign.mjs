@@ -24,7 +24,7 @@
  * @module vcrBayesianDesign
  */
 
-import { finishPremises } from "./vcrPremises.mjs";
+import { finishPremises, withQuestionPremisesAll } from "./vcrPremises.mjs";
 import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
 import { personWord } from "./vcrPersonStated.mjs";
 import { list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
@@ -244,11 +244,11 @@ function calibrationPayload(result, staleMark, design) {
 export function presentBayesianDesigns(bundle, { nodeOf }) {
   const results = list(bundle.allResults ?? bundle.results).map(object).filter((row) => row.kind === "design_bayesian" && !row.supersededBy)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 8);
-  return results.map((result) => {
+  return withQuestionPremisesAll(results.map((result) => {
     const design = object(object(result.diagnostics).bayesianDesign);
     const staleMark = markFor(bundle.stale ?? [], nodeOf(result));
     if (design.kind === "bop2" || design.kind === "predictive_monitoring") return phase2Payload(result, staleMark, design);
     if (design.kind === "threshold_calibration") return calibrationPayload(result, staleMark, design);
     return null;
-  }).filter(Boolean);
+  }).filter(Boolean), bundle, results);
 }

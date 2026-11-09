@@ -35,7 +35,7 @@ import { targetTrialPremises } from "./vcrTargetTrialView.mjs";
 import { TIME_UNIT_WORDS, hazardLawWords, list, numeric, object, text } from "./vcrViewsKit.mjs";
 import { biasEstimatePhrase, biasStatedWords } from "./vcrBiasAnalysis.mjs";
 import { borrowingPremises } from "./vcrBorrowing.mjs";
-import { researchQuestionPremises } from "./vcrResearchQuestionView.mjs";
+import { researchQuestionPremises, resultQuestionInput } from "./vcrResearchQuestionView.mjs";
 
 /**
  * @typedef {{ key: string, label: string, value: string, source: 'literature' | 'assumed' | 'default' | 'given' | 'derived', decisive: boolean,
@@ -52,6 +52,7 @@ const PRIORITY = Object.freeze([
   // the research question: which version a result answers, what the simulation cannot represent of it, what the model's data estimate
   "question:earlier", "question:not_representable", "question:calibration", "question:events_unstated",
   // what the people of a population are and what a computation may do with them, then the control of a comparison
+  "claim:virtual_cohort", "claim:population_forecast", "claim:individualized_forecast",
   "binding:readiness", "binding:stale_model", "binding:stale_population", "origin:simulated", "origin:model_predicted", "origin:reconstructed", "origin:aggregate",
   "effect", "control", "dropout", "correlation", "similarity", "sampling", "accrualRate", "accrual", "followup", "alpha", "assurance",
   // a comparison: how suitable it is, how far the target trial is emulated, what an indirect comparison leaves unadjusted, what a
@@ -109,6 +110,29 @@ export function finishPremises(rows, personStated = null) {
 export function vcrPremises(view, input) {
   const rows = view === "trial" ? trialPremises(input) : view === "population" ? populationPremises(input) : comparatorPremises(input);
   return finishPremises([...rows, ...modelUsePremises(input.modelUse), ...researchQuestionPremises(input.researchQuestion)], input.personStated);
+}
+
+/**
+ * A card that already carries its premises, with the research question's rows added the way `vcrPremises` adds them to the three result
+ * pages (which version the result answers, what the simulation cannot represent of the question, what the model's data estimate): one block,
+ * ranked together, so a question row competes for a decisive place by the same order. A study with no question adds nothing.
+ * @template {Record<string, any> | null} T @param {T} card @param {Record<string, any> | null | undefined} bundle the page's bundle (`researchQuestion`, `executions`, `jobs`)
+ * @param {{ executionId?: string | null } | null | undefined} result the result the card is of @param {string | null} [modelId]
+ * @returns {T}
+ */
+export function withQuestionPremises(card, bundle, result, modelId = null) {
+  if (!card || !Array.isArray(card.premises)) return card;
+  const rows = researchQuestionPremises(resultQuestionInput(bundle, result, modelId));
+  return rows.length ? /** @type {T} */ ({ ...card, premises: finishPremises([...card.premises, ...rows]) }) : card;
+}
+
+/**
+ * The cards of one result family, each with the research question's rows (`withQuestionPremises`); a card is found its result by its id.
+ * @template {Record<string, any>} T @param {T[]} cards @param {Record<string, any> | null | undefined} bundle @param {Array<Record<string, any>>} results
+ * @returns {T[]}
+ */
+export function withQuestionPremisesAll(cards, bundle, results) {
+  return cards.map((card) => withQuestionPremises(card, bundle, results.find((result) => String(result.id) === String(card.id))));
 }
 
 /**
