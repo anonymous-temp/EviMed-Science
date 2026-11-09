@@ -24,6 +24,7 @@ Read [../vcr-protocol/references/operating-contract.md](../vcr-protocol/referenc
 - `mcp__evimed__vcr_read` `what: "jobs"` — 执行记录：种子、环境、CPU 秒。
 - `mcp__evimed__vcr_read` `what: "report_model"` — **可以引用的字段有哪些**：`{{n:…}}` 的路径都在这里（`counts`、`measures`、`assumptions`、`definition`、按场景 id 分开的结果等）。人数很小的格子读给你的时候已经隐去；引用照写，平台渲染时用的是完整的数。
 - 其中的 `schedule`（方案的访视日程）和 `regulatoryContacts`（监管沟通记录）由平台把表格印进包里，正文不必重写；要在文字里说访视的次数、天数，写引用（`{{n:schedule.totals.visits|int}}`、`{{n:schedule.visits[3].day|int}}`）。没有就是没有记录，不要从对话里补。
+- 虚拟实验室里做过的方案比较和设计搜索（`lab`）由平台印成包里的「虚拟实验室」一节，每个数都是从结果渲染的引用，正文不必重写，也不要手写其中的数；要在文字里提到其中一个数，写引用（`{{n:lab[0].comparison[0].arms[1].value.value|pct1}}`）。没有做过就没有这一节。
 
 ## 包的结构
 

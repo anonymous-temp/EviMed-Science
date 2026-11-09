@@ -3,6 +3,7 @@ import { DOCUMENT_REPORT_EXPORT_FORMATS as DOCUMENT_EXPORT_FORMATS, documentExpo
 import { HttpError } from './security.mjs';
 import { exportHash, freezeDocumentAssets } from './documentExport.mjs';
 import { renderVcrNumbers, vcrReportReviewRevision } from './vcrRender.mjs';
+import { renderLabSection } from './vcrLabReport.mjs';
 import { renderModelDocument } from './vcrModelDocuments.mjs';
 import { contactsTable, markdownTable, scheduleTable } from './vcrScheduleView.mjs';
 import { readVcrReviewExportProof } from './vcrReview.mjs';
@@ -62,7 +63,10 @@ export function canonicalVcrDocument(study, row) {
     : reports.map(report => `${report.section === 'main' ? '' : `## ${report.section}\n\n`}${renderVcrNumbers(report.template, model).text}`);
   // What the platform prints itself, after the words a run wrote: the visit schedule and the regulatory contacts the study recorded
   // (the frozen report model carries both; a package frozen before they were part of it has neither and prints nothing).
+  // and the virtual lab's comparisons and design searches (R14), every number rendered from the same frozen model
+  const lab = modelDocument ? null : renderLabSection(model);
   const records = modelDocument ? [] : [
+    ...(lab ? [lab.markdown] : []),
     ...(model.schedule?.visits?.length ? [`## 访视日程\n\n${markdownTable(scheduleTable(model.schedule.visits))}`] : []),
     ...(model.regulatoryContacts?.length ? [`## 监管沟通记录\n\n${markdownTable(contactsTable(model.regulatoryContacts))}`] : []),
   ];
