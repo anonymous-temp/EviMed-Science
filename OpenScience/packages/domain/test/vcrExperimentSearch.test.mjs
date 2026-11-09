@@ -437,3 +437,87 @@ test('a lower analysis level gives an asymptotically calibrated test margin unde
   assert.equal(level(/** @type {string} */ (verdict.best)), 0.022, 'the lower level passes the unchanged 2.5% bound')
   assert.deepEqual(verdict.inconclusive.map(level), [0.025], 'the level equal to the bound stays undecided and is never passed on its point estimate')
 })
+
+// Improvement precision and the screened-out reference (round 2, F05/F06). The cases are the shape of the independent review's
+// `unknown-covariance` and `screened-reference` harnesses, run through the public campaign functions with synthetic engine outcomes.
+const improvementManifest = (/** @type {any} */ over = {}) => frozen({ objective: { measure: 'power', direction: 'maximize', truth: 'alternative' }, reference: 0,
+  constraints: [{ measure: 'power', op: '>=', bound: 0.5, kind: 'design', truth: 'alternative' }],
+  stages: { final: { count: 2 } }, space: { ...manifestOf().space, variables: [{ path: 'design.nTreat', values: [200, 201] }] }, ...over })
+const powerEngine = (/** @type {Record<string, number>} */ powers, /** @type {(out: any, unit: any) => void} */ shape = () => {}) => (/** @type {any} */ unit) => {
+  const out = fakeOutcome(unit)
+  const p = powers[`${unit.candidate}:${unit.stage}`] ?? powers[unit.candidate]
+  out.replicates = 20000
+  out.measures[0] = { name: 'power', value: p, mcse: Math.sqrt(p * (1 - p) / 20000), simulated: true, source: 'synthetic' }
+  shape(out, unit)
+  return out
+}
+// the same seed on both finals, each with its own draw signature: the dependence is unknown
+const sameSeedOwnDraws = (/** @type {any} */ out, /** @type {any} */ unit) => { out.seed = 5; out.drawSignature = `draws:${unit.candidate}` }
+
+test('an unknown dependence is bounded by the sum of the marginal errors, never by their independent combination (F05)', () => {
+  const engine = powerEngine({ c000: 0.70, c001: 0.80 }, sameSeedOwnDraws)
+  const wide = drive(improvementManifest({ stopRules: { minImprovement: 0.09 } }), engine)
+  const bound = wide.state.stop.verdict.improvementBound
+  assert.equal(bound.basis, 'worst_case')
+  assert.equal(bound.coupling, 'same_seed_different_draws')
+  const marginals = Math.sqrt(0.7 * 0.3 / 20000) + Math.sqrt(0.8 * 0.2 / 20000)
+  assert.ok(Math.abs(bound.mcse - marginals) < 1e-12, 'Cauchy–Schwarz: sd(A − B) <= sd(A) + sd(B)')
+  // under independence the lower bound (about 0.0916) would meet 0.09; the worst case (about 0.0884) does not
+  assert.equal(wide.action.reason, 'inconclusive_at_precision')
+  const easy = drive(improvementManifest({ stopRules: { minImprovement: 0.05 } }), engine)
+  assert.equal(easy.action.reason, 'acceptable_precision')
+  assert.equal(easy.state.stop.verdict.improvementBound.basis, 'worst_case')
+})
+
+test('a missing marginal error is unknown, not zero: the improvement is unassessed and the requested minimum is not satisfied (F05)', () => {
+  const noError = (/** @type {any} */ out, /** @type {any} */ unit) => { if (unit.candidate === 'c001') delete out.measures[0].mcse; sameSeedOwnDraws(out, unit) }
+  const bounded = drive(improvementManifest({ stopRules: { minImprovement: 0.01 } }), powerEngine({ c000: 0.70, c001: 0.80 }, noError))
+  assert.equal(bounded.state.stop.verdict.improvementBound.basis, 'unassessed')
+  assert.equal(bounded.state.stop.verdict.improvementBound.lower, null)
+  assert.equal(bounded.action.reason, 'inconclusive_at_precision')
+  // different seeds are independent streams, yet an absent error still leaves the contrast without an interval
+  const independentNoError = drive(improvementManifest({ stopRules: { minImprovement: 0.01 } }), powerEngine({ c000: 0.70, c001: 0.80 }, (out, unit) => { if (unit.candidate === 'c001') delete out.measures[0].mcse }))
+  assert.equal(independentNoError.state.stop.verdict.improvementBound.basis, 'unassessed')
+  assert.equal(independentNoError.action.reason, 'inconclusive_at_precision')
+})
+
+test('a contrast is independent only between two known, different seeds (F05)', () => {
+  const a = { seed: 5, replicates: 100, measures: [{ name: 'power', value: 0.5, mcse: 0.05, simulated: true }] }
+  const b = { seed: 6, replicates: 100, measures: [{ name: 'power', value: 0.4, mcse: 0.05, simulated: true }] }
+  assert.equal(vcrEvaluationContrast(a, b, 'power').coupling, 'independent')
+  const unseeded = vcrEvaluationContrast({ ...a, seed: null }, b, 'power')
+  assert.deepEqual([unseeded.coupling, unseeded.mcse, unseeded.worstCaseMcse], ['unknown_dependence', null, 0.1])
+  const noError = vcrEvaluationContrast(a, { ...b, measures: [{ name: 'power', value: 0.4, simulated: true }] }, 'power')
+  assert.deepEqual([noError.coupling, noError.mcse, noError.worstCaseMcse], ['independent', null, null])
+  const exact = vcrEvaluationContrast(a, { ...b, measures: [{ name: 'power', value: 0.4 }] }, 'power')
+  assert.deepEqual([exact.mcse, exact.worstCaseMcse], [0.05, 0.05], 'a calculated measure has no error of its own')
+})
+
+test('a reference screened out is still evaluated finally for the contrast and never wins (F06)', () => {
+  const manifest = improvementManifest({ stopRules: { minImprovement: 0.01 }, stages: { screening: { replicates: 500 }, final: { count: 1 } },
+    constraints: [{ measure: 'power', op: '>=', bound: 0.5, kind: 'design', truth: 'alternative' }] })
+  // the reference's screening power is far under the bound, so screening eliminates it; its final power is what the contrast reads
+  const { action, state, units } = drive(manifest, powerEngine({ 'c000:screening': 0.10, 'c000:final': 0.55, 'c001:screening': 0.80, 'c001:final': 0.80 }))
+  assert.equal(state.candidates.c000.role, 'reference_only')
+  assert.ok(units.some((unit) => unit.candidate === 'c000' && unit.stage === 'final'), 'the reference has a final evaluation')
+  const verdict = state.stop.verdict
+  assert.equal(verdict.best, 'c001')
+  assert.ok(!verdict.feasible.includes('c000'), 'it never competes, though its own final power would pass')
+  assert.ok(Math.abs(verdict.improvement - 0.25) < 1e-12)
+  assert.notEqual(verdict.improvementBound, null)
+  assert.equal(action.reason, 'acceptable_precision')
+  // and the stop honours the minimum the person asked for
+  const demanding = drive(improvementManifest({ stopRules: { minImprovement: 0.4 }, stages: { screening: { replicates: 500 }, final: { count: 1 } } }),
+    powerEngine({ 'c000:screening': 0.10, 'c000:final': 0.55, 'c001:screening': 0.80, 'c001:final': 0.80 }))
+  assert.equal(demanding.action.reason, 'no_useful_improvement')
+})
+
+test('a reference that cannot be evaluated leaves the improvement unassessed and the requested minimum unsatisfied (F06)', () => {
+  const manifest = improvementManifest({ stopRules: { minImprovement: 0.01 }, stages: { screening: { replicates: 500 }, final: { count: 1 } } })
+  const engine = (/** @type {any} */ unit) => (unit.candidate === 'c000' && unit.stage === 'final' ? { jobId: `job_${unit.key}`, state: 'failed', issues: ['handler_error'], cpuSeconds: 1 }
+    : powerEngine({ 'c000:screening': 0.10, 'c001:screening': 0.80, 'c001:final': 0.80 })(unit))
+  const { action, state } = drive(manifest, engine)
+  assert.equal(state.stop.verdict.best, 'c001')
+  assert.equal(state.stop.verdict.improvement, null)
+  assert.equal(action.reason, 'inconclusive_at_precision')
+})
