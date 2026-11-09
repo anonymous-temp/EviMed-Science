@@ -142,6 +142,18 @@ export const VCR_WRITE_FIELDS = Object.freeze({
   "result_record": [
     "resultId"
   ],
+  "research_question": [
+    "id",
+    "basis",
+    "question",
+    "population",
+    "treatment",
+    "variable",
+    "intercurrentEvents",
+    "summary",
+    "decisionContext",
+    "assumptions"
+  ],
   "regulatory_contact": [
     "date",
     "agency",

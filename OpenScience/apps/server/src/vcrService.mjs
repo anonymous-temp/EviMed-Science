@@ -67,6 +67,7 @@ import { vcrExecutionInputs, vcrPopulationsWithOwnResults } from "./vcrSnapshotB
 import { vcrReportModel } from "./vcrRender.mjs";
 import { readSchedule } from "./vcrScheduleView.mjs";
 import { vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
+import { presentResearchQuestion } from "./vcrResearchQuestionView.mjs";
 import { buildModelAnalysis, isModelDocumentKind, readModelAnalysisInputs } from "./vcrModelDocuments.mjs";
 import { buildVcrActivity, readRunMarks } from "./vcrStudyStatus.mjs";
 
@@ -80,7 +81,7 @@ export const VCR_READ_WHATS = Object.freeze([
   "contracts", "data_intake",
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
   "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
-  "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
+  "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts", "research_question",
   "candidates", "success_rates",
 ]);
 
@@ -139,7 +140,7 @@ export const VCR_WRITE_WHATS = Object.freeze([
   "task_context", "patient_context", "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
   "fact", "language_judgment", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
-  "candidate_trial", "soa", "regulatory_contact", "result_record",
+  "candidate_trial", "soa", "regulatory_contact", "result_record", "research_question",
 ]);
 
 /** @param {unknown} value */
@@ -1069,6 +1070,8 @@ export class VcrService {
       currentNodes,
     };
     // The saved comparison a link names (`?object=`): the comparison tab's headline follows it, and the newest stays without one.
+    // The research question the premises of a result page name (R22): only the pages that print premises read it.
+    if (["trial", "population", "comparator", "patients"].includes(tab)) bundle.researchQuestion = (await this.store.researchQuestions?.(study.id).catch(() => []))?.[0] ?? null;
     if (tab === "comparator" && typeof query.object === "string") bundle.askedComparator = query.object;
     // and the trial tab's (a saved design's id, or the key a computed design is filed under): the first sentence and the premises follow it
     if (tab === "trial" && typeof query.object === "string") bundle.askedObject = query.object;
@@ -1850,6 +1853,13 @@ export class VcrService {
           visits: protocol ? await this.store.schedule(protocol.id) : [] });
       }
       case "regulatory_contacts": {
+      case "research_question": {
+        // The study's question as it stands: what is written and by whom, what is still open (a gap is a default, not a defect) and which
+        // events this simulation can represent. `modelId` judges the events against one model; without it, the platform's general handling.
+        const modelId = typeof filter.modelId === "string" && filter.modelId ? filter.modelId : null;
+        const questions = (await this.store.researchQuestions(study.id)).map((question) => presentResearchQuestion(question, { modelId }));
+        return { questions: questions.slice(0, limit), more: questions.length > limit };
+      }
         const contacts = await this.store.regulatoryContacts(study.id, limit + 1);
         return { contacts: contacts.slice(0, limit), more: contacts.length > limit };
       }

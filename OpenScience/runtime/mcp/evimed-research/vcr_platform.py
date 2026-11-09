@@ -82,14 +82,14 @@ READ_WHATS = (
     "contracts", "data_intake",
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
     "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
-    "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
+    "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts", "research_question",
     "candidates", "success_rates",
 )
 WRITE_WHATS = ("data_intake", "task_context", "patient_context",
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
     "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
     "fact", "language_judgment", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
-    "candidate_trial", "soa", "regulatory_contact", "result_record",
+    "candidate_trial", "soa", "regulatory_contact", "result_record", "research_question",
 )
 # The engine's job kinds, in the domain's order (`VCR_JOB_KINDS` in
 # `packages/domain/src/vcrVocabulary.mjs`): the 24 of the first release, then the
@@ -323,6 +323,8 @@ def _detailed_tool_definitions():
                 "reads the trial's title, phase, status and sites from the registry, judges the named patients against the criteria (its eligibility "
                 "lines, in the same shape as a protocol's) and ranks the trials; a language criterion of a trial is answered with what: language_judgment "
                 "and candidateTrialId."
+                " what: research_question writes the study's question (read it with the same what) a field at a time from what the person said, "
+                "basis person_stated or model_assembled; a field not written is a default, never a form to fill."
                 " what: trial_benchmark imports an existing external trial-effect JSON via data {predictionsFile: workspace-relative path}; "
                 "actual effects are read from preserved evidence. Never generate the file's predictions yourself."
             ),

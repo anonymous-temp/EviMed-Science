@@ -91,7 +91,7 @@ export const VCR_TABLES = Object.freeze([
   "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments", "parsed_trial_criteria",
   "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
-  "model_assessments", "model_plan_versions", "published_simulations",
+  "model_assessments", "research_questions", "model_plan_versions", "published_simulations",
   "precedent_candidates", "evidence_signals", "frontier_scans", "platform_packs", "pack_promotions",
   "evidence_second_reads", "experiments",
 ]);
@@ -1485,6 +1485,23 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.model_plan_versions (
   version               integer NOT NULL,
   content               jsonb NOT NULL,
   content_hash          text NOT NULL,
+-- The research question of a study (round-2 R22), one row per version of a question key: the whole question as it stood, who wrote
+-- each field (\`bases\`) and which fields this version changed. A row is never updated, so a result that recorded the version keeps
+-- reading the question it answered.
+CREATE TABLE IF NOT EXISTS evimed_vcr.research_questions (
+  id         text PRIMARY KEY,
+  study_id   text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id    text NOT NULL,
+  key        text NOT NULL,
+  version    integer NOT NULL,
+  fields     jsonb NOT NULL DEFAULT '{}'::jsonb,
+  bases      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  written    jsonb NOT NULL DEFAULT '[]'::jsonb,
+  saved_by   text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (study_id, key, version)
+);
+
   seal_plan_version     integer NOT NULL DEFAULT 0,
   seal_plan_hash        text NOT NULL DEFAULT '',
   frozen_at             timestamptz NOT NULL,

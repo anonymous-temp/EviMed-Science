@@ -35,6 +35,7 @@ import { targetTrialPremises } from "./vcrTargetTrialView.mjs";
 import { TIME_UNIT_WORDS, hazardLawWords, list, numeric, object, text } from "./vcrViewsKit.mjs";
 import { biasEstimatePhrase, biasStatedWords } from "./vcrBiasAnalysis.mjs";
 import { borrowingPremises } from "./vcrBorrowing.mjs";
+import { researchQuestionPremises } from "./vcrResearchQuestionView.mjs";
 
 /**
  * @typedef {{ key: string, label: string, value: string, source: 'literature' | 'assumed' | 'default' | 'given' | 'derived', decisive: boolean,
@@ -48,6 +49,8 @@ import { borrowingPremises } from "./vcrBorrowing.mjs";
 const PRIORITY = Object.freeze([
   // a use the model was never validated for turns every number below it, so it ranks first
   "use:use_not_validated",
+  // the research question: which version a result answers, what the simulation cannot represent of it, what the model's data estimate
+  "question:earlier", "question:not_representable", "question:calibration", "question:events_unstated",
   // what the people of a population are and what a computation may do with them, then the control of a comparison
   "binding:readiness", "binding:stale_model", "binding:stale_population", "origin:simulated", "origin:model_predicted", "origin:reconstructed", "origin:aggregate",
   "effect", "control", "dropout", "correlation", "similarity", "sampling", "accrualRate", "accrual", "followup", "alpha", "assurance",
@@ -105,7 +108,7 @@ export function finishPremises(rows, personStated = null) {
  */
 export function vcrPremises(view, input) {
   const rows = view === "trial" ? trialPremises(input) : view === "population" ? populationPremises(input) : comparatorPremises(input);
-  return finishPremises([...rows, ...modelUsePremises(input.modelUse)], input.personStated);
+  return finishPremises([...rows, ...modelUsePremises(input.modelUse), ...researchQuestionPremises(input.researchQuestion)], input.personStated);
 }
 
 /**

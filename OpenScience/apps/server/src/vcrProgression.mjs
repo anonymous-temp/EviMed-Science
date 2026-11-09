@@ -31,6 +31,7 @@
 import { createHash } from "node:crypto";
 import { finishPremises } from "./vcrPremises.mjs";
 import { list, markFor, measureValue, numeric, object, text, zhUnit } from "./vcrViewsKit.mjs";
+import { researchQuestionPremises, resultQuestionInput } from "./vcrResearchQuestionView.mjs";
 
 /** @param {unknown} value @returns {unknown} the value with every object's keys in order, so the same scenario is the same text */
 function ordered(value) {
@@ -289,7 +290,13 @@ export function presentProgressions(bundle, { nodeOf }) {
   // twelve live runs, 2026-11-07).
   const results = list(bundle.allResults ?? bundle.results).map(object).filter((row) => row.kind === "progression_simulation" && !row.supersededBy)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-  return results.map((result) => cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)))).filter(Boolean);
+  return results.map((result) => {
+    const card = cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)));
+    // The Alzheimer model's calibration estimand is the parameter set's: only a result computed with it is judged against it.
+    const modelId = object(object(object(result.diagnostics).progression)).family === "beta_logit" ? "camd-adas-cog-11" : null;
+    const rows = card ? researchQuestionPremises(resultQuestionInput(bundle, result, modelId)) : [];
+    return card && rows.length ? { ...card, premises: finishPremises([...list(card.premises), ...rows]) } : card;
+  }).filter(Boolean);
 }
 
 /** @param {Record<string, any>} result @param {any} staleMark exported for the tests that read one result */

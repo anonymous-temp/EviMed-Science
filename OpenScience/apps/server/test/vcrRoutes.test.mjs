@@ -103,6 +103,11 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
     async addReview(/** @type {any} */ input) { calls.push(["vcr.review", input.kind, input.reviewer]); return { id: "rvw_1", ...input }; },
     async addDecision(/** @type {any} */ input) { calls.push(["vcr.decision", input.decidedBy]); return { id: "dec_1", ...input }; },
     async addRegulatoryContact(/** @type {any} */ input) { calls.push(["vcr.regulatory", input.actor, input.agency]); return { id: "reg_1", existing: input.agency === "FDA", ...input }; },
+    async researchQuestions() { calls.push(["vcr.questions"]); return [{ id: "main", version: 2, studyId: "std_1", fields: { question: "q" }, bases: { question: "person_stated" }, written: ["question"], by: OWNER, createdAt: null }]; },
+    async saveResearchQuestion(/** @type {any} */ input) {
+      calls.push(["vcr.question", input.actor, input.basis, input.key ?? null, Object.keys(input.patch).join(",")]);
+      return { question: { id: input.key ?? "main", version: 3, studyId: "std_1", fields: input.patch, bases: {}, written: Object.keys(input.patch), by: input.actor, createdAt: null }, created: true, kept: [] };
+    },
     async exportRow(/** @type {string} */ _studyId, /** @type {string} */ id) {
       calls.push(["vcr.export", id]);
       if (id === "exp_sim") return { id: "exp_sim", kind: "simulation_report", state: "ready" };
@@ -517,6 +522,8 @@ const REQUESTS = {
   "GET /studies/:id/export/:export": ["GET", "/api/vcr/studies/std_1/export/exp_1", undefined],
   "GET /studies/:id/records/:result.csv": ["GET", "/api/vcr/studies/std_1/records/res_1.csv", undefined],
   "GET /studies/:id/records/:result.quality.json": ["GET", "/api/vcr/studies/std_1/records/res_1.quality.json", undefined],
+  "GET /studies/:id/research-question": ["GET", "/api/vcr/studies/std_1/research-question", undefined],
+  "POST /studies/:id/research-question": ["POST", "/api/vcr/studies/std_1/research-question", { question: "多奈哌齐能否延缓恶化" }],
   "GET /studies/:id/publications": ["GET", "/api/vcr/studies/std_1/publications", undefined],
   "POST /studies/:id/publications": ["POST", "/api/vcr/studies/std_1/publications", { exportId: "exp_1", title: "EV-201 模拟", summary: "" }],
   "POST /studies/:id/predictions": ["POST", "/api/vcr/studies/std_1/predictions", { scenarioId: "scn_1", registryId: "NCT02296125", endpoint: "PFS", resultPath: "measure(power)" }],
@@ -1284,4 +1291,25 @@ test("the per-person trajectory page is the owner's read: filters and the acting
   as("stranger");
   await assert.rejects(routes(request("GET", "/api/vcr/studies/std_1/longitudinal/prd_1/subjects", undefined), response()), { status: 404, code: "vcr_study_not_found" });
   assert.equal(seen.length, 1, "the reader was not asked for a member without the ability or a stranger");
+});
+
+test("the research question is read by whoever reads the study and edited on the page as the person's own basis; a bad field is refused by name", async () => {
+  const { routes, calls, audits } = fixture({ overrides: composedHooks() });
+  const read = response();
+  assert.equal(await routes(request("GET", "/api/vcr/studies/std_1/research-question"), read), true);
+  assert.deepEqual(JSON.parse(read.body).data.questions.map((/** @type {any} */ question) => [question.id, question.version]), [["main", 2]]);
+  assert.ok(JSON.parse(read.body).data.questions[0].gaps.length > 0, "a field nobody wrote is a gap to fill in, not an error");
+
+  const made = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/research-question", { question: " 新的问题 ", intercurrentEvents: [{ event: "停药", strategy: "hypothetical" }] }), made);
+  assert.equal(made.status, 201);
+  assert.deepEqual(calls.filter((call) => call[0] === "vcr.question"), [["vcr.question", OWNER, "person_edited", null, "question,intercurrentEvents"]],
+    "written as the account's own edit, the strongest basis, and never as a run's");
+  assert.ok(audits.some((line) => line[0] === "vcr.research_question.edit" && line[1] === "completed"), "audited");
+
+  for (const bad of [{ intercurrentEvents: [{ event: "停药", strategy: "ignore" }] }, { variable: { endpoint: 3 } }, { basis: "person_edited" }]) {
+    await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/research-question", bad), response()),
+      (error) => error instanceof HttpError && error.status === 400 && ["vcr_research_question_invalid", "vcr_payload_invalid"].includes(error.code), JSON.stringify(bad));
+  }
+  assert.equal(calls.filter((call) => call[0] === "vcr.question").length, 1, "nothing refused was written");
 });

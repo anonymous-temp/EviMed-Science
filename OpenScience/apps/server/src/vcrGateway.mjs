@@ -57,6 +57,8 @@
 //   `vcr_gateway_unavailable`.
 
 import { VCR_WRITE_FIELDS, vcrContractsRead } from "./vcrWriteContracts.mjs";
+import { VCR_QUESTION_FIELD_LABELS_ZH, VCR_QUESTION_LIMITS } from "@evimed/domain";
+import { VCR_QUESTION_DEFAULT_KEY, VCR_QUESTION_KEY, checkResearchQuestionPatch } from "./vcrResearchQuestions.mjs";
 import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
 import { extractSelection } from "./vcrMatchBatch.mjs";
 import { locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, sourceTextLength } from "./vcrPatientTrials.mjs";
@@ -1776,6 +1778,31 @@ const WRITERS = {
   },
 
   async decision(item, { store, study }) {
+  /**
+   * The study's research question (R22), a field at a time from what the person said. Every field is optional; a patch that changes
+   * something is the next version, a field the person edited on the page is kept and named back (`kept`) rather than overwritten, and
+   * a patch that changes nothing writes nothing. The basis is the run's to state as `person_stated` (the person's own words) or
+   * `model_assembled` (its reading of several turns); an edit on the page is the person's alone.
+   */
+  async research_question(item, { store, study }, extra) {
+    if (!item.only(VCR_WRITE_FIELDS.research_question)) return null;
+    const key = item.str("id", { max: VCR_QUESTION_LIMITS.id }) ?? VCR_QUESTION_DEFAULT_KEY;
+    if (!VCR_QUESTION_KEY.test(key)) item.bad("id", "id 是小写英文字母开头、只含小写字母、数字和下划线的短词，例如 main；不写就是 main。");
+    const basis = item.choice("basis", ["person_stated", "model_assembled"], { fallback: "model_assembled" });
+    const { id: _id, basis: _basis, ...fields } = item.row;
+    const { patch, issues } = checkResearchQuestionPatch(fields);
+    for (const found of issues) item.bad(found.field, found.message);
+    if (item.ok && !Object.keys(patch).length) item.bad("question", "至少写一个字段：question、population、treatment、variable、intercurrentEvents、summary、decisionContext 或 assumptions。");
+    if (!item.ok) return null;
+    const saved = await store.saveResearchQuestion({ studyId: study.id, userId: study.userId, actor: "runtime", basis: /** @type {string} */ (basis), key, patch });
+    if (!saved.question) return void item.bad("question", "没有可以写入的内容（字段都是空的）。");
+    const version = saved.question.version;
+    const kept = saved.kept.map((entry) => /** @type {Record<string, string>} */ (VCR_QUESTION_FIELD_LABELS_ZH)[entry.field] ?? entry.field);
+    const note = kept.length ? `${kept.join("、")}是对方在页面上改过的，没有被覆盖；要换成对话里说的，请对方在页面上改。` : saved.created ? "" : "没有变化，没有写新版本。";
+    extra.results.push({ index: item.index, id: `${key}@${version}`, version, ...(kept.length ? { kept: saved.kept.map((entry) => entry.field) } : {}), ...(note ? { note } : {}) });
+    return `${key}@${version}`;
+  },
+
     if (!item.only(VCR_WRITE_FIELDS.decision)) return null;
     const question = item.str("question", { max: 400, required: true });
     const chosen = item.obj("chosen") ?? {};

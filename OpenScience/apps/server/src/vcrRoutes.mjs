@@ -76,6 +76,9 @@ import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { measureValue, zhTime } from "./vcrViewsKit.mjs";
 import { presentSplineFit } from "./vcrSplineFit.mjs";
 import { checkRegulatoryContact } from "./vcrScheduleView.mjs";
+import { VCR_QUESTION_FIELDS } from "@evimed/domain";
+import { checkResearchQuestionPatch } from "./vcrResearchQuestions.mjs";
+import { presentResearchQuestion } from "./vcrResearchQuestionView.mjs";
 import { VCR_ROWS_PAGE_MAX } from "./vcrRows.mjs";
 import { readRunMarks } from "./vcrStudyStatus.mjs";
 
@@ -128,6 +131,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_regulatory_contact_invalid",
   "vcr_export_kind_invalid",
   "vcr_export_not_found",
+  "vcr_research_question_invalid",
   "vcr_model_invalid",
   "vcr_model_exists",
   "vcr_member_role_invalid",
@@ -208,6 +212,8 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/regulatory-contacts": ["write"],
   "POST /studies/:id/export": ["export"],
   "GET /studies/:id/export/:export": ["read"],
+  "GET /studies/:id/research-question": ["read"],
+  "POST /studies/:id/research-question": ["write"],
   "GET /studies/:id/records/:result.csv": ["read"],
   "GET /studies/:id/records/:result.quality.json": ["read"],
   "GET /studies/:id/publications": ["read"],
@@ -1519,6 +1525,23 @@ export function createVcrRoutes(dependencies) {
     if (section === "publications") {
       // Off is invisible: the module's own not-enabled answer, before the study is even looked up.
       if (!config.vcrPublicSimulationsEnabled || !hooks.publications) throw new HttpError(404, "vcr_publications_not_enabled", "模拟研究 is not enabled.");
+    // --- 研究问题与假设: read by anyone who reads the study; an edit on the page is the person's basis, the strongest one ------
+    // Only the fields the person changed are sent; a field nobody wrote stays a default. A patch that changes nothing is no version.
+    if (parts.length === 3 && section === "research-question" && ["GET", "POST"].includes(method)) {
+      if (method === "GET") {
+        const { study } = await authorize(id, "read");
+        return reply({ questions: (await data().researchQuestions(study.id)).map((question) => presentResearchQuestion(question)) });
+      }
+      const body = await bodyOf(req, maxJsonBytes, ["id", ...VCR_QUESTION_FIELDS]);
+      const { patch, issues } = checkResearchQuestionPatch(body);
+      if (issues.length) throw new HttpError(400, "vcr_research_question_invalid", issues[0].message);
+      const { study } = await authorize(id, "write");
+      const saved = await audited("vcr.research_question.edit", (result) => ({ code: String(result.question?.version ?? 0), detail: id }), { code: id },
+        () => data().saveResearchQuestion({ studyId: study.id, userId: study.userId, actor: String(user.id), basis: "person_edited",
+          ...(typeof body.id === "string" && body.id ? { key: body.id } : {}), patch }));
+      return reply({ question: presentResearchQuestion(saved.question), created: saved.created }, saved.created ? 201 : 200);
+    }
+
       if (parts.length === 3 && method === "GET") {
         const { study } = await authorize(id, "read");
         return reply({ publications: await hooks.publications.forStudy(study.id) });

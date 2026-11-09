@@ -1003,7 +1003,9 @@ export class VcrJobs {
    *
    * @param {{ studyId: string, userId: string, principal?: string, kind: string, scenario?: Record<string, any>, inputs?: unknown[],
    *   qualityBasis?: Record<string, any> | null, derived?: Array<{ resultId: string, table: string, bindTo?: string }>, seed?: number | null, replicates?: number | null, cpuSecondsLimit?: number | null, idempotencyKey?: string | null,
-   *   runId?: string | null, maxAttempts?: number, detail?: Record<string, any>, internal?: boolean }} input
+   *   runId?: string | null, maxAttempts?: number, detail?: Record<string, any>, internal?: boolean, questionRef?: { id: string, version: number } | null }} input
+   * `questionRef` is the research question a job answers (R22); when none is named the study's current one is recorded, in the job's record and
+   * never in its scenario, so it cannot change a scenario hash or reach the engine.
    * @returns {Promise<{ job: any, created: boolean, notice?: { code: string, message: string } }>} `notice` is what the caller must tell the person
    *   about a job that was queued (a synthesis the budget may not hold)
    */
@@ -1185,6 +1187,9 @@ export class VcrJobs {
       throw this.#invalid("vcr_job_scenario_invalid", issues.map((issue) => (said.has(issue.field) ? { ...issue, detail: said.get(issue.field) } : issue)));
     }
 
+    const named = object(input.questionRef);
+    const questionRef = typeof named.id === "string" && named.id && Number.isInteger(named.version) ? { id: named.id, version: Number(named.version) }
+      : await this.store.currentQuestionRef?.(studyId).catch(() => null) ?? null;
     const baseKey = vcrIdempotencyKey({ key: input.idempotencyKey ?? null, kind, studyId, scenarioHash, inputs, seed });
     const sourceModel = object(object(input.detail).sourceModel);
     const key = sourceModel.id ? `${baseKey}:model:${vcrScenarioHash({ id: sourceModel.id, version: sourceModel.version })}` : baseKey;
@@ -1206,12 +1211,13 @@ export class VcrJobs {
       (id, study_id, user_id, kind, method, method_version, state, scenario, scenario_hash, inputs, seed, replicates,
        cpu_seconds_limit, max_attempts, run_id, idempotency_key, checkpoint)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14, $15, $16, $17::jsonb)
-      ON CONFLICT (user_id, idempotency_key) DO UPDATE SET updated_at = now()
+      ON CONFLICT (user_id, idempotency_key) DO UPDATE SET updated_at = now(),
+        checkpoint = CASE WHEN $18::jsonb IS NULL THEN ${VCR_SCHEMA}.jobs.checkpoint ELSE ${VCR_SCHEMA}.jobs.checkpoint || jsonb_build_object('questionRef', $18::jsonb) END
       RETURNING *, (xmax = 0) AS inserted`,
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(described.applied.length ? { normalizedKeys: described.applied } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: vcrJobCostClass(kind, scenario) })])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(described.applied.length ? { normalizedKeys: described.applied } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: vcrJobCostClass(kind, scenario), ...(questionRef ? { questionRef } : {}) }), questionRef ? JSON.stringify(questionRef) : null])).rows[0];
       // Completion locks the job before its population. A duplicate enqueue must take the same order:
       // the UPSERT may wait for a finishing job; only then lock and recheck its generation in this transaction.
       if (qualityBasis) {

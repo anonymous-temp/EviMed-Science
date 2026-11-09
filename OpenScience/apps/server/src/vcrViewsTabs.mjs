@@ -65,6 +65,7 @@ import { presentWinRatioDesigns } from "./vcrWinRatio.mjs";
 import { vcrTypeOneVerdict } from "./vcrTypeOneVerdict.mjs";
 import { presentPrognosticModels } from "./vcrPrognosticTraining.mjs";
 import { presentProgressions } from "./vcrProgression.mjs";
+import { resultQuestionInput } from "./vcrResearchQuestionView.mjs";
 import { presentEvidenceSyntheses, tauPriorWords, vcrSuccessRatesPage } from "./vcrEvidenceSynthesis.mjs";
 import { presentBiasAnalysis } from "./vcrBiasAnalysis.mjs";
 import { presentBorrowing } from "./vcrBorrowing.mjs";
@@ -479,7 +480,7 @@ export function presentPopulationTab(bundle) {
       { currentResultId: current.resultId ?? null }) : null,
     // 「这个结论的前提」 of a generated population: how its variables relate, how far it is the source trial's, how far its parameters moved.
     premises: current ? finishPremises([
-      ...vcrPremises("population", { kind: current.kind, diagnostics, modelUse: bindingUseFindings(binding, bundle.models, current) }),
+      ...vcrPremises("population", { kind: current.kind, diagnostics, researchQuestion: resultQuestionInput(bundle, list(bundle.allResults ?? bundle.results).find((/** @type {any} */ row) => row.id === current.resultId) ?? null), modelUse: bindingUseFindings(binding, bundle.models, current) }),
       ...populationBindingPremises(binding),
     ]) : [],
     binding: binding ? {
@@ -908,6 +909,7 @@ export function presentComparatorTab(bundle) {
     operatingCharacteristics: operatingCharacteristicsView(diagnostics),
     // 「这个结论的前提」: the list and its rules are `vcrPremises`'s; the comparator's facts are filled in beside the route's own rows.
     premises: finishPremises([...vcrPremises("comparator", {
+      researchQuestion: resultQuestionInput(bundle, result),
       route: shown?.route ?? null, estimand: ownEstimand, estimandStated: ownEstimand !== null && shown ? shown.estimand !== "ATT" && shown.estimand === ownEstimand : false, diagnostics,
       measures: Object.fromEntries(list(result?.measures).map(object).map((measure) => [String(measure.name), numeric(measure.value)])),
       applicability: shown ? vcrApplicability(shown.configuration) : null,
@@ -1430,6 +1432,7 @@ function trialPremiseInput(bundle, row) {
     effectDiscount: object(stages.analytic?.diagnostics?.sensitivity).discount ?? null,
   };
 }
+    researchQuestion: resultQuestionInput(bundle, { executionId: stage?.result?.executionId ?? row._result?.executionId ?? null }),
 
 /**
  * The enrolment-year row of the balance plot (remediation plan D6): the two arms' mean calendar year of the time-zero date, the

@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { VCR_EXPORT_KINDS as ALL_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_JOB_METHODS, VCR_ENGINE_METHODS } from "@evimed/domain";
+import { applyQuestionPatch, VCR_EXPORT_KINDS as ALL_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_JOB_METHODS, VCR_ENGINE_METHODS } from "@evimed/domain";
 import { projectResearchInvocation } from '@evimed/research-plugin-runtime/hosted-protocol';
 
 /** The documents a run writes. A result record is the platform's own, from one result (D7): no run is sent out for it and none fills it. */
@@ -76,7 +76,18 @@ function fixture(overrides = {}) {
     async reportModel(target) { return vcrReportModel({ study: target, results: await vcrStoreResults() }); },
     async adoptModel(_user, input) { calls.push(["adopt", input.name]); return { id: "mdl_1" }; },
   };
+  /** The research question's versions, kept the way the store keeps them (the domain's patch decides what changes). @type {Map<string, any>} */
+  const questions = new Map();
   const store = {
+    async saveResearchQuestion(input) {
+      const latest = questions.get(input.key) ?? null;
+      const next = applyQuestionPatch(latest, input.patch, input.basis);
+      calls.push(["question", input.key, input.basis, input.actor, Object.keys(input.patch).join(",")]);
+      if (!next.changed) return { question: latest, created: false, kept: next.kept };
+      const question = { id: input.key, version: next.version, fields: next.fields, bases: next.bases };
+      questions.set(input.key, question);
+      return { question, created: true, kept: next.kept };
+    },
     async studyByRuntimeDispatch() { return study; },
     async studyByControlProject(userId, projectId) {
       return userId === "u1" && projectId === "prj_1" ? study : null;
@@ -2147,4 +2158,53 @@ test("「每月入组 20 人」 started in a conversation: the rate reaches the 
   assert.equal(refused.status, 400, refused.body);
   assert.match(refused.body, /accrual\.rate/);
   assert.equal(queued.length, before);
+});
+
+test("the research question is written a field at a time: every field optional, a version per change, the page's edit kept over a run's write", async () => {
+  const { calls, handler } = fixture();
+  const write = async (/** @type {Record<string, any>} */ data) => { const res = response(); await handler(request("/internal/vcr/v1/write", { what: "research_question", data }), res); return res.json().data; };
+
+  const first = await write({ question: "多奈哌齐在 78 周能否延缓 ADAS-Cog 恶化？", basis: "person_stated" });
+  assert.deepEqual([first.ok, first.ids, first.issues], [true, ["main@1"], []], JSON.stringify(first));
+  assert.deepEqual(calls.find((call) => call[0] === "question"), ["question", "main", "person_stated", "runtime", "question"]);
+
+  // a second field is the next version; the first field stays
+  const second = await write({ variable: { endpoint: "ADAS-Cog 11", timePoint: "第 78 周" }, intercurrentEvents: [{ event: "因不良反应停药", strategy: "treatment_policy", mechanism: "停药后继续随访" }] });
+  assert.deepEqual(second.ids, ["main@2"]);
+  assert.equal(calls.filter((call) => call[0] === "question")[1][2], "model_assembled", "no basis stated is the model's own assembly");
+
+  // the same words again are no new version and say so
+  const again = await write({ question: "多奈哌齐在 78 周能否延缓 ADAS-Cog 恶化？" });
+  assert.equal(again.ok, true);
+  assert.deepEqual(again.ids, ["main@2"]);
+  assert.match(JSON.stringify(again.results), /没有变化/);
+
+  // the run may not state the person's page edit as its own basis, and an unreadable part is named by its field
+  const bad = await write({ basis: "person_edited", question: "x" });
+  assert.deepEqual(bad.issues.map((/** @type {any} */ issue) => issue.field), ["basis"]);
+  const unreadable = await write({ intercurrentEvents: [{ event: "停药", strategy: "ignore" }], nonsense: 1 });
+  assert.deepEqual(unreadable.issues.map((/** @type {any} */ issue) => issue.field).sort(), ["nonsense"], "the closed field list refuses first");
+  const strategy = await write({ intercurrentEvents: [{ event: "停药", strategy: "ignore" }] });
+  assert.deepEqual(strategy.issues.map((/** @type {any} */ issue) => issue.field), ["intercurrentEvents[0].strategy"]);
+  const nothing = await write({ id: "main" });
+  assert.equal(nothing.ok, false, "an item with no field writes nothing");
+  assert.equal(calls.filter((call) => call[0] === "question").length, 3, "none of the refused items reached the store");
+});
+
+test("a field the person edited on the page is not overwritten by a run, and the run is told which", async () => {
+  const { handler, vcr } = fixture();
+  // the person's edit is already version 1 on the page's basis
+  const edited = await vcr.store.saveResearchQuestion({ key: "main", basis: "person_edited", actor: "u1", patch: { question: "页面上改的问题", summary: "第 78 周的平均变化之差" } });
+  assert.equal(edited.question.version, 1);
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", { what: "research_question", data: { question: "对话里整理的问题", summary: "别的汇总", population: { text: "轻中度阿尔茨海默病" } } }), res);
+  const done = res.json().data;
+  assert.equal(done.ok, true, JSON.stringify(done));
+  assert.deepEqual(done.results[0].kept, ["question", "summary"]);
+  assert.match(done.results[0].note, /研究问题、群体层面的汇总方式是对方在页面上改过的/);
+  assert.deepEqual(done.ids, ["main@2"], "the population is a new version; the two kept fields did not move");
+});
+
+test("the research question reads and writes through the closed vocabularies the runtime lists", () => {
+  assert.ok(VCR_READ_WHATS.includes("research_question") && VCR_WRITE_WHATS.includes("research_question"));
 });

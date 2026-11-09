@@ -45,7 +45,7 @@ export const VCR_ID_PREFIXES = Object.freeze({
   job: "job", execution: "exe", result: "res", forecast: "fct",
   assessment: "mas", judgment: "jdg", episode: "fup",
   review: "rvw", decision: "dec", contact: "reg", export: "exp",
-  modelAssessment: "mia", modelPlan: "mpv",
+  modelAssessment: "mia", modelPlan: "mpv", question: "rqv",
   simulation: "sim", candidate: "pcn", signal: "sig", secondRead: "esr",
   candidateTrial: "ctr", candidateCriterion: "ctc", candidateAssessment: "cta", candidateJudgment: "ctj",
 });

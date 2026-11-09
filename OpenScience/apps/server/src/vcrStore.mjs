@@ -51,6 +51,7 @@ import { HttpError } from "./security.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_EXPERIMENT_CANDIDATE_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
 import { addRegulatoryContact, regulatoryContacts } from "./vcrRegulatory.mjs";
+import { currentQuestionRef, researchQuestions, saveResearchQuestion } from "./vcrResearchQuestions.mjs";
 import { carryScheduleForward, saveScheduleVisits, visitsFromRows } from "./vcrSchedule.mjs";
 import { withReviewState } from "./vcrViewsKit.mjs";
 import { longitudinalIndex } from './vcrLongitudinalStore.mjs';
@@ -1880,6 +1881,23 @@ export class VcrStore extends VcrStoreBase {
     return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.model_plan_versions WHERE study_id = $1
       ORDER BY version DESC LIMIT 50`, [studyId])).map((row) => modelPlanVersionFromRow(row));
   }
+  // --- the research question (R22): versions of 「研究问题与假设」, `vcrResearchQuestions.mjs` ---------
+
+  /** @param {Parameters<typeof saveResearchQuestion>[1]} input */
+  saveResearchQuestion(input) {
+    return saveResearchQuestion(this, input);
+  }
+
+  /** The current version of every question of the study, the default first. @param {string} studyId */
+  researchQuestions(studyId) {
+    return researchQuestions(this, studyId);
+  }
+
+  /** The question a new job answers, as `{ id, version }`, or null. @param {string} studyId */
+  currentQuestionRef(studyId) {
+    return currentQuestionRef(this, studyId);
+  }
+
 
   /** @param {{ studyId: string, userId: string, kind: string, cover?: Record<string, any> }} input
    * @param {{client?:any}} [options] */
