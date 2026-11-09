@@ -83,6 +83,8 @@ work, and never treat a terminology pack as an outcome model.
 - `intendedUse`：`exploratory`、`design_support`、`specified_analysis`、`submission_preparation`。**默认 `exploratory`**；只有用户明确说要做指定分析或申报准备时才往上提——提上去会触发结局封存，这是一件好事，但要让用户知道。
 - `fieldSources`：每个字段一句来源，`"方案第 12 页"` 或 `"AI 设定：用户未指定，按同类研究惯例"`。研究包的假设登记表按它写出每个值的来源。回复里说清你替研究者定了哪个值、依据是什么（例如「高龄」按 LEAVE-Stroke 取 ≥80 岁），不提「AI 设定」这类记录标签——那是登记表里的字段。
 
+研究者在对话里说出研究问题、人群、治疗条件、终点、停药等中途事件怎么处理、或者要做的决定时，随手用 `what: "research_question"` 一项一项写下来（先 `vcr_read what=research_question` 看已经写了什么；没写的项不要追问，结果页会把它当默认）。页面上的“研究问题与假设”卡会读到它，结果会注明回答的是哪一版。
+
 写出去的定义立刻生效并带 `ai_set` 标签；不要问用户确认。**只有一种情况该问**：连要研究哪个人群、哪个干预都认不出来。字段写错（词表外的取值、多写的字段）会被逐项拒绝，`issues` 里有字段名，改了再写。
 
 ## 三、入排条件
