@@ -120,6 +120,10 @@ export const VCR_CAMPAIGN_METHODS = Object.freeze({
 export const VCR_CAMPAIGN_ALPHA_SEARCH_METHODS = Object.freeze(['design.simulate', 'patients.progression'])
 export const VCR_CAMPAIGN_ALPHA_PATH = 'analysis.alpha'
 
+/** The measure scenarios are compared on, and the defaults a robust reading writes into its manifest (R34). */
+export const VCR_ROBUST_MEASURE = 'power'
+export const VCR_ROBUST_DEFAULTS = Object.freeze({ floor: 0.8, tolerance: Object.freeze({ power: 0.02, relative: 0.1 }) })
+
 /** Paths no variable may move: the evaluator. A path equal to or below one of these is refused. */
 export const VCR_CAMPAIGN_FROZEN_PATHS = Object.freeze({
   common: Object.freeze(['truth', 'endpoint', 'evaluation', 'performance', 'targetMcse', 'hypothesis', 'costs', 'timeUnit',
@@ -178,6 +182,16 @@ function frozenPath(method, path) {
   return frozen.some((root) => path === root || path.startsWith(`${root}.`) || root.startsWith(`${path}.`))
 }
 
+/**
+ * Paths a scenario's world may not re-state: the evaluator's (the common list and the method's own truth field). The method's other
+ * frozen paths (dropout, placebo, population, model) are exactly what a world is for, so they are allowed here.
+ * @param {string | undefined} truthField @param {string} path
+ */
+function worldFrozenPath(truthField, path) {
+  const roots = [...VCR_CAMPAIGN_FROZEN_PATHS.common, ...(truthField ? [truthField] : [])]
+  return roots.some((root) => path === root || path.startsWith(`${root}.`) || root.startsWith(`${path}.`))
+}
+
 // ---------------------------------------------------------------------------
 // The manifest
 // ---------------------------------------------------------------------------
@@ -211,11 +225,26 @@ export function vcrCampaignManifest(input) {
   const truthField = info?.truthField ?? 'truth'
   const emptyTruthOk = Boolean(info?.truthField)
   if (emptyTruthOk && rawTruths.length && base[truthField] !== undefined) bad('campaign_value_frozen', `space.scenario.${truthField}`, `The ${truthField} of each world is stated in space.truths, not in the base scenario.`)
-  const truths = rawTruths.length ? rawTruths.map((entry) => ({ name: String(object(entry).name ?? ''), truth: object(object(entry).truth) })) : [{ name: 'base', truth: object(base[truthField]) }]
+  // A scenario (R34) is a truth plus, optionally, the world around it: `world` re-states dotted paths of the base scenario for this scenario only
+  // (the control course, the population, the dropout mechanism: whatever the method's schema takes there) and `weight` says how much the person
+  // cares about it. Both are written only when stated, so a campaign that states neither keeps the canonical bytes it always had.
+  const truths = rawTruths.length ? rawTruths.map((entry) => {
+    const raw = object(entry)
+    return { name: String(raw.name ?? ''), truth: object(raw.truth), ...(raw.world == null ? {} : { world: object(raw.world) }), ...(raw.weight == null ? {} : { weight: raw.weight }) }
+  }) : [{ name: 'base', truth: object(base[truthField]) }]
   if (truths.length > L.maxTruths) bad('campaign_value_invalid', 'space.truths', `At most ${L.maxTruths} truth scenarios.`)
   truths.forEach((entry, i) => {
     if (!/^[a-z][a-z0-9_]{0,23}$/.test(entry.name)) bad('campaign_value_invalid', `space.truths[${i}].name`, 'A truth is named with a short lower-case word.')
     if (!emptyTruthOk && !Object.keys(entry.truth).length) bad('campaign_value_invalid', `space.truths[${i}].truth`, 'A truth scenario states its truth.')
+    if (entry.world !== undefined) {
+      const world = /** @type {Record<string, any>} */ (entry.world)
+      if (!Object.keys(world).length) bad('campaign_value_invalid', `space.truths[${i}].world`, 'A scenario\'s world states at least one path, or is left out.')
+      for (const path of Object.keys(world)) {
+        if (!PATH.test(path)) bad('campaign_value_invalid', `space.truths[${i}].world`, `"${path}" is not a dotted scenario path.`)
+        else if (worldFrozenPath(info?.truthField, path)) bad('campaign_value_frozen', `space.truths[${i}].world.${path}`, `${path} belongs to the evaluator (truth, endpoint, nominal alpha, what is measured, precision) and no scenario's world can move it.`)
+      }
+    }
+    if (entry.weight !== undefined && !(typeof entry.weight === 'number' && Number.isFinite(entry.weight) && entry.weight > 0)) bad('campaign_value_invalid', `space.truths[${i}].weight`, 'A scenario weight is a positive number.')
   })
   if (new Set(truths.map((entry) => entry.name)).size !== truths.length) bad('campaign_value_invalid', 'space.truths', 'Truth names are unique.')
   const truthNames = truths.map((entry) => entry.name)
@@ -239,6 +268,15 @@ export function vcrCampaignManifest(input) {
   explicit.forEach((entry, i) => {
     if (!Object.keys(entry.set).length) bad('campaign_value_invalid', `space.candidates[${i}].set`, 'A candidate sets at least one path.')
     for (const path of Object.keys(entry.set)) checkPath(path, `space.candidates[${i}].set.${path}`)
+  })
+  // a scenario's world is the evaluator's, a variable is the search's: one path cannot be both
+  const searchedPaths = new Set([...variables.map((entry) => entry.path), ...explicit.flatMap((entry) => Object.keys(entry.set))])
+  truths.forEach((entry, i) => {
+    for (const path of Object.keys(object(entry.world))) {
+      if ([...searchedPaths].some((searched) => searched === path || searched.startsWith(`${path}.`) || path.startsWith(`${searched}.`))) {
+        bad('campaign_world_clash', `space.truths[${i}].world.${path}`, `${path} is searched by a candidate; a scenario's world cannot re-state a path the search moves.`)
+      }
+    }
   })
   const spaceSize = variables.length ? variables.reduce((n, entry) => n * Math.max(1, entry.values.length), 1) : explicit.length
   if (spaceSize > L.maxSpace) bad('campaign_value_invalid', 'space', `A space has at most ${L.maxSpace} candidates.`)
@@ -294,6 +332,36 @@ export function vcrCampaignManifest(input) {
     return out
   })
 
+  // The robust reading (R34): two or more scenarios that state an effect are judged side by side, never one of them alone. It is on when the
+  // manifest has such scenarios (or states `robust`) and the method measures a power; every default it takes is written into the manifest.
+  const effectNames = truths.filter((entry) => (info?.truthField ? vcrDiseaseHypothesis(entry.truth) !== 'none' : !vcrIsNullScenario({ ...base, truth: entry.truth }))).map((entry) => entry.name)
+  const robustIn = src.robust == null ? null : object(src.robust)
+  /** @type {Record<string, any> | null} */
+  let robust = null
+  if (robustIn || (effectNames.length >= 2 && Object.hasOwn(measures, VCR_ROBUST_MEASURE))) {
+    const r = robustIn ?? {}
+    const scenarios = list(r.scenarios).length ? list(r.scenarios).map(String) : effectNames
+    const powerBound = constraints.find((c) => c.measure === VCR_ROBUST_MEASURE && c.op === '>=' && c.truth === objective.truth)?.bound
+    const tolerance = { power: object(r.tolerance).power ?? VCR_ROBUST_DEFAULTS.tolerance.power, relative: object(r.tolerance).relative ?? VCR_ROBUST_DEFAULTS.tolerance.relative }
+    robust = { measure: VCR_ROBUST_MEASURE, scenarios, floor: r.floor ?? (typeof powerBound === 'number' ? powerBound : VCR_ROBUST_DEFAULTS.floor),
+      confidence: r.confidence ?? constraints[0]?.confidence ?? 0.975, tolerance, cost: r.cost ?? null }
+    if (!Object.hasOwn(measures, VCR_ROBUST_MEASURE)) bad('campaign_robust_unsupported', 'robust', `${method || 'This method'} measures no ${VCR_ROBUST_MEASURE}: scenarios cannot be compared on it.`)
+    if (r.measure != null && r.measure !== VCR_ROBUST_MEASURE) bad('campaign_value_invalid', 'robust.measure', `Scenarios are compared on ${VCR_ROBUST_MEASURE}.`)
+    if (scenarios.length < 2 || new Set(scenarios).size !== scenarios.length || scenarios.some((name) => !effectNames.includes(name))) {
+      bad('campaign_robust_scenarios', 'robust.scenarios', 'A robust reading compares two or more distinct scenarios that each state an effect.')
+    }
+    if (!(typeof robust.floor === 'number' && robust.floor > 0 && robust.floor < 1)) bad('campaign_value_invalid', 'robust.floor', 'The power every scenario must reach is a number between 0 and 1.')
+    if (!(typeof robust.confidence === 'number' && robust.confidence >= 0.9 && robust.confidence <= 0.999)) bad('campaign_value_invalid', 'robust.confidence', 'A bound\'s confidence is from 0.90 to 0.999.')
+    if (!(typeof tolerance.power === 'number' && tolerance.power >= 0 && tolerance.power <= 0.2)) bad('campaign_value_invalid', 'robust.tolerance.power', 'A power tolerance is from 0 to 0.2.')
+    if (!(typeof tolerance.relative === 'number' && tolerance.relative >= 0 && tolerance.relative <= 0.5)) bad('campaign_value_invalid', 'robust.tolerance.relative', 'A relative tolerance is from 0 to 0.5.')
+    if (robust.cost != null && !(Object.hasOwn(measures, robust.cost) && ['mean', 'exact'].includes(measures[robust.cost]))) bad('campaign_value_invalid', 'robust.cost', 'The cost is a mean or calculated measure the method produces.')
+    // weights are the person's: stated for every compared scenario or for none
+    const weighted = truths.filter((entry) => entry.weight !== undefined).map((entry) => entry.name)
+    if (weighted.length && (scenarios.some((name) => !weighted.includes(name)) || weighted.some((name) => !scenarios.includes(name)))) {
+      bad('campaign_weights_incomplete', 'space.truths', 'Scenario weights are stated for every compared scenario or for none.')
+    }
+  } else if (truths.some((entry) => entry.weight !== undefined)) bad('campaign_weights_incomplete', 'space.truths', 'Scenario weights belong to a robust reading of two or more effect scenarios.')
+
   // the analysis level may be searched only downward from the frozen constraint: each level at or below the smallest error-control bound
   const searchedLevels = [
     ...variables.filter((entry) => entry.path === VCR_CAMPAIGN_ALPHA_PATH).flatMap((entry, _i) => entry.values.map((value) => ({ field: `space.variables[${variables.indexOf(entry)}].values`, value }))),
@@ -314,7 +382,7 @@ export function vcrCampaignManifest(input) {
   const stagesIn = object(src.stages)
   const screeningIn = stagesIn.screening == null ? null : object(stagesIn.screening)
   const exact = info?.exact === true
-  const neededTruths = [...new Set([objective.truth, ...constraints.filter((c) => c.kind !== 'error_control').map((c) => c.truth)])]
+  const neededTruths = [...new Set([objective.truth, ...constraints.filter((c) => c.kind !== 'error_control').map((c) => c.truth), ...(robust ? robust.scenarios : [])])]
   const screening = screeningIn && !exact && info?.precisionBlock !== false ? { replicates: screeningIn.replicates, truths: list(screeningIn.truths).length ? list(screeningIn.truths).map(String) : neededTruths } : null
   if (screeningIn && info?.precisionBlock === false) bad('campaign_value_invalid', 'stages.screening', `${method} runs every unit at the engine's own number of trials: it has no screening precision.`)
   if (screeningIn && exact) bad('campaign_value_invalid', 'stages.screening', 'An exact method has no screening stage: every value is final.')
@@ -388,7 +456,7 @@ export function vcrCampaignManifest(input) {
     objective, constraints,
     space: { method, version, scenario: base, truths, ...(variables.length ? { variables } : { candidates: explicit }), ...(sample ? { sample } : {}) },
     stages: { ...(analytic ? { analytic } : {}), screening, final },
-    budget, stopRules, reference: referenceIn,
+    budget, stopRules, reference: referenceIn, ...(robust ? { robust } : {}),
   }, issues }
 }
 
@@ -402,7 +470,8 @@ export function vcrCampaignManifest(input) {
  * world, the error-control constraint at the scenario's own alpha, the stage sizes, the budget) is written by code here and never by the
  * form, so a form can no more loosen the alpha than a manifest can. A manifest and a form are told apart by `space`.
  */
-export const VCR_SEARCH_FORM_KEYS = Object.freeze(['question', 'method', 'scenario', 'vary', 'goal', 'nullTruth', 'budget'])
+export const VCR_SEARCH_FORM_KEYS = Object.freeze(['question', 'method', 'scenario', 'scenarios', 'vary', 'goal', 'nullTruth', 'budget'])
+const FORM_SCENARIO_KEYS = Object.freeze(['name', 'effect', 'world', 'weight'])
 const FORM_GOAL_KEYS = Object.freeze(['minimize', 'maximize', 'power', 'atLeast', 'atMost'])
 /** CPU seconds a candidate is budgeted by method (screening on both worlds, or one unit at the engine's floor), and a finalist's check. */
 const FORM_COST = Object.freeze({
@@ -473,6 +542,28 @@ export function vcrSearchFromForm(input) {
     } else {
       effectName = method === 'design.analytic' ? 'planned' : 'curve'
       truths = [{ name: effectName, truth: object(base.truth) }]
+    }
+  }
+  // Several effect scenarios (R34): each names the effect it assumes (the truth keys that differ from the base scenario's, or for patients.progression
+  // the drug hypothesis), optionally the world around it and a weight; one is named `base` and is the one the objective is judged under. The scenario
+  // list replaces the single effect world; the world without an effect stays what code derived.
+  if (form.scenarios !== undefined && truths.length) {
+    const scenariosIn = list(form.scenarios)
+    const nullEntry = truths.find((entry) => entry.name === 'null' || entry.name === 'none')
+    const baseEffect = truths.find((entry) => entry !== nullEntry)?.truth ?? {}
+    if (!Array.isArray(form.scenarios) || scenariosIn.length < 2) bad('search_form_scenarios', 'scenarios', 'Scenarios are a list of two or more effect assumptions, each {name, effect, world?, weight?}, one of them named "base".')
+    else if (!scenariosIn.some((entry) => object(entry).name === 'base')) bad('search_form_scenarios', 'scenarios', 'One scenario is named "base": the assumption the objective is judged under.')
+    else if (!info?.measures || !Object.hasOwn(info.measures, 'power')) bad('search_form_scenarios', 'scenarios', `${method} measures no power, so its scenarios cannot be compared.`)
+    else {
+      const built = scenariosIn.map((raw, i) => {
+        const entry = object(raw)
+        for (const key of Object.keys(entry)) if (!FORM_SCENARIO_KEYS.includes(key)) bad('search_form_field_unknown', `scenarios[${i}].${key}`, `A scenario takes ${FORM_SCENARIO_KEYS.join(', ')}.`)
+        // a drug hypothesis replaces the base one; a truth states only what differs from the base truth
+        const truth = method === 'patients.progression' ? object(entry.effect ?? baseEffect) : { ...baseEffect, ...object(entry.effect) }
+        return { name: String(entry.name ?? ''), truth, ...(entry.world == null ? {} : { world: entry.world }), ...(entry.weight == null ? {} : { weight: entry.weight }) }
+      })
+      effectName = 'base'
+      truths = [...built, ...(nullEntry ? [nullEntry] : [])]
     }
   }
   const nullName = truths.find((entry) => entry.name === 'null' || entry.name === 'none')?.name
@@ -614,6 +705,7 @@ export function vcrCandidateScenario(manifest, candidate, truthName, stage) {
   for (const [path, value] of Object.entries(object(candidate.set))) setPath(scenario, path, value)
   const truth = list(manifest.space?.truths).find((entry) => entry.name === truthName)
   const info = /** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[manifest.space.method]
+  if (truth) for (const [path, value] of Object.entries(object(truth.world))) setPath(scenario, path, value)
   if (truth) scenario[info?.truthField ?? 'truth'] = clone(truth.truth)
   if (!info?.exact && info?.precisionBlock !== false && vcrEvaluationAllowed(manifest.space.method, scenario)) {
     scenario.evaluation = stage === 'screening'
@@ -666,7 +758,8 @@ export function vcrCampaignUnit(manifest, identity, candidate, stage, truth) {
   return {
     key: `${candidate.key}:${stage}:${truth}`, candidate: candidate.key, stage, truth, method, version: manifest.space.version, kind,
     scenario: vcrCandidateScenario(manifest, candidate, truth, stage),
-    seed: vcrCampaignSeed(identity, stage, truth, drawKey),
+    // scenarios of a robust reading draw on one stream (common random numbers): they differ by what is assumed, never by luck
+    seed: vcrCampaignSeed(identity, stage, manifest.robust ? '*' : truth, drawKey),
     replicates: stage === 'final' && Number.isInteger(manifest.stages.final.replicates) ? manifest.stages.final.replicates : null,
     idempotencyKey: `vcr-campaign:${identity.slice(0, 24)}:${candidate.key}:${stage}:${truth}`,
   }
@@ -919,9 +1012,10 @@ export function vcrCampaignInitialState(manifest) {
   }
 }
 
-/** The truths the final stage evaluates: every truth the objective or a constraint names. @param {Record<string, any>} manifest */
+/** The truths the final stage evaluates: every truth the objective or a constraint names (every named truth when the reading is robust). @param {Record<string, any>} manifest */
 function finalTruths(manifest) {
-  return [...new Set([manifest.objective.truth, ...list(manifest.constraints).map((c) => c.truth)])]
+  // a robust reading reports the operating characteristics of every named world, the null one's type I error included
+  return [...new Set([manifest.objective.truth, ...list(manifest.constraints).map((c) => c.truth), ...(manifest.robust ? list(manifest.space?.truths).map((t) => t.name) : [])])]
 }
 
 /** @param {Record<string, any>} manifest @param {string} stage */
@@ -1061,11 +1155,206 @@ export function vcrCampaignVerdict(manifest, state) {
     constraints: row.verdicts.filter((v) => v.status === 'inconclusive').map((v) => ({ index: v.index, measure: v.measure, op: v.op, bound: list(manifest.constraints)[v.index]?.bound ?? null,
       estimate: v.estimate ?? null, mcse: v.mcse ?? null, upper: v.bound?.upper ?? null, lower: v.bound?.lower ?? null, needed: v.needed ?? null })) }))
   const bestUndecided = best ? null : undecided.filter((row) => row.objective).map((row) => ({ ...row, value: /** @type {any} */ (row.objective).value })).sort(byObjective(manifest))[0]?.key ?? null
-  return { rows, feasible: feasible.map((row) => row.key), best: best?.key ?? null, inconclusive: rows.filter((row) => row.inconclusive).map((row) => row.key),
+  const robust = manifest.robust ? vcrCampaignRobust(manifest, state, feasible.map((row) => row.key)) : null
+  return { rows, feasible: feasible.map((row) => row.key), best: best?.key ?? null, robust, inconclusive: rows.filter((row) => row.inconclusive).map((row) => row.key),
     undecided, bestUndecided,
     reference: referenceKey, improvement, improvementBound,
     // each finalist is judged on its own at the constraints' confidence; the best is then picked among them (stats P2-1)
     selection: { finalists: keys.length, confidences: [...new Set(list(manifest.constraints).map((c) => Number(c.confidence)))] } }
+}
+
+// ---------------------------------------------------------------------------
+// The robust reading (R34): scenarios side by side, no single optimum
+// ---------------------------------------------------------------------------
+
+/** The operating characteristics a scenario's table row reports, when the evaluation carries them (name, then the key it is shown under). */
+export const VCR_ROBUST_OC_MEASURES = Object.freeze(['power', 'type_one_error', 'expected_sample_size', 'total_sample_size', 'duration_months',
+  'last_visit_weeks', 'expected_events', 'early_stop_probability'])
+/** The measure each cost dimension is read from, first the method has. */
+const ROBUST_N_MEASURES = Object.freeze(['total_sample_size', 'expected_sample_size'])
+const ROBUST_DURATION_MEASURES = Object.freeze(['duration_months', 'last_visit_weeks'])
+
+/** @param {unknown} value */
+const finite = (value) => value != null && Number.isFinite(Number(value))
+
+/**
+ * The robust choice over a table of designs evaluated in every scenario (pure; the numbers are the caller's, so a hand-built table decides
+ * it exactly as a campaign's evaluations do). For each design: the worst-case power over the scenarios (maximin) and its error, the regret
+ * in each scenario against the best design there and the largest of them, the expected power over the weights only when every scenario
+ * has one, and whether power reaches the floor in all of them. Then the Pareto set over (N, duration, worst-case power), the near-optimal
+ * set, and the cheapest design acceptable in every scenario beside the cheapest under the base case. Nothing here picks "the" best design:
+ * the criterion leaders (`maximin`, `minimaxRegret`) are named as such, and the choice rule is written down in the result.
+ *
+ * Hidden knowledge:
+ * - **Eligible** designs are complete (every scenario evaluated), not kept only as a reference, and not failing an error-control or safety
+ *   constraint (`guard: 'fail'`); an ineligible design still gets its row and its numbers, and never enters a set or defines a best.
+ * - **Worst case is a minimum of noisy numbers**, so it leans optimistic for the design that wins it; its error is the error of the
+ *   scenario that was the minimum, and acceptability is judged on the Clopper-Pearson bound of every scenario instead.
+ * - **Regret is against the best design of the table in that scenario** on power. Its error is the contrast's own (`contrast`, paired when
+ *   the two runs shared draws), or the sum of the two marginal errors when the dependence is unknown.
+ * - **Near-optimal** is "within tolerance of a Pareto design on every criterion": the criterion may be worse by at most the stated
+ *   tolerance (absolute for power, relative for N and duration) plus z times the combined MCSE. Pareto designs are in it by definition.
+ *   It is a practical-equivalence set, not a second ranking.
+ * @param {{
+ *   rows: Array<Record<string, any>>, scenarios: Array<{ name: string, weight?: number | null }>, tolerance: { power: number, relative: number },
+ *   confidence: number, baseFeasible?: string[], contrast?: (a: string, b: string, scenario: string) => number | null
+ * }} table each row: `{ key, index, complete, referenceOnly?, guard?, scenarios: { [name]: { power: { value, mcse, status } } }, n?, duration?, cost?, costBase? }` (a value is `{ value, mcse }`)
+ */
+export function vcrRobustChoice(table) {
+  const { scenarios, tolerance } = table
+  const names = scenarios.map((entry) => entry.name)
+  const z = vcrNormalQuantile(table.confidence)
+  const weighted = scenarios.length > 0 && scenarios.every((entry) => finite(entry.weight) && Number(entry.weight) > 0)
+  const weightSum = weighted ? scenarios.reduce((sum, entry) => sum + Number(entry.weight), 0) : 0
+  const weights = Object.fromEntries(scenarios.map((entry) => [entry.name, weighted ? Number(entry.weight) / weightSum : null]))
+  const eligibleRow = (/** @type {Record<string, any>} */ row) => row.complete === true && row.referenceOnly !== true && row.guard !== 'fail'
+  const eligible = table.rows.filter(eligibleRow)
+  const powerOf = (/** @type {Record<string, any>} */ row, /** @type {string} */ name) => object(object(row.scenarios)[name]).power
+  // the best design in each scenario, on power; the lower index decides a tie
+  /** @type {Record<string, Record<string, any> | null>} */
+  const bestIn = {}
+  for (const name of names) {
+    bestIn[name] = eligible.filter((row) => finite(powerOf(row, name)?.value))
+      .reduce((best, row) => (!best || Number(powerOf(row, name).value) > Number(powerOf(best, name).value) + 1e-12
+        || (Math.abs(Number(powerOf(row, name).value) - Number(powerOf(best, name).value)) <= 1e-12 && row.index < best.index) ? row : best), /** @type {Record<string, any> | null} */ (null))
+  }
+  const marginalError = (/** @type {Record<string, any>} */ row, /** @type {string} */ name) => (finite(powerOf(row, name)?.mcse) ? Number(powerOf(row, name).mcse) : null)
+  const rows = table.rows.map((row) => {
+    const base = { key: row.key, index: row.index, complete: row.complete === true, referenceOnly: row.referenceOnly === true, guard: row.guard ?? 'none', eligible: eligibleRow(row) }
+    if (row.complete !== true || names.some((name) => !finite(powerOf(row, name)?.value))) return { ...base, complete: false, worstCase: null, regret: null, expectedPower: null, acceptable: 'unknown' }
+    // maximin: the scenario with the lowest power, and that scenario's own error
+    const worst = names.reduce((low, name) => (Number(powerOf(row, name).value) < Number(powerOf(row, low).value) ? name : low), names[0])
+    const regretIn = Object.fromEntries(names.map((name) => {
+      const best = bestIn[name]
+      if (!best || best.key === row.key) return [name, { value: 0, mcse: 0, against: best?.key ?? null }]
+      const value = Math.max(0, Number(powerOf(best, name).value) - Number(powerOf(row, name).value))
+      const own = table.contrast ? table.contrast(best.key, row.key, name) : null
+      const sa = marginalError(best, name), sb = marginalError(row, name)
+      return [name, { value, mcse: finite(own) ? Number(own) : sa == null || sb == null ? null : sa + sb, against: best.key }]
+    }))
+    const maxName = names.reduce((high, name) => (regretIn[name].value > regretIn[high].value ? name : high), names[0])
+    const statuses = names.map((name) => powerOf(row, name).status)
+    return { ...base,
+      worstCase: { value: Number(powerOf(row, worst).value), mcse: marginalError(row, worst), scenario: worst },
+      regret: { byScenario: regretIn, max: { ...regretIn[maxName], scenario: maxName } },
+      expectedPower: weighted ? { value: names.reduce((sum, name) => sum + weights[name] * Number(powerOf(row, name).value), 0),
+        // the scenarios' runs may be positively correlated: the worst case the marginal errors allow, never their independent combination
+        mcse: names.some((name) => marginalError(row, name) == null) ? null : names.reduce((sum, name) => sum + weights[name] * Number(marginalError(row, name)), 0) } : null,
+      acceptable: statuses.every((status) => status === 'pass') ? 'pass' : statuses.some((status) => status === 'fail') ? 'fail' : 'inconclusive' }
+  })
+  const input = new Map(table.rows.map((row) => [row.key, row]))
+  const pool = rows.filter((row) => row.eligible && row.worstCase)
+  // the criteria of the Pareto and near-optimal sets: those every eligible design has a number for
+  /** @type {Array<{ name: string, sense: 'min' | 'max', value: (row: any) => number | null, mcse: (row: any) => number, relative: boolean }>} */
+  const dims = []
+  const dim = (/** @type {string} */ name, /** @type {'min' | 'max'} */ sense, /** @type {(row: any) => any} */ read, /** @type {boolean} */ relative) => {
+    if (pool.length && pool.every((row) => finite(read(row)?.value))) dims.push({ name, sense, value: (row) => Number(read(row).value), mcse: (row) => (finite(read(row)?.mcse) ? Number(read(row).mcse) : 0), relative })
+  }
+  dim('n', 'min', (row) => input.get(row.key)?.n, true)
+  dim('duration', 'min', (row) => input.get(row.key)?.duration, true)
+  dim('worst_case_power', 'max', (row) => row.worstCase, false)
+  const better = (/** @type {any} */ a, /** @type {any} */ b, /** @type {typeof dims[number]} */ d) => (d.sense === 'min' ? d.value(a) < d.value(b) - 1e-12 : d.value(a) > d.value(b) + 1e-12)
+  const notWorse = (/** @type {any} */ a, /** @type {any} */ b, /** @type {typeof dims[number]} */ d) => (d.sense === 'min' ? d.value(a) <= d.value(b) + 1e-12 : d.value(a) >= d.value(b) - 1e-12)
+  const pareto = dims.length ? pool.filter((row) => !pool.some((other) => other !== row && dims.every((d) => notWorse(other, row, d)) && dims.some((d) => better(other, row, d)))) : []
+  const near = dims.length ? pool.filter((row) => pareto.some((p) => p === row || dims.every((d) => {
+    const worseBy = d.sense === 'min' ? d.value(row) - d.value(p) : d.value(p) - d.value(row)
+    const allowed = (d.relative ? tolerance.relative * Math.abs(d.value(p)) : tolerance.power) + z * Math.sqrt(d.mcse(row) ** 2 + d.mcse(p) ** 2)
+    return worseBy <= allowed + 1e-12
+  }))) : []
+  const cheapest = (/** @type {Array<Record<string, any>>} */ among, /** @type {'cost' | 'costBase'} */ field) => among
+    .filter((row) => finite(input.get(row.key)?.[field]?.value))
+    .sort((a, b) => Number(input.get(a.key)[field].value) - Number(input.get(b.key)[field].value) || a.index - b.index)[0] ?? null
+  const acceptable = pool.filter((row) => row.acceptable === 'pass')
+  const feasibleBase = new Set(table.baseFeasible ?? [])
+  const cheapestAcceptable = cheapest(acceptable, 'cost')
+  const cheapestUnderBase = cheapest(pool.filter((row) => feasibleBase.has(row.key)), 'costBase')
+  const leader = (/** @type {(row: any) => number} */ read, /** @type {1 | -1} */ sign) => pool.reduce((best, row) => (!best || sign * (read(row) - read(best)) > 1e-12 ? row : best), /** @type {any} */ (null))
+  for (const row of rows) {
+    const mark = /** @type {Record<string, any>} */ (row)
+    mark.pareto = pareto.some((p) => p.key === row.key)
+    mark.nearOptimal = near.some((p) => p.key === row.key)
+  }
+  return {
+    scenarios: scenarios.map((entry) => ({ name: entry.name, weight: weights[entry.name] })),
+    weighted, rows, criteria: dims.map((d) => ({ name: d.name, sense: d.sense })),
+    bestIn: Object.fromEntries(names.map((name) => [name, bestIn[name]?.key ?? null])),
+    pareto: pareto.map((row) => row.key), nearOptimal: near.map((row) => row.key), acceptable: acceptable.map((row) => row.key),
+    inconclusive: pool.filter((row) => row.acceptable === 'inconclusive').map((row) => row.key),
+    maximin: leader((row) => row.worstCase.value, 1)?.key ?? null,
+    minimaxRegret: leader((row) => row.regret.max.value, -1)?.key ?? null,
+    cheapestAcceptable: cheapestAcceptable?.key ?? null, cheapestUnderBase: cheapestUnderBase?.key ?? null,
+    sameDesign: cheapestAcceptable && cheapestUnderBase ? cheapestAcceptable.key === cheapestUnderBase.key : null,
+    rule: { floor: null, tolerance, confidence: table.confidence },
+  }
+}
+
+/**
+ * The robust reading of a campaign whose finalists are evaluated: the table of its finalists' final evaluations in every scenario of
+ * `manifest.robust`, through `vcrRobustChoice`. Operating characteristics are listed for every scenario the finalists were evaluated in
+ * (the null one included), each with its MCSE; N and duration are the largest over the compared scenarios, the cost the same unless
+ * the objective minimizes a cost measure itself.
+ * @param {Record<string, any>} manifest @param {Record<string, any>} state @param {string[]} baseFeasible the finalists feasible under the base case
+ */
+export function vcrCampaignRobust(manifest, state, baseFeasible) {
+  const robust = object(manifest.robust)
+  const method = String(manifest.space?.method ?? '')
+  const measures = object(object(/** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[method]).measures)
+  const nMeasure = ROBUST_N_MEASURES.find((name) => Object.hasOwn(measures, name)) ?? null
+  const durationMeasure = ROBUST_DURATION_MEASURES.find((name) => Object.hasOwn(measures, name)) ?? null
+  const costMeasure = robust.cost ?? (manifest.objective?.direction === 'minimize' && ['mean', 'exact'].includes(measures[manifest.objective.measure]) ? manifest.objective.measure : nMeasure)
+  const candidates = vcrCampaignCandidates(manifest)
+  const truths = [...new Set([...list(robust.scenarios), ...finalTruths(manifest)])]
+  const scenarioDefs = list(robust.scenarios).map((name) => ({ name, weight: list(manifest.space?.truths).find((entry) => entry.name === name)?.weight ?? null }))
+  const evaluationOf = (/** @type {Record<string, any>} */ entry, /** @type {string} */ name) => object(entry.evaluations)[`final:${name}`]
+  const read = (/** @type {Record<string, any> | undefined} */ evaluation, /** @type {string | null} */ name) => {
+    const measure = name && evaluation?.state === 'succeeded' ? vcrEvaluationMeasure(evaluation, name) : null
+    return measure && finite(measure.value) ? { value: Number(measure.value), mcse: finite(measure.mcse) ? Number(measure.mcse) : null } : null
+  }
+  /** The largest value of a measure over the compared scenarios, with the error of the scenario it came from. */
+  const worstOver = (/** @type {Record<string, any>} */ entry, /** @type {string | null} */ name) => {
+    const found = list(robust.scenarios).map((scenario) => read(evaluationOf(entry, scenario), name))
+    return name && found.length && found.every(Boolean) ? found.reduce((high, one) => (Number(one?.value) > Number(high?.value) ? one : high)) : null
+  }
+  const baseTruth = manifest.objective.truth
+  const rows = list(state.finalists).map((key) => {
+    const candidate = candidates.find((c) => c.key === key)
+    const entry = object(object(state.candidates)[key])
+    const verdicts = vcrCandidateVerdicts(manifest, entry, 'final')
+    const guarded = verdicts.filter((v) => ['error_control', 'safety'].includes(String(v.kind)))
+    const guard = guarded.some((v) => v.status === 'fail') ? 'fail' : guarded.some((v) => v.status === 'inconclusive') ? 'inconclusive' : guarded.length ? 'pass' : 'none'
+    /** @type {Record<string, any>} */
+    const byScenario = {}
+    /** @type {Record<string, any>} */
+    const oc = {}
+    for (const name of truths) {
+      const evaluation = evaluationOf(entry, name)
+      if (!evaluation) continue
+      oc[name] = Object.fromEntries(VCR_ROBUST_OC_MEASURES.map((measure) => [measure, read(evaluation, measure)]).filter(([, value]) => value))
+      const n = oc[name].expected_sample_size ?? oc[name].total_sample_size, d = oc[name].duration_months ?? oc[name].last_visit_weeks
+      // exposure is a safety proxy: people times the time they are followed, each error carried through the product
+      if (n && d) oc[name].exposure = { value: n.value * d.value, mcse: n.mcse == null && d.mcse == null ? null : Math.sqrt(((n.mcse ?? 0) * d.value) ** 2 + ((d.mcse ?? 0) * n.value) ** 2) }
+    }
+    for (const name of list(robust.scenarios)) {
+      const evaluation = evaluationOf(entry, name)
+      const judged = evaluation ? vcrJudgeConstraint(manifest, { measure: robust.measure, op: '>=', bound: robust.floor, kind: 'design', truth: name, confidence: robust.confidence }, evaluation, { stage: 'final' }) : null
+      const power = read(evaluation, robust.measure)
+      if (power) byScenario[name] = { power: { ...power, status: judged?.status ?? 'not_judged', lower: judged?.bound?.lower ?? null, upper: judged?.bound?.upper ?? null } }
+    }
+    return { key, index: candidate?.index ?? -1, referenceOnly: entry.role === 'reference_only',
+      complete: entry.status === 'evaluated' && list(robust.scenarios).every((name) => byScenario[name]), guard,
+      scenarios: byScenario, oc, n: worstOver(entry, nMeasure), duration: worstOver(entry, durationMeasure),
+      cost: worstOver(entry, costMeasure), costBase: read(evaluationOf(entry, baseTruth), costMeasure) }
+  })
+  const finalOf = (/** @type {string} */ key) => object(object(object(state.candidates)[key]).evaluations)
+  const choice = vcrRobustChoice({ rows, scenarios: scenarioDefs, tolerance: robust.tolerance, confidence: robust.confidence, baseFeasible,
+    contrast: (a, b, name) => {
+      const c = vcrEvaluationContrast(finalOf(a)[`final:${name}`], finalOf(b)[`final:${name}`], robust.measure)
+      return c.mcse ?? c.worstCaseMcse
+    } })
+  const inputByKey = new Map(rows.map((row) => [row.key, row]))
+  return { ...choice, rule: { ...choice.rule, floor: robust.floor, measure: robust.measure }, measures: { n: nMeasure, duration: durationMeasure, cost: costMeasure },
+    // each row keeps the numbers it was judged on: its power by scenario (with the verdict against the floor), every operating characteristic, N, duration and cost
+    rows: choice.rows.map((row) => { const given = inputByKey.get(row.key) ?? {}; return { ...row, scenarios: given.scenarios ?? {}, oc: given.oc ?? {}, n: given.n ?? null, duration: given.duration ?? null, cost: given.cost ?? null, costBase: given.costBase ?? null } }) }
 }
 
 /**
@@ -1141,6 +1430,11 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
       const meets = (/** @type {string} */ key) => list(manifest.constraints).filter((c) => c.kind !== 'error_control').every((c) => {
         const measure = vcrEvaluationMeasure(next.candidates[key].evaluations[`screening:${c.truth}`], c.measure)
         return measure != null && (c.op === '<=' ? Number(measure.value) <= c.bound : Number(measure.value) >= c.bound)
+      }) && list(manifest.robust?.scenarios).every((name) => {
+        // a robust reading ranks first the designs whose screened power reaches the floor in every scenario it compares
+        if (!stageTruths(manifest, 'screening').includes(name)) return true
+        const measure = vcrEvaluationMeasure(next.candidates[key].evaluations[`screening:${name}`], manifest.robust.measure)
+        return measure != null && Number(measure.value) >= manifest.robust.floor
       })
       const ranked = survivors.map((c) => ({ key: c.key, index: c.index, meets: meets(c.key), ...(objectiveOf(manifest, next.candidates[c.key], 'screening') ?? { value: NaN, mcse: null }) }))
         .filter((row) => Number.isFinite(row.value)).sort((a, b) => Number(b.meets) - Number(a.meets) || byObjective(manifest)(a, b))

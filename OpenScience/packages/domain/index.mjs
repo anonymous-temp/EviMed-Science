@@ -1981,6 +1981,13 @@ export {
   vcrVisibleQuestion,
 } from './src/vcrVocabulary.mjs'
 export {
+  VCR_PREDICTION_CLAIMS,
+  VCR_PREDICTION_CLAIM_WORDS_ZH,
+  individualizationEvidenceSentence,
+  predictionClaimOf,
+  predictionClaimPremise,
+} from './src/vcrPredictionClaims.mjs'
+export {
   VCR_APPLICABILITY_LIMITS,
   VCR_APPLICABILITY_LIMIT_LABELS_ZH,
   VCR_APPLICABILITY_NOTE_MAX,
@@ -2111,6 +2118,11 @@ export {
   VCR_SEARCH_FORM_KEYS,
   VCR_SEARCH_FORM_DEFAULTS,
   vcrCampaignRecord,
+  vcrCampaignRobust,
+  vcrRobustChoice,
+  VCR_ROBUST_DEFAULTS,
+  VCR_ROBUST_MEASURE,
+  VCR_ROBUST_OC_MEASURES,
   vcrCampaignSeed,
   vcrCampaignUnit,
   vcrCampaignVerdict,
@@ -2347,6 +2359,9 @@ export {
   VCR_EFFECT_DISTRIBUTION_TIERS,
   VCR_EFFECT_SOURCE_KINDS,
   VCR_PEOPLE_MODES,
+  VCR_REFERENCE_DRUGS,
+  VCR_MECHANISM_DRUGS,
+  VCR_MECHANISM_LINKS,
   VCR_PROGRESSION_PARAMETER_SETS,
   VCR_SINGLE_ARM_ANALYSIS_METHODS,
   VCR_TWO_ARM_ANALYSIS_METHODS,
@@ -2858,4 +2873,5 @@ export {
   questionAnswersEarlier,
   questionCalibration,
   questionRepresentability,
+  vcrEstimandAlignment,
 } from './src/vcrResearchQuestion.mjs'
