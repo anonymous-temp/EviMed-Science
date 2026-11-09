@@ -2824,3 +2824,23 @@ export { dnsKey, registrableDomain } from './src/geoDomains.mjs'
 export { RESEARCH_NATIVE_BUNDLES, researchNativeReceiptDigest, researchNativeArtifactDigest } from './src/researchNativeBundles.mjs'
 export { nativeResearchRowIsAdmitted, nativeResearchToolProfileHolds } from './src/researchNativeBundles.mjs'
 export { privateByDefault, sourcePrivacyOf, sourceAllowsEgress } from "./src/memoryPrivacy.mjs";
+
+// vcrResearchQuestion — the research question of a study in the attributes of ICH E9(R1): the closed vocabularies, the patch that
+// writes a new version with who wrote each field, which intercurrent events a model can represent and what its data estimate
+export {
+  VCR_QUESTION_BASES,
+  VCR_QUESTION_BASIS_LABELS_ZH,
+  VCR_QUESTION_FIELDS,
+  VCR_QUESTION_FIELD_LABELS_ZH,
+  VCR_QUESTION_LIMITS,
+  VCR_QUESTION_MODEL_CAPABILITIES,
+  VCR_QUESTION_MODEL_TIERS,
+  VCR_QUESTION_OBJECT_FIELDS,
+  VCR_QUESTION_STRATEGIES,
+  VCR_QUESTION_STRATEGY_LABELS_ZH,
+  applyQuestionPatch,
+  normalizeQuestionPatch,
+  questionAnswersEarlier,
+  questionCalibration,
+  questionRepresentability,
+} from './src/vcrResearchQuestion.mjs'
