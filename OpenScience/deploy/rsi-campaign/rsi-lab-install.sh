@@ -50,7 +50,9 @@ usermod -p '*' rsi-outbox
 # The directory the monthly script publishes into exists before the first bundle, or every pull would fail; only it is world-readable, a month's directory stays the lab's.
 install -d -m 0755 "$BUNDLES"
 chown 10001:10001 "$BUNDLES"
-chmod o+x "$R/srv/rsi-lab/outbox"
+# Traverse only, both levels: /srv/rsi-lab is the lab group's (0750), and rrsync, running as rsi-outbox, reported the bundles directory missing without it (2026-11-09).
+# What a non-member can reach through it is release/ (the public source tarballs) and bundles/; inbox, state and a month's outbox stay closed.
+chmod o+x "$R/srv/rsi-lab" "$R/srv/rsi-lab/outbox"
 install -d -m 0700 "$HOME_DIR/.ssh"
 printf 'command="%s -ro %s",from="%s",restrict %s\n' "$RRSYNC" "$BUNDLES" "$PROD_IP" "$PULL_PUB" > "$HOME_DIR/.ssh/authorized_keys.tmp"
 chmod 0600 "$HOME_DIR/.ssh/authorized_keys.tmp"
