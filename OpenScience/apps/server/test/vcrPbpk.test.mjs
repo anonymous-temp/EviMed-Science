@@ -1,5 +1,5 @@
-// The patients tab's card for a drug given after a perpetrator of CYP3A4 (in-silico round 2, R38): the engine's real results (tests/numeric N160 holds
-// their numbers to the authors' own simulation and to deSolve) read into the payload the page shows.
+// The patients tab's card for a drug given after a perpetrator of CYP3A4 (in-silico round 2, R38): the engine's real results (tests/numeric N160 and N180
+// hold their numbers to the authors' own simulation, the paper's table and deSolve) read into the payload the page shows.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -31,10 +31,10 @@ test("the kind is a result of its own, read on the patients tab, filed under the
 });
 
 test("a perpetrator or a victim the published model does not carry is refused by name, never run with a stand-in", () => {
-  const job = (scenario) => ({ jobId: "job_1", studyId: "std_1", protocolVersion: 1, seed: 1, cpuSecondsLimit: 600, inputs: [{ kind: "assumption", id: "asm_1@1" }], kind: "pk_interaction", method: "pk.interaction", methodVersion: "1.0.0", scenario });
+  const job = (scenario) => ({ jobId: "job_1", studyId: "std_1", protocolVersion: 1, seed: 1, cpuSecondsLimit: 600, inputs: [{ kind: "assumption", id: "asm_1@1" }], kind: "pk_interaction", method: "pk.interaction", methodVersion: "1.1.0", scenario });
   const good = { victim: { drug: "midazolam", doseMg: 3 }, perpetrator: { drug: "rifampicin", doseMg: 75, doses: 7 } };
   assert.deepEqual(validateEngineJob(job(good)), []);
-  assert.deepEqual(validateEngineJob(job({ ...good, perpetrator: { ...good.perpetrator, drug: "ketoconazole" } })).map((i) => `${i.code}@${i.field}`), ["scenario_value_invalid@scenario.perpetrator.drug"]);
+  assert.deepEqual(validateEngineJob(job({ ...good, perpetrator: { ...good.perpetrator, drug: "itraconazole" } })).map((i) => `${i.code}@${i.field}`), ["scenario_value_invalid@scenario.perpetrator.drug"]);
   assert.deepEqual(validateEngineJob(job({ ...good, victim: { ...good.victim, drug: "tacrolimus" } })).map((i) => `${i.code}@${i.field}`), ["scenario_value_invalid@scenario.victim.drug"]);
 });
 
@@ -77,4 +77,46 @@ test("a result of another kind, or a superseded one, makes no card", () => {
   const base = { id: "r", version: 1, createdAt: "2026-11-09T10:00:00Z", ...fixture("oral-7-days") };
   assert.deepEqual(presentPbpkInteractions({ allResults: [{ ...base, kind: "decision_voi" }], stale: [] }, { nodeOf: () => "n" }), []);
   assert.deepEqual(presentPbpkInteractions({ allResults: [{ ...base, kind: "pk_interaction", supersededBy: "x" }], stale: [] }, { nodeOf: () => "n" }), []);
+});
+
+test("the ketoconazole model is carried and its sibling inhibitors are refused by name", () => {
+  const job = (scenario) => ({ jobId: "job_1", studyId: "std_1", protocolVersion: 1, seed: 1, cpuSecondsLimit: 600, inputs: [{ kind: "assumption", id: "asm_1@1" }], kind: "pk_interaction", method: "pk.interaction", methodVersion: "1.1.0", scenario });
+  const ktz = { victim: { drug: "midazolam", doseMg: 1, route: "iv" }, perpetrator: { drug: "ketoconazole", doseMg: 200, doses: 6, gapH: 0 } };
+  assert.deepEqual(validateEngineJob(job(ktz)), []);
+  assert.deepEqual(validateEngineJob(job({ ...ktz, perpetrator: { ...ktz.perpetrator, inhibition: "noncompetitive" } })), []);
+  assert.deepEqual(validateEngineJob(job({ ...ktz, perpetrator: { ...ktz.perpetrator, inhibition: "irreversible" } })).map((i) => `${i.code}@${i.field}`), ["scenario_value_invalid@scenario.perpetrator.inhibition"]);
+  for (const drug of ["itraconazole", "clarithromycin", "erythromycin", "diltiazem"]) {
+    assert.deepEqual(validateEngineJob(job({ ...ktz, perpetrator: { ...ktz.perpetrator, drug } })).map((i) => `${i.code}@${i.field}`), ["scenario_value_invalid@scenario.perpetrator.drug"], drug);
+  }
+  assert.ok(validateEngineJob(job({ ...ktz, perpetrator: { ...ktz.perpetrator, drug: "rifampicin", inhibition: "mixed" } })).length > 0, "an inhibition model on an inducer is not a field of it");
+});
+
+test("the ketoconazole card names the inhibition model, shows no enzyme-activity line and keeps the unused weight out of the person's premises", () => {
+  const card = cardOf("ketoconazole-iv-validation");
+  assert.equal(card.perpetrator, "酮康唑");
+  assert.equal(card.route, "iv");
+  assert.equal(card.weightKg, null);
+  assert.ok(!card.headline.some((line) => /cyp3a4/.test(line.key)), "nothing is induced, so no enzyme-activity line");
+  const ratio = card.headline.find((line) => line.key === "auc_ratio").value.value;
+  assert.ok(ratio > 2.45 && ratio < 2.55, "the mixed model prints 2.5 in the paper's Table 4");
+  assert.match(card.lead, /^合用后，咪达唑仑的曲线下面积是单用时的 2\.\d+ 倍/);
+  assert.doesNotMatch(card.lead, /酶被诱导/);
+  assert.match(card.citation, /Quinney/);
+  const decisive = card.premises.filter((p) => p.decisive).map((p) => p.key);
+  assert.deepEqual(decisive, ["pbpk_model", "pbpk_person", "pbpk_regimen", "pbpk_inhibition"], "the request is the paper's own validation design: no outside row");
+  assert.match(card.premises.find((p) => p.key === "pbpk_inhibition").value, /^混合抑制。.*4\.5.*2\.0.*2\.5.*3\.1/);
+  assert.match(card.premises.find((p) => p.key === "pbpk_person").value, /体重不是输入/);
+  assert.match(card.premises.find((p) => p.key === "pbpk_scope").value, /没有时间依赖性抑制/);
+  assert.ok(!words(card).some((w) => BACK_OFFICE.test(w) || /NaN|undefined|null/.test(w)), words(card).filter((w) => BACK_OFFICE.test(w) || /NaN|undefined|null/.test(w)).join(" | "));
+});
+
+test("an oral dose and a dose the paper did not validate run and are said to be extrapolations", () => {
+  const card = cardOf("ketoconazole-oral-outside");
+  assert.equal(card.route, "oral");
+  const outside = card.premises.filter((p) => p.key.startsWith("pbpk_outside_")).map((p) => p.key).sort();
+  assert.deepEqual(outside, ["pbpk_outside_perpetrator_dose", "pbpk_outside_victim_route"]);
+  assert.match(card.premises.find((p) => p.key === "pbpk_outside_victim_route").value, /口服是模型的外推/);
+  assert.match(card.premises.find((p) => p.key === "pbpk_inhibition").value, /^竞争性抑制/);
+  assert.ok(card.premises.filter((p) => p.decisive).length <= 6);
+  assert.ok(card.premises.some((p) => p.key === "assumed_weightKg" && /没有用到/.test(p.value)), "a stated weight is not an input of this model, and the page says so");
 });

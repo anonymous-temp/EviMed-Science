@@ -35,7 +35,7 @@ export function vcrPbpkSubjectId(scenario) {
 }
 
 /** @type {Record<string, string>} */
-const DRUG_WORDS = Object.freeze({ midazolam: "咪达唑仑", rifampicin: "利福平" });
+const DRUG_WORDS = Object.freeze({ midazolam: "咪达唑仑", rifampicin: "利福平", ketoconazole: "酮康唑" });
 /** @param {unknown} name */
 const drugWord = (name) => DRUG_WORDS[String(name)] ?? String(name);
 /** @param {number} value @param {number} [digits] */
@@ -45,20 +45,31 @@ const MEASURES = Object.freeze(["auc_ratio", "cmax_ratio", "victim_auc_alone", "
 
 /** The defaults the engine took, as labelled rows (a key the page cannot word is dropped). @type {Record<string, string>} */
 const ASSUMED_LABELS = Object.freeze({
-  "victim.route": "给药途径", weightKg: "体重", horizonH: "观察时长", "perpetrator.intervalH": "合用药物的给药间隔", "perpetrator.gapH": "最后一次合用药物到服药的间隔",
+  "victim.route": "给药途径", weightKg: "体重", "perpetrator.inhibition": "抑制模型", horizonH: "观察时长", "perpetrator.intervalH": "合用药物的给药间隔", "perpetrator.gapH": "最后一次合用药物到服药的间隔",
 });
 /** @param {string} key @param {unknown} value */
 function assumedValue(key, value) {
   if (key === "victim.route") return value === "iv" ? "静脉" : "口服";
+  if (key === "perpetrator.inhibition") return INHIBITION_WORDS[String(value)] ?? null;
+  if (key === "weightKg" && value === "not used") return "没有用到";
   const number = Number(value);
   if (!Number.isFinite(number)) return null;
   return key === "weightKg" ? `${plain(number)} kg` : `${plain(number)} 小时`;
 }
 
+/** The three inhibition models of the ketoconazole paper, in plain words. @type {Record<string, string>} */
+const INHIBITION_WORDS = Object.freeze({ competitive: "竞争性抑制", noncompetitive: "非竞争性抑制", mixed: "混合抑制" });
+
 /** @type {Record<string, string>} */
 const OUTSIDE_WORDS = Object.freeze({
   perpetrator_dose: "利福平的剂量超出了论文拟合过的范围（5 到 600 mg），超出的部分是模型的外推。",
   victim_dose: "咪达唑仑的剂量超出了论文拟合过的范围（口服 3 到 6 mg，静脉 1 mg 或每公斤体重 0.05 mg），超出的部分是模型的外推。",
+});
+/** What is outside the ketoconazole paper's own validation (its Table 4: 200 mg daily for six days, intravenous midazolam 1 mg). @type {Record<string, string>} */
+const OUTSIDE_WORDS_INHIBITOR = Object.freeze({
+  perpetrator_dose: "论文只用每天 200 mg 的酮康唑验证过这个模型，别的剂量是模型的外推。",
+  victim_route: "论文只用静脉给药的咪达唑仑验证过这个模型；口服是模型的外推（口服的肠壁代谢也被抑制，论文没有拿口服数据核对过）。",
+  victim_dose: "论文只用 1 mg 静脉咪达唑仑验证过这个模型，别的剂量是模型的外推。",
 });
 
 /**
@@ -70,23 +81,36 @@ function premisesOf(pbpk, record) {
   const perpetrator = object(given.perpetrator);
   const model = object(pbpk.model);
   const iv = victim.route === "iv";
+  const inhibitor = perpetrator.drug === "ketoconazole";
   const infusion = numeric(victim.infusionH);
   /** @type {Array<Record<string, any>>} */
   const rows = [];
   rows.push({ key: "pbpk_model", label: "用的是什么模型", source: "literature", decisive: true,
-    value: "已发表的全身生理药代动力学模型（Asaumi 等，2018，CPT: Pharmacometrics & Systems Pharmacology）：利福平反复给药诱导肠壁和肝脏的 CYP3A4，咪达唑仑在同一套生理参数上被代谢；参数和方程取自作者公开的模型代码，没有改动" });
+    value: inhibitor
+      ? "已发表的生理药代动力学模型（Quinney 等，2013，CPT: Pharmacometrics & Systems Pharmacology，基于 Chien 等 2006）：酮康唑可逆地抑制肠壁和肝脏的 CYP3A4，咪达唑仑经肠壁、门静脉和肝脏代谢；方程和参数取自论文的补充材料，抑制常数取自论文表 3，没有为了贴近临床结果调过任何一个数"
+      : "已发表的全身生理药代动力学模型（Asaumi 等，2018，CPT: Pharmacometrics & Systems Pharmacology）：利福平反复给药诱导肠壁和肝脏的 CYP3A4，咪达唑仑在同一套生理参数上被代谢；参数和方程取自作者公开的模型代码，没有改动" });
   rows.push({ key: "pbpk_person", label: "模拟的是谁", source: "default", decisive: true,
-    value: `一个体重 ${plain(Number(given.weightKg))} kg 的典型健康成人：没有个体差异、基因型和疾病，所以这里的倍数是模型的典型值，不是某个患者会得到的值` });
+    value: `${inhibitor ? "一个典型的健康成人（这个模型的体积和血流量是固定的，体重不是输入）" : `一个体重 ${plain(Number(given.weightKg))} kg 的典型健康成人`}：没有个体差异、基因型和疾病，所以这里的倍数是模型的典型值，不是某个患者会得到的值` });
   const doses = Number(perpetrator.doses);
   rows.push({ key: "pbpk_regimen", label: "给药方案", source: "given", decisive: true,
     value: `${drugWord(perpetrator.drug)} ${plain(Number(perpetrator.doseMg))} mg，每 ${plain(Number(perpetrator.intervalH))} 小时一次，共 ${doses} 次；${drugWord(victim.drug)}${iv ? (infusion ? `静脉滴注 ${plain(infusion)} 小时` : "静脉推注") : "口服"} ${plain(Number(victim.doseMg))} mg，在最后一次${drugWord(perpetrator.drug)}后 ${plain(Number(perpetrator.gapH))} 小时给药` });
+  const outsideWords = inhibitor ? OUTSIDE_WORDS_INHIBITOR : OUTSIDE_WORDS;
   for (const key of list(model.outsideFit).map(String)) {
-    if (OUTSIDE_WORDS[key]) rows.push({ key: `pbpk_outside_${key}`, label: "超出模型验证过的范围", source: "assumed", decisive: true, value: OUTSIDE_WORDS[key] });
+    if (outsideWords[key]) rows.push({ key: `pbpk_outside_${key}`, label: "超出模型验证过的范围", source: "assumed", decisive: true, value: outsideWords[key] });
+  }
+  if (inhibitor) {
+    const kind = String(perpetrator.inhibition ?? "mixed");
+    rows.push({ key: "pbpk_inhibition", label: "用的是哪一种抑制模型", source: "literature", decisive: true,
+      value: `${INHIBITION_WORDS[kind] ?? kind}。论文用同一组体外数据给出三种抑制常数，对静脉咪达唑仑 1 mg、酮康唑每天 200 mg 共六天，三种模型预测的面积比分别是 4.5（竞争性）、2.0（非竞争性）、2.5（混合），临床观察值是 3.1；这三个数是三个模型的预测，不是同一个数的三个把握程度` });
   }
   rows.push({ key: "pbpk_clinical", label: "和临床研究比", source: "literature", decisive: false,
-    value: "已发表的临床研究里，利福平合用后口服咪达唑仑的面积比彼此相差近八倍；模型给出的是它们之间的一个典型值，对诱导最强的几项研究偏高。论文本身没有给出合用后面积比的数值，只说拟合“吻合良好”" });
+    value: inhibitor
+      ? "已发表的临床研究里，酮康唑合用后咪达唑仑的面积比：静脉约 2.7 到 4.7 倍，口服约 11 到 20 倍。模型不加调整地预测，六项比较都在两倍以内，几何平均倍数误差 1.4；对静脉 400 mg 偏高、对口服 200 mg 偏低，口服比静脉更不可靠"
+      : "已发表的临床研究里，利福平合用后口服咪达唑仑的面积比彼此相差近八倍；模型给出的是它们之间的一个典型值，对诱导最强的几项研究偏高。论文本身没有给出合用后面积比的数值，只说拟合“吻合良好”" });
   rows.push({ key: "pbpk_scope", label: "模型里有什么、没有什么", source: "default", decisive: false,
-    value: "只有利福平的诱导：肠壁和肝脏 CYP3A4 的合成按它在细胞里的游离浓度上升，降解速率不变；没有抑制剂，也没有其他诱导剂" });
+    value: inhibitor
+      ? "只有酮康唑对 CYP3A4 的可逆抑制（肠壁和肝脏）：没有时间依赖性抑制，没有诱导，没有酮康唑的代谢产物，也没有它对转运体的作用；伊曲康唑、克拉霉素等其他抑制剂没有公开的完整模型，所以不在里面"
+      : "只有利福平的诱导：肠壁和肝脏 CYP3A4 的合成按它在细胞里的游离浓度上升，降解速率不变；没有抑制剂，也没有其他诱导剂" });
   for (const row of list(pbpk.assumed).map(object)) {
     const key = String(row.key);
     const label = ASSUMED_LABELS[key];
@@ -134,7 +158,7 @@ function cardOf(result, staleMark) {
     victim: drugWord(victim.drug), perpetrator: drugWord(perpetrator.drug), route: victim.route === "iv" ? "iv" : "oral",
     weightKg: numeric(given.weightKg), horizonH: numeric(given.horizonH),
     headline, lead, series, table,
-    citation: "Asaumi 等，2018，CPT: Pharmacometrics & Systems Pharmacology 7(3):186-196",
+    citation: perpetrator.drug === "ketoconazole" ? "Quinney 等，2013，CPT: Pharmacometrics & Systems Pharmacology 2:e75" : "Asaumi 等，2018，CPT: Pharmacometrics & Systems Pharmacology 7(3):186-196",
     premises: premisesOf(pbpk, object(result.diagnostics).personStated), limited,
   };
 }
