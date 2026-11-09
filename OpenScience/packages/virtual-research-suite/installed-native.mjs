@@ -7,6 +7,8 @@ const { ToolRuntime } = await loadHarnessModule('@deepseek-ai/dsh-tools')
 const ctx = new Context()
 ctx.provide('systemPrompt', { tools() {}, section() { return () => {} } })
 const runtime = new ToolRuntime(ctx)
+// Since DSH 0.2.2 a call runs through the composition's selected executor (a batch of calls), not through ToolRuntime itself.
+ctx.plugin(await loadHarnessModule('@deepseek-ai/dsh-tool-executor-native'))
 await ctx.plugin(suite, { mode: 'standalone' })
 if (process.env.WITH_TRIAL) {
   const trial = await import('@evimed/virtual-trial/plugin')
@@ -14,7 +16,8 @@ if (process.env.WITH_TRIAL) {
 }
 await new Promise(done => setTimeout(done, 30))
 const agent = { session: { id: 'suite-probe', requestHeader: () => ({ config: {} }) }, ctx }
-const result = await runtime.execute({ callId: 'suite-probe', name: 'virtual_research_available', agent, arguments: {}, signal: new AbortController().signal })
+const batch = await runtime.execute({ calls: [{ type: 'tool-call', id: 'suite-probe', name: 'virtual_research_available', arguments: '{}' }], agent, signal: new AbortController().signal })
+const result = batch.results[0].result
 assert.equal(result.isError, false)
 if (process.env.WITH_TRIAL) assert.ok(result.value.data.tools.includes('virtual_trial_start'))
 else assert.deepEqual(result.value.data.tools, [])

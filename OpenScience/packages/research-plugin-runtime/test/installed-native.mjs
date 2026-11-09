@@ -7,9 +7,12 @@ const { ToolRuntime } = await loadHarnessModule('@deepseek-ai/dsh-tools')
 const ctx = new Context()
 ctx.provide('systemPrompt', { tools() {}, section() { return () => {} } })
 const runtime = new ToolRuntime(ctx)
+// Since DSH 0.2.2 a call runs through the composition's selected executor (a batch of calls), not through ToolRuntime itself.
+ctx.plugin(await loadHarnessModule('@deepseek-ai/dsh-tool-executor-native'))
 const agent = { session: { id: 'local-probe', requestHeader: () => ({ config: {} }) }, ctx }
 async function call(name, args) {
-  const result = await runtime.execute({ callId: `probe-${Math.random()}`, name, agent, arguments: args, signal: new AbortController().signal })
+  const batch = await runtime.execute({ calls: [{ type: 'tool-call', id: `probe-${Math.random()}`, name, arguments: JSON.stringify(args ?? {}) }], agent, signal: new AbortController().signal })
+  const result = batch.results[0].result
   assert.equal(result.isError, false, JSON.stringify(result))
   return result.value.data
 }
