@@ -1499,8 +1499,6 @@ class RegistryRecordTests(_GatewayCase):
         self.assertEqual(result["error"]["code"], "registry_not_configured")
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 class TrialBenchmarkFileTests(unittest.TestCase):
     def test_preserved_trial_predictions_are_read_from_workspace_with_content_identity(self):
@@ -1525,3 +1523,61 @@ class TrialBenchmarkFileTests(unittest.TestCase):
                     vcr_platform.write({'what': 'trial_benchmark', 'data': {'predictionsFile': str(file)}})
                 self.assertEqual(raised.exception.code, 'vcr_benchmark_invalid')
                 post.assert_not_called()
+
+
+class VcrStudyIdTests(unittest.TestCase):
+    """R11: a study handed to this conversation is named by `studyId`, which the catalogue does not advertise."""
+
+    def test_the_catalogue_does_not_grow_and_the_three_tools_accept_a_study_id(self):
+        import server
+
+        for name in ("vcr_read", "vcr_write", "vcr_simulate"):
+            self.assertNotIn("studyId", server.TOOLS[name]["inputSchema"]["properties"], "nothing grows the root catalogue")
+        posted = []
+
+        def fake_post(operation, payload, timeout=0):
+            posted.append((operation, dict(payload)))
+            return {"what": payload.get("what"), "ok": True}
+
+        with mock.patch.object(vcr_platform, "_post", fake_post), mock.patch.object(vcr_platform, "_gateway", lambda: ("http://gateway", "token")):
+            for arguments in ({"what": "study", "studyId": "std_old"},):
+                server._dispatch("vcr_read", arguments)
+            self.assertEqual(posted[-1][1].get("what"), "study")
+        # the id rides every request of the call through the one place that posts, and only for the call that named it
+        sent = []
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self, limit=0):
+                return b'{"data":{}}'
+
+        class Opener:
+            def open(self, request, timeout=0):
+                sent.append(json.loads(request.data))
+                return Response()
+
+        with mock.patch.object(vcr_platform, "_gateway", lambda: ("http://gateway", "token")), mock.patch.object(vcr_platform.public_sources, "_OPENER", Opener()):
+            with vcr_platform.invocation(None, "std_old"):
+                vcr_platform._post("read", {"what": "study"})
+            vcr_platform._post("read", {"what": "study"})
+        self.assertEqual(sent[0], {"what": "study", "studyId": "std_old"})
+        self.assertEqual(sent[1], {"what": "study"})
+
+    def test_a_malformed_study_id_is_refused_and_other_unknown_fields_still_are(self):
+        import server
+
+        bad = server._dispatch("vcr_read", {"what": "study", "studyId": "not an id!"})
+        self.assertEqual(bad["status"], "error")
+        self.assertIn("studyId", bad["error"]["message"])
+        other = server._dispatch("vcr_read", {"what": "study", "studyId": "std_old", "extra": 1})
+        self.assertEqual(other["status"], "error")
+        self.assertIn("extra", other["error"]["message"])
+
+
+if __name__ == "__main__":
+    unittest.main()

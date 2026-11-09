@@ -13,6 +13,8 @@ import {
   type VcrStudySummary,
 } from "@/lib/vcrClient";
 import { useGeneralResearchDraft } from "@/components/vcr/useGeneralResearchDraft";
+import { useContinueStudy } from "@/components/vcr/useContinueStudy";
+import { Menu } from "@/components/ui/Menu";
 import { PROFESSIONAL_RESEARCH_TASKS } from "@/components/vcr/professionalResearchTasks";
 import { parseVcrWorkspaceArea, vcrWorkspaceAreaPath, type VcrWorkspaceArea } from "@/lib/vcrWorkspaceNavigation";
 import { useVcrEntryDraft } from "@/lib/vcrEntryDraft";
@@ -396,6 +398,7 @@ function StudyRow({ study, to, selected, opening }: { study: VcrStudySummary; to
  */
 function ConversationStudyRow({ study }: { study: VcrConversationStudy }) {
   const tab = study.tabs[0] ?? "overview";
+  const continueStudy = useContinueStudy();
   const holds = [...new Set(study.tabs.map((key) => (VCR_TAB_LABELS_ZH as Record<string, string>)[key]).filter(Boolean))];
   return (
     <ListRow
@@ -403,6 +406,7 @@ function ConversationStudyRow({ study }: { study: VcrConversationStudy }) {
       title={<span className="line-clamp-2">{study.name}</span>}
       meta={holds.length > 0 ? <span data-vcr-holds="" className="block truncate">{holds.join(" · ")}</span> : undefined}
       trailing={study.updatedAt ? <span className="tabular-nums">{study.updatedAt}</span> : undefined}
+      menu={<Menu label={`“${study.name}”的操作`} items={[{ label: "在新对话中继续", onSelect: () => continueStudy({ id: study.id, projectId: study.projectId, name: study.name }) }]} />}
     />
   );
 }

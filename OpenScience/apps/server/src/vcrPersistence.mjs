@@ -86,7 +86,7 @@ export const VCR_TABLES = Object.freeze([
   "populations", "patient_sets", "comparator_designs", "trial_scenarios", "design_grids",
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
-  "jobs", "conversation_completions", "executions", "results", "forecasts", "longitudinal_artifacts",
+  "jobs", "conversation_completions", "study_conversations", "executions", "results", "forecasts", "longitudinal_artifacts",
   "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "matching_extractions",
   "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments", "parsed_trial_criteria",
   "followup_episodes",
@@ -926,6 +926,18 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.conversation_completions (
 ALTER TABLE evimed_vcr.conversation_completions ADD COLUMN IF NOT EXISTS dispatch_generation integer NOT NULL DEFAULT 0;
 ALTER TABLE evimed_vcr.conversation_completions ALTER COLUMN study_id DROP NOT NULL;
 ALTER TABLE evimed_vcr.conversation_completions ALTER COLUMN job_id DROP NOT NULL;
+
+-- A person's explicit, recorded and revocable handoff of one study to another conversation (R11): the gateway resolves an explicit
+-- studyId from a session only while its row here is not revoked. A re-grant after a revocation clears \`revoked_at\` and is a new grant.
+CREATE TABLE IF NOT EXISTS evimed_vcr.study_conversations (
+  study_id    text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  session_id  text NOT NULL,
+  granted_by  text NOT NULL,
+  granted_at  timestamptz NOT NULL DEFAULT now(),
+  revoked_at  timestamptz,
+  PRIMARY KEY (study_id, session_id)
+);
+CREATE INDEX IF NOT EXISTS vcr_study_conversations_session_idx ON evimed_vcr.study_conversations (session_id) WHERE revoked_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS vcr_completion_pending_idx ON evimed_vcr.conversation_completions (run_after,user_id,created_at) WHERE state='pending';
 CREATE INDEX IF NOT EXISTS vcr_completion_retention_idx ON evimed_vcr.conversation_completions (updated_at) WHERE state<>'pending';

@@ -93,6 +93,8 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_payload_invalid",
   "vcr_study_not_found",
   "vcr_study_paused",
+  // 收回 a handoff the study never made.
+  "vcr_continuation_not_found",
   // 「为该患者找试验」 for a patient the study does not hold.
   "vcr_subject_not_found",
   "vcr_name_invalid",
@@ -220,6 +222,8 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/publications": ["manage_study"],
   "POST /studies/:id/predictions": ["manage_study"],
   "DELETE /studies/:id/publications/:publication": ["manage_study"],
+  "GET /studies/:id/continuations": ["read"],
+  "DELETE /studies/:id/continuations/:session": ["read"],
   "GET /studies/:id/members": ["read"],
   "POST /studies/:id/members": ["manage_members"],
   "DELETE /studies/:id/members/:user": ["manage_members"],
@@ -279,7 +283,7 @@ export function vcrRoutePattern(pathname) {
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
   if (parts[1] === "of-project" && parts.length === 3) return "/api/vcr/studies/of-project/:project";
-  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "method-configurations", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs", "experiments"];
+  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "method-configurations", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "continuations", "referrals", "pack", "definitions", "runs", "experiments"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -1624,6 +1628,30 @@ export function createVcrRoutes(dependencies) {
         if (!config.vcrPublicSimulationsEnabled || !hooks.publications || !VCR_PUBLICATION_KINDS.includes(String(view?.kind))) return reply(view);
         const live = (await hooks.publications.forStudy(study.id)).find((/** @type {any} */ entry) => entry.exportId === parts[3]) ?? null;
         return reply({ ...view, publication: { canPublish: roles.some((role) => roleHolds(role, "manage_study")), live: live ? { id: live.id, publishedAt: live.publishedAt } : null } });
+      }
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
+    }
+
+    // --- the conversations a study was handed to (R11) --------------------------------------
+    // The grant itself is written by the person's own pick (the composer's study reference, 「在新对话中继续」: the reference staging
+    // route); here the person reads their handoffs and takes one back. A revoked grant stops serving the conversation at its next call.
+    if (section === "continuations") {
+      if (parts.length === 3 && method === "GET") {
+        const { study } = await authorize(id, "read");
+        const grants = await service.store.studyConversationGrants(study.id);
+        return reply({ continuations: grants.filter((/** @type {any} */ grant) => grant.grantedBy === String(user.id))
+          .map((/** @type {any} */ grant) => ({ sessionId: grant.sessionId, grantedAt: grant.grantedAt, revoked: grant.revokedAt !== null, revokedAt: grant.revokedAt })) });
+      }
+      if (parts.length === 4 && method === "DELETE") {
+        await bodyOf(req, maxJsonBytes, []);
+        const { study, roles } = await authorize(id, "read");
+        const held = await service.store.studyConversationHandoff(study.id, parts[3]);
+        if (!held) throw new HttpError(404, "vcr_continuation_not_found", "这项研究没有交给这个对话。");
+        // the person who handed it over takes it back; the study's lead can too
+        if (held.grantedBy !== String(user.id) && !roles.some((role) => roleHolds(role, "manage_study"))) throw new HttpError(403, "vcr_forbidden", "只有交出这项研究的人或研究负责人可以收回。");
+        const revoked = await audited("vcr.continuation.revoke", () => ({ code: study.id, detail: "revoked" }), { code: study.id },
+          () => service.store.revokeStudyConversation(study.id, parts[3]));
+        return reply({ revoked });
       }
       throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }

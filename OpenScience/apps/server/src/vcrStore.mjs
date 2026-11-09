@@ -293,6 +293,13 @@ function resultFromRow(row) {
 }
 
 /** @param {any} row */
+function studyConversationFromRow(row) {
+  if (!row) return null;
+  return { studyId: String(row.study_id), sessionId: String(row.session_id), grantedBy: String(row.granted_by),
+    grantedAt: iso(row.granted_at), revokedAt: iso(row.revoked_at) };
+}
+
+/** @param {any} row */
 function assumptionFromRow(row) {
   if (!row) return null;
   return {
@@ -787,6 +794,41 @@ export class VcrStore extends VcrStoreBase {
   async setConversationSession(studyId, sessionId) {
     return vcrStudyFromRow(await this.one(`UPDATE ${VCR_SCHEMA}.studies SET conversation_session_id = $2
       WHERE id = $1 AND deleted_at IS NULL AND conversation_session_id IS NULL RETURNING *`, [studyId, String(sessionId)]));
+  }
+
+  /**
+   * The handoff of a study to another conversation (R11): recorded, by whom and when, and revocable. A second grant of the same pair
+   * after a revocation is a new grant. The row is an authorization of the conversation's explicit `studyId`, never a copy of anything.
+   * @param {{ studyId: string, sessionId: string, grantedBy: string }} input
+   */
+  async grantStudyConversation({ studyId, sessionId, grantedBy }) {
+    return studyConversationFromRow(await this.one(`INSERT INTO ${VCR_SCHEMA}.study_conversations (study_id, session_id, granted_by)
+      VALUES ($1, $2, $3) ON CONFLICT (study_id, session_id) DO UPDATE
+        SET granted_by = EXCLUDED.granted_by, granted_at = CASE WHEN study_conversations.revoked_at IS NULL THEN study_conversations.granted_at ELSE now() END, revoked_at = NULL
+      RETURNING *`, [studyId, String(sessionId), String(grantedBy)]));
+  }
+
+  /** @param {string} studyId @param {string} sessionId @returns {Promise<boolean>} whether a grant was in force and is now revoked */
+  async revokeStudyConversation(studyId, sessionId) {
+    return Boolean(await this.one(`UPDATE ${VCR_SCHEMA}.study_conversations SET revoked_at = now()
+      WHERE study_id = $1 AND session_id = $2 AND revoked_at IS NULL RETURNING study_id`, [studyId, String(sessionId)]));
+  }
+
+  /** The grant in force for one study and conversation, or null. @param {string} studyId @param {string} sessionId */
+  async studyConversationGrant(studyId, sessionId) {
+    return studyConversationFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.study_conversations
+      WHERE study_id = $1 AND session_id = $2 AND revoked_at IS NULL`, [studyId, String(sessionId)]));
+  }
+
+  /** The handoff of one study to one conversation whether or not it still stands (a revoked one says so), or null. @param {string} studyId @param {string} sessionId */
+  async studyConversationHandoff(studyId, sessionId) {
+    return studyConversationFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.study_conversations WHERE study_id = $1 AND session_id = $2`, [studyId, String(sessionId)]));
+  }
+
+  /** Every conversation a study was handed to, revoked ones included (the study page lists them). @param {string} studyId */
+  async studyConversationGrants(studyId) {
+    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.study_conversations WHERE study_id = $1 ORDER BY granted_at DESC LIMIT 100`, [studyId]))
+      .map((row) => studyConversationFromRow(row));
   }
 
   /** Where the last tick stopped: studies are walked in id order, a page at a time, and the walk wraps. */

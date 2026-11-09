@@ -330,6 +330,23 @@ describe("the studies a conversation made (VCR remediation F1)", () => {
     expect(within(await screen.findByRole("list", { name: "研究" })).queryByRole("link", { name: "帮我匹配患者和临床试验" })).toBeNull();
   });
 
+  it("R11 each row offers 「在新对话中继续」: a new conversation in the study's project whose composer holds the study as its reference, unsent", async () => {
+    serve({ ...fixture("ev201/home.json"), conversationStudies: [made({ projectId: "prj_conv" })] });
+    draw();
+    const rows = await screen.findByRole("list", { name: "对话里的研究" });
+    await userEvent.click(within(rows).getByRole("button", { name: "“帮我匹配患者和临床试验”的操作" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "在新对话中继续" }));
+    const location = JSON.parse(screen.getByTestId("location").textContent!);
+    expect(location.path).toBe("/app/chat");
+    expect(location.state.conversationProjectId).toBe("prj_conv");
+    expect(location.state.globalAssistant).toBeUndefined();
+    const intent = expectOpaqueRuntimeUiIntent(location.state, "prj_conv");
+    expect(intent.draft).toBe("接着做“帮我匹配患者和临床试验”这项研究：");
+    expect(intent.kind).toBe("create");
+    expect(intent.vcrReference).toEqual({ studyId: "std_conv", kind: "study", objectId: "study" });
+    expect(store.select).toHaveBeenCalledWith("prj_conv", expect.any(Function));
+  });
+
   it("is the list when the module has no study of its own: the empty state is not drawn, without an extra task pane", async () => {
     serve({ studies: [], reviews: [], draftProjectIds: [], conversationStudies: [made()] });
     drawHome();

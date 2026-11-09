@@ -21,8 +21,11 @@ export function createVcrCompletionResolver({ accounts,studies,sessions,allows,a
     if(row.study_id && !allows(user)) throw new HttpError(503,'vcr_disabled','Research tools are disabled for this account.');
     const project=await accounts.requireProject(user,row.project_id);
     const study=row.study_id ? await studies.getStudy(row.user_id,row.study_id) : null;
+    // A study handed to this conversation (R11) answers there while the grant stands, and a revoked grant has no conversation to wake;
+    // without a grant, a conversation-scoped study answers only in the conversation it belongs to.
+    const handoff=study && study.conversationSessionId!==row.root_session_id ? await studies.studyConversationHandoff?.(study.id,row.root_session_id) : null;
     if(row.study_id && (!study || study.projectId!==row.project_id || !['active','draft'].includes(study.status)
-      || study.scope==='conversation' && study.conversationSessionId!==row.root_session_id)) return {user,project,session:null};
+      || (handoff ? handoff.revokedAt!==null || handoff.grantedBy!==String(row.user_id) : study.scope==='conversation' && study.conversationSessionId!==row.root_session_id))) return {user,project,session:null};
     return {user,project,session:await sessions.get(project,row.root_session_id) ?? await adoptSession?.(project,row.root_session_id) ?? null};
   };
 }

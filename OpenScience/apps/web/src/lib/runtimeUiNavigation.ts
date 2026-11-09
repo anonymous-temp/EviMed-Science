@@ -32,7 +32,7 @@ export interface RuntimeUiIntentMarker {
 
 export interface VcrObjectSelection {
   studyId?: string;
-  kind: "population" | "patient_set" | "comparator" | "trial_scenario" | "model" | "step";
+  kind: "population" | "patient_set" | "comparator" | "trial_scenario" | "model" | "step" | "study";
   objectId: string;
   version?: number | string;
   resultId?: string;

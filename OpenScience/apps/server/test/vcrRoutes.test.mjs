@@ -85,6 +85,9 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
   const vcrStore = {
     async rolesOf(/** @type {string} */ _studyId, /** @type {string} */ userId) { calls.push(["vcr.rolesOf", userId]); return roles[userId] ?? []; },
     async members() { calls.push(["vcr.members"]); return [{ userId: OWNER, role: "lead" }]; },
+    async studyConversationGrants() { return []; },
+    async studyConversationHandoff(/** @type {string} */ studyId, /** @type {string} */ sessionId) { return { studyId, sessionId, grantedBy: current, grantedAt: "2026-11-09T00:00:00.000Z", revokedAt: null }; },
+    async revokeStudyConversation() { return true; },
     async studyByControlProject(/** @type {string} */ userId, /** @type {string} */ projectId) {
       calls.push(["vcr.ofProject", userId, projectId]);
       const member = userId === study.userId || (roles[userId] ?? []).length > 0;
@@ -230,6 +233,7 @@ test("a 虚拟临床研究 path's metric label folds every id, so a dashboard ro
     ["/api/vcr/studies/std_abc/jobs/job_1", "/api/vcr/studies/:id/jobs/:item"],
     ["/api/vcr/studies/std_abc/jobs/job_1/cancel", "/api/vcr/studies/:id/jobs/:item/cancel"],
     ["/api/vcr/studies/std_abc/members/user_1", "/api/vcr/studies/:id/members/:item"],
+    ["/api/vcr/studies/std_abc/continuations/ses_1", "/api/vcr/studies/:id/continuations/:item"],
     ["/api/vcr/studies/std_abc/referrals", "/api/vcr/studies/:id/referrals"],
     ["/api/vcr/studies/std_abc/referrals/ref_1/contact", "/api/vcr/studies/:id/referrals/:item/contact"],
     ["/api/vcr/studies/std_abc/referrals/ref_1/transition", "/api/vcr/studies/:id/referrals/:item/transition"],
@@ -528,6 +532,8 @@ const REQUESTS = {
   "POST /studies/:id/publications": ["POST", "/api/vcr/studies/std_1/publications", { exportId: "exp_1", title: "EV-201 模拟", summary: "" }],
   "POST /studies/:id/predictions": ["POST", "/api/vcr/studies/std_1/predictions", { scenarioId: "scn_1", registryId: "NCT02296125", endpoint: "PFS", resultPath: "measure(power)" }],
   "DELETE /studies/:id/publications/:publication": ["DELETE", "/api/vcr/studies/std_1/publications/sim_1", undefined],
+  "GET /studies/:id/continuations": ["GET", "/api/vcr/studies/std_1/continuations", undefined],
+  "DELETE /studies/:id/continuations/:session": ["DELETE", "/api/vcr/studies/std_1/continuations/ses_1", undefined],
   "GET /studies/:id/members": ["GET", "/api/vcr/studies/std_1/members", undefined],
   "POST /studies/:id/members": ["POST", "/api/vcr/studies/std_1/members", { userId: "newcomer", role: "viewer" }],
   "DELETE /studies/:id/members/:user": ["DELETE", "/api/vcr/studies/std_1/members/newcomer", undefined],

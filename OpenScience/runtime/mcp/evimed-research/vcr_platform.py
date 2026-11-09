@@ -640,20 +640,28 @@ def _field_issues(raw) -> list:
 
 
 _EXECUTION_CONTEXT = ContextVar("vcr_execution_context", default=None)
+_STUDY_ID = ContextVar("vcr_study_id", default=None)
 
 
 @contextmanager
-def invocation(execution_context):
-    """Keep native context per synchronous call, including nested wrappers."""
+def invocation(execution_context, study_id=None):
+    """Keep native context per synchronous call, including nested wrappers.
+
+    `study_id` is the explicit study a call names (one handed to this conversation): every request the call makes carries it.
+    """
     token = _EXECUTION_CONTEXT.set(execution_context)
+    study_token = _STUDY_ID.set(study_id if isinstance(study_id, str) and study_id else None)
     try:
         yield
     finally:
+        _STUDY_ID.reset(study_token)
         _EXECUTION_CONTEXT.reset(token)
 
 
 def _post(operation: str, payload: dict, timeout: int = TIMEOUT_SECONDS) -> dict:
     base, token = _gateway()
+    if _STUDY_ID.get():
+        payload = {**payload, "studyId": _STUDY_ID.get()}
     request = urllib.request.Request(
         "%s/%s" % (base, operation),
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),

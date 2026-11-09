@@ -236,6 +236,9 @@ function requests(target, ids) {
     "POST /studies/:id/correction-cases": async () => ["POST", `${S}/correction-cases`, {}],
     "GET /studies/:id/correction-cases/:dataset": async () => ["GET", `${S}/correction-cases/eds_missing`, undefined],
     "POST /studies/:id/correction-cases/:dataset/replay": async () => ["POST", `${S}/correction-cases/eds_missing/replay`, {}],
+    // A handoff of the study to another conversation: whoever reads the study sees their own; taking one back of a pair that does not exist is 404.
+    "GET /studies/:id/continuations": async () => ["GET", `${S}/continuations`, undefined],
+    "DELETE /studies/:id/continuations/:session": async () => ["DELETE", `${S}/continuations/ses_none`, undefined],
     "GET /studies/:id/members": async () => ["GET", `${S}/members`, undefined],
     "POST /studies/:id/members": async () => ["POST", `${S}/members`, { userId: `newcomer${suffix}`, role: "viewer" }],
     "DELETE /studies/:id/members/:user": async () => ["DELETE", `${S}/members/newcomer${suffix}?role=viewer`, undefined],

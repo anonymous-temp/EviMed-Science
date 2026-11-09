@@ -167,7 +167,7 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   "source_changed", "vcr_intake_source_invalid", "vcr_intake_source_changed", "vcr_intake_payload_invalid", "vcr_intake_format_invalid", "vcr_intake_map_changed", "vcr_field_map_changed", "vcr_field_map_unconfirmed", "vcr_source_withdrawn",
   "vcr_curve_calibration_invalid", "vcr_curve_digitizer_unavailable", "vcr_intake_busy", "vcr_intake_timeout", "vcr_intake_failed",
   "vcr_simulate_action_invalid", "vcr_simulate_payload_invalid", "vcr_simulate_subject_required", "vcr_simulate_subject_unknown",
-  "vcr_job_not_found", "registry_unavailable",
+  "vcr_job_not_found", "registry_unavailable", "vcr_study_id_invalid", "vcr_study_not_granted",
 ]);
 
 class VcrGatewayError extends Error {
@@ -2714,7 +2714,12 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       if (++window.count > /** @type {Record<string, number>} */ (windowLimits)[operation]) {
         throw gatewayError(429, "vcr_gateway_rate_limited", "Too many 虚拟临床研究 calls in a minute.");
       }
-      const body = await readJsonBody(req, /** @type {Record<string, number>} */ (requestLimits)[operation]);
+      const posted = await readJsonBody(req, /** @type {Record<string, number>} */ (requestLimits)[operation]);
+      // An explicit `studyId` names a study handed to this conversation (R11). It is an addressing field of the call, not of the
+      // operation: it is taken off before the operation's own field checks and the native-call proof still covers it.
+      const askedStudyId = posted && typeof posted === 'object' && !Array.isArray(posted) ? posted.studyId : undefined;
+      if (askedStudyId !== undefined && (typeof askedStudyId !== 'string' || !ID.test(askedStudyId))) throw gatewayError(400, 'vcr_study_id_invalid', 'studyId is the id of a study handed to this conversation.');
+      const body = askedStudyId === undefined ? posted : Object.fromEntries(Object.entries(posted).filter(([field]) => field !== "studyId"));
       // Parse before choosing a scope: a malformed syntax probe never creates a scientific task.
       if (operation === 'read') readRequest(body);
       if (operation === 'simulate') simulateRequest(body);
@@ -2745,7 +2750,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       // Transcript paging belongs to the request's bounded proof work.
       let proofTimer;
       const origin = nativeHeader ? await Promise.race([
-        resolveInvocation(identity,nativeHeader,operation,body),
+        resolveInvocation(identity,nativeHeader,operation,posted),
         new Promise((_,reject)=>{proofTimer=setTimeout(()=>reject(gatewayError(504,'vcr_gateway_timeout','The native call proof timed out.')),Math.max(budgetMs, Number(config?.vcrRunAdoptionWaitMs ?? 0) + budgetMs));proofTimer.unref?.();}),
       ]).finally(()=>clearTimeout(proofTimer)) : null;
       if(origin && (origin.userId!==String(identity.userId) || origin.projectId!==String(identity.projectId))) throw gatewayError(403,'vcr_invocation_unavailable','The native research scope changed.');
@@ -2767,12 +2772,24 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         return;
       }
       if ((!origin || origin.programme) && !programmeStudy) throw gatewayError(403,'vcr_invocation_unavailable','A current native research call or exact study dispatch is required.');
-      let study = programmeStudy ?? await vcr.store.studyByControlProject(String(identity.userId),String(identity.projectId));
-      if (origin && !programmeStudy && study && !study.conversationSessionId && resolveStudyConversation) {
+      // A study named explicitly is served to the conversation it was handed to and to no other: the grant is read for this very
+      // session and account on every call, so a revocation takes effect at the next one. Authorization of what the call does with
+      // the study (roles, grants, small cells) is unchanged and applies below as for the conversation's own study.
+      let handedStudy = null;
+      if (askedStudyId !== undefined) {
+        const denied = () => gatewayError(403, 'vcr_study_not_granted', 'This study was not handed to this conversation. Ask the researcher to continue it here.');
+        if (!origin || origin.programme) throw denied();
+        const grant = await vcr.store.studyConversationGrant(askedStudyId, origin.rootSessionId);
+        if (!grant || grant.grantedBy !== String(origin.userId)) throw denied();
+        handedStudy = await vcr.service.requireStudy({ id: String(origin.userId) }, askedStudyId).catch(() => null);
+        if (!handedStudy || handedStudy.projectId !== String(origin.projectId)) throw denied();
+      }
+      let study = handedStudy ?? programmeStudy ?? await vcr.store.studyByControlProject(String(identity.userId),String(identity.projectId));
+      if (origin && !programmeStudy && !handedStudy && study && !study.conversationSessionId && resolveStudyConversation) {
         const legacy=await resolveStudyConversation(study,{create:false});
         if (legacy?.sessionId) { await vcr.store.setConversationSession(study.id,legacy.sessionId); study={...study,conversationSessionId:legacy.sessionId}; }
       }
-      if (origin && !programmeStudy && (!study || study.conversationSessionId!==origin.rootSessionId)) {
+      if (origin && !programmeStudy && !handedStudy && (!study || study.conversationSessionId!==origin.rootSessionId)) {
         const create=operation==='write' || operation==='digitize' || operation==='simulate' && ['start','search','compare'].includes(body.action ?? 'start');
         // The study is made with a placeholder name; a title the model gives (task_context) or the kind of work it comes to hold names it.
         study=await vcr.store.taskContext(origin,{create}) ?? {id:null,userId:origin.userId,projectId:origin.projectId,scope:'conversation',purpose:'task',conversationSessionId:origin.rootSessionId};

@@ -7300,7 +7300,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (vcrReferenceRoute && req.method === "POST") {
         const ctx = await context(req, res);
         const body = await readJson(req, 4096);
-        const reference = await validateVcrConversationReference(vcr, ctx.user, ctx.project, decodeRouteComponent(vcrReferenceRoute[1], "session id"), body);
+        const reference = await validateVcrConversationReference(vcr, ctx.user, ctx.project, decodeRouteComponent(vcrReferenceRoute[1], "session id"), body, { grant: true });
         sendJson(res, 200, { data: reference });
         return;
       }

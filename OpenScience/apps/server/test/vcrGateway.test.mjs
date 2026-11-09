@@ -177,11 +177,12 @@ test("the token names the account and the study; there is no id parameter", asyn
   assert.equal(res.json().data.studyId, "std_1");
   assert.deepEqual(calls[0], ["read", "study", {}]);
 
-  // A body field naming another study is refused as an unknown field, not honoured.
+  // A study named in the body is not honoured here: only a conversation holding a grant may name one (R11), and a call that is no
+  // native conversation's has none (before R11 this was refused as an unknown field, 400 vcr_request_invalid).
   const other = response();
   await handler(request("/internal/vcr/v1/read", { what: "study", studyId: "std_2" }), other);
-  assert.equal(other.status, 400);
-  assert.equal(other.json().code, "vcr_request_invalid");
+  assert.equal(other.status, 403);
+  assert.equal(other.json().code, "vcr_study_not_granted");
 });
 
 test("a missing or invalid token is 401; the module off is a named 503", async () => {

@@ -702,6 +702,15 @@ describe("the 「⋯」 menu", () => {
   });
 });
 
+describe("在新对话中继续 (R11)", () => {
+  it("opens a new conversation in the study's project whose composer holds the study as its unsent reference", async () => {
+    draw();
+    await openMenu("在新对话中继续");
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/chat\?project=prj_ev201$/));
+    expect(store.select).toHaveBeenCalledWith("prj_ev201", expect.any(Function));
+  });
+});
+
 describe("重命名", () => {
   it("opens with the name as it is, saves the new one with exactly { name }, re-reads the study and asks for the project list again", async () => {
     draw();
@@ -869,19 +878,19 @@ describe("the 「⋯」 menu follows the reader's abilities", () => {
 
   it("offers the lead everything: rename, export, the data intake, members, budget, pause, the record, the AI's runs, and — apart — delete", async () => {
     draw();
-    expect(await items()).toEqual(["重命名", "导出…", "数据接入", "成员与角色", "计算预算", "暂停研究", "变更记录", "AI 运行", "删除"]);
+    expect(await items()).toEqual(["在新对话中继续", "重命名", "导出…", "数据接入", "成员与角色", "计算预算", "暂停研究", "变更记录", "AI 运行", "删除"]);
   });
 
   it("offers a reader who only exports the export, and the two records — nothing that changes the study", async () => {
     withAbilities(["read", "review_clinical", "export"]);
     draw();
-    expect(await items()).toEqual(["导出…", "数据接入", "变更记录", "AI 运行"]);
+    expect(await items()).toEqual(["在新对话中继续", "导出…", "数据接入", "变更记录", "AI 运行"]);
   });
 
   it("keeps the budget, the status, the members and the deletion from a data manager, who is not the lead — and lets them rename", async () => {
     withAbilities(["read", "write", "run", "manage_data", "read_patient_level"]);
     draw();
-    expect(await items()).toEqual(["重命名", "数据接入", "变更记录", "AI 运行"]);
+    expect(await items()).toEqual(["在新对话中继续", "重命名", "数据接入", "变更记录", "AI 运行"]);
   });
 
   it("says nothing of the budget to a reader who cannot confirm it: the line is the lead's, and a button that would be refused is not offered", async () => {

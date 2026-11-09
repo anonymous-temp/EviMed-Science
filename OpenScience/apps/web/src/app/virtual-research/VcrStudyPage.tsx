@@ -23,6 +23,7 @@ import { prepareRuntimeUiIntent, registerPendingRuntimeUiIntent, runtimeUiIntent
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
+import { useContinueStudy } from "@/components/vcr/useContinueStudy";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Note } from "@/components/ui/Note";
@@ -178,6 +179,7 @@ function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyI
   // the menu offers only the actions that will not be refused (the routes
   // check for themselves, per operation — this is presentation).
   const can = (ability: string) => study.abilities.includes(ability);
+  const continueStudy = useContinueStudy();
 
   // --- the shell moves to the study's project, once ------------------------------------------------------------------
   // --- where a study opens: on what it holds, once -----------------------------------------------------------------------
@@ -239,6 +241,7 @@ function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyI
       .finally(() => setChangingStatus(false));
   };
   const menu: MenuEntry[] = [
+    ...(can("read") ? [{ label: "在新对话中继续", onSelect: () => continueStudy({ id: studyId, projectId: study.projectId, name: study.name }) }] : []),
     ...(can("write") ? [{ label: "重命名", onSelect: () => setPanel("rename") }] : []),
     ...(can("export") ? [{ label: "导出…", disabled: running, onSelect: () => setPanel("export") }] : []),
     // 数据接入 is one entry on every tier: a study with no data plane to take it says so in the drawer, and a tier that takes real
