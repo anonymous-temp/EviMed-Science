@@ -2007,6 +2007,27 @@ test("the run that started a campaign reading it after it stopped is its notice;
   assert.equal(values[4], "std_task", "the update names the study and the origin's run: another run's read does not match it");
 });
 
+test("the run that started a comparison reading it once every arm has ended is its notice, with the aggregate's own state (R04)", async () => {
+  const { call, made } = conversationCalls("https://evimed.example");
+  /** @type {any[]} */ const updates = [];
+  made.vcr.store.query = async (/** @type {string} */ sql, /** @type {any[]} */ values) => { updates.push([sql.includes("originTerminalObservation"), values]); return { rowCount: 1 }; };
+  let ended = /** @type {any} */ ({ terminal: false, state: null });
+  made.vcr.experiments = {
+    async view(/** @type {any} */ _study, /** @type {string} */ id) { return { id, kind: "experiment", status: ended.terminal ? "complete" : "running" }; },
+    async completionOf(/** @type {string} */ _studyId, /** @type {string} */ _id) { return ended; },
+  };
+  await call("simulate", { action: "compare_status", experimentId: "exp_1" });
+  assert.equal(updates.length, 0, "a comparison with an arm still open is not observed");
+  ended = { terminal: true, outcome: "partial", state: "succeeded" };
+  assert.equal((await call("simulate", { action: "compare_status", experimentId: "exp_1" })).status, 200);
+  assert.equal(updates.length, 1);
+  const [marked, values] = updates[0];
+  assert.equal(marked, true);
+  assert.equal(values[0], "exp_1");
+  assert.deepEqual(JSON.parse(values[3]), { runId: "run_1", rootSessionId: values[2], callId: JSON.parse(values[3]).callId, state: "succeeded", resultKey: "experiment" });
+  assert.equal(values[4], "std_task");
+});
+
 test("the lab's actions reach the experiments package with the study and the origin; a malformed call is refused by shape", async () => {
   const { call, made } = conversationCalls("https://evimed.example");
   /** @type {any[]} */ const asked = [];
