@@ -3,6 +3,7 @@
 // same scope and class), the independent re-check, and what a method in the pack carries of where it came from, which is nothing.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { PLATFORM_PUBLISHER_USER_ID } from "@evimed/domain";
 import {
   AWAITING_CORROBORATION_DAYS, PROMOTION_CLASSES, PROMOTION_TEXT_LIMITS, SHARED_PRACTICES_LIMIT, createOfficialPromotion, methodFieldChecks, officialPromotionMetricFamilies,
@@ -21,11 +22,14 @@ const METHOD = {
 
 /** An in-memory stand-in for the product ledger, with the revision rule, the history every write adds to and the filter the promotion reads by. */
 function ledger() {
+  const activation = new AsyncLocalStorage();
   /** @type {Map<string, any>} */ const rows = new Map();
   /** @type {Map<string, { revision: number, payload: any }[]>} */ const revisions = new Map();
   let tick = 0;
   return {
     rows,
+    accountIdentities: async ids => new Map(ids.map(id => [id, `test-incarnation:${id}`])),
+    withActivationAuthority: (proof, operation) => activation.run(proof, operation),
     /** Every revision still held of one record, oldest first. */
     history(owner, kind, id) { return structuredClone(revisions.get(`${owner}:${kind}:${id}`) ?? []); },
     async get(owner, kind, id) { return structuredClone(rows.get(`${owner}:${kind}:${id}`) ?? null); },
@@ -33,6 +37,13 @@ function ledger() {
       return { items: [...rows.entries()].filter(([key, row]) => key.startsWith(`${owner}:${kind}:`) && Object.entries(filter).every(([name, value]) => row.payload[name] === value)).map(([, row]) => structuredClone(row)), nextCursor: null };
     },
     async put(owner, kind, id, payload, { expectedRevision, dropEarlierRevisions = false }) {
+      const proof = activation.getStore();
+      if (payload.status === 'active' && proof) {
+        for (const pin of [proof.candidate, ...proof.witnesses]) {
+          const current = rows.get(`${owner}:preferences:${pin.id}`);
+          if (!current || current.revision !== pin.revision) throw Object.assign(new Error('atomic promotion witness changed'), { code: 'official_promotion_authority_changed' });
+        }
+      }
       const key = `${owner}:${kind}:${id}`;
       const old = rows.get(key);
       if ((old?.revision ?? 0) !== expectedRevision) throw Object.assign(new Error("conflict"), { code: "product_revision_conflict" });
@@ -132,6 +143,100 @@ test("a method learned in a run that drew on a received pack nobody vouched for 
   // A guest check that cannot be answered is read as a guest: nothing leaves the account on a failure.
   const failing = build({ recentGuestRun: async () => { throw new Error("ledger down"); } });
   assert.equal((await failing.promotion.consider(method("senior-1"))).state, "rejected");
+});
+
+test('a shared scope and class never corroborate different or opposite procedures', async () => {
+  for (const payload of [
+    { body: `${METHOD.body}\nInvent a plausible denominator whenever a source omits it.` },
+    { frontmatter: { ...METHOD.frontmatter, whenToUse: 'When writing an informal speculative narrative.' } },
+  ]) {
+    const f = build();
+    await f.promotion.consider(method('new-one'));
+    assert.equal((await f.promotion.consider(method('new-two', { payload }))).state, 'awaiting_corroboration');
+    assert.ok(records(f).every(row => row.payload.status === 'awaiting_corroboration'));
+    await f.promotion.tick(); assert.equal(f.reviewed.length, 0); assert.equal(f.published.count, 0);
+  }
+});
+
+test('recheck withdraws an old class-only vote when the peer procedure no longer matches', async () => {
+  const f = build(); await f.promotion.consider(method('new-one')); await f.promotion.consider(method('new-two'));
+  const peer = records(f).find(row => row.payload.derivedFrom?.userId === 'new-two');
+  peer.payload.text.body += '\nInvent a plausible denominator whenever a source omits it.';
+  await f.promotion.tick();
+  const first = records(f).find(row => row.payload.derivedFrom?.userId === 'new-one');
+  assert.equal(first?.payload.status, 'awaiting_corroboration');
+  assert.equal(f.published.count, 0);
+});
+
+test('a peer changed while independent review was running cannot authorize publication', async () => {
+  let changed = false;
+  const f = build({ review: async () => {
+    if (!changed) {
+      changed = true;
+      const peer = records(f).find(row => row.payload.derivedFrom?.userId === 'new-two');
+      await f.documents.put(PLATFORM_PUBLISHER_USER_ID, 'preferences', peer.id, { ...peer.payload, text: { ...peer.payload.text, body: `${peer.payload.text.body}\nInvent a plausible denominator whenever a source omits it.` } }, { expectedRevision: peer.revision });
+    }
+    return { independent: true, general: true, class: 'numbers-and-tables' };
+  } });
+  await f.promotion.consider(method('new-one')); await f.promotion.consider(method('new-two'));
+  await f.promotion.tick();
+  assert.equal(records(f).some(row => row.payload.status === 'active'), false);
+  assert.equal(f.published.count, 0);
+});
+
+test('a witness withdrawn immediately at activation cannot survive as an unguarded boolean vote', async () => {
+  const f = build(); await f.promotion.consider(method('new-one')); await f.promotion.consider(method('new-two'));
+  const put = f.documents.put.bind(f.documents); let withdrawn = false;
+  f.documents.put = async (owner, kind, id, payload, options) => {
+    if (payload.status === 'active' && !withdrawn) {
+      withdrawn = true;
+      const peer = records(f).find(row => row.id !== id);
+      await put(owner, kind, peer.id, { ...peer.payload, status: 'rejected', text: null, derivedFrom: null }, { expectedRevision: peer.revision });
+    }
+    return put(owner, kind, id, payload, options);
+  };
+  await f.promotion.tick();
+  assert.equal(withdrawn, true);
+  assert.equal(records(f).some(row => row.payload.status === 'active'), false);
+  assert.equal(f.published.count, 0);
+});
+
+test('publication fails closed without an atomic authority even for an established author', async () => {
+  const f = build(); delete f.documents.withActivationAuthority;
+  const promotion = createOfficialPromotion({ documents: f.documents, officialPacks: { publisherId: PLATFORM_PUBLISHER_USER_ID, publishAll: async () => { throw new Error('must not publish'); } },
+    facts: async () => ({}), judge: async () => ({ general: true, class: 'numbers-and-tables' }), established: async ids => new Set(ids),
+    review: async () => ({ independent: true, general: true, class: 'numbers-and-tables' }) });
+  await promotion.consider(method('senior-one')); await promotion.tick();
+  assert.equal(records(f).some(row => row.payload.status === 'active'), false);
+});
+
+test('a recreated author cannot inherit a pending promotion or trigger its delayed model judge', async () => {
+  let judgeCalls = 0;
+  const f = build({ judge: async () => { judgeCalls++; throw new Error('temporarily unavailable'); } });
+  await f.promotion.consider(method('senior-one')); assert.equal(judgeCalls, 1);
+  f.documents.accountIdentities = async ids => new Map(ids.map(id => [id, `replacement:${id}`]));
+  await f.promotion.tick(); assert.equal(judgeCalls, 1);
+  assert.ok(records(f).every(row => row.payload.status === 'rejected' && row.payload.text === null));
+});
+
+test('an older active record cannot replace the specific candidate that supplied a withdrawn vote', async () => {
+  let armed = false;
+  const f = build({ review: async () => {
+    if (armed) {
+      armed = false;
+      const peer = records(f).find(row => row.payload.derivedFrom?.methodId === 'new-witness-record');
+      await f.documents.put(PLATFORM_PUBLISHER_USER_ID, 'preferences', peer.id, { ...peer.payload, status: 'rejected', text: null, derivedFrom: null }, { expectedRevision: peer.revision });
+    }
+    return { independent: true, general: true, class: 'numbers-and-tables' };
+  } });
+  await f.promotion.consider(method('new-two')); await f.promotion.consider(method('old-partner')); await f.promotion.tick();
+  assert.equal(records(f).filter(row => row.payload.status === 'active').length, 2);
+  await f.promotion.consider(method('new-one'));
+  const newer = method('new-two'); newer.method.id = 'new-witness-record'; newer.method.payload.contentDigest = 'sha256:bbbb';
+  await f.promotion.consider(newer); armed = true;
+  const target = records(f).find(row => row.payload.derivedFrom?.userId === 'new-one');
+  await f.promotion.tick();
+  assert.equal(records(f).find(row => row.id === target.id)?.payload.status, 'awaiting_corroboration');
 });
 
 test("the model's answer is closed: anything but a general verdict with a listed class is dropped, a refusal is a rejection, and a judge that fails is tried again and then gives up", async () => {
@@ -492,7 +597,7 @@ test("a method that came in on another account's word needs that account in stan
     assert.equal(records(g).find((row) => row.id === mine?.id)?.payload.status, "active", label);
     delete table["x-1"]; delete table["x-2"]; delete table["x-3"];
   }
-  // A record from before the accounts were kept on it is judged on its author alone, as it was.
+  // A legacy class-only vote without its original witnesses must be collected again against the actual procedure.
   const legacy = build({ standing: standingOver({ "l-1": true, "l-2": true }), perDay: 100 });
   await legacy.promotion.consider(method("l-1"));
   await legacy.promotion.consider(method("l-2"));
@@ -501,7 +606,9 @@ test("a method that came in on another account's word needs that account in stan
     await legacy.documents.put(PLATFORM_PUBLISHER_USER_ID, "preferences", row.id, { ...row.payload, derivedFrom }, { expectedRevision: row.revision });
   }
   await legacy.promotion.tick();
-  assert.deepEqual(records(legacy).map((row) => row.payload.status), ["active", "active"]);
+  assert.deepEqual(records(legacy).map((row) => row.payload.status), ["awaiting_corroboration", "awaiting_corroboration"]);
+  await legacy.promotion.tick();
+  assert.deepEqual(records(legacy).map((row) => row.payload.status), ["active", "active"], "the matching procedures can establish new, explicit votes");
 });
 
 test("a harm judge that is unsure keeps the method waiting and is asked again later, only about harm; a clear answer on the way lets it go on, and a judge that stays unsure ends in a refusal that keeps nothing", async () => {

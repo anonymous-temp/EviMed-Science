@@ -37,10 +37,13 @@
  * @module trajectoryDigest
  */
 
+import { ownTurnStarts, rootSessionOf } from './runTurnIdentity.mjs'
+export { ownTurnStarts, rootSessionOf } from './runTurnIdentity.mjs'
 import { cleanArtifactShapes } from './artifactShape.mjs'
 import { fileFormatOf } from './fileDeliverable.mjs'
 import { PLATFORM_CONTEXT_TAGS, carriesPlatformContext, stripPlatformTags, unwrapUserWrappers } from './memoryVocabulary.mjs'
 import { methodSourceIdentifierShapesIn } from './methodSourcePrivacy.mjs'
+import { scopeRunTranscript } from './runTurnScope.mjs'
 import { isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName } from './toolNames.mjs'
 
 /** Bounds on what a digest holds: the size of a model's input, not a policy. */
@@ -86,38 +89,6 @@ export function transcriptMessageText(message) {
     .join('\n')
 }
 
-/**
- * The turns of the root session that belong to the run, by the rule the ledger assigns history with: a turn one of the run's
- * own request ids entered, or the native turn it was adopted from when it has no request ids. Null when the run names neither
- * (a record from before turn identity), and then every turn is read.
- * @param {readonly any[]} messages the run's own (root) session @param {any} run
- * @returns {Set<number> | null}
- */
-export function ownTurnStarts(messages, run) {
-  const requestIds = new Set(Array.isArray(run?.kernelRequestIds) ? run.kernelRequestIds : [])
-  /** @type {Set<number>} */
-  const turns = new Set()
-  for (const message of messages) {
-    if (message?.role === 'user' && message.source === 'user' && Number.isSafeInteger(message.turnStartSeq)
-      && requestIds.has(message.sourceRequestId)) turns.add(message.turnStartSeq)
-  }
-  if (!requestIds.size && Number.isSafeInteger(run?.nativeTurn?.startSeq)) turns.add(run.nativeTurn.startSeq)
-  return turns.size ? turns : null
-}
-
-/**
- * The run's root session and its messages. A stored transcript carries `sessionId` on every line; a live one does not, and
- * then every message is the root's.
- * @param {{ header?: any, messages?: readonly any[] } | null | undefined} transcript @param {any} run
- * @returns {{ sessionId: string | null, messages: any[] }}
- */
-export function rootSessionOf(transcript, run) {
-  const declared = typeof run?.sessionId === 'string' && run.sessionId ? run.sessionId : null
-  const fromHeader = (transcript?.header?.sessions ?? []).find((/** @type {any} */ session) => session?.parentSessionId == null)?.sessionId
-  const sessionId = declared ?? (typeof fromHeader === 'string' && fromHeader ? fromHeader : null)
-  const messages = (transcript?.messages ?? []).filter((/** @type {any} */ message) => !sessionId || message?.sessionId === undefined || message.sessionId === sessionId)
-  return { sessionId, messages }
-}
 
 /**
  * The messages the researcher typed into the run once it was going, in order. Two structural marks, never the words:
@@ -188,6 +159,7 @@ function toolSequence(calls) {
  * @property {string[]} tools
  * @property {{ status: string, repaired: boolean }} outcome
  * @property {{ sensitive: number }} dropped
+ * @property {import('./runTurnScope.mjs').RunTurnScope} runScope
  */
 
 /**
@@ -195,13 +167,15 @@ function toolSequence(calls) {
  * @param {any} run the ledger's record of the run: `sessionId`, `kernelRequestIds`, `nativeTurn`, `status`, `repairRounds`, `artifacts`,
  *   `unverifiedArtifacts`, `outputFiles`
  * @param {{ shapes?: Readonly<Record<string, unknown>> | null, reactions?: readonly TrajectoryReaction[], attempts?: number,
- *   toolTraces?: readonly { steps?: readonly { tool?: unknown, turn?: number }[] }[] | null }} [options]
+ *   toolTraces?: readonly { runId?:string, sessionId?:string, steps?: readonly { tool?: unknown, turn?: number, turnStartSeq?:number }[] }[] | null }} [options]
  *   `shapes`: file path to the shape read from it (`apps/server/src/artifactShapes.mjs`). `reactions`: what the person did after
  *   the run was going that the transcript does not hold. `attempts`: the largest number of submissions any deliverable took.
  *   `toolTraces`: the run's executed tool trace, one entry per session (`apps/server/src/toolExecutionEdges.mjs`, `readToolTraces`).
  * @returns {TrajectoryDigest}
  */
 export function trajectoryDigest(transcript, run, options = {}) {
+  const scoped = scopeRunTranscript(transcript, run)
+  transcript = scoped
   const limits = TRAJECTORY_DIGEST_LIMITS
   const { messages: root } = rootSessionOf(transcript, run)
   const turns = ownTurnStarts(root, run)
@@ -276,7 +250,18 @@ export function trajectoryDigest(transcript, run, options = {}) {
     if (artifacts.length >= limits.artifacts) break
   }
 
-  const executed = (options.toolTraces ?? []).flatMap((trace) => (Array.isArray(trace?.steps) ? trace.steps : []).map((step) => String(step?.tool ?? '')))
+  const allowedTurns = new Map()
+  for (const message of scoped.messages) {
+    const id = message.sessionId ?? scoped.runScope.rootSessionId
+    const allowed = allowedTurns.get(id) ?? new Set()
+    allowed.add(message.turnStartSeq)
+    allowedTurns.set(id, allowed)
+  }
+  const executed = (scoped.runScope.available ? options.toolTraces ?? [] : [])
+    .filter(trace => trace.runId === run?.id && allowedTurns.has(trace.sessionId))
+    .flatMap(trace => (Array.isArray(trace?.steps) ? trace.steps : [])
+      .filter(step => Number.isSafeInteger(step?.turnStartSeq) && allowedTurns.get(trace.sessionId).has(step.turnStartSeq))
+      .map(step => String(step?.tool ?? '')))
   const tools = toolSequence(executed.length
     ? executed
     : (transcript?.messages ?? []).flatMap((message) => (message?.parts ?? []).filter((/** @type {any} */ part) => part?.type === 'tool').map((/** @type {any} */ part) => String(part.tool ?? ''))))
@@ -289,5 +274,6 @@ export function trajectoryDigest(transcript, run, options = {}) {
     tools,
     outcome: { status: String(run?.status ?? 'unknown'), repaired: rounds > 0 || (Number(options.attempts) || 0) > 1 || (Number(run?.attempts) || 0) > 1 },
     dropped: { sensitive },
+    runScope: scoped.runScope,
   }
 }

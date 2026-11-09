@@ -53,6 +53,7 @@ import {
  *   memorySettings: any,
  *   nativeMemory?: import("./nativeMemoryStore.mjs").NativeMemoryStore | null,
  *   nativeMemoryImport?: import("./nativeMemoryImport.mjs").NativeMemoryImport | null,
+ *   resetHistory?: ((userId: string) => Promise<unknown>) | null,
  *   resetProduct?: ((userId: string) => Promise<{ methods: number, entries: number, jobs: number, feedback: number }>) | null,
  *   releasePausedRuntimes?: ((userId: string) => Promise<unknown>) | null,
  *   projectWork?: ((user: any, project: any, options: { timeZone: string }) => Promise<{ capabilities: any[], works: any[] }>) | null,
@@ -64,7 +65,7 @@ import {
  * @returns {(req: any, res: any) => Promise<boolean>}
  */
 export function createMemoryRoutes({
-  config, memorySettings, nativeMemory = null, nativeMemoryImport = null, resetProduct = null, releasePausedRuntimes = null, projectWork = null,
+  config, memorySettings, nativeMemory = null, nativeMemoryImport = null, resetProduct = null, resetHistory = null, releasePausedRuntimes = null, projectWork = null,
   store, context, audit, decodeRouteComponent,
 }) {
   const enabled = config.memoryEnabled !== false;
@@ -142,6 +143,7 @@ export function createMemoryRoutes({
       // The instant first, before anything is deleted: from it on, a conversation that was already over is not
       // learned from again (`endedBeforeReset`), whatever the deletions below leave of it. Run again after a failure it
       // is taken again, which can only move it later.
+      if (resetHistory) await resetHistory(ctx.user.id);
       await memorySettings.noteReset(ctx.user.id);
       const purged = await memorySettings.purgeUserMemory(ctx.user.id);
       // A reset that fails halfway answers with the failure and is run again: both halves are idempotent. The engine's memory files

@@ -1,3 +1,4 @@
+import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash } from "node:crypto";
 import { recordNativeConsolidatedFiles, recordNativeConsolidation } from "./nativeMemoryMetrics.mjs";
 import { nativeMemoryFile } from "./openVikingSessions.mjs";
@@ -125,7 +126,8 @@ export class NativeMemoryConsolidation {
    * One pass over one native account: ask for a consolidation when one is due, or look after the one in flight. Never throws.
    * @param {string} userId @returns {Promise<string>} what became of it, one of `NATIVE_CONSOLIDATION_OUTCOMES`, or "off"
    */
-  async tick(userId) {
+  async tick(userId) { return withNativeMemoryWrite(this.overlay.database,userId,()=>this.#tickOwned(userId)); }
+  async #tickOwned(userId) {
     if (!this.applicable) return "off";
     try {
       const state = await this.overlay.consolidationState(userId);
@@ -147,6 +149,7 @@ export class NativeMemoryConsolidation {
     if (state.checkedAt && at - Date.parse(state.checkedAt) < CHECK_EVERY_MS) return "not_due";
     const settings = await this.memorySettings.settings(userId);
     if (settings.learningPaused) return "held_back";
+    if(this.overlay.sourceDeletion&&(await this.overlay.sourceDeletion.ledger.recordsForOwner(userId,{pendingOnly:true})).length)return "held_back";
     const open = await this.overlay.openCommits({ userId, limit: 1, now: this.now() });
     const latest = (await this.overlay.commitsOf(userId, { limit: 1 }))[0];
     if (open.length || (latest && at - Date.parse(latest.createdAt ?? "") < QUIET_AFTER_COMMIT_MS)) return "held_back";

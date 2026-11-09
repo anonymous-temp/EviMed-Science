@@ -155,7 +155,7 @@ test("from one correction to a scoped method, its use on a later relevant task, 
     candidate: { operation: "amend", targetMethodId: created.id, applicability: "A pooled estimate is printed from several studies.", counterexamples: ["Fewer than three studies are pooled."] }, skill: V2 });
   assert.equal(amended.methodId, created.id);
   method = await f.learning.getMethod(USER, created.id);
-  assert.equal(method.payload.status, "candidate", "an amended body waits for the next pass, as every revised body does");
+  assert.equal(method.payload.status, "approved", "an eligible amendment takes effect at once (ca72a1654); the next pass only consolidates it");
   await f.consolidation.sleep({ job: { userId: USER, projectId: "evimed-learning" } });
   method = await f.learning.getMethod(USER, created.id);
   assert.equal(method.payload.status, "approved");

@@ -71,7 +71,7 @@ export const NATIVE_POLICY_SYNC_OUTCOMES = Object.freeze(["current", "rewritten"
 /** Lines removed because the person forgot another that says the same, and the judge's part in it. */
 export const NATIVE_FORGET_DUPLICATE_OUTCOMES = Object.freeze(["removed", "judge_failed", "kept"]);
 /** What became of a recall-statistics write (`last_recalled_at`): noted, or failed (never a reason for a recall to fail). */
-export const NATIVE_RECALL_NOTE_OUTCOMES = Object.freeze(["noted", "failed"]);
+export const NATIVE_RECALL_NOTE_OUTCOMES = Object.freeze(["noted", "failed", "receipt_failed"]);
 /** What the page's import did: offered a list, saved it, was refused for the rate, or had no usable answer from the model. */
 export const NATIVE_IMPORT_OUTCOMES = Object.freeze(["offered", "saved", "rate_limited", "model_failed"]);
 /** The map's read of what the memories used to say: read, failed, or not finished inside its own deadline (the map is drawn without those marks and nothing else is lost). */

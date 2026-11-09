@@ -94,7 +94,9 @@ test("a turn typed in the kernel's composer is handed the block at its first ste
   const project = { id: A, userId: f.userId };
   const first = await resident.forSession(user, project, "ses_native");
   assert.match(first.text, /用英文写/);
-  assert.deepEqual(first.memories, [{ id: `card:${A}`, kind: "project_fact", scope: "project" }]);
+  // The memo carries its source receipts (attribution, source privacy) beside id, kind and scope since the typed-source round.
+  assert.deepEqual(first.memories.map(({ id, kind, scope }) => ({ id, kind, scope })), [{ id: `card:${A}`, kind: "project_fact", scope: "project" }]);
+  assert.ok(first.memories.every((memo) => memo.sourcePrivacy?.schemaVersion === 1 && Array.isArray(memo.originalSources)), "and its receipts");
   // Not noted until the step has entered: asked again, handed again.
   assert.equal((await resident.forSession(user, project, "ses_native")).digest, first.digest);
   await resident.attached(user, project, "ses_native", { digest: first.digest, memories: first.memories });
@@ -123,7 +125,7 @@ test("what the block held is kept with the conversation, so the run it becomes c
   const block = await resident.forSession({ id: f.userId }, { id: A }, "ses_native");
   await resident.attached({ id: f.userId }, { id: A }, "ses_native", { digest: block.digest, memories: block.memories });
   const state = await f.memorySettings.residentState(f.userId, A, "ses_native");
-  assert.deepEqual(state.memos, [{ id: `card:${A}`, kind: "project_fact", scope: "project" }]);
+  assert.deepEqual(state.memos.map(({ id, kind, scope }) => ({ id, kind, scope })), [{ id: `card:${A}`, kind: "project_fact", scope: "project" }]);
   const delivered = Date.parse(state.deliveredAt);
   const run = (over = {}) => ({ id: "r1", sessionId: "ses_native", startedAt: new Date(delivered - 2_000).toISOString(), finishedAt: new Date(delivered + 30_000).toISOString(), ...over });
   assert.deepEqual(nativeResidentMemos(run(), state), state.memos, "the run the block was handed in");

@@ -168,6 +168,11 @@ class FakePool extends EventEmitter {
     const sql = oneLine(text);
     this.statements.push(sql);
     this.calls.push({ sql, values: Array.isArray(values) ? values : [] });
+    // The source-deletion ledger's scope of a project (an agent-run listing asks it for the conversations a person deleted).
+    if (sql.startsWith('SELECT u.created_at::text AS account,p.created_at::text AS project FROM evimed_control.users u JOIN evimed_control.projects p ON p.user_id=u.id')) {
+      const owned = values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1]);
+      return { rows: owned ? [{ account: ACCOUNT_CREATED_AT, project: PROJECT_CREATED_AT }] : [], rowCount: owned ? 1 : 0 };
+    }
     if (sql.startsWith('SELECT u.id AS "ownerId",u.created_at::text AS "ownerCreatedAt", p.id AS "projectId",p.created_at::text AS "projectCreatedAt" FROM evimed_control.users u JOIN evimed_control.projects p ON p.user_id=u.id')) {
       const owned = values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1]);
       return { rows: owned ? [{ ownerId: USER_ID, ownerCreatedAt: ACCOUNT_CREATED_AT, projectId: values[1], projectCreatedAt: PROJECT_CREATED_AT }] : [], rowCount: owned ? 1 : 0 };
@@ -355,12 +360,12 @@ class FakePool extends EventEmitter {
     if (/^SELECT 1 FROM evimed_control\.projects WHERE user_id = \$1 AND id = \$2 FOR UPDATE/.test(sql)) {
       return values[0] === USER_ID && values[1] === PROJECT_ID ? { rows: [{ "?column?": 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
-    if (/^SELECT p\.id, p\.name, p\.active_workspace, p\.quota_bytes, p\.archived_at, u\.created_at::text AS account_created_at FROM evimed_control\.projects p JOIN evimed_control\.users u ON u\.id=p\.user_id WHERE p\.user_id = \$1 AND p\.id = \$2/.test(sql)
+    if (/^SELECT p\.id, p\.name, p\.active_workspace, p\.quota_bytes, p\.archived_at, u\.created_at::text AS account_created_at, p\.created_at::text AS project_created_at FROM evimed_control\.projects p JOIN evimed_control\.users u ON u\.id=p\.user_id WHERE p\.user_id = \$1 AND p\.id = \$2/.test(sql)
       || /^SELECT id, name, active_workspace, quota_bytes(?:, archived_at)? FROM evimed_control\.projects/.test(sql)) {
       // The frontier feed's internal project, which its worker finds under
       // the operator account before its first batch.
       return values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1])
-        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null, created_at: PROJECT_CREATED_AT, account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
+        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null, created_at: PROJECT_CREATED_AT, project_created_at: PROJECT_CREATED_AT, account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT request_id,requested_at,expires_at(?:,durable_hold)? FROM evimed_product\.maintenance_lease/.test(sql)) {

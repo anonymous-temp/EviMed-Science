@@ -20,7 +20,7 @@ test("both directories are replayed, and every case in them is shaped for this a
   const cases = (await Promise.all(NATIVE_CASE_DIRECTORIES.map(load))).flat();
   assert.deepEqual(cases.flatMap(nativeCaseIssues), []);
   const general = await load("cases-general");
-  assert.equal(general.length, 50, "the eleven general cases of 2026-10-12, the 25 work-order cases of 2026-10-23 (C01-C24, the last in two variants), the upgrade, the eleven of 2026-10-25 (misconception, symptom-to-trait, import, repetition), the project rule given with a small request (M8), and the same rule said back by the assistant (S7, 2026-10-27)");
+  assert.equal(general.length, 55, "the prior 50 general cases plus five development controls for unnamed people, fiction, identity separation and nonnumeric personal context (2026-11-05)");
   assert.ok(general.every((item) => item.replay.synthetic === true), "every name and number in them is invented");
   assert.ok(cases.length >= 35);
 });
@@ -38,7 +38,7 @@ test("the work-order corpus holds every case of research G section 6, each with 
   assert.ok(keeps.length >= 10 && refuses.length >= 6, `${keeps.length} keep cases, ${refuses.length} refuse cases`);
   // A case that starts from a memory has the engine write it: C17 (the recall echo), C22 (a choice shown in two conversations), the
   // upgrade, and the repetition that is no repetition (two different choices).
-  assert.deepEqual(workOrder.filter((item) => item.replay.seed).map((item) => item.id.split("-")[0]).sort(), ["c17", "c22", "e3c", "u01"]);
+  assert.deepEqual(workOrder.filter((item) => item.replay.seed).map((item) => item.id.split("-")[0]).sort(), ["c17", "c22", "e3c", "m06", "u01"]);
   // The cross-key conflict was the deleted extractor's own (its `conflictsWith` never fired on production) and went with it.
   assert.equal(ids.includes("x01"), false);
 });

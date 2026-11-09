@@ -20,6 +20,7 @@ function store(overlayExtra) {
   const overlay = {
     configured: true,
     files: async () => new Map(),
+    attributionCommits: async () => new Map(),
     revisionsOfMany: async () => new Map([[URI, [{ id: "r1", actor: "user", change: "updated", changedAt: "2026-10-30T02:00:00.000Z", reason: "edited on the memory page",
       before: `- ${FORGOTTEN}\n- ${KEPT}`, after: "- Target journal is JASN and nothing else." }]]]),
     sources: async () => [], originsOf: async () => new Map(), sessionProjects: async () => new Map(),

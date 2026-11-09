@@ -38,11 +38,12 @@ const frontmatter = (name) => ({
 
 /** The digest of one accepted run, as `trajectoryDigest` makes it from a transcript with one request. */
 const accepted = (/** @type {string} */ request, /** @type {string[]} */ tools = ["web_search"]) => trajectoryDigest({
+  header: { sessions: [{ sessionId: "s", parentSessionId: null, seedEndSeq: -1 }] },
   messages: [
     { sessionId: "s", role: "user", source: "user", seq: 1, turn: 1, turnStartSeq: 1, parts: [{ type: "text", text: request }] },
     ...tools.map((tool, index) => ({ sessionId: "s", role: "assistant", source: "user", seq: 2 + index, turn: 1, turnStartSeq: 1, parts: [{ type: "tool", tool, status: "completed", input: {}, output: "ok" }] })),
   ],
-}, { id: "r", sessionId: "s", status: "succeeded", outputFiles: ["report/weekly.md"] }, { shapes: { "report/weekly.md": { format: "md", labels: ["Summary", "Findings"] } } });
+}, { id: "r", sessionId: "s", nativeTurn: { startSeq: 1 }, status: "succeeded", outputFiles: ["report/weekly.md"] }, { shapes: { "report/weekly.md": { format: "md", labels: ["Summary", "Findings"] } } });
 
 /**
  * The replay over a real ledger. `accepted` are the runs the evidence ledger would hand back, `requests` what each of them asked, and `answer(run)` what
@@ -259,13 +260,13 @@ test("a grounded contradiction whose words carry a credential still counts, and 
 
 test("the trajectory reader reads one accepted run back as a digest, and a run it cannot read is none", async () => {
   const run = { id: "run_a", sessionId: "s", kernelRequestIds: ["req_1"], status: "succeeded", outputFiles: ["report/weekly.md"] };
-  const transcript = { header: {}, messages: [{ sessionId: "s", role: "user", source: "user", seq: 1, turn: 1, turnStartSeq: 1, sourceRequestId: "req_1", parts: [{ type: "text", text: "weekly report please" }] }] };
+  const transcript = { header: { sessions: [{ sessionId: "s", parentSessionId: null, seedEndSeq: -1 }] }, messages: [{ sessionId: "s", role: "user", source: "user", seq: 1, turn: 1, turnStartSeq: 1, sourceRequestId: "req_1", parts: [{ type: "text", text: "weekly report please" }] }] };
   /** @type {any[]} */ const seen = [];
   const read = createTrajectoryReader({
     resolveProject: async (_userId, projectId) => (projectId === "p1" ? { id: "p1" } : null),
     listRuns: async () => [run],
     readTranscript: async (_project, runId) => (runId === "run_a" ? transcript : null),
-    readTraces: async () => [{ steps: [{ tool: "web_search" }] }],
+    readTraces: async () => [{ runId: "run_a", sessionId: "s", steps: [{ tool: "web_search", turnStartSeq: 1 }] }],
     readShapes: async (_project, files) => { seen.push(files); return { "report/weekly.md": { format: "md", labels: ["Summary", "Findings"] } }; },
   });
   const digest = await read("u1", { runId: "run_a", projectId: "p1" });

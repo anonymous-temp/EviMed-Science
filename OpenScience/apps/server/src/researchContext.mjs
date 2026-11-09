@@ -167,7 +167,7 @@ export function renderMemoryContext(memories, { lookup = "" } = {}) {
 }
 
 /** Whose statement a memory is, as the closed words the model weighs it by: the user's own, the user's edit, an inference, or a platform or source record. */
-export const ORIGIN_TEXT = Object.freeze({ explicit: "user", manual: "user-edited", inferred: "inferred", system: "platform" });
+export const ORIGIN_TEXT = Object.freeze({ explicit: "user", manual: "user-edited", inferred: "inferred", system: "platform", engine:"engine-derived",unknown:"source-unknown",imported:"imported-context",mixed:"mixed-sources",assistant:"assistant-suggestion",document:"document-claim",opinion:"user-opinion" });
 
 /** @param {unknown} origin @returns {string | undefined} */
 function originOf(origin) {

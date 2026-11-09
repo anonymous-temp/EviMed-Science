@@ -1,4 +1,4 @@
-import { privateByDefault } from "@evimed/domain";
+import { privateByDefault, sourcePrivacyOf } from "@evimed/domain";
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -50,7 +50,7 @@ function privateSelections(value) {
   const selected = new Map();
   for (const entry of value) {
     fields(entry, ["id", "sha256"]);
-    if (typeof entry.id !== "string" || !/^native:nm_[a-f0-9]{24}$/.test(entry.id)
+    if (typeof entry.id !== "string" || !/^native:nm_[a-f0-9]{24}(?:_[a-f0-9]{12})?$/.test(entry.id)
       || typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256) || selected.has(entry.id)) throw invalid();
     selected.set(entry.id, entry.sha256);
   }
@@ -70,7 +70,7 @@ function excludedIds(value) {
  * @type {Record<"inferred" | "document" | "sensitive" | "received" | "paused" | "private", (count: number) => string>}
  */
 const EXCLUDED_TEXT = Object.freeze({
-  private: (count) => `关于其他人的 ${count} 条记忆没有放进来；逐条勾选才会分享。`,
+  private: (count) => `尚未选择的 ${count} 条内容没有放进来；逐条勾选才会分享。`,
   inferred: (count) => `助手替你记下、你还没有确认或改过的 ${count} 条内容没有放进来。`,
   document: (count) => `从你上传的资料里整理出来的 ${count} 条内容没有放进来。`,
   sensitive: (count) => `你标为敏感的 ${count} 条内容没有放进来。`,
@@ -152,7 +152,7 @@ function assertShareTextOnly(manifest, payloadPaths) {
   for (const name of payloadPaths) if (!declared.has(name)) throw notTextOnly();
 }
 
-function renderedFiles(snapshotId, entries) {
+function renderedFiles(snapshotId, entries,version=2) {
   const result = Object.create(null);
   for (const entry of entries) {
     if (entry.factKind === "method_preference") {
@@ -165,7 +165,7 @@ function renderedFiles(snapshotId, entries) {
       ? `# Shared profile\n\n${group.map(entry => `## ${entry.factKind} (version ${entry.version})\n\n${entry.content}`).join("\n\n")}\n`
       : group.map(entry => JSON.stringify(entry)).join("\n") + "\n";
   }
-  result["provenance.json"] = JSON.stringify({ format: "evimed-capsule-transfer", version: 1, snapshotId, entries });
+  result["provenance.json"] = JSON.stringify({ format: "evimed-capsule-transfer", version, snapshotId, entries });
   return result;
 }
 /**
@@ -295,6 +295,26 @@ async function exportableMethods(client, userId, rows) {
 }
 
 /**
+ * A capsule fact the person stated or wrote themselves (origin `explicit` or `manual`) and that carries no privacy of its own is
+ * ordinary: the sender's default and the recipient's mount must agree on it, and a person, an inferred note and anything with no
+ * provable origin stay as `sourcePrivacyOf` reads them. @param {any} payload
+ */
+function ownStatement(payload) {
+  if (payload?.sourcePrivacy || !["explicit", "manual"].includes(payload?.origin)) return payload;
+  return { ...payload, sourcePrivacy: { schemaVersion: 1, classification: "ordinary", reasons: ["own-statement"] } };
+}
+
+function receivedSourcePrivacy(entry,preview) {
+  if(preview.sourceAttestation==='hosted-exact-snapshot'&&entry.sourcePrivacy?.schemaVersion===1)return sourcePrivacyOf(entry);
+  return sourcePrivacyOf({sourcePrivacy:{schemaVersion:1,classification:'unclassified'},originalSources:[entry]});
+}
+
+function receivedAttribution(entry,official=false) {
+  const claimed=Array.isArray(entry.attribution?.origins)?entry.attribution.origins:[entry.origin??'unknown'];
+  return {schemaVersion:1,origins:official?['system']:[...new Set(['imported',...claimed.filter(origin=>CAPSULE_FACT_ORIGINS.includes(origin))])].slice(0,16),confirmed:false};
+}
+
+/**
  * The rows a received pack is written as: the capsule, and one fact for each entry the scan kept. An import writes them for a pack a person
  * took in, and an official pack's adoption writes the same rows for the platform's own (`adoptOfficial`), so that a pack of either kind is
  * one shape for everything that reads packs: the shelf, the mount, a takedown, an upgrade in place.
@@ -317,7 +337,9 @@ function receivedPackRecords({ capsuleId, preview, kept, unchecked, held, share,
       // never mounted (`capsuleMethods.mjs`); only what a person wrote or a
       // pack brought becomes this pack's own. A pack exported before origins
       // travelled could hold only entries its sharer had approved by hand.
-      capsuleId, factKind: entry.factKind, layer: entry.layer, content: entry.content, origin: entry.origin === "inferred" ? "inferred" : "system",
+      capsuleId, factKind: entry.factKind, layer: entry.layer, content: entry.content, origin:channel==='official'?'system':'imported',
+      attribution:receivedAttribution(entry,channel==='official'),
+      sourcePrivacy:channel==='official'?{schemaVersion:1,classification:'ordinary',reasons:['official-method']}:receivedSourcePrivacy(entry,preview),
       status: "approved", contextOnly: true, ...(unchecked.has(entry.id) ? { unscanned: true } : {}),
       ...(held.has(entry.id) ? { safetyHold: true } : {}),
       provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }], share,
@@ -442,7 +464,11 @@ export class CapsuleTransferService {
       const workstyle = [
         ...facts.rows.filter((row) => !privateByDefault(row.payload) && row.payload.sensitive !== true).map((row) => ({ ...row, entryId: `fact:${row.id}` })),
         ...methods.rows.map((row) => ({ id: row.id, entryId: `method:${row.id}`, revision: row.revision, payload: {
-          factKind: "method_preference", origin: "system", content: learnedMethodText(row.payload) } })),
+          // A learned method is distilled by the platform from the researcher's own runs, and distillation refuses a run that was handed
+          // anything but ordinary memory (`methodSourceAllowsLearning`): the method is ordinary by construction, which is what lets a
+          // hosted delivery attest it and a recipient mount it.
+          factKind: "method_preference", origin: "system", content: learnedMethodText(row.payload),
+          sourcePrivacy: { schemaVersion: 1, classification: "ordinary", reasons: ["own-method"] } } })),
         ...selectedNative.filter((row) => !KNOWLEDGE.includes(row.payload.factKind)).map((row) => ({ ...row, entryId: `native:${row.id}` })),
       ];
       const knowledge = selectedNative.filter((row) => KNOWLEDGE.includes(row.payload.factKind)).map((row) => ({ ...row, entryId: `native:${row.id}` }));
@@ -519,7 +545,7 @@ export class CapsuleTransferService {
     // a `preference` for sharing its directory's name.
     const eligible = records.filter((row) => (["people", "notes"].includes(row.nativeType) || !PROJECT_MEMORY_TYPES.includes(row.nativeType) || (row.scope === "project" && Boolean(row.scopeId)))
       && kinds.includes(row.kind) && row.status === "active" && !row.share
-      && ["explicit", "manual"].includes(row.origin) && ["user", "project"].includes(row.scope)
+      && CAPSULE_FACT_ORIGINS.includes(row.origin) && !["inferred", "assistant", "document", "opinion"].includes(row.origin) && ["user", "project"].includes(row.scope)
       && row.kind === PAGE_KIND_OF_TYPE[row.nativeType] && row.version === versionOfHash(row.contentHash));
     const facts = eligible.filter((row) => !row.sensitive)
       .map((row) => {
@@ -540,7 +566,7 @@ export class CapsuleTransferService {
           // How many conversations of the person's wrote this line (a profile line's own commit).
           conversations: Array.isArray(row.evidence) ? row.evidence.length : 0,
           nativeSource: { engine: "native", sha256: file.hash, version: row.version },
-          payload: { factKind: row.kind, origin: "explicit", content: checkedText(row.value) } };
+          payload: { factKind: row.kind, origin: row.origin, content: checkedText(row.value),attribution:row.attribution,sourcePrivacy:row.sourcePrivacy } };
       });
     return { facts, sensitive: eligible.length - facts.length };
   }
@@ -658,7 +684,7 @@ export class CapsuleTransferService {
     const entryOf = (fact, included) => {
       const content = String(fact.payload.content ?? "");
       return { id: fact.entryId, included, ...(privateByDefault(fact.payload) ? { requiresSelection: true } : {}), factKind: fact.payload.factKind, layer: location(fact.payload.factKind).layer, content, sha256: privateByDefault(fact.payload) ? fact.nativeSource.sha256 : digest(content),
-        origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "inferred" };
+        origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "unknown",attribution:fact.payload.attribution,sourcePrivacy:fact.payload.sourcePrivacy };
     };
     const included = source.facts.slice(0, MAX_ENTRIES).map((fact) => entryOf(fact, true));
     const listed = [...included, ...source.unticked.map((fact) => entryOf(fact, false))];
@@ -691,6 +717,8 @@ export class CapsuleTransferService {
    * @param {{ accountCreatedAt?: string | null, channel?: "file" | "delivery" | "link" }} [options]
    */
   async export(userId, capsuleId, input, options = {}) {
+    const sourceDeletion = this.nativeMemory?.sourceDeletion;
+    const deletionVersion = sourceDeletion ? await sourceDeletion.version(userId) : null;
     fields(input, ["password", "scopes", "supersedes", "recipients", "recipientNames", "card", "excludeEntryIds", "includePrivateEntries"]);
     if (input.password !== undefined) checkedText(input.password, 1024);
     const accountCreatedAt = await this.withAccount(userId, options.accountCreatedAt ?? null);
@@ -712,7 +740,13 @@ export class CapsuleTransferService {
     const source = await this.#assemble(userId, capsuleId, kinds, { exclude, includePrivate: privateSelections(input.includePrivateEntries) });
     if (!source.facts.length) throw new HttpError(409, "capsule_export_empty", "No approved entries are eligible for these share scopes.");
     if (source.facts.length > MAX_ENTRIES) throw new HttpError(413, "capsule_transfer_too_large", "A snapshot supports at most 100 approved entries.");
-    return this.#seal({ userId, accountCreatedAt, capsuleId, scopes, channel, input, previous, source, recipientIds, named });
+    const result = await this.#seal({ userId, accountCreatedAt, capsuleId, scopes, channel, input, previous, source, recipientIds, named });
+    if (sourceDeletion && await sourceDeletion.version(userId) !== deletionVersion) {
+      const current = await this.snapshot(userId, capsuleId, result.snapshot.id);
+      if (current.payload.status !== 'revoked') await this.revoke(userId, capsuleId, current.id, current.revision);
+      throw new HttpError(409, 'capsule_snapshot_revoked', 'A source changed while the snapshot was prepared.');
+    }
+    return result;
   }
 
   /**
@@ -730,7 +764,8 @@ export class CapsuleTransferService {
     const entries = source.facts.map(fact => {
       const id = randomUUID(); const place = location(fact.payload.factKind); const content = checkedText(fact.payload.content);
       return { id, version: fact.revision, factKind: fact.payload.factKind, layer: place.layer, content, sha256: digest(content), path: place.path ?? `methods/${id}/SKILL.md`,
-        origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "inferred" };
+        origin: CAPSULE_FACT_ORIGINS.includes(fact.payload.origin) ? fact.payload.origin : "unknown",
+        attribution:fact.payload.attribution??{schemaVersion:1,origins:[fact.payload.origin??"unknown"],confirmed:false},sourcePrivacy:sourcePrivacyOf(ownStatement(fact.payload)) };
     });
     const card = await this.#card(userId, entries, previous, input.card);
     const files = renderedFiles(snapshotId, entries);
@@ -903,6 +938,14 @@ export class CapsuleTransferService {
    * be the bytes it was sealed as; a revoked or taken-down one answers the same refusal a download of it does.
    * @param {string} ownerId @param {string} snapshotId
    */
+  /** A live share must still have the exact active snapshot after asynchronous reading/decryption. */
+  async assertSnapshotActive(ownerId,snapshotId,expectedRevision) {
+    const current=await this.documents.get(ownerId,'preferences',snapshotId);
+    if (!current || current.payload.recordType!=='capsule-snapshot' || current.payload.status==='revoked' || current.revision!==expectedRevision) throw new HttpError(409,'capsule_snapshot_revoked','This hosted snapshot changed while it was read.');
+    await this.nativeMemory?.sourceDeletion?.assertSnapshotSourcesAvailable(ownerId,current.payload.sourceEntries);
+    return current;
+  }
+
   async snapshotArchive(ownerId, snapshotId) {
     const record = await this.documents.get(ownerId, "preferences", snapshotId);
     if (!record || record.payload.recordType !== "capsule-snapshot") throw new HttpError(404, "capsule_snapshot_not_found", "The snapshot is unavailable.");
@@ -911,6 +954,7 @@ export class CapsuleTransferService {
     const archive = await readProtectedCapsuleFile(directory, `${capsuleAccountHash(ownerId)}-${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES)
       ?? await readProtectedCapsuleFile(directory, `${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES);
     if (!archive || digest(archive) !== record.payload.archiveSha256) throw new HttpError(503, "capsule_snapshot_unavailable", "The snapshot file is unavailable.");
+    await this.assertSnapshotActive(ownerId,snapshotId,record.revision);
     return { archive, record };
   }
 
@@ -956,7 +1000,18 @@ export class CapsuleTransferService {
     const archive = await readProtectedCapsuleFile(directory, `${capsuleAccountHash(userId)}-${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES)
       ?? await readProtectedCapsuleFile(directory, `${record.id}.evimedcap`, CAPSULE_TRANSFER_MAX_BYTES);
     if (!archive || digest(archive) !== record.payload.archiveSha256) throw new HttpError(503, "capsule_snapshot_unavailable", "The snapshot file is unavailable.");
+    await this.assertSnapshotActive(userId,snapshotId,record.revision);
     return { archive, filename: `capsule-${record.id}.evimedcap` };
+  }
+
+  /** A native source deletion revokes only hosted snapshots bound to those exact native record ids.
+   * @param {string} userId @param {string[]} recordIds */
+  async revokeSourceRecords(userId, recordIds) {
+    if (!recordIds.length) return;
+    const rows = await this.documents.database.query(`SELECT id,payload,revision FROM evimed_product.documents
+      WHERE user_id=$1 AND kind='preferences' AND payload->>'recordType'='capsule-snapshot'
+      AND payload->>'status'='active' AND EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'sourceEntries') e WHERE e->>'id'=ANY($2::text[]))`, [userId, recordIds]);
+    for (const row of rows.rows) await this.revoke(userId, row.payload.capsuleId, row.id, row.revision);
   }
 
   async revoke(userId, capsuleId, snapshotId, expectedRevision) {
@@ -1138,12 +1193,17 @@ export class CapsuleTransferService {
     let metadata;
     try { metadata = JSON.parse(opened.entries["provenance.json"]); } catch { throw invalid(); }
     fields(metadata, ["format", "version", "snapshotId", "entries"]);
-    if (metadata.format !== "evimed-capsule-transfer" || metadata.version !== 1 || !UUID.test(metadata.snapshotId) || metadata.snapshotId !== manifest.capsuleId
+    if (metadata.format !== "evimed-capsule-transfer" || ![1,2].includes(metadata.version) || !UUID.test(metadata.snapshotId) || metadata.snapshotId !== manifest.capsuleId
       || !Array.isArray(metadata.entries) || !metadata.entries.length || metadata.entries.length > MAX_ENTRIES) throw invalid();
     const ids = new Set();
     for (const entry of metadata.entries) {
       // `origin` since 2026-09-20; a pack exported before carries none.
-      fields(entry, ["id", "version", "factKind", "layer", "content", "sha256", "path", "origin"]);
+      fields(entry, ["id", "version", "factKind", "layer", "content", "sha256", "path", "origin", "attribution", "sourcePrivacy"]);
+      if(metadata.version===2){
+        fields(entry.attribution,["schemaVersion","origins","confirmed"]);fields(entry.sourcePrivacy,["schemaVersion","classification","reasons"]);
+        if(entry.attribution.schemaVersion!==1||entry.attribution.confirmed!==false||!Array.isArray(entry.attribution.origins)||entry.attribution.origins.length>16||entry.attribution.origins.some(origin=>!CAPSULE_FACT_ORIGINS.includes(origin))
+          ||entry.sourcePrivacy.schemaVersion!==1||!["private","unclassified","ordinary"].includes(entry.sourcePrivacy.classification)||!Array.isArray(entry.sourcePrivacy.reasons)||entry.sourcePrivacy.reasons.length>32||entry.sourcePrivacy.reasons.some(reason=>typeof reason!=="string"||reason.length>100))throw invalid();
+      }
       if (entry.origin !== undefined && !CAPSULE_FACT_ORIGINS.includes(entry.origin)) throw invalid();
       if (!UUID.test(entry.id) || ids.has(entry.id) || !kindsFor(scopes).includes(entry.factKind)) throw invalid();
       ids.add(entry.id); productInteger(entry.version, 1, 2_147_483_647); checkedText(entry.content);
@@ -1151,7 +1211,7 @@ export class CapsuleTransferService {
       if (entry.layer !== place.layer || entry.path !== (place.path ?? `methods/${entry.id}/SKILL.md`) || entry.sha256 !== digest(entry.content)) throw invalid();
     }
     assertShareTextOnly(opened.manifest, Object.keys(opened.entries));
-    const canonicalFiles = renderedFiles(metadata.snapshotId, metadata.entries);
+    const canonicalFiles = renderedFiles(metadata.snapshotId, metadata.entries,metadata.version);
     if (Object.keys(opened.entries).length !== Object.keys(canonicalFiles).length || Object.entries(canonicalFiles).some(([file, content]) => opened.entries[file] !== content)) throw invalid();
     const archiveSha256 = digest(input.archive);
     const hosted = known && !known.revoked ? await this.documents.get(known.ownerId, "preferences", metadata.snapshotId) : null;
@@ -1168,7 +1228,7 @@ export class CapsuleTransferService {
     // one the account holds only when it is signed by the same key (2026-10-10 review C-4).
     const signingKeyFingerprint = digest(String(known?.publicKey ?? envelope.issuerPublicKey));
     const upgrade = await this.#upgradeTarget(userId, manifest, metadata.entries, { signingKeyFingerprint, trust: known ? "verified" : "unverified" });
-    const preview = { archiveSha256, manifestSha256, snapshotId: metadata.snapshotId, scopes, entries: metadata.entries, newerSnapshotId: replacements.items[0]?.id ?? null, scan,
+    const preview = { ...(hosted&&sourceAccountPresent&&metadata.version===2?{sourceAttestation:"hosted-exact-snapshot"}:{}),archiveSha256, manifestSha256, snapshotId: metadata.snapshotId, scopes, entries: metadata.entries, newerSnapshotId: replacements.items[0]?.id ?? null, scan,
       card, sharedAt: typeof opened.manifest.createdAt === "string" ? opened.manifest.createdAt : null, upgrades: upgrade ? upgrade.view : null,
       issuerTrust: known ? "verified" : "unverified", issuerId: manifest.issuer.userId,
       hostedStatus: known && (known.revoked || !sourceAccountPresent) ? "revoked" : hosted?.payload.status ?? (known ? "unavailable" : "unknown"),
@@ -1288,7 +1348,7 @@ export class CapsuleTransferService {
         for (const entry of preview.entries.filter((/** @type {any} */ item) => kept.has(item.id))) {
           await this.documents.put(userId, "fact", randomUUID(), {
             capsuleId: upgrade.capsule.id, factKind: entry.factKind, layer: entry.layer, content: entry.content,
-            origin: entry.origin === "inferred" ? "inferred" : "system", status: "approved", contextOnly: true,
+            origin: share.channel==='official'?'system':'imported', attribution:receivedAttribution(entry,share.channel==='official'),sourcePrivacy:share.channel==='official'?{schemaVersion:1,classification:'ordinary',reasons:['official-method']}:receivedSourcePrivacy(entry,preview), status: "approved", contextOnly: true,
             ...(unchecked.has(entry.id) ? { unscanned: true } : {}), ...(held.has(entry.id) ? { safetyHold: true } : {}),
             provenance: [{ type: "import", id: `${preview.snapshotId}:${entry.id}` }], share,
             transfer: { version: entry.version, sha256: entry.sha256, path: entry.path, snapshotId: preview.snapshotId, issuerTrust: preview.issuerTrust },

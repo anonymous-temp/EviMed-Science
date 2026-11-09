@@ -1,0 +1,18 @@
+{
+  "id": "g12-unnamed-colleague-care-constraint",
+  "class": "unnamed-person-nonnumeric-context",
+  "observedIn": "Synthetic development counterexample frozen on 2026-11-05 before policy round 2; no real person or confirmation question is used.",
+  "expected": "The colleague's stated caregiving constraint is useful personal context without a name or measurements. Keep it under a source-local person label, not as the account owner's preference or identity.",
+  "decidable": true,
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      { "id": "u1", "role": "user", "text": "有位同事因为需要照护家人，不希望参加周末出差。请帮我写一个沟通提纲。" },
+      { "id": "a1", "role": "assistant", "text": "提纲可以先说明这位同事需要照护家人的约束，再讨论出差安排。" }
+    ]
+  },
+  "expect": { "requireKinds": { "person": 1 }, "requireTextContains": ["照护", "周末"], "noRecordOfKinds": ["profile", "preference"] },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
+}

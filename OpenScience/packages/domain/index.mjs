@@ -467,6 +467,8 @@ export {
   trajectoryDigest,
   transcriptMessageText,
 } from './src/trajectoryDigest.mjs'
+export { scopeRunTranscript } from './src/runTurnScope.mjs'
+export { methodSourceIdentifierShapesIn } from './src/methodSourcePrivacy.mjs'
 
 // learningEvidence — one reaction of the researcher to a run, as the feedback ledger keeps it (steer, follow-up, result-corrected, silent, used)
 export {
@@ -2821,5 +2823,4 @@ export { dnsKey, registrableDomain } from './src/geoDomains.mjs'
 
 export { RESEARCH_NATIVE_BUNDLES, researchNativeReceiptDigest, researchNativeArtifactDigest } from './src/researchNativeBundles.mjs'
 export { nativeResearchRowIsAdmitted, nativeResearchToolProfileHolds } from './src/researchNativeBundles.mjs'
-export { privateByDefault } from "./src/memoryPrivacy.mjs";
-export { methodSourceIdentifierShapesIn } from './src/methodSourcePrivacy.mjs'
+export { privateByDefault, sourcePrivacyOf, sourceAllowsEgress } from "./src/memoryPrivacy.mjs";

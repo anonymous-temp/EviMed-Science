@@ -274,7 +274,9 @@ export async function packLineageCard(input, { identity, password, packVersion =
     ...standards.map((standard, index) => entry(`standard:${index}`, "preference", standard)),
     entry("card", "expertise", profile),
   ];
-  const files = renderCapsuleTransferFiles(snapshotId, entries);
+  // The manifest is the version-1 form: its entries carry no per-entry attribution or source privacy (a version-2 manifest refuses an entry without them),
+  // and a pack nobody hosted is read as unclassified by the importer in any case.
+  const files = renderCapsuleTransferFiles(snapshotId, entries, 1);
   const container = await packCapsule({
     capsuleId: snapshotId,
     version: packVersion,

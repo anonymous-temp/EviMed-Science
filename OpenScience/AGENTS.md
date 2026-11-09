@@ -134,7 +134,11 @@ per-project workspace + JSONL provenance.
   historical scores do not validate the new policy. Native memory has no expiry date.
 - **A person has one capsule**; a project is a label on its entries, a received pack is enabled for the whole account, and a
   native account reaches its capsule through the memory gateway's `search` and a profile block, never a second recall
-  tool. A capsule is context, never permission (below).
+  tool. The same search appends source-attributed original conversation excerpts as context only, never as an opening-profile
+  block. Default raw-history scope is the owner's ordinary account namespace; named projects remain exact-scoped, and shared
+  GEO namespaces are not implicitly searched. Learning pause does not disable recall. Deletion fences and index cleanup survive
+  owner deletion; terminal history capacity limits report partial coverage without stranding native extraction. A capsule is
+  context, never permission (below).
 - **The learning loop learns only from the researcher's own work.** A script or eval that starts a run marks it
   `automated` (`apps/server/test/automatedDrivers.test.mjs` holds the list); evidence is the person's own words, checked
   as a substring of what they wrote, or their opening a delivered file, and silence is unknown, never approval; nothing is withheld from a run on purpose to measure a method; a method takes

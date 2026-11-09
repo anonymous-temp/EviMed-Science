@@ -21,6 +21,7 @@ import {
   transcriptPath,
 } from "../src/runTranscripts.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
+import { scopeRunTranscript } from '@evimed/domain';
 import { kernelToolText } from "./helpers/kernelToolText.mjs";
 
 const CAPTURED_AT = "2026-09-07T04:00:00.000Z";
@@ -160,6 +161,26 @@ async function readLines(project, runId) {
   const lines = text.split("\n").filter(Boolean);
   return { text, header: JSON.parse(lines[0]), records: lines.slice(1).map((line) => JSON.parse(line)) };
 }
+
+test('capture preserves every original turn while recording exact child-turn learning receipts', async () => {
+  await withProject(async project => {
+    const run = { id: 'run_scoped', sessionId: 'root', kernelRequestIds: ['input2'] };
+    const opener = (seq, turnStartSeq, sourceRequestId) => ({ role: 'user', source: 'user', seq, turnStartSeq, sourceRequestId, parts: [{ type: 'text', text: sourceRequestId }] });
+    const sessions = [
+      { sessionId: 'root', parentSessionId: null, label: 'root', capability: null, error: null, transcript: transcript('root', [opener(1, 0, 'input1'), opener(11, 10, 'input2')]) },
+      { sessionId: 'child', parentSessionId: 'root', label: 'child', capability: null, error: null,
+        transcript: transcript('child', [{ ...message(2, 'copied'), turnStartSeq: 0 }, { ...message(12, 'current child'), turnStartSeq: 10 }]) },
+    ];
+    const receipt = await persistRunTranscript({ project, run, sessions, ownedChildSessionIds: ['child'], childTurnOwnership: [
+      { schema: 'child-run-turns/1', rootSessionId: 'root', runId: run.id, sessionId: 'child', turnStartSeqs: [10] },
+    ] });
+    const saved = await readRunTranscript(project, run.id);
+    assert.equal(saved.messages.length, 4); assert.equal(receipt.messages, 4, 'raw history is not trimmed to the learning view');
+    assert.equal(saved.header.sessions.find(row => row.sessionId === 'root').seedEndSeq, -1);
+    const selected = scopeRunTranscript(saved, run);
+    assert.deepEqual(selected.messages.map(row => row.parts[0].text), ['input2', 'current child']);
+  });
+});
 
 test("a run's own session and both of its subagent sessions are collected whole into one complete transcript", async () => {
   await withProject(async (project) => {
@@ -933,4 +954,18 @@ test("an excerpt drops a message by the shape of a credential or an identifier, 
 
   assert.deepEqual(excerpt.messages.map((entry) => entry.seq), [1, 3], "a sentence that mentions passwords and a file called secret-santa are language and names");
   assert.deepEqual(excerpt.dropped, { sensitive: 2, bounded: 0 }, "a secret assigned to a name inside a tool call, and a phone number, are shapes");
+});
+
+test('a partial capture does not mint a fork-seed proof on its persisted round trip', async () => {
+  await withProject(async project => {
+    const run = { id: 'partial_run', sessionId: 'root', kernelRequestIds: ['input'] };
+    const live = transcript('root', [{ role: 'user', source: 'user', sourceRequestId: 'input', seq: 11, turnStartSeq: 10, parts: [{ type: 'text', text: 'Current request' }] }]);
+    live.exhausted = false;
+    await persistRunTranscript({ project, run, sessions: [{ sessionId: 'root', parentSessionId: null, label: 'root', capability: null, error: null, transcript: live }] });
+    const saved = await readRunTranscript(project, run.id);
+    assert.equal(saved.header.completeness, 'partial');
+    assert.equal(saved.header.sessions[0].seedEndSeq, undefined);
+    assert.equal(scopeRunTranscript(saved, run).runScope.available, false);
+    assert.equal(saved.messages.length, 1);
+  });
 });

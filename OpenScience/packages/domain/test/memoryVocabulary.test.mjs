@@ -296,3 +296,13 @@ for (const [source, expected] of [
     assert.deepEqual(identifierShapesIn(expected), []);
   });
 }
+
+test("an English word-form assignment needs a value of six characters; a symbol, a quote or 是 does not (the floor restored 2026-11-08)", () => {
+  assert.equal(maskIdentifiers("the secret is out and everyone knows"), "the secret is out and everyone knows");
+  assert.deepEqual(identifierShapesIn("the secret is out"), []);
+  assert.deepEqual(identifierShapesIn("the password is hunter2x"), ["credential"]);
+  assert.equal(maskIdentifiers("password is hunter2x"), "password is [已省略]");
+  assert.equal(maskIdentifiers("password: 1234"), "password: [已省略]");
+  assert.equal(maskIdentifiers('the secret is "ab"'), "the secret is [已省略]");
+  assert.equal(maskIdentifiers("密码是abc"), "密码是[已省略]", "the Chinese form keeps no floor");
+});

@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
   PRIMARY KEY (user_id, archive_uri)
 );
 -- A ledger made before the page's 「记住这一条」 existed gains the column without being rebuilt.
+ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS native_ingested_at timestamptz(3);
 ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS pending_text text CHECK (pending_text IS NULL OR char_length(pending_text) <= 2000);
 -- A ledger made before 2026-10-23 gains what the extraction said about itself (a commit that wrote nothing is told apart: the
 -- model proposed nothing, or the engine refused what it proposed).
@@ -256,17 +257,78 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_imports (
   expires_at timestamptz(3) NOT NULL
 );
 CREATE INDEX IF NOT EXISTS native_imports_user_idx ON evimed_memory.native_imports (user_id, created_at DESC);
+-- One row per one-time data migration that has finished (the project-stamp backfill), so a start does not repeat it.
+CREATE TABLE IF NOT EXISTS evimed_memory.native_markers (
+  name text PRIMARY KEY,
+  done_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+-- Writer leases of the owner fence (nativeMemoryWriteFence.mjs): held as rows, never as a transaction across an engine call.
+CREATE TABLE IF NOT EXISTS evimed_memory.native_writer_leases (
+  user_id text NOT NULL,
+  lease_id text NOT NULL,
+  kind text NOT NULL CHECK (kind IN ('shared','exclusive')),
+  expires_at timestamptz(3) NOT NULL,
+  PRIMARY KEY (user_id, lease_id)
+);
+-- Authority stamps are captured from trusted project/context rows, separately from a memory's display scope.
+ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS project_created_at text;
+ALTER TABLE evimed_memory.native_sessions ADD COLUMN IF NOT EXISTS project_created_at text;
+ALTER TABLE evimed_memory.native_line_origins ADD COLUMN IF NOT EXISTS project_created_at text;
+ALTER TABLE evimed_memory.native_revisions ADD COLUMN IF NOT EXISTS source_project_id text;
+ALTER TABLE evimed_memory.native_revisions ADD COLUMN IF NOT EXISTS source_project_created_at text;
 `;
+
+const BACKFILL_BATCH = 2000;
+
+/**
+ * Rows written before the incarnation stamps existed carry NULL. Each is stamped from the project row it names, only when that
+ * row is older than the memory row (a project recreated under the same id keeps the older rows unstamped). Idempotent, batched
+ * in short statements of its own: one run stamps what is left and a second finds nothing.
+ * @param {any} database
+ */
+export async function backfillProjectStamps(database) {
+  const present = await database.query("SELECT to_regclass('evimed_control.projects') IS NOT NULL AS ok");
+  if (!present.rows[0]?.ok) return false;
+  const steps = [
+    ["evimed_memory.native_sessions", "project_id", "project_created_at", "created_at", "user_id, engine_session"],
+    ["evimed_memory.native_commits", "project_id", "project_created_at", "created_at", "user_id, archive_uri"],
+    ["evimed_memory.native_line_origins", "project_id", "project_created_at", "added_at", "user_id, uri, fingerprint"],
+    ["evimed_memory.native_revisions", "source_project_id", "source_project_created_at", "changed_at", "id"],
+  ];
+  for (const [table, idColumn, stampColumn, atColumn, key] of steps) {
+    const keyList = key.split(", ");
+    const keyMatch = keyList.map(column => `t.${column}=b.${column}`).join(" AND ");
+    const userColumn = "t.user_id";
+    for (;;) {
+      const done = await database.query(`WITH b AS (
+          SELECT ${keyList.map(column => `t.${column}`).join(", ")}, p.created_at::text AS stamp
+          FROM ${table} t JOIN evimed_control.projects p ON p.user_id=${userColumn} AND p.id=t.${idColumn}
+          WHERE t.${stampColumn} IS NULL AND t.${atColumn}>=p.created_at LIMIT ${BACKFILL_BATCH})
+        UPDATE ${table} t SET ${stampColumn}=b.stamp FROM b WHERE ${keyMatch} AND t.${stampColumn} IS NULL`);
+      if (!done.rowCount) break;
+    }
+  }
+  return true;
+}
 
 /** @param {any} database */
 export async function migrateNativeMemory(database) {
   if (migrations.has(database)) return migrations.get(database);
-  const attempt = database.transaction(async (/** @type {any} */ client) => {
+  // The memo says the DDL is done, so it never runs inside a caller's transaction: a rollback there could undo what the memo records.
+  const outside = (/** @type {() => Promise<any>} */ work) => typeof database.withoutTransactionClient === "function" ? database.withoutTransactionClient(work) : work();
+  const attempt = outside(() => database.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-memory-native-v1'))");
     await client.query(sql);
     // A word a list above gained after the table was created is otherwise refused by every existing database (vocabularyChecks.mjs).
     await refreshVocabularyChecks(client, sql, "evimed_memory");
-  });
+  })).then(() => outside(async () => {
+    // The stamp backfill scans four tables: once it has finished, a marker row says so and later starts skip it.
+    const done = await database.query("SELECT 1 FROM evimed_memory.native_markers WHERE name='project-stamps-v1'");
+    if (done.rows.length) return;
+    // No project table yet (a database that has not been migrated): nothing was backfilled, so nothing is marked done.
+    if (!(await backfillProjectStamps(database))) return;
+    await database.query("INSERT INTO evimed_memory.native_markers(name) VALUES('project-stamps-v1') ON CONFLICT DO NOTHING");
+  }));
   migrations.set(database, attempt);
   try { await attempt; }
   catch (error) { migrations.delete(database); throw error; }

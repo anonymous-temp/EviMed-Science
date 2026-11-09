@@ -399,6 +399,10 @@ function assignedSecretsIn(text) {
       // A final prose comma/semicolon followed by whitespace is outside the token. Internal punctuation is always kept
       // inside the secret, and a punctuation-only password is still a value.
       if (end > start + 1 && /[,;]$/.test(text.slice(start, end)) && /\s/.test(text.charAt(end))) end -= 1
+      // The English word form ("the secret is …", "password is …") is also ordinary prose: its value must be at least six characters
+      // to be a secret (the floor the grammar had before 2026-11-05), so "the secret is out" keeps its word. A symbol ("password: abc"),
+      // a quote and the Chinese 为/是 (「密码是abc」) state a value outright and have no floor.
+      if (/\bis\s*$/i.test(match[0]) && end - start < 6) continue
     }
     coveredUntil = end
     if (end > start && text.slice(start, end) !== IDENTIFIER_MASK) spans.push({ start, end })

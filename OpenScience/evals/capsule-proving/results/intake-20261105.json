@@ -1,0 +1,123 @@
+{
+  "adapterRevision": "09ac14cf8",
+  "longmemeval": {
+    "validated": 500,
+    "failed": 0,
+    "errors": [],
+    "repeatedSourceParts": 26,
+    "emptyOriginalText": 12,
+    "development": 120,
+    "confirmation": 380,
+    "sourceOverlap": {
+      "sharedSessionIds": 1545,
+      "sourceContextDisjoint": false
+    },
+    "poolDigest": "c377dd12bc37c2b6e7903b1b74520b97402005b57eab42cb70423b3d98463a19"
+  },
+  "medical": [
+    {
+      "language": "zh",
+      "validated": 1978,
+      "failures": [
+        {
+          "persona": "persona_4",
+          "id": "session_50_ig_1",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_11",
+          "id": "session_20_ig_1",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_11",
+          "id": "session_20_ig_2",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_12",
+          "id": "session_80_sua_1",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_15",
+          "id": "session_40_ig_2",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_19",
+          "id": "session_40_ig_1",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_19",
+          "id": "session_80_ig_1",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_19",
+          "id": "session_100_ig_2",
+          "reason": "question must be nonempty text"
+        }
+      ],
+      "denominator": 1986,
+      "invalidSourceQuestions": 8,
+      "denominatorMayBeReduced": false
+    },
+    {
+      "language": "en",
+      "validated": 1978,
+      "failures": [
+        {
+          "persona": "persona_4",
+          "id": "session_50_ig_1",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_11",
+          "id": "session_20_ig_1",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_11",
+          "id": "session_20_ig_2",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_12",
+          "id": "session_80_sua_1",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_15",
+          "id": "session_40_ig_2",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_19",
+          "id": "session_40_ig_1",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_19",
+          "id": "session_80_ig_1",
+          "reason": "question must be nonempty text"
+        },
+        {
+          "persona": "persona_19",
+          "id": "session_100_ig_2",
+          "reason": "question must be nonempty text"
+        }
+      ],
+      "denominator": 1986,
+      "invalidSourceQuestions": 8,
+      "denominatorMayBeReduced": false
+    }
+  ],
+  "schema": "capsule-proving-intake/1",
+  "kind": "structure-only",
+  "modelCalls": 0,
+  "productAccuracyMeasured": false,
+  "sourceManifestSha256": "408d31dd5bd8119e2de42fbee1bc61df60fbc29a2d534ab33e41eaf7465b83bb",
+  "fullLongMemEvalIncludesDevelopment": true
+}

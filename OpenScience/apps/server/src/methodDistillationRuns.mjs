@@ -42,12 +42,14 @@ import { createHash } from "node:crypto";
 
 import {
   METHOD_EVIDENCE_QUOTE_LENGTH, METHOD_OPERATIONS, TRAJECTORY_ANCHOR_RADIUS, isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName, methodScientific,
-  parseSkillFrontmatter, projectMethodResultLinks, rootSessionOf, SKILL_AUTHORING_LIMITS, steeredMessages, trajectoryDigest, transcriptMessageText, unwrapUserWrappers,
+  parseSkillFrontmatter, projectMethodResultLinks, rootSessionOf, scopeRunTranscript, sourcePrivacyOf, SKILL_AUTHORING_LIMITS, steeredMessages, trajectoryDigest, transcriptMessageText, unwrapUserWrappers,
 } from "@evimed/domain";
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { LEARNING_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { readRunTranscript, transcriptExcerpt } from "./runTranscripts.mjs";
 import { readToolTraces } from "./toolExecutionEdges.mjs";
+import { SCRIPT_CONVERSATIONS, SCRIPT_EVIDENCE_GENERATION, SCRIPT_RUNS } from "./scriptLessons.mjs";
+import { methodSourceAllowsLearning } from './runLearningScope.mjs';
 import { learnedMethodId, methodScopeOf, methodSourceProjects } from "./learningService.mjs";
 import { learningScopeOf, lessonPeers } from "./learningTriggers.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
@@ -95,7 +97,7 @@ export const DISTILLATION_TRIGGERS = Object.freeze(["edit_diff", "correction", "
 // is quoted and checked in code. A lesson read under the old shape learnt the platform's choreography.
 // "9" since 2026-10-25: a lesson has no handbook to be filed as. The input says nothing of the account handbook arm any more (`signal` is the
 // researcher's or the run's, `methodsUsed` has no handbooks, `authoringLimits` no handbook length, and the gate's findings, `repairIssues`, are not carried), so a lesson read under the old shape is a new dispatch.
-export const DISTILLATION_EXTRACTOR_VERSION = "9";
+export const DISTILLATION_EXTRACTOR_VERSION = "10";
 
 /**
  * How many messages of context a trigger that points at no intervention is worth: an edit diff points at the writing of one
@@ -353,6 +355,7 @@ function anchoredExcerpts({ runId, trigger, messages, interventions, rootSession
  *   `scripts`: for a `script` lesson, the program that recurred — how often, and the source of up to three of its occurrences, so the variants are seen.
  */
 export function buildDistillationInput(input) {
+  if (!methodSourceAllowsLearning(input.run)) throw new HttpError(409, 'distillation_run_unavailable', 'Original private memory sources cannot teach a reusable method.');
   if (!DISTILLATION_TRIGGERS.includes(input.trigger)) {
     throw new HttpError(400, "distillation_trigger_invalid", "Unknown distillation trigger.");
   }
@@ -361,7 +364,7 @@ export function buildDistillationInput(input) {
   );
   const reactions = reactionsOf(input.feedback);
   const trajectory = digestOf(input.run, input.transcript, input.shapes, reactions, input.toolTraces);
-  const spoken = withoutGoalGesture(input.transcript, input.run);
+  const spoken = withoutGoalGesture(scopeRunTranscript(input.transcript, input.run), input.run);
   const steered = steeredCorrections(spoken, input.run);
   const { sessionId: rootSessionId } = rootSessionOf(spoken, input.run);
   const anchored = spoken
@@ -387,7 +390,8 @@ export function buildDistillationInput(input) {
     // from evidence the loop cannot see. The SKILL.md tells the model to weigh
     // this, and the promotion rule refuses to spend evaluation budget on a
     // candidate distilled from an incomplete record.
-    transcriptCompleteness: input.transcript?.header?.completeness ?? "unavailable",
+    transcriptCompleteness: trajectory.runScope.available
+      ? trajectory.runScope.partial ? 'partial' : input.transcript?.header?.completeness ?? 'unavailable' : 'unavailable',
     // What was asked, what was done to it, what it left and how the work went — built in code from the stored transcript.
     trajectory,
     excerptDropped: { sensitive: anchored.dropped.sensitive + trajectory.dropped.sensitive, bounded: anchored.dropped.bounded },
@@ -439,11 +443,13 @@ export function buildDistillationInput(input) {
     mountedTools: input.mountedTools ?? [],
     // The other clean runs of the same kind a `routine` induction compares against: each by its digest — what it was asked, what it
     // left, the order of its tools — and no raw lines. Empty for every other trigger.
-    peerRuns: (input.peerRuns ?? []).slice(0, MAX_PEER_RUNS).map((peer) => ({
-      runId: peer.runId,
-      transcriptCompleteness: peer.transcript?.header?.completeness ?? "unavailable",
-      trajectory: peer.transcript ? digestOf(peer.run ?? { id: peer.runId }, peer.transcript, peer.shapes, [], peer.toolTraces) : null,
-    })),
+    peerRuns: (input.peerRuns ?? []).slice(0, MAX_PEER_RUNS).map(peer => {
+      if (!methodSourceAllowsLearning(peer.run)) return { runId: peer.runId, trajectory: null, transcriptCompleteness: 'unavailable', sourcePrivacy: sourcePrivacyOf(peer.run) };
+      const peerTrajectory = peer.transcript ? digestOf(peer.run ?? { id: peer.runId }, peer.transcript, peer.shapes, [], peer.toolTraces) : null;
+      return { runId: peer.runId, trajectory: peerTrajectory,
+        transcriptCompleteness: peerTrajectory?.runScope.available
+          ? peerTrajectory.runScope.partial ? 'partial' : peer.transcript?.header?.completeness ?? 'unavailable' : 'unavailable' };
+    }),
   };
 }
 
@@ -600,7 +606,7 @@ export class MethodDistillationRuns {
    *   resetInstant?: ((userId: string) => Promise<string | null>) | null,
    *   similarity?: { nearest: (query: string, methods: readonly any[], options?: { limit?: number }) => Promise<{ method: any, score: number }[]> } | null,
    *   resolveRun?: ((project: any, runId: string) => Promise<any>) | null,
-   *   scriptUses?: { exemplars: (userId: string, hash: string) => Promise<{runId: string, at?: string, source: string}[]> } | null,
+   *   scriptUses?: { lesson: (userId: string, hash: string) => Promise<{runs:number,conversations:number,exemplars:{runId: string, at?: string, source: string}[]}> } | null,
    *   verifyCode?: ((candidate: { files: Record<string, string>, dependencies: [] }, options: { signal?: AbortSignal }) => Promise<{ ok: boolean, issues: { code: string, message?: string, path?: string }[] }>) | null,
    *   onCodeSkill?: ((outcome: string) => void) | null,
    *   contextProvenance?: any,
@@ -655,10 +661,16 @@ export class MethodDistillationRuns {
    * @param {any} job @returns {Promise<{hash: string, runs: number, conversations: number, exemplars: {runId: string, at?: string, source: string}[]}>}
    */
   async #scriptsOf(job) {
+    if (job.payload?.scriptEvidenceGeneration !== SCRIPT_EVIDENCE_GENERATION) {
+      throw new HttpError(409, 'distillation_run_unavailable', 'This queued script lesson predates current-run evidence.');
+    }
     const hash = String(job.payload?.scriptHash ?? "");
-    const exemplars = this.scriptUses && /^[a-f0-9]{32}$/.test(hash) ? await this.scriptUses.exemplars(job.userId, hash) : [];
-    if (!exemplars.length) throw new HttpError(409, "distillation_run_unavailable", "The program this lesson was queued for is no longer on record.");
-    return { hash, runs: Number(job.payload?.runs) || exemplars.length, conversations: Number(job.payload?.conversations) || 1, exemplars };
+    const recurrence = this.scriptUses && /^[a-f0-9]{32}$/.test(hash) ? await this.scriptUses.lesson(job.userId, hash) : null;
+    const exemplars = recurrence?.exemplars ?? [];
+    if (!exemplars.length || !recurrence || recurrence.runs < SCRIPT_RUNS || recurrence.conversations < SCRIPT_CONVERSATIONS) {
+      throw new HttpError(409, "distillation_run_unavailable", "The program this lesson was queued for has insufficient proven occurrences.");
+    }
+    return { hash, runs: recurrence.runs, conversations: recurrence.conversations, exemplars };
   }
 
   /**
@@ -724,6 +736,7 @@ export class MethodDistillationRuns {
    * @returns {Promise<{state: string, runId?: string, sessionId?: string, methodId?: string, operation?: string}>}
    */
   async execute({ job, project, run, feedback = [] }) {
+    if (!methodSourceAllowsLearning(run)) throw new HttpError(409, 'distillation_run_unavailable', 'Original private memory sources cannot teach a reusable method.');
     const trigger = String(job.payload?.trigger ?? "");
     // A shared GEO project's lesson reads only what a person's attributed input said (`GeoContextProvenance.observeRun`): the user turns of
     // the transcript are replaced by the observed human text, and nothing outside the project is shown.
@@ -755,12 +768,14 @@ export class MethodDistillationRuns {
       if (sourceObservations.some(source=>source.runId===sourceId)) continue;
       const source=await this.contextProvenance.resolveSourceRun(job.userId,project.id,sourceId);
       if (!source) throw new HttpError(409,'geo_learning_source_unverified','A correction source is unavailable.');
+      if (!methodSourceAllowsLearning(source)) throw new HttpError(409, 'distillation_run_unavailable', 'A correction source contains private memory context.');
       sourceObservations.push(await this.contextProvenance.observeRun(project,source));
     }
     for (const peer of peers) {
       if (shared && peer.projectId && peer.projectId !== policy.controlProjectId) continue;
       const peerProject = await this.#peerProject(job, project, peer);
       const peerRun = peerProject && this.resolveRun ? await this.resolveRun(peerProject, peer.runId).catch(() => null) : null;
+      if (shared && peerRun && !methodSourceAllowsLearning(peerRun)) throw new HttpError(409, 'distillation_run_unavailable', 'A peer source contains private memory context.');
       if (shared) {
         if (!peerRun || !peerProject) continue;
         sourceObservations.push(await this.contextProvenance.observeRun(peerProject, peerRun));
@@ -847,6 +862,7 @@ export class MethodDistillationRuns {
       throw new HttpError(422, "method_candidate_invalid", `Unknown operation ${JSON.stringify(operation)}.`);
     }
     if (operation === "no_change") return { operation, methodId: undefined };
+    if (!methodSourceAllowsLearning(run)) throw new HttpError(409, 'distillation_run_unavailable', 'Original private memory sources cannot teach a reusable method.');
     // The conversation this lesson comes from was over before the account reset its memory: what the reset deleted is not
     // written back by a lesson that was already on its way (review M-11).
     if (this.resetInstant && endedBeforeReset(run, await this.resetInstant(job.userId).catch(() => null))) {
@@ -913,6 +929,8 @@ export class MethodDistillationRuns {
     if (context.evidence) this.onEvidence?.({ kept: verified.kept.length, dropped: verified.dropped });
     const provenance = {
       origin: "inferred",
+      ...(Object.hasOwn(run, 'sourcePrivacy') || Object.hasOwn(run, 'originalSources')
+        ? { sourcePrivacy: sourcePrivacyOf(run), originalSources: run.originalSources ?? [] } : {}),
       runId: run.id,
       feedbackEventIds: job.payload?.feedbackEventIds ?? [],
       ...(resultLinks.length ? { results: resultLinks } : {}),

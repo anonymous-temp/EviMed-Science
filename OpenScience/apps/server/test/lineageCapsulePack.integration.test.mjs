@@ -77,13 +77,10 @@ test("a packed card imports through the platform's own importer, and a doctor na
   const result = await recallForAgent({ capsules, learning: null },
     { user: { id: doctorId }, institution: { id: hospital } }, { query: "桂枝汤", capsuleIds: [imported.id] });
   assert.deepEqual(result.capsules, [{ id: imported.id, title: "经方思路", owner: "institution" }]);
-  // The three stages, and the standards a pack's work style carries beside
-  // them (the mount's own rule: preferences travel with methods).
-  const headings = result.methods.map((method) => method.content.split("\n")[0]);
-  for (const stage of ["# 经方思路 · 追问（M02）", "# 经方思路 · 辨病辨证（M03）", "# 经方思路 · 候选方药与加减（M04）"]) {
-    assert.ok(headings.includes(stage), stage);
-  }
-  assert.equal(result.methods.length, 5);
-  assert.ok(result.methods.every((method) => method.source === "capsule" && method.capsuleId === imported.id));
-  assert.ok(result.items.some((item) => /桂枝汤/.test(item.content)), "the card's text answers the query");
+  // A pack read from a file is not hosted by anyone here, so its source privacy cannot be attested (a18ea3caa: unproven imported methods are
+  // refused): the stages are recalled as context items below and none of them is mounted as a method of the doctor's run.
+  assert.equal(result.methods.length, 0, "an unattested imported pack mounts no method");
+  // The external agent API hands out only what is ordinary (`privateByDefault`); an unattested pack's entries are unclassified, so its text
+  // stays with the owner's own recall and the key's answer names the pack and gives nothing of it.
+  assert.equal(result.items.length, 0, "an unattested pack's text is not handed to an external key");
 });

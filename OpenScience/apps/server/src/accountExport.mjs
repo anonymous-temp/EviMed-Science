@@ -118,7 +118,7 @@ const queries = [
     FROM evimed_product.feedback_events WHERE user_id=$1 ORDER BY occurred_at,id`],
   // The programs the account's own runs carried that the learning loop counted toward a script lesson (`scriptLessons.mjs`): the program's text, the run and
   // conversation it was in and when, for the last ninety days.
-  ["scriptUses", `SELECT script_hash AS "scriptHash",run_id AS "runId",session_id AS "sessionId",project_id AS "projectId",scope,occurred_at AS "occurredAt",source
+  ["scriptUses", `SELECT script_hash AS "scriptHash",scope_proof AS "scopeProof",run_id AS "runId",session_id AS "sessionId",project_id AS "projectId",scope,occurred_at AS "occurredAt",source
     FROM evimed_learning.script_uses WHERE user_id=$1 ORDER BY occurred_at,run_id,script_hash`],
 ];
 

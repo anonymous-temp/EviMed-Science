@@ -1,0 +1,119 @@
+{
+  "schema": "capsule-development-judgement-summary/1",
+  "at": "2026-11-05T15:40:24.676138+00:00",
+  "scope": "saved development engine replay; not hosted product QA, held-out confirmation or full-plan acceptance",
+  "ownerDecision": "2026-11-05: replace offline Claude judge with Bailian Qwen 3.8 Max; freeze additional development and push current reviewed work",
+  "requestedModel": "qwen3.8-max",
+  "returnedModels": [
+    "qwen3.8-max"
+  ],
+  "api": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "rubric": "capsule-semantic/1",
+  "modelIdentityLimit": "Provider returned an alias, not an immutable weights digest.",
+  "baseline": {
+    "templateRevision": "0765c63c1",
+    "mechanical": {
+      "passed": 160,
+      "denominator": 195
+    },
+    "semantic": {
+      "denominator": 54,
+      "pass": 28,
+      "fail": 26,
+      "unknown": 0
+    },
+    "infrastructureReplacements": 5,
+    "replacementRule": "Replace only the 13 recorded infrastructure failures, never quality failures. Originals and both attempts retained."
+  },
+  "candidate": {
+    "templateRevision": "0a7ca6f06",
+    "mechanical": {
+      "passed": 181,
+      "denominator": 195
+    },
+    "semantic": {
+      "denominator": 54,
+      "pass": 30,
+      "fail": 19,
+      "unknown": 5
+    },
+    "sourcePrerequisiteCorrections": [
+      {
+        "previous": {
+          "id": "u01-upgrade-replaces-the-old-choice:#3",
+          "verdict": "fail",
+          "reason": "No memory files were produced; both the required current AMA style and the historical Vancouver record are missing."
+        },
+        "reason": "Incomplete extraction or seed prerequisite",
+        "at": "2026-11-05T15:36:31.232Z"
+      }
+    ]
+  },
+  "laterPeopleTemplate": {
+    "revision": "2383cf918",
+    "mechanicalPassed": 33,
+    "denominator": 39,
+    "scope": "focused development replay only; not the full 249-sample candidate",
+    "remainingFailures": [
+      "religious restriction is not consistently filed in people",
+      "unnamed nonnumeric person is not consistently filed in people"
+    ]
+  },
+  "artifacts": [
+    {
+      "file": "baseline-write-quality-repeat3.json",
+      "sha256": "da8081ce77b9af758c9a351507ed50ba4886c2aabc5c738eb5dc8f271baed667"
+    },
+    {
+      "file": "baseline-infrastructure-retry.json",
+      "sha256": "3b03cfe9315f961b4048e0d34d74fd0f1624084168c83f08604d36de130bfdf7"
+    },
+    {
+      "file": "baseline-qwen-offline-judge.json",
+      "sha256": "fad9e90874abed0ba9f935dba51e47a73d683d94aa9666b8d94a72d4aec88912"
+    },
+    {
+      "file": "baseline-recovered-semantic-replays.json",
+      "sha256": "27c2e3a37c74fb3e07dcf7dea76931248154ec43ed32431bcdd87051f4125b63"
+    },
+    {
+      "file": "baseline-recovered-semantic-qwen-judge.json",
+      "sha256": "5a420c8b1d28e39f85b00e50f240f280316e3b89c90e5bb2c128cefdd22e67fe"
+    },
+    {
+      "file": "candidate-write-quality-repeat3.json",
+      "sha256": "245d6cc3c659e210f89ed0e52b378349ebd715f19ff822797e3578063f63982a"
+    },
+    {
+      "file": "candidate-qwen-offline-judge.json",
+      "sha256": "116b064ce61a4176fb929fbc99a13dcd4fbf3a0332f4a7cc27b9489870df3e95"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 60877,
+    "completion_tokens": 5666,
+    "total_tokens": 66543
+  },
+  "requestIds": [
+    "9061ae5f-0f83-9750-88c6-f73ec24e7c37",
+    "f8cff193-7e1a-9d9c-838c-3ccd5c779c53",
+    "04db497f-232f-9943-9372-2413421ae818",
+    "3d651a05-e5a4-90f4-a0e1-dd521b14a2a4",
+    "3282fef5-58e7-95fb-bead-47dc63fe3e8f",
+    "b76b8dd6-0fb7-94a8-8a4c-cfa6fd1dae88",
+    "1ec035c6-53ea-9d84-8bb8-e5e14e13bd7a",
+    "8fa3822d-46fb-9b07-8336-b83dab3bf4e7",
+    "c162a658-1bd7-9461-8760-12c56cee8997",
+    "4a78ca78-3c4d-9777-9004-bc361284fb8a",
+    "934f4117-1aa0-9251-a08e-2e9c1e3c2e60",
+    "8d69ae6d-2d78-9301-8f63-5c3498ee109d",
+    "c771dbfb-0607-96d6-a9d4-db2157295a0a",
+    "9540f61f-5497-9e50-8b38-092732e07a31",
+    "ae6a02f8-b089-9398-8026-54607acf08db",
+    "8d3d8062-6cf5-9cbc-b4a7-e3cbf26d59f2",
+    "14c05625-9ea0-92de-a9a4-c429207088af",
+    "ae0e6039-2009-9f32-a721-08c19b613a4c",
+    "5215c822-8bb9-9fce-b425-2b2eed900a9b"
+  ],
+  "acceptance": "Development scores only. Unknowns remain in the denominator; mechanical outcomes unchanged. No quality pass inferred for extraction or seed failures."
+}
