@@ -490,9 +490,11 @@ export class VcrKnowledge {
    * @param {any} study @param {{ canPromote?: boolean }} [options]
    */
   async studyKnowledge(study, { canPromote = false } = {}) {
-    const [bound, definitions, comparisons] = await Promise.all([
+    const [bound, definitions, held] = await Promise.all([
       this.studyPack(study), this.store.definitionsUsedBy(study.id, study.userId), this.store.comparisonResults(study.id),
     ]);
+    // a comparison made from patient-derived forecasts is judged again here like every read of a result (the study store's lineage check)
+    const comparisons = typeof this.studyStore.resultsInLineage === "function" ? await this.studyStore.resultsInLineage(study.id, held) : held;
     const pack = bound ? presentPackSummary(bound.binding.origin, bound.pack, bound.row) : null;
     // The platform pack side (flywheel F26): a curated pack of the account may be offered to the platform, and what the last re-check said.
     const own = Boolean(bound?.row && !("platform" in bound.row && bound.row.platform) && bound.row.userId === study.userId);

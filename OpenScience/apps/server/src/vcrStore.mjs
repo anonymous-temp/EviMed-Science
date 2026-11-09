@@ -1610,6 +1610,18 @@ export class VcrStore extends VcrStoreBase {
   async #permitted(row) { return row ? (await this.#inLineage([row]))[0] ?? null : null; }
 
   /**
+   * Rows of a study's results that another reader holds (a knowledge pack's comparisons, the reconstructions a form offers, the receipts a
+   * publication names, the prior stage a landing folds in), judged by the same lineage check as every read in this store: one whose
+   * snapshot, source grant or field binding was withdrawn is left out, whatever summary the reader stored. Items need an `id`.
+   * @template {{ id: string }} T @param {string} studyId @param {T[]} items @returns {Promise<T[]>}
+   */
+  async resultsInLineage(studyId, items) {
+    if (!items.length) return items;
+    const kept = new Set((await this.#inLineage(items.map((item) => ({ id: String(item.id), study_id: studyId })))).map((row) => String(row.id)));
+    return items.filter((item) => kept.has(String(item.id)));
+  }
+
+  /**
    * A result made from patient-derived forecasts carries that lineage on the job that wrote it (`checkpoint.forecastLineage`), and every
    * read of the result judges it again with the one check the artifacts use (`longitudinalGuard`): a result whose snapshot, source grant
    * or field binding is gone is not served, whatever stored summary it holds. Rows with no such job pass untouched, in one query.

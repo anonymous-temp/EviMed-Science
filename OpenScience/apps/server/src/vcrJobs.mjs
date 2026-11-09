@@ -1322,7 +1322,10 @@ export class VcrJobs {
           AND t->>'location' LIKE 'derived/%' AND t->>'sha256' ~ '^[a-f0-9]{64}$')
       ORDER BY r.created_at DESC LIMIT 100`, [studyId]);
     const choices = [];
+    // a reconstruction offered for use is judged by the store's lineage check like any read of a result
+    const offered = new Set((await this.store.resultsInLineage(studyId, rows.map((/** @type {any} */ row) => ({ id: String(row.id) })))).map((/** @type {any} */ row) => row.id));
     for (const row of rows) {
+      if (!offered.has(String(row.id))) continue;
       if (!vcrExecutionReceiptVerified({ receipt: row.execution_receipt, output_hash: row.execution_output_hash })) continue;
       const result = resultFromRow(row);
       const table = list(result.tables).find(candidate => object(candidate).name === VCR_RECONSTRUCTION_REFERENCE.table);
@@ -2156,9 +2159,11 @@ export class VcrJobs {
           // One subject, one current result: a later stage folds into it, serialised
           // so two stages finishing together cannot each miss the other's measures.
           await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-vcr-result:${row.study_id}:${kind}:${subjectId ?? ""}`]);
-          const prior = resultFromRow((await client.query(`SELECT * FROM ${VCR_SCHEMA}.results
+          const priorRow = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.results
             WHERE study_id = $1 AND kind = $2 AND subject_id IS NOT DISTINCT FROM $3 AND superseded_by IS NULL
-            ORDER BY version DESC LIMIT 1`, [String(row.study_id), kind, subjectId])).rows[0]);
+            ORDER BY version DESC LIMIT 1`, [String(row.study_id), kind, subjectId])).rows[0];
+          // an earlier stage whose lineage was withdrawn is not folded into the new one (the store's check, a read of committed rows)
+          const prior = resultFromRow(priorRow && (await this.store.resultsInLineage(String(row.study_id), [priorRow])).length ? priorRow : undefined);
           // When the object was last marked stale, on the database's own clock (the
           // clock every job row is stamped with). A stage is old when its job was
           // frozen before that mark, whenever it landed: it computed the world as

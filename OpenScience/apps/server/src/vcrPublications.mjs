@@ -189,6 +189,13 @@ export function createVcrPublications({ store, service, matchStore = null, now =
     for (const result of Object.values(object(model.results))) if (object(result).id) ids.add(String(object(result).id));
     for (const entry of Object.values(object(model.scenarioResults))) if (object(entry).id) ids.add(String(object(entry).id));
     if (!ids.size) return [];
+    // A result whose lineage was withdrawn since the export was written is never published: the export holds its numbers as they were.
+    if (typeof store.resultsInLineage === "function") {
+      const permitted = await store.resultsInLineage(studyId, [...ids].map((id) => ({ id })));
+      if (permitted.length < ids.size) {
+        throw refuse("vcr_publication_source_withdrawn", 409, "这份报告引用的结果所依据的数据授权已撤回，不能发布；重新生成报告后再发布。");
+      }
+    }
     const rows = await store.rows(`SELECT r.id AS result_id, r.kind, e.id AS execution_id, e.method, e.method_version, e.receipt
       FROM ${VCR_SCHEMA}.results r JOIN ${VCR_SCHEMA}.executions e ON e.id = r.execution_id
       WHERE r.study_id = $1 AND r.id = ANY($2::text[]) ORDER BY r.created_at`, [studyId, [...ids]]);

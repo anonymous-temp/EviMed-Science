@@ -75,6 +75,7 @@ import { prepareVcrMethodConfiguration, resolveJobSubject, prepareVcrSubjectPopu
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { measureValue, zhTime } from "./vcrViewsKit.mjs";
 import { presentSplineFit } from "./vcrSplineFit.mjs";
+import { withQuestionPremises } from "./vcrPremises.mjs";
 import { checkRegulatoryContact } from "./vcrScheduleView.mjs";
 import { VCR_QUESTION_FIELDS } from "@evimed/domain";
 import { checkResearchQuestionPatch } from "./vcrResearchQuestions.mjs";
@@ -152,6 +153,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_publications_not_enabled",
   "vcr_publication_not_found",
   "vcr_publication_not_ready",
+  "vcr_publication_source_withdrawn",
   "vcr_publication_patient_data",
   // Platform knowledge packs (flywheel F26): the switch is off, the pack is not yet marked curated.
   "vcr_platform_packs_not_enabled",
@@ -1354,7 +1356,8 @@ export function createVcrRoutes(dependencies) {
         return reply({ jobId: parts[3], result: service.forModel(historicalResult),
           computationBasis:vcrAnalyticComputationBasis(result,job),
           // a spline survival fit (C13): the median, the restricted mean and the survival with how far beyond the data each lies, and the premises
-          splineFit: job.method === "model.survival_fit" ? presentSplineFit(result, (measure) => measureValue(measure, { kind: result.kind, result, tab: "patients", staleMark: null })) : null,
+          splineFit: job.method === "model.survival_fit" ? withQuestionPremises(presentSplineFit(result, (measure) => measureValue(measure, { kind: result.kind, result, tab: "patients", staleMark: null })),
+            { researchQuestion: (await service.store?.researchQuestions?.(study.id).catch(() => []))?.[0] ?? null, executions: new Map([[String(result.executionId), { jobId: job.id }]]), jobs: [job] }, result) : null,
           execution: { method: job.method, methodVersion: job.methodVersion, seed: job.seed, scenarioHash: job.scenarioHash, sourceModel: job.checkpoint?.sourceModel ? { id: job.checkpoint.sourceModel.id, version: job.checkpoint.sourceModel.version } : null },
           records: available ? { ...described, available: true, state: "available", csvUrl: `${prefix}/records/${encodeURIComponent(result.id)}.csv`,
             rowsUrl: `${prefix}/${result.kind === "population" ? "population" : "patients"}/rows?result=${encodeURIComponent(result.id)}` }
