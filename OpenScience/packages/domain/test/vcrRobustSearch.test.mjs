@@ -24,8 +24,8 @@ const TABLE = [
 ]
 const SCENARIOS = [{ name: 'optimistic' }, { name: 'base' }, { name: 'pessimistic' }]
 /** @typedef {{ rows: any[], [key: string]: any }} Chosen */
-const robust = (/** @type {any} */ input) => /** @type {Chosen} */ (/** @type {any} */ (vcrRobustChoice(input)))
-const choose = (over = {}) => robust({ rows: TABLE, scenarios: SCENARIOS, tolerance: { power: 0.02, relative: 0.1 }, confidence: 0.975, baseFeasible: ['A', 'B', 'C', 'D'], ...over })
+const robustChoice = (/** @type {any} */ input) => /** @type {Chosen} */ (/** @type {any} */ (vcrRobustChoice(input)))
+const choose = (over = {}) => robustChoice({ rows: TABLE, scenarios: SCENARIOS, tolerance: { power: 0.02, relative: 0.1 }, confidence: 0.975, baseFeasible: ['A', 'B', 'C', 'D'], ...over })
 
 test('worst-case power is the minimum over scenarios and carries the error of the scenario that was the minimum', () => {
   const out = choose()
@@ -96,7 +96,7 @@ test('the cheapest acceptable design in every scenario is shown beside the cheap
 test('a design that failed an error-control or safety constraint, or lacks a scenario, keeps its row and enters no set', () => {
   const rows = [row('A', 0, [0.99, 0.99, 0.99], 50, 12, { guard: 'fail' }), ...TABLE.slice(1),
     { ...row('E', 4, [0.9, 0.9, 0.9], 40, 12), complete: false }]
-  const out = robust({ rows, scenarios: SCENARIOS, tolerance: { power: 0.02, relative: 0.1 }, confidence: 0.975, baseFeasible: ['A', 'B'] })
+  const out = robustChoice({ rows, scenarios: SCENARIOS, tolerance: { power: 0.02, relative: 0.1 }, confidence: 0.975, baseFeasible: ['A', 'B'] })
   assert.ok(!out.pareto.includes('A') && !out.nearOptimal.includes('A') && !out.acceptable.includes('A'))
   assert.equal(out.rows.find((r) => r.key === 'A').worstCase.value, 0.99, 'its numbers are still shown')
   assert.equal(out.rows.find((r) => r.key === 'E').worstCase, null)
@@ -106,7 +106,7 @@ test('a design that failed an error-control or safety constraint, or lacks a sce
 
 test('a design whose power is undecided in a scenario is inconclusive, never acceptable', () => {
   const rows = TABLE.map((r) => (r.key === 'C' ? { ...r, scenarios: { ...r.scenarios, pessimistic: { power: power(0.81, 'inconclusive') } } } : r))
-  const out = robust({ rows, scenarios: SCENARIOS, tolerance: { power: 0.02, relative: 0.1 }, confidence: 0.975, baseFeasible: ['C'] })
+  const out = robustChoice({ rows, scenarios: SCENARIOS, tolerance: { power: 0.02, relative: 0.1 }, confidence: 0.975, baseFeasible: ['C'] })
   assert.equal(out.rows.find((r) => r.key === 'C').acceptable, 'inconclusive')
   assert.deepEqual(out.inconclusive, ['C'])
   assert.equal(out.cheapestAcceptable, 'D', 'only D is decided in every scenario')
