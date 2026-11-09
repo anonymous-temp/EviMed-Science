@@ -193,11 +193,15 @@
     as.numeric(if (p$is_null) abs(t_stat) > crit else -t_stat > crit)
   }
   half <- if (ok) stats::qt(0.975, df) * se else NA_real_
+  # the truth of the study this trial drew (review S7): the default mode draws a new study per trial and the effect differs between studies, so a
+  # correctly aligned estimator read against the typical study looked anti-conservative (coverage 0.923 to 0.927 for 0.944 in the typical study)
+  tt <- if (identical(p$uncertainty, "typical_study")) list(treatment_policy = p$truth$treatment_policy, hypothetical = p$truth$hypothetical)
+        else .vcr_bl_apart(function() .vcr_ice_truth_at(p, par, pp$study, .VCR_ICE_TRIAL_TRUTH_PEOPLE))
   cover <- function(truth) if (ok) as.numeric(est - half <= truth && truth <= est + half) else NA_real_
   share_stop <- c(mean(ev$stop[treated == 0] <= max(visits)), mean(ev$stop[treated == 1] <= max(visits)))
   c(reject = reject, estimate = est, analysed = as.numeric(ok), row = pp$row, observed,
     if (!is.null(eff)) stats::setNames(eff, c("pts", "frac", "triesPts", "triesFrac")),
-    se = se, coverTP = cover(p$truth$treatment_policy$value), coverHyp = cover(p$truth$hypothetical$value),
+    se = se, coverTP = cover(tt$treatment_policy$value), coverHyp = cover(tt$hypothetical$value), truthTP = tt$treatment_policy$value, truthHyp = tt$hypothetical$value,
     ctlMean = { o <- use[, at] & treated == 0; if (any(o)) mean((y[, at] - y[, 1L])[o]) else NA_real_ }, ctlLs = fit$lsControl %||% NA_real_,
     stopControl = share_stop[1], stopTreated = share_stop[2],
     withdrewControl = mean(exit[treated == 0] <= max(visits)), withdrewTreated = mean(exit[treated == 1] <= max(visits)),
@@ -234,7 +238,7 @@
 
 .vcr_ice_limits <- function(p) {
   c("The curves and the expected differences are the typical study without the stated intercurrent events; the simulated trials and the estimand table carry them.",
-    "The true value of each estimand is computed from the data-generating process at the typical study; a trial drawn from a new study per run differs from it by the logistic curvature.",
+    if (identical(p$uncertainty, "typical_study")) "The true value of each estimand is computed from the data-generating process at the typical study." else "The true value of each estimand is computed from the data-generating process for the study each simulated trial drew, and bias and coverage are measured against that trial's own value.",
     if (!is.null(p$ice$death)) "A death is scored as the worst value, 70, from the day it happens, in every truth and every analysis: a composite, not a choice of this run.",
     "An estimator estimates one estimand: treatment-policy data answer the treatment-policy truth, on-treatment data and an MMRM answer the hypothetical one, and a reference-based imputation answers neither exactly; the bias against each is in the result.")
 }
@@ -298,7 +302,9 @@
 #' "gls" (`nlme::gls`, REML, for any pattern) or "auto" (factored when the data are monotone, else gls). Returns, per visit, the arm effect and its
 #' standard error, plus the coefficients (J x 3: intercept, arm, baseline), the covariance matrix of the visits, the path taken and the degrees of
 #' freedom of the last visit (the residual degrees of freedom of its conditional regression), or NULL when the data cannot be fitted.
-vcr_mmrm_fit <- function(chg, mask, arm, base, method = c("auto", "factored", "gls")) {
+#' The factored path's standard error is the small-sample one by default (`small_sample`, see `.vcr_mmrm_factored`); the estimates, `sigma` and `coef`
+#' are the maximum-likelihood ones either way, and `small_sample = FALSE` gives the ML standard errors too.
+vcr_mmrm_fit <- function(chg, mask, arm, base, method = c("auto", "factored", "gls"), small_sample = TRUE) {
   method <- match.arg(method)
   J <- ncol(chg)
   # a person's pattern: the number of visits observed when they are the first ones (prefix), -1 when a value is missing before a later one
@@ -308,7 +314,7 @@ vcr_mmrm_fit <- function(chg, mask, arm, base, method = c("auto", "factored", "g
   monotone <- !any(m < 0L)
   path <- if (identical(method, "gls") || (identical(method, "auto") && !monotone)) "gls" else "factored"
   if (identical(path, "factored") && !monotone) vcr_abort("scenario_value_invalid", "scenario.analysis.kind", "The factored MMRM fit needs monotone missing data; use the gls path.")
-  if (identical(path, "gls")) .vcr_mmrm_gls(chg, mask, arm, base) else .vcr_mmrm_factored(chg, m, arm, base)
+  if (identical(path, "gls")) .vcr_mmrm_gls(chg, mask, arm, base) else .vcr_mmrm_factored(chg, m, arm, base, small_sample)
 }
 
 #' The control arm's least-squares mean change at the last visit of a fitted MMRM, at the mean baseline of every person in the analysis (the SAS / emmeans
@@ -321,9 +327,17 @@ vcr_mmrm_ls_control <- function(fit, base) {
   NA_real_
 }
 
-.vcr_mmrm_factored <- function(chg, m, arm, base) {
+#' The factored fit. Its estimates are the exact maximum-likelihood ones (the coefficients and `sigma` are what `mmrm(reml = FALSE)` gives). The
+#' standard error and the degrees of freedom are small-sample ones (review S6): with the covariance estimated from 30 to 60 people per arm the ML
+#' variance is biased low and its degrees of freedom were the conditional regression's, which together gave a type I error of 5.4 to 5.9% at 5%
+#' nominal. The conditional variances are now the unbiased ones, RSS_j / (n_j - 3) (the REML analogue: the 3 fixed coefficients of the visit, not the
+#' earlier outcomes the conditional regression also holds; with complete data this is the one-visit ANCOVA's variance exactly), and the t has the
+#' last visit's conditional regression degrees of freedom. Against `mmrm` Kenward-Roger on the same data the standard error is about 3% larger and
+#' the degrees of freedom smaller, so the test is a little more conservative than that oracle, never more liberal (N111l). A Satterthwaite df that
+#' ignores the covariance coefficients' own variability was tried and was liberal and unstable (df up to 230 where Kenward-Roger gives 100).
+.vcr_mmrm_factored <- function(chg, m, arm, base, small_sample = TRUE) {
   J <- ncol(chg); X <- cbind(1, arm, base)
-  b <- matrix(0, J, 3L); Gam <- matrix(0, J, J); s2 <- numeric(J); n_j <- integer(J); dfJ <- NA_real_
+  b <- matrix(0, J, 3L); Gam <- matrix(0, J, J); s2 <- numeric(J); s2u <- numeric(J); n_j <- integer(J); dfJ <- NA_real_
   for (j in seq_len(J)) {
     idx <- which(m >= j)
     n_j[j] <- length(idx)
@@ -334,18 +348,23 @@ vcr_mmrm_ls_control <- function(fit, base) {
     a <- f$coefficients[1:3]; gm <- if (j > 1L) f$coefficients[4:(3L + j - 1L)] else numeric(0)
     b[j, ] <- a + if (j > 1L) as.vector(crossprod(gm, b[seq_len(j - 1L), , drop = FALSE])) else 0
     if (j > 1L) Gam[j, seq_len(j - 1L)] <- gm
-    s2[j] <- sum(f$residuals^2) / length(idx)
+    rss <- sum(f$residuals^2)
+    s2[j] <- rss / length(idx); s2u[j] <- rss / (length(idx) - 3L)
     if (j == J) dfJ <- length(idx) - ncol(Z)
   }
   A <- solve(diag(J) - Gam); Sigma <- A %*% diag(s2, J) %*% t(A)
   Sigma <- (Sigma + t(Sigma)) / 2
-  # the information of the visit-specific coefficients (3 per visit) with the covariance fixed at its estimate
-  info <- matrix(0, 3L * J, 3L * J)
-  for (mm in sort(unique(m[m >= 1L]))) {
-    W <- solve(Sigma[seq_len(mm), seq_len(mm), drop = FALSE]); Sx <- crossprod(X[m == mm, , drop = FALSE])
-    for (j in seq_len(mm)) for (l in seq_len(mm)) { r <- (3L * (j - 1L) + 1L):(3L * j); cc <- (3L * (l - 1L) + 1L):(3L * l); info[r, cc] <- info[r, cc] + W[j, l] * Sx }
+  # the information of the visit-specific coefficients (3 per visit) with the covariance fixed at an estimate of it
+  cov_at <- function(Sig) {
+    info <- matrix(0, 3L * J, 3L * J)
+    for (mm in sort(unique(m[m >= 1L]))) {
+      W <- solve(Sig[seq_len(mm), seq_len(mm), drop = FALSE]); Sx <- crossprod(X[m == mm, , drop = FALSE])
+      for (j in seq_len(mm)) for (l in seq_len(mm)) { r <- (3L * (j - 1L) + 1L):(3L * j); cc <- (3L * (l - 1L) + 1L):(3L * l); info[r, cc] <- info[r, cc] + W[j, l] * Sx }
+    }
+    tryCatch(solve(info), error = function(e) NULL)
   }
-  cov <- tryCatch(solve(info), error = function(e) NULL)
+  Sig_u <- A %*% diag(if (isTRUE(small_sample)) s2u else s2, J) %*% t(A)
+  cov <- cov_at((Sig_u + t(Sig_u)) / 2)
   if (is.null(cov)) return(NULL)
   eff <- b[, 2L]; se <- sqrt(vapply(seq_len(J), function(j) cov[3L * (j - 1L) + 2L, 3L * (j - 1L) + 2L], numeric(1)))
   list(effect = eff, se = se, coef = b, sigma = Sigma, path = "factored", df = dfJ, n = n_j, covariance = cov)
@@ -442,7 +461,13 @@ vcr_ice_truth <- function(p, seed, n_people = .VCR_ICE_TRUTH_PEOPLE) {
   old <- if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) get(".Random.seed", envir = globalenv()) else NULL
   on.exit(if (!is.null(old)) assign(".Random.seed", old, envir = globalenv()), add = TRUE)
   set.seed(seed)
-  par <- p$par; study <- vcr_beta_logit_typical_study(par); ice <- p$ice
+  .vcr_ice_truth_at(p, p$par, vcr_beta_logit_typical_study(p$par), n_people)
+}
+
+#' The truth of one study: the same computation at a given parameter set and study (a simulated trial's own, review S7: a trial of a new study estimates
+#' the effect in THAT study, so its bias and coverage are read against it). Draws from the stream in use.
+.vcr_ice_truth_at <- function(p, par, study, n_people) {
+  ice <- p$ice
   q <- .vcr_bl_draw_people(par, study, n_people)
   visits <- p$visits[seq_len(p$at)]; at <- length(visits); tr <- p$treatment
   z <- (q$alpha - q$meanSlope) / study[["sdAlpha"]]
@@ -467,6 +492,10 @@ vcr_ice_truth <- function(p, seed, n_people = .VCR_ICE_TRUTH_PEOPLE) {
   list(treatment_policy = mk(tp), hypothetical = mk(hy), people = n_people)
 }
 
+#' The people a trial's own truth is computed from. A trial of the typical study shares the one exact truth; any other trial draws its truth on a
+#' substream of its own (the trial's stream is left where it was), from this many people: its sampling error is far below the estimate's.
+.VCR_ICE_TRIAL_TRUTH_PEOPLE <- 600L
+
 # --- the result ------------------------------------------------------------------------------------------------------------------------------
 
 #' The intercurrent-event part of the result: the configuration as run, the realized shares, and the estimand table (truth, estimator bias, coverage).
@@ -474,13 +503,18 @@ vcr_ice_truth <- function(p, seed, n_people = .VCR_ICE_TRUTH_PEOPLE) {
   done <- nrow(v); est <- v[, "estimate"]; ok <- v[, "analysed"] == 1
   meas <- function(name, x, ...) vcr_measure(name, mean(x), simulated = TRUE, mcse = stats::sd(x) / sqrt(length(x)), source = "synthetic", ...)
   share <- function(col) if (done > 1L) meas("realized_share", v[, col]) else NULL
+  typical <- identical(p$uncertainty, "typical_study")
   rows <- lapply(c("treatment_policy", "hypothetical"), function(s) {
-    tr <- p$truth[[s]]; col <- if (identical(s, "treatment_policy")) "coverTP" else "coverHyp"
+    tr <- p$truth[[s]]; col <- if (identical(s, "treatment_policy")) "coverTP" else "coverHyp"; tcol <- if (identical(s, "treatment_policy")) "truthTP" else "truthHyp"
     cv <- v[ok, col]; e <- est[ok]
+    # the truth of the study each trial drew, so bias is the mean of (estimate - that trial's truth); in the typical study every trial has the one exact truth
+    own <- if (typical) rep(tr$value, length(e)) else v[ok, tcol]
+    value <- if (typical) tr$value else mean(own); value_se <- if (typical) tr$mcse else if (length(own) > 1L) stats::sd(own) / sqrt(length(own)) else NA_real_
     list(strategy = s,
-         truth = vcr_measure("estimand_truth", tr$value, simulated = TRUE, mcse = tr$mcse, source = "synthetic", unit = unit,
-                             note = "treated less control, mean change from baseline at the analysis visit, from the data-generating process at the typical study"),
-         bias = if (length(e) > 1L) vcr_measure("estimator_bias", mean(e) - tr$value, simulated = TRUE, mcse = sqrt(stats::var(e) / length(e) + tr$mcse^2), source = "synthetic", unit = unit) else NULL,
+         truth = vcr_measure("estimand_truth", value, simulated = TRUE, mcse = value_se, source = "synthetic", unit = unit,
+                             note = if (typical) "treated less control, mean change from baseline at the analysis visit, from the data-generating process at the typical study"
+                                    else "treated less control, mean change from baseline at the analysis visit, from the data-generating process: the mean over the simulated trials of the true value in the study each one drew"),
+         bias = if (length(e) > 1L) vcr_measure("estimator_bias", mean(e - own), simulated = TRUE, mcse = sqrt(stats::var(e - own) / length(e) + (if (typical) tr$mcse^2 else 0)), source = "synthetic", unit = unit) else NULL,
          coverage = if (length(cv) > 1L) vcr_measure("ci_coverage", mean(cv), simulated = TRUE, mcse = vcr_mcse_proportion(mean(cv), length(cv)), source = "synthetic") else NULL)
   })
   list(estimator = p$ia$kind, data = p$ia$data, delta = p$ia$delta, estimands = rows, claimed = p$claimed,

@@ -17,7 +17,8 @@
 #   g  bias and coverage per strategy x estimator against the true values: where the estimator is aligned the bias is within its Monte Carlo error and the
 #      interval covers within its own, where it is not the bias is the stated size (everyone followed; a retrieved share of one half; progression-dependent stopping)
 #   h  no intercurrent event, no change: an MMRM with nobody stopping or leaving is the one-visit ANCOVA's estimate when there is one post-baseline visit
-#   i  the null: the type I error of the MMRM with independent stopping is the test's level within its Monte Carlo error
+#   i  the null: the type I error of the MMRM with independent stopping is the test's level within 3 Monte Carlo errors (it was 4 plus 0.002, a band of +/- 0.8 points)
+#   l  the MMRM's small-sample standard error against `mmrm` Kenward-Roger, and its type I error at 30 people per arm with dropout (it was 5.4 to 5.9% at 5%)
 #   j  the same seed gives the same result on one core and on two
 #   k  what is refused, by name
 
@@ -46,7 +47,7 @@
 
 vcr_case("N111a", c("AC-04", "AC-28"), function() {
   d <- .n111_data(); nm <- .n111_arm_names(d$J)
-  fast <- vcr_mmrm_fit(d$chg, d$mask, d$arm, d$base, "factored")
+  fast <- vcr_mmrm_fit(d$chg, d$mask, d$arm, d$base, "factored", small_sample = FALSE)
   mml <- .n111_mmrm(d, FALSE)
   gl <- nlme::gls(chg ~ 0 + visit + visit:arm + visit:base, data = .n111_long(d), correlation = nlme::corSymm(form = ~ vi | id), weights = nlme::varIdent(form = ~ 1 | visit),
                   method = "ML", control = nlme::glsControl(tolerance = 1e-10, msTol = 1e-10, maxIter = 500L, msMaxIter = 500L))
@@ -219,7 +220,9 @@ vcr_case("N111g3", c("AC-04", "AC-28"), function() {
   sym <- .n111_run(.n111_sc(n = 70L, kind = "cmi_jump_to_reference", retrieved = 1, strategy = "treatment_policy", groups = 6L), 11031L, replicates = 5000L)
   dm <- .n111_run(.n111_sc(n = 70L, kind = "cmi_jump_to_reference", retrieved = 1, dm = 0.4, strategy = "treatment_policy", groups = 6L), 11032L, replicates = 5000L)
   rs <- .n111_row(sym, "treatment_policy"); rd <- .n111_row(dm, "treatment_policy")
-  list(pass = abs(rs$bias) <= 0.15 && rd$bias > 0.2 && rd$bias > rs$bias + 0.1 && identical(sym$diagnostics$progression$intercurrent$estimator, "cmi_jump_to_reference"),
+  # the interval of the delete-a-group jackknife (G - 1 df) is conservative by design: where the estimator is nearly aligned it covers at or above its level
+  # and not wildly above it (review S17: this case held no coverage before)
+  list(pass = abs(rs$bias) <= 0.15 && rs$cover >= 0.94 && rs$cover <= 0.98 && rd$cover < rs$cover && rd$bias > 0.2 && rd$bias > rs$bias + 0.1 && identical(sym$diagnostics$progression$intercurrent$estimator, "cmi_jump_to_reference"),
        detail = sprintf("jump to reference against the treatment-policy truth: symptomatic effect fading in 4 weeks bias %.3f (MCSE %.3f), coverage %.3f; with a disease-modifying share of 0.4 held after stopping the truth is %.3f and the imputation, which gives the person the reference's course, understates the effect by %.3f (MCSE %.3f)",
                         rs$bias, rs$mcse, rs$cover, rd$truth, rd$bias, rd$mcse))
 })
@@ -257,7 +260,7 @@ vcr_case("N111i", c("AC-04", "AC-27", "AC-28"), function() {
   s <- .n111_sc(n = 100L, kind = "mmrm", data = "all_observed", retrieved = 1); s$treatment <- stats::setNames(list(), character(0))
   null <- .n111_run(s, 11061L)
   m <- null$measures[[1]]
-  list(pass = identical(null$status, "succeeded") && identical(m$name, "type_one_error") && abs(m$value - 0.05) <= 4 * m$mcse + 0.002 && abs(null$diagnostics$progression$intercurrent$estimands[[1]]$truth$value) < 1e-9,
+  list(pass = identical(null$status, "succeeded") && identical(m$name, "type_one_error") && abs(m$value - 0.05) <= 3 * m$mcse && abs(null$diagnostics$progression$intercurrent$estimands[[1]]$truth$value) < 1e-9,
        detail = sprintf("no drug, everyone followed, independent stopping: the MMRM's type I error %.4f (MCSE %.4f) at level 0.05 over %d trials; the true value of both estimands is %.1e",
                         m$value, m$mcse, null$diagnostics$progression$trials, abs(null$diagnostics$progression$intercurrent$estimands[[1]]$truth$value)))
 })
@@ -280,4 +283,50 @@ vcr_case("N111k", c("AC-04", "AC-27", "AC-28"), function() {
   got <- c(no_half_life = code(no_half_life), bad_share = code(bad_share), distributed = code(distributed), old_family = code(old_family))
   list(pass = grepl("washoutHalfLifeWeeks", got[["no_half_life"]], fixed = TRUE) && !is.na(got[["bad_share"]]) && grepl("scenario.treatment", got[["distributed"]], fixed = TRUE) && !is.na(got[["old_family"]]),
        detail = sprintf("refused by name: a stop with no fade-out time (%s), a share of 1.2 (%s), an effect stated as a distribution (%s), an MMRM for a linear-family scenario (%s)", got[["no_half_life"]], got[["bad_share"]], got[["distributed"]], got[["old_family"]]))
+})
+
+vcr_case("N111l", c("AC-04", "AC-27", "AC-28"), function() {
+  # review S6: the factored fast path inside power loops. Four visits, monotone MCAR dropout of 10% per visit, no effect, 30 per arm.
+  S <- matrix(c(25, 12, 10, 8, 12, 36, 20, 15, 10, 20, 49, 30, 8, 15, 30, 64), 4L); J <- 4L; L <- t(chol(S))
+  data_at <- function(n) {
+    arm <- rep(0:1, each = n); base <- stats::rnorm(2 * n, 25, 6)
+    chg <- matrix(0.1 * (base - 25), 2 * n, J) + t(L %*% matrix(stats::rnorm(J * 2 * n), J, 2 * n))
+    last <- pmin(J, stats::rgeom(2 * n, 0.1) + 1L)
+    list(chg = chg, mask = outer(seq_len(2 * n), seq_len(J), function(i, j) j <= last[i]), arm = arm, base = base, n = 2 * n, J = J)
+  }
+  set.seed(11101L)
+  nsim <- 25000L; rej <- 0L; tot <- 0L
+  for (s in seq_len(nsim)) {
+    d <- data_at(30L); f <- vcr_mmrm_fit(d$chg, d$mask, d$arm, d$base, "factored")
+    if (is.null(f)) next
+    tot <- tot + 1L; if (abs(f$effect[J] / f$se[J]) > stats::qt(0.975, f$df)) rej <- rej + 1L
+  }
+  tie <- rej / tot; mcse <- sqrt(0.05 * 0.95 / tot)
+  # the same data through mmrm (REML, Kenward-Roger): the standard error of the last visit's arm effect
+  ratio <- numeric(0)
+  for (s in seq_len(120L)) {
+    d <- data_at(30L); f <- vcr_mmrm_fit(d$chg, d$mask, d$arm, d$base, "factored")
+    kr <- tryCatch(mmrm::mmrm(chg ~ 0 + visit + visit:arm + visit:base + us(visit | id), data = .n111_long(d), reml = TRUE, method = "Kenward-Roger"), error = function(e) NULL)
+    if (is.null(f) || is.null(kr)) next
+    ratio <- c(ratio, f$se[J] / summary(kr)$coef[paste0("visit", J, ":arm"), "Std. Error"])
+  }
+  # the old maximum-likelihood standard error and df, read from the same fit, for the record of what changed
+  list(pass = tie <= 0.05 + 0.0045 && tie >= 0.05 - 0.0045 && length(ratio) >= 100L && mean(ratio) >= 0.97 && mean(ratio) <= 1.06,
+       detail = sprintf("no effect, 30 per arm, four visits, 10%% dropout per visit: the type I error %.4f (MCSE %.4f) over %d fits, held to 0.05 +/- 0.0045 (the maximum-likelihood variance with the conditional df gave 0.054 to 0.059); the standard error against mmrm REML Kenward-Roger on %d datasets: mean ratio %.3f (range %.3f to %.3f)",
+                        tie, mcse, tot, length(ratio), mean(ratio), min(ratio), max(ratio)))
+})
+
+vcr_case("N111m", c("AC-04", "AC-27", "AC-28"), function() {
+  # review S7: in the engine's default mode (a new study per trial) the effect differs between studies, so bias and coverage are read against each
+  # trial's OWN true value. An aligned estimator (everything collected, everyone followed, the MMRM, treatment-policy truth) covers within its own error
+  # in every mode; against the typical study's value it read 0.923 to 0.927 where the typical-study mode reads 0.944.
+  one <- function(unc, seed) {
+    s <- .n111_sc(kind = "mmrm", data = "all_observed", retrieved = 1); s$model$uncertainty <- unc; s$treatment$diseaseModifying <- list(fraction = .n111_P(0.3)); s$estimand <- list(strategy = "treatment_policy")
+    .n111_row(.n111_run(s, seed, cores = 2L, replicates = 3000L), "treatment_policy")
+  }
+  typ <- one("typical_study", 11091L); new <- one("new_study", 11092L); post <- one("posterior_draws", 11093L)
+  ok <- function(r) abs(r$cover - 0.95) <= 4 * r$cover_se + 0.005 && abs(r$bias) <= 4 * r$mcse + 0.03
+  fmt <- function(r) sprintf("bias %.3f (MCSE %.3f), coverage %.3f (MCSE %.3f)", r$bias, r$mcse, r$cover, r$cover_se)
+  list(pass = ok(typ) && ok(new) && ok(post),
+       detail = sprintf("MMRM on everything collected, 150 per arm, 3,000 trials, against each trial's own treatment-policy truth: typical study %s; new study %s; posterior draws %s (against the typical study's value the last two were 0.927 and 0.923)", fmt(typ), fmt(new), fmt(post)))
 })
