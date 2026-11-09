@@ -116,3 +116,5 @@ alternative case; one finalist in the first wave); the rest of B is allocated by
 addendum). Same worlds, budgets, seeds 1..200, pick rules, metrics and reading as above; the original five arms are re-run unchanged and must reproduce the first run
 byte for byte (they do: 150 of 150 cells). Development of the rule used seeds 1001..1100 (`--seed-from`), never reported; `--arms` runs a subset of arms for such a
 development run. A unit of ours2 may carry its own `replicates` (a fresh re-run of a final evaluation); the simulated world draws it exactly like any other unit.
+
+The product default (2026-11-09, controller) derives the same budget from `budget.cpuSeconds` and a measured CPU rate when `budget.replicates` is absent; `ours2` states the replicate budget directly, so this addendum's numbers do not change.

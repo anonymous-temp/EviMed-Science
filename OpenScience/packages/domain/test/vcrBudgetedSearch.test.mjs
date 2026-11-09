@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   vcrCampaignManifest, vcrCampaignCanonical, vcrCampaignCandidates, vcrCampaignInitialState, vcrCampaignAdvance, vcrCampaignRecord,
-  vcrCampaignVerdict, vcrCampaignBudgetPlan, VCR_ALLOCATION, vcrClopperPearson,
+  vcrCampaignVerdict, vcrCampaignBudgetPlan, VCR_ALLOCATION, vcrClopperPearson, vcrSearchFromForm,
 } from '../src/vcrExperimentSearch.mjs'
 
 const BASE = {
@@ -39,7 +39,7 @@ function mulberry32(/** @type {number} */ seed) { let a = seed >>> 0; return () 
 const binomial = (/** @type {number} */ n, /** @type {number} */ p, /** @type {() => number} */ rng) => { let k = 0; for (let i = 0; i < n; i++) if (rng() < p) k += 1; return k }
 
 /** Drive a campaign to its stop; `units` is every unit the machine asked for, in order. */
-function drive(/** @type {Record<string, any>} */ manifest, /** @type {number} */ worldSeed, world = WORLD) {
+function drive(/** @type {Record<string, any>} */ manifest, /** @type {number} */ worldSeed, world = WORLD, secondsPer = (/** @type {number} */ _n) => 0.001) {
   const identity = 'b'.repeat(64)
   const candidates = vcrCampaignCandidates(manifest)
   let state = vcrCampaignInitialState(manifest)
@@ -61,7 +61,7 @@ function drive(/** @type {Record<string, any>} */ manifest, /** @type {number} *
       alt ? { name: 'power', value: p, mcse: Math.sqrt(p * (1 - p) / replicates), simulated: true, ...(screening ? { precision: 'screening' } : {}) }
         : { name: 'type_one_error', value: p, mcse: Math.sqrt(p * (1 - p) / replicates), simulated: true }]
     state = vcrCampaignRecord(manifest, { ...state, inFlight: { unitKey: unit.key, unit } }, /** @type {any} */ (unit),
-      { jobId: `j_${unit.key}`, state: 'succeeded', seed: unit.seed, replicates, precision: screening ? 'screening' : 'final', measures, cpuSeconds: replicates / 1000 })
+      { jobId: `j_${unit.key}`, state: 'succeeded', seed: unit.seed, replicates, precision: screening ? 'screening' : 'final', measures, cpuSeconds: replicates * secondsPer(units.length) })
   }
   return { state, units, candidates }
 }
@@ -179,4 +179,58 @@ test('the screening rule of the plan is stated and bounded', () => {
   assert.deepEqual(vcrCampaignBudgetPlan({ candidates: 12, replicates: 40_000 }), { screeningReplicates: 600, finalCount: VCR_ALLOCATION.firstWave })
   assert.equal(vcrCampaignBudgetPlan({ candidates: 12, replicates: 10_000_000 }).screeningReplicates, 4_999, 'screening stays below the floor')
   assert.equal(vcrCampaignBudgetPlan({ candidates: 200, replicates: 40_000 }).screeningReplicates, 200, 'and never below its minimum')
+})
+
+const sequential = (/** @type {number} */ cpuSeconds, /** @type {any} */ world = HARD) =>
+  frozen({ allocation: 'sequential', cpuSeconds }, { screening: { replicates: 500 }, final: { count: 1 } }, world)
+
+test('a sequential campaign derives its replicate budget from the CPU seconds it measures', () => {
+  const manifest = sequential(200) // 200 CPU seconds at 0.002 s a replicate is 100,000 replicates, whatever the engine's speed was guessed to be
+  assert.equal(Object.hasOwn(manifest.budget, 'replicates'), false)
+  const { state } = drive(manifest, 3, HARD, () => 0.002)
+  assert.equal(state.rate.perReplicate, 0.002)
+  assert.equal(state.allocation.derived.replicates, 100_000)
+  assert.equal(state.allocation.derived.perReplicateCpuSeconds, 0.002)
+  assert.equal(state.allocation.budget, 100_000)
+  assert.ok(state.usage.replicatesCompleted <= 100_000)
+  assert.equal(state.allocation.unspent, 100_000 - state.usage.replicatesCompleted)
+  // the same seconds on an engine twice as fast buy twice the replicates
+  const fast = drive(sequential(200), 3, HARD, () => 0.001).state
+  assert.equal(fast.allocation.derived.replicates, 200_000)
+  assert.ok(fast.usage.replicatesCompleted >= state.usage.replicatesCompleted)
+})
+
+test('a rate that changes mid-campaign re-derives the budget, and the CPU seconds are never exceeded', () => {
+  for (const [cpu, seed] of [[60, 1], [120, 2], [250, 3]]) {
+    // the screening units are cheap per replicate and the final runs cost four times as much
+    const manifest = sequential(cpu)
+    const { state } = drive(manifest, seed, HARD, (units) => (units <= 12 ? 0.001 : 0.004))
+    assert.ok(state.usage.cpuSeconds <= cpu + 1e-9, `${cpu} CPU seconds: used ${state.usage.cpuSeconds}`)
+    assert.equal(state.rate.perReplicate, 0.004)
+    assert.equal(state.rate.history.length, 1)
+    assert.equal(state.rate.history[0].from, 0.001)
+    assert.equal(state.allocation.derived.replicates, Math.floor(cpu / 0.004))
+    assert.equal(state.allocation.derived.rateChanges, 1)
+  }
+})
+
+test('a stored manifest without the allocation field keeps its bytes, its fixed stages and an unchanged state', () => {
+  const stored = frozen()
+  assert.equal(Object.hasOwn(stored.budget, 'allocation'), false)
+  assert.equal(vcrCampaignCanonical(stored), vcrCampaignCanonical(frozen({ allocation: undefined })))
+  assert.notEqual(vcrCampaignCanonical(stored), vcrCampaignCanonical(sequential(600_000, WORLD)))
+  const { state } = drive(stored, 2, WORLD, () => 0.002)
+  assert.equal(state.rate, undefined)
+  assert.equal(state.allocation, undefined)
+})
+
+test('the short form, and so every hosted default, asks for the sequential allocation; a form that cannot have it is left out of it', () => {
+  const form = { question: 'fewest patients', method: 'design.simulate', scenario: BASE, vary: { 'design.nTreat': [100, 150, 200] },
+    goal: { minimize: 'expected_sample_size', power: 0.8 } }
+  const compiled = vcrSearchFromForm(form)
+  assert.deepEqual(compiled.issues, [])
+  assert.equal(/** @type {any} */ (compiled.input).budget.allocation, 'sequential')
+  assert.equal(vcrCampaignManifest(compiled.input).manifest?.budget.allocation, 'sequential')
+  // refused field values are named, not read as something else
+  assert.ok(vcrCampaignManifest({ ...manifestInput(), budget: { ...manifestInput().budget, allocation: 'greedy' } }).issues.some((i) => i.field === 'budget.allocation'))
 })

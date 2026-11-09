@@ -656,9 +656,10 @@ frozen Newcombe reading, tables file):
   is 8 points below halving and OCBA (92% against 100%).
 - **Not verified:** why level85 at 640k ends at 93% while budget remains (the stop reason of those runs is `acceptable_precision`; whether the missing 7% are
   designs held inconclusive by the re-run cap or truly infeasible by one standard error of the truth table was not measured: the benchmark rows keep the stop
-  reason, not the allocation record). The agent arm (R16) is still the `--score-agent` slot. The product's short form uses `budget.replicates` only when the person
-  states it: without it a campaign keeps the fixed structure, so the default hosted search is not yet on the new allocation (a decision for the controller:
-  a default replicate budget derived from the CPU-second budget needs the engine's seconds per replicate).
+  reason, not the allocation record). The agent arm (R16) is still the `--score-agent` slot. Update (controller decision): every new campaign now asks for the sequential allocation (`budget.allocation: 'sequential'`, written by the short form and
+  so by every hosted default); with no explicit `budget.replicates` the budget is derived from `budget.cpuSeconds` and the CPU seconds per replicate the campaign measures
+  (first completed unit, re-derived when a unit differs by 25%, recorded in the state and the stop record, `cpuSeconds` never exceeded). Stored manifests without the field keep
+  their bytes and fixed stages. The `ours2` arm here states `budget.replicates` explicitly, so its behaviour at a stated budget is unchanged and no rerun was needed.
 
 Verdict in one sentence: the structural cap is removed and the budgeted campaign now matches grid and the OCBA-style procedure from about 160k trials in the
 level worlds while keeping every error-control rule, but it still trails successive halving and the OCBA-style procedure below that budget (and by 5-7 points

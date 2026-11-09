@@ -438,10 +438,16 @@ export function vcrCampaignManifest(input) {
   if (!(Number.isInteger(budget.modelCalls) && budget.modelCalls >= 0 && budget.modelCalls <= L.modelCallsMax)) bad('campaign_budget_invalid', 'budget.modelCalls', `Model calls are 0 to ${L.modelCallsMax}.`)
   // A replicate budget turns the campaign's allocation sequential (`vcrCampaignAdvance`, "budgeted"): it is opt-in, and a manifest without it
   // keeps its canonical bytes and its fixed stage sizes.
-  if (budgetIn.replicates != null) {
-    if (!(Number.isInteger(budgetIn.replicates) && budgetIn.replicates >= 1 && budgetIn.replicates <= L.replicatesMax)) bad('campaign_budget_invalid', 'budget.replicates', `A replicate budget is 1 to ${L.replicatesMax}.`)
-    else if (exact || !screening || robust) bad('campaign_budget_invalid', 'budget.replicates', 'A replicate budget needs a simulated search with a screening stage and no robust reading.')
-    else /** @type {Record<string, any>} */ (budget).replicates = budgetIn.replicates
+  // `allocation: 'sequential'` is the same allocation with the replicate budget derived from the CPU-second budget and the rate the campaign measures.
+  if (budgetIn.replicates != null || budgetIn.allocation != null) {
+    if (budgetIn.replicates != null && !(Number.isInteger(budgetIn.replicates) && budgetIn.replicates >= 1 && budgetIn.replicates <= L.replicatesMax)) bad('campaign_budget_invalid', 'budget.replicates', `A replicate budget is 1 to ${L.replicatesMax}.`)
+    else if (budgetIn.allocation != null && budgetIn.allocation !== 'sequential') bad('campaign_budget_invalid', 'budget.allocation', 'The allocation is "sequential" or absent.')
+    else if (budgetIn.replicates != null && (exact || !screening || robust)) bad('campaign_budget_invalid', 'budget.replicates', 'A replicate budget needs a simulated search with a screening stage and no robust reading.')
+    else {
+      if (budgetIn.replicates != null) /** @type {Record<string, any>} */ (budget).replicates = budgetIn.replicates
+      // the sequential allocation is what every new campaign asks for; where it cannot apply (an exact method, no screening stage, a robust reading) it is left out
+      if (budgetIn.allocation != null && !exact && screening && !robust) /** @type {Record<string, any>} */ (budget).allocation = 'sequential'
+    }
   }
   const evaluated = sample ? Math.min(sample.count, spaceSize) : spaceSize
   if (Number.isInteger(budget.maxCandidates) && evaluated > budget.maxCandidates) {
@@ -622,7 +628,7 @@ export function vcrSearchFromForm(input) {
   const cost = /** @type {Record<string, any>} */ (FORM_COST)[method] ?? { candidate: 20, finalist: 60 }
   for (const key of Object.keys(budgetIn)) if (!['maxCandidates', 'cpuSeconds', 'replicates'].includes(key)) bad('search_form_field_unknown', `budget.${key}`, 'A budget takes maxCandidates, cpuSeconds and replicates.')
   const budget = { maxCandidates: budgetIn.maxCandidates ?? candidates, cpuSeconds: budgetIn.cpuSeconds ?? Math.ceil(candidates * cost.candidate + finalCount * cost.finalist + 60), modelCalls: 0,
-    ...(budgetIn.replicates != null ? { replicates: budgetIn.replicates } : {}) }
+    ...(budgetIn.replicates != null ? { replicates: budgetIn.replicates } : {}), allocation: 'sequential' }
 
   if (issues.length) return { input: null, issues }
   const space = { method, scenario: base, truths,
@@ -1089,6 +1095,14 @@ export function vcrCampaignRecord(manifest, state, unit, outcome) {
   next.usage.queueSeconds += evaluation.queueSeconds
   next.usage.wallSeconds += evaluation.wallSeconds
   next.usage.replicatesCompleted += Number.isInteger(evaluation.replicates) ? evaluation.replicates : 0
+  // a sequential allocation measures the CPU seconds a replicate costs on this engine: the first completed unit sets it, and a unit that costs
+  // materially (25%) more or less per replicate re-derives it, so the derived budget follows the engine and never the guess
+  if (manifest.budget.allocation === 'sequential' && outcome.state === 'succeeded' && Number.isInteger(evaluation.replicates) && evaluation.replicates > 0 && evaluation.cpuSeconds > 0) {
+    const perReplicate = evaluation.cpuSeconds / evaluation.replicates
+    const current = Number(next.rate?.perReplicate)
+    if (!(current > 0)) next.rate = { perReplicate, history: [] }
+    else if (Math.abs(perReplicate - current) / current > 0.25) next.rate = { perReplicate, history: [...list(next.rate.history), { from: current, to: perReplicate, atUnit: next.unitsEvaluated }] }
+  }
   const canceled = outcome.state === 'canceled'
   if (canceled) next.cancelRequested = true
   if (unit.stage === 'analytic') {
@@ -1424,7 +1438,11 @@ function unitReplicates(manifest, unit) {
 
 /** Whether a unit fits what is left of the replicate budget. @param {Record<string, any>} manifest @param {Record<string, any>} state @param {Record<string, any>} unit */
 function affordable(manifest, state, unit) {
-  return state.usage.replicatesCompleted + unitReplicates(manifest, unit) <= manifest.budget.replicates
+  const cost = unitReplicates(manifest, unit)
+  if (Number.isInteger(manifest.budget.replicates) && state.usage.replicatesCompleted + cost > manifest.budget.replicates) return false
+  // the CPU-second budget as replicates, at the rate measured so far (before the first completed unit there is none: the ceiling check alone applies)
+  const rate = Number(state.rate?.perReplicate)
+  return !(rate > 0) || state.usage.cpuSeconds + cost * rate <= manifest.budget.cpuSeconds
 }
 
 /**
@@ -1439,7 +1457,11 @@ function finalizeAllocation(manifest, state, stopReason) {
     unevaluated.push(key)
   }
   const spent = state.usage.replicatesCompleted
-  state.allocation = { ...object(state.allocation), budget: manifest.budget.replicates, spent, unspent: Math.max(0, manifest.budget.replicates - spent),
+  const rate = Number(state.rate?.perReplicate)
+  const derived = rate > 0 ? Math.floor(manifest.budget.cpuSeconds / rate) : null
+  const total = Math.min(...[manifest.budget.replicates, derived].filter((x) => Number.isInteger(x)))
+  state.allocation = { ...object(state.allocation), budget: Number.isFinite(total) ? total : spent, ...(rate > 0 ? { derived: { replicates: derived, perReplicateCpuSeconds: rate, rateChanges: list(state.rate.history).length } } : {}),
+    spent, unspent: Math.max(0, (Number.isFinite(total) ? total : spent) - spent),
     unspentReason: stopReason === 'budget_exhausted' ? 'next_unit_does_not_fit' : stopReason === 'user_cancellation' || stopReason === 'persistent_model_failure' ? stopReason
       : state.allocation?.precisionLimited ? 'precision_not_reachable' : 'decided', unevaluated }
 }
@@ -1537,7 +1559,7 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
   const next = clone(state)
   if (next.stop) return { state: next, action: { type: 'none' } }
   if (next.inFlight) return { state: next, action: { type: 'wait' } }
-  const budgeted = Number.isInteger(manifest.budget.replicates)
+  const budgeted = Number.isInteger(manifest.budget.replicates) || manifest.budget.allocation === 'sequential'
   const stop = (/** @type {string} */ reason) => {
     if (budgeted) finalizeAllocation(manifest, next, reason)
     next.stop = { reason, verdict: next.finalists ? vcrCampaignVerdict(manifest, next) : null }
