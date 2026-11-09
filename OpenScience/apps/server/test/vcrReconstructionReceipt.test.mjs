@@ -15,6 +15,8 @@ test('reconstruction listing and binding share verifier-origin keyless proof wit
   const result={id:'result',executionId:'execution',version:1,tables:[table]};
   const producer={scenario:{},inputs:[],checkpoint:{curveReceiptId:'curve',curveImageHash:'image',curvePointsHash:'points',curvePrincipal:'owner'}};
   const store={result:async(study,id)=>study==='study'&&id==='result'?result:null,one:async sql=>sql.includes('.executions')?{method:'evidence.reconstruct_km',receipt,output_hash:hash,job_id:'job'}:producer,
+   // the real store's lineage check with no guard configured keeps every row; a withdrawn lineage is held by vcrGuardedResultReaders.integration.test.mjs
+   resultsInLineage:async(_study,items)=>items,
    rows:async()=>[{id:'result',execution_id:'execution',version:1,tables:[table],curve_origin:'upload',execution_receipt:receipt,execution_output_hash:hash}]};
   const jobs=new VcrJobs({store,config:{vcrDataPlaneDir:root}});let curveHash='image';let unsupported=false;
   jobs.curveVerifier=async()=>({detail:{curveImageHash:curveHash,curvePointsHash:'points',curveTimeUnit:'months',curveTimeUnitUnsupported:unsupported}});
