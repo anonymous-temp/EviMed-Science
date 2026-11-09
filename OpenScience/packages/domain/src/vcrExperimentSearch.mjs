@@ -871,10 +871,11 @@ export function vcrCampaignVerdict(manifest, state) {
     const objective = objectiveOf(manifest, entry, 'final')
     return { key, index: candidate?.index ?? -1, objective, verdicts,
       feasible: entry.status === 'evaluated' && objective != null && verdicts.every((v) => v.status === 'pass'),
-      inconclusive: entry.status === 'evaluated' && verdicts.some((v) => v.status === 'inconclusive') && !verdicts.some((v) => v.status === 'fail') }
+      inconclusive: entry.status === 'evaluated' && entry.role !== 'reference_only' && verdicts.some((v) => v.status === 'inconclusive') && !verdicts.some((v) => v.status === 'fail') }
   })
   const referenceKey = manifest.reference == null ? null : candidates.find((c) => c.index === manifest.reference)?.key ?? null
-  const feasible = rows.filter((row) => row.feasible)
+  // a reference kept only for the contrast (screened out, so it never competes) is not a design the search may return
+  const feasible = rows.filter((row) => row.feasible && object(state.candidates[row.key]).role !== 'reference_only')
   const ranked = feasible.map((row) => ({ ...row, value: /** @type {any} */ (row.objective).value })).sort(byObjective(manifest))
   const best = ranked[0] ?? null
   const reference = referenceKey ? rows.find((row) => row.key === referenceKey) ?? null : null
@@ -884,15 +885,18 @@ export function vcrCampaignVerdict(manifest, state) {
   if (best?.objective && reference?.objective) {
     const sign = manifest.objective.direction === 'minimize' ? -1 : 1
     improvement = sign * (best.objective.value - reference.objective.value)
-    // the improvement is decided on the bound of the two final runs' contrast: with the error their coupling allows, or, where the coupling
-    // leaves it unknown, the independent error (common random numbers only make it smaller)
+    // the improvement is decided on the bound of the two final runs' contrast: with the error their coupling allows; where the coupling
+    // leaves it unknown, the worst case the marginal errors allow (Cauchy–Schwarz); and where even that is unknown, not decided at all
     const finalOf = (/** @type {string} */ key) => object(object(state.candidates[key]).evaluations)[`final:${manifest.objective.truth}`]
     const contrast = vcrEvaluationContrast(finalOf(best.key), finalOf(reference.key), manifest.objective.measure)
     const confidence = Number(list(manifest.constraints)[0]?.confidence ?? 0.975)
-    const mcse = contrast.mcse ?? Math.hypot(Number(best.objective.mcse ?? 0), Number(reference.objective.mcse ?? 0))
-    const z = vcrNormalQuantile(confidence)
-    improvementBound = { lower: improvement - z * mcse, upper: improvement + z * mcse, mcse, confidence, coupling: contrast.coupling,
-      basis: contrast.mcse == null ? 'independent_error' : contrast.coupling }
+    const mcse = contrast.mcse ?? contrast.worstCaseMcse
+    if (mcse == null) improvementBound = { lower: null, upper: null, mcse: null, confidence, coupling: contrast.coupling, basis: 'unassessed' }
+    else {
+      const z = vcrNormalQuantile(confidence)
+      improvementBound = { lower: improvement - z * mcse, upper: improvement + z * mcse, mcse, confidence, coupling: contrast.coupling,
+        basis: contrast.mcse == null ? 'worst_case' : contrast.coupling === 'independent' ? 'independent_error' : contrast.coupling }
+    }
   }
   // Undecided is an answer too (F4): the finalists no constraint failed, the undecided constraint of each named with the simulated value and its
   // error, and the best of them by the objective when no finalist passed everything. The frozen constraint is never touched: this only
@@ -989,7 +993,12 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
     const reference = manifest.reference == null ? null : candidates.find((c) => c.index === manifest.reference)
     if (reference && !chosen.some((c) => c?.key === reference.key) && !['unsupported', 'failed'].includes(next.candidates[reference.key]?.status)) chosen.push(reference)
     next.finalists = chosen.filter(Boolean).map((c) => /** @type {any} */ (c).key)
-    for (const key of next.finalists) if (next.candidates[key].status !== 'eliminated') next.candidates[key].status = 'finalist'
+    for (const key of next.finalists) {
+      const entry = next.candidates[key]
+      // a reference screened out (or analytically set aside) is still evaluated finally, for the contrast, and never competes to win (F06)
+      if (entry.status === 'eliminated') entry.role = 'reference_only'
+      entry.status = 'finalist'
+    }
   }
 
   // 4. final evaluations on independent streams
@@ -1009,10 +1018,12 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
     return stop(verdict.inconclusive.length ? 'inconclusive_at_precision' : 'no_feasible_beneficial_candidate')
   }
   const bound = verdict.improvementBound
-  if (verdict.reference && verdict.improvement != null && bound) {
+  const least = manifest.stopRules.minImprovement
+  // a requested improvement that could not be assessed (the reference has no final evaluation, or the error of the contrast is unknown) is not satisfied
+  if (verdict.reference && verdict.best !== verdict.reference && least != null && (!bound || bound.basis === 'unassessed')) return stop('inconclusive_at_precision')
+  if (verdict.reference && verdict.improvement != null && bound && bound.basis !== 'unassessed') {
     if (verdict.best === verdict.reference || bound.upper <= 0) return stop('no_feasible_beneficial_candidate')
     if (bound.lower <= 0) return stop('inconclusive_at_precision')
-    const least = manifest.stopRules.minImprovement
     if (least != null && bound.upper < least) return stop('no_useful_improvement')
     if (least != null && bound.lower < least) return stop('inconclusive_at_precision')
   }
@@ -1043,12 +1054,21 @@ const popcount = (byte) => { let n = 0; for (let b = byte; b; b >>= 1) n += b & 
  */
 export function vcrEvaluationContrast(a, b, name) {
   const ma = vcrEvaluationMeasure(a, name), mb = vcrEvaluationMeasure(b, name)
-  if (!ma || !mb) return { measure: name, coupling: 'unavailable', difference: null, mcse: null }
+  if (!ma || !mb) return { measure: name, coupling: 'unavailable', difference: null, mcse: null, worstCaseMcse: null }
   const difference = Number(ma.value) - Number(mb.value)
-  if (ma.simulated !== true && mb.simulated !== true) return { measure: name, coupling: 'exact', difference, mcse: 0 }
-  const sameSeed = a.seed != null && a.seed === b.seed
-  if (sameSeed) {
-    if (!a.drawSignature || a.drawSignature !== b.drawSignature) return { measure: name, coupling: 'same_seed_different_draws', difference, mcse: null }
+  if (ma.simulated !== true && mb.simulated !== true) return { measure: name, coupling: 'exact', difference, mcse: 0, worstCaseMcse: 0 }
+  // A calculated measure has no Monte-Carlo error (0); a simulated one without its error has an unknown one, never 0. When the
+  // dependence of the two runs is unknown, Cauchy–Schwarz still bounds the contrast's error by the sum of the marginal errors
+  // (sd(A − B) <= sd(A) + sd(B)), which holds whatever the covariance is; without both marginal errors there is no bound.
+  const marginal = (/** @type {Record<string, any>} */ m) => (m.simulated !== true ? 0 : m.mcse != null && Number.isFinite(Number(m.mcse)) ? Number(m.mcse) : null)
+  const sa = marginal(ma), sb = marginal(mb)
+  const worstCaseMcse = sa == null || sb == null ? null : sa + sb
+  // The two runs are independent only on streams that were drawn apart: two known, different seeds. A run with no recorded seed says
+  // nothing about its stream, so its dependence is as unknown as that of two runs that drew the same seed differently.
+  const seeded = a.seed != null && b.seed != null
+  if (!seeded) return { measure: name, coupling: 'unknown_dependence', difference, mcse: null, worstCaseMcse }
+  if (a.seed === b.seed) {
+    if (!a.drawSignature || a.drawSignature !== b.drawSignature) return { measure: name, coupling: 'same_seed_different_draws', difference, mcse: null, worstCaseMcse }
     const bitsA = typeof a.rejects === 'string' ? bitsOf(a.rejects) : null, bitsB = typeof b.rejects === 'string' ? bitsOf(b.rejects) : null
     const n = Number(a.replicates)
     // the bitset is the primary test's rejection indicator, so it pairs `power` or `type_one_error` and nothing else
@@ -1058,10 +1078,9 @@ export function vcrEvaluationContrast(a, b, name) {
       for (let i = 0; i < bitsA.length; i++) { onlyA += popcount(bitsA[i] & ~bitsB[i] & 0xff); onlyB += popcount(bitsB[i] & ~bitsA[i] & 0xff) }
       const mean = (onlyA - onlyB) / n
       const variance = ((onlyA + onlyB) / n - mean * mean) * n / (n - 1)
-      return { measure: name, coupling: 'paired', difference, mcse: Math.sqrt(Math.max(0, variance) / n), discordant: { onlyA, onlyB } }
+      return { measure: name, coupling: 'paired', difference, mcse: Math.sqrt(Math.max(0, variance) / n), worstCaseMcse, discordant: { onlyA, onlyB } }
     }
-    return { measure: name, coupling: 'paired_without_replicates', difference, mcse: null }
+    return { measure: name, coupling: 'paired_without_replicates', difference, mcse: null, worstCaseMcse }
   }
-  const sa = Number(ma.mcse ?? 0), sb = Number(mb.mcse ?? 0)
-  return { measure: name, coupling: 'independent', difference, mcse: Math.sqrt(sa * sa + sb * sb) }
+  return { measure: name, coupling: 'independent', difference, mcse: sa == null || sb == null ? null : Math.sqrt(sa * sa + sb * sb), worstCaseMcse }
 }
