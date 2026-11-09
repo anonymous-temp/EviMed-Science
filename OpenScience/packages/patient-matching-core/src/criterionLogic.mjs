@@ -73,11 +73,15 @@ export function deriveCriterionVerdict(criterion) {
     const satisfied = counted.filter((part) => part.verdict === 'satisfied').length
     const unsatisfied = counted.filter((part) => part.verdict === 'not-satisfied').length
     const unknown = counted.length - satisfied - unsatisfied
-    let verdict
-    if (rule.kind === 'all') verdict = unsatisfied ? 'not-satisfied' : unknown ? 'unknown' : 'satisfied'
-    else if (rule.kind === 'any') verdict = satisfied ? 'satisfied' : unknown ? 'unknown' : 'not-satisfied'
-    else verdict = satisfied >= rule.count ? 'satisfied' : satisfied + unknown < rule.count ? 'not-satisfied' : 'unknown'
-    return { verdict, derived: true, parts }
+    let verdict, proven
+    if (rule.kind === 'all') { verdict = unsatisfied ? 'not-satisfied' : unknown ? 'unknown' : 'satisfied'; proven = unsatisfied > 0 }
+    else if (rule.kind === 'any') { verdict = satisfied ? 'satisfied' : unknown ? 'unknown' : 'not-satisfied'; proven = satisfied > 0 }
+    else { verdict = satisfied >= rule.count ? 'satisfied' : satisfied + unknown < rule.count ? 'not-satisfied' : 'unknown'; proven = satisfied >= rule.count }
+    // A verdict the listed parts prove (one unmet part of "all", one met part of "any", enough met parts of "at least n") holds whatever
+    // else the criterion names. Any other verdict assumes every condition was listed; when the list is visibly short of that (fewer parts
+    // than "at least n" needs, or a single part of an "all"/"any") the model's own verdict stands.
+    const listed = parts?.length ?? 0, incomplete = rule.kind === 'atLeast' ? listed < rule.count : listed < 2
+    if (proven || !incomplete) return { verdict, derived: true, parts }
   }
   const timed = timingVerdict(criterion.timing)
   if (timed) return { verdict: timed, derived: true, parts }

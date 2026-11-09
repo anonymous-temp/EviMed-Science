@@ -194,8 +194,15 @@ export function completeDecision(answer, prepared) {
   const profile = prepared.trialProfiles.find((item) => item.trialId === pair.trialId)
   const bundle = bundleFor(prepared, pair)
   const sources = new Map([...(bundle?.sources ?? []), ...(profile ? [profile.source] : [])].map((source) => [source.sourceId, source]))
+  // "Now" for a time window is the date of the patient's newest record, a fact of the record the code knows; the model's reference date
+  // is replaced (on n2c2 a model-written reference date turned MIs two years before the newest record into "within six months").
+  const recordDates = (bundle?.patientPassages ?? []).filter((passage) => passage.subjectKey === pair.subjectKey).map((passage) => passage.recordDate).filter((date) => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date))
+  const newest = recordDates.length ? recordDates.reduce((a, b) => (a > b ? a : b)) : null
+  const anchored = (timing) => (timing && typeof timing === 'object' ? { ...timing, referenceDate: newest } : timing)
   const criteria = (Array.isArray(answer.criteria) ? answer.criteria : []).map((criterion) => {
     const row = { ...criterion, evidenceIds: Array.isArray(criterion?.evidenceIds) ? criterion.evidenceIds : [], assumptions: Array.isArray(criterion?.assumptions) ? criterion.assumptions : [] }
+    if (row.timing) row.timing = anchored(row.timing)
+    if (Array.isArray(row.parts)) row.parts = row.parts.map((part) => (part && typeof part === 'object' && part.timing ? { ...part, timing: anchored(part.timing) } : part))
     if (Array.isArray(row.parts) && row.parts.length === 0) delete row.parts
     if (row.rule === null) delete row.rule
     if (row.timing === null) delete row.timing

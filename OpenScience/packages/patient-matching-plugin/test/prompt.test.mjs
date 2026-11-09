@@ -114,3 +114,14 @@ test('malformed logic is dropped instead of costing the pair', () => {
   assert.equal(decision.criteria[0].rule, undefined); assert.equal(decision.criteria[0].parts, undefined)
   validatePairDecision(decision, { task: prepared.task, trialProfile: prepared.trialProfiles[1], evidenceBundle: prepared.evidenceBundles[1] })
 })
+
+test('"now" for a time window is the newest record date, whatever reference date the model wrote', () => {
+  const { prepared } = twoTrials()
+  const decision = completeDecision({ subjectKey: 'patient-a', trialId: 'trial-b', clinicalEligibility: 'uncertain', recommendation: { priority: null, rationale: 'r' }, unresolvedFacts: [], assumptions: [], criteria: [
+    { criterionId: 'b2', kind: 'exclusion', verdict: 'satisfied', basis: 'stated', evidenceIds: ['e:1.4'], reason: 'r', assumptions: [], parts: [], rule: null,
+      timing: { eventDate: '2061-06-01', referenceDate: '2061-09-01', windowDays: 183, relation: 'within' } },
+  ] }, prepared)
+  assert.equal(decision.criteria[0].timing.referenceDate, '2069-04-07')
+  assert.equal(applyCriterionLogic(decision), 1)
+  assert.equal(decision.criteria[0].verdict, 'not-satisfied', 'an event eight years before the newest record is not within six months')
+})

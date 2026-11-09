@@ -15,6 +15,20 @@ test('parts combine by rule, not-applicable parts do not count', () => {
   assert.deepEqual(deriveCriterionVerdict({ verdict: 'satisfied' }), { verdict: 'satisfied', derived: false, parts: undefined })
 })
 
+test('a part list visibly short of the criterion overrules the model only with what the listed parts prove', () => {
+  const part = (verdict) => ({ text: 'x', verdict, basis: 'stated', evidenceIds: [], timing: null })
+  const derive = (verdict, parts, rule) => deriveCriterionVerdict({ verdict, parts, rule })
+  // "Two or more of four": only the one condition looked at is listed; its absence does not prove the criterion unmet.
+  assert.deepEqual([derive('unknown', [part('not-satisfied')], { kind: 'atLeast', count: 2 }).verdict, derive('unknown', [part('not-satisfied')], { kind: 'atLeast', count: 2 }).derived], ['unknown', false])
+  assert.equal(derive('satisfied', [part('unknown')], { kind: 'atLeast', count: 2 }).verdict, 'satisfied')
+  assert.equal(derive('unknown', [part('satisfied'), part('satisfied')], { kind: 'atLeast', count: 2 }).verdict, 'satisfied', 'enough met parts prove it')
+  // One listed part of an "all" or "any": a met "all" or an unmet "any" needs the rest; an unmet "all" or a met "any" does not.
+  assert.equal(derive('not-satisfied', [part('satisfied')], { kind: 'all', count: null }).verdict, 'not-satisfied')
+  assert.equal(derive('unknown', [part('not-satisfied')], { kind: 'all', count: null }).verdict, 'not-satisfied')
+  assert.equal(derive('satisfied', [part('not-satisfied')], { kind: 'any', count: null }).verdict, 'satisfied')
+  assert.equal(derive('unknown', [part('satisfied')], { kind: 'any', count: null }).verdict, 'satisfied')
+})
+
 test('time windows are computed in whole days from the recorded dates', () => {
   const t = (eventDate, referenceDate, windowDays, relation = 'within') => timingVerdict({ eventDate, referenceDate, windowDays, relation })
   assert.equal(t('2069-01-01', '2069-06-30', 183), 'satisfied')
