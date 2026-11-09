@@ -12,7 +12,7 @@ const ad = (/** @type {any} */ over = {}) => ({
   model: { family: 'beta_logit', parameterSet: { id: 'camd-adas-cog-11', version: 'adsim-3.0' } },
   treatment: { symptomatic: { pointsAt: P(-3), atWeek: 26, referenceAdas: 25, et50Weeks: P(8), washoutHalfLifeWeeks: P(4) } }, ...over,
 })
-const codes = (/** @type {any[]} */ issues) => issues.map((i) => `${i.code}@${i.field}`)
+const codes = (/** @type {readonly any[]} */ issues) => issues.map((i) => `${i.code}@${i.field}`)
 const ic = { discontinuation: { shareControl: P(0.1), shareTreated: P(0.3), retrievedShare: P(0.5) } }
 
 test('intercurrent events, the estimand and the new estimators are beta_logit scenarios with their numbers stated', () => {

@@ -26,14 +26,14 @@ test("each claim has its own words, in Chinese, with plain quotes and no back of
 });
 
 test("an individualized forecast is never called better without the frozen comparison, and the premise is one decisive row", () => {
-  const none = predictionClaimPremise("individualized_forecast");
+  const none = /** @type {any} */ (predictionClaimPremise("individualized_forecast"));
   assert.equal(none.decisive, true);
   assert.equal(none.key, "claim:individualized_forecast");
   assert.ok(none.value.includes("不说它比简单做法更准"));
-  const no = predictionClaimPremise("individualized_forecast", { helped: false });
+  const no = /** @type {any} */ (predictionClaimPremise("individualized_forecast", { helped: false }));
   assert.ok(no.value.includes("没有显示比") && !no.value.includes("小于"));
-  const yes = predictionClaimPremise("individualized_forecast", { helped: true });
+  const yes = /** @type {any} */ (predictionClaimPremise("individualized_forecast", { helped: true }));
   assert.ok(yes.value.includes("95%区间不含0"));
   // the other two claims say nothing about accuracy of individualizing
-  assert.ok(!predictionClaimPremise("population_forecast", { helped: true }).value.includes("95%"));
+  assert.ok(!/** @type {any} */ (predictionClaimPremise("population_forecast", { helped: true })).value.includes("95%"));
 });

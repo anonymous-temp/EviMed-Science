@@ -11,7 +11,7 @@ const ad = (/** @type {any} */ treatment = {}) => ({
   endpoint: { type: 'continuous', unit: 'points' }, design: { nTreat: 60, nControl: 60 }, timeUnit: 'weeks', visits: [0, 26, 52, 78],
   model: { family: 'beta_logit', parameterSet: { id: 'camd-adas-cog-11', version: 'adsim-3.0' } }, treatment,
 })
-const codes = (/** @type {any[]} */ issues) => issues.map((i) => `${i.code}@${i.field}`)
+const codes = (/** @type {readonly any[]} */ issues) => issues.map((i) => `${i.code}@${i.field}`)
 const chain = { drug: 'aducanumab', regimen: { maintenanceMgPerKg: 10, titrationMgPerKg: [1, 1, 3, 3, 6, 6], intervalWeeks: 4 }, atWeek: 78 }
 
 test('a marketed inhibitor, a background inhibitor and the antibody chain are keys of the Alzheimer treatment, and nothing else is', () => {
@@ -81,7 +81,7 @@ test('a phase-2 estimate is a normal with the spread it states, and a spread nob
   assert.equal(/** @type {any} */ (vcrEffectPriorFromEstimate({ estimate: -3 })).reason, 'effect_prior_spread_missing')
   assert.equal(/** @type {any} */ (vcrEffectPriorFromEstimate({ estimate: -3, se: -1 })).reason, 'effect_prior_spread_invalid')
   assert.equal(/** @type {any} */ (vcrEffectPriorFromEstimate({ estimate: -3, lower: 1, upper: 0 })).reason, 'effect_prior_spread_invalid')
-  assert.equal(/** @type {any} */ (vcrEffectPriorFromEstimate({})).reason, 'effect_prior_estimate_missing')
+  assert.equal(/** @type {any} */ (vcrEffectPriorFromEstimate(/** @type {any} */ ({}))).reason, 'effect_prior_estimate_missing')
 })
 
 test('the module is exported from the package index', () => {

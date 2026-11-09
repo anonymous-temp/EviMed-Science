@@ -12,8 +12,8 @@ const form = (/** @type {any} */ over = {}) => ({
   vary: { 'design.nTreat+design.nControl': [[80, 80], [120, 120], [160, 160]] },
   goal: { minimize: 'expected_sample_size', power: 0.8 }, ...over,
 })
-const compile = (/** @type {any} */ over) => vcrCampaignFromInput(form(over))
-const codes = (/** @type {any} */ over) => compile(over).issues.map((issue) => `${issue.code}@${issue.field}`)
+const compile = (/** @type {any} */ over = undefined) => vcrCampaignFromInput(form(over))
+const codes = (/** @type {any} */ over = undefined) => compile(over).issues.map((issue) => `${issue.code}@${issue.field}`)
 
 test('a short form compiles to a frozen manifest with the evaluator written by code', () => {
   const out = compile()

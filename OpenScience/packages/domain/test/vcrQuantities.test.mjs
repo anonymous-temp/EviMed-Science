@@ -12,7 +12,7 @@ test("the set is closed and every name is its own words, a label never reused", 
   // the three the uncertainty modes of a simulation produce are the first three, one each
   assert.deepEqual(Object.values(VCR_UNCERTAINTY_MODE_QUANTITY), ["conditional_power_typical_study", "expected_power_over_studies", "expected_power_over_parameters"]);
   // no label of an averaged quantity is called 功效, and no name of a programme's success exists
-  for (const id of VCR_RESULT_QUANTITIES.filter((entry) => entry !== "conditional_power_typical_study")) assert.doesNotMatch(VCR_RESULT_QUANTITY_LABELS_ZH[id], /功效/, id);
+  for (const id of VCR_RESULT_QUANTITIES.filter((entry) => entry !== "conditional_power_typical_study")) assert.doesNotMatch(/** @type {Record<string, string>} */ (VCR_RESULT_QUANTITY_LABELS_ZH)[id], /功效/, id);
   for (const label of Object.values(VCR_RESULT_QUANTITY_LABELS_ZH)) assert.doesNotMatch(label, /研发成功率|项目成功/);
   assert.match(VCR_SIMULATION_ERROR_SENTENCE_ZH, /模拟本身的误差.*模型形式.*药效假设/);
 });
@@ -24,7 +24,7 @@ test("a quantity that needs more than a run is computed only when everything it 
   assert.deepEqual(none.missing, ["effectPrior", "mid", "betweenStudy", "estimand"]);
   const partial = vcrQuantityAvailability("trial_success_probability", { effectPrior: true, mid: true, betweenStudy: false, estimand: true });
   assert.deepEqual(partial.missing, ["betweenStudy"], "a fact stated false is missing, like one not stated");
-  assert.match(partial.sentence, /得到显著结果且药效达到最小重要差异的概率.*没有计算.*研究之间的差异/);
+  assert.match(String(partial.sentence), /得到显著结果且药效达到最小重要差异的概率.*没有计算.*研究之间的差异/);
   const all = vcrQuantityAvailability("trial_success_probability", { effectPrior: true, mid: true, betweenStudy: true, estimand: true });
   assert.deepEqual([all.computable, all.missing, all.sentence], [true, [], null]);
   assert.equal(vcrQuantityAvailability("expected_power_given_mid", { effectPrior: true }).missing[0], "mid");

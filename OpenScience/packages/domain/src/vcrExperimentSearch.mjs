@@ -1226,7 +1226,7 @@ export function vcrRobustChoice(table) {
   const z = vcrNormalQuantile(table.confidence)
   const weighted = scenarios.length > 0 && scenarios.every((entry) => finite(entry.weight) && Number(entry.weight) > 0)
   const weightSum = weighted ? scenarios.reduce((sum, entry) => sum + Number(entry.weight), 0) : 0
-  const weights = Object.fromEntries(scenarios.map((entry) => [entry.name, weighted ? Number(entry.weight) / weightSum : null]))
+  const weights = /** @type {Record<string, number>} */ (Object.fromEntries(scenarios.map((entry) => [entry.name, weighted ? Number(entry.weight) / weightSum : null])))
   const eligibleRow = (/** @type {Record<string, any>} */ row) => row.complete === true && row.referenceOnly !== true && row.guard !== 'fail'
   const eligible = table.rows.filter(eligibleRow)
   const powerOf = (/** @type {Record<string, any>} */ row, /** @type {string} */ name) => object(object(row.scenarios)[name]).power
@@ -1265,7 +1265,7 @@ export function vcrRobustChoice(table) {
   const input = new Map(table.rows.map((row) => [row.key, row]))
   const pool = rows.filter((row) => row.eligible && row.worstCase)
   // the criteria of the Pareto and near-optimal sets: those every eligible design has a number for
-  /** @type {Array<{ name: string, sense: 'min' | 'max', value: (row: any) => number | null, mcse: (row: any) => number, relative: boolean }>} */
+  /** @type {Array<{ name: string, sense: 'min' | 'max', value: (row: any) => number, mcse: (row: any) => number, relative: boolean }>} */
   const dims = []
   const dim = (/** @type {string} */ name, /** @type {'min' | 'max'} */ sense, /** @type {(row: any) => any} */ read, /** @type {boolean} */ relative) => {
     if (pool.length && pool.every((row) => finite(read(row)?.value))) dims.push({ name, sense, value: (row) => Number(read(row).value), mcse: (row) => (finite(read(row)?.mcse) ? Number(read(row).mcse) : 0), relative })
@@ -1283,7 +1283,7 @@ export function vcrRobustChoice(table) {
   }))) : []
   const cheapest = (/** @type {Array<Record<string, any>>} */ among, /** @type {'cost' | 'costBase'} */ field) => among
     .filter((row) => finite(input.get(row.key)?.[field]?.value))
-    .sort((a, b) => Number(input.get(a.key)[field].value) - Number(input.get(b.key)[field].value) || a.index - b.index)[0] ?? null
+    .sort((a, b) => Number(/** @type {any} */ (input.get(a.key))[field].value) - Number(/** @type {any} */ (input.get(b.key))[field].value) || a.index - b.index)[0] ?? null
   const acceptable = pool.filter((row) => row.acceptable === 'pass')
   const feasibleBase = new Set(table.baseFeasible ?? [])
   const cheapestAcceptable = cheapest(acceptable, 'cost')

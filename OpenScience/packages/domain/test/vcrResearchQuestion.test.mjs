@@ -7,7 +7,7 @@ import {
   questionRepresentability,
 } from "@evimed/domain";
 
-const patch = (raw) => { const { patch: p, issues } = normalizeQuestionPatch(raw); assert.deepEqual(issues, []); return p; };
+const patch = (/** @type {any} */ raw) => { const { patch: p, issues } = normalizeQuestionPatch(raw); assert.deepEqual(issues, []); return p; };
 
 test("every field is optional: an empty patch is no version and a first field is version 1", () => {
   assert.equal(applyQuestionPatch(null, {}, "person_stated").changed, false);
@@ -79,11 +79,11 @@ test("representability is computed from the model's capabilities, never refused"
 });
 
 test("the calibration estimand of the AD model, and when the question differs from it", () => {
-  const same = questionCalibration({ fields: { intercurrentEvents: [{ event: "退出", strategy: "hypothetical" }] } }, "camd-adas-cog-11");
+  const same = /** @type {any} */ (questionCalibration({ fields: { intercurrentEvents: [{ event: "退出", strategy: "hypothetical" }] } }, "camd-adas-cog-11"));
   assert.equal(same.differs, false);
   assert.match(same.sentence, /混合的试验数据/);
-  assert.equal(questionCalibration({ fields: { intercurrentEvents: [{ event: "停药", strategy: "treatment_policy" }] } }, "camd-adas-cog-11").differs, true);
-  assert.equal(questionCalibration({ fields: {} }, "camd-adas-cog-11").differs, false, "no stated strategy, nothing to differ from");
+  assert.equal(/** @type {any} */ (questionCalibration({ fields: { intercurrentEvents: [{ event: "停药", strategy: "treatment_policy" }] } }, "camd-adas-cog-11")).differs, true);
+  assert.equal(/** @type {any} */ (questionCalibration({ fields: {} }, "camd-adas-cog-11")).differs, false, "no stated strategy, nothing to differ from");
   assert.equal(questionCalibration({ fields: {} }, "unknown"), null, "nothing is claimed about a model whose data are not described");
 });
 

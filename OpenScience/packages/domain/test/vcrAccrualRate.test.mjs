@@ -19,7 +19,7 @@ test("a rate per month gives the duration of its people, in the scenario's unit,
   assert.deepEqual(read.applied.map((entry) => [entry.field, entry.value]), [["accrual.duration", 30]]);
   assert.match(read.applied[0].took, /^derived: 600 people at 20 per months take 30 months/);
   assert.deepEqual(codes(read.scenario), []);
-  assert.equal(SIM.accrual.duration, undefined, "the input is not mutated");
+  assert.equal(/** @type {any} */ (SIM.accrual).duration, undefined, "the input is not mutated");
 });
 
 test("an unequal allocation and another unit: the sizes add up, and the rate's unit is converted exactly", () => {

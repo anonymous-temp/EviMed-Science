@@ -14,7 +14,7 @@ const ad = (/** @type {any} */ treatment = {}, /** @type {any} */ over = {}) => 
 })
 const SOURCE = { kind: 'literature', citation: 'a published effect estimate' }
 const dist = (/** @type {string} */ family, /** @type {any} */ parameters, /** @type {string} */ tier = 'A') => ({ distribution: { family, parameters, source: SOURCE, tier } })
-const codes = (/** @type {any[]} */ issues) => issues.map((i) => `${i.code}@${i.field}`)
+const codes = (/** @type {readonly any[]} */ issues) => issues.map((i) => `${i.code}@${i.field}`)
 const sym = (/** @type {any} */ pointsAt) => ({ symptomatic: { pointsAt, atWeek: 26, referenceAdas: 25, et50Weeks: { value: 8, basis: 'assumed' } } })
 
 test('the progression method is 1.2.0 and still reads what 1.0.0 and 1.1.0 wrote', () => {
@@ -30,8 +30,8 @@ test('an effect is a number with its basis, or a distribution with its family, p
   assert.deepEqual(run(sym({ value: -2.5, basis: 'assumed' })), [], 'the number as before')
   assert.deepEqual(run(sym(dist('normal', { mean: -2, sd: 1 }))), [])
   assert.deepEqual(run({ diseaseModifying: { fraction: dist('beta', { shape1: 2, shape2: 8 }, 'B') } }), [])
-  for (const [family, parameters] of [['fixed', { value: -2 }], ['normal', { mean: 0, sd: 1 }], ['truncated_normal', { mean: 0, sd: 1, lower: -3, upper: 3 }], ['lognormal', { meanlog: 0, sdlog: 1 }],
-    ['beta', { shape1: 1, shape2: 1 }], ['uniform', { min: -3, max: -1 }], ['empirical_draws', { values: [-1, -2, -3] }]]) {
+  for (const [family, parameters] of /** @type {Array<[string, any]>} */ ([['fixed', { value: -2 }], ['normal', { mean: 0, sd: 1 }], ['truncated_normal', { mean: 0, sd: 1, lower: -3, upper: 3 }], ['lognormal', { meanlog: 0, sdlog: 1 }],
+    ['beta', { shape1: 1, shape2: 1 }], ['uniform', { min: -3, max: -1 }], ['empirical_draws', { values: [-1, -2, -3] }]])) {
     assert.deepEqual(run(sym(dist(family, parameters))), [], family)
   }
   const missing = (/** @type {string} */ part) => { const e = dist('normal', { mean: -2, sd: 1 }); delete (/** @type {any} */ (e.distribution))[part]; return run(sym(e)) }
@@ -75,16 +75,16 @@ test('a job that uses the 1.2.0 features is refused under an older label and acc
 
 test('a comparison names a record of people and how the arms use it; it is frozen with the record and the mode', () => {
   const arms = (/** @type {any} */ over = {}) => [{ name: 'none', method: 'patients.progression', scenario: ad({}, over) }, { name: 'symptomatic', method: 'patients.progression', scenario: ad(sym({ value: -2.5, basis: 'assumed' }), over) }]
-  const input = (/** @type {any} */ people, /** @type {any} */ over) => ({ question: 'q', arms: arms(over), comparison: { measures: ['power'], reference: 'none' }, ...(people ? { people } : {}) })
+  const input = (/** @type {any} */ people, /** @type {any} */ over = undefined) => ({ question: 'q', arms: arms(over), comparison: { measures: ['power'], reference: 'none' }, ...(people ? { people } : {}) })
   const frozen = vcrDesignExperiment(input({ recordId: 'res_1', mode: 'paired_counterfactual' }), { methods })
   assert.deepEqual(frozen.issues, [])
   assert.deepEqual(frozen.record?.people, { recordId: 'res_1', mode: 'paired_counterfactual' })
-  const bytes = (/** @type {any} */ people) => vcrDesignExperimentCanonical(/** @type {any} */ (vcrDesignExperiment(input(people), { methods }).record))
+  const bytes = (/** @type {any} */ people = undefined) => vcrDesignExperimentCanonical(/** @type {any} */ (vcrDesignExperiment(input(people), { methods }).record))
   assert.notEqual(bytes({ recordId: 'res_1', mode: 'paired_counterfactual' }), bytes({ recordId: 'res_1', mode: 'resampled_trials' }), 'another mode is another experiment')
   assert.notEqual(bytes({ recordId: 'res_1', mode: 'resampled_trials' }), bytes({ recordId: 'res_2', mode: 'resampled_trials' }), 'another record is another experiment')
   assert.notEqual(bytes({ recordId: 'res_1', mode: 'resampled_trials' }), bytes(undefined), 'with and without a record')
   assert.equal(vcrDesignExperiment(input(undefined), { methods }).record?.people, undefined, 'no people key when none is named')
-  const bad = (/** @type {any} */ people, /** @type {any} */ over) => codes(vcrDesignExperiment(input(people, over), { methods }).issues)
+  const bad = (/** @type {any} */ people, /** @type {any} */ over = undefined) => codes(vcrDesignExperiment(input(people, over), { methods }).issues)
   assert.deepEqual(bad({ recordId: 'bad id', mode: 'resampled_trials' }), ['experiment_value_invalid@people.recordId'])
   assert.deepEqual(bad({ recordId: 'res_1', mode: 'all' }), ['experiment_value_invalid@people.mode'])
   assert.deepEqual(bad({ recordId: 'res_1', mode: 'resampled_trials' }, { population: { mmseRange: { value: [16, 26], basis: 'assumed' } } }).filter((c) => c.startsWith('experiment_people_conflict')).length, 2, 'both arms')

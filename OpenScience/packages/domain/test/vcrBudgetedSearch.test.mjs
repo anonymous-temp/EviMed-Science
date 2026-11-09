@@ -33,9 +33,9 @@ const manifestInput = (/** @type {any} */ budget = {}, /** @type {any} */ stages
   stages: { screening: { replicates: 500 }, final: { count: 1 }, ...stages },
   budget: { maxCandidates: world.length, cpuSeconds: 600_000, modelCalls: 0, ...budget },
 })
-const frozen = (/** @type {any} */ budget, /** @type {any} */ stages, world = WORLD) => { const out = vcrCampaignManifest(manifestInput(budget, stages, world)); assert.deepEqual(out.issues, []); return /** @type {Record<string, any>} */ (out.manifest) }
+const frozen = (/** @type {any} */ budget = undefined, /** @type {any} */ stages = undefined, world = WORLD) => { const out = vcrCampaignManifest(manifestInput(budget, stages, world)); assert.deepEqual(out.issues, []); return /** @type {Record<string, any>} */ (out.manifest) }
 
-function mulberry32(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
+function mulberry32(/** @type {number} */ seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
 const binomial = (/** @type {number} */ n, /** @type {number} */ p, /** @type {() => number} */ rng) => { let k = 0; for (let i = 0; i < n; i++) if (rng() < p) k += 1; return k }
 
 /** Drive a campaign to its stop; `units` is every unit the machine asked for, in order. */
@@ -60,7 +60,7 @@ function drive(/** @type {Record<string, any>} */ manifest, /** @type {number} *
     const measures = [{ name: 'expected_sample_size', value: c.n, mcse: 0, simulated: true, ...(screening ? { precision: 'screening' } : {}) },
       alt ? { name: 'power', value: p, mcse: Math.sqrt(p * (1 - p) / replicates), simulated: true, ...(screening ? { precision: 'screening' } : {}) }
         : { name: 'type_one_error', value: p, mcse: Math.sqrt(p * (1 - p) / replicates), simulated: true }]
-    state = vcrCampaignRecord(manifest, { ...state, inFlight: { unitKey: unit.key, unit } }, unit,
+    state = vcrCampaignRecord(manifest, { ...state, inFlight: { unitKey: unit.key, unit } }, /** @type {any} */ (unit),
       { jobId: `j_${unit.key}`, state: 'succeeded', seed: unit.seed, replicates, precision: screening ? 'screening' : 'final', measures, cpuSeconds: replicates / 1000 })
   }
   return { state, units, candidates }
