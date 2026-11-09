@@ -132,7 +132,10 @@ export const VCR_CAMPAIGN_FROZEN_PATHS = Object.freeze({
   'design.simulate': Object.freeze(['accrual.dropoutAnnual']),
   'design.dose': Object.freeze(['design.targetToxicity']),
   // the drug hypothesis is the evaluator's world, as are the model, its population and what the analysis estimates
-  'patients.progression': Object.freeze(['treatment', 'model', 'population', 'placebo', 'dropoutModel', 'analysis.kind']),
+  // the intercurrent mechanism, the data the analysis reads, its delta and the estimand are the question asked of the world, not a design choice: a
+  // search for power would pick the lowest discontinuation or the data set with more power and change the estimand without saying so (review S8); they
+  // stay legitimate `world` paths of a scenario, where the person states them
+  'patients.progression': Object.freeze(['treatment', 'model', 'population', 'placebo', 'dropoutModel', 'analysis.kind', 'intercurrent', 'analysis.data', 'analysis.delta', 'analysis.jackknifeGroups', 'estimand']),
 })
 
 /** The fields of a design.simulate scenario that only analyse or judge the draws: candidates differing only here share their draws. */
@@ -140,7 +143,7 @@ const DRAW_NEUTRAL = Object.freeze(['truth', 'analysis', 'performance', 'targetM
   'design.informationRates', 'design.spending'])
 
 export const VCR_CAMPAIGN_LIMITS = Object.freeze({
-  maxSpace: 10_000, maxCandidates: 200, maxVariables: 6, maxValues: 50, maxTruths: 4, maxConstraints: 8,
+  maxSpace: 10_000, maxCandidates: 200, maxVariables: 6, maxValues: 50, maxTruths: 8, maxConstraints: 8,
   finalCountMax: 5, replicatesMax: 500_000_000, cpuSecondsMax: 7 * 24 * 3600, modelCallsMax: 1000, questionMax: 500,
 })
 
@@ -362,6 +365,20 @@ export function vcrCampaignManifest(input) {
     }
   } else if (truths.some((entry) => entry.weight !== undefined)) bad('campaign_weights_incomplete', 'space.truths', 'Scenario weights belong to a robust reading of two or more effect scenarios.')
 
+  // The type I error is judged in every world an effect scenario changes (review S10): a scenario whose `world` re-states the dropout or the
+  // intercurrent mechanism has its own null (the same world, no effect) and an error-control constraint on it, because a mechanism that depends on the
+  // arm or on progression inflates the type I error of a completers' analysis in THAT world and the base null never sees it.
+  if (constraints.some((c) => c.kind === 'error_control')) {
+    const isEffect = (/** @type {string} */ name) => effectNames.includes(name)
+    for (const [i, entry] of truths.entries()) {
+      if (!isEffect(entry.name) || entry.world === undefined) continue
+      const key = canonicalScenarioJson(entry.world)
+      const guarded = truths.some((other) => !isEffect(other.name) && other.world !== undefined && canonicalScenarioJson(other.world) === key
+        && constraints.some((c) => c.kind === 'error_control' && c.truth === other.name))
+      if (!guarded) bad('campaign_world_error_control_missing', `space.truths[${i}].world`, `The scenario "${entry.name}" changes the world; the type I error is held in that world too: add a truth with no effect and the same world, and an error-control constraint on it.`)
+    }
+  }
+
   // the analysis level may be searched only downward from the frozen constraint: each level at or below the smallest error-control bound
   const searchedLevels = [
     ...variables.filter((entry) => entry.path === VCR_CAMPAIGN_ALPHA_PATH).flatMap((entry, _i) => entry.values.map((value) => ({ field: `space.variables[${variables.indexOf(entry)}].values`, value }))),
@@ -580,6 +597,18 @@ export function vcrSearchFromForm(input) {
     }
   }
   const nullName = truths.find((entry) => entry.name === 'null' || entry.name === 'none')?.name
+  // each scenario that changes the world gets its own no-effect counterpart in that world, held to the same error-control bound (review S10)
+  /** @type {string[]} */
+  const worldNulls = []
+  if (nullName) {
+    const nullTruth = truths.find((entry) => entry.name === nullName)
+    const withWorld = truths.filter((entry) => entry.name !== nullName && /** @type {any} */ (entry).world != null)
+    for (const [k, entry] of withWorld.entries()) {
+      const name = `${nullName}_w${k + 1}`
+      truths.push({ name, truth: object(nullTruth?.truth), world: /** @type {any} */ (entry).world })
+      worldNulls.push(name)
+    }
+  }
 
   // what varies: one path each, or several that move together ("design.nTreat+design.nControl")
   const varyIn = object(form.vary)
@@ -615,6 +644,7 @@ export function vcrSearchFromForm(input) {
     // the frozen constraint: the nominal level of the analysis, never a number the form chooses
     const alpha = typeof base.analysis?.alpha === 'number' ? base.analysis.alpha : info.defaultAlpha ?? 0.025
     constraints.push({ measure: 'type_one_error', op: '<=', bound: alpha, kind: 'error_control', truth: nullName })
+    for (const name of worldNulls) constraints.push({ measure: 'type_one_error', op: '<=', bound: alpha, kind: 'error_control', truth: name })
   }
 
   // stages and budget: sized by code from the space
@@ -924,14 +954,30 @@ export function vcrEvaluationMeasure(evaluation, name) {
 }
 
 /**
+ * The confidence a FINAL verdict is read at. A fixed-structure campaign reads each design once, at the constraint's own confidence. A budgeted one
+ * may run an undecided design fresh up to `VCR_ALLOCATION.maxRounds` more times and reads the last run, so a design gets up to `maxRounds + 1`
+ * looks and passes if the look it ends on passes: with every look at the constraint's confidence a design exactly on its bound was certified
+ * 3.3% of the time against 2.4% for one look (review S3, 20,000 simulated campaigns). The error is therefore split across the looks (Bonferroni:
+ * each look at 1 - (1 - c) / (maxRounds + 1)), which keeps the chance that ANY look certifies a design at its bound at or below 1 - c.
+ * @param {Record<string, any>} manifest @param {{ confidence?: number }} constraint
+ */
+export function vcrFinalConfidence(manifest, constraint) {
+  const c = Number(constraint.confidence ?? 0.975)
+  const budgeted = Number.isInteger(manifest?.budget?.replicates) || manifest?.budget?.allocation === 'sequential'
+  return budgeted ? 1 - (1 - c) / (VCR_ALLOCATION.maxRounds + 1) : c
+}
+
+/**
  * The verdict of one constraint on one evaluation. `stage` is the stage the verdict is for: a measure at screening precision is
  * never judged for the final stage (`screening_result_not_final`), and a verdict at screening stage is provisional.
- * @param {Record<string, any>} manifest @param {Record<string, any>} constraint
+ * @param {Record<string, any>} manifest @param {Record<string, any>} asked the constraint
  * @param {Record<string, any> | null | undefined} evaluation the unit's outcome (`measures`, `replicates`, `precision`, `state`)
  * @param {{ stage: 'screening' | 'final' }} options
  * @returns {Record<string, any>} `{ status, final, reason?, estimate?, mcse?, bound? }`
  */
-export function vcrJudgeConstraint(manifest, constraint, evaluation, { stage }) {
+export function vcrJudgeConstraint(manifest, asked, evaluation, { stage }) {
+  // a final verdict is read at the confidence the looks of its design allow (`vcrFinalConfidence`), a screening one only eliminates
+  const constraint = stage === 'final' ? { ...asked, confidence: vcrFinalConfidence(manifest, asked) } : asked
   if (!evaluation || evaluation.state !== 'succeeded') return { status: 'not_judged', final: false, reason: evaluation ? 'evaluation_failed' : 'not_evaluated' }
   const screeningMeasure = (/** @type {any} */ m) => object(m).precision === 'screening'
   const measure = vcrEvaluationMeasure(evaluation, constraint.measure)
@@ -1221,7 +1267,7 @@ const finite = (value) => value != null && Number.isFinite(Number(value))
  *
  * Hidden knowledge:
  * - **Eligible** designs are complete (every scenario evaluated), not kept only as a reference, and not failing an error-control or safety
- *   constraint (`guard: 'fail'`); an ineligible design still gets its row and its numbers, and never enters a set or defines a best.
+ *   constraint (`guard: 'fail'`) or whose such constraint is not settled either way (`guard: 'inconclusive'`, listed as `unsettled`); an ineligible design still gets its row and its numbers, and never enters a set or defines a best.
  * - **Worst case is a minimum of noisy numbers**, so it leans optimistic for the design that wins it; its error is the error of the
  *   scenario that was the minimum, and acceptability is judged on the Clopper-Pearson bound of every scenario instead.
  * - **Regret is against the best design of the table in that scenario** on power. Its error is the contrast's own (`contrast`, paired when
@@ -1241,7 +1287,7 @@ export function vcrRobustChoice(table) {
   const weighted = scenarios.length > 0 && scenarios.every((entry) => finite(entry.weight) && Number(entry.weight) > 0)
   const weightSum = weighted ? scenarios.reduce((sum, entry) => sum + Number(entry.weight), 0) : 0
   const weights = /** @type {Record<string, number>} */ (Object.fromEntries(scenarios.map((entry) => [entry.name, weighted ? Number(entry.weight) / weightSum : null])))
-  const eligibleRow = (/** @type {Record<string, any>} */ row) => row.complete === true && row.referenceOnly !== true && row.guard !== 'fail'
+  const eligibleRow = (/** @type {Record<string, any>} */ row) => row.complete === true && row.referenceOnly !== true && row.guard !== 'fail' && row.guard !== 'inconclusive'
   const eligible = table.rows.filter(eligibleRow)
   const powerOf = (/** @type {Record<string, any>} */ row, /** @type {string} */ name) => object(object(row.scenarios)[name]).power
   // the best design in each scenario, on power; the lower index decides a tie
@@ -1314,6 +1360,8 @@ export function vcrRobustChoice(table) {
     bestIn: Object.fromEntries(names.map((name) => [name, bestIn[name]?.key ?? null])),
     pareto: pareto.map((row) => row.key), nearOptimal: near.map((row) => row.key), acceptable: acceptable.map((row) => row.key),
     inconclusive: pool.filter((row) => row.acceptable === 'inconclusive').map((row) => row.key),
+    // visible with their numbers, outside every set: their type I error (or safety) is not settled either way
+    unsettled: rows.filter((row) => row.complete && row.referenceOnly !== true && row.guard === 'inconclusive').map((row) => row.key),
     maximin: leader((row) => row.worstCase.value, 1)?.key ?? null,
     minimaxRegret: leader((row) => row.regret.max.value, -1)?.key ?? null,
     cheapestAcceptable: cheapestAcceptable?.key ?? null, cheapestUnderBase: cheapestUnderBase?.key ?? null,
@@ -1412,10 +1460,13 @@ export function vcrCampaignRobust(manifest, state, baseFeasible) {
  *   `maxRounds` times;
  * - a finalist whose first constraint already fails on its final evaluation is not run on its other truths (the verdict could not change);
  * - the campaign stops when nothing in play can still beat the best, or when nothing in play fits the remaining budget.
- * Error control is untouched: a verdict still reads only a final evaluation at the method's floor or more, on a stream no screening unit and no
- * earlier run of that design used, at the constraints' own confidence. A re-run is judged on its own fresh data alone (the earlier run decided
- * only whether to run it; its data are kept as `superseded`, never pooled), which keeps each design's bound exact. More designs judged means more
- * chances for one to pass by luck, as it always has with more finalists (`verdict.selection`); the benchmark measures it.
+ * Error control: a verdict still reads only a final evaluation at the method's floor or more, on a stream no screening unit and no earlier run of
+ * that design used. A re-run is judged on its own fresh data alone (the earlier run decided only whether to run it; its data are kept as
+ * `superseded`, never pooled), but a design that may be looked at `maxRounds + 1` times and passes on the look it ends on is certified more often than
+ * one look would: measured 3.3% against 2.4% for a design exactly on its bound at 97.5% (review S3). So each look is read at the constraint's
+ * error split across the looks (`vcrFinalConfidence`, Bonferroni), and the chance that any look certifies a design at its bound stays at or below the
+ * stated 1 - confidence. More designs judged means more chances for one to pass by luck, as it always has with more finalists (`verdict.selection`);
+ * the benchmark measures it.
  */
 export const VCR_ALLOCATION = Object.freeze({ maxRounds: 2, maxGrowth: 4, screeningShare: 0.2, firstWave: 1 })
 

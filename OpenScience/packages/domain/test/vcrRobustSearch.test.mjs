@@ -140,6 +140,11 @@ const manifestOf = (/** @type {any} */ over = {}, /** @type {any} */ truths = nu
 const campaign = (/** @type {any} */ input) => /** @type {Built} */ (/** @type {any} */ (vcrCampaignManifest(input)))
 const issuesOf = (/** @type {any} */ input) => campaign(input).issues.map((/** @type {any} */ issue) => issue.code)
 const ID = 'b'.repeat(64)
+/** a manifest whose `base` scenario sits in a changed world: the type I error is held in that world too (a null of the same world and its constraint) */
+const inWorld = (/** @type {any} */ w, /** @type {any} */ extra = {}) => manifestOf({
+  constraints: [{ measure: 'power', op: '>=', bound: 0.8, kind: 'design', truth: 'base' }, { measure: 'type_one_error', op: '<=', bound: 0.025, kind: 'error_control', truth: 'null' },
+    { measure: 'type_one_error', op: '<=', bound: 0.025, kind: 'error_control', truth: 'null_w1' }] },
+[{ name: 'optimistic', truth: truth(0.6) }, { name: 'base', truth: truth(0.7), world: w, ...extra }, { name: 'null', truth: truth(1) }, { name: 'null_w1', truth: truth(1), world: w }])
 
 test('two or more effect scenarios make the reading robust, with every default written into the frozen manifest', () => {
   const out = campaign(manifestOf())
@@ -153,7 +158,7 @@ test('two or more effect scenarios make the reading robust, with every default w
 })
 
 test('a scenario states a world and a weight; the world cannot move the evaluator or a searched path, and weights are all or none', () => {
-  const world = (/** @type {any} */ w, extra = {}) => manifestOf({}, [{ name: 'optimistic', truth: truth(0.6) }, { name: 'base', truth: truth(0.7), world: w, ...extra }, { name: 'null', truth: truth(1) }])
+  const world = (/** @type {any} */ w, extra = {}) => inWorld(w, extra)
   assert.deepEqual(issuesOf(world({ 'accrual.dropoutAnnual': 0.2, 'accrual.followup': 18 })), [])
   assert.ok(issuesOf(world({ 'analysis.alpha': 0.1 })).includes('campaign_value_frozen'))
   assert.ok(issuesOf(world({ endpoint: { type: 'binary' } })).includes('campaign_value_frozen'))
@@ -200,8 +205,7 @@ test('every design runs in every scenario on one stream: the scenarios differ by
 })
 
 test('a scenario\'s world is applied to the scenario its unit runs, and only to that scenario', () => {
-  const input = manifestOf({}, [{ name: 'optimistic', truth: truth(0.6) }, { name: 'base', truth: truth(0.7), world: { 'accrual.dropoutAnnual': 0.25 } }, { name: 'null', truth: truth(1) }])
-  const manifest = campaign(input).manifest
+  const manifest = campaign(inWorld({ 'accrual.dropoutAnnual': 0.25 })).manifest
   const candidate = vcrCampaignCandidates(manifest)[0]
   const base = vcrCandidateScenario(manifest, candidate, 'base', 'final')
   assert.equal(base.accrual.dropoutAnnual, 0.25)
@@ -276,7 +280,10 @@ test('the short form states several effect scenarios and compiles to a robust ma
   const out = /** @type {Built} */ (/** @type {any} */ (vcrCampaignFromInput(form)))
   assert.deepEqual(out.issues, [])
   const m = out.manifest
-  assert.deepEqual(m.space.truths.map((/** @type {any} */ t) => t.name), ['optimistic', 'base', 'pessimistic', 'null'])
+  // the scenario that changes the world has its own null in that world (review S10), held to the same bound
+  assert.deepEqual(m.space.truths.map((/** @type {any} */ t) => t.name), ['optimistic', 'base', 'pessimistic', 'null', 'null_w1'])
+  assert.deepEqual(m.space.truths[4], { name: 'null_w1', truth: { hazardRatio: 1, controlMedian: 12 }, world: { 'accrual.dropoutAnnual': 0.2 } })
+  assert.ok(m.constraints.some((/** @type {any} */ c) => c.kind === 'error_control' && c.truth === 'null_w1' && c.bound === 0.025))
   assert.deepEqual(m.space.truths[1].truth, BASE.truth, 'a scenario without an effect is the base scenario\'s own')
   assert.deepEqual(m.space.truths[2].truth, { hazardRatio: 0.8, controlMedian: 12 }, 'an effect states only what differs')
   assert.deepEqual(m.space.truths[2].world, { 'accrual.dropoutAnnual': 0.2 })
@@ -289,4 +296,36 @@ test('the short form states several effect scenarios and compiles to a robust ma
   assert.ok(issues([{ name: 'base' }]).includes('search_form_scenarios'))
   assert.ok(issues([{ name: 'a', effect: { hazardRatio: 0.6 } }, { name: 'b', effect: { hazardRatio: 0.8 } }]).includes('search_form_scenarios'), 'one is named base')
   assert.ok(issues([{ name: 'base' }, { name: 'a', extra: 1 }]).includes('search_form_field_unknown'))
+})
+
+test('a scenario that changes the world must have its type I error held in that world (review S10)', () => {
+  // the base null alone is not enough: a mechanism that depends on the arm inflates the type I error only in its own world
+  assert.ok(issuesOf(manifestOf({}, [{ name: 'optimistic', truth: truth(0.6) }, { name: 'base', truth: truth(0.7), world: { 'accrual.dropoutAnnual': 0.2 } }, { name: 'null', truth: truth(1) }])).includes('campaign_world_error_control_missing'))
+  assert.deepEqual(issuesOf(inWorld({ 'accrual.dropoutAnnual': 0.2 })), [])
+  // a null in ANOTHER world does not guard this one
+  assert.ok(issuesOf(manifestOf({ constraints: [{ measure: 'power', op: '>=', bound: 0.8, kind: 'design', truth: 'base' }, { measure: 'type_one_error', op: '<=', bound: 0.025, kind: 'error_control', truth: 'null_w1' }] },
+    [{ name: 'optimistic', truth: truth(0.6) }, { name: 'base', truth: truth(0.7), world: { 'accrual.dropoutAnnual': 0.2 } }, { name: 'null_w1', truth: truth(1), world: { 'accrual.dropoutAnnual': 0.3 } }])).includes('campaign_world_error_control_missing'))
+})
+
+test('the progression world the person states (intercurrent, analysis data, delta, estimand) is the evaluator\'s, never searched (review S8)', () => {
+  for (const path of ['intercurrent.discontinuation.shareTreated', 'analysis.data', 'analysis.delta', 'estimand.strategy']) {
+    const input = { question: 'q', objective: { measure: 'total_sample_size', direction: 'minimize', truth: 'drug' },
+      constraints: [{ measure: 'power', op: '>=', bound: 0.8, kind: 'design', truth: 'drug' }, { measure: 'type_one_error', op: '<=', bound: 0.05, kind: 'error_control', truth: 'none' }],
+      space: { method: 'patients.progression', scenario: { timeUnit: 'weeks' }, truths: [{ name: 'drug', truth: { symptomatic: { pointsAt: { value: -2, basis: 'assumed' } } } }, { name: 'none', truth: {} }],
+        variables: [{ path, values: [0.1, 0.4] }] }, stages: { screening: { replicates: 500 }, final: { count: 1 } }, budget: { maxCandidates: 2, cpuSeconds: 600, modelCalls: 0 } }
+    assert.ok(issuesOf(input).includes('campaign_value_frozen'), `${path} is a frozen path`)
+  }
+})
+
+test('a design whose type I error is unsettled is shown but never named acceptable or cheapest (review S4)', () => {
+  // A: 300 people, type I error inconclusive, power passes everywhere; B: 400 people, type I error passes, power passes everywhere
+  const mk = (/** @type {string} */ key, /** @type {number} */ index, /** @type {string} */ guard, /** @type {number} */ n) => ({ key, index, complete: true, guard,
+    scenarios: { base: { power: power(0.9, 'pass') }, pessimistic: { power: power(0.85, 'pass') } }, n: { value: n, mcse: 0 }, duration: { value: 24, mcse: 0 }, cost: { value: n, mcse: 0 }, costBase: { value: n, mcse: 0 } })
+  const out = robustChoice({ rows: [mk('A', 0, 'inconclusive', 300), mk('B', 1, 'pass', 400)], scenarios: [{ name: 'base' }, { name: 'pessimistic' }], tolerance: { power: 0.02, relative: 0.1 }, confidence: 0.975, baseFeasible: ['B'] })
+  assert.equal(out.cheapestAcceptable, 'B')
+  assert.equal(out.cheapestUnderBase, 'B')
+  assert.deepEqual(out.acceptable, ['B'])
+  assert.ok(!out.pareto.includes('A') && !out.nearOptimal.includes('A'))
+  assert.deepEqual(out.unsettled, ['A'], 'A stays visible, with its reason')
+  assert.equal(out.rows.find((/** @type {any} */ r) => r.key === 'A').worstCase.value, 0.85)
 })
