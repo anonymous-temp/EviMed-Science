@@ -1,0 +1,673 @@
+{
+ "id": "agent-organization-r37a",
+ "frozenAt": "2026-11-09",
+ "purpose": "Plan R37a: does the agent organize an experiment from natural language: the right method, the person's stated numbers carried into the call unchanged, and the research question's fields written. Graded by code over the recorded tool-call arguments before any number of any result is read.",
+ "samplesPerRequest": 2,
+ "turnTimeoutSeconds": 900,
+ "grading": {
+  "methodOk": "some call of a model tool carries a `kind` (or, for vcr_write, what=research_question) in `methods`",
+  "fixedOk": "each fixed item is found: some numeric leaf anywhere in the arguments of a method-matching call equals the value or one of its alternatives (relative 1e-9); rate = found / items",
+  "questionOk": "for research_question requests: the listed field names appear in the items of a vcr_write what=research_question call",
+  "sampleOk": "methodOk and every fixed item found (and every question field written)"
+ },
+ "requests": [
+  {
+   "id": "O01",
+   "text": "两臂生存期试验，对照组中位生存期 10 个月，预期 HR 0.70，入组 12 个月，再随访 18 个月，单侧 α 2.5%，要 90% 把握度。需要多少事件、多少人？",
+   "methods": [
+    "design_analytic"
+   ],
+   "fixed": [
+    {
+     "label": "HR",
+     "value": 0.7,
+     "alt": []
+    },
+    {
+     "label": "control median",
+     "value": 10,
+     "alt": []
+    },
+    {
+     "label": "accrual 12",
+     "value": 12,
+     "alt": []
+    },
+    {
+     "label": "follow-up 18",
+     "value": 18,
+     "alt": []
+    },
+    {
+     "label": "power 0.9",
+     "value": 0.9,
+     "alt": [
+      90
+     ]
+    },
+    {
+     "label": "alpha",
+     "value": 0.025,
+     "alt": [
+      2.5
+     ]
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O02",
+   "text": "肿瘤二线治疗试验，对照组中位 PFS 4.2 个月，新方案预期把中位数提高到 6.0 个月，两组 1:1，入组 18 个月、随访 12 个月，双侧 α 0.05，把握度 85%。样本量大概多少？",
+   "methods": [
+    "design_analytic"
+   ],
+   "fixed": [
+    {
+     "label": "control median",
+     "value": 4.2,
+     "alt": []
+    },
+    {
+     "label": "treatment median",
+     "value": 6.0,
+     "alt": []
+    },
+    {
+     "label": "accrual 18",
+     "value": 18,
+     "alt": []
+    },
+    {
+     "label": "follow-up 12",
+     "value": 12,
+     "alt": []
+    },
+    {
+     "label": "power 0.85",
+     "value": 0.85,
+     "alt": [
+      85
+     ]
+    },
+    {
+     "label": "alpha 0.05",
+     "value": 0.05,
+     "alt": [
+      0.025
+     ]
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O03",
+   "text": "心血管结局试验，一年事件率对照组 12%、治疗组预期 9%，两组各 800 人，随访 3 年，想知道用 log-rank 检验的功效有多高，用模拟来算。",
+   "methods": [
+    "design_simulation",
+    "design_analytic"
+   ],
+   "fixed": [
+    {
+     "label": "n per arm",
+     "value": 800,
+     "alt": []
+    },
+    {
+     "label": "follow-up 3",
+     "value": 3,
+     "alt": [
+      36
+     ]
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O04",
+   "text": "两臂生存期试验，每组 250 人，入组 12 个月，随访 24 个月，对照组中位生存期 12 个月，HR 0.75，单侧 α 2.5%。请用模拟估计功效，要求蒙特卡洛误差不超过 0.5 个百分点。",
+   "methods": [
+    "design_simulation"
+   ],
+   "fixed": [
+    {
+     "label": "n per arm",
+     "value": 250,
+     "alt": []
+    },
+    {
+     "label": "accrual 12",
+     "value": 12,
+     "alt": []
+    },
+    {
+     "label": "follow-up 24",
+     "value": 24,
+     "alt": []
+    },
+    {
+     "label": "control median",
+     "value": 12,
+     "alt": []
+    },
+    {
+     "label": "HR",
+     "value": 0.75,
+     "alt": []
+    },
+    {
+     "label": "alpha",
+     "value": 0.025,
+     "alt": [
+      2.5
+     ]
+    },
+    {
+     "label": "mcse",
+     "value": 0.005,
+     "alt": [
+      0.5
+     ]
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O05",
+   "text": "同一个生存期试验（对照中位 12 个月，HR 0.75，单侧 α 2.5%，入组 12 个月），我想看每组 150 到 250 人、随访 18 到 30 个月这个范围内，各种组合的功效是多少，做成一张网格。",
+   "methods": [
+    "design_grid"
+   ],
+   "fixed": [
+    {
+     "label": "control median",
+     "value": 12,
+     "alt": []
+    },
+    {
+     "label": "HR",
+     "value": 0.75,
+     "alt": []
+    },
+    {
+     "label": "alpha",
+     "value": 0.025,
+     "alt": [
+      2.5
+     ]
+    },
+    {
+     "label": "accrual 12",
+     "value": 12,
+     "alt": []
+    },
+    {
+     "label": "n low",
+     "value": 150,
+     "alt": []
+    },
+    {
+     "label": "n high",
+     "value": 250,
+     "alt": []
+    },
+    {
+     "label": "follow-up low",
+     "value": 18,
+     "alt": []
+    },
+    {
+     "label": "follow-up high",
+     "value": 30,
+     "alt": []
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O06",
+   "text": "两臂连续终点试验：24 个月 MMSE 下降均值 3 分、标准差 4 分，想看出两组差 1.5 分，双侧 α 0.05，80% 把握度，每组多少人？",
+   "methods": [
+    "design_analytic"
+   ],
+   "fixed": [
+    {
+     "label": "mean change",
+     "value": 3,
+     "alt": []
+    },
+    {
+     "label": "sd",
+     "value": 4,
+     "alt": []
+    },
+    {
+     "label": "difference",
+     "value": 1.5,
+     "alt": []
+    },
+    {
+     "label": "alpha 0.05",
+     "value": 0.05,
+     "alt": []
+    },
+    {
+     "label": "power 0.8",
+     "value": 0.8,
+     "alt": [
+      80
+     ]
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O07",
+   "text": "二分类终点试验：对照组应答率 30%，治疗组预期 45%，每组 150 人，双侧 α 0.05，功效是多少？",
+   "methods": [
+    "design_analytic",
+    "design_simulation"
+   ],
+   "fixed": [
+    {
+     "label": "control rate",
+     "value": 0.3,
+     "alt": [
+      30
+     ]
+    },
+    {
+     "label": "treatment rate",
+     "value": 0.45,
+     "alt": [
+      45
+     ]
+    },
+    {
+     "label": "n per arm",
+     "value": 150,
+     "alt": []
+    },
+    {
+     "label": "alpha",
+     "value": 0.05,
+     "alt": [
+      0.025
+     ]
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O08",
+   "text": "我们想知道，假如药物的真实 HR 不确定，服从均值 0.75（对数 HR 的标准差 0.12）的分布，每组 300 人、入组 12 个月随访 24 个月、对照中位生存期 12 个月，这个试验的 assurance（期望把握度）是多少？",
+   "methods": [
+    "assurance"
+   ],
+   "fixed": [
+    {
+     "label": "n per arm",
+     "value": 300,
+     "alt": []
+    },
+    {
+     "label": "HR",
+     "value": 0.75,
+     "alt": []
+    },
+    {
+     "label": "sd",
+     "value": 0.12,
+     "alt": []
+    },
+    {
+     "label": "accrual 12",
+     "value": 12,
+     "alt": []
+    },
+    {
+     "label": "follow-up 24",
+     "value": 24,
+     "alt": []
+    },
+    {
+     "label": "control median",
+     "value": 12,
+     "alt": []
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O09",
+   "text": "多中心入组预测：5 个中心，每个中心预计每月入组 2 人，计划入组 300 人，目前还没有开始入组。请预测入组大概需要多久。",
+   "methods": [
+    "accrual_forecast"
+   ],
+   "fixed": [
+    {
+     "label": "target patients",
+     "value": 300,
+     "alt": []
+    },
+    {
+     "label": "sites",
+     "value": 5,
+     "alt": []
+    },
+    {
+     "label": "rate",
+     "value": 2,
+     "alt": []
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O10",
+   "text": "一个关于风险比 0.62（95% 置信区间下限 0.45，上限 0.85）的观察性研究结论，想知道要多强的未测混杂才能抵消它，请算 E 值，这是 HR，事件不罕见。",
+   "methods": [
+    "evalue"
+   ],
+   "fixed": [
+    {
+     "label": "risk ratio",
+     "value": 0.62,
+     "alt": []
+    },
+    {
+     "label": "limit 0.85",
+     "value": 0.85,
+     "alt": [
+      0.45
+     ]
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O11",
+   "text": "轻中度阿尔茨海默病 78 周试验，每组 200 人，两组：安慰剂和一个疾病修饰药物（假设减缓进展 30%）。模拟 ADAS-cog 的变化并给出把握度。",
+   "methods": [
+    "design_simulation",
+    "generate_patients_longitudinal",
+    "patients_progression",
+    "design_analytic"
+   ],
+   "fixed": [
+    {
+     "label": "n per arm",
+     "value": 200,
+     "alt": []
+    },
+    {
+     "label": "weeks",
+     "value": 78,
+     "alt": []
+    },
+    {
+     "label": "slowing",
+     "value": 0.3,
+     "alt": [
+      30
+     ]
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O12",
+   "text": "阿尔茨海默病试验，78 周，每组 300 人，药物是对症药物，第 12 周 ADAS-cog 比安慰剂好 2 分，之后保持。想知道在这种设定下 78 周的组间差和把握度。",
+   "methods": [
+    "generate_patients_longitudinal",
+    "patients_progression",
+    "design_simulation"
+   ],
+   "fixed": [
+    {
+     "label": "n per arm",
+     "value": 300,
+     "alt": []
+    },
+    {
+     "label": "weeks",
+     "value": 78,
+     "alt": []
+    },
+    {
+     "label": "points",
+     "value": 2,
+     "alt": []
+    },
+    {
+     "label": "at week",
+     "value": 12,
+     "alt": []
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O13",
+   "text": "酮康唑每天 400 mg，连续用药，咪达唑仑口服 2 mg，估计咪达唑仑 AUC 比值。",
+   "methods": [
+    "pk_interaction"
+   ],
+   "fixed": [
+    {
+     "label": "dose 400",
+     "value": 400,
+     "alt": []
+    },
+    {
+     "label": "midazolam 2",
+     "value": 2,
+     "alt": []
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O14",
+   "text": "评价一组 6 位轻度认知障碍患者未来 24 个月的 MMSE 个体轨迹，需要每个人的预测。P1 72岁 男 MMSE 26 APOE4 携带；P2 68岁 女 MMSE 27 非携带；P3 75岁 女 MMSE 24 携带；P4 70岁 男 MMSE 25 非携带；P5 79岁 男 MMSE 23 携带；P6 66岁 女 MMSE 28 非携带。",
+   "methods": [
+    "forecast_trajectories",
+    "forecast_individualize",
+    "generate_patients_longitudinal"
+   ],
+   "fixed": [
+    {
+     "label": "P5 age",
+     "value": 79,
+     "alt": []
+    },
+    {
+     "label": "P3 MMSE",
+     "value": 24,
+     "alt": []
+    },
+    {
+     "label": "horizon 24",
+     "value": 24,
+     "alt": []
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O15",
+   "text": "把三项已发表研究合并起来看看：研究 1 log HR −0.30（标准误 0.12），研究 2 log HR −0.18（标准误 0.10），研究 3 log HR −0.40（标准误 0.20）。给我合并的效应和异质性。",
+   "methods": [
+    "pool_evidence"
+   ],
+   "fixed": [
+    {
+     "label": "study1",
+     "value": -0.3,
+     "alt": []
+    },
+    {
+     "label": "se1",
+     "value": 0.12,
+     "alt": []
+    },
+    {
+     "label": "study2",
+     "value": -0.18,
+     "alt": []
+    },
+    {
+     "label": "se2",
+     "value": 0.1,
+     "alt": []
+    },
+    {
+     "label": "study3",
+     "value": -0.4,
+     "alt": []
+    },
+    {
+     "label": "se3",
+     "value": 0.2,
+     "alt": []
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O16",
+   "text": "单臂 II 期试验：目标缓解率 40%，无效的界值 20%，单侧 α 5%，把握度 80%，要多少人？请用 Simon 二阶段设计。",
+   "methods": [
+    "design_analytic",
+    "design_simulation",
+    "design_grid"
+   ],
+   "fixed": [
+    {
+     "label": "target 0.4",
+     "value": 0.4,
+     "alt": [
+      40
+     ]
+    },
+    {
+     "label": "null 0.2",
+     "value": 0.2,
+     "alt": [
+      20
+     ]
+    },
+    {
+     "label": "alpha 0.05",
+     "value": 0.05,
+     "alt": [
+      5
+     ]
+    },
+    {
+     "label": "power 0.8",
+     "value": 0.8,
+     "alt": [
+      80
+     ]
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O17",
+   "text": "阿尔茨海默病 78 周试验每组 200 人，不确定的有：药物减缓比例（0 到 40%）、退出率（10% 到 40%）、安慰剂进展速度（0.8 到 1.2 倍）。哪项不确定性对‘做不做 III 期’的决定最关键？",
+   "methods": [
+    "value_of_information"
+   ],
+   "fixed": [
+    {
+     "label": "n per arm",
+     "value": 200,
+     "alt": []
+    },
+    {
+     "label": "slowing max",
+     "value": 0.4,
+     "alt": [
+      40
+     ]
+    },
+    {
+     "label": "dropout max",
+     "value": 0.4,
+     "alt": [
+      40
+     ]
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O18",
+   "text": "双臂生存期试验：HR 0.7，对照中位 10 个月，入组 12 个月，随访 18 个月，想比较期中分析一次（信息分数 0.5）的分组序贯设计和固定设计的功效、期望事件数。单侧 α 2.5%。",
+   "methods": [
+    "design_confirmatory",
+    "design_simulation",
+    "design_analytic"
+   ],
+   "fixed": [
+    {
+     "label": "HR",
+     "value": 0.7,
+     "alt": []
+    },
+    {
+     "label": "control median",
+     "value": 10,
+     "alt": []
+    },
+    {
+     "label": "accrual 12",
+     "value": 12,
+     "alt": []
+    },
+    {
+     "label": "follow-up 18",
+     "value": 18,
+     "alt": []
+    },
+    {
+     "label": "info fraction",
+     "value": 0.5,
+     "alt": []
+    }
+   ],
+   "questionFields": []
+  },
+  {
+   "id": "O19",
+   "text": "帮我整理一个研究问题放到页面上：在轻中度阿尔茨海默病患者中，疾病修饰药物与安慰剂相比，78 周时 ADAS-cog 平均变化的差；中途改用对症药物按治疗策略处理，要决定的是是否进入 III 期。",
+   "methods": [
+    "research_question"
+   ],
+   "fixed": [],
+   "questionFields": [
+    "question",
+    "population",
+    "variable",
+    "intercurrentEvents",
+    "decisionContext"
+   ]
+  },
+  {
+   "id": "O20",
+   "text": "我想做一个肺癌二线治疗的试验：人群是一线含铂化疗后进展的晚期非小细胞肺癌，比较新口服靶向药联合化疗与化疗单用，主要终点 PFS，中途换治疗按意向治疗处理，要决定的是是否开展 III 期。把研究问题记下来。",
+   "methods": [
+    "research_question"
+   ],
+   "fixed": [],
+   "questionFields": [
+    "question",
+    "population",
+    "treatment",
+    "variable",
+    "decisionContext"
+   ]
+  }
+ ]
+}
