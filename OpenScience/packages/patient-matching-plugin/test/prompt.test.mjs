@@ -41,6 +41,7 @@ test('the child reads the record once, by record with dates and sections, and ea
   assert.match(prompt, /\[b1\] \(inclusion; under "Cohort 2 must also have:"\) Two or more of/)
   assert.ok(prompt.indexOf('PATIENT patient-a') < prompt.indexOf('TRIAL trial-a') && prompt.indexOf('TRIAL trial-b') < prompt.indexOf('PAIRS'), 'the stable record comes before the trials and pairs')
   assert.doesNotMatch(prompt, /sha256:|"sourceId"|\\"/, 'no identities or escaped JSON')
+  assert.match(prompt, /in the language the patient record is written in/, 'reasons follow the record\'s language')
 })
 
 test('source text cannot close the data block', () => {
