@@ -52,7 +52,7 @@ import {
 import { HttpError } from "./security.mjs";
 import { finishPremises } from "./vcrPremises.mjs";
 import { ALZHEIMER_PARAMETERS_TEXT, ALZHEIMER_REGULATORY_TEXT, ALZHEIMER_REPRODUCTION_TEXT, PEOPLE_MODE_TEXT_ZH, alzheimerScopeText, powerQuantityLabel, progressionPowerQuantity, scenarioPowerQuantity } from "./vcrProgression.mjs";
-import { measureLabel, measureValue, text, zhUnit } from "./vcrViewsKit.mjs";
+import { measureLabel, measureValue, text as wordOf, zhUnit } from "./vcrViewsKit.mjs";
 import { VCR_PEOPLE_TABLE, vcrPeopleInstantiateRequest, vcrPeopleRecordView, vcrPeopleStartBinding } from "./vcrPeople.mjs";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 
@@ -671,7 +671,7 @@ export class VcrExperiments {
       const status = entry.refused ? "unsupported" : result && (!job || job.state === "succeeded") ? "complete" : job && TERMINAL.has(String(job.state)) ? "failed" : job ? "running" : "incomplete";
       const progression = object(object(result?.diagnostics).progression);
       const armScenario = arm.scenario ?? (job ? object(job.scenario) : null);
-      arms.push({ name: arm.name, progression: disease ? progression : null, trajectoryUnit: disease ? zhUnit(text(object(list(progression.curves)[0]).timeUnit)) : null, hypothesis: disease && armScenario ? hypothesisView(armScenario) : null, trajectory: disease ? trajectoryOf(progression) : null,
+      arms.push({ name: arm.name, progression: disease ? progression : null, trajectoryUnit: disease ? zhUnit(wordOf(object(list(progression.curves)[0]).timeUnit)) : null, hypothesis: disease && armScenario ? hypothesisView(armScenario) : null, trajectory: disease ? trajectoryOf(progression) : null,
         beyond: progression.extrapolation?.beyond === true, method: arm.method ?? job?.method ?? null, methodVersion: arm.version ?? job?.method_version ?? null, attached: Boolean(arm.resultId),
         status, refused: entry.refused ? refusedText(entry.refused) : null, resultId: result?.id ?? null, scenario: arm.scenario ?? (job ? object(job.scenario) : null),
         evaluation: result ? { state: status === "complete" ? "succeeded" : "failed", seed: job?.seed == null ? null : Number(job.seed), replicates: execution?.replicates == null ? null : Number(execution.replicates),

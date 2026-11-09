@@ -47,7 +47,8 @@ test("the card says what the ratio is, shows the curves and every number with it
   assert.ok(ratio.value.value > 0.24 && ratio.value.value < 0.25, "the area over 48 h; the authors' own 10 h window gives 0.277 (N160a)");
   assert.equal(ratio.value.unit, "倍");
   assert.equal(card.headline.find((line) => line.key === "victim_auc_alone").value.unit, "ng·h/mL");
-  assert.match(card.lead, /^合用后，咪达唑仑的曲线下面积降到单用时的 24\.\d%/);
+  assert.match(card.lead, /^合用后，咪达唑仑的曲线下面积是单用时的 0\.242 倍（下降）/, "the lead says the ratio the headline says, in the same form (review P2-15)");
+  assert.doesNotMatch(card.lead, /24\.\d%/);
   assert.match(card.lead, /典型健康成人/);
   assert.equal(card.series.length, 2);
   assert.ok(card.series[1].ours && card.series[0].points.length === card.table.length && card.table.length >= 10);
@@ -104,7 +105,7 @@ test("the ketoconazole card names the inhibition model, shows no enzyme-activity
   assert.match(card.citation, /Quinney/);
   const decisive = card.premises.filter((p) => p.decisive).map((p) => p.key);
   assert.deepEqual(decisive, ["pbpk_model", "pbpk_person", "pbpk_regimen", "pbpk_inhibition"], "the request is the paper's own validation design: no outside row");
-  assert.match(card.premises.find((p) => p.key === "pbpk_inhibition").value, /^混合抑制。.*4\.5.*2\.0.*2\.5.*3\.1/);
+  assert.match(card.premises.find((p) => p.key === "pbpk_inhibition").value, /^混合抑制。.*4\.5（竞争性）、2\.0（非竞争性）、2\.5（混合）.*3\.1/);
   assert.match(card.premises.find((p) => p.key === "pbpk_person").value, /体重不是输入/);
   assert.match(card.premises.find((p) => p.key === "pbpk_scope").value, /没有时间依赖性抑制/);
   assert.ok(!words(card).some((w) => BACK_OFFICE.test(w) || /NaN|undefined|null/.test(w)), words(card).filter((w) => BACK_OFFICE.test(w) || /NaN|undefined|null/.test(w)).join(" | "));
@@ -142,7 +143,7 @@ test("the clarithromycin card says the perpetrator was assembled, names the cons
   assert.deepEqual(decisive, ["pbpk_model", "pbpk_person", "pbpk_regimen", "pbpk_inactivation", "pbpk_perpetrator_exposure"]);
   assert.match(card.premises.find((p) => p.key === "pbpk_model").value, /不是一个已发表的完整模型/);
   assert.match(card.premises.find((p) => p.key === "pbpk_model").value, /没有为了贴近临床结果调过任何一个数/);
-  assert.match(card.premises.find((p) => p.key === "pbpk_inactivation").value, /29\.5.*相差五倍.*3\.5、4\.6、11\.5.*7 倍/);
+  assert.match(card.premises.find((p) => p.key === "pbpk_inactivation").value, /29\.5.*相差五倍.*3\.5、4\.59、11\.5.*7 倍/);
   assert.match(card.premises.find((p) => p.key === "pbpk_perpetrator_exposure").value, /实测是 2\.33 mg\/L 和 15\.9 mg·h\/L.*偏高.*不能把它读成对模型的验证/);
   const defaulted = card.premises.find((p) => p.key === "assumed_perpetrator.inactivationSet");
   assert.ok(defaulted && /三组.*中位|median/.test(defaulted.value) && defaulted.source === "default", "the default set is a stated default, with its rule");
@@ -156,4 +157,50 @@ test("a clarithromycin dose that was not compared is an extrapolation, and a cho
   assert.match(card.premises.find((p) => p.key === "pbpk_inactivation").value, /^人肝微粒体常数（Mayhew 2000/);
   assert.ok(!card.premises.some((p) => p.key === "pbpk_perpetrator_exposure"), "no clinical value for 1000 mg twice daily: no comparison is made up");
   assert.match(card.lead, /^合用后，咪达唑仑的曲线下面积是单用时的 \d/);
+});
+
+// round-2 review (X3): P1-1 whose words the regimen is, P1-13 no English sentence of the engine on the page, P1-4 no research-question rows on a PBPK result,
+// P2-15 two out-of-range rows that say what each states, S15 every comparison figure is the data file's and none is typed in the presenter.
+const ENGLISH_RUN = /[A-Za-z]{4,}(?: [A-Za-z]{2,}){2,}/;
+
+test("review P1-1 and P1-13: the regimen is the run's statement unless a checked record says it was the person's, and the defaults are said in Chinese", () => {
+  const card = cardOf("oral-7-days");
+  assert.equal(card.premises.find((p) => p.key === "pbpk_regimen").source, "assumed", "no record of the person's messages: not 你给的数据");
+  // a checked record that holds every stated number of the regimen makes it theirs, and the interval the engine defaulted is not among them
+  const said = ["perpetrator.doseMg", "perpetrator.doses", "victim.doseMg"];
+  const withRecord = cardOf("oral-7-days", { diagnostics: { ...fixture("oral-7-days").diagnostics, personStated: { schema: 2, readable: true, paths: [], matched: said } } });
+  assert.equal(withRecord.premises.find((p) => p.key === "pbpk_regimen").source, "given");
+  for (const row of card.premises.filter((p) => p.key.startsWith("assumed_"))) assert.doesNotMatch(row.value, ENGLISH_RUN, `${row.key}: ${row.value}`);
+  const weight = card.premises.find((p) => p.key === "assumed_weightKg");
+  assert.match(weight.value, /^80 kg（已发表模型代码用的体重/);
+  assert.match(card.premises.find((p) => p.key === "assumed_victim.route").value, /^口服（相互作用研究里通常这样给咪达唑仑）/);
+  assert.match(card.premises.find((p) => p.key === "assumed_perpetrator.intervalH").value, /^24 小时（每天一次）/);
+});
+
+test("review P1-4 and P2-15: no research-question rows on a PBPK card, and the out-of-range rows say which part is out", () => {
+  const result = { id: "res_q", version: 1, kind: "pk_interaction", createdAt: "2026-11-09T10:00:00Z", ...fixture("iv-outside-fit") };
+  const question = { id: "main", version: 3, fields: { intercurrentEvents: [{ event: "因不良反应停药", strategy: "composite" }] }, bases: {}, written: [], history: [{ version: 3, written: ["intercurrentEvents"] }] };
+  const bundle = { allResults: [result], stale: [], researchQuestion: question, executions: new Map([["x", { jobId: "job_1" }]]), jobs: [{ id: "job_1", checkpoint: { questionRef: { id: "main", version: 2 } } }] };
+  const [card] = presentPbpkInteractions(bundle, { nodeOf: () => "node" });
+  assert.deepEqual(card.premises.filter((p) => p.key.startsWith("question:")), [], "a PBPK result simulates no trial endpoint");
+  const outside = card.premises.filter((p) => p.key.startsWith("pbpk_outside_"));
+  assert.equal(new Set(outside.map((p) => p.label)).size, outside.length, "adjacent rows are told apart by what they state");
+  assert.ok(outside.every((p) => p.decisive), "both are decisive and none is folded away");
+});
+
+test("review S15: the clinical comparison figures are read from the data file, none typed in the presenter", () => {
+  const data = JSON.parse(readFileSync(new URL("../src/vcrPbpkComparisons.json", import.meta.url), "utf8"));
+  const clar = cardOf("clarithromycin-oral-compared").premises.find((p) => p.key === "pbpk_clinical").value;
+  assert.ok(clar.includes(`几何平均倍数误差 ${data.clarithromycin.reported.polasek_hlm.geometricMeanFoldError.toFixed(2)}`), clar);
+  assert.ok(clar.includes(`${data.clarithromycin.reported.ito_hlm.geometricMeanFoldError.toFixed(2)}，${data.clarithromycin.reported.ito_hlm.of} 项里有 ${data.clarithromycin.reported.ito_hlm.within2} 项`), clar);
+  const rif = cardOf("oral-7-days").premises.find((p) => p.key === "pbpk_clinical").value;
+  assert.match(rif, /几何平均倍数误差 2\.1/);
+  assert.match(rif, /6 项里有 3 项在两倍以内/);
+  assert.match(rif, /Link 2008，模型的比值是它的 6\.5 倍/);
+  const keto = cardOf("ketoconazole-iv-validation").premises.find((p) => p.key === "pbpk_clinical").value;
+  assert.match(keto, /静脉 3 到 4\.3 倍，口服 12\.4 到 18\.3 倍/);
+  assert.match(keto, /几何平均倍数误差 1\.41/);
+  // the typed numbers of the old sentences are gone from the source
+  const source = readFileSync(new URL("../src/vcrPbpk.mjs", import.meta.url), "utf8");
+  for (const typed of ["几何平均倍数误差 1.4", "3.5、4.6、11.5", "近八倍", "2.7 到 4.7"]) assert.ok(!source.includes(typed), typed);
 });

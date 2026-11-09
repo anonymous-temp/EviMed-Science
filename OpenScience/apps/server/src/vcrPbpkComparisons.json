@@ -1,0 +1,196 @@
+{
+  "note": "What the drug-interaction card says of the model against the published clinical studies. Every number is the printed output of the engine's own numeric cases (N160c rifampicin, N180d ketoconazole, N185d clarithromycin), predicted before the comparison and not adjusted; the card computes its ranges and which side the model sits on from the rows, and quotes the case's own fold error and count (`reported`: the rows are printed to the digits the cases print, so a fold error recomputed from them would differ in the last digit); it types none of them. A parameter change in the engine that moves a case's output is a change of this file, and apps/server/test/vcrPbpk.test.mjs holds the card's sentences to it.",
+  "rifampicin": {
+    "case": "N160c",
+    "victim": "midazolam",
+    "route": "oral",
+    "perpetratorRegimen": "600 mg once a day for 7 days",
+    "kind": "auc_ratio",
+    "studies": [
+      {
+        "name": "Kharasch 2004",
+        "predicted": 0.083,
+        "observed": 0.053
+      },
+      {
+        "name": "Gorski 2003",
+        "predicted": 0.081,
+        "observed": 0.032
+      },
+      {
+        "name": "Backman 1996",
+        "predicted": 0.086,
+        "observed": 0.041
+      },
+      {
+        "name": "Link 2008",
+        "predicted": 0.104,
+        "observed": 0.016
+      },
+      {
+        "name": "Chung 2006",
+        "predicted": 0.098,
+        "observed": 0.124
+      },
+      {
+        "name": "Reitman 2011",
+        "predicted": 0.099,
+        "observed": 0.123
+      }
+    ],
+    "reported": {
+      "geometricMeanFoldError": 2.1,
+      "within2": 3,
+      "of": 6
+    }
+  },
+  "ketoconazole": {
+    "case": "N180d",
+    "victim": "midazolam",
+    "kind": "auc_ratio",
+    "studies": [
+      {
+        "name": "Quinney 2013, Table 4",
+        "route": "iv",
+        "dose": "200 mg",
+        "predicted": 2.5,
+        "observed": 3.1
+      },
+      {
+        "name": "Guo 2020",
+        "route": "iv",
+        "dose": "200 mg",
+        "predicted": 2.5,
+        "observed": 3.0
+      },
+      {
+        "name": "Guo 2020",
+        "route": "iv",
+        "dose": "400 mg",
+        "predicted": 7.6,
+        "observed": 4.3
+      },
+      {
+        "name": "Guo 2020",
+        "route": "oral",
+        "dose": "200 mg",
+        "predicted": 6.7,
+        "observed": 12.4
+      },
+      {
+        "name": "Guo 2020",
+        "route": "oral",
+        "dose": "400 mg",
+        "predicted": 21.4,
+        "observed": 18.3
+      },
+      {
+        "name": "Marok 2023 introduction",
+        "route": "oral",
+        "dose": "400 mg",
+        "predicted": 20.1,
+        "observed": 15.0
+      }
+    ],
+    "paperPredictions": {
+      "competitive": 4.5,
+      "noncompetitive": 2.0,
+      "mixed": 2.5,
+      "observed": 3.1
+    },
+    "reported": {
+      "geometricMeanFoldError": 1.41,
+      "within2": 6,
+      "of": 6
+    }
+  },
+  "clarithromycin": {
+    "case": "N185d",
+    "victim": "midazolam",
+    "kind": "auc_ratio",
+    "defaultSet": "polasek_hlm",
+    "studies": [
+      {
+        "name": "Gorski 1998",
+        "route": "iv",
+        "predicted": {
+          "polasek_hlm": 3.03,
+          "mayhew_hlm": 5.6,
+          "ito_hlm": 2.5
+        },
+        "observed": 2.75
+      },
+      {
+        "name": "Gorski 1998",
+        "route": "oral",
+        "dose": "4 mg",
+        "predicted": {
+          "polasek_hlm": 4.59,
+          "mayhew_hlm": 11.5,
+          "ito_hlm": 3.5
+        },
+        "observed": 7.0
+      },
+      {
+        "name": "Markert 2013",
+        "route": "oral",
+        "dose": "3 mg",
+        "predicted": {
+          "polasek_hlm": 4.62,
+          "mayhew_hlm": 11.6,
+          "ito_hlm": 3.5
+        },
+        "observed": 5.49
+      },
+      {
+        "name": "Yeates 1996",
+        "route": "oral",
+        "dose": "15 mg",
+        "predicted": {
+          "polasek_hlm": 2.8,
+          "mayhew_hlm": 8.9,
+          "ito_hlm": 2.1
+        },
+        "observed": 3.6
+      },
+      {
+        "name": "Wang 2004",
+        "route": "oral",
+        "dose": "4 mg",
+        "predicted": {
+          "polasek_hlm": 4.6,
+          "mayhew_hlm": 11.5,
+          "ito_hlm": 3.5
+        },
+        "observed": 8.6
+      },
+      {
+        "name": "Wang 2004",
+        "route": "iv",
+        "predicted": {
+          "polasek_hlm": 3.06,
+          "mayhew_hlm": 5.7,
+          "ito_hlm": 2.5
+        },
+        "observed": 2.1
+      }
+    ],
+    "reported": {
+      "polasek_hlm": {
+        "geometricMeanFoldError": 1.38,
+        "within2": 6,
+        "of": 6
+      },
+      "mayhew_hlm": {
+        "geometricMeanFoldError": 2.0,
+        "within2": 2,
+        "of": 6
+      },
+      "ito_hlm": {
+        "geometricMeanFoldError": 1.61,
+        "within2": 5,
+        "of": 6
+      }
+    }
+  }
+}

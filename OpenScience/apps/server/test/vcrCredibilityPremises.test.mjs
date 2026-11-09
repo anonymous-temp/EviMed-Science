@@ -25,8 +25,15 @@ test("the validation sentence carries the result's own numbers and says only pla
   const v = vcrExternalValidation();
   const row = rows["credibility:validation"];
   assert.equal(row.decisive, true);
-  assert.equal(row.source, "derived");
-  assert.match(row.value, new RegExp(`在 ${v.arms} 项模型没见过的试验的安慰剂组上`));
+  // a validation on published placebo arms is the literature's, not “由你给的数据算出” (review P1-2); and it says the trials were published after the fit,
+  // never that the model had not seen them (the frozen protocol does not establish that: review P2-9, S5)
+  assert.equal(row.source, "literature");
+  assert.match(row.value, new RegExp(`在 ${v.arms} 项发表时间晚于模型拟合的试验的安慰剂组上`));
+  assert.doesNotMatch(`${row.label}${row.value}`, /没见过/);
+  assert.match(rows["credibility:validation-scope"].value, /没有核实其中有没有哪一项已经在拟合所用的数据库里/);
+  assert.equal(rows["credibility:validation-scope"].decisive, false, "the qualification is folded");
+  assert.equal(rows["credibility:structure"].source, "literature");
+  assert.equal(rows["credibility:applicability"].source, "default", "a range check is computed by the platform, not from the person's data");
   assert.ok(row.value.includes(String(Number(Math.abs(v.primary.long.meanBias).toPrecision(3)))));
   assert.match(row.value, new RegExp(`${v.primary.long.covered}/${v.primary.long.arms} 项`));
   assert.match(row.value, /只检验了安慰剂组/);
@@ -55,7 +62,7 @@ test("the model risk comes only from a stored assessment's two ratings, by M15's
   assert.equal(field("model_risk").basis, "not_stated");
   assert.equal(field("question_of_interest").basis, "not_stated");
   assert.equal(field("validation").basis, "computed");
-  assert.match(byKey(credibilityPremises(diagnostics()))["credibility:risk"].value, /没有说明时这里不给模型风险等级/);
+  assert.match(byKey(credibilityPremises(diagnostics()))["credibility:risk"].value, /研究里没有记下评估时，这里不给模型风险等级/);
   const given = vcrCredibilityRecord({ assessment: { questionOfInterest: "第 78 周检验的把握", contextOfUse: "设计一项试验", influence: "low", consequence: "high" } });
   assert.equal(field("question_of_interest", given).basis, "stated");
   assert.deepEqual(field("model_risk", given).data, { level: "high", rule: "driven_by_consequence" });
@@ -73,6 +80,9 @@ test("the Alzheimer page carries the validation as one of at most five decisive 
   for (const key of ["credibility:validation", "credibility:structure", "credibility:applicability", "credibility:verification", "credibility:risk"]) {
     if (rows[key]) assert.doesNotMatch(`${rows[key].label} ${rows[key].value}`, /[a-z]+_[a-z_]+|patients\.progression|N\d{3}/);
   }
+  // no English table name of the engine reaches the page (review P1-13), and the verification row is one fold of the card, not a third copy of the replicate sentence
+  assert.equal(rows["credibility:verification"], undefined);
+  assert.doesNotMatch(card.premises.map((premise) => premise.value).join(" "), /EMA qualification opinion|Table \d/);
 });
 
 test("a stored assessment of the model the result runs on shows the computed model risk on the page; one about another model, or none, shows nothing", () => {
@@ -81,7 +91,9 @@ test("a stored assessment of the model the result runs on shows the computed mod
   const bundle = (assessments) => ({ allResults: [fixture], assessments, stale: [] });
   const risk = (assessments) => byKey(presentProgressions(bundle(assessments), { nodeOf: () => "n" })[0].premises)["credibility:risk"];
   const bound = risk([record({})]);
-  assert.equal(bound.source, "given");
+  // the record may be the assistant's own (nothing says whose it is), so it is not “你给的数据” (review P1-1)
+  assert.equal(bound.source, "assumed");
+  assert.match(bound.value, /^按研究里记下的评估：/);
   assert.match(bound.value, /影响低，决定出错的后果高，模型风险高/);
   assert.match(bound.value, /错误决策的后果/);
   // the page keeps at most five decisive rows, so the shared builder may fold this one; the row itself asks to be decisive when the risk is high
@@ -89,7 +101,7 @@ test("a stored assessment of the model the result runs on shows the computed mod
   // the newest record about the model wins; a version that is not the parameter set's, and another model's record, bind nothing
   assert.match(risk([record({ key: "old", influence: "high", createdAt: "2026-11-01T00:00:00Z" }), record({ influence: "low", consequence: "low", createdAt: "2026-11-09T02:00:00Z" })]).value, /模型风险低/);
   for (const none of [[], [record({ modelName: "other-model" })], [record({ modelVersion: "adsim-9" })], [record({ influence: "", consequence: "" })]]) {
-    assert.match(risk(none).value, /没有说明时这里不给模型风险等级/);
+    assert.match(risk(none).value, /研究里没有记下评估时，这里不给模型风险等级/);
   }
   assert.equal(assessmentForModel([record({ modelVersion: "adsim-3.0" })], "camd-adas-cog-11")?.key, "q1");
   assert.equal(assessmentForModel([record({})], null), null);

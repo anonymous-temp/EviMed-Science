@@ -1,5 +1,5 @@
 {
-  "headline": "已模拟 3 个方案，按药效的不确定性平均后，得到显著结果的概率（assurance） 58%～74%。",
+  "headline": "已模拟 3 个方案，按药效的不确定性平均后，得到显著结果的概率 58%～74%。",
   "ademp": [
     {
       "key": "aim",
@@ -95,7 +95,7 @@
     {
       "key": "trialSuccess",
       "label": "得到显著结果且药效达到最小重要差异的概率",
-      "value": "没有计算：还缺你给出的最小重要差异、研究之间的差异、与研究问题一致的分析方法",
+      "value": "没有计算：还缺你给出的最小重要差异",
       "source": "default",
       "decisive": false,
       "reason": null
@@ -303,7 +303,7 @@
           "stale": false,
           "detail": {
             "kind": "run",
-            "title": "按药效的不确定性平均后，得到显著结果的概率（assurance）",
+            "title": "药效平均后的显著概率",
             "fields": [
               {
                 "label": "方法",
@@ -652,7 +652,7 @@
           "stale": false,
           "detail": {
             "kind": "run",
-            "title": "按药效的不确定性平均后，得到显著结果的概率（assurance）",
+            "title": "药效平均后的显著概率",
             "fields": [
               {
                 "label": "方法",
@@ -1006,7 +1006,7 @@
           "stale": false,
           "detail": {
             "kind": "run",
-            "title": "按药效的不确定性平均后，得到显著结果的概率（assurance）",
+            "title": "药效平均后的显著概率",
             "fields": [
               {
                 "label": "方法",
@@ -1163,7 +1163,7 @@
     },
     {
       "key": "assurance",
-      "label": "按药效的不确定性平均后，得到显著结果的概率（assurance）",
+      "label": "按药效的不确定性平均后，得到显著结果的概率",
       "unit": "%"
     },
     {

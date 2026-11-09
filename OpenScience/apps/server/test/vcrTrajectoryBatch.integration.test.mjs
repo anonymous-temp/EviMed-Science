@@ -243,16 +243,16 @@ test('R32/R33: the claim of a prediction follows what its provider declared, and
   // history without an evaluated method: individualized, and the sentence says no comparison was made, even for an endpoint another method was evaluated on
   const unevaluated = await says({conditioning:'history'},'cd4',5);
   assert.equal(unevaluated.claim.key,'claim:individualized_forecast');
-  assert.ok(unevaluated.claim.value.includes('没有做过个体化预测的对照评估') && !unevaluated.claim.value.includes('95%区间不含0'),unevaluated.claim.value);
+  assert.ok(unevaluated.claim.value.includes('没有做过个体化预测的对照评估') && !unevaluated.claim.value.includes('95% 区间不含 0'),unevaluated.claim.value);
   // the evaluated method on its endpoints: the protocol's finding, per family
   const cd4 = await says({conditioning:'history',individualizationMethod:'lmm_empirical_bayes'},'cd4',6);
-  assert.ok(cd4.claim.value.includes('CD4 计数') && cd4.claim.value.includes('95%区间不含0'),cd4.claim.value);
+  assert.ok(cd4.claim.value.includes('CD4 计数') && cd4.claim.value.includes('95% 区间不含 0'),cd4.claim.value);
   assert.deepEqual([cd4.summary.individualEvaluation.family,cd4.summary.individualEvaluation.helped],['cd4_count',true]);
   const bilirubin = await says({conditioning:'history',individualizationMethod:'lmm_empirical_bayes'},'bilirubin',7);
   assert.ok(bilirubin.claim.value.includes('血清胆红素') && bilirubin.claim.value.includes('没有显示比'),bilirubin.claim.value);
   assert.equal(bilirubin.summary.individualEvaluation.helped,false);
   // an endpoint the evaluation did not cover is never given the finding
   const other = await says({conditioning:'history',individualizationMethod:'lmm_empirical_bayes'},'HbA1c',8);
-  assert.ok(other.claim.value.includes('没有做过个体化预测的对照评估') && !other.claim.value.includes('95%区间不含0'),other.claim.value);
+  assert.ok(other.claim.value.includes('没有做过个体化预测的对照评估') && !other.claim.value.includes('95% 区间不含 0'),other.claim.value);
   assert.equal(other.summary.individualEvaluation.helped,null);
 });

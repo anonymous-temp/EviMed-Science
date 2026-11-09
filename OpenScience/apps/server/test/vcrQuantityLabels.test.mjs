@@ -45,7 +45,8 @@ test("beside an assurance the premises say the trial-level success chance is not
   const input = { endpointType: "time_to_event", designKind: "two_arm_fixed", configuration: { design: { kind: "two_arm_fixed" }, endpoint: { type: "time_to_event" } }, hasAssurance: true, assuranceRan: true, simulated: true };
   const rows = Object.fromEntries(vcrPremises("trial", input).map((premise) => [premise.key, premise]));
   assert.equal(rows.trialSuccess.label, VCR_RESULT_QUANTITY_LABELS_ZH.trial_success_probability);
-  assert.match(rows.trialSuccess.value, /^没有计算：还缺你给出的最小重要差异、研究之间的差异、与研究问题一致的分析方法$/, "the sourced prior is the assurance that ran");
+  // a design page is of a classic design, which has no between-study variation and no intercurrent-event estimand: only the one fact that can be missing is said
+  assert.match(rows.trialSuccess.value, /^没有计算：还缺你给出的最小重要差异$/, "the sourced prior is the assurance that ran");
   assert.equal(rows.trialSuccess.decisive, false);
   assert.equal(rows["lab:replicates"].value, VCR_SIMULATION_ERROR_SENTENCE_ZH);
   const complete = Object.fromEntries(vcrPremises("trial", { ...input, successFacts: { mid: true, betweenStudy: true, estimand: true } }).map((premise) => [premise.key, premise]));

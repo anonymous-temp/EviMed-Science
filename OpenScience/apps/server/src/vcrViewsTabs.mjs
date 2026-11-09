@@ -64,6 +64,7 @@ import { presentBayesianDesigns } from "./vcrBayesianDesign.mjs";
 import { presentWinRatioDesigns } from "./vcrWinRatio.mjs";
 import { presentValueOfInformation } from "./vcrValueOfInformation.mjs";
 import { presentPbpkInteractions } from "./vcrPbpk.mjs";
+import { presentPeopleRecords } from "./vcrPeople.mjs";
 import { vcrTypeOneVerdict } from "./vcrTypeOneVerdict.mjs";
 import { presentPrognosticModels } from "./vcrPrognosticTraining.mjs";
 import { presentProgressions } from "./vcrProgression.mjs";
@@ -659,6 +660,8 @@ export function presentPatientsTab(bundle) {
     partial: partialOf(bundle, ["patient_set"], "这次生成"),
     // Population-level progression simulations (P4) the conversation computed: a card each, curves and power.
     progressions: presentProgressions(bundle, { nodeOf: resultNode }),
+    // The records of virtual people the study holds: how many, made from what, for which model, how many outside the fitted range, and what ran on them.
+    peopleRecords: presentPeopleRecords(bundle),
     // A published PBPK model of a drug after a perpetrator (R38) the conversation computed: a card each, the curves alone and after.
     pbpkInteractions: presentPbpkInteractions(bundle, { nodeOf: resultNode }),
     // Survival fits with a spline (C13) the conversation computed: the curve beyond the data, with how far beyond, and the premises.

@@ -530,7 +530,7 @@ test("the matching tab offers one direction, from the protocol to the patients, 
 test("the sentence about the designs names a range and never a winner", () => {
   const { designs } = presentDesigns(designsBundle());
   const sentence = designsSentence(designs);
-  assert.match(String(sentence), /已模拟 2 个方案，按药效的不确定性平均后，得到显著结果的概率（assurance） 58%～71%/);
+  assert.match(String(sentence), /已模拟 2 个方案，按药效的不确定性平均后，得到显著结果的概率 58%～71%/);
   assert.doesNotMatch(String(sentence), /最佳|推荐|最优|best/);
   assert.equal(designsSentence([]), null);
 });
@@ -1270,7 +1270,7 @@ test("C2-4 a stage the recomputation did not run again is not left on the page: 
   const design = scenario("a", 1, "A", { resultId: "res_a" });
   const dropped = { ...result("a", [measure("power", 0.5)]), diagnostics: { notRerun: [{ stage: "assurance", measures: ["assurance"] }] } };
   const page = presentTrialTab({ ...emptyBundle(), scenarios: [design], results: [dropped], allResults: [dropped] });
-  assert.deepEqual(page.footnotes, ["方案 A：按药效的不确定性平均后，得到显著结果的概率（assurance）不再显示——效应假设卡现在没有预测分布，没有可以积分的先验，这一项没有重算。"]);
+  assert.deepEqual(page.footnotes, ["方案 A：按药效的不确定性平均后，得到显著结果的概率不再显示——效应假设卡现在没有预测分布，没有可以积分的先验，这一项没有重算。"]);
   const other = { ...dropped, diagnostics: { notRerun: [{ stage: "simulation", measures: ["power"] }] } };
   assert.match(presentTrialTab({ ...emptyBundle(), scenarios: [design], results: [other], allResults: [other] }).footnotes[0], /仿真没有重算/);
 });

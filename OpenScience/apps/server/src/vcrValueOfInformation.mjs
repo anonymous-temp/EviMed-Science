@@ -24,7 +24,7 @@
  * @module vcrValueOfInformation
  */
 
-import { finishPremises, withQuestionPremisesAll } from "./vcrPremises.mjs";
+import { finishPremises } from "./vcrPremises.mjs";
 import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
 import { personWord } from "./vcrPersonStated.mjs";
 import { list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
@@ -58,9 +58,16 @@ function specWords(spec) {
     case "beta": return `Beta(${plain(Number(n("alpha")))}, ${plain(Number(n("beta")))}) 分布`;
     case "uniform": return `${plain(Number(n("min")))} 到 ${plain(Number(n("max")))} 之间均匀分布`;
     case "range": return `乐观 ${plain(Number(n("optimistic")))}、基线 ${plain(Number(n("base")))}、悲观 ${plain(Number(n("pessimistic")))}（只有三个值，没有概率分布）`;
-    case "draws": return "调用方给出的抽样";
+    case "draws": return "你给的抽样";
     default: return null;
   }
+}
+
+/** An option as the page names it: the label it was given and, when the scenario gave a number of people per arm, what that is. @param {Record<string, any>} option */
+function optionName(option) {
+  const label = String(option.label);
+  const n = numeric(option.nPerArm);
+  return n === null ? label : `${label}（${n === 0 ? "不做试验" : `每组 ${plain(n)} 人`}）`;
 }
 
 /** @param {Record<string, any>} voi the engine's `diagnostics.voi` @param {Record<string, any> | null} record */
@@ -75,11 +82,11 @@ function premisesOf(voi, record) {
     value: "在每个输入的不确定性下，选期望收益最大的选项；信息价值是“先弄清再选”比“现在就选”多得的期望收益",
   });
   if (table) {
-    rows.push({ key: "table_source", label: "收益和输入的来源", source: "given", decisive: true,
-      value: "每个选项的收益和每个输入的抽样由调用方给出，引擎没有重新计算它们；这里的数字只说明在这些抽样下哪个输入最值得先弄清" });
+    rows.push({ key: "table_source", label: "收益和输入的来源", source: personWord(record, "table", "assumed"), decisive: true,
+      value: "每个选项的收益和每个输入的抽样来自你给的表，这里没有重新计算它们；这里的数字只说明在这些抽样下哪个输入最值得先弄清" });
   } else {
     const net = given.utility === "net_benefit";
-    rows.push({ key: "utility", label: "收益怎么算", source: personWord(record, "utility", "given"), decisive: true,
+    rows.push({ key: "utility", label: "收益怎么算", source: personWord(record, "utility", "assumed"), decisive: true,
       value: net
         ? `每个选项的收益 = 成功的价值 ${plain(Number(given.successValue))}${given.unit ? ` ${given.unit}` : ""} × 成功概率 − 每人成本 ${plain(Number(given.costPerPatient ?? 0))} × 入组人数；不做试验的收益是 0`
         : "每个选项的收益 = 试验得到显著结果的概率；不做试验的收益是 0" });
@@ -89,14 +96,14 @@ function premisesOf(voi, record) {
       if (!words) continue;
       const fixed = entry.family === "fixed";
       rows.push({ key: `input_${role}`, label: slowing && role === "effect" ? "药物效应（占对照组恶化幅度的比例）" : roleWord(role), value: words,
-        source: personWord(record, `inputs.${role}`, "given"), decisive: !fixed && role === "effect" });
+        source: personWord(record, `inputs.${role}`, "assumed"), decisive: !fixed && role === "effect" });
     }
     rows.push({ key: "success", label: "“成功”是什么意思", source: "default", decisive: false,
       value: `按这次抽到的真实效应，单侧 ${plain(Number(given.alpha ?? 0.025))} 水平下得到显著结果的概率（正态近似），不是抽一次试验的 0 或 1` });
     rows.push({ key: "dropout_model", label: "脱落怎么处理", source: "default", decisive: false, value: "脱落只减少能分析的人数，且与结局无关（完全随机脱落）" });
   }
   rows.push({ key: "independence", label: "各输入之间", source: "default", decisive: false,
-    value: table ? "按调用方给出的抽样原样使用（包括它们之间的相关）" : "彼此独立；如果它们其实相关，各自的信息价值会被高估或低估" });
+    value: table ? "按你给的抽样原样使用（包括它们之间的相关）" : "彼此独立；如果它们其实相关，各自的信息价值会被高估或低估" });
   rows.push({ key: "draws", label: "抽样次数", source: "default", decisive: false, value: `${plain(Number(given.draws), 6)} 次` });
   rows.push({ key: "regression", label: "单个输入的价值怎么估", source: "default", decisive: false,
     value: "用广义可加模型（GAM）把每个选项的收益对该输入做回归（Strong 等 2014）；数字后面的“±”是抽样平均的误差，不含回归平滑本身的误差" });
@@ -112,6 +119,8 @@ function cardOf(result, staleMark) {
   const given = object(voi.given);
   const options = list(voi.options).map(object);
   if (!options.length) return null;
+  const named = new Map(options.map((option) => [String(option.label), optionName(option)]));
+  const nameOf = (/** @type {string} */ label) => named.get(label) ?? label;
   const headline = list(result.measures).map(object).filter((m) => ["voi_evpi", "voi_probability_wrong_decision", "voi_best_expected_utility"].includes(String(m.name)))
     .map((m) => ({ key: String(m.name), label: String(MEASURE_LABELS[String(m.name)] ?? m.name), value: show(m) }));
   const evpi = numeric(list(result.measures).map(object).find((m) => m.name === "voi_evpi")?.value);
@@ -122,10 +131,10 @@ function cardOf(result, staleMark) {
   const thresholds = list(voi.thresholds).map(object).map((row) => ({
     key: String(row.input), label: roleWord(String(row.input)),
     stated: { optimistic: numeric(row.optimistic), base: numeric(row.base), pessimistic: numeric(row.pessimistic) },
-    decisions: { optimistic: String(object(row.decisionAt).optimistic ?? ""), base: String(object(row.decisionAt).base ?? ""), pessimistic: String(object(row.decisionAt).pessimistic ?? "") },
+    decisions: { optimistic: nameOf(String(object(row.decisionAt).optimistic ?? "")), base: nameOf(String(object(row.decisionAt).base ?? "")), pessimistic: nameOf(String(object(row.decisionAt).pessimistic ?? "")) },
     flips: list(row.flips).map(object).map((flip) => ({
       value: measureValue({ name: "voi_threshold", value: flip.value, mcse: flip.mcse, simulated: true, source: "synthetic" }, { kind: "decision_voi", result, tab: "trial", staleMark }),
-      from: String(flip.from), to: String(flip.to),
+      from: nameOf(String(flip.from)), to: nameOf(String(flip.to)),
     })),
   }));
   const studies = list(voi.studies).map(object).map((row) => ({
@@ -146,9 +155,10 @@ function cardOf(result, staleMark) {
     id: String(result.id), version: Number(result.version), form: "value_of_information",
     title: "下一步最值得弄清什么（信息价值）",
     question: "不知道的这些输入里，哪一个先弄清楚最可能改变决定、值多少；一项研究值不值得做",
-    chosen: String(voi.chosen ?? ""), draws: numeric(given.draws), unit: given.unit ? String(given.unit) : null,
+    chosen: nameOf(String(voi.chosen ?? "")), draws: numeric(given.draws), unit: given.unit ? String(given.unit) : null,
     headline, lead,
-    options: options.map((o) => ({ key: String(o.label), label: String(o.label), chosen: o.chosen === true, expected: show(o.expectedUtility) })),
+    // an option's name is the words it was given; beside it, what it is in the people it enrols (0 per arm is no trial)
+    options: options.map((o) => ({ key: String(o.label), label: optionName(o), chosen: o.chosen === true, expected: show(o.expectedUtility) })),
     inputs, thresholds, studies,
     premises: premisesOf(voi, object(result.diagnostics).personStated), limited,
   };
@@ -167,6 +177,6 @@ const MEASURE_LABELS = Object.freeze({
 export function presentValueOfInformation(bundle, { nodeOf }) {
   const results = list(bundle.allResults ?? bundle.results).map(object).filter((row) => row.kind === "decision_voi" && !row.supersededBy)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 8);
-  const cards = results.map((result) => cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)))).filter(Boolean);
-  return withQuestionPremisesAll(cards, bundle, results);
+  // no research-question rows: a value-of-information result simulates no trial endpoint (round-2 review P1-4)
+  return results.map((result) => cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)))).filter(Boolean);
 }

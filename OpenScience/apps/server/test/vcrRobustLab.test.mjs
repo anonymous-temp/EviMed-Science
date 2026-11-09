@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { vcrCampaignManifest, vcrCampaignInitialState, vcrCampaignAdvance, vcrCampaignRecord } from "@evimed/domain";
-import { presentCampaign, VcrExperiments } from "../src/vcrExperiments.mjs";
+import { presentCampaign, presentRobust, VcrExperiments } from "../src/vcrExperiments.mjs";
 import { renderLabSection } from "../src/vcrLabReport.mjs";
 import { vcrReportModel } from "../src/vcrRender.mjs";
 
@@ -106,5 +106,40 @@ test("the study's lab block carries the robust reading and the exported section 
   assert.match(text, /\d+\.\d%（模拟误差 ±\d+\.\d%）/, "each power is printed with its error");
   assert.doesNotMatch(text, /最优(的|设计|方案)|最佳/);
   assert.doesNotMatch(text, /未计算/, "no reference was left unresolved");
-  assert.match(text, /在这些假设下满足约束且最省的设计|只看基准情形、满足约束且最省的设计/);
+  assert.match(text, /只看基准情形，按目标（期望样本量最少），满足全部约束的方案：/, "the base-case pick is the objective's, worded by it (review P0-2)");
+  assert.doesNotMatch(text, /满足约束且最省/);
+});
+
+test("review S4: a design that held in every scenario is never said to be unfit elsewhere, and a pick whose error control is undecided says so", () => {
+  const scenarioRow = (key, acceptable, guard, n) => ({ key, index: Number(key.slice(1)), complete: true, eligible: guard !== "fail", referenceOnly: false, guard, acceptable, oc: {}, scenarios: {},
+    worstCase: { value: 0.82, mcse: 0.01, scenario: "base" }, regret: null, expectedPower: null, n: { value: n, mcse: 0 }, duration: null, pareto: false, nearOptimal: false });
+  const robust = (rows, cheapestAcceptable, cheapestUnderBase) => ({ scenarios: [{ name: "base", weight: null }, { name: "pessimistic", weight: null }], rows, measures: { n: "expected_sample_size" },
+    rule: { floor: 0.8, confidence: 0.95, tolerance: { power: 0.02, relative: 0.1 } }, cheapestAcceptable, cheapestUnderBase, sameDesign: cheapestAcceptable === cheapestUnderBase,
+    inconclusive: [], weighted: false, criteria: [], pareto: [], nearOptimal: [], acceptable: [], maximin: null, minimaxRegret: null });
+  const manifest = { objective: { truth: "base", measure: "expected_sample_size", direction: "minimize" } };
+  const candidates = [{ key: "c1", index: 0 }, { key: "c2", index: 1 }];
+  // A (300 people): inconclusive type I error, passes the power floor everywhere. B (400): passes everything and is feasible at the base case.
+  const rows = [scenarioRow("c1", "pass", "inconclusive", 300), scenarioRow("c2", "pass", "pass", 400)];
+  const said = presentRobust(manifest, robust(rows, "c1", "c2"), candidates).statement;
+  assert.match(said, /它在每个假设下也都达标/, "B passed in every scenario: it is not said to be unfit elsewhere");
+  assert.doesNotMatch(said, /未必够用/);
+  assert.match(said, /第 1 个（它的错误率或安全性约束还无法确定）/, "the cheaper pick's undecided error control is said beside it");
+  const failing = presentRobust(manifest, robust([scenarioRow("c1", "pass", "pass", 300), scenarioRow("c2", "fail", "pass", 400)], "c1", "c2"), candidates).statement;
+  assert.match(failing, /它在别的假设下未必够用/, "a base pick that did not hold elsewhere is still said so");
+});
+
+test("review S9: a search over progression simulations names the chance by its uncertainty mode, never 功效 (page, tags, rule and export)", () => {
+  const row = stoppedRow(THREE);
+  row.manifest.space.method = "patients.progression";
+  row.manifest.space.scenario = { ...row.manifest.space.scenario, model: { family: "beta_logit", uncertainty: "new_study" } };
+  const view = presentCampaign(row);
+  const label = "考虑研究之间差异后的预期把握度";
+  assert.equal(view.powerQuantity, "expected_power_over_studies");
+  assert.equal(view.robust.powerLabel, label);
+  assert.equal(view.constraints.find((c) => c.measure === "power").label, label);
+  assert.match(view.robust.statement, new RegExp(`“${label}”`));
+  assert.equal(view.robust.tagText.maximin, `最差情形“${label}”最高`);
+  assert.doesNotMatch(`${view.robust.statement}${view.robust.choiceRule}${JSON.stringify(view.robust.tagText)}`, /功效/);
+  const lab = [{ ...view, bestSettings: [], finalists: [] }];
+  assert.match(renderLabSection({ ...vcrReportModel({ study: { id: "std_1", name: "x", question: "", dataTier: "T0", intendedUse: "exploratory" }, results: [] }), lab }).markdown, new RegExp(`“optimistic”下的“${label}”`));
 });

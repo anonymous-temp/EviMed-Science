@@ -29,12 +29,12 @@ export const VCR_PREDICTION_CLAIM_WORDS_ZH = Object.freeze({
   }),
   population_forecast: Object.freeze({
     label: '为真实患者做群体模型预测',
-    sentence: '这次只用了这位患者的基线信息，按群体模型预测；基线相同的人得到相同的预测，他自己此前的变化没有用上。',
+    sentence: '这次只用了每个人的基线信息，按群体模型预测；基线相同的人得到相同的预测，各人自己此前的变化没有用上。',
     evidence: '与真实随访结果的对照',
   }),
   individualized_forecast: Object.freeze({
     label: '用每个人的历史个体化',
-    sentence: '这次在群体模型之上，用这位患者此前的观测更新了他自己的参数再预测；预测区间是在已拟合的群体参数下得到的，没有计入这些参数本身的估计误差。',
+    sentence: '这次在群体模型之上，用每个人此前的观测更新了各人自己的参数再预测；预测区间是在已拟合的群体参数下得到的，没有计入这些参数本身的估计误差。',
     evidence: '与“沿用最近一次观测值”和“沿个人趋势外推”的误差对照',
   }),
 })
@@ -49,9 +49,11 @@ export const VCR_INDIVIDUAL_FAMILY_WORDS_ZH = Object.freeze({ serum_bilirubin: '
 export function individualizationEvidenceSentence(helped, family = null) {
   const about = family && /** @type {Record<string, string>} */ (VCR_INDIVIDUAL_FAMILY_WORDS_ZH)[family]
   const where = about ? `在公开的随访数据上（${about}），` : '在公开的随访数据上，'
-  if (helped === true) return `${where}这种个体化预测的平均误差小于沿用最近一次观测值和沿个人趋势外推，差异的95%区间不含0。`
+  // what the frozen evaluation's claim covers and no more (RUN-20261109: two secondary trial populations, CD4 on the square-root scale, about six
+  // months and about 76 weeks ahead): the sentence never reads as a finding about another endpoint, population or horizon
+  if (helped === true) return `${where}这种个体化预测的平均误差小于沿用最近一次观测值和沿个人趋势外推，差异的 95% 区间不含 0。这只是在两个公开的试验人群里（CD4 计数取平方根，往后约 6 个月和约 76 周）测得的，换一个终点、人群或预测的时间，不能直接引用。`
   if (helped === false) return `${where}这种个体化预测没有显示比沿用最近一次观测值或沿个人趋势外推更准，所以这里只给出预测，不说它更准。`
-  return '这个终点没有做过个体化预测的对照评估（用的方法不是评估过的那一种，也算没有），这里只给出预测，不说它比简单做法更准。'
+  return '这个终点没有做过个体化预测的对照评估，只在已知真值的模拟患者上检查过方法没有算错；这里只给出预测，不说它比简单做法更准。'
 }
 
 /**

@@ -207,7 +207,7 @@ test('the claim sentence of an individualized forecast follows the frozen evalua
   const sentence = (/** @type {any} */ extra) => trajectoryPremises({...base,...extra}).find(p => p.key === 'claim:individualized_forecast').value;
   const helped = (method, endpointCode) => ({individualizationHelped:vcrIndividualizationHelped({method,endpointCode}),individualizationFamily:vcrIndividualEvaluationFamily(method,endpointCode)});
   assert.ok(sentence(helped('lmm_empirical_bayes','bilirubin')).includes('没有显示比'));
-  assert.ok(sentence(helped('lmm_empirical_bayes','cd4')).includes('95%区间不含0'));
+  assert.ok(sentence(helped('lmm_empirical_bayes','cd4')).includes('95% 区间不含 0'));
   assert.ok(sentence(helped('lmm_empirical_bayes','hba1c')).includes('没有做过个体化预测的对照评估'));
   assert.ok(sentence(helped(null,'cd4')).includes('没有做过个体化预测的对照评估'),'a provider that names no evaluated method inherits no finding');
 });

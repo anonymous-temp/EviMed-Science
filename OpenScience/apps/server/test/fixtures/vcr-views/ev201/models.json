@@ -797,7 +797,7 @@
     },
     {
       "id": "mth_22",
-      "name": "按药效的不确定性平均后，得到显著结果的概率（assurance）",
+      "name": "按药效的不确定性平均后，得到显著结果的概率",
       "method": "design.assurance",
       "version": "1.1.0",
       "endpoints": "连续 · 二分类 · 事件时间",
@@ -1119,7 +1119,7 @@
     },
     {
       "id": "mth_45",
-      "name": "合用药物后的暴露变化（已发表的 PBPK 模型）",
+      "name": "合用药物后的暴露变化（以已发表的 PBPK 模型为基础）",
       "method": "pk.interaction",
       "version": "1.2.0",
       "endpoints": null,

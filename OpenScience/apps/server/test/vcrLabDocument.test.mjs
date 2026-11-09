@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { canonicalVcrDocument } from "../src/vcrDocumentExport.mjs";
+import { objectivePick } from "../src/vcrExperiments.mjs";
 import { labDocumentRoot, labSectionTemplate, renderLabSection } from "../src/vcrLabReport.mjs";
 import { vcrReportModel } from "../src/vcrRender.mjs";
 import { typedNumberSpans } from "@evimed/domain";
@@ -52,9 +53,10 @@ test("the section prints each comparison and design search with every number ren
   assert.match(text, /差值 15\.5%（模拟误差 ±0\.1%）/);
   assert.match(text, /### 设计搜索：达到 80% 功效的最小样本量/);
   assert.match(text, /功效不低于80\.0%；I 类错误不高于2\.5%/, "a bound is the frozen constraint, shown in the measure's unit");
-  assert.match(text, /在这些假设下满足约束且最省的设计：试验组人数 140，检验水准 0\.025；期望样本量 280/);
+  assert.match(text, /在这些假设下，满足全部约束的方案：试验组人数 140，检验水准 0\.025；期望样本量 280/, "no pick is called the cheapest unless the objective says so (review P0-2)");
   assert.match(text, /\| 14 \| 试验组人数 180，检验水准 0\.020 \| 360 \|/);
-  assert.match(text, /这些结论的前提：\n\n- 比较的前提：各组用同一个终点和同一套分析设置。/);
+  // the premises are structured like the page's block: the decisive ones one by one with where each came from, the others in one paragraph (review P2-1)
+  assert.match(text, /这个结论的前提：\n\n- 比较的前提（你给的数据）：各组用同一个终点和同一套分析设置。/);
   for (const word of ["design.nTreat", "analysis.alpha", "labDoc", "TEXT_", "LAB_PREMISES"]) assert.ok(!text.includes(word), `back-office word ${word}`);
 });
 
@@ -66,7 +68,7 @@ test("no number of the section is typed: its template holds none, and changing t
   changed.lab[1].best.design["design.nTreat"] = 150;
   const text = renderLabSection(changed).markdown;
   assert.match(text, /55\.5%（模拟误差 ±0\.3%）/);
-  assert.match(text, /在这些假设下满足约束且最省的设计：试验组人数 150/);
+  assert.match(text, /在这些假设下，满足全部约束的方案：试验组人数 150/);
   assert.equal(renderLabSection({ ...model, lab: [] }), null, "a study with no lab work has no section, and no other export changes");
 });
 
@@ -109,4 +111,24 @@ test("the exported Word and PDF files contain the laboratory section, read back 
       assert.ok(!text.includes("未计算"), `${name}: nothing is left unbound`);
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("review P0-2: a search that maximizes is worded by its objective in the exported section, and a minimized sample size by its own words", () => {
+  const worded = (objective) => renderLabSection({ ...model, lab: [{ ...lab[1], objective: { ...lab[1].objective, ...objective } }] }).markdown;
+  const maximize = worded({ direction: "maximize", measure: "power", label: "功效", pick: objectivePick({ direction: "maximize", measure: "power" }, "功效") });
+  assert.match(maximize, /在这些假设下，按目标（功效最高），满足全部约束的方案：/);
+  assert.doesNotMatch(maximize, /最省/);
+  const smallest = worded({ direction: "minimize", measure: "expected_sample_size", label: "期望样本量", pick: objectivePick({ direction: "minimize", measure: "expected_sample_size" }, "期望样本量") });
+  assert.match(smallest, /按目标（期望样本量最少），满足全部约束的方案：/);
+  assert.equal(objectivePick({ direction: "minimize", measure: "cost" }, "平均费用").phrase, "费用最低");
+  assert.equal(objectivePick({ direction: "maximize", measure: "assurance" }, "药效平均后的显著概率").tag, "满足约束，药效平均后的显著概率最高");
+});
+
+test("review P2-1: the lab's premises print the open rows first and fold the rest into one paragraph, and a course table says its unit", () => {
+  const many = { ...lab[0], premises: [
+    { key: "a", label: "甲", value: "决定性的", source: "literature", decisive: true }, { key: "b", label: "乙", value: "折起来的", source: "default", decisive: false },
+    { key: "c", label: "丙", value: "也折起来", source: "assumed", decisive: false }], arms: lab[0].arms.map((arm) => ({ ...arm, trajectory: [{ visit: 26, control: 20, treated: 19 }, { visit: 52, control: 24, treated: 21 }], trajectoryUnit: "周" })) };
+  const text = renderLabSection({ ...model, lab: [many] }).markdown;
+  assert.match(text, /这个结论的前提：\n\n- 甲（文献）：决定性的\n- 其余前提：乙：折起来的；丙：也折起来/);
+  assert.match(text, /\| 随访时间点（周） \|/);
 });

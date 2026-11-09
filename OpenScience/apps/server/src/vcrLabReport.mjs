@@ -21,6 +21,7 @@
  * @module vcrLabReport
  */
 
+import { VCR_PREMISE_SOURCE_LABELS_ZH } from "@evimed/domain";
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { MEASURE_META } from "./vcrViewsKit.mjs";
 
@@ -87,7 +88,9 @@ function robustSection(robust, at, cell) {
   const names = list(robust.scenarios).map((scenario) => String(object(scenario).name));
   const tags = object(robust.tagText);
   const lines = ["#### 稳健性比较", "", cell(robust.statement), "", cell(robust.choiceRule), ""];
-  lines.push(`| 候选 | 设置 | ${names.map((name) => `${cell(`“${name}”下的功效`)}`).join(" | ")} | 最差情形功效 | 最大遗憾 | 样本量 | 所属集合 |`, `|---|---|${names.map(() => "---").join("|")}|---|---|---|---|`);
+  // a search over a mode-averaged chance names it as the search's own quantity, never 功效 (review S9)
+  const power = robust.powerLabel && robust.powerLabel !== "功效" ? `“${robust.powerLabel}”` : "功效";
+  lines.push(`| 候选 | 设置 | ${names.map((name) => `${cell(`“${name}”下的${power}`)}`).join(" | ")} | ${cell(`最差情形${power}`)} | 最大遗憾 | 样本量 | 所属集合 |`, `|---|---|${names.map(() => "---").join("|")}|---|---|---|---|`);
   list(robust.rows).forEach((row, r) => {
     const base = `${at}.rows[${r}]`;
     const set = list(row.settings).map((setting, s) => `${cell(setting.label)} {{n:${base}.settings[${s}].value.value|${Number.isInteger(setting.value.value) ? "int" : "f3"}}}`).join("，");
@@ -105,12 +108,13 @@ function robustSection(robust, at, cell) {
 /**
  * The section's template: Chinese structure and every number as a reference into `labDoc`. Nothing here is typed.
  * @param {ReadonlyArray<Record<string, any>>} root `labDocumentRoot(lab)`
- * @returns {{ template: string, premises: string[][], slots: string[] }} the template, each entry's premises (sentences, printed after the render) and the words the slots stand for
+ * @returns {{ template: string, premises: Array<{ open: string[], rest: string[] }>, slots: string[] }} the template, each entry's premises (the decisive ones and the rest,
+ *   sentences printed after the render) and the words the slots stand for
  */
 export function labSectionTemplate(root) {
   /** @type {string[]} */
   const out = ["## 虚拟实验室", ""];
-  /** @type {string[][]} */
+  /** @type {Array<{ open: string[], rest: string[] }>} */
   const premises = [];
   /** @type {string[]} */
   const slots = [];
@@ -126,7 +130,7 @@ export function labSectionTemplate(root) {
       out.push(`目标：${goal.direction === "minimize" ? "尽量减少" : "尽量提高"}${cell(goal.label)}。约束：${list(entry.constraints).map((constraint, c) =>
         `${cell(constraint.label)}${constraint.opText}{{n:${at}.constraints[${c}].boundValue.value|${constraint.boundValue.unit === "%" ? "pct1" : "f2"}}}`).join("；") || "没有"}。`, "");
       if (entry.best) {
-        out.push(`${entry.robust ? "只看基准情形、满足约束且最省的设计" : "在这些假设下满足约束且最省的设计"}：${list(entry.bestSettings).map((setting, s) => `${cell(setting.label)} {{n:${at}.bestSettings[${s}].value.value|${Number.isInteger(setting.value.value) ? "int" : "f3"}}}`).join("，")}；${cell(goal.label)} ${numberText(`${at}.best.objective`, entry.best.objective)}。`, "");
+        out.push(`${entry.robust ? "只看基准情形，" : "在这些假设下，"}${cell(goal.pick?.sentence ?? "满足全部约束的方案")}：${list(entry.bestSettings).map((setting, s) => `${cell(setting.label)} {{n:${at}.bestSettings[${s}].value.value|${Number.isInteger(setting.value.value) ? "int" : "f3"}}}`).join("，")}；${cell(goal.label)} ${numberText(`${at}.best.objective`, entry.best.objective)}。`, "");
       } else if (entry.undecided) out.push(`没有设计同时满足全部约束；${cell(entry.undecided.advice)}`, "");
       if (list(entry.finalists).length) {
         out.push(`| 候选 | 设置 | ${cell(goal.label)} | 约束 |`, "|---|---|---|---|");
@@ -155,7 +159,7 @@ export function labSectionTemplate(root) {
       }
       const courses = arms.filter((arm) => list(arm.trajectory).length);
       if (courses.length) {
-        out.push(`| 随访时间点 | ${courses.map((arm) => `${cell(arm.name)}（治疗组均值）`).join(" | ")} |`, `|---|${courses.map(() => "---").join("|")}|`);
+        out.push(`| 随访时间点${courses[0].trajectoryUnit ? `（${cell(courses[0].trajectoryUnit)}）` : ""} | ${courses.map((arm) => `${cell(arm.name)}（治疗组均值）`).join(" | ")} |`, `|---|${courses.map(() => "---").join("|")}|`);
         const visits = list(courses[0].trajectory).map((point) => point.visit);
         visits.forEach((_visit, v) => {
           const cells = courses.map((arm) => `{{n:${at}.arms[${arms.indexOf(arm)}].trajectory[${v}].treated|f1}}`);
@@ -164,7 +168,11 @@ export function labSectionTemplate(root) {
         out.push("");
       }
     }
-    premises.push(list(entry.premises).map((premise) => `${cellText(object(premise).label)}：${cellText(object(premise).value)}`));
+    // structured like the page's 「这个结论的前提」: the decisive premises one by one with where each came from, the others in one paragraph
+    const source = (/** @type {unknown} */ key) => /** @type {Record<string, string>} */ (VCR_PREMISE_SOURCE_LABELS_ZH)[String(key)] ?? "";
+    const said = list(entry.premises).map(object);
+    premises.push({ open: said.filter((premise) => premise.decisive === true).map((premise) => `${cellText(premise.label)}${source(premise.source) ? `（${source(premise.source)}）` : ""}：${cellText(premise.value)}`),
+      rest: said.filter((premise) => premise.decisive !== true).map((premise) => `${cellText(premise.label)}：${cellText(premise.value)}`) });
     out.push(`{{LAB_PREMISES_${i}}}`, "");
   });
   return { template: out.join("\n"), premises, slots };
@@ -182,7 +190,8 @@ export function renderLabSection(model) {
   const root = labDocumentRoot(lab);
   const { template, premises, slots } = labSectionTemplate(root);
   const rendered = renderVcrNumbers(template, { ...model, labDoc: root });
-  const withPremises = premises.reduce((text, lines, i) => text.replace(`{{LAB_PREMISES_${i}}}`, lines.length ? `这些结论的前提：\n\n${lines.map((line) => `- ${line}`).join("\n")}` : ""), rendered.text);
+  const withPremises = premises.reduce((text, block, i) => text.replace(`{{LAB_PREMISES_${i}}}`, block.open.length || block.rest.length
+    ? `这个结论的前提：\n\n${[...block.open.map((line) => `- ${line}`), ...(block.rest.length ? [`- 其余前提：${block.rest.join("；")}`] : [])].join("\n")}` : ""), rendered.text);
   const markdown = withPremises.replace(/\{\{TEXT_(\d+)\}\}/g, (_match, index) => slots[Number(index)] ?? "");
   return { markdown, issues: rendered.issues };
 }

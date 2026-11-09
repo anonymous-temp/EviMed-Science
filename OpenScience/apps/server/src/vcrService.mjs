@@ -67,7 +67,7 @@ import { dominatedScenarioMap, numeric, withReviewState, zhUnit } from "./vcrVie
 import { vcrExecutionInputs, vcrPopulationsWithOwnResults } from "./vcrSnapshotBinding.mjs";
 import { vcrReportModel } from "./vcrRender.mjs";
 import { readSchedule } from "./vcrScheduleView.mjs";
-import { presentResearchQuestion } from "./vcrResearchQuestionView.mjs";
+import { presentResearchQuestion, questionModelId } from "./vcrResearchQuestionView.mjs";
 import { vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { buildModelAnalysis, isModelDocumentKind, readModelAnalysisInputs } from "./vcrModelDocuments.mjs";
 import { buildVcrActivity, readRunMarks } from "./vcrStudyStatus.mjs";
@@ -1070,6 +1070,12 @@ export class VcrService {
       criteria: protocol ? await this.store.criteria(protocol.id) : [], jobMarks,
       currentNodes,
     };
+    // The records of virtual people the study holds (they are filed out of every card's way) and the comparisons that run on them, for the patients page's list.
+    if (tab === "patients") {
+      bundle.peopleRecords = await this.store.results(study.id, "experiment_candidate").catch(() => []);
+      bundle.peopleUses = await this.store.rows(`SELECT manifest->'people'->>'recordId' AS "recordId", manifest->>'question' AS question FROM ${VCR_SCHEMA}.experiments
+        WHERE study_id = $1 AND kind <> 'campaign' AND manifest->'people'->>'recordId' IS NOT NULL ORDER BY created_at DESC LIMIT 100`, [study.id]).catch(() => []);
+    }
     // The research question the premises of a result page name (R22): only the pages that print premises read it.
     if (["trial", "population", "comparator", "patients"].includes(tab)) bundle.researchQuestion = (await this.store.researchQuestions?.(study.id).catch(() => []))?.[0] ?? null;
     // The saved comparison a link names (`?object=`): the comparison tab's headline follows it, and the newest stays without one.
@@ -1856,8 +1862,9 @@ export class VcrService {
       case "research_question": {
         // The study's question as it stands: what is written and by whom, what is still open (a gap is a default, not a defect) and which
         // events this simulation can represent. `modelId` judges the events against one model; without it, the platform's general handling.
-        const modelId = typeof filter.modelId === "string" && filter.modelId ? filter.modelId : null;
-        const questions = (await this.store.researchQuestions(study.id)).map((question) => presentResearchQuestion(question, { modelId }));
+        const named = typeof filter.modelId === "string" && filter.modelId ? filter.modelId : null;
+        const progressions = named ? [] : await this.store.results(study.id, "progression_simulation").catch(() => []);
+        const questions = (await this.store.researchQuestions(study.id)).map((question) => presentResearchQuestion(question, { modelId: named ?? questionModelId(question, progressions) }));
         return { questions: questions.slice(0, limit), more: questions.length > limit };
       }
       case "regulatory_contacts": {

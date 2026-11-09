@@ -34,7 +34,7 @@ import { finishPremises } from "./vcrPremises.mjs";
 import { drugOriginPremises } from "./vcrDrugOriginPremises.mjs";
 import { credibilityPremises } from "./vcrCredibilityPremises.mjs";
 import { researchQuestionPremises, resultQuestionInput } from "./vcrResearchQuestionView.mjs";
-import { list, markFor, measureValue, numeric, object, text, zhUnit } from "./vcrViewsKit.mjs";
+import { list, markFor, measureLabel, measureValue, numeric, object, text, zhUnit } from "./vcrViewsKit.mjs";
 
 /** @param {unknown} value @returns {unknown} the value with every object's keys in order, so the same scenario is the same text */
 function ordered(value) {
@@ -51,6 +51,20 @@ function ordered(value) {
 export function vcrProgressionSubjectId(scenario) {
   return `pg:${createHash("sha256").update(JSON.stringify(ordered(object(scenario)))).digest("hex").slice(0, 10)}`;
 }
+
+/**
+ * What a run on a record of virtual people is, said once for the card and for the lab (round-2 review P0-1): the record's study is fixed, so a chance
+ * computed on it is conditional on that study; the paired mode's answer is the contrast of the same people under both arms, which is the model's reading
+ * and never an observed individual effect.
+ */
+export const PEOPLE_MODE_TEXT_ZH = Object.freeze({
+  paired_counterfactual: "每一组都用同一批虚拟患者：每个人在各组里个体特征、脱落时间和测量误差的随机数都相同，只有药物不同。结果是模型推算的“同一批人换一种治疗会怎样”，不是任何试验观察到的个体疗效。",
+  resampled_trials: "每一组的每次模拟试验都从同一份虚拟患者记录里抽人并随机分组，各组抽到的人相同；记录里的研究层面差异是固定的，没有再抽。",
+});
+/** The closed id of the chance a run on a record states (a study fixed by the record, nothing averaged over studies). */
+const FIXED_STUDY_QUANTITY = "conditional_power_fixed_study";
+/** The paired mode's measures, in the order the card shows them: the mean first, the spread of the people, then who is better off. */
+const PAIRED_MEASURES = Object.freeze(["paired_mean_contrast", "paired_latent_mean_contrast", "paired_latent_sd", "paired_latent_q10", "paired_latent_q50", "paired_latent_q90", "paired_share_improved", "paired_observed_share"]);
 
 const FAMILY_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ linear: "线性", exponential: "指数", logistic: "逻辑斯蒂（S 形）", emax: "Emax（逐渐饱和）", beta_logit: "阿尔茨海默病 ADAS-cog 11 " }));
 const BASIS_SOURCE = Object.freeze(/** @type {Record<string, "literature" | "assumed" | "given">} */ ({ literature: "literature", assumed: "assumed", data: "given" }));
@@ -115,6 +129,24 @@ function alzheimerEffectWords(progression) {
   return parts.length ? parts.join("；") : null;
 }
 
+/**
+ * The tier of the drug effect a run states, from what the result itself carries: a marketed inhibitor (A), a published chain (B), an earlier piece of
+ * evidence stated as a distribution (C), or the person's own hypothesis. The effect row ends by it, so it never contradicts the tier row beside it.
+ * @param {Record<string, any>} progression @returns {"A" | "B" | "C" | "stated"}
+ */
+function effectTier(progression) {
+  if (text(object(object(progression.treatment).reference).drug)) return "A";
+  if (text(object(progression.mechanism).drug)) return "B";
+  if (list(progression.effectDistributions).map(object).some((entry) => entry.tier === "C")) return "C";
+  return "stated";
+}
+const EFFECT_ENDING_ZH = Object.freeze(/** @type {Record<string, string>} */ ({
+  A: "这是数据拟合的模型对这类已上市药物的预测，不是对任何新药的预测",
+  B: "这只在已发表的机制链成立时才是这个药的效果，不是药物有效的结论",
+  C: "这只在这份已有证据可以推到这项研究时才成立",
+  stated: "这是你设定的假设，不是对某个药物疗效的预测",
+}));
+
 /** What the Alzheimer model's parameters are and what they reproduce (a sentence the result card and the lab's experiments both say). */
 export const ALZHEIMER_PARAMETERS_TEXT = "参数直接用 CAMD 模型（Rogers 等，2012）公开的原值，没有按你的数据重新估计。";
 /** What those parameters reproduce of the 2013 EMA opinion: a folded detail, not a decisive row. */
@@ -167,7 +199,7 @@ function intercurrentPremises(progression) {
   if (numeric(death.share) !== null) parts.push(`约 ${pct(death.share)} 的人死亡，死亡后的分数按最差值 70 分计`);
   /** @type {Array<Record<string, any>>} */
   const rows = [];
-  if (parts.length) rows.push({ key: "progression:ad:events", label: "停药、退出和死亡", source: "given", decisive: false, value: `${parts.join("；")}。停药后对症的效果按设定的半衰期消退，疾病修饰的效果保留` });
+  if (parts.length) rows.push({ key: "progression:ad:events", label: "停药、退出和死亡", source: "assumed", decisive: false, value: `${parts.join("；")}。停药后对症的效果按设定的半衰期消退，疾病修饰的效果保留` });
   const strategyWords = /** @type {Record<string, string>} */ ({ treatment_policy: "不论是否停药（治疗策略）", hypothetical: "假如没有人停药（假想情境）" });
   const estimator = String(ic.estimator ?? "");
   const claimed = typeof ic.claimed === "string" ? ic.claimed : null;
@@ -176,7 +208,7 @@ function intercurrentPremises(progression) {
     return truth === null ? null : `${strategyWords[String(row.strategy)] ?? String(row.strategy)}：真实差值 ${plain(truth)} 分，这个分析的偏差 ${bias === null ? "未知" : `${plain(bias)}${mcse === null ? "" : `（模拟误差 ${plain(mcse)}）`}`} 分，95% 区间覆盖 ${cover === null ? "未知" : pct(cover)}`;
   }).filter(Boolean);
   const alignment = claimed ? vcrEstimandAlignment({ strategy: claimed, estimator, data: String(ic.data ?? "") }) : null;
-  if (table.length) rows.push({ key: "progression:ad:estimand", label: "这个分析回答的是哪个效应", source: "derived", decisive: claimed !== null,
+  if (table.length) rows.push({ key: "progression:ad:estimand", label: "这个分析回答的是哪个效应", source: "default", decisive: claimed !== null,
     value: `${table.join("；")}。${alignment ? alignment.sentence : "两个真实值都由模型算出，偏差小、覆盖率接近 95% 的那个才是这个分析回答的问题"}` });
   return rows;
 }
@@ -184,36 +216,72 @@ function intercurrentPremises(progression) {
 /**
  * The estimand table of a run with intercurrent events: for each way of handling a stop the model's true value, this analysis's bias against it and the
  * coverage of its 95% interval, each with its Monte Carlo error, and a sentence saying whether the analysis answers that question. Null for a run without them.
- * @param {Record<string, any>} progression @param {(measure: Record<string, any>) => unknown} shown
+ * The row the table marks as wanted is the research question's own strategy when the question states one, else the strategy the run says it answers
+ * (`claimedBy` says which, so the page never calls the run's own aim “研究问题要的”).
+ * @param {Record<string, any>} progression @param {(measure: Record<string, any>) => unknown} shown @param {readonly string[]} [questionStrategies]
  */
-function estimandsOf(progression, shown) {
+function estimandsOf(progression, shown, questionStrategies = []) {
   const ic = object(progression.intercurrent);
   const rows = list(ic.estimands).map(object);
   if (!rows.length) return null;
   const labels = /** @type {Record<string, string>} */ ({ treatment_policy: "不论是否停药（治疗策略）", hypothetical: "假如没有人停药（假想情境）" });
   return { rows: rows.map((row) => {
     const alignment = vcrEstimandAlignment({ strategy: String(row.strategy), estimator: String(ic.estimator ?? ""), data: String(ic.data ?? "") });
-    return { key: String(row.strategy), label: labels[String(row.strategy)] ?? String(row.strategy), claimed: ic.claimed === row.strategy, truth: shown(object(row.truth)),
+    const fromQuestion = questionStrategies.length > 0;
+    return { key: String(row.strategy), label: labels[String(row.strategy)] ?? String(row.strategy), claimed: fromQuestion ? questionStrategies.includes(String(row.strategy)) : ic.claimed === row.strategy,
+      claimedBy: fromQuestion ? "question" : "run", truth: shown(object(row.truth)),
       bias: Object.keys(object(row.bias)).length ? shown(object(row.bias)) : null, coverage: Object.keys(object(row.coverage)).length ? shown(object(row.coverage)) : null,
       sentence: alignment.sentence };
   }) };
 }
 
+/**
+ * The rows a run on a record of virtual people adds: whose people they are, how many have a baseline outside the range the model was fitted on, and whether
+ * the record was made for an earlier parameter file. Nothing here is computed on the page; the engine's report is read.
+ * @param {Record<string, any>} progression
+ * @returns {Array<Record<string, any>>}
+ */
+function peopleRows(progression) {
+  const people = object(progression.people);
+  if (!Object.keys(people).length) return [];
+  const mode = String(people.mode ?? "");
+  const total = numeric(people.people);
+  const outside = numeric(people.outsideFittedMmse);
+  const fitted = pairOf(people.fittedMmse);
+  /** @type {Array<Record<string, any>>} */
+  const rows = [{ key: "progression:ad:people", label: "入组的人", decisive: true, source: "default",
+    value: `${total === null ? "一份" : `${plain(total)} 个`}虚拟患者的记录里的人（由模型的人群层面造出，不是真人）。${PEOPLE_MODE_TEXT_ZH[/** @type {keyof typeof PEOPLE_MODE_TEXT_ZH} */ (mode)] ?? ""}` }];
+  if (outside !== null && outside > 0) {
+    rows.push({ key: "progression:ad:people-range", label: "超出拟合范围的人", decisive: true, source: "default",
+      value: `${total === null ? "" : `${plain(total)} 个人里有 `}${plain(outside)} 个人的基线 MMSE 在模型拟合所用试验的入组范围${fitted ? `（${plain(fitted[0])}–${plain(fitted[1])} 分）` : ""}之外，他们的结果是外推。` });
+  }
+  if (people.madeForCurrentModel === false) {
+    rows.push({ key: "progression:ad:people-model", label: "这批人是为哪个模型造的", decisive: true, source: "default",
+      value: "这份记录是为更早的一版模型参数造的：这些人照样被模拟，但他们的个体参数属于那个旧模型。" });
+  }
+  return rows;
+}
+
 /** The premises of the Alzheimer model (beta_logit): five decisive sentences, the rest folded. @param {Record<string, any>} progression */
 function alzheimerPremisesOf(progression, assessment = null) {
   const effect = alzheimerEffectWords(progression);
+  const tier = effectTier(progression);
   const effectBasis = String(givenOf(progression, "treatment.diseaseModifying.fraction").basis ?? givenOf(progression, "treatment.symptomatic.pointsAt").basis ?? givenOf(progression, "treatment.symptomatic.logitEmax").basis ?? "assumed");
   const extrapolation = object(progression.extrapolation);
   const population = object(progression.population);
+  const onRecord = Object.keys(object(progression.people)).length > 0;
   const mmse = pairOf(population.mmseRange);
   const ages = pairOf(population.ageBounds);
   const analysis = object(progression.analysis);
   const treatment = object(progression.treatment);
   const visit = plain(Number(analysis.visit));
+  // A value the scenario states with no record of whose words it was is an assumption of the run, not the person's data; only what the engine
+  // defaulted is a default (round-2 review P1-1: nothing here reads 你给的数据 without a checked record of the person's messages).
+  const stated = (/** @type {string} */ key) => (assumedHas(progression, key) ? "default" : "assumed");
   /** @type {Array<Record<string, any>>} */
   const rows = [
-    { key: "progression:ad:effect", label: "药物效果", decisive: true, source: effect ? BASIS_SOURCE[effectBasis] ?? "assumed" : "default",
-      value: effect ? `${effect}。这是你设定的假设，不是对某个药物疗效的预测` : "没有设定药物效果，两组相同：这里看的是检验误判有效的概率" },
+    { key: "progression:ad:effect", label: "药物效果", decisive: true, source: effect ? (tier === "stated" ? BASIS_SOURCE[effectBasis] ?? "assumed" : "literature") : "default",
+      value: effect ? `${effect}。${EFFECT_ENDING_ZH[tier]}` : "没有设定药物效果，两组相同：这里看的是检验误判有效的概率" },
     { key: "progression:ad:parameters", label: "模型参数", decisive: true, source: "literature",
       value: ALZHEIMER_PARAMETERS_TEXT },
     { key: "progression:ad:reproduction", label: "复现情况", decisive: false, source: "literature", value: ALZHEIMER_REPRODUCTION_TEXT },
@@ -221,29 +289,31 @@ function alzheimerPremisesOf(progression, assessment = null) {
       value: ALZHEIMER_REGULATORY_TEXT },
     { key: "progression:ad:scope", label: "适用范围", decisive: true, source: "literature",
       value: alzheimerScopeText(extrapolation.beyond === true, Number(extrapolation.lastVisit), mmse) },
-    { key: "progression:ad:mmse", label: "入组的人", decisive: true, source: assumedHas(progression, "population.mmseRange") ? "default" : BASIS_SOURCE[String(givenOf(progression, "population.mmseRange").basis)] ?? "assumed",
-      value: mmse ? `基线 MMSE 在 ${plain(mmse[0])}–${plain(mmse[1])} 分之间均匀分布${ages ? `，年龄 ${plain(ages[0])}–${plain(ages[1])} 岁` : ""}` : "按模型默认的入组范围" },
+    ...(onRecord ? [] : [{ key: "progression:ad:mmse", label: "入组的人", decisive: true, source: assumedHas(progression, "population.mmseRange") ? "default" : BASIS_SOURCE[String(givenOf(progression, "population.mmseRange").basis)] ?? "assumed",
+      value: mmse ? `基线 MMSE 在 ${plain(mmse[0])}–${plain(mmse[1])} 分之间均匀分布${ages ? `，年龄 ${plain(ages[0])}–${plain(ages[1])} 岁` : ""}` : "按模型默认的入组范围" }]),
+    ...peopleRows(progression),
   ];
-  const uncertainty = String(progression.uncertainty ?? "");
+  const uncertainty = onRecord ? "fixed_study" : String(progression.uncertainty ?? "");
   const uncertaintyWords = /** @type {Record<string, string>} */ ({
+    fixed_study: `这批虚拟患者来自一项固定的研究，每次模拟都在这一项研究里进行，不再抽取研究层面的参数，所以数字里没有研究之间的差异（“${VCR_RESULT_QUANTITY_LABELS_ZH[FIXED_STUDY_QUANTITY]}”）`,
     new_study: `每次模拟的试验都按一项新研究抽取研究层面的参数（研究之间的差异算在“${VCR_RESULT_QUANTITY_LABELS_ZH.expected_power_over_studies}”里）`,
     typical_study: "不考虑研究之间的差异，每次模拟都是同一个典型研究",
     posterior_draws: `每次模拟先抽一组后验参数，再按它抽一项新研究（参数的不确定性和研究之间的差异都算在“${VCR_RESULT_QUANTITY_LABELS_ZH.expected_power_over_parameters}”里）`,
   });
-  if (uncertaintyWords[uncertainty]) rows.push({ key: "progression:ad:uncertainty", label: "试验之间的差异", value: uncertaintyWords[uncertainty], source: assumedHas(progression, "model.uncertainty") ? "default" : "given" });
+  if (uncertaintyWords[uncertainty]) rows.push({ key: "progression:ad:uncertainty", label: "试验之间的差异", value: uncertaintyWords[uncertainty], source: onRecord || assumedHas(progression, "model.uncertainty") ? "default" : "assumed" });
   const apoe = list(population.apoe4).map(Number); const means = list(population.ageMeanByApoe4).map(Number);
-  if (apoe.length === 3 && means.length === 3 && numeric(population.femaleShare) !== null) {
-    rows.push({ key: "progression:ad:covariates", label: "年龄、性别和 ApoE4", source: assumedHas(progression, "population.covariates") ? "default" : "given",
+  if (!onRecord && apoe.length === 3 && means.length === 3 && numeric(population.femaleShare) !== null) {
+    rows.push({ key: "progression:ad:covariates", label: "年龄、性别和 ApoE4", source: stated("population.covariates"),
       value: `带 0、1、2 个 ApoE4 等位基因的人各占 ${apoe.map((x) => plain(x * 100, 3)).join("%、")}%，女性 ${plain(Number(population.femaleShare) * 100, 3)}%，三组的平均年龄 ${means.map((x) => plain(x, 3)).join("、")} 岁` });
   }
-  rows.push({ key: "progression:ad:dropout", label: "脱落", source: assumedHas(progression, "dropoutModel") ? "default" : "given",
+  rows.push({ key: "progression:ad:dropout", label: "脱落", source: stated("dropoutModel"),
     value: progression.dropoutModel === "none" ? "不考虑脱落，每个人都看到最后" : "按模型的脱落规律：与年龄和 MMSE 有关，与分组和病情无关" });
-  rows.push({ key: "progression:ad:placebo", label: "安慰剂反应", source: assumedHas(progression, "placebo") ? "default" : "given",
+  rows.push({ key: "progression:ad:placebo", label: "安慰剂反应", source: stated("placebo"),
     value: progression.placebo === false ? "不加安慰剂反应" : "两组从第 0 周起都有安慰剂反应" });
-  rows.push({ key: "progression:ad:analysis", label: "比较方法", source: assumedHas(progression, "analysis.kind") || assumedHas(progression, "analysis.visit") ? "default" : "given",
+  rows.push({ key: "progression:ad:analysis", label: "比较方法", source: assumedHas(progression, "analysis.kind") || assumedHas(progression, "analysis.visit") ? "default" : "assumed",
     value: `第 ${visit} 周相对基线的变化，${analysisWords(analysis)}；检验水平双侧 ${plain(Number(analysis.alpha ?? 0.05) * 100)}%` });
   rows.push(...intercurrentPremises(progression));
-  if (effect) rows.push({ key: "progression:ad:dosing", label: "用药时间", source: assumedHas(progression, "treatment.doseEnd") ? "default" : "given",
+  if (effect) rows.push({ key: "progression:ad:dosing", label: "用药时间", source: stated("treatment.doseEnd"),
     value: `第 ${plain(Number(treatment.doseBegin ?? 0))}–${plain(Number(treatment.doseEnd))} 周` });
   rows.push({ key: "progression:ad:curves", label: "曲线怎么算的", source: "default",
     value: "平均病程按典型研究、用参数的中位数精确计算；检验的把握度和估计差值是模拟的" });
@@ -284,15 +354,44 @@ function runWords(result, progression, alzheimer) {
   const size = control !== null && treated !== null && Number.isInteger(control) && Number.isInteger(treated)
     ? (control === treated ? `每组 ${control} 人` : `治疗组 ${treated} 人、对照组 ${control} 人`)
     : total !== null && Number.isInteger(total) ? `共 ${total} 人` : null;
-  const variation = alzheimer ? /** @type {Record<string, string>} */ ({ typical_study: "同一个典型研究", new_study: "含研究之间的差异", posterior_draws: "含参数的不确定性" })[String(progression.uncertainty)] : null;
+  const variation = Object.keys(object(progression.people)).length ? "在这批虚拟患者所属的研究里" : alzheimer ? /** @type {Record<string, string>} */ ({ typical_study: "同一个典型研究", new_study: "含研究之间的差异", posterior_draws: "含参数的不确定性" })[String(progression.uncertainty)] : null;
   const slope = object(progression.analysis).kind === "slope" ? "按斜率比较" : null;
   return [arms, size, slope].filter(Boolean).join("，") + (variation ? `（${variation}）` : "");
 }
 
 /**
+ * The closed name of the chance a progression run states (`VCR_RESULT_QUANTITIES`), from what the run carries: the same decision for the card, for each
+ * arm of a lab comparison and for a lab search, so that no page calls a mode-averaged number 「功效」 (round-2 review P1-9, S9). Null for a run without a
+ * true effect (it states the error it makes, not a power).
+ * @param {Record<string, any>} progression the result's `diagnostics.progression`
+ * @returns {string | null}
+ */
+export function progressionPowerQuantity(progression) {
+  if (progression.isNull === true) return null;
+  if (list(progression.effectDistributions).length > 0) return "assurance";
+  if (Object.keys(object(progression.people)).length > 0) return FIXED_STUDY_QUANTITY;
+  return VCR_UNCERTAINTY_MODE_QUANTITY[/** @type {keyof typeof VCR_UNCERTAINTY_MODE_QUANTITY} */ (String(progression.uncertainty ?? "typical_study"))] ?? "conditional_power_typical_study";
+}
+
+/**
+ * The same name from a scenario before it ran (a lab search's frozen scenario): the effect distribution or record of people it states, else its
+ * `model.uncertainty` mode, else the typical study.
+ * @param {Record<string, any>} scenario @returns {string}
+ */
+export function scenarioPowerQuantity(scenario) {
+  const treatment = object(scenario.treatment);
+  if (JSON.stringify(treatment).includes('"distribution"')) return "assurance";
+  if (Object.keys(object(scenario.people)).length > 0) return FIXED_STUDY_QUANTITY;
+  return VCR_UNCERTAINTY_MODE_QUANTITY[/** @type {keyof typeof VCR_UNCERTAINTY_MODE_QUANTITY} */ (String(object(scenario.model).uncertainty ?? "typical_study"))] ?? "conditional_power_typical_study";
+}
+
+/** @param {string} quantity */
+export const powerQuantityLabel = (quantity) => /** @type {Record<string, string>} */ (VCR_RESULT_QUANTITY_LABELS_ZH)[quantity] ?? quantity;
+
+/**
  * @param {Record<string, any>} result @param {any} staleMark
  */
-function cardOf(result, staleMark, assessment = null) {
+function cardOf(result, staleMark, assessment = null, questionStrategies = []) {
   const progression = object(object(result.diagnostics).progression);
   const family = String(progression.family ?? "");
   const curves = list(progression.curves).map(object);
@@ -313,7 +412,14 @@ function cardOf(result, staleMark, assessment = null) {
   const slope = analysis.kind === "slope";
   // an effect stated as a distribution (1.2.0) reports an assurance, named so, not a power
   const distributed = list(progression.effectDistributions).length > 0;
-  const power = list(result.measures).map(object).find((measure) => measure.name === (isNull ? "type_one_error" : distributed ? "assurance" : "power")) ?? null;
+  // a run on a record of virtual people: its study is the record's (fixed), and the paired mode's answer is a contrast of the same people, not a power
+  const people = object(progression.people);
+  const onRecord = Object.keys(people).length > 0;
+  const paired = onRecord && String(people.mode) === "paired_counterfactual";
+  const quantity = progressionPowerQuantity(progression);
+  const power = paired ? null : list(result.measures).map(object).find((measure) => measure.name === (isNull ? "type_one_error" : distributed ? "assurance" : "power")) ?? null;
+  const pairedMeasures = paired ? PAIRED_MEASURES.map((name) => list(result.measures).map(object).find((measure) => measure.name === name)).filter(Boolean)
+    .map((measure) => ({ key: String(object(measure).name), label: measureLabel(String(object(measure).name)), value: shown(object(measure)) })) : [];
   const approx = numeric(object(progression.approximation).power);
   const difference = list(result.measures).map(object).find((measure) => measure.name === "expected_difference") ?? null;
   const band = (/** @type {Record<string, any>} */ arm, /** @type {number} */ z) => {
@@ -332,14 +438,19 @@ function cardOf(result, staleMark, assessment = null) {
     title: `${FAMILY_WORDS[family] ?? family}进展：${runWords(result, progression, alzheimer)}`,
     question: isNull
       ? "治疗什么都不改变时，这个检验会误判有效的概率是多少"
+      : paired
+        ? "同一批虚拟患者，用药和不用药各会怎样；模型推算的差别有多大、多少人会更好"
+      : alzheimer && quantity === "assurance"
+        ? `按药效的不确定性平均后，第 ${plain(Number(analysis.visit))} 周得到显著结果的概率有多大`
       : alzheimer
-        ? `药物按你设定的效果起作用时，第 ${plain(Number(analysis.visit))} 周检验判出有效的把握有多大`
+        ? `药物按这里设定的效果起作用时，第 ${plain(Number(analysis.visit))} 周检验判出有效的把握有多大`
         : `这么多人、把进展减慢 ${plain(Number(object(progression.treatment).slowing) * 100)}% 时，${slope ? "按每个人的进展斜率比较" : "按基线到所选随访的变化比较"}，检验判出有效的把握有多大`,
     label: "人群层面，不是对个人的预测",
     reason: "这条曲线只描述一组人的平均病程和人与人之间的散布，用来估计检验的把握；它不能告诉你某一个人会怎样。",
     power: power ? shown(power) : null,
-    powerName: isNull ? "没有真实效应时误判有效的概率" : distributed ? VCR_RESULT_QUANTITY_LABELS_ZH.assurance : VCR_RESULT_QUANTITY_LABELS_ZH[VCR_UNCERTAINTY_MODE_QUANTITY[String(progression.uncertainty ?? "typical_study")] ?? "conditional_power_typical_study"],
-    powerQuantity: isNull ? null : distributed ? "assurance" : VCR_UNCERTAINTY_MODE_QUANTITY[String(progression.uncertainty ?? "typical_study")] ?? "conditional_power_typical_study",
+    powerName: paired ? "同一批虚拟患者里，用药与不用药的差别（模型推算）" : quantity === null ? "没有真实效应时误判有效的概率" : VCR_RESULT_QUANTITY_LABELS_ZH[/** @type {keyof typeof VCR_RESULT_QUANTITY_LABELS_ZH} */ (quantity)],
+    powerQuantity: paired ? null : quantity,
+    paired: paired ? { measures: pairedMeasures, sentence: PEOPLE_MODE_TEXT_ZH.paired_counterfactual } : null,
     approximation: approx === null ? null : shown({ name: isNull ? "type_one_error" : "power", value: approx, source: "calculated" }),
     expected: difference ? { value: shown(difference), words: slope ? "治疗组减对照组的平均斜率之差" : alzheimer ? "治疗组减对照组的平均变化之差（典型研究，按那时仍在随访的人）" : "治疗组减对照组的平均变化之差" } : null,
     timeUnit: unit ? unitWords(unit) : unit, visits: curves.map((curve) => Number(curve.visit)),
@@ -353,7 +464,7 @@ function cardOf(result, staleMark, assessment = null) {
           gap: shown(inUnit({ name: "curve_gap", value: Number(object(t.mean).value) - Number(object(c.mean).value), source: "calculated" })) };
       }),
     },
-    estimands: alzheimer ? estimandsOf(progression, shown) : null,
+    estimands: alzheimer ? estimandsOf(progression, shown, questionStrategies) : null,
     trials: numeric(progression.trials),
     premises: alzheimer ? alzheimerPremisesOf(progression, assessment) : premisesOf(progression, unit),
     limited: list(object(result.diagnostics).issues).some((issue) => object(issue).code === "cpu_budget_exhausted")
@@ -405,7 +516,8 @@ export function presentProgressions(bundle, { nodeOf }) {
   return results.map((result) => {
     // The Alzheimer model's calibration estimand is the parameter set's: only a result computed with it is judged against it.
     const modelId = object(object(object(result.diagnostics).progression)).family === "beta_logit" ? "camd-adas-cog-11" : null;
-    const card = cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)), assessmentForModel(bundle.assessments, modelId));
+    const strategies = [...new Set(list(object(object(bundle.researchQuestion).fields).intercurrentEvents).map((entry) => object(entry).strategy).filter((value) => value === "treatment_policy" || value === "hypothetical"))].map(String);
+    const card = cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)), assessmentForModel(bundle.assessments, modelId), strategies);
     const rows = card ? [...researchQuestionPremises(resultQuestionInput(bundle, result, modelId)), ...estimatorForQuestionRows(bundle, result)] : [];
     return card && rows.length ? { ...card, premises: finishPremises([...list(card.premises), ...rows]) } : card;
   }).filter(Boolean);

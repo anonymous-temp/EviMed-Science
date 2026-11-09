@@ -150,7 +150,8 @@ export function modelUsePremises(findings) {
     const value = code === "input_out_of_range"
       ? `有变量超出了模型声明的取值范围${limits.length === 2 && limits.every(Number.isFinite) ? `（${limits[0]}–${limits[1]}）` : ""}；超出的部分是外推。`
       : code === "individual_laplace_untrusted" && Number.isInteger(finding.people) && finding.people > 0
-        ? `有 ${finding.people} 个人的后验用近似算出，近似的可靠性不够；他们的预测区间只作参考。`
+        // a count of real people below the small-cell floor is never printed (it is also a count in the stored sentence a model reads)
+        ? `有${finding.people < VCR_MIN_CELL_SIZE ? "少数" : ` ${finding.people} 个`}人的后验用近似算出，近似的可靠性不够；他们的预测区间只作参考。`
         : USE_PREMISE_TEXT_ZH[code] ?? /** @type {Record<string, string>} */ (VCR_USE_TEXT_ZH)[code];
     return value ? [{ key: `use:${code}`, label: USE_PREMISE_LABEL_ZH[code] ?? "模型的适用范围", value, source: /** @type {const} */ ("assumed"), decisive: USE_DECISIVE.has(code) }] : [];
   });
@@ -340,9 +341,16 @@ function trialPremises(input) {
       // reads 「由你给的数据算出」 only while its parent is the person's (a derived value of an assumed rate is an assumption).
       const per = (TIME_UNIT_WORDS[String(vcrTimeUnitOf(accrual.rateUnit) ?? vcrTimeUnitOf(configuration.timeUnit) ?? "months")] ?? TIME_UNIT_WORDS.months).bare;
       const parent = personWord(input.personStated, "accrual.rate", "assumed");
+      // the duration is the quotient of the rate and the group sizes: it is the person's only when the sizes are too (a size nobody stated is an
+      // assumed one, and a derived value of an assumed size is an assumption, review P2-12); a single-arm generator has one group
+      const oneGroup = ["single_arm", "single_arm_external", "simon_two_stage"].includes(String(input.designKind ?? object(configuration.design).kind));
+      const sizes = oneGroup ? 1 : 2;
+      const sizePaths = oneGroup ? ["design.nTreat"] : ["design.nTreat", "design.nControl"];
+      const sizesStated = personWord(input.personStated, sizePaths, "assumed") === "given";
+      const durationSource = parent === "given" && sizesStated ? "derived" : parent === "given" ? "assumed" : parent;
       rows.push({ key: "accrualRate", label: "入组速度", value: `每${per} ${plain(rate)} 人`, source: parent, decisive: true });
-      rows.push({ key: "accrual", label: "入组时长", value: `${plain(duration)} ${time}`, source: parent === "given" ? "derived" : parent, from: "accrualRate",
-        reason: `由每${per} ${plain(rate)} 人和两组的计划人数算出`, decisive: false });
+      rows.push({ key: "accrual", label: "入组时长", value: `${plain(duration)} ${time}`, source: durationSource, from: "accrualRate",
+        reason: `由每${per} ${plain(rate)} 人和${sizes === 1 ? "这一组的计划人数" : "两组的计划人数"}算出`, decisive: false });
       if (followup !== null) rows.push({ key: "followup", label: "随访时长", value: `${plain(followup)} ${time}`, source: personWord(input.personStated, "accrual.followup", "assumed"), decisive: true });
     } else {
       const parts = [duration !== null ? `入组 ${plain(duration)} ${time}` : null, followup !== null ? `随访 ${plain(followup)} ${time}` : null].filter(Boolean);
@@ -393,7 +401,10 @@ function trialPremises(input) {
   // rests on hold; beside an assurance the page says which are missing, in the person's words, instead of leaving the reader to read the
   // assurance as it (`facts` is what the caller knows: an absent fact is a missing one).
   if (input.assuranceRan === true) {
-    const availability = vcrQuantityAvailability("trial_success_probability", { effectPrior: true, ...object(input.successFacts) });
+    // A design page is of a classic design: it has no between-study variation to carry and no intercurrent-event estimand to align, so those two facts
+    // are not missing here, they do not exist (naming them was a permanent line on every assurance, review P2-2); what can still be missing is the
+    // minimal important difference, and only that is said.
+    const availability = vcrQuantityAvailability("trial_success_probability", { effectPrior: true, betweenStudy: true, estimand: true, ...object(input.successFacts) });
     if (!availability.computable) {
       rows.push({ key: "trialSuccess", label: VCR_RESULT_QUANTITY_LABELS_ZH.trial_success_probability, value: `没有计算：还缺${availability.missing.map((key) => /** @type {Record<string, string>} */ (VCR_QUANTITY_FACT_LABELS_ZH)[key]).join("、")}`, source: "default", decisive: false });
     }

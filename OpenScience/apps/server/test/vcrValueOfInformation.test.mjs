@@ -56,8 +56,9 @@ test("an input with no distribution gets the decisions at its three values and w
   const [row] = card.thresholds;
   assert.equal(row.label, "药物效应");
   assert.deepEqual(row.stated, { optimistic: 2, base: 1.2, pessimistic: 0.2 });
-  assert.equal(row.decisions.optimistic, "n300");
-  assert.equal(row.decisions.pessimistic, "no_trial");
+  // the option's own label stays, and beside it what it is in people; a trial of nobody is “不做试验” (review P2-7)
+  assert.equal(row.decisions.optimistic, "n300（每组 300 人）");
+  assert.equal(row.decisions.pessimistic, "no_trial（不做试验）");
   assert.equal(row.flips.length, 1);
   assert.ok(row.flips[0].value.value > 0.2 && row.flips[0].value.value < 2 && row.flips[0].value.mcse > 0);
   assert.ok(!card.inputs.some((input) => input.label === "药物效应"), "a range has no EVPPI");
@@ -67,6 +68,9 @@ test("an input with no distribution gets the decisions at its three values and w
 test("a table of draws the engine did not compute says so in the premises, and its inputs are named by the caller's own columns", () => {
   const card = cardOf("table");
   assert.ok(card.premises.some((p) => p.key === "table_source" && p.decisive && /没有重新计算/.test(p.value)));
+  // the words of the person, not of the interface: no 「调用方」 and no 「引擎」 (P2-7), and a table nobody checked is not “你给的数据” (P1-1)
+  assert.doesNotMatch(card.premises.map((p) => p.value).join(" "), /调用方|引擎/);
+  assert.equal(card.premises.find((p) => p.key === "table_source").source, "assumed");
   assert.deepEqual(card.inputs.map((row) => row.label).sort(), ["theta", "w"]);
   assert.equal(card.studies.length, 1);
 });

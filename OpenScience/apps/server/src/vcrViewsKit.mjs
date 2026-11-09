@@ -41,7 +41,7 @@ import { vcrAnalyticComputationBasis } from "./vcrScientificBasis.mjs";
 
 import {
   VCR_COUNT_KEYS, VCR_INTERVAL_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_PERFORMANCE_MEASURE_LABELS_ZH,
-  VCR_STALE_REASON_LABELS_ZH, VCR_VALUE_SOURCES, knownErrorCodeMessage, VCR_RESULT_QUANTITY_LABELS_ZH } from "@evimed/domain";
+  VCR_STALE_REASON_LABELS_ZH, VCR_VALUE_SOURCES, knownErrorCodeMessage, VCR_RESULT_QUANTITY_LABELS_ZH, VCR_RESULT_QUANTITY_SHORT_ZH } from "@evimed/domain";
 
 /** @param {unknown} value */
 export const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
@@ -344,10 +344,10 @@ export const MEASURE_META = Object.freeze({
   power: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.power, unit: "%", percent: true },
   type_one_error: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.type_one_error, unit: "%", percent: true },
   coverage: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.coverage, unit: "%", percent: true },
-  assurance: { label: VCR_RESULT_QUANTITY_LABELS_ZH.assurance, unit: "%", percent: true },
+  assurance: { label: VCR_RESULT_QUANTITY_SHORT_ZH.assurance, unit: "%", percent: true },
   duration_months: { label: "平均研究时长", unit: "个月" },
   power_at_prior_mean: { label: "先验均值处的功效", unit: "%", percent: true },
-  assurance_simulated: { label: `${VCR_RESULT_QUANTITY_LABELS_ZH.assurance}（仿真复核）`, unit: "%", percent: true },
+  assurance_simulated: { label: `${VCR_RESULT_QUANTITY_SHORT_ZH.assurance}（仿真复核）`, unit: "%", percent: true },
   bias: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.bias },
   empirical_se: { label: "经验标准误" },
   mse: { label: "均方误差" },
@@ -540,6 +540,16 @@ export const MEASURE_META = Object.freeze({
   paired_share_improved: { label: "期望评分更好的人所占比例（模型推算）", unit: "%", percent: true },
   paired_observed_share: { label: "分析随访时仍在观察的人所占比例", unit: "%", percent: true },
   baseline_mean_score: { label: "这批虚拟患者的期望基线评分" },
+  // the intercurrent-event table of an Alzheimer result (the truth of each way of handling a stop, this analysis's bias and interval coverage against it)
+  // and the share of people a rule realized: a name the page never shows as the engine wrote it
+  estimand_truth: { label: "按这种处理方式，模型算出的真实差值" },
+  estimator_bias: { label: "这个分析的偏差" },
+  ci_coverage: { label: "95% 区间覆盖率", unit: "%", percent: true },
+  realized_share: { label: "实际发生的人所占比例", unit: "%", percent: true },
+  exposure_patient_time: { label: "累计观察的人时" },
+  // the individualization engine's counts of people
+  people_forecast: { label: "有预测的人数", unit: "人" },
+  people_without_forecast: { label: "没有预测的人数", unit: "人" },
   // what a lab search says about an Alzheimer trial's own size and length (calculated from its scenario)
   total_sample_size: { label: "入组总人数", unit: "例" },
   last_visit_weeks: { label: "最后一次随访", unit: "周" },
@@ -990,7 +1000,7 @@ export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */
   "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用预后模型", "model.prognostic_train": "用自己的历史数据训练预后模型", "patients.progression": "人群层面的疾病进展模拟",
   "profile.snapshot": "数据快照画像", "cohort.build": "构建队列", "population.scenario": "情景人群生成", "population.literature": "文献人群",
   "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "design.confirmatory": "确认性设计", "design.dose": "剂量探索设计", "design.bayesian": "贝叶斯设计（无需 MCMC）", "design.win_ratio": "分层复合终点的胜率比设计", "decision.value_of_information": "决策的信息价值（EVPI、EVPPI、EVSI）", "patients.continuous": "虚拟患者（连续终点）",
-  "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "forecast.individualize": "按每个人自己的记录做个体化预测", "pk.interaction": "合用药物后的暴露变化（已发表的 PBPK 模型）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并", "evidence.network": "网络荟萃分析", "evidence.dose_response": "剂量反应荟萃分析", "evidence.shrinkage": "已发表效应的经验收缩",
+  "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "forecast.individualize": "按每个人自己的记录做个体化预测", "pk.interaction": "合用药物后的暴露变化（以已发表的 PBPK 模型为基础）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并", "evidence.network": "网络荟萃分析", "evidence.dose_response": "剂量反应荟萃分析", "evidence.shrinkage": "已发表效应的经验收缩",
   "evidence.reconstruct_km": "生存曲线重建（Guyot）", "comparator.entropy_balance": "熵平衡加权", "comparator.propensity_weight": "倾向评分加权",
   "comparator.rmst": "RMST 比较", "comparator.maic": "匹配调整间接比较", "comparator.evalue": "E 值", "comparator.bias_analysis": "未测混杂的偏倚分析", "comparator.borrowing": "外部对照的动态借用", "comparator.stc": "模拟治疗比较（G 计算）", "comparator.target_trial": "目标试验模拟", "comparator.map_prior": "MAP 先验",
   "comparator.weighted_cox": "加权 Cox 风险比", "comparator.maic_time_to_event": "事件时间终点的匹配调整间接比较",

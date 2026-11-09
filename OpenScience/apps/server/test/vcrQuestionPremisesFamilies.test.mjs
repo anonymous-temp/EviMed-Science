@@ -24,9 +24,21 @@ const FAMILIES = [
   ["confirmatory", presentConfirmatoryDesigns, "design_confirmatory", fixture("vcr-confirmatory", "futility"), {}],
   ["bayesian", presentBayesianDesigns, "design_bayesian", fixture("vcr-bayesian", "bop2"), {}],
   ["win ratio", presentWinRatioDesigns, "design_win_ratio", fixture("vcr-win-ratio", "power"), {}],
+];
+// a trained prognostic model and a survival fit simulate no trial endpoint: the research question's rows are not theirs (review P1-4)
+const NOT_THE_QUESTIONS = [
   ["prognostic model", presentPrognosticModels, "prognostic_training", fixture("vcr-prognostic-training", "cox"), {}],
   ["spline fit", presentSplineFits, "model_fit", fixture("vcr-borrowing", "spline-fit"), { diagnostics: { timeUnit: "months" } }],
 ];
+for (const [name, present, kind, base, patch] of NOT_THE_QUESTIONS) {
+  test(`the ${name} card carries no row of the research question`, () => {
+    const result = { ...base, ...patch, diagnostics: { ...base.diagnostics, ...patch.diagnostics }, id: "res_1", version: 1, kind, subjectId: "x", executionId: "exe_1",
+      createdAt: "2026-11-04T00:00:00Z", supersededBy: null, reviewState: "ai_set" };
+    const card = present(bundle(result), { nodeOf: NODE })[0];
+    assert.ok(card, `${name}: a card`);
+    assert.deepEqual(card.premises.filter((row) => row.key.startsWith("question:")), []);
+  });
+}
 
 for (const [name, present, kind, base, patch] of FAMILIES) {
   test(`the ${name} card names the version of the research question it answers`, () => {

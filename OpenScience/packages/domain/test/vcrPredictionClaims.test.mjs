@@ -33,7 +33,23 @@ test("an individualized forecast is never called better without the frozen compa
   const no = /** @type {any} */ (predictionClaimPremise("individualized_forecast", { helped: false }));
   assert.ok(no.value.includes("没有显示比") && !no.value.includes("小于"));
   const yes = /** @type {any} */ (predictionClaimPremise("individualized_forecast", { helped: true }));
-  assert.ok(yes.value.includes("95%区间不含0"));
+  assert.ok(yes.value.includes("95% 区间不含 0"));
   // the other two claims say nothing about accuracy of individualizing
   assert.ok(!/** @type {any} */ (predictionClaimPremise("population_forecast", { helped: true })).value.includes("95%"));
+});
+
+test("review P2-13: a batch page never says 「这位患者」 or 「他」, the finding carries the run's scope, and the no-evaluation sentence is no process wording", () => {
+  for (const claim of ["population_forecast", "individualized_forecast"]) {
+    const words = VCR_PREDICTION_CLAIM_WORDS_ZH[claim].sentence;
+    assert.doesNotMatch(words, /这位患者|他自己|他们的|用他/, claim);
+  }
+  const yes = individualizationEvidenceSentence(true, "cd4_count");
+  assert.match(yes, /两个公开的试验人群/);
+  assert.match(yes, /平方根/);
+  assert.match(yes, /约 6 个月和约 76 周/);
+  assert.match(yes, /不能直接引用/);
+  const none = individualizationEvidenceSentence(null);
+  assert.doesNotMatch(none, /用的方法不是评估过的那一种/);
+  assert.match(none, /没有做过个体化预测的对照评估/);
+  assert.match(none, /已知真值的模拟患者/);
 });

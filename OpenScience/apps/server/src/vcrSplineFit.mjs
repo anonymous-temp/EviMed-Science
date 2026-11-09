@@ -15,7 +15,7 @@
  */
 
 import { TIME_UNIT_WORDS, list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
-import { finishPremises, withQuestionPremisesAll } from "./vcrPremises.mjs";
+import { finishPremises } from "./vcrPremises.mjs";
 
 /** @param {number} value @param {number} [digits] */
 const plain = (value, digits = 3) => String(Number(value.toPrecision(digits)));
@@ -105,9 +105,10 @@ export function presentSplineFit(result, value) {
 export function presentSplineFits(bundle, { nodeOf }) {
   const results = list(bundle.allResults ?? bundle.results).map(object).filter((row) => row.kind === "model_fit" && !row.supersededBy)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 4);
-  return withQuestionPremisesAll(results.map((result) => {
+  // no research-question rows: a survival fit simulates no trial endpoint (round-2 review P1-4)
+  return results.map((result) => {
     const staleMark = markFor(bundle.stale ?? [], nodeOf(result));
     const block = presentSplineFit(result, (measure) => measureValue(measure, { kind: "model_fit", result, tab: "patients", staleMark }));
     return block ? { id: String(result.id), version: Number(result.version), ...block, stale: Boolean(staleMark) } : null;
-  }).filter(Boolean), bundle, results);
+  }).filter(Boolean);
 }

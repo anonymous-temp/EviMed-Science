@@ -47,7 +47,9 @@ test("the people-count keys are the contract's, and the floor is ten", () => {
   assert.deepEqual(Object.fromEntries(Object.entries(VCR_PEOPLE_COUNT_BLOCK_FIELDS).map(([block, keys]) => [block, [...keys]])),
     { byYear: ["treated", "control"], estimate: ["people", "records"], plan: ["toRead", "alreadyRead", "prefiltered", "noDocuments", "deferred"],
       covariates: ["missing"], design: ["people"], waitingTime: ["people"],
-      accounting: ["submitted", "admitted", "completed", "rejected", "failed", "unprocessed", "partial"] });
+      accounting: ["submitted", "admitted", "completed", "rejected", "failed", "unprocessed", "partial"],
+      // a batch forecast's findings about its model carry the people each concerns (round-2 review P1-10): a count of real people like the ledger's
+      useFindings: ["people"] });
   assert.deepEqual(VCR_PEOPLE_COUNT_LINKS.map((link) => [[...link.triggers], [...link.whole], [...link.derived]]),
     [[["events", "nonEvents"], ["n", "events", "nonEvents"], ["observedRisk", "calibrationInLarge"]],
       [["startedWithinGrace", "startedAfterGrace", "neverStarted", "treatedBeforeTimeZero"], ["people", "startedWithinGrace", "startedAfterGrace", "neverStarted", "treatedBeforeTimeZero"], []],

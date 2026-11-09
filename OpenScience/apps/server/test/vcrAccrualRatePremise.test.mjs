@@ -42,3 +42,15 @@ test("a scenario with no rate reads as it always read: one row for the accrual a
   assert.equal(row(plain, "accrualRate"), undefined);
   assert.equal("from" in row(plain, "accrual"), false);
 });
+
+test("review P2-12: the duration is 由你给的数据算出 only when the group sizes were the person's too, and a single-arm design says one group", () => {
+  const rateOnly = rows(vcrPersonStated(scenario, [human("每月入组 20 人，入组完后再随访 24 个月")]));
+  assert.equal(row(rateOnly, "accrualRate").source, "given");
+  assert.equal(row(rateOnly, "accrual").source, "assumed", "the sizes were the model's: a quotient of a given rate and an assumed size is an assumption");
+  assert.match(row(rateOnly, "accrual").reason, /两组的计划人数/);
+  const single = { ...scenario, design: { kind: "single_arm", nTreat: 300 } };
+  const one = vcrPremises("trial", { endpointType: "time_to_event", designKind: "single_arm", configuration: single, diagnostics: {}, cards: [], bound: [], appliedDefaults: [],
+    personStated: vcrPersonStated(single, [human("单臂试验 300 人，每月入组 20 人，入组完后随访 24 个月")]) });
+  assert.match(row(one, "accrual").reason, /这一组的计划人数/);
+  assert.equal(row(one, "accrual").source, "derived");
+});

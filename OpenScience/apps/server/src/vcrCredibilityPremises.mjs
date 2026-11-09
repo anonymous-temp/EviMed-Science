@@ -48,13 +48,17 @@ export function credibilityPremises(progression, assessment = null) {
   /** @type {Array<Record<string, any>>} */
   const rows = [];
   rows.push({
-    key: "credibility:validation", label: "在没见过的试验上的检验", decisive: true, source: "derived",
-    value: `在 ${validation.arms} 项模型没见过的试验的安慰剂组上，预测的 ${horizonWords(long)}变化平均偏差 ${signed(Number(long.meanBias))} 分（正数是预测比观察到的多恶化；平均绝对偏差 ${plain(Number(long.meanAbsoluteBias))} 分，预测区间包住了 ${long.covered}/${long.arms} 项），${horizonWords(short)}变化平均偏差 ${signed(Number(short.meanBias))} 分（${short.covered}/${short.arms} 项）。只检验了安慰剂组，没有检验任何药物的效果`,
+    key: "credibility:validation", label: "在晚于模型拟合的试验上的检验", decisive: true, source: "literature",
+    value: `在 ${validation.arms} 项发表时间晚于模型拟合的试验的安慰剂组上，预测的 ${horizonWords(long)}变化平均偏差 ${signed(Number(long.meanBias))} 分（正数是预测比观察到的多恶化；平均绝对偏差 ${plain(Number(long.meanAbsoluteBias))} 分，预测区间包住了 ${long.covered}/${long.arms} 项），${horizonWords(short)}变化平均偏差 ${signed(Number(short.meanBias))} 分（${short.covered}/${short.arms} 项）。只检验了安慰剂组，没有检验任何药物的效果`,
   });
+  // what the committed validation does not establish: the trials were published after the fit, and nobody checked that none of their arms is in the
+  // data the model was fitted on (RUN-20261109 and its protocol claim no more)
+  rows.push({ key: "credibility:validation-scope", label: "这些试验和拟合数据的关系", decisive: false, source: "literature",
+    value: "这些试验都发表在拟合这个模型的数据之后；没有核实其中有没有哪一项已经在拟合所用的数据库里，所以只能说它们晚于模型，不能说模型从没见过它们。" });
   const second = object(validation.secondStructure);
   if (numeric(second.long) !== null && numeric(second.short) !== null) {
     rows.push({
-      key: "credibility:structure", label: "换一种已发表的模型形式", decisive: false, source: "derived",
+      key: "credibility:structure", label: "换一种已发表的模型形式", decisive: false, source: "literature",
       value: `另一种已发表的模型形式（Conrado 等，2014；用同一个 CAMD 数据库，形式不同）预测的平均变化与这里相差 ${plain(Number(second.long))} 分（${horizonWords(long)}）和 ${plain(Number(second.short))} 分（${horizonWords(short)}）；两者没有取平均，因为没有经过验证的权重`,
     });
   }
@@ -66,17 +70,12 @@ export function credibilityPremises(progression, assessment = null) {
       : c.check === "horizon_weeks" ? `最后一次随访在第 ${plain(c.value)} 周，${c.inside ? "没有超过" : "超过了"}验证过的最长 ${plain(c.range[1])} 周`
         : "药物效果没有被这些检验覆盖（它们只看安慰剂组）";
     rows.push({
-      key: "credibility:applicability", label: "这次的人群和时间落在检验过的范围里吗", decisive: out.length > 0 && out.some((c) => c.check !== "drug_effect_validated"), source: "derived",
+      key: "credibility:applicability", label: "这次的人群和时间落在检验过的范围里吗", decisive: out.length > 0 && out.some((c) => c.check !== "drug_effect_validated"), source: "default",
       value: checks.map(words).join("；"),
     });
   }
-  const reproduced = list(field("verification")?.data.reproduced);
-  if (reproduced.length) {
-    rows.push({
-      key: "credibility:verification", label: "这个模型的计算核对过什么", decisive: false, source: "derived",
-      value: `模型的实现已按公开的数字核对过（${reproduced.join("、")}）；这次的数字来自 ${field("verification")?.data.replicates ?? "?"} 次模拟，模拟越多只减小模拟的误差，不改变模型形式或药效假设带来的误差`,
-    });
-  }
+  // the tables the implementation reproduces are one folded row of the card itself (复现情况); the replicate count is its header and the simulation-error row
+  // says what more replicates change, so neither is said a third time here
   const risk = field("model_risk");
   const level = String(risk?.data.level ?? "");
   if (risk?.basis === "computed" && level in VCR_RATING_LABELS_ZH) {
@@ -84,13 +83,13 @@ export function credibilityPremises(progression, assessment = null) {
     const word = (/** @type {string} */ value) => (/** @type {Record<string, string>} */ (VCR_RATING_LABELS_ZH))[value] ?? value;
     const rule = (/** @type {Record<string, string>} */ (VCR_MODEL_RISK_RULE_LABELS_ZH))[String(risk.data.rule)] ?? "";
     rows.push({
-      key: "credibility:risk", label: "模型对决定的影响和出错的后果", decisive: risk.decisive, source: "given",
-      value: `按你记下的评估：模型对决定的影响${rating("model_influence") ? word(rating("model_influence")) : "未评"}，决定出错的后果${rating("decision_consequence") ? word(rating("decision_consequence")) : "未评"}，模型风险${word(level)}。${rule}`,
+      key: "credibility:risk", label: "模型对决定的影响和出错的后果", decisive: risk.decisive, source: "assumed",
+      value: `按研究里记下的评估：模型对决定的影响${rating("model_influence") ? word(rating("model_influence")) : "未评"}，决定出错的后果${rating("decision_consequence") ? word(rating("decision_consequence")) : "未评"}，模型风险${word(level)}。${rule}`,
     });
   } else {
     rows.push({
       key: "credibility:risk", label: "模型对决定的影响和出错的后果", decisive: false, source: "default",
-      value: "模型在你的决定里占多大分量、决定出错的后果有多严重，要由你来判断；没有说明时这里不给模型风险等级",
+      value: "模型在你的决定里占多大分量、决定出错的后果有多严重，要由你来判断；研究里没有记下评估时，这里不给模型风险等级",
     });
   }
   return rows;

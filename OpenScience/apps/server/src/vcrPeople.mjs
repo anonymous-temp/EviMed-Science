@@ -126,3 +126,23 @@ export function vcrPeopleStartBinding(scenario, people) {
   const seed = Number.parseInt(sha256(`start-on-people|${recordId}|${mode}`).slice(0, 8), 16) % (2 ** 31 - 1);
   return { ok: true, scenario: bound, derived: [{ resultId: recordId, table: VCR_PEOPLE_TABLE, shape: "subject" }], recordId, mode, seed };
 }
+
+/**
+ * The records of virtual people the study holds, as the patients page lists them (round-2 review P1-8): a record is filed out of every card's way, so
+ * without a list of its own the researcher could not see that it exists, how many people it holds, whether the model changed since it was made or how
+ * many of its people lie outside the range the model was fitted on. Words only; the people stay in the data plane.
+ * @param {Record<string, any>} bundle the patients tab's bundle (`peopleRecords`: the records' results; `peopleUses`: `{ recordId, question }` of each comparison that names one)
+ * @returns {Array<{ id: string, createdAt: string | null, people: number, source: string, current: boolean, madeFor: string, outside: { people: number, range: number[] | null } | null,
+ *   usedBy: string[] }>}
+ */
+export function presentPeopleRecords(bundle) {
+  const uses = list(bundle.peopleUses).map(object);
+  return list(bundle.peopleRecords).map((result) => vcrPeopleRecordView(object(result))).filter((view) => view !== null).map((view) => ({
+    id: view.id, createdAt: view.createdAt, people: view.people,
+    source: view.covariatesFrom ? "年龄、基线分数等取自你选的人群版本，个体参数由模型抽出" : "由模型的人群层面抽出",
+    current: view.current,
+    madeFor: view.current ? "为现在的模型造的" : "为更早的一版模型造的（这些人照样被模拟，个体参数属于旧模型）",
+    outside: view.outsideFittedMmse > 0 ? { people: view.outsideFittedMmse, range: view.fittedMmse } : null,
+    usedBy: uses.filter((entry) => entry.recordId === view.id).map((entry) => String(entry.question || "未写明问题")),
+  })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+}

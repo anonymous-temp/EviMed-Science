@@ -78,7 +78,12 @@ export async function saveResearchQuestion(store, input) {
  */
 export async function researchQuestions(store, studyId) {
   const rows = await store.rows(`SELECT DISTINCT ON (key) * FROM ${VCR_SCHEMA}.research_questions WHERE study_id = $1 ORDER BY key, version DESC`, [studyId]);
-  return rows.map(questionFromRow).sort((a, b) => Number(b?.id === VCR_QUESTION_DEFAULT_KEY) - Number(a?.id === VCR_QUESTION_DEFAULT_KEY) || String(b?.createdAt).localeCompare(String(a?.createdAt)));
+  // which fields each version wrote, so a result that answered an earlier version can be told what changed since (`history`; a presenter reads it, a page never sees it)
+  const written = await store.rows(`SELECT key, version, written FROM ${VCR_SCHEMA}.research_questions WHERE study_id = $1`, [studyId]);
+  return rows.map((row) => {
+    const question = questionFromRow(row);
+    return question && { ...question, history: written.filter((entry) => String(entry.key) === question.id).map((entry) => ({ version: Number(entry.version), written: list(entry.written).map(String) })) };
+  }).sort((a, b) => Number(b?.id === VCR_QUESTION_DEFAULT_KEY) - Number(a?.id === VCR_QUESTION_DEFAULT_KEY) || String(b?.createdAt).localeCompare(String(a?.createdAt)));
 }
 
 /**
