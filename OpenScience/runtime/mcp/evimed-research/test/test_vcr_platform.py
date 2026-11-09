@@ -368,7 +368,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
         # Live 2026-11-04: the model shaped a generic design kind and then wrote its own simulation of what design_dose / design_bayesian compute.
         # Live 2026-11-07: having shaped design_analytic for a sample size, the model projected six listed patients itself; the pointer also names
         # the disease-progression kind, the batch forecast and the lab's two actions.
-        others = ("design_dose", "design_bayesian", "design_confirmatory", "design_win_ratio", "network_meta", "generate_progression", "forecast_trajectories")
+        others = ("design_dose", "design_bayesian", "design_confirmatory", "design_win_ratio", "network_meta", "decision_voi", "generate_progression", "forecast_trajectories")
         for kind in ("design_analytic", "design_simulation", "design_grid"):
             notes = " ".join(vcr_platform.shape({"action": "shape", "kind": kind})["data"]["notes"])
             for other in others + ("Alzheimer ADAS-cog", "action compare", "action search"):

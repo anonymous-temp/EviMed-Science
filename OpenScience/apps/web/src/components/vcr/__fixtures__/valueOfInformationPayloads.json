@@ -1,0 +1,1323 @@
+{
+  "two-arm": {
+    "id": "res_two-arm",
+    "version": 1,
+    "form": "value_of_information",
+    "title": "下一步最值得弄清什么（信息价值）",
+    "question": "不知道的这些输入里，哪一个先弄清楚最可能改变决定、值多少；一项研究值不值得做",
+    "chosen": "n300",
+    "draws": 2000,
+    "unit": "m",
+    "headline": [
+      {
+        "key": "voi_evpi",
+        "label": "完全信息的价值（EVPI）",
+        "value": {
+          "value": 28.98963526,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 27.278367,
+            "high": 30.700904,
+            "level": 95
+          },
+          "mcse": 0.87309623,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "完全信息的价值（EVPI）",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.873096"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "voi_probability_wrong_decision",
+        "label": "按现在的最优选择会选错的概率",
+        "value": {
+          "value": 70.8,
+          "text": null,
+          "unit": "%",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": 1.01670055,
+          "review": "ai_set",
+          "precision": 0,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "按现在的最优选择会选错的概率",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "1.016701"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "voi_best_expected_utility",
+        "label": "最优选项的期望收益",
+        "value": {
+          "value": 71.89925054,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": 2.90513379,
+          "review": "ai_set",
+          "precision": 0,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "最优选项的期望收益",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "2.905134"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        }
+      }
+    ],
+    "lead": "按这张表，最值得先弄清的是“药物效应”（约占完全信息价值的 93.3%）；在你列出的研究里，“phase 2, 240 per arm”价值最大。这一步划不划算要看它的成本，由你决定。",
+    "options": [
+      {
+        "key": "no_trial",
+        "label": "no_trial",
+        "chosen": false,
+        "expected": {
+          "value": 0,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "期望收益",
+            "fields": [],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "n150",
+        "label": "n150",
+        "chosen": false,
+        "expected": {
+          "value": 68.01455812,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": 2.23633613,
+          "review": "ai_set",
+          "precision": 0,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "期望收益",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "2.236336"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "n300",
+        "label": "n300",
+        "chosen": true,
+        "expected": {
+          "value": 71.89925054,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": 2.90513379,
+          "review": "ai_set",
+          "precision": 0,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "期望收益",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "2.905134"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "n450",
+        "label": "n450",
+        "chosen": false,
+        "expected": {
+          "value": 49.16633757,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": 3.11456636,
+          "review": "ai_set",
+          "precision": 0,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "期望收益",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "3.114566"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        }
+      }
+    ],
+    "inputs": [
+      {
+        "key": "effect + sd",
+        "label": "药物效应 + 结局的标准差",
+        "rank": 1,
+        "group": true,
+        "evppi": {
+          "value": 27.90380687,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 26.135358,
+            "high": 29.672256,
+            "level": 95
+          },
+          "mcse": 0.90226995,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "弄清这个输入的价值（EVPPI）",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.90227"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        },
+        "share": 96.25442547386129
+      },
+      {
+        "key": "effect",
+        "label": "药物效应",
+        "rank": 2,
+        "group": false,
+        "evppi": {
+          "value": 27.06003874,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 25.331343,
+            "high": 28.788735,
+            "level": 95
+          },
+          "mcse": 0.88198775,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "弄清这个输入的价值（EVPPI）",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.881988"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        },
+        "share": 93.34383993870817
+      },
+      {
+        "key": "sd",
+        "label": "结局的标准差",
+        "rank": 3,
+        "group": false,
+        "evppi": {
+          "value": 0.00656577,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 0.001911,
+            "high": 0.01122,
+            "level": 95
+          },
+          "mcse": 0.00237482,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "弄清这个输入的价值（EVPPI）",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.002375"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        },
+        "share": 0.022648694486135473
+      },
+      {
+        "key": "dropoutShare",
+        "label": "脱落比例",
+        "rank": 4,
+        "group": false,
+        "evppi": {
+          "value": 0.00225016,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 0.00062,
+            "high": 0.00388,
+            "level": 95
+          },
+          "mcse": 0.00083152,
+          "review": "ai_set",
+          "precision": 4,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "弄清这个输入的价值（EVPPI）",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.000832"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        },
+        "share": 0.007761948814772024
+      }
+    ],
+    "thresholds": [],
+    "studies": [
+      {
+        "key": "phase 2, 80 per arm",
+        "label": "phase 2, 80 per arm",
+        "observes": "药物效应",
+        "size": 80,
+        "evsi": {
+          "value": 7.31273563,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 6.640743,
+            "high": 7.984728,
+            "level": 95
+          },
+          "mcse": 0.34285347,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "做这项研究的价值（EVSI）",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.342853"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        },
+        "share": 25.22534542400752,
+        "ceiling": {
+          "value": 27.06003874,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      },
+      {
+        "key": "phase 2, 240 per arm",
+        "label": "phase 2, 240 per arm",
+        "observes": "药物效应",
+        "size": 240,
+        "evsi": {
+          "value": 14.21153663,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 13.012868,
+            "high": 15.410205,
+            "level": 95
+          },
+          "mcse": 0.61156571,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "做这项研究的价值（EVSI）",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.611566"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_two-arm",
+              "tab": "trial"
+            }
+          }
+        },
+        "share": 49.02281970926868,
+        "ceiling": {
+          "value": 27.06003874,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      }
+    ],
+    "premises": [
+      {
+        "key": "utility",
+        "label": "收益怎么算",
+        "value": "每个选项的收益 = 成功的价值 400 m × 成功概率 − 每人成本 0.2 × 入组人数；不做试验的收益是 0",
+        "source": "given",
+        "decisive": true,
+        "reason": null
+      },
+      {
+        "key": "input_effect",
+        "label": "药物效应",
+        "value": "正态分布，均值 1.2，标准差 0.8",
+        "source": "given",
+        "decisive": true,
+        "reason": null
+      },
+      {
+        "key": "decision_rule",
+        "label": "怎样选",
+        "value": "在每个输入的不确定性下，选期望收益最大的选项；信息价值是“先弄清再选”比“现在就选”多得的期望收益",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "input_sd",
+        "label": "结局的标准差",
+        "value": "对数正态分布，对数的均值 1.95，标准差 0.12",
+        "source": "given",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "input_dropoutShare",
+        "label": "脱落比例",
+        "value": "Beta(4, 16) 分布",
+        "source": "given",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "success",
+        "label": "“成功”是什么意思",
+        "value": "按这次抽到的真实效应，单侧 0.025 水平下得到显著结果的概率（正态近似），不是抽一次试验的 0 或 1",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "dropout_model",
+        "label": "脱落怎么处理",
+        "value": "脱落只减少能分析的人数，且与结局无关（完全随机脱落）",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "independence",
+        "label": "各输入之间",
+        "value": "彼此独立；如果它们其实相关，各自的信息价值会被高估或低估",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "draws",
+        "label": "抽样次数",
+        "value": "2000 次",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "regression",
+        "label": "单个输入的价值怎么估",
+        "value": "用广义可加模型（GAM）把每个选项的收益对该输入做回归（Strong 等 2014）；数字后面的“±”是抽样平均的误差，不含回归平滑本身的误差",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      }
+    ],
+    "limited": null
+  },
+  "range": {
+    "id": "res_range",
+    "version": 1,
+    "form": "value_of_information",
+    "title": "下一步最值得弄清什么（信息价值）",
+    "question": "不知道的这些输入里，哪一个先弄清楚最可能改变决定、值多少；一项研究值不值得做",
+    "chosen": "n300",
+    "draws": 1000,
+    "unit": "m",
+    "headline": [
+      {
+        "key": "voi_evpi",
+        "label": "完全信息的价值（EVPI）",
+        "value": {
+          "value": 0,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 0,
+            "high": 0,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "完全信息的价值（EVPI）",
+            "fields": [],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_range",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "voi_probability_wrong_decision",
+        "label": "按现在的最优选择会选错的概率",
+        "value": {
+          "value": 0,
+          "text": null,
+          "unit": "%",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "按现在的最优选择会选错的概率",
+            "fields": [],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_range",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "voi_best_expected_utility",
+        "label": "最优选项的期望收益",
+        "value": {
+          "value": 85.08233107,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": 0.00032235,
+          "review": "ai_set",
+          "precision": 4,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "最优选项的期望收益",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.000322"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_range",
+              "tab": "trial"
+            }
+          }
+        }
+      }
+    ],
+    "lead": "在这些假设下，弄清任何一个输入都不会改变现在的选择。",
+    "options": [
+      {
+        "key": "no_trial",
+        "label": "no_trial",
+        "chosen": false,
+        "expected": {
+          "value": 0,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "期望收益",
+            "fields": [],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_range",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "n300",
+        "label": "n300",
+        "chosen": true,
+        "expected": {
+          "value": 85.08233107,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": 0.00032235,
+          "review": "ai_set",
+          "precision": 4,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "期望收益",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.000322"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_range",
+              "tab": "trial"
+            }
+          }
+        }
+      }
+    ],
+    "inputs": [
+      {
+        "key": "dropoutShare",
+        "label": "脱落比例",
+        "rank": 1,
+        "group": false,
+        "evppi": {
+          "value": 0,
+          "text": null,
+          "unit": "m",
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 0,
+            "high": 0,
+            "level": 95
+          },
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "弄清这个输入的价值（EVPPI）",
+            "fields": [],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_range",
+              "tab": "trial"
+            }
+          }
+        },
+        "share": null
+      }
+    ],
+    "thresholds": [
+      {
+        "key": "effect",
+        "label": "药物效应",
+        "stated": {
+          "optimistic": 2,
+          "base": 1.2,
+          "pessimistic": 0.2
+        },
+        "decisions": {
+          "optimistic": "n300",
+          "base": "n300",
+          "pessimistic": "no_trial"
+        },
+        "flips": [
+          {
+            "value": {
+              "value": 0.86487622,
+              "text": null,
+              "unit": null,
+              "source": "synthetic",
+              "interval": null,
+              "mcse": 8.5e-7,
+              "review": "ai_set",
+              "precision": 7,
+              "reason": null,
+              "stale": false,
+              "detail": {
+                "kind": "run",
+                "title": "最优选择改变时这个输入的取值",
+                "fields": [
+                  {
+                    "label": "蒙特卡洛标准误",
+                    "value": "0.000001"
+                  }
+                ],
+                "quote": null,
+                "quoteSource": null,
+                "ref": {
+                  "kind": "result",
+                  "id": "res_range",
+                  "tab": "trial"
+                }
+              }
+            },
+            "from": "no_trial",
+            "to": "n300"
+          }
+        ]
+      }
+    ],
+    "studies": [],
+    "premises": [
+      {
+        "key": "utility",
+        "label": "收益怎么算",
+        "value": "每个选项的收益 = 成功的价值 400 m × 成功概率 − 每人成本 0.2 × 入组人数；不做试验的收益是 0",
+        "source": "given",
+        "decisive": true,
+        "reason": null
+      },
+      {
+        "key": "input_effect",
+        "label": "药物效应",
+        "value": "乐观 2、基线 1.2、悲观 0.2（只有三个值，没有概率分布）",
+        "source": "given",
+        "decisive": true,
+        "reason": null
+      },
+      {
+        "key": "decision_rule",
+        "label": "怎样选",
+        "value": "在每个输入的不确定性下，选期望收益最大的选项；信息价值是“先弄清再选”比“现在就选”多得的期望收益",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "input_sd",
+        "label": "结局的标准差",
+        "value": "固定为 7",
+        "source": "given",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "input_dropoutShare",
+        "label": "脱落比例",
+        "value": "0.0999 到 0.1 之间均匀分布",
+        "source": "given",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "success",
+        "label": "“成功”是什么意思",
+        "value": "按这次抽到的真实效应，单侧 0.025 水平下得到显著结果的概率（正态近似），不是抽一次试验的 0 或 1",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "dropout_model",
+        "label": "脱落怎么处理",
+        "value": "脱落只减少能分析的人数，且与结局无关（完全随机脱落）",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "independence",
+        "label": "各输入之间",
+        "value": "彼此独立；如果它们其实相关，各自的信息价值会被高估或低估",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "draws",
+        "label": "抽样次数",
+        "value": "1000 次",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "regression",
+        "label": "单个输入的价值怎么估",
+        "value": "用广义可加模型（GAM）把每个选项的收益对该输入做回归（Strong 等 2014）；数字后面的“±”是抽样平均的误差，不含回归平滑本身的误差",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      }
+    ],
+    "limited": null
+  },
+  "table": {
+    "id": "res_table",
+    "version": 1,
+    "form": "value_of_information",
+    "title": "下一步最值得弄清什么（信息价值）",
+    "question": "不知道的这些输入里，哪一个先弄清楚最可能改变决定、值多少；一项研究值不值得做",
+    "chosen": "b",
+    "draws": 600,
+    "unit": null,
+    "headline": [
+      {
+        "key": "voi_evpi",
+        "label": "完全信息的价值（EVPI）",
+        "value": {
+          "value": 0.26836036,
+          "text": null,
+          "unit": null,
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 0.22768,
+            "high": 0.30904,
+            "level": 95
+          },
+          "mcse": 0.02075505,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "完全信息的价值（EVPI）",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.020755"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_table",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "voi_probability_wrong_decision",
+        "label": "按现在的最优选择会选错的概率",
+        "value": {
+          "value": 34.33333333,
+          "text": null,
+          "unit": "%",
+          "source": "synthetic",
+          "interval": null,
+          "mcse": 1.93845108,
+          "review": "ai_set",
+          "precision": 0,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "按现在的最优选择会选错的概率",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "1.938451"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_table",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "voi_best_expected_utility",
+        "label": "最优选项的期望收益",
+        "value": {
+          "value": 0.45314526,
+          "text": null,
+          "unit": null,
+          "source": "synthetic",
+          "interval": null,
+          "mcse": 0.04700499,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "最优选项的期望收益",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.047005"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_table",
+              "tab": "trial"
+            }
+          }
+        }
+      }
+    ],
+    "lead": "按这张表，最值得先弄清的是“theta”（约占完全信息价值的 84.7%）；在你列出的研究里，“trial”价值最大。这一步划不划算要看它的成本，由你决定。",
+    "options": [
+      {
+        "key": "a",
+        "label": "a",
+        "chosen": false,
+        "expected": {
+          "value": 0,
+          "text": null,
+          "unit": null,
+          "source": "synthetic",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "期望收益",
+            "fields": [],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_table",
+              "tab": "trial"
+            }
+          }
+        }
+      },
+      {
+        "key": "b",
+        "label": "b",
+        "chosen": true,
+        "expected": {
+          "value": 0.45314526,
+          "text": null,
+          "unit": null,
+          "source": "synthetic",
+          "interval": null,
+          "mcse": 0.04700499,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "期望收益",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.047005"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_table",
+              "tab": "trial"
+            }
+          }
+        }
+      }
+    ],
+    "inputs": [
+      {
+        "key": "theta",
+        "label": "theta",
+        "rank": 1,
+        "group": false,
+        "evppi": {
+          "value": 0.22730284,
+          "text": null,
+          "unit": null,
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 0.191872,
+            "high": 0.262734,
+            "level": 95
+          },
+          "mcse": 0.01807689,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "弄清这个输入的价值（EVPPI）",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.018077"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_table",
+              "tab": "trial"
+            }
+          }
+        },
+        "share": 84.700601667126
+      },
+      {
+        "key": "w",
+        "label": "w",
+        "rank": 2,
+        "group": false,
+        "evppi": {
+          "value": 0.07103503,
+          "text": null,
+          "unit": null,
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 0.053002,
+            "high": 0.089068,
+            "level": 95
+          },
+          "mcse": 0.00920056,
+          "review": "ai_set",
+          "precision": 3,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "弄清这个输入的价值（EVPPI）",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.009201"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_table",
+              "tab": "trial"
+            }
+          }
+        },
+        "share": 26.470017105077158
+      }
+    ],
+    "thresholds": [],
+    "studies": [
+      {
+        "key": "trial",
+        "label": "trial",
+        "observes": "theta",
+        "size": 25,
+        "evsi": {
+          "value": 0.22730284,
+          "text": null,
+          "unit": null,
+          "source": "synthetic",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 0.191872,
+            "high": 0.262734,
+            "level": 95
+          },
+          "mcse": 0.01807689,
+          "review": "ai_set",
+          "precision": 2,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "做这项研究的价值（EVSI）",
+            "fields": [
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.018077"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_table",
+              "tab": "trial"
+            }
+          }
+        },
+        "share": 84.70060165986658,
+        "ceiling": {
+          "value": 0.22730284,
+          "text": null,
+          "unit": null,
+          "source": "synthetic",
+          "interval": null,
+          "mcse": null,
+          "review": "ai_set",
+          "precision": null,
+          "reason": null,
+          "stale": false,
+          "detail": null
+        }
+      }
+    ],
+    "premises": [
+      {
+        "key": "table_source",
+        "label": "收益和输入的来源",
+        "value": "每个选项的收益和每个输入的抽样由调用方给出，引擎没有重新计算它们；这里的数字只说明在这些抽样下哪个输入最值得先弄清",
+        "source": "given",
+        "decisive": true,
+        "reason": null
+      },
+      {
+        "key": "decision_rule",
+        "label": "怎样选",
+        "value": "在每个输入的不确定性下，选期望收益最大的选项；信息价值是“先弄清再选”比“现在就选”多得的期望收益",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "independence",
+        "label": "各输入之间",
+        "value": "按调用方给出的抽样原样使用（包括它们之间的相关）",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "draws",
+        "label": "抽样次数",
+        "value": "600 次",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      },
+      {
+        "key": "regression",
+        "label": "单个输入的价值怎么估",
+        "value": "用广义可加模型（GAM）把每个选项的收益对该输入做回归（Strong 等 2014）；数字后面的“±”是抽样平均的误差，不含回归平滑本身的误差",
+        "source": "default",
+        "decisive": false,
+        "reason": null
+      }
+    ],
+    "limited": null
+  }
+}

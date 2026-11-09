@@ -8,6 +8,7 @@ import { VcrScientificBasis } from "../VcrScientificBasis";
 import { VcrVersionComparison } from "../VcrVersionComparison";
 import { VirtualLabWorkspace } from "../VirtualLabWorkspace";
 import { VcrWinRatioDesigns } from "../VcrWinRatioDesigns";
+import { VcrValueOfInformation } from "../VcrValueOfInformation";
 import { useEffect, useRef, useState } from "react";
 import { CircleCheck, PenLine, TriangleAlert } from "lucide-react";
 import { useSearchParams } from "react-router";
@@ -149,7 +150,7 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
 }
 
 /** Whether the step holds a design or a forecast of its own. */
-export const trialHasDesigns = (data: TrialData): boolean => data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0 || Boolean(data.accrualForecasts?.length) || Boolean(data.confirmatoryDesigns?.length) || Boolean(data.doseDesigns?.length) || Boolean(data.bayesianDesigns?.length) || Boolean(data.winRatioDesigns?.length);
+export const trialHasDesigns = (data: TrialData): boolean => data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0 || Boolean(data.accrualForecasts?.length) || Boolean(data.confirmatoryDesigns?.length) || Boolean(data.doseDesigns?.length) || Boolean(data.bayesianDesigns?.length) || Boolean(data.winRatioDesigns?.length) || Boolean(data.valueOfInformation?.length);
 
 /** The kinds of record the step holds, as the band's switch lists them. */
 function trialViews(data: TrialData, study: VcrStudy, labCount: number): Array<{ value: TrialView; label: string; count?: number }> {
@@ -490,6 +491,7 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
       <VcrDoseDesigns designs={data.doseDesigns ?? []} />
       <VcrBayesianDesigns designs={data.bayesianDesigns ?? []} />
       <VcrWinRatioDesigns designs={data.winRatioDesigns ?? []} />
+      <VcrValueOfInformation cards={data.valueOfInformation ?? []} />
     </div>
   );
 }
