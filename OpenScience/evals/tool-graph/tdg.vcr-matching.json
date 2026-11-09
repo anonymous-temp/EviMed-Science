@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:987806500e0000338d46a2900552bd452eb8aaf7acebb9feeec00f72840a01a3",
+  "version": "sha256:65fa325b281280aa5186d27a86ad89a3a10f2f47eaa78ffe41098616988f768f",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -1730,6 +1730,8 @@
               "borrowing_prior",
               "train_prognostic_model",
               "generate_progression",
+              "decision_voi",
+              "pk_interaction",
               "match_extract",
               "forecast_trajectories",
               "evaluate_forecast",
