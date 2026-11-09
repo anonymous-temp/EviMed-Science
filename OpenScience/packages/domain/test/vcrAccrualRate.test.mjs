@@ -54,3 +54,30 @@ test("a rate that cannot give a duration is refused by name with the reason and 
   const none = { ...SIM, accrual: { duration: 12, followup: 12 } };
   assert.equal(vcrDeriveAccrualDuration("design.simulate", none).scenario, none);
 });
+
+test("every method whose schema carries accrual.rate derives the duration: the generators (control arm defaults to none) and a grid whose designs enrol the same", () => {
+  const gen = { design: { nTreat: 100, nControl: 100 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 12 },
+    accrual: { rate: 10, followup: 12 }, timeUnit: "months" };
+  const made = vcrNormalizeScenarioKeys("patients.time_to_event", gen);
+  assert.equal(made.conflicts.length, 0);
+  assert.equal(made.scenario.accrual.duration, 20, "200 people at 10 a month");
+  assert.match(made.applied[0].took, /^derived: 200 people at 10 per months/);
+  assert.deepEqual(validateScenario("patients.time_to_event", made.scenario).map((issue) => issue.code), []);
+  const noControl = vcrNormalizeScenarioKeys("patients.time_to_event", { ...gen, design: { nTreat: 100 } });
+  assert.equal(noControl.scenario.accrual.duration, 10, "a generator's control arm defaults to none, as the engine takes it");
+  const grid = { design: { kind: "two_arm_fixed", nTreat: 10 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 12 },
+    accrual: { rate: 10, followup: 12 }, timeUnit: "months",
+    designs: [{ kind: "two_arm_fixed", nTreat: 100, nControl: 100 }, { kind: "group_sequential", nTreat: 150, nControl: 50, informationRates: [0.5, 1], spending: "obrien_fleming" }],
+    truths: [{ hazardRatio: 0.7, controlMedian: 12 }] };
+  assert.equal(vcrNormalizeScenarioKeys("design.grid", grid).scenario.accrual.duration, 20);
+  const unequal = vcrNormalizeScenarioKeys("design.grid", { ...grid, designs: [{ kind: "two_arm_fixed", nTreat: 100 }, { kind: "two_arm_fixed", nTreat: 50 }] });
+  assert.equal(unequal.conflicts[0].field, "scenario.accrual.rate", "designs of different sizes have no one duration; the rate is refused by name");
+  assert.equal(unequal.scenario.accrual.duration, undefined);
+  // the schema's reading and the derivation's agree: every method the schema gives a rate key derives, and the others refuse by name
+  const keyed = ["design.simulate", "design.grid", "patients.continuous", "patients.binary", "patients.time_to_event", "design.analytic", "design.confirmatory"];
+  for (const method of keyed) {
+    const offered = validateScenario(method, { design: { kind: "futility_group_sequential" }, endpoint: { type: "time_to_event" }, accrual: { rate: 5 } }).every((issue) => issue.field !== "scenario.accrual.rate");
+    const derives = !vcrDeriveAccrualDuration(method, { design: { kind: "two_arm_fixed", nTreat: 10, nControl: 10 }, designs: [{ kind: "two_arm_fixed", nTreat: 10, nControl: 10 }], accrual: { rate: 5 } }).conflicts.length;
+    assert.equal(offered, derives, `${method}: the schema ${offered ? "reads" : "refuses"} accrual.rate and the derivation ${derives ? "gives" : "refuses"} a duration`);
+  }
+});

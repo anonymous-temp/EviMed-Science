@@ -11,8 +11,9 @@
  * Hidden knowledge:
  *
  * - **Only a method whose scenario states the people can derive.** `design.simulate` states `design.nTreat` (and `nControl`, which
- *   defaults to the treatment arm); `design.analytic` and the confirmatory designs compute the people from the duration, so a duration
- *   derived from the people would be circular. Those refuse a rate by name with the reason, and keep every other key.
+ *   defaults to the treatment arm), a generator the same (its control arm defaults to none), a grid when every design enrols the same
+ *   number; `design.analytic` and the confirmatory designs compute the people from the duration, so a duration derived from the people
+ *   would be circular. Those refuse a rate by name with the reason, and keep every other key.
  * - **Both stated must agree.** A duration written beside a rate is kept when it is the rate's quotient (to rounding) and refused
  *   otherwise: one of the two would be silently ignored.
  *
@@ -24,21 +25,39 @@ import { VCR_DEFAULT_TIME_UNIT, vcrConvertTime, vcrTimeUnitOf } from './vcrTimeU
 /** @param {unknown} value @returns {value is Record<string, any>} */
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 
-/** The methods whose scenario states the number of people and whose accrual is the uniform one: where a rate can give the duration. */
-const PEOPLE_FROM_DESIGN = new Set(['design.simulate'])
+/**
+ * The methods whose schema reads a uniform `accrual.duration` AND states the people, i.e. every method whose schema carries `accrual.rate`
+ * (`SIMULATED_ACCRUAL` in `vcrScenarioSchemas.mjs`: the simulated designs and the three generators). The other readers of a duration
+ * (`design.analytic`, `design.confirmatory`) compute the people from it and have no rate key.
+ */
+const GENERATORS = new Set(['patients.continuous', 'patients.binary', 'patients.time_to_event'])
+const PEOPLE_FROM_DESIGN = new Set(['design.simulate', 'design.grid', ...GENERATORS])
+
+/** The people one two-arm size block enrols as the engine counts them, or null when it does not state them. @param {Record<string, any>} design @param {number} controlDefault */
+function twoArmPeople(design, controlDefault) {
+  const treat = design.nTreat
+  if (!Number.isInteger(treat) || treat < 1) return null
+  const control = design.nControl === undefined ? (controlDefault < 0 ? treat : controlDefault) : design.nControl
+  return Number.isInteger(control) && control >= 0 ? treat + control : null
+}
 
 /**
- * The people a scenario enrols, as the engine counts them, or null when the scenario does not state them.
+ * The people a scenario enrols, as the engine counts them, or null when the scenario does not state them (one number or none).
+ * A generator's control arm defaults to 0 people (the engine's `n0 %||% 0`); a simulated design's to the treatment arm. A grid enrols a
+ * different number of people in each of its designs, so one duration follows only when they all enrol the same.
  * @param {string} method @param {Record<string, any>} scenario @returns {number | null}
  */
 function statedPeople(method, scenario) {
   if (!PEOPLE_FROM_DESIGN.has(method)) return null
+  if (GENERATORS.has(method)) return twoArmPeople(isObject(scenario.design) ? scenario.design : {}, 0)
+  if (method === 'design.grid') {
+    const designs = Array.isArray(scenario.designs) ? scenario.designs : []
+    const totals = designs.map((entry) => (isObject(entry) && ['two_arm_fixed', 'group_sequential'].includes(String(entry.kind)) ? twoArmPeople(entry, -1) : null))
+    return totals.length && totals.every((total) => total !== null && total === totals[0]) ? totals[0] : null
+  }
   const design = isObject(scenario.design) ? scenario.design : {}
   if (!['two_arm_fixed', 'group_sequential'].includes(String(design.kind))) return null
-  const treat = design.nTreat
-  if (!Number.isInteger(treat) || treat < 1) return null
-  const control = design.nControl === undefined ? treat : design.nControl
-  return Number.isInteger(control) && control >= 0 ? treat + control : null
+  return twoArmPeople(design, -1)
 }
 
 /**
@@ -64,7 +83,7 @@ export function vcrDeriveAccrualDuration(method, scenario) {
   const people = statedPeople(method, scenario)
   if (people === null) {
     return refuse('accrual.rate', accrual.rate, PEOPLE_FROM_DESIGN.has(method)
-      ? 'A rate gives the duration only for a fixed two-arm or group-sequential design that states its sizes (design.nTreat): state them, or state accrual.duration instead.'
+      ? 'A rate gives the duration only for a fixed two-arm or group-sequential design that states its sizes (design.nTreat; a grid: the same number of people in every design): state them, or state accrual.duration instead.'
       : 'This method computes the number of people from the accrual duration, so a rate cannot give the duration: state accrual.duration, or size the design with design.simulate, which takes the people and the rate.')
   }
   const duration = vcrConvertTime(people / accrual.rate, rateUnit, unit)

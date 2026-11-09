@@ -203,7 +203,7 @@ export const VCR_REFERENCE_INPUTS = Object.freeze([
   Object.freeze({ label: "对照组生存分布（中位时间，或指数、Weibull、分段指数）",
     keys: Object.freeze(["truth.controlMedian", "truth.controlDistribution"]) }),
   Object.freeze({ label: "协变量效应", keys: Object.freeze(["truth.covariateEffects", "truth.covariateLogit"]) }),
-  Object.freeze({ label: "入组节奏", keys: Object.freeze(["accrual.kind", "accrual.duration", "accrual.breaks", "accrual.rates", "accrual.tail"]) }),
+  Object.freeze({ label: "入组节奏", keys: Object.freeze(["accrual.kind", "accrual.duration", "accrual.rate", "accrual.rateUnit", "accrual.breaks", "accrual.rates", "accrual.tail"]) }),
   Object.freeze({ label: "随访时长", keys: Object.freeze(["accrual.followup", "accrual.maxFollowup"]) }),
   Object.freeze({ label: "脱落率（每 12 个时间单位）", keys: Object.freeze(["accrual.dropoutAnnual"]) }),
 ]);
