@@ -100,3 +100,11 @@ file). The command is
 ```
 Rscript --vanilla run_individual.R --engine <vcr-engine> --jm <aids.rda> --actg <ACTG175.txt> --source-commit <commit> --out <result.json>
 ```
+
+## Amendment 1 (2026-11-09, after the first run, before the second): the fold rule was implemented wrongly
+
+The first run (runner at commit `dbcc66e2b`) used `strtoi(<8 hex digits>, 16)`, which returns NA above 2^31 - 1, so about half of the people
+had no fold: they were neither tested nor used in any training set. The run therefore tested 93 of 205 eligible people on pbcseq, 109 of 223
+on aids and 665 of 1,342 on ACTG175, and fitted on the other half. The fold rule written above is unchanged; the runner now computes the same
+32-bit number exactly (two 16-bit halves) and stops if any eligible person is not tested. No window, covariate, model, metric, interval or
+claim rule changed. The first run's output is kept as an invalid run in the RUN file (its summary) and is not a result.

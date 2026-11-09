@@ -89,7 +89,11 @@ spec_selftest <- function() {
 }
 
 # --- one dataset's out-of-fold evaluation ----------------------------------------------------------------------------------------------
-fold_of <- function(name, id, k) strtoi(substr(sha256_text(paste0(name, ":", id)), 1L, 8L), 16L) %% k
+# the first 8 hex digits are a 32-bit number; `strtoi` returns NA above 2^31 - 1, so it is read as two 16-bit halves (a double holds it exactly)
+fold_of <- function(name, id, k) {
+  h <- sha256_text(paste0(name, ":", id))
+  (strtoi(substr(h, 1L, 4L), 16L) * 65536 + strtoi(substr(h, 5L, 8L), 16L)) %% k
+}
 
 predictions <- function(s, folds = protocol$folds) {
   d <- s$long; d$fold <- vapply(d$id, function(i) fold_of(s$name, i, folds), numeric(1))
@@ -194,6 +198,8 @@ horizon_table <- function(L, bins) {
 run_dataset <- function(s) {
   r <- predictions(s)
   P <- r$primary
+  # the protocol's denominator is the whole eligible set: a person that fell out of every fold is a defect, never a smaller sample
+  if (length(unique(P$id)) != r$eligible) stop(sprintf("%s: %d eligible people but %d tested", s$name, r$eligible, length(unique(P$id))))
   B <- protocol$bootstrap$replicates
   mets <- metric_rows(P)
   # each method's own MAE / RMSE with a person-bootstrap CI
