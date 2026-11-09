@@ -132,8 +132,14 @@ vcr_beta_logit_placebo <- function(par, t) {
 # --- a marketed AChE inhibitor from the posterior itself (plan R29) -------------------------------------------------------------------------
 
 #' The drugs the posterior carries: the index of its columns and the reference dose its effect is stated at (training manual §3.2).
-.VCR_BETA_LOGIT_REFERENCE_DRUGS <- list(donepezil = list(index = 1L, referenceDoseMg = 5), galantamine = list(index = 2L, referenceDoseMg = 24),
-                                        rivastigmine = list(index = 3L, referenceDoseMg = 6))
+.VCR_BETA_LOGIT_REFERENCE_DRUGS <- list(donepezil = list(index = 1L, referenceDoseMg = 5, studiedDoseMg = c(5, 10)), galantamine = list(index = 2L, referenceDoseMg = 24, studiedDoseMg = c(16, 24)),
+                                        rivastigmine = list(index = 3L, referenceDoseMg = 6, studiedDoseMg = c(6, 12)))
+# `studiedDoseMg` (review S11): the doses the evidence this implementation was read against covers (the Cochrane reviews of donepezil 5 and 10 mg, galantamine
+# 16 to 24 mg and rivastigmine 6 to 12 mg a day; Ito 2010's reference doses 5 and 6 mg). The fitted range of Rogers 2012 itself is not published in what was
+# read, so this is the range the check was made on, and a dose outside it is run and named as an extrapolation of the power law, never refused.
+
+#' Whether a dose lies outside the doses the evidence covers.
+.vcr_bl_dose_outside <- function(dose, range) dose < range[1] - 1e-9 || dose > range[2] + 1e-9
 
 #' The logit Emax and ET50 of `ref` (`{drug, doseMg}`) from the parameters of `par` (the medians, or one posterior draw): E_DRG = (D / Dref)^gamma
 #' x EDelta x t / (ET50 + t) with EDelta = -(1 + b) eStar / b and b = 12 / ET50 (the manual's Listing 3.9 to 3.11, adsim's own re-parameterisation:
@@ -147,7 +153,7 @@ vcr_beta_logit_placebo <- function(par, t) {
   k <- d$index; dr <- par$drugs
   et50 <- dr$et50[k]; b <- 12 / et50
   list(emax = (dose / d$referenceDoseMg)^dr$gamma[k] * (-(1 + b) * dr$eStar[k] / b), et50 = et50, doseRatio = dose / d$referenceDoseMg, eStar = dr$eStar[k], gamma = dr$gamma[k],
-       referenceDoseMg = d$referenceDoseMg)
+       referenceDoseMg = d$referenceDoseMg, studiedDoseMg = d$studiedDoseMg, outsideStudiedRange = .vcr_bl_dose_outside(dose, d$studiedDoseMg))
 }
 
 #' A symptomatic effect stated as `points` (treated less untreated, negative is better) after `on_weeks` weeks on drug for a person at
@@ -177,7 +183,7 @@ vcr_beta_logit_drug <- function(tr, t) {
 .vcr_bl_reference_report <- function(par, ref, uncertainty, weeks = FALSE) {
   if (is.null(ref)) return(NULL)
   e <- .vcr_bl_reference_effect(par, ref)
-  c(list(drug = as.character(ref[["drug"]]), doseMg = vcr_scalar(ref[["doseMg"]]), referenceDoseMg = e$referenceDoseMg, doseRatio = e$doseRatio, eStar = e$eStar, et50Weeks = e$et50,
+  c(list(drug = as.character(ref[["drug"]]), doseMg = vcr_scalar(ref[["doseMg"]]), referenceDoseMg = e$referenceDoseMg, studiedDoseMg = e$studiedDoseMg, outsideStudiedRange = e$outsideStudiedRange, doseRatio = e$doseRatio, eStar = e$eStar, et50Weeks = e$et50,
          doseExponent = e$gamma, logitEmax = e$emax, readFrom = if (identical(uncertainty, "posterior_draws")) "each trial's own posterior draw (the medians are shown)" else "the posterior's medians"),
     if (weeks) list(weeksBefore = vcr_scalar(ref[["weeksBefore"]])))
 }
@@ -185,8 +191,13 @@ vcr_beta_logit_drug <- function(tr, t) {
 #' The sentences a reference inhibitor adds to the result's limits.
 .vcr_bl_reference_limits <- function(tr) {
   if (is.null(tr[["reference"]]) && is.null(tr[["background"]])) return(NULL)
-  list("The marketed inhibitor's effect is the one fitted in the posterior itself (the manual's equation: effect at the reference dose times (dose / reference dose) to the fitted exponent), on the trials the model was built from; the range of the doses in those trials is not published in what this engine carries, so the same law is applied at any dose.",
-       "Against the Cochrane review of donepezil 10 mg at 24 to 26 weeks (Birks and Harvey 2018: -2.67 points, 95% CI -3.31 to -2.02) the fitted effect lands inside the interval. That is a check that the equation is implemented as published, not an independent validation: the review pools the kind of trials this model was fitted on.")
+  outside <- Filter(Negate(is.null), lapply(list(tr[["reference"]], tr[["background"]]), function(r) {
+    if (is.null(r)) return(NULL)
+    d <- .VCR_BETA_LOGIT_REFERENCE_DRUGS[[as.character(r[["drug"]] %||% "")]]; dose <- vcr_scalar(r[["doseMg"]])
+    if (!is.null(d) && .vcr_bl_dose_outside(dose, d$studiedDoseMg)) sprintf("%s %s mg a day lies outside the %s to %s mg the evidence read covers: the dose-response law is extrapolated there, and nothing was checked at that dose.", as.character(r[["drug"]]), format(dose), format(d$studiedDoseMg[1]), format(d$studiedDoseMg[2]))
+  }))
+  c(outside, list("The marketed inhibitor's effect is the one fitted in the posterior itself (the manual's equation: effect at the reference dose times (dose / reference dose) to the fitted exponent), on the trials the model was built from; the fitted range of the doses in those trials is not published in what this engine carries, so the same law is applied at any dose and a dose beyond the range the evidence read covers is named above.",
+       "Against the Cochrane review of donepezil 10 mg at 24 to 26 weeks (Birks and Harvey 2018: -2.67 points, 95% CI -3.31 to -2.02) the fitted effect lands inside the interval. That is a check that the equation is implemented as published, not an independent validation: the review pools the kind of trials this model was fitted on."))
 }
 
 # --- calculated moments ----------------------------------------------------------------------------------------------------------------

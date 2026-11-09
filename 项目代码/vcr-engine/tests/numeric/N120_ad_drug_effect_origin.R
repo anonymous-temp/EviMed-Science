@@ -5,7 +5,7 @@
 # own Emax equation read from the parameter file by hand, the calculated numbers the paper prints, `deSolve` for the ODE, a closed form of the indirect
 # response at a constant concentration, and the engine's own fixed-share run for the inversion.
 #
-#   a  tier A: the logit Emax and ET50 of each drug at a dose are the posterior's equation (the manual's Listings 3.9 to 3.11) computed here from the file,
+#   a  tier A (a TRANSCRIPTION check: the equation typed twice by one author; the formula is held to something else in l): the logit Emax and ET50 of each drug at a dose are the posterior's equation (the manual's Listings 3.9 to 3.11) computed here from the file,
 #      the 12-week effect on the reference dose is exactly -eStar, and the arm's curves and power equal the researcher's own statement of that Emax
 #   b  tier A under `posterior_draws`: each trial reads the row it is about to draw, and rows differ
 #   c  background therapy: a closed form of the shared response, and an identical pair of arms when no treatment is stated
@@ -15,6 +15,9 @@
 #   g  the SUVR integration against `deSolve` on the whole system, and no dose leaving the baseline untouched
 #   h  the covariate equations and what the paper prints of them: the weight effect of 3 to 5% per 10%, the SUVR change by age, the high-dose week-78 change
 #   i  the clinical link's draws are Pang's interval and the inversion into the model's share reproduces the stated points in an engine run
+#   l  tier A against an independent published fit of the same drug class (Ito et al. 2010, a linear Emax model on ADAS-cog 11, its printed parameters): the
+#      arm's expected difference at week 26 against Ito's own curve, with its own stated uncertainty
+#   m  a dose outside the doses the evidence read covers is run, and the result names it as an extrapolation (review S11)
 #   j  the chain's effect feeds the assurance (named, tier B, sourced); lecanemab's PK is Table 1 and its chain is refused by name
 
 .n120_P <- function(v, basis = "assumed") list(value = v, basis = basis)
@@ -260,4 +263,44 @@ vcr_case("N120k", c("AC-04", "AC-28"), function() {
          abs(dist$mean - mu) < 1e-9 && dist$sd >= se && abs(rep$drawMean - dist$mean) < 4 * dist$sd / sqrt(rep$draws) && grepl("estimand", rep$source$note, fixed = TRUE),
        detail = sprintf("four studies (-2.9, -2.2, -3.4, -1.8 points) pooled by the engine: mean %.4f (DerSimonian-Laird by hand %.4f), prior SD %.3f (the confidence SD is %.3f); stated as the symptomatic effect with tier C and the pooling as its source, the run is named an assurance (%.3f, 600 trials) and its effect report carries the tier, the source and the estimand note; the draws' mean %.3f is the prior's within the Monte Carlo error",
                         dist$mean, mu, dist$sd, se, r$measures[[1]]$value, rep$drawMean))
+})
+
+vcr_case("N120l", c("AC-04", "AC-28"), function() {
+  # Ito K, et al. 2010 (Alzheimers Dement 6:39-53), the printed Emax fits to the same kind of trials: S(t) = DEmax * t / (ET50 + t) on the ADAS-cog 11 change,
+  # DEmax scaled by (dose / reference dose)^q. A different structure (linear, not logit), fitted by other authors: nothing of the engine's equation is in it.
+  ito <- list(donepezil = list(demax = -2.26, se = 0.296, et50 = 1.42, q = 0.231, ref = 5, doses = c(5, 10), tol = 0.15),
+              galantamine = list(demax = -4.88, se = 0.498, et50 = 13.1, q = 0, ref = 24, doses = c(16, 24), tol = 0.70),
+              rivastigmine = list(demax = -1.6, se = 0.566, et50 = 9.37, q = 1.17, ref = 6, doses = c(6, 12), tol = 1.30))
+  rows <- character(0); ok <- TRUE
+  for (nm in names(ito)) {
+    it <- ito[[nm]]
+    for (dose in it$doses) {
+      r <- .n120_run(.n120_sc(list(reference = list(drug = nm, doseMg = dose)), visits = c(0, 13, 26)), replicates = 50L)
+      cu <- r$diagnostics$progression$curves; eng <- cu[[3]]$treated$mean$value - cu[[3]]$control$mean$value
+      pub <- it$demax * (dose / it$ref)^it$q * 26 / (it$et50 + 26)
+      ok <- ok && abs(eng - pub) <= it$tol
+      rows <- c(rows, sprintf("%s %g mg: engine %.2f, Ito %.2f (gap %.2f, held to %.2f)", nm, dose, eng, pub, abs(eng - pub), it$tol))
+    }
+  }
+  list(pass = ok, detail = paste0("expected treated-less-control ADAS-cog 11 difference at week 26 against Ito 2010's printed curve: ", paste(rows, collapse = "; "),
+       ". Donepezil agrees within 0.15 points; galantamine within 0.7 (about 2 SE of its DEmax); rivastigmine's published fit is itself loose (DEmax SE 0.57, ET50 9.4 +/- 9.9 weeks), so it is held to 1.3 points and the gap is part of the record"))
+})
+
+vcr_case("N120m", c("AC-04", "AC-28"), function() {
+  limits <- function(drug, dose) { r <- .n120_run(.n120_sc(list(reference = list(drug = drug, doseMg = dose))), replicates = 50L); list(r = r, text = unlist(r$diagnostics$progression$limits), rep = r$diagnostics$progression$treatment$reference) }
+  inside <- limits("donepezil", 10); low <- limits("donepezil", 1); high <- limits("donepezil", 100); gal <- limits("galantamine", 24)
+  named <- function(x) any(grepl("lies outside the", x$text, fixed = TRUE))
+  # the law is applied (run, not refused): 100 mg gives the power law's 2.05 x the reference dose's effect and the page can read that it is outside
+  list(pass = identical(inside$r$status, "succeeded") && !named(inside) && !named(gal) && named(low) && named(high) && identical(high$r$status, "succeeded") &&
+         isTRUE(high$rep$outsideStudiedRange) && identical(inside$rep$outsideStudiedRange, FALSE) && identical(high$rep$studiedDoseMg, c(5, 10)),
+       detail = sprintf("donepezil 10 mg and galantamine 24 mg are inside the doses the evidence read covers (5 to 10 and 16 to 24 mg) and say nothing; 1 mg and 100 mg run and the result says each lies outside (outsideStudiedRange %s / %s, range %s to %s mg)", low$rep$outsideStudiedRange, high$rep$outsideStudiedRange, high$rep$studiedDoseMg[1], high$rep$studiedDoseMg[2]))
+})
+
+vcr_case("N120n", c("AC-04", "AC-31"), function() {
+  # review S12: the antibody chain's spread is the link's confidence interval and nothing more; the result says it is a lower bound and what it leaves out
+  r <- .n120_run(.n120_sc(list(mechanism = list(drug = "aducanumab", regimen = list(maintenanceMgPerKg = 10, titrationMgPerKg = c(1, 1, 3, 3, 6, 6), intervalWeeks = 4), atWeek = 78)), n = 150L, visits = c(0, 26, 52, 78)), replicates = 100L)
+  lim <- unlist(r$diagnostics$progression$limits)
+  said <- any(grepl("lower bound on the true uncertainty", lim, fixed = TRUE)) && any(grepl("between trials and between drugs", lim, fixed = TRUE)) && any(grepl("confidence interval of that link", lim, fixed = TRUE))
+  list(pass = identical(r$status, "succeeded") && said && identical(r$measures[[1]]$name, "assurance"),
+       detail = "an aducanumab chain run (150 per arm, 100 trials): the limits say that the spread is only the link's confidence interval, that it leaves out the heterogeneity between trials and drugs, the PK/PD parameter uncertainty and the differences between people, and that it is a lower bound")
 })

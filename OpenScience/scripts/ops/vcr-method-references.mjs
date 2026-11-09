@@ -51,7 +51,7 @@ export const REQUIRED_CURRENT_REFERENCES = {
   // 1.2.0 (plan R26) adds the MMRM against gls and mmrm (N111a), the imputation against a hand case (N111c) and the true values against the exact moments (N111f)
   // 1.2.0 (plan R27, R28) adds the control arm's least-squares mean against mmrm and an ordinary regression (N190c) and the second published structure against its authors' printed trajectory (N200a)
   // 1.2.0 (plan R29, R30) adds the marketed inhibitor against the posterior's own equation (N120a), the antibody's SUVR integration against lsoda (N120g) and the link's inversion against a fixed-share run (N120i)
-  'patients.progression': ['N101a', 'N101c', 'N101d', 'N103c', 'N104b', 'N111a', 'N111c', 'N111f', 'N111l', 'N104g', 'N120a', 'N120g', 'N120i', 'N190c', 'N200a'],
+  'patients.progression': ['N101a', 'N101c', 'N101d', 'N103c', 'N104b', 'N111a', 'N111c', 'N111f', 'N111l', 'N104g', 'N120a', 'N120l', 'N120g', 'N120i', 'N190c', 'N200a'],
 };
 export const NUMERIC_REFERENCES = {
   N53e: { methods: ['design.analytic'], anchors: ['Independently integrate arm event probabilities', 'abs(at$y-checked)<1e-10'] },
@@ -393,6 +393,7 @@ export const NUMERIC_REFERENCES = {
   N104a: { methods: ['patients.progression'], anchors: ['same(fixed, tiny, "assurance")'] },
   N104g: { methods: ['patients.progression'], anchors: ['nodes <- mu + sqrt(2) * sdv * gh$nodes; w <- gh$weights / sqrt(pi)', 'abs(.n104_first(a)$value - quad) <= tol'] },
   N111l: { methods: ['patients.progression'], anchors: ['method = "Kenward-Roger"', 'tie <= 0.05 + 0.0045'] },
+  N120l: { methods: ['patients.progression'], anchors: ['ito <- list(donepezil = list(demax = -2.26, se = 0.296, et50 = 1.42, q = 0.231', 'pub <- it$demax * (dose / it$ref)^it$q * 26 / (it$et50 + 26)'] },
   N104b: { methods: ['patients.progression'], anchors: ['# the independent computation: Gauss-Hermite quadrature of the power at a fixed effect over the same normal prior', 'abs(m$value - quad) <= tol'] },
   N104c: { methods: ['patients.progression'], anchors: ['mass <- stats::pnorm((hi - mu) / s) - stats::pnorm((lo - mu) / s)', 'abs(rep$drawMean - tmean) <= 4 * tsd / sqrt(trials)'] },
   N104d: { methods: ['patients.progression'], anchors: ['list("beta", list(shape1 = 3, shape2 = 9), 3 / 12, sqrt(3 * 9 / (12^2 * 13)))'] },

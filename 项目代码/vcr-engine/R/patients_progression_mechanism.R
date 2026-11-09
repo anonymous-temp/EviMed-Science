@@ -239,6 +239,7 @@ vcr_mechanism_chain <- function(mech, par, begin, end, visits, placebo, dropout,
     "The link comes from trials mostly in early Alzheimer disease (MMSE 20 to 30); this model describes mild-to-moderate disease (MMSE 14 to 26): the population does not match.",
     "The link was fitted on the same trials the chain is checked against, so agreement with their results is not independent of it.",
     "The link is an association across trials, not the causal effect of lowering amyloid in one person.",
+    sprintf("The spread of the effect carried into the assurance is only the confidence interval of that link (95%% %s to %s ADAS-Cog points per 0.1 SUVR): it leaves out how much the link differs between trials and between drugs (a new antibody is a new trial, and one meta-analysis found no association for MMSE), the uncertainty of the serum and PET model parameters and the differences between people. It is a lower bound on the true uncertainty, so the assurance is, if anything, overstated.", format(link$lower), format(link$upper)),
     "The serum and amyloid PET models reproduce the SUVR change the paper prints for its reference patient and the change reported for EMERGE's high dose at week 78 within a few hundredths; the paper's own statement of the time to a SUVR of 1.10 is not reproduced from its published parameters.")
   list(spec = tr, report = report, limits = limits)
 }
