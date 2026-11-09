@@ -14,7 +14,9 @@
  * entry naming a method the engine does not have, an anchor that is no longer
  * in its case, and a `crossChecks` label that names an R package of a lock which no
  * case calls (2026-11-03: `simsurv` and `IPDfromKM` were labels nothing ran) all exit 1
- * and name themselves. Node's own modules only: the CI job
+ * and name themselves. So does a function name defined at the top level of two engine files: R sources them in order and the later silently replaces
+ * the earlier, so a case calling the first one's signature fails with "unused argument" far from the cause (2026-11-09: `vcr_interval_coverage` in
+ * `quality.R` and `individualize.R`). Node's own modules only: the CI job
  * that runs this has no `pnpm install`.
  *
  * Environment: VCR_ENGINE_ROOT (default: 项目代码/vcr-engine beside OpenScience).
@@ -38,6 +40,11 @@ const lockedPackages = ['R/package-lock.json', 'tests/package-lock.crosscheck.js
   .flatMap(lock => JSON.parse(readFileSync(path.join(engine, lock), 'utf8')).packages ?? []).map(entry => String(entry.package));
 
 const problems = [];
+const definedIn = new Map();
+for (const name of readdirSync(path.join(engine, 'R')).filter(file => /\.R$/.test(file)).sort()) {
+  for (const [, fn] of readFileSync(path.join(engine, 'R', name), 'utf8').matchAll(/^([A-Za-z_.][A-Za-z0-9_.]*)\s*<-\s*function\b/gm)) definedIn.set(fn, [...(definedIn.get(fn) ?? []), name]);
+}
+for (const [fn, where] of definedIn) if (where.length > 1) problems.push(`${fn}: defined at the top level of ${where.join(' and ')}; the later file replaces the earlier -- rename one`);
 const missing = methodsWithoutReference(methods, definitions);
 for (const method of missing) problems.push(`${method}: no reference case holds it (add one to NUMERIC_REFERENCES, or write one)`);
 for (const { caseId, problem } of referenceProblems(methods, definitions)) problems.push(`${caseId}: ${problem}`);

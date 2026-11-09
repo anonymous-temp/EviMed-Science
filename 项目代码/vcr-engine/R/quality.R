@@ -667,7 +667,7 @@ vcr_calibration <- function(observed, predicted, bins = 10L) {
 
 #' Coverage of prediction intervals, with the binomial interval a correctly
 #' calibrated model should sit inside.
-vcr_interval_coverage <- function(observed, low, high, nominal = 0.95, level = 0.99) {
+vcr_interval_binomial_coverage <- function(observed, low, high, nominal = 0.95, level = 0.99) {
   inside <- observed >= low & observed <= high
   n <- length(inside); p <- mean(inside)
   ci <- stats::binom.test(sum(inside), n, nominal, conf.level = level)$conf.int
