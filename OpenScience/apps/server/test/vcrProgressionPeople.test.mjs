@@ -17,11 +17,12 @@ const strings = (node) => (typeof node === "string" ? [node] : Array.isArray(nod
 const people = (mode, extra = {}) => ({ mode, inputId: "res_people:progression-people", tableSha256: "a".repeat(64), people: 400, madeForParameterSetSha256: "b".repeat(64), madeForCurrentModel: true,
   outsideFittedMmse: 0, fittedMmse: [14, 26], study: { tau: 0.1, omega: 0.2 }, sampling: "without_replacement", ...extra });
 
-/** What a resampled run on a record reports today: the engine keeps `uncertainty` as the model's default although the study is fixed. */
+/** What a resampled run on a record reports: the engine states `uncertainty: fixed_study` (until round 2 it kept the model's default, new_study, although the study is fixed). */
 function resampled(extra = {}) {
   const result = fixture("alzheimer-beta-logit");
   result.diagnostics.progression.isNull = false;
   result.diagnostics.progression.people = people("resampled_trials", extra);
+  result.diagnostics.progression.uncertainty = "fixed_study";
   return result;
 }
 /** The paired result: no `power`, `uncertainty` is `fixed_study`, `calculatedFor` is `people_of_record`. */
@@ -87,6 +88,7 @@ test("P0-1 a run that is not on a record keeps its mode's name and the entry-ran
   assert.equal(row(card, "progression:ad:people"), undefined);
   assert.equal(progressionPowerQuantity({ uncertainty: "posterior_draws" }), "expected_power_over_parameters");
   assert.equal(progressionPowerQuantity({ isNull: true }), null);
+  assert.equal(progressionPowerQuantity({ uncertainty: "fixed_study" }), "conditional_power_fixed_study", "the engine's own word names the quantity, with or without the people block");
   assert.equal(progressionPowerQuantity({ effectDistributions: [{}], people: { mode: "x" } }), "assurance");
   assert.equal(progressionPowerQuantity({ people: { mode: "resampled_trials" } }), "conditional_power_fixed_study");
   assert.equal(scenarioPowerQuantity({ model: { uncertainty: "new_study" } }), "expected_power_over_studies");

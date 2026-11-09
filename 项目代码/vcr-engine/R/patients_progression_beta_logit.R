@@ -694,7 +694,8 @@ vcr_job_patients_progression_beta_logit <- function(job, output_dir = NULL, canc
          parameterSet = list(id = set$id, version = set$version, artifact = src[["artifact"]], url = src[["url"]], archiveSha1 = src[["archiveSha1"]],
                              archiveSha256 = src[["archiveSha256"]], sourceSha256 = src[["sourceSha256"]], fileSha256 = set$fileSha256, draws = nrow(set$draws),
                              publication = src[["publication"]]),
-         uncertainty = uncertainty, placebo = placebo, dropoutModel = dropout,
+         # a run on a record of people is in the one study the record was made in; the mode a scenario names is not drawn (round-2 review X3 P0-1)
+         uncertainty = if (is.null(record)) uncertainty else "fixed_study", placebo = placebo, dropoutModel = dropout,
          analysis = list(kind = kind, visit = at_time, alpha = alpha, firstVisit = visits[1L]),
          treatment = list(symptomaticLogitEmax = treatment$emax %||% 0, et50Weeks = treatment$et50, washoutHalfLifeWeeks = treatment$halfLife,
                           diseaseModifyingFraction = treatment$fraction, doseBegin = treatment$begin, doseEnd = treatment$end,

@@ -30,3 +30,18 @@ vcr_case("N105a", c("AC-31", "AC-04"), function() {
        detail = sprintf("seven beta_logit scenarios of the 1.1.0 release at seed 20261109 (600 trials): %d of 7 output hashes equal the recorded ones (%s)",
                         sum(unname(got) == unname(want)), paste(sprintf("%s %s", names(got), substr(got, 1, 8)), collapse = ", ")))
 })
+
+vcr_case("N105b", c("AC-31", "AC-04"), function() {
+  P <- function(v, basis = "assumed") list(value = v, basis = basis)
+  sym <- list(symptomatic = list(pointsAt = P(-2.5), atWeek = 26, referenceAdas = 25, et50Weeks = P(8)))
+  inst <- .n103_instantiate(300L, 10501L); input <- .n103_input(inst, "res_n105b:progression-people")
+  on_record <- .n103_run("resampled_trials", input, sym, seed = 10502L, n = 40L, replicates = 300L)
+  scen <- function(unc) list(endpoint = list(type = "continuous", unit = "points"), design = list(nTreat = 60L, nControl = 60L), timeUnit = "weeks", visits = c(0, 13, 26, 52, 78),
+    model = list(family = "beta_logit", parameterSet = list(id = "camd-adas-cog-11", version = "adsim-3.0"), uncertainty = unc), treatment = sym)
+  modes <- vapply(c("new_study", "typical_study", "posterior_draws"), function(u) vcr_test_run(vcr_test_job("patients.progression", scen(u), seed = 20261109L, replicates = 600L))$diagnostics$progression$uncertainty, character(1))
+  recorded_hash <- "b5b6287a08fa562b20577b2000a92941a123433ad6f907521172acb75dc5b293"
+  got <- vcr_output_hash(on_record)
+  list(pass = identical(on_record$diagnostics$progression$uncertainty, "fixed_study") && identical(unname(modes), c("new_study", "typical_study", "posterior_draws")) && identical(got, recorded_hash),
+       detail = sprintf("a resampled_trials run on a people record states its study as fixed_study (the old code wrote new_study, which says one study is drawn per trial); runs with no record keep stating their own mode (%s); output hash of the record run %s (equal to the one recorded with the code before the change)",
+                        paste(modes, collapse = "/"), got))
+})

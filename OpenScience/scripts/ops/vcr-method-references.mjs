@@ -436,6 +436,7 @@ export const NUMERIC_REFERENCES = {
   N210e: { methods: ['forecast.individualize'], anchors: ['same <- identical(vcr_file_sha256(file.path(one$dir, "person-forecasts.csv"))', 'shape <- identical(names(a), c("subject", "horizonDays", "status"'] },
   // what 1.2.0 did not change
   N105a: { methods: ['patients.progression'], anchors: ['null_new = list(sc("new_study"), "3d355061d1e5a8a507a86121e6f187eff096de74a1028ae03e60be05e5294f42")', 'identical(unname(got), unname(want))'] },
+  N105b: { methods: ['patients.progression'], anchors: ['b5b6287a08fa562b20577b2000a92941a123433ad6f907521172acb75dc5b293', 'identical(on_record$diagnostics$progression$uncertainty, "fixed_study")'] },
   // the people of an adaptive design whose answer is in events (live check 2026-11-04, design.confirmatory 1.2.0): patient-level simulations and the Lachin-Foulkes chance of an event written out
   N100a: { methods: ['design.confirmatory'], anchors: ['sim <- lapply(c(0.5, 1), function(rate) .n100_enrolled(n, 0.5, hr, rate * max_events))', 'expected <- ended[1] * got[1] + (1 - ended[1]) * got[2]'] },
   N100b: { methods: ['design.confirmatory'], anchors: ['closed <- p1$value * at_interim[["mean"]] + (1 - p1$value) * n0', 'n0 <- ceiling(plan / per_head); cap <- ceiling(1.0001 * plan)'] },
