@@ -943,8 +943,8 @@ export function presentCampaign(row) {
     identity: String(row.identity),
     objective: { ...manifest.objective, label: wordsOf(manifest.objective?.measure), pick: objectivePick(manifest.objective, wordsOf(manifest.objective?.measure)) },
     powerQuantity,
-    constraints: list(manifest.constraints).map((c) => ({ ...c, label: wordsOf(c.measure), kindText: CONSTRAINT_KIND_TEXT_ZH[/** @type {keyof typeof CONSTRAINT_KIND_TEXT_ZH} */ (c.kind)] ?? c.kind })),
-    truths: list(manifest.space?.truths).map((truth) => truth.name),
+    constraints: list(manifest.constraints).map((c) => ({ ...c, ...(typeof c.truth === "string" ? { truth: vcrTruthWords(list(manifest.space?.truths)).get(c.truth) ?? c.truth } : {}), label: wordsOf(c.measure), kindText: CONSTRAINT_KIND_TEXT_ZH[/** @type {keyof typeof CONSTRAINT_KIND_TEXT_ZH} */ (c.kind)] ?? c.kind })),
+    truths: list(manifest.space?.truths).map((truth) => vcrTruthWords(list(manifest.space?.truths)).get(String(truth.name)) ?? truth.name),
     stages: manifest.stages, budget: { declared: manifest.budget, used: { ...usage, units: Number(state.unitsEvaluated ?? 0),
       candidatesEvaluated: candidates.filter((c) => c.stage).length, candidatesPlanned: candidates.length } },
     candidates, finalists: list(state.finalists), best: verdict?.best ?? null, inconclusive: verdict?.inconclusive ?? [], feasible: verdict?.feasible ?? [],
@@ -973,13 +973,33 @@ export function presentCampaign(row) {
         ? diseasePremises(false, [object(object(manifest.space).scenario), ...vcrCampaignCandidates(manifest).map((candidate) => object(candidate.set))])
         : (() => {
           // the one sentence that decides this result: which efficacy hypotheses were simulated
-          const names = list(manifest.space?.truths).map((truth) => String(truth.name)).filter(Boolean);
+          const truthWords = vcrTruthWords(list(manifest.space?.truths));
+          const names = list(manifest.space?.truths).map((truth) => truthWords.get(String(truth.name)) ?? String(truth.name)).filter(Boolean);
           return names.length ? [{ key: "campaign:conditional", label: "疗效假设", value: `结果是在“${names.join("”“")}”这 ${names.length} 个疗效假设下模拟的；疗效假设变了，结论可能不同。`, source: /** @type {const} */ ("assumed"), decisive: true }] : [];
         })()),
       { key: "campaign:frozen", label: "开始前已固定的评价方式", value: "目标、约束、疗效假设和每个阶段的模拟次数在开始前已固定；改动任何一项就是一个新的实验方案。", source: "given", decisive: false },
     ]),
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
   };
+}
+
+/**
+ * What a person reads for each efficacy scenario of a search: the name the scenario was given, except the no-effect counterpart of a changed world that the platform adds
+ * (`null_w1`, `none_w2`...): it reads 无效应 and names that world after the scenario that changed it (the one with the same world), never `null_w1` (round-2 review X1 flag a).
+ * @param {Array<Record<string, any>>} truths the manifest's `space.truths` @returns {Map<string, string>} name -> words
+ */
+export function vcrTruthWords(truths) {
+  /** @type {Map<string, string>} */
+  const words = new Map();
+  const entries = truths.map(object).filter((entry) => typeof entry.name === "string" && entry.name);
+  for (const entry of entries) {
+    const name = String(entry.name);
+    if (!/^(null|none)_w\d+$/.test(name)) { words.set(name, name); continue; }
+    const world = JSON.stringify(entry.world ?? null);
+    const owner = entries.find((other) => !/^(null|none)(_w\d+)?$/.test(String(other.name)) && other.world != null && JSON.stringify(other.world) === world);
+    words.set(name, owner ? `无效应（${String(owner.name)}的假设下）` : "无效应（另一种情形下）");
+  }
+  return words;
 }
 
 const ROBUST_GUARD_TEXT_ZH = Object.freeze({ pass: "错误率与安全性约束满足", inconclusive: "错误率或安全性约束无法确定", fail: "不满足错误率或安全性约束", none: "没有错误率或安全性约束" });
@@ -997,11 +1017,14 @@ const ROBUST_OC_LABELS_ZH = Object.freeze({ exposure: "累计暴露（人数 × 
  * @param {string | null} [quantityLabel] the closed name of the chance the search computes when it is not a plain power (`patients.progression`); null reads 功效
  */
 export function presentRobust(manifest, robust, candidates, quantityLabel = null) {
+  const words = vcrTruthWords(list(manifest.space?.truths));
+  const said = (/** @type {unknown} */ name) => (name == null ? name : words.get(String(name)) ?? String(name));
   const power = quantityLabel ? `“${quantityLabel}”` : "功效";
   const percentOf = (/** @type {number} */ x) => percentWord(x);
   const num = (/** @type {string} */ name, /** @type {{ value: number, mcse?: number | null } | null | undefined} */ one) => (one
     ? measureValue({ name, value: one.value, mcse: one.mcse ?? undefined, simulated: one.mcse != null }, { kind: "experiment_candidate" }) : null);
   const scenarios = list(robust.scenarios).map((entry) => String(entry.name));
+  const scenarioWords = scenarios.map((name) => String(said(name)));
   const indexOf = (/** @type {string | null} */ key) => (key ? (candidates.find((candidate) => candidate.key === key)?.index ?? null) : null);
   const tags = (/** @type {Record<string, any>} */ row) => [
     ...(row.pareto ? ["pareto"] : []), ...(row.nearOptimal ? ["near_optimal"] : []),
@@ -1012,12 +1035,12 @@ export function presentRobust(manifest, robust, candidates, quantityLabel = null
     key: row.key, index: indexOf(row.key) ?? row.index, complete: row.complete, eligible: row.eligible, referenceOnly: row.referenceOnly,
     guard: row.guard, guardText: ROBUST_GUARD_TEXT_ZH[/** @type {keyof typeof ROBUST_GUARD_TEXT_ZH} */ (row.guard)] ?? null,
     acceptable: row.acceptable, acceptableText: ROBUST_ACCEPTABLE_TEXT_ZH[/** @type {keyof typeof ROBUST_ACCEPTABLE_TEXT_ZH} */ (row.acceptable)] ?? null,
-    worstCase: row.worstCase ? { ...num("power", row.worstCase), scenario: row.worstCase.scenario } : null,
-    maxRegret: row.regret ? { ...num("power", row.regret.max), scenario: row.regret.max.scenario } : null,
+    worstCase: row.worstCase ? { ...num("power", row.worstCase), scenario: said(row.worstCase.scenario) } : null,
+    maxRegret: row.regret ? { ...num("power", row.regret.max), scenario: said(row.regret.max.scenario) } : null,
     expectedPower: num("power", row.expectedPower),
     n: num(robust.measures.n ?? "expected_sample_size", row.n), duration: num(robust.measures.duration ?? "duration_months", row.duration),
     scenarios: Object.entries(object(row.oc)).map(([name, oc]) => ({
-      name, weight: list(robust.scenarios).find((entry) => entry.name === name)?.weight ?? null,
+      name: String(said(name)), weight: list(robust.scenarios).find((entry) => entry.name === name)?.weight ?? null,
       compared: scenarios.includes(name),
       power: object(row.scenarios)[name]?.power ? { ...num("power", object(row.scenarios)[name].power), status: object(row.scenarios)[name].power.status,
         statusText: VCR_CONSTRAINT_STATUS_TEXT_ZH[/** @type {keyof typeof VCR_CONSTRAINT_STATUS_TEXT_ZH} */ (object(row.scenarios)[name].power.status)] ?? null,
@@ -1030,9 +1053,9 @@ export function presentRobust(manifest, robust, candidates, quantityLabel = null
   const pick = (/** @type {string | null} */ key) => { const row = rows.find((entry) => entry.key === key); return row ? { key: row.key, index: row.index, n: row.n, worstCase: row.worstCase } : null; };
   const cheapestAcceptable = pick(robust.cheapestAcceptable);
   const cheapestUnderBase = pick(robust.cheapestUnderBase);
-  const names = scenarios.map((name) => `“${name}”`).join("、");
+  const names = scenarioWords.map((name) => `“${name}”`).join("、");
   const floor = percentOf(Number(robust.rule.floor));
-  const baseName = String(manifest.objective?.truth ?? "");
+  const baseName = String(said(manifest.objective?.truth ?? "") ?? "");
   /** @type {string[]} */
   const sentences = [`在这些假设下（${names}）：`];
   const rowOf = (/** @type {string | null} */ key) => rows.find((entry) => entry.key === key) ?? null;
@@ -1058,7 +1081,7 @@ export function presentRobust(manifest, robust, candidates, quantityLabel = null
     weighted ? `你给了各假设的权重，所以另给按权重平均的${power}。` : `你没有给各假设的权重，所以不给按权重平均的${power}。`,
   ];
   return {
-    scenarios: list(robust.scenarios).map((entry) => ({ name: String(entry.name), weight: entry.weight ?? null })), weighted,
+    scenarios: list(robust.scenarios).map((entry) => ({ name: String(said(entry.name)), weight: entry.weight ?? null })), weighted,
     floor: Number(robust.rule.floor), confidence: Number(robust.rule.confidence), tolerance: robust.rule.tolerance,
     criteria: robust.criteria, rows,
     sets: { pareto: robust.pareto, nearOptimal: robust.nearOptimal, acceptable: robust.acceptable, inconclusive: robust.inconclusive },

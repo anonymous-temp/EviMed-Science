@@ -143,3 +143,30 @@ test("review S9: a search over progression simulations names the chance by its u
   const lab = [{ ...view, bestSettings: [], finalists: [] }];
   assert.match(renderLabSection({ ...vcrReportModel({ study: { id: "std_1", name: "x", question: "", dataTier: "T0", intendedUse: "exploratory" }, results: [] }), lab }).markdown, new RegExp(`“optimistic”下的“${label}”`));
 });
+
+test("the no-effect counterpart of a scenario in a changed world is worded from that scenario, and no `null_w1` reaches the page, the reply or the report (round-2 review X1 flag a)", async () => {
+  const world = { "accrual.dropoutAnnual": 0.2 };
+  const truths = [{ name: "optimistic", truth: truth(0.6) }, { name: "base", truth: truth(0.7), world }, { name: "null", truth: truth(1) }, { name: "null_w1", truth: truth(1), world }];
+  const withWorld = input(truths);
+  withWorld.constraints.push({ measure: "type_one_error", op: "<=", bound: 0.025, kind: "error_control", truth: "null_w1" });
+  const manifest = vcrCampaignManifest(withWorld).manifest;
+  assert.ok(manifest, "the world's own null is a valid manifest");
+  let state = vcrCampaignInitialState(manifest);
+  for (let i = 0; i < 300; i++) {
+    const { state: next, action } = vcrCampaignAdvance(manifest, state, { identity: ID });
+    state = next;
+    if (action.type !== "evaluate") break;
+    state = vcrCampaignRecord(manifest, { ...state, inFlight: { unitKey: action.unit.key } }, action.unit, engine(action.unit));
+  }
+  const row = { id: "cmp_w", study_id: "std_1", kind: "campaign", status: "stopped", identity: ID, manifest, state, created_at: new Date("2026-11-09T00:00:00Z"), updated_at: new Date("2026-11-09T00:01:00Z") };
+  const view = presentCampaign(row);
+  const seen = view.robust.rows.flatMap((r) => r.scenarios.map((s) => s.name));
+  assert.ok(seen.includes("无效应（base的假设下）"), `the world's null reads from the scenario that changed the world: ${seen}`);
+  assert.ok(seen.includes("null"), "a name the person or the model gave stays as given");
+  const experiments = new VcrExperiments({ store: { rows: async () => [row], one: async () => null }, jobs: null });
+  const lab = await experiments.reportBlock({ id: "std_1" });
+  const model = { ...vcrReportModel({ study: { id: "std_1", name: "EV-301", question: "", dataTier: "T0", intendedUse: "exploratory" }, results: [] }), lab };
+  for (const [where, text] of [["page", JSON.stringify(view, (key, value) => (key === "resultIds" ? undefined : value))], ["report", renderLabSection(model).markdown]]) assert.ok(!/null_w\d|none_w\d/.test(text), where);
+  assert.doesNotMatch(view.premises.map((p) => p.value).join(""), /null_w/, "the sentence naming the hypotheses");
+  assert.match(view.premises.find((p) => p.key === "campaign:conditional").value, /无效应（base的假设下）/);
+});
