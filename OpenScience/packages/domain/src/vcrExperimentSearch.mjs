@@ -616,7 +616,12 @@ export function vcrSearchFromForm(input) {
   if (!entries.length) bad('search_form_vary', 'vary', 'The form states what varies: {"design.nTreat": [80, 120, 160]} or a range {from, to, step}.')
   const together = entries.some(([key]) => key.includes('+'))
   /** @type {Array<{ paths: string[], values: any[] }>} */
-  const varied = entries.map(([key, spec]) => ({ paths: key.split('+'), values: formValues(spec, bad, `vary.${key}`) }))
+  // paths that move together take rows; a range {from, to, step} on them is the same value for each path at every step (the people per arm of two arms)
+  const varied = entries.map(([key, spec]) => {
+    const paths = key.split('+')
+    const values = formValues(spec, bad, `vary.${key}`)
+    return { paths, values: paths.length > 1 && !Array.isArray(spec) ? values.map((value) => paths.map(() => value)) : values }
+  })
   for (const entry of varied) {
     if (entry.paths.length > 1 && !entry.values.every((row) => Array.isArray(row) && row.length === entry.paths.length)) {
       bad('search_form_vary', `vary.${entry.paths.join('+')}`, `Paths that move together take one list of rows, each with ${entry.paths.length} values.`)

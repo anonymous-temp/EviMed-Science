@@ -859,9 +859,13 @@ async function save(client, row, state, status) {
     WHERE id = $1 AND study_id = $2 AND revision = $5`, [row.id, row.study_id, JSON.stringify(state), status, Number(row.revision)]);
 }
 
-/** @param {string} code @param {string} lead @param {Array<{ code: string, field: string, detail?: string }>} issues */
+/**
+ * The refusal names each problem with the reason the domain gave: live R39 (2026-11-09) showed a search form refused with only
+ * "vary.design.nTreat+design.nControl（search_form_vary）", and conversations that had read the form went back to hand-made sweeps.
+ * @param {string} code @param {string} lead @param {Array<{ code: string, field: string, detail?: string }>} issues
+ */
 function invalid(code, lead, issues) {
-  const error = new HttpError(400, code, `${lead}${issues.slice(0, 6).map((issue) => `${issue.field || issue.code}（${issue.code}）`).join("、")}。`);
+  const error = new HttpError(400, code, `${lead}${issues.slice(0, 6).map((issue) => `${issue.field || issue.code}（${issue.code}）${issue.detail ? `：${issue.detail}` : ""}`).join("；")}`);
   /** @type {any} */ (error).issues = issues.slice(0, 20);
   return error;
 }

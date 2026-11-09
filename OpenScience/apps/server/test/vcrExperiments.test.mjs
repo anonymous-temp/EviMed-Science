@@ -219,5 +219,5 @@ test('a short form that cannot be searched is refused with its reason and starts
   const experiments = new VcrExperiments({ store, jobs: null });
   await assert.rejects(experiments.startCampaign({ id: 'std_1', userId: 'u1' }, { ...FORM, vary: { 'analysis.alpha': [0.025, 0.05] } }, { userId: 'u1' }),
     (/** @type {any} */ error) => error.code === 'vcr_campaign_invalid' && /campaign_alpha_relaxed/.test(JSON.stringify(error.details ?? error.message ?? error)));
-  await assert.rejects(experiments.startCampaign({ id: 'std_1', userId: 'u1' }, { ...FORM, vary: {} }, { userId: 'u1' }), { code: 'vcr_campaign_invalid' });
+  await assert.rejects(experiments.startCampaign({ id: 'std_1', userId: 'u1' }, { ...FORM, vary: {} }, { userId: 'u1' }), { code: 'vcr_campaign_invalid', message: /The form states what varies/ }); // the refusal carries the reason, not only the field and the code (live R39, 2026-11-09)
 });

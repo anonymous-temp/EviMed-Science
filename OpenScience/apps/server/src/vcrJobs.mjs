@@ -1289,7 +1289,7 @@ export class VcrJobs {
   /** @param {string} code @param {readonly { code: string, field: string, detail?: string }[]} issues */
   #invalid(code, issues) {
     const error = new HttpError(400, code,
-      `作业不符合引擎协议：${issues.slice(0, 6).map((issue) => `${issue.field || issue.code}（${issue.code}）`).join("、")}。`);
+      `作业不符合引擎协议：${issues.slice(0, 6).map((issue) => `${issue.field || issue.code}（${issue.code}）${issue.detail ? `：${issue.detail}` : ""}`).join("；")}`);
     /** @type {any} */ (error).issues = issues.slice(0, 20);
     return error;
   }

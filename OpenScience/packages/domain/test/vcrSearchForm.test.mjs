@@ -37,6 +37,15 @@ test('a short form compiles to a frozen manifest with the evaluator written by c
     { 'design.nTreat': 80, 'design.nControl': 80 }, { 'design.nTreat': 120, 'design.nControl': 120 }, { 'design.nTreat': 160, 'design.nControl': 160 }])
 })
 
+test('a range on paths that move together is the same value for each path at every step', () => {
+  // live R39 (2026-11-09): {from: 100, to: 300, step: 1} on design.nTreat+design.nControl was refused; the people per arm of two arms are one number
+  const out = compile({ vary: { 'design.nTreat+design.nControl': { from: 100, to: 120, step: 10 } } })
+  assert.deepEqual(out.issues, [])
+  assert.deepEqual(vcrCampaignCandidates(/** @type {any} */ (out.manifest)).map((c) => c.set),
+    [100, 110, 120].map((n) => ({ 'design.nTreat': n, 'design.nControl': n })))
+  assert.ok(codes({ vary: { 'design.nTreat+design.nControl': { from: 100, to: 90, step: 10 } } }).includes('search_form_vary@vary.design.nTreat+design.nControl'), 'a bad range is still refused')
+})
+
 test('the same form is the same campaign, and a form equals the manifest it compiles to', () => {
   const a = /** @type {any} */ (compile().manifest)
   const b = /** @type {any} */ (compile({ question: 'Smallest two-arm trial' }).manifest)
