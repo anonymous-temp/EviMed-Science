@@ -1354,7 +1354,7 @@ export function vcrCampaignRobust(manifest, state, baseFeasible) {
   const inputByKey = new Map(rows.map((row) => [row.key, row]))
   return { ...choice, rule: { ...choice.rule, floor: robust.floor, measure: robust.measure }, measures: { n: nMeasure, duration: durationMeasure, cost: costMeasure },
     // each row keeps the numbers it was judged on: its power by scenario (with the verdict against the floor), every operating characteristic, N, duration and cost
-    rows: choice.rows.map((row) => { const given = inputByKey.get(row.key) ?? {}; return { ...row, scenarios: given.scenarios ?? {}, oc: given.oc ?? {}, n: given.n ?? null, duration: given.duration ?? null, cost: given.cost ?? null, costBase: given.costBase ?? null } }) }
+    rows: choice.rows.map((row) => { const given = /** @type {Record<string, any>} */ (inputByKey.get(row.key) ?? {}); return { ...row, scenarios: given.scenarios ?? {}, oc: given.oc ?? {}, n: given.n ?? null, duration: given.duration ?? null, cost: given.cost ?? null, costBase: given.costBase ?? null } }) }
 }
 
 /**

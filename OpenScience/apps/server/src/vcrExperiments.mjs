@@ -612,7 +612,7 @@ export class VcrExperiments {
           stop: view.stop, objective: view.objective, constraints: view.constraints,
           best: best ? { index: best.index + 1, design: best.set, objective: best.objective.final } : null,
           undecided: view.undecided ? { closest: view.undecided.closest, advice: view.undecided.advice } : null,
-          robust: view.robust ? { ...view.robust, rows: view.robust.rows.map((/** @type {any} */ row) => ({ ...row, index: row.index + 1, design: at(row.key)?.set ?? {} })) } : null,
+          robust: view.robust ? { ...view.robust, rows: view.robust.rows.map((/** @type {any} */ entry) => ({ ...entry, index: entry.index + 1, design: at(entry.key)?.set ?? {} })) } : null,
           finalists, budget: view.budget, premises: view.premises, createdAt: view.createdAt });
       } else {
         const view = await reader.#presentExperiment(study, row, { design: true });

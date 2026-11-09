@@ -74,7 +74,7 @@ const campaign = {
   constraints: [{ measure: 'power', op: '>=', bound: 0.3, kind: 'design', truth: 'base' }],
   space: { method: 'patients.progression', scenario: base,
     truths: [{ name: 'optimistic', truth: symptomatic(-3.5) }, { name: 'base', truth: symptomatic(-2.5) }, { name: 'pessimistic', truth: symptomatic(-1.5) }, { name: 'null', truth: {} }],
-    candidates: [30, 60, 120].map((n) => ({ name: `${n}/arm`, set: { 'design.nTreat': n, 'design.nControl': n } })) },
+    candidates: [60, 150, 400].map((n) => ({ name: `${n}/arm`, set: { 'design.nTreat': n, 'design.nControl': n } })) },
   stages: { final: { count: 3 } }, budget: { maxCandidates: 3, cpuSeconds: 6000, modelCalls: 0 },
 };
 
@@ -100,13 +100,13 @@ test('three effect scenarios and the null run for every design on one stream, an
     assert.equal(row.worstCase.scenario, 'pessimistic');
     assert.ok(row.worstCase.mcse > 0 && row.maxRegret.value >= 0);
     assert.ok(row.scenarios.every((s) => s.power === null || s.power.mcse > 0), 'every power carries its MCSE');
-    assert.equal(row.n.value, 2 * [30, 60, 120][row.index]);
+    assert.equal(row.n.value, 2 * [60, 150, 400][row.index]);
   }
   const worst = robust.rows.map((row) => row.worstCase.value);
   assert.ok(worst[0] <= worst[1] && worst[1] <= worst[2], 'a larger design is never worse in the worst case');
   assert.equal(robust.rows[2].maxRegret.value, 0, 'the largest design is the best in every scenario');
   assert.ok(robust.sets.pareto.length >= 1 && robust.sets.nearOptimal.length >= robust.sets.pareto.length);
-  assert.ok(robust.cheapestUnderBase, 'a design reaches 30% power at the base case');
+  assert.ok(robust.cheapestUnderBase, `a design reaches 30% power at the base case: ${JSON.stringify(robust.rows.map((row) => row.scenarios.map((s) => [s.name, s.power?.value, s.power?.status])))}`);
   assert.match(robust.statement, /^在这些假设下（“optimistic”、“base”、“pessimistic”）：/);
   assert.doesNotMatch(JSON.stringify(robust), /最优(的|设计|方案)|最佳/);
   // the same campaign again queues nothing
