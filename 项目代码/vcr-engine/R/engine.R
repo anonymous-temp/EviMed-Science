@@ -105,6 +105,8 @@ vcr_engine_handlers <- function() list(
   "comparator.target_trial" = vcr_job_target_trial,
   "design.grid" = vcr_job_design_grid,
   "design.assurance" = vcr_job_assurance,
+  "decision.value_of_information" = vcr_job_decision_voi,
+  "pk.interaction" = vcr_job_pk_interaction,
   "design.procova" = vcr_job_procova,
   "accrual.poisson_gamma" = vcr_job_accrual,
   "matching.evaluate" = vcr_job_match_criteria,
@@ -155,6 +157,14 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "target_trial")
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "evidence_tau_prior", "evidence_network", "dose_response", "effect_shrinkage")
 # --- end evidence synthesis ---
 
+# --- the value of information of a decision (in-silico round 2, R35, 2026-11-09): EVPI, EVPPI by regression, EVSI, thresholds ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "decision_voi")
+# --- end decision voi ---
+
+# --- a published whole-body PBPK model: midazolam with rifampicin's CYP3A4 induction (in-silico round 2, R38, 2026-11-09) ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "pbpk_interaction")
+# --- end pbpk ---
+
 # --- single-arm trials of a mean and of a survival time against a benchmark (2026-10-07) ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "single_arm")
 # --- end single arm ---
@@ -182,6 +192,16 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression_beta
 # --- its 1.2.0: effect distributions (plan R25) and the virtual patient record with its two modes (plan R23, 2026-11-09) ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression_effects", "patients_progression_people")
 # --- end people ---
+# --- the tier-B mechanism chain of its 1.2.0 (plan R30, 2026-11-09) ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression_mechanism")
+# --- end mechanism ---
+
+# --- individualization (plan R32, 2026-11-09): empirical-Bayes MAP + Laplace of a person's own history; a linear mixed model and the beta_logit family ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "individualize")
+# --- intercurrent events and estimators aligned to the estimand (plan R26, 2026-11-09) ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "patients_progression_intercurrent")
+# --- end intercurrent ---
+# --- end individualization ---
 
 #' Startup self-check: the local registry and the domain must agree, exactly.
 vcr_engine_self_check <- function() {

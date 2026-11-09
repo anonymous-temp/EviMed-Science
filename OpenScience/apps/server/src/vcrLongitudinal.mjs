@@ -243,7 +243,8 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       designInputs:content.horizonsDays?.length && checked.rows.length ? forecastDesignInputs(content) : [],
       trajectories:aggregateForecastCurve(content),actualProvider:provenance.receipts?.map((/** @type {any} */ r) => ({provider:r.provider,model:r.actualModel,version:r.actualVersion})),
       cost:provenance.receipts?.map((/** @type {any} */ r) => ({value:r.cost,currency:r.costCurrency})),failures:provenance.failures ?? []};
-    summary.premises = trajectoryPremises({findings:summary.useFindings,actionContext:context,uncertainty:summary.uncertainty});
+    summary.usesOwnHistory = provenance.usesOwnHistory ?? null;
+    summary.premises = trajectoryPremises({findings:summary.useFindings,actionContext:context,uncertainty:summary.uncertainty,usesOwnHistory:summary.usesOwnHistory});
     const saved = await artifacts.save(study,'prediction',content,summary,lineageOf(from,input.priorPredictionId ?? input.historyId));
     return longitudinalArtifactView(saved);
   }

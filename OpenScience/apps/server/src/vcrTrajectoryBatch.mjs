@@ -28,6 +28,7 @@
  */
 import { VCR_PREDICTION_MODES, VCR_UNIT_DIMENSIONS, assessModelUse, vcrUnitsConvertible } from '@evimed/domain';
 import { finishPremises, modelUsePremises } from './vcrPremises.mjs';
+import { predictionClaimOf, predictionClaimPremise } from '@evimed/domain';
 
 export const TRAJECTORY_ACTION_SOURCES = Object.freeze(['none', 'supplied_schedule', 'logged_replay']);
 export const TRAJECTORY_STATUSES = Object.freeze(['completed', 'rejected', 'failed', 'unprocessed']);
@@ -102,6 +103,8 @@ export function providerInputSpec(provider, endpoint) {
   const actionCodes = list(provider.actionCodes).map(String);
   return { observationCodes, actionCodes, actionUnits: object(provider.actionUnits), actionConditioned: actionCodes.length > 0,
     requiresActions: provider.requiresActions === true || actionCodes.length > 0 && provider.requiresActions !== false,
+    // what the provider declares about the person's own history (plan C.3): `history` uses it, `baseline` does not, anything else is not stated
+    usesOwnHistory: provider.conditioning === 'history' ? true : provider.conditioning === 'baseline' ? false : null,
     codes: new Set([...observationCodes, ...actionCodes]) };
 }
 
@@ -256,10 +259,13 @@ export function reasonCounts(lines) {
 /**
  * The one premises block of a trajectory result: what the domain's use check found, and what the action context and the missing
  * or mixed uncertainty mean for how far the result goes. Sentences, never numbers; the page folds all but the decisive rows.
- * @param {{findings?:any[],actionContext:{mode:string,actionSource:string},uncertainty:ReturnType<typeof uncertaintyProvenance>}} input
+ * The claim row (which of the three claims the forecast supports) leads when the provider said whether it used the person's own history.
+ * @param {{findings?:any[],actionContext:{mode:string,actionSource:string},uncertainty:ReturnType<typeof uncertaintyProvenance>,usesOwnHistory?:boolean|null,individualizationHelped?:boolean|null}} input
  */
-export function trajectoryPremises({ findings = [], actionContext: context, uncertainty }) {
+export function trajectoryPremises({ findings = [], actionContext: context, uncertainty, usesOwnHistory = null, individualizationHelped = null }) {
   /** @type {any[]} */ const rows = [];
+  const claim = predictionClaimPremise(predictionClaimOf({ real: true, usesOwnHistory }), { helped: individualizationHelped });
+  if (claim) rows.push(claim);
   if (context.actionSource === 'logged_replay') {
     rows.push({ key: 'trajectory:logged_replay', label: '用药信息的来源', decisive: true, source: 'given',
       value: '这次使用了预测起点之后实际记录的用药，检验的是“已知实际用药时模型有多准”，不能当作起点时就能得到的预测。' });

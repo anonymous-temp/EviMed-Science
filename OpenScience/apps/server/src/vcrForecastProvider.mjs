@@ -64,7 +64,7 @@ export function createForecastProviders({file = '',fetchImpl = fetch,now = () =>
       const account = () => reconcileSubjects({subjects,horizonsDays:input.horizonsDays,preRejected:projected.rejected,rows,validationRejected:rejected,batches,unprocessedReason:stopped});
       const premises = use.premises;
       const ctxLabel = {mode:context.mode,actionSource:context.actionSource,deployable:context.deployable,label:context.label};
-      const extras = () => ({accounting:account(),premises,uncertainty:uncertaintyProvenance(rows),actionContext:ctxLabel,leakageDropped:projected.leakageDropped,unitDropped:projected.unitDropped ?? 0});
+      const extras = () => ({accounting:account(),premises,uncertainty:uncertaintyProvenance(rows),actionContext:ctxLabel,usesOwnHistory:spec.usesOwnHistory,leakageDropped:projected.leakageDropped,unitDropped:projected.unitDropped ?? 0});
       const operationStarted = Date.now();
       for (let offset=0;offset<sendKeys.length;offset+=batchSize) {
         if (await input.isCanceled()) {stopped = 'canceled';break;}

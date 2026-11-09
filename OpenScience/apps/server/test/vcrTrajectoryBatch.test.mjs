@@ -187,3 +187,16 @@ test('a newer endpoint value in a unit that cannot be converted never leaves an 
   assert.deepEqual(out.sendKeys,['b'],'b: an older unreadable value leaves the newest one standing');
   assert.equal(out.unitDropped,2);
 });
+
+test('the claim row leads the premises only when the provider said whether it used the person\'s own history',() => {
+  const base = {actionContext:{mode:'factual_forecast',actionSource:'none'},uncertainty:{available:true,note:'predictive_mixes_heterogeneity_and_observation_noise'}};
+  assert.ok(!trajectoryPremises(base).some(p => p.key.startsWith('claim:')),'a provider that did not say gets no claim');
+  assert.equal(providerInputSpec({},{code:'HR',unit:'bpm'}).usesOwnHistory,null);
+  assert.equal(providerInputSpec({conditioning:'history'},{code:'HR',unit:'bpm'}).usesOwnHistory,true);
+  assert.equal(providerInputSpec({conditioning:'baseline'},{code:'HR',unit:'bpm'}).usesOwnHistory,false);
+  const own = trajectoryPremises({...base,usesOwnHistory:true});
+  assert.equal(own[0].key,'claim:individualized_forecast');
+  assert.ok(own[0].decisive && own[0].value.includes('没有做过个体化预测的对照评估'));
+  assert.equal(trajectoryPremises({...base,usesOwnHistory:false})[0].key,'claim:population_forecast');
+  assert.ok(!own.some(p => /job|tool|hash|LOCF/i.test(p.value)),'no back-office words');
+});

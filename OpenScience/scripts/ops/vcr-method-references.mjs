@@ -48,7 +48,9 @@ export const REQUIRED_CURRENT_REFERENCES = {
   'model.prognostic_apply': ['N52d'],
   // 1.1.0's beta_logit family: the parameter file and the training manual's printed numbers, EMA Tables 9 and 11
   // 1.2.0 (plan R23, R25) adds the people table's paired contrast against its closed form (N103c) and the assurance against an independent quadrature of its integral (N104b)
-  'patients.progression': ['N101a', 'N101c', 'N101d', 'N103c', 'N104b'],
+  // 1.2.0 (plan R26) adds the MMRM against gls and mmrm (N111a), the imputation against a hand case (N111c) and the true values against the exact moments (N111f)
+  // 1.2.0 (plan R29, R30) adds the marketed inhibitor against the posterior's own equation (N120a), the antibody's SUVR integration against lsoda (N120g) and the link's inversion against a fixed-share run (N120i)
+  'patients.progression': ['N101a', 'N101c', 'N101d', 'N103c', 'N104b', 'N111a', 'N111c', 'N111f', 'N120a', 'N120g', 'N120i'],
 };
 export const NUMERIC_REFERENCES = {
   N53e: { methods: ['design.analytic'], anchors: ['Independently integrate arm event probabilities', 'abs(at$y-checked)<1e-10'] },
@@ -337,6 +339,11 @@ export const NUMERIC_REFERENCES = {
   N99e: { methods: ['patients.progression'], anchors: ['identical(code(unsourced), "scenario_field_missing")'] },
   // patients.progression 1.1.0, the beta_logit family (plan T06): the CAMD ADAS-cog 11 Alzheimer model with adsim 3.0's posterior, held to the EMA qualification opinion's
   // tables and the training manual's printed numbers, its terms to their closed forms, its null to its level, and the four other families to the 1.0.0 release's hashes
+  N111a: { methods: ['patients.progression'], anchors: ['mml <- .n111_mmrm(d, FALSE)', 'method = "ML", control = nlme::glsControl', 'reml_mm <- .n111_mmrm(d, TRUE)'] },
+  N111b: { methods: ['patients.progression'], anchors: ['auto <- vcr_mmrm_fit(d$chg, d$mask, d$arm, d$base, "auto"); mm <- .n111_mmrm(d, TRUE)'] },
+  N111c: { methods: ['patients.progression'], anchors: ['abs(jr[1, 2] - 1.8) < 1e-12 && abs(cr[1, 2] - 2.05) < 1e-12', 'd <- .n111_data(seed = 112L, n = 120L); mm <- .n111_mmrm(d, FALSE)'] },
+  N111f: { methods: ['patients.progression'], anchors: ['exact <- trt$change[p0$at] - ctl$change[p0$at]', 'abs(t0$hypothetical$value - exact) <= 4 * t0$hypothetical$mcse'] },
+  N111g1: { methods: ['patients.progression'], anchors: ['.n111_aligned(tp_a) && .n111_aligned(tp_m) && .n111_aligned(hy_ao) && .n111_aligned(hy_mo)'] },
   N101a: { methods: ['patients.progression'], anchors: ['# adsim 3.0 training manual (S11): Listing 2.6 phiEta * 70 / 4 = 7.2415', 'abs(l26 - 7.2415) <= 5e-5 && abs(l28 - 3.509151) <= 5e-7 && abs(l46 - (-0.1010641)) <= 5e-8 && abs(et50 - 1.62) <= 0.005'] },
   N101b: { methods: ['patients.progression'], anchors: ['# EMA qualification opinion 2013 Table 7 "Predicted"', 'table7 <- list(apoe = c(0.42, 0.44, 0.14), male = 0.45, age = c(75.3, 75.6, 66.5), sd = 9.3)'] },
   N101c: { methods: ['patients.progression'], anchors: ['# EMA qualification opinion 2013 Table 9 (S2 p.28)', 'table9 <- list(`16` = c(32.2, 29.6, 34.9), `21` = c(22.3, 20.0, 24.8), `26` = c(14.2, 12.4, 16.1))'] },
@@ -366,6 +373,24 @@ export const NUMERIC_REFERENCES = {
   N104d: { methods: ['patients.progression'], anchors: ['list("beta", list(shape1 = 3, shape2 = 9), 3 / 12, sqrt(3 * 9 / (12^2 * 13)))'] },
   N104e: { methods: ['patients.progression'], anchors: ['identical(rep$tier, "B") && identical(rep$source$kind, "model_result")'] },
   N104f: { methods: ['patients.progression'], anchors: ['identical(old, "method_version_mismatch@methodVersion")'] },
+  // where the drug effect comes from (plan R29 tier A, R30 tier B): the posterior's own equation, the published chain against lsoda, the link's interval and its inversion
+  N120a: { methods: ['patients.progression'], anchors: ['at12 <- max(at12, abs(xr[["emax"]] * 12 / (xr[["et50"]] + 12) + xr[["eStar"]]))', 'isTRUE(all.equal(.n120_curve_diff(ref), .n120_curve_diff(hand), tolerance = 1e-12))'] },
+  N120b: { methods: ['patients.progression'], anchors: ['ok <- ok && identical(par$drugs, want$drugs)'] },
+  N120c: { methods: ['patients.progression'], anchors: ['want <- x[["emax"]] * ((t + s) / (x[["et50"]] + t + s) - s / (x[["et50"]] + s))'] },
+  N120d: { methods: ['patients.progression'], anchors: ['pts <- function(a) 70 * (stats::plogis(stats::qlogis(a / 70) + e26) - a / 70)', 'engine > -3.31 && engine < -2.02 && says'] },
+  N120e: { methods: ['patients.progression'], anchors: ['nowash = "scenario_field_missing@scenario.treatment.reference.washoutHalfLifeWeeks"'] },
+  N120f: { methods: ['patients.progression'], anchors: ['deSolve::ode(y, c(edges[i], edges[i + 1L]), f, NULL, method = "lsoda", rtol = 1e-12, atol = 1e-14)[2L, 2:3]', 'rel < 1e-6 && abs(half - 24.8) / 24.8 < 0.05'] },
+  N120g: { methods: ['patients.progression'], anchors: ['# lsoda on the whole PK-PD system, piece by piece between the infusion edges', 'rel < 1e-6 && held'] },
+  N120h: { methods: ['patients.progression'], anchors: ['weight_ok && abs(ratio[["CL"]] - 1.1^0.561) < 1e-12 && abs(ref - 0.335) < 0.02'] },
+  N120i: { methods: ['patients.progression'], anchors: ['# the inversion: the share at the median of the link, run as a fixed disease-modifying share', 'abs(by_hand - want) < 1e-9 && abs(diff - want) < 0.01'] },
+  N120j: { methods: ['patients.progression'], anchors: ['identical(rep$tier, "B") && identical(rep$source$kind, "model_result")', 'pk_ok && w_ok'] },
+  // individualization (plan R32): a mixed model held to nlme, a Gaussian posterior held to its BLUPs, the Laplace posterior held to a grid, intervals held to known truth
+  N130a: { methods: ['patients.longitudinal'], anchors: ['m <- nlme::lme(y ~ t + x, random = ~ t | id, data = d, method = "REML")', 'worst <- max(worst, gap)'] },
+  N130b: { methods: ['patients.longitudinal'], anchors: ['brute <- solve(crossprod(Z) / f2$sigma^2 + solve(G))'] },
+  N130c: { methods: ['patients.longitudinal'], anchors: ['z <- function(cv) max(abs(cv["p", ] - c(0.5, 0.8, 0.95)) / (cv["se", ] * sqrt(2)))'] },
+  N130d: { methods: ['patients.progression'], anchors: ['# the independent computation: the posterior on a fine grid of (intercept, slope), normalised by summation'] },
+  N130e: { methods: ['patients.progression'], anchors: ['dev <- unlist(lapply(cov_j, function(cv) abs(cv$coverage - cv$level) / cv$mcse))'] },
+  N130f: { methods: ['patients.progression'], anchors: ['all(diff(sds) < 0)'] },
   // what 1.2.0 did not change
   N105a: { methods: ['patients.progression'], anchors: ['null_new = list(sc("new_study"), "3d355061d1e5a8a507a86121e6f187eff096de74a1028ae03e60be05e5294f42")', 'identical(unname(got), unname(want))'] },
   // the people of an adaptive design whose answer is in events (live check 2026-11-04, design.confirmatory 1.2.0): patient-level simulations and the Lachin-Foulkes chance of an event written out
