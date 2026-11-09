@@ -2804,7 +2804,7 @@ export { VCR_LONGITUDINAL_SCHEMA, VCR_LONGITUDINAL_ERROR_CODES, VCR_LONGITUDINAL
   longitudinalVariance, longitudinalQuantile, eventsFromMappedTable, replayClinicalEvents, longitudinalReadiness,
   validateForecast, validateLongitudinalScenario, longitudinalSubjects } from './src/vcrLongitudinal.mjs'
 export { forecastRandom, empiricalCrps, discrimination, forecastMetrics, metricIntervals, pairForecastOutcomes,
-  continuousBaselines, ipcwBrier, evaluateForecast, compareForecasts, compareVersionsToObserved, forecastDesignInputs, forecastShiftDiagnostics } from './src/vcrForecastEvaluation.mjs'
+  continuousBaselines, ipcwBrier, evaluateForecast, strictestDataClass, compareForecasts, compareVersionsToObserved, forecastDesignInputs, forecastShiftDiagnostics } from './src/vcrForecastEvaluation.mjs'
 
 export { evaluateTrialBenchmark } from './src/vcrTrialBenchmark.mjs'
 export { VCR_OBJECT_REFERENCE_KINDS, vcrObjectReference } from './src/vcrObjectReference.mjs';
