@@ -1,0 +1,9598 @@
+{
+ "revision": "07e04f9c3f21e11307144aea9c92f24bb0cff7d3",
+ "frozen": {
+  "seeds": 200,
+  "budgets": [
+   40000,
+   80000,
+   160000,
+   320000,
+   640000
+  ],
+  "powerBound": 0.8,
+  "typeOneBound": 0.025,
+  "floors": {
+   "alternative": 5000,
+   "null": 20000
+  },
+  "splitAlt": 0.2,
+  "epsilonPatients": 50,
+  "successLevel": 0.8,
+  "ocba": {
+   "stageOneShare": 0.3,
+   "indifference": 0.005
+  },
+  "calibration": {
+   "screeningReplicates": 300,
+   "screeningSeeds": 30,
+   "finalAltSeeds": 10,
+   "finalNullSeeds": 5,
+   "sdRatio": [
+    0.8,
+    1.25
+   ]
+  },
+  "arms": [
+   "grid",
+   "random",
+   "halving",
+   "ocba",
+   "ours"
+  ]
+ },
+ "referenceSha256": "95e226ede82950c49549c905291104a8e81ed615e3c14af5131420c3fe0af1d5",
+ "worlds": [
+  {
+   "name": "survival",
+   "items": [
+    {
+     "index": 0,
+     "set": {
+      "design.nTreat": 100,
+      "design.nControl": 100,
+      "accrual.duration": 12
+     },
+     "patients": 200,
+     "power": 0.4718,
+     "typeOne": 0.0246
+    },
+    {
+     "index": 1,
+     "set": {
+      "design.nTreat": 100,
+      "design.nControl": 100,
+      "accrual.duration": 18
+     },
+     "patients": 200,
+     "power": 0.512,
+     "typeOne": 0.02625
+    },
+    {
+     "index": 2,
+     "set": {
+      "design.nTreat": 100,
+      "design.nControl": 100,
+      "accrual.duration": 24
+     },
+     "patients": 200,
+     "power": 0.5374,
+     "typeOne": 0.02445
+    },
+    {
+     "index": 3,
+     "set": {
+      "design.nTreat": 125,
+      "design.nControl": 125,
+      "accrual.duration": 12
+     },
+     "patients": 250,
+     "power": 0.551,
+     "typeOne": 0.02515
+    },
+    {
+     "index": 4,
+     "set": {
+      "design.nTreat": 125,
+      "design.nControl": 125,
+      "accrual.duration": 18
+     },
+     "patients": 250,
+     "power": 0.5968,
+     "typeOne": 0.0251
+    },
+    {
+     "index": 5,
+     "set": {
+      "design.nTreat": 125,
+      "design.nControl": 125,
+      "accrual.duration": 24
+     },
+     "patients": 250,
+     "power": 0.6382,
+     "typeOne": 0.02675
+    },
+    {
+     "index": 6,
+     "set": {
+      "design.nTreat": 150,
+      "design.nControl": 150,
+      "accrual.duration": 12
+     },
+     "patients": 300,
+     "power": 0.6516,
+     "typeOne": 0.026
+    },
+    {
+     "index": 7,
+     "set": {
+      "design.nTreat": 150,
+      "design.nControl": 150,
+      "accrual.duration": 18
+     },
+     "patients": 300,
+     "power": 0.6782,
+     "typeOne": 0.02415
+    },
+    {
+     "index": 8,
+     "set": {
+      "design.nTreat": 150,
+      "design.nControl": 150,
+      "accrual.duration": 24
+     },
+     "patients": 300,
+     "power": 0.715,
+     "typeOne": 0.0256
+    },
+    {
+     "index": 9,
+     "set": {
+      "design.nTreat": 175,
+      "design.nControl": 175,
+      "accrual.duration": 12
+     },
+     "patients": 350,
+     "power": 0.7194,
+     "typeOne": 0.02405
+    },
+    {
+     "index": 10,
+     "set": {
+      "design.nTreat": 175,
+      "design.nControl": 175,
+      "accrual.duration": 18
+     },
+     "patients": 350,
+     "power": 0.746,
+     "typeOne": 0.02535
+    },
+    {
+     "index": 11,
+     "set": {
+      "design.nTreat": 175,
+      "design.nControl": 175,
+      "accrual.duration": 24
+     },
+     "patients": 350,
+     "power": 0.7836,
+     "typeOne": 0.02545
+    },
+    {
+     "index": 12,
+     "set": {
+      "design.nTreat": 200,
+      "design.nControl": 200,
+      "accrual.duration": 12
+     },
+     "patients": 400,
+     "power": 0.773,
+     "typeOne": 0.02595
+    },
+    {
+     "index": 13,
+     "set": {
+      "design.nTreat": 200,
+      "design.nControl": 200,
+      "accrual.duration": 18
+     },
+     "patients": 400,
+     "power": 0.8042,
+     "typeOne": 0.0257
+    },
+    {
+     "index": 14,
+     "set": {
+      "design.nTreat": 200,
+      "design.nControl": 200,
+      "accrual.duration": 24
+     },
+     "patients": 400,
+     "power": 0.8382,
+     "typeOne": 0.0249
+    }
+   ],
+   "feasibleCount": 1,
+   "optimalCount": 1,
+   "bestPatients": 400,
+   "penaltyScore": 450
+  },
+  {
+   "name": "level",
+   "items": [
+    {
+     "index": 0,
+     "set": {
+      "design.nTreat": 200,
+      "design.nControl": 200,
+      "analysis.alpha": 0.025
+     },
+     "patients": 400,
+     "power": 0.8314,
+     "typeOne": 0.02475
+    },
+    {
+     "index": 1,
+     "set": {
+      "design.nTreat": 200,
+      "design.nControl": 200,
+      "analysis.alpha": 0.0235
+     },
+     "patients": 400,
+     "power": 0.8248,
+     "typeOne": 0.0234
+    },
+    {
+     "index": 2,
+     "set": {
+      "design.nTreat": 200,
+      "design.nControl": 200,
+      "analysis.alpha": 0.022
+     },
+     "patients": 400,
+     "power": 0.8166,
+     "typeOne": 0.02175
+    },
+    {
+     "index": 3,
+     "set": {
+      "design.nTreat": 200,
+      "design.nControl": 200,
+      "analysis.alpha": 0.02
+     },
+     "patients": 400,
+     "power": 0.805,
+     "typeOne": 0.01965
+    },
+    {
+     "index": 4,
+     "set": {
+      "design.nTreat": 225,
+      "design.nControl": 225,
+      "analysis.alpha": 0.025
+     },
+     "patients": 450,
+     "power": 0.872,
+     "typeOne": 0.02655
+    },
+    {
+     "index": 5,
+     "set": {
+      "design.nTreat": 225,
+      "design.nControl": 225,
+      "analysis.alpha": 0.0235
+     },
+     "patients": 450,
+     "power": 0.8672,
+     "typeOne": 0.0244
+    },
+    {
+     "index": 6,
+     "set": {
+      "design.nTreat": 225,
+      "design.nControl": 225,
+      "analysis.alpha": 0.022
+     },
+     "patients": 450,
+     "power": 0.8632,
+     "typeOne": 0.0227
+    },
+    {
+     "index": 7,
+     "set": {
+      "design.nTreat": 225,
+      "design.nControl": 225,
+      "analysis.alpha": 0.02
+     },
+     "patients": 450,
+     "power": 0.8556,
+     "typeOne": 0.02065
+    },
+    {
+     "index": 8,
+     "set": {
+      "design.nTreat": 250,
+      "design.nControl": 250,
+      "analysis.alpha": 0.025
+     },
+     "patients": 500,
+     "power": 0.9092,
+     "typeOne": 0.025
+    },
+    {
+     "index": 9,
+     "set": {
+      "design.nTreat": 250,
+      "design.nControl": 250,
+      "analysis.alpha": 0.0235
+     },
+     "patients": 500,
+     "power": 0.9032,
+     "typeOne": 0.0235
+    },
+    {
+     "index": 10,
+     "set": {
+      "design.nTreat": 250,
+      "design.nControl": 250,
+      "analysis.alpha": 0.022
+     },
+     "patients": 500,
+     "power": 0.898,
+     "typeOne": 0.02235
+    },
+    {
+     "index": 11,
+     "set": {
+      "design.nTreat": 250,
+      "design.nControl": 250,
+      "analysis.alpha": 0.02
+     },
+     "patients": 500,
+     "power": 0.892,
+     "typeOne": 0.02035
+    }
+   ],
+   "feasibleCount": 11,
+   "optimalCount": 4,
+   "bestPatients": 400,
+   "penaltyScore": 550
+  },
+  {
+   "name": "level85",
+   "items": [
+    {
+     "index": 0,
+     "set": {
+      "design.nTreat": 200,
+      "design.nControl": 200,
+      "analysis.alpha": 0.025
+     },
+     "patients": 400,
+     "power": 0.8314,
+     "typeOne": 0.02475
+    },
+    {
+     "index": 1,
+     "set": {
+      "design.nTreat": 200,
+      "design.nControl": 200,
+      "analysis.alpha": 0.0235
+     },
+     "patients": 400,
+     "power": 0.8248,
+     "typeOne": 0.0234
+    },
+    {
+     "index": 2,
+     "set": {
+      "design.nTreat": 200,
+      "design.nControl": 200,
+      "analysis.alpha": 0.022
+     },
+     "patients": 400,
+     "power": 0.8166,
+     "typeOne": 0.02175
+    },
+    {
+     "index": 3,
+     "set": {
+      "design.nTreat": 200,
+      "design.nControl": 200,
+      "analysis.alpha": 0.02
+     },
+     "patients": 400,
+     "power": 0.805,
+     "typeOne": 0.01965
+    },
+    {
+     "index": 4,
+     "set": {
+      "design.nTreat": 225,
+      "design.nControl": 225,
+      "analysis.alpha": 0.025
+     },
+     "patients": 450,
+     "power": 0.872,
+     "typeOne": 0.02655
+    },
+    {
+     "index": 5,
+     "set": {
+      "design.nTreat": 225,
+      "design.nControl": 225,
+      "analysis.alpha": 0.0235
+     },
+     "patients": 450,
+     "power": 0.8672,
+     "typeOne": 0.0244
+    },
+    {
+     "index": 6,
+     "set": {
+      "design.nTreat": 225,
+      "design.nControl": 225,
+      "analysis.alpha": 0.022
+     },
+     "patients": 450,
+     "power": 0.8632,
+     "typeOne": 0.0227
+    },
+    {
+     "index": 7,
+     "set": {
+      "design.nTreat": 225,
+      "design.nControl": 225,
+      "analysis.alpha": 0.02
+     },
+     "patients": 450,
+     "power": 0.8556,
+     "typeOne": 0.02065
+    },
+    {
+     "index": 8,
+     "set": {
+      "design.nTreat": 250,
+      "design.nControl": 250,
+      "analysis.alpha": 0.025
+     },
+     "patients": 500,
+     "power": 0.9092,
+     "typeOne": 0.025
+    },
+    {
+     "index": 9,
+     "set": {
+      "design.nTreat": 250,
+      "design.nControl": 250,
+      "analysis.alpha": 0.0235
+     },
+     "patients": 500,
+     "power": 0.9032,
+     "typeOne": 0.0235
+    },
+    {
+     "index": 10,
+     "set": {
+      "design.nTreat": 250,
+      "design.nControl": 250,
+      "analysis.alpha": 0.022
+     },
+     "patients": 500,
+     "power": 0.898,
+     "typeOne": 0.02235
+    },
+    {
+     "index": 11,
+     "set": {
+      "design.nTreat": 250,
+      "design.nControl": 250,
+      "analysis.alpha": 0.02
+     },
+     "patients": 500,
+     "power": 0.892,
+     "typeOne": 0.02035
+    }
+   ],
+   "feasibleCount": 7,
+   "optimalCount": 3,
+   "bestPatients": 450,
+   "penaltyScore": 550
+  }
+ ],
+ "ours": {
+  "survival": [
+   {
+    "budget": 40000,
+    "finalCount": 1,
+    "screening": 1000
+   },
+   {
+    "budget": 80000,
+    "finalCount": 2,
+    "screening": 2000
+   },
+   {
+    "budget": 160000,
+    "finalCount": 5,
+    "screening": 2300
+   },
+   {
+    "budget": 320000,
+    "finalCount": 5,
+    "screening": 4999
+   },
+   {
+    "budget": 640000,
+    "finalCount": 5,
+    "screening": 4999
+   }
+  ],
+  "level": [
+   {
+    "budget": 40000,
+    "finalCount": 1,
+    "screening": 1200
+   },
+   {
+    "budget": 80000,
+    "finalCount": 2,
+    "screening": 2500
+   },
+   {
+    "budget": 160000,
+    "finalCount": 5,
+    "screening": 2900
+   },
+   {
+    "budget": 320000,
+    "finalCount": 5,
+    "screening": 4999
+   },
+   {
+    "budget": 640000,
+    "finalCount": 5,
+    "screening": 4999
+   }
+  ],
+  "level85": [
+   {
+    "budget": 40000,
+    "finalCount": 1,
+    "screening": 1200
+   },
+   {
+    "budget": 80000,
+    "finalCount": 2,
+    "screening": 2500
+   },
+   {
+    "budget": 160000,
+    "finalCount": 5,
+    "screening": 2900
+   },
+   {
+    "budget": 320000,
+    "finalCount": 5,
+    "screening": 4999
+   },
+   {
+    "budget": 640000,
+    "finalCount": 5,
+    "screening": 4999
+   }
+  ]
+ },
+ "aggregate": {
+  "survival": [
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 75,
+     "n": 200,
+     "p": 0.375,
+     "ci": [
+      0.310854368105246,
+      0.4438569635619946
+     ]
+    },
+    "successEps": {
+     "k": 75,
+     "n": 200,
+     "p": 0.375,
+     "ci": [
+      0.310854368105246,
+      0.4438569635619946
+     ]
+    },
+    "none": {
+     "k": 59,
+     "n": 200,
+     "p": 0.295,
+     "ci": [
+      0.2361394381410138,
+      0.3615871457932609
+     ]
+    },
+    "trueViolation": {
+     "k": 66,
+     "n": 200,
+     "p": 0.33,
+     "ci": [
+      0.26857425825421716,
+      0.3978331528132302
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 90,
+     "n": 141,
+     "p": 0.6382978723404256
+    },
+    "trueViolationOfPicks": {
+     "k": 66,
+     "n": 141,
+     "p": 0.46808510638297873
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 31.25
+    },
+    "spentMedian": 39990,
+    "spentMax": 39990
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "successEps": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "none": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 1,
+     "n": 2,
+     "p": 0.5
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 2,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49.5
+    },
+    "spentMedian": 39990,
+    "spentMax": 39990
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 6,
+     "n": 200,
+     "p": 0.03,
+     "ci": [
+      0.013820314259191425,
+      0.06389429280963374
+     ]
+    },
+    "successEps": {
+     "k": 6,
+     "n": 200,
+     "p": 0.03,
+     "ci": [
+      0.013820314259191425,
+      0.06389429280963374
+     ]
+    },
+    "none": {
+     "k": 189,
+     "n": 200,
+     "p": 0.945,
+     "ci": [
+      0.904213000830331,
+      0.9690146584342919
+     ]
+    },
+    "trueViolation": {
+     "k": 5,
+     "n": 200,
+     "p": 0.025,
+     "ci": [
+      0.010724719583860124,
+      0.05717834075165468
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 9,
+     "n": 11,
+     "p": 0.8181818181818182
+    },
+    "trueViolationOfPicks": {
+     "k": 5,
+     "n": 11,
+     "p": 0.45454545454545453
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 48.5
+    },
+    "spentMedian": 25000,
+    "spentMax": 25000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "successEps": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "none": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 0,
+     "n": 0,
+     "p": null
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 0,
+     "p": null
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 50
+    },
+    "spentMedian": 25000,
+    "spentMax": 25000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 38,
+     "n": 200,
+     "p": 0.19,
+     "ci": [
+      0.1416717149442203,
+      0.25001238759053673
+     ]
+    },
+    "successEps": {
+     "k": 38,
+     "n": 200,
+     "p": 0.19,
+     "ci": [
+      0.1416717149442203,
+      0.25001238759053673
+     ]
+    },
+    "none": {
+     "k": 153,
+     "n": 200,
+     "p": 0.765,
+     "ci": [
+      0.7015863106396482,
+      0.8184256662258015
+     ]
+    },
+    "trueViolation": {
+     "k": 9,
+     "n": 200,
+     "p": 0.045,
+     "ci": [
+      0.02385254288504434,
+      0.08329670438371192
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 29,
+     "n": 47,
+     "p": 0.6170212765957447
+    },
+    "trueViolationOfPicks": {
+     "k": 9,
+     "n": 47,
+     "p": 0.19148936170212766
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 40.5
+    },
+    "spentMedian": 39990,
+    "spentMax": 39990
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "successEps": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "none": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 2,
+     "n": 2,
+     "p": 1
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 2,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49.5
+    },
+    "spentMedian": 39990,
+    "spentMax": 39990
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 57,
+     "n": 200,
+     "p": 0.285,
+     "ci": [
+      0.22695002962622268,
+      0.35115346084143123
+     ]
+    },
+    "successEps": {
+     "k": 57,
+     "n": 200,
+     "p": 0.285,
+     "ci": [
+      0.22695002962622268,
+      0.35115346084143123
+     ]
+    },
+    "none": {
+     "k": 56,
+     "n": 200,
+     "p": 0.28,
+     "ci": [
+      0.2223688973234035,
+      0.3459230464109402
+     ]
+    },
+    "trueViolation": {
+     "k": 87,
+     "n": 200,
+     "p": 0.435,
+     "ci": [
+      0.36815725451898934,
+      0.5042926379479759
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 89,
+     "n": 144,
+     "p": 0.6180555555555556
+    },
+    "trueViolationOfPicks": {
+     "k": 87,
+     "n": 144,
+     "p": 0.6041666666666666
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 35.75
+    },
+    "spentMedian": 39986,
+    "spentMax": 39992
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "successEps": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "none": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 1,
+     "n": 2,
+     "p": 0.5
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 2,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49.5
+    },
+    "spentMedian": 39986,
+    "spentMax": 39992
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 28,
+     "n": 200,
+     "p": 0.14,
+     "ci": [
+      0.09866982605979482,
+      0.1948988091418585
+     ]
+    },
+    "successEps": {
+     "k": 28,
+     "n": 200,
+     "p": 0.14,
+     "ci": [
+      0.09866982605979482,
+      0.1948988091418585
+     ]
+    },
+    "none": {
+     "k": 141,
+     "n": 200,
+     "p": 0.705,
+     "ci": [
+      0.638412854206739,
+      0.7638605618589861
+     ]
+    },
+    "trueViolation": {
+     "k": 31,
+     "n": 200,
+     "p": 0.155,
+     "ci": [
+      0.11139636898322336,
+      0.21160690641836105
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 37,
+     "n": 59,
+     "p": 0.6271186440677966
+    },
+    "trueViolationOfPicks": {
+     "k": 31,
+     "n": 59,
+     "p": 0.5254237288135594
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 43
+    },
+    "spentMedian": 40000,
+    "spentMax": 40000
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "successEps": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "none": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 1,
+     "n": 2,
+     "p": 0.5
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 2,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49.5
+    },
+    "spentMedian": 40000,
+    "spentMax": 40000
+   },
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 79,
+     "n": 200,
+     "p": 0.395,
+     "ci": [
+      0.3298410096426624,
+      0.4641165089578198
+     ]
+    },
+    "successEps": {
+     "k": 79,
+     "n": 200,
+     "p": 0.395,
+     "ci": [
+      0.3298410096426624,
+      0.4641165089578198
+     ]
+    },
+    "none": {
+     "k": 64,
+     "n": 200,
+     "p": 0.32,
+     "ci": [
+      0.2592653327095053,
+      0.38751898489132125
+     ]
+    },
+    "trueViolation": {
+     "k": 57,
+     "n": 200,
+     "p": 0.285,
+     "ci": [
+      0.22695002962622268,
+      0.35115346084143123
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 85,
+     "n": 136,
+     "p": 0.625
+    },
+    "trueViolationOfPicks": {
+     "k": 57,
+     "n": 136,
+     "p": 0.41911764705882354
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 30.25
+    },
+    "spentMedian": 79995,
+    "spentMax": 79995
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 4,
+     "n": 200,
+     "p": 0.02,
+     "ci": [
+      0.007804426362159347,
+      0.05028708724004506
+     ]
+    },
+    "successEps": {
+     "k": 4,
+     "n": 200,
+     "p": 0.02,
+     "ci": [
+      0.007804426362159347,
+      0.05028708724004506
+     ]
+    },
+    "none": {
+     "k": 196,
+     "n": 200,
+     "p": 0.98,
+     "ci": [
+      0.9497129127599548,
+      0.9921955736378405
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 1,
+     "n": 4,
+     "p": 0.25
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 4,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49
+    },
+    "spentMedian": 79995,
+    "spentMax": 79995
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 21,
+     "n": 200,
+     "p": 0.105,
+     "ci": [
+      0.06970748770124899,
+      0.15518032036723173
+     ]
+    },
+    "successEps": {
+     "k": 21,
+     "n": 200,
+     "p": 0.105,
+     "ci": [
+      0.06970748770124899,
+      0.15518032036723173
+     ]
+    },
+    "none": {
+     "k": 170,
+     "n": 200,
+     "p": 0.85,
+     "ci": [
+      0.7939442066666507,
+      0.8928640646650752
+     ]
+    },
+    "trueViolation": {
+     "k": 9,
+     "n": 200,
+     "p": 0.045,
+     "ci": [
+      0.02385254288504434,
+      0.08329670438371192
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 15,
+     "n": 30,
+     "p": 0.5
+    },
+    "trueViolationOfPicks": {
+     "k": 9,
+     "n": 30,
+     "p": 0.3
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 44.75
+    },
+    "spentMedian": 75000,
+    "spentMax": 75000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "successEps": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "none": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 0,
+     "n": 0,
+     "p": null
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 0,
+     "p": null
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 50
+    },
+    "spentMedian": 75000,
+    "spentMax": 75000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 39,
+     "n": 200,
+     "p": 0.195,
+     "ci": [
+      0.1460552050050192,
+      0.2554404442630482
+     ]
+    },
+    "successEps": {
+     "k": 39,
+     "n": 200,
+     "p": 0.195,
+     "ci": [
+      0.1460552050050192,
+      0.2554404442630482
+     ]
+    },
+    "none": {
+     "k": 156,
+     "n": 200,
+     "p": 0.78,
+     "ci": [
+      0.7176120002896181,
+      0.8318346167757626
+     ]
+    },
+    "trueViolation": {
+     "k": 5,
+     "n": 200,
+     "p": 0.025,
+     "ci": [
+      0.010724719583860124,
+      0.05717834075165468
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 24,
+     "n": 44,
+     "p": 0.5454545454545454
+    },
+    "trueViolationOfPicks": {
+     "k": 5,
+     "n": 44,
+     "p": 0.11363636363636363
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 40.25
+    },
+    "spentMedian": 79995,
+    "spentMax": 79995
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 3,
+     "n": 200,
+     "p": 0.015,
+     "ci": [
+      0.005114237753504754,
+      0.043165729115389295
+     ]
+    },
+    "successEps": {
+     "k": 3,
+     "n": 200,
+     "p": 0.015,
+     "ci": [
+      0.005114237753504754,
+      0.043165729115389295
+     ]
+    },
+    "none": {
+     "k": 197,
+     "n": 200,
+     "p": 0.985,
+     "ci": [
+      0.9568342708846106,
+      0.9948857622464952
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 2,
+     "n": 3,
+     "p": 0.6666666666666666
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 3,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49.25
+    },
+    "spentMedian": 79995,
+    "spentMax": 79995
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 66,
+     "n": 200,
+     "p": 0.33,
+     "ci": [
+      0.26857425825421716,
+      0.3978331528132302
+     ]
+    },
+    "successEps": {
+     "k": 66,
+     "n": 200,
+     "p": 0.33,
+     "ci": [
+      0.26857425825421716,
+      0.3978331528132302
+     ]
+    },
+    "none": {
+     "k": 74,
+     "n": 200,
+     "p": 0.37,
+     "ci": [
+      0.30612608362251653,
+      0.4387737013114137
+     ]
+    },
+    "trueViolation": {
+     "k": 60,
+     "n": 200,
+     "p": 0.3,
+     "ci": [
+      0.24074744639257037,
+      0.3667906842750147
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 83,
+     "n": 126,
+     "p": 0.6587301587301587
+    },
+    "trueViolationOfPicks": {
+     "k": 60,
+     "n": 126,
+     "p": 0.47619047619047616
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 33.5
+    },
+    "spentMedian": 79985,
+    "spentMax": 79991
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "successEps": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "none": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 1,
+     "n": 2,
+     "p": 0.5
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 2,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49.5
+    },
+    "spentMedian": 79985,
+    "spentMax": 79991
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 100,
+     "n": 200,
+     "p": 0.5,
+     "ci": [
+      0.43136085907267824,
+      0.5686391409273218
+     ]
+    },
+    "successEps": {
+     "k": 100,
+     "n": 200,
+     "p": 0.5,
+     "ci": [
+      0.43136085907267824,
+      0.5686391409273218
+     ]
+    },
+    "none": {
+     "k": 67,
+     "n": 200,
+     "p": 0.335,
+     "ci": [
+      0.27324086932910685,
+      0.4029780884716509
+     ]
+    },
+    "trueViolation": {
+     "k": 33,
+     "n": 200,
+     "p": 0.165,
+     "ci": [
+      0.11996855297651625,
+      0.22265781589168893
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 60,
+     "n": 133,
+     "p": 0.45112781954887216
+    },
+    "trueViolationOfPicks": {
+     "k": 33,
+     "n": 133,
+     "p": 0.24812030075187969
+    },
+    "regret": {
+     "median": 25,
+     "q1": 0,
+     "q3": 50,
+     "mean": 25
+    },
+    "spentMedian": 80000,
+    "spentMax": 80000
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 9,
+     "n": 200,
+     "p": 0.045,
+     "ci": [
+      0.02385254288504434,
+      0.08329670438371192
+     ]
+    },
+    "successEps": {
+     "k": 9,
+     "n": 200,
+     "p": 0.045,
+     "ci": [
+      0.02385254288504434,
+      0.08329670438371192
+     ]
+    },
+    "none": {
+     "k": 191,
+     "n": 200,
+     "p": 0.955,
+     "ci": [
+      0.9167032956162879,
+      0.9761474571149557
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 6,
+     "n": 9,
+     "p": 0.6666666666666666
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 9,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 47.75
+    },
+    "spentMedian": 80000,
+    "spentMax": 80000
+   },
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 87,
+     "n": 200,
+     "p": 0.435,
+     "ci": [
+      0.36815725451898934,
+      0.5042926379479759
+     ]
+    },
+    "successEps": {
+     "k": 87,
+     "n": 200,
+     "p": 0.435,
+     "ci": [
+      0.36815725451898934,
+      0.5042926379479759
+     ]
+    },
+    "none": {
+     "k": 61,
+     "n": 200,
+     "p": 0.305,
+     "ci": [
+      0.2453641558726048,
+      0.3719855215282907
+     ]
+    },
+    "trueViolation": {
+     "k": 52,
+     "n": 200,
+     "p": 0.26,
+     "ci": [
+      0.2041383002358024,
+      0.32490745656529973
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 79,
+     "n": 139,
+     "p": 0.5683453237410072
+    },
+    "trueViolationOfPicks": {
+     "k": 52,
+     "n": 139,
+     "p": 0.37410071942446044
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 28.25
+    },
+    "spentMedian": 159990,
+    "spentMax": 159990
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 7,
+     "n": 200,
+     "p": 0.035,
+     "ci": [
+      0.01705554191525804,
+      0.0704706118868775
+     ]
+    },
+    "successEps": {
+     "k": 7,
+     "n": 200,
+     "p": 0.035,
+     "ci": [
+      0.01705554191525804,
+      0.0704706118868775
+     ]
+    },
+    "none": {
+     "k": 193,
+     "n": 200,
+     "p": 0.965,
+     "ci": [
+      0.9295293881131225,
+      0.9829444580847421
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 2,
+     "n": 7,
+     "p": 0.2857142857142857
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 7,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 48.25
+    },
+    "spentMedian": 159990,
+    "spentMax": 159990
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 40,
+     "n": 200,
+     "p": 0.2,
+     "ci": [
+      0.15045200891679145,
+      0.2608551870845863
+     ]
+    },
+    "successEps": {
+     "k": 40,
+     "n": 200,
+     "p": 0.2,
+     "ci": [
+      0.15045200891679145,
+      0.2608551870845863
+     ]
+    },
+    "none": {
+     "k": 147,
+     "n": 200,
+     "p": 0.735,
+     "ci": [
+      0.669824237532593,
+      0.7913184589329944
+     ]
+    },
+    "trueViolation": {
+     "k": 13,
+     "n": 200,
+     "p": 0.065,
+     "ci": [
+      0.03837635449161451,
+      0.10801907971038324
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 31,
+     "n": 53,
+     "p": 0.5849056603773585
+    },
+    "trueViolationOfPicks": {
+     "k": 13,
+     "n": 53,
+     "p": 0.24528301886792453
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 40
+    },
+    "spentMedian": 150000,
+    "spentMax": 150000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "successEps": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "none": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 0,
+     "n": 1,
+     "p": 0
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 1,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49.75
+    },
+    "spentMedian": 150000,
+    "spentMax": 150000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 42,
+     "n": 200,
+     "p": 0.21,
+     "ci": [
+      0.15928412034547004,
+      0.2716461691225284
+     ]
+    },
+    "successEps": {
+     "k": 42,
+     "n": 200,
+     "p": 0.21,
+     "ci": [
+      0.15928412034547004,
+      0.2716461691225284
+     ]
+    },
+    "none": {
+     "k": 149,
+     "n": 200,
+     "p": 0.745,
+     "ci": [
+      0.6803707412567906,
+      0.8003950486754174
+     ]
+    },
+    "trueViolation": {
+     "k": 9,
+     "n": 200,
+     "p": 0.045,
+     "ci": [
+      0.02385254288504434,
+      0.08329670438371192
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 25,
+     "n": 51,
+     "p": 0.49019607843137253
+    },
+    "trueViolationOfPicks": {
+     "k": 9,
+     "n": 51,
+     "p": 0.17647058823529413
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 39.5
+    },
+    "spentMedian": 159990,
+    "spentMax": 159990
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 4,
+     "n": 200,
+     "p": 0.02,
+     "ci": [
+      0.007804426362159347,
+      0.05028708724004506
+     ]
+    },
+    "successEps": {
+     "k": 4,
+     "n": 200,
+     "p": 0.02,
+     "ci": [
+      0.007804426362159347,
+      0.05028708724004506
+     ]
+    },
+    "none": {
+     "k": 196,
+     "n": 200,
+     "p": 0.98,
+     "ci": [
+      0.9497129127599548,
+      0.9921955736378405
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 2,
+     "n": 4,
+     "p": 0.5
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 4,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49
+    },
+    "spentMedian": 159990,
+    "spentMax": 159990
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 85,
+     "n": 200,
+     "p": 0.425,
+     "ci": [
+      0.3585361249314706,
+      0.4942906740688738
+     ]
+    },
+    "successEps": {
+     "k": 85,
+     "n": 200,
+     "p": 0.425,
+     "ci": [
+      0.3585361249314706,
+      0.4942906740688738
+     ]
+    },
+    "none": {
+     "k": 55,
+     "n": 200,
+     "p": 0.275,
+     "ci": [
+      0.21779700288091797,
+      0.3406833941201153
+     ]
+    },
+    "trueViolation": {
+     "k": 60,
+     "n": 200,
+     "p": 0.3,
+     "ci": [
+      0.24074744639257037,
+      0.3667906842750147
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 77,
+     "n": 145,
+     "p": 0.5310344827586206
+    },
+    "trueViolationOfPicks": {
+     "k": 60,
+     "n": 145,
+     "p": 0.41379310344827586
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 28.75
+    },
+    "spentMedian": 159985,
+    "spentMax": 159990
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 8,
+     "n": 200,
+     "p": 0.04,
+     "ci": [
+      0.0204056319610195,
+      0.0769320685744264
+     ]
+    },
+    "successEps": {
+     "k": 8,
+     "n": 200,
+     "p": 0.04,
+     "ci": [
+      0.0204056319610195,
+      0.0769320685744264
+     ]
+    },
+    "none": {
+     "k": 191,
+     "n": 200,
+     "p": 0.955,
+     "ci": [
+      0.9167032956162879,
+      0.9761474571149557
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 3,
+     "n": 9,
+     "p": 0.3333333333333333
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 9,
+     "p": 0.1111111111111111
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 48
+    },
+    "spentMedian": 159985,
+    "spentMax": 159990
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 94,
+     "n": 200,
+     "p": 0.47,
+     "ci": [
+      0.4020475482110944,
+      0.5390831713890433
+     ]
+    },
+    "successEps": {
+     "k": 94,
+     "n": 200,
+     "p": 0.47,
+     "ci": [
+      0.4020475482110944,
+      0.5390831713890433
+     ]
+    },
+    "none": {
+     "k": 65,
+     "n": 200,
+     "p": 0.325,
+     "ci": [
+      0.263915714943814,
+      0.392680149390323
+     ]
+    },
+    "trueViolation": {
+     "k": 41,
+     "n": 200,
+     "p": 0.205,
+     "ci": [
+      0.15486176168906182,
+      0.2662569810456263
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 77,
+     "n": 135,
+     "p": 0.5703703703703704
+    },
+    "trueViolationOfPicks": {
+     "k": 41,
+     "n": 135,
+     "p": 0.3037037037037037
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 26.5
+    },
+    "spentMedian": 109500,
+    "spentMax": 134500
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 4,
+     "n": 200,
+     "p": 0.02,
+     "ci": [
+      0.007804426362159347,
+      0.05028708724004506
+     ]
+    },
+    "successEps": {
+     "k": 4,
+     "n": 200,
+     "p": 0.02,
+     "ci": [
+      0.007804426362159347,
+      0.05028708724004506
+     ]
+    },
+    "none": {
+     "k": 196,
+     "n": 200,
+     "p": 0.98,
+     "ci": [
+      0.9497129127599548,
+      0.9921955736378405
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 3,
+     "n": 4,
+     "p": 0.75
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 4,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49
+    },
+    "spentMedian": 109500,
+    "spentMax": 134500
+   },
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 91,
+     "n": 200,
+     "p": 0.455,
+     "ci": [
+      0.3874821925827813,
+      0.5242138868174252
+     ]
+    },
+    "successEps": {
+     "k": 91,
+     "n": 200,
+     "p": 0.455,
+     "ci": [
+      0.3874821925827813,
+      0.5242138868174252
+     ]
+    },
+    "none": {
+     "k": 70,
+     "n": 200,
+     "p": 0.35,
+     "ci": [
+      0.28728824080917403,
+      0.4183653571915147
+     ]
+    },
+    "trueViolation": {
+     "k": 39,
+     "n": 200,
+     "p": 0.195,
+     "ci": [
+      0.1460552050050192,
+      0.2554404442630482
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 73,
+     "n": 130,
+     "p": 0.5615384615384615
+    },
+    "trueViolationOfPicks": {
+     "k": 39,
+     "n": 130,
+     "p": 0.3
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 27.25
+    },
+    "spentMedian": 319995,
+    "spentMax": 319995
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 4,
+     "n": 200,
+     "p": 0.02,
+     "ci": [
+      0.007804426362159347,
+      0.05028708724004506
+     ]
+    },
+    "successEps": {
+     "k": 4,
+     "n": 200,
+     "p": 0.02,
+     "ci": [
+      0.007804426362159347,
+      0.05028708724004506
+     ]
+    },
+    "none": {
+     "k": 196,
+     "n": 200,
+     "p": 0.98,
+     "ci": [
+      0.9497129127599548,
+      0.9921955736378405
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 2,
+     "n": 4,
+     "p": 0.5
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 4,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49
+    },
+    "spentMedian": 319995,
+    "spentMax": 319995
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 69,
+     "n": 200,
+     "p": 0.345,
+     "ci": [
+      0.2825979433061415,
+      0.41324410796123684
+     ]
+    },
+    "successEps": {
+     "k": 69,
+     "n": 200,
+     "p": 0.345,
+     "ci": [
+      0.2825979433061415,
+      0.41324410796123684
+     ]
+    },
+    "none": {
+     "k": 101,
+     "n": 200,
+     "p": 0.505,
+     "ci": [
+      0.4362699998026278,
+      0.5735415469306826
+     ]
+    },
+    "trueViolation": {
+     "k": 30,
+     "n": 200,
+     "p": 0.15,
+     "ci": [
+      0.10713593533492477,
+      0.20605579333334925
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 53,
+     "n": 99,
+     "p": 0.5353535353535354
+    },
+    "trueViolationOfPicks": {
+     "k": 30,
+     "n": 99,
+     "p": 0.30303030303030304
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 32.75
+    },
+    "spentMedian": 300000,
+    "spentMax": 300000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "successEps": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "none": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 0,
+     "n": 0,
+     "p": null
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 0,
+     "p": null
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 50
+    },
+    "spentMedian": 300000,
+    "spentMax": 300000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 52,
+     "n": 200,
+     "p": 0.26,
+     "ci": [
+      0.2041383002358024,
+      0.32490745656529973
+     ]
+    },
+    "successEps": {
+     "k": 52,
+     "n": 200,
+     "p": 0.26,
+     "ci": [
+      0.2041383002358024,
+      0.32490745656529973
+     ]
+    },
+    "none": {
+     "k": 143,
+     "n": 200,
+     "p": 0.715,
+     "ci": [
+      0.6488465391585686,
+      0.7730499703737773
+     ]
+    },
+    "trueViolation": {
+     "k": 5,
+     "n": 200,
+     "p": 0.025,
+     "ci": [
+      0.010724719583860124,
+      0.05717834075165468
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 31,
+     "n": 57,
+     "p": 0.543859649122807
+    },
+    "trueViolationOfPicks": {
+     "k": 5,
+     "n": 57,
+     "p": 0.08771929824561403
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 37
+    },
+    "spentMedian": 319995,
+    "spentMax": 319995
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 5,
+     "n": 200,
+     "p": 0.025,
+     "ci": [
+      0.010724719583860124,
+      0.05717834075165468
+     ]
+    },
+    "successEps": {
+     "k": 5,
+     "n": 200,
+     "p": 0.025,
+     "ci": [
+      0.010724719583860124,
+      0.05717834075165468
+     ]
+    },
+    "none": {
+     "k": 195,
+     "n": 200,
+     "p": 0.975,
+     "ci": [
+      0.9428216592483453,
+      0.9892752804161398
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 4,
+     "n": 5,
+     "p": 0.8
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 5,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 48.75
+    },
+    "spentMedian": 319995,
+    "spentMax": 319995
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 85,
+     "n": 200,
+     "p": 0.425,
+     "ci": [
+      0.3585361249314706,
+      0.4942906740688738
+     ]
+    },
+    "successEps": {
+     "k": 85,
+     "n": 200,
+     "p": 0.425,
+     "ci": [
+      0.3585361249314706,
+      0.4942906740688738
+     ]
+    },
+    "none": {
+     "k": 68,
+     "n": 200,
+     "p": 0.34,
+     "ci": [
+      0.2779154592508567,
+      0.4081150452832114
+     ]
+    },
+    "trueViolation": {
+     "k": 47,
+     "n": 200,
+     "p": 0.235,
+     "ci": [
+      0.18157433377419854,
+      0.2984136893603518
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 75,
+     "n": 132,
+     "p": 0.5681818181818182
+    },
+    "trueViolationOfPicks": {
+     "k": 47,
+     "n": 132,
+     "p": 0.3560606060606061
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 28.75
+    },
+    "spentMedian": 319985,
+    "spentMax": 319992
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 5,
+     "n": 200,
+     "p": 0.025,
+     "ci": [
+      0.010724719583860124,
+      0.05717834075165468
+     ]
+    },
+    "successEps": {
+     "k": 5,
+     "n": 200,
+     "p": 0.025,
+     "ci": [
+      0.010724719583860124,
+      0.05717834075165468
+     ]
+    },
+    "none": {
+     "k": 195,
+     "n": 200,
+     "p": 0.975,
+     "ci": [
+      0.9428216592483453,
+      0.9892752804161398
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 3,
+     "n": 5,
+     "p": 0.6
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 5,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 48.75
+    },
+    "spentMedian": 319985,
+    "spentMax": 319992
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 93,
+     "n": 200,
+     "p": 0.465,
+     "ci": [
+      0.3971856410502652,
+      0.5341335318165621
+     ]
+    },
+    "successEps": {
+     "k": 93,
+     "n": 200,
+     "p": 0.465,
+     "ci": [
+      0.3971856410502652,
+      0.5341335318165621
+     ]
+    },
+    "none": {
+     "k": 63,
+     "n": 200,
+     "p": 0.315,
+     "ci": [
+      0.2546232094605245,
+      0.38234956140699167
+     ]
+    },
+    "trueViolation": {
+     "k": 44,
+     "n": 200,
+     "p": 0.22,
+     "ci": [
+      0.1681653832242373,
+      0.2823879997103819
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 79,
+     "n": 137,
+     "p": 0.5766423357664233
+    },
+    "trueViolationOfPicks": {
+     "k": 44,
+     "n": 137,
+     "p": 0.32116788321167883
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 26.75
+    },
+    "spentMedian": 124985,
+    "spentMax": 149985
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 5,
+     "n": 200,
+     "p": 0.025,
+     "ci": [
+      0.010724719583860124,
+      0.05717834075165468
+     ]
+    },
+    "successEps": {
+     "k": 5,
+     "n": 200,
+     "p": 0.025,
+     "ci": [
+      0.010724719583860124,
+      0.05717834075165468
+     ]
+    },
+    "none": {
+     "k": 195,
+     "n": 200,
+     "p": 0.975,
+     "ci": [
+      0.9428216592483453,
+      0.9892752804161398
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 3,
+     "n": 5,
+     "p": 0.6
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 5,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 48.75
+    },
+    "spentMedian": 124985,
+    "spentMax": 149985
+   },
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 88,
+     "n": 200,
+     "p": 0.44,
+     "ci": [
+      0.3729781920017676,
+      0.5092832471985078
+     ]
+    },
+    "successEps": {
+     "k": 88,
+     "n": 200,
+     "p": 0.44,
+     "ci": [
+      0.3729781920017676,
+      0.5092832471985078
+     ]
+    },
+    "none": {
+     "k": 76,
+     "n": 200,
+     "p": 0.38,
+     "ci": [
+      0.31559005800516143,
+      0.44893282039538956
+     ]
+    },
+    "trueViolation": {
+     "k": 36,
+     "n": 200,
+     "p": 0.18,
+     "ci": [
+      0.13294625827141174,
+      0.2391147507967245
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 56,
+     "n": 124,
+     "p": 0.45161290322580644
+    },
+    "trueViolationOfPicks": {
+     "k": 36,
+     "n": 124,
+     "p": 0.2903225806451613
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 28
+    },
+    "spentMedian": 639990,
+    "spentMax": 639990
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "successEps": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "none": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 0,
+     "n": 2,
+     "p": 0
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 2,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49.5
+    },
+    "spentMedian": 639990,
+    "spentMax": 639990
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 80,
+     "n": 200,
+     "p": 0.4,
+     "ci": [
+      0.3346057851761492,
+      0.46916328015764336
+     ]
+    },
+    "successEps": {
+     "k": 80,
+     "n": 200,
+     "p": 0.4,
+     "ci": [
+      0.3346057851761492,
+      0.46916328015764336
+     ]
+    },
+    "none": {
+     "k": 82,
+     "n": 200,
+     "p": 0.41,
+     "ci": [
+      0.3441567485880499,
+      0.4792354102123633
+     ]
+    },
+    "trueViolation": {
+     "k": 38,
+     "n": 200,
+     "p": 0.19,
+     "ci": [
+      0.1416717149442203,
+      0.25001238759053673
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 67,
+     "n": 118,
+     "p": 0.5677966101694916
+    },
+    "trueViolationOfPicks": {
+     "k": 38,
+     "n": 118,
+     "p": 0.3220338983050847
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 30
+    },
+    "spentMedian": 375000,
+    "spentMax": 375000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 8,
+     "n": 200,
+     "p": 0.04,
+     "ci": [
+      0.0204056319610195,
+      0.0769320685744264
+     ]
+    },
+    "successEps": {
+     "k": 8,
+     "n": 200,
+     "p": 0.04,
+     "ci": [
+      0.0204056319610195,
+      0.0769320685744264
+     ]
+    },
+    "none": {
+     "k": 192,
+     "n": 200,
+     "p": 0.96,
+     "ci": [
+      0.9230679314255735,
+      0.9795943680389805
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 1,
+     "n": 8,
+     "p": 0.125
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 8,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 48
+    },
+    "spentMedian": 375000,
+    "spentMax": 375000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 43,
+     "n": 200,
+     "p": 0.215,
+     "ci": [
+      0.16371876218582487,
+      0.277023074015484
+     ]
+    },
+    "successEps": {
+     "k": 43,
+     "n": 200,
+     "p": 0.215,
+     "ci": [
+      0.16371876218582487,
+      0.277023074015484
+     ]
+    },
+    "none": {
+     "k": 155,
+     "n": 200,
+     "p": 0.775,
+     "ci": [
+      0.7122587671141067,
+      0.8273763032179636
+     ]
+    },
+    "trueViolation": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 26,
+     "n": 45,
+     "p": 0.5777777777777777
+    },
+    "trueViolationOfPicks": {
+     "k": 2,
+     "n": 45,
+     "p": 0.044444444444444446
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 39.25
+    },
+    "spentMedian": 639990,
+    "spentMax": 639990
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 4,
+     "n": 200,
+     "p": 0.02,
+     "ci": [
+      0.007804426362159347,
+      0.05028708724004506
+     ]
+    },
+    "successEps": {
+     "k": 4,
+     "n": 200,
+     "p": 0.02,
+     "ci": [
+      0.007804426362159347,
+      0.05028708724004506
+     ]
+    },
+    "none": {
+     "k": 196,
+     "n": 200,
+     "p": 0.98,
+     "ci": [
+      0.9497129127599548,
+      0.9921955736378405
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 4,
+     "n": 4,
+     "p": 1
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 4,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 49
+    },
+    "spentMedian": 639990,
+    "spentMax": 639990
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 107,
+     "n": 200,
+     "p": 0.535,
+     "ci": [
+      0.46586646818343785,
+      0.6028143589497348
+     ]
+    },
+    "successEps": {
+     "k": 107,
+     "n": 200,
+     "p": 0.535,
+     "ci": [
+      0.46586646818343785,
+      0.6028143589497348
+     ]
+    },
+    "none": {
+     "k": 65,
+     "n": 200,
+     "p": 0.325,
+     "ci": [
+      0.263915714943814,
+      0.392680149390323
+     ]
+    },
+    "trueViolation": {
+     "k": 28,
+     "n": 200,
+     "p": 0.14,
+     "ci": [
+      0.09866982605979482,
+      0.1948988091418585
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 70,
+     "n": 135,
+     "p": 0.5185185185185185
+    },
+    "trueViolationOfPicks": {
+     "k": 28,
+     "n": 135,
+     "p": 0.2074074074074074
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 50,
+     "mean": 23.25
+    },
+    "spentMedian": 639985,
+    "spentMax": 639989
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 10,
+     "n": 200,
+     "p": 0.05,
+     "ci": [
+      0.027382645473457017,
+      0.08957814852860962
+     ]
+    },
+    "successEps": {
+     "k": 10,
+     "n": 200,
+     "p": 0.05,
+     "ci": [
+      0.027382645473457017,
+      0.08957814852860962
+     ]
+    },
+    "none": {
+     "k": 190,
+     "n": 200,
+     "p": 0.95,
+     "ci": [
+      0.9104218514713903,
+      0.972617354526543
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 4,
+     "n": 10,
+     "p": 0.4
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 10,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 47.5
+    },
+    "spentMedian": 639985,
+    "spentMax": 639989
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 89,
+     "n": 200,
+     "p": 0.445,
+     "ci": [
+      0.377806009517404,
+      0.5142669764161818
+     ]
+    },
+    "successEps": {
+     "k": 89,
+     "n": 200,
+     "p": 0.445,
+     "ci": [
+      0.377806009517404,
+      0.5142669764161818
+     ]
+    },
+    "none": {
+     "k": 68,
+     "n": 200,
+     "p": 0.34,
+     "ci": [
+      0.2779154592508567,
+      0.4081150452832114
+     ]
+    },
+    "trueViolation": {
+     "k": 43,
+     "n": 200,
+     "p": 0.215,
+     "ci": [
+      0.16371876218582487,
+      0.277023074015484
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 72,
+     "n": 132,
+     "p": 0.5454545454545454
+    },
+    "trueViolationOfPicks": {
+     "k": 43,
+     "n": 132,
+     "p": 0.32575757575757575
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 27.75
+    },
+    "spentMedian": 124985,
+    "spentMax": 149985
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 7,
+     "n": 200,
+     "p": 0.035,
+     "ci": [
+      0.01705554191525804,
+      0.0704706118868775
+     ]
+    },
+    "successEps": {
+     "k": 7,
+     "n": 200,
+     "p": 0.035,
+     "ci": [
+      0.01705554191525804,
+      0.0704706118868775
+     ]
+    },
+    "none": {
+     "k": 192,
+     "n": 200,
+     "p": 0.96,
+     "ci": [
+      0.9230679314255735,
+      0.9795943680389805
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 4,
+     "n": 8,
+     "p": 0.5
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 8,
+     "p": 0.125
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 50,
+     "mean": 48.25
+    },
+    "spentMedian": 124985,
+    "spentMax": 149985
+   }
+  ],
+  "level": [
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 44,
+     "n": 200,
+     "p": 0.22
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0.5
+    },
+    "spentMedian": 39996,
+    "spentMax": 39996
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 11,
+     "n": 200,
+     "p": 0.055,
+     "ci": [
+      0.03098534156570805,
+      0.09578699916966896
+     ]
+    },
+    "successEps": {
+     "k": 74,
+     "n": 200,
+     "p": 0.37,
+     "ci": [
+      0.30612608362251653,
+      0.4387737013114137
+     ]
+    },
+    "none": {
+     "k": 75,
+     "n": 200,
+     "p": 0.375,
+     "ci": [
+      0.310854368105246,
+      0.4438569635619946
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 12,
+     "n": 125,
+     "p": 0.096
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 125,
+     "p": 0.008
+    },
+    "regret": {
+     "median": 100,
+     "q1": 50,
+     "q3": 150,
+     "mean": 97.75
+    },
+    "spentMedian": 39996,
+    "spentMax": 39996
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 52,
+     "n": 200,
+     "p": 0.26,
+     "ci": [
+      0.2041383002358024,
+      0.32490745656529973
+     ]
+    },
+    "successEps": {
+     "k": 103,
+     "n": 200,
+     "p": 0.515,
+     "ci": [
+      0.44610849139209374,
+      0.5833261488078374
+     ]
+    },
+    "none": {
+     "k": 39,
+     "n": 200,
+     "p": 0.195,
+     "ci": [
+      0.1460552050050192,
+      0.2554404442630482
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 16,
+     "n": 161,
+     "p": 0.09937888198757763
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 161,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 100,
+     "mean": 71
+    },
+    "spentMedian": 25000,
+    "spentMax": 25000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 20,
+     "n": 200,
+     "p": 0.1,
+     "ci": [
+      0.06567044845124732,
+      0.14940581288392302
+     ]
+    },
+    "successEps": {
+     "k": 51,
+     "n": 200,
+     "p": 0.255,
+     "ci": [
+      0.19960495132458245,
+      0.3196292587432093
+     ]
+    },
+    "none": {
+     "k": 119,
+     "n": 200,
+     "p": 0.595,
+     "ci": [
+      0.5257971002635867,
+      0.6606222876693102
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 4,
+     "n": 81,
+     "p": 0.04938271604938271
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 81,
+     "p": 0
+    },
+    "regret": {
+     "median": 150,
+     "q1": 50,
+     "q3": 150,
+     "mean": 112
+    },
+    "spentMedian": 25000,
+    "spentMax": 25000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 167,
+     "n": 200,
+     "p": 0.835,
+     "ci": [
+      0.777342184108311,
+      0.8800314470234837
+     ]
+    },
+    "successEps": {
+     "k": 196,
+     "n": 200,
+     "p": 0.98,
+     "ci": [
+      0.9497129127599548,
+      0.9921955736378405
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 3,
+     "n": 200,
+     "p": 0.015,
+     "ci": [
+      0.005114237753504754,
+      0.043165729115389295
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 26,
+     "n": 200,
+     "p": 0.13
+    },
+    "trueViolationOfPicks": {
+     "k": 3,
+     "n": 200,
+     "p": 0.015
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 10
+    },
+    "spentMedian": 39991,
+    "spentMax": 39991
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 44,
+     "n": 200,
+     "p": 0.22,
+     "ci": [
+      0.1681653832242373,
+      0.2823879997103819
+     ]
+    },
+    "successEps": {
+     "k": 105,
+     "n": 200,
+     "p": 0.525,
+     "ci": [
+      0.45597395960896836,
+      0.5930837740575836
+     ]
+    },
+    "none": {
+     "k": 92,
+     "n": 200,
+     "p": 0.46,
+     "ci": [
+      0.39233051748177505,
+      0.529177108651742
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 6,
+     "n": 108,
+     "p": 0.05555555555555555
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 108,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 150,
+     "mean": 85.75
+    },
+    "spentMedian": 39991,
+    "spentMax": 39991
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "successEps": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 55,
+     "n": 200,
+     "p": 0.275
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 1
+    },
+    "spentMedian": 39996,
+    "spentMax": 39998
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 55,
+     "n": 200,
+     "p": 0.275,
+     "ci": [
+      0.21779700288091797,
+      0.3406833941201153
+     ]
+    },
+    "successEps": {
+     "k": 65,
+     "n": 200,
+     "p": 0.325,
+     "ci": [
+      0.263915714943814,
+      0.392680149390323
+     ]
+    },
+    "none": {
+     "k": 100,
+     "n": 200,
+     "p": 0.5,
+     "ci": [
+      0.43136085907267824,
+      0.5686391409273218
+     ]
+    },
+    "trueViolation": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 8,
+     "n": 100,
+     "p": 0.08
+    },
+    "trueViolationOfPicks": {
+     "k": 2,
+     "n": 100,
+     "p": 0.02
+    },
+    "regret": {
+     "median": 150,
+     "q1": 0,
+     "q3": 150,
+     "mean": 95.5
+    },
+    "spentMedian": 39996,
+    "spentMax": 39998
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 123,
+     "n": 200,
+     "p": 0.615,
+     "ci": [
+      0.5459986716511277,
+      0.6796669032150108
+     ]
+    },
+    "successEps": {
+     "k": 123,
+     "n": 200,
+     "p": 0.615,
+     "ci": [
+      0.5459986716511277,
+      0.6796669032150108
+     ]
+    },
+    "none": {
+     "k": 77,
+     "n": 200,
+     "p": 0.385,
+     "ci": [
+      0.3203330967849892,
+      0.4540013283488722
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 49,
+     "n": 123,
+     "p": 0.3983739837398374
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 123,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 150,
+     "mean": 57.75
+    },
+    "spentMedian": 39400,
+    "spentMax": 39400
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 8,
+     "n": 200,
+     "p": 0.04,
+     "ci": [
+      0.0204056319610195,
+      0.0769320685744264
+     ]
+    },
+    "successEps": {
+     "k": 8,
+     "n": 200,
+     "p": 0.04,
+     "ci": [
+      0.0204056319610195,
+      0.0769320685744264
+     ]
+    },
+    "none": {
+     "k": 192,
+     "n": 200,
+     "p": 0.96,
+     "ci": [
+      0.9230679314255735,
+      0.9795943680389805
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 3,
+     "n": 8,
+     "p": 0.375
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 8,
+     "p": 0
+    },
+    "regret": {
+     "median": 150,
+     "q1": 150,
+     "q3": 150,
+     "mean": 144
+    },
+    "spentMedian": 39400,
+    "spentMax": 39400
+   },
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 40,
+     "n": 200,
+     "p": 0.2
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0.25
+    },
+    "spentMedian": 79992,
+    "spentMax": 79992
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 43,
+     "n": 200,
+     "p": 0.215,
+     "ci": [
+      0.16371876218582487,
+      0.277023074015484
+     ]
+    },
+    "successEps": {
+     "k": 132,
+     "n": 200,
+     "p": 0.66,
+     "ci": [
+      0.5918849547167886,
+      0.7220845407491433
+     ]
+    },
+    "none": {
+     "k": 26,
+     "n": 200,
+     "p": 0.13,
+     "ci": [
+      0.09028202253521182,
+      0.18366351919982074
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 11,
+     "n": 174,
+     "p": 0.06321839080459771
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 174,
+     "p": 0.005747126436781609
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 100,
+     "mean": 63
+    },
+    "spentMedian": 79992,
+    "spentMax": 79992
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 138,
+     "n": 200,
+     "p": 0.69,
+     "ci": [
+      0.6228282237882907,
+      0.7500105520775032
+     ]
+    },
+    "successEps": {
+     "k": 184,
+     "n": 200,
+     "p": 0.92,
+     "ci": [
+      0.8740105113029427,
+      0.9501594142951284
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 31,
+     "n": 200,
+     "p": 0.155
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 50,
+     "mean": 19.5
+    },
+    "spentMedian": 75000,
+    "spentMax": 75000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 60,
+     "n": 200,
+     "p": 0.3,
+     "ci": [
+      0.24074744639257037,
+      0.3667906842750147
+     ]
+    },
+    "successEps": {
+     "k": 118,
+     "n": 200,
+     "p": 0.59,
+     "ci": [
+      0.5207645897876366,
+      0.65584325141195
+     ]
+    },
+    "none": {
+     "k": 37,
+     "n": 200,
+     "p": 0.185,
+     "ci": [
+      0.1373019276778717,
+      0.24457062812357494
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 7,
+     "n": 163,
+     "p": 0.04294478527607362
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 163,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 100,
+     "mean": 64.75
+    },
+    "spentMedian": 75000,
+    "spentMax": 75000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 182,
+     "n": 200,
+     "p": 0.91,
+     "ci": [
+      0.8622342807918278,
+      0.9423125513396226
+     ]
+    },
+    "successEps": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 34,
+     "n": 200,
+     "p": 0.17
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 4.75
+    },
+    "spentMedian": 79988,
+    "spentMax": 79988
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 109,
+     "n": 200,
+     "p": 0.545,
+     "ci": [
+      0.47578611318257474,
+      0.6125178074172186
+     ]
+    },
+    "successEps": {
+     "k": 156,
+     "n": 200,
+     "p": 0.78,
+     "ci": [
+      0.7176120002896181,
+      0.8318346167757626
+     ]
+    },
+    "none": {
+     "k": 43,
+     "n": 200,
+     "p": 0.215,
+     "ci": [
+      0.16371876218582487,
+      0.277023074015484
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 4,
+     "n": 157,
+     "p": 0.025477707006369428
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 157,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 50,
+     "mean": 44.5
+    },
+    "spentMedian": 79988,
+    "spentMax": 79988
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 56,
+     "n": 200,
+     "p": 0.28
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0.25
+    },
+    "spentMedian": 79996,
+    "spentMax": 79999
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 118,
+     "n": 200,
+     "p": 0.59,
+     "ci": [
+      0.5207645897876366,
+      0.65584325141195
+     ]
+    },
+    "successEps": {
+     "k": 134,
+     "n": 200,
+     "p": 0.67,
+     "ci": [
+      0.6021668471867698,
+      0.7314257417457829
+     ]
+    },
+    "none": {
+     "k": 43,
+     "n": 200,
+     "p": 0.215,
+     "ci": [
+      0.16371876218582487,
+      0.277023074015484
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 13,
+     "n": 157,
+     "p": 0.08280254777070063
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 157,
+     "p": 0.006369426751592357
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 100,
+     "mean": 48
+    },
+    "spentMedian": 79996,
+    "spentMax": 79999
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 195,
+     "n": 200,
+     "p": 0.975,
+     "ci": [
+      0.9428216592483453,
+      0.9892752804161398
+     ]
+    },
+    "successEps": {
+     "k": 195,
+     "n": 200,
+     "p": 0.975,
+     "ci": [
+      0.9428216592483453,
+      0.9892752804161398
+     ]
+    },
+    "none": {
+     "k": 5,
+     "n": 200,
+     "p": 0.025,
+     "ci": [
+      0.010724719583860124,
+      0.05717834075165468
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 52,
+     "n": 195,
+     "p": 0.26666666666666666
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 195,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 3.75
+    },
+    "spentMedian": 80000,
+    "spentMax": 80000
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 67,
+     "n": 200,
+     "p": 0.335,
+     "ci": [
+      0.27324086932910685,
+      0.4029780884716509
+     ]
+    },
+    "successEps": {
+     "k": 67,
+     "n": 200,
+     "p": 0.335,
+     "ci": [
+      0.27324086932910685,
+      0.4029780884716509
+     ]
+    },
+    "none": {
+     "k": 133,
+     "n": 200,
+     "p": 0.665,
+     "ci": [
+      0.5970219115283492,
+      0.7267591306708931
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 11,
+     "n": 67,
+     "p": 0.16417910447761194
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 67,
+     "p": 0
+    },
+    "regret": {
+     "median": 150,
+     "q1": 0,
+     "q3": 150,
+     "mean": 99.75
+    },
+    "spentMedian": 80000,
+    "spentMax": 80000
+   },
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 42,
+     "n": 200,
+     "p": 0.21
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 159996,
+    "spentMax": 159996
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 96,
+     "n": 200,
+     "p": 0.48,
+     "ci": [
+      0.4117916632582544,
+      0.548962149808504
+     ]
+    },
+    "successEps": {
+     "k": 191,
+     "n": 200,
+     "p": 0.955,
+     "ci": [
+      0.9167032956162879,
+      0.9761474571149557
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 4,
+     "n": 200,
+     "p": 0.02
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 28.25
+    },
+    "spentMedian": 159996,
+    "spentMax": 159996
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 182,
+     "n": 200,
+     "p": 0.91,
+     "ci": [
+      0.8622342807918278,
+      0.9423125513396226
+     ]
+    },
+    "successEps": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 33,
+     "n": 200,
+     "p": 0.165
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 5.25
+    },
+    "spentMedian": 150000,
+    "spentMax": 150000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 91,
+     "n": 200,
+     "p": 0.455,
+     "ci": [
+      0.3874821925827813,
+      0.5242138868174252
+     ]
+    },
+    "successEps": {
+     "k": 167,
+     "n": 200,
+     "p": 0.835,
+     "ci": [
+      0.777342184108311,
+      0.8800314470234837
+     ]
+    },
+    "none": {
+     "k": 10,
+     "n": 200,
+     "p": 0.05,
+     "ci": [
+      0.027382645473457017,
+      0.08957814852860962
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 7,
+     "n": 190,
+     "p": 0.03684210526315789
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 190,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 38
+    },
+    "spentMedian": 150000,
+    "spentMax": 150000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 190,
+     "n": 200,
+     "p": 0.95,
+     "ci": [
+      0.9104218514713903,
+      0.972617354526543
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 21,
+     "n": 200,
+     "p": 0.105
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 2.5
+    },
+    "spentMedian": 159991,
+    "spentMax": 159991
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 172,
+     "n": 200,
+     "p": 0.86,
+     "ci": [
+      0.8051011908581415,
+      0.9013301739402051
+     ]
+    },
+    "successEps": {
+     "k": 194,
+     "n": 200,
+     "p": 0.97,
+     "ci": [
+      0.9361057071903662,
+      0.9861796857408085
+     ]
+    },
+    "none": {
+     "k": 6,
+     "n": 200,
+     "p": 0.03,
+     "ci": [
+      0.013820314259191425,
+      0.06389429280963374
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 5,
+     "n": 194,
+     "p": 0.02577319587628866
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 194,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 10
+    },
+    "spentMedian": 159991,
+    "spentMax": 159991
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 50,
+     "n": 200,
+     "p": 0.25
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 159996,
+    "spentMax": 159998
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 172,
+     "n": 200,
+     "p": 0.86,
+     "ci": [
+      0.8051011908581415,
+      0.9013301739402051
+     ]
+    },
+    "successEps": {
+     "k": 185,
+     "n": 200,
+     "p": 0.925,
+     "ci": [
+      0.8799563893397121,
+      0.9540250829916694
+     ]
+    },
+    "none": {
+     "k": 7,
+     "n": 200,
+     "p": 0.035,
+     "ci": [
+      0.01705554191525804,
+      0.0704706118868775
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 13,
+     "n": 193,
+     "p": 0.06735751295336788
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 193,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 12.5
+    },
+    "spentMedian": 159996,
+    "spentMax": 159998
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 69,
+     "n": 200,
+     "p": 0.345
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0.25
+    },
+    "spentMedian": 159800,
+    "spentMax": 159800
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 162,
+     "n": 200,
+     "p": 0.81,
+     "ci": [
+      0.7499876124094633,
+      0.8583282850557797
+     ]
+    },
+    "successEps": {
+     "k": 165,
+     "n": 200,
+     "p": 0.825,
+     "ci": [
+      0.7663556880107202,
+      0.8713948496544538
+     ]
+    },
+    "none": {
+     "k": 35,
+     "n": 200,
+     "p": 0.175,
+     "ci": [
+      0.1286051503455461,
+      0.23364431198927976
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 6,
+     "n": 165,
+     "p": 0.03636363636363636
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 165,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 27
+    },
+    "spentMedian": 159800,
+    "spentMax": 159800
+   },
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 52,
+     "n": 200,
+     "p": 0.26
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 319992,
+    "spentMax": 319992
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 178,
+     "n": 200,
+     "p": 0.89,
+     "ci": [
+      0.8390730895663762,
+      0.9262275556318328
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 12,
+     "n": 200,
+     "p": 0.06
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 5.5
+    },
+    "spentMedian": 319992,
+    "spentMax": 319992
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 58,
+     "n": 200,
+     "p": 0.29
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 300000,
+    "spentMax": 300000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 162,
+     "n": 200,
+     "p": 0.81,
+     "ci": [
+      0.7499876124094633,
+      0.8583282850557797
+     ]
+    },
+    "successEps": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 9.75
+    },
+    "spentMedian": 300000,
+    "spentMax": 300000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 14,
+     "n": 200,
+     "p": 0.07
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0.25
+    },
+    "spentMedian": 319988,
+    "spentMax": 319988
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 194,
+     "n": 200,
+     "p": 0.97,
+     "ci": [
+      0.9361057071903662,
+      0.9861796857408085
+     ]
+    },
+    "successEps": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "none": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 4,
+     "n": 199,
+     "p": 0.020100502512562814
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 199,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 2
+    },
+    "spentMedian": 319988,
+    "spentMax": 319988
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 57,
+     "n": 200,
+     "p": 0.285
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 319996,
+    "spentMax": 319998
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 10,
+     "n": 200,
+     "p": 0.05
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0.25
+    },
+    "spentMedian": 319996,
+    "spentMax": 319998
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 35,
+     "n": 200,
+     "p": 0.175
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 184988,
+    "spentMax": 184988
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 166,
+     "n": 200,
+     "p": 0.83,
+     "ci": [
+      0.7718411632128768,
+      0.8757209211856076
+     ]
+    },
+    "successEps": {
+     "k": 167,
+     "n": 200,
+     "p": 0.835,
+     "ci": [
+      0.777342184108311,
+      0.8800314470234837
+     ]
+    },
+    "none": {
+     "k": 33,
+     "n": 200,
+     "p": 0.165,
+     "ci": [
+      0.11996855297651625,
+      0.22265781589168893
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 12,
+     "n": 167,
+     "p": 0.0718562874251497
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 167,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 25
+    },
+    "spentMedian": 184988,
+    "spentMax": 184988
+   },
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 77,
+     "n": 200,
+     "p": 0.385
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 639996,
+    "spentMax": 639996
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 10,
+     "n": 200,
+     "p": 0.05
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0.5
+    },
+    "spentMedian": 639996,
+    "spentMax": 639996
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 53,
+     "n": 200,
+     "p": 0.265
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 300000,
+    "spentMax": 300000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 166,
+     "n": 200,
+     "p": 0.83,
+     "ci": [
+      0.7718411632128768,
+      0.8757209211856076
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 8,
+     "n": 200,
+     "p": 0.04
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 8.5
+    },
+    "spentMedian": 300000,
+    "spentMax": 300000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 14,
+     "n": 200,
+     "p": 0.07
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 639991,
+    "spentMax": 639991
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 15,
+     "n": 200,
+     "p": 0.075
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 639991,
+    "spentMax": 639991
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 56,
+     "n": 200,
+     "p": 0.28
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 639996,
+    "spentMax": 639998
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 15,
+     "n": 200,
+     "p": 0.075
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 639996,
+    "spentMax": 639998
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 54,
+     "n": 200,
+     "p": 0.27
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 184988,
+    "spentMax": 184988
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 162,
+     "n": 200,
+     "p": 0.81,
+     "ci": [
+      0.7499876124094633,
+      0.8583282850557797
+     ]
+    },
+    "successEps": {
+     "k": 162,
+     "n": 200,
+     "p": 0.81,
+     "ci": [
+      0.7499876124094633,
+      0.8583282850557797
+     ]
+    },
+    "none": {
+     "k": 38,
+     "n": 200,
+     "p": 0.19,
+     "ci": [
+      0.1416717149442203,
+      0.25001238759053673
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 10,
+     "n": 162,
+     "p": 0.06172839506172839
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 162,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 28.5
+    },
+    "spentMedian": 184988,
+    "spentMax": 184988
+   }
+  ],
+  "level85": [
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 122,
+     "n": 200,
+     "p": 0.61,
+     "ci": [
+      0.5409374590206674,
+      0.6749165691121608
+     ]
+    },
+    "successEps": {
+     "k": 137,
+     "n": 200,
+     "p": 0.685,
+     "ci": [
+      0.6176504385930084,
+      0.7453767905394755
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 63,
+     "n": 200,
+     "p": 0.315,
+     "ci": [
+      0.2546232094605245,
+      0.38234956140699167
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 90,
+     "n": 200,
+     "p": 0.45
+    },
+    "trueViolationOfPicks": {
+     "k": 63,
+     "n": 200,
+     "p": 0.315
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 100,
+     "mean": 35.25
+    },
+    "spentMedian": 39996,
+    "spentMax": 39996
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 7,
+     "n": 200,
+     "p": 0.035,
+     "ci": [
+      0.01705554191525804,
+      0.0704706118868775
+     ]
+    },
+    "successEps": {
+     "k": 92,
+     "n": 200,
+     "p": 0.46,
+     "ci": [
+      0.39233051748177505,
+      0.529177108651742
+     ]
+    },
+    "none": {
+     "k": 107,
+     "n": 200,
+     "p": 0.535,
+     "ci": [
+      0.46586646818343785,
+      0.6028143589497348
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 2,
+     "n": 93,
+     "p": 0.021505376344086023
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 93,
+     "p": 0.010752688172043012
+    },
+    "regret": {
+     "median": 100,
+     "q1": 50,
+     "q3": 100,
+     "mean": 75.25
+    },
+    "spentMedian": 39996,
+    "spentMax": 39996
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 64,
+     "n": 200,
+     "p": 0.32,
+     "ci": [
+      0.2592653327095053,
+      0.38751898489132125
+     ]
+    },
+    "successEps": {
+     "k": 123,
+     "n": 200,
+     "p": 0.615,
+     "ci": [
+      0.5459986716511277,
+      0.6796669032150108
+     ]
+    },
+    "none": {
+     "k": 76,
+     "n": 200,
+     "p": 0.38,
+     "ci": [
+      0.31559005800516143,
+      0.44893282039538956
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 14,
+     "n": 124,
+     "p": 0.11290322580645161
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 124,
+     "p": 0.008064516129032258
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 100,
+     "mean": 53.25
+    },
+    "spentMedian": 25000,
+    "spentMax": 25000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 15,
+     "n": 200,
+     "p": 0.075,
+     "ci": [
+      0.04597491700833055,
+      0.12004361066028794
+     ]
+    },
+    "successEps": {
+     "k": 53,
+     "n": 200,
+     "p": 0.265,
+     "ci": [
+      0.2086815410670056,
+      0.33017576246740693
+     ]
+    },
+    "none": {
+     "k": 147,
+     "n": 200,
+     "p": 0.735,
+     "ci": [
+      0.669824237532593,
+      0.7913184589329944
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 1,
+     "n": 53,
+     "p": 0.018867924528301886
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 53,
+     "p": 0
+    },
+    "regret": {
+     "median": 100,
+     "q1": 50,
+     "q3": 100,
+     "mean": 83
+    },
+    "spentMedian": 25000,
+    "spentMax": 25000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 121,
+     "n": 200,
+     "p": 0.605,
+     "ci": [
+      0.5358834910421801,
+      0.6701589903573376
+     ]
+    },
+    "successEps": {
+     "k": 185,
+     "n": 200,
+     "p": 0.925,
+     "ci": [
+      0.8799563893397121,
+      0.9540250829916694
+     ]
+    },
+    "none": {
+     "k": 3,
+     "n": 200,
+     "p": 0.015,
+     "ci": [
+      0.005114237753504754,
+      0.043165729115389295
+     ]
+    },
+    "trueViolation": {
+     "k": 12,
+     "n": 200,
+     "p": 0.06,
+     "ci": [
+      0.03465219410651454,
+      0.10193169336217282
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 35,
+     "n": 197,
+     "p": 0.17766497461928935
+    },
+    "trueViolationOfPicks": {
+     "k": 12,
+     "n": 197,
+     "p": 0.06091370558375635
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 50,
+     "mean": 23.5
+    },
+    "spentMedian": 39991,
+    "spentMax": 39991
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 28,
+     "n": 200,
+     "p": 0.14,
+     "ci": [
+      0.09866982605979482,
+      0.1948988091418585
+     ]
+    },
+    "successEps": {
+     "k": 112,
+     "n": 200,
+     "p": 0.56,
+     "ci": [
+      0.4907167528014922,
+      0.6270218079982324
+     ]
+    },
+    "none": {
+     "k": 87,
+     "n": 200,
+     "p": 0.435,
+     "ci": [
+      0.36815725451898934,
+      0.5042926379479759
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 5,
+     "n": 113,
+     "p": 0.04424778761061947
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 113,
+     "p": 0.008849557522123894
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 100,
+     "mean": 65
+    },
+    "spentMedian": 39991,
+    "spentMax": 39991
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 127,
+     "n": 200,
+     "p": 0.635,
+     "ci": [
+      0.5663170259754063,
+      0.6985947358239737
+     ]
+    },
+    "successEps": {
+     "k": 138,
+     "n": 200,
+     "p": 0.69,
+     "ci": [
+      0.6228282237882907,
+      0.7500105520775032
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 62,
+     "n": 200,
+     "p": 0.31,
+     "ci": [
+      0.2499894479224967,
+      0.37717177621170916
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 85,
+     "n": 200,
+     "p": 0.425
+    },
+    "trueViolationOfPicks": {
+     "k": 62,
+     "n": 200,
+     "p": 0.31
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 100,
+     "mean": 33.75
+    },
+    "spentMedian": 39993,
+    "spentMax": 39998
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 11,
+     "n": 200,
+     "p": 0.055,
+     "ci": [
+      0.03098534156570805,
+      0.09578699916966896
+     ]
+    },
+    "successEps": {
+     "k": 32,
+     "n": 200,
+     "p": 0.16,
+     "ci": [
+      0.11567412001614788,
+      0.2171407021187469
+     ]
+    },
+    "none": {
+     "k": 167,
+     "n": 200,
+     "p": 0.835,
+     "ci": [
+      0.777342184108311,
+      0.8800314470234837
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 4,
+     "n": 33,
+     "p": 0.12121212121212122
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 33,
+     "p": 0.030303030303030304
+    },
+    "regret": {
+     "median": 100,
+     "q1": 100,
+     "q3": 100,
+     "mean": 89.25
+    },
+    "spentMedian": 39993,
+    "spentMax": 39998
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "successEps": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "none": {
+     "k": 178,
+     "n": 200,
+     "p": 0.89,
+     "ci": [
+      0.8390730895663762,
+      0.9262275556318328
+     ]
+    },
+    "trueViolation": {
+     "k": 22,
+     "n": 200,
+     "p": 0.11,
+     "ci": [
+      0.07377244436816725,
+      0.16092691043362384
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 21,
+     "n": 22,
+     "p": 0.9545454545454546
+    },
+    "trueViolationOfPicks": {
+     "k": 22,
+     "n": 22,
+     "p": 1
+    },
+    "regret": {
+     "median": 100,
+     "q1": 100,
+     "q3": 100,
+     "mean": 100
+    },
+    "spentMedian": 39400,
+    "spentMax": 39400
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 40000,
+    "seeds": 200,
+    "pcs": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "successEps": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "none": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 0,
+     "n": 0,
+     "p": null
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 0,
+     "p": null
+    },
+    "regret": {
+     "median": 100,
+     "q1": 100,
+     "q3": 100,
+     "mean": 100
+    },
+    "spentMedian": 39400,
+    "spentMax": 39400
+   },
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 140,
+     "n": 200,
+     "p": 0.7,
+     "ci": [
+      0.6332093157249852,
+      0.7592525536074295
+     ]
+    },
+    "successEps": {
+     "k": 143,
+     "n": 200,
+     "p": 0.715,
+     "ci": [
+      0.6488465391585686,
+      0.7730499703737773
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 57,
+     "n": 200,
+     "p": 0.285,
+     "ci": [
+      0.22695002962622268,
+      0.35115346084143123
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 72,
+     "n": 200,
+     "p": 0.36
+    },
+    "trueViolationOfPicks": {
+     "k": 57,
+     "n": 200,
+     "p": 0.285
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 100,
+     "mean": 29.25
+    },
+    "spentMedian": 79992,
+    "spentMax": 79992
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 15,
+     "n": 200,
+     "p": 0.075,
+     "ci": [
+      0.04597491700833055,
+      0.12004361066028794
+     ]
+    },
+    "successEps": {
+     "k": 147,
+     "n": 200,
+     "p": 0.735,
+     "ci": [
+      0.669824237532593,
+      0.7913184589329944
+     ]
+    },
+    "none": {
+     "k": 53,
+     "n": 200,
+     "p": 0.265,
+     "ci": [
+      0.2086815410670056,
+      0.33017576246740693
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 5,
+     "n": 147,
+     "p": 0.034013605442176874
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 147,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 100,
+     "mean": 59.5
+    },
+    "spentMedian": 79992,
+    "spentMax": 79992
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 111,
+     "n": 200,
+     "p": 0.555,
+     "ci": [
+      0.4857330235838182,
+      0.6221939904825959
+     ]
+    },
+    "successEps": {
+     "k": 181,
+     "n": 200,
+     "p": 0.905,
+     "ci": [
+      0.8563983879055893,
+      0.9383368974925508
+     ]
+    },
+    "none": {
+     "k": 11,
+     "n": 200,
+     "p": 0.055,
+     "ci": [
+      0.03098534156570805,
+      0.09578699916966896
+     ]
+    },
+    "trueViolation": {
+     "k": 8,
+     "n": 200,
+     "p": 0.04,
+     "ci": [
+      0.0204056319610195,
+      0.0769320685744264
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 38,
+     "n": 189,
+     "p": 0.20105820105820105
+    },
+    "trueViolationOfPicks": {
+     "k": 8,
+     "n": 189,
+     "p": 0.042328042328042326
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 50,
+     "mean": 27
+    },
+    "spentMedian": 75000,
+    "spentMax": 75000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 27,
+     "n": 200,
+     "p": 0.135,
+     "ci": [
+      0.09446570427968658,
+      0.18929138418865638
+     ]
+    },
+    "successEps": {
+     "k": 109,
+     "n": 200,
+     "p": 0.545,
+     "ci": [
+      0.47578611318257474,
+      0.6125178074172186
+     ]
+    },
+    "none": {
+     "k": 91,
+     "n": 200,
+     "p": 0.455,
+     "ci": [
+      0.3874821925827813,
+      0.5242138868174252
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 4,
+     "n": 109,
+     "p": 0.03669724770642202
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 109,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 50,
+     "q3": 100,
+     "mean": 66
+    },
+    "spentMedian": 75000,
+    "spentMax": 75000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 149,
+     "n": 200,
+     "p": 0.745,
+     "ci": [
+      0.6803707412567906,
+      0.8003950486754174
+     ]
+    },
+    "successEps": {
+     "k": 191,
+     "n": 200,
+     "p": 0.955,
+     "ci": [
+      0.9167032956162879,
+      0.9761474571149557
+     ]
+    },
+    "none": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "trueViolation": {
+     "k": 7,
+     "n": 200,
+     "p": 0.035,
+     "ci": [
+      0.01705554191525804,
+      0.0704706118868775
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 30,
+     "n": 198,
+     "p": 0.15151515151515152
+    },
+    "trueViolationOfPicks": {
+     "k": 7,
+     "n": 198,
+     "p": 0.03535353535353535
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 50,
+     "mean": 15
+    },
+    "spentMedian": 79988,
+    "spentMax": 79988
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 64,
+     "n": 200,
+     "p": 0.32,
+     "ci": [
+      0.2592653327095053,
+      0.38751898489132125
+     ]
+    },
+    "successEps": {
+     "k": 152,
+     "n": 200,
+     "p": 0.76,
+     "ci": [
+      0.6962665896736326,
+      0.8139338404585067
+     ]
+    },
+    "none": {
+     "k": 48,
+     "n": 200,
+     "p": 0.24,
+     "ci": [
+      0.1860661595414933,
+      0.3037334103263674
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 6,
+     "n": 152,
+     "p": 0.039473684210526314
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 152,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 46
+    },
+    "spentMedian": 79988,
+    "spentMax": 79988
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 145,
+     "n": 200,
+     "p": 0.725,
+     "ci": [
+      0.6593166058798847,
+      0.7822029971190819
+     ]
+    },
+    "successEps": {
+     "k": 146,
+     "n": 200,
+     "p": 0.73,
+     "ci": [
+      0.66456564747098,
+      0.786765502261297
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 54,
+     "n": 200,
+     "p": 0.27,
+     "ci": [
+      0.2132344977387029,
+      0.33543435252902004
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 83,
+     "n": 200,
+     "p": 0.415
+    },
+    "trueViolationOfPicks": {
+     "k": 54,
+     "n": 200,
+     "p": 0.27
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 100,
+     "mean": 27.25
+    },
+    "spentMedian": 79992,
+    "spentMax": 79998
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 44,
+     "n": 200,
+     "p": 0.22,
+     "ci": [
+      0.1681653832242373,
+      0.2823879997103819
+     ]
+    },
+    "successEps": {
+     "k": 85,
+     "n": 200,
+     "p": 0.425,
+     "ci": [
+      0.3585361249314706,
+      0.4942906740688738
+     ]
+    },
+    "none": {
+     "k": 114,
+     "n": 200,
+     "p": 0.57,
+     "ci": [
+      0.5007048770948288,
+      0.6366567771715163
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 8,
+     "n": 86,
+     "p": 0.09302325581395349
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 86,
+     "p": 0.011627906976744186
+    },
+    "regret": {
+     "median": 100,
+     "q1": 50,
+     "q3": 100,
+     "mean": 67.75
+    },
+    "spentMedian": 79992,
+    "spentMax": 79998
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 136,
+     "n": 200,
+     "p": 0.68,
+     "ci": [
+      0.6124810151086787,
+      0.7407346672904946
+     ]
+    },
+    "successEps": {
+     "k": 136,
+     "n": 200,
+     "p": 0.68,
+     "ci": [
+      0.6124810151086787,
+      0.7407346672904946
+     ]
+    },
+    "none": {
+     "k": 53,
+     "n": 200,
+     "p": 0.265,
+     "ci": [
+      0.2086815410670056,
+      0.33017576246740693
+     ]
+    },
+    "trueViolation": {
+     "k": 11,
+     "n": 200,
+     "p": 0.055,
+     "ci": [
+      0.03098534156570805,
+      0.09578699916966896
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 37,
+     "n": 147,
+     "p": 0.25170068027210885
+    },
+    "trueViolationOfPicks": {
+     "k": 11,
+     "n": 147,
+     "p": 0.07482993197278912
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 100,
+     "mean": 32
+    },
+    "spentMedian": 80000,
+    "spentMax": 80000
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 80000,
+    "seeds": 200,
+    "pcs": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "successEps": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "none": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 1,
+     "n": 2,
+     "p": 0.5
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 2,
+     "p": 0
+    },
+    "regret": {
+     "median": 100,
+     "q1": 100,
+     "q3": 100,
+     "mean": 99
+    },
+    "spentMedian": 80000,
+    "spentMax": 80000
+   },
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 168,
+     "n": 200,
+     "p": 0.84,
+     "ci": [
+      0.782859297881253,
+      0.884325879983852
+     ]
+    },
+    "successEps": {
+     "k": 169,
+     "n": 200,
+     "p": 0.845,
+     "ci": [
+      0.7883930935816389,
+      0.8886036310167766
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 31,
+     "n": 200,
+     "p": 0.155,
+     "ci": [
+      0.11139636898322336,
+      0.21160690641836105
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 55,
+     "n": 200,
+     "p": 0.275
+    },
+    "trueViolationOfPicks": {
+     "k": 31,
+     "n": 200,
+     "p": 0.155
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 15.75
+    },
+    "spentMedian": 159996,
+    "spentMax": 159996
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 54,
+     "n": 200,
+     "p": 0.27,
+     "ci": [
+      0.2132344977387029,
+      0.33543435252902004
+     ]
+    },
+    "successEps": {
+     "k": 196,
+     "n": 200,
+     "p": 0.98,
+     "ci": [
+      0.9497129127599548,
+      0.9921955736378405
+     ]
+    },
+    "none": {
+     "k": 4,
+     "n": 200,
+     "p": 0.02,
+     "ci": [
+      0.007804426362159347,
+      0.05028708724004506
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 13,
+     "n": 196,
+     "p": 0.0663265306122449
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 196,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 37.5
+    },
+    "spentMedian": 159996,
+    "spentMax": 159996
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 154,
+     "n": 200,
+     "p": 0.77,
+     "ci": [
+      0.7069169558159164,
+      0.8229065677828437
+     ]
+    },
+    "successEps": {
+     "k": 186,
+     "n": 200,
+     "p": 0.93,
+     "ci": [
+      0.8859451907260929,
+      0.957847828338599
+     ]
+    },
+    "none": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "trueViolation": {
+     "k": 12,
+     "n": 200,
+     "p": 0.06,
+     "ci": [
+      0.03465219410651454,
+      0.10193169336217282
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 48,
+     "n": 198,
+     "p": 0.24242424242424243
+    },
+    "trueViolationOfPicks": {
+     "k": 12,
+     "n": 198,
+     "p": 0.06060606060606061
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 15
+    },
+    "spentMedian": 150000,
+    "spentMax": 150000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 61,
+     "n": 200,
+     "p": 0.305,
+     "ci": [
+      0.2453641558726048,
+      0.3719855215282907
+     ]
+    },
+    "successEps": {
+     "k": 161,
+     "n": 200,
+     "p": 0.805,
+     "ci": [
+      0.7445595557369519,
+      0.8539447949949808
+     ]
+    },
+    "none": {
+     "k": 39,
+     "n": 200,
+     "p": 0.195,
+     "ci": [
+      0.1460552050050192,
+      0.2554404442630482
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 6,
+     "n": 161,
+     "p": 0.037267080745341616
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 161,
+     "p": 0
+    },
+    "regret": {
+     "median": 50,
+     "q1": 0,
+     "q3": 50,
+     "mean": 44.5
+    },
+    "spentMedian": 150000,
+    "spentMax": 150000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 173,
+     "n": 200,
+     "p": 0.865,
+     "ci": [
+      0.8107086158113436,
+      0.9055342957203134
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 17,
+     "n": 200,
+     "p": 0.085
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 6.75
+    },
+    "spentMedian": 159991,
+    "spentMax": 159991
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 123,
+     "n": 200,
+     "p": 0.615,
+     "ci": [
+      0.5459986716511277,
+      0.6796669032150108
+     ]
+    },
+    "successEps": {
+     "k": 180,
+     "n": 200,
+     "p": 0.9,
+     "ci": [
+      0.8505941871160769,
+      0.9343295515487526
+     ]
+    },
+    "none": {
+     "k": 20,
+     "n": 200,
+     "p": 0.1,
+     "ci": [
+      0.06567044845124732,
+      0.14940581288392302
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 4,
+     "n": 180,
+     "p": 0.022222222222222223
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 180,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 50,
+     "mean": 24.25
+    },
+    "spentMedian": 159991,
+    "spentMax": 159991
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 155,
+     "n": 200,
+     "p": 0.775,
+     "ci": [
+      0.7122587671141067,
+      0.8273763032179636
+     ]
+    },
+    "successEps": {
+     "k": 155,
+     "n": 200,
+     "p": 0.775,
+     "ci": [
+      0.7122587671141067,
+      0.8273763032179636
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 45,
+     "n": 200,
+     "p": 0.225,
+     "ci": [
+      0.17262369678203637,
+      0.2877412328858932
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 67,
+     "n": 200,
+     "p": 0.335
+    },
+    "trueViolationOfPicks": {
+     "k": 45,
+     "n": 200,
+     "p": 0.225
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 22.5
+    },
+    "spentMedian": 159992,
+    "spentMax": 159998
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 110,
+     "n": 200,
+     "p": 0.55,
+     "ci": [
+      0.48075615084147033,
+      0.6173593164916334
+     ]
+    },
+    "successEps": {
+     "k": 157,
+     "n": 200,
+     "p": 0.785,
+     "ci": [
+      0.722976925984516,
+      0.8362812378141752
+     ]
+    },
+    "none": {
+     "k": 41,
+     "n": 200,
+     "p": 0.205,
+     "ci": [
+      0.15486176168906182,
+      0.2662569810456263
+     ]
+    },
+    "trueViolation": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 16,
+     "n": 159,
+     "p": 0.10062893081761007
+    },
+    "trueViolationOfPicks": {
+     "k": 2,
+     "n": 159,
+     "p": 0.012578616352201259
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 50,
+     "mean": 33.25
+    },
+    "spentMedian": 159992,
+    "spentMax": 159998
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 183,
+     "n": 200,
+     "p": 0.915,
+     "ci": [
+      0.8681041288487654,
+      0.9462542500159954
+     ]
+    },
+    "successEps": {
+     "k": 183,
+     "n": 200,
+     "p": 0.915,
+     "ci": [
+      0.8681041288487654,
+      0.9462542500159954
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 17,
+     "n": 200,
+     "p": 0.085,
+     "ci": [
+      0.05374574998400461,
+      0.13189587115123463
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 51,
+     "n": 200,
+     "p": 0.255
+    },
+    "trueViolationOfPicks": {
+     "k": 17,
+     "n": 200,
+     "p": 0.085
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 8.5
+    },
+    "spentMedian": 159800,
+    "spentMax": 159800
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 160000,
+    "seeds": 200,
+    "pcs": {
+     "k": 107,
+     "n": 200,
+     "p": 0.535,
+     "ci": [
+      0.46586646818343785,
+      0.6028143589497348
+     ]
+    },
+    "successEps": {
+     "k": 112,
+     "n": 200,
+     "p": 0.56,
+     "ci": [
+      0.4907167528014922,
+      0.6270218079982324
+     ]
+    },
+    "none": {
+     "k": 88,
+     "n": 200,
+     "p": 0.44,
+     "ci": [
+      0.3729781920017676,
+      0.5092832471985078
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 10,
+     "n": 112,
+     "p": 0.08928571428571429
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 112,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 100,
+     "mean": 45.25
+    },
+    "spentMedian": 159800,
+    "spentMax": 159800
+   },
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 183,
+     "n": 200,
+     "p": 0.915,
+     "ci": [
+      0.8681041288487654,
+      0.9462542500159954
+     ]
+    },
+    "successEps": {
+     "k": 183,
+     "n": 200,
+     "p": 0.915,
+     "ci": [
+      0.8681041288487654,
+      0.9462542500159954
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 17,
+     "n": 200,
+     "p": 0.085,
+     "ci": [
+      0.05374574998400461,
+      0.13189587115123463
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 50,
+     "n": 200,
+     "p": 0.25
+    },
+    "trueViolationOfPicks": {
+     "k": 17,
+     "n": 200,
+     "p": 0.085
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 8.5
+    },
+    "spentMedian": 319992,
+    "spentMax": 319992
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 131,
+     "n": 200,
+     "p": 0.655,
+     "ci": [
+      0.5867558920387631,
+      0.7174020566938584
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 14,
+     "n": 200,
+     "p": 0.07
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 50,
+     "mean": 17.25
+    },
+    "spentMedian": 319992,
+    "spentMax": 319992
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 183,
+     "n": 200,
+     "p": 0.915,
+     "ci": [
+      0.8681041288487654,
+      0.9462542500159954
+     ]
+    },
+    "successEps": {
+     "k": 183,
+     "n": 200,
+     "p": 0.915,
+     "ci": [
+      0.8681041288487654,
+      0.9462542500159954
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 17,
+     "n": 200,
+     "p": 0.085,
+     "ci": [
+      0.05374574998400461,
+      0.13189587115123463
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 63,
+     "n": 200,
+     "p": 0.315
+    },
+    "trueViolationOfPicks": {
+     "k": 17,
+     "n": 200,
+     "p": 0.085
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 8.5
+    },
+    "spentMedian": 300000,
+    "spentMax": 300000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 116,
+     "n": 200,
+     "p": 0.58,
+     "ci": [
+      0.5107207388477095,
+      0.6462640088852564
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 10,
+     "n": 200,
+     "p": 0.05
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 50,
+     "mean": 21
+    },
+    "spentMedian": 300000,
+    "spentMax": 300000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 189,
+     "n": 200,
+     "p": 0.945,
+     "ci": [
+      0.904213000830331,
+      0.9690146584342919
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 21,
+     "n": 200,
+     "p": 0.105
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 2.75
+    },
+    "spentMedian": 319988,
+    "spentMax": 319988
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 171,
+     "n": 200,
+     "p": 0.855,
+     "ci": [
+      0.7995133242038862,
+      0.8971064938611499
+     ]
+    },
+    "successEps": {
+     "k": 193,
+     "n": 200,
+     "p": 0.965,
+     "ci": [
+      0.9295293881131225,
+      0.9829444580847421
+     ]
+    },
+    "none": {
+     "k": 7,
+     "n": 200,
+     "p": 0.035,
+     "ci": [
+      0.01705554191525804,
+      0.0704706118868775
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 7,
+     "n": 193,
+     "p": 0.03626943005181347
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 193,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 9
+    },
+    "spentMedian": 319988,
+    "spentMax": 319988
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 186,
+     "n": 200,
+     "p": 0.93,
+     "ci": [
+      0.8859451907260929,
+      0.957847828338599
+     ]
+    },
+    "successEps": {
+     "k": 186,
+     "n": 200,
+     "p": 0.93,
+     "ci": [
+      0.8859451907260929,
+      0.957847828338599
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 14,
+     "n": 200,
+     "p": 0.07,
+     "ci": [
+      0.04215217166140097,
+      0.11405480927390717
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 54,
+     "n": 200,
+     "p": 0.27
+    },
+    "trueViolationOfPicks": {
+     "k": 14,
+     "n": 200,
+     "p": 0.07
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 7
+    },
+    "spentMedian": 319992,
+    "spentMax": 319996
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 183,
+     "n": 200,
+     "p": 0.915,
+     "ci": [
+      0.8681041288487654,
+      0.9462542500159954
+     ]
+    },
+    "successEps": {
+     "k": 195,
+     "n": 200,
+     "p": 0.975,
+     "ci": [
+      0.9428216592483453,
+      0.9892752804161398
+     ]
+    },
+    "none": {
+     "k": 5,
+     "n": 200,
+     "p": 0.025,
+     "ci": [
+      0.010724719583860124,
+      0.05717834075165468
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 14,
+     "n": 195,
+     "p": 0.07179487179487179
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 195,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 5.5
+    },
+    "spentMedian": 319992,
+    "spentMax": 319996
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 184,
+     "n": 200,
+     "p": 0.92,
+     "ci": [
+      0.8740105113029427,
+      0.9501594142951284
+     ]
+    },
+    "successEps": {
+     "k": 185,
+     "n": 200,
+     "p": 0.925,
+     "ci": [
+      0.8799563893397121,
+      0.9540250829916694
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 15,
+     "n": 200,
+     "p": 0.075,
+     "ci": [
+      0.04597491700833055,
+      0.12004361066028794
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 48,
+     "n": 200,
+     "p": 0.24
+    },
+    "trueViolationOfPicks": {
+     "k": 15,
+     "n": 200,
+     "p": 0.075
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 7.75
+    },
+    "spentMedian": 184988,
+    "spentMax": 184988
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 320000,
+    "seeds": 200,
+    "pcs": {
+     "k": 109,
+     "n": 200,
+     "p": 0.545,
+     "ci": [
+      0.47578611318257474,
+      0.6125178074172186
+     ]
+    },
+    "successEps": {
+     "k": 113,
+     "n": 200,
+     "p": 0.565,
+     "ci": [
+      0.4957073620520242,
+      0.6318427454810105
+     ]
+    },
+    "none": {
+     "k": 87,
+     "n": 200,
+     "p": 0.435,
+     "ci": [
+      0.36815725451898934,
+      0.5042926379479759
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 3,
+     "n": 113,
+     "p": 0.02654867256637168
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 113,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 100,
+     "mean": 44.5
+    },
+    "spentMedian": 184988,
+    "spentMax": 184988
+   },
+   {
+    "rule": "point",
+    "arm": "grid",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "successEps": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 49,
+     "n": 200,
+     "p": 0.245
+    },
+    "trueViolationOfPicks": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 1
+    },
+    "spentMedian": 639996,
+    "spentMax": 639996
+   },
+   {
+    "rule": "platform",
+    "arm": "grid",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 181,
+     "n": 200,
+     "p": 0.905,
+     "ci": [
+      0.8563983879055893,
+      0.9383368974925508
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 18,
+     "n": 200,
+     "p": 0.09
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 4.75
+    },
+    "spentMedian": 639996,
+    "spentMax": 639996
+   },
+   {
+    "rule": "point",
+    "arm": "random",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 178,
+     "n": 200,
+     "p": 0.89,
+     "ci": [
+      0.8390730895663762,
+      0.9262275556318328
+     ]
+    },
+    "successEps": {
+     "k": 178,
+     "n": 200,
+     "p": 0.89,
+     "ci": [
+      0.8390730895663762,
+      0.9262275556318328
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 22,
+     "n": 200,
+     "p": 0.11,
+     "ci": [
+      0.07377244436816725,
+      0.16092691043362384
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 56,
+     "n": 200,
+     "p": 0.28
+    },
+    "trueViolationOfPicks": {
+     "k": 22,
+     "n": 200,
+     "p": 0.11
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 11
+    },
+    "spentMedian": 300000,
+    "spentMax": 300000
+   },
+   {
+    "rule": "platform",
+    "arm": "random",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 113,
+     "n": 200,
+     "p": 0.565,
+     "ci": [
+      0.4957073620520242,
+      0.6318427454810105
+     ]
+    },
+    "successEps": {
+     "k": 198,
+     "n": 200,
+     "p": 0.99,
+     "ci": [
+      0.9642782379732652,
+      0.997253341891151
+     ]
+    },
+    "none": {
+     "k": 2,
+     "n": 200,
+     "p": 0.01,
+     "ci": [
+      0.0027466581088489593,
+      0.035721762026734716
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 11,
+     "n": 198,
+     "p": 0.05555555555555555
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 198,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 50,
+     "mean": 22.25
+    },
+    "spentMedian": 300000,
+    "spentMax": 300000
+   },
+   {
+    "rule": "point",
+    "arm": "halving",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 20,
+     "n": 200,
+     "p": 0.1
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 639991,
+    "spentMax": 639991
+   },
+   {
+    "rule": "platform",
+    "arm": "halving",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 196,
+     "n": 200,
+     "p": 0.98,
+     "ci": [
+      0.9497129127599548,
+      0.9921955736378405
+     ]
+    },
+    "successEps": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "none": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 14,
+     "n": 199,
+     "p": 0.07035175879396985
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 199,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 1.25
+    },
+    "spentMedian": 639991,
+    "spentMax": 639991
+   },
+   {
+    "rule": "point",
+    "arm": "ocba",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "successEps": {
+     "k": 199,
+     "n": 200,
+     "p": 0.995,
+     "ci": [
+      0.9722262953035721,
+      0.9991168312941546
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005,
+     "ci": [
+      0.0008831687058453758,
+      0.02777370469642793
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 46,
+     "n": 200,
+     "p": 0.23
+    },
+    "trueViolationOfPicks": {
+     "k": 1,
+     "n": 200,
+     "p": 0.005
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0.5
+    },
+    "spentMedian": 639992,
+    "spentMax": 639995
+   },
+   {
+    "rule": "platform",
+    "arm": "ocba",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "successEps": {
+     "k": 200,
+     "n": 200,
+     "p": 1,
+     "ci": [
+      0.9811546733310369,
+      0.9999999999999998
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 15,
+     "n": 200,
+     "p": 0.075
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 200,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 0
+    },
+    "spentMedian": 639992,
+    "spentMax": 639995
+   },
+   {
+    "rule": "point",
+    "arm": "ours",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 180,
+     "n": 200,
+     "p": 0.9,
+     "ci": [
+      0.8505941871160769,
+      0.9343295515487526
+     ]
+    },
+    "successEps": {
+     "k": 180,
+     "n": 200,
+     "p": 0.9,
+     "ci": [
+      0.8505941871160769,
+      0.9343295515487526
+     ]
+    },
+    "none": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "trueViolation": {
+     "k": 20,
+     "n": 200,
+     "p": 0.1,
+     "ci": [
+      0.06567044845124732,
+      0.14940581288392302
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 55,
+     "n": 200,
+     "p": 0.275
+    },
+    "trueViolationOfPicks": {
+     "k": 20,
+     "n": 200,
+     "p": 0.1
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 0,
+     "mean": 10
+    },
+    "spentMedian": 184988,
+    "spentMax": 184988
+   },
+   {
+    "rule": "platform",
+    "arm": "ours",
+    "budget": 640000,
+    "seeds": 200,
+    "pcs": {
+     "k": 115,
+     "n": 200,
+     "p": 0.575,
+     "ci": [
+      0.505709325931126,
+      0.6414638750685293
+     ]
+    },
+    "successEps": {
+     "k": 122,
+     "n": 200,
+     "p": 0.61,
+     "ci": [
+      0.5409374590206674,
+      0.6749165691121608
+     ]
+    },
+    "none": {
+     "k": 78,
+     "n": 200,
+     "p": 0.39,
+     "ci": [
+      0.3250834308878392,
+      0.4590625409793326
+     ]
+    },
+    "trueViolation": {
+     "k": 0,
+     "n": 200,
+     "p": 0,
+     "ci": [
+      0,
+      0.018845326668962936
+     ]
+    },
+    "reevalViolationOfPicks": {
+     "k": 8,
+     "n": 122,
+     "p": 0.06557377049180328
+    },
+    "trueViolationOfPicks": {
+     "k": 0,
+     "n": 122,
+     "p": 0
+    },
+    "regret": {
+     "median": 0,
+     "q1": 0,
+     "q3": 100,
+     "mean": 40.75
+    },
+    "spentMedian": 184988,
+    "spentMax": 184988
+   }
+  ]
+ },
+ "disagreements": {
+  "survival": 0,
+  "level": 0,
+  "level85": 0
+ }
+}
