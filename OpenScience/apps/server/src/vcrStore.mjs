@@ -1546,9 +1546,9 @@ export class VcrStore extends VcrStoreBase {
    * @param {string} studyId @param {string} kind @param {string | null} subjectId
    */
   async currentResultOf(studyId, kind, subjectId) {
-    return resultFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.results
+    return resultFromRow(await this.#permitted(await this.one(`SELECT * FROM ${VCR_SCHEMA}.results
       WHERE study_id = $1 AND kind = $2 AND subject_id IS NOT DISTINCT FROM $3 AND superseded_by IS NULL
-      ORDER BY version DESC LIMIT 1`, [studyId, kind, subjectId ?? null]));
+      ORDER BY version DESC LIMIT 1`, [studyId, kind, subjectId ?? null])));
   }
 
   /**
@@ -1573,13 +1573,13 @@ export class VcrStore extends VcrStoreBase {
    * @param {string} studyId @param {string} jobId
    */
   async resultOfJob(studyId, jobId) {
-    return resultFromRow(await this.one(`SELECT r.* FROM ${VCR_SCHEMA}.results r JOIN ${VCR_SCHEMA}.executions e ON e.id = r.execution_id
-      WHERE r.study_id = $1 AND e.job_id = $2 ORDER BY r.created_at DESC, r.version DESC LIMIT 1`, [studyId, jobId]));
+    return resultFromRow(await this.#permitted(await this.one(`SELECT r.* FROM ${VCR_SCHEMA}.results r JOIN ${VCR_SCHEMA}.executions e ON e.id = r.execution_id
+      WHERE r.study_id = $1 AND e.job_id = $2 ORDER BY r.created_at DESC, r.version DESC LIMIT 1`, [studyId, jobId])));
   }
 
   /** @param {string} studyId @param {string} id */
   async result(studyId, id) {
-    return resultFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND id = $2`, [studyId, id]));
+    return resultFromRow(await this.#permitted(await this.one(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND id = $2`, [studyId, id])));
   }
 
   /**
@@ -1588,22 +1588,50 @@ export class VcrStore extends VcrStoreBase {
    * their own experiment, and here only when asked for by kind. @param {string} studyId @param {string | null} [kind]
    */
   async results(studyId, kind = null) {
-    const rows = await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results
+    const rows = await this.#inLineage(await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results
       WHERE study_id = $1 AND superseded_by IS NULL AND ($2::text IS NULL OR kind = $2) AND kind <> $3 AND ($2::text IS NOT NULL OR kind <> $4)
-      ORDER BY created_at DESC LIMIT 200`, [studyId, kind, VCR_COMPARISON_RESULT_KIND, VCR_EXPERIMENT_CANDIDATE_KIND]);
+      ORDER BY created_at DESC LIMIT 200`, [studyId, kind, VCR_COMPARISON_RESULT_KIND, VCR_EXPERIMENT_CANDIDATE_KIND]));
     return rows.map(resultFromRow);
   }
 
   /** Every result of a study including superseded ones (the package's history), design-search candidates aside. @param {string} studyId */
   async allResults(studyId) {
-    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND kind <> $2 AND kind <> $3 ORDER BY created_at DESC LIMIT 500`,
-      [studyId, VCR_COMPARISON_RESULT_KIND, VCR_EXPERIMENT_CANDIDATE_KIND])).map(resultFromRow);
+    return (await this.#inLineage(await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND kind <> $2 AND kind <> $3 ORDER BY created_at DESC LIMIT 500`,
+      [studyId, VCR_COMPARISON_RESULT_KIND, VCR_EXPERIMENT_CANDIDATE_KIND]))).map(resultFromRow);
   }
 
   /** The result one execution wrote, whatever its kind. @param {string} studyId @param {string} executionId */
   async resultForExecution(studyId, executionId) {
-    return resultFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND execution_id = $2 ORDER BY created_at DESC LIMIT 1`,
-      [studyId, String(executionId)]));
+    return resultFromRow(await this.#permitted(await this.one(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND execution_id = $2 ORDER BY created_at DESC LIMIT 1`,
+      [studyId, String(executionId)])));
+  }
+
+  /** One result row through the same lineage judgement, or null. @param {any} row */
+  async #permitted(row) { return row ? (await this.#inLineage([row]))[0] ?? null : null; }
+
+  /**
+   * A result made from patient-derived forecasts carries that lineage on the job that wrote it (`checkpoint.forecastLineage`), and every
+   * read of the result judges it again with the one check the artifacts use (`longitudinalGuard`): a result whose snapshot, source grant
+   * or field binding is gone is not served, whatever stored summary it holds. Rows with no such job pass untouched, in one query.
+   * @template {{ id: string, study_id: string }} T @param {T[]} rows @returns {Promise<T[]>}
+   */
+  async #inLineage(rows) {
+    if (!this.longitudinalGuard || !rows.length) return rows;
+    const held = await this.rows(`SELECT r.id, j.checkpoint->'forecastLineage' AS lineage FROM ${VCR_SCHEMA}.results r
+      JOIN ${VCR_SCHEMA}.executions e ON e.id = r.execution_id JOIN ${VCR_SCHEMA}.jobs j ON j.id = e.job_id
+      WHERE r.id = ANY($1::text[]) AND j.checkpoint ? 'forecastLineage'`, [rows.map((row) => String(row.id))]);
+    if (!held.length) return rows;
+    const lineage = new Map(held.map((row) => [String(row.id), object(row.lineage)]));
+    const denied = new Set();
+    for (const studyId of new Set(rows.filter((row) => lineage.has(String(row.id))).map((row) => String(row.study_id)))) {
+      const pseudo = rows.filter((row) => String(row.study_id) === studyId && lineage.has(String(row.id))).map((row) => {
+        const found = /** @type {Record<string, any>} */ (lineage.get(String(row.id)));
+        return { id: String(row.id), snapshot_ids: list(found.snapshotIds), source_ids: list(found.sourceIds), bindings: list(found.bindings) };
+      });
+      const allowed = await this.longitudinalGuard(studyId, pseudo, null);
+      for (const row of pseudo) if (!allowed.has(row.id)) denied.add(row.id);
+    }
+    return denied.size ? rows.filter((row) => !denied.has(String(row.id))) : rows;
   }
 
   // --- forecasts (AC-23) ---------------------------------------------------------------

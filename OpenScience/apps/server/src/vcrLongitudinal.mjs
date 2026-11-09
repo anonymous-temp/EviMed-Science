@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import {
   vcrResultOutputPayload, eventsFromMappedTable, replayClinicalEvents, longitudinalReadiness,
   validateForecast, validateLongitudinalScenario, VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_LIMITS, VCR_LONGITUDINAL_SCHEMAS,
-  compareForecasts, forecastDesignInputs, longitudinalSubjects, strictestDataClass,
+  compareForecasts, forecastDesignInputs, longitudinalSubjects, strictestDataClass, VCR_MIN_CELL_SIZE,
 } from '@evimed/domain';
 import { parseTable, studyPseudonymKey, pseudonymOf } from './vcrDataPlane.mjs';
 import { VcrLongitudinalStore, longitudinalHash, longitudinalArtifactView } from './vcrLongitudinalStore.mjs';
@@ -419,15 +419,20 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       const a = forecastDesignInputs({...first.content,rows:treatmentRows}).find((/** @type {any} */ r) => r.horizonDays === input.horizonDays);
       const b = forecastDesignInputs({...second.content,rows:controlRows}).find((/** @type {any} */ r) => r.horizonDays === input.horizonDays);
       if (!a || !b || a.mean == null || b.mean == null) return {available:false,code:'forecast_horizon_missing'};
+      // People below the deployment's small-cell threshold are not a design a reader may take from patient-derived forecasts: refused with
+      // its reason, every other result kept. A synthetic class is not a patient disclosure and keeps its small designs.
+      const configured = Number(config.vcrMinCellSize);
+      const minCell = Number.isInteger(configured) && configured > VCR_MIN_CELL_SIZE ? configured : VCR_MIN_CELL_SIZE;
+      if (strictestDataClass(first.content,second.content) !== 'synthetic' && pairedSubjects.size < minCell) return {available:false,code:'forecast_design_below_small_cell'};
       const binary = ['risk','survival_probability'].includes(a.type);
       if (!binary && a.type !== 'continuous') return {available:false,code:'forecast_rate_not_binary_risk'};
       if (!binary && (a.outcomeVariance == null || b.outcomeVariance == null)) return {available:false,code:'predictive_outcome_variance_missing'};
       const truth = binary ? {controlRate:b.type === 'risk' ? b.mean : 1-b.mean,treatmentRate:a.type === 'risk' ? a.mean : 1-a.mean}
         : {effect:a.mean-b.mean,sd:Math.sqrt((Number(a.outcomeVariance)+Number(b.outcomeVariance))/2)};
-      let prognostic = null, validation = null;
+      let prognostic = null, validation = null, validatedPrediction = null;
       if (input.prognosticEvaluationId) {
         validation = await artifacts.read(study,input.prognosticEvaluationId,actor);
-        const validatedPrediction = validation.row.parent_id ? await artifacts.read(study,validation.row.parent_id,actor) : null;
+        validatedPrediction = validation.row.parent_id ? await artifacts.read(study,validation.row.parent_id,actor) : null;
         const group = validation.content.groups?.find((/** @type {any} */ r) => r.horizonDays === input.horizonDays);
         const correlation = group?.metrics?.correlation?.value;
         if (validation.row.kind !== 'evaluation' || !validatedPrediction || longitudinalHash(validatedPrediction.content.model) !== longitudinalHash(first.content.model)
@@ -442,10 +447,14 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
           horizonDays:input.horizonDays,validation:validation?.row.id ?? null,randomizationAt:input.randomizationAt ?? null})}`,
         scenario:{design:{...(prognostic ? {} : {kind:'two_arm_fixed'}),allocation:input.allocation ?? .5},endpoint:{type:binary ? 'binary' : 'continuous'},truth,
           analysis:{alpha:input.alpha ?? .05,power:input.power ?? .9,sided:2},...(prognostic ? {prognostic} : {})},
-        // Analytic design reads the frozen truth in its scenario, not a patient
-        // file. The source forecasts and hashes remain in the job's checkpoint.
+        // Analytic design reads the frozen truth in its scenario, not a patient file, so the engine is given no input. What the truth was
+        // made from is the job's lineage (every snapshot, source and field binding of the predictions, the history and the validation it
+        // read): it rides in the checkpoint and the store judges it again on every read of this job's result (`resultLineageGuard`).
         inputs:[],
-        detail:{forecastInputs:[{id:first.row.id,hash:first.row.sha256},{id:second.row.id,hash:second.row.sha256}],
+        detail:{forecastLineage:(({snapshotIds,sourceIds,bindings}) => ({snapshotIds,sourceIds,bindings,
+            dataClass:strictestDataClass(first.content,second.content)}))(lineageOf([first.row,second.row,...(validation ? [validation.row] : []),
+            ...(validatedPrediction ? [validatedPrediction.row] : [])],null)),
+          forecastInputs:[{id:first.row.id,hash:first.row.sha256},{id:second.row.id,hash:second.row.sha256}],
           variance:{treatment:a,control:b},
           interpretation:'model_scenario_design',horizonDays:input.horizonDays,pairedSubjects:pairedSubjects.size,parameterUncertainty:'not_estimated',
           ...(validation ? {validation:{id:validation.row.id,hash:validation.row.sha256,dataClass:validation.content.dataClass,
