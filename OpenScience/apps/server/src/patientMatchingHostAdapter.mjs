@@ -32,23 +32,37 @@ export const INITIAL_EVIDENCE_CHARACTERS = WINDOW_CHARACTERS;
 export const EVIDENCE_QUERIES_MAX = 8;
 export const EVIDENCE_LIMIT_MAX = 50;
 
-/** @param {{vcr:any,documents:any,config?:any,modelPorts?:any,indexPorts?:any,calculate?:any,writeArtifact?:any,onPending?:any,onCancel?:any,knowledge?:any,discover?:any,evidenceEmbed?:((texts:string[])=>Promise<number[][]>)|null}} dependencies */
+/** @param {{vcr:any,documents:any,config?:any,modelPorts?:any,indexPorts?:any,calculate?:any,writeArtifact?:any,onPending?:any,onCancel?:any,knowledge?:any,discover?:any,evidenceEmbed?:((texts:string[],context?:any)=>Promise<number[][]>)|null}} dependencies */
 export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, modelPorts = null, indexPorts = null, calculate = calculateClinicalScore, writeArtifact = null, onPending = null, onCancel = null, knowledge = null, discover = null, evidenceEmbed = null }) {
   const repository = new PatientMatchingRepository(documents);
   const targets = judgmentTargets({ evidence: vcr.evidence, matchStore: vcr.matchStore, pages: vcr.registryPages });
   const modelProfile = config.patientMatchingProfile ?? patientMatchingConfiguration(config);
   if(modelProfile.reasoningModel!=='deepseek-flash'||modelProfile.proEscalation!==false)throw new HttpError(503,'patient_matching_flash_required','Patient matching requires DeepSeek V4.1 Flash.');
   // The managed child names the provider the production kernel mounts; `deepseek` had no adapter there (replay, 2026-11-08: NO_ADAPTER).
-  const reasoning = Object.freeze({ provider: KERNEL_DEEPSEEK_PROVIDER, model: modelProfile.reasoningModel, reasoningEffort: 'high', maxTokens: 16000 });
+  // Thinking effort of the clinical child: the provider accepts low, high and max; high unless the deployment sets low.
+  const reasoningEffort = config.patientMatchingReasoningEffort === 'low' ? 'low' : 'high';
+  const reasoning = Object.freeze({ provider: KERNEL_DEEPSEEK_PROVIDER, model: modelProfile.reasoningModel, reasoningEffort, maxTokens: 16000 });
   const profileDigest = profileIdentity({ modelProfile, reasoning });
   const evidenceLedgers=new Map();
   // One search index per patient revision; the dense channel (embedder given and patientMatchingEvidenceDense on) is off by default.
   const recordIndexes=new LruCache(32);
-  const denseOn=config.patientMatchingEvidenceDense===true&&typeof evidenceEmbed==='function';
-  /** The dense channel: the sentences of the five chunks nearest the phrasings, in chunk order. */
-  async function denseSentenceRanking(/** @type {any} */ index,/** @type {string[]} */ queries){
+  // The embedder: one given directly (tests, replays), else the server's paid embedding port, called under the task's own envelope so
+  // the request is authorized against the patient's current sources and booked like every other matching model call.
+  const embedder=typeof evidenceEmbed==='function'?evidenceEmbed:typeof modelPorts?.embed==='function'?async(/** @type {string[]} */ texts,/** @type {any} */ context)=>{
+    const vectors=[],batch=Number(modelPorts.embeddingBatchSize)||20;
+    for(let at=0;at<texts.length;at+=batch){
+      const result=await modelPorts.embed({scope:context.scope,origin:context.origin,signal:context.origin?.signal,input:{taskId:context.taskId,texts:texts.slice(at,at+batch).map(text=>text.slice(0,30000)),patientSources:context.patientSources}});
+      if(result?.status!=='complete'||!Array.isArray(result.data?.vectors))throw new Error(result?.data?.code??'patient_matching_embedding_failed');
+      vectors.push(...result.data.vectors);
+    }
+    return vectors;
+  }:null;
+  const denseOn=config.patientMatchingEvidenceDense===true&&typeof embedder==='function';
+  /** The dense channel: the sentences of the five chunks nearest the phrasings, in chunk order. Fails open to BM25 alone. */
+  async function denseSentenceRanking(/** @type {any} */ index,/** @type {string[]} */ queries,/** @type {any} */ context){
     const position=new Map(index.passages.map((/** @type {any} */ item,/** @type {number} */ at)=>[item.evidenceId,at]));
-    return (await denseChunkRanking(index,queries,/** @type {any} */ (evidenceEmbed))).slice(0,5).flatMap(at=>index.chunks[at].evidenceIds.map((/** @type {string} */ eid)=>position.get(eid)));
+    try { return (await denseChunkRanking(index,queries,texts=>/** @type {any} */ (embedder)(texts,context))).slice(0,5).flatMap(at=>index.chunks[at].evidenceIds.map((/** @type {string} */ eid)=>position.get(eid))); }
+    catch { return null; }
   }
   function indexOf(subjectKey,person){
     const key=`${subjectKey}:${person.note.hash}`;
@@ -456,7 +470,7 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
         let found;
         if(!queries.length)found=person.passages.filter(matches).slice(0,limit);
         else{
-          const extraRankings=denseOn?[await denseSentenceRanking(index,queries)]:[];
+          const dense=denseOn?await denseSentenceRanking(index,queries,{scope,origin,taskId:meta.taskId,patientSources:person.sources??[]}):null,extraRankings=dense?[dense]:[];
           found=/** @type {any[]} */ (searchRecordIndex(index,queries,{limit:index.passages.length,unit:'sentence',extraRankings})).filter(matches).slice(0,limit);
         }
         await recordReads(study,person,found);

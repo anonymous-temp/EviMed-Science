@@ -218,8 +218,8 @@ const cosine = (/** @type {number[]} */ a, /** @type {number[]} */ b) => {
   return na && nb ? dot / Math.sqrt(na * nb) : 0;
 };
 /** A ranked list of chunk positions by cosine similarity to the queries (best query score per chunk). Chunk vectors are cached
- * on the index, so they are computed once per patient revision. TODO: the server does not wire an embedder into the adapter yet
- * (`evidenceEmbed`), so this channel stays off in production.
+ * on the index, so they are computed once per patient revision. The server's embedder is the paid matching embedding port; the
+ * channel runs when `patientMatchingEvidenceDense` is on.
  * @param {ReturnType<typeof buildRecordIndex>} index @param {string[]} queries @param {(texts:string[])=>Promise<number[][]>} embed */
 export async function denseChunkRanking(index, queries, embed) {
   if (!index.chunkVectors) {

@@ -24,7 +24,7 @@ function validatePrepared(value, scope, expected = {}) {
   requireValue(/^sha256:[a-f0-9]{64}$/.test(value.profileDigest), 'Missing trusted reasoning profile digest')
   if (expected.executionId) requireValue(value.executionId === expected.executionId && value.profileDigest === expected.profileDigest && contentDigest(canonicalJson(value.task)) === expected.taskDigest, 'Frozen execution changed during native assessment')
   const r = value.reasoning
-  requireValue(r && Object.keys(r).every(key => ['provider', 'model', 'reasoningEffort', 'maxTokens'].includes(key)) && r.provider === NATIVE_DEEPSEEK_PROVIDER && r.model === 'deepseek-flash' && ['low', 'medium', 'high'].includes(r.reasoningEffort) && Number.isSafeInteger(r.maxTokens) && r.maxTokens >= 256 && r.maxTokens <= 32768, 'Only the trusted DeepSeek Flash reasoning profile is permitted')
+  requireValue(r && Object.keys(r).every(key => ['provider', 'model', 'reasoningEffort', 'maxTokens'].includes(key)) && r.provider === NATIVE_DEEPSEEK_PROVIDER && r.model === 'deepseek-flash' && ['low', 'high'].includes(r.reasoningEffort) && Number.isSafeInteger(r.maxTokens) && r.maxTokens >= 256 && r.maxTokens <= 32768, 'Only the trusted DeepSeek Flash reasoning profile is permitted')
   requireValue(value.outputSchema?.type === 'object' && value.outputSchema?.properties?.decisions?.type === 'array', 'Missing structured decision response schema')
   return value
 }

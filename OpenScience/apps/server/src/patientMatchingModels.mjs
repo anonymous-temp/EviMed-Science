@@ -62,8 +62,17 @@ const PROFILE_INSTRUCTIONS = [
   'Answer one JSON object: {"profile": "<the text>", "age": <the patient\'s age in years as a number, or null if the record does not state it>, "sex": <"male" | "female" | null>}.',
 ].join('\n');
 
+/**
+ * The profile request's messages for a record's passages (oldest first): the newest 60,000 characters, identifiers masked. Exported so the
+ * board that measures what the summary keeps sends exactly what discovery sends. @param {unknown[]} passages
+ */
+export function profileMessages(passages) {
+  const record = maskIdentifiers(newestWindow((passages ?? []).map((text) => ({ text: String(text ?? '') })), PROFILE_INPUT_CHARS));
+  return record.trim() ? [{ role: 'system', content: PROFILE_INSTRUCTIONS }, { role: 'user', content: record }] : null;
+}
+
 /** The answer's JSON, read defensively: a fenced or wrapped object is still found, a missing field is null. @param {unknown} content */
-function profileAnswer(content) {
+export function profileAnswer(content) {
   const raw = typeof content === 'string' ? content : '';
   const start = raw.indexOf('{'), end = raw.lastIndexOf('}');
   let parsed = null;
@@ -186,15 +195,15 @@ export function createPatientMatchingModelPorts({ config, usageLedger = null, au
      */
     async profile(/** @type {any} */ envelope) {
       try {
-        const record = maskIdentifiers(newestWindow((envelope.input.passages ?? []).map((/** @type {any} */ text) => ({ text: String(text ?? '') })), PROFILE_INPUT_CHARS));
-        if (!record.trim()) throw failure('patient_matching_profile_input_invalid');
+        const messages = profileMessages(envelope.input.passages ?? []);
+        if (!messages) throw failure('patient_matching_profile_input_invalid');
         const origin = new URL(config.deepseekBaseUrl ?? 'https://api.deepseek.com').origin;
         const actor = await authorize(envelope, { destination: origin, operation: 'profile' });
         if (!actor?.userId || actor.projectId !== envelope.scope.projectId || actor.userId !== envelope.scope.actorId) throw failure('patient_matching_model_access_denied');
         const response = await callModelImpl({ config, usageLedger, fetchImpl }, { userId: actor.userId, projectId: actor.projectId, runId: actor.runId ?? null,
           purpose: 'kernel', operation: 'patient-matching-profile', taskId: envelope.input.taskId ?? undefined, module: 'patient-matching', signal: envelope.signal,
           body: { model: 'deepseek-flash', thinking: { type: 'disabled' }, temperature: 0, max_tokens: 1200, response_format: { type: 'json_object' },
-            messages: [{ role: 'system', content: PROFILE_INSTRUCTIONS }, { role: 'user', content: record }] } });
+            messages } });
         const answer = profileAnswer(response?.choices?.[0]?.message?.content);
         if (!answer) throw failure('patient_matching_profile_invalid');
         return reply('complete', 'Patient profile summary completed.', { ...answer, model: 'deepseek-flash' });
