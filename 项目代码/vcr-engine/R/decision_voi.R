@@ -332,6 +332,11 @@ vcr_job_decision_voi <- function(job, ...) {
     labels <- p$labels
     Phi <- do.call(cbind, lapply(uncertain, function(r) rep_len(vals[[r]], S))); colnames(Phi) <- uncertain
     if (identical(p$utility, "success_probability") && unit == "") unit <- "概率"
+    # Live R39 (2026-11-09): a go/no-go question stated on the success-probability scale answered EVPI 0 (a trial always beats the zero of "no trial"), and the
+    # agent then worked out a value of information of its own. The result says why, in the one place the agent reads it.
+    if (identical(p$utility, "success_probability") && any(p$n == 0)) {
+      assumed <- c(assumed, list(list(key = "utility.noTrial", value = "not running the trial is worth 0 on a success-probability scale, so any trial beats it and no input can change that; for a go/no-go decision state successValue and costPerPatient (utility net_benefit)", basis = "default")))
+    }
     assumed <- c(assumed, list(
       list(key = "inputs.independent", value = "independent", basis = "default"),
       list(key = "model.dropoutShare", value = "analysed people only", basis = "default"),

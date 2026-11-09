@@ -146,7 +146,12 @@ function cardOf(result, staleMark) {
   // the input the engine named as the next step (the best single input), not whichever row happens to lead the table
   const top = inputs.find((row) => row.key === next.input) ?? inputs[0] ?? null;
   const lead = next.kind === "none" || !top
-    ? (evpi !== null && evpi <= 1e-9 ? "在这些假设下，弄清任何一个输入都不会改变现在的选择。" : null)
+    ? (evpi !== null && evpi <= 1e-9
+      // a go/no-go stated as the chance of success has no cost to weigh it against: any trial beats not running one, whatever is learnt
+      ? (given.utility === "success_probability" && options.some((option) => numeric(option.nPerArm) === 0)
+        ? "在这些假设下，弄清任何一个输入都不会改变现在的选择：收益只算成功概率时，做试验总比不做好。要看“做不做”，请写出成功的价值和每人成本，按净收益再算。"
+        : "在这些假设下，弄清任何一个输入都不会改变现在的选择。")
+      : null)
     : `按这张表，最值得先弄清的是“${top.label}”${top.share === null ? "" : `（约占完全信息价值的 ${plain(top.share)}%）`}${next.study ? `；在你列出的研究里，“${String(next.study)}”价值最大` : ""}。这一步划不划算要看它的成本，由你决定。`;
   const failures = list(voi.failures).map(object);
   const limited = result.conclusion === "limited" || list(object(result.diagnostics).issues).some((issue) => object(issue).code === "cpu_budget_exhausted")

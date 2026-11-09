@@ -83,3 +83,17 @@ test("a result that is not of this kind, or has no options, is no card; a limite
   assert.match(limited.limited, /预算在算完所有输入之前用完了/);
   assert.equal(cardOf("two-arm").limited, null);
 });
+
+test("a go/no-go on the success-probability scale with an option of no trial says why nothing is worth learning, and what to state instead", () => {
+  // live R39 (2026-11-09): the result read EVPI 0 and the conversation then worked out a value of information of its own
+  const base = fixture("two-arm");
+  const diagnostics = structuredClone(base.diagnostics);
+  diagnostics.voi.given = { ...diagnostics.voi.given, utility: "success_probability", successValue: null, costPerPatient: null };
+  diagnostics.voi.next = { kind: "none" };
+  const measures = base.measures.map((m) => (m.name === "voi_evpi" ? { ...m, value: 0 } : m));
+  const options = diagnostics.voi.options.some((o) => o.nPerArm === 0) ? diagnostics.voi.options : [{ label: "no_trial", nPerArm: 0, chosen: false, expectedUtility: { name: "expected_utility", value: 0 } }, ...diagnostics.voi.options];
+  diagnostics.voi.options = options;
+  const card = cardOf("two-arm", { diagnostics, measures });
+  assert.match(card.lead, /成功的价值和每人成本/);
+  assert.match(card.lead, /做试验总比不做好/);
+});
