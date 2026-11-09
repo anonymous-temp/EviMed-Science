@@ -399,8 +399,8 @@ export const MEASURE_META = Object.freeze({
   expected_utility: { label: "期望收益" },
   voi_threshold: { label: "最优选择改变时这个输入的取值" },
   // the published PBPK model of an oral drug after a perpetrator (pk_interaction): exposures in the model's own units, ratios and enzyme activities as multiples
-  victim_auc_alone: { label: "单用时的曲线下面积", unit: "ng/mL·h" },
-  victim_auc_with_perpetrator: { label: "合用后的曲线下面积", unit: "ng/mL·h" },
+  victim_auc_alone: { label: "单用时的曲线下面积", unit: "ng·h/mL" },
+  victim_auc_with_perpetrator: { label: "合用后的曲线下面积", unit: "ng·h/mL" },
   auc_ratio: { label: "曲线下面积之比（合用 ÷ 单用）", unit: "倍" },
   victim_cmax_alone: { label: "单用时的峰浓度", unit: "ng/mL" },
   victim_cmax_with_perpetrator: { label: "合用后的峰浓度", unit: "ng/mL" },
@@ -638,10 +638,12 @@ export const MEASURE_META = Object.freeze({
 export const TIME_UNIT_WORDS = Object.freeze(/** @type {Record<string, { after: string, bare: string }>} */ ({
   days: { after: "天", bare: "天" }, weeks: { after: "周", bare: "周" }, months: { after: "个月", bare: "月" }, years: { after: "年", bare: "年" },
 }));
-/** The unit words the engine and the platform write, said in Chinese: the time units by their table, their singular forms, and the percent sign. */
+/** The unit words the engine and the platform write, said in Chinese: the time units by their table, their singular forms, the percent sign, a score's points and the PBPK concentration units. */
 const UNIT_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
   ...Object.fromEntries(Object.entries(TIME_UNIT_WORDS).map(([unit, words]) => [unit, words.after])),
   month: TIME_UNIT_WORDS.months.after, day: TIME_UNIT_WORDS.days.after, "%": "%",
+  // a score's unit as the parameter file's endpoint.unit spells it, and the PBPK engine's concentration and area under the curve
+  points: "分", "ng/mL": "ng/mL", "ng/mL*h": "ng·h/mL",
 }));
 /** A unit as a page says it: an English unit word of the engine's or the platform's in Chinese, any other spelling as it was written. @param {string | null} unit */
 export const zhUnit = (unit) => (unit === null ? null : UNIT_WORDS[unit] ?? unit);

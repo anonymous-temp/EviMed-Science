@@ -2686,6 +2686,7 @@
   "doseDesigns": [],
   "bayesianDesigns": [],
   "winRatioDesigns": [],
+  "valueOfInformation": [],
   "milestones": [
     {
       "design": "A",

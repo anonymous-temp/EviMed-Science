@@ -268,7 +268,9 @@ test("every unit the engine writes has a reading: its one percentage says so, an
   // The walk proves it walked: the units `vcr_patient_summary` writes are found — a percentage and a count as literals, a duration as the unit's word.
   // Plus the calendar year of the enrolment-year row (D6): a label on a diagnostic row of the comparator, which names the unit of the years
   // it prints and is never a measure; a percent format refuses it like every unit that is not "%" (the loop below).
-  assert.deepEqual([...literals].sort(), ["%", "calendar year", "例", "天", "周", "月", "年"].sort(), "a unit the engine now writes that the renderer has never been told about");
+  // Plus the PBPK engine's two concentration units (H3: a concentration and an area under the curve, read by `zhUnit`). A score's unit is never a
+  // literal here: it is the parameter file's endpoint.unit.
+  assert.deepEqual([...literals].sort(), ["%", "calendar year", "ng/mL", "ng/mL*h", "例", "天", "周", "月", "年"].sort(), "a unit the engine now writes that the renderer has never been told about");
   assert.ok(scaledToPercent.length >= 1, "the scan found the summary that stores a percentage");
   for (const line of scaledToPercent) assert.match(line, /unit\s*=\s*"%"/, `a value stored as a percentage must say so: ${line}`);
   // Every literal unit: a percentage is printed as it stands, anything else is refused by a percent format.

@@ -170,7 +170,7 @@ vcr_mechanism_suvr <- function(times, t0, mg, hours, pk, pd, hmax = .VCR_MECH_ST
 #' covariance, the clinical link and its inversion into the disease-modifying share. `begin`, `end` are the dosing window in study weeks, `visits` the schedule,
 #' `placebo` and `dropout` the study's, which the inversion is calculated under. Returns the effect spec R25 draws from, a report and the sentences of the
 #' result's limits.
-vcr_mechanism_chain <- function(mech, par, begin, end, visits, placebo, dropout, seed = 1L, individuals = 400L) {
+vcr_mechanism_chain <- function(mech, par, begin, end, visits, placebo, dropout, seed = 1L, individuals = 400L, score_unit = NULL) {
   drug <- as.character(mech[["drug"]] %||% "")
   spec <- .VCR_MECH_DRUGS[[drug]]
   if (is.null(spec)) vcr_abort("scenario_value_invalid", "scenario.treatment.mechanism.drug", "The mechanism chain carries aducanumab and lecanemab.")
@@ -231,7 +231,7 @@ vcr_mechanism_chain <- function(mech, par, begin, end, visits, placebo, dropout,
     people = list(n = individuals, suvrChangeMean = s("suvr_change_mean", -mean(delta_n), stats::sd(delta_n) / sqrt(individuals)),
                   suvrChangeP05 = s("suvr_change_p05", q(-delta_n, 0.05), .vcr_mech_quantile_mcse(-delta_n, 0.05)),
                   suvrChangeP95 = s("suvr_change_p95", q(-delta_n, 0.95), .vcr_mech_quantile_mcse(-delta_n, 0.95)), shareBelow110 = s("share_suvr_below_1_10", reach, vcr_mcse_proportion(reach, individuals))),
-    clinical = list(pointsAtWeek = m("points_at_week", centre, unit = "points"), pointsLow = q(points, 0.025), pointsHigh = q(points, 0.975)),
+    clinical = list(pointsAtWeek = m("points_at_week", centre, unit = score_unit), pointsLow = q(points, 0.025), pointsHigh = q(points, 0.975)),
     share = list(median = stats::median(share[share < 1]), p05 = q(share, 0.05), p95 = q(share, 0.95), notRepresentable = mean(share >= 1)))
   limits <- list(
     sprintf("This effect is what follows if the published chain for %s holds (serum model, amyloid PET model, and the trial-level association between amyloid PET and ADAS-Cog). It is never a statement that the drug works.", drug),

@@ -769,6 +769,20 @@
     },
     {
       "id": "mth_20",
+      "name": "决策的信息价值（EVPI、EVPPI、EVSI）",
+      "method": "decision.value_of_information",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_21",
       "name": "方案的解析计算",
       "method": "design.analytic",
       "version": "1.4.0",
@@ -782,7 +796,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_21",
+      "id": "mth_22",
       "name": "按药效的不确定性平均后，得到显著结果的概率（assurance）",
       "method": "design.assurance",
       "version": "1.1.0",
@@ -796,7 +810,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_22",
+      "id": "mth_23",
       "name": "贝叶斯设计（无需 MCMC）",
       "method": "design.bayesian",
       "version": "1.0.0",
@@ -810,7 +824,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_23",
+      "id": "mth_24",
       "name": "确认性设计",
       "method": "design.confirmatory",
       "version": "1.2.0",
@@ -824,7 +838,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_24",
+      "id": "mth_25",
       "name": "剂量探索设计",
       "method": "design.dose",
       "version": "1.0.0",
@@ -838,7 +852,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_25",
+      "id": "mth_26",
       "name": "设计网格",
       "method": "design.grid",
       "version": "1.5.0",
@@ -852,7 +866,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_26",
+      "id": "mth_27",
       "name": "预后协变量调整",
       "method": "design.procova",
       "version": "1.0.0",
@@ -866,7 +880,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_27",
+      "id": "mth_28",
       "name": "方案的模拟运行",
       "method": "design.simulate",
       "version": "1.5.0",
@@ -880,7 +894,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_28",
+      "id": "mth_29",
       "name": "分层复合终点的胜率比设计",
       "method": "design.win_ratio",
       "version": "1.0.0",
@@ -894,7 +908,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_29",
+      "id": "mth_30",
       "name": "剂量反应荟萃分析",
       "method": "evidence.dose_response",
       "version": "1.0.0",
@@ -908,7 +922,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_30",
+      "id": "mth_31",
       "name": "网络荟萃分析",
       "method": "evidence.network",
       "version": "1.0.0",
@@ -922,7 +936,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_31",
+      "id": "mth_32",
       "name": "证据合并",
       "method": "evidence.pool",
       "version": "1.1.0",
@@ -936,7 +950,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_32",
+      "id": "mth_33",
       "name": "生存曲线重建（Guyot）",
       "method": "evidence.reconstruct_km",
       "version": "1.1.0",
@@ -950,7 +964,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_33",
+      "id": "mth_34",
       "name": "已发表效应的经验收缩",
       "method": "evidence.shrinkage",
       "version": "1.0.0",
@@ -964,7 +978,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_34",
+      "id": "mth_35",
       "name": "逐条匹配",
       "method": "matching.evaluate",
       "version": "1.0.0",
@@ -978,7 +992,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_35",
+      "id": "mth_36",
       "name": "应用预后模型",
       "method": "model.prognostic_apply",
       "version": "1.2.0",
@@ -992,7 +1006,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_36",
+      "id": "mth_37",
       "name": "用自己的历史数据训练预后模型",
       "method": "model.prognostic_train",
       "version": "1.0.0",
@@ -1006,7 +1020,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_37",
+      "id": "mth_38",
       "name": "拟合人群生存模型",
       "method": "model.survival_fit",
       "version": "1.1.0",
@@ -1020,7 +1034,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_38",
+      "id": "mth_39",
       "name": "虚拟患者（二分类终点）",
       "method": "patients.binary",
       "version": "1.1.0",
@@ -1034,7 +1048,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_39",
+      "id": "mth_40",
       "name": "虚拟患者（连续终点）",
       "method": "patients.continuous",
       "version": "1.1.0",
@@ -1048,7 +1062,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_40",
+      "id": "mth_41",
       "name": "虚拟患者（纵向轨迹）",
       "method": "patients.longitudinal",
       "version": "1.2.0",
@@ -1062,7 +1076,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_41",
+      "id": "mth_42",
       "name": "人群层面的疾病进展模拟",
       "method": "patients.progression",
       "version": "1.2.0",
@@ -1076,7 +1090,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_42",
+      "id": "mth_43",
       "name": "虚拟患者（事件时间终点）",
       "method": "patients.time_to_event",
       "version": "1.1.0",
@@ -1090,7 +1104,21 @@
       "usedIn": null
     },
     {
-      "id": "mth_43",
+      "id": "mth_44",
+      "name": "合用药物后的暴露变化（已发表的 PBPK 模型）",
+      "method": "pk.interaction",
+      "version": "1.0.0",
+      "endpoints": null,
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_45",
       "name": "与第二份基线表对照",
       "method": "population.check",
       "version": "1.0.0",
@@ -1104,7 +1132,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_44",
+      "id": "mth_46",
       "name": "文献人群",
       "method": "population.literature",
       "version": "1.1.0",
@@ -1118,7 +1146,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_45",
+      "id": "mth_47",
       "name": "人群质量报告",
       "method": "population.quality",
       "version": "1.2.0",
@@ -1132,7 +1160,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_46",
+      "id": "mth_48",
       "name": "情景人群生成",
       "method": "population.scenario",
       "version": "1.1.0",
@@ -1146,7 +1174,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_47",
+      "id": "mth_49",
       "name": "经验合成人群",
       "method": "population.synthpop",
       "version": "1.4.0",
@@ -1160,7 +1188,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_48",
+      "id": "mth_50",
       "name": "数据快照画像",
       "method": "profile.snapshot",
       "version": "1.1.0",

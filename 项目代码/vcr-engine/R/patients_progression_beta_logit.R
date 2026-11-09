@@ -388,7 +388,8 @@ vcr_beta_logit_moments <- function(par, study, times, drug = NULL, placebo = TRU
     # benefit is a treated change below the control's (a higher ADAS-cog is worse); with no effect, either side is an error
     as.numeric(if (p$is_null) abs(t_stat) > crit else -t_stat > crit)
   }
-  c(reject = reject, estimate = est, analysed = as.numeric(!is.na(t_stat)), row = pp$row, observed, if (!is.null(eff)) stats::setNames(eff, c("pts", "frac", "triesPts", "triesFrac")))
+  c(reject = reject, estimate = est, analysed = as.numeric(!is.na(t_stat)), row = pp$row, observed, if (!is.null(eff)) stats::setNames(eff, c("pts", "frac", "triesPts", "triesFrac")),
+    ctlMean = if (n_c >= 1L) mean(change[arm == 0]) else NA_real_, ctlLs = NA_real_)
 }
 
 .vcr_bl_run <- function(set, p, want, seed, cores, cancel_file = NULL, batch = 500L, progress = NULL) {
@@ -488,6 +489,27 @@ vcr_beta_logit_moments <- function(par, study, times, drug = NULL, placebo = TRU
   out
 }
 
+#' What the simulated trials say the control arm's mean change at the analysis visit is: its mean over the trials, its spread between trials and the
+#' 2.5 / 50 / 97.5 percentiles, which are the predictive interval of an observed arm mean of the same size (the trial's own sampling error is in each
+#' trial's value, so it is in the interval). The reading follows the analysis: an MMRM's least-squares mean (the one a trial reports), else the
+#' observed mean of the people still in the study. Each percentile's Monte Carlo error is that of a sample quantile, sqrt(p (1 - p) / n) / density.
+#' The mean of the completers' observed change is reported beside the MMRM reading, the difference being what a missing-at-random analysis recovers.
+.vcr_control_reading <- function(v, unit, at_time, kind) {
+  col <- if (identical(kind, "mmrm") && "ctlLs" %in% colnames(v)) "ctlLs" else if ("ctlMean" %in% colnames(v)) "ctlMean" else return(NULL)
+  x <- v[, col]; x <- x[is.finite(x)]
+  if (length(x) < 20L) return(NULL)
+  q_meas <- function(name, p) {
+    q <- unname(stats::quantile(x, p, type = 7)); f <- stats::density(x, from = q, to = q, n = 1L)$y
+    vcr_measure(name, q, simulated = TRUE, mcse = if (f > 0) sqrt(p * (1 - p) / length(x)) / f else NA_real_, source = "synthetic", unit = unit)
+  }
+  completers <- if ("ctlMean" %in% colnames(v)) { y <- v[, "ctlMean"]; y <- y[is.finite(y)]; if (length(y) > 1L) vcr_measure("control_completers_change", mean(y), simulated = TRUE, mcse = vcr_mcse_mean(y), source = "synthetic", unit = unit) else NULL } else NULL
+  list(visit = at_time, reading = if (identical(col, "ctlLs")) "mmrm_ls_mean" else "observed_mean", trials = length(x),
+       mean = vcr_measure("control_change", mean(x), simulated = TRUE, mcse = vcr_mcse_mean(x), source = "synthetic", unit = unit),
+       sd = vcr_measure("control_change_sd", stats::sd(x), simulated = TRUE, mcse = vcr_mcse_empse(x), source = "synthetic", unit = unit),
+       lower = q_meas("control_change_p025", 0.025), median = q_meas("control_change_p500", 0.5), upper = q_meas("control_change_p975", 0.975),
+       completers = completers)
+}
+
 # --- the handler ----------------------------------------------------------------------------------------------------------------------------
 
 vcr_job_patients_progression_beta_logit <- function(job, output_dir = NULL, cancel_file = NULL, progress = NULL) {
@@ -534,7 +556,7 @@ vcr_job_patients_progression_beta_logit <- function(job, output_dir = NULL, canc
   if (!is.null(sc[["treatment"]][["mechanism"]])) {
     if (!is.null(sc[["treatment"]][["diseaseModifying"]])) vcr_abort("scenario_value_invalid", "scenario.treatment.mechanism", "The disease-modifying share is either stated (diseaseModifying) or the chain's (mechanism), not both.")
     chain <- vcr_mechanism_chain(sc[["treatment"]][["mechanism"]], par, vcr_scalar(sc[["treatment"]][["doseBegin"]], 0), vcr_scalar(sc[["treatment"]][["doseEnd"]], max(visits)), visits, placebo, dropout,
-                                 seed = as.integer(as.numeric(vcr_scalar(job[["seed"]], 1)) %% 2147483647))
+                                 seed = as.integer(as.numeric(vcr_scalar(job[["seed"]], 1)) %% 2147483647), score_unit = set$endpoint[["unit"]])
     effects$fraction <- chain$spec
   }
   treatment <- .vcr_bl_treatment(sc[["treatment"]], max(visits), effects, par = par)
@@ -669,7 +691,7 @@ vcr_job_patients_progression_beta_logit <- function(job, output_dir = NULL, canc
                           background = .vcr_bl_reference_report(par, population[["background"]], uncertainty, weeks = TRUE)),
          population = list(mmseRange = par$mmse, ageBounds = par$ageBounds, apoe4 = par$apoe, femaleShare = par$female, ageMeanByApoe4 = par$ageMean, ageSd = par$ageSd),
          effectDistributions = reports, mechanism = if (is.null(chain)) NULL else chain$report, people = if (is.null(record)) NULL else .vcr_bl_record_report(record, "resampled_trials", p),
-         observed = observed, trialsAnalysed = length(est), posteriorRowsUsed = length(unique(v[v[, "row"] > 0, "row"])),
+         observed = observed, controlReading = .vcr_control_reading(v, unit, at_time, kind), trialsAnalysed = length(est), posteriorRowsUsed = length(unique(v[v[, "row"] > 0, "row"])),
          extrapolation = list(dataWeeks = .VCR_BETA_LOGIT_DATA_WEEKS, lastVisit = max(visits), beyond = beyond),
          reproduction = list(reproduced = c("EMA qualification opinion 2013 Table 7", "EMA qualification opinion 2013 Table 9", "EMA qualification opinion 2013 Table 11"),
                              notReproduced = c("EMA qualification opinion 2013 Table 10 intervals", "EMA qualification opinion 2013 Figures 15 and 16")),

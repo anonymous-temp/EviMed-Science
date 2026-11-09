@@ -46,7 +46,7 @@ test("the card says what the ratio is, shows the curves and every number with it
   const ratio = card.headline.find((line) => line.key === "auc_ratio");
   assert.ok(ratio.value.value > 0.24 && ratio.value.value < 0.25, "the area over 48 h; the authors' own 10 h window gives 0.277 (N160a)");
   assert.equal(ratio.value.unit, "倍");
-  assert.equal(card.headline.find((line) => line.key === "victim_auc_alone").value.unit, "ng/mL·h");
+  assert.equal(card.headline.find((line) => line.key === "victim_auc_alone").value.unit, "ng·h/mL");
   assert.match(card.lead, /^合用后，咪达唑仑的曲线下面积降到单用时的 24\.\d%/);
   assert.match(card.lead, /典型健康成人/);
   assert.equal(card.series.length, 2);

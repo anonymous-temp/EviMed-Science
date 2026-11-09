@@ -47,7 +47,7 @@ const READS_NO_ROWS = [
   "maic_comparator", "evalue", "design_analytic", "design_simulation", "design_grid", "assurance", "procova", "accrual_forecast", "map_prior",
   "negative_control_comparator", "tipping_point", "generate_patients_longitudinal", "population_check", "design_confirmatory", "bias_analysis", "network_meta",
   "dose_response_meta", "effect_shrinkage", "design_dose", "design_bayesian", "design_win_ratio", "decision_voi", "borrowing_prior", "generate_progression", "match_extract",
-  "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
+  "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect", "pk_interaction",
 ];
 
 /** Integer keys of those results that are not a head count of real people, and why. A key not here and not listed in the domain fails. */
