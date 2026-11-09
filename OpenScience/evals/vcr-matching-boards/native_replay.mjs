@@ -56,7 +56,7 @@ const clone = (value) => structuredClone(value);
 function createRun({ id, patients, protocols = [], trials = [], plan, maxCalls }) {
   return { id, userId: 'replay-user', projectId: 'replay-project', patients: new Map(patients.map((row) => [row.subjectKey, row])),
     protocols: new Map(protocols.map((row) => [row.id, row])), trials: new Map(trials.map((row) => [row.registryId, row])),
-    plan: [...plan], maxCalls, calls: 0, currentTask: null, rootSessionId: null, pendingAssessCallId: null,
+    plan: [...plan], maxCalls, calls: 0, currentTask: null, rootSessionId: null, pendingAssessCallId: null, messages: [], sessionPatient: null,
     judgments: [], timeline: [], errors: [], model: { calls: 0, input: 0, cacheRead: 0, output: 0, costCny: 0, ms: [], spans: [] } };
 }
 
@@ -126,6 +126,23 @@ function createStores(runs, guide = null) {
       },
     },
     registryPages: null,
+    // Session board: the clinician's messages are the patient sources, as the product reads them from the transcript. A message taken
+    // as context becomes one dated document of the conversation's patient; a later message (a supplement) is a further document.
+    patientContext: Object.assign(async (study, { messageSeq, subjectKey } = {}) => {
+      const run = runOf(study.id), message = run?.messages.find((item) => item.seq === Number(messageSeq));
+      if (!message) throw Object.assign(new Error('message not found'), { status: 404, code: 'patient_matching_original_required' });
+      const key = subjectKey ?? run.sessionPatient ?? `session-${run.id}`;
+      run.sessionPatient = key;
+      const row = run.patients.get(key) ?? { subjectKey: key, docs: [] };
+      if (!row.docs.some((doc) => doc.docId === `msg-${message.seq}`)) row.docs.push({ docId: `msg-${message.seq}`, text: message.text, visibleAt: `2026-01-01T00:00:${String(message.seq).padStart(2, '0')}.000Z` });
+      run.patients.set(key, row);
+      return { ok: true, subjectKey: key, subjectLabel: 'Patient', documentId: `msg-${message.seq}` };
+    }, {
+      async candidates(origin) {
+        const run = [...runs.values()].find((item) => item.rootSessionId === origin.rootSessionId);
+        return { candidates: [...(run?.messages ?? [])].reverse().map((message) => ({ messageSeq: message.seq, turn: message.seq, preview: [...message.text].slice(0, 240).join(''), sha256: sha(message.text) })), nextBeforeSeq: null };
+      },
+    }),
     matchJudgments: {
       async save(row) {
         const run = runOf(row.studyId);
@@ -147,6 +164,8 @@ const CHILD_TOOLS = new Set(['match_evidence', 'match_compute']);
 
 function originOf(run, invocation, signal) {
   if (invocation.tool === 'match_assess') { run.rootSessionId ??= invocation.sessionId; run.pendingAssessCallId = invocation.callId; }
+  // A real root (session board) may open with match_context; its first non-child call binds the conversation.
+  if (run.messages.length && !CHILD_TOOLS.has(invocation.tool)) run.rootSessionId ??= invocation.sessionId;
   const child = run.rootSessionId != null && invocation.sessionId !== run.rootSessionId && CHILD_TOOLS.has(invocation.tool);
   const origin = { userId: run.userId, projectId: run.projectId, sessionId: invocation.sessionId, rootSessionId: run.rootSessionId ?? invocation.sessionId,
     runId: run.id, callId: invocation.callId, tool: invocation.tool, args: invocation.args ?? {}, rootCallId: child ? run.pendingAssessCallId : invocation.callId,
@@ -164,7 +183,7 @@ const runnerOrigin = (run) => {
 
 async function readBody(req) { const chunks = []; for await (const chunk of req) chunks.push(Buffer.from(chunk)); return Buffer.concat(chunks); }
 
-function createServer({ runs, adapter, documents, token, key, ledgerFile, capCny, stopFile, billingFactor = 1 }) {
+function createServer({ runs, adapter, documents, token, key, ledgerFile, capCny, stopFile, billingFactor = 1, decisionsFile = null }) {
   let spent = jsonl(ledgerFile).reduce((sum, row) => sum + (row.costCny ?? 0), 0);
   const guard = () => {
     // The ledger is at full price; a request is only ever sent off-peak (below), so the bill is the ledger times the off-peak factor.
@@ -204,6 +223,9 @@ function createServer({ runs, adapter, documents, token, key, ledgerFile, capCny
           clauses: (result?.data?.trialProfiles ?? []).reduce((sum, profile) => sum + profile.criteria.length, 0) || null });
       } else if (body.port === 'ResultPort' && body.operation === 'save') {
         run.timeline.push({ at: started, end: now(), kind: `save:${body.input?.phase}`, status: result?.status, executionId: body.input?.executionId ?? null, decisions: body.input?.decisions?.length ?? 0, diagnostics: (body.input?.diagnostics ?? []).slice(0, 5).map((text) => String(text).slice(0, 160)) });
+        // Every saved decision as the plugin wrote it (criterion logic included, reasons left out), for analysis after the run.
+        if (decisionsFile && Array.isArray(body.input?.decisions)) for (const decision of body.input.decisions) append(decisionsFile, { run: run.id, phase: body.input?.phase ?? null, status: result?.status ?? null, subjectKey: decision.subjectKey, trialId: decision.trialId, clinicalEligibility: decision.clinicalEligibility,
+          criteria: (decision.criteria ?? []).map(({ reason, ...criterion }) => ({ ...criterion, reasonChars: String(reason ?? '').length, reasonHasChinese: /[\u4e00-\u9fff]/u.test(String(reason ?? '')) })) });
       } else run.timeline.push({ at: started, end: now(), kind: `${body.port}.${body.operation}`, status: result?.status ?? 'ok' });
       return send(res, 200, result);
     } catch (error) {
@@ -305,9 +327,9 @@ function prepareProfile({ dsh, artifact, work }) {
   return base;
 }
 
-function patchFor({ port, runId }) {
+function patchFor({ port, runId, realRoot = false }) {
   return [
-    '- id: agent-default-model', '  config:', '    provider: native-replay', '    model: replay-root',
+    '- id: agent-default-model', '  config:', ...(realRoot ? ['    provider: deepseek-official', '    model: deepseek-flash'] : ['    provider: native-replay', '    model: replay-root']),
     // The production row (dshProfilePatch.mjs) with the loopback forwarder as its gateway.
     '- id: llm-deepseek', '  config:', `    baseURL: http://127.0.0.1:${port}/r/${runId}/anthropic`, '    thinking: enabled', '    reasoningEffort: high', '    maxTokens: 65536',
     '    retryPolicy:', '      mode: normal', '      maxRetries: 5', '      retryableCodes: [EMPTY_RESPONSE, RATE_LIMIT, SERVER, TIMEOUT, TRANSPORT, MALFORMED_RESPONSE]',
@@ -321,28 +343,31 @@ function patchFor({ port, runId }) {
   ].join('\n');
 }
 
-async function runKernel({ run, dsh, profile, work, port, tokenFile, timeoutMs }) {
+async function runKernel({ run, dsh, profile, work, port, tokenFile, timeoutMs, prompt = 'Assess the selected patient and trial pairs.', sessionId = null, realRoot = false, turn = 1 }) {
   const dir = path.join(work, 'runs', run.id);
-  fs.rmSync(dir, { recursive: true, force: true });
-  fs.mkdirSync(path.join(dir, 'home'), { recursive: true });
-  fs.mkdirSync(path.join(dir, 'ws'), { recursive: true });
-  fs.cpSync(path.join(profile, 'dsh'), path.join(dir, 'dsh'), { recursive: true });
+  if (!sessionId) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(path.join(dir, 'home'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'ws'), { recursive: true });
+    fs.cpSync(path.join(profile, 'dsh'), path.join(dir, 'dsh'), { recursive: true });
+  }
   const patch = path.join(dir, 'replay.patch.yml');
-  fs.writeFileSync(patch, patchFor({ port, runId: run.id }));
+  fs.writeFileSync(patch, patchFor({ port, runId: run.id, realRoot }));
   const env = { ...process.env, DSH_HOME: path.join(dir, 'dsh'), HOME: path.join(dir, 'home'), DSH_TELEMETRY: '0', DEEPSEEK_API_KEY: PLACEHOLDER_KEY,
     EVIMED_PATIENT_MATCHING_ENABLED: '1', EVIMED_PATIENT_MATCHING_HOST_ENDPOINT: `http://127.0.0.1:${port}/run/${run.id}/port`,
     EVIMED_PATIENT_MATCHING_TOKEN_FILE: tokenFile, NATIVE_REPLAY_CONTROL: `http://127.0.0.1:${port}/run/${run.id}/next` };
   delete env.DEEPSEEK_BASE_URL;
   const started = now();
-  const child = spawn(dsh, ['--profile', 'replay', '--patch', patch, '--json', 'Assess the selected patient and trial pairs.'], { env, cwd: path.join(dir, 'ws'), stdio: ['ignore', 'pipe', 'pipe'] });
-  const log = fs.createWriteStream(path.join(dir, 'kernel.log'));
+  const child = spawn(dsh, ['--profile', 'replay', '--patch', patch, '--json', ...(sessionId ? ['--session-id', sessionId] : []), prompt], { env, cwd: path.join(dir, 'ws'), stdio: ['ignore', 'pipe', 'pipe'] });
+  const log = fs.createWriteStream(path.join(dir, turn > 1 ? `kernel-${turn}.log` : 'kernel.log'));
   child.stdout.pipe(log); child.stderr.pipe(log);
   const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
   const [code, signal] = await new Promise((resolve) => child.once('exit', (c, s) => resolve([c, s])));
   clearTimeout(timer);
   await new Promise((resolve) => log.end(resolve));
-  if (process.env.NATIVE_REPLAY_KEEP !== '1') fs.rmSync(path.join(dir, 'dsh'), { recursive: true, force: true });
-  return { code, signal, wallMs: now() - started };
+  if (process.env.NATIVE_REPLAY_KEEP !== '1' && !realRoot) fs.rmSync(path.join(dir, 'dsh'), { recursive: true, force: true });
+  const events = fs.readFileSync(path.join(dir, turn > 1 ? `kernel-${turn}.log` : 'kernel.log'), 'utf8').split('\n').filter((line) => line.startsWith('{')).map((line) => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+  return { code, signal, wallMs: now() - started, events };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -383,6 +408,7 @@ async function buildCases(o) {
         protocols, plan: protocols.map((protocol) => ({ protocolVersionId: protocol.id, subjectKeys: [row.patientId] })) };
     });
   }
+  if (o.board === 'session') return { summary: { ...summary, turns: spec.turns } };
   if (o.board === 'latency') {
     const orders = new Map(jsonl(o.orders).map((row) => [row.patientId, row.ranking.map((entry) => entry.registryId)]));
     const cases = jsonl(o.cases).filter((row) => row.split === 'dev' && (orders.get(row.patientId)?.length ?? 0) >= o.pairs).slice(0, o.limit ?? 5);
@@ -396,6 +422,21 @@ async function buildCases(o) {
         trials, plan: [{ subjectKey: row.patientId, registryIds: trials.map((trial) => trial.registryId) }] });
     }
     await corpus.close?.();
+    return out;
+  }
+  if (o.board === 'session') {
+    // A real conversation: the clinician's message carries the record and the trials to assess; the root is DeepSeek Flash with the
+    // plugin's tools; a second turn answers whatever the assistant asked (a simulated clinician, below).
+    const out = [];
+    for (const one of jsonl(o.cases).slice(0, o.limit ?? undefined)) {
+      const corpus = createVcrTrialCorpus(one.collection ?? o.collection);
+      const trials = [];
+      for (const registryId of one.registryIds) { const built = await corpus.record(registryId); if (built) trials.push(trialFromPrecedent(registryId, built)); }
+      await corpus.close?.();
+      const ids = trials.map((trial) => trial.registryId).join(', ');
+      const turn1 = one.lang === 'zh' ? `请帮我看看这位患者是否适合入组以下临床试验：${ids}。\n\n病历：\n${one.note}` : `Please assess whether this patient is eligible for these trials: ${ids}.\n\nRecord:\n${one.note}`;
+      out.push({ key: one.key, session: one, turn1, patients: [], trials, plan: [] });
+    }
     return out;
   }
   if (o.board === 'incidents') {
@@ -466,12 +507,74 @@ function overlap(intervals) {
 
 function median(values) { if (!values.length) return null; const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor((sorted.length - 1) / 2)]; }
 
+/** What one turn of a real conversation did: the tools in order, failed tool results, the final reply. @param {any[]} events */
+function turnOf(events, wallMs) {
+  const calls = events.filter((event) => event.type === 'tool_call'), results = new Map(events.filter((event) => event.type === 'tool_result').map((event) => [event.callId, event]));
+  return { wallMs, tools: calls.map((call) => call.tool), failedTools: calls.filter((call) => results.get(call.callId)?.status !== 'completed').map((call) => ({ tool: call.tool, status: results.get(call.callId)?.status ?? 'none' })),
+    reply: String(events.filter((event) => event.type === 'final').at(-1)?.text ?? ''), toolResults: calls.map((call) => ({ tool: call.tool, input: call.input, result: String(results.get(call.callId)?.result ?? '').slice(0, 6000) })) };
+}
+
+/** The clinician's answer to what the assistant asked: one Flash call, from the case's facts only, in the conversation's language. */
+async function clinicianAnswer({ key, spec, reply }) {
+  const facts = spec.session.facts ?? (spec.session.lang === 'zh'
+    ? '体能状态 ECOG 1 分；未怀孕；无其他恶性肿瘤史；无活动性感染；肝肾功能和血常规在正常范围；能签署知情同意。其余未做或不清楚。'
+    : 'ECOG performance status 1; not pregnant; no other cancer; no active infection; liver and kidney function and blood counts normal; can give consent. Anything else was not done or is unknown.');
+  const body = { model: 'deepseek-flash', max_tokens: 600, temperature: 0, thinking: { type: 'disabled' }, messages: [
+    { role: 'system', content: 'You are the physician who treats this patient and asked the assistant for help. Reply to the assistant\'s last message in one short message, in the language of that message. Answer only what it asked, using only the FACTS; for anything else say you do not know. If it asked nothing, thank it briefly.' },
+    { role: 'user', content: `FACTS:\n${facts}\n\nTHE ASSISTANT'S LAST MESSAGE:\n${reply.slice(0, 6000)}` }] };
+  const response = await fetch('https://api.deepseek.com/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(120000) });
+  const data = await response.json();
+  return String(data?.choices?.[0]?.message?.content ?? '').trim() || (spec.session.lang === 'zh' ? '谢谢。' : 'Thank you.');
+}
+
+/** The session board's two turns on one kernel session; the turns are kept on the spec for the summary, the replies privately. */
+async function sessionTurns({ o, spec, run, profile, port, tokenFile, key }) {
+  const timeoutMs = Number(o['timeout-min']) * 60000;
+  run.messages.push({ seq: 1, text: spec.turn1 });
+  const first = await runKernel({ run, dsh: o.dsh, profile, work: o.work, port, tokenFile, timeoutMs, prompt: spec.turn1, realRoot: true });
+  const sessionId = first.events.find((event) => event.type === 'session')?.sessionId ?? null;
+  const one = turnOf(first.events, first.wallMs);
+  const savedAfterFirst = run.judgments.length;
+  const answer = sessionId ? await clinicianAnswer({ key, spec, reply: one.reply }) : '';
+  let two = null, second = first;
+  if (sessionId) {
+    run.messages.push({ seq: 2, text: answer });
+    second = await runKernel({ run, dsh: o.dsh, profile, work: o.work, port, tokenFile, timeoutMs, prompt: answer, sessionId, realRoot: true, turn: 2 });
+    two = turnOf(second.events, second.wallMs);
+  }
+  fs.writeFileSync(path.join(o.work, 'runs', run.id, 'conversation.json'), JSON.stringify({ turn1: spec.turn1, reply1: one.reply, answer, reply2: two?.reply ?? null, tools1: one.toolResults, tools2: two?.toolResults ?? [] }, null, 1));
+  const strip = (turn) => turn && ({ wallMs: turn.wallMs, tools: turn.tools, failedTools: turn.failedTools, replyChars: turn.reply.length, replyHasChinese: /[\u4e00-\u9fff]/u.test(turn.reply) });
+  spec.turns = { first: strip(one), second: strip(two), savedAfterFirst, savedAfterSecond: run.judgments.length, answerChars: answer.length };
+  return { code: second.code, signal: second.signal, wallMs: first.wallMs + (two?.wallMs ?? 0) };
+}
+
+/** A direct DashScope embedder for the evidence dense channel (replays only; the server uses its paid port). */
+function denseEmbedder(key, usageFile) {
+  const model = 'qwen3.7-text-embedding', dimensions = 1024, endpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings';
+  return async (texts) => {
+    const vectors = [];
+    for (let at = 0; at < texts.length; at += 10) {
+      const input = texts.slice(at, at + 10).map((text) => text.slice(0, 30000));
+      let payload = null;
+      for (let attempt = 0; attempt < 3 && !payload; attempt++) {
+        const response = await fetch(endpoint, { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, input, dimensions, encoding_format: 'float' }), signal: AbortSignal.timeout(30000) }).catch(() => null);
+        if (response?.ok) payload = await response.json(); else { await response?.body?.cancel(); await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1))); }
+      }
+      if (!payload) throw new Error('embedding_failed');
+      append(usageFile, { at: new Date().toISOString(), texts: input.length, tokens: payload.usage?.total_tokens ?? null });
+      vectors.push(...payload.data.sort((a, b) => a.index - b.index).map((row) => row.embedding));
+    }
+    return vectors;
+  };
+}
+
 async function main() {
   const { values } = parseArgs({ options: {
     board: { type: 'string' }, cases: { type: 'string' }, out: { type: 'string' }, work: { type: 'string' }, dsh: { type: 'string' }, artifact: { type: 'string' },
     'key-file': { type: 'string' }, 'cap-cny': { type: 'string', default: '25' }, ledger: { type: 'string' }, parallel: { type: 'string', default: '3' },
     limit: { type: 'string' }, pairs: { type: 'string', default: '20' }, orders: { type: 'string' }, collection: { type: 'string' }, 'timeout-min': { type: 'string', default: '45' },
-    'stop-file': { type: 'string' }, 'guide-file': { type: 'string' }, 'guide-title': { type: 'string' }, 'billing-factor': { type: 'string', default: '1' } } });
+    'stop-file': { type: 'string' }, 'guide-file': { type: 'string' }, 'guide-title': { type: 'string' }, 'billing-factor': { type: 'string', default: '1' },
+    'evidence-dense': { type: 'boolean', default: false }, 'dense-key-file': { type: 'string' }, 'reasoning-effort': { type: 'string' } } });
   const o = { ...values, limit: values.limit ? Number(values.limit) : null, pairs: Number(values.pairs), parallel: Number(values.parallel) };
   for (const name of ['board', 'cases', 'out', 'work', 'dsh', 'artifact', 'key-file']) if (!o[name]) throw new Error(`--${name} is required`);
   fs.mkdirSync(o.out, { recursive: true });
@@ -486,8 +589,11 @@ async function main() {
   const runs = new Map();
   const guide = o['guide-file'] ? { title: o['guide-title'] ?? 'Benchmark task definition', text: fs.readFileSync(o['guide-file'], 'utf8').trim() } : null;
   const { vcr, documents } = createStores(runs, guide);
-  const adapter = createPatientMatchingHostAdapter({ vcr, documents, config: {} });
-  const { server, spent, guard } = createServer({ runs, adapter, documents, token, key, ledgerFile, capCny: Number(o['cap-cny']), stopFile: o['stop-file'], billingFactor: Number(o['billing-factor']) });
+  // --evidence-dense: the match_evidence dense channel with the production embedding model (qwen3.7-text-embedding, 1024 dimensions),
+  // called directly with the DashScope key file; usage goes to <out>/embedding.jsonl.
+  const evidenceEmbed = o['evidence-dense'] ? denseEmbedder(fs.readFileSync(o['dense-key-file'], 'utf8').trim(), path.join(o.out, 'embedding.jsonl')) : null;
+  const adapter = createPatientMatchingHostAdapter({ vcr, documents, config: { patientMatchingEvidenceDense: Boolean(evidenceEmbed), ...(o['reasoning-effort'] ? { patientMatchingReasoningEffort: o['reasoning-effort'] } : {}) }, evidenceEmbed });
+  const { server, spent, guard } = createServer({ runs, adapter, documents, token, key, ledgerFile, capCny: Number(o['cap-cny']), stopFile: o['stop-file'], billingFactor: Number(o['billing-factor']), decisionsFile: path.join(o.out, 'decisions.jsonl') });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
   const specs = await buildCases(o);
@@ -504,7 +610,9 @@ async function main() {
       const run = createRun({ id, patients: spec.patients, protocols: spec.protocols, trials: spec.trials, plan: spec.plan,
         maxCalls: spec.plan.length + (spec.protocols?.length ?? 0) + (spec.trials?.length ?? 0) + 4 });
       runs.set(id, run);
-      const kernel = await runKernel({ run, dsh: o.dsh, profile, work: o.work, port, tokenFile, timeoutMs: Number(o['timeout-min']) * 60000 });
+      let kernel;
+      if (o.board === 'session') kernel = await sessionTurns({ o, spec, run, profile, port, tokenFile, key });
+      else kernel = await runKernel({ run, dsh: o.dsh, profile, work: o.work, port, tokenFile, timeoutMs: Number(o['timeout-min']) * 60000 });
       const result = resultOf(o, spec, run, kernel);
       fs.writeFileSync(path.join(o.work, 'runs', id, 'timeline.json'), JSON.stringify({ timeline: run.timeline, errors: run.errors, modelMs: run.model.ms }, null, 1));
       if (result.record) append(recordsFile, result.record);

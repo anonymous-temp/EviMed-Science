@@ -1,5 +1,5 @@
 /** The trial texts the matching plugin ranks and indexes, built from a collection document (TrialGPT 2.0 JSON or TREC XML ingest). */
-import { patientMatchingRankingDocument } from '../../apps/server/src/patientMatchingRankingText.mjs';
+import { patientMatchingRankingDocument, TRIAL_RECORD_VIEW } from '../../apps/server/src/patientMatchingRankingText.mjs';
 
 const items = value => (value ? String(value).split(/;\s*|\n+/).map(part => part.trim()).filter(Boolean) : []);
 
@@ -23,4 +23,5 @@ export function fullText(doc) {
 }
 
 /** `balanced` is the plugin's bounded view (patientMatchingRankingDocument); `full` the uncut record. */
-export const viewText = (view, doc) => (view === 'full' ? fullText(doc) : patientMatchingRankingDocument(rankingRecord(doc)).text);
+/** `trial-record` is the production view `trial-record-12k-v1` itself (patientMatchingRankingDocument), byte for byte. */
+export const viewText = (view, doc) => (view === 'full' ? fullText(doc) : view === 'trial-record' ? patientMatchingRankingDocument(rankingRecord(doc), TRIAL_RECORD_VIEW).text : patientMatchingRankingDocument(rankingRecord(doc)).text);
