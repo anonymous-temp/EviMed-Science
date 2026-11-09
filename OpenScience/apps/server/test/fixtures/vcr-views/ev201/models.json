@@ -979,6 +979,20 @@
     },
     {
       "id": "mth_35",
+      "name": "按每个人自己的记录做个体化预测",
+      "method": "forecast.individualize",
+      "version": "1.0.0",
+      "endpoints": "连续",
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_36",
       "name": "逐条匹配",
       "method": "matching.evaluate",
       "version": "1.0.0",
@@ -992,7 +1006,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_36",
+      "id": "mth_37",
       "name": "应用预后模型",
       "method": "model.prognostic_apply",
       "version": "1.2.0",
@@ -1006,7 +1020,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_37",
+      "id": "mth_38",
       "name": "用自己的历史数据训练预后模型",
       "method": "model.prognostic_train",
       "version": "1.0.0",
@@ -1020,7 +1034,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_38",
+      "id": "mth_39",
       "name": "拟合人群生存模型",
       "method": "model.survival_fit",
       "version": "1.1.0",
@@ -1034,7 +1048,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_39",
+      "id": "mth_40",
       "name": "虚拟患者（二分类终点）",
       "method": "patients.binary",
       "version": "1.1.0",
@@ -1048,7 +1062,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_40",
+      "id": "mth_41",
       "name": "虚拟患者（连续终点）",
       "method": "patients.continuous",
       "version": "1.1.0",
@@ -1062,7 +1076,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_41",
+      "id": "mth_42",
       "name": "虚拟患者（纵向轨迹）",
       "method": "patients.longitudinal",
       "version": "1.2.0",
@@ -1076,7 +1090,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_42",
+      "id": "mth_43",
       "name": "人群层面的疾病进展模拟",
       "method": "patients.progression",
       "version": "1.2.0",
@@ -1090,7 +1104,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_43",
+      "id": "mth_44",
       "name": "虚拟患者（事件时间终点）",
       "method": "patients.time_to_event",
       "version": "1.1.0",
@@ -1104,10 +1118,10 @@
       "usedIn": null
     },
     {
-      "id": "mth_44",
+      "id": "mth_45",
       "name": "合用药物后的暴露变化（已发表的 PBPK 模型）",
       "method": "pk.interaction",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": null,
       "numeric": null,
       "validation": {
@@ -1118,7 +1132,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_45",
+      "id": "mth_46",
       "name": "与第二份基线表对照",
       "method": "population.check",
       "version": "1.0.0",
@@ -1132,7 +1146,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_46",
+      "id": "mth_47",
       "name": "文献人群",
       "method": "population.literature",
       "version": "1.1.0",
@@ -1146,7 +1160,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_47",
+      "id": "mth_48",
       "name": "人群质量报告",
       "method": "population.quality",
       "version": "1.2.0",
@@ -1160,7 +1174,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_48",
+      "id": "mth_49",
       "name": "情景人群生成",
       "method": "population.scenario",
       "version": "1.1.0",
@@ -1174,7 +1188,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_49",
+      "id": "mth_50",
       "name": "经验合成人群",
       "method": "population.synthpop",
       "version": "1.4.0",
@@ -1188,7 +1202,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_50",
+      "id": "mth_51",
       "name": "数据快照画像",
       "method": "profile.snapshot",
       "version": "1.1.0",

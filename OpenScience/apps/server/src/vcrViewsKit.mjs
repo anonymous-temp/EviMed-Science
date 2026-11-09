@@ -638,12 +638,14 @@ export const MEASURE_META = Object.freeze({
 export const TIME_UNIT_WORDS = Object.freeze(/** @type {Record<string, { after: string, bare: string }>} */ ({
   days: { after: "天", bare: "天" }, weeks: { after: "周", bare: "周" }, months: { after: "个月", bare: "月" }, years: { after: "年", bare: "年" },
 }));
-/** The unit words the engine and the platform write, said in Chinese: the time units by their table, their singular forms, the percent sign and the PBPK concentration units. */
+/** The unit words the engine and the platform write, said in Chinese: the time units by their table, their singular forms, the percent sign, the PBPK concentration units and a count of people. */
 const UNIT_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
   ...Object.fromEntries(Object.entries(TIME_UNIT_WORDS).map(([unit, words]) => [unit, words.after])),
   month: TIME_UNIT_WORDS.months.after, day: TIME_UNIT_WORDS.days.after, "%": "%",
   // the PBPK engine's concentration and area under the curve (a score's unit is the person's own word and is shown as written)
   "ng/mL": "ng/mL", "ng/mL*h": "ng·h/mL",
+  // the individualization engine's counts of people (forecast.individualize: how many got a forecast, how many did not)
+  people: "人",
 }));
 /** A unit as a page says it: an English unit word of the engine's or the platform's in Chinese, any other spelling as it was written. @param {string | null} unit */
 export const zhUnit = (unit) => (unit === null ? null : UNIT_WORDS[unit] ?? unit);
