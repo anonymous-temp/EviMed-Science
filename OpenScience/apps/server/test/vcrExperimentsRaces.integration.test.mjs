@@ -347,3 +347,79 @@ test('a comparison started with no conversation, or whose arms are still being q
   await run.completions.tick();
   assert.equal((await rowsOf(halfRow.id)).length, 1, 'once the last arm has ended and been queued, the one completion is recorded');
 });
+
+// --- a start that died part-way (R03, the interrupted start) -----------------------------------------------------------------------
+
+/** The queue, except that the `dieAt`th distinct enqueue fails as an infrastructure error does (the process is gone). @param {number} dieAt */
+function dying(dieAt) {
+  const log = { enqueued: /** @type {string[]} */ ([]), cancels: /** @type {string[]} */ ([]) };
+  let calls = 0;
+  const jobs = { jobCpuSeconds: vcr.jobs.jobCpuSeconds,
+    enqueue: async (/** @type {any} */ input) => {
+      if (++calls === dieAt) throw Object.assign(new Error('database unavailable'), { status: 503, code: 'database_unavailable' });
+      const out = await vcr.jobs.enqueue(input);
+      if (!log.enqueued.includes(out.job.id)) log.enqueued.push(out.job.id);
+      return out;
+    },
+    cancel: async (/** @type {string} */ studyId, /** @type {string} */ jobId, /** @type {any} */ o) => { log.cancels.push(jobId); return vcr.jobs.cancel(studyId, jobId, o); } };
+  return { jobs, log };
+}
+const resuming = (/** @type {any} */ jobs) => new VcrExperiments({ store: vcr.store, jobs, config: { vcrExperimentResumeAfterMs: 0 }, report: () => {} });
+
+test('a comparison whose start died after its first arm is resumed on restart under the same keys, and completes once', options, async () => {
+  const died = dying(2);
+  await assert.rejects(experimentsOf(died.jobs).startExperiment(study, experiment('resume: after arm 1'), { userId: origin.userId, origin: runOrigin('resume') }), /database unavailable/);
+  const row = await rowByQuestion('resume: after arm 1');
+  assert.deepEqual(Object.keys(row.state.arms), ['A'], 'one arm of three was queued and recorded');
+  const restarted = dying(0);
+  const report = await resuming(restarted.jobs).repair();
+  assert.equal(report.resumed, 1);
+  const after = await rowByQuestion('resume: after arm 1');
+  assert.deepEqual(Object.keys(after.state.arms).sort(), ['A', 'B', 'C']);
+  assert.equal((await jobsOf(row.id)).length, 3, 'one job per arm');
+  await resuming(dying(0).jobs).repair(); await Promise.all([resuming(dying(0).jobs).repair(), resuming(dying(0).jobs).repair()]);
+  assert.equal((await jobsOf(row.id)).length, 3, 'a duplicate or concurrent repair queues nothing more');
+  // an arm enqueued and lost before its record is reattached to its own job
+  const [, second] = await jobsOf(row.id);
+  await vcr.store.query(`UPDATE evimed_vcr.experiments SET state = state #- '{arms,B}' WHERE id = $1`, [row.id]);
+  await resuming(dying(0).jobs).repair();
+  assert.equal((await rowByQuestion('resume: after arm 1')).state.arms.B.jobId, second.id);
+  assert.equal((await jobsOf(row.id)).length, 3);
+  for (const job of await jobsOf(row.id)) await end(job.id, 'succeeded');
+  await vcr.store.query(`UPDATE evimed_vcr.jobs SET finished_at = now() + interval '5 seconds' WHERE checkpoint->'experiment'->>'id' = $1`, [row.id]);
+  const run = service({ runs: turn('resume', -1) });
+  await run.completions.tick(); await run.completions.tick();
+  assert.equal((await rowsOf(row.id)).length, 1);
+  assert.equal(run.log.dispatched.length, 1);
+  assert.match(run.log.dispatched[0].supplement, /outcome=succeeded;/);
+});
+
+test('a comparison whose start died and was then cancelled is not resumed: it settles as canceled, once', options, async () => {
+  const died = dying(2);
+  await assert.rejects(experimentsOf(died.jobs).startExperiment(study, experiment('resume: cancelled'), { userId: origin.userId, origin: runOrigin('resumecancel') }), /database unavailable/);
+  const row = await rowByQuestion('resume: cancelled');
+  const handler = dying(0);
+  await experimentsOf(handler.jobs).cancel(study, row.id);
+  await resuming(handler.jobs).repair(); await resuming(handler.jobs).repair();
+  assert.deepEqual(Object.keys((await rowByQuestion('resume: cancelled')).state.arms), ['A'], 'no arm was queued after the cancel');
+  assert.equal((await jobsOf(row.id)).length, 1);
+  const run = service({ runs: turn('resumecancel', -1) });
+  await run.completions.tick(); await run.completions.tick();
+  const rows = await rowsOf(row.id);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].payload.outcome, 'canceled');
+  assert.equal(run.log.dispatched.length + run.log.notices.length, 0);
+});
+
+test('a comparison whose study can no longer take jobs ends with the remaining arms refused, not starting for ever', options, async () => {
+  const died = dying(2);
+  await assert.rejects(experimentsOf(died.jobs).startExperiment(study, experiment('resume: paused'), { userId: origin.userId, origin: runOrigin('resumepaused') }), /database unavailable/);
+  const row = await rowByQuestion('resume: paused');
+  const gone = { jobCpuSeconds: 300, enqueue: async () => { throw Object.assign(new Error('paused'), { status: 409, code: 'vcr_study_paused' }); }, cancel: async () => ({}) };
+  await resuming(gone).repair();
+  const after = await rowByQuestion('resume: paused');
+  assert.deepEqual([after.state.arms.B.refused, after.state.arms.C.refused], [['study_unavailable'], ['study_unavailable']]);
+  await end((await jobsOf(row.id))[0].id, 'succeeded');
+  const outcome = await new VcrExperiments({ store: vcr.store, jobs: null }).completionOf(study.id, row.id);
+  assert.deepEqual([outcome.terminal, outcome.outcome], [true, 'partial']);
+});
