@@ -92,7 +92,7 @@ test('a different process can cancel a detached worker, and a dead worker is ide
   } finally { await rm(workspace, { recursive: true, force: true }) }
 })
 
-test('all 47 non-matching methods are discoverable with an engine job mapping and schema', async () => {
+test('every non-matching engine method is discoverable with an engine job mapping and schema', async () => {
   const { readFile } = await import('node:fs/promises')
   const { catalogue, sharedEvidenceMethods } = await import('../catalogue.mjs')
   const snapshot = JSON.parse(await readFile(join(engineRoot, 'R', 'domain-snapshot.json'), 'utf8'))

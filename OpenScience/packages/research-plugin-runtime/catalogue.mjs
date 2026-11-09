@@ -5,7 +5,7 @@ const domainCatalogue = [
     "id": "virtual-trial",
     "title": "Virtual laboratory: design simulation",
     "displayName": "虚拟实验室 · 设计模拟",
-    "task": "Virtual laboratory: sample size, power and dose finding; on the hosted platform also compare saved or new designs, or drug hypotheses on a disease-progression model (Alzheimer ADAS-cog), and search for a design",
+    "task": "Virtual laboratory: sample size, power and dose finding; on the hosted platform also compare saved or new designs, or drug hypotheses on a disease-progression model (Alzheimer ADAS-cog), search for a design, and the value of more information before a decision",
     "dataRequirement": "Design assumptions",
     "draft": true,
     "methods": [
@@ -18,6 +18,7 @@ const domainCatalogue = [
       "design.grid",
       "design.assurance",
       "design.procova",
+      "decision.value_of_information",
       "accrual.poisson_gamma"
     ],
     "compatibility": "Existing VCR engine method versions",
@@ -52,7 +53,7 @@ const domainCatalogue = [
     "id": "virtual-patient",
     "title": "Patient trajectory prediction",
     "displayName": "患者轨迹预测",
-    "task": "Patient trajectories: disease progression (Alzheimer ADAS-cog), scenarios, applying or training models",
+    "task": "Patient trajectories: disease progression (Alzheimer ADAS-cog), scenarios, applying or training models, one forecast per person from their own history, and drug interactions (concentration over time)",
     "dataRequirement": "Model and compatible inputs",
     "draft": true,
     "methods": [
@@ -63,7 +64,9 @@ const domainCatalogue = [
       "patients.longitudinal",
       "model.survival_fit",
       "model.prognostic_apply",
-      "model.prognostic_train"
+      "model.prognostic_train",
+      "forecast.individualize",
+      "pk.interaction"
     ],
     "compatibility": "Existing VCR engine method versions",
     "availableMode": [
