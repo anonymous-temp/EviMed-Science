@@ -89,7 +89,7 @@ export function finishPremises(rows, personStated = null) {
     if (!key || !label || !value || byKey.has(key)) continue;
     const source = /** @type {readonly string[]} */ (VCR_PREMISE_SOURCES).includes(String(row.source)) ? /** @type {VcrPremise["source"]} */ (row.source) : "assumed";
     const rank = PRIORITY.indexOf(key);
-    byKey.set(key, { key, label, value, source, decisive: row.decisive === true, reason: text(row.reason), ...(text(row.from) ? { from: text(row.from) } : {}), rank: rank < 0 ? PRIORITY.length : rank });
+    byKey.set(key, { key, label, value, source, decisive: row.decisive === true, reason: text(row.reason), ...(text(/** @type {any} */ (row).from) ? { from: text(/** @type {any} */ (row).from) } : {}), rank: rank < 0 ? PRIORITY.length : rank });
   }
   const ordered = [...byKey.values()].sort((a, b) => Number(b.decisive) - Number(a.decisive) || a.rank - b.rank);
   let open = 0;
