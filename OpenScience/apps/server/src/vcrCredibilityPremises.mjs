@@ -15,7 +15,7 @@
  * @module vcrCredibilityPremises
  */
 
-import { vcrCredibilityRecord } from "@evimed/domain";
+import { VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, vcrCredibilityRecord } from "@evimed/domain";
 import { list, numeric, object } from "./vcrViewsKit.mjs";
 
 /** @param {number} value @param {number} [digits] */
@@ -27,9 +27,10 @@ const horizonWords = (horizon) => `${String(horizon.weeks).replace(" to ", "–"
 
 /**
  * @param {Record<string, any>} progression the result's `diagnostics.progression`
+ * @param {Record<string, any> | null} [assessment] the study's stored assessment of the model this result runs on (`assessmentForModel`), if it has one
  * @returns {Array<Record<string, any>>} premise rows (`key`, `label`, `value`, `source`, `decisive`), for `finishPremises`
  */
-export function credibilityPremises(progression) {
+export function credibilityPremises(progression, assessment = null) {
   const population = object(progression.population);
   const extrapolation = object(progression.extrapolation);
   const treatment = object(progression.treatment);
@@ -39,6 +40,7 @@ export function credibilityPremises(progression) {
   const record = vcrCredibilityRecord({
     population: { mmseRange: mmse.length === 2 ? mmse : undefined }, lastVisitWeeks: numeric(extrapolation.lastVisit) ?? undefined,
     reproduced: list(object(progression.reproduction).reproduced), replicates: numeric(progression.trials) ?? undefined, hasDrugEffect,
+    ...(assessment ? { assessment } : {}),
   });
   const field = (/** @type {string} */ name) => record.items.find((item) => item.field === name);
   const validation = object(field("validation")?.data);
@@ -75,9 +77,21 @@ export function credibilityPremises(progression) {
       value: `模型的实现已按公开的数字核对过（${reproduced.join("、")}）；这次的数字来自 ${field("verification")?.data.replicates ?? "?"} 次模拟，模拟越多只减小模拟的误差，不改变模型形式或药效假设带来的误差`,
     });
   }
-  rows.push({
-    key: "credibility:risk", label: "模型对决定的影响和出错的后果", decisive: false, source: "default",
-    value: "模型在你的决定里占多大分量、决定出错的后果有多严重，要由你来判断；没有说明时这里不给模型风险等级",
-  });
+  const risk = field("model_risk");
+  const level = String(risk?.data.level ?? "");
+  if (risk?.basis === "computed" && level in VCR_RATING_LABELS_ZH) {
+    const rating = (/** @type {string} */ name) => String(object(field(name)?.data).level ?? "");
+    const word = (/** @type {string} */ value) => (/** @type {Record<string, string>} */ (VCR_RATING_LABELS_ZH))[value] ?? value;
+    const rule = (/** @type {Record<string, string>} */ (VCR_MODEL_RISK_RULE_LABELS_ZH))[String(risk.data.rule)] ?? "";
+    rows.push({
+      key: "credibility:risk", label: "模型对决定的影响和出错的后果", decisive: risk.decisive, source: "given",
+      value: `按你记下的评估：模型对决定的影响${rating("model_influence") ? word(rating("model_influence")) : "未评"}，决定出错的后果${rating("decision_consequence") ? word(rating("decision_consequence")) : "未评"}，模型风险${word(level)}。${rule}`,
+    });
+  } else {
+    rows.push({
+      key: "credibility:risk", label: "模型对决定的影响和出错的后果", decisive: false, source: "default",
+      value: "模型在你的决定里占多大分量、决定出错的后果有多严重，要由你来判断；没有说明时这里不给模型风险等级",
+    });
+  }
   return rows;
 }

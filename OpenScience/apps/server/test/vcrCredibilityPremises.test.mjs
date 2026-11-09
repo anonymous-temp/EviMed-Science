@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { VCR_CREDIBILITY_FIELDS, vcrCredibilityRecord, vcrExternalValidation } from "@evimed/domain";
 import { credibilityPremises } from "../src/vcrCredibilityPremises.mjs";
-import { progressionCard } from "../src/vcrProgression.mjs";
+import { assessmentForModel, presentProgressions, progressionCard } from "../src/vcrProgression.mjs";
 import { summarise } from "../../../evals/vcr-in-silico/external-validation/summarise.mjs";
 
 const RESULT = new URL("../../../evals/vcr-in-silico/external-validation/result-20261109.json", import.meta.url);
@@ -73,4 +73,24 @@ test("the Alzheimer page carries the validation as one of at most five decisive 
   for (const key of ["credibility:validation", "credibility:structure", "credibility:applicability", "credibility:verification", "credibility:risk"]) {
     if (rows[key]) assert.doesNotMatch(`${rows[key].label} ${rows[key].value}`, /[a-z]+_[a-z_]+|patients\.progression|N\d{3}/);
   }
+});
+
+test("a stored assessment of the model the result runs on shows the computed model risk on the page; one about another model, or none, shows nothing", () => {
+  const fixture = { ...JSON.parse(readFileSync(new URL("./fixtures/vcr-progression/alzheimer-beta-logit.json", import.meta.url), "utf8")), id: "res_1", version: 1, kind: "progression_simulation", createdAt: "2026-11-09T00:00:00Z" };
+  const record = (over) => ({ key: "q1", version: 1, modelName: "camd-adas-cog-11", modelVersion: "", influence: "low", consequence: "high", createdAt: "2026-11-09T01:00:00Z", ...over });
+  const bundle = (assessments) => ({ allResults: [fixture], assessments, stale: [] });
+  const risk = (assessments) => byKey(presentProgressions(bundle(assessments), { nodeOf: () => "n" })[0].premises)["credibility:risk"];
+  const bound = risk([record({})]);
+  assert.equal(bound.source, "given");
+  assert.match(bound.value, /影响低，决定出错的后果高，模型风险高/);
+  assert.match(bound.value, /错误决策的后果/);
+  // the page keeps at most five decisive rows, so the shared builder may fold this one; the row itself asks to be decisive when the risk is high
+  assert.equal(byKey(credibilityPremises(diagnostics(), record({})))["credibility:risk"].decisive, true);
+  // the newest record about the model wins; a version that is not the parameter set's, and another model's record, bind nothing
+  assert.match(risk([record({ key: "old", influence: "high", createdAt: "2026-11-01T00:00:00Z" }), record({ influence: "low", consequence: "low", createdAt: "2026-11-09T02:00:00Z" })]).value, /模型风险低/);
+  for (const none of [[], [record({ modelName: "other-model" })], [record({ modelVersion: "adsim-9" })], [record({ influence: "", consequence: "" })]]) {
+    assert.match(risk(none).value, /没有说明时这里不给模型风险等级/);
+  }
+  assert.equal(assessmentForModel([record({ modelVersion: "adsim-3.0" })], "camd-adas-cog-11")?.key, "q1");
+  assert.equal(assessmentForModel([record({})], null), null);
 });

@@ -29,7 +29,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { VCR_RESULT_QUANTITY_LABELS_ZH, VCR_SIMULATION_ERROR_SENTENCE_ZH, VCR_UNCERTAINTY_MODE_QUANTITY, vcrEstimandAlignment } from "@evimed/domain";
+import { VCR_PROGRESSION_PARAMETER_SETS, VCR_RESULT_QUANTITY_LABELS_ZH, VCR_SIMULATION_ERROR_SENTENCE_ZH, VCR_UNCERTAINTY_MODE_QUANTITY, vcrEstimandAlignment } from "@evimed/domain";
 import { finishPremises } from "./vcrPremises.mjs";
 import { drugOriginPremises } from "./vcrDrugOriginPremises.mjs";
 import { credibilityPremises } from "./vcrCredibilityPremises.mjs";
@@ -200,7 +200,7 @@ function estimandsOf(progression, shown) {
 }
 
 /** The premises of the Alzheimer model (beta_logit): five decisive sentences, the rest folded. @param {Record<string, any>} progression */
-function alzheimerPremisesOf(progression) {
+function alzheimerPremisesOf(progression, assessment = null) {
   const effect = alzheimerEffectWords(progression);
   const effectBasis = String(givenOf(progression, "treatment.diseaseModifying.fraction").basis ?? givenOf(progression, "treatment.symptomatic.pointsAt").basis ?? givenOf(progression, "treatment.symptomatic.logitEmax").basis ?? "assumed");
   const extrapolation = object(progression.extrapolation);
@@ -248,7 +248,7 @@ function alzheimerPremisesOf(progression) {
   rows.push({ key: "progression:ad:curves", label: "曲线怎么算的", source: "default",
     value: "平均病程按典型研究、用参数的中位数精确计算；检验的把握度和估计差值是模拟的" });
   rows.push(...drugOriginPremises(progression));
-  rows.push(...credibilityPremises(progression));
+  rows.push(...credibilityPremises(progression, assessment));
   rows.push({ key: "lab:replicates", label: "模拟的误差", source: "default", decisive: false, value: VCR_SIMULATION_ERROR_SENTENCE_ZH });
   return finishPremises(rows);
 }
@@ -292,7 +292,7 @@ function runWords(result, progression, alzheimer) {
 /**
  * @param {Record<string, any>} result @param {any} staleMark
  */
-function cardOf(result, staleMark) {
+function cardOf(result, staleMark, assessment = null) {
   const progression = object(object(result.diagnostics).progression);
   const family = String(progression.family ?? "");
   const curves = list(progression.curves).map(object);
@@ -355,7 +355,7 @@ function cardOf(result, staleMark) {
     },
     estimands: alzheimer ? estimandsOf(progression, shown) : null,
     trials: numeric(progression.trials),
-    premises: alzheimer ? alzheimerPremisesOf(progression) : premisesOf(progression, unit),
+    premises: alzheimer ? alzheimerPremisesOf(progression, assessment) : premisesOf(progression, unit),
     limited: list(object(result.diagnostics).issues).some((issue) => object(issue).code === "cpu_budget_exhausted")
       ? `只模拟完了一部分试验（${numeric(progression.trials) ?? "?"} 次，原定 ${numeric(progression.trialsRequested) ?? "?"} 次），数字按已完成的给出。` : null,
   };
@@ -378,6 +378,21 @@ function estimatorForQuestionRows(bundle, result) {
 }
 
 /**
+ * The study's stored model assessment (ICH M15) of the model a result runs on: the newest record that names the model by its id (a record says which model it is
+ * about, and the Alzheimer result runs on the parameter set of that id), with a version only when the record gives one that is the parameter set's. A study
+ * with several questions about one model binds the most recently saved; none, or a record about another model, binds nothing and the page says nothing of risk.
+ * @param {unknown} assessments the study's records (`bundle.assessments`) @param {string | null} modelId
+ * @returns {Record<string, any> | null}
+ */
+export function assessmentForModel(assessments, modelId) {
+  if (!modelId) return null;
+  const version = VCR_PROGRESSION_PARAMETER_SETS[/** @type {keyof typeof VCR_PROGRESSION_PARAMETER_SETS} */ (modelId)];
+  const bound = list(assessments).map(object).filter((record) => record.modelName === modelId && (!record.modelVersion || record.modelVersion === version));
+  bound.sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")));
+  return bound[0] ?? null;
+}
+
+/**
  * The cards of the patients tab for every progression simulation the study holds now, newest first.
  * @param {Record<string, any>} bundle the patients tab's bundle (`results`, `allResults`, `stale`)
  * @param {{ nodeOf: (result: Record<string, any>) => string }} helpers
@@ -388,9 +403,9 @@ export function presentProgressions(bundle, { nodeOf }) {
   const results = list(bundle.allResults ?? bundle.results).map(object).filter((row) => row.kind === "progression_simulation" && !row.supersededBy)
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   return results.map((result) => {
-    const card = cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)));
     // The Alzheimer model's calibration estimand is the parameter set's: only a result computed with it is judged against it.
     const modelId = object(object(object(result.diagnostics).progression)).family === "beta_logit" ? "camd-adas-cog-11" : null;
+    const card = cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)), assessmentForModel(bundle.assessments, modelId));
     const rows = card ? [...researchQuestionPremises(resultQuestionInput(bundle, result, modelId)), ...estimatorForQuestionRows(bundle, result)] : [];
     return card && rows.length ? { ...card, premises: finishPremises([...list(card.premises), ...rows]) } : card;
   }).filter(Boolean);
