@@ -30,21 +30,21 @@
 .vcr_bl_effect_spec <- function(x, field, lo, hi, closed_lo = FALSE) {
   if (is.null(x)) return(NULL)
   d <- x[["distribution"]]
-  bad <- function(f, detail) vcr_abort("scenario_value_invalid", paste0(field, ".distribution.", f), detail)
+  refuse_field <- function(f, detail) vcr_abort("scenario_value_invalid", paste0(field, ".distribution.", f), detail)
   if (is.null(d)) return(list(family = "fixed", parameters = list(value = vcr_scalar(x[["value"]])), source = NULL, tier = NULL, distributed = FALSE, lo = lo, hi = hi, closed_lo = closed_lo))
   family <- as.character(d[["family"]] %||% "")
-  if (!(family %in% .VCR_BL_EFFECT_FAMILIES)) bad("family", "The effect distribution is fixed, normal, truncated_normal, lognormal, beta, uniform or empirical_draws.")
+  if (!(family %in% .VCR_BL_EFFECT_FAMILIES)) refuse_field("family", "The effect distribution is fixed, normal, truncated_normal, lognormal, beta, uniform or empirical_draws.")
   pr <- d[["parameters"]] %||% list()
-  num <- function(k) { v <- vcr_scalar(pr[[k]]); if (is.null(v) || !is.finite(v)) bad(paste0("parameters.", k), sprintf("The %s family needs a number `%s`.", family, k)); v }
+  num <- function(k) { v <- vcr_scalar(pr[[k]]); if (is.null(v) || !is.finite(v)) refuse_field(paste0("parameters.", k), sprintf("The %s family needs a number `%s`.", family, k)); v }
   parameters <- switch(family,
     fixed = list(value = num("value")),
-    normal = { p <- list(mean = num("mean"), sd = num("sd")); if (!(p$sd > 0)) bad("parameters.sd", "The SD is positive."); p },
+    normal = { p <- list(mean = num("mean"), sd = num("sd")); if (!(p$sd > 0)) refuse_field("parameters.sd", "The SD is positive."); p },
     truncated_normal = { p <- list(mean = num("mean"), sd = num("sd"), lower = num("lower"), upper = num("upper"))
-      if (!(p$sd > 0) || !(p$upper > p$lower)) bad("parameters", "The SD is positive and the upper bound is above the lower."); p },
-    lognormal = { p <- list(meanlog = num("meanlog"), sdlog = num("sdlog")); if (!(p$sdlog > 0)) bad("parameters.sdlog", "The SD of the log is positive."); p },
-    beta = { p <- list(shape1 = num("shape1"), shape2 = num("shape2")); if (!(p$shape1 > 0) || !(p$shape2 > 0)) bad("parameters", "Both beta shapes are positive."); p },
-    uniform = { p <- list(min = num("min"), max = num("max")); if (!(p$max > p$min)) bad("parameters.max", "The upper end is above the lower."); p },
-    empirical_draws = { v <- vcr_num(pr[["values"]]); if (length(v) < 2L || length(v) > 10000L || anyNA(v) || !all(is.finite(v))) bad("parameters.values", "Between 2 and 10000 finite numbers."); list(values = v) })
+      if (!(p$sd > 0) || !(p$upper > p$lower)) refuse_field("parameters", "The SD is positive and the upper bound is above the lower."); p },
+    lognormal = { p <- list(meanlog = num("meanlog"), sdlog = num("sdlog")); if (!(p$sdlog > 0)) refuse_field("parameters.sdlog", "The SD of the log is positive."); p },
+    beta = { p <- list(shape1 = num("shape1"), shape2 = num("shape2")); if (!(p$shape1 > 0) || !(p$shape2 > 0)) refuse_field("parameters", "Both beta shapes are positive."); p },
+    uniform = { p <- list(min = num("min"), max = num("max")); if (!(p$max > p$min)) refuse_field("parameters.max", "The upper end is above the lower."); p },
+    empirical_draws = { v <- vcr_num(pr[["values"]]); if (length(v) < 2L || length(v) > 10000L || anyNA(v) || !all(is.finite(v))) refuse_field("parameters.values", "Between 2 and 10000 finite numbers."); list(values = v) })
   src <- d[["source"]] %||% list()
   tier <- as.character(d[["tier"]] %||% "")
   spec <- list(family = family, parameters = parameters, source = list(kind = as.character(src[["kind"]] %||% ""), citation = src[["citation"]], objectRef = src[["objectRef"]], note = src[["note"]]),

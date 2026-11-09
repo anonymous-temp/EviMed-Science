@@ -596,7 +596,7 @@ vcr_pattern_match <- function(pattern, x) {
     if (!is.null(node$minLength) && n < node$minLength) raise("scenario_value_invalid", path, "The string is too short.")
     else if (!is.null(node$maxLength) && n > node$maxLength) raise("scenario_value_invalid", path, "The string is too long.")
     else if (!is.null(node$pattern) && !vcr_pattern_match(node$pattern, value)) raise("scenario_value_invalid", path, "The value does not match the expected name pattern.")
-    else if (!is.null(node$values) && !(value %in% unlist(node$values))) {
+    else if (!is.null(node[["values"]]) && !(value %in% unlist(node[["values"]]))) {
       raise(node$badValueCode %||% "scenario_value_invalid", path, "The value is not one of the allowed words.")
     } else if (!is.null(node$valuesBy)) {
       by <- .vcrp_lookup(ctx$root, node$valuesBy$path)
@@ -716,7 +716,7 @@ vcr_pattern_match <- function(pattern, x) {
   }
   for (key in names(fields)) {
     field <- fields[[key]]
-    required<-isTRUE(field$req)||(!is.null(field$reqWhen)&&.vcrp_when_holds(field$reqWhen,ctx$root))
+    required<-isTRUE(field[["req"]])||(!is.null(field$reqWhen)&&.vcrp_when_holds(field$reqWhen,ctx$root))
     if (!active(field)) next
     if (.vcrp_has(value, key) && is.null(value[[key]])) {
       if (!isTRUE(field$nullable)) raise("scenario_value_invalid", .vcrp_at(path, key), "null is not a value; leave the key out.")
