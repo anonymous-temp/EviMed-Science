@@ -1,0 +1,150 @@
+{
+  "scenarios": {
+    "V1": {
+      "planted": "effect",
+      "status": "succeeded",
+      "engineEvppi": {
+        "effect": 28.558915,
+        "sd": 0,
+        "dropoutShare": 0
+      },
+      "engineTop": "effect",
+      "oracleEvpiOneInput": {
+        "effect": 28.530124,
+        "sd": 0,
+        "dropoutShare": -1.421085e-14
+      },
+      "oracleTop": "effect",
+      "enginePlantedFirst": true,
+      "oraclePlantedFirst": true
+    },
+    "V2": {
+      "planted": "dropoutShare",
+      "status": "succeeded",
+      "engineEvppi": {
+        "dropoutShare": 10.247625,
+        "effect": 0.032085
+      },
+      "engineTop": "dropoutShare",
+      "oracleEvpiOneInput": {
+        "effect": 0.028035,
+        "sd": 4.263256e-14,
+        "dropoutShare": 10.373268
+      },
+      "oracleTop": "dropoutShare",
+      "enginePlantedFirst": true,
+      "oraclePlantedFirst": true
+    },
+    "V3": {
+      "planted": "sd",
+      "status": "succeeded",
+      "engineEvppi": {
+        "sd": 12.368326,
+        "effect": 0,
+        "dropoutShare": 0
+      },
+      "engineTop": "sd",
+      "oracleEvpiOneInput": {
+        "effect": 0,
+        "sd": 12.425871,
+        "dropoutShare": -1.421085e-14
+      },
+      "oracleTop": "sd",
+      "enginePlantedFirst": true,
+      "oraclePlantedFirst": true
+    },
+    "V4": {
+      "planted": "controlProgression",
+      "status": "succeeded",
+      "engineEvppi": {
+        "controlProgression": 15.025922,
+        "effect": 0.002807,
+        "dropoutShare": 0
+      },
+      "engineTop": "controlProgression",
+      "oracleEvpiOneInput": {
+        "effect": 0.013204,
+        "sd": -4.263256e-14,
+        "dropoutShare": 7.105427e-15,
+        "controlProgression": 14.934691
+      },
+      "oracleTop": "controlProgression",
+      "enginePlantedFirst": true,
+      "oraclePlantedFirst": true
+    },
+    "V5": {
+      "planted": "effect",
+      "status": "succeeded",
+      "engineEvppi": {
+        "effect": 32.041789,
+        "sd": 0,
+        "dropoutShare": 0
+      },
+      "engineTop": "effect",
+      "oracleEvpiOneInput": {
+        "effect": 32.295103,
+        "sd": 0.007009,
+        "dropoutShare": 0.000165
+      },
+      "oracleTop": "effect",
+      "enginePlantedFirst": true,
+      "oraclePlantedFirst": true
+    },
+    "V6": {
+      "planted": "dropoutShare",
+      "status": "succeeded",
+      "engineEvppi": {
+        "dropoutShare": 13.981743,
+        "effect": 0.099429
+      },
+      "engineTop": "dropoutShare",
+      "oracleEvpiOneInput": {
+        "effect": 0.996477,
+        "sd": -4.973799e-14,
+        "dropoutShare": 14.182276
+      },
+      "oracleTop": "dropoutShare",
+      "enginePlantedFirst": true,
+      "oraclePlantedFirst": true
+    },
+    "V7": {
+      "planted": "sd",
+      "status": "succeeded",
+      "engineEvppi": {
+        "sd": 12.184028,
+        "effect": 0.002814,
+        "dropoutShare": 0
+      },
+      "engineTop": "sd",
+      "oracleEvpiOneInput": {
+        "effect": 3.522954e-06,
+        "sd": 12.668074,
+        "dropoutShare": 0
+      },
+      "oracleTop": "sd",
+      "enginePlantedFirst": true,
+      "oraclePlantedFirst": true
+    },
+    "V8": {
+      "planted": "effect",
+      "status": "succeeded",
+      "engineEvppi": {
+        "effect": 36.917797,
+        "sd": 0.038446,
+        "dropoutShare": 0
+      },
+      "engineTop": "effect",
+      "oracleEvpiOneInput": {
+        "effect": 36.76938,
+        "sd": 1.900486,
+        "dropoutShare": 0.760809
+      },
+      "oracleTop": "effect",
+      "enginePlantedFirst": true,
+      "oraclePlantedFirst": true
+    }
+  },
+  "plantedFirstEngine": 8,
+  "plantedFirstOracle": 8,
+  "n": 8
+}

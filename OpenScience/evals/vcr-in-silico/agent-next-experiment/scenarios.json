@@ -1,0 +1,401 @@
+{
+ "id": "agent-next-experiment-r37c",
+ "frozenAt": "2026-11-09",
+ "purpose": "Plan R37c: eight known-truth scenarios, each with one planted decisive uncertainty (the others narrow). Part 1 offline: does decision.value_of_information rank the planted input first; part 2 live: does the agent run the method and name the planted input as the next step.",
+ "oracle": "independent of the engine: plain-R one-input-at-a-time EVPI (others held at their medians) on a closed-form one-sided z-test power, 200000 draws; checked in part1.R before freezing",
+ "grading": {
+  "part1": "engine EVPPI rank 1 == plantedInput",
+  "part2": "agentRan: a vcr_simulate call of kind decision_value_of_information whose scenario gives the planted input a distribution; engineNext: that run's result names the planted input as the next step (read from the result); named: the final reply's last paragraph mentions the planted input's label (a closed vocabulary from inputLabels) at least as often as any other input's label; counted separately, never merged"
+ },
+ "samplesPerScenario": 2,
+ "turnTimeoutSeconds": 900,
+ "scenarios": [
+  {
+   "id": "V1",
+   "plantedInput": "effect",
+   "inputLabels": {
+    "effect": "药物的真实效应（两组 ADAS-cog 之差，单位分）",
+    "sd": "结局的个体标准差（分）",
+    "dropoutShare": "脱落率"
+   },
+   "text": "阿尔茨海默病的两臂试验（连续终点，单侧 α 2.5%），决定是否投入。可选方案：不开展试验、每组 300 人。成功的价值按 400（百万元）算，每名受试者成本 0.2（百万元），以净收益衡量。目前不确定的输入：药物的真实效应（两组 ADAS-cog 之差，单位分）服从正态分布，均值 1.2、标准差 0.9；结局的个体标准差（分）服从对数正态分布，对数均值 1.95、对数标准差 0.03；脱落率服从 Beta(40, 160) 分布，彼此独立。请告诉我：哪一项不确定性对这个决定最关键，接下来最值得先做哪个实验或收集哪种数据？",
+   "engineScenario": {
+    "source": "two_arm_continuous",
+    "utility": "net_benefit",
+    "successValue": 400,
+    "costPerPatient": 0.2,
+    "unit": "m",
+    "effectScale": "absolute",
+    "options": [
+     {
+      "label": "不开展试验",
+      "nPerArm": 0
+     },
+     {
+      "label": "每组 300 人",
+      "nPerArm": 300
+     }
+    ],
+    "inputs": {
+     "effect": {
+      "family": "normal",
+      "mean": 1.2,
+      "sd": 0.9
+     },
+     "sd": {
+      "family": "lognormal",
+      "meanlog": 1.95,
+      "sdlog": 0.03
+     },
+     "dropoutShare": {
+      "family": "beta",
+      "alpha": 40,
+      "beta": 160
+     }
+    }
+   }
+  },
+  {
+   "id": "V2",
+   "plantedInput": "dropoutShare",
+   "inputLabels": {
+    "effect": "药物的真实效应（两组 ADAS-cog 之差，单位分）",
+    "sd": "结局的个体标准差（分）",
+    "dropoutShare": "脱落率"
+   },
+   "text": "阿尔茨海默病的两臂试验（连续终点，单侧 α 2.5%），决定是否投入。可选方案：不开展试验、每组 300 人。成功的价值按 400（百万元）算，每名受试者成本 0.2（百万元），以净收益衡量。目前不确定的输入：药物的真实效应（两组 ADAS-cog 之差，单位分）服从正态分布，均值 1.2、标准差 0.05；结局的个体标准差（分）确定为 7；脱落率在 0.05 到 0.8 之间均匀分布，彼此独立。请告诉我：哪一项不确定性对这个决定最关键，接下来最值得先做哪个实验或收集哪种数据？",
+   "engineScenario": {
+    "source": "two_arm_continuous",
+    "utility": "net_benefit",
+    "successValue": 400,
+    "costPerPatient": 0.2,
+    "unit": "m",
+    "effectScale": "absolute",
+    "options": [
+     {
+      "label": "不开展试验",
+      "nPerArm": 0
+     },
+     {
+      "label": "每组 300 人",
+      "nPerArm": 300
+     }
+    ],
+    "inputs": {
+     "effect": {
+      "family": "normal",
+      "mean": 1.2,
+      "sd": 0.05
+     },
+     "sd": {
+      "family": "fixed",
+      "value": 7
+     },
+     "dropoutShare": {
+      "family": "uniform",
+      "min": 0.05,
+      "max": 0.8
+     }
+    }
+   }
+  },
+  {
+   "id": "V3",
+   "plantedInput": "sd",
+   "inputLabels": {
+    "effect": "药物的真实效应（两组 ADAS-cog 之差，单位分）",
+    "sd": "结局的个体标准差（分）",
+    "dropoutShare": "脱落率"
+   },
+   "text": "阿尔茨海默病的两臂试验（连续终点，单侧 α 2.5%），决定是否投入。可选方案：不开展试验、每组 300 人。成功的价值按 400（百万元）算，每名受试者成本 0.2（百万元），以净收益衡量。目前不确定的输入：药物的真实效应（两组 ADAS-cog 之差，单位分）服从正态分布，均值 1.2、标准差 0.05；结局的个体标准差（分）服从对数正态分布，对数均值 1.95、对数标准差 0.5；脱落率服从 Beta(40, 160) 分布，彼此独立。请告诉我：哪一项不确定性对这个决定最关键，接下来最值得先做哪个实验或收集哪种数据？",
+   "engineScenario": {
+    "source": "two_arm_continuous",
+    "utility": "net_benefit",
+    "successValue": 400,
+    "costPerPatient": 0.2,
+    "unit": "m",
+    "effectScale": "absolute",
+    "options": [
+     {
+      "label": "不开展试验",
+      "nPerArm": 0
+     },
+     {
+      "label": "每组 300 人",
+      "nPerArm": 300
+     }
+    ],
+    "inputs": {
+     "effect": {
+      "family": "normal",
+      "mean": 1.2,
+      "sd": 0.05
+     },
+     "sd": {
+      "family": "lognormal",
+      "meanlog": 1.95,
+      "sdlog": 0.5
+     },
+     "dropoutShare": {
+      "family": "beta",
+      "alpha": 40,
+      "beta": 160
+     }
+    }
+   }
+  },
+  {
+   "id": "V4",
+   "plantedInput": "controlProgression",
+   "inputLabels": {
+    "effect": "药物减缓进展的比例",
+    "sd": "结局的个体标准差（分）",
+    "dropoutShare": "脱落率",
+    "controlProgression": "安慰剂组 78 周的进展（分）"
+   },
+   "text": "阿尔茨海默病的两臂试验（连续终点，单侧 α 2.5%），决定是否投入。可选方案：不开展试验、每组 300 人。成功的价值按 400（百万元）算，每名受试者成本 0.2（百万元），以净收益衡量。目前不确定的输入：药物减缓进展的比例服从正态分布，均值 0.3、标准差 0.02；结局的个体标准差（分）确定为 7；脱落率服从 Beta(40, 160) 分布；安慰剂组 78 周的进展（分）在 1.5 到 6.0 之间均匀分布，彼此独立。这里药物效应写成安慰剂组进展的比例（0.3 表示减缓 30%）。请告诉我：哪一项不确定性对这个决定最关键，接下来最值得先做哪个实验或收集哪种数据？",
+   "engineScenario": {
+    "source": "two_arm_continuous",
+    "utility": "net_benefit",
+    "successValue": 400,
+    "costPerPatient": 0.2,
+    "unit": "m",
+    "effectScale": "proportional_slowing",
+    "options": [
+     {
+      "label": "不开展试验",
+      "nPerArm": 0
+     },
+     {
+      "label": "每组 300 人",
+      "nPerArm": 300
+     }
+    ],
+    "inputs": {
+     "effect": {
+      "family": "normal",
+      "mean": 0.3,
+      "sd": 0.02
+     },
+     "sd": {
+      "family": "fixed",
+      "value": 7
+     },
+     "dropoutShare": {
+      "family": "beta",
+      "alpha": 40,
+      "beta": 160
+     },
+     "controlProgression": {
+      "family": "uniform",
+      "min": 1.5,
+      "max": 6.0
+     }
+    }
+   }
+  },
+  {
+   "id": "V5",
+   "plantedInput": "effect",
+   "inputLabels": {
+    "effect": "药物的真实效应（两组 ADAS-cog 之差，单位分）",
+    "sd": "结局的个体标准差（分）",
+    "dropoutShare": "脱落率"
+   },
+   "text": "阿尔茨海默病的两臂试验（连续终点，单侧 α 2.5%），决定是否投入。可选方案：不开展试验、每组 150 人、每组 300 人、每组 450 人。成功的价值按 400（百万元）算，每名受试者成本 0.2（百万元），以净收益衡量。目前不确定的输入：药物的真实效应（两组 ADAS-cog 之差，单位分）服从正态分布，均值 0.9、标准差 0.7；结局的个体标准差（分）服从对数正态分布，对数均值 1.95、对数标准差 0.03；脱落率服从 Beta(40, 160) 分布，彼此独立。请告诉我：哪一项不确定性对这个决定最关键，接下来最值得先做哪个实验或收集哪种数据？",
+   "engineScenario": {
+    "source": "two_arm_continuous",
+    "utility": "net_benefit",
+    "successValue": 400,
+    "costPerPatient": 0.2,
+    "unit": "m",
+    "effectScale": "absolute",
+    "options": [
+     {
+      "label": "不开展试验",
+      "nPerArm": 0
+     },
+     {
+      "label": "每组 150 人",
+      "nPerArm": 150
+     },
+     {
+      "label": "每组 300 人",
+      "nPerArm": 300
+     },
+     {
+      "label": "每组 450 人",
+      "nPerArm": 450
+     }
+    ],
+    "inputs": {
+     "effect": {
+      "family": "normal",
+      "mean": 0.9,
+      "sd": 0.7
+     },
+     "sd": {
+      "family": "lognormal",
+      "meanlog": 1.95,
+      "sdlog": 0.03
+     },
+     "dropoutShare": {
+      "family": "beta",
+      "alpha": 40,
+      "beta": 160
+     }
+    }
+   }
+  },
+  {
+   "id": "V6",
+   "plantedInput": "dropoutShare",
+   "inputLabels": {
+    "effect": "药物的真实效应（两组 ADAS-cog 之差，单位分）",
+    "sd": "结局的个体标准差（分）",
+    "dropoutShare": "脱落率"
+   },
+   "text": "阿尔茨海默病的两臂试验（连续终点，单侧 α 2.5%），决定是否投入。可选方案：不开展试验、每组 150 人、每组 300 人、每组 450 人。成功的价值按 400（百万元）算，每名受试者成本 0.2（百万元），以净收益衡量。目前不确定的输入：药物的真实效应（两组 ADAS-cog 之差，单位分）服从正态分布，均值 1.3、标准差 0.05；结局的个体标准差（分）确定为 7；脱落率在 0.05 到 0.85 之间均匀分布，彼此独立。请告诉我：哪一项不确定性对这个决定最关键，接下来最值得先做哪个实验或收集哪种数据？",
+   "engineScenario": {
+    "source": "two_arm_continuous",
+    "utility": "net_benefit",
+    "successValue": 400,
+    "costPerPatient": 0.2,
+    "unit": "m",
+    "effectScale": "absolute",
+    "options": [
+     {
+      "label": "不开展试验",
+      "nPerArm": 0
+     },
+     {
+      "label": "每组 150 人",
+      "nPerArm": 150
+     },
+     {
+      "label": "每组 300 人",
+      "nPerArm": 300
+     },
+     {
+      "label": "每组 450 人",
+      "nPerArm": 450
+     }
+    ],
+    "inputs": {
+     "effect": {
+      "family": "normal",
+      "mean": 1.3,
+      "sd": 0.05
+     },
+     "sd": {
+      "family": "fixed",
+      "value": 7
+     },
+     "dropoutShare": {
+      "family": "uniform",
+      "min": 0.05,
+      "max": 0.85
+     }
+    }
+   }
+  },
+  {
+   "id": "V7",
+   "plantedInput": "sd",
+   "inputLabels": {
+    "effect": "药物的真实效应（两组 ADAS-cog 之差，单位分）",
+    "sd": "结局的个体标准差（分）",
+    "dropoutShare": "脱落率"
+   },
+   "text": "阿尔茨海默病的两臂试验（连续终点，单侧 α 2.5%），决定是否投入。可选方案：不开展试验、每组 150 人、每组 300 人、每组 450 人。成功的价值按 400（百万元）算，每名受试者成本 0.2（百万元），以净收益衡量。目前不确定的输入：药物的真实效应（两组 ADAS-cog 之差，单位分）服从正态分布，均值 1.3、标准差 0.05；结局的个体标准差（分）服从对数正态分布，对数均值 1.95、对数标准差 0.45；脱落率服从 Beta(40, 160) 分布，彼此独立。请告诉我：哪一项不确定性对这个决定最关键，接下来最值得先做哪个实验或收集哪种数据？",
+   "engineScenario": {
+    "source": "two_arm_continuous",
+    "utility": "net_benefit",
+    "successValue": 400,
+    "costPerPatient": 0.2,
+    "unit": "m",
+    "effectScale": "absolute",
+    "options": [
+     {
+      "label": "不开展试验",
+      "nPerArm": 0
+     },
+     {
+      "label": "每组 150 人",
+      "nPerArm": 150
+     },
+     {
+      "label": "每组 300 人",
+      "nPerArm": 300
+     },
+     {
+      "label": "每组 450 人",
+      "nPerArm": 450
+     }
+    ],
+    "inputs": {
+     "effect": {
+      "family": "normal",
+      "mean": 1.3,
+      "sd": 0.05
+     },
+     "sd": {
+      "family": "lognormal",
+      "meanlog": 1.95,
+      "sdlog": 0.45
+     },
+     "dropoutShare": {
+      "family": "beta",
+      "alpha": 40,
+      "beta": 160
+     }
+    }
+   }
+  },
+  {
+   "id": "V8",
+   "plantedInput": "effect",
+   "inputLabels": {
+    "effect": "药物的真实效应（两组 ADAS-cog 之差，单位分）",
+    "sd": "结局的个体标准差（分）",
+    "dropoutShare": "脱落率"
+   },
+   "text": "阿尔茨海默病的两臂试验（连续终点，单侧 α 2.5%），决定是否投入。可选方案：不开展试验、每组 300 人。成功的价值按 400（百万元）算，每名受试者成本 0.2（百万元），以净收益衡量。目前不确定的输入：药物的真实效应（两组 ADAS-cog 之差，单位分）服从正态分布，均值 1.0、标准差 0.9；结局的个体标准差（分）服从对数正态分布，对数均值 1.95、对数标准差 0.1；脱落率服从 Beta(4, 16) 分布，彼此独立。请告诉我：哪一项不确定性对这个决定最关键，接下来最值得先做哪个实验或收集哪种数据？",
+   "engineScenario": {
+    "source": "two_arm_continuous",
+    "utility": "net_benefit",
+    "successValue": 400,
+    "costPerPatient": 0.2,
+    "unit": "m",
+    "effectScale": "absolute",
+    "options": [
+     {
+      "label": "不开展试验",
+      "nPerArm": 0
+     },
+     {
+      "label": "每组 300 人",
+      "nPerArm": 300
+     }
+    ],
+    "inputs": {
+     "effect": {
+      "family": "normal",
+      "mean": 1.0,
+      "sd": 0.9
+     },
+     "sd": {
+      "family": "lognormal",
+      "meanlog": 1.95,
+      "sdlog": 0.1
+     },
+     "dropoutShare": {
+      "family": "beta",
+      "alpha": 4,
+      "beta": 16
+     }
+    }
+   }
+  }
+ ]
+}
