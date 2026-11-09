@@ -38,6 +38,12 @@ const MANIFEST = { question: "smallest trial", objective: { measure: "expected_s
   space: { method: "design.simulate", scenario: { truth: { hazardRatio: 0.75 } }, variables: [{ path: "design.nTreat", values: [150, 200, 250] }] },
   stages: { final: { count: 2 } }, budget: { maxCandidates: 3, cpuSeconds: 600 } };
 
+/** The short form of a design search (R10): sent in the same `manifest` field, compiled by the control plane's campaign start, never by the proof. */
+const SEARCH_FORM = { method: "design.simulate",
+  scenario: { design: { kind: "two_arm_fixed", nTreat: 100, nControl: 100 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 12 },
+    accrual: { kind: "uniform", duration: 12, followup: 12 }, analysis: { method: "logrank", alpha: 0.025, sided: 1 } },
+  vary: { "design.nTreat+design.nControl": [[80, 80], [120, 120]] }, goal: { minimize: "expected_sample_size", power: 0.8 } };
+
 /** What the model sent to `vcr_simulate`, one per lab action. */
 const LAB_CALLS = {
   search: { action: "search", manifest: MANIFEST },
@@ -145,4 +151,21 @@ test("a lab request that is not the pending call is refused", async () => {
   for (const [input, body] of forged) await assert.rejects(proof(input, body), { code: "vcr_invocation_unavailable" }, JSON.stringify(body).slice(0, 120));
   // A key the MCP server never forwards for that action is not projected either: the call may carry it, the request does not.
   assert.equal((await proof({ ...LAB_CALLS.compare_status, jobId: "job_x" }, LAB_CALLS.compare_status)).runId, "run_live");
+});
+
+test("the short form of a search is proved and reaches the lab exactly as the model wrote it, and a changed form is a forged request", async (t) => {
+  const { callTool, reached } = await controlPlane(t);
+  const answer = await callTool({ action: "search", manifest: SEARCH_FORM });
+  assert.equal(answer.status, "success", JSON.stringify(answer).slice(0, 400));
+  assert.deepEqual(reached.at(-1), ["search", SEARCH_FORM], "compiled later, by startCampaign: the proof and the gateway carry the form whole");
+  const project = { id: "prj_1", userId: "u1" };
+  const proof = (/** @type {Record<string, any>} */ input, /** @type {Record<string, any>} */ body) => verifyVcrInvocation({
+    header: JSON.stringify({ v: 1, sessionId: "root", callId: "call_lab" }), operation: "simulate", body, project,
+    runtimeManager: { sessionTranscript: async (/** @type {any} */ _p, /** @type {string} */ sessionId) => ({ sessionId, truncated: false, turns: [{ startSeq: 1, end: null }],
+      messages: [{ turnStartSeq: 1, role: "assistant", parts: [{ type: "tool", callId: "call_lab", status: "pending", tool: mcpToolName("vcr_simulate"), input }] }] }) },
+    resolveSession: () => ({ runId: "run_live" }), runs: [{ id: "run_live", sessionId: "root" }] });
+  const sent = { action: "search", manifest: SEARCH_FORM };
+  assert.equal((await proof(sent, sent)).runId, "run_live");
+  await assert.rejects(proof(sent, { action: "search", manifest: { ...SEARCH_FORM, goal: { minimize: "expected_sample_size", power: 0.5 } } }), { code: "vcr_invocation_unavailable" });
+  await assert.rejects(proof(sent, { action: "search", manifest: SEARCH_FORM, form: SEARCH_FORM }), { code: "vcr_invocation_unavailable" }, "no other field is read for this action");
 });

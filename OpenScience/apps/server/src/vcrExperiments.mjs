@@ -39,7 +39,7 @@
 import { createHash } from "node:crypto";
 import {
   VCR_ENGINE_METHODS, VCR_CAMPAIGN_METHODS, VCR_JOB_METHODS, vcrCampaignAdvance, vcrCampaignCandidates, vcrCampaignCanonical,
-  vcrCampaignInitialState, vcrCampaignManifest, vcrCampaignRecord, vcrCampaignVerdict, vcrCampaignDrawKey, vcrCampaignSeed, vcrCandidateVerdicts,
+  vcrCampaignInitialState, vcrCampaignFromInput, vcrCampaignRecord, vcrCampaignVerdict, vcrCampaignDrawKey, vcrCampaignSeed, vcrCandidateVerdicts,
   vcrDesignExperiment, vcrDesignExperimentCanonical, vcrDiseaseHypothesis, vcrEvaluationContrast, vcrEvaluationMeasure, vcrExperimentAlignment,
   VCR_DISEASE_EXPERIMENT_ALIGNED_FIELDS, vcrEvaluationAllowed,
 } from "@evimed/domain";
@@ -142,7 +142,7 @@ export class VcrExperiments {
    * @param {{ id: string, userId: string }} study @param {unknown} input @param {{ userId: string, origin?: Record<string, any> | null }} who
    */
   async startCampaign(study, input, { userId, origin = null }) {
-    const { manifest, issues } = vcrCampaignManifest(input);
+    const { manifest, issues } = vcrCampaignFromInput(input);
     if (!manifest) throw invalid("vcr_campaign_invalid", "实验方案不完整或不允许：", issues);
     const identity = sha256(vcrCampaignCanonical(manifest));
     const id = `cmp_${sha256(`${study.id}:${identity}`).slice(0, 24)}`;

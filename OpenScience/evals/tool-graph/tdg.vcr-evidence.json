@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:8d357c4ad7b42383d778a55892a72fcc005df508a1cef58423f4965fb7b83519",
+  "version": "sha256:2e93a59f2ec86a3d1acf7df5ce121caa370cd747e8fb9d52f477ec95c3c006fc",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 37,
@@ -1693,12 +1693,17 @@
               "candidate_trials",
               "soa",
               "regulatory_contacts",
+              "research_question",
               "candidates",
               "success_rates"
             ]
           },
           "filter": {
             "type": "object"
+          },
+          "studyId": {
+            "type": "string",
+            "maxLength": 160
           }
         },
         "required": [
@@ -1795,7 +1800,8 @@
               "forecast_trajectories",
               "evaluate_forecast",
               "compare_forecasts",
-              "benchmark_trial_effect"
+              "benchmark_trial_effect",
+              "search"
             ]
           },
           "scenario": {
@@ -1940,6 +1946,10 @@
                 }
               ]
             }
+          },
+          "studyId": {
+            "type": "string",
+            "maxLength": 160
           }
         },
         "required": [
@@ -2001,7 +2011,8 @@
               "candidate_trial",
               "soa",
               "regulatory_contact",
-              "result_record"
+              "result_record",
+              "research_question"
             ]
           },
           "items": {
@@ -2012,6 +2023,10 @@
           },
           "data": {
             "type": "object"
+          },
+          "studyId": {
+            "type": "string",
+            "maxLength": 160
           }
         },
         "required": [

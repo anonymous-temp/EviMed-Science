@@ -370,7 +370,7 @@ def _detailed_tool_definitions():
                 "type": "object",
                 "properties": {
                     "action": {"type": "string", "enum": list(SIMULATE_ACTIONS), "default": "start"},
-                    "kind": {"type": "string", "enum": list(JOB_KINDS)},
+                    "kind": {"type": "string", "enum": [*JOB_KINDS, "search"]},
                     "scenario": {"type": "object"},
                     "inputs": {"type": "array", "maxItems": 200, "items": {"type": "object"}},
                     "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
@@ -1133,13 +1133,15 @@ def _control_plane_shape(kind: str):
 # The lab's own shapes (F4), answered by `shape` with no kind so the tool description stays as short as it was. The keys inside a manifest
 # are the domain's `vcrCampaignManifest`; `test_vcr_platform.py` holds the words that matter (the frozen evaluator, the analysis level).
 LAB_SHAPES = {
-    "search": "action search with manifest {question, objective {measure, direction minimize|maximize, truth}, constraints [{measure, op <=|>=, bound, "
-              "kind error_control|design|safety, truth}], space {method design.simulate|design.dose|design.analytic|patients.progression, scenario, "
-              "truths [{name, truth}], and either variables [{path, values}] or candidates [{set}]}, stages {screening {replicates}, final {count}}, "
-              "budget {maxCandidates, cpuSeconds}}. Only design paths vary: the truth, endpoint, sidedness and what is measured are the evaluator. "
-              "An error-control bound is fixed and never relaxed; it passes only on its conservative bound, never on a point estimate. The analysis "
-              "level (analysis.alpha, design.simulate and patients.progression) may be a variable only at or below that bound, with an error-control "
-              "constraint stated: it is how a design gains margin under the same constraint. A changed manifest is a new campaign. Read with "
+    "search": "action search with manifest = the short form {method design.simulate|design.dose|design.analytic|patients.progression, scenario (the base "
+              "design, with the effect it is designed for), vary {path: [values] | {from, to, step}; paths joined by + move together, e.g. "
+              "\"design.nTreat+design.nControl\": [[80, 80], [120, 120]]}, goal {minimize|maximize: measure, power (default 0.8), atLeast, atMost}}. "
+              "Code writes the rest: the world without an effect, the type I error held at the scenario's own alpha, the stages and the budget. "
+              "action shape kind search gives a filled example. The full manifest {question, objective, constraints, space {method, scenario, truths, "
+              "variables | candidates}, stages, budget} is for what the form cannot say. Only design paths vary: the truth, endpoint, sidedness and what "
+              "is measured are the evaluator. An error-control bound is fixed and never relaxed; it passes only on its conservative bound, never on a "
+              "point estimate. The analysis level (analysis.alpha, design.simulate and patients.progression) may be varied only at or below that "
+              "bound: it is how a design gains margin under the same constraint. A changed manifest is a new campaign. Read with "
               "search_status {campaignId}, stop with search_cancel {campaignId}.",
     "compare": "action compare with experiment {question, arms [{name, resultId} | {name, method, scenario}], comparison {measures, reference}}: saved "
                "design results attach by id and are never rerun. A design this conversation cannot read by id (computed in another conversation) is "
@@ -1156,6 +1158,45 @@ def shape(arguments: dict) -> dict:
     if kind is None:
         return {
             "status": "success",
+# A filled short form, for `shape` kind search. `test_vcr_platform.py` holds it to the domain's compile (`vcrSearchFromForm`, through node), so the
+# example a run copies is one the platform accepts.
+SEARCH_EXAMPLE = {
+    "method": "design.simulate",
+    "scenario": {"design": {"kind": "two_arm_fixed", "nTreat": 100, "nControl": 100}, "endpoint": {"type": "time_to_event"},
+                 "truth": {"hazardRatio": 0.7, "controlMedian": 12}, "accrual": {"kind": "uniform", "duration": 12, "followup": 12},
+                 "analysis": {"method": "logrank", "alpha": 0.025, "sided": 1}},
+    "vary": {"design.nTreat+design.nControl": [[80, 80], [120, 120], [160, 160], [200, 200]]},
+    "goal": {"minimize": "expected_sample_size", "power": 0.8},
+}
+
+
+def _search_shape() -> dict:
+    """``vcr_simulate`` action shape, kind search: the short form of a design search with an example. Asks the platform nothing."""
+    return {
+        "status": "success",
+        "summary": "A design search: the smallest design that meets stated requirements, found across ranges in one campaign.",
+        "data": {
+            "kind": "search", "action": "search", "manifest": SEARCH_EXAMPLE,
+            "keys": [
+                "method: design.simulate (default) | design.dose | design.analytic | patients.progression",
+                "scenario: the base design every candidate starts from, with the effect it is designed for (patients.progression: the drug in treatment)",
+                "vary: {path: [values] | {from, to, step}}; paths joined by + move together as rows",
+                "goal.minimize | goal.maximize: the measure the method produces (expected_sample_size, power, total_sample_size, ...); exactly one",
+                "goal.power: the power a design must reach (design.simulate, patients.progression; default 0.8); goal.atLeast / goal.atMost: {measure: bound}",
+                "nullTruth (optional): the truth with no effect, when it cannot be derived from the scenario",
+                "budget (optional): {maxCandidates, cpuSeconds}; sized from the ranges when left out",
+            ],
+            "notes": [
+                "Code writes the evaluator: the world without an effect, a type I error constraint held at the scenario's own alpha, the screening and final "
+                "stages and the budget. The form cannot state or relax them, and the analysis level may be varied only at or below that alpha.",
+                "The platform runs the campaign without you: start it, say what was started and where it appears, and end the turn.",
+            ],
+        },
+        "warnings": [],
+        "next_actions": ["Call vcr_simulate with action search and manifest set to the form, written for the researcher's design."],
+    }
+
+
             "summary": "%d job kinds; ask for one with action shape and its kind." % len(help_["kinds"]),
             "data": {
                 "kinds": {name: "%s%s" % (entry["method"], " (%s)" % "|".join(help_["methods"][entry["method"]].get("endpoints", []))
@@ -1175,6 +1216,8 @@ def shape(arguments: dict) -> dict:
     if kind == "match_extract":
         # Not an engine method and not a stored-record scenario: the platform plans the reading from the study and takes a selection only.
         return {
+    if kind == "search":
+        return _search_shape()
             "status": "success",
             "summary": "match_extract is built by the platform from the study; you state nothing in a scenario, only a selection.",
             "data": {"kind": kind, "method": "matching.extract", "builtByPlatform": True, "runStates": [], "keys": [],
@@ -1379,8 +1422,9 @@ def lab(arguments: dict, action: str) -> dict:
     value = arguments.get(key)
     if action in ("search", "compare"):
         if not isinstance(value, dict) or not value:
-            raise VcrPlatformError("vcr_simulate_payload_invalid", "%s is the %s object; action shape with no kind says what it holds." % (
-                key, "frozen campaign" if action == "search" else "experiment of named arms and their comparison"))
+            raise VcrPlatformError("vcr_simulate_payload_invalid", "%s is the %s object; action shape %s says what it holds." % (
+                key, "short search form or frozen campaign" if action == "search" else "experiment of named arms and their comparison",
+                "kind search" if action == "search" else "with no kind"))
     elif not isinstance(value, str) or not value:
         raise VcrPlatformError("vcr_simulate_payload_invalid", "%s is the id %s answered with." % (key, "search" if key == "campaignId" else "compare"))
     try:
@@ -1604,6 +1648,27 @@ def _job_answer(data: dict, action: str) -> dict:
         return {
             "status": "warning",
             "summary": "Nothing was started%s." % (": %s" % reason if reason else ""),
+# Live 2026-11-07: asked for the smallest design, the model iterated single designs and grids and never started the search that does it. The
+# pointer rides on the result of a grid and on the second design of a conversation, where the model is already comparing designs by hand.
+SEARCH_POINTER = ("When the aim is the smallest design that meets stated requirements across ranges, vcr_simulate action search finds it in one "
+                  "campaign instead of one design at a time (action shape kind search gives the form).")
+_DESIGNS_SEEN: dict = {}
+
+
+def _repeated_design(job_id: str) -> bool:
+    """Whether this design result is not the first of the conversation. The conversation is the call's session; a process
+    without one counts as one conversation. Bounded: the oldest sessions are forgotten."""
+    context = _EXECUTION_CONTEXT.get()
+    session = str(context.get("sessionId")) if isinstance(context, dict) and context.get("sessionId") else ""
+    seen = _DESIGNS_SEEN.setdefault(session, [])
+    repeated = bool(seen) and job_id not in seen
+    if job_id and job_id not in seen:
+        seen.append(job_id)
+    while len(_DESIGNS_SEEN) > 64:
+        _DESIGNS_SEEN.pop(next(iter(_DESIGNS_SEEN)))
+    return repeated
+
+
             "data": data,
             "warnings": [str(data.get("message") or "The platform did not queue this computation.")],
             "next_actions": [
@@ -1680,6 +1745,8 @@ def _job_answer(data: dict, action: str) -> dict:
                        "derived figure of your own: a further number is another start.")
     return {
         "status": "success",
+        if result.get("kind") == "design_grid" or _repeated_design(job_id):
+            actions.append(SEARCH_POINTER)
         "summary": "Job %s succeeded." % job_id if action != "cancel" else "Job %s is cancelled." % job_id,
         "data": data,
         "warnings": [],

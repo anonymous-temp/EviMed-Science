@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { vcrCampaignAdvance, vcrCampaignInitialState, vcrCampaignManifest, vcrCampaignRecord, VCR_PREMISES_DECISIVE_MAX } from '@evimed/domain';
-import { presentCampaign, refusedText, VCR_CAMPAIGN_STOP_TEXT_ZH } from '../src/vcrExperiments.mjs';
+import { presentCampaign, refusedText, VcrExperiments, VCR_CAMPAIGN_STOP_TEXT_ZH } from '../src/vcrExperiments.mjs';
 
 const ID = 'b'.repeat(64);
 const input = {
@@ -187,4 +187,37 @@ test('a rate near its bound is told how many more replicates would decide it, an
   const alpha = view.premises.find((premise) => premise.key === 'alpha');
   assert.match(alpha.value, /约束固定为 2\.5%.*检验水准也在搜索范围内/);
   assert.equal(view.constraints[1].bound, 0.025, 'the frozen constraint is what it was');
+});
+
+// --- the short form of a search (R10): startCampaign freezes what the domain compiles, and refuses what it cannot ---------------------------
+
+const FORM = {
+  method: 'design.simulate', scenario: input.space.scenario, nullTruth: { effect: 0, sd: 1 },
+  vary: { 'design.nTreat+design.nControl': [[60, 60], [100, 100], [140, 140]] }, goal: { minimize: 'expected_sample_size', power: 0.8 },
+};
+
+test('a campaign starts from the short form and stores the manifest the domain compiled, evaluator included', async () => {
+  /** @type {any[]} */
+  const inserted = [];
+  const store = { one: async (/** @type {string} */ _sql, /** @type {any[]} */ params) => { inserted.push(params); return { id: params[0] }; } };
+  const experiments = new VcrExperiments({ store, jobs: null });
+  experiments.advance = async () => {};
+  experiments.view = async () => ({ kind: 'campaign' });
+  const started = await experiments.startCampaign({ id: 'std_1', userId: 'u1' }, FORM, { userId: 'u1' });
+  assert.equal(started.created, true);
+  const stored = JSON.parse(inserted[0][4]);
+  assert.equal(stored.constraints.find((/** @type {any} */ c) => c.kind === 'error_control').bound, 0.025, 'the frozen error-control bound is the scenario\'s own alpha');
+  assert.equal(stored.space.truths.length, 2);
+  // the same short form in the same study is the same campaign; a full manifest that compiles to it is too
+  const again = await experiments.startCampaign({ id: 'std_1', userId: 'u1' }, JSON.parse(JSON.stringify(FORM)), { userId: 'u1' });
+  assert.equal(inserted[1][0], inserted[0][0]);
+  assert.equal(again.created, true);
+});
+
+test('a short form that cannot be searched is refused with its reason and starts nothing', async () => {
+  const store = { one: async () => { throw new Error('nothing is stored for a refused form'); } };
+  const experiments = new VcrExperiments({ store, jobs: null });
+  await assert.rejects(experiments.startCampaign({ id: 'std_1', userId: 'u1' }, { ...FORM, vary: { 'analysis.alpha': [0.025, 0.05] } }, { userId: 'u1' }),
+    (/** @type {any} */ error) => error.code === 'vcr_campaign_invalid' && /campaign_alpha_relaxed/.test(JSON.stringify(error.details ?? error.message ?? error)));
+  await assert.rejects(experiments.startCampaign({ id: 'std_1', userId: 'u1' }, { ...FORM, vary: {} }, { userId: 'u1' }), { code: 'vcr_campaign_invalid' });
 });

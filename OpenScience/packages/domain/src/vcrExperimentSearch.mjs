@@ -40,7 +40,7 @@ import { canonicalScenarioJson, vcrIsNullScenario } from './vcrEngineJob.mjs'
 import { VCR_JOB_METHODS, VCR_ENGINE_METHODS } from './vcrEngineJob.mjs'
 import { VCR_REPLICATES_ALT_MIN } from './vcrVocabulary.mjs'
 import { vcrDiseaseHypothesis } from './vcrExperiment.mjs'
-import { vcrEvaluationAllowed } from './vcrScenarioSchemas.mjs'
+import { vcrEvaluationAllowed, vcrNullTruth } from './vcrScenarioSchemas.mjs'
 
 /** @param {unknown} value @returns {Record<string, any>} */
 const object = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {})
@@ -387,6 +387,159 @@ export function vcrCampaignManifest(input) {
     stages: { ...(analytic ? { analytic } : {}), screening, final },
     budget, stopRules, reference: referenceIn,
   }, issues }
+}
+
+// ---------------------------------------------------------------------------
+// The short form (R10)
+// ---------------------------------------------------------------------------
+
+/**
+ * The short form of a design search, the one a conversation writes: the method, the base scenario (with the effect it is designed for),
+ * what varies and the goal. `vcrSearchFromForm` compiles it into the full manifest input; the evaluator the manifest freezes (the null
+ * world, the error-control constraint at the scenario's own alpha, the stage sizes, the budget) is written by code here and never by the
+ * form, so a form can no more loosen the alpha than a manifest can. A manifest and a form are told apart by `space`.
+ */
+export const VCR_SEARCH_FORM_KEYS = Object.freeze(['question', 'method', 'scenario', 'vary', 'goal', 'nullTruth', 'budget'])
+const FORM_GOAL_KEYS = Object.freeze(['minimize', 'maximize', 'power', 'atLeast', 'atMost'])
+/** CPU seconds a candidate is budgeted by method (screening on both worlds, or one unit at the engine's floor), and a finalist's check. */
+const FORM_COST = Object.freeze({
+  'design.simulate': Object.freeze({ candidate: 4, finalist: 80 }),
+  'design.dose': Object.freeze({ candidate: 20, finalist: 60 }),
+  'patients.progression': Object.freeze({ candidate: 40, finalist: 0 }),
+  'design.analytic': Object.freeze({ candidate: 1, finalist: 0 }),
+})
+export const VCR_SEARCH_FORM_DEFAULTS = Object.freeze({ power: 0.8, screeningReplicates: 500, finalCount: 3 })
+
+/**
+ * The values of one varied path: a list as written, or {from, to, step} expanded by code.
+ * @param {unknown} spec @param {(code: string, field: string, detail: string) => void} bad @param {string} field
+ */
+function formValues(spec, bad, field) {
+  if (Array.isArray(spec)) return spec
+  const range = object(spec)
+  const { from, to, step } = range
+  if (![from, to, step].every((x) => typeof x === 'number' && Number.isFinite(x)) || step <= 0 || to < from) {
+    bad('search_form_vary', field, 'A varied path is a list of values or {from, to, step} with a positive step and to at least from.')
+    return []
+  }
+  const count = Math.floor((to - from) / step + 1e-9) + 1
+  if (count > VCR_CAMPAIGN_LIMITS.maxValues) { bad('search_form_vary', field, `A range gives at most ${VCR_CAMPAIGN_LIMITS.maxValues} values; this one gives ${count}.`); return [] }
+  return Array.from({ length: count }, (_, i) => Math.round((from + i * step) * 1e9) / 1e9)
+}
+
+/**
+ * Compile the short form of a design search into the full manifest input, ready for `vcrCampaignManifest`. Pure and deterministic.
+ * @param {unknown} input
+ * @returns {{ input: Record<string, any> | null, issues: Array<{ code: string, field: string, detail: string }> }}
+ */
+export function vcrSearchFromForm(input) {
+  /** @type {Array<{ code: string, field: string, detail: string }>} */
+  const issues = []
+  const bad = (/** @type {string} */ code, /** @type {string} */ field, /** @type {string} */ detail) => { issues.push({ code, field, detail }) }
+  const form = object(input)
+  for (const key of Object.keys(form)) {
+    if (!VCR_SEARCH_FORM_KEYS.includes(key)) bad('search_form_field_unknown', key, `The short form takes ${VCR_SEARCH_FORM_KEYS.join(', ')}; "${key}" is read by nothing (a full manifest states space).`)
+  }
+  const method = typeof form.method === 'string' ? form.method : 'design.simulate'
+  const info = /** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[method]
+  if (!info) bad('campaign_method_unsupported', 'method', `A search covers ${Object.keys(VCR_CAMPAIGN_METHODS).join(', ')}.`)
+  const base = clone(object(form.scenario))
+  if (!Object.keys(base).length) bad('search_form_scenario', 'scenario', 'The form states the base scenario every design starts from, with the effect it is designed for.')
+
+  // the worlds: the effect the design is for, and the world without it (which holds the type I error)
+  const goalIn = object(form.goal)
+  for (const key of Object.keys(goalIn)) if (!FORM_GOAL_KEYS.includes(key)) bad('search_form_field_unknown', `goal.${key}`, `A goal takes ${FORM_GOAL_KEYS.join(', ')}.`)
+  const directions = ['minimize', 'maximize'].filter((key) => goalIn[key] !== undefined)
+  if (directions.length !== 1 || typeof goalIn[directions[0]] !== 'string') bad('search_form_goal', 'goal', 'A goal minimizes or maximizes exactly one measure: {minimize: "expected_sample_size"}.')
+  const errorControlled = method === 'design.simulate' || method === 'patients.progression'
+  /** @type {Array<{ name: string, truth: Record<string, any> }>} */
+  let truths = []
+  /** @type {string} */
+  let effectName = 'alternative'
+  if (info && Object.keys(base).length) {
+    if (method === 'patients.progression') {
+      effectName = 'drug'
+      truths = [{ name: 'drug', truth: object(base.treatment) }, { name: 'none', truth: {} }]
+      if (vcrDiseaseHypothesis(base.treatment) === 'none') bad('search_form_scenario', 'scenario.treatment', 'State the drug hypothesis the trial is designed to detect in scenario.treatment.')
+      delete base.treatment
+    } else if (errorControlled) {
+      const nullTruth = form.nullTruth != null ? object(form.nullTruth) : vcrNullTruth(base)
+      if (vcrIsNullScenario(base)) bad('search_form_scenario', 'scenario.truth', 'The base scenario states no effect; a search designs for the effect it must detect.')
+      else if (!nullTruth) bad('search_form_null_truth', 'nullTruth', 'The world without an effect cannot be derived for this design: state it in nullTruth (the same truth keys with no effect).')
+      else truths = [{ name: 'alternative', truth: object(base.truth) }, { name: 'null', truth: nullTruth }]
+    } else {
+      effectName = method === 'design.analytic' ? 'planned' : 'curve'
+      truths = [{ name: effectName, truth: object(base.truth) }]
+    }
+  }
+  const nullName = truths.find((entry) => entry.name === 'null' || entry.name === 'none')?.name
+
+  // what varies: one path each, or several that move together ("design.nTreat+design.nControl")
+  const varyIn = object(form.vary)
+  const entries = Object.entries(varyIn)
+  if (!entries.length) bad('search_form_vary', 'vary', 'The form states what varies: {"design.nTreat": [80, 120, 160]} or a range {from, to, step}.')
+  const together = entries.some(([key]) => key.includes('+'))
+  /** @type {Array<{ paths: string[], values: any[] }>} */
+  const varied = entries.map(([key, spec]) => ({ paths: key.split('+'), values: formValues(spec, bad, `vary.${key}`) }))
+  for (const entry of varied) {
+    if (entry.paths.length > 1 && !entry.values.every((row) => Array.isArray(row) && row.length === entry.paths.length)) {
+      bad('search_form_vary', `vary.${entry.paths.join('+')}`, `Paths that move together take one list of rows, each with ${entry.paths.length} values.`)
+    }
+  }
+  const size = varied.reduce((n, entry) => n * Math.max(1, entry.values.length), 1)
+  if (size > VCR_CAMPAIGN_LIMITS.maxCandidates) bad('campaign_space_exceeds_budget', 'vary', `The ranges make ${size} designs and a search evaluates at most ${VCR_CAMPAIGN_LIMITS.maxCandidates}: narrow a range or take a coarser step.`)
+
+  // the goal: the measure, and what a design must still meet
+  /** @type {Array<Record<string, any>>} */
+  const constraints = []
+  const design = method === 'design.dose' ? 'safety' : 'design'
+  if (goalIn.power !== undefined && !errorControlled) bad('search_form_goal', 'goal.power', 'goal.power is for a simulated comparison; state a requirement of this design in atLeast.')
+  if (errorControlled) {
+    const power = goalIn.power ?? (goalIn.minimize === 'power' || goalIn.maximize === 'power' || goalIn.atLeast?.power !== undefined ? null : VCR_SEARCH_FORM_DEFAULTS.power)
+    if (power !== null) {
+      if (!(typeof power === 'number' && power > 0 && power < 1)) bad('search_form_goal', 'goal.power', 'The power a design must reach is a number between 0 and 1.')
+      else constraints.push({ measure: 'power', op: '>=', bound: power, kind: 'design', truth: effectName })
+    }
+  }
+  for (const [key, op] of [['atLeast', '>='], ['atMost', '<=']]) {
+    for (const [measure, bound] of Object.entries(object(goalIn[key]))) constraints.push({ measure, op, bound, kind: design, truth: effectName })
+  }
+  if (errorControlled && nullName) {
+    // the frozen constraint: the nominal level of the analysis, never a number the form chooses
+    const alpha = typeof base.analysis?.alpha === 'number' ? base.analysis.alpha : info.defaultAlpha ?? 0.025
+    constraints.push({ measure: 'type_one_error', op: '<=', bound: alpha, kind: 'error_control', truth: nullName })
+  }
+
+  // stages and budget: sized by code from the space
+  const exact = info?.exact === true
+  const candidates = Math.min(size, VCR_CAMPAIGN_LIMITS.maxCandidates)
+  const finalCount = Math.min(VCR_SEARCH_FORM_DEFAULTS.finalCount, Math.max(1, candidates))
+  const stages = { screening: exact || info?.precisionBlock === false ? null : { replicates: VCR_SEARCH_FORM_DEFAULTS.screeningReplicates }, final: { count: finalCount } }
+  const cost = /** @type {Record<string, any>} */ (FORM_COST)[method] ?? { candidate: 20, finalist: 60 }
+  const budgetIn = object(form.budget)
+  for (const key of Object.keys(budgetIn)) if (!['maxCandidates', 'cpuSeconds'].includes(key)) bad('search_form_field_unknown', `budget.${key}`, 'A budget takes maxCandidates and cpuSeconds.')
+  const budget = { maxCandidates: budgetIn.maxCandidates ?? candidates, cpuSeconds: budgetIn.cpuSeconds ?? Math.ceil(candidates * cost.candidate + finalCount * cost.finalist + 60), modelCalls: 0 }
+
+  if (issues.length) return { input: null, issues }
+  const space = { method, scenario: base, truths,
+    ...(together
+      ? { candidates: varied.reduce((rows, entry) => rows.flatMap((row) => entry.values.map((value) => ({ ...row, ...Object.fromEntries(entry.paths.map((path, i) => [path, entry.paths.length > 1 ? value[i] : value])) }))), [{}]).map((set) => ({ set })) }
+      : { variables: varied.map((entry) => ({ path: entry.paths[0], values: entry.values })) }) }
+  return { input: { question: typeof form.question === 'string' ? form.question : '', objective: { measure: goalIn[directions[0]], direction: directions[0], truth: effectName },
+    constraints, space, stages, budget }, issues }
+}
+
+/**
+ * The one entry a campaign is started from: a full manifest is frozen as it is, a short form is compiled first. Either way the result is
+ * `vcrCampaignManifest`'s, so the evaluator's rules are the same for both.
+ * @param {unknown} input
+ * @returns {{ manifest: Record<string, any> | null, issues: Array<{ code: string, field: string, detail: string }>, compiled: boolean }}
+ */
+export function vcrCampaignFromInput(input) {
+  if (Object.hasOwn(object(input), 'space')) return { ...vcrCampaignManifest(input), compiled: false }
+  const { input: full, issues } = vcrSearchFromForm(input)
+  if (!full) return { manifest: null, issues, compiled: true }
+  return { ...vcrCampaignManifest(full), compiled: true }
 }
 
 /** The canonical bytes a campaign's identity is the sha256 of. @param {Record<string, any>} manifest */

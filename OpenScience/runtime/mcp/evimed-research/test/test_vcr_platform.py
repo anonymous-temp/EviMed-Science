@@ -271,7 +271,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertGreaterEqual(len(kinds), 24, "the first release's twenty-four, then the kinds appended after them")
         self.assertEqual(list(vcr_platform.JOB_KINDS), kinds)
         simulate = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]
-        self.assertEqual(simulate["inputSchema"]["properties"]["kind"]["enum"], kinds)
+        # the job kinds, and `search` for action shape alone (the short form of a design search): it is no job kind and start refuses it
+        self.assertEqual(simulate["inputSchema"]["properties"]["kind"]["enum"], [*kinds, "search"])
 
     def test_simulate_description_is_short_and_sends_the_run_to_the_shape_action_instead_of_typing_the_shapes(self):
         # A description rides every request of the run; the per-method shapes are served on demand from the generated help.
@@ -865,6 +866,56 @@ class VcrSimulateTests(_GatewayCase):
         # the tool catalogue the root conversation sees: the five actions and four keys are the whole growth (13,159 -> 13,475 bytes compact)
         import json
         self.assertLess(len(json.dumps(list(definitions.values()), separators=(",", ":"))), 13_600)
+
+    def test_shape_kind_search_gives_a_filled_form_the_domain_compiles(self):
+        answer = vcr_platform.shape({"kind": "search"})
+        self.assertEqual(answer["status"], "success")
+        example = answer["data"]["manifest"]
+        self.assertEqual(set(example), {"method", "scenario", "vary", "goal"})
+        definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
+        self.assertIn("search", definitions["vcr_simulate"]["inputSchema"]["properties"]["kind"]["enum"])
+        for key in ("evaluator", "alpha"):
+            self.assertTrue(any(key in note for note in answer["data"]["notes"]), key)
+        # the same through the tool and with the module off (shape asks the platform nothing)
+        through = self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "search"})
+        self.assertEqual(through["data"]["manifest"], example)
+        # a search is not a job kind: it cannot be started or validated as one
+        for action in ("start", "validate"):
+            with self.assertRaises(vcr_platform.VcrPlatformError):
+                vcr_platform.simulate({"action": action, "kind": "search", "scenario": {}})
+        # the example is what the domain's compile accepts, so the run that copies it is not refused
+        node = shutil.which("node")
+        script = "import('@evimed/domain').then((m) => { const out = m.vcrCampaignFromInput(JSON.parse(process.argv[1])); console.log(JSON.stringify({ issues: out.issues, ok: Boolean(out.manifest) })) })"
+        out = subprocess.run([node, "--input-type=module", "-e", script, json.dumps(example)], cwd=OPEN_SCIENCE / "apps" / "server",
+                             capture_output=True, text=True, timeout=60, check=True)
+        self.assertEqual(json.loads(out.stdout.strip().splitlines()[-1]), {"issues": [], "ok": True})
+
+    def test_the_search_form_is_the_whole_of_the_lab_shape_and_search_is_posted_as_the_manifest_field(self):
+        lab = vcr_platform.shape({})["data"]["lab"]["search"]
+        for fragment in ("vary", "goal", "kind search", "Code writes the rest", "never relaxed"):
+            self.assertIn(fragment, lab)
+        _Gateway.answers["simulate"] = (200, {"data": {"kind": "campaign", "id": "cmp_9", "status": "running", "stop": None}})
+        form = vcr_platform.shape({"kind": "search"})["data"]["manifest"]
+        self.server.call_tool("vcr_simulate", {"action": "search", "manifest": form})
+        self.assertEqual(_Gateway.seen[-1]["body"], {"action": "search", "manifest": form})
+        with self.assertRaises(vcr_platform.VcrPlatformError) as refused:
+            vcr_platform.simulate({"action": "search"})
+        self.assertIn("kind search", str(refused.exception))
+
+    def test_a_grid_and_a_second_design_point_at_the_search_and_a_first_design_does_not(self):
+        succeeded = lambda job, kind: {"state": "succeeded", "jobId": job, "result": {"kind": kind}}
+        lines = lambda answer: [line for line in answer["next_actions"] if "action search" in line]
+        vcr_platform._DESIGNS_SEEN.clear()
+        with vcr_platform.invocation({"sessionId": "s1"}):
+            self.assertEqual(lines(vcr_platform._job_answer(succeeded("job_a", "trial_scenario"), "status")), [], "a first design is a plain answer")
+            self.assertEqual(lines(vcr_platform._job_answer(succeeded("job_a", "trial_scenario"), "status")), [], "reading the same design again is not a second design")
+            self.assertEqual(len(lines(vcr_platform._job_answer(succeeded("job_b", "trial_scenario"), "status"))), 1, "a second design of the conversation")
+            self.assertEqual(len(lines(vcr_platform._job_answer(succeeded("job_c", "design_grid"), "status"))), 1, "a grid always")
+        with vcr_platform.invocation({"sessionId": "s2"}):
+            self.assertEqual(lines(vcr_platform._job_answer(succeeded("job_d", "trial_scenario"), "status")), [], "another conversation starts again")
+        self.assertEqual(lines(vcr_platform._job_answer(succeeded("job_e", "population"), "status")), [])
+        pointer = vcr_platform.SEARCH_POINTER
+        self.assertIn("shape kind search", pointer)
 
     def test_shape_answers_through_the_tool_without_asking_the_platform_and_with_the_module_off(self):
         result = self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "design_simulation"})
