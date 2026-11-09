@@ -417,7 +417,10 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
       const subjectKey = taken?.subjectKey ?? input.subjectKey;
       const selectedPairs = subjectKey ? (input.trialIds ?? []).map(trialId => ({ subjectKey, trialId })) : [];
       const taskRow = input.taskId ? (await owned(origin, input.taskId)).row : await newTask(origin, selectedPairs, { contextSubjectKey:subjectKey ?? null, direction: selectedPairs.length === 1 ? 'specified-pair' : input.direction ?? 'patient-to-trials' });
-      return response({ ...(taken ?? {}), taskId: taskRow.id, jobId: taskRow.id, inputs: await vcr.patientContext.candidates(origin, {}, study) });
+      // A call that took no patient says how to take one: the listing is of inputs, not of patients.
+      const untaken = !subjectKey && !taskRow.payload?.contextSubjectKey && !(taskRow.payload?.selectedPairs?.length);
+      return response({ ...(taken ?? {}), taskId: taskRow.id, jobId: taskRow.id, inputs: await vcr.patientContext.candidates(origin, {}, study) },
+        untaken ? 'No patient is taken yet: call match_context again with this taskId and the messageSeq (or sourceId) of the input that holds the patient record, and trialIds for trials the person named.' : undefined);
     }
     if (port === 'ExecutionPort' && operation === 'assess') return prepare(origin, input);
     if (port === 'ResultPort' && operation === 'save') return commit(origin, input);

@@ -53,8 +53,8 @@ const clone = (value) => structuredClone(value);
 // ---------------------------------------------------------------------------------------------------------------------
 
 /** One replay conversation: its patients, protocols and trials, and what the host saved. */
-function createRun({ id, patients, protocols = [], trials = [], plan, maxCalls }) {
-  return { id, userId: 'replay-user', projectId: 'replay-project', patients: new Map(patients.map((row) => [row.subjectKey, row])),
+function createRun({ id, patients, protocols = [], trials = [], plan, maxCalls, collection = null }) {
+  return { id, collection, userId: 'replay-user', projectId: 'replay-project', patients: new Map(patients.map((row) => [row.subjectKey, row])),
     protocols: new Map(protocols.map((row) => [row.id, row])), trials: new Map(trials.map((row) => [row.registryId, row])),
     plan: [...plan], maxCalls, calls: 0, currentTask: null, rootSessionId: null, pendingAssessCallId: null, messages: [], sessionPatient: null,
     judgments: [], timeline: [], errors: [], model: { calls: 0, input: 0, cacheRead: 0, output: 0, costCny: 0, ms: [], spans: [] } };
@@ -408,7 +408,6 @@ async function buildCases(o) {
         protocols, plan: protocols.map((protocol) => ({ protocolVersionId: protocol.id, subjectKeys: [row.patientId] })) };
     });
   }
-  if (o.board === 'session') return { summary: { ...summary, turns: spec.turns } };
   if (o.board === 'latency') {
     const orders = new Map(jsonl(o.orders).map((row) => [row.patientId, row.ranking.map((entry) => entry.registryId)]));
     const cases = jsonl(o.cases).filter((row) => row.split === 'dev' && (orders.get(row.patientId)?.length ?? 0) >= o.pairs).slice(0, o.limit ?? 5);
@@ -485,6 +484,7 @@ function resultOf(o, spec, run, kernel) {
     return { summary, record: n2c2Record({ case: spec.case, judgment: done ? { criteria: clauseRows(row) } : null, failed: done ? [] : [{ registryId: protocol.id, code: row?.errorCode ?? 'native_not_saved' }],
       usage: { inputTokens: run.model.input, outputTokens: run.model.output, costCny: Number(run.model.costCny.toFixed(4)) } }) };
   }
+  if (o.board === 'session') return { summary: { ...summary, turns: spec.turns } };
   if (o.board === 'latency') {
     const verdicts = {};
     for (const row of newest.values()) verdicts[row.verdict ?? row.status] = (verdicts[row.verdict ?? row.status] ?? 0) + 1;
@@ -520,7 +520,7 @@ async function clinicianAnswer({ key, spec, reply }) {
     ? '体能状态 ECOG 1 分；未怀孕；无其他恶性肿瘤史；无活动性感染；肝肾功能和血常规在正常范围；能签署知情同意。其余未做或不清楚。'
     : 'ECOG performance status 1; not pregnant; no other cancer; no active infection; liver and kidney function and blood counts normal; can give consent. Anything else was not done or is unknown.');
   const body = { model: 'deepseek-flash', max_tokens: 600, temperature: 0, thinking: { type: 'disabled' }, messages: [
-    { role: 'system', content: 'You are the physician who treats this patient and asked the assistant for help. Reply to the assistant\'s last message in one short message, in the language of that message. Answer only what it asked, using only the FACTS; for anything else say you do not know. If it asked nothing, thank it briefly.' },
+    { role: 'system', content: 'You are the physician who treats this patient and asked the assistant for help. Reply to the assistant\'s last message in one short message, in the language of that message. Answer what it asked: use the FACTS where they cover a question, and for any other fact it asked about give one plausible value consistent with the record (a test of the assistant, so answer every question). If it asked nothing, thank it briefly.' },
     { role: 'user', content: `FACTS:\n${facts}\n\nTHE ASSISTANT'S LAST MESSAGE:\n${reply.slice(0, 6000)}` }] };
   const response = await fetch('https://api.deepseek.com/chat/completions', { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(120000) });
   const data = await response.json();
@@ -592,7 +592,27 @@ async function main() {
   // --evidence-dense: the match_evidence dense channel with the production embedding model (qwen3.7-text-embedding, 1024 dimensions),
   // called directly with the DashScope key file; usage goes to <out>/embedding.jsonl.
   const evidenceEmbed = o['evidence-dense'] ? denseEmbedder(fs.readFileSync(o['dense-key-file'], 'utf8').trim(), path.join(o.out, 'embedding.jsonl')) : null;
-  const adapter = createPatientMatchingHostAdapter({ vcr, documents, config: { patientMatchingEvidenceDense: Boolean(evidenceEmbed), ...(o['reasoning-effort'] ? { patientMatchingReasoningEffort: o['reasoning-effort'] } : {}) }, evidenceEmbed });
+  // Session board: discovery over the case's frozen collection (lexical search only; the product's discovery adds rerank and Jev), so a
+  // real root that searches gets trials back; every trial found becomes readable to the assessment.
+  const discover = o.board === 'session' ? async ({ study, input }) => {
+    const run = runs.get(String(study.id).replace(/^study-/u, ''));
+    const corpus = createVcrTrialCorpus(run.collection);
+    try {
+      const explicit = Array.isArray(input.trialIds) && input.trialIds.length ? input.trialIds : null;
+      const found = explicit ? { candidates: explicit.map((registryId) => ({ registryId })) }
+        : await corpus.collect({ condition: String(input.query ?? ''), terms: Array.isArray(input.terms) ? input.terms : [], limit: Math.min(Number(input.limit) || 20, 50), ...(input.age !== undefined ? { age: input.age } : {}), ...(input.sex ? { sex: input.sex } : {}) });
+      const candidates = [];
+      for (const row of found.candidates ?? []) {
+        const built = await corpus.record(row.registryId);
+        if (!built) continue;
+        const trial = trialFromPrecedent(row.registryId, built);
+        run.trials.set(trial.registryId, trial);
+        candidates.push({ registryId: trial.registryId, title: trial.title, conditions: trial.conditions });
+      }
+      return { status: 'complete', summary: `${candidates.length} candidate trials from the frozen collection.`, data: { candidates, coverage: found.coverage ?? 'frozen collection' }, artifacts: [] };
+    } finally { await corpus.close?.(); }
+  } : null;
+  const adapter = createPatientMatchingHostAdapter({ vcr, documents, config: { patientMatchingEvidenceDense: Boolean(evidenceEmbed), ...(o['reasoning-effort'] ? { patientMatchingReasoningEffort: o['reasoning-effort'] } : {}) }, evidenceEmbed, discover });
   const { server, spent, guard } = createServer({ runs, adapter, documents, token, key, ledgerFile, capCny: Number(o['cap-cny']), stopFile: o['stop-file'], billingFactor: Number(o['billing-factor']), decisionsFile: path.join(o.out, 'decisions.jsonl') });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
@@ -607,7 +627,7 @@ async function main() {
       const why = guard();
       if (why) { stopped = why; return; }
       const id = `r${sha(`${o.board}|${spec.key}`).slice(0, 10)}`;
-      const run = createRun({ id, patients: spec.patients, protocols: spec.protocols, trials: spec.trials, plan: spec.plan,
+      const run = createRun({ id, patients: spec.patients, protocols: spec.protocols, trials: spec.trials, plan: spec.plan, collection: spec.session?.collection ?? o.collection ?? null,
         maxCalls: spec.plan.length + (spec.protocols?.length ?? 0) + (spec.trials?.length ?? 0) + 4 });
       runs.set(id, run);
       let kernel;
