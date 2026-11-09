@@ -141,7 +141,9 @@
 .vcr_bl_effect_report <- function(key, spec, used, tries) {
   if (is.null(spec) || !isTRUE(spec$distributed)) return(NULL)
   src <- spec$source
-  list(key = key, family = spec$family, parameters = spec$parameters, source = list(kind = src$kind, citation = src$citation, objectRef = src$objectRef, note = src$note), tier = spec$tier,
+  # the draws of an `empirical_draws` family are the researcher's (or a chain's) and as many as 10,000: the result carries their count and summary, never the values
+  parameters <- if (identical(spec$family, "empirical_draws")) { v <- spec$parameters$values; list(draws = length(v), min = min(v), p05 = stats::quantile(v, 0.05, names = FALSE), median = stats::median(v), p95 = stats::quantile(v, 0.95, names = FALSE), max = max(v)) } else spec$parameters
+  list(key = key, family = spec$family, parameters = parameters, source = list(kind = src$kind, citation = src$citation, objectRef = src$objectRef, note = src$note), tier = spec$tier,
        priorMassRepresentable = .vcr_bl_effect_mass(spec), redrawnShare = if (length(tries)) 1 - length(tries) / sum(tries) else NA_real_,
        drawMean = if (length(used)) mean(used) else NA_real_, drawSd = if (length(used) > 1L) stats::sd(used) else NA_real_, draws = length(used))
 }
