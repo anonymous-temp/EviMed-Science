@@ -709,11 +709,11 @@ jobs:
         run: |
           export VCR_TEST_CORES="$(nproc)"
           export VCR_PYTHON=/usr/bin/python3
-          node ../OpenScience/scripts/vcr/merge-numeric-shards.mjs coverage --shards "$RUNNER_TEMP/shards" --out "$RUNNER_TEMP/vcr-shard-coverage.json"
+          node ../../OpenScience/scripts/vcr/merge-numeric-shards.mjs coverage --shards "$RUNNER_TEMP/shards" --out "$RUNNER_TEMP/vcr-shard-coverage.json"
           VCR_TEST_SHARD=final VCR_TEST_COVERAGE_FROM="$RUNNER_TEMP/vcr-shard-coverage.json" \
             VCR_NUMERICAL_EVIDENCE_FILE="$RUNNER_TEMP/vcr-final-evidence.json" \
             bash tests/run_all.sh 2>&1 | tee "$RUNNER_TEMP/vcr-final.log"
-          node ../OpenScience/scripts/vcr/merge-numeric-shards.mjs assemble --shards "$RUNNER_TEMP/shards" \
+          node ../../OpenScience/scripts/vcr/merge-numeric-shards.mjs assemble --shards "$RUNNER_TEMP/shards" \
             --final-report "$RUNNER_TEMP/vcr-final-evidence.json" --final-log "$RUNNER_TEMP/vcr-final.log" \
             --out-report "$RUNNER_TEMP/vcr-numerical-evidence.json" --out-log "$RUNNER_TEMP/vcr-numeric.log"
           export VCR_NUMERICAL_EVIDENCE_FILE="$RUNNER_TEMP/vcr-numerical-evidence.json"
