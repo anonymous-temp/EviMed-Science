@@ -84,14 +84,14 @@ test("the tests that need the engine's R and Python are exactly the ones the dur
   assert.equal(receipts?.if, "always()"); assert.equal(receipts?.with?.["if-no-files-found"], "error");
 });
 
-test("the three engine jobs are wired to one R library, and a missing R is a red job rather than a skipped test", async () => {
+test("the engine jobs are wired to one R library, and a missing R is a red job rather than a skipped test", async () => {
   const jobs = (await workflow()).jobs;
   const library = jobs["vcr-r-library"];
-  assert.ok(library && jobs["vcr-engine"] && jobs["vcr-seam"], "the workflow lacks one of vcr-r-library, vcr-engine, vcr-seam");
+  assert.ok(library && jobs["vcr-engine-numeric"] && jobs["vcr-engine"] && jobs["vcr-seam"], "the workflow lacks one of vcr-r-library, vcr-engine-numeric, vcr-engine, vcr-seam");
   assert.ok(library.outputs.key, "the library job publishes the key its cache is under");
-  for (const name of ["vcr-engine", "vcr-seam"]) {
+  for (const name of ["vcr-engine-numeric", "vcr-engine", "vcr-seam"]) {
     const job = jobs[name];
-    assert.equal(job.needs, "vcr-r-library", `${name} must wait for the library`);
+    assert.ok([job.needs].flat().includes("vcr-r-library"), `${name} must wait for the library`);
     assert.equal(job.env.VCR_ENGINE_TESTS, "required", `${name}: without this a missing R skips the tests that need it`);
     const restore = job.steps.find((/** @type {any} */ step) => String(step.uses ?? "").startsWith("actions/cache/restore@"));
     assert.ok(restore, `${name} does not restore the library`);
@@ -100,7 +100,7 @@ test("the three engine jobs are wired to one R library, and a missing R is a red
     assert.match(scriptsOf(job), /r-library\.sh verify/, `${name} must prove the restored library is the locks`);
     assert.match(scriptsOf(job), /ci-system-deps\.sh/, `${name} installs R itself`);
   }
-  for (const job of [library, jobs["vcr-engine"], jobs["vcr-seam"]]) {
+  for (const job of [library, jobs["vcr-engine-numeric"], jobs["vcr-engine"], jobs["vcr-seam"]]) {
     assert.equal(job.env.VCR_R_LIBS, "${{ github.workspace }}/.vcr-rlib", "one library path, from the workflow's own workspace");
     assert.match(job["runs-on"], /^ubuntu-24\.04$/, "the image whose own R is the one the locks name");
   }
@@ -111,6 +111,36 @@ test("the three engine jobs are wired to one R library, and a missing R is a red
   const text = await readFile(path.join(repoRoot, ".github/workflows/web.yml"), "utf8");
   assert.ok(!/\/home\/[a-z]+\//.test(text.split("\n").filter((line) => !line.trim().startsWith("#")).join("\n")), "no machine path in a step");
   assert.ok(!/VCR_TEST_ONLY/.test(text), "the numeric run is the whole suite");
+});
+
+test("the numeric suite runs as shards whose union the final job proves is every case once, under the names the evidence importer reads", async () => {
+  const jobs = (await workflow()).jobs;
+  const shards = jobs["vcr-engine-numeric"];
+  const final = jobs["vcr-engine"];
+  const partition = JSON.parse(await readFile(path.join(engineRoot, "tests/numeric-partition.json"), "utf8"));
+  assert.deepEqual(shards.strategy.matrix.shard, partition.shards.map((/** @type {unknown} */ _, /** @type {number} */ index) => index + 1), "the matrix is the partition's shards");
+  assert.equal(shards.strategy["fail-fast"], false, "one failing shard does not hide what the others found");
+  assert.ok(shards["timeout-minutes"] <= 75 && final["timeout-minutes"] <= 75, "each job fits the hour the shards are balanced for");
+  assert.deepEqual([final.needs].flat().sort(), ["vcr-engine-numeric", "vcr-r-library"], "the final job waits for every shard");
+  const run = shards.steps.find((/** @type {any} */ step) => /numeric acceptance cases/.test(step.name));
+  assert.match(run.run, /VCR_TEST_SHARD="\$\{\{ matrix\.shard \}\}"/);
+  assert.equal(run.shell, "bash", "the default shell has no pipefail, so `| tee` would hide a failing shard");
+  assert.match(scriptsOf(shards), /numeric-partition\.mjs/, "a case in no shard fails in seconds, before the long run");
+  assert.match(scriptsOf(shards), /check-numeric-log\.sh "\$RUNNER_TEMP\/vcr-numeric\.log" "\$\{\{ matrix\.shard \}\}"/);
+  const upload = shards.steps.find((/** @type {any} */ step) => String(step.uses ?? "").startsWith("actions/upload-artifact@"));
+  const download = final.steps.find((/** @type {any} */ step) => String(step.uses ?? "").startsWith("actions/download-artifact@"));
+  assert.equal(upload.with.name.replace("${{ matrix.shard }}", "*"), download.with.pattern, "the final job reads exactly what the shards preserve");
+  assert.equal(upload.with["if-no-files-found"], "error");
+  // The importer's contract: job `vcr-engine`, these steps once each, and the artifact it names.
+  const names = final.steps.map((/** @type {any} */ step) => step.name);
+  for (const name of ["Prove the library is exactly the locks", "Run every numeric acceptance case", "Check the run was whole", "Preserve numerical validation evidence"]) {
+    assert.equal(names.filter((/** @type {string} */ entry) => entry === name).length, 1, name);
+  }
+  const assemble = final.steps.find((/** @type {any} */ step) => step.name === "Run every numeric acceptance case").run;
+  assert.match(assemble, /VCR_TEST_SHARD=final/);
+  assert.match(assemble, /merge-numeric-shards\.mjs assemble/);
+  assert.ok(assemble.indexOf("VCR_TEST_SHARD=final") < assemble.indexOf("assemble --shards"), "the final cases run before the merge reads them");
+  assert.match(final.steps.find((/** @type {any} */ step) => step.name === "Preserve numerical validation evidence").with.name, /^vcr-numerical-evidence-\$\{\{ github\.sha \}\}$/);
 });
 
 test("the engine job runs every numeric case, fails with the suite, and checks that a green run was whole", async () => {
@@ -136,11 +166,12 @@ test("the engine job runs every numeric case, fails with the suite, and checks t
 
 test("every repository file a vcr step runs exists, and the seam job's database is the production image", async () => {
   const value = await workflow();
-  for (const name of ["vcr-r-library", "vcr-engine", "vcr-seam"]) {
+  for (const name of ["vcr-r-library", "vcr-engine-numeric", "vcr-engine", "vcr-seam"]) {
     const job = value.jobs[name];
     const script = scriptsOf(job);
     const referenced = new Set([...script.matchAll(/scripts\/vcr\/[\w.-]+/g)].map((match) => path.join(openScience, match[0])));
     for (const match of script.matchAll(/(?:\.\.\/)?(项目代码\/vcr-engine\/[\w./-]+)/g)) referenced.add(path.join(repoRoot, match[1]));
+    for (const match of script.matchAll(/\.\.\/OpenScience\/(scripts\/vcr\/[\w.-]+)/g)) referenced.add(path.join(openScience, match[1]));
     if (/bash tests\/run_all\.sh/.test(script)) referenced.add(path.join(engineRoot, "tests/run_all.sh"));
     if (/pytest tests\/service/.test(script)) referenced.add(path.join(engineRoot, "tests/service/test_service.py"));
     assert.ok(referenced.size > 0, `${name} names no repository file: the scan read nothing`);

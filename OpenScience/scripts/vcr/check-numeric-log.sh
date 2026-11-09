@@ -2,7 +2,10 @@
 # Read the log of a full `tests/run_all.sh` run and say whether it is a green
 # run or only looks like one.
 #
-#   scripts/vcr/check-numeric-log.sh <log>
+#   scripts/vcr/check-numeric-log.sh <log> [<shard>]
+#
+# With a shard (1.., or final) the log is one shard's run and "declared" is what tests/numeric-partition.json gives that shard;
+# scripts/vcr/numeric-partition.mjs separately proves the shards together are every case once.
 #
 # Hidden knowledge: `run_all.sh` exits 0 for a run in which every case that
 # ran passed, and a case that could not do its job is allowed to say so and
@@ -22,7 +25,8 @@
 # Environment: VCR_ENGINE_ROOT (default: 项目代码/vcr-engine beside OpenScience).
 set -euo pipefail
 
-log="${1:?usage: check-numeric-log.sh <log>}"
+log="${1:?usage: check-numeric-log.sh <log> [<shard>]}"
+shard="${2:-}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 engine="${VCR_ENGINE_ROOT:-$here/../../../项目代码/vcr-engine}"
 [ -f "$log" ] || { echo "check-numeric-log: no log at $log" >&2; exit 1; }
@@ -31,10 +35,14 @@ engine="${VCR_ENGINE_ROOT:-$here/../../../项目代码/vcr-engine}"
 # Cases the suite declares. The walk has to have walked: zero would make the
 # floor below vacuous.
 declared=0
-for file in "$engine"/tests/numeric/*.R; do
-  count="$(grep -c '^vcr_case(' "$file" || true)"
-  declared=$((declared + count))
-done
+if [ -n "$shard" ]; then
+  declared="$(VCR_ENGINE_ROOT="$engine" node "$here/numeric-partition.mjs" --count "$shard")"
+else
+  for file in "$engine"/tests/numeric/*.R; do
+    count="$(grep -c '^vcr_case(' "$file" || true)"
+    declared=$((declared + count))
+  done
+fi
 if [ "$declared" -eq 0 ]; then
   echo "check-numeric-log: no vcr_case( found under $engine/tests/numeric — the scan read nothing" >&2
   exit 1
