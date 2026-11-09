@@ -285,10 +285,11 @@ vcr_job_pk_interaction <- function(job, output_dir = NULL, ...) {
   note <- function(key, value, basis) assumed[[length(assumed) + 1L]] <<- list(key = key, value = value, basis = basis)
   v <- sc$victim; pp <- sc$perpetrator
   inhibitor <- identical(as.character(pp$drug), "ketoconazole")
+  mbi <- identical(as.character(pp$drug), "clarithromycin")
   route <- as.character(v$route %||% "oral")
   if (is.null(v$route)) note("victim.route", "oral", "the usual way midazolam is given in an interaction study")
   weight <- vcr_scalar(sc$weightKg, 80)
-  if (is.null(sc$weightKg) && !inhibitor) note("weightKg", 80, "the body weight of the published code (every clearance, flow and volume of the model is per kilogram)")
+  if (is.null(sc$weightKg) && !inhibitor && !mbi) note("weightKg", 80, "the body weight of the published code (every clearance, flow and volume of the model is per kilogram)")
   horizon <- vcr_scalar(sc$horizonH, 48)
   if (is.null(sc$horizonH)) note("horizonH", 48, "long enough for the area under the curve to be complete: midazolam's half-life is a few hours")
   interval <- vcr_scalar(pp$intervalH, 24)
@@ -299,9 +300,12 @@ vcr_job_pk_interaction <- function(job, output_dir = NULL, ...) {
   if (identical(route, "iv") && !is.null(v$infusionH)) victim$infusionH <- vcr_scalar(v$infusionH)
   perp <- list(drug = as.character(pp$drug), doseMg = as.numeric(pp$doseMg), intervalH = interval, doses = as.integer(pp$doses), gapH = gap)
   inhibition <- if (inhibitor) as.character(pp$inhibition %||% "mixed") else NULL
+  mbi_set <- if (mbi) as.character(pp$inactivationSet %||% "polasek_hlm") else NULL
+  if (mbi && is.null(pp$inactivationSet)) note("perpetrator.inactivationSet", "polasek_hlm", "the median of the three human-liver-microsome sets of the paper's Table 2, fixed before any prediction was run")
+  if (mbi && !is.null(sc$weightKg)) note("weightKg", "not used", "the published structure has fixed volumes and flows for a typical adult and no body-weight scaling")
   if (inhibitor && is.null(pp$inhibition)) note("perpetrator.inhibition", "mixed", "the model of the three that the paper found to fit the in-vitro data best")
   if (inhibitor && !is.null(sc$weightKg)) note("weightKg", "not used", "the published model has fixed volumes and flows for a typical adult and no body-weight scaling")
-  run <- tryCatch(if (inhibitor) vcr_pbpk_inhibition(victim, perp, inhibition, horizon) else vcr_pbpk_interaction(victim, perp, weight, horizon),
+  run <- tryCatch(if (mbi) vcr_pbpk_mbi(victim, perp, mbi_set, horizon) else if (inhibitor) vcr_pbpk_inhibition(victim, perp, inhibition, horizon) else vcr_pbpk_interaction(victim, perp, weight, horizon),
                   vcr_pbpk_interrupted = function(e) e)
   if (inherits(run, "vcr_pbpk_interrupted")) {
     if (identical(conditionMessage(run), "canceled")) return(list(status = "canceled", measures = list(), counts = vcr_counts(realPatients = NULL, generatedRecords = 0), diagnostics = list(interrupted = "canceled during the simulation")))
@@ -314,6 +318,9 @@ vcr_job_pk_interaction <- function(job, output_dir = NULL, ...) {
   outside_fit <- if (inhibitor) {
     # Quinney et al. 2013 Table 4 is the one validation of the inhibitor model in its own paper: 200 mg daily for six days, midazolam 1 mg intravenously
     c(if (!isTRUE(all.equal(perp$doseMg, 200))) "perpetrator_dose", if (identical(route, "oral")) "victim_route" else if (!isTRUE(all.equal(victim$doseMg, 1))) "victim_dose")
+  } else if (mbi) {
+    # the predictions were compared with studies of clarithromycin 250 and 500 mg twice daily (N185d); any other dose is the structure extrapolated
+    c(if (!perp$doseMg %in% c(250, 500)) "perpetrator_dose")
   } else c(if (perp$doseMg < fitted_rif[1] || perp$doseMg > fitted_rif[2]) "perpetrator_dose",
            if (victim$doseMg < min(fitted_dose) - 1e-9 || victim$doseMg > max(fitted_dose) + 1e-9) "victim_dose")
   ratio <- run$auc_with / run$auc_alone
@@ -330,8 +337,11 @@ vcr_job_pk_interaction <- function(job, output_dir = NULL, ...) {
   curve <- lapply(seq_along(run$rel_time), function(i) list(hour = run$rel_time[i], alone = run$alone[i], withPerpetrator = run$with[i]))
   list(status = "succeeded", measures = measures, counts = vcr_counts(realPatients = NULL, generatedRecords = 0),
        diagnostics = list(pbpk = list(
-         given = list(label = sc$label, victim = victim, perpetrator = c(perp, if (inhibitor) list(inhibition = inhibition)), weightKg = if (inhibitor) NULL else weight, horizonH = horizon),
-         model = list(citation = if (inhibitor) .vcr_inhib_citation else .vcr_pbpk_citation, mechanism = if (inhibitor) "inhibition" else "induction",
+         # clarithromycin: the perpetrator's own exposure over its last dosing interval, and the clinical value for the regimen it was compared with (500 mg every 12 h, a healthy-subject
+         # study, clarithromycin alone, n = 23: Css,max 2327 ug/L, AUCtau 15924 ug*h/L; PMC10333645), so the page can say how far the assembled perpetrator's own exposure is from it
+         perpetrator = if (mbi) c(run$perp_exposure, if (identical(perp$doseMg, 500) && identical(perp$intervalH, 12)) list(observedCmaxUgL = 2327, observedAucTauUgHL = 15924)),
+         given = list(label = sc$label, victim = victim, perpetrator = c(perp, if (inhibitor) list(inhibition = inhibition), if (mbi) list(inactivationSet = mbi_set)), weightKg = if (inhibitor || mbi) NULL else weight, horizonH = horizon),
+         model = list(citation = if (mbi) .vcr_mbi_citation else if (inhibitor) .vcr_inhib_citation else .vcr_pbpk_citation, mechanism = if (mbi) "inactivation" else if (inhibitor) "inhibition" else "induction",
                       population = "a typical healthy adult: no between-person variability, genotype or disease",
                       victimStartsAtHour = run$victimTime, outsideFit = as.list(outside_fit)),
          curve = curve, assumed = assumed)))

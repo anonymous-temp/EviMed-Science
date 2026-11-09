@@ -7741,7 +7741,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.1.0",
+        "methodVersion": "1.2.0",
         "scenario": {
           "label": "midazolam after rifampicin",
           "victim": {
@@ -7772,7 +7772,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.1.0",
+        "methodVersion": "1.2.0",
         "scenario": {
           "victim": {
             "drug": "midazolam",
@@ -7807,7 +7807,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.1.0",
+        "methodVersion": "1.2.0",
         "scenario": {
           "label": "midazolam with ketoconazole",
           "victim": {
@@ -7821,6 +7821,42 @@
             "doses": 6,
             "gapH": 0,
             "inhibition": "noncompetitive"
+          }
+        }
+      }
+    },
+    {
+      "name": "intravenous midazolam after two weeks of clarithromycin 500 mg twice daily, the median set of in-vitro inactivation constants (an assembled perpetrator)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "pk_interaction",
+        "method": "pk.interaction",
+        "methodVersion": "1.2.0",
+        "scenario": {
+          "label": "midazolam with clarithromycin",
+          "victim": {
+            "drug": "midazolam",
+            "doseMg": 3.5,
+            "route": "iv",
+            "infusionH": 0.5
+          },
+          "perpetrator": {
+            "drug": "clarithromycin",
+            "doseMg": 500,
+            "intervalH": 12,
+            "doses": 14,
+            "gapH": 2,
+            "inactivationSet": "mayhew_hlm"
           }
         }
       }
@@ -31919,7 +31955,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.1.0",
+        "methodVersion": "1.2.0",
         "scenario": {
           "victim": {
             "drug": "midazolam",
@@ -31952,7 +31988,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.1.0",
+        "methodVersion": "1.2.0",
         "scenario": {
           "victim": {
             "drug": "midazolam",
@@ -31971,6 +32007,40 @@
       ]
     },
     {
+      "name": "an inactivation set the compilation does not have",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "pk_interaction",
+        "method": "pk.interaction",
+        "methodVersion": "1.2.0",
+        "scenario": {
+          "victim": {
+            "drug": "midazolam",
+            "doseMg": 3
+          },
+          "perpetrator": {
+            "drug": "clarithromycin",
+            "doseMg": 500,
+            "doses": 14,
+            "inactivationSet": "fitted"
+          }
+        }
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.perpetrator.inactivationSet"
+      ]
+    },
+    {
       "name": "a victim the published model does not carry",
       "job": {
         "jobId": "job_1",
@@ -31986,7 +32056,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.1.0",
+        "methodVersion": "1.2.0",
         "scenario": {
           "victim": {
             "drug": "tacrolimus",
@@ -32019,7 +32089,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.1.0",
+        "methodVersion": "1.2.0",
         "scenario": {
           "victim": {
             "drug": "midazolam",
@@ -32053,7 +32123,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.1.0",
+        "methodVersion": "1.2.0",
         "scenario": {
           "victim": {
             "drug": "midazolam",

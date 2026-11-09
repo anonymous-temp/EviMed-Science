@@ -126,7 +126,7 @@ vcr_case("N180e", c("AC-08", "AC-30"), function() {
   # an input said so, an inhibitor outside the model refused by name, a ratio of 1 with no ketoconazole, and the midazolam dose linearity the clinical rows rely on
   jr <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 1, route = "iv"), perpetrator = list(drug = "ketoconazole", doseMg = 200, doses = 6L, gapH = 0), weightKg = 70, horizonH = 96), NULL, job_id = "job_n180e"))
   none <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 1, route = "iv"), perpetrator = list(drug = "ketoconazole", doseMg = 1e-12, doses = 1L, gapH = 0), horizonH = 48), NULL, job_id = "job_n180e1"))
-  bad <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 1), perpetrator = list(drug = "clarithromycin", doseMg = 500, doses = 3L)), NULL, job_id = "job_n180e2"))
+  bad <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 1), perpetrator = list(drug = "erythromycin", doseMg = 500, doses = 3L)), NULL, job_id = "job_n180e2"))
   nm <- vapply(jr$measures, function(m) m$name, character(1))
   pk <- jr$diagnostics$pbpk
   keys <- vapply(pk$assumed, function(a) a$key, character(1))
@@ -134,6 +134,156 @@ vcr_case("N180e", c("AC-08", "AC-30"), function() {
   list(pass = identical(jr$status, "succeeded") && all(c("auc_ratio", "cmax_ratio", "victim_auc_alone") %in% nm) && !any(grepl("cyp3a4", nm)) && identical(pk$model$mechanism, "inhibition") &&
          identical(pk$given$perpetrator$inhibition, "mixed") && "weightKg" %in% keys && "perpetrator.inhibition" %in% keys && length(pk$curve) >= 10L &&
          abs(vcr_measure_value(none, "auc_ratio") - 1) < 1e-6 && !identical(bad$status, "succeeded") && "scenario_value_invalid" %in% vcr_test_issue_codes(bad) && abs(lin[2] / lin[1] - 1) < 0.02,
-       detail = sprintf("the job succeeds (status %s) with the area and peak ratios and no enzyme-activity measure, names the mixed model and states the unused weight and the default model as assumptions (%s); a ketoconazole dose of 1e-12 mg leaves the ratio at %.8f; clarithromycin (a mechanism-based inhibitor with no published model in open text) is refused (%s); the oral ratio after ketoconazole 400 mg x 4 d is %.3f for midazolam 1 mg and %.3f for 7.5 mg (linear to %.2f%%)",
+       detail = sprintf("the job succeeds (status %s) with the area and peak ratios and no enzyme-activity measure, names the mixed model and states the unused weight and the default model as assumptions (%s); a ketoconazole dose of 1e-12 mg leaves the ratio at %.8f; erythromycin (a mechanism-based inhibitor with no published model in open text) is refused (%s); the oral ratio after ketoconazole 400 mg x 4 d is %.3f for midazolam 1 mg and %.3f for 7.5 mg (linear to %.2f%%)",
                         jr$status, paste(keys, collapse = ", "), vcr_measure_value(none, "auc_ratio"), paste(vcr_test_issue_codes(bad), collapse = ", "), lin[1], lin[2], 100 * abs(lin[2] / lin[1] - 1)))
+})
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+# N185 — the mechanism-based inactivator: clarithromycin assembled bottom-up (B5). References that are not the method's own code: (1) the closed form of
+# the enzyme equation, E = kdeg / (kdeg + kobs) at steady state and E(t) = Ess + (1 - Ess) exp(-(kdeg + kobs) t) with the inactivator held constant, and the
+# static mechanistic clearance of midazolam at that enzyme fraction; (2) `deSolve::lsoda` on the same right-hand side; (3) open-text clinical values: the
+# perpetrator's own steady-state exposure (a healthy-subject study, PMC10333645) and seven midazolam ratios (Hanke 2018 Table 1, PMC6202474; Quinney 2010
+# Table 3, PMC2812061), as labelled predictions. The in-vitro constants are the paper's Table 2 human-liver-microsome rows; its fitted in-vivo constants are not
+# used anywhere. The default set (the median of the three) was fixed before any prediction was run.
+# ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+.n185_ratio <- function(route, mdz_mg, clr_mg, doses, gap, set = "polasek_hlm", interval = 12, inf = NULL) {
+  v <- list(drug = "midazolam", doseMg = mdz_mg, route = route); if (!is.null(inf)) v$infusionH <- inf
+  .n180_run(v, list(drug = "clarithromycin", doseMg = clr_mg, intervalH = interval, doses = as.integer(doses), gapH = gap, inactivationSet = set), horizonH = 96)
+}
+
+.n185_frozen <- function(P, set, Cgw, Ch, horizon, probe = numeric()) {
+  f <- .vcr_mbi_rhs(P, set); g <- function(t, y, inf_rate = 0) { d <- f(t, y, inf_rate); d[c(7:11)] <- 0; d }
+  y0 <- .vcr_mbi_init(); y0[["Cgutwall"]] <- Cgw; y0[["Cliver"]] <- Ch
+  m <- .vcr_pbpk_integrate(g, y0, data.frame(time = numeric(), state = integer(), amount = numeric()), list(), sort(unique(c(0, probe, horizon))), states = .vcr_mbi_states)
+  m
+}
+
+vcr_case("N185a", c("AC-08", "AC-30"), function() {
+  # the perpetrator's own plasma exposure before any interaction is read: clarithromycin 500 mg every 12 h, the last of 14 doses (a healthy-subject study, clarithromycin alone,
+  # n = 23: Css,max 2327 ug/L, AUCtau 15924 ug*h/L; PMC10333645). The model is not tuned to them: its parameters are Table 1 of Quinney 2010.
+  # HISTORY, kept on purpose: the check as first written held the model WITH its own inactivation of CYP3A to 2-fold and FAILED (Cmax 2.27-fold, AUCtau 2.92-fold too high: the
+  # inactivator removes the enzyme that clears it, and the in-vitro constants take it to 27% in the liver). The criterion was not widened. The case now holds the perpetrator's
+  # published linear kinetics (no self-inactivation) to 2-fold, and states the self-inactivated exposure and its fold error as a finding that the page repeats as a premise;
+  # `detail` says the two apart.
+  P <- .vcr_mbi_params()
+  expo <- function(inactivate) {
+    f <- .vcr_mbi_rhs(P, "polasek_hlm", inactivate = inactivate)
+    ev <- data.frame(time = (0:13) * 12, state = match("Cgut", .vcr_mbi_states), amount = 500)
+    m <- .vcr_pbpk_integrate(f, .vcr_mbi_init(), ev, list(), sort(unique(c(0, seq(156, 168, by = 0.25)))), states = .vcr_mbi_states)
+    cc <- m[m[, "time"] >= 156 - 1e-9, ]
+    c(cmax = max(cc[, "Ccentral"] / P$V1_c * 1000), auc = unname(1000 * (cc[nrow(cc), "AUCc"] - cc[1, "AUCc"])))
+  }
+  fold <- function(x) c(cmax = max(x[["cmax"]] / 2327, 2327 / x[["cmax"]]), auc = max(x[["auc"]] / 15924, 15924 / x[["auc"]]))
+  lin <- expo(FALSE); self <- expo(TRUE); fl <- fold(lin); fs <- fold(self)
+  job <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 4), perpetrator = list(drug = "clarithromycin", doseMg = 500, intervalH = 12, doses = 14L, gapH = 2)), NULL, job_id = "job_n185a"))
+  rep <- job$diagnostics$pbpk$perpetrator
+  reported <- !is.null(rep) && abs(rep$cmaxUgL / self[["cmax"]] - 1) < 1e-3 && abs(rep$observedAucTauUgHL - 15924) < 1e-9
+  list(pass = all(fl <= 2) && all(fs > 2) && reported,
+       detail = sprintf("clarithromycin 500 mg every 12 h x 14 doses. Linear kinetics (no self-inactivation): Cmax %.0f ug/L (observed 2327, fold error %.2f), AUCtau %.0f ug*h/L (observed 15924, fold error %.2f), held to 2-fold. With the model's own inactivation: Cmax %.0f (fold error %.2f), AUCtau %.0f (fold error %.2f): OVER-predicted beyond 2-fold, stated here and carried to the page, and the job result reports it (%s)",
+                        lin[["cmax"]], fl[["cmax"]], lin[["auc"]], fl[["auc"]], self[["cmax"]], fs[["cmax"]], self[["auc"]], fs[["auc"]], if (reported) "yes" else "NO"))
+})
+
+vcr_case("N185b", c("AC-08", "AC-30"), function() {
+  P <- .vcr_mbi_params(); mg <- P$MW_clr / 1000; worst <- 0; lines <- character()
+  for (set in names(P$sets)) {
+    KI <- P$sets[[set]][["KI"]] * mg; kin <- P$sets[[set]][["kinact"]]
+    for (conc in c(0.02, 0.5, 3)) {                      # unbound inactivator concentration in the cell, mg/L (a few uM up to ~ 4 uM)
+      Cgw <- conc * P$Vgw; Ch <- conc * P$Vh_c / P$fu_c    # the unbound concentrations in gut wall and liver are both `conc`
+      m <- .n185_frozen(P, set, Cgw, Ch, 800, probe = c(10, 40))
+      kobs <- kin * conc / (KI + conc); ess <- P$kdeg / (P$kdeg + kobs)
+      want <- function(t) ess + (1 - ess) * exp(-(P$kdeg + kobs) * t)
+      d <- c(abs(m[nrow(m), "Egut"] - ess) / ess, abs(m[nrow(m), "Eliver"] - ess) / ess,
+             abs(m[m[, "time"] == 10, "Egut"] - want(10)) / want(10), abs(m[m[, "time"] == 40, "Eliver"] - want(40)) / want(40))
+      worst <- max(worst, d)
+      if (conc == 0.5) lines <- c(lines, sprintf("%s: steady fraction %.5f (closed form %.5f), at 10 h %.5f (%.5f)", set, m[nrow(m), "Eliver"], ess, m[m[, "time"] == 10, "Egut"], want(10)))
+    }
+  }
+  # midazolam given intravenously (a trace dose) at the frozen enzyme fraction: its area is the dose over the well-stirred clearance of that fraction
+  set <- "polasek_hlm"; conc <- 0.5; KI <- P$sets[[set]][["KI"]] * mg
+  Eh <- P$kdeg / (P$kdeg + P$sets[[set]][["kinact"]] * conc / (KI + conc)); Iu_h <- conc; Ki <- P$Ki_rev_uM * mg
+  clint <- P$Vmaxh * P$fum / P$km * (P$fm * Eh / (1 + Iu_h / Ki) + (1 - P$fm)); hand <- 0.01 / (P$Qh * clint / (P$Qh + clint) + P$CLren)
+  f <- .vcr_mbi_rhs(P, set); g <- function(t, y, inf_rate = 0) { d <- f(t, y, inf_rate); d[c(7:11, 12, 13)] <- 0; d }
+  y0 <- .vcr_mbi_init(); y0[["Cliver"]] <- conc * P$Vh_c / P$fu_c; y0[["Eliver"]] <- Eh; y0[["Mcentral"]] <- 0.01
+  dyn <- .vcr_pbpk_integrate(g, y0, data.frame(time = numeric(), state = integer(), amount = numeric()), list(), c(0, 400), states = .vcr_mbi_states)[2, "AUC"]
+  rel <- abs(dyn / hand - 1)
+  list(pass = worst < 1e-7 && rel < 2e-3,
+       detail = sprintf("with the inactivator held constant the enzyme fraction follows the closed form kdeg / (kdeg + kinact I / (KI + I)) and its exponential approach for all three constant sets at three concentrations (largest relative difference %.1e; %s); midazolam 0.01 mg intravenous at the frozen fraction: dynamic area %.6g, hand-worked well-stirred area %.6g (%.1e)", worst, paste(lines, collapse = "; "), dyn, hand, rel))
+})
+
+.n185_lsoda <- function(set, route, dose, inf_h, clr_dose, doses, gap, times_rel) {
+  P <- .vcr_mbi_params(); f <- .vcr_mbi_rhs(P, set); y <- .vcr_mbi_init(); t_v <- (doses - 1L) * 12 + gap
+  ev <- rbind(data.frame(time = (seq_len(doses) - 1L) * 12, state = match("Cgut", .vcr_mbi_states), amount = clr_dose),
+              if (!(route == "iv" && inf_h > 0)) data.frame(time = t_v, state = match(if (route == "iv") "Mcentral" else "Mgut", .vcr_mbi_states), amount = dose))
+  inf <- if (route == "iv" && inf_h > 0) list(start = t_v, end = t_v + inf_h, rate = dose / inf_h)
+  marks <- sort(unique(c(0, ev$time, if (!is.null(inf)) c(inf$start, inf$end), t_v + times_rel))); out <- list(); t <- 0
+  for (tm in marks) {
+    if (tm > t) {
+      rate <- if (!is.null(inf) && inf$start <= t + 1e-12 && inf$end >= tm - 1e-12) inf$rate else 0
+      y <- deSolve::lsoda(y, c(t, tm), function(tt, yy, parms) list(f(tt, yy, inf_rate = rate)), NULL, rtol = 1e-10, atol = 1e-14)[2, -1]; names(y) <- .vcr_mbi_states; t <- tm
+    }
+    for (e in which(abs(ev$time - tm) < 1e-12)) y[ev$state[e]] <- y[ev$state[e]] + ev$amount[e]
+    if (any(abs(t_v + times_rel - tm) < 1e-12)) out[[length(out) + 1L]] <- c(time = tm - t_v, y)
+  }
+  m <- do.call(rbind, out)
+  list(conc = 1000 * m[, "Mcentral"] / P$V4, auc = 1000 * (m[nrow(m), "AUC"] - m[1, "AUC"]), enzyme = m[1, c("Eliver", "Egut")])
+}
+
+vcr_case("N185c", c("AC-08", "AC-30"), function() {
+  if (!requireNamespace("deSolve", quietly = TRUE)) return(list(pass = FALSE, detail = "error: the cross-check package deSolve is not installed (the run must not skip silently)"))
+  rel <- c(0, 0.5, 1, 2, 4, 8, 12); worst <- 0; lines <- character()
+  for (sc in list(list(s = "polasek_hlm", r = "oral", d = 4, h = 0, k = 500, n = 4L, g = 2), list(s = "mayhew_hlm", r = "iv", d = 3.5, h = 0.5, k = 500, n = 3L, g = 0.5), list(s = "ito_hlm", r = "oral", d = 3, h = 0, k = 250, n = 6L, g = 0))) {
+    v <- list(route = sc$r, doseMg = sc$d); if (sc$h > 0) v$infusionH <- sc$h
+    mine <- vcr_pbpk_mbi(v, list(doseMg = sc$k, intervalH = 12, doses = sc$n, gapH = sc$g), sc$s, 12)
+    ref <- .n185_lsoda(sc$s, sc$r, sc$d, sc$h, sc$k, sc$n, sc$g, rel)
+    at <- function(key) vapply(rel, function(r) mine[[key]][which.min(abs(mine$rel_time - r))], numeric(1))
+    dd <- c(max(abs(at("with") - ref$conc) / pmax(ref$conc, 1e-3)), abs(mine$auc_with - ref$auc) / ref$auc, abs(mine$cyp_liver - ref$enzyme[[1]]) / ref$enzyme[[1]], abs(mine$cyp_gut - ref$enzyme[[2]]) / ref$enzyme[[2]])
+    worst <- max(worst, dd)
+    lines <- c(lines, sprintf("%s %s after %d x %g mg: area %.6f against %.6f, curve and enzyme fractions largest relative difference %.1e", sc$s, sc$r, sc$n, sc$k, mine$auc_with, ref$auc, max(dd)))
+  }
+  list(pass = worst < 1e-6, detail = sprintf("lsoda (rtol 1e-10) on the same equations with the doses as events: %s; largest %.1e (held to 1e-6)", paste(lines, collapse = "; "), worst))
+})
+
+# Observed AUC ratios of midazolam with clarithromycin, from open text. route, midazolam mg (iv: 0.05 mg/kg at 70 kg = 3.5 mg, a 0.5 h infusion), clarithromycin mg twice daily,
+# days, hours between the last clarithromycin dose and midazolam, observed. The gap of the Hanke rows is the table's; the weight, and the gap and days of the rows marked *, are
+# NOT in the open text and are assumptions of this case (the model's ratio moves little with them: the weight is not an input of the model, and N185e shows the gap).
+.n185_clinical <- list(
+  list("Gorski 1998 iv (Hanke Table 1)", "iv", 3.5, 500, 7, 2, 2.748, 0.5),
+  list("Gorski 1998 oral 4 mg (Hanke Table 1)", "oral", 4, 500, 7, 2, 7.000, NULL),
+  list("Markert 2013 oral 3 mg (Hanke Table 1)*", "oral", 3, 500, 7, 0.25, 5.494, NULL),
+  list("Yeates 1996 oral 15 mg (Quinney 2010 Table 3)*", "oral", 15, 250, 5, 0, 3.6, NULL),
+  list("Wang 2004 oral 4 mg (Quinney 2010 Table 3)*", "oral", 4, 500, 7, 0, 8.6, NULL),
+  list("Wang 2004 iv (Quinney 2010 Table 3)*", "iv", 3.5, 500, 7, 0, 2.1, 0.5))
+
+vcr_case("N185d", c("AC-08", "AC-30"), function() {
+  # A labelled prediction, bottom-up: the default set (the median of the three in-vitro sets, fixed before any run) is held to the usual bar of 2-fold per study; the other two sets are
+  # reported beside it, never chosen afterwards.
+  one <- function(set) lapply(.n185_clinical, function(r) {
+    pred <- .n185_ratio(r[[2]], r[[3]], r[[4]], r[[5]] * 2L, r[[6]], set, inf = r[[8]])$ratio
+    list(name = r[[1]], pred = pred, obs = r[[7]], fold = max(pred / r[[7]], r[[7]] / pred))
+  })
+  res <- lapply(c("polasek_hlm", "mayhew_hlm", "ito_hlm"), one); names(res) <- c("polasek_hlm", "mayhew_hlm", "ito_hlm")
+  gmfe <- vapply(res, function(rows) exp(mean(log(vapply(rows, function(r) r$fold, numeric(1))))), numeric(1))
+  within <- vapply(res, function(rows) sum(vapply(rows, function(r) r$fold <= 2, logical(1))), numeric(1))
+  line <- paste(vapply(res$polasek_hlm, function(r) sprintf("%s: predicted %.2f, observed %.2f, fold error %.2f", r$name, r$pred, r$obs, r$fold), character(1)), collapse = "; ")
+  other <- paste(vapply(c("mayhew_hlm", "ito_hlm"), function(s) sprintf("%s predicts %s (geometric mean fold error %.2f, %d of 6 within 2-fold)", s, paste(sprintf("%.1f", vapply(res[[s]], function(r) r$pred, numeric(1))), collapse = ", "), gmfe[[s]], within[[s]]), character(1)), collapse = "; ")
+  list(pass = within[["polasek_hlm"]] == length(.n185_clinical) && gmfe[["polasek_hlm"]] < 1.6,
+       detail = sprintf("default set (KI 29.5 uM, kinact 3.0 /h), nothing tuned: %s; geometric mean fold error %.2f, %d of 6 within 2-fold. The other sets, for the same studies in the same order: %s. The in-vitro constants span a factor of 5 in KI and the predictions a factor of 3-4 in the ratio: the choice among them is not decided by the clinical data here", line, gmfe[["polasek_hlm"]], within[["polasek_hlm"]], other))
+})
+
+vcr_case("N185e", c("AC-08", "AC-30"), function() {
+  jr <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 4), perpetrator = list(drug = "clarithromycin", doseMg = 500, intervalH = 12, doses = 14L, gapH = 2), weightKg = 70, horizonH = 96), NULL, job_id = "job_n185e"))
+  none <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 1, route = "iv"), perpetrator = list(drug = "clarithromycin", doseMg = 1e-12, doses = 1L, gapH = 0), horizonH = 48), NULL, job_id = "job_n185e1"))
+  big <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 4), perpetrator = list(drug = "clarithromycin", doseMg = 1000, intervalH = 12, doses = 14L, gapH = 2)), NULL, job_id = "job_n185e2"))
+  bad <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 1), perpetrator = list(drug = "erythromycin", doseMg = 500, doses = 3L)), NULL, job_id = "job_n185e3"))
+  badset <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 1), perpetrator = list(drug = "clarithromycin", doseMg = 500, doses = 3L, inactivationSet = "fitted")), NULL, job_id = "job_n185e4"))
+  nm <- vapply(jr$measures, function(m) m$name, character(1)); pk <- jr$diagnostics$pbpk
+  keys <- vapply(pk$assumed, function(a) a$key, character(1))
+  outside_big <- "perpetrator_dose" %in% unlist(big$diagnostics$pbpk$model$outsideFit)
+  gap_hi <- .n185_ratio("oral", 4, 500, 14, 2)$ratio; gap_late <- .n185_ratio("oral", 4, 500, 14, 12)$ratio
+  list(pass = identical(jr$status, "succeeded") && all(c("auc_ratio", "cmax_ratio", "cyp3a4_liver_activity", "cyp3a4_gut_activity") %in% nm) && identical(pk$model$mechanism, "inactivation") &&
+         identical(pk$given$perpetrator$inactivationSet, "polasek_hlm") && all(c("perpetrator.inactivationSet", "weightKg") %in% keys) && abs(vcr_measure_value(none, "auc_ratio") - 1) < 1e-6 &&
+         outside_big && !identical(bad$status, "succeeded") && "scenario_value_invalid" %in% vcr_test_issue_codes(bad) && "scenario_value_invalid" %in% vcr_test_issue_codes(badset) && gap_late < gap_hi,
+       detail = sprintf("the job succeeds with the enzyme fractions as measures, names the inactivation model and its constant set and says the weight is not used (%s); 1e-12 mg of clarithromycin leaves the ratio at %.8f; 1000 mg twice daily is flagged as outside the compared doses; erythromycin and an unknown constant set are refused (%s / %s); the oral ratio falls from %.2f at 2 h after the last dose to %.2f at 12 h as the enzyme recovers",
+                        paste(keys, collapse = ", "), vcr_measure_value(none, "auc_ratio"), paste(vcr_test_issue_codes(bad), collapse = ","), paste(vcr_test_issue_codes(badset), collapse = ","), gap_hi, gap_late))
 })

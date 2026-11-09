@@ -1701,7 +1701,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
   }),
 
   // Two published models of an oral or intravenous victim after a repeated oral perpetrator (plan R38; rifampicin: Asaumi et al. 2018, a whole-body
-  // model with induction; ketoconazole: Quinney et al. 2013 after Chien et al. 2006, a semi-physiological model with reversible inhibition). The
+  // model with induction; ketoconazole: Quinney et al. 2013 after Chien et al. 2006, a semi-physiological model with reversible inhibition; clarithromycin: the same midazolam model with a perpetrator assembled from the sources of Quinney et al. 2010, mechanism-based). The
   // drug lists are closed on purpose: a perpetrator or a victim whose published model could not be written from open text is refused by name
   // at the schema (a value not in the list), never run with a stand-in.
   'pk.interaction': object({
@@ -1713,7 +1713,8 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       infusionH: gated(number({ gt: 0, max: 24, unit: 'h' }), is('victim.route', 'iv')),
     })),
     perpetrator: req(object({
-      drug: req(string({ values: ['rifampicin', 'ketoconazole'] })),
+      drug: req(string({ values: ['rifampicin', 'ketoconazole', 'clarithromycin'] })),
+      inactivationSet: gated(string({ values: ['polasek_hlm', 'mayhew_hlm', 'ito_hlm'], default: 'polasek_hlm' }), is('perpetrator.drug', 'clarithromycin')),
       inhibition: gated(string({ values: ['competitive', 'noncompetitive', 'mixed'], default: 'mixed' }), is('perpetrator.drug', 'ketoconazole')),
       doseMg: req(number({ gt: 0, max: 1200, unit: 'mg' })),
       intervalH: number({ gt: 0, max: 168, default: 24, unit: 'h' }),

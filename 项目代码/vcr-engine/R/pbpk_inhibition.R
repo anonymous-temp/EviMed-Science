@@ -134,3 +134,128 @@ vcr_pbpk_inhibition <- function(victim, perpetrator, model = "mixed", horizon, g
   "Quinney SK, Zhang X, Lucksiri A, Gorski JC, Li L, Hall SD. Physiologically based pharmacokinetic model of the interaction of midazolam and ketoconazole: ",
   "competitive, noncompetitive and mixed inhibition. CPT Pharmacometrics Syst Pharmacol 2013;2:e75 (doi 10.1038/psp.2013.50), the model of Chien JY et al. ",
   "Drug Metab Dispos 2006;34:1208-1219; equations and parameters as in the paper's supplementary R code.")
+
+# ---------------------------------------------------------------------------
+# Mechanism-based inhibition: clarithromycin assembled bottom-up (plan R38, B5). Appended to the file because it shares the midazolam rows above.
+#
+# Hidden knowledge:
+#
+# - **This perpetrator is assembled from separate published sources and is not a published model.** The midazolam model is the ketoconazole one above
+#   (Chien 2006 / Quinney 2013 supplement). Clarithromycin takes the structure of Quinney SK, Haehner BD, Rebhun JF, Gorski JC, Hall SD et al. Drug Metab
+#   Dispos 2010;38:241-248 (PMC2812061: a one-compartment model with gut lumen, gut wall, portal vein and liver, well-stirred hepatic clearance, enzyme
+#   turnover and an inactivator that raises the enzyme's degradation by kobs = kinact * I / (KI + I)), whose Table 1 values are used as printed:
+#   ka 1.7 /h (Chu 1992), V1 123 L, CLR 7.5 L/h (Chu 1992), CLint 67 L/h (Chu 1992), fu 0.28 (Ito 2003), Km 60 (Rodrigues 1997), kdeg 0.025 /h (from in-vivo
+#   CYP3A recovery data, Gorski 2002, Wang 2004), reversible Ki 300 uM (Obach 2006), liver volume 2.8 L (Ito 2003). The equations of that paper are images;
+#   the enzyme equation here is the one its text states, and Quinney's own midazolam parameters are replaced by the supplement's.
+# - **KI and kinact are the paper's Table 2 in-vitro values, never the paper's own in-vivo estimate.** The paper's 5.3 uM and 0.4 / 4 per h were fitted
+#   by grid search to the clinical midazolam ratios: using them would be tuning to the answer, so they are not in this file. The in-vitro rows are
+#   human liver microsomes: Mayhew 2000 (KI 5.49 uM, kinact 4.32 /h), Ito 2003 (37.0-41.4 uM, 2.5-2.8 /h: the midpoints), Polasek & Miners 2006 (29.5 uM,
+#   3.0 /h). The default is Polasek & Miners, the median of the three on both constants, fixed before any prediction was run; the other two are selectable
+#   and every prediction is reported for all three.
+# - **Km is a number the paper's table labels micromoles and uses as mg/L**: its Vmax 4002 mg/h is CLint 67 L/h times 59.7, so 59.7 mg/L is what the
+#   derived Vmax needs; at the concentrations of the dose (4 uM against Km 60) the linear clearance 67 L/h is what matters either way.
+# - **What the assembly does not have.** No 14-hydroxy metabolite (itself an inhibitor and a CYP3A4 substrate), no P-glycoprotein or transporter effect, no
+#   binding-corrected KI (the table does not say which of its values are unbound), a gut-wall volume of 1 L (the supplement's, which gives midazolam its
+#   gut availability) rather than the 0.25 L the paper's table names, and the absorbed fraction of clarithromycin taken as 1 (Table 1 gives none). The
+#   perpetrator's own plasma exposure is checked against open-text clinical values in N185 before the interaction is read.
+# ---------------------------------------------------------------------------
+
+.vcr_mbi_params <- function() {
+  c(.vcr_inhib_params(), list(
+    # clarithromycin, Quinney 2010 Table 1 (units: L, L/h, per h, mg/h, mg/L)
+    ka_c = 1.7, V1_c = 123, CLR_c = 7.5, CLint_c = 67, fu_c = 0.28, Vh_c = 2.8, Vmax_c = 4002, Km_c = 4002 / 67,
+    kdeg = 0.025, Ki_rev_uM = 300, MW_clr = 747.95,
+    # Table 2 of the same paper, human liver microsomes: KI (uM) and kinact (per h)
+    sets = list(polasek_hlm = c(KI = 29.5, kinact = 3.0), mayhew_hlm = c(KI = 5.49, kinact = 4.32), ito_hlm = c(KI = (37.0 + 41.4) / 2, kinact = (2.5 + 2.8) / 2))
+  ))
+}
+
+.vcr_mbi_states <- c("Mgut", "Mgutwall", "Mportal", "Mliver", "Mcentral", "Mperiph", "Cgut", "Cgutwall", "Cportal", "Cliver", "Ccentral", "Egut", "Eliver", "AUC", "AUCc")
+
+.vcr_mbi_rhs <- function(P, set = "polasek_hlm", inactivate = TRUE) {
+  s <- P$sets[[set]]; mg <- P$MW_clr / 1000
+  with(P, {
+    KI <- s[["KI"]] * mg; kin <- s[["kinact"]] * inactivate; Ki <- Ki_rev_uM * mg
+    function(t, y, inf_rate = 0) {
+      Ag <- y[1]; Agw <- y[2]; Apv <- y[3]; Ah <- y[4]; A4 <- y[5]; A5 <- y[6]
+      Cg <- y[7]; Cgw <- y[8]; Cpv <- y[9]; Ch <- y[10]; C1 <- y[11]; Eg <- y[12]; Eh <- y[13]
+      Iu_g <- Cgw / Vgw                          # unbound in the enterocyte: fuGut is 1 in the compound table the structure uses
+      Iu_h <- fu_c * Ch / Vh_c                   # unbound in the liver, liver conc = amount / volume
+      d <- numeric(15L)
+      # midazolam: the supplement's equations, the 3A pathways scaled by the enzyme, a reversible competitive term for clarithromycin
+      d[1] <- -ka * Ag
+      d[2] <- ka * Ag - kpv * Agw - Vmaxg * Eg * Agw / (km * Vgw * (1 + Iu_g / Ki) + Agw)
+      d[3] <- kpv * Agw - Qpv * (Apv / Vpv - A4 / V4)
+      d[4] <- Qpv * (Apv / Vpv - A4 / V4) + Qh * (A4 / V4 - Ah / Vh) -
+        fm * Vmaxh * Eh * fum * Ah / (km * Vh * (1 + Iu_h / Ki) + fum * Ah) - (1 - fm) * Vmaxh * fum * Ah / (Vh * km + fum * Ah)
+      d[5] <- inf_rate - Qh * (A4 / V4 - Ah / Vh) - Q4 * (A4 / V4 - A5 / V5) - CLren * A4 / V4
+      d[6] <- Q4 * (A4 / V4 - A5 / V5)
+      # clarithromycin: gut lumen, gut wall (first-pass), portal vein, liver (well stirred), one central volume
+      d[7] <- -ka_c * Cg
+      d[8] <- ka_c * Cg - kpv * Cgw - Vmax_c * Eg * Cgw / (Km_c * Vgw + Cgw)
+      d[9] <- kpv * Cgw - Qpv * (Cpv / Vpv - C1 / V1_c)
+      d[10] <- Qpv * (Cpv / Vpv - C1 / V1_c) + Qh * (C1 / V1_c - Ch / Vh_c) - Vmax_c * Eh * fu_c * Ch / (Km_c * Vh_c + fu_c * Ch)
+      d[11] <- -Qh * (C1 / V1_c - Ch / Vh_c) - CLR_c * C1 / V1_c
+      # the enzyme (fraction of its starting amount): synthesis constant, degradation raised by the inactivator
+      d[12] <- kdeg * (1 - Eg) - kin * Iu_g / (KI + Iu_g) * Eg
+      d[13] <- kdeg * (1 - Eh) - kin * Iu_h / (KI + Iu_h) * Eh
+      d[14] <- A4 / V4
+      d[15] <- C1 / V1_c
+      d
+    }
+  })
+}
+
+.vcr_mbi_init <- function() { y <- numeric(length(.vcr_mbi_states)); names(y) <- .vcr_mbi_states; y[c("Egut", "Eliver")] <- 1; y }
+
+#' Midazolam alone and after repeated oral clarithromycin. Same return shape as vcr_pbpk_inhibition; `set` names the KI/kinact row of Table 2.
+vcr_pbpk_mbi <- function(victim, perpetrator, set = "polasek_hlm", horizon, grid = NULL, P = .vcr_mbi_params(), rtol = 1e-6, atol = 1e-9) {
+  f <- .vcr_mbi_rhs(P, set)
+  y0 <- .vcr_mbi_init()
+  n_p <- as.integer(perpetrator$doses); interval <- perpetrator$intervalH
+  t_v <- (n_p - 1L) * interval + perpetrator$gapH
+  ev_p <- data.frame(time = (seq_len(n_p) - 1L) * interval, state = match("Cgut", .vcr_mbi_states), amount = perpetrator$doseMg)
+  v_state <- match(if (identical(victim$route, "oral")) "Mgut" else "Mcentral", .vcr_mbi_states)
+  inf_h <- victim$infusionH %||% 0
+  mdz_event <- function(t0) if (identical(victim$route, "iv") && inf_h > 0) NULL else data.frame(time = t0, state = v_state, amount = victim$doseMg)
+  mdz_inf <- function(t0) if (identical(victim$route, "iv") && inf_h > 0) list(list(start = t0, end = t0 + inf_h, rate = victim$doseMg / inf_h)) else list()
+  rel <- if (is.null(grid)) sort(unique(c(pmin(c(0, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 36, 48, 72, 96), horizon), horizon))) else unique(c(seq(0, horizon, by = grid), horizon))
+  run <- function(t0, with_perp, extra = numeric()) {
+    ev <- rbind(if (with_perp) ev_p, mdz_event(t0), data.frame(time = numeric(), state = integer(), amount = numeric()))
+    ev <- ev[order(ev$time), , drop = FALSE]
+    t_out <- sort(unique(c(t0, t0 + rel, extra)))
+    if (with_perp) t_out <- sort(unique(c(t_out, ev_p$time)))
+    .vcr_pbpk_integrate(f, y0, ev, mdz_inf(t0), t_out, rtol, atol, states = .vcr_mbi_states)
+  }
+  t_last <- (n_p - 1L) * interval
+  alone <- run(0, FALSE); with_p <- run(t_v, TRUE, extra = seq(t_last, t_last + interval, by = 0.5))
+  vol <- P$V4
+  pick <- function(m, t0) {
+    base <- m[abs(m[, "time"] - t0) < 1e-9, "AUC"]
+    m2 <- m[m[, "time"] >= t0 - 1e-9, , drop = FALSE]
+    list(time = m2[, "time"] - t0, conc = 1000 * m2[, "Mcentral"] / vol, auc = 1000 * (m2[nrow(m2), "AUC"] - base), m2 = m2)
+  }
+  peak <- function(res) {
+    k <- which.max(res$conc)
+    if (k == 1L || k == length(res$conc) || identical(victim$route, "iv")) return(max(res$conc))
+    m2 <- res$m2; start <- m2[k - 1L, ]
+    at <- function(tt) 1000 * .vcr_radau_segment(f, start[-1], start[1], tt, rtol = rtol, atol = atol)[["Mcentral"]] / vol
+    o <- stats::optimize(at, c(m2[k - 1L, 1], m2[k + 1L, 1]), maximum = TRUE, tol = 1e-4)
+    max(res$conc[k], o$objective)
+  }
+  # the extra output points of the perpetrator's last interval are not part of the victim's curve: keep the victim's grid only
+  on_grid <- vapply(with_p[, "time"], function(tt) any(abs(tt - t_v - rel) < 1e-9), logical(1))
+  a <- pick(alone, 0); w <- pick(with_p[on_grid, , drop = FALSE], t_v)
+  a$cmax <- peak(a); w$cmax <- peak(w)
+  at_v <- with_p[abs(with_p[, "time"] - t_v) < 1e-9, ]
+  win <- with_p[with_p[, "time"] >= t_last - 1e-9 & with_p[, "time"] <= t_last + interval + 1e-9, , drop = FALSE]
+  perp_exposure <- list(cmaxUgL = max(win[, "Ccentral"] / P$V1_c * 1000), aucTauUgHL = unname(1000 * (win[nrow(win), "AUCc"] - win[1, "AUCc"])))
+  list(rel_time = a$time, alone = a$conc, with = w$conc, auc_alone = a$auc, auc_with = w$auc, cmax_alone = a$cmax, cmax_with = w$cmax,
+       cyp_liver = at_v[["Eliver"]], cyp_gut = at_v[["Egut"]], rif = with_p[with_p[, "time"] <= t_v + 1e-9, c("time", "Ccentral")],
+       weight = NA_real_, victimTime = t_v, model = set, perp = with_p, perpetrator_vol = P$V1_c, perp_exposure = perp_exposure)
+}
+
+.vcr_mbi_citation <- paste0(
+  "Assembled from separate published sources, not a published model: the midazolam model of Chien JY et al. Drug Metab Dispos 2006;34:1208-1219 as in the supplement of ",
+  "Quinney SK et al. CPT Pharmacometrics Syst Pharmacol 2013;2:e75; the clarithromycin structure and parameters of Table 1 of Quinney SK et al. Drug Metab Dispos ",
+  "2010;38:241-248, with the in-vitro mechanism-based constants of that paper's Table 2 (Mayhew 2000; Ito 2003; Polasek and Miners 2006), not its in-vivo fit.")

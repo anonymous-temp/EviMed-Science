@@ -772,11 +772,12 @@
       "modelTier": "scenario"
     },
     "pk.interaction": {
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": [],
       "crossChecks": [
         "deSolve (its stiff integrator on the same equations, the doses as events: the 41 states and the area under the curve, to 1e-6; and the 12 states of the ketoconazole inhibition model, to 1e-6)",
         "the inhibition models' own published predictions (Quinney et al. 2013, Table 4: the intravenous midazolam area ratio after ketoconazole 200 mg daily for six days, 2.5 mixed and 2.0 noncompetitive) and the closed-form static mechanistic ratio of the same equations with the inhibitor held constant",
+        "the mechanism-based inactivation equations against the closed-form steady-state enzyme fraction kdeg / (kdeg + kinact * I / (KI + I)) with the inactivator held constant, and the assembled clarithromycin model against open-text clinical midazolam ratios (labelled as a prediction)",
         "the authors' own simulation of the model (the Metrum Research Group's open vignette: the 3 mg midazolam area after 75 mg rifampicin daily for 7 days, 24.70 and 6.84 ng/mL*h, and its dose-response)"
       ],
       "modelTier": "literature"
@@ -14961,9 +14962,25 @@
               "t": "string",
               "values": [
                 "rifampicin",
-                "ketoconazole"
+                "ketoconazole",
+                "clarithromycin"
               ],
               "req": true
+            },
+            "inactivationSet": {
+              "t": "string",
+              "values": [
+                "polasek_hlm",
+                "mayhew_hlm",
+                "ito_hlm"
+              ],
+              "default": "polasek_hlm",
+              "when": {
+                "path": "perpetrator.drug",
+                "in": [
+                  "clarithromycin"
+                ]
+              }
             },
             "inhibition": {
               "t": "string",

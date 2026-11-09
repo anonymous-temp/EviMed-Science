@@ -284,7 +284,12 @@ export const NUMERIC_REFERENCES = {
   N180b: { methods: ['pk.interaction'], anchors: ['hand <- .n180_static(P, kic, ik[["Kg"]], ik[["Ke"]], 0.01, route)', 'list(pass = worst < 2e-3 && hit / base > 10'] },
   N180c: { methods: ['pk.interaction'], anchors: ['ref <- .n180_lsoda(sc$m, sc$r, sc$d, sc$k, sc$n, sc$g, 12, rel)', 'list(pass = worst < 1e-6'] },
   N180d: { methods: ['pk.interaction'], anchors: ['pred <- .n180_ratio(r[[2]], r[[3]], r[[4]], r[[5]], "mixed")', 'list(pass = all(fold <= 2) && gm < 1.6'] },
-  N180e: { methods: ['pk.interaction'], anchors: ['perpetrator = list(drug = "clarithromycin", doseMg = 500, doses = 3L)', 'abs(lin[2] / lin[1] - 1) < 0.02'] },
+  N180e: { methods: ['pk.interaction'], anchors: ['perpetrator = list(drug = "erythromycin", doseMg = 500, doses = 3L)', 'abs(lin[2] / lin[1] - 1) < 0.02'] },
+  N185a: { methods: ['pk.interaction'], anchors: ['lin <- expo(FALSE); self <- expo(TRUE); fl <- fold(lin); fs <- fold(self)', 'list(pass = all(fl <= 2) && all(fs > 2) && reported'] },
+  N185b: { methods: ['pk.interaction'], anchors: ['kobs <- kin * conc / (KI + conc); ess <- P$kdeg / (P$kdeg + kobs)', 'list(pass = worst < 1e-7 && rel < 2e-3'] },
+  N185c: { methods: ['pk.interaction'], anchors: ['ref <- .n185_lsoda(sc$s, sc$r, sc$d, sc$h, sc$k, sc$n, sc$g, rel)', 'list(pass = worst < 1e-6'] },
+  N185d: { methods: ['pk.interaction'], anchors: ['res <- lapply(c("polasek_hlm", "mayhew_hlm", "ito_hlm"), one)', 'within[["polasek_hlm"]] == length(.n185_clinical) && gmfe[["polasek_hlm"]] < 1.6'] },
+  N185e: { methods: ['pk.interaction'], anchors: ['perpetrator = list(drug = "erythromycin", doseMg = 500, doses = 3L)', 'gap_late < gap_hi'] },
   N77a: { methods: ['evidence.shrinkage'], anchors: ['rows <- c(d$table2, d$table3)', 's <- .n77_stratum(as.numeric(row$p[[1]]), as.numeric(row$p[[2]]), mix)'] },
   N77b: { methods: ['evidence.shrinkage'], anchors: ['folded_med <- stats::uniroot(', 'sign_int <- stats::integrate(dens, 0, Inf, rel.tol = 1e-11)$value', 'jr <- vcr_test_run(.n77_job(list(list(id = "paper", estimate = 0.44, se = 0.2)), "n77b_job"))', 'abs(jrow$replication - repl_int)'] },
 
