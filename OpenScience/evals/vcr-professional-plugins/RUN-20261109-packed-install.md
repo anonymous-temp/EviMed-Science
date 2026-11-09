@@ -57,3 +57,11 @@ node OpenScience/scripts/ops/vcr-packed-install-probe.mjs --work <new empty dir>
   --kernel-profile <seeded profile dir> --engine <vcr-engine root> --hosted-home <sealed DSH home> --results <file.json>
 node OpenScience/scripts/ops/vcr-packed-install-probe.mjs --work <new dir> --pack-only     # kernel-free, seconds
 ```
+
+## Rerun on the final revision (X2, wave 6)
+
+Run at `a71830fa0` (branch `codex/vcr-in-silico-r2-20261108`, `--source-ref HEAD`, a committed export, so the later research-plugin catalogue
+commit `fbabcb714`, the domain and manifest changes since `c6f5ea298`, and the removal of the explicit `studyId` from all research-plugin tool
+schemas are in what was packed). Same kernel, seeded profile, hosted-home copy and engine as above. **144 of 144 cases pass** (the same 62 / 50 / 32).
+The run answers the review's finding that the first run predated the catalogue changes; the 22 research-plugin tools now register without a
+`studyId` property, and every call the probe makes is accepted without it.
