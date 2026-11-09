@@ -39,13 +39,19 @@ export const VCR_PREDICTION_CLAIM_WORDS_ZH = Object.freeze({
   }),
 })
 
+/** The endpoints the frozen evaluation covered, in words (`vcrIndividualEvaluationFamily` names them). */
+export const VCR_INDIVIDUAL_FAMILY_WORDS_ZH = Object.freeze({ serum_bilirubin: '血清胆红素', cd4_count: 'CD4 计数' })
+
 /** The one sentence that says whether the individual claim is backed: `helped` is the frozen evaluation's finding for the endpoint at hand
- * (`true`: both paired comparisons excluded zero; `false`: they did not; `null`: no evaluation for this endpoint).
- * @param {boolean | null} helped */
-export function individualizationEvidenceSentence(helped) {
-  if (helped === true) return '在公开的随访数据上，这种个体化预测的平均误差小于沿用最近一次观测值和沿个人趋势外推，差异的95%区间不含0。'
-  if (helped === false) return '在公开的随访数据上，这种个体化预测没有显示比沿用最近一次观测值或沿个人趋势外推更准，所以这里只给出预测，不说它更准。'
-  return '这个终点没有做过个体化预测的对照评估，这里只给出预测，不说它比简单做法更准。'
+ * (`true`: both paired comparisons excluded zero; `false`: they did not; `null`: no evaluation for this endpoint). `family` names the endpoint the
+ * finding is about, so the sentence never reads as a finding about any other.
+ * @param {boolean | null} helped @param {string | null} [family] */
+export function individualizationEvidenceSentence(helped, family = null) {
+  const about = family && /** @type {Record<string, string>} */ (VCR_INDIVIDUAL_FAMILY_WORDS_ZH)[family]
+  const where = about ? `在公开的随访数据上（${about}），` : '在公开的随访数据上，'
+  if (helped === true) return `${where}这种个体化预测的平均误差小于沿用最近一次观测值和沿个人趋势外推，差异的95%区间不含0。`
+  if (helped === false) return `${where}这种个体化预测没有显示比沿用最近一次观测值或沿个人趋势外推更准，所以这里只给出预测，不说它更准。`
+  return '这个终点没有做过个体化预测的对照评估（用的方法不是评估过的那一种，也算没有），这里只给出预测，不说它比简单做法更准。'
 }
 
 /**
@@ -63,13 +69,13 @@ export function predictionClaimOf({ real = true, usesOwnHistory = null } = {}) {
 
 /**
  * The premise row of a result page for its claim, or null when the claim is unknown.
- * @param {string | null} claim @param {{helped?: boolean | null}} [evidence]
+ * @param {string | null} claim @param {{helped?: boolean | null, family?: string | null}} [evidence]
  */
-export function predictionClaimPremise(claim, { helped = null } = {}) {
+export function predictionClaimPremise(claim, { helped = null, family = null } = {}) {
   const words = claim ? VCR_PREDICTION_CLAIM_WORDS_ZH[claim] : null
   if (!words) return null
   return {
     key: `claim:${claim}`, label: '这次预测说明了什么', decisive: true, source: 'default',
-    value: claim === 'individualized_forecast' ? `${words.sentence}${individualizationEvidenceSentence(helped)}` : words.sentence,
+    value: claim === 'individualized_forecast' ? `${words.sentence}${individualizationEvidenceSentence(helped, family)}` : words.sentence,
   }
 }

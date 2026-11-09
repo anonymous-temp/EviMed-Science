@@ -26,7 +26,8 @@ export function createForecastProviders({file = '',fetchImpl = fetch,now = () =>
       return (await configured()).map((/** @type {any} */ p) => ({id:p.id,name:p.name ?? p.id,model:p.model ?? 'unknown',
         version:p.version ?? 'unknown',availability:'configured_api',destination:cloudOrigin(p.url),
         endpoints:p.endpoints ?? [],maxHorizonDays:p.maxHorizonDays ?? null,termsReference:p.termsReference ?? null,
-        trainingOverlap:p.trainingOverlap ?? 'unknown',apiEvidence:p.apiEvidence ?? null,seedSupported:p.seedSupported === true}));
+        trainingOverlap:p.trainingOverlap ?? 'unknown',apiEvidence:p.apiEvidence ?? null,seedSupported:p.seedSupported === true,
+        conditioning:p.conditioning === 'history' || p.conditioning === 'baseline' ? p.conditioning : null,individualizationMethod:p.conditioning === 'history' ? p.individualizationMethod ?? null : null}));
     },
     /** @param {string} id */
     async require(id) {
@@ -64,7 +65,9 @@ export function createForecastProviders({file = '',fetchImpl = fetch,now = () =>
       const account = () => reconcileSubjects({subjects,horizonsDays:input.horizonsDays,preRejected:projected.rejected,rows,validationRejected:rejected,batches,unprocessedReason:stopped});
       const premises = use.premises;
       const ctxLabel = {mode:context.mode,actionSource:context.actionSource,deployable:context.deployable,label:context.label};
-      const extras = () => ({accounting:account(),premises,uncertainty:uncertaintyProvenance(rows),actionContext:ctxLabel,usesOwnHistory:spec.usesOwnHistory,leakageDropped:projected.leakageDropped,unitDropped:projected.unitDropped ?? 0});
+      const extras = () => ({accounting:account(),premises,uncertainty:uncertaintyProvenance(rows),actionContext:ctxLabel,usesOwnHistory:spec.usesOwnHistory,
+        // the method a history-conditioned provider names, so the claim's sentence can follow the evaluation that was run for it (R33)
+        individualizationMethod:spec.usesOwnHistory === true ? selected.individualizationMethod ?? null : null,leakageDropped:projected.leakageDropped,unitDropped:projected.unitDropped ?? 0});
       const operationStarted = Date.now();
       for (let offset=0;offset<sendKeys.length;offset+=batchSize) {
         if (await input.isCanceled()) {stopped = 'canceled';break;}

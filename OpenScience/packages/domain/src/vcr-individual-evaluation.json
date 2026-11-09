@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "plan": "R33",
+  "record": "OpenScience/evals/vcr-in-silico/individual/result-20261109.json",
+  "sourceCommit": "f7c2b15a8c96aa4deb6c4129f6ee42dd7b4e9b9a",
+  "protocolSha256": "fac2e1b62862c3485916975714e1b2a890cb81b0b661e1daccb2109b20c9f5c7",
+  "methods": {
+    "lmm_empirical_bayes": {
+      "describes": "linear mixed model, random intercept and slope, a person's own history updates that person's parameters",
+      "endpointFamilies": {
+        "serum_bilirubin": {
+          "datasets": ["pbcseq"],
+          "endpointCodes": ["bilirubin", "bilirubin_total", "serum_bilirubin", "total_bilirubin", "1975-2", "loinc:1975-2"]
+        },
+        "cd4_count": {
+          "datasets": ["aids", "actg175"],
+          "endpointCodes": ["cd4", "cd4_count", "cd4_cells", "cd4+", "24467-3", "loinc:24467-3"]
+        }
+      }
+    }
+  },
+  "datasets": {
+    "pbcseq": { "helped": false },
+    "aids": { "helped": true },
+    "actg175": { "helped": true }
+  }
+}

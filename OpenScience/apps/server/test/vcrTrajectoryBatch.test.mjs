@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { vcrIndividualEvaluationFamily, vcrIndividualizationHelped } from '@evimed/domain';
 import { createForecastProviders } from '../src/vcrForecastProvider.mjs';
 import { actionContext, assertReconciled, convertUnit, loggedActionSchedule, projectBatch, providerInputSpec, reconcileSubjects, trajectoryPremises, uncertaintyProvenance } from '../src/vcrTrajectoryBatch.mjs';
 
@@ -199,4 +200,14 @@ test('the claim row leads the premises only when the provider said whether it us
   assert.ok(own[0].decisive && own[0].value.includes('没有做过个体化预测的对照评估'));
   assert.equal(trajectoryPremises({...base,usesOwnHistory:false})[0].key,'claim:population_forecast');
   assert.ok(!own.some(p => /job|tool|hash|LOCF/i.test(p.value)),'no back-office words');
+});
+
+test('the claim sentence of an individualized forecast follows the frozen evaluation for the endpoint, and no further (R33)',() => {
+  const base = {actionContext:{mode:'factual_forecast',actionSource:'none'},uncertainty:{available:true,note:'predictive_mixes_heterogeneity_and_observation_noise'},usesOwnHistory:true};
+  const sentence = (/** @type {any} */ extra) => trajectoryPremises({...base,...extra}).find(p => p.key === 'claim:individualized_forecast').value;
+  const helped = (method, endpointCode) => ({individualizationHelped:vcrIndividualizationHelped({method,endpointCode}),individualizationFamily:vcrIndividualEvaluationFamily(method,endpointCode)});
+  assert.ok(sentence(helped('lmm_empirical_bayes','bilirubin')).includes('没有显示比'));
+  assert.ok(sentence(helped('lmm_empirical_bayes','cd4')).includes('95%区间不含0'));
+  assert.ok(sentence(helped('lmm_empirical_bayes','hba1c')).includes('没有做过个体化预测的对照评估'));
+  assert.ok(sentence(helped(null,'cd4')).includes('没有做过个体化预测的对照评估'),'a provider that names no evaluated method inherits no finding');
 });

@@ -7,6 +7,7 @@ import {
   vcrResultOutputPayload, eventsFromMappedTable, replayClinicalEvents, longitudinalReadiness,
   validateForecast, validateLongitudinalScenario, VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_LIMITS, VCR_LONGITUDINAL_SCHEMAS,
   compareForecasts, forecastDesignInputs, longitudinalSubjects, strictestDataClass, VCR_MIN_CELL_SIZE,
+  VCR_INDIVIDUAL_EVALUATION_RECORD, vcrIndividualEvaluationFamily, vcrIndividualizationHelped,
 } from '@evimed/domain';
 import { parseTable, studyPseudonymKey, pseudonymOf } from './vcrDataPlane.mjs';
 import { VcrLongitudinalStore, longitudinalHash, longitudinalArtifactView } from './vcrLongitudinalStore.mjs';
@@ -244,7 +245,14 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       trajectories:aggregateForecastCurve(content),actualProvider:provenance.receipts?.map((/** @type {any} */ r) => ({provider:r.provider,model:r.actualModel,version:r.actualVersion})),
       cost:provenance.receipts?.map((/** @type {any} */ r) => ({value:r.cost,currency:r.costCurrency})),failures:provenance.failures ?? []};
     summary.usesOwnHistory = provenance.usesOwnHistory ?? null;
-    summary.premises = trajectoryPremises({findings:summary.useFindings,actionContext:context,uncertainty:summary.uncertainty,usesOwnHistory:summary.usesOwnHistory});
+    // What an individualized forecast may say about its accuracy is what the frozen evaluation found for this method on this endpoint
+    // (R33): only a provider that names the evaluated method reads it, and an endpoint it did not cover has no finding.
+    const individual = {method:provenance.individualizationMethod ?? null,endpointCode:content.endpoint?.code ?? null};
+    const individualizationFamily = vcrIndividualEvaluationFamily(individual.method,individual.endpointCode);
+    const individualizationHelped = vcrIndividualizationHelped(individual);
+    if (summary.usesOwnHistory === true) summary.individualEvaluation = {method:individual.method,family:individualizationFamily,helped:individualizationHelped,...VCR_INDIVIDUAL_EVALUATION_RECORD};
+    summary.premises = trajectoryPremises({findings:summary.useFindings,actionContext:context,uncertainty:summary.uncertainty,usesOwnHistory:summary.usesOwnHistory,
+      individualizationHelped,individualizationFamily});
     const saved = await artifacts.save(study,'prediction',content,summary,lineageOf(from,input.priorPredictionId ?? input.historyId));
     return longitudinalArtifactView(saved);
   }
@@ -324,6 +332,8 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
           scenario:scenario.scenario,...(scenario.priorPredictionId ? {priorPredictionId:scenario.priorPredictionId} : {})},actor,
         {originKind:'cloud_api',jobId:job.jobId,receipts:batch.receipts,failures:batch.failures,rejected:batch.rejected,
           accounting:batch.accounting,premises:batch.premises,uncertainty:batch.uncertainty,actionContext:batch.actionContext,leakageDropped:batch.leakageDropped,unitDropped:batch.unitDropped,
+          // what the provider declared about the person's own history, and the evaluated method it names: the claim of the result follows them (R32, R33)
+          usesOwnHistory:batch.usesOwnHistory ?? null,individualizationMethod:batch.individualizationMethod ?? null,
           actionSchedule:Array.isArray(prediction.actions) ? prediction.actions : [],
           lineageRows:later ? [later.row] : []});
         await onProgress({done:batch.rows.length,total:history.content.events.length});

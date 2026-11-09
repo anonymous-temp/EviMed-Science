@@ -1981,6 +1981,13 @@ export {
   vcrVisibleQuestion,
 } from './src/vcrVocabulary.mjs'
 export {
+  VCR_INDIVIDUAL_EVALUATION_RECORD,
+  VCR_INDIVIDUALIZATION_METHODS,
+  vcrIndividualEvaluationFamily,
+  vcrIndividualizationHelped,
+} from './src/vcrIndividualEvaluation.mjs'
+export {
+  VCR_INDIVIDUAL_FAMILY_WORDS_ZH,
   VCR_PREDICTION_CLAIMS,
   VCR_PREDICTION_CLAIM_WORDS_ZH,
   individualizationEvidenceSentence,

@@ -226,3 +226,33 @@ test('a logged replay reads its actions only from a frozen history whose source 
   assert.deepEqual(await vcr.longitudinal.enqueueDesign(study,{predictionId:saved.id,controlPredictionId:forecast.id,horizonDays:30},'owner'),
     {available:false,code:'logged_replay_not_deployable'});
 });
+
+test('R32/R33: the claim of a prediction follows what its provider declared, and what the frozen evaluation found for the endpoint (no further)',options,async () => {
+  const says = async (providerExtra,endpointCode,seed) => {
+    await writeProviders({version:'1',...providerExtra});
+    handler = async (_url,init) => respond(JSON.parse(init.body),key => [{subjectKey:key,horizonDays:30,point:7,sd:.4,uncertainty:'predictive'}]);
+    const {queued,job} = await run(predictRequest({endpoint:{...endpoint,code:endpointCode},samples:seed}));
+    assert.equal(job.state,'succeeded',JSON.stringify(job));
+    const summary = (await vcr.jobs.resultOf(study.id,queued.job.id)).diagnostics.longitudinal.summary;
+    return {summary,claim:summary.premises.find(p => p.key.startsWith('claim:'))};
+  };
+  // a provider that declared nothing about the person's history has no claim
+  assert.equal((await says({},'cd4',3)).claim,undefined);
+  // a baseline provider: a population forecast, which says nothing about accuracy of individualizing
+  assert.equal((await says({conditioning:'baseline'},'cd4',4)).claim.key,'claim:population_forecast');
+  // history without an evaluated method: individualized, and the sentence says no comparison was made, even for an endpoint another method was evaluated on
+  const unevaluated = await says({conditioning:'history'},'cd4',5);
+  assert.equal(unevaluated.claim.key,'claim:individualized_forecast');
+  assert.ok(unevaluated.claim.value.includes('没有做过个体化预测的对照评估') && !unevaluated.claim.value.includes('95%区间不含0'),unevaluated.claim.value);
+  // the evaluated method on its endpoints: the protocol's finding, per family
+  const cd4 = await says({conditioning:'history',individualizationMethod:'lmm_empirical_bayes'},'cd4',6);
+  assert.ok(cd4.claim.value.includes('CD4 计数') && cd4.claim.value.includes('95%区间不含0'),cd4.claim.value);
+  assert.deepEqual([cd4.summary.individualEvaluation.family,cd4.summary.individualEvaluation.helped],['cd4_count',true]);
+  const bilirubin = await says({conditioning:'history',individualizationMethod:'lmm_empirical_bayes'},'bilirubin',7);
+  assert.ok(bilirubin.claim.value.includes('血清胆红素') && bilirubin.claim.value.includes('没有显示比'),bilirubin.claim.value);
+  assert.equal(bilirubin.summary.individualEvaluation.helped,false);
+  // an endpoint the evaluation did not cover is never given the finding
+  const other = await says({conditioning:'history',individualizationMethod:'lmm_empirical_bayes'},'HbA1c',8);
+  assert.ok(other.claim.value.includes('没有做过个体化预测的对照评估') && !other.claim.value.includes('95%区间不含0'),other.claim.value);
+  assert.equal(other.summary.individualEvaluation.helped,null);
+});

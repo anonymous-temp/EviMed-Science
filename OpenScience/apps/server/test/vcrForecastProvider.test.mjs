@@ -110,3 +110,19 @@ test('malformed peers keep valid rows, the original exchange, cost and a replaya
   const replay=await api.predict({...input(),beginBatch:async()=>persisted});
   assert.equal(replay.rows.length,2);assert.equal(replay.failures[0].code,'provider_rows_invalid');assert.equal(calls,1);
 });
+
+test('a provider that conditions on history carries the evaluated method it names, and nothing else does (R32/R33)',async t=>{
+  const run = async (extra) => {
+    const {api}=await fixture(t,async(_url,options)=>answer(JSON.parse(options.body)),extra);
+    return api.predict(input());
+  };
+  const named = await run({conditioning:'history',individualizationMethod:'lmm_empirical_bayes'});
+  assert.equal(named.usesOwnHistory,true);assert.equal(named.individualizationMethod,'lmm_empirical_bayes');
+  // a method is named only by a provider that uses the person's own history: a baseline provider cannot borrow the finding
+  const baseline = await run({conditioning:'baseline',individualizationMethod:'lmm_empirical_bayes'});
+  assert.equal(baseline.usesOwnHistory,false);assert.equal(baseline.individualizationMethod,null);
+  const silent = await run({individualizationMethod:'lmm_empirical_bayes'});
+  assert.equal(silent.usesOwnHistory,null);assert.equal(silent.individualizationMethod,null);
+  const listed = await fixture(t,async()=>answer({}),{conditioning:'history',individualizationMethod:'lmm_empirical_bayes'});
+  assert.deepEqual((await listed.api.list()).map(p => [p.conditioning,p.individualizationMethod]),[['history','lmm_empirical_bayes']]);
+});
