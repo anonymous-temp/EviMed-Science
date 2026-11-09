@@ -197,7 +197,7 @@
 
 #' Run an event list: `events` is a data frame of time, state index (or NA), amount (mg), and `infusions` a list of (start, end, rate). Returns the state at each of `t_out`
 #' (sorted, including the times the caller wants the curve at), integrating through every dose.
-.vcr_pbpk_integrate <- function(f, y0, events, infusions, t_out, rtol = 1e-6, atol = 1e-9) {
+.vcr_pbpk_integrate <- function(f, y0, events, infusions, t_out, rtol = 1e-6, atol = 1e-9, states = .vcr_pbpk_states) {
   marks <- sort(unique(c(0, events$time, unlist(lapply(infusions, function(i) c(i$start, i$end))), t_out)))
   y <- y0; out <- list(); t <- 0; h <- NULL
   ev_idx <- seq_len(nrow(events))
@@ -209,7 +209,7 @@
       rate <- sum(vapply(infusions, function(i) if (i$start <= t + 1e-12 && i$end >= tm - 1e-12) i$rate else 0, numeric(1)))
       g <- if (rate == 0) f else function(tt, yy) f(tt, yy, inf_rate = rate)
       y <- .vcr_radau_segment(g, y, t, tm, rtol = rtol, atol = atol, h0 = if (is.null(h)) NULL else min(h, tm - t))
-      h <- attr(y, "h"); attributes(y) <- list(names = .vcr_pbpk_states)
+      h <- attr(y, "h"); attributes(y) <- list(names = states)
       t <- tm
     }
     for (e in ev_idx[abs(events$time - tm) < 1e-12]) { y[events$state[e]] <- y[events$state[e]] + events$amount[e]; h <- NULL }
@@ -284,10 +284,11 @@ vcr_job_pk_interaction <- function(job, output_dir = NULL, ...) {
   assumed <- list()
   note <- function(key, value, basis) assumed[[length(assumed) + 1L]] <<- list(key = key, value = value, basis = basis)
   v <- sc$victim; pp <- sc$perpetrator
+  inhibitor <- identical(as.character(pp$drug), "ketoconazole")
   route <- as.character(v$route %||% "oral")
   if (is.null(v$route)) note("victim.route", "oral", "the usual way midazolam is given in an interaction study")
   weight <- vcr_scalar(sc$weightKg, 80)
-  if (is.null(sc$weightKg)) note("weightKg", 80, "the body weight of the published code (every clearance, flow and volume of the model is per kilogram)")
+  if (is.null(sc$weightKg) && !inhibitor) note("weightKg", 80, "the body weight of the published code (every clearance, flow and volume of the model is per kilogram)")
   horizon <- vcr_scalar(sc$horizonH, 48)
   if (is.null(sc$horizonH)) note("horizonH", 48, "long enough for the area under the curve to be complete: midazolam's half-life is a few hours")
   interval <- vcr_scalar(pp$intervalH, 24)
@@ -297,7 +298,11 @@ vcr_job_pk_interaction <- function(job, output_dir = NULL, ...) {
   victim <- list(drug = as.character(v$drug), doseMg = as.numeric(v$doseMg), route = route)
   if (identical(route, "iv") && !is.null(v$infusionH)) victim$infusionH <- vcr_scalar(v$infusionH)
   perp <- list(drug = as.character(pp$drug), doseMg = as.numeric(pp$doseMg), intervalH = interval, doses = as.integer(pp$doses), gapH = gap)
-  run <- tryCatch(vcr_pbpk_interaction(victim, perp, weight, horizon), vcr_pbpk_interrupted = function(e) e)
+  inhibition <- if (inhibitor) as.character(pp$inhibition %||% "mixed") else NULL
+  if (inhibitor && is.null(pp$inhibition)) note("perpetrator.inhibition", "mixed", "the model of the three that the paper found to fit the in-vitro data best")
+  if (inhibitor && !is.null(sc$weightKg)) note("weightKg", "not used", "the published model has fixed volumes and flows for a typical adult and no body-weight scaling")
+  run <- tryCatch(if (inhibitor) vcr_pbpk_inhibition(victim, perp, inhibition, horizon) else vcr_pbpk_interaction(victim, perp, weight, horizon),
+                  vcr_pbpk_interrupted = function(e) e)
   if (inherits(run, "vcr_pbpk_interrupted")) {
     if (identical(conditionMessage(run), "canceled")) return(list(status = "canceled", measures = list(), counts = vcr_counts(realPatients = NULL, generatedRecords = 0), diagnostics = list(interrupted = "canceled during the simulation")))
     return(list(status = "failed", measures = list(), counts = vcr_counts(realPatients = NULL, generatedRecords = 0), diagnostics = list(),
@@ -306,8 +311,11 @@ vcr_job_pk_interaction <- function(job, output_dir = NULL, ...) {
   # What the authors fitted (Asaumi et al. 2018, Table 1 and the text): rifampicin 5, 10, 25, 75 mg (Kharasch 2011, midazolam 3 mg by mouth, 1 mg i.v.) and
   # 600 mg (Gorski 2003, midazolam 4 and 6 mg by mouth, 0.05 mg/kg i.v.). A request outside that runs; the result says so and the page says it as a premise.
   fitted_rif <- c(5, 600); fitted_dose <- if (identical(route, "oral")) c(3, 6) else c(1, 0.05 * weight)
-  outside_fit <- c(if (perp$doseMg < fitted_rif[1] || perp$doseMg > fitted_rif[2]) "perpetrator_dose",
-                   if (victim$doseMg < min(fitted_dose) - 1e-9 || victim$doseMg > max(fitted_dose) + 1e-9) "victim_dose")
+  outside_fit <- if (inhibitor) {
+    # Quinney et al. 2013 Table 4 is the one validation of the inhibitor model in its own paper: 200 mg daily for six days, midazolam 1 mg intravenously
+    c(if (!isTRUE(all.equal(perp$doseMg, 200))) "perpetrator_dose", if (identical(route, "oral")) "victim_route" else if (!isTRUE(all.equal(victim$doseMg, 1))) "victim_dose")
+  } else c(if (perp$doseMg < fitted_rif[1] || perp$doseMg > fitted_rif[2]) "perpetrator_dose",
+           if (victim$doseMg < min(fitted_dose) - 1e-9 || victim$doseMg > max(fitted_dose) + 1e-9) "victim_dose")
   ratio <- run$auc_with / run$auc_alone
   measures <- list(
     vcr_measure("victim_auc_alone", run$auc_alone, unit = "ng/mL*h", source = "calculated"),
@@ -316,13 +324,15 @@ vcr_job_pk_interaction <- function(job, output_dir = NULL, ...) {
     vcr_measure("victim_cmax_alone", run$cmax_alone, unit = "ng/mL", source = "calculated"),
     vcr_measure("victim_cmax_with_perpetrator", run$cmax_with, unit = "ng/mL", source = "calculated"),
     vcr_measure("cmax_ratio", run$cmax_with / run$cmax_alone, source = "calculated"),
-    vcr_measure("cyp3a4_liver_activity", run$cyp_liver, source = "calculated"),
-    vcr_measure("cyp3a4_gut_activity", run$cyp_gut, source = "calculated"))
+    if (!inhibitor) vcr_measure("cyp3a4_liver_activity", run$cyp_liver, source = "calculated"),
+    if (!inhibitor) vcr_measure("cyp3a4_gut_activity", run$cyp_gut, source = "calculated"))
+  measures <- Filter(Negate(is.null), measures)
   curve <- lapply(seq_along(run$rel_time), function(i) list(hour = run$rel_time[i], alone = run$alone[i], withPerpetrator = run$with[i]))
   list(status = "succeeded", measures = measures, counts = vcr_counts(realPatients = NULL, generatedRecords = 0),
        diagnostics = list(pbpk = list(
-         given = list(label = sc$label, victim = victim, perpetrator = perp, weightKg = weight, horizonH = horizon),
-         model = list(citation = .vcr_pbpk_citation, population = "a typical healthy adult: no between-person variability, genotype or disease",
+         given = list(label = sc$label, victim = victim, perpetrator = c(perp, if (inhibitor) list(inhibition = inhibition)), weightKg = if (inhibitor) NULL else weight, horizonH = horizon),
+         model = list(citation = if (inhibitor) .vcr_inhib_citation else .vcr_pbpk_citation, mechanism = if (inhibitor) "inhibition" else "induction",
+                      population = "a typical healthy adult: no between-person variability, genotype or disease",
                       victimStartsAtHour = run$victimTime, outsideFit = as.list(outside_fit)),
          curve = curve, assumed = assumed)))
 }

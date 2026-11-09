@@ -7741,7 +7741,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.0.0",
+        "methodVersion": "1.1.0",
         "scenario": {
           "label": "midazolam after rifampicin",
           "victim": {
@@ -7772,7 +7772,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.0.0",
+        "methodVersion": "1.1.0",
         "scenario": {
           "victim": {
             "drug": "midazolam",
@@ -7788,6 +7788,40 @@
           },
           "weightKg": 70,
           "horizonH": 24
+        }
+      }
+    },
+    {
+      "name": "intravenous midazolam with the sixth of ketoconazole 200 mg daily doses, under the noncompetitive inhibition model (the published validation design)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "pk_interaction",
+        "method": "pk.interaction",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "label": "midazolam with ketoconazole",
+          "victim": {
+            "drug": "midazolam",
+            "doseMg": 1,
+            "route": "iv"
+          },
+          "perpetrator": {
+            "drug": "ketoconazole",
+            "doseMg": 200,
+            "doses": 6,
+            "gapH": 0,
+            "inhibition": "noncompetitive"
+          }
         }
       }
     }
@@ -31799,7 +31833,7 @@
       ]
     },
     {
-      "name": "a perpetrator the published model does not carry (ketoconazole)",
+      "name": "a perpetrator the published models do not carry (itraconazole)",
       "job": {
         "jobId": "job_1",
         "studyId": "std_1",
@@ -31814,7 +31848,40 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.0.0",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "victim": {
+            "drug": "midazolam",
+            "doseMg": 3
+          },
+          "perpetrator": {
+            "drug": "itraconazole",
+            "doseMg": 200,
+            "doses": 7
+          }
+        }
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.perpetrator.drug"
+      ]
+    },
+    {
+      "name": "an inhibition model the paper does not have (irreversible)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "kind": "pk_interaction",
+        "method": "pk.interaction",
+        "methodVersion": "1.1.0",
         "scenario": {
           "victim": {
             "drug": "midazolam",
@@ -31823,12 +31890,13 @@
           "perpetrator": {
             "drug": "ketoconazole",
             "doseMg": 200,
-            "doses": 7
+            "doses": 6,
+            "inhibition": "irreversible"
           }
         }
       },
       "expected": [
-        "scenario_value_invalid@scenario.perpetrator.drug"
+        "scenario_value_invalid@scenario.perpetrator.inhibition"
       ]
     },
     {
@@ -31847,7 +31915,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.0.0",
+        "methodVersion": "1.1.0",
         "scenario": {
           "victim": {
             "drug": "tacrolimus",
@@ -31880,7 +31948,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.0.0",
+        "methodVersion": "1.1.0",
         "scenario": {
           "victim": {
             "drug": "midazolam",
@@ -31914,7 +31982,7 @@
         ],
         "kind": "pk_interaction",
         "method": "pk.interaction",
-        "methodVersion": "1.0.0",
+        "methodVersion": "1.1.0",
         "scenario": {
           "victim": {
             "drug": "midazolam",

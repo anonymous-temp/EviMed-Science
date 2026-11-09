@@ -119,13 +119,13 @@ vcr_case("N160e", c("AC-08", "AC-30"), function() {
   # the job's own structure: the result carries the measures and the curve, a victim or perpetrator outside the model is refused by the schema, and a
   # run without the perpetrator's effect (a dose 1e-300 times smaller than any induction) returns ratio 1 (induction is the only thing that moves it)
   jr <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 1, route = "iv"), perpetrator = list(drug = "rifampicin", doseMg = 1e-12, doses = 1L), horizonH = 12), NULL, job_id = "job_n160e"))
-  bad <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 1), perpetrator = list(drug = "ketoconazole", doseMg = 200, doses = 3L)), NULL, job_id = "job_n160e2"))
+  bad <- vcr_test_run(vcr_test_job("pk.interaction", list(victim = list(drug = "midazolam", doseMg = 1), perpetrator = list(drug = "itraconazole", doseMg = 200, doses = 3L)), NULL, job_id = "job_n160e2"))
   names_ok <- all(c("victim_auc_alone", "victim_auc_with_perpetrator", "auc_ratio", "victim_cmax_alone", "cmax_ratio", "cyp3a4_liver_activity", "cyp3a4_gut_activity") %in% vapply(jr$measures, function(m) m$name, character(1)))
   ratio <- vcr_measure_value(jr, "auc_ratio"); cmax_ratio <- vcr_measure_value(jr, "cmax_ratio")
   curve <- jr$diagnostics$pbpk$curve
   refused <- !identical(bad$status, "succeeded") && "scenario_value_invalid" %in% vcr_test_issue_codes(bad)
   list(pass = identical(jr$status, "succeeded") && names_ok && abs(ratio - 1) < 1e-6 && abs(cmax_ratio - 1) < 1e-6 && length(curve) >= 10L && refused &&
          length(jr$diagnostics$pbpk$assumed) >= 3L,
-       detail = sprintf("a rifampicin dose of 1e-12 mg leaves the area ratio at %.8f and the peak ratio at %.8f; the curve has %d points; %d defaults are stated as assumptions; a perpetrator outside the model (ketoconazole) is refused by the schema (%s)",
+       detail = sprintf("a rifampicin dose of 1e-12 mg leaves the area ratio at %.8f and the peak ratio at %.8f; the curve has %d points; %d defaults are stated as assumptions; a perpetrator outside the models (itraconazole) is refused by the schema (%s)",
                         ratio, cmax_ratio, length(curve), length(jr$diagnostics$pbpk$assumed), paste(vcr_test_issue_codes(bad), collapse = ", ")))
 })
