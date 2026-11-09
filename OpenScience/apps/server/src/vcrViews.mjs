@@ -92,7 +92,7 @@ export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} 
   fit_survival_model: "拟合人群生存模型", apply_prognostic_model: "应用预后模型", train_prognostic_model: "用自己的历史数据训练预后模型", generate_progression: "人群层面的疾病进展模拟",
   forecast_trajectories: '纵向结果预测', evaluate_forecast: '预测与观测验证', compare_forecasts: '预测情景比较', benchmark_trial_effect: '试验效果预测验证',
   profile_snapshot: "数据快照画像", build_cohort: "构建队列", generate_population: "生成情景人群",
-  literature_population: "文献人群", synthesize_population: "合成人群", population_quality: "人群质量报告", population_check: "与第二份基线表对照", design_confirmatory: "确认性设计", design_dose: "剂量探索设计", design_bayesian: "贝叶斯设计", design_win_ratio: "胜率比设计", decision_voi: "信息价值分析", pk_interaction: "合用药物的暴露预测",
+  literature_population: "文献人群", synthesize_population: "合成人群", population_quality: "人群质量报告", population_check: "与第二份基线表对照", design_confirmatory: "确认性设计", design_dose: "剂量探索设计", design_bayesian: "贝叶斯设计", design_win_ratio: "胜率比设计", decision_voi: "信息价值分析", pk_interaction: "合用药物的暴露预测", individualize_forecast: "个体化预测",
   bias_analysis: "未测混杂的偏倚分析", borrowing_prior: "外部对照的动态借用", stc_comparator: "模拟治疗比较（G 计算）", target_trial_emulation: "目标试验模拟",
   network_meta: "网络荟萃分析", dose_response_meta: "剂量反应荟萃分析", effect_shrinkage: "已发表效应的经验收缩",
   generate_patients: "生成虚拟患者", generate_patients_continuous: "生成虚拟患者（连续终点）",

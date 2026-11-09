@@ -12,6 +12,7 @@ import {
 import { parseTable, studyPseudonymKey, pseudonymOf } from './vcrDataPlane.mjs';
 import { VcrLongitudinalStore, longitudinalHash, longitudinalArtifactView } from './vcrLongitudinalStore.mjs';
 import { createForecastProviders } from './vcrForecastProvider.mjs';
+import { createLocalIndividualizer } from './vcrLocalIndividualize.mjs';
 import { HttpError } from './security.mjs';
 import { runForecastCalculation } from './vcrForecastCalculation.mjs';
 import { actionContext, loggedActionSchedule, reasonCounts, reconcileSubjects, trajectoryPremises, uncertaintyProvenance } from './vcrTrajectoryBatch.mjs';
@@ -76,7 +77,8 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
     const study = await store.studyById(studyId);
     return study ? artifacts.permitted(study,rows,actor) : new Set();
   };
-  const providers = createForecastProviders({file:config.vcrForecastProvidersFile,fetchImpl,now});
+  // the deployment's own individualized forecast: the engine computes it from the people's earlier records, nothing leaves (R32)
+  const providers = createForecastProviders({file:config.vcrForecastProvidersFile,fetchImpl,now,local:createLocalIndividualizer({jobs,store,dataPlane})});
   /** @param {any} study @param {string} actor @param {string} ability */
   const authorize = (study,actor,ability) => access.require({studyId:study.id,actor,ability,purpose:'vcr',note:'longitudinal research'});
   /** @param {any} study @param {any} input @param {string} actor */
@@ -341,6 +343,8 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       try {
         const result = await providers.predict({providerId:scenario.providerId,history:history.content,endpoint:scenario.endpoint,
           horizonsDays:scenario.horizonsDays,scenario:scenario.scenario,prediction,seed:job.seed,samples:scenario.samples,jobId:job.jobId,
+          // what a provider that computes inside the deployment needs of this job: the study, the person acting, the lineage its engine job keeps and the class of the rows
+          local:{study,actor,lineage,valueSource:history.content.events.length && history.content.events.every((/** @type {any} */ e) => e.valueSource === 'synthetic') ? 'synthetic' : 'observed'},
           budgetMs:Math.min(job.cpuSecondsLimit*1000,600_000),
           beginBatch:async batch => {
             const existing = await store.one(`SELECT id FROM evimed_vcr.longitudinal_artifacts WHERE study_id=$1

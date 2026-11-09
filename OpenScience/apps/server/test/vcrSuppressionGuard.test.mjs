@@ -25,6 +25,7 @@ const FIXTURES = /** @type {Record<string, string[]>} */ ({
   train_prognostic_model: ["vcr-prognostic-training/cox", "vcr-prognostic-training/linear", "vcr-prognostic-training/too-few-events"],
   synthesize_population: ["vcr-synthetic-inference/synthesis"],
   population_quality: ["vcr-synthetic-inference/quality"],
+  individualize_forecast: ["vcr-individualize/linear-mixed", "vcr-individualize/beta-logit"],
 });
 
 /** Kinds that read rows and were built before this guard existed: their results are held by the tests named here. */
@@ -57,7 +58,7 @@ const NOT_PEOPLE = /** @type {Record<string, string>} */ ({
   perRun: "a computation size", runs: "a computation size", drawsInTotal: "a computation size", floor: "a computation setting", draws: "a computation size", batches: "a computation size",
   maxIterations: "a computation setting", m: "the number of imputed or synthetic copies", imputations: "the number of imputed copies", copies: "the number of synthetic copies", copy: "an index of a copy",
   failedCopies: "a count of failed computations", failedReplicates: "a count of failed computations", copiesPerReplicate: "a computation setting", worstCopy: "an index of a copy", profileCopy: "an index of a copy",
-  horizon: "a time stated by the person", tau: "a time stated by the person", gracePeriod: "a time stated by the person", followupDegree: "a model setting", trialPeriodDegree: "a model setting",
+  horizon: "a time stated by the person", horizonsDays: "times stated by the person", tau: "a time stated by the person", gracePeriod: "a time stated by the person", followupDegree: "a model setting", trialPeriodDegree: "a model setting",
   folds: "a model setting", parameters: "the number of model parameters", needed: "the number of people a model needs (a threshold, not a count of the table)", scale: "a unit of scale", center: "a centring constant",
   gamma: "a discount stated by the person", gammas: "discounts stated by the person", lambda: "a discount stated by the person", lambdas: "discounts stated by the person", trees: "a model setting",
   df: "degrees of freedom", minCount: "a threshold", rareLevelFloor: "a threshold", essFloor: "a threshold", coxFewEvents: "a threshold", association: "a value stated by the person",

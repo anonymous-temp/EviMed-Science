@@ -381,7 +381,9 @@ const SIZED_KINDS = new Set(["design_simulation", "design_grid", "map_prior"]);
  * that is validated: a literature population (its baseline bindings are verified and removed), a reconstruction (its curve receipt),
  * a matched time-to-event comparison (its reconstruction), a model's equation, and the pooled and matched scenarios the platform builds.
  */
-const PLATFORM_BOUND_KINDS = new Set(["literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "match_extract"]);
+/** The kinds whose table the platform writes itself and hands over with `files` (never a caller's): the local forecast provider's projected events. */
+const VCR_LOCAL_FILE_KINDS = new Set(["individualize_forecast"]);
+const PLATFORM_BOUND_KINDS = new Set(["individualize_forecast", "literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "match_extract"]);
 
 /**
  * What set a simulation's replicate count, in a sentence: the floor of its case, the study's intended use, a borrowing design, the
@@ -1023,7 +1025,8 @@ export class VcrJobs {
    *
    * @param {{ studyId: string, userId: string, principal?: string, kind: string, scenario?: Record<string, any>, inputs?: unknown[],
    *   qualityBasis?: Record<string, any> | null, derived?: Array<{ resultId: string, table: string, bindTo?: string }>, seed?: number | null, replicates?: number | null, cpuSecondsLimit?: number | null, idempotencyKey?: string | null,
-   *   runId?: string | null, maxAttempts?: number, detail?: Record<string, any>, internal?: boolean, questionRef?: { id: string, version: number } | null }} input
+   *   runId?: string | null, maxAttempts?: number, detail?: Record<string, any>, internal?: boolean, questionRef?: { id: string, version: number } | null,
+   *   files?: Array<{ kind: string, id: string, location: string, hash: string, valueSource?: string }> }} input
    * `questionRef` is the research question a job answers (R22); when none is named the study's current one is recorded, in the job's record and
    * never in its scenario, so it cannot change a scenario hash or reach the engine.
    * @returns {Promise<{ job: any, created: boolean, notice?: { code: string, message: string } }>} `notice` is what the caller must tell the person
@@ -1127,9 +1130,16 @@ export class VcrJobs {
     // fact ledger server-side and takes no snapshot, though the domain files its kind under the
     // patient-level ones: its input is a frozen as-of, a protocol id and a token of the facts.
     const runsLocally = typeof this.localExecutors[method] === "function";
+    // A file the control plane itself wrote for one kind, handed to the engine like a snapshot's view (the local forecast provider's projected
+    // events): internal only, named by location and hash, never a caller's.
+    const localFiles = list(input.files).map(object);
+    if (localFiles.length && (input.internal !== true || !VCR_LOCAL_FILE_KINDS.has(kind)
+      || localFiles.some(file => file.kind !== "snapshot_file" || !vcrLocationIsValid(String(file.location ?? "")) || !/^[a-f0-9]{64}$/.test(String(file.hash ?? "")) || typeof file.id !== "string"))) {
+      throw new HttpError(400, "vcr_job_scenario_invalid", "A file for the engine is handed over by the platform for its own kinds only.");
+    }
     const hasBoundReconstruction = list(input.derived).some(entry => isReconstructionReference(kind, object(entry)));
     const callerIssues = (longitudinal || batch) && input.internal === true ? []
-      : [...validateCallerInputs(asked, { kind: (input.internal === true && list(input.derived).length) || hasBoundReconstruction || runsLocally ? undefined : kind })];
+      : [...validateCallerInputs(asked, { kind: (input.internal === true && list(input.derived).length) || hasBoundReconstruction || runsLocally || localFiles.length ? undefined : kind })];
     const derivedEntries = list(input.derived).map(object);
     // A caller other than the orchestrator may only point at a reconstruction result for the job that reads one.
     if (derivedEntries.length && input.internal !== true && !derivedEntries.every((entry) => isReconstructionReference(kind, entry))) {
@@ -1158,6 +1168,7 @@ export class VcrJobs {
       ...await this.#resolveInputs({ studyId, principal, kind, method, scenario, asked }),
       ...resolvedDerived,
       ...(qualityInput ? [qualityInput] : []),
+      ...localFiles.map(file => ({ kind: "snapshot_file", id: String(file.id), location: String(file.location), hash: String(file.hash), valueSource: String(file.valueSource ?? "observed") })),
     ];
     // The one place every caller passes (the conversation, the page, the programme): a cohort filed under a real population is
     // computed on that population's snapshot and rules, whatever the caller named.

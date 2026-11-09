@@ -7,24 +7,28 @@ import { longitudinalHash } from './vcrLongitudinalStore.mjs';
 import { requireCloudPermission, cloudOrigin } from './vcrCloudProjection.mjs';
 import { HttpError } from './security.mjs';
 import { actionContext, assessProviderUse, projectBatch, providerInputSpec, reconcileSubjects, uncertaintyProvenance } from './vcrTrajectoryBatch.mjs';
+import { localEndpointIssue, localForecastProviders } from './vcrLocalIndividualize.mjs';
 
 /** @param {any} value */
 const positive = value => Number.isFinite(value) && value > 0;
-/** @param {{file?:string,fetchImpl?:typeof fetch,now?:()=>Date}} [options] */
-export function createForecastProviders({file = '',fetchImpl = fetch,now = () => new Date()} = {}) {
+/** `local` is the deployment's own individualizer (`createLocalIndividualizer`): with it the built-in local providers exist beside the configured
+ * cloud ones, and a configuration entry with one of their ids and `enabled: false` switches that one off.
+ * @param {{file?:string,fetchImpl?:typeof fetch,now?:()=>Date,local?:ReturnType<typeof import('./vcrLocalIndividualize.mjs').createLocalIndividualizer>|null}} [options] */
+export function createForecastProviders({file = '',fetchImpl = fetch,now = () => new Date(),local = null} = {}) {
   /** Configuration is reread for every batch so disable/rollback takes effect on
    * queued work as well. Existing results keep their actual version. */
   async function configured() {
-    if (!file) return [];
-    const value = JSON.parse(await fs.readFile(file,'utf8'));
+    const value = file ? JSON.parse(await fs.readFile(file,'utf8')) : {providers:[]};
     if (!Array.isArray(value.providers)) throw new TypeError('Forecast providers must be a list.');
-    return value.providers.filter((/** @type {any} */ p) => p && typeof p.id === 'string' && cloudOrigin(p.url)
-      && p.protocol === 'evimed-event-history-v1' && p.enabled === true);
+    const switchedOff = new Set(value.providers.filter((/** @type {any} */ p) => p && p.enabled === false).map((/** @type {any} */ p) => p.id));
+    const own = local?.available() ? localForecastProviders().filter(p => !switchedOff.has(p.id)) : [];
+    return [...value.providers.filter((/** @type {any} */ p) => p && typeof p.id === 'string' && cloudOrigin(p.url)
+      && p.protocol === 'evimed-event-history-v1' && p.enabled === true),...own];
   }
   return {
     async list() {
       return (await configured()).map((/** @type {any} */ p) => ({id:p.id,name:p.name ?? p.id,model:p.model ?? 'unknown',
-        version:p.version ?? 'unknown',availability:'configured_api',destination:cloudOrigin(p.url),
+        version:p.version ?? 'unknown',availability:p.local === true ? 'local_engine' : 'configured_api',destination:p.local === true ? null : cloudOrigin(p.url),
         endpoints:p.endpoints ?? [],maxHorizonDays:p.maxHorizonDays ?? null,termsReference:p.termsReference ?? null,
         trainingOverlap:p.trainingOverlap ?? 'unknown',apiEvidence:p.apiEvidence ?? null,seedSupported:p.seedSupported === true,
         conditioning:p.conditioning === 'history' || p.conditioning === 'baseline' ? p.conditioning : null,individualizationMethod:p.conditioning === 'history' ? p.individualizationMethod ?? null : null}));
@@ -38,9 +42,11 @@ export function createForecastProviders({file = '',fetchImpl = fetch,now = () =>
     /** @param {{providerId:string,history:any,endpoint:any,horizonsDays:number[],scenario?:any,seed:number,samples?:number,
      * jobId:string,budgetMs?:number,permissions:()=>Promise<any[]>,onBatch:(content:any)=>Promise<void>,isCanceled:()=>Promise<boolean>,
      * beginBatch?:(batch:any)=>Promise<any>,finishBatch?:(batch:any)=>Promise<void>,
-     * prediction?:{predictionMode?:string,actions?:any[],actionSource?:string}}} input */
+     * prediction?:{predictionMode?:string,actions?:any[],actionSource?:string},
+     * local?:{study:any,actor:string,lineage:any,valueSource:string}}} input */
     async predict(input) {
       const selected = await this.require(input.providerId);
+      if (selected.local === true) {const issue = localEndpointIssue(selected,input.endpoint);if (issue) throw issue;}
       if (selected.endpoints?.length && !selected.endpoints.includes(input.endpoint.code)) throw new HttpError(422,'vcr_forecast_endpoint_unsupported','This provider does not expose the requested endpoint.');
       if (!input.horizonsDays?.length || input.horizonsDays.some(h => !positive(h) || positive(selected.maxHorizonDays) && h > selected.maxHorizonDays)) throw new HttpError(422,'vcr_forecast_horizon_unsupported','The requested horizon is not supported by this provider.');
       const subjects = longitudinalSubjects(input.history);
@@ -63,12 +69,32 @@ export function createForecastProviders({file = '',fetchImpl = fetch,now = () =>
       /** @type {Array<{keys:string[],outcome:'done'|'failed',code?:string}>} */ const batches = [];
       /** @type {string|null} */ let stopped = null;
       const account = () => reconcileSubjects({subjects,horizonsDays:input.horizonsDays,preRejected:projected.rejected,rows,validationRejected:rejected,batches,unprocessedReason:stopped});
-      const premises = use.premises;
+      /** @type {any[]} */ let premises = use.premises;
       const ctxLabel = {mode:context.mode,actionSource:context.actionSource,deployable:context.deployable,label:context.label};
       const extras = () => ({accounting:account(),premises,uncertainty:uncertaintyProvenance(rows),actionContext:ctxLabel,usesOwnHistory:spec.usesOwnHistory,
         // the method a history-conditioned provider names, so the claim's sentence can follow the evaluation that was run for it (R33)
         individualizationMethod:spec.usesOwnHistory === true ? selected.individualizationMethod ?? null : null,leakageDropped:projected.leakageDropped,unitDropped:projected.unitDropped ?? 0});
       const operationStarted = Date.now();
+      if (selected.local === true) {
+        // Nothing leaves the deployment: the batch is one engine job over the projected events, no cloud permission, no per-chunk request.
+        if (!local || !input.local) throw new HttpError(409,'vcr_forecast_provider_unavailable','This prediction is computed by the platform\'s engine, which is not available here. Imported predictions and other research remain available.');
+        await input.permissions();    // the grant of every history is read again; its cloud answer is not needed
+        const requestDigest = longitudinalHash({events:projected.events,keys:sendKeys,endpoint:input.endpoint,horizonsDays:input.horizonsDays,provider:longitudinalHash(selected),seed:input.seed,samples:input.samples ?? null});
+        const ran = sendKeys.length ? await local.run({study:input.local.study,actor:input.local.actor,jobId:input.jobId,requestDigest,provider:selected,endpoint:input.endpoint,
+          horizonsDays:input.horizonsDays,origin:input.history.asOf,events:projected.events,keys:sendKeys,seed:input.seed,samples:input.samples,budgetMs:input.budgetMs ?? 120_000,
+          lineage:input.local.lineage,valueSource:input.local.valueSource,isCanceled:input.isCanceled}) : null;
+        if (ran?.failure) {failures.push({offset:0,code:ran.failure.code});batches.push({keys:sendKeys,outcome:'failed',code:ran.failure.code});}
+        else if (ran) {
+          stopped = ran.stopped;
+          if (ran.receipt) {rows.push(...ran.rows);rejected.push(...ran.rejected);receipts.push(ran.receipt);batches.push({keys:sendKeys.filter(key => ran.reached.has(key)),outcome:'done'});}
+          if (ran.stopped && ran.stopped !== 'canceled') failures.push({offset:0,code:ran.stopped});
+          if (ran.receipt?.invalidRows) failures.push({offset:0,code:'provider_rows_invalid',rows:ran.receipt.invalidRows});
+          // what a person reads beside the claim: how the model was fitted, where its time starts, and how many posteriors were approximated badly
+          premises = [...premises,{code:selected.family === 'beta_logit' ? 'individual_week_zero' : 'individual_fit_on_batch'},
+            ...(ran.diagnostics.laplaceNotTrusted > 0 ? [{code:'individual_laplace_untrusted',people:ran.diagnostics.laplaceNotTrusted}] : [])];
+        }
+        return {rows,rejected,receipts,failures,provider:{id:selected.id,model:selected.model,version:selected.version ?? 'unknown'},...extras()};
+      }
       for (let offset=0;offset<sendKeys.length;offset+=batchSize) {
         if (await input.isCanceled()) {stopped = 'canceled';break;}
         if (Date.now()-operationStarted >= (input.budgetMs ?? 120_000)) {failures.push({offset,code:'forecast_time_budget'});stopped = 'forecast_time_budget';break;}

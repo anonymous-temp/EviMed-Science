@@ -149,7 +149,9 @@ export function modelUsePremises(findings) {
     // the engine's field name is not a word a person wrote, so the sentence does not name the variable
     const value = code === "input_out_of_range"
       ? `有变量超出了模型声明的取值范围${limits.length === 2 && limits.every(Number.isFinite) ? `（${limits[0]}–${limits[1]}）` : ""}；超出的部分是外推。`
-      : USE_PREMISE_TEXT_ZH[code] ?? /** @type {Record<string, string>} */ (VCR_USE_TEXT_ZH)[code];
+      : code === "individual_laplace_untrusted" && Number.isInteger(finding.people) && finding.people > 0
+        ? `有 ${finding.people} 个人的后验用近似算出，近似的可靠性不够；他们的预测区间只作参考。`
+        : USE_PREMISE_TEXT_ZH[code] ?? /** @type {Record<string, string>} */ (VCR_USE_TEXT_ZH)[code];
     return value ? [{ key: `use:${code}`, label: USE_PREMISE_LABEL_ZH[code] ?? "模型的适用范围", value, source: /** @type {const} */ ("assumed"), decisive: USE_DECISIVE.has(code) }] : [];
   });
 }
@@ -157,12 +159,15 @@ export function modelUsePremises(findings) {
 /** Premise-only findings that have no refusal-side sentence in `VCR_USE_TEXT_ZH`. */
 const USE_PREMISE_TEXT_ZH = Object.freeze({
   horizon_exceeded: "这次推演的时长超过了模型声明的最长时长；超出的部分是外推。",
+  individual_fit_on_batch: "混合模型是用这一批人自己的记录拟合的，拟合出的个体差异当作已知；人数少、记录短时，预测区间会偏窄。",
+  individual_week_zero: "每个人第一次测到的分数被当作研究的第 0 周，预测起点之后的记录一条也没有用；基线 MMSE、年龄、ApoE4 和性别取自本人的记录，缺任何一项的人没有预测。",
 });
 /** Each row says what it states, so adjacent rows are not told apart by position. */
 const USE_PREMISE_LABEL_ZH = Object.freeze({
   use_not_validated: "验证过的用途", population_outside_validation: "验证过的人群", endpoint_outside_validation: "验证过的终点",
   horizon_beyond_validation: "验证过的时长", horizon_exceeded: "模型声明的时长", input_out_of_range: "模型的取值范围",
   no_independent_data: "验证数据", provenance_missing: "验证出处",
+  individual_fit_on_batch: "模型怎样拟合", individual_week_zero: "时间从哪里算起", individual_laplace_untrusted: "后验的近似",
 });
 /** A model used beyond what it was validated for or fitted on is as decisive as one never validated for the use. */
 const USE_DECISIVE = new Set(["use_not_validated", "population_outside_validation", "endpoint_outside_validation", "horizon_beyond_validation", "input_out_of_range", "horizon_exceeded"]);
