@@ -334,7 +334,8 @@ export class VcrExperiments {
     }
     this.counters.repaired += repaired;
     const orphans = await this.#cancelOrphans();
-    return { campaigns: rows.length, repaired, orphans };
+    const resumed = await this.#resumeStarts();
+    return { campaigns: rows.length, repaired, orphans, resumed };
   }
 
   /**
@@ -418,6 +419,23 @@ export class VcrExperiments {
       VALUES ($1, $2, $3, 'experiment', $4, $5::jsonb, '{"arms":{}}'::jsonb, $6::jsonb) ON CONFLICT (study_id, kind, identity) DO NOTHING RETURNING id`,
     [id, study.id, String(userId), identity, JSON.stringify(record), JSON.stringify(originOf(origin))]);
     if (inserted) this.counters.experiments += 1;
+    await this.#queueArms(study, id, identity, record, String(userId));
+    return { created: Boolean(inserted), ...(await this.view(study, id)) };
+  }
+
+  /** How a design experiment ended, for the conversation's one completion and for the run that reads it; see `experimentOutcome`. @param {string} studyId @param {string} id */
+  async completionOf(studyId, id) {
+    const row = await this.store.one(`SELECT * FROM ${SCHEMA}.experiments WHERE id = $1 AND study_id = $2 AND kind = 'experiment'`, [id, studyId]);
+    return row ? experimentOutcome(this.store, row) : null;
+  }
+
+  /**
+   * Queue the arms of a frozen comparison that have no record yet, each under its own idempotency key. Safe to run again at any time
+   * (a start that died part-way, a restart, two callers at once): an arm whose job was enqueued is reattached to that very job, never
+   * duplicated, and a cancel asked meanwhile stops the queuing. It is the start's body and the resume of an interrupted start.
+   * @param {{ id: string }} study @param {string} id @param {string} identity @param {Record<string, any>} record the frozen comparison @param {string} userId
+   */
+  async #queueArms(study, id, identity, record, userId) {
     // Each arm is written into the row's state the moment it is enqueued, merged into what is there and never over it, and the cancel
     // flag is read from the same write: a cancel that arrives while the arms are being queued either finds the arm's job (and cancels
     // it) or is seen here (and the job just queued is cancelled), so no arm runs untracked (F03b). A failed start keeps what it began.
@@ -451,13 +469,38 @@ export class VcrExperiments {
         break;
       }
     }
-    return { created: Boolean(inserted), ...(await this.view(study, id)) };
   }
 
-  /** How a design experiment ended, for the conversation's one completion and for the run that reads it; see `experimentOutcome`. @param {string} studyId @param {string} id */
-  async completionOf(studyId, id) {
-    const row = await this.store.one(`SELECT * FROM ${SCHEMA}.experiments WHERE id = $1 AND study_id = $2 AND kind = 'experiment'`, [id, studyId]);
-    return row ? experimentOutcome(this.store, row) : null;
+  /**
+   * Resume the comparisons whose start was interrupted (the process died after some arms were queued): the arms with no record are
+   * queued now, from the frozen manifest, under the same keys. A comparison that was cancelled is not resumed: it has no arm left to
+   * wait for and settles as canceled. A study that cannot take a job any more refuses the remaining arms with a closed reason, so the
+   * comparison still ends. An infrastructure failure leaves it for the next call.
+   */
+  async #resumeStarts() {
+    const rows = await this.store.rows(`SELECT * FROM ${SCHEMA}.experiments WHERE kind = 'experiment' AND COALESCE(state->>'cancelRequested', 'false') <> 'true'
+      AND updated_at < now() - make_interval(secs => $2)
+      AND (SELECT count(*) FROM jsonb_object_keys(COALESCE(state->'arms', '{}'::jsonb))) < jsonb_array_length(manifest->'arms')
+      ORDER BY updated_at LIMIT $1`, [Number(this.config.vcrCompletionReconcileBatch ?? 20), Number(this.config.vcrExperimentResumeAfterMs ?? 30000) / 1000]);
+    let resumed = 0;
+    for (const row of rows) {
+      const study = { id: String(row.study_id) };
+      try {
+        await this.#queueArms(study, String(row.id), String(row.identity), object(row.manifest), String(row.user_id));
+        resumed += 1;
+      } catch (error) {
+        const status = Number(/** @type {any} */ (error)?.status), code = String(/** @type {any} */ (error)?.code ?? "");
+        if ((status === 404 && code === "vcr_study_not_found") || (status === 409 && code === "vcr_study_paused")) {
+          const held = object(object((await this.store.one(`SELECT state FROM ${SCHEMA}.experiments WHERE id = $1`, [row.id]))?.state).arms);
+          for (const arm of list(object(row.manifest).arms)) {
+            if (!held[arm.name]) await this.store.query(`UPDATE ${SCHEMA}.experiments SET revision = revision + 1, updated_at = now(),
+              state = jsonb_set(state, '{arms}', COALESCE(state->'arms', '{}'::jsonb) || jsonb_build_object($2::text, $3::jsonb)) WHERE id = $1`,
+            [row.id, arm.name, JSON.stringify({ refused: ["study_unavailable"] })]);
+          }
+        } else this.report(code || "vcr_experiment_resume_failed");
+      }
+    }
+    return resumed;
   }
 
   // --- reading ------------------------------------------------------------------------------------------------------------------
