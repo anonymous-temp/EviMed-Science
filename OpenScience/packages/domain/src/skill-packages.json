@@ -1048,7 +1048,7 @@
       "origin": "capability",
       "version": "1.20.5",
       "source": {"kind":"release"},
-      "digest": "sha256:88f5f77758658dcc87deeb29174df1d1ddfed3a14e322186b79ad4ed141533f0",
+      "digest": "sha256:aeea2692183b86fbca0760b4ce5deb8727c620b63fc1e95beed46baee6b59ca7",
       "digestAlgorithm": "release-directory-v1",
       "references": [
         {"path":"capability.yaml","sha256":"31cfe174e1eebb24e381d49630a4515b9ae16ba609b1da2e08b601c5ab1e2dac"},
@@ -1057,7 +1057,7 @@
         {"path":"references/longitudinal.md","sha256":"8f24303f06dbfa8e8e690dceddfae6249e9ac6985c8e7bc5ba6a31d478ccab01"},
         {"path":"references/models.md","sha256":"bcbb585d15da300effc5838972f55658d919b09f49ed55186530118162643995"},
         {"path":"references/populations-and-patients.md","sha256":"4424e0b88d6b4f7b26920dde174ae476c63fe76bbb045152f63176ebfacc76da"},
-        {"path":"references/trial-design.md","sha256":"1d2ceb14f3f0c1173df7f5395314ffd00877553ce288e748a2e8aa26a2485a4a"}
+        {"path":"references/trial-design.md","sha256":"fff92acb3f944ac3a3c3b6175038892eae3979021a61195da5c5b43cd9f3cdcb"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1224,7 +1224,7 @@
       "origin": "capability",
       "version": "1.4.5",
       "source": {"kind":"release"},
-      "digest": "sha256:fdb92427321809cff9017193004b5ad863b012e01d40d21b1079deaa633559ae",
+      "digest": "sha256:3ecb95bcea1af005ef195e7f8c693bb6b00bab51851dcc4ab3184df9f35b0cda",
       "digestAlgorithm": "release-directory-v1",
       "references": [
         {"path":"capability.yaml","sha256":"cec7f1853e7983a22f71f348dfa5e8d7382920698f1fff4900057462eb2a1e06"},
