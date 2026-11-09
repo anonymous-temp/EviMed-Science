@@ -17,7 +17,7 @@ import test from "node:test";
 import { createVcrRoutes } from "../src/vcrRoutes.mjs";
 import {
   assessmentBody, assumptionBody, budgetBody, cancelBody, decisionBody, definitionCompareBody, definitionSaveBody, definitionUseBody, exportBody,
-  jobBody, memberBody, packBindBody, regulatoryContactBody, reviewBody, runBody, studyPatchBody,
+  jobBody, memberBody, packBindBody, regulatoryContactBody, researchQuestionBody, reviewBody, runBody, studyPatchBody,
 } from "../../web/src/lib/vcrBodies.ts";
 
 /** @param {string} method @param {string} url @param {unknown} [body] */
@@ -50,6 +50,7 @@ function harness() {
     async addReview(/** @type {any} */ input) { return { id: "rvw_1", ...input }; },
     async addDecision(/** @type {any} */ input) { return { id: "dec_1", ...input }; },
     async addRegulatoryContact(/** @type {any} */ input) { return { id: "reg_1", existing: false, ...input }; },
+    async saveResearchQuestion(/** @type {any} */ input) { return { question: { id: "main", version: 2, fields: input.patch, bases: {}, written: [], by: input.actor }, created: true, kept: [] }; },
     async exportRow() { return { id: "exp_1" }; },
   };
   const service = {
@@ -137,6 +138,10 @@ const CASES = /** @type {Array<[string, string, string, unknown]>} */ ([
   ["add a regulatory contact with everything the form has", "POST", "/api/vcr/studies/std_1/regulatory-contacts",
     regulatoryContactBody({ date: "2026-08-14", agency: " 药审中心（CDE） ", type: "Pre-IND 沟通交流", summary: "讨论外部对照", outcome: "同意作支持性证据", attachments: ["minutes.pdf", " ", "briefing.zip"] })],
   ["add a regulatory contact with only the day and the agency", "POST", "/api/vcr/studies/std_1/regulatory-contacts", regulatoryContactBody({ date: "2026-08-14", agency: "FDA", type: "", summary: "  ", attachments: [] })],
+  ["save the research question with the fields the person changed", "POST", "/api/vcr/studies/std_1/research-question",
+    researchQuestionBody({ question: " 多奈哌齐能否延缓恶化？ ", variable: { endpoint: "ADAS-Cog 11", scale: "", timePoint: "第 78 周" }, population: { text: "" },
+      intercurrentEvents: [{ event: " 停药 ", strategy: "treatment_policy", mechanism: "仍随访" }, { event: " ", strategy: "", mechanism: "" }], assumptions: [{ text: "脱落与分组无关", source: "" }] })],
+  ["save the research question with one field", "POST", "/api/vcr/studies/std_1/research-question", researchQuestionBody({ summary: "第 78 周平均变化之差" })],
   ["export a package", "POST", "/api/vcr/studies/std_1/export", exportBody("study_package")],
   ["add a member", "POST", "/api/vcr/studies/std_1/members", memberBody({ userId: "u_stat", role: "statistical_reviewer" })],
   ["work from a catalogue pack", "POST", "/api/vcr/studies/std_1/pack", packBindBody("nsclc")],
@@ -207,4 +212,13 @@ test("AC-18 retired contact routes refuse old clients without a write", async ()
     assert.equal(answer.code, "vcr_recruitment_retired");
   }
   assert.deepEqual(seen, []);
+});
+
+test("a research question body trims what was typed, clears what was emptied and leaves out what was not touched", () => {
+  assert.deepEqual(researchQuestionBody({ summary: "  " }), { summary: null });
+  assert.deepEqual(researchQuestionBody({ population: { text: " 轻中度 AD " } }), { population: { text: "轻中度 AD" } });
+  assert.deepEqual(researchQuestionBody({ variable: { endpoint: "ADAS-Cog 11", scale: "" } }), { variable: { endpoint: "ADAS-Cog 11", scale: null } });
+  assert.deepEqual(researchQuestionBody({ intercurrentEvents: [{ event: "停药", strategy: "", mechanism: " " }] }), { intercurrentEvents: [{ event: "停药", strategy: null, mechanism: "" }] });
+  assert.deepEqual(researchQuestionBody({ intercurrentEvents: [{ event: " ", strategy: "", mechanism: "" }] }), { intercurrentEvents: null }, "a list emptied of words is cleared");
+  assert.deepEqual(researchQuestionBody({}), {});
 });

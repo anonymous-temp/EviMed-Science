@@ -1,4 +1,5 @@
 import { VcrResearchProgress } from "../VcrResearchProgress";
+import { VcrResearchQuestionCard } from "../VcrResearchQuestion";
 import { resumeVcrStep } from "../vcrConversationActions";
 import { Link } from "react-router";
 import { PenLine } from "lucide-react";
@@ -79,6 +80,7 @@ export function OverviewTab({ studyId, study }: { studyId: string; study: VcrStu
           </div>
         )}
         <Attention items={attention} study={study} studyId={studyId} />
+        <VcrResearchQuestionCard studyId={studyId} canWrite={study.abilities.includes("write")} />
         {(started.length > 0 || deliverables.length > 0) && (
           <div className={cn("grid items-start gap-6", started.length > 0 && deliverables.length > 0 && WIDE_COLUMNS)}>
             <StepList study={study} studyId={studyId} started={started} />

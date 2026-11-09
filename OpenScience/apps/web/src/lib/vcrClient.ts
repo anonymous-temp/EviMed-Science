@@ -42,17 +42,17 @@ import { productRequest } from "./productClient";
 import { programmeRunState, type ProgrammeRun } from "./programmeRuns";
 import {
   assessmentBody, assessmentReviewBody, assumptionBody, budgetBody, cancelBody, decisionBody, definitionCompareBody, definitionSaveBody,
-  definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, regulatoryContactBody, reviewBody, runBody,
+  definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, regulatoryContactBody, researchQuestionBody, reviewBody, runBody,
   studyPatchBody, trialSearchBody,
   type VcrAssessmentBody, type VcrAssumptionBody, type VcrBudgetBody, type VcrDecisionBody, type VcrDefinitionCompareBody,
   type VcrDefinitionSaveBody, type VcrDefinitionUseBody, type VcrJobBody, type VcrQualityBasis,
-  type VcrJudgmentBody, type VcrMemberBody, type VcrModelBody, type VcrPatchBody, type VcrRegulatoryContactBody, type VcrReviewBody,
+  type VcrJudgmentBody, type VcrMemberBody, type VcrModelBody, type VcrPatchBody, type VcrRegulatoryContactBody, type VcrResearchQuestionBody, type VcrReviewBody,
 } from "./vcrBodies";
 
 export type {
   VcrAssessmentBody, VcrAssumptionBody, VcrBudgetBody, VcrDecisionBody, VcrDefinitionCompareBody, VcrDefinitionSaveBody,
   VcrDefinitionUseBody, VcrJobBody, VcrQualityBasis, VcrJudgmentBody, VcrMemberBody, VcrModelBody,
-  VcrPatchBody, VcrRegulatoryContactBody, VcrReviewBody,
+  VcrPatchBody, VcrRegulatoryContactBody, VcrResearchQuestionBody, VcrReviewBody,
 } from "./vcrBodies";
 
 /* ---------------------------------------------------------------- vocabulary */
@@ -1352,6 +1352,35 @@ export interface VcrSchedule {
   protocolVersion: number | null;
   visits: VcrScheduleVisit[];
   totals: { visits: number; activities: number; entries: number; firstDay: number | null; lastDay: number | null };
+}
+
+/** One intercurrent event of the research question, with what this simulation can do about it. */
+export interface VcrQuestionEvent {
+  event: string;
+  strategy: string | null;
+  strategyLabel: string | null;
+  mechanism: string;
+  state: "representable" | "not_representable" | "strategy_not_stated";
+  stateLabel: string;
+}
+
+/** The study's 「研究问题与假设」: what is written, by whom, what is open and what the simulation can represent of it. */
+export interface VcrResearchQuestion {
+  id: string;
+  version: number;
+  question: string;
+  population: string;
+  treatment: string;
+  variable: { endpoint: string; scale: string; timePoint: string };
+  summary: string;
+  decisionContext: { decision: string; thresholds: string };
+  assumptions: Array<{ text: string; source: string }>;
+  events: VcrQuestionEvent[];
+  /** The label of who wrote each field that has been written, by field. */
+  basisLabels: Record<string, string>;
+  /** The fields nobody has written yet, by their Chinese name. */
+  gaps: string[];
+  calibration: { sentence: string; differs: boolean } | null;
 }
 
 /** One entry of the study's log of regulatory contacts. */
@@ -3501,6 +3530,31 @@ export function readVcrSchedule(raw: unknown): VcrSchedule | null {
   };
 }
 
+export function readVcrResearchQuestion(raw: Loose): VcrResearchQuestion {
+  const fields = (raw.fields && typeof raw.fields === "object" && !Array.isArray(raw.fields) ? raw.fields : {}) as Loose;
+  const part = (value: unknown, key: string) => text(((value && typeof value === "object" ? value : {}) as Loose)[key]) ?? "";
+  const bases = (raw.bases && typeof raw.bases === "object" ? raw.bases : {}) as Record<string, unknown>;
+  const calibration = (raw.calibration && typeof raw.calibration === "object" ? raw.calibration : null) as Loose | null;
+  return {
+    id: text(raw.id) ?? "main",
+    version: finite(raw.version) ?? 1,
+    question: text(fields.question) ?? "",
+    population: part(fields.population, "text"),
+    treatment: part(fields.treatment, "text"),
+    variable: { endpoint: part(fields.variable, "endpoint"), scale: part(fields.variable, "scale"), timePoint: part(fields.variable, "timePoint") },
+    summary: text(fields.summary) ?? "",
+    decisionContext: { decision: part(fields.decisionContext, "decision"), thresholds: part(fields.decisionContext, "thresholds") },
+    assumptions: arr(fields.assumptions).map((entry) => ({ text: text(entry.text) ?? "", source: text(entry.source) ?? "" })).filter((entry) => entry.text),
+    events: arr(raw.events).map((entry) => ({
+      event: text(entry.event) ?? "", strategy: text(entry.strategy), strategyLabel: text(entry.strategyLabel), mechanism: text(entry.mechanism) ?? "",
+      state: entry.state === "representable" || entry.state === "not_representable" ? entry.state : "strategy_not_stated", stateLabel: text(entry.stateLabel) ?? "",
+    })),
+    basisLabels: Object.fromEntries(Object.entries(bases).map(([field, entry]) => [field, text((entry as Loose | null)?.label) ?? ""])),
+    gaps: arr(raw.gaps).map((entry) => text(entry.label) ?? "").filter(Boolean),
+    calibration: calibration && text(calibration.sentence) ? { sentence: text(calibration.sentence) ?? "", differs: calibration.differs === true } : null,
+  };
+}
+
 export function readVcrRegulatoryContact(raw: Loose): VcrRegulatoryContact {
   return {
     id: text(raw.id) ?? "",
@@ -3880,6 +3934,19 @@ export function recordVcrDecision(studyId: string, input: VcrDecisionBody) {
 /** 「添加」 on the regulatory log: the contact is added to the study's record, never edited; the identical one already there answers 200. */
 export function addVcrRegulatoryContact(studyId: string, input: VcrRegulatoryContactBody) {
   return productRequest<VcrRegulatoryContact>(`${study(studyId)}/regulatory-contacts`, "POST", regulatoryContactBody(input));
+}
+
+/** The study's research question as it stands, or null while nobody has written one (or the module could not be read: the card then says nothing). */
+export async function getVcrResearchQuestion(studyId: string): Promise<VcrResearchQuestion | null> {
+  const answer = await productRequest<{ questions?: Loose[] } | undefined>(`${study(studyId)}/research-question`);
+  const first = answer?.questions?.[0];
+  return first ? readVcrResearchQuestion(first) : null;
+}
+
+/** 「保存」 on the research question card: the changed fields are the person's own edit, the strongest basis; answers the question as it stands. */
+export async function saveVcrResearchQuestion(studyId: string, input: VcrResearchQuestionBody): Promise<VcrResearchQuestion | null> {
+  const answer = await productRequest<{ question?: Loose | null }>(`${study(studyId)}/research-question`, "POST", researchQuestionBody(input));
+  return answer?.question ? readVcrResearchQuestion(answer.question) : null;
 }
 
 /** 「导出」: the package is written by a run the page watches in its activity strip; a run that waits answers `runId: null`. */

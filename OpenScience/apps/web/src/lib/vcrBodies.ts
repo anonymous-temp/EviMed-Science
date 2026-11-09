@@ -137,6 +137,23 @@ export interface VcrJudgmentBody {
   note?: string;
 }
 
+/**
+ * 「保存」 on the research question card: only the fields the person changed. `null` clears a field; a key left out stays as it is. The
+ * route marks every field it takes from this body as the person's own edit.
+ */
+export interface VcrResearchQuestionBody {
+  /** Which question; none is the study's main one. */
+  id?: string;
+  question?: string | null;
+  population?: { text?: string | null } | null;
+  treatment?: { text?: string | null } | null;
+  variable?: { endpoint?: string | null; scale?: string | null; timePoint?: string | null } | null;
+  intercurrentEvents?: Array<{ event: string; strategy: string | null; mechanism: string }> | null;
+  summary?: string | null;
+  decisionContext?: { decision?: string | null; thresholds?: string | null } | null;
+  assumptions?: Array<{ text: string; source: string }> | null;
+}
+
 /** Drop the keys nobody set, so the body is exactly what was said. */
 function said<T extends Record<string, unknown>>(entries: T): Partial<T> {
   const body: Record<string, unknown> = {};
@@ -232,6 +249,29 @@ export function regulatoryContactBody(input: VcrRegulatoryContactBody) {
   return said({
     date: input.date, agency: input.agency.trim(), type: filled(input.type), summary: filled(input.summary), outcome: filled(input.outcome),
     attachments: attachments.length > 0 ? attachments : undefined,
+  });
+}
+
+/** A field the person emptied is cleared (`null`); an entry with no words is dropped from a list. */
+export function researchQuestionBody(input: VcrResearchQuestionBody) {
+  const words = (value: string | null | undefined) => (value === undefined ? undefined : value === null || !value.trim() ? null : value.trim());
+  const part = <K extends string>(value: Partial<Record<K, string | null>> | null | undefined, keys: readonly K[]) => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const out: Record<string, string | null> = {};
+    for (const key of keys) { const entry = words(value[key]); if (entry !== undefined) out[key] = entry; }
+    return out;
+  };
+  const events = input.intercurrentEvents === undefined ? undefined
+    : input.intercurrentEvents === null ? null
+      : input.intercurrentEvents.map((entry) => ({ event: entry.event.trim(), strategy: entry.strategy || null, mechanism: entry.mechanism.trim() })).filter((entry) => entry.event);
+  const assumptions = input.assumptions === undefined ? undefined
+    : input.assumptions === null ? null
+      : input.assumptions.map((entry) => ({ text: entry.text.trim(), source: entry.source.trim() })).filter((entry) => entry.text);
+  return said({
+    id: input.id, question: words(input.question), population: part(input.population, ["text"] as const), treatment: part(input.treatment, ["text"] as const),
+    variable: part(input.variable, ["endpoint", "scale", "timePoint"] as const), intercurrentEvents: events && events.length === 0 ? null : events, summary: words(input.summary),
+    decisionContext: part(input.decisionContext, ["decision", "thresholds"] as const), assumptions: assumptions && assumptions.length === 0 ? null : assumptions,
   });
 }
 
