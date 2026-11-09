@@ -82,3 +82,10 @@ primary (summary-level literature data) and is not independent.
 That the model is validated for any drug effect (only placebo arms); that eight arms are enough to estimate a bias with a narrow interval (the RUN gives each
 number with the count behind it); that a trial's reported MMRM and the model's least-squares mean share an estimand beyond what the table above says; that the
 second structure is independent data (it rests on the same CAMD database; its structure is independent).
+
+## Amendments
+
+1. 2026-11-09, before any result was written: the first run stopped at the fourth arm (MINDSET) with an error of the runner, not a result: where a trial reports no
+   APOE4 share the model's own default is used, and the default the engine reports is the medians of three posterior columns, which do not add up to 1 (the engine
+   normalises them when it samples); the second structure refused them. The runner now normalises those shares the same way for the second structure. The run was
+   started again for the whole set; nothing about the scenarios, the trial table or the engine changed.
