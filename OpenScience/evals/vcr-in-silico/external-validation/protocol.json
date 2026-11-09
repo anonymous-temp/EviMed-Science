@@ -1,10 +1,18 @@
 {
- "frozenOn": "2026-11-09",
- "trialsSha256": "27fab8ff664391a206677ea45bf8dfb0d36b98b8ec58d09293b2786516cd6169",
- "engineFiles": {
-  "patients_progression_beta_logit.R": "0d00117751ccd5af3938e66b102e59da167e631a6ebc57e56c4de99d80900de5",
-  "patients_progression_intercurrent.R": "7ff62832ea77ce0f2fde8a7a485de4b15baf34e17ec239ba7bed6a092e93d902",
-  "patients_progression_alternative.R": "d924455cdc5ae2a94a75c8b2160ccfb4a1a0236c41a91c76a0d44cb7444299d9"
- },
- "note": "the runner refuses to run when trials.json or one of these engine files differs from what is written here"
+  "frozenOn": "2026-11-09",
+  "trialsSha256": "27fab8ff664391a206677ea45bf8dfb0d36b98b8ec58d09293b2786516cd6169",
+  "engineFiles": {
+    "patients_progression_beta_logit.R": "e938909084e99205b8d6a5661d8fa4d64aba194b1df7733fb64de5a6d960dbbd",
+    "patients_progression_intercurrent.R": "4dc5553c2191ee4f472e97095dd1fab748be9dd74e4ce8cc2a35c7c81e77913c",
+    "patients_progression_alternative.R": "786b8c85d9095d66dbe468c3923d8954ceced8bbd297a45289f3d639ffe1315b"
+  },
+  "note": "the runner refuses to run when trials.json or one of these engine files differs from what is written here",
+  "amendment2": {
+    "on": "2026-11-09",
+    "firstRunEngineFiles": {
+      "patients_progression_beta_logit.R": "0d00117751ccd5af3938e66b102e59da167e631a6ebc57e56c4de99d80900de5",
+      "patients_progression_intercurrent.R": "7ff62832ea77ce0f2fde8a7a485de4b15baf34e17ec239ba7bed6a092e93d902",
+      "patients_progression_alternative.R": "d924455cdc5ae2a94a75c8b2160ccfb4a1a0236c41a91c76a0d44cb7444299d9"
+    }
+  }
 }

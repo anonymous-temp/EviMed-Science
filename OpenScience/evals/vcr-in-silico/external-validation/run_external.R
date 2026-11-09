@@ -74,10 +74,10 @@ one_variant <- function(t, index, background) {
 conrado <- function(t, rogers, index) {
   pop <- rogers$population
   r <- vcr_conrado_trials(n = as.integer(t$nSimulated), weeks = t$endpointWeek, baseline = t$baselineAdas$mean, ageMean = pop$ageMeanByApoe4[[1L]], ageSd = pop$ageSd,
-                          apoe = num(pop$apoe4) / sum(num(pop$apoe4)), onMedication = TRUE, trials = 4000L, seed = 20261109L + 101L * index)
+                          apoe = num(pop$apoe4) / sum(num(pop$apoe4)), onMedication = TRUE, trials = 4000L, seed = 20261109L + 101L * index, baselineKind = "mean")
   x <- r$change
   list(mean = mean(x), sd = stats::sd(x), lower = unname(stats::quantile(x, 0.025)), median = unname(stats::quantile(x, 0.5)), upper = unname(stats::quantile(x, 0.975)),
-       typicalChange = r$typicalChange, trials = length(x), meanMcse = stats::sd(x) / sqrt(length(x)), apoe = num(pop$apoe4) / sum(num(pop$apoe4)), ageMean = pop$ageMeanByApoe4[[1L]], ageSd = pop$ageSd)
+       typicalChange = r$typicalChange, baselineMean = r$baselineMean, baselineMeanMcse = r$baselineMeanMcse, trials = length(x), meanMcse = stats::sd(x) / sqrt(length(x)), apoe = num(pop$apoe4) / sum(num(pop$apoe4)), ageMean = pop$ageMeanByApoe4[[1L]], ageSd = pop$ageSd)
 }
 
 rows <- list()

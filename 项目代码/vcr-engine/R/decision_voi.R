@@ -208,6 +208,16 @@ vcr_voi_two_arm_utilities <- function(n_per_arm, delta, sd, dropout, alpha, util
   out
 }
 
+#' Run `fn` on a stream of its own (`seed`) and leave the stream in use exactly where it was: a step that draws only sometimes (a bootstrap that runs when a
+#' range input flips, a shuffled baseline) must not move the numbers drawn after it (review S18: the threshold bootstrap reseeded the global stream, so the
+#' EVSI noise drawn afterwards depended on whether and where an input flipped).
+.vcr_voi_own_stream <- function(seed, fn) {
+  old <- if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) get(".Random.seed", envir = globalenv()) else NULL
+  on.exit(if (is.null(old)) { if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) rm(".Random.seed", envir = globalenv()) } else assign(".Random.seed", old, envir = globalenv()), add = TRUE)
+  set.seed(seed, kind = VCR_RNG_KIND)
+  fn()
+}
+
 .vcr_voi_threshold <- function(role, spec, p, draws, S, unit, stopped_fn) {
   vals_stated <- c(optimistic = vcr_scalar(spec[["optimistic"]], NA), base = vcr_scalar(spec[["base"]], NA), pessimistic = vcr_scalar(spec[["pessimistic"]], NA))
   if (any(is.na(vals_stated))) vcr_abort("scenario_field_missing", sprintf("scenario.inputs.%s", role), "A range states its optimistic, base and pessimistic values.")
@@ -224,15 +234,18 @@ vcr_voi_two_arm_utilities <- function(n_per_arm, delta, sd, dropout, alpha, util
   rows <- list()
   for (f in flips) {
     # the bootstrap standard error of the threshold: the same search on resampled draws
-    set.seed(1000L + as.integer(round(f$value * 1e6)) %% 100000L, kind = VCR_RNG_KIND)
     found <- numeric(0)
-    if (is.null(stopped_fn())) for (b in seq_len(30L)) {
-      idx <- sample.int(S, S, replace = TRUE)
-      dr <- lapply(draws, function(v) if (length(v) == S) v[idx] else v)
-      fl <- .vcr_voi_flips(best_with(dr), lo, hi, grid = 21L)
-      hit <- Filter(function(g) g$from == f$from && g$to == f$to, fl)
-      if (length(hit)) found <- c(found, hit[[1L]]$value)
-    }
+    if (is.null(stopped_fn())) found <- .vcr_voi_own_stream(1000L + as.integer(round(f$value * 1e6)) %% 100000L, function() {
+      out <- numeric(0)
+      for (b in seq_len(30L)) {
+        idx <- sample.int(S, S, replace = TRUE)
+        dr <- lapply(draws, function(v) if (length(v) == S) v[idx] else v)
+        fl <- .vcr_voi_flips(best_with(dr), lo, hi, grid = 21L)
+        hit <- Filter(function(g) g$from == f$from && g$to == f$to, fl)
+        if (length(hit)) out <- c(out, hit[[1L]]$value)
+      }
+      out
+    })
     mcse <- if (length(found) >= 10L) stats::sd(found) else (hi - lo) / 2
     rows[[length(rows) + 1L]] <- list(value = f$value, from = p$labels[f$from], to = p$labels[f$to], mcse = mcse,
                                       reproduced = length(found), resamples = 30L)
@@ -363,6 +376,16 @@ vcr_job_decision_voi <- function(job, ...) {
          shareOfEvpi = if (tiny) NULL else r$evppi / base$evpi)
   })
 
+  # what the interval leaves out: the regression's own upward bias. An input that tells nothing (its draws shuffled on a stream of its own, so the true EVPPI is
+  # zero) reads this much here, which is the least a real input's EVPPI can be told from zero at this number of draws.
+  noise_floor <- NULL
+  if (length(uncertain) && !tiny && is.null(stop_fn())) {
+    nm <- uncertain[1L]
+    shuffled <- .vcr_voi_own_stream(7919L, function() Phi[sample.int(S), nm, drop = FALSE])
+    nf <- tryCatch(vcr_voi_evppi(U, shuffled, nm, base), error = function(e) NULL)
+    if (!is.null(nf)) noise_floor <- list(input = nm, evppi = nf$evppi, shareOfEvpi = nf$evppi / base$evpi)
+  }
+
   if (length(ranges) && is.null(stop_fn())) {
     thresholds <- lapply(ranges, function(role) .vcr_voi_threshold(role, p$specs[[role]], p, draws, S, unit, stop_fn))
   }
@@ -412,7 +435,8 @@ vcr_job_decision_voi <- function(job, ...) {
                    successValue = if (!is.null(p)) p$value else NULL, costPerPatient = if (!is.null(p) && identical(p$utility, "net_benefit")) p$cost else NULL,
                    inputs = if (!is.null(p)) lapply(names(p$specs), function(r) c(list(role = r), p$specs[[r]])) else lapply(uncertain, function(nm) list(role = nm, family = "draws"))),
       chosen = labels[base$best], options = opt_rows, inputs = rows, thresholds = thresholds, studies = studies, `next` = nxt,
-      regression = list(method = "gam", basis = "s(x, bs = 'cr', k = 10); te(..., bs = 'cr', k = 5) for two or three inputs, k = 4 for four; group means for ten values or fewer"),
+      regression = list(noiseFloor = noise_floor, intervalOmits = "the interval of an EVPPI or an EVSI is the Monte Carlo error of the average over the draws; it leaves out the regression's own upward bias, which noiseFloor measures on a shuffled input (its true EVPPI is zero)",
+                        method = "gam", basis = "s(x, bs = 'cr', k = 10); te(..., bs = 'cr', k = 5) for two or three inputs, k = 4 for four; group means for ten values or fewer"),
       failures = failures, assumed = assumed, notApplied = if (length(not_applied)) not_applied else NULL)))
   if (identical(stopped, "canceled")) { result$status <- "canceled"; result$diagnostics$interrupted <- "canceled before every input was evaluated" }
   else if (identical(stopped, "cpu_budget")) {

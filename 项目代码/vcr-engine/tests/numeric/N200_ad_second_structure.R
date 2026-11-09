@@ -55,3 +55,15 @@ vcr_case("N200d", c("AC-04"), function() {
   list(pass = identical(c(r1, r2, r3), rep("refused", 3L)) && abs(slow - hand) < 1e-12 && slow < fast,
        detail = sprintf("no people, a baseline at the bound and shares that do not add up are refused (%s); off background medication the typical week-52 change is %.4f (hand: %.4f), on it %.4f", paste(c(r1, r2, r3), collapse = "/"), slow, hand, fast))
 })
+
+vcr_case("N200e", c("AC-04"), function() {
+  # review S13: a trial publishes the MEAN baseline score of its arm; the model's baseline is log-normal around a typical (median) value. Taking the published mean
+  # as the median made the simulated arm's baseline exp(omega / 2) = 8% too high (25.8 for 23.9). As a mean it is converted: the people really average 23.9.
+  args <- list(n = 400L, weeks = 78, baseline = 23.9, ageMean = 73, ageSd = 8, apoe = c(.4, .45, .15), trials = 1500L, seed = 33L)
+  as_mean <- do.call(vcr_conrado_trials, c(args, list(baselineKind = "mean")))
+  as_typ <- do.call(vcr_conrado_trials, args)
+  want <- 23.9 * exp(.VCR_CONRADO$omega[1L, 1L] / 2)
+  list(pass = abs(as_mean$baselineMean - 23.9) <= 4 * as_mean$baselineMeanMcse + 0.02 && abs(as_typ$baselineMean - want) <= 4 * as_typ$baselineMeanMcse + 0.02 && mean(as_typ$change) > mean(as_mean$change),
+       detail = sprintf("published arm mean baseline 23.9: as a mean the simulated people average %.3f (Monte Carlo SE %.3f); taken as the typical value they average %.3f (the closed form 23.9 x exp(omega/2) = %.3f), and the mean 78-week change is %.3f against %.3f",
+                        as_mean$baselineMean, as_mean$baselineMeanMcse, as_typ$baselineMean, want, mean(as_mean$change), mean(as_typ$change)))
+})

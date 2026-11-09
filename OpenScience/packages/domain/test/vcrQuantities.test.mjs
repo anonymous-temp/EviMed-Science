@@ -1,13 +1,20 @@
 // The closed set of names of the chances a result states (round 2, R24): different quantities, never a ladder.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { VCR_QUANTITY_REQUIRES, VCR_RESULT_QUANTITIES, VCR_RESULT_QUANTITY_LABELS_ZH, VCR_SIMULATION_ERROR_SENTENCE_ZH, VCR_UNCERTAINTY_MODE_QUANTITY, vcrQuantityAvailability } from "../index.mjs";
+import { VCR_QUANTITY_REQUIRES, VCR_RESULT_QUANTITIES, VCR_RESULT_QUANTITY_LABELS_ZH, VCR_RESULT_QUANTITY_SHORT_ZH, VCR_SIMULATION_ERROR_SENTENCE_ZH, VCR_UNCERTAINTY_MODE_QUANTITY, vcrQuantityAvailability } from "../index.mjs";
 
 test("the set is closed and every name is its own words, a label never reused", () => {
   assert.deepEqual([...VCR_RESULT_QUANTITIES].sort(), Object.keys(VCR_RESULT_QUANTITY_LABELS_ZH).sort());
   assert.equal(new Set(Object.values(VCR_RESULT_QUANTITY_LABELS_ZH)).size, VCR_RESULT_QUANTITIES.length);
   assert.equal(VCR_RESULT_QUANTITY_LABELS_ZH.conditional_power_typical_study, "在典型研究条件下的把握度");
-  assert.equal(VCR_RESULT_QUANTITY_LABELS_ZH.assurance, "按药效的不确定性平均后，得到显著结果的概率（assurance）");
+  // no bare English in a name a person reads (review P2-3): the closed name is Chinese, and its short form is the same name said briefly
+  assert.equal(VCR_RESULT_QUANTITY_LABELS_ZH.assurance, "按药效的不确定性平均后，得到显著结果的概率");
+  assert.doesNotMatch(Object.values(VCR_RESULT_QUANTITY_LABELS_ZH).join(" "), /[A-Za-z]{4,}/);
+  assert.equal(VCR_RESULT_QUANTITY_SHORT_ZH.assurance, "药效平均后的显著概率");
+  assert.doesNotMatch(VCR_RESULT_QUANTITY_SHORT_ZH.assurance, /[A-Za-z]/);
+  // a run on a record of virtual people has its own closed name (review P0-1): conditional on the record's one study, not the typical study and not averaged over studies
+  assert.equal(VCR_RESULT_QUANTITY_LABELS_ZH.conditional_power_fixed_study, "在这批虚拟人所属的这一项研究条件下的把握度");
+  assert.ok(VCR_RESULT_QUANTITIES.includes("conditional_power_fixed_study"));
   assert.equal(VCR_RESULT_QUANTITY_LABELS_ZH.trial_success_probability, "得到显著结果且药效达到最小重要差异的概率");
   // the three the uncertainty modes of a simulation produce are the first three, one each
   assert.deepEqual(Object.values(VCR_UNCERTAINTY_MODE_QUANTITY), ["conditional_power_typical_study", "expected_power_over_studies", "expected_power_over_parameters"]);
@@ -31,3 +38,10 @@ test("a quantity that needs more than a run is computed only when everything it 
   assert.equal(vcrQuantityAvailability("assurance", { effectPrior: true }).computable, true);
   assert.equal(vcrQuantityAvailability("conditional_power_typical_study", {}).computable, true, "the typical study needs nothing beyond the run");
 });
+
+test('the two replication chances of the shrinkage result are in the closed vocabulary (review S18)', () => {
+  for (const id of ['replication_probability', 'future_trial_success_probability']) {
+    assert.ok(VCR_RESULT_QUANTITIES.includes(id), id)
+    assert.match(/** @type {Record<string, string>} */ (VCR_RESULT_QUANTITY_LABELS_ZH)[id], /显著/, id)
+  }
+})

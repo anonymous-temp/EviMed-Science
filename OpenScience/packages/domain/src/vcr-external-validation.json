@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "protocol": "evals/vcr-in-silico/external-validation",
-  "resultSha256": "8984dd9889a9cae096336e5425733bae886e3bf74b1bb90f7f65b43b67c77c66",
+  "resultSha256": "ee39628e56d0757f238680d6fda19b9f062cec9f667e4ed831ca5f7025721703",
   "ranOn": "2026-11-09",
   "arms": 8,
   "primary": {
@@ -62,31 +62,31 @@
     "name": "Conrado et al. 2014",
     "long": {
       "arms": 4,
-      "meanBias": 0.1217,
-      "meanAbsoluteBias": 0.4997,
-      "rmse": 0.6784,
-      "meanZ": -0.242,
+      "meanBias": -0.1302,
+      "meanAbsoluteBias": 0.5721,
+      "rmse": 0.6874,
+      "meanZ": 0.3288,
       "covered": 3
     },
     "short": {
       "arms": 4,
-      "meanBias": 1.65,
-      "meanAbsoluteBias": 1.65,
-      "rmse": 1.659,
-      "meanZ": -5.462,
+      "meanBias": 1.55,
+      "meanAbsoluteBias": 1.55,
+      "rmse": 1.56,
+      "meanZ": -5.229,
       "covered": 0
     },
     "all": {
       "arms": 8,
-      "meanBias": 0.8859,
-      "meanAbsoluteBias": 1.075,
-      "rmse": 1.267,
-      "meanZ": -2.852,
+      "meanBias": 0.7099,
+      "meanAbsoluteBias": 1.061,
+      "rmse": 1.205,
+      "meanZ": -2.45,
       "covered": 3
     },
     "meanAbsoluteDifferenceFromPrimary": {
-      "long": 1.632,
-      "short": 0.9095
+      "long": 1.38,
+      "short": 0.8095
     }
   },
   "domain": {

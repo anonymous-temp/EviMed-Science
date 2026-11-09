@@ -193,3 +193,24 @@ vcr_case("N140g", c("AC-08", "AC-25", "AC-31"), function() {
        detail = sprintf("table EVPPI theta %.5f = the function's %.5f, theta+w %.5f, junk %.5f (ranked last); 1 and 2 cores one hash; refusals %s; 200 draws run and say so: %s",
                         by[["theta"]], direct, by[["theta + w"]], by[["junk"]], paste(got_codes, collapse = "/"), few_noted))
 })
+
+vcr_case("N140h", c("AC-08", "AC-28"), function() {
+  # review S18. (1) The threshold bootstrap runs only when a range input flips the decision and used to reseed the global stream, so the EVSI noise drawn after it
+  # depended on whether it ran. Two problems with the SAME draws (the range input is held at its base in every draw) that differ only in whether the range's
+  # optimistic and pessimistic values flip the decision must give the same EVSI to the bit. (2) The interval of an EVPPI leaves out the regression's upward bias:
+  # the result states it and measures it on a shuffled input (an input that tells nothing: its true EVPPI is zero).
+  mk <- function(lo, hi) .n140_two_arm(list(options = list(list(label = "no_trial", nPerArm = 0), list(label = "n300", nPerArm = 300)),
+                                            studies = list(list(label = "phase2", kind = "phase2_effect", size = 40)),
+                                            inputs = list(effect = list(family = "normal", mean = 1.0, sd = 0.9), sd = list(family = "range", optimistic = lo, base = 7, pessimistic = hi),
+                                                          dropoutShare = list(family = "uniform", min = 0.0999, max = 0.1001))))
+  run <- function(sc) vcr_test_run(vcr_test_job("decision.value_of_information", sc, replicates = 8000L, seed = 143L))
+  flip <- run(mk(2, 40)); calm <- run(mk(6.9, 7.1))
+  nf <- flip$diagnostics$voi$thresholds[[1L]]$flips; nc <- calm$diagnostics$voi$thresholds[[1L]]$flips
+  same <- identical(flip$diagnostics$voi$studies[[1L]]$evsi$value, calm$diagnostics$voi$studies[[1L]]$evsi$value) &&
+    identical(flip$diagnostics$voi$inputs[[1L]]$evppi$value, calm$diagnostics$voi$inputs[[1L]]$evppi$value)
+  reg <- flip$diagnostics$voi$regression
+  evpi <- vcr_measure_value(flip, "voi_evpi")
+  list(pass = length(nf) >= 1L && length(nc) == 0L && same && !is.null(reg$noiseFloor) && reg$noiseFloor$evppi < 0.05 * evpi && grepl("upward bias", reg$intervalOmits, fixed = TRUE),
+       detail = sprintf("a problem whose range input flips the decision (%d flip) and one whose range does not (%d flips), same draws: the EVSI of the 40-per-arm phase 2 is %s to the bit (%.6f and %.6f); the shuffled-input noise floor of the EVPPI is %.5f (%.2f%% of the EVPI %.4f)",
+                        length(nf), length(nc), if (same) "identical" else "DIFFERENT", flip$diagnostics$voi$studies[[1L]]$evsi$value, calm$diagnostics$voi$studies[[1L]]$evsi$value, reg$noiseFloor$evppi, 100 * reg$noiseFloor$shareOfEvpi, evpi))
+})

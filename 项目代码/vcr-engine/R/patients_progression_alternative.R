@@ -41,7 +41,11 @@ vcr_conrado_mean <- function(bl, sl, t_years, shape = .VCR_CONRADO$shape, bound 
 #' The mean change of a control arm at `weeks` for `n` people, drawn `trials` times: each trial draws its people (age, APOE e4 alleles, the baseline and slope
 #' effects, the baseline and later beta observations) and returns the arm's mean change. `baseline` is the trial's mean baseline score, `age` its mean and SD,
 #' `apoe` the genotype shares (0, 1, 2 alleles), `onMedication` the flag of the paper's reference. Returns the per-trial means and the typical-value change.
-vcr_conrado_trials <- function(n, weeks, baseline, ageMean, ageSd, apoe, onMedication = TRUE, trials = 2000L, seed = 1L, omega = .VCR_CONRADO$omega) {
+#' `baselineKind` says what `baseline` is: the model's own typical value (the median of its log-normal baseline) or the arm's MEAN baseline, which is what a trial
+#' publishes (review S13: a published mean taken as the median gave an arm baseline about 8% too high, 25.8 for 23.9, and 0.2 points more change at 78 weeks).
+#' For a mean the median is mean x exp(-omega_baseline / 2). The result carries the mean baseline score the simulated people really had (`baselineMean`).
+vcr_conrado_trials <- function(n, weeks, baseline, ageMean, ageSd, apoe, onMedication = TRUE, trials = 2000L, seed = 1L, omega = .VCR_CONRADO$omega, baselineKind = c("typical", "mean")) {
+  baselineKind <- match.arg(baselineKind)
   P <- .VCR_CONRADO
   if (!(n >= 1L) || !(weeks > 0) || !(baseline > 0 && baseline < P$bound)) stop("n, weeks and baseline must be positive, the baseline below 70", call. = FALSE)
   if (length(apoe) != 3L || abs(sum(apoe) - 1) > 1e-9) stop("apoe is three shares that add up to 1", call. = FALSE)
@@ -49,6 +53,7 @@ vcr_conrado_trials <- function(n, weeks, baseline, ageMean, ageSd, apoe, onMedic
   on.exit(if (is.null(old)) rm(".Random.seed", envir = .GlobalEnv) else assign(".Random.seed", old, envir = .GlobalEnv), add = TRUE)
   set.seed(seed)
   L <- t(chol(omega + diag(1e-300, 2L))); t_years <- weeks / 52.1775
+  if (identical(baselineKind, "mean")) baseline <- baseline * exp(-omega[1L, 1L] / 2)
   one <- function() {
     eta <- L %*% matrix(stats::rnorm(2L * n), 2L)
     bl <- baseline * exp(eta[1L, ])
@@ -58,8 +63,9 @@ vcr_conrado_trials <- function(n, weeks, baseline, ageMean, ageSd, apoe, onMedic
     sl <- (P$slope + eta[2L, ]) * (1 + P$slopeAge * (age - P$ageCentre)) * (1 + P$slopeApoe4 * (apoe_n - P$apoe4Centre)) * (1 + (1 - as.numeric(onMedication)) * P$slopeOffMedication)
     m0 <- bl / P$bound; mt <- vcr_conrado_mean(bl, sl, t_years) / P$bound
     y0 <- stats::rbeta(n, m0 * P$tau, (1 - m0) * P$tau); yt <- stats::rbeta(n, mt * P$tau, (1 - mt) * P$tau)
-    P$bound * mean(yt - y0)
+    c(P$bound * mean(yt - y0), P$bound * mean(y0))
   }
   typical <- vcr_conrado_mean(baseline, P$slope * (1 + P$slopeOffMedication * (1 - as.numeric(onMedication))), t_years) - baseline
-  list(change = vapply(seq_len(trials), function(i) one(), numeric(1)), typicalChange = typical, weeks = weeks, source = P$source)
+  draws <- vapply(seq_len(trials), function(i) one(), numeric(2L))
+  list(change = draws[1L, ], baselineMean = mean(draws[2L, ]), baselineMeanMcse = stats::sd(draws[2L, ]) / sqrt(trials), typicalChange = typical, weeks = weeks, source = P$source)
 }

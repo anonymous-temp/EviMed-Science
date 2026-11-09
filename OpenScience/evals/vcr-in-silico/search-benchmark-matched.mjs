@@ -22,7 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   vcrCampaignAdvance, vcrCampaignCandidates, vcrCampaignCanonical, vcrCampaignManifest, vcrCampaignRecord, vcrCampaignInitialState,
-  vcrCampaignUnit, vcrCampaignVerdict, vcrClopperPearson, vcrCampaignBudgetPlan,
+  vcrCampaignUnit, vcrCampaignVerdict, vcrClopperPearson, vcrCampaignBudgetPlan, VCR_ALLOCATION,
 } from '../../packages/domain/index.mjs';
 
 const run = promisify(execFile);
@@ -318,8 +318,9 @@ function runWorld(world, seeds) {
     for (const arm of FROZEN.arms) {
       for (let seed = seedFrom; seed < seedFrom + seeds; seed++) {
         const result = ARMS[arm](world, B, seed);
-        const picks = { point: pickPoint(world, result.est, result.only), platform: pickPlatform(world, result.est, confidence, result.only) };
-        // ours' own pick is the domain's verdict; my rule P on its final estimates must agree with it
+        const picks = { point: pickPoint(world, result.est, result.only), platform: pickPlatform(world, result.est, arm === 'ours2' ? 1 - (1 - confidence) / (VCR_ALLOCATION.maxRounds + 1) : confidence, result.only) };
+        // ours' own pick is the domain's verdict; my rule P on its final estimates must agree with it (a budgeted arm's looks share the constraints' error:
+        // review S3, each look is read at 1 - (1 - confidence) / (maxRounds + 1), so its recomputation is too)
         if (arm.startsWith('ours')) { if (result.domainPick !== picks.platform) disagreements[arm] = (disagreements[arm] ?? 0) + 1; picks.platform = result.domainPick; }
         for (const rule of ['point', 'platform']) {
           rows.push({ arm, budget: B, seed, rule, pick: picks[rule], spent: result.spent, stop: result.stop ?? null, ...judge(world, picks[rule], stream(world.name, arm, B, seed, rule, 'reeval')) });

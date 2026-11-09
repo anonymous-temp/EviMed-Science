@@ -1154,6 +1154,8 @@ export const VCR_LOCAL_CALIBRATION_MIN = Object.freeze({ slopeEvents: 10, slopeN
  * O'Hagan, Stevens & Campbell 2005). Every stream emits only these ids.
  *
  * - `conditional_power_typical_study`: the chance of a significant result for the typical study, every parameter at its middle value.
+ * - `conditional_power_fixed_study`: the chance of a significant result in the one study a record of virtual people was made in (a run on a record
+ *   keeps that study fixed, so there is no variation between studies in it); it is conditional like the typical study's, on that study.
  * - `expected_power_over_studies`: the same averaged over the variation between studies (a new study is drawn each time).
  * - `expected_power_over_parameters`: also averaged over the model's parameter uncertainty (a posterior draw each time).
  * - `assurance`: the chance of a significant result averaged over a sourced prior on the drug's effect. It counts a significant result
@@ -1162,22 +1164,36 @@ export const VCR_LOCAL_CALIBRATION_MIN = Object.freeze({ slopeEvents: 10, slopeN
  *   `probability_effect_at_least_mid` (the prior's own chance of such an effect), and only when the person states a minimal important difference.
  * - `trial_success_probability`: significant and the effect at or above the minimal important difference (assurance's product rule:
  *   expected power given the MID times the chance of such an effect). Computed only when `VCR_QUANTITY_REQUIRES` is all there.
+ * - `replication_probability` and `future_trial_success_probability` (the shrinkage of a published estimate, review S18): the chance that a new trial of the same
+ *   precision, or of a stated other precision, is significant in the direction of the estimate, with the true effect read from the shrunken estimate. They are
+ *   chances of a significant result in the assurance's family (averaged over what the effect may be), not a trial's overall success.
  *
  * A programme's or an indication's 「研发成功率」 is no quantity here and is never computed: it needs a declared denominator, evidence of
  * the transitions between phases and attribution, none of which a simulation holds.
  */
 export const VCR_RESULT_QUANTITIES = frozen([
   'conditional_power_typical_study', 'expected_power_over_studies', 'expected_power_over_parameters',
-  'assurance', 'expected_power_given_mid', 'probability_effect_at_least_mid', 'trial_success_probability',
+  'conditional_power_fixed_study', 'assurance', 'expected_power_given_mid', 'probability_effect_at_least_mid', 'trial_success_probability',
+  'replication_probability', 'future_trial_success_probability',
 ])
 export const VCR_RESULT_QUANTITY_LABELS_ZH = Object.freeze({
   conditional_power_typical_study: '在典型研究条件下的把握度',
+  conditional_power_fixed_study: '在这批虚拟人所属的这一项研究条件下的把握度',
   expected_power_over_studies: '考虑研究之间差异后的预期把握度',
   expected_power_over_parameters: '再考虑模型参数不确定性后的预期把握度',
-  assurance: '按药效的不确定性平均后，得到显著结果的概率（assurance）',
+  assurance: '按药效的不确定性平均后，得到显著结果的概率',
   expected_power_given_mid: '药效至少达到最小重要差异时的预期把握度',
   probability_effect_at_least_mid: '药效至少达到最小重要差异的概率',
   trial_success_probability: '得到显著结果且药效达到最小重要差异的概率',
+  replication_probability: '同样精度的试验再做一次仍达显著的概率',
+  future_trial_success_probability: '按新试验的精度仍达显著的概率',
+})
+/**
+ * A short form of a closed name for where the full one would crowd the line (a metric tile, an axis, a placeholder); the full name stays where the number is
+ * defined (a card's headline, a column header). Never a different quantity: it is the same name said briefly, without bare English.
+ */
+export const VCR_RESULT_QUANTITY_SHORT_ZH = Object.freeze({
+  assurance: '药效平均后的显著概率',
 })
 /** The power a progression simulation reports, by how its trials vary (`model.uncertainty`; no key at all is the typical study). */
 export const VCR_UNCERTAINTY_MODE_QUANTITY = Object.freeze({
@@ -1362,6 +1378,9 @@ export const VCR_PEOPLE_COUNT_BLOCK_FIELDS = Object.freeze({
   // a batch trajectory forecast's ledger of the people it was given: submitted, admitted, and what became of each (they make each other,
   // `VCR_PEOPLE_COUNT_LINKS`); a person's own line is the owner's per-person read, never this block
   accounting: frozen(['submitted', 'admitted', 'completed', 'rejected', 'failed', 'unprocessed', 'partial']),
+  // what a batch forecast found about the use of its model, each finding with the people it concerns ("the posterior of 2 people was approximated"):
+  // a count of real people, so a small one is hidden like the ledger's
+  useFindings: frozen(['people']),
 })
 /**
  * Counts that stand in arithmetic with each other, and what is computed from them. A table of outcomes states its people, its events

@@ -394,6 +394,7 @@ export const NUMERIC_REFERENCES = {
   N104g: { methods: ['patients.progression'], anchors: ['nodes <- mu + sqrt(2) * sdv * gh$nodes; w <- gh$weights / sqrt(pi)', 'abs(.n104_first(a)$value - quad) <= tol'] },
   N111l: { methods: ['patients.progression'], anchors: ['method = "Kenward-Roger"', 'tie <= 0.05 + 0.0045'] },
   N120l: { methods: ['patients.progression'], anchors: ['ito <- list(donepezil = list(demax = -2.26, se = 0.296, et50 = 1.42, q = 0.231', 'pub <- it$demax * (dose / it$ref)^it$q * 26 / (it$et50 + 26)'] },
+  N200e: { methods: ['patients.progression'], anchors: ['want <- 23.9 * exp(.VCR_CONRADO$omega[1L, 1L] / 2)', 'abs(as_mean$baselineMean - 23.9)'] },
   N104b: { methods: ['patients.progression'], anchors: ['# the independent computation: Gauss-Hermite quadrature of the power at a fixed effect over the same normal prior', 'abs(m$value - quad) <= tol'] },
   N104c: { methods: ['patients.progression'], anchors: ['mass <- stats::pnorm((hi - mu) / s) - stats::pnorm((lo - mu) / s)', 'abs(rep$drawMean - tmean) <= 4 * tsd / sqrt(trials)'] },
   N104d: { methods: ['patients.progression'], anchors: ['list("beta", list(shape1 = 3, shape2 = 9), 3 / 12, sqrt(3 * 9 / (12^2 * 13)))'] },

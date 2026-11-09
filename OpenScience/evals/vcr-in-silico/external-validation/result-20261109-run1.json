@@ -1,0 +1,1185 @@
+{
+  "schemaVersion": 1,
+  "synthetic": false,
+  "ranOn": "2026-11-09T15:11:09Z",
+  "replicates": 20000,
+  "cores": 2,
+  "gitHead": "93883fd699bfc4d394740dba801e1de2fbe8be97",
+  "protocolSha256": "4b6e099b4ef23a4fe9e90773291a72d2b06945f1486c32bab89e65d026b8b7b5",
+  "trialsSha256": "27fab8ff664391a206677ea45bf8dfb0d36b98b8ec58d09293b2786516cd6169",
+  "engineFiles": ["0d00117751ccd5af3938e66b102e59da167e631a6ebc57e56c4de99d80900de5", "7ff62832ea77ce0f2fde8a7a485de4b15baf34e17ec239ba7bed6a092e93d902", "d924455cdc5ae2a94a75c8b2160ccfb4a1a0236c41a91c76a0d44cb7444299d9"],
+  "rVersion": "4.3.3",
+  "trials": [
+    {
+      "id": "bapineuzumab-301",
+      "label": "Bapineuzumab 301 (APOE4 carriers), placebo arm",
+      "endpointWeek": 78,
+      "nSimulated": 432,
+      "analysis": "mmrm",
+      "observed": {
+        "change": 8.7,
+        "se": 0.5
+      },
+      "primary": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261210,
+        "trials": 20000,
+        "reading": {
+          "reading": "mmrm_ls_mean",
+          "trials": 19994,
+          "mean": 6.013686835493,
+          "meanMcse": 0.015600006167517,
+          "sd": 2.20584307859304,
+          "lower": 1.62418294853894,
+          "median": 6.01239564297216,
+          "upper": 10.3737793305807,
+          "completersMean": 5.90510940390832
+        },
+        "baselineModelAdas": 22.5460214590484,
+        "baselineModelSd": 8.64192616544477,
+        "completionModel": 0.63388287037037,
+        "population": {
+          "mmseRange": [16, 26],
+          "ageBounds": null,
+          "apoe4": [0, 0.752, 0.248],
+          "femaleShare": 0.56,
+          "ageMeanByApoe4": [72.3, 72.3, 72.3],
+          "ageSd": 8.4
+        },
+        "background": {
+          "drug": "donepezil",
+          "doseMg": 10,
+          "referenceDoseMg": 5,
+          "doseRatio": 2,
+          "eStar": 0.1382,
+          "et50Weeks": 1.6185,
+          "doseExponent": 0.24145,
+          "logitEmax": -0.18541282227313,
+          "readFrom": "each trial's own posterior draw (the medians are shown)",
+          "weeksBefore": 13
+        },
+        "metrics": {
+          "predicted": 6.013686835493,
+          "predictedSd": 2.20584307859304,
+          "lower": 1.62418294853894,
+          "upper": 10.3737793305807,
+          "observed": 8.7,
+          "observedSe": 0.5,
+          "bias": -2.686313164507,
+          "z": 1.21781698370875,
+          "covered": true
+        }
+      },
+      "noBackground": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261210,
+        "trials": 20000,
+        "reading": {
+          "reading": "mmrm_ls_mean",
+          "trials": 19994,
+          "mean": 6.29155809914946,
+          "meanMcse": 0.0155277456667331,
+          "sd": 2.19562543356148,
+          "lower": 1.90486215374768,
+          "median": 6.30658706766024,
+          "upper": 10.643825443245,
+          "completersMean": 6.18170611765975
+        },
+        "baselineModelAdas": 22.5460214590484,
+        "baselineModelSd": 8.64192616544477,
+        "completionModel": 0.63388287037037,
+        "population": {
+          "mmseRange": [16, 26],
+          "ageBounds": null,
+          "apoe4": [0, 0.752, 0.248],
+          "femaleShare": 0.56,
+          "ageMeanByApoe4": [72.3, 72.3, 72.3],
+          "ageSd": 8.4
+        },
+        "background": null,
+        "metrics": {
+          "predicted": 6.29155809914946,
+          "predictedSd": 2.19562543356148,
+          "lower": 1.90486215374768,
+          "upper": 10.643825443245,
+          "observed": 8.7,
+          "observedSe": 0.5,
+          "bias": -2.40844190085054,
+          "z": 1.09692749229264,
+          "covered": true
+        }
+      },
+      "conradoStructure": {
+        "mean": 8.75395626868259,
+        "sd": 0.571499656393199,
+        "lower": 7.65276130794133,
+        "median": 8.74103473574701,
+        "upper": 9.86898646027864,
+        "typicalChange": 6.13206190172187,
+        "trials": 4000,
+        "meanMcse": 0.00903620298103059,
+        "apoe": [0, 0.752, 0.248],
+        "ageMean": 72.3,
+        "ageSd": 8.4,
+        "metrics": {
+          "predicted": 8.75395626868259,
+          "predictedSd": 0.571499656393199,
+          "lower": 7.65276130794133,
+          "upper": 9.86898646027864,
+          "observed": 8.7,
+          "observedSe": 0.5,
+          "bias": 0.0539562686825938,
+          "z": -0.094411725499746,
+          "covered": true
+        },
+        "differenceFromPrimary": 2.74026943318959
+      },
+      "baselineReported": {
+        "mean": 23.9,
+        "sd": 9.5
+      },
+      "completionReported": {
+        "share": 0.754,
+        "basis": "completers 75.4%"
+      }
+    },
+    {
+      "id": "bapineuzumab-302",
+      "label": "Bapineuzumab 302 (APOE4 non-carriers), placebo arm",
+      "endpointWeek": 78,
+      "nSimulated": 493,
+      "analysis": "mmrm",
+      "observed": {
+        "change": 7.4,
+        "se": 0.5
+      },
+      "primary": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261311,
+        "trials": 20000,
+        "reading": {
+          "reading": "mmrm_ls_mean",
+          "trials": 19999,
+          "mean": 6.07495000341473,
+          "meanMcse": 0.0152817960378303,
+          "sd": 2.16111829142848,
+          "lower": 1.71146514971553,
+          "median": 6.0968761663602,
+          "upper": 10.3432555460757,
+          "completersMean": 5.98435691363313
+        },
+        "baselineModelAdas": 22.5460214590484,
+        "baselineModelSd": 8.64192616544477,
+        "completionModel": 0.635406490872211,
+        "population": {
+          "mmseRange": [16, 26],
+          "ageBounds": null,
+          "apoe4": [1, 0, 0],
+          "femaleShare": 0.503,
+          "ageMeanByApoe4": [71.9, 71.9, 71.9],
+          "ageSd": 10.1
+        },
+        "background": {
+          "drug": "donepezil",
+          "doseMg": 10,
+          "referenceDoseMg": 5,
+          "doseRatio": 2,
+          "eStar": 0.1382,
+          "et50Weeks": 1.6185,
+          "doseExponent": 0.24145,
+          "logitEmax": -0.18541282227313,
+          "readFrom": "each trial's own posterior draw (the medians are shown)",
+          "weeksBefore": 13
+        },
+        "metrics": {
+          "predicted": 6.07495000341473,
+          "predictedSd": 2.16111829142848,
+          "lower": 1.71146514971553,
+          "upper": 10.3432555460757,
+          "observed": 7.4,
+          "observedSe": 0.5,
+          "bias": -1.32504999658527,
+          "z": 0.613131637375304,
+          "covered": true
+        }
+      },
+      "noBackground": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261311,
+        "trials": 20000,
+        "reading": {
+          "reading": "mmrm_ls_mean",
+          "trials": 19999,
+          "mean": 6.35532833327102,
+          "meanMcse": 0.0151991353776703,
+          "sd": 2.1494286010144,
+          "lower": 1.99283633433998,
+          "median": 6.38651323361192,
+          "upper": 10.6275199763361,
+          "completersMean": 6.26425620503262
+        },
+        "baselineModelAdas": 22.5460214590484,
+        "baselineModelSd": 8.64192616544477,
+        "completionModel": 0.635406490872211,
+        "population": {
+          "mmseRange": [16, 26],
+          "ageBounds": null,
+          "apoe4": [1, 0, 0],
+          "femaleShare": 0.503,
+          "ageMeanByApoe4": [71.9, 71.9, 71.9],
+          "ageSd": 10.1
+        },
+        "background": null,
+        "metrics": {
+          "predicted": 6.35532833327102,
+          "predictedSd": 2.1494286010144,
+          "lower": 1.99283633433998,
+          "upper": 10.6275199763361,
+          "observed": 7.4,
+          "observedSe": 0.5,
+          "bias": -1.04467166672898,
+          "z": 0.486022967329994,
+          "covered": true
+        }
+      },
+      "conradoStructure": {
+        "mean": 6.64410441923508,
+        "sd": 0.448759303635109,
+        "lower": 5.77313646693482,
+        "median": 6.64477207516658,
+        "upper": 7.54074610502746,
+        "typicalChange": 5.69958920374263,
+        "trials": 4000,
+        "meanMcse": 0.00709550760339013,
+        "apoe": [1, 0, 0],
+        "ageMean": 71.9,
+        "ageSd": 10.1,
+        "metrics": {
+          "predicted": 6.64410441923508,
+          "predictedSd": 0.448759303635109,
+          "lower": 5.77313646693482,
+          "upper": 7.54074610502746,
+          "observed": 7.4,
+          "observedSe": 0.5,
+          "bias": -0.755895580764919,
+          "z": 1.68441205484075,
+          "covered": true
+        },
+        "differenceFromPrimary": 0.569154415820348
+      },
+      "baselineReported": {
+        "mean": 22.2,
+        "sd": 10.1
+      },
+      "completionReported": {
+        "share": 0.712,
+        "basis": "completers 71.2%"
+      }
+    },
+    {
+      "id": "verubecestat-epoch",
+      "label": "Verubecestat EPOCH, placebo arm",
+      "endpointWeek": 78,
+      "nSimulated": 653,
+      "analysis": "mmrm",
+      "observed": {
+        "change": 7.7,
+        "se": 0.3
+      },
+      "primary": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261412,
+        "trials": 20000,
+        "reading": {
+          "reading": "mmrm_ls_mean",
+          "trials": 19997,
+          "mean": 6.25537065719313,
+          "meanMcse": 0.0152693999718755,
+          "sd": 2.15925729043477,
+          "lower": 1.84078853180391,
+          "median": 6.29335863571303,
+          "upper": 10.4915385250057,
+          "completersMean": 6.11183727359127
+        },
+        "baselineModelAdas": 23.5146635561513,
+        "baselineModelSd": 9.10246102975533,
+        "completionModel": 0.622317917304747,
+        "population": {
+          "mmseRange": [15, 26],
+          "ageBounds": null,
+          "apoe4": [0.364, 0.478272, 0.157728],
+          "femaleShare": 0.542,
+          "ageMeanByApoe4": [72.4, 72.4, 72.4],
+          "ageSd": 7.6
+        },
+        "background": {
+          "drug": "donepezil",
+          "doseMg": 10,
+          "referenceDoseMg": 5,
+          "doseRatio": 2,
+          "eStar": 0.1382,
+          "et50Weeks": 1.6185,
+          "doseExponent": 0.24145,
+          "logitEmax": -0.18541282227313,
+          "readFrom": "each trial's own posterior draw (the medians are shown)",
+          "weeksBefore": 13
+        },
+        "metrics": {
+          "predicted": 6.25537065719313,
+          "predictedSd": 2.15925729043477,
+          "lower": 1.84078853180391,
+          "upper": 10.4915385250057,
+          "observed": 7.7,
+          "observedSe": 0.3,
+          "bias": -1.44462934280687,
+          "z": 0.669039928315349,
+          "covered": true
+        }
+      },
+      "noBackground": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261412,
+        "trials": 20000,
+        "reading": {
+          "reading": "mmrm_ls_mean",
+          "trials": 19997,
+          "mean": 6.53602804324975,
+          "meanMcse": 0.0151973635858241,
+          "sd": 2.14907057111086,
+          "lower": 2.12252037158339,
+          "median": 6.57865828674746,
+          "upper": 10.7398509291494,
+          "completersMean": 6.39042108792459
+        },
+        "baselineModelAdas": 23.5146635561513,
+        "baselineModelSd": 9.10246102975533,
+        "completionModel": 0.622317917304747,
+        "population": {
+          "mmseRange": [15, 26],
+          "ageBounds": null,
+          "apoe4": [0.364, 0.478272, 0.157728],
+          "femaleShare": 0.542,
+          "ageMeanByApoe4": [72.4, 72.4, 72.4],
+          "ageSd": 7.6
+        },
+        "background": null,
+        "metrics": {
+          "predicted": 6.53602804324975,
+          "predictedSd": 2.14907057111086,
+          "lower": 2.12252037158339,
+          "upper": 10.7398509291494,
+          "observed": 7.7,
+          "observedSe": 0.3,
+          "bias": -1.16397195675025,
+          "z": 0.541616442194634,
+          "covered": true
+        }
+      },
+      "conradoStructure": {
+        "mean": 7.76541814387329,
+        "sd": 0.431995233121138,
+        "lower": 6.93530076322997,
+        "median": 7.76062264728763,
+        "upper": 8.61006458381267,
+        "typicalChange": 5.57201242211307,
+        "trials": 4000,
+        "meanMcse": 0.00683044437499103,
+        "apoe": [0.364, 0.478272, 0.157728],
+        "ageMean": 72.4,
+        "ageSd": 7.6,
+        "metrics": {
+          "predicted": 7.76541814387329,
+          "predictedSd": 0.431995233121138,
+          "lower": 6.93530076322997,
+          "upper": 8.61006458381267,
+          "observed": 7.7,
+          "observedSe": 0.3,
+          "bias": 0.0654181438732913,
+          "z": -0.151432559569348,
+          "covered": true
+        },
+        "differenceFromPrimary": 1.51004748668016
+      },
+      "baselineReported": {
+        "mean": 21.7,
+        "sd": 7.6
+      },
+      "completionReported": {
+        "share": 0.71,
+        "basis": "70.2 to 72.1% of all arms completed part 1"
+      }
+    },
+    {
+      "id": "intepirdine-mindset",
+      "label": "Intepirdine MINDSET (all on donepezil), placebo arm",
+      "endpointWeek": 24,
+      "nSimulated": 633,
+      "analysis": "mmrm",
+      "observed": {
+        "change": 0.75,
+        "se": 0.21
+      },
+      "primary": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261513,
+        "trials": 20000,
+        "reading": {
+          "reading": "mmrm_ls_mean",
+          "trials": 20000,
+          "mean": 1.23128674504453,
+          "meanMcse": 0.00546439359376414,
+          "sd": 0.77278195304459,
+          "lower": -0.295135128094167,
+          "median": 1.23803146271957,
+          "upper": 2.71139892702867,
+          "completersMean": 1.23916746320556
+        },
+        "baselineModelAdas": 28.3017283267855,
+        "baselineModelSd": 10.0532154359805,
+        "completionModel": 0.820766192733017,
+        "population": {
+          "mmseRange": [12, 24],
+          "ageBounds": null,
+          "apoe4": [0.4219, 0.435, 0.1434],
+          "femaleShare": 0.622,
+          "ageMeanByApoe4": [72.5, 72.5, 72.5],
+          "ageSd": 7.55
+        },
+        "background": {
+          "drug": "donepezil",
+          "doseMg": 10,
+          "referenceDoseMg": 5,
+          "doseRatio": 2,
+          "eStar": 0.1382,
+          "et50Weeks": 1.6185,
+          "doseExponent": 0.24145,
+          "logitEmax": -0.18541282227313,
+          "readFrom": "each trial's own posterior draw (the medians are shown)",
+          "weeksBefore": 13
+        },
+        "metrics": {
+          "predicted": 1.23128674504453,
+          "predictedSd": 0.77278195304459,
+          "lower": -0.295135128094167,
+          "upper": 2.71139892702867,
+          "observed": 0.75,
+          "observedSe": 0.21,
+          "bias": 0.481286745044534,
+          "z": -0.622797599178359,
+          "covered": true
+        }
+      },
+      "noBackground": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261513,
+        "trials": 20000,
+        "reading": {
+          "reading": "mmrm_ls_mean",
+          "trials": 20000,
+          "mean": 1.45841243406838,
+          "meanMcse": 0.00536945452080902,
+          "sd": 0.759355540587365,
+          "lower": -0.0434978302859922,
+          "median": 1.46915701315585,
+          "upper": 2.91727942825766,
+          "completersMean": 1.46561097749286
+        },
+        "baselineModelAdas": 28.3017283267855,
+        "baselineModelSd": 10.0532154359805,
+        "completionModel": 0.820766192733017,
+        "population": {
+          "mmseRange": [12, 24],
+          "ageBounds": null,
+          "apoe4": [0.4219, 0.435, 0.1434],
+          "femaleShare": 0.622,
+          "ageMeanByApoe4": [72.5, 72.5, 72.5],
+          "ageSd": 7.55
+        },
+        "background": null,
+        "metrics": {
+          "predicted": 1.45841243406838,
+          "predictedSd": 0.759355540587365,
+          "lower": -0.0434978302859922,
+          "upper": 2.91727942825766,
+          "observed": 0.75,
+          "observedSe": 0.21,
+          "bias": 0.708412434068378,
+          "z": -0.932912708479637,
+          "covered": true
+        }
+      },
+      "conradoStructure": {
+        "mean": 2.29382562636282,
+        "sd": 0.233124242628191,
+        "lower": 1.84195064969308,
+        "median": 2.29304747901866,
+        "upper": 2.75375436556592,
+        "typicalChange": 1.80632893863644,
+        "trials": 4000,
+        "meanMcse": 0.003686017922534,
+        "apoe": [0.421773467959612, 0.434869539138259, 0.143356992902129],
+        "ageMean": 72.5,
+        "ageSd": 7.55,
+        "metrics": {
+          "predicted": 2.29382562636282,
+          "predictedSd": 0.233124242628191,
+          "lower": 1.84195064969308,
+          "upper": 2.75375436556592,
+          "observed": 0.75,
+          "observedSe": 0.21,
+          "bias": 1.54382562636282,
+          "z": -6.62232983132976,
+          "covered": false
+        },
+        "differenceFromPrimary": 1.06253888131829
+      },
+      "baselineReported": {
+        "mean": 24.8,
+        "sd": 8.8
+      },
+      "completionReported": {
+        "share": 0.888,
+        "basis": "completers 88.8%"
+      }
+    },
+    {
+      "id": "idalopirdine-starshine",
+      "label": "Idalopirdine STARSHINE (all on a cholinesterase inhibitor), placebo arm",
+      "endpointWeek": 24,
+      "nSimulated": 304,
+      "analysis": "change",
+      "observed": {
+        "change": 0.41,
+        "se": 0.3546
+      },
+      "primary": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261614,
+        "trials": 20000,
+        "reading": {
+          "reading": "observed_mean",
+          "trials": 19998,
+          "mean": 1.42428787791277,
+          "meanMcse": 0.00587814684483676,
+          "sd": 0.831253933144758,
+          "lower": -0.209608119186622,
+          "median": 1.42213425409648,
+          "upper": 3.05710699406682,
+          "completersMean": 1.42428787791277
+        },
+        "baselineModelAdas": 30.2126217916965,
+        "baselineModelSd": 9.54009994963608,
+        "completionModel": 0.806498684210526,
+        "population": {
+          "mmseRange": [12, 22],
+          "ageBounds": null,
+          "apoe4": [0.387, 0.460976, 0.152024],
+          "femaleShare": 0.638,
+          "ageMeanByApoe4": [73.7, 73.7, 73.7],
+          "ageSd": 8
+        },
+        "background": {
+          "drug": "donepezil",
+          "doseMg": 10,
+          "referenceDoseMg": 5,
+          "doseRatio": 2,
+          "eStar": 0.1382,
+          "et50Weeks": 1.6185,
+          "doseExponent": 0.24145,
+          "logitEmax": -0.18541282227313,
+          "readFrom": "each trial's own posterior draw (the medians are shown)",
+          "weeksBefore": 13
+        },
+        "metrics": {
+          "predicted": 1.42428787791277,
+          "predictedSd": 0.831253933144758,
+          "lower": -0.209608119186622,
+          "upper": 3.05710699406682,
+          "observed": 0.41,
+          "observedSe": 0.3546,
+          "bias": 1.01428787791277,
+          "z": -1.22019016989858,
+          "covered": true
+        }
+      },
+      "noBackground": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261614,
+        "trials": 20000,
+        "reading": {
+          "reading": "observed_mean",
+          "trials": 19998,
+          "mean": 1.65626916101946,
+          "meanMcse": 0.00580586397325671,
+          "sd": 0.821032102543044,
+          "lower": 0.031572851727057,
+          "median": 1.65845766335377,
+          "upper": 3.26635083304203,
+          "completersMean": 1.65626916101946
+        },
+        "baselineModelAdas": 30.2126217916965,
+        "baselineModelSd": 9.54009994963608,
+        "completionModel": 0.806498684210526,
+        "population": {
+          "mmseRange": [12, 22],
+          "ageBounds": null,
+          "apoe4": [0.387, 0.460976, 0.152024],
+          "femaleShare": 0.638,
+          "ageMeanByApoe4": [73.7, 73.7, 73.7],
+          "ageSd": 8
+        },
+        "background": null,
+        "metrics": {
+          "predicted": 1.65626916101946,
+          "predictedSd": 0.821032102543044,
+          "lower": 0.031572851727057,
+          "upper": 3.26635083304203,
+          "observed": 0.41,
+          "observedSe": 0.3546,
+          "bias": 1.24626916101946,
+          "z": -1.51792988015852,
+          "covered": true
+        }
+      },
+      "conradoStructure": {
+        "mean": 2.30461676913957,
+        "sd": 0.342304387553894,
+        "lower": 1.62376452506358,
+        "median": 2.30624905514898,
+        "upper": 2.9681102444657,
+        "typicalChange": 1.8785590151631,
+        "trials": 4000,
+        "meanMcse": 0.0054123075886965,
+        "apoe": [0.387, 0.460976, 0.152024],
+        "ageMean": 73.7,
+        "ageSd": 8,
+        "metrics": {
+          "predicted": 2.30461676913957,
+          "predictedSd": 0.342304387553894,
+          "lower": 1.62376452506358,
+          "upper": 2.9681102444657,
+          "observed": 0.41,
+          "observedSe": 0.3546,
+          "bias": 1.89461676913957,
+          "z": -5.53488894103429,
+          "covered": false
+        },
+        "differenceFromPrimary": 0.880328891226799
+      },
+      "baselineReported": {
+        "mean": 25.8,
+        "sd": 8.5
+      },
+      "completionReported": {
+        "share": 0.89,
+        "basis": "89% (2254/2525) of all participants completed"
+      }
+    },
+    {
+      "id": "idalopirdine-starbeam",
+      "label": "Idalopirdine STARBEAM (all on a cholinesterase inhibitor), placebo arm",
+      "endpointWeek": 24,
+      "nSimulated": 279,
+      "analysis": "change",
+      "observed": {
+        "change": 0.56,
+        "se": 0.3776
+      },
+      "primary": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261715,
+        "trials": 20000,
+        "reading": {
+          "reading": "observed_mean",
+          "trials": 19999,
+          "mean": 1.43765650646955,
+          "meanMcse": 0.00607039282121683,
+          "sd": 0.858461723321786,
+          "lower": -0.255790628428222,
+          "median": 1.43110615243325,
+          "upper": 3.12327245911061,
+          "completersMean": 1.43765650646955
+        },
+        "baselineModelAdas": 30.2126217916965,
+        "baselineModelSd": 9.54009994963608,
+        "completionModel": 0.80812311827957,
+        "population": {
+          "mmseRange": [12, 22],
+          "ageBounds": null,
+          "apoe4": [0.426, 0.431648, 0.142352],
+          "femaleShare": 0.642,
+          "ageMeanByApoe4": [73.5, 73.5, 73.5],
+          "ageSd": 8.2
+        },
+        "background": {
+          "drug": "donepezil",
+          "doseMg": 10,
+          "referenceDoseMg": 5,
+          "doseRatio": 2,
+          "eStar": 0.1382,
+          "et50Weeks": 1.6185,
+          "doseExponent": 0.24145,
+          "logitEmax": -0.18541282227313,
+          "readFrom": "each trial's own posterior draw (the medians are shown)",
+          "weeksBefore": 13
+        },
+        "metrics": {
+          "predicted": 1.43765650646955,
+          "predictedSd": 0.858461723321786,
+          "lower": -0.255790628428222,
+          "upper": 3.12327245911061,
+          "observed": 0.56,
+          "observedSe": 0.3776,
+          "bias": 0.877656506469546,
+          "z": -1.02235950960456,
+          "covered": true
+        }
+      },
+      "noBackground": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261715,
+        "trials": 20000,
+        "reading": {
+          "reading": "observed_mean",
+          "trials": 19999,
+          "mean": 1.67199525126136,
+          "meanMcse": 0.00599675166906541,
+          "sd": 0.848047552073701,
+          "lower": -0.0070162336963093,
+          "median": 1.66551539023891,
+          "upper": 3.33434882550599,
+          "completersMean": 1.67199525126136
+        },
+        "baselineModelAdas": 30.2126217916965,
+        "baselineModelSd": 9.54009994963608,
+        "completionModel": 0.80812311827957,
+        "population": {
+          "mmseRange": [12, 22],
+          "ageBounds": null,
+          "apoe4": [0.426, 0.431648, 0.142352],
+          "femaleShare": 0.642,
+          "ageMeanByApoe4": [73.5, 73.5, 73.5],
+          "ageSd": 8.2
+        },
+        "background": null,
+        "metrics": {
+          "predicted": 1.67199525126136,
+          "predictedSd": 0.848047552073701,
+          "lower": -0.0070162336963093,
+          "upper": 3.33434882550599,
+          "observed": 0.56,
+          "observedSe": 0.3776,
+          "bias": 1.11199525126136,
+          "z": -1.31124162618267,
+          "covered": true
+        }
+      },
+      "conradoStructure": {
+        "mean": 2.28197286065885,
+        "sd": 0.342409519546275,
+        "lower": 1.61458044760231,
+        "median": 2.28117651801873,
+        "upper": 2.95825659336892,
+        "typicalChange": 1.8713446169836,
+        "trials": 4000,
+        "meanMcse": 0.00541396987145087,
+        "apoe": [0.426, 0.431648, 0.142352],
+        "ageMean": 73.5,
+        "ageSd": 8.2,
+        "metrics": {
+          "predicted": 2.28197286065885,
+          "predictedSd": 0.342409519546275,
+          "lower": 1.61458044760231,
+          "upper": 2.95825659336892,
+          "observed": 0.56,
+          "observedSe": 0.3776,
+          "bias": 1.72197286065885,
+          "z": -5.02898652742082,
+          "covered": false
+        },
+        "differenceFromPrimary": 0.844316354189307
+      },
+      "baselineReported": {
+        "mean": 25.7,
+        "sd": 8
+      },
+      "completionReported": {
+        "share": 0.89,
+        "basis": "89% (2254/2525) of all participants completed"
+      }
+    },
+    {
+      "id": "idalopirdine-starbright",
+      "label": "Idalopirdine STARBRIGHT (all on a cholinesterase inhibitor), placebo arm",
+      "endpointWeek": 24,
+      "nSimulated": 356,
+      "analysis": "change",
+      "observed": {
+        "change": 0.82,
+        "se": 0.352
+      },
+      "primary": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261816,
+        "trials": 20000,
+        "reading": {
+          "reading": "observed_mean",
+          "trials": 19999,
+          "mean": 1.40870702224562,
+          "meanMcse": 0.00583979407132013,
+          "sd": 0.825850950664658,
+          "lower": -0.21573436290155,
+          "median": 1.41137889225769,
+          "upper": 3.02446708951172,
+          "completersMean": 1.40870702224562
+        },
+        "baselineModelAdas": 30.2126217916965,
+        "baselineModelSd": 9.54009994963607,
+        "completionModel": 0.805345224719101,
+        "population": {
+          "mmseRange": [12, 22],
+          "ageBounds": null,
+          "apoe4": [0.415, 0.43992, 0.14508],
+          "femaleShare": 0.635,
+          "ageMeanByApoe4": [74.2, 74.2, 74.2],
+          "ageSd": 8
+        },
+        "background": {
+          "drug": "donepezil",
+          "doseMg": 10,
+          "referenceDoseMg": 5,
+          "doseRatio": 2,
+          "eStar": 0.1382,
+          "et50Weeks": 1.6185,
+          "doseExponent": 0.24145,
+          "logitEmax": -0.18541282227313,
+          "readFrom": "each trial's own posterior draw (the medians are shown)",
+          "weeksBefore": 13
+        },
+        "metrics": {
+          "predicted": 1.40870702224562,
+          "predictedSd": 0.825850950664658,
+          "lower": -0.21573436290155,
+          "upper": 3.02446708951172,
+          "observed": 0.82,
+          "observedSe": 0.352,
+          "bias": 0.588707022245625,
+          "z": -0.712848997475663,
+          "covered": true
+        }
+      },
+      "noBackground": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261816,
+        "trials": 20000,
+        "reading": {
+          "reading": "observed_mean",
+          "trials": 19999,
+          "mean": 1.64013538487025,
+          "meanMcse": 0.00575443892827311,
+          "sd": 0.813780212352894,
+          "lower": 0.0370497202026549,
+          "median": 1.64594596310443,
+          "upper": 3.26199118164635,
+          "completersMean": 1.64013538487025
+        },
+        "baselineModelAdas": 30.2126217916965,
+        "baselineModelSd": 9.54009994963607,
+        "completionModel": 0.805345224719101,
+        "population": {
+          "mmseRange": [12, 22],
+          "ageBounds": null,
+          "apoe4": [0.415, 0.43992, 0.14508],
+          "femaleShare": 0.635,
+          "ageMeanByApoe4": [74.2, 74.2, 74.2],
+          "ageSd": 8
+        },
+        "background": null,
+        "metrics": {
+          "predicted": 1.64013538487025,
+          "predictedSd": 0.813780212352894,
+          "lower": 0.0370497202026549,
+          "upper": 3.26199118164635,
+          "observed": 0.82,
+          "observedSe": 0.352,
+          "bias": 0.820135384870251,
+          "z": -1.00780944586866,
+          "covered": true
+        }
+      },
+      "conradoStructure": {
+        "mean": 2.25944758898683,
+        "sd": 0.30885606997804,
+        "lower": 1.64432094614547,
+        "median": 2.262615999305,
+        "upper": 2.84910709450542,
+        "typicalChange": 1.88577133375786,
+        "trials": 4000,
+        "meanMcse": 0.00488344325149479,
+        "apoe": [0.415, 0.43992, 0.14508],
+        "ageMean": 74.2,
+        "ageSd": 8,
+        "metrics": {
+          "predicted": 2.25944758898683,
+          "predictedSd": 0.30885606997804,
+          "lower": 1.64432094614547,
+          "upper": 2.84910709450542,
+          "observed": 0.82,
+          "observedSe": 0.352,
+          "bias": 1.43944758898683,
+          "z": -4.66057730090645,
+          "covered": false
+        },
+        "differenceFromPrimary": 0.850740566741201
+      },
+      "baselineReported": {
+        "mean": 25.9,
+        "sd": 8.5
+      },
+      "completionReported": {
+        "share": 0.89,
+        "basis": "89% (2254/2525) of all participants completed"
+      }
+    },
+    {
+      "id": "semagacestat-identity",
+      "label": "Semagacestat IDENTITY, placebo arm",
+      "endpointWeek": 76,
+      "nSimulated": 501,
+      "analysis": "mmrm",
+      "observed": {
+        "change": 6.19,
+        "se": 0.54
+      },
+      "primary": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261917,
+        "trials": 20000,
+        "reading": {
+          "reading": "mmrm_ls_mean",
+          "trials": 19997,
+          "mean": 5.60683337919859,
+          "meanMcse": 0.0153335332104338,
+          "sd": 2.16832641975035,
+          "lower": 1.25146428092503,
+          "median": 5.61324456717681,
+          "upper": 9.96814447079613,
+          "completersMean": 5.5040705425437
+        },
+        "baselineModelAdas": 22.5460214590484,
+        "baselineModelSd": 8.64192616544477,
+        "completionModel": 0.63302005988024,
+        "population": {
+          "mmseRange": [16, 26],
+          "ageBounds": null,
+          "apoe4": [0.4219, 0.435, 0.1434],
+          "femaleShare": 0.555,
+          "ageMeanByApoe4": [73.9, 73.9, 73.9],
+          "ageSd": 8.1
+        },
+        "background": {
+          "drug": "donepezil",
+          "doseMg": 10,
+          "referenceDoseMg": 5,
+          "doseRatio": 2,
+          "eStar": 0.1382,
+          "et50Weeks": 1.6185,
+          "doseExponent": 0.24145,
+          "logitEmax": -0.18541282227313,
+          "readFrom": "each trial's own posterior draw (the medians are shown)",
+          "weeksBefore": 13
+        },
+        "metrics": {
+          "predicted": 5.60683337919859,
+          "predictedSd": 2.16832641975035,
+          "lower": 1.25146428092503,
+          "upper": 9.96814447079613,
+          "observed": 6.19,
+          "observedSe": 0.54,
+          "bias": -0.583166620801414,
+          "z": 0.268947800243358,
+          "covered": true
+        }
+      },
+      "noBackground": {
+        "status": "succeeded",
+        "issues": [],
+        "seed": 20261917,
+        "trials": 20000,
+        "reading": {
+          "reading": "mmrm_ls_mean",
+          "trials": 19997,
+          "mean": 5.88546324032848,
+          "meanMcse": 0.0152665729059516,
+          "sd": 2.15885751292433,
+          "lower": 1.57773490916923,
+          "median": 5.89668847244788,
+          "upper": 10.2190216277546,
+          "completersMean": 5.78026605457878
+        },
+        "baselineModelAdas": 22.5460214590484,
+        "baselineModelSd": 8.64192616544477,
+        "completionModel": 0.63302005988024,
+        "population": {
+          "mmseRange": [16, 26],
+          "ageBounds": null,
+          "apoe4": [0.4219, 0.435, 0.1434],
+          "femaleShare": 0.555,
+          "ageMeanByApoe4": [73.9, 73.9, 73.9],
+          "ageSd": 8.1
+        },
+        "background": null,
+        "metrics": {
+          "predicted": 5.88546324032848,
+          "predictedSd": 2.15885751292433,
+          "lower": 1.57773490916923,
+          "upper": 10.2190216277546,
+          "observed": 6.19,
+          "observedSe": 0.54,
+          "bias": -0.304536759671525,
+          "z": 0.141063853380026,
+          "covered": true
+        }
+      },
+      "conradoStructure": {
+        "mean": 7.31351457931617,
+        "sd": 0.466829600148942,
+        "lower": 6.40062559968045,
+        "median": 7.31954925456758,
+        "upper": 8.24040843136681,
+        "typicalChange": 5.68527395837762,
+        "trials": 4000,
+        "meanMcse": 0.00738122407828168,
+        "apoe": [0.421773467959612, 0.434869539138259, 0.143356992902129],
+        "ageMean": 73.9,
+        "ageSd": 8.1,
+        "metrics": {
+          "predicted": 7.31351457931617,
+          "predictedSd": 0.466829600148942,
+          "lower": 6.40062559968045,
+          "upper": 8.24040843136681,
+          "observed": 6.19,
+          "observedSe": 0.54,
+          "bias": 1.12351457931617,
+          "z": -2.40669096166506,
+          "covered": false
+        },
+        "differenceFromPrimary": 1.70668120011759
+      },
+      "baselineReported": {
+        "mean": 22.8,
+        "sd": 9.1
+      },
+      "completionReported": {
+        "share": 0.54,
+        "basis": "54% of the randomized had week-76 data"
+      }
+    }
+  ],
+  "summary": {
+    "longHorizon": {
+      "weeks": "76 to 78",
+      "primary": {
+        "trials": 4,
+        "meanBias": -1.50978978117514,
+        "meanAbsoluteBias": 1.50978978117514,
+        "rmse": 1.68812567341488,
+        "meanZ": 0.692234087410691,
+        "coverage": 4,
+        "ids": ["bapineuzumab-301", "bapineuzumab-302", "verubecestat-epoch", "semagacestat-identity"]
+      },
+      "noBackground": {
+        "trials": 4,
+        "meanBias": -1.23040557100033,
+        "meanAbsoluteBias": 1.23040557100033,
+        "rmse": 1.44391002447617,
+        "meanZ": 0.566407688799324,
+        "coverage": 4,
+        "ids": ["bapineuzumab-301", "bapineuzumab-302", "verubecestat-epoch", "semagacestat-identity"]
+      },
+      "conradoStructure": {
+        "trials": 4,
+        "meanBias": 0.121748352776785,
+        "meanAbsoluteBias": 0.499696143159244,
+        "rmse": 0.678390365393316,
+        "meanZ": -0.242030797973351,
+        "coverage": 3,
+        "ids": ["bapineuzumab-301", "bapineuzumab-302", "verubecestat-epoch", "semagacestat-identity"]
+      }
+    },
+    "shortHorizon": {
+      "weeks": "24",
+      "primary": {
+        "trials": 4,
+        "meanBias": 0.740484537918118,
+        "meanAbsoluteBias": 0.740484537918118,
+        "rmse": 0.770920510108855,
+        "meanZ": -0.894549069039291,
+        "coverage": 4,
+        "ids": ["intepirdine-mindset", "idalopirdine-starshine", "idalopirdine-starbeam", "idalopirdine-starbright"]
+      },
+      "noBackground": {
+        "trials": 4,
+        "meanBias": 0.971703057804862,
+        "meanAbsoluteBias": 0.971703057804862,
+        "rmse": 0.995513747619152,
+        "meanZ": -1.19247341517237,
+        "coverage": 4,
+        "ids": ["intepirdine-mindset", "idalopirdine-starshine", "idalopirdine-starbeam", "idalopirdine-starbright"]
+      },
+      "conradoStructure": {
+        "trials": 4,
+        "meanBias": 1.64996571128702,
+        "meanAbsoluteBias": 1.64996571128702,
+        "rmse": 1.65907882278126,
+        "meanZ": -5.46169565017283,
+        "coverage": 0,
+        "ids": ["intepirdine-mindset", "idalopirdine-starshine", "idalopirdine-starbeam", "idalopirdine-starbright"]
+      }
+    },
+    "all": {
+      "primary": {
+        "trials": 8,
+        "meanBias": -0.38465262162851,
+        "meanAbsoluteBias": 1.12513715954663,
+        "rmse": 1.31226649773378,
+        "meanZ": -0.1011574908143,
+        "coverage": 8,
+        "ids": ["bapineuzumab-301", "bapineuzumab-302", "verubecestat-epoch", "intepirdine-mindset", "idalopirdine-starshine", "idalopirdine-starbeam", "idalopirdine-starbright", "semagacestat-identity"]
+      },
+      "noBackground": {
+        "trials": 8,
+        "meanBias": -0.129351256597732,
+        "meanAbsoluteBias": 1.10105431440259,
+        "rmse": 1.24014591489903,
+        "meanZ": -0.313032863186525,
+        "coverage": 8,
+        "ids": ["bapineuzumab-301", "bapineuzumab-302", "verubecestat-epoch", "intepirdine-mindset", "idalopirdine-starshine", "idalopirdine-starbeam", "idalopirdine-starbright", "semagacestat-identity"]
+      },
+      "conradoStructure": {
+        "trials": 8,
+        "meanBias": 0.885857032031901,
+        "meanAbsoluteBias": 1.07483092722313,
+        "rmse": 1.2674296880024,
+        "meanZ": -2.85186322407309,
+        "coverage": 3,
+        "ids": ["bapineuzumab-301", "bapineuzumab-302", "verubecestat-epoch", "intepirdine-mindset", "idalopirdine-starshine", "idalopirdine-starbeam", "idalopirdine-starbright", "semagacestat-identity"]
+      }
+    }
+  }
+}

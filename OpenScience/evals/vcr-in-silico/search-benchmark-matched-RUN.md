@@ -550,7 +550,7 @@ A campaign that states `budget.replicates` is *budgeted*; one that does not has 
   that was not judged (`not_needed:cannot_beat_best`, `not_evaluated:budget`, `not_screened:budget`).
 - **Error control is untouched.** A verdict still reads one final run at the method's floor or more, on a stream no screening unit and no earlier run of that
   design used, at the constraints' own confidence (Clopper-Pearson); alpha is frozen; `inconclusive_at_precision` is still a stop reason. A re-run is judged on
-  its own fresh data alone (the earlier run only decided to run it; it is kept as `superseded`, never pooled), so each design's bound stays exact. What more
+  its own fresh data alone (the earlier run only decided to run it; it is kept as `superseded`, never pooled). **Correction (X1 addendum below): the clause "so each design's bound stays exact" was wrong.** A design that may be run up to three times and is certified on the look it ends on is certified more often than one look would: 3.3% against 2.4% for a design exactly on its type I error bound at a 97.5% confidence (20,000 simulated campaigns). The numbers in this addendum D5 are of that rule; the X1 addendum has the corrected rule. What more
   designs judged does change is the chance that one of them passes by luck (the family-wise note of `verdict.selection`, which holds for any larger
   finalist set); the table below measures it: the picked design violated a constraint in truth in 0 of the picks of `ours2` at every budget in the
   level world and survival, and in 1 budget of 5 in level85 (80k: 1 of its 14 picks, 7%; the other four budgets 0).
@@ -562,7 +562,9 @@ The first version of the rule (no cap on a re-run's size) was run once on seeds 
 whose true value sits on the bound (a type I error of 2.475% against 2.5%). Its numbers are kept in `results/search-benchmark-matched-20261109-d5-v1-superseded.json`. The cap (re-run
 at most 4 times its run, at most twice) was then chosen on **development seeds 1001..1100** the protocol never reports (`--seed-from 1001`; rounds/growth
 2/4, 3/8 and 3/16 were tried there and 2/4 was best), and the reported run is seeds 1..200 once with that rule. The seeds 1..200 therefore did
-influence one decision (that a cap was needed), the choice of its value did not use them.
+influence one decision (that a cap was needed), the choice of its value did not use them. **That is not the whole of it (review S16):** the development seeds 1001..1100 are other
+seeds of the SAME three truth tables that are reported, so the cap (rounds 2, growth 4) was chosen on the worlds it is then reported on; only the seeds differ. "Ours2 matches grid and
+OCBA from about 160k" is in-sample for the worlds and out-of-sample for the seeds only. No world that was not used in the choice was run.
 
 ## Result
 
@@ -664,3 +666,35 @@ frozen Newcombe reading, tables file):
 Verdict in one sentence: the structural cap is removed and the budgeted campaign now matches grid and the OCBA-style procedure from about 160k trials in the
 level worlds while keeping every error-control rule, but it still trails successive halving and the OCBA-style procedure below that budget (and by 5-7 points
 at 640k in level85), because their small-budget verdicts rest on precision the platform does not allow itself.
+
+
+# Addendum X1 (2026-11-09): the re-runs' error is split across the looks, and what that costs
+
+**What was wrong.** Addendum D5 said that error control is untouched and each design's bound stays exact. It did not. The domain's state machine, driven with binomial
+outcomes for one design whose true value sits exactly on its bound (a type I error of 2.5% against a bound of 2.5%, or a power of 80% against 80%; 6,000 to 20,000
+campaigns each), certified that design in 3.3% of campaigns with re-runs against 2.4% with one final run (`packages/domain/test/vcrBudgetedSearchErrorControl.test.mjs`
+holds the experiment; on the old rule it reads 3.27% and 3.25%). A design gets up to three looks (`maxRounds` 2 plus the first) and passes if the look it ends on
+passes; every look was read at the constraint's 97.5% confidence, so the confidence that "type I error is at most alpha" really holds fell to about 96.6%. The frozen
+alpha was never touched; the confidence of the claim was.
+
+**The fix.** In a budgeted campaign each final look is read at the constraint's error split across the looks (`vcrFinalConfidence`, Bonferroni): 1 - (1 - c) / 3,
+99.17% for c = 97.5%. The chance that any look certifies a design at its bound is then at most 2.5%; the same experiment now certifies at most 2.5% (test). A fixed-structure
+campaign (no `budget.replicates`, no sequential allocation) has one look and is read as before.
+
+**The benchmark again**, same protocol, worlds, budgets and seeds 1..200 (`node evals/vcr-in-silico/search-benchmark-matched.mjs`, 67 s): the five other arms reproduce
+their aggregate cells exactly (ours included: every cell that differs from D5 is an ours2 cell), and `ours2` changes. Data: `results/search-benchmark-matched-20261109-x1.json`, tables
+`results/search-benchmark-matched-20261109-x1-tables.md`; the D5 files stay. Rule P, probability of correct selection at 40k / 80k / 160k / 320k / 640k trials:
+
+| World | ours2 in D5 (3 looks at 97.5%) | ours2 now (looks at 99.17%) | grid | halving | OCBA |
+|---|---|---|---|---|---|
+| level | 6.5 / 27.0 / 80.5 / 96.0 / 98.5% | 2.5 / 15.0 / 73.0 / 94.0 / 95.5% | 5.5 / 21.5 / 48.0 / 89.0 / 99.0% | 22.0 / 54.5 / 86.0 / 97.0 / 100% | 27.5 / 59.0 / 86.0 / 99.5 / 100% |
+| level85 | 1.0 / 6.5 / 57.0 / 89.0 / 93.0% | 0.5 / 4.5 / 44.5 / 72.0 / 83.0% | 3.5 / 7.5 / 27.0 / 65.5 / 90.5% | 14.0 / 32.0 / 61.5 / 85.5 / 98.0% | 5.5 / 22.0 / 55.0 / 91.5 / 100% |
+| survival | 1.0 / 3.5 / 4.5 / 5.0 / 1.5% | 0.0 / 1.0 / 2.0 / 1.5 / 1.5% | 1.0 / 2.0 / 3.5 / 2.0 / 1.0% | 1.0 / 1.5 / 2.0 / 2.5 / 2.0% | 1.0 / 1.0 / 4.0 / 2.5 / 5.0% |
+
+Where ours stands now, plainly: the price of a valid error control with re-runs is up to 17 points of correct selection (level85 at 320k: 72% against 89% before; at 640k 83% against 93%, where
+halving and OCBA read 98 and 100%). In the level world ours2 is now below grid at 40k to 80k and above it at 160k to 320k (73% against 48%, 94% against 89%), but it trails
+halving and OCBA at every budget up to 320k and is 3.5 points below grid at 640k (95.5% against 99.0%); in level85 it is above grid from 160k to 320k and below it at 640k. The picked design
+violated a constraint in truth in 0% of the picks of ours2 at every budget in all three worlds (one 7.1% cell of level85 at 80k in D5 is 0% now). "Matches grid and
+OCBA from about 160k" (D5) is withdrawn: it matches grid, and trails OCBA and halving. The tuning disclosure above applies to the cap, which this addendum did not re-choose;
+the worlds are the ones it was chosen on, so the table is in-sample for the worlds. The recomputation check of the runner now reads ours2's looks at the same split
+confidence; ours2's own verdict and that recomputation agree in 1,000 of 1,000 runs per world.

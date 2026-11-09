@@ -89,3 +89,11 @@ second structure is independent data (it rests on the same CAMD database; its st
    APOE4 share the model's own default is used, and the default the engine reports is the medians of three posterior columns, which do not add up to 1 (the engine
    normalises them when it samples); the second structure refused them. The runner now normalises those shares the same way for the second structure. The run was
    started again for the whole set; nothing about the scenarios, the trial table or the engine changed.
+2. 2026-11-09, after the first RUN and before the second, from the independent statistical review (S13): the second structure was given a trial's published
+   baseline ADAS-cog score as the MEDIAN of its log-normal baseline, but a trial publishes the arm's MEAN. The simulated people averaged 25.8 for a published 23.9, and
+   the predicted change was 0.2 points larger at 78 weeks, so the comparison "closer than the primary" was not like-for-like. `vcr_conrado_trials` now takes
+   `baselineKind = "mean"` (median = mean x exp(-omega / 2)); the runner passes it, and nothing else about the scenarios or the trial table changed. The primary
+   and the no-background predictions do not depend on that function. The engine files of `protocol.json` changed since the first run by edits that do not
+   touch a placebo arm with a donepezil background (the share of a disease-modifying effect, a marketed inhibitor's dose range in its report, the MMRM's
+   small-sample standard error and the truth an intercurrent-event estimate is read against); the whole set was run again, as a whole, to prove it: the second RUN
+   states whether the primary numbers moved. This amendment was written before the second run; the first RUN stays in the repository.
