@@ -63,7 +63,7 @@ function specWords(spec) {
   }
 }
 
-/** @param {Record<string, any>} card the engine's `diagnostics.voi` @param {Record<string, any> | null} record */
+/** @param {Record<string, any>} voi the engine's `diagnostics.voi` @param {Record<string, any> | null} record */
 function premisesOf(voi, record) {
   const given = object(voi.given);
   const table = given.source === "table";
