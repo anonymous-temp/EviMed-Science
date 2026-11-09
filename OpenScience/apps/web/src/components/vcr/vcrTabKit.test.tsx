@@ -86,3 +86,34 @@ describe("the sentence for a read that failed", () => {
     expect(retry).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("a changed key", () => {
+  function Rows({ readKey, load }: { readKey: string; load: () => Promise<string> }) {
+    const { state, last, refreshing, carried } = useVcrLoad(readKey, load);
+    return <p data-testid="rows">{`${state.kind}|${last ?? "-"}|${refreshing ? "refreshing" : "-"}|${carried ?? "-"}`}</p>;
+  }
+  it("never hands out the previous key's answer, not even in the render after the change, and a failed read leaves nothing", async () => {
+    function Switch() {
+      const [page, setPage] = useState(0);
+      return <><Rows readKey={`vcr:rows:${page}`} load={async () => { if (page === 1) throw new WebApiError("no", { status: 403 }); return `页${page}`; }} /><button type="button" onClick={() => setPage(1)}>下一页</button></>;
+    }
+    render(<Switch />);
+    await waitFor(() => expect(screen.getByTestId("rows")).toHaveTextContent("ready|页0|-|页0"));
+    await userEvent.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() => expect(screen.getByTestId("rows")).toHaveTextContent(/^error\|-\|-\|页0$/));
+  });
+  it("keeps the answer through a re-read of the same key and says it is refreshing", async () => {
+    let release: () => void = () => undefined;
+    let calls = 0;
+    function Again() {
+      const hook = useVcrLoad("vcr:same", async () => { calls += 1; if (calls > 1) await new Promise<void>((resolve) => { release = resolve; }); return `读${calls}`; });
+      return <><p data-testid="rows">{`${hook.state.kind}|${hook.last ?? "-"}|${hook.refreshing ? "refreshing" : "-"}`}</p><button type="button" onClick={hook.reload}>读取</button></>;
+    }
+    render(<Again />);
+    await waitFor(() => expect(screen.getByTestId("rows")).toHaveTextContent("ready|读1|-"));
+    await userEvent.click(screen.getByRole("button", { name: "读取" }));
+    await waitFor(() => expect(screen.getByTestId("rows")).toHaveTextContent("ready|读1|refreshing"));
+    await act(async () => { release(); });
+    await waitFor(() => expect(screen.getByTestId("rows")).toHaveTextContent("ready|读2|-"));
+  });
+});

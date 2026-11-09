@@ -121,3 +121,18 @@ it('names people by their order, never by a key, and offers a version by its num
   for (const text of options) expect(text).toMatch(/^第 \d 版 · 起点 /);
   expect(options.join('')).not.toMatch(/HbA1c|版本未提供/);
 });
+
+it('never shows the previous version\'s people under another version, and says so when that read is denied (review F07)', async () => {
+  network.productRequest.mockImplementation(async (url: string) => {
+    if (url.includes('/longitudinal/pred-1/subjects')) throw new WebApiError('forbidden', { status: 403, code: 'forbidden' });
+    return page([line(1)], { id: 'pred-2' });
+  });
+  const user = userEvent.setup();
+  // pred-2 is the newer one, so it is the version the page opens on
+  draw([history, prediction({ versionNumber: 1 }, 'pred-1'), { ...prediction({ versionNumber: 2 }, 'pred-2'), createdAt: '2026-01-03' }]);
+  expect(await screen.findByRole('button', { name: '查看患者 1的轨迹' })).toBeInTheDocument();
+  await user.selectOptions(screen.getAllByLabelText('预测版本')[0]!, 'pred-1');
+  await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(expect.stringContaining('/longitudinal/pred-1/subjects')));
+  await waitFor(() => expect(screen.queryByRole('button', { name: '查看患者 1的轨迹' })).toBeNull());
+  expect(await screen.findByRole('button', { name: /重试/ })).toBeInTheDocument();
+});

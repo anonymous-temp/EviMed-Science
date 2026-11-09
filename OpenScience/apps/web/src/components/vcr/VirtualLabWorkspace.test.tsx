@@ -254,3 +254,20 @@ it('names a varied design field in words, never as the generic 参数', async ()
   expect(await screen.findAllByText(/干预组人数 120，对照组人数 120/)).not.toHaveLength(0);
   expect(screen.queryByText(/参数 120/)).toBeNull();
 });
+
+it('a list that is read again and denied replaces the old experiments with the error (review F07)', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    let denied = false;
+    network.productRequest.mockImplementation(async (url: string) => {
+      if (url.endsWith('/experiments')) { if (denied) throw new WebApiError('forbidden', { status: 403, code: 'forbidden' }); return { experiments: [entry('cmp1', 'campaign', 'running')] }; }
+      return campaign({ status: 'running', stop: null, inFlight: { unit: 'u', stage: 'final' } });
+    });
+    draw();
+    expect(await screen.findByText(/正在计算复核这一步/)).toBeInTheDocument();
+    denied = true;
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(await screen.findByRole('button', { name: /重试/ })).toBeInTheDocument();
+    expect(screen.queryByText(/正在计算复核这一步/)).toBeNull();
+  } finally { vi.useRealTimers(); }
+});

@@ -52,23 +52,34 @@ export type VcrLoad<T> =
   | { kind: "ready"; data: T };
 
 export interface VcrLoadResult<T> {
+  /** Always the state of the key asked for now: a key that has not answered yet reads `loading`, never the previous key's answer. */
   state: VcrLoad<T>;
   reload: () => void;
   /**
-   * The newest answer this hook has received, whatever key it was for — what a control that must outlive a change of key (a
-   * select the reader is working in, a panel half filled in) keeps drawing while the next page is read or when it cannot be.
-   * A hook belongs to one study (the study page is keyed by it), so this is never another study's answer.
+   * The newest answer to **this** key, kept across a re-read of it (so a refresh does not blank the table) and gone the moment the key
+   * changes or a read of it fails: a table drawn from it is the one the request asked for. Nothing else may be drawn as a result.
    */
   last: T | null;
+  /** The same key is being read again while `last` stays on screen: the page says 「正在刷新」 (`VcrRefreshingNote`). */
+  refreshing: boolean;
+  /**
+   * The newest answer to any key, a failed one included — for a control the reader is working in (a select, a half-filled panel)
+   * that must not unmount when the key moves. Never rows, never a heading, never a number a result is read from; a page that
+   * draws results from it shows another request's answer as this one's (review F07).
+   * A hook belongs to one study (the study page is keyed by it), so this is never another study's answer.
+   */
+  carried: T | null;
 }
 
 export function useVcrLoad<T>(key: string, load: () => Promise<T>): VcrLoadResult<T> {
-  const [state, setState] = useState<VcrLoad<T>>({ kind: "loading" });
-  const [last, setLast] = useState<T | null>(null);
+  // Every answer is kept with its key, and what the page is handed is derived against the key of this render: the render that
+  // follows a key change (before any effect runs) already reads `loading`, not the previous key's rows.
+  const [settled, setSettled] = useState<{ key: string; state: VcrLoad<T> }>({ key, state: { kind: "loading" } });
+  const [carried, setCarried] = useState<T | null>(null);
+  const [reading, setReading] = useState<string | null>(null);
   const [round, setRound] = useState(0);
   const loader = useRef(load);
   loader.current = load;
-  const shownKey = useRef(key);
   // The key of the answer on screen, if any: a failure of a read of the same key keeps it (and says so), of another key does not.
   const answeredKey = useRef<string | null>(null);
   const report = useContext(VcrRefreshContext);
@@ -82,26 +93,25 @@ export function useVcrLoad<T>(key: string, load: () => Promise<T>): VcrLoadResul
 
   useEffect(() => {
     let live = true;
-    if (shownKey.current !== key) {
-      shownKey.current = key;
-      setState({ kind: "loading" });
-    }
+    setReading(key);
     Promise.resolve()
       .then(() => loader.current())
       .then(
-        (data) => { if (live) { answeredKey.current = key; setState({ kind: "ready", data }); setLast(data); reporter.current?.(reportId, null); } },
+        (data) => { if (live) { answeredKey.current = key; setSettled({ key, state: { kind: "ready", data } }); setCarried(data); setReading(null); reporter.current?.(reportId, null); } },
         (error: unknown) => {
           if (!live) return;
+          setReading(null);
           if (reporter.current && answeredKey.current === key && !isVcrOff(error) && !isVcrMissing(error)) {
             reporter.current(reportId, { message: webErrorMessage(error, { fallback: "" }), retry: () => retry.current() });
             return;
           }
-          setState({
+          answeredKey.current = null;
+          setSettled({ key, state: {
             kind: "error",
             message: webErrorMessage(error, { fallback: "暂时无法读取，请稍后重试。" }),
             off: isVcrOff(error),
             missing: isVcrMissing(error),
-          });
+          } });
         },
       );
     return () => { live = false; };
@@ -119,7 +129,14 @@ export function useVcrLoad<T>(key: string, load: () => Promise<T>): VcrLoadResul
     seenVersion.current = following;
     if (following !== null) setRound((value) => value + 1);
   }, [following]);
-  return { state, reload, last };
+  const state: VcrLoad<T> = settled.key === key ? settled.state : { kind: "loading" };
+  const last = state.kind === "ready" ? state.data : null;
+  return { state, reload, last, refreshing: reading === key && state.kind === "ready", carried };
+}
+
+/** The one sentence for a re-read of what is on screen. */
+export function VcrRefreshingNote() {
+  return <p role="status" data-vcr-refreshing="" className="text-caption text-text-3">正在刷新</p>;
 }
 
 /** A route that did not answer, with 重试. */

@@ -68,10 +68,12 @@ export function PatientTable({ studyId, source, result, title, labels, arm = nul
   const offset = paging.view === view ? paging.offset : 0;
 
   const sortText = sort ? `${sort.descending ? "-" : ""}${sort.column}` : null;
-  const { state, reload, last } = useVcrLoad(`${studyId}:rows:${source}:${view}:${offset}`, () => getVcrRows(studyId, source, {
+  const { state, reload, last, carried } = useVcrLoad(`${studyId}:rows:${source}:${view}:${offset}`, () => getVcrRows(studyId, source, {
     result, offset, limit: pageSize, sort: sortText, arm, filters: Object.fromEntries(Object.entries(filters).filter(([, text]) => text)),
   }));
-  const page: VcrRowsPage | null = state.kind === "ready" ? state.data : last;
+  // Another page's rows stay (dimmed, aria-busy) only while this one is being read, so paging does not blank the table; once this
+  // page's read has failed nothing else is drawn in its place.
+  const page: VcrRowsPage | null = state.kind === "error" ? null : last ?? carried;
 
   // A page that was asked for and came back empty (the table shrank under it) goes back to the first.
   const emptied = useRef(false);
@@ -146,7 +148,7 @@ export function PatientTable({ studyId, source, result, title, labels, arm = nul
     </div>
   ) : undefined;
 
-  if (state.kind === "error" && !page) {
+  if (state.kind === "error" && !sort) {
     return (
       <Section title={title}>
         <DataTable label={title} columns={[]} rows={[]} rowKey={() => ""} state="error" errorMessage={state.message} onRetry={reload} />
