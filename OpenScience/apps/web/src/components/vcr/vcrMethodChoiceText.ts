@@ -61,7 +61,8 @@ const ruleLabels: Record<string, string> = {
 /** Words read only at their own path, because the same short word means something else elsewhere: the shape of a mean curve, and which value a dropout looks at. */
 const pathLabels: Record<string, Record<string, string>> = {
   "pk.interaction:victim.drug": { midazolam: "咪达唑仑" },
-  "pk.interaction:perpetrator.drug": { rifampicin: "利福平", ketoconazole: "酮康唑" },
+  "pk.interaction:perpetrator.drug": { rifampicin: "利福平", ketoconazole: "酮康唑", clarithromycin: "克拉霉素" },
+  "pk.interaction:perpetrator.inactivationSet": { polasek_hlm: "Polasek 与 Miners 2006 的人肝微粒体常数（三组的中位组）", mayhew_hlm: "Mayhew 2000 的人肝微粒体常数（灭活最强）", ito_hlm: "Ito 2003 的人肝微粒体常数（灭活最弱）" },
   "pk.interaction:perpetrator.inhibition": { competitive: "竞争性抑制", noncompetitive: "非竞争性抑制", mixed: "混合抑制（论文中拟合最好的一种）" },
   "pk.interaction:victim.route": { oral: "口服", iv: "静脉" },
   "decision.value_of_information:source": { two_arm_continuous: "两组连续终点试验的功效（引擎按每个选项的人数计算）", table: "调用方给出的收益和输入抽样" },
@@ -244,6 +245,7 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "an effect that is a share of the control arm's worsening, with the share given only as optimistic, base and pessimistic values (a threshold is reported, never a probability), the control worsening uncertain, and a natural-history cohort of 200": "效应是对照组恶化幅度的一个比例，只给乐观、基线、悲观三个值（只报转折点，不给概率），对照组恶化幅度不确定，并问一个 200 人的自然病程队列值多少"
   },
   "pk.interaction": {
+    "intravenous midazolam 0.05 mg per kilogram (3.5 mg) as a 30-minute infusion two hours after the last of fourteen clarithromycin 500 mg twice-daily doses, under the median set of in-vitro inactivation constants": "克拉霉素每天两次、每次 500 mg，连用 7 天，最后一次后 2 小时静脉滴注咪达唑仑 3.5 mg（每公斤 0.05 mg，30 分钟），用三组体外灭活常数中的中位组",
     "intravenous midazolam 1 mg given with the sixth of ketoconazole 200 mg daily doses (the published validation design), under the mixed inhibition model": "酮康唑每天 200 mg、连用 6 天，第 6 次同时静脉给咪达唑仑 1 mg（论文验证过的方案），用混合抑制模型",
     "a 3 mg oral midazolam dose 12 hours after the last of seven daily 75 mg rifampicin doses, over 48 hours, in an 80 kg adult": "利福平每天 75 mg、连用 7 天，最后一次后 12 小时口服咪达唑仑 3 mg，观察 48 小时，体重 80 kg 的成人",
     "the same victim as a 30-minute intravenous infusion of 2 mg after 600 mg rifampicin daily for ten days, a 70 kg adult": "利福平每天 600 mg、连用 10 天，最后一次后 24 小时静脉滴注咪达唑仑 2 mg（30 分钟），体重 70 kg 的成人"

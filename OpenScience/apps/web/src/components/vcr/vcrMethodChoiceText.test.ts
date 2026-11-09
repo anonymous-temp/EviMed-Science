@@ -31,7 +31,7 @@ it("covers all declared choices and authored examples of all preserved method-fo
     }
     for (const example of VCR_SCENARIO_EXAMPLES[method]) expect(methodExampleLabel(method, example.label), `${method}:${example.label}`).toMatch(/[\u3400-\u9fff]/);
   }
-  expect(count).toBe(262); expect(values.size).toBe(274); expect(methods.flatMap(method => VCR_SCENARIO_EXAMPLES[method])).toHaveLength(96);
+  expect(count).toBe(263); expect(values.size).toBe(278); expect(methods.flatMap(method => VCR_SCENARIO_EXAMPLES[method])).toHaveLength(97);
   for (const value of [...VCR_ROW_RULE_OPS, ...VCR_ROW_RULE_COMPARATORS]) expect(ruleChoiceLabel(value)).not.toBe(value);
   expect(Object.keys(VCR_LONGITUDINAL_METHODS)).toHaveLength(4);
 });

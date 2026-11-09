@@ -31,7 +31,7 @@ test("the kind is a result of its own, read on the patients tab, filed under the
 });
 
 test("a perpetrator or a victim the published model does not carry is refused by name, never run with a stand-in", () => {
-  const job = (scenario) => ({ jobId: "job_1", studyId: "std_1", protocolVersion: 1, seed: 1, cpuSecondsLimit: 600, inputs: [{ kind: "assumption", id: "asm_1@1" }], kind: "pk_interaction", method: "pk.interaction", methodVersion: "1.1.0", scenario });
+  const job = (scenario) => ({ jobId: "job_1", studyId: "std_1", protocolVersion: 1, seed: 1, cpuSecondsLimit: 600, inputs: [{ kind: "assumption", id: "asm_1@1" }], kind: "pk_interaction", method: "pk.interaction", methodVersion: "1.2.0", scenario });
   const good = { victim: { drug: "midazolam", doseMg: 3 }, perpetrator: { drug: "rifampicin", doseMg: 75, doses: 7 } };
   assert.deepEqual(validateEngineJob(job(good)), []);
   assert.deepEqual(validateEngineJob(job({ ...good, perpetrator: { ...good.perpetrator, drug: "itraconazole" } })).map((i) => `${i.code}@${i.field}`), ["scenario_value_invalid@scenario.perpetrator.drug"]);
@@ -79,13 +79,13 @@ test("a result of another kind, or a superseded one, makes no card", () => {
   assert.deepEqual(presentPbpkInteractions({ allResults: [{ ...base, kind: "pk_interaction", supersededBy: "x" }], stale: [] }, { nodeOf: () => "n" }), []);
 });
 
-test("the ketoconazole model is carried and its sibling inhibitors are refused by name", () => {
-  const job = (scenario) => ({ jobId: "job_1", studyId: "std_1", protocolVersion: 1, seed: 1, cpuSecondsLimit: 600, inputs: [{ kind: "assumption", id: "asm_1@1" }], kind: "pk_interaction", method: "pk.interaction", methodVersion: "1.1.0", scenario });
+test("the ketoconazole model is carried and the inhibitors with no model are refused by name", () => {
+  const job = (scenario) => ({ jobId: "job_1", studyId: "std_1", protocolVersion: 1, seed: 1, cpuSecondsLimit: 600, inputs: [{ kind: "assumption", id: "asm_1@1" }], kind: "pk_interaction", method: "pk.interaction", methodVersion: "1.2.0", scenario });
   const ktz = { victim: { drug: "midazolam", doseMg: 1, route: "iv" }, perpetrator: { drug: "ketoconazole", doseMg: 200, doses: 6, gapH: 0 } };
   assert.deepEqual(validateEngineJob(job(ktz)), []);
   assert.deepEqual(validateEngineJob(job({ ...ktz, perpetrator: { ...ktz.perpetrator, inhibition: "noncompetitive" } })), []);
   assert.deepEqual(validateEngineJob(job({ ...ktz, perpetrator: { ...ktz.perpetrator, inhibition: "irreversible" } })).map((i) => `${i.code}@${i.field}`), ["scenario_value_invalid@scenario.perpetrator.inhibition"]);
-  for (const drug of ["itraconazole", "clarithromycin", "erythromycin", "diltiazem"]) {
+  for (const drug of ["itraconazole", "erythromycin", "diltiazem"]) {
     assert.deepEqual(validateEngineJob(job({ ...ktz, perpetrator: { ...ktz.perpetrator, drug } })).map((i) => `${i.code}@${i.field}`), ["scenario_value_invalid@scenario.perpetrator.drug"], drug);
   }
   assert.ok(validateEngineJob(job({ ...ktz, perpetrator: { ...ktz.perpetrator, drug: "rifampicin", inhibition: "mixed" } })).length > 0, "an inhibition model on an inducer is not a field of it");
@@ -119,4 +119,41 @@ test("an oral dose and a dose the paper did not validate run and are said to be 
   assert.match(card.premises.find((p) => p.key === "pbpk_inhibition").value, /^竞争性抑制/);
   assert.ok(card.premises.filter((p) => p.decisive).length <= 6);
   assert.ok(card.premises.some((p) => p.key === "assumed_weightKg" && /没有用到/.test(p.value)), "a stated weight is not an input of this model, and the page says so");
+});
+
+test("clarithromycin is carried as an assembled perpetrator with a named set of in-vitro constants, and an unknown set is refused", () => {
+  const job = (scenario) => ({ jobId: "job_1", studyId: "std_1", protocolVersion: 1, seed: 1, cpuSecondsLimit: 600, inputs: [{ kind: "assumption", id: "asm_1@1" }], kind: "pk_interaction", method: "pk.interaction", methodVersion: "1.2.0", scenario });
+  const clr = { victim: { drug: "midazolam", doseMg: 4 }, perpetrator: { drug: "clarithromycin", doseMg: 500, intervalH: 12, doses: 14, gapH: 2 } };
+  assert.deepEqual(validateEngineJob(job(clr)), []);
+  assert.deepEqual(validateEngineJob(job({ ...clr, perpetrator: { ...clr.perpetrator, inactivationSet: "mayhew_hlm" } })), []);
+  assert.deepEqual(validateEngineJob(job({ ...clr, perpetrator: { ...clr.perpetrator, inactivationSet: "fitted" } })).map((i) => `${i.code}@${i.field}`), ["scenario_value_invalid@scenario.perpetrator.inactivationSet"]);
+  assert.ok(validateEngineJob(job({ ...clr, perpetrator: { ...clr.perpetrator, drug: "ketoconazole", inactivationSet: "mayhew_hlm" } })).length > 0, "an inactivation set on a reversible inhibitor is not a field of it");
+});
+
+test("the clarithromycin card says the perpetrator was assembled, names the constant set and its spread, and says the perpetrator's own exposure is too high", () => {
+  const card = cardOf("clarithromycin-oral-compared");
+  assert.equal(card.perpetrator, "克拉霉素");
+  assert.equal(card.weightKg, null);
+  assert.match(card.lead, /^合用后，咪达唑仑的曲线下面积是单用时的 4\.\d+ 倍/);
+  assert.match(card.lead, /酶被不可逆灭活的结果：给药时肝脏 CYP3A4 活性剩下用药前的 \d+(\.\d+)?%/);
+  assert.doesNotMatch(card.lead, /诱导/);
+  assert.match(card.citation, /不是已发表的完整模型/);
+  const decisive = card.premises.filter((p) => p.decisive).map((p) => p.key);
+  assert.deepEqual(decisive, ["pbpk_model", "pbpk_person", "pbpk_regimen", "pbpk_inactivation", "pbpk_perpetrator_exposure"]);
+  assert.match(card.premises.find((p) => p.key === "pbpk_model").value, /不是一个已发表的完整模型/);
+  assert.match(card.premises.find((p) => p.key === "pbpk_model").value, /没有为了贴近临床结果调过任何一个数/);
+  assert.match(card.premises.find((p) => p.key === "pbpk_inactivation").value, /29\.5.*相差五倍.*3\.5、4\.6、11\.5.*7 倍/);
+  assert.match(card.premises.find((p) => p.key === "pbpk_perpetrator_exposure").value, /实测是 2\.33 mg\/L 和 15\.9 mg·h\/L.*偏高.*不能把它读成对模型的验证/);
+  const defaulted = card.premises.find((p) => p.key === "assumed_perpetrator.inactivationSet");
+  assert.ok(defaulted && /三组.*中位|median/.test(defaulted.value) && defaulted.source === "default", "the default set is a stated default, with its rule");
+  assert.ok(!words(card).some((w) => BACK_OFFICE.test(w) || /NaN|undefined|null/.test(w)), words(card).filter((w) => BACK_OFFICE.test(w) || /NaN|undefined|null/.test(w)).join(" | "));
+});
+
+test("a clarithromycin dose that was not compared is an extrapolation, and a chosen set is worded", () => {
+  const card = cardOf("clarithromycin-iv-outside");
+  assert.equal(card.route, "iv");
+  assert.deepEqual(card.premises.filter((p) => p.key.startsWith("pbpk_outside_")).map((p) => p.key), ["pbpk_outside_perpetrator_dose"]);
+  assert.match(card.premises.find((p) => p.key === "pbpk_inactivation").value, /^人肝微粒体常数（Mayhew 2000/);
+  assert.ok(!card.premises.some((p) => p.key === "pbpk_perpetrator_exposure"), "no clinical value for 1000 mg twice daily: no comparison is made up");
+  assert.match(card.lead, /^合用后，咪达唑仑的曲线下面积是单用时的 \d/);
 });
