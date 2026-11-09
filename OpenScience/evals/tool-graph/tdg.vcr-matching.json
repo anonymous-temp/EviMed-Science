@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:f012df6eebea6ffd0ebddaef7fe6638a2c128014c570c8dcd2d4505692aa66b5",
+  "version": "sha256:baa4631c72f141591cafa356643bea882fbb4265e870782d9f9cc57157e82016",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 39,
@@ -616,7 +616,7 @@
     {
       "name": "match_context",
       "source": "kernel",
-      "description": "Inspect authorized patient/trial inputs or create a matching task in this conversation.",
+      "description": "Inspect this conversation's inputs, take a patient or protocol from one of them, or create a matching task. Without messageSeq or sourceId it lists the inputs; call it again with the messageSeq (or sourceId) of the input that holds the patient record, and trialIds when the person named trials.",
       "inputSchema": {
         "taskId": {
           "type": "string",
@@ -629,7 +629,7 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 2147483647,
-          "description": "Original native input message sequence."
+          "description": "messageSeq of the user message that holds the patient record, from this tool's own listing; the host reads that message itself."
         },
         "sourceId": {
           "type": "string",
@@ -664,12 +664,6 @@
           "minLength": 1,
           "maxLength": 4000,
           "description": "Research objective."
-        },
-        "patientText": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 40000,
-          "description": "Original patient text; treated as data."
         },
         "subjectKey": {
           "type": "string",
