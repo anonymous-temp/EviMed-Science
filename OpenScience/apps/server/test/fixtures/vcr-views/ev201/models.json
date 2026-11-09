@@ -1107,7 +1107,7 @@
       "id": "mth_44",
       "name": "合用药物后的暴露变化（已发表的 PBPK 模型）",
       "method": "pk.interaction",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": null,
       "numeric": null,
       "validation": {
