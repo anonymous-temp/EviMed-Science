@@ -470,29 +470,6 @@ test('older records outside the window are retrieved per criterion and found by 
  }finally{vcr.evidence.judgmentRecord=original;}
 });
 
-test('the dense evidence channel embeds through the paid port under the task envelope and falls back to BM25 when it fails',options,async()=>{
- const original=vcr.evidence.judgmentRecord,ids=['NCT00000923'];
- vcr.evidence.judgmentRecord=async({registryId})=>({status:'ok',trial:{registryId,registry:'clinicaltrials.gov',title:registryId,summary:'Synthetic registration',eligibility:'Inclusion Criteria:\n* Prior myocardial infarction.',conditions:[],interventions:[]}});
- const envelopes=[];let failing=false;
- const vector=text=>/infarction|cardiac/i.test(text)?[1,0]:[0,1];
- const modelPorts={embeddingBatchSize:20,embed:async envelope=>{envelopes.push(envelope);if(failing)return {status:'failed',data:{code:'patient_matching_embedding_failed'}};return {status:'complete',data:{vectors:envelope.input.texts.map(vector)}};}};
- const dense=createPatientMatchingHostAdapter({vcr,documents,config:{...config,patientMatchingEvidenceDense:true},modelPorts});
- try{
-  const filler=Array.from({length:2600},(_,index)=>`Routine observation number ${index+1} is recorded here.`).join(' ');
-  messages.set(++messageSeq,`Record date: 2081-02-03\nPAST HISTORY:\nOld anterior infarction, stented.\n${filler}\nRecord date: 2094-04-07\nThe newest observation closes the record.`);
-  const call={...origin,callId:'dense-call',rootCallId:'dense-call'};
-  const run=(port,operation,input)=>dense.dispatch({port,operation,input,origin:call});
-  const context=(await run('PatientDataPort','context',{messageSeq})).data;
-  await run('ExecutionPort','assess',{phase:'prepare',taskId:context.taskId,registryIds:ids});
-  const found=(await run('PatientDataPort','read',{taskId:context.taskId,source:'patient',action:'search',query:'cardiac event'})).data.passages;
-  assert.ok(found.some(passage=>/Old anterior infarction/.test(passage.text)),'a phrasing with no shared word reaches the passage through the embedding');
-  assert.ok(envelopes.length>=2&&envelopes.every(envelope=>envelope.input.taskId===context.taskId&&Array.isArray(envelope.input.patientSources)&&envelope.input.texts.length<=20),'every request carries the task and the patient sources');
-  failing=true;
-  const lexical=(await run('PatientDataPort','read',{taskId:context.taskId,source:'patient',action:'search',query:'stented'})).data.passages;
-  assert.ok(lexical.some(passage=>/stented/.test(passage.text)),'a failed embedding leaves the BM25 answer');
- }finally{vcr.evidence.judgmentRecord=original;}
-});
-
 test('a project study\'s own conversation resolves to that study, so its matching runs on the plugin there (gate G1)', options, async () => {
   const own = await vcr.store.createStudy({ userId: 'owner', projectId: 'project', name: 'Project study', dataTier: 'T0' });
   assert.notEqual(own.scope, 'conversation');

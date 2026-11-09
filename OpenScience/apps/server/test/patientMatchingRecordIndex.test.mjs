@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { segmentSentences } from '@evimed/domain';
-import { buildRecordIndex, chunkPassages, denseChunkRanking, headingOf, initialEvidenceIds, LruCache, recordDateOf, searchRecordIndex, sentenceContexts, stem, tokenize } from '../src/patientMatchingRecordIndex.mjs';
+import { buildRecordIndex, chunkPassages, headingOf, initialEvidenceIds, LruCache, recordDateOf, searchRecordIndex, sentenceContexts, stem, tokenize } from '../src/patientMatchingRecordIndex.mjs';
 
 function passagesOf(records) {
   const out = [];
@@ -102,15 +102,6 @@ test('the initial window keeps the newest records and retrieves per criterion fr
   assert.deepEqual(initialEvidenceIds(index, ['Prior myocardial infarction', 'Prior revascularisation'], { windowCharacters: 5000, retrievedCharacters: 3000 }), { window, retrieved }, 'same inputs, same bundle');
   const whole = initialEvidenceIds(index, ['x'], { windowCharacters: 10_000_000 });
   assert.equal(whole.retrieved.size, 0);
-});
-
-test('the dense channel embeds chunks once per index and ranks by cosine', async () => {
-  const index = buildRecordIndex(passagesOf(['Alpha beta.\nGamma delta.']));
-  let calls = 0;
-  const embed = async texts => { calls++; return texts.map(text => (/alpha/i.test(text) ? [1, 0] : [0, 1])); };
-  assert.deepEqual(await denseChunkRanking(index, ['alpha'], embed), [0]);
-  await denseChunkRanking(index, ['alpha'], embed);
-  assert.equal(calls, 3, 'chunks embedded once, queries twice');
 });
 
 test('the LRU keeps its capacity and the most recently used entry', () => {

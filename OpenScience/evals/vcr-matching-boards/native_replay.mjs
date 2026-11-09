@@ -548,33 +548,13 @@ async function sessionTurns({ o, spec, run, profile, port, tokenFile, key }) {
   return { code: second.code, signal: second.signal, wallMs: first.wallMs + (two?.wallMs ?? 0) };
 }
 
-/** A direct DashScope embedder for the evidence dense channel (replays only; the server uses its paid port). */
-function denseEmbedder(key, usageFile) {
-  const model = 'qwen3.7-text-embedding', dimensions = 1024, endpoint = 'https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings';
-  return async (texts) => {
-    const vectors = [];
-    for (let at = 0; at < texts.length; at += 10) {
-      const input = texts.slice(at, at + 10).map((text) => text.slice(0, 30000));
-      let payload = null;
-      for (let attempt = 0; attempt < 3 && !payload; attempt++) {
-        const response = await fetch(endpoint, { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify({ model, input, dimensions, encoding_format: 'float' }), signal: AbortSignal.timeout(30000) }).catch(() => null);
-        if (response?.ok) payload = await response.json(); else { await response?.body?.cancel(); await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1))); }
-      }
-      if (!payload) throw new Error('embedding_failed');
-      append(usageFile, { at: new Date().toISOString(), texts: input.length, tokens: payload.usage?.total_tokens ?? null });
-      vectors.push(...payload.data.sort((a, b) => a.index - b.index).map((row) => row.embedding));
-    }
-    return vectors;
-  };
-}
-
 async function main() {
   const { values } = parseArgs({ options: {
     board: { type: 'string' }, cases: { type: 'string' }, out: { type: 'string' }, work: { type: 'string' }, dsh: { type: 'string' }, artifact: { type: 'string' },
     'key-file': { type: 'string' }, 'cap-cny': { type: 'string', default: '25' }, ledger: { type: 'string' }, parallel: { type: 'string', default: '3' },
     limit: { type: 'string' }, pairs: { type: 'string', default: '20' }, orders: { type: 'string' }, collection: { type: 'string' }, 'timeout-min': { type: 'string', default: '45' },
     'stop-file': { type: 'string' }, 'guide-file': { type: 'string' }, 'guide-title': { type: 'string' }, 'billing-factor': { type: 'string', default: '1' },
-    'evidence-dense': { type: 'boolean', default: false }, 'dense-key-file': { type: 'string' }, 'reasoning-effort': { type: 'string' } } });
+    'reasoning-effort': { type: 'string' } } });
   const o = { ...values, limit: values.limit ? Number(values.limit) : null, pairs: Number(values.pairs), parallel: Number(values.parallel) };
   for (const name of ['board', 'cases', 'out', 'work', 'dsh', 'artifact', 'key-file']) if (!o[name]) throw new Error(`--${name} is required`);
   fs.mkdirSync(o.out, { recursive: true });
@@ -589,9 +569,6 @@ async function main() {
   const runs = new Map();
   const guide = o['guide-file'] ? { title: o['guide-title'] ?? 'Benchmark task definition', text: fs.readFileSync(o['guide-file'], 'utf8').trim() } : null;
   const { vcr, documents } = createStores(runs, guide);
-  // --evidence-dense: the match_evidence dense channel with the production embedding model (qwen3.7-text-embedding, 1024 dimensions),
-  // called directly with the DashScope key file; usage goes to <out>/embedding.jsonl.
-  const evidenceEmbed = o['evidence-dense'] ? denseEmbedder(fs.readFileSync(o['dense-key-file'], 'utf8').trim(), path.join(o.out, 'embedding.jsonl')) : null;
   // Session board: discovery over the case's frozen collection (lexical search only; the product's discovery adds rerank and Jev), so a
   // real root that searches gets trials back; every trial found becomes readable to the assessment.
   const discover = o.board === 'session' ? async ({ study, input }) => {
@@ -612,7 +589,7 @@ async function main() {
       return { status: 'complete', summary: `${candidates.length} candidate trials from the frozen collection.`, data: { candidates, coverage: found.coverage ?? 'frozen collection' }, artifacts: [] };
     } finally { await corpus.close?.(); }
   } : null;
-  const adapter = createPatientMatchingHostAdapter({ vcr, documents, config: { patientMatchingEvidenceDense: Boolean(evidenceEmbed), ...(o['reasoning-effort'] ? { patientMatchingReasoningEffort: o['reasoning-effort'] } : {}) }, evidenceEmbed, discover });
+  const adapter = createPatientMatchingHostAdapter({ vcr, documents, config: { ...(o['reasoning-effort'] ? { patientMatchingReasoningEffort: o['reasoning-effort'] } : {}) }, discover });
   const { server, spent, guard } = createServer({ runs, adapter, documents, token, key, ledgerFile, capCny: Number(o['cap-cny']), stopFile: o['stop-file'], billingFactor: Number(o['billing-factor']), decisionsFile: path.join(o.out, 'decisions.jsonl') });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;

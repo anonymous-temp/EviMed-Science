@@ -196,40 +196,20 @@ export function fuseRankings(rankings) {
 }
 
 /** BM25 per query, fused by reciprocal rank; only items with a positive score in some list, ties in stored order.
- * `extraRankings` are further ranked lists of positions (the dense channel) fused alongside.
  * @param {ReturnType<typeof buildRecordIndex>} index @param {string[]} queries
- * @param {{limit?:number,unit?:'sentence'|'chunk',extraRankings?:number[][]}} [options]
+ * @param {{limit?:number,unit?:'sentence'|'chunk'}} [options]
  * @returns {Array<IndexedPassage|Chunk>} */
-export function searchRecordIndex(index, queries, { limit = 20, unit = 'sentence', extraRankings = [] } = {}) {
+export function searchRecordIndex(index, queries, { limit = 20, unit = 'sentence' } = {}) {
   const bm25 = unit === 'chunk' ? index.chunkIndex : index.sentenceIndex;
   const items = unit === 'chunk' ? index.chunks : index.passages;
   const rankings = queries.map(query => scoreBm25(bm25, tokenize(query)).sort((a, b) => b.score - a.score || a.position - b.position).map(item => item.position)).filter(list => list.length);
-  const fused = fuseRankings([...rankings, ...extraRankings.filter(list => list.length)]);
+  const fused = fuseRankings(rankings);
   return fused.slice(0, Math.max(0, limit)).map(position => items[position]);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------
-// Optional dense channel (off by default)
+// Index cache
 // ---------------------------------------------------------------------------------------------------------------------------
-
-const cosine = (/** @type {number[]} */ a, /** @type {number[]} */ b) => {
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
-  return na && nb ? dot / Math.sqrt(na * nb) : 0;
-};
-/** A ranked list of chunk positions by cosine similarity to the queries (best query score per chunk). Chunk vectors are cached
- * on the index, so they are computed once per patient revision. The server's embedder is the paid matching embedding port; the
- * channel runs when `patientMatchingEvidenceDense` is on.
- * @param {ReturnType<typeof buildRecordIndex>} index @param {string[]} queries @param {(texts:string[])=>Promise<number[][]>} embed */
-export async function denseChunkRanking(index, queries, embed) {
-  if (!index.chunkVectors) {
-    const vectors = await embed(index.chunks.map(chunk => chunk.text));
-    index.chunkVectors = new Map(index.chunks.map((chunk, position) => [chunk.chunkId, vectors[position]]));
-  }
-  const queryVectors = await embed(queries);
-  const scored = index.chunks.map((chunk, position) => ({ position, score: Math.max(...queryVectors.map(vector => cosine(vector, /** @type {number[]} */ (index.chunkVectors?.get(chunk.chunkId))))) }));
-  return scored.filter(item => item.score > 0).sort((a, b) => b.score - a.score || a.position - b.position).map(item => item.position);
-}
 
 /** A bounded least-recently-used cache. */
 export class LruCache {

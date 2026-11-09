@@ -1162,8 +1162,6 @@ function vcrSettings(overrides) {
     patientMatchingProfile: patientMatchingConfiguration(overrides),
     // TrialLink ranking policy triallink-3 (2026-11-08): Jev's fit and graded readings, from one request per candidate, are fused with the Qwen3.7 rerank; one request
     // per candidate, bounded by the depth. Off keeps the rerank order alone. The depth bounds lexical, dense, fused, rerank and Jev stages.
-    // Dense (embedding) channel of the match_evidence patient search, fused with BM25; off until measured.
-    patientMatchingEvidenceDense: overrides.patientMatchingEvidenceDense ?? boolEnv("OPEN_SCIENCE_PATIENT_MATCHING_EVIDENCE_DENSE", false),
     // Thinking effort of the clinical assessment child (DeepSeek Flash): "high" (default) or "low".
     patientMatchingReasoningEffort: overrides.patientMatchingReasoningEffort ?? (process.env.OPEN_SCIENCE_PATIENT_MATCHING_REASONING_EFFORT?.trim() === "low" ? "low" : "high"),
     patientMatchingJevEnabled: overrides.patientMatchingJevEnabled ?? boolEnv("OPEN_SCIENCE_PATIENT_MATCHING_JEV_ENABLED", true),
