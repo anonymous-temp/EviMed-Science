@@ -498,6 +498,81 @@ Assessment latency (latency board, 5 SIGIR patients × 20 trials, final code): m
 model calls per execution (79 s and 2 before: the child now searches the record before leaving a decisive criterion unknown). Component latency: Jev with both readings 265 ms median per call against 262 ms for the fit alone (tokens +14%); the whole-record
 rerank 9.0 s per 100 documents per request, three requests in flight.
 
+### 4.8 Round 4 (2026-11-09): the remaining gaps closed, except deployment
+
+Owner: close every open gap but the release. Plugin and core 0.1.11. Development data only for every choice (n2c2 training split,
+Board C as development, the latency board); the n2c2 official test was run once at the end on the final code, as a re-run.
+
+**Two defects in round 3's criterion logic, both found from the data.**
+
+| Defect | How it showed | Fix | Measured |
+|---|---|---|---|
+| "At least n of" was counted from the parts the model listed | a criterion answered with only the condition looked at became not-satisfied in code | code overrules only with what the listed parts prove; a visibly short list keeps the model's verdict | unit tests (no saved run had the case) |
+| The time-window `relation` was read as the criterion's requirement | n2c2 test MI-6MOS false positives 1 → 6 between rounds 2 and 3; on 202 training patients, 8 code reversals, 7 wrong: "MI in the past 6 months" written as `beyond` (where the patient's MI fell) turned a correct not-satisfied into satisfied | code completes a criterion the assessment left unknown and never reverses a decided one (the disagreement stays as an assumption); the field says it is the criterion's wording; the reference date ("now") is set in code to the newest record date | re-scored from saved decisions: train-heldout (162) micro-F1 0.937 → 0.940, MI-6MOS F1 0.81 → 0.91; train-dev (40) 0.941 → 0.939 |
+
+**Arms measured and decided (plugin 0.1.8, development data).**
+
+| Arm | n2c2 train-dev micro / macro F1 | Board C decided / all / false favourable | Latency board, 5 × 20 trials (s) | Decision |
+|---|---|---|---|---|
+| thinking high (kept) | 0.941 / 0.887, CNY 4.88 | 93.1% / 77.1% / 129 | 67, 94, 132, 134, 203 (median 132) | kept |
+| thinking low | 0.933 / 0.884, CNY 4.24 | 92.0% / 77.9% / 117 | 49, 68, 118, 122, 132 (median 118) | not adopted: the tail stays (calls of 13–16k output tokens remain) and quality is lower |
+| evidence dense channel (qwen3.7 embeddings fused with BM25) | 0.927 / 0.870, CNY 5.79 + 255k embedding tokens | 92.2% / 77.5% / 123 | — | removed |
+
+The latency tail is the structured answer of a criterion-heavy trial at about 170 output tokens a second (the slowest calls write
+13–16k tokens with either thinking level), not reasoning; the effort lever (`OPEN_SCIENCE_PATIENT_MATCHING_REASONING_EFFORT`, default
+high) stays for deployments that want the lower cost.
+
+**What the long-record ranking text keeps** (`profile_probe.mjs`, 40 n2c2 training patients, median 16,209 characters; one Flash call
+answers the 13 criteria from the text alone, scored against the gold; CNY 0.88):
+
+| Ranking text | Median characters | Criterion accuracy | "Met" F1 |
+|---|---|---|---|
+| whole record | 16,209 | 0.812 | 0.784 |
+| first 8,000 characters (before round 3) | 8,000 | 0.788 | 0.734 |
+| newest whole sentences (fallback) | 5,977 | 0.829 | 0.792 |
+| profile summary (round 3) | 2,001 | 0.827 | 0.789 |
+
+**Real conversations** (session board: DeepSeek Flash root with the plugin's tools, the clinician's message carrying the record and
+three named trials, a second turn from a simulated clinician who answers every question asked; three real Chinese records and two
+SIGIR patients). The first run (0.1.8) took the patient on its fourth `match_context` call and searched for trials the person had
+named; `match_context` now says the patient is taken by passing a `messageSeq` back (the always-refused `patientText` is out of the
+schema) and the skill says named trials are assessed. On 0.1.9: no failed tool call in any of the five; the patient taken on the second
+`match_context`; first turns 66–133 s; every second turn called `match_correct` then `match_assess` and re-assessed the three pairs
+the answers affected, with replies in the clinician's language. When the clinician had no answers (first run), the assessment stayed
+"cannot confirm" and nothing was filled in.
+
+**Chinese records through the plugin** (30 real Chinese CDSS notes × 5 trials from round 1's candidates, 150 pairs): all saved, none
+failed, median assessment span 64 s, every unknown criterion names its missing fact. 97% of the criterion reasons were English (the
+round-3 prompt is English and named no language); one instruction line makes them follow the record's language — on 10 notes (50 pairs,
+0.1.10) every reason is Chinese.
+
+**TREC 2023 end to end, official scorer** (internal board; a subagent re-scored the full pipeline: candidates from round 3's lexical
+indexes and the dense list, Qwen rerank on the whole record, Jev, triallink-3): nDCG@10 0.533 (round 2: 0.511), eligible P@10 0.481,
+MRR 0.812. A whole-topic lexical query fused beside the round-3 variant gives 0.549 (dev +0.032, test +0.011, n = 37, not significant);
+it is not put into the product (frozen collections serve the benchmarks only, and the patient text would have to be carried through
+four layers). The distance to plain BM25 (0.619) is mostly pooling: our top ten is 57% judged against 78% for the raw retrieval order,
+whose own official score is 0.564 with eligible P@10 0.351; condensed nDCG@10 of the full pipeline is 0.887.
+
+**Board C's false favourable count, analysed** (0.1.7 final run; no tuning on Board C): 116 of 117 are rows the physicians labelled "not
+enough information". The physicians annotated GPT-4's own output: where GPT-4 said "not enough information" they kept it on 255 of 289
+rows, and 97 of our 116 are such rows. On the rows the physicians decided as disqualifying we give one favourable answer (GPT-4: 2).
+Mapping our "silent" basis to "not enough information" would be worse: of 383 silent "not excluded" answers the physicians agreed
+on 307. The clinically real class is 24 inclusions inferred from cited sentences that the physicians judged insufficient (14 of them
+with physician-cited sentences too): a disagreement over how strong an inference is, not a fabrication.
+
+**Final code (0.1.11), the external boards re-run once.**
+
+| Board | Round 3 (0.1.7) | Round 4 (0.1.11) |
+|---|---|---|
+| n2c2 official test (86), a re-run: micro / macro F1 | 0.919 [0.905, 0.934] / 0.825 | **0.927 [0.913, 0.940] / 0.845**; MI-6MOS F1 0.84 → 1.00; CNY 10.1 |
+| Board C: physician-decided / all / false favourable | 92.2% / 77.8% / 117 | **92.5% [89.8, 94.8]** (+5.1 vs GPT-4, +0.9 to +9.8) / 77.6% / 123 |
+| Incidents | 17/17 | 17/17 |
+
+Board A and NIH-TrialBench are ranking boards and the ranking stage did not change this round. The plugin's native and status smokes
+pass on 0.1.11 with no paid call (receipts beside the artefact). Spend this round: DeepSeek ledger CNY 89.9 at full price (all off-peak,
+so about half billed), Qwen rerank CNY 5.4, Jev USD 0.31, embeddings 255k tokens. Not done, by the owner's ruling: deployment, and so
+the real production path, retiring the unread tables and deleting the batch judge, which wait for this release to be live.
+
 ## 4.4 Gaps recorded at the owner's review (2026-11-08 evening)
 
 | Gap | What is known | Next |

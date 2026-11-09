@@ -568,12 +568,12 @@
    "rows": [
     {
      "label": "Linemach",
-     "value": 0.919,
+     "value": 0.927,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      0.905,
-      0.934
+      0.913,
+      0.940
      ]
     },
     {
@@ -680,15 +680,15 @@
    "subtitle_zh": "TrialGPT 标注集中医生给出明确结论的 722 条（共 1,015 条），一致率（%）；Linemach 使用 TrialGPT 自己的任务定义",
    "metric": "Accuracy (%)",
    "scale": 100,
-   "note": "Paired difference Linemach − GPT-4: +4.8 points (+0.3 to +9.9, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows. Each physician's accuracy on these rows is rebuilt from that physician's confusion matrices in TrialGPT 1.0 (proportions per gold label, two decimals) weighted by the released gold counts; the same rebuild gives GPT-4 87.7% against its exact 87.4%, and reproduces the paper's whole-set range (88.6–90.1% against 88.7–90.0%).",
-   "note_zh": "配对差值 Linemach − GPT-4：+4.8 个百分点（+0.3 至 +9.9，按患者自助法）。GPT-4 的成绩由 TrialGPT 公开的预测在同一批条目上计算。每位医生在这批条目上的一致率，由 TrialGPT 1.0 论文中该医生的混淆矩阵（按金标准标签的比例，两位小数）乘以公开的金标准条目数还原；同样的还原对 GPT-4 得到 87.7%（精确值 87.4%），对全部条目得到 88.6–90.1%（论文为 88.7–90.0%）。",
+   "note": "Paired difference Linemach − GPT-4: +5.1 points (+0.9 to +9.8, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows. Each physician's accuracy on these rows is rebuilt from that physician's confusion matrices in TrialGPT 1.0 (proportions per gold label, two decimals) weighted by the released gold counts; the same rebuild gives GPT-4 87.7% against its exact 87.4%, and reproduces the paper's whole-set range (88.6–90.1% against 88.7–90.0%).",
+   "note_zh": "配对差值 Linemach − GPT-4：+5.1 个百分点（+0.9 至 +9.8，按患者自助法）。GPT-4 的成绩由 TrialGPT 公开的预测在同一批条目上计算。每位医生在这批条目上的一致率，由 TrialGPT 1.0 论文中该医生的混淆矩阵（按金标准标签的比例，两位小数）乘以公开的金标准条目数还原；同样的还原对 GPT-4 得到 87.7%（精确值 87.4%），对全部条目得到 88.6–90.1%（论文为 88.7–90.0%）。",
    "rows": [
     {
      "label": "Linemach",
-     "value": 92.2,
+     "value": 92.5,
      "ci95": [
-      89.4,
-      94.6
+      89.8,
+      94.8
      ],
      "source": "this report",
      "kind": "ours"
@@ -729,16 +729,16 @@
    "subtitle": "TrialGPT annotations · 1,015 criteria · 53 patients · label agreement %",
    "metric": "Accuracy (%)",
    "scale": 100,
-   "note": "On the 293 criteria the gold labels \"not enough information\", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, Linemach 42.3%. Linemach was given TrialGPT's own task definition (which asks for as few \"not enough information\" answers as possible).",
+   "note": "On the 293 criteria the gold labels \"not enough information\", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, Linemach 41.0%. Linemach was given TrialGPT's own task definition (which asks for as few \"not enough information\" answers as possible).",
    "rows": [
     {
      "label": "Linemach",
-     "value": 77.8,
+     "value": 77.6,
      "source": "this report",
      "kind": "ours",
      "ci95": [
-      73.5,
-      81.7
+      73.0,
+      81.9
      ],
      "note": "same run as the panel above"
     },
@@ -764,7 +764,7 @@
    "short": "Criterion-level",
    "title_zh": "逐条判断 · 全部标准（%）",
    "subtitle_zh": "TrialGPT 标注集，1,015 条标准，53 位患者，标签一致率（%）",
-   "note_zh": "金标准标为\"信息不足\"的 293 条中，有 255 条就是 GPT-4 自己的回答被标注员保留下来（标注员是看着 GPT-4 的预测做标注的）；在这些条目上 GPT-4 吻合 87.0%，Linemach 42.3%。Linemach 使用的是 TrialGPT 自己的任务定义（要求尽量少答\"信息不足\"）。",
+   "note_zh": "金标准标为\"信息不足\"的 293 条中，有 255 条就是 GPT-4 自己的回答被标注员保留下来（标注员是看着 GPT-4 的预测做标注的）；在这些条目上 GPT-4 吻合 87.0%，Linemach 41.0%。Linemach 使用的是 TrialGPT 自己的任务定义（要求尽量少答\"信息不足\"）。",
    "figure": false
   }
  ],
