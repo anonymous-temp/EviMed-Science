@@ -91,6 +91,7 @@ const CONSTRAINT_KIND_TEXT_ZH = Object.freeze({ error_control: "错误率控制"
 const COUPLING_TEXT_ZH = Object.freeze({
   paired: "同一批模拟患者上的配对比较", independent: "独立随机数上的比较", exact: "精确计算的差", same_seed_different_draws: "随机数不一致，不给出差值的误差",
   paired_without_replicates: "配对，但这个指标没有逐次结果，不给出误差", unavailable: "缺少这个指标",
+  unknown_dependence: "两次计算用的随机数不明，不给出差值的误差", reference_unavailable: "对照方案没有算出结果，这一项没有比较",
 });
 
 /**
@@ -127,7 +128,7 @@ export class VcrExperiments {
     this.config = config;
     this.now = now;
     this.report = report;
-    this.counters = { campaigns: 0, experiments: 0, units: 0, unsupported: 0, repaired: 0, stopped: 0, enqueueFailed: 0 };
+    this.counters = { campaigns: 0, experiments: 0, units: 0, unsupported: 0, repaired: 0, stopped: 0, enqueueFailed: 0, orphansCanceled: 0 };
     if (jobs?.addFinishHook) jobs.addFinishHook((/** @type {any} */ outcome) => this.onJobFinished(outcome), "experiments");
   }
 
@@ -217,12 +218,45 @@ export class VcrExperiments {
         return;
       }
       this.counters.units += 1;
-      await this.store.query(`UPDATE ${SCHEMA}.experiments SET state = jsonb_set(state, '{inFlight,jobId}', to_jsonb($3::text)), revision = revision + 1, updated_at = now()
-        WHERE id = $1 AND study_id = $2 AND state->'inFlight'->>'unitKey' = $4 AND state->'inFlight'->>'jobId' IS NULL`, [id, studyId, job.id, unit.key]);
+      // The job is attached only if this unit is still the one in flight and has no job. A cancel that raced past the enqueue has
+      // cleared the flight and stopped the campaign: the job it returned belongs to nobody, so it is cancelled here (F03).
+      const link = await this.#link(studyId, id, unit, job);
+      if (link === "lost" || link === "linked_canceled") { await this.#cancelOrphan(studyId, job); return; }
       // a unit deduplicated onto a job that already ended (a restart after the job finished) is recorded now
       if (TERMINAL.has(String(job.state))) { await this.#settle(studyId, id, unit.key, job.id); continue; }
       return;
     }
+  }
+
+  /**
+   * Attach an enqueued job to the unit in flight, under the row's lock. `linked`: attached; `linked_canceled`: attached, but a cancel
+   * had already been asked (it read the flight before the job id was there), so the caller cancels the job; `ours`: the unit already
+   * carries this very job (a deduplicated enqueue); `lost`: the flight is gone or holds another job (cancelled or stopped meanwhile).
+   * @param {string} studyId @param {string} id @param {Record<string, any>} unit @param {{ id: string }} job
+   * @returns {Promise<"linked" | "linked_canceled" | "ours" | "lost">}
+   */
+  async #link(studyId, id, unit, job) {
+    return this.store.transaction(async (/** @type {any} */ client) => {
+      const row = (await client.query(`SELECT * FROM ${SCHEMA}.experiments WHERE id = $1 AND study_id = $2 FOR UPDATE`, [id, studyId])).rows[0];
+      const state = object(row?.state);
+      const flight = object(state.inFlight);
+      if (!row || row.status !== "running" || flight.unitKey !== unit.key) return "lost";
+      if (flight.jobId) return flight.jobId === job.id ? "ours" : "lost";
+      await save(client, row, { ...state, inFlight: { ...flight, jobId: job.id } }, row.status);
+      return state.cancelRequested === true ? "linked_canceled" : "linked";
+    });
+  }
+
+  /**
+   * Cancel a job no experiment row owns. A failure is reported and left for `repair()`, which finds the job again by the experiment
+   * it names; the job's idempotency key means a retry never makes a second one.
+   * @param {string} studyId @param {{ id: string }} job
+   */
+  async #cancelOrphan(studyId, job) {
+    try {
+      await this.jobs.cancel(studyId, String(job.id), { actor: "platform" });
+      this.counters.orphansCanceled += 1;
+    } catch (error) { this.report(String(/** @type {any} */ (error)?.code ?? "vcr_experiment_orphan_cancel_failed")); }
   }
 
   /** The finish hook: a campaign unit's job ended (or was cancelled). Idempotent: a unit is recorded once. @param {any} outcome */
@@ -299,7 +333,25 @@ export class VcrExperiments {
       } catch (error) { this.report(String(/** @type {any} */ (error)?.code ?? "vcr_experiment_repair_failed")); }
     }
     this.counters.repaired += repaired;
-    return { campaigns: rows.length, repaired };
+    const orphans = await this.#cancelOrphans();
+    return { campaigns: rows.length, repaired, orphans };
+  }
+
+  /**
+   * Open jobs that name an experiment which does not own them: a campaign unit that is no longer the one in flight (the link lost to a
+   * cancel, or a crash between the enqueue and the cancel of such a job), a campaign arm of a comparison whose cancel was asked.
+   * Cancelling is idempotent, so a job that a concurrent tick is about to link and finds terminal is simply left alone.
+   */
+  async #cancelOrphans() {
+    const rows = await this.store.rows(`SELECT j.id, j.study_id FROM ${SCHEMA}.jobs j
+      JOIN ${SCHEMA}.experiments e ON e.id = j.checkpoint->'experiment'->>'id' AND e.study_id = j.study_id
+      WHERE j.state IN ('queued', 'running', 'awaiting_budget') AND (
+        (e.kind = 'campaign' AND NOT (e.status = 'running' AND e.state->'inFlight'->>'unitKey' = j.checkpoint->'experiment'->>'unitKey'
+          AND (e.state->'inFlight'->>'jobId' IS NULL OR e.state->'inFlight'->>'jobId' = j.id)))
+        OR (e.kind = 'experiment' AND e.state->>'cancelRequested' = 'true'))
+      ORDER BY j.created_at LIMIT $1`, [Number(this.config.vcrCompletionReconcileBatch ?? 20)]);
+    for (const row of rows) await this.#cancelOrphan(String(row.study_id), { id: String(row.id) });
+    return rows.length;
   }
 
   /**
@@ -366,34 +418,46 @@ export class VcrExperiments {
       VALUES ($1, $2, $3, 'experiment', $4, $5::jsonb, '{"arms":{}}'::jsonb, $6::jsonb) ON CONFLICT (study_id, kind, identity) DO NOTHING RETURNING id`,
     [id, study.id, String(userId), identity, JSON.stringify(record), JSON.stringify(originOf(origin))]);
     if (inserted) this.counters.experiments += 1;
-    /** @type {Record<string, any>} */
-    const arms = {};
-    // the arms queued so far are written down whatever happens to the next one, so a failed start keeps what it began (review eng P2-4)
-    const keep = async () => this.store.query(`UPDATE ${SCHEMA}.experiments SET state = $3::jsonb, revision = revision + 1, updated_at = now() WHERE id = $1 AND study_id = $2`,
-      [id, study.id, JSON.stringify({ arms })]);
-    try {
-      for (const arm of record.arms) {
-        if (arm.resultId) { arms[arm.name] = { resultId: arm.resultId }; continue; }
-        const kind = Object.entries(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)).find(([, method]) => method === arm.method)?.[0];
-        const campaignInfo = /** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[arm.method];
-        const runsWithBlock = Boolean(campaignInfo) && campaignInfo.exact !== true && campaignInfo.precisionBlock !== false;
-        const scenario = runsWithBlock && vcrEvaluationAllowed(arm.method, arm.scenario) ? { ...arm.scenario, evaluation: { version: 1 } } : arm.scenario;
-        // arms that draw identically share a seed, so their comparison can be paired; the engine's draw signature confirms it
-        const drawKey = arm.method === "design.simulate" ? vcrCampaignDrawKey({ space: { method: arm.method, scenario: arm.scenario } }, { key: arm.name, set: {} }) : `own:${arm.name}`;
-        try {
-          const { job } = await this.jobs.enqueue({ studyId: study.id, userId: String(userId), kind, scenario, inputs: [], internal: true,
-            seed: vcrCampaignSeed(identity, "experiment", "arm", drawKey), idempotencyKey: `vcr-experiment:${identity.slice(0, 24)}:${sha256(arm.name).slice(0, 12)}`,
-            detail: { resultKind: "experiment_candidate", subjectId: `${id}:${sha256(arm.name).slice(0, 12)}`, experiment: { id, arm: arm.name } } });
-          arms[arm.name] = { jobId: job.id };
-        } catch (error) {
-          if (Number(/** @type {any} */ (error)?.status) !== 400) throw error;
-          arms[arm.name] = { refused: list(/** @type {any} */ (error)?.issues).map((issue) => String(object(issue).code)).slice(0, 5) };
-        }
+    // Each arm is written into the row's state the moment it is enqueued, merged into what is there and never over it, and the cancel
+    // flag is read from the same write: a cancel that arrives while the arms are being queued either finds the arm's job (and cancels
+    // it) or is seen here (and the job just queued is cancelled), so no arm runs untracked (F03b). A failed start keeps what it began.
+    /** @param {string} name @param {Record<string, any>} entry @returns {Promise<boolean>} whether a cancel has been asked */
+    const note = async (name, entry) => (await this.store.one(`UPDATE ${SCHEMA}.experiments SET revision = revision + 1, updated_at = now(),
+      state = jsonb_set(state, '{arms}', COALESCE(state->'arms', '{}'::jsonb) || jsonb_build_object($3::text, $4::jsonb))
+      WHERE id = $1 AND study_id = $2 RETURNING state->>'cancelRequested' AS cancel`, [id, study.id, name, JSON.stringify(entry)]))?.cancel === "true";
+    const stopped = async () => (await this.store.one(`SELECT state->>'cancelRequested' AS cancel FROM ${SCHEMA}.experiments WHERE id = $1 AND study_id = $2`, [id, study.id]))?.cancel === "true";
+    for (const arm of record.arms) {
+      if (arm.resultId) { await note(arm.name, { resultId: arm.resultId }); continue; }
+      if (await stopped()) break;
+      const kind = Object.entries(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)).find(([, method]) => method === arm.method)?.[0];
+      const campaignInfo = /** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[arm.method];
+      const runsWithBlock = Boolean(campaignInfo) && campaignInfo.exact !== true && campaignInfo.precisionBlock !== false;
+      const scenario = runsWithBlock && vcrEvaluationAllowed(arm.method, arm.scenario) ? { ...arm.scenario, evaluation: { version: 1 } } : arm.scenario;
+      // arms that draw identically share a seed, so their comparison can be paired; the engine's draw signature confirms it
+      const drawKey = arm.method === "design.simulate" ? vcrCampaignDrawKey({ space: { method: arm.method, scenario: arm.scenario } }, { key: arm.name, set: {} }) : `own:${arm.name}`;
+      let job;
+      try {
+        // the arms carry no conversation origin: the comparison's own origin wakes the conversation once, when every arm is terminal (R04)
+        job = (await this.jobs.enqueue({ studyId: study.id, userId: String(userId), kind, scenario, inputs: [], internal: true,
+          seed: vcrCampaignSeed(identity, "experiment", "arm", drawKey), idempotencyKey: `vcr-experiment:${identity.slice(0, 24)}:${sha256(arm.name).slice(0, 12)}`,
+          detail: { resultKind: "experiment_candidate", subjectId: `${id}:${sha256(arm.name).slice(0, 12)}`, experiment: { id, arm: arm.name } } })).job;
+      } catch (error) {
+        if (Number(/** @type {any} */ (error)?.status) !== 400) throw error;
+        await note(arm.name, { refused: list(/** @type {any} */ (error)?.issues).map((issue) => String(object(issue).code)).slice(0, 5) });
+        continue;
       }
-    } finally {
-      await keep();
+      if (await note(arm.name, { jobId: job.id })) {
+        await this.jobs.cancel(study.id, String(job.id), { actor: "platform" }).catch((/** @type {any} */ error) => this.report(String(error?.code ?? "vcr_experiment_orphan_cancel_failed")));
+        break;
+      }
     }
     return { created: Boolean(inserted), ...(await this.view(study, id)) };
+  }
+
+  /** How a design experiment ended, for the conversation's one completion and for the run that reads it; see `experimentOutcome`. @param {string} studyId @param {string} id */
+  async completionOf(studyId, id) {
+    const row = await this.store.one(`SELECT * FROM ${SCHEMA}.experiments WHERE id = $1 AND study_id = $2 AND kind = 'experiment'`, [id, studyId]);
+    return row ? experimentOutcome(this.store, row) : null;
   }
 
   // --- reading ------------------------------------------------------------------------------------------------------------------
@@ -494,7 +558,10 @@ export class VcrExperiments {
         // the measure's name rides with its value, so the model boundary's by-name rule can judge it
         return { name: arm.name, status: arm.status, value: measure ? { name, ...measureValue(measure, { kind: "experiment_candidate" }) } : null, precision: measure?.precision ?? null };
       }),
-      contrasts: reference?.evaluation ? arms.filter((arm) => arm !== reference && arm.evaluation).map((arm) => {
+      // A reference that was refused or failed leaves every arm's contrast unassessed, said so; it never leaves the contrast list empty as if
+      // there were nothing to compare (F06, same class as the search's screened-out reference).
+      contrasts: reference && !reference.evaluation ? arms.filter((arm) => arm !== reference).map((arm) => ({ arm: arm.name, against: reference.name,
+        coupling: "reference_unavailable", couplingText: COUPLING_TEXT_ZH.reference_unavailable, difference: null })) : reference?.evaluation ? arms.filter((arm) => arm !== reference && arm.evaluation).map((arm) => {
         const contrast = vcrEvaluationContrast(/** @type {any} */ (arm.evaluation), reference.evaluation, name);
         return { arm: arm.name, against: reference.name, coupling: contrast.coupling, couplingText: COUPLING_TEXT_ZH[/** @type {keyof typeof COUPLING_TEXT_ZH} */ (contrast.coupling)] ?? null,
           difference: contrast.difference == null ? null : { name, ...measureValue({ name, value: contrast.difference, mcse: contrast.mcse ?? undefined, simulated: contrast.mcse != null }, { kind: "experiment_candidate" }) } };
@@ -575,6 +642,51 @@ function diseasePremises(beyond, scenarios) {
 /** The two years of data the Alzheimer parameter set rests on, in weeks (the engine's own constant). */
 const ALZHEIMER_DATA_WEEKS = 104;
 
+/**
+ * Whether a design experiment's arms have all ended, and how, for the one completion it sends to the conversation that started it
+ * (R04). Read from the arms' own jobs, never from the experiment row's `status` (which never leaves its insert default). An arm is
+ * terminal when it holds an attached result, a refusal, or a job that ended; an arm with no record yet is still being queued, unless a
+ * cancel was asked, in which case it will never run. `state` is the job-path vocabulary (`succeeded` / `failed` / `canceled`) and
+ * `partial` says that some arms have no result; `outcome` is the four-way word: succeeded, partial, failed, canceled.
+ * @param {any} store anything with `rows`
+ * @param {{ id: string, study_id: string, manifest: any, state: any }} row the experiment's row
+ * @returns {Promise<{ terminal: boolean, outcome: "succeeded" | "partial" | "failed" | "canceled" | null, state: "succeeded" | "failed" | "canceled" | null,
+ *   partial: boolean, arms: { total: number, complete: number, failed: number, canceled: number, refused: number, pending: number }, finishedAt: string | null }>}
+ */
+export async function experimentOutcome(store, row) {
+  const state = object(row.state);
+  const held = object(state.arms);
+  const names = list(object(row.manifest).arms).map((arm) => String(object(arm).name));
+  const jobIds = names.map((name) => object(held[name]).jobId).filter(Boolean).map(String);
+  const jobs = jobIds.length ? await store.rows(`SELECT id, state, finished_at FROM ${SCHEMA}.jobs WHERE study_id = $1 AND id = ANY($2::text[])`, [row.study_id, jobIds]) : [];
+  const byId = new Map(jobs.map((/** @type {any} */ job) => [String(job.id), job]));
+  const arms = { total: names.length, complete: 0, failed: 0, canceled: 0, refused: 0, pending: 0 };
+  let finished = 0;
+  for (const name of names) {
+    const entry = object(held[name]);
+    if (entry.refused) arms.refused += 1;
+    else if (entry.resultId) arms.complete += 1;
+    else if (entry.jobId) {
+      const job = byId.get(String(entry.jobId));
+      // a job row that is gone cannot produce a result: that arm ended without one
+      const jobState = job ? String(job.state) : "failed";
+      if (job?.finished_at) finished = Math.max(finished, new Date(job.finished_at).getTime());
+      if (jobState === "succeeded") arms.complete += 1;
+      else if (jobState === "canceled") arms.canceled += 1;
+      else if (jobState === "failed") arms.failed += 1;
+      else arms.pending += 1;
+    } else if (state.cancelRequested === true) arms.canceled += 1;
+    else arms.pending += 1;
+  }
+  const ended = arms.total > 0 && arms.pending === 0;
+  if (!ended) return { terminal: false, outcome: null, state: null, partial: false, arms, finishedAt: null };
+  const withoutResult = arms.total - arms.complete;
+  const asked = state.cancelRequested === true && withoutResult > 0;
+  const outcome = withoutResult === 0 ? "succeeded" : asked || (arms.failed === 0 && arms.refused === 0) ? "canceled" : arms.complete === 0 ? "failed" : "partial";
+  return { terminal: true, outcome, state: outcome === "canceled" ? "canceled" : outcome === "failed" ? "failed" : "succeeded",
+    partial: arms.complete > 0 && withoutResult > 0, arms, finishedAt: finished ? new Date(finished).toISOString() : null };
+}
+
 /** @param {Record<string, any> | null} origin */
 function originOf(origin) {
   const value = object(origin);
@@ -624,7 +736,7 @@ export function presentCampaign(row) {
     const all = Object.values(evaluations).map(object);
     return {
       key: candidate.key, index: candidate.index, set: candidate.set, status: String(entry.status ?? "pending"),
-      statusText: VCR_CANDIDATE_STATUS_TEXT_ZH[/** @type {keyof typeof VCR_CANDIDATE_STATUS_TEXT_ZH} */ (entry.status)] ?? "待评估",
+      statusText: entry.role === "reference_only" ? "仅作对照" : VCR_CANDIDATE_STATUS_TEXT_ZH[/** @type {keyof typeof VCR_CANDIDATE_STATUS_TEXT_ZH} */ (entry.status)] ?? "待评估",
       stage: final ? "final" : screening ? "screening" : null, reason: entry.reason ?? null, reasonText: reasonText(entry.reason ?? null),
       objective: { screening, final },
       constraints: list(manifest.constraints).map((constraint, index) => ({
