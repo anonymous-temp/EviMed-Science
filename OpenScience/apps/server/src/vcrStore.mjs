@@ -797,37 +797,61 @@ export class VcrStore extends VcrStoreBase {
   }
 
   /**
-   * The handoff of a study to another conversation (R11): recorded, by whom and when, and revocable. A second grant of the same pair
-   * after a revocation is a new grant. The row is an authorization of the conversation's explicit `studyId`, never a copy of anything.
+   * The handoff of a study to another conversation (R11): recorded, by whom and when, and revocable. One live row per study, session
+   * and person; a grant never rewrites another person's row, and a grant after a revocation is a new row. The row binds the
+   * conversation to the study, it is never a copy of anything.
    * @param {{ studyId: string, sessionId: string, grantedBy: string }} input
    */
   async grantStudyConversation({ studyId, sessionId, grantedBy }) {
-    return studyConversationFromRow(await this.one(`INSERT INTO ${VCR_SCHEMA}.study_conversations (study_id, session_id, granted_by)
-      VALUES ($1, $2, $3) ON CONFLICT (study_id, session_id) DO UPDATE
-        SET granted_by = EXCLUDED.granted_by, granted_at = CASE WHEN study_conversations.revoked_at IS NULL THEN study_conversations.granted_at ELSE now() END, revoked_at = NULL
-      RETURNING *`, [studyId, String(sessionId), String(grantedBy)]));
+    const made = await this.one(`INSERT INTO ${VCR_SCHEMA}.study_conversations (study_id, session_id, granted_by) VALUES ($1, $2, $3)
+      ON CONFLICT (study_id, session_id, granted_by) WHERE revoked_at IS NULL DO NOTHING RETURNING *`, [studyId, String(sessionId), String(grantedBy)]);
+    return studyConversationFromRow(made ?? await this.one(`SELECT * FROM ${VCR_SCHEMA}.study_conversations
+      WHERE study_id = $1 AND session_id = $2 AND granted_by = $3 AND revoked_at IS NULL`, [studyId, String(sessionId), String(grantedBy)]));
   }
 
-  /** @param {string} studyId @param {string} sessionId @returns {Promise<boolean>} whether a grant was in force and is now revoked */
-  async revokeStudyConversation(studyId, sessionId) {
-    return Boolean(await this.one(`UPDATE ${VCR_SCHEMA}.study_conversations SET revoked_at = now()
-      WHERE study_id = $1 AND session_id = $2 AND revoked_at IS NULL RETURNING study_id`, [studyId, String(sessionId)]));
+  /**
+   * Take a handoff back: every live row of the pair, or only the rows one person wrote.
+   * @param {string} studyId @param {string} sessionId @param {string | null} [grantedBy]
+   * @returns {Promise<boolean>} whether a grant was in force and is now revoked
+   */
+  async revokeStudyConversation(studyId, sessionId, grantedBy = null) {
+    const rows = await this.rows(`UPDATE ${VCR_SCHEMA}.study_conversations SET revoked_at = now()
+      WHERE study_id = $1 AND session_id = $2 AND revoked_at IS NULL AND ($3::text IS NULL OR granted_by = $3) RETURNING id`, [studyId, String(sessionId), grantedBy]);
+    return rows.length > 0;
   }
 
-  /** The grant in force for one study and conversation, or null. @param {string} studyId @param {string} sessionId */
-  async studyConversationGrant(studyId, sessionId) {
+  /** The newest grant in force for one study and conversation (one person's when named), or null. @param {string} studyId @param {string} sessionId @param {string | null} [grantedBy] */
+  async studyConversationGrant(studyId, sessionId, grantedBy = null) {
     return studyConversationFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.study_conversations
-      WHERE study_id = $1 AND session_id = $2 AND revoked_at IS NULL`, [studyId, String(sessionId)]));
+      WHERE study_id = $1 AND session_id = $2 AND revoked_at IS NULL AND ($3::text IS NULL OR granted_by = $3)
+      ORDER BY granted_at DESC, id DESC LIMIT 1`, [studyId, String(sessionId), grantedBy]));
   }
 
-  /** The handoff of one study to one conversation whether or not it still stands (a revoked one says so), or null. @param {string} studyId @param {string} sessionId */
-  async studyConversationHandoff(studyId, sessionId) {
-    return studyConversationFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.study_conversations WHERE study_id = $1 AND session_id = $2`, [studyId, String(sessionId)]));
+  /**
+   * The study a conversation is bound to by one person's handoff: that person's newest live grant for the session, whose study still
+   * exists. A conversation without one works on its own study as always.
+   * @param {string} sessionId @param {string} grantedBy
+   */
+  async boundStudyGrant(sessionId, grantedBy) {
+    return studyConversationFromRow(await this.one(`SELECT c.* FROM ${VCR_SCHEMA}.study_conversations c JOIN ${VCR_SCHEMA}.studies s ON s.id = c.study_id AND s.deleted_at IS NULL
+      WHERE c.session_id = $1 AND c.granted_by = $2 AND c.revoked_at IS NULL ORDER BY c.granted_at DESC, c.id DESC LIMIT 1`, [String(sessionId), String(grantedBy)]));
+  }
+
+  /** Whether the conversation already belongs to somebody else: a study of another person is bound to it, or another person handed a study to it. @param {string} sessionId @param {string} userId */
+  async sessionClaimedByOther(sessionId, userId) {
+    return Boolean(await this.one(`SELECT 1 AS taken WHERE EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.studies WHERE conversation_session_id = $1 AND user_id <> $2)
+      OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.study_conversations WHERE session_id = $1 AND granted_by <> $2)`, [String(sessionId), String(userId)]));
+  }
+
+  /** The newest handoff of one study to one conversation by one person whether or not it still stands (a live one first, a revoked one says so), or null. @param {string} studyId @param {string} sessionId @param {string | null} [grantedBy] */
+  async studyConversationHandoff(studyId, sessionId, grantedBy = null) {
+    return studyConversationFromRow(await this.one(`SELECT * FROM ${VCR_SCHEMA}.study_conversations WHERE study_id = $1 AND session_id = $2 AND ($3::text IS NULL OR granted_by = $3)
+      ORDER BY (revoked_at IS NULL) DESC, granted_at DESC, id DESC LIMIT 1`, [studyId, String(sessionId), grantedBy]));
   }
 
   /** Every conversation a study was handed to, revoked ones included (the study page lists them). @param {string} studyId */
   async studyConversationGrants(studyId) {
-    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.study_conversations WHERE study_id = $1 ORDER BY granted_at DESC LIMIT 100`, [studyId]))
+    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.study_conversations WHERE study_id = $1 ORDER BY granted_at DESC, id DESC LIMIT 100`, [studyId]))
       .map((row) => studyConversationFromRow(row));
   }
 

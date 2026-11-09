@@ -23,9 +23,9 @@ export function createVcrCompletionResolver({ accounts,studies,sessions,allows,a
     const study=row.study_id ? await studies.getStudy(row.user_id,row.study_id) : null;
     // A study handed to this conversation (R11) answers there while the grant stands, and a revoked grant has no conversation to wake;
     // without a grant, a conversation-scoped study answers only in the conversation it belongs to.
-    const handoff=study && study.conversationSessionId!==row.root_session_id ? await studies.studyConversationHandoff?.(study.id,row.root_session_id) : null;
+    const handoff=study && study.conversationSessionId!==row.root_session_id ? await studies.studyConversationHandoff?.(study.id,row.root_session_id,String(row.user_id)) : null;
     if(row.study_id && (!study || study.projectId!==row.project_id || !['active','draft'].includes(study.status)
-      || (handoff ? handoff.revokedAt!==null || handoff.grantedBy!==String(row.user_id) : study.scope==='conversation' && study.conversationSessionId!==row.root_session_id))) return {user,project,session:null};
+      || (handoff ? handoff.revokedAt!==null : study.scope==='conversation' && study.conversationSessionId!==row.root_session_id))) return {user,project,session:null};
     return {user,project,session:await sessions.get(project,row.root_session_id) ?? await adoptSession?.(project,row.root_session_id) ?? null};
   };
 }
@@ -93,6 +93,7 @@ export class VcrConversationCompletions {
         VALUES ($1,$2,NULL,$3,$4,$5,'campaign',$6,$7,$8::jsonb,$9,$10) ON CONFLICT DO NOTHING`,
       [`vcc_${fingerprint}`,row.study_id,row.user_id,row.project_id,origin.rootSessionId,vcrCompletionDispatchId(fingerprint),fingerprint,
         JSON.stringify({completedAt:row.state?.stop?.at ?? row.updated_at,state,campaignId:row.id,stopReason:reason,resultId:null,resultVersion:null,partial:false,error:null,
+          objective:view.objective?.pick?{phrase:view.objective.pick.phrase,sentence:view.objective.pick.sentence}:null,
           best:shown?{index:shown.index+1,set:shown.set,objective:(v=>v?{value:v.value,mcse:v.mcse ?? null,unit:v.unit ?? null}:null)(shown.objective.final ?? shown.objective.screening),source:view.best?'feasible':'undecided'}:null,
           robust:view.robust?{scenarios:view.robust.scenarios.map(x=>x.name),cheapestAcceptable:view.robust.cheapestAcceptable?{index:view.robust.cheapestAcceptable.index+1}:null,cheapestUnderBase:view.robust.cheapestUnderBase?{index:view.robust.cheapestUnderBase.index+1}:null,sameDesign:view.robust.sameDesign,statement:view.robust.statement}:null,
           runId:origin.runId,callId:origin.callId ?? null}),invalid?'unavailable':'pending',invalid?'vcr_completion_origin_invalid':null]);
@@ -300,7 +301,7 @@ export class VcrConversationCompletions {
           if(await this.disposition(other,owned.project)===null) siblings.push(other);
         }
         const label={succeeded:'计算已完成',failed:'计算未完成',canceled:'计算已取消'}[outcome.state] ?? '计算状态有更新';
-        const campaignText=outcome.campaignId ? `设计搜索已结束：${VCR_CAMPAIGN_STOP_TEXT_ZH[outcome.stopReason] ?? '已停止。'}${outcome.robust?.statement ? outcome.robust.statement : outcome.best ? `${outcome.best.source==='feasible'?'在这些假设下，满足约束且最省':'最接近'}的方案是第 ${outcome.best.index} 个。` : ''}` : null;
+        const campaignText=outcome.campaignId ? `设计搜索已结束：${VCR_CAMPAIGN_STOP_TEXT_ZH[outcome.stopReason] ?? '已停止。'}${outcome.robust?.statement ? outcome.robust.statement : outcome.best ? `${outcome.best.source==='feasible'?(outcome.objective?.sentence ? `在这些假设下，${outcome.objective.sentence}` : '在这些假设下，满足全部约束的方案'):'最接近'}是第 ${outcome.best.index} 个。` : ''}` : null;
         const experimentText=outcome.experimentId ? `方案对比已结束：${{succeeded:'每一组都有结果',partial:`${outcome.arms?.complete ?? 0} 组有结果，${(outcome.arms?.total ?? 0)-(outcome.arms?.complete ?? 0)} 组没有结果`,failed:'没有一组算出结果',canceled:'已按要求停止'}[outcome.outcome] ?? '已结束'}。` : null;
         const text = experimentText ? `${experimentText}请继续原来的任务，读取实际结果再解释。` : campaignText ? `${campaignText}请继续原来的任务，读取实际结果再解释。` : `${label}${outcome.partial ? '，保留了部分结果' : ''}。请继续原来的任务，读取实际结果再解释。`;
         const systemSupplement = outcome.experimentId

@@ -177,12 +177,11 @@ test("the token names the account and the study; there is no id parameter", asyn
   assert.equal(res.json().data.studyId, "std_1");
   assert.deepEqual(calls[0], ["read", "study", {}]);
 
-  // A study named in the body is not honoured here: only a conversation holding a grant may name one (R11), and a call that is no
-  // native conversation's has none (before R11 this was refused as an unknown field, 400 vcr_request_invalid).
+  // A study named in the body is no field of any call: a handed-over study binds the conversation (R11, reworked), and a call never names one.
   const other = response();
   await handler(request("/internal/vcr/v1/read", { what: "study", studyId: "std_2" }), other);
-  assert.equal(other.status, 403);
-  assert.equal(other.json().code, "vcr_study_not_granted");
+  assert.equal(other.status, 400);
+  assert.equal(other.json().code, "vcr_request_invalid");
 });
 
 test("a missing or invalid token is 401; the module off is a named 503", async () => {
@@ -2167,7 +2166,8 @@ test("the research question is written a field at a time: every field optional, 
 
   const first = await write({ question: "多奈哌齐在 78 周能否延缓 ADAS-Cog 恶化？", basis: "person_stated" });
   assert.deepEqual([first.ok, first.ids, first.issues], [true, ["main@1"], []], JSON.stringify(first));
-  assert.deepEqual(calls.find((call) => call[0] === "question"), ["question", "main", "person_stated", "runtime", "question"]);
+  assert.deepEqual(calls.find((call) => call[0] === "question"), ["question", "main", "model_assembled", "runtime", "question"],
+    "a run that claims the field as the person's own words is recorded as the assistant's reading (review eng round 2, P2-7)");
 
   // a second field is the next version; the first field stays
   const second = await write({ variable: { endpoint: "ADAS-Cog 11", timePoint: "第 78 周" }, intercurrentEvents: [{ event: "因不良反应停药", strategy: "treatment_policy", mechanism: "停药后继续随访" }] });

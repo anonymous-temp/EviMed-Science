@@ -132,6 +132,9 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
 )
+# The kinds a conversation never starts (the platform's local forecast provider queues it): they are in the domain's list above and not in the
+# always-on `kind` enum of `vcr_simulate`, which a run reads at every turn.
+PLATFORM_QUEUED_KINDS = ("individualize_forecast",)
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
 POOLING_CALIBRES = ("closest", "overall", "next_closest")
 # The empirical priors for the between-study spread a pooling may name (`packages/domain/src/vcrEvidencePriors.mjs`); a prior the run types in is not offered here.
@@ -330,8 +333,8 @@ def _detailed_tool_definitions():
                 "reads the trial's title, phase, status and sites from the registry, judges the named patients against the criteria (its eligibility "
                 "lines, in the same shape as a protocol's) and ranks the trials; a language criterion of a trial is answered with what: language_judgment "
                 "and candidateTrialId."
-                " what: research_question writes the study's question (read it with the same what) a field at a time from what the person said, "
-                "basis person_stated or model_assembled; a field not written is a default, never a form to fill."
+                " what: research_question writes the study's question (read it with the same what) a field at a time from what the person said; "
+                "a field not written is a default, never a form to fill."
                 " what: trial_benchmark imports an existing external trial-effect JSON via data {predictionsFile: workspace-relative path}; "
                 "actual effects are read from preserved evidence. Never generate the file's predictions yourself."
             ),
@@ -377,7 +380,7 @@ def _detailed_tool_definitions():
                 "type": "object",
                 "properties": {
                     "action": {"type": "string", "enum": list(SIMULATE_ACTIONS), "default": "start"},
-                    "kind": {"type": "string", "enum": [*JOB_KINDS, "search", "people"]},
+                    "kind": {"type": "string", "enum": [*(kind for kind in JOB_KINDS if kind not in PLATFORM_QUEUED_KINDS), "search", "people"]},
                     "scenario": {"type": "object"},
                     "inputs": {"type": "array", "maxItems": 200, "items": {"type": "object"}},
                     "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
@@ -648,28 +651,20 @@ def _field_issues(raw) -> list:
 
 
 _EXECUTION_CONTEXT = ContextVar("vcr_execution_context", default=None)
-_STUDY_ID = ContextVar("vcr_study_id", default=None)
 
 
 @contextmanager
-def invocation(execution_context, study_id=None):
-    """Keep native context per synchronous call, including nested wrappers.
-
-    `study_id` is the explicit study a call names (one handed to this conversation): every request the call makes carries it.
-    """
+def invocation(execution_context):
+    """Keep native context per synchronous call, including nested wrappers."""
     token = _EXECUTION_CONTEXT.set(execution_context)
-    study_token = _STUDY_ID.set(study_id if isinstance(study_id, str) and study_id else None)
     try:
         yield
     finally:
-        _STUDY_ID.reset(study_token)
         _EXECUTION_CONTEXT.reset(token)
 
 
 def _post(operation: str, payload: dict, timeout: int = TIMEOUT_SECONDS) -> dict:
     base, token = _gateway()
-    if _STUDY_ID.get():
-        payload = {**payload, "studyId": _STUDY_ID.get()}
     request = urllib.request.Request(
         "%s/%s" % (base, operation),
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -1498,7 +1493,7 @@ def _lab_answer(data: dict, action: str) -> dict:
             "data": data, "warnings": [],
             "next_actions": [
                 "The record is made once by the engine; the same request is the same record. Read its id from data.records by asking again, and do not "
-                "loop: the researcher sees it on the study page.",
+                "loop: the researcher sees it, with its size and how many people are outside the model's range, in the list of records of virtual people on the 人群与患者 page.",
                 "Compare drugs on it with action compare and people {recordId, mode}; give no number of your own for the people.",
             ],
         }

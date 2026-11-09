@@ -1028,7 +1028,8 @@ export class VcrJobs {
    *   runId?: string | null, maxAttempts?: number, detail?: Record<string, any>, internal?: boolean, questionRef?: { id: string, version: number } | null,
    *   files?: Array<{ kind: string, id: string, location: string, hash: string, valueSource?: string }> }} input
    * `questionRef` is the research question a job answers (R22); when none is named the study's current one is recorded, in the job's record and
-   * never in its scenario, so it cannot change a scenario hash or reach the engine.
+   * never in its scenario, so it cannot change a scenario hash or reach the engine. It is written when the job is made and never
+   * again: the same request after the question moved returns the same job, still saying which version it answered.
    * @returns {Promise<{ job: any, created: boolean, notice?: { code: string, message: string } }>} `notice` is what the caller must tell the person
    *   about a job that was queued (a synthesis the budget may not hold)
    */
@@ -1251,12 +1252,14 @@ export class VcrJobs {
        cpu_seconds_limit, max_attempts, run_id, idempotency_key, checkpoint)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb, $11, $12, $13, $14, $15, $16, $17::jsonb)
       ON CONFLICT (user_id, idempotency_key) DO UPDATE SET updated_at = now(),
-        checkpoint = CASE WHEN $18::jsonb IS NULL THEN ${VCR_SCHEMA}.jobs.checkpoint ELSE ${VCR_SCHEMA}.jobs.checkpoint || jsonb_build_object('questionRef', $18::jsonb) END
+        -- the question a job answered is stamped when the job is made and never again: a duplicate request, a resumed arm or a re-asked
+        -- scenario after the question changed finds the same job still saying which version it answered (review eng round 2, P2-9)
+        checkpoint = ${VCR_SCHEMA}.jobs.checkpoint
       RETURNING *, (xmax = 0) AS inserted`,
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...effectDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(described.applied.length ? { normalizedKeys: described.applied } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: vcrJobCostClass(kind, scenario), ...(questionRef ? { questionRef } : {}) }), questionRef ? JSON.stringify(questionRef) : null])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...effectDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(described.applied.length ? { normalizedKeys: described.applied } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: vcrJobCostClass(kind, scenario), ...(questionRef ? { questionRef } : {}) })])).rows[0];
       // Completion locks the job before its population. A duplicate enqueue must take the same order:
       // the UPSERT may wait for a finishing job; only then lock and recheck its generation in this transaction.
       if (qualityBasis) {
@@ -2036,15 +2039,33 @@ export class VcrJobs {
   async #storeTables(row, result) {
     const tables = list(result.tables).map((table) => ({ ...object(table) }));
     const keep = new Set(list(object(row.checkpoint).keepTables).map(String));
+    // A kept table that holds a row of a real person (a per-person forecast) is `privateTables`: filed under `forecasts/<study>/<job>/`
+    // owner-only, where the engine's user cannot read it after the job, and removed by the one that read it (review eng round 2, P2-4).
+    const privateTables = new Set(list(object(row.checkpoint).privateTables).map(String));
+    for (const name of privateTables) keep.add(name);
     const engineJobId = object(row.checkpoint).engineJobId;
     if (!keep.size || !engineJobId || typeof this.engine?.downloadTable !== "function"
       || !String(this.config.vcrDataPlaneDir ?? "").trim()) return tables;
     const root = assertDataPlaneRoot(String(this.config.vcrDataPlaneDir));
     for (const table of tables) {
       if (!keep.has(String(table.name)) || !/^[a-f0-9]{64}$/.test(String(table.sha256))) continue;
-      const relative = `derived/${row.study_id}/${row.id}/${table.name}.csv`;
+      const confidential = privateTables.has(String(table.name));
+      const relative = `${confidential ? "forecasts" : "derived"}/${row.study_id}/${row.id}/${table.name}.csv`;
       if (!vcrLocationIsValid(relative)) continue;
       const destination = path.join(root, relative);
+      if (confidential) {
+        await fs.mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
+        for (const directory of derivedDirectories(root, relative).slice(1)) await fs.chmod(directory, 0o700);
+        const present = await fs.readFile(destination).then((bytes) => sha256Bytes(bytes) === table.sha256).catch(() => false);
+        if (!present) {
+          await this.engine.downloadTable(String(engineJobId), String(table.name), { destination, sha256: String(table.sha256),
+            maxBytes: Number(this.config.vcrDerivedTableMaxBytes ?? 256 * 1024 * 1024), mode: 0o600 });
+          this.counters.tablesStored += 1;
+        }
+        await fs.chmod(destination, 0o600);
+        table.location = relative;
+        continue;
+      }
       // What is filed here is what the engine's own next job opens, and the engine
       // runs as another user with the data plane mounted read-only: an owner-only
       // file (the mode a patient-level file rightly has) is one it cannot read, and
@@ -2066,6 +2087,27 @@ export class VcrJobs {
       table.location = relative;
     }
     return tables;
+  }
+
+  /** The finishes in flight that hold a transaction and then need a second connection. */
+  #folding = 0;
+  /** @type {Array<() => void>} */
+  #foldWaiters = [];
+  /**
+   * Run `work`, and when it is a stage fold, at most `(pool size - 2) / 2` of them at once, so the connections the folds hold and the
+   * ones each of them then asks for can never add up to more than the pool has.
+   * @template T @param {boolean} stage @param {() => Promise<T>} work @returns {Promise<T>}
+   */
+  async foldGated(stage, work) {
+    if (!stage) return work();
+    const max = Number(/** @type {any} */ (this.store).database?.pool?.options?.max ?? 10);
+    const limit = Math.max(1, Math.floor((max - 2) / 2));
+    while (this.#folding >= limit) await new Promise((resolve) => this.#foldWaiters.push(() => resolve(undefined)));
+    this.#folding += 1;
+    try { return await work(); } finally {
+      this.#folding -= 1;
+      this.#foldWaiters.shift()?.();
+    }
   }
 
   /**
@@ -2128,7 +2170,9 @@ export class VcrJobs {
     const leaseOwner = outcome.leaseOwner ?? null;
     const leaseAttempt = outcome.leaseAttempt ?? null;
 
-    const outcomeOf = await this.store.transaction(async (client) => {
+    // A stage that folds into the subject's current result judges the earlier stage's lineage on connections of its own while this one
+    // holds the advisory lock: so no more of them run at once than the pool can serve both halves of (review eng round 2, P2-8)
+    const outcomeOf = await this.foldGated(Boolean(detail.stage), () => this.store.transaction(async (client) => {
       const locked = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE id = $1 FOR UPDATE`, [jobId])).rows[0];
       if (!locked || locked.state !== "running" || (leaseOwner && String(locked.lease_owner ?? "") !== leaseOwner)
         || (leaseAttempt != null && Number(locked.attempts) !== leaseAttempt)) {
@@ -2248,7 +2292,7 @@ export class VcrJobs {
         reason: reason ? String(object(reason).code ?? "") : "",
         detail: { kind: String(row.kind), resultId: recorded?.id ?? null, partial, signed: outcome.signed === true } });
       return { finished, execution, recorded };
-    });
+    }));
     if (/** @type {any} */ (outcomeOf).skipped) return { action: "skipped", state: /** @type {any} */ (outcomeOf).state };
 
     const { finished, execution, recorded } = /** @type {any} */ (outcomeOf);

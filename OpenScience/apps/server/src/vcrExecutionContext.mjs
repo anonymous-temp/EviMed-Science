@@ -31,8 +31,6 @@ function projected(tool, operation, actual, body) {
     : ['start', 'validate'].includes(actual.action ?? 'start') ? ['action', 'kind', 'scenario', 'inputs', 'seed', 'replicates', 'cpuSecondsLimit', 'subjectId', 'reconstructionResultId', 'selection', 'modelId', 'modelVersion', 'sources', 'people'] : ['action', 'jobId'];
   const result = Object.fromEntries(keys.filter(key => operation === 'write' ? Object.hasOwn(actual,key) : actual[key] != null).map(key => [key, actual[key]]));
   if (operation === 'simulate') result.action ??= 'start';
-  // the study a call names explicitly (one handed to this conversation) is part of what the proof covers
-  if (actual.studyId != null) result.studyId = actual.studyId;
   if (operation === 'read' && object(result.filter) && !Object.keys(result.filter).length && !body.filter) delete result.filter;
   return result;
 }

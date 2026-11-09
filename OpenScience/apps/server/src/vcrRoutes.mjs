@@ -75,12 +75,12 @@ import { prepareVcrMethodConfiguration, resolveJobSubject, prepareVcrSubjectPopu
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { measureValue, zhTime } from "./vcrViewsKit.mjs";
 import { presentSplineFit } from "./vcrSplineFit.mjs";
-import { withQuestionPremises } from "./vcrPremises.mjs";
 import { checkRegulatoryContact } from "./vcrScheduleView.mjs";
 import { VCR_QUESTION_FIELDS } from "@evimed/domain";
 import { checkResearchQuestionPatch } from "./vcrResearchQuestions.mjs";
-import { presentResearchQuestion } from "./vcrResearchQuestionView.mjs";
+import { presentResearchQuestion, questionModelId } from "./vcrResearchQuestionView.mjs";
 import { VCR_ROWS_PAGE_MAX } from "./vcrRows.mjs";
+import { readingAs } from "./vcrLongitudinalStore.mjs";
 import { readRunMarks } from "./vcrStudyStatus.mjs";
 
 /**
@@ -423,6 +423,8 @@ export function createVcrRoutes(dependencies) {
     const { user } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
     await store.assertCsrf(req, url.pathname);
     if (!service.allows(user)) throw NOT_ENABLED();
+    // everything this request reads is judged as the person asking (`readingAs`)
+    return readingAs(String(user.id), async () => {
     let parts;
     try { parts = url.pathname.slice("/api/vcr".length).split("/").filter(Boolean).map(decodeURIComponent); }
     catch { throw new HttpError(400, "vcr_path_invalid", "Invalid 虚拟临床研究 path."); }
@@ -1356,8 +1358,7 @@ export function createVcrRoutes(dependencies) {
         return reply({ jobId: parts[3], result: service.forModel(historicalResult),
           computationBasis:vcrAnalyticComputationBasis(result,job),
           // a spline survival fit (C13): the median, the restricted mean and the survival with how far beyond the data each lies, and the premises
-          splineFit: job.method === "model.survival_fit" ? withQuestionPremises(presentSplineFit(result, (measure) => measureValue(measure, { kind: result.kind, result, tab: "patients", staleMark: null })),
-            { researchQuestion: (await service.store?.researchQuestions?.(study.id).catch(() => []))?.[0] ?? null, executions: new Map([[String(result.executionId), { jobId: job.id }]]), jobs: [job] }, result) : null,
+          splineFit: job.method === "model.survival_fit" ? presentSplineFit(result, (measure) => measureValue(measure, { kind: result.kind, result, tab: "patients", staleMark: null })) : null,
           execution: { method: job.method, methodVersion: job.methodVersion, seed: job.seed, scenarioHash: job.scenarioHash, sourceModel: job.checkpoint?.sourceModel ? { id: job.checkpoint.sourceModel.id, version: job.checkpoint.sourceModel.version } : null },
           records: available ? { ...described, available: true, state: "available", csvUrl: `${prefix}/records/${encodeURIComponent(result.id)}.csv`,
             rowsUrl: `${prefix}/${result.kind === "population" ? "population" : "patients"}/rows?result=${encodeURIComponent(result.id)}` }
@@ -1533,7 +1534,8 @@ export function createVcrRoutes(dependencies) {
     if (parts.length === 3 && section === "research-question" && ["GET", "POST"].includes(method)) {
       if (method === "GET") {
         const { study } = await authorize(id, "read");
-        return reply({ questions: (await data().researchQuestions(study.id)).map((question) => presentResearchQuestion(question)) });
+        const progressions = await data().results(study.id, "progression_simulation").catch(() => []);
+        return reply({ questions: (await data().researchQuestions(study.id)).map((question) => presentResearchQuestion(question, { modelId: questionModelId(question, progressions) })) });
       }
       const body = await bodyOf(req, maxJsonBytes, ["id", ...VCR_QUESTION_FIELDS]);
       const { patch, issues } = checkResearchQuestionPatch(body);
@@ -1542,7 +1544,8 @@ export function createVcrRoutes(dependencies) {
       const saved = await audited("vcr.research_question.edit", (result) => ({ code: String(result.question?.version ?? 0), detail: id }), { code: id },
         () => data().saveResearchQuestion({ studyId: study.id, userId: study.userId, actor: String(user.id), basis: "person_edited",
           ...(typeof body.id === "string" && body.id ? { key: body.id } : {}), patch }));
-      return reply({ question: presentResearchQuestion(saved.question), created: saved.created }, saved.created ? 201 : 200);
+      const progressions = await data().results(study.id, "progression_simulation").catch(() => []);
+      return reply({ question: presentResearchQuestion(saved.question, { modelId: questionModelId(saved.question, progressions) }), created: saved.created }, saved.created ? 201 : 200);
     }
 
     // --- 模拟研究: the lead publishes one of the study's reports to the public column --------------------
@@ -1640,20 +1643,27 @@ export function createVcrRoutes(dependencies) {
     // route); here the person reads their handoffs and takes one back. A revoked grant stops serving the conversation at its next call.
     if (section === "continuations") {
       if (parts.length === 3 && method === "GET") {
-        const { study } = await authorize(id, "read");
+        const { study, roles } = await authorize(id, "read");
+        const lead = roles.some((role) => roleHolds(role, "manage_study"));
         const grants = await service.store.studyConversationGrants(study.id);
-        return reply({ continuations: grants.filter((/** @type {any} */ grant) => grant.grantedBy === String(user.id))
-          .map((/** @type {any} */ grant) => ({ sessionId: grant.sessionId, grantedAt: grant.grantedAt, revoked: grant.revokedAt !== null, revokedAt: grant.revokedAt })) });
+        // a person reads the handoffs they made; the study's lead reads every one
+        return reply({ continuations: grants.filter((/** @type {any} */ grant) => lead || grant.grantedBy === String(user.id))
+          .map((/** @type {any} */ grant) => ({ sessionId: grant.sessionId, grantedAt: grant.grantedAt, revoked: grant.revokedAt !== null, revokedAt: grant.revokedAt, mine: grant.grantedBy === String(user.id) })) });
       }
       if (parts.length === 4 && method === "DELETE") {
         await bodyOf(req, maxJsonBytes, []);
         const { study, roles } = await authorize(id, "read");
-        const held = await service.store.studyConversationHandoff(study.id, parts[3]);
-        if (!held) throw new HttpError(404, "vcr_continuation_not_found", "这项研究没有交给这个对话。");
-        // the person who handed it over takes it back; the study's lead can too
-        if (held.grantedBy !== String(user.id) && !roles.some((role) => roleHolds(role, "manage_study"))) throw new HttpError(403, "vcr_forbidden", "只有交出这项研究的人或研究负责人可以收回。");
+        // the person who handed it over takes back what they handed over; the study's lead takes back any
+        const lead = roles.some((role) => roleHolds(role, "manage_study"));
+        const by = lead ? null : String(user.id);
+        const held = await service.store.studyConversationHandoff(study.id, parts[3], by);
+        if (!held) {
+          // nothing handed over at all is a miss; a handoff that is somebody else's is not this person's to take back
+          if (!by || !(await service.store.studyConversationHandoff(study.id, parts[3]))) throw new HttpError(404, "vcr_continuation_not_found", "这项研究没有交给这个对话。");
+          throw new HttpError(403, "vcr_forbidden", "只有交出这项研究的人或研究负责人可以收回。");
+        }
         const revoked = await audited("vcr.continuation.revoke", () => ({ code: study.id, detail: "revoked" }), { code: study.id },
-          () => service.store.revokeStudyConversation(study.id, parts[3]));
+          () => service.store.revokeStudyConversation(study.id, parts[3], by));
         return reply({ revoked });
       }
       throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
@@ -1736,6 +1746,7 @@ export function createVcrRoutes(dependencies) {
     }
 
     throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
+    });
   };
 }
 

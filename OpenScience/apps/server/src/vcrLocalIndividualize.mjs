@@ -12,8 +12,12 @@
  *   engine job; the grant of every history is still re-read before the job is queued (`permissions`), because a withdrawn grant stops the work.
  * - **The forecasts are a kept table of an ordinary engine job.** The job is filed out of every card's way (`experiment_candidate`, subject
  *   `individualize:<digest>`), keeps its lineage (`forecastLineage`: the sources and bindings of the history), so a withdrawn source makes its
- *   result unreadable, and its table `person-forecasts` is stored by the queue under `derived/`. What the provider reads back is that table,
- *   checked against the hash the result lists.
+ *   result unreadable, and its table `person-forecasts` is a private table: the queue files it under `forecasts/` owner-only (never under
+ *   `derived/`, which the engine's user reads: it holds a row of a real person). What the provider reads back is that table, checked against
+ *   the hash the result lists.
+ * - **Nothing of a real person outlives the read.** The events the batch projected and the per-person table are overwritten and removed as
+ *   soon as the provider has read the table back (or the wait ended without one): the saved prediction, under the history's lineage and
+ *   the grant judged on every read, is the one record of the forecasts, so a withdrawal of the grant has nothing else to reach.
  * - **The wait is cancel-aware and bounded.** A cancel of the forecast job cancels the engine job; a spent time budget cancels it and says
  *   `forecast_time_budget`; a job that waits for a person to confirm CPU budget is cancelled and says so (`forecast_budget_unconfirmed`)
  *   rather than leave the forecast waiting on a confirmation nobody was asked for.
@@ -26,7 +30,7 @@
 import fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { VCR_ENGINE_METHODS, validateForecast } from '@evimed/domain';
-import { parseTable, studyRelative, toCsv, writeContentAddressed } from './vcrDataPlane.mjs';
+import { parseTable, shredPlaneFile, studyRelative, toCsv, writeContentAddressed } from './vcrDataPlane.mjs';
 import { HttpError } from './security.mjs';
 
 const METHOD = 'forecast.individualize';
@@ -70,20 +74,33 @@ export function createLocalIndividualizer({ jobs, store, dataPlane, sleep = ms =
      *   reached: Set<string>, diagnostics: Record<string,any> }>}
      */
     async run(input) {
+      /** @type {string[]} */ const filed = [];
+      try { return await runIndividualize(input, filed); } finally {
+        for (const location of filed) await shredPlaneFile(dataPlane.root(), location).catch(() => null);
+      }
+    },
+  };
+  /** @param {any} input @param {string[]} filed the plane's locations to remove when the run is over */
+  async function runIndividualize(input, filed) {
       const { study, provider, endpoint } = input;
       const origin = Date.parse(input.origin);
       const lines = input.events.filter(event => Number.isFinite(Number(event.value)))
         .map(event => [event.subjectKey, event.code, Number(event.value), (Date.parse(event.occurredAt) - origin) / DAY_MS]);
       const root = dataPlane.root();
       const table = await writeContentAddressed(root, `${studyRelative(study.id)}/views/individualize`, 'csv', toCsv(['subject', 'code', 'value', 'day'], lines));
+      filed.push(table.location);
       const draws = Math.min(4000, Math.max(100, Number(input.samples) || 400));
       const scenario = { family: provider.family, inputId: `${input.jobId}:events`, endpoint: { type: 'continuous', code: endpoint.code, unit: endpoint.unit },
         horizonsDays: input.horizonsDays, ...(provider.family === 'beta_logit' ? { draws, parameterSet: { ...AD_PARAMETER_SET } } : {}) };
+      // The same request is the same engine job while one is alive or done; one that was cancelled or failed is not reused, so a forecast
+      // retried after `forecast_time_budget` (or a cancel) is computed again, under a key of its own attempt (review eng round 2, P2-4)
+      const ended = (await store.rows(`SELECT 1 FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'individualize_forecast' AND checkpoint->>'forecastJobId' = $2
+        AND state IN ('failed', 'canceled')`, [study.id, input.jobId])).length;
       const queued = await jobs.enqueue({ studyId: study.id, userId: study.userId, principal: input.actor, kind: 'individualize_forecast', scenario, internal: true,
         files: [{ kind: 'snapshot_file', id: scenario.inputId, location: table.location, hash: table.sha256, valueSource: input.valueSource }],
         seed: input.seed ?? null, cpuSecondsLimit: Math.min(600, Math.max(30, Math.ceil(input.budgetMs / 1000))), maxAttempts: 1,
-        idempotencyKey: `individualize:${input.jobId}:${input.requestDigest}`,
-        detail: { resultKind: 'experiment_candidate', subjectId: `individualize:${input.requestDigest.slice(0, 24)}`, keepTables: ['person-forecasts'],
+        idempotencyKey: `individualize:${input.jobId}:${input.requestDigest}${ended ? `:attempt${ended}` : ''}`,
+        detail: { resultKind: 'experiment_candidate', subjectId: `individualize:${input.requestDigest.slice(0, 24)}`, privateTables: ['person-forecasts'],
           forecastLineage: { snapshotIds: input.lineage.snapshotIds, sourceIds: input.lineage.sourceIds, bindings: input.lineage.bindings }, forecastJobId: input.jobId } });
       const engineJob = queued.job;
       const started = Date.now();
@@ -104,7 +121,8 @@ export function createLocalIndividualizer({ jobs, store, dataPlane, sleep = ms =
       if (job.state !== 'succeeded') return fail(String(object(job.error).code ?? 'forecast_engine_failed'));
       // a result that cannot be read (its lineage was withdrawn in the meantime) is not a forecast
       const result = await store.resultOfJob(study.id, engineJob.id);
-      const kept = list(result?.tables).map(object).find(entry => entry.name === 'person-forecasts' && String(entry.location ?? '').startsWith('derived/') && /^[a-f0-9]{64}$/.test(String(entry.sha256 ?? '')));
+      for (const entry of list(result?.tables).map(object)) if (String(entry.location ?? '').startsWith('forecasts/')) filed.push(String(entry.location));
+      const kept = list(result?.tables).map(object).find(entry => entry.name === 'person-forecasts' && String(entry.location ?? '').startsWith('forecasts/') && /^[a-f0-9]{64}$/.test(String(entry.sha256 ?? '')));
       if (!result || !kept) return fail('forecast_result_unreadable');
       const bytes = await fs.readFile(dataPlane.resolve(String(kept.location))).catch(() => null);
       if (!bytes || createHash('sha256').update(bytes).digest('hex') !== kept.sha256) return fail('forecast_table_changed');
@@ -137,8 +155,7 @@ export function createLocalIndividualizer({ jobs, store, dataPlane, sleep = ms =
         engineJobId: engineJob.id, engineResultId: result.id ?? null, engineMethodVersion: String(job.methodVersion ?? ''), local: true };
       return { rows: checked.rows, rejected: [...rejected, ...(checked.rejected ?? [])], receipt, failure: null, stopped: interrupted ? String(interrupted) : null, reached,
         diagnostics: { forecastPeople: diagnostics.forecastPeople ?? null, laplaceNotTrusted: Number(diagnostics.laplaceNotTrusted ?? 0), fit: diagnostics.fit ?? null } };
-    },
-  };
+  }
 }
 
 /** Refuse a local batch the provider cannot run, by name. @param {Record<string,any>} provider @param {{code:string,type:string}} endpoint */

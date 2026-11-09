@@ -567,3 +567,22 @@ test("the cost class follows the measured seconds: a win-ratio design, a target-
   for (const design of ["futility_group_sequential", "count_endpoint"]) assert.equal(vcrJobCostClass("design_confirmatory", { design: { kind: design } }), "light", design);
   for (const kind of ["design_dose", "design_bayesian", "stc_comparator", "bias_analysis", "borrowing_prior", "network_meta", "evalue"]) assert.equal(vcrJobCostClass(kind, {}), "light", kind);
 });
+
+test("stage folds run at most (pool - 2) / 2 at once, so the connections they hold and the ones they then ask for fit the pool (review eng round 2, P2-8)", async () => {
+  const jobs = new VcrJobs({ store: /** @type {any} */ ({ database: { pool: { options: { max: 6 } } } }), config: {} });
+  let running = 0, peak = 0, plain = 0, plainPeak = 0;
+  const hold = async (/** @type {boolean} */ stage) => {
+    if (stage) { running += 1; peak = Math.max(peak, running); } else { plain += 1; plainPeak = Math.max(plainPeak, plain); }
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    if (stage) running -= 1; else plain -= 1;
+    return stage;
+  };
+  const folds = await Promise.all(Array.from({ length: 9 }, () => jobs.foldGated(true, () => hold(true))));
+  assert.equal(peak, 2, "pool 6: two folds at once");
+  assert.equal(folds.length, 9, "every fold ran: the rest waited and none was dropped");
+  await Promise.all(Array.from({ length: 5 }, () => jobs.foldGated(false, () => hold(false))));
+  assert.equal(plainPeak, 5, "a finish that folds no stage is not held back");
+  // a failing fold gives its place back
+  await assert.rejects(jobs.foldGated(true, async () => { throw new Error("boom"); }), /boom/);
+  assert.equal(await jobs.foldGated(true, async () => "next"), "next");
+});

@@ -30,15 +30,12 @@ test('the lab tools are research tools of the trial plugin and in its bundle inv
   assert.equal(RESEARCH_NATIVE_BUNDLES['virtual-cohort'].tools.length, 5)
 })
 
-test('an explicit studyId rides every research call as an addressing field, validated by the gateway pattern', () => {
-  const manifest = { objective: { measure: 'power', direction: 'maximize' } }
-  const studyId = 'std_old'
-  assert.deepEqual(project('virtual_trial_read', { jobId: 'job_1', studyId }), { operation: 'simulate', body: { action: 'status', jobId: 'job_1', studyId } })
-  assert.deepEqual(project('virtual_trial_cancel', { jobId: 'job_1', studyId }), { operation: 'simulate', body: { action: 'cancel', jobId: 'job_1', studyId } })
-  assert.deepEqual(project('virtual_trial_describe', { method: 'design.simulate', studyId }).body.studyId, studyId)
-  assert.deepEqual(project('virtual_trial_search', { manifest, studyId }), { operation: 'simulate', body: { action: 'search', manifest, studyId } })
-  assert.deepEqual(project('virtual_trial_compare', { experimentId: 'exp_1', studyId }).body, { action: 'compare_status', experimentId: 'exp_1', studyId })
-  assert.equal(project('virtual_trial_start', { method: 'design.simulate', scenario: {}, studyId }).body.studyId, studyId)
-  assert.deepEqual(project('virtual_trial_read', { jobId: 'job_1' }), { operation: 'simulate', body: { action: 'status', jobId: 'job_1' } }, 'without it nothing changes')
-  for (const bad of [7, '', 'has space', 'x'.repeat(161)]) assert.throws(() => project('virtual_trial_read', { jobId: 'job_1', studyId: bad }), /research_invocation_invalid/)
+test('no research call takes a study: a handed-over study binds the conversation instead', () => {
+  assert.deepEqual(project('virtual_trial_read', { jobId: 'job_1' }), { operation: 'simulate', body: { action: 'status', jobId: 'job_1' } })
+  // a study named in any call is refused: the call has no such field
+  for (const [tool, args] of [['virtual_trial_read', { jobId: 'job_1' }], ['virtual_trial_describe', { method: 'design.simulate' }], ['virtual_trial_start', { method: 'design.simulate', scenario: {} }]]) {
+    assert.throws(() => project(tool, { ...args, studyId: 'std_old' }), /research_invocation_invalid/, tool)
+  }
+  assert.throws(() => project('virtual_trial_search', { manifest: {}, studyId: 'std_old' }), /research_invocation_invalid/)
+  assert.throws(() => project('virtual_trial_compare', { experimentId: 'exp_1', studyId: 'std_old' }), /research_invocation_invalid/)
 })

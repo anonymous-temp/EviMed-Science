@@ -189,11 +189,14 @@ export function strictestDataClass(...sources) {
 
 /** @param {any} prediction @param {any} history @param {any} outcomes @param {any} [options] @returns {any} */
 export function evaluateForecast(prediction, history, outcomes, options = {}) {
-  const paired = pairForecastOutcomes(prediction,outcomes.events,{...options,dataClass:strictestDataClass(history,outcomes)})
+  // the class is the strictest of every record the evaluation reads, the prediction's own included: a prediction made from a real
+  // earlier version or real actions is patient-class even on a synthetic history (review eng round 2, P2-3)
+  const evaluationClass = strictestDataClass(prediction,history,outcomes)
+  const paired = pairForecastOutcomes(prediction,outcomes.events,{...options,dataClass:evaluationClass})
   const role = options.split ?? 'test'
   const probability = ['risk','survival_probability'].includes(prediction.endpoint.type)
   const riskSet = probability && options.eventCodes?.length ? options.riskSet ?? 'incident' : 'all'
-  const actualSources = strictestDataClass(history,outcomes) === 'synthetic' ? ['observed','extracted','synthetic'] : ['observed','extracted']
+  const actualSources = evaluationClass === 'synthetic' ? ['observed','extracted','synthetic'] : ['observed','extracted']
   const evaluationEvents = history.evaluationEvents ?? history.events
   const prevalent = new Set(riskSet === 'incident' ? [...evaluationEvents,...outcomes.events].filter(e =>
     options.eventCodes.includes(e.code) && Date.parse(e.occurredAt) <= Date.parse(prediction.origin)
@@ -203,7 +206,7 @@ export function evaluateForecast(prediction, history, outcomes, options = {}) {
   const rows = paired.paired.filter(eligible), missing = paired.missing.filter(eligible)
   const candidates = new Set(longitudinalSubjects(history).filter(subjectKey => inSplit({subjectKey})))
   const expectedSubjects = new Set([...candidates].filter(subjectKey => !prevalent.has(subjectKey)))
-  const dataClass = strictestDataClass(history,outcomes)
+  const dataClass = evaluationClass
   const bootstrap = options.bootstrap ?? 200, seed = options.seed ?? 1
   const groups = prediction.horizonsDays.map((/** @type {number} */ horizonDays) => {
     const cells = rows.filter(r => r.horizonDays === horizonDays), absent = missing.filter(r => r.horizonDays === horizonDays)

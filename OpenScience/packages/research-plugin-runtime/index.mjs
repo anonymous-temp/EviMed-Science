@@ -1,5 +1,5 @@
 import { catalogue } from './catalogue.mjs'
-import { hostedReferenceParameters, hostedStudyParameter } from './hostedProtocol.mjs'
+import { hostedReferenceParameters } from './hostedProtocol.mjs'
 import { renderResearchReport } from './report.mjs'
 import { randomUUID } from 'node:crypto'
 import { readFile, realpath } from 'node:fs/promises'
@@ -203,17 +203,17 @@ async function registerConfiguredResearchTools(ctx, { name, methods, mode, works
   }
   /** @type {Parameters<typeof import('@evimed/harness-port').defineTool>[0][]} */
   const definitions = [
-    { name: `${name}_describe`, description: `${overview?.task ?? 'Virtual research'}. Discover methods, prerequisites and one method schema. Answer conceptual questions directly. If essential inputs are missing, finish with a concise list of what is needed; do not repeatedly inspect schemas or manufacture data. Prefer an applicable registered method over an ad hoc calculation.`, parameters: { method: { type: 'string' }, ...hostedStudyParameter }, execute: async ({ method }, call) => {
+    { name: `${name}_describe`, description: `${overview?.task ?? 'Virtual research'}. Discover methods, prerequisites and one method schema. Answer conceptual questions directly. If essential inputs are missing, finish with a concise list of what is needed; do not repeatedly inspect schemas or manufacture data. Prefer an applicable registered method over an ad hoc calculation.`, parameters: { method: { type: 'string' } }, execute: async ({ method }, call) => {
       if (!method) return { ok: true, data: { ...overview, methods, guidance: skillUrl ? await readFile(skillUrl, 'utf8') : null } }
       if (!methods.includes(method)) throw new Error('unsupported_method')
       if (!forCall(call).describe) return { ok: true, data: { method, schemaAvailable: false } }
       return { ok: true, data: { ...await forCall(call).describe(method), interpretationGuidance: scientificInterpretationGuidance } }
     } },
     { name: `${name}_start`, description: `${overview?.task ?? 'Virtual research'}. Start a research computation using an installed method. Available method IDs: ${methods.join(', ')}. Use only explicit assumptions and authorized inputs.`,
-      parameters: { method: { type: 'string', required: true }, scenario: { type: 'object', additionalProperties: true, required: true }, version: { type: 'string' }, inputs: { type: 'array', items: { type: 'object', additionalProperties: true, properties: {} } }, sources: { type: 'array', description: 'At most 8 source assertions: publication {field, publication, quote} or user {origin: user, field, value, quote, unit, context, sessionId?, messageSeq?}. Assertions need independent verification.', items: { type: 'object', additionalProperties: true, properties: {} } }, seed: { type: 'integer' }, replicates: { type: 'integer' }, cpuSecondsLimit: { type: 'integer' }, ...hostedReferenceParameters, ...hostedStudyParameter },
+      parameters: { method: { type: 'string', required: true }, scenario: { type: 'object', additionalProperties: true, required: true }, version: { type: 'string' }, inputs: { type: 'array', items: { type: 'object', additionalProperties: true, properties: {} } }, sources: { type: 'array', description: 'At most 8 source assertions: publication {field, publication, quote} or user {origin: user, field, value, quote, unit, context, sessionId?, messageSeq?}. Assertions need independent verification.', items: { type: 'object', additionalProperties: true, properties: {} } }, seed: { type: 'integer' }, replicates: { type: 'integer' }, cpuSecondsLimit: { type: 'integer' }, ...hostedReferenceParameters },
       execute: async (args, call) => ({ ok: true, data: await pluginFor(call).start(args) }) },
-    { name: `${name}_read`, description: 'Read the state and result of a research job.', parameters: { jobId: { type: 'string', required: true }, ...hostedStudyParameter }, execute: async ({ jobId }, call) => ({ ok: true, data: await pluginFor(call).read(jobId) }) },
-    { name: `${name}_report`, description: 'Compose an inspectable report from a completed research job, preserving its assumptions and limitations.', parameters: { jobId: { type: 'string', required: true }, ...hostedStudyParameter }, execute: async ({ jobId }, call) => {
+    { name: `${name}_read`, description: 'Read the state and result of a research job.', parameters: { jobId: { type: 'string', required: true } }, execute: async ({ jobId }, call) => ({ ok: true, data: await pluginFor(call).read(jobId) }) },
+    { name: `${name}_report`, description: 'Compose an inspectable report from a completed research job, preserving its assumptions and limitations.', parameters: { jobId: { type: 'string', required: true } }, execute: async ({ jobId }, call) => {
       const scoped = forCall(call)
       const result = await pluginFor(call).read(jobId)
       if (result.status !== 'succeeded') throw new Error('job_not_succeeded')
@@ -223,14 +223,14 @@ async function registerConfiguredResearchTools(ctx, { name, methods, mode, works
       const saved = scoped.saveReport ? await scoped.saveReport(jobId, report, reproduction) : null
       return { ok: true, data: { report, ...(saved ?? { reproduction }) } }
     } },
-    { name: `${name}_cancel`, description: 'Cancel a running research job.', parameters: { jobId: { type: 'string', required: true }, ...hostedStudyParameter }, execute: async ({ jobId }, call) => { await pluginFor(call).cancel(jobId); return { ok: true, data: { jobId, requested: true } } } },
+    { name: `${name}_cancel`, description: 'Cancel a running research job.', parameters: { jobId: { type: 'string', required: true } }, execute: async ({ jobId }, call) => { await pluginFor(call).cancel(jobId); return { ok: true, data: { jobId, requested: true } } } },
     // The virtual lab (trial plugin, hosted): the model proposes a frozen campaign or a comparison and reads it; code evaluates.
     ...(name === 'virtual_trial' ? [
       { name: 'virtual_trial_search', description: 'Bounded design search. {manifest} freezes objective, constraints with fixed bounds, truths, the searched design paths, screening and final sizes, budget; the platform screens, re-checks finalists at full precision and stops with a reason. {campaignId} reads; add cancel:true to stop.',
-        parameters: { manifest: { type: 'object', additionalProperties: true, properties: {} }, campaignId: { type: 'string' }, cancel: { type: 'boolean' }, ...hostedStudyParameter },
+        parameters: { manifest: { type: 'object', additionalProperties: true, properties: {} }, campaignId: { type: 'string' }, cancel: { type: 'boolean' } },
         execute: async (/** @type {any} */ args, /** @type {any} */ call) => labCall(call, 'search', args) },
       { name: 'virtual_trial_compare', description: 'Compare arms on one endpoint and analysis: saved design results by resultId (no rerun), design methods, or drug hypotheses on a disease-progression model; contrasts to a reference arm. {experiment} creates, {experimentId} reads.',
-        parameters: { experiment: { type: 'object', additionalProperties: true, properties: {} }, experimentId: { type: 'string' }, ...hostedStudyParameter },
+        parameters: { experiment: { type: 'object', additionalProperties: true, properties: {} }, experimentId: { type: 'string' } },
         execute: async (/** @type {any} */ args, /** @type {any} */ call) => labCall(call, 'compare', args) },
     ] : []),
   ]

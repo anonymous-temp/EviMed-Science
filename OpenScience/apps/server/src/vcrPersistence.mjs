@@ -927,17 +927,20 @@ ALTER TABLE evimed_vcr.conversation_completions ADD COLUMN IF NOT EXISTS dispatc
 ALTER TABLE evimed_vcr.conversation_completions ALTER COLUMN study_id DROP NOT NULL;
 ALTER TABLE evimed_vcr.conversation_completions ALTER COLUMN job_id DROP NOT NULL;
 
--- A person's explicit, recorded and revocable handoff of one study to another conversation (R11): the gateway resolves an explicit
--- studyId from a session only while its row here is not revoked. A re-grant after a revocation clears \`revoked_at\` and is a new grant.
+-- A person's explicit, recorded and revocable handoff of one study to another conversation (R11): the study OWNER's act, or a member
+-- whose role holds read, write and run. The grant BINDS the conversation: the gateway resolves the newest grant of the calling person for
+-- the session as the conversation's study while its row is not revoked. A grant is a row of its own (never an overwrite of someone
+-- else's \`granted_by\`): one live row per study, session and person, and a re-grant after a revocation is a new row.
 CREATE TABLE IF NOT EXISTS evimed_vcr.study_conversations (
+  id          bigserial PRIMARY KEY,
   study_id    text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
   session_id  text NOT NULL,
   granted_by  text NOT NULL,
   granted_at  timestamptz NOT NULL DEFAULT now(),
-  revoked_at  timestamptz,
-  PRIMARY KEY (study_id, session_id)
+  revoked_at  timestamptz
 );
-CREATE INDEX IF NOT EXISTS vcr_study_conversations_session_idx ON evimed_vcr.study_conversations (session_id) WHERE revoked_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_study_conversations_live_idx ON evimed_vcr.study_conversations (study_id, session_id, granted_by) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS vcr_study_conversations_session_idx ON evimed_vcr.study_conversations (session_id, granted_by, granted_at DESC) WHERE revoked_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS vcr_completion_pending_idx ON evimed_vcr.conversation_completions (run_after,user_id,created_at) WHERE state='pending';
 CREATE INDEX IF NOT EXISTS vcr_completion_retention_idx ON evimed_vcr.conversation_completions (updated_at) WHERE state<>'pending';

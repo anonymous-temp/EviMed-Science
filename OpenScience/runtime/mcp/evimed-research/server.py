@@ -1999,13 +1999,7 @@ def _dispatch(name, arguments, execution_context=None):
     if arguments is None:
         arguments = {}
     try:
-        # `studyId` (a study handed to this conversation, R11) is an addressing field of the three research tools, taught by the
-        # selection the person staged and not by the always-on catalogue: it is checked here by its own pattern, the rest by the schema.
-        if name in ("vcr_read", "vcr_write", "vcr_simulate") and isinstance(arguments, dict) and "studyId" in arguments:
-            _validate(arguments["studyId"], vcr_platform.ID, "arguments.studyId")
-            _validate({key: item for key, item in arguments.items() if key != "studyId"}, definition["inputSchema"], "arguments")
-        else:
-            _validate(arguments, definition["inputSchema"], "arguments")
+        _validate(arguments, definition["inputSchema"], "arguments")
     except ValueError as error:
         return failure(
             "invalid_input",
@@ -2280,7 +2274,7 @@ def _dispatch(name, arguments, execution_context=None):
         return result
     if name in ("vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool"):
         try:
-            with vcr_platform.invocation(execution_context, arguments.get("studyId") if name in ("vcr_read", "vcr_write", "vcr_simulate") else None):
+            with vcr_platform.invocation(execution_context):
                 if name == "vcr_read":
                     result = vcr_platform.read(arguments)
                 elif name == "vcr_write":

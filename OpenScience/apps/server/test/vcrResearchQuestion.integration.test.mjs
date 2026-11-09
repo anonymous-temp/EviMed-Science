@@ -120,7 +120,7 @@ test("members read, only a writer edits, and another account's study reads as on
   assert.equal((await store.researchQuestions(study.id))[0]?.version, 1, "nothing of the refused calls was written");
 });
 
-test("a job records the version of the question it answers; the same request after the question moved answers the current one; marks follow", options, async () => {
+test("a job records the version of the question it answers and keeps it when the same request comes again after the question moved; marks follow", options, async () => {
   const study = await furnish();
   const jobs = new VcrJobs({ store, config, engine: /** @type {any} */ ({ configured: () => true }) });
   const scenario = { design: { kind: "two_arm_fixed", nTreat: 150, nControl: 150 }, endpoint: { type: "time_to_event" },
@@ -151,7 +151,13 @@ test("a job records the version of the question it answers; the same request aft
   assert.equal(again.created, false);
   assert.equal(again.job.id, v1.job.id);
   const restamped = await store.one("SELECT checkpoint FROM evimed_vcr.jobs WHERE id = $1", [v1.job.id]);
-  assert.deepEqual(restamped.checkpoint.questionRef, { id: "main", version: 2 }, "the identical computation requested under the current question answers it");
+  // review eng round 2, P2-9: the stamp is written when the job is made and never again, so a duplicate request (a re-asked scenario, a
+  // resumed arm) after the question moved finds the same job still saying which version it answered; before, the duplicate rewrote it
+  assert.deepEqual(restamped.checkpoint.questionRef, { id: "main", version: 1 }, "a job keeps the version it was made under");
   assert.deepEqual(researchQuestionPremises(resultQuestionInput({ ...bundle, jobs: [{ id: job.id, checkpoint: restamped.checkpoint }] }, { executionId: "exe_1" }, "camd-adas-cog-11")).map((entry) => entry.key),
-    ["question:not_representable", "question:calibration"], "no longer marked");
+    ["question:earlier", "question:not_representable", "question:calibration"], "still marked as answering an earlier version");
+  // a finished job is no different: its stamp does not move either
+  await store.query("UPDATE evimed_vcr.jobs SET state = 'succeeded', finished_at = now() WHERE id = $1", [v1.job.id]);
+  await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario: { ...scenario, truth: { hazardRatio: 0.65, controlMedian: 6 } }, idempotencyKey: "rq-one" });
+  assert.deepEqual((await store.one("SELECT checkpoint FROM evimed_vcr.jobs WHERE id = $1", [v1.job.id])).checkpoint.questionRef, { id: "main", version: 1 });
 });

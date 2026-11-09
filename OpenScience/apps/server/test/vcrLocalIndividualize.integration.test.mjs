@@ -19,6 +19,7 @@ import { composeVcr } from '../src/vcrComposition.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 import { streamOf } from './helpers/vcrIntakeData.mjs';
 import { VcrOrchestrator } from '../src/vcrOrchestrator.mjs';
+import { createLocalIndividualizer, localForecastProviders } from '../src/vcrLocalIndividualize.mjs';
 
 const run = promisify(execFile);
 const engineRequired = process.env.VCR_ENGINE_TESTS === 'required';
@@ -30,6 +31,8 @@ const PEOPLE = 40;
 let database, isolated, root, vcr, study, source, snapshot, history;
 /** @type {Map<string,{out:string,result:any}>} */ const outputs = new Map();
 let held = null;   // a promise the fake transport waits for before it runs (the cancel test)
+/** what the engine was handed (the projected events, read at submit) and how each kept table was filed */
+/** @type {{ inputs: string[], filed: {destination:string,mode:number}[] }} */ const seen = { inputs: [], filed: [] };
 
 /** A deterministic stream of uniforms and standard normals. @param {number} seed */
 function streams(seed) {
@@ -50,6 +53,7 @@ before(async () => {
   vcr.jobs.engine = { configured: () => true,
     submit: async (/** @type {any} */ job) => {
       if (held) await held;
+      for (const file of await fs.readdir(path.join(root, 'studies', study.id, 'views', 'individualize')).catch(() => [])) seen.inputs.push(await fs.readFile(path.join(root, 'studies', study.id, 'views', 'individualize', file), 'utf8'));
       const out = path.join(root, 'engine', job.jobId); await fs.mkdir(out, { recursive: true });
       const file = path.join(out, 'job.json'); await fs.writeFile(file, JSON.stringify(job));
       await run('Rscript', [path.join(engineRoot, 'service/run_job.R'), file, out], { env: { ...process.env, VCR_ENGINE_ROOT: engineRoot, VCR_ENGINE_DATA_ROOT: root, VCR_ENGINE_CORES: '1' }, timeout: 120000 });
@@ -59,7 +63,7 @@ before(async () => {
     status: async (/** @type {string} */ jobId) => ({ state: outputs.get(jobId)?.result.status ?? 'running', progress: { done: 1, total: 1 } }),
     result: async (/** @type {string} */ jobId) => ({ result: outputs.get(jobId)?.result, signed: true }),
     cancel: async () => ({}),
-    downloadTable: async (/** @type {string} */ jobId, /** @type {string} */ name, /** @type {any} */ { destination }) => { await fs.writeFile(destination, await fs.readFile(path.join(/** @type {any} */ (outputs.get(jobId)).out, `${name}.csv`))); } };
+    downloadTable: async (/** @type {string} */ jobId, /** @type {string} */ name, /** @type {any} */ { destination, mode }) => { seen.filed.push({ destination, mode }); await fs.writeFile(destination, await fs.readFile(path.join(/** @type {any} */ (outputs.get(jobId)).out, `${name}.csv`))); } };
   study = await vcr.store.createStudy({ userId: 'owner', projectId: 'synthetic-individualize', name: 'Individualized forecasts', question: 'CD4 forecast per person', dataTier: 'T0' });
   source = await vcr.dataPlane.registerSource({ userId: 'owner', studyId: study.id, name: 'Authored synthetic CD4 history', allowedUses: ['vcr'], valueSource: 'synthetic' });
   // PEOPLE people with four CD4 visits before the origin (a straight line each, with noise) and four bilirubin values, a lab value of 9999 after the origin
@@ -156,16 +160,24 @@ test('a batch through the local provider: one row per person and horizon, every 
   assert.ok(summary.premises.some((/** @type {any} */ p) => p.key === 'use:individual_fit_on_batch'), 'the batch-fit premise is said');
   const receipt = result.diagnostics.longitudinal.summary.actualProvider[0];
   assert.equal(receipt.provider, 'evimed-individualize-linear-mixed');
-  // nothing after the origin reached the engine's table, and no person identifier of the source is in it
-  const views = path.join(root, 'studies', study.id, 'views', 'individualize');
-  const files = await fs.readdir(views);
-  assert.ok(files.length >= 1);
-  for (const file of files) {
-    const text = await fs.readFile(path.join(views, file), 'utf8');
+  // nothing after the origin reached the engine, and no person identifier of the source is in what it was handed
+  assert.ok(seen.inputs.length >= 1);
+  for (const text of seen.inputs) {
     assert.ok(!text.includes('9999') && !/\bP0\d\d\b/.test(text), 'no record after the origin and no source identifier');
     assert.match(text.split('\n')[0], /^subject,code,value,day$/);
     assert.ok(text.split('\n').slice(1).filter(Boolean).every(line => Number(line.split(',')[3]) <= 0), 'every day is at or before the origin');
   }
+  // the per-person table of real people was filed where the engine's user cannot read it (owner-only, under forecasts/, never derived/) ...
+  assert.ok(seen.filed.length >= 1);
+  for (const filed of seen.filed) {
+    assert.match(path.relative(root, filed.destination), /^forecasts\//, 'a private table, not under derived/');
+    assert.equal(filed.mode, 0o600);
+  }
+  // ... and nothing of a real person outlives the read: the events and the table are gone, the saved prediction is the one record
+  const left = async (/** @type {string} */ dir) => (await fs.readdir(dir, { recursive: true, withFileTypes: true }).catch(() => [])).filter(entry => entry.isFile()).map(entry => entry.name);
+  assert.deepEqual(await left(path.join(root, 'studies', study.id, 'views', 'individualize')), []);
+  assert.deepEqual(await left(path.join(root, 'forecasts', study.id)), []);
+  assert.deepEqual(await left(path.join(root, 'derived', study.id)), []);
 });
 
 test('the claim names the endpoint the evaluation found no help on, and a second request is a new version the first does not hide', options, async () => {
@@ -210,6 +222,42 @@ test('the Alzheimer family runs the same way: its own premise, no finding behind
   assert.ok(summary.premises.some((/** @type {any} */ p) => p.key === 'use:individual_week_zero'));
   const claim = summary.premises.find((/** @type {any} */ p) => p.key === 'claim:individualized_forecast');
   assert.ok(claim && claim.decisive && claim.value.includes('没有做过个体化预测的对照评估'), JSON.stringify(summary.premises));
+});
+
+// (placed before the cancel test: that test's stand-in engine never confirms the stop of the job it cancelled, which holds the engine lane)
+// Review eng round 2, P2-4: a forecast retried after its time budget is computed again (the cancelled engine job is not reused by the key),
+// and an engine job whose forecast job already ended is stopped by the repair sweep.
+test('a forecast retried after forecast_time_budget gets a fresh engine job; an abandoned engine job is swept', options, async () => {
+  const individualizer = createLocalIndividualizer({ jobs: vcr.jobs, store: vcr.store, dataPlane: vcr.dataPlane });
+  const events = ['s1', 's2', 's3', 's4'].flatMap((subjectKey, k) => ['2025-09-01', '2025-11-01', '2025-12-15'].map((day, i) => ({
+    subjectKey, code: 'cd4', value: 400 + 10 * k + 5 * i, occurredAt: `${day}T00:00:00.000Z` })));
+  const input = { study, actor: 'owner', jobId: 'fjob_retry', requestDigest: 'a'.repeat(64), provider: localForecastProviders()[0], endpoint: { code: 'cd4', type: 'continuous', unit: 'cells/uL' },
+    horizonsDays: [30], origin: '2026-01-01T00:00:00.000Z', events, keys: ['s1', 's2', 's3', 's4'], seed: 3, budgetMs: 400, lineage: { snapshotIds: [], sourceIds: [], bindings: [] },
+    valueSource: 'synthetic', isCanceled: async () => false };
+  let release = () => {};
+  held = new Promise(resolve => { release = () => resolve(undefined); });
+  const first = await individualizer.run(input);
+  assert.equal(first.failure?.code, 'forecast_time_budget');
+  const firstJobs = await vcr.store.rows(`SELECT id, state FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'forecastJobId'='fjob_retry'`, [study.id]);
+  assert.equal(firstJobs.length, 1);
+  assert.equal(firstJobs[0].state, 'canceled', 'the time budget cancelled the engine job');
+  release(); held = null;
+  let finished = false;
+  const driving = pump(() => finished);
+  const second = await individualizer.run({ ...input, budgetMs: 120000 });
+  finished = true; await driving;
+  assert.equal(second.failure, null, JSON.stringify(second.failure));
+  assert.ok(second.rows.length >= 4, 'the retry was computed');
+  const queuedParentId = 'job_parent_ended';
+  await vcr.store.query(`INSERT INTO evimed_vcr.jobs (id, study_id, user_id, kind, method, state, finished_at) VALUES ($1, $2, 'owner', 'forecast_trajectories', 'forecast.trajectories', 'canceled', now())`, [queuedParentId, study.id]);
+  const all = await vcr.store.rows(`SELECT id, state FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'forecastJobId'='fjob_retry' ORDER BY created_at`, [study.id]);
+  assert.deepEqual(all.map((/** @type {any} */ row) => row.state), ['canceled', 'succeeded'], 'a second engine job, not the cancelled one again');
+  // a stranded engine job of a forecast job that ended (cancelled while the control plane was down) is cancelled by the sweep
+  await vcr.store.query(`INSERT INTO evimed_vcr.jobs (id, study_id, user_id, kind, method, state, checkpoint) VALUES ('job_abandoned', $1, 'owner', 'individualize_forecast', 'forecast.individualize', 'running', $2::jsonb)`,
+    [study.id, JSON.stringify({ forecastJobId: queuedParentId })]);
+  const { VcrExperiments } = await import('../src/vcrExperiments.mjs');
+  await new VcrExperiments({ store: vcr.store, jobs: vcr.jobs, config: {}, report: () => {} }).repair();
+  assert.equal((await vcr.jobs.get(study.id, 'job_abandoned')).state, 'canceled');
 });
 
 test('a cancel of the forecast reaches the engine job, and what is saved holds no forecast', options, async () => {

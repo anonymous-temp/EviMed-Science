@@ -272,7 +272,9 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertEqual(list(vcr_platform.JOB_KINDS), kinds)
         simulate = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]
         # the job kinds, and `search` for action shape alone (the short form of a design search) and `people` (the request for a record of virtual people): neither is a job kind and start refuses it
-        self.assertEqual(simulate["inputSchema"]["properties"]["kind"]["enum"], [*kinds, "search", "people"])
+        # a kind no conversation can start (the platform's own forecast provider queues it) is not in the always-on enum a run reads every turn
+        self.assertEqual(simulate["inputSchema"]["properties"]["kind"]["enum"], [*(kind for kind in kinds if kind != "individualize_forecast"), "search", "people"])
+        self.assertNotIn("individualize_forecast", json.dumps(vcr_platform.tool_definitions()))
 
     def test_simulate_description_is_short_and_sends_the_run_to_the_shape_action_instead_of_typing_the_shapes(self):
         # A description rides every request of the run; the per-method shapes are served on demand from the generated help.
@@ -1067,10 +1069,14 @@ class VcrSimulateTests(_GatewayCase):
 
     def test_all_kinds_pass_the_runtime_check_and_others_never_leave_it(self):
         _Gateway.answers["simulate"] = (200, {"data": {"action": "start", "jobId": "job_1", "state": "queued"}})
-        for kind in vcr_platform.JOB_KINDS:
+        startable = [kind for kind in vcr_platform.JOB_KINDS if kind not in vcr_platform.PLATFORM_QUEUED_KINDS]
+        for kind in startable:
             self.server.call_tool("vcr_simulate", {"action": "start", "kind": kind, "scenario": {}})
-        self.assertEqual([seen["body"]["kind"] for seen in _Gateway.seen], list(vcr_platform.JOB_KINDS))
+        self.assertEqual([seen["body"]["kind"] for seen in _Gateway.seen], startable)
         before = len(_Gateway.seen)
+        # a kind only the platform queues never leaves the tool (review eng round 2, P2-5)
+        self.assertEqual(self.server.call_tool("vcr_simulate", {"action": "start", "kind": "individualize_forecast", "scenario": {}})["error"]["code"], "invalid_input")
+        self.assertEqual(len(_Gateway.seen), before)
         result = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "make_it_up"})
         self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertEqual(len(_Gateway.seen), before)
@@ -1569,24 +1575,18 @@ class TrialBenchmarkFileTests(unittest.TestCase):
 
 
 class VcrStudyIdTests(unittest.TestCase):
-    """R11: a study handed to this conversation is named by `studyId`, which the catalogue does not advertise."""
+    """R11 (reworked): a study handed to a conversation binds it, so no tool takes a study argument and none is advertised."""
 
-    def test_the_catalogue_does_not_grow_and_the_three_tools_accept_a_study_id(self):
+    def test_no_research_tool_takes_a_study_id(self):
         import server
 
         for name in ("vcr_read", "vcr_write", "vcr_simulate"):
             self.assertNotIn("studyId", server.TOOLS[name]["inputSchema"]["properties"], "nothing grows the root catalogue")
-        posted = []
+            bad = server._dispatch(name, {"what": "study", "studyId": "std_old"} if name != "vcr_simulate" else {"action": "status", "jobId": "job_1", "studyId": "std_old"})
+            self.assertEqual(bad["status"], "error", name)
+            self.assertIn("studyId", bad["error"]["message"])
 
-        def fake_post(operation, payload, timeout=0):
-            posted.append((operation, dict(payload)))
-            return {"what": payload.get("what"), "ok": True}
-
-        with mock.patch.object(vcr_platform, "_post", fake_post), mock.patch.object(vcr_platform, "_gateway", lambda: ("http://gateway", "token")):
-            for arguments in ({"what": "study", "studyId": "std_old"},):
-                server._dispatch("vcr_read", arguments)
-            self.assertEqual(posted[-1][1].get("what"), "study")
-        # the id rides every request of the call through the one place that posts, and only for the call that named it
+    def test_the_gateway_post_adds_nothing_to_a_request(self):
         sent = []
 
         class Response:
@@ -1605,21 +1605,9 @@ class VcrStudyIdTests(unittest.TestCase):
                 return Response()
 
         with mock.patch.object(vcr_platform, "_gateway", lambda: ("http://gateway", "token")), mock.patch.object(vcr_platform.public_sources, "_OPENER", Opener()):
-            with vcr_platform.invocation(None, "std_old"):
+            with vcr_platform.invocation(None):
                 vcr_platform._post("read", {"what": "study"})
-            vcr_platform._post("read", {"what": "study"})
-        self.assertEqual(sent[0], {"what": "study", "studyId": "std_old"})
-        self.assertEqual(sent[1], {"what": "study"})
-
-    def test_a_malformed_study_id_is_refused_and_other_unknown_fields_still_are(self):
-        import server
-
-        bad = server._dispatch("vcr_read", {"what": "study", "studyId": "not an id!"})
-        self.assertEqual(bad["status"], "error")
-        self.assertIn("studyId", bad["error"]["message"])
-        other = server._dispatch("vcr_read", {"what": "study", "studyId": "std_old", "extra": 1})
-        self.assertEqual(other["status"], "error")
-        self.assertIn("extra", other["error"]["message"])
+        self.assertEqual(sent, [{"what": "study"}])
 
 
 if __name__ == "__main__":

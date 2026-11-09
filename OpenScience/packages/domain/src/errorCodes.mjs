@@ -1443,7 +1443,6 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'agent_run_dispatch_conflict',
   'vcr_study_not_found',
   'vcr_study_paused',
-  'vcr_study_id_invalid',
   'vcr_study_not_granted',
   'vcr_continuation_not_found',
   'vcr_effect_prior_unavailable',
@@ -2344,7 +2343,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // them says 「稍后再试」, which is what the family sentence for an unknown
   // vcr_ code says and is wrong here. Each says what happened and what to do.
   vcr_study_paused: '这个研究已暂停，继续之后再让 AI 做。',
-  vcr_study_id_invalid: '给出的研究编号不是交给这个对话的研究。',
   vcr_study_not_granted: '这项研究没有交给这个对话；请研究者在研究页选择“在新对话中继续”。',
   vcr_continuation_not_found: '这项研究没有交给这个对话。',
   vcr_effect_prior_unavailable: '这个研究里没有这项汇总结果，或它已不可读（来源被撤回）。',

@@ -1,3 +1,14 @@
+/**
+ * The exported study documents (the review package, the report, the lab report, the model documents, a result record).
+ *
+ * Hidden knowledge:
+ *
+ * - **An exported file stays the person's after a withdrawal** (ruling recorded 2026-11-09, review eng round 2, P2-12). A document is
+ *   frozen when it is made and holds its numbers; withdrawing a source's grant, a subject's consent or a person's access afterwards stops
+ *   every later read, list, report and export (the lineage is judged again on each of those) and stops publication of the file
+ *   (`vcr_publication_source_withdrawn`), but it does not reach into a file that has already been handed over: a copy the person
+ *   holds cannot be recalled. A withdrawal's reach is what the platform serves, not what a person already took away.
+ */
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 import { DOCUMENT_REPORT_EXPORT_FORMATS as DOCUMENT_EXPORT_FORMATS, documentExportDigest, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH } from '@evimed/domain';
 import { HttpError } from './security.mjs';

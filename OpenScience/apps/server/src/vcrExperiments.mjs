@@ -51,8 +51,8 @@ import {
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { finishPremises } from "./vcrPremises.mjs";
-import { ALZHEIMER_PARAMETERS_TEXT, ALZHEIMER_REGULATORY_TEXT, ALZHEIMER_REPRODUCTION_TEXT, alzheimerScopeText } from "./vcrProgression.mjs";
-import { measureLabel, measureValue } from "./vcrViewsKit.mjs";
+import { ALZHEIMER_PARAMETERS_TEXT, ALZHEIMER_REGULATORY_TEXT, ALZHEIMER_REPRODUCTION_TEXT, PEOPLE_MODE_TEXT_ZH, alzheimerScopeText, powerQuantityLabel, progressionPowerQuantity, scenarioPowerQuantity } from "./vcrProgression.mjs";
+import { measureLabel, measureValue, text, zhUnit } from "./vcrViewsKit.mjs";
 import { VCR_PEOPLE_TABLE, vcrPeopleInstantiateRequest, vcrPeopleRecordView, vcrPeopleStartBinding } from "./vcrPeople.mjs";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 
@@ -363,8 +363,13 @@ export class VcrExperiments {
           AND (e.state->'inFlight'->>'jobId' IS NULL OR e.state->'inFlight'->>'jobId' = j.id)))
         OR (e.kind = 'experiment' AND e.state->>'cancelRequested' = 'true'))
       ORDER BY j.created_at LIMIT $1`, [Number(this.config.vcrCompletionReconcileBatch ?? 20)]);
-    for (const row of rows) await this.#cancelOrphan(String(row.study_id), { id: String(row.id) });
-    return rows.length;
+    // an engine job that computes the forecasts of a forecast job which has ended (cancelled while the control plane was down, or settled
+    // some other way) has nobody waiting for it: it is stopped here instead of running to its CPU limit
+    const abandoned = await this.store.rows(`SELECT j.id, j.study_id FROM ${SCHEMA}.jobs j WHERE j.kind = 'individualize_forecast' AND j.state IN ('queued', 'running', 'awaiting_budget')
+      AND EXISTS (SELECT 1 FROM ${SCHEMA}.jobs p WHERE p.id = j.checkpoint->>'forecastJobId' AND p.study_id = j.study_id AND p.state IN ('succeeded', 'failed', 'canceled'))
+      ORDER BY j.created_at LIMIT $1`, [Number(this.config.vcrCompletionReconcileBatch ?? 20)]);
+    for (const row of [...rows, ...abandoned]) await this.#cancelOrphan(String(row.study_id), { id: String(row.id) });
+    return rows.length + abandoned.length;
   }
 
   /**
@@ -400,7 +405,14 @@ export class VcrExperiments {
     const rows = await this.store.rows(`UPDATE ${SCHEMA}.experiments SET state = jsonb_set(state, '{cancelRequested}', 'true'::jsonb),
       revision = revision + 1, updated_at = now() WHERE study_id = $1 AND kind = 'campaign' AND status = 'running' RETURNING id`, [study.id]);
     for (const row of rows) await this.advance(study.id, String(row.id)).catch((error) => this.report(String(/** @type {any} */ (error)?.code ?? "vcr_experiment_cancel_failed")));
-    return rows.length;
+    // and every comparison that still has an arm to queue or an arm job open: a start interrupted before the stop must not queue its
+    // remaining arms after it (review eng round 2, P1-1); a queuing that is running reads the flag before each arm
+    const comparisons = await this.store.rows(`UPDATE ${SCHEMA}.experiments e SET state = jsonb_set(e.state, '{cancelRequested}', 'true'::jsonb),
+      revision = revision + 1, updated_at = now() WHERE e.study_id = $1 AND e.kind = 'experiment' AND COALESCE(e.state->>'cancelRequested', 'false') <> 'true'
+      AND ((SELECT count(*) FROM jsonb_object_keys(COALESCE(e.state->'arms', '{}'::jsonb))) < jsonb_array_length(e.manifest->'arms')
+        OR EXISTS (SELECT 1 FROM ${SCHEMA}.jobs j WHERE j.study_id = e.study_id AND j.checkpoint->'experiment'->>'id' = e.id AND j.state IN ('queued', 'running', 'awaiting_budget')))
+      RETURNING e.id`, [study.id]);
+    return rows.length + comparisons.length;
   }
 
   // --- virtual people -----------------------------------------------------------------------------------------------------------
@@ -485,7 +497,7 @@ export class VcrExperiments {
     const identity = sha256(vcrDesignExperimentCanonical(record));
     const id = `exp_${sha256(`${study.id}:${identity}`).slice(0, 24)}`;
     const inserted = await this.store.one(`INSERT INTO ${SCHEMA}.experiments (id, study_id, user_id, kind, identity, manifest, state, origin)
-      VALUES ($1, $2, $3, 'experiment', $4, $5::jsonb, '{"arms":{}}'::jsonb, $6::jsonb) ON CONFLICT (study_id, kind, identity) DO NOTHING RETURNING id`,
+      VALUES ($1, $2, $3, 'experiment', $4, $5::jsonb, '{"arms":{},"resumable":true}'::jsonb, $6::jsonb) ON CONFLICT (study_id, kind, identity) DO NOTHING RETURNING id`,
     [id, study.id, String(userId), identity, JSON.stringify(record), JSON.stringify(originOf(origin))]);
     if (inserted) this.counters.experiments += 1;
     await this.#queueArms(study, id, identity, record, String(userId));
@@ -553,10 +565,15 @@ export class VcrExperiments {
    * comparison still ends. An infrastructure failure leaves it for the next call.
    */
   async #resumeStarts() {
+    // Only a comparison the new start wrote (`resumable`: rows written by a release that kept its arms only when the start ended were never
+    // meant to be resumed, and are not) and one no older than the completion window: nobody is waiting on an old comparison, and
+    // queuing its arms would bill a person for work nobody asked for now. A row that failed goes to the back (its `updated_at` is bumped).
     const rows = await this.store.rows(`SELECT * FROM ${SCHEMA}.experiments WHERE kind = 'experiment' AND COALESCE(state->>'cancelRequested', 'false') <> 'true'
+      AND state->>'resumable' = 'true' AND created_at > now() - make_interval(secs => $3)
       AND updated_at < now() - make_interval(secs => $2)
       AND (SELECT count(*) FROM jsonb_object_keys(COALESCE(state->'arms', '{}'::jsonb))) < jsonb_array_length(manifest->'arms')
-      ORDER BY updated_at LIMIT $1`, [Number(this.config.vcrCompletionReconcileBatch ?? 20), Number(this.config.vcrExperimentResumeAfterMs ?? 30000) / 1000]);
+      ORDER BY updated_at LIMIT $1`, [Number(this.config.vcrCompletionReconcileBatch ?? 20), Number(this.config.vcrExperimentResumeAfterMs ?? 30000) / 1000,
+      Number(this.config.vcrCompletionMaxAgeMs ?? 86_400_000) / 1000]);
     let resumed = 0;
     for (const row of rows) {
       const study = { id: String(row.study_id) };
@@ -572,7 +589,10 @@ export class VcrExperiments {
               state = jsonb_set(state, '{arms}', COALESCE(state->'arms', '{}'::jsonb) || jsonb_build_object($2::text, $3::jsonb)) WHERE id = $1`,
             [row.id, arm.name, JSON.stringify({ refused: ["study_unavailable"] })]);
           }
-        } else this.report(code || "vcr_experiment_resume_failed");
+        } else {
+          this.report(code || "vcr_experiment_resume_failed");
+          await this.store.query(`UPDATE ${SCHEMA}.experiments SET updated_at = now() WHERE id = $1`, [row.id]).catch(() => null);
+        }
       }
     }
     return resumed;
@@ -651,7 +671,7 @@ export class VcrExperiments {
       const status = entry.refused ? "unsupported" : result && (!job || job.state === "succeeded") ? "complete" : job && TERMINAL.has(String(job.state)) ? "failed" : job ? "running" : "incomplete";
       const progression = object(object(result?.diagnostics).progression);
       const armScenario = arm.scenario ?? (job ? object(job.scenario) : null);
-      arms.push({ name: arm.name, hypothesis: disease && armScenario ? hypothesisView(armScenario) : null, trajectory: disease ? trajectoryOf(progression) : null,
+      arms.push({ name: arm.name, progression: disease ? progression : null, trajectoryUnit: disease ? zhUnit(text(object(list(progression.curves)[0]).timeUnit)) : null, hypothesis: disease && armScenario ? hypothesisView(armScenario) : null, trajectory: disease ? trajectoryOf(progression) : null,
         beyond: progression.extrapolation?.beyond === true, method: arm.method ?? job?.method ?? null, methodVersion: arm.version ?? job?.method_version ?? null, attached: Boolean(arm.resultId),
         status, refused: entry.refused ? refusedText(entry.refused) : null, resultId: result?.id ?? null, scenario: arm.scenario ?? (job ? object(job.scenario) : null),
         evaluation: result ? { state: status === "complete" ? "succeeded" : "failed", seed: job?.seed == null ? null : Number(job.seed), replicates: execution?.replicates == null ? null : Number(execution.replicates),
@@ -670,8 +690,12 @@ export class VcrExperiments {
         });
       }
     }
+    // `power` of a progression arm is the chance its own run states (a mode-averaged number is never called 功效, review P1-9): the arms' names, one when
+    // they agree
+    const armQuantities = [...new Set(arms.map((arm) => (arm.status === "complete" && arm.progression ? progressionPowerQuantity(arm.progression) : null)).filter((quantity) => quantity !== null))];
+    const labelOf = (/** @type {string} */ name) => (disease && name === "power" && armQuantities.length ? armQuantities.map((quantity) => powerQuantityLabel(String(quantity))).join("、") : measureLabel(name));
     const comparison = list(record.comparison?.measures).map((name) => ({
-      measure: name, label: measureLabel(name),
+      measure: name, label: labelOf(name),
       arms: arms.map((arm) => {
         const measure = arm.evaluation ? vcrEvaluationMeasure(arm.evaluation, name) : null;
         // the measure's name rides with its value, so the model boundary's by-name rule can judge it
@@ -695,7 +719,7 @@ export class VcrExperiments {
     const measureIssues = comparison.flatMap((entry) => {
       const lacking = entry.arms.filter((cell) => cell.status === "complete" && !cell.value).map((cell) => cell.name);
       if (!lacking.length) return [];
-      const carriedText = carried.filter((name) => name !== entry.measure).map(measureLabel).join("、");
+      const carriedText = carried.filter((name) => name !== entry.measure).map(labelOf).join("、");
       return [{ code: "comparison_measure_not_carried", measure: entry.measure, label: entry.label, arms: lacking,
         carried: carried.filter((name) => name !== entry.measure),
         text: `“${entry.label}”这些方案的结果里没有（${lacking.join("、")}），这一项没有比较。${carriedText ? `它们有的指标：${carriedText}。` : ""}` }];
@@ -704,13 +728,13 @@ export class VcrExperiments {
       id: String(row.id), kind: "experiment", experimentKind: disease ? "disease" : "design", question: String(record.question ?? ""), purpose: String(record.purpose ?? ""),
       people: record.people ? { recordId: String(record.people.recordId), mode: String(record.people.mode), modeText: PEOPLE_MODE_TEXT_ZH[/** @type {keyof typeof PEOPLE_MODE_TEXT_ZH} */ (record.people.mode)] ?? null } : null,
       status: incomplete.some((name) => arms.find((arm) => arm.name === name)?.status === "running") ? "running" : "complete",
-      arms: arms.map(({ evaluation: _e, scenario, beyond: _b, ...arm }) => (design ? { ...arm, design: scenario } : arm)), comparison, measureIssues, alignment: alignment.map(({ values: _v, ...rest }) => rest), incomplete,
+      arms: arms.map(({ evaluation: _e, scenario, beyond: _b, progression: _p, ...arm }) => (design ? { ...arm, design: scenario } : arm)), comparison, measureIssues, alignment: alignment.map(({ values: _v, ...rest }) => rest), incomplete,
       premises: finishPremises([
         { key: "lab:aligned", label: "比较的前提", value: alignment.every((entry) => entry.aligned) ? "各组用同一个终点和同一套分析设置。"
           : `各组的${alignment.filter((entry) => !entry.aligned).map((entry) => ALIGNED_FIELD_TEXT_ZH[/** @type {keyof typeof ALIGNED_FIELD_TEXT_ZH} */ (entry.field)]).join("、")}不一致或未知，差值只能对照着看。`,
           source: "given", decisive: true },
         // no general disclaimer: the comparison's alignment and each arm's own scenario already say what it rests on
-        ...(record.people ? [{ key: "lab:people", label: "比较用的虚拟患者", value: PEOPLE_MODE_TEXT_ZH[/** @type {keyof typeof PEOPLE_MODE_TEXT_ZH} */ (record.people.mode)] ?? "", source: /** @type {const} */ ("given"), decisive: true }] : []),
+        ...(record.people ? [{ key: "lab:people", label: "比较用的虚拟患者", value: PEOPLE_MODE_TEXT_ZH[/** @type {keyof typeof PEOPLE_MODE_TEXT_ZH} */ (record.people.mode)] ?? "", source: /** @type {const} */ ("default"), decisive: true }] : []),
         ...(disease ? diseasePremises(arms.some((arm) => arm.beyond), arms.map((arm) => object(arm.scenario))) : []),
         ...(measureIssues.length ? [{ key: "lab:measure_missing", label: "没有比较的指标", value: measureIssues.map((issue) => issue.text).join(""), source: /** @type {const} */ ("given"), decisive: true }] : []),
         ...(incomplete.length ? [{ key: "lab:incomplete", label: "未完成的组", value: `${incomplete.join("、")}还没有可比较的结果，比较中缺少它们。`, source: /** @type {const} */ ("given"), decisive: true }] : []),
@@ -738,10 +762,6 @@ export function campaignScenarioIssues(manifest) {
 const ALIGNED_FIELD_TEXT_ZH = Object.freeze({ endpoint: "终点", "analysis.alpha": "检验水准", "analysis.sided": "单双侧", hypothesis: "假设类型", timeUnit: "时间单位",
   visits: "随访时间点", design: "每组人数", model: "模型设置", population: "入组人群", placebo: "安慰剂反应设置", dropoutModel: "脱落设置",
   "analysis.kind": "分析方法", "analysis.visit": "分析所在的随访点" });
-const PEOPLE_MODE_TEXT_ZH = Object.freeze({
-  paired_counterfactual: "每一组都用同一批虚拟患者：每个人在各组里个体特征、脱落时间和测量误差的随机数都相同，只有药物不同。结果是模型推算的“同一批人换一种治疗会怎样”，不是任何试验观察到的个体疗效。",
-  resampled_trials: "每一组的每次模拟试验都从同一份虚拟患者记录里抽人并随机分组，各组抽到的人相同；记录里的研究层面差异是固定的，没有再抽。",
-});
 const HYPOTHESIS_TEXT_ZH = Object.freeze({ none: "没有药物效果（只看检验会不会误判有效）", symptomatic: "改善症状的假设", disease_modifying: "减慢病情恶化的假设", both: "改善症状并减慢恶化的假设" });
 
 /** The drug hypothesis of a disease arm, in a word and in the closed sentence. @param {Record<string, any>} scenario */
@@ -857,6 +877,21 @@ function shown(evaluation, name) {
 }
 
 /**
+ * What this search's objective means by its pick, in words (round-2 review P0-2): a search that maximizes the chance of a significant result at most N
+ * people picks the most powerful design, never “the cheapest one that meets the constraints”. The phrase names the objective; the tag and the sentence
+ * are built from it. A closed table by measure for the usual ones, the measure's own label otherwise.
+ * @param {Record<string, any> | null | undefined} objective `manifest.objective` @param {string} label the objective's label as the page says it
+ * @returns {{ phrase: string, tag: string, sentence: string }}
+ */
+export function objectivePick(objective, label) {
+  const maximize = objective?.direction === "maximize";
+  const least = /** @type {Record<string, string>} */ ({ sample_size: "样本量最少", total_sample_size: "样本量最少", expected_sample_size: "期望样本量最少", expected_patients: "期望入组人数最少",
+    duration_months: "研究周期最短", last_visit_weeks: "随访最短", cost: "费用最低", type_one_error: "I 类错误最低" });
+  const phrase = maximize ? `${label}最高` : least[String(objective?.measure)] ?? `${label}最低`;
+  return { phrase, tag: `满足约束，${phrase}`, sentence: `按目标（${phrase}），满足全部约束的方案` };
+}
+
+/**
  * The campaign's read model: what was frozen, every candidate with its stage, objective and verdicts, the finalists, the stop and
  * the budget used, and the premises of its conclusion. Pure over the stored row.
  * @param {any} row
@@ -865,6 +900,10 @@ export function presentCampaign(row) {
   const manifest = object(row.manifest);
   const state = object(row.state);
   const truthOf = (/** @type {string} */ stage, /** @type {string} */ truth) => `${stage}:${truth}`;
+  // A search over progression simulations states the chance its frozen scenario computes (the uncertainty mode names it); a mode-averaged number is
+  // never called 功效 (review S9)
+  const powerQuantity = manifest.space?.method === "patients.progression" ? scenarioPowerQuantity(object(object(manifest.space).scenario)) : null;
+  const wordsOf = (/** @type {string} */ measure) => (measure === "power" && powerQuantity ? powerQuantityLabel(powerQuantity) : measureLabel(measure));
   const candidates = vcrCampaignCandidates(manifest).map((candidate) => {
     const entry = object(object(state.candidates)[candidate.key]);
     const evaluations = object(entry.evaluations);
@@ -880,7 +919,7 @@ export function presentCampaign(row) {
       stage: final ? "final" : screening ? "screening" : null, reason: entry.reason ?? null, reasonText: reasonText(entry.reason ?? null),
       objective: { screening, final },
       constraints: list(manifest.constraints).map((constraint, index) => ({
-        index, measure: constraint.measure, label: measureLabel(constraint.measure), kind: constraint.kind, op: constraint.op, bound: constraint.bound,
+        index, measure: constraint.measure, label: wordsOf(constraint.measure), kind: constraint.kind, op: constraint.op, bound: constraint.bound,
         screening: verdictView(screenVerdicts[index], constraint), final: verdictView(finalVerdicts[index], constraint),
       })),
       resultIds: all.map((evaluation) => evaluation.resultId).filter(Boolean),
@@ -902,8 +941,9 @@ export function presentCampaign(row) {
   return {
     id: String(row.id), kind: "campaign", question: String(manifest.question ?? ""), status: String(row.status), method: manifest.space?.method, methodVersion: manifest.space?.version,
     identity: String(row.identity),
-    objective: { ...manifest.objective, label: measureLabel(manifest.objective?.measure) },
-    constraints: list(manifest.constraints).map((c) => ({ ...c, label: measureLabel(c.measure), kindText: CONSTRAINT_KIND_TEXT_ZH[/** @type {keyof typeof CONSTRAINT_KIND_TEXT_ZH} */ (c.kind)] ?? c.kind })),
+    objective: { ...manifest.objective, label: wordsOf(manifest.objective?.measure), pick: objectivePick(manifest.objective, wordsOf(manifest.objective?.measure)) },
+    powerQuantity,
+    constraints: list(manifest.constraints).map((c) => ({ ...c, label: wordsOf(c.measure), kindText: CONSTRAINT_KIND_TEXT_ZH[/** @type {keyof typeof CONSTRAINT_KIND_TEXT_ZH} */ (c.kind)] ?? c.kind })),
     truths: list(manifest.space?.truths).map((truth) => truth.name),
     stages: manifest.stages, budget: { declared: manifest.budget, used: { ...usage, units: Number(state.unitsEvaluated ?? 0),
       candidatesEvaluated: candidates.filter((c) => c.stage).length, candidatesPlanned: candidates.length } },
@@ -914,7 +954,7 @@ export function presentCampaign(row) {
       basis: verdict.improvementBound.basis } : null,
     selection: verdict?.selection ?? null,
     // the robust reading of a campaign that compares two or more effect scenarios; null for one that does not
-    robust: verdict?.robust ? presentRobust(manifest, verdict.robust, candidates) : null,
+    robust: verdict?.robust ? presentRobust(manifest, verdict.robust, candidates, powerQuantity ? powerQuantityLabel(powerQuantity) : null) : null,
     // the closest design no constraint failed and what would decide each undecided constraint (only when nothing passed everything)
     undecided: verdict && !verdict.best ? undecidedView(manifest, verdict, candidates) : null,
     againstReference: versus ? { coupling: versus.coupling, couplingText: COUPLING_TEXT_ZH[/** @type {keyof typeof COUPLING_TEXT_ZH} */ (versus.coupling)] ?? null,
@@ -944,7 +984,8 @@ export function presentCampaign(row) {
 
 const ROBUST_GUARD_TEXT_ZH = Object.freeze({ pass: "错误率与安全性约束满足", inconclusive: "错误率或安全性约束无法确定", fail: "不满足错误率或安全性约束", none: "没有错误率或安全性约束" });
 const ROBUST_ACCEPTABLE_TEXT_ZH = Object.freeze({ pass: "每个假设下都达到", fail: "有假设下没达到", inconclusive: "有假设下无法确定", unknown: "有假设没有结果" });
-const ROBUST_TAG_TEXT_ZH = Object.freeze({ pareto: "帕累托集合", near_optimal: "接近最优集合", maximin: "最差情形功效最高", minimax_regret: "最大遗憾最小",
+/** The tags of the robust sets; the one that names the chance reads it by the search's own quantity (a mode-averaged number is not 功效). @param {string} power */
+const robustTagText = (power) => Object.freeze({ pareto: "帕累托集合", near_optimal: "接近最优集合", maximin: `最差情形${power}最高`, minimax_regret: "最大遗憾最小",
   cheapest_acceptable: "各假设下都达标的最省方案", cheapest_base: "仅看基准情形的最省方案" });
 const ROBUST_OC_LABELS_ZH = Object.freeze({ exposure: "累计暴露（人数 × 时长）" });
 
@@ -953,8 +994,10 @@ const ROBUST_OC_LABELS_ZH = Object.freeze({ exposure: "累计暴露（人数 × 
  * its worst case, its largest regret and the sets it belongs to, the two cheapest designs side by side and the rule the sets were drawn by.
  * No row is marked best: the leaders of a criterion are named as leaders of that criterion. Pure over the domain's `vcrCampaignRobust`.
  * @param {Record<string, any>} manifest @param {Record<string, any>} robust @param {Array<Record<string, any>>} candidates the view's candidates
+ * @param {string | null} [quantityLabel] the closed name of the chance the search computes when it is not a plain power (`patients.progression`); null reads 功效
  */
-function presentRobust(manifest, robust, candidates) {
+export function presentRobust(manifest, robust, candidates, quantityLabel = null) {
+  const power = quantityLabel ? `“${quantityLabel}”` : "功效";
   const percentOf = (/** @type {number} */ x) => percentWord(x);
   const num = (/** @type {string} */ name, /** @type {{ value: number, mcse?: number | null } | null | undefined} */ one) => (one
     ? measureValue({ name, value: one.value, mcse: one.mcse ?? undefined, simulated: one.mcse != null }, { kind: "experiment_candidate" }) : null);
@@ -992,18 +1035,27 @@ function presentRobust(manifest, robust, candidates) {
   const baseName = String(manifest.objective?.truth ?? "");
   /** @type {string[]} */
   const sentences = [`在这些假设下（${names}）：`];
+  const rowOf = (/** @type {string | null} */ key) => rows.find((entry) => entry.key === key) ?? null;
   if (cheapestAcceptable) {
-    sentences.push(`每个假设下功效都确认不低于 ${floor} 的最省方案是第 ${cheapestAcceptable.index + 1} 个`);
-    sentences.push(cheapestUnderBase ? (robust.sameDesign ? `；只看基准情形“${baseName}”，最省的也是它。` : `；只看基准情形“${baseName}”，最省的是第 ${cheapestUnderBase.index + 1} 个，它在别的假设下未必够用。`) : "。");
+    sentences.push(`每个假设下${power}都确认不低于 ${floor} 的最省方案是第 ${cheapestAcceptable.index + 1} 个`);
+    // the guard of the pick: a type I error or safety constraint not decided for it is said, never left to the row's small print
+    const picked = rowOf(robust.cheapestAcceptable);
+    if (picked && picked.guard !== "pass" && picked.guard !== "none") sentences.push(`（它的错误率或安全性约束${picked.guard === "inconclusive" ? "还无法确定" : "没有满足"}）`);
+    // The base-case pick is another design only when the cheaper one is not feasible at the base; whether it also holds in every scenario is read from
+    // its own row: a design that held everywhere is never said to be unfit elsewhere (review S4).
+    const under = rowOf(robust.cheapestUnderBase);
+    sentences.push(cheapestUnderBase ? (robust.sameDesign ? `；只看基准情形“${baseName}”，最省的也是它。`
+      : under?.acceptable === "pass" ? `；只看基准情形“${baseName}”，最省的是第 ${cheapestUnderBase.index + 1} 个，它在每个假设下也都达标。`
+      : `；只看基准情形“${baseName}”，最省的是第 ${cheapestUnderBase.index + 1} 个，它在别的假设下未必够用。`) : "。");
   } else if (list(robust.inconclusive).length) {
-    sentences.push(`没有方案在每个假设下都确认功效不低于 ${floor}；有 ${list(robust.inconclusive).length} 个方案在某个假设下无法确定。`);
-  } else sentences.push(`没有方案在每个假设下都达到功效 ${floor}。`);
+    sentences.push(`没有方案在每个假设下都确认${power}不低于 ${floor}；有 ${list(robust.inconclusive).length} 个方案在某个假设下无法确定。`);
+  } else sentences.push(`没有方案在每个假设下都达到${power} ${floor}。`);
   const weighted = robust.weighted === true;
   const choiceRule = [
     `${scenarios.length} 个假设下每个方案都用同一批随机数模拟，差别只来自假设本身。`,
-    `最差情形功效取各假设中最低的一个；遗憾是它与该假设下功效最高的方案之差，取各假设中最大的一个。`,
-    `帕累托集合按样本量、研究时长和最差情形功效三项比较，没有别的方案在三项上都不差、又至少一项更好；接近最优集合还包括每一项至多比某个帕累托方案差“功效 ${percentOf(Number(robust.rule.tolerance.power))}、样本量和时长各 ${percentOf(Number(robust.rule.tolerance.relative))}”加模拟误差的方案。`,
-    weighted ? "你给了各假设的权重，所以另给按权重平均的功效。" : "你没有给各假设的权重，所以不给平均功效。",
+    `最差情形${power}取各假设中最低的一个；遗憾是它与该假设下${power}最高的方案之差，取各假设中最大的一个。`,
+    `帕累托集合按样本量、研究时长和最差情形${power}三项比较，没有别的方案在三项上都不差、又至少一项更好；接近最优集合还包括每一项至多比某个帕累托方案差这么多的方案：${power}差 ${percentOf(Number(robust.rule.tolerance.power))}、样本量和时长各差 ${percentOf(Number(robust.rule.tolerance.relative))}，再加模拟误差。`,
+    weighted ? `你给了各假设的权重，所以另给按权重平均的${power}。` : `你没有给各假设的权重，所以不给按权重平均的${power}。`,
   ];
   return {
     scenarios: list(robust.scenarios).map((entry) => ({ name: String(entry.name), weight: entry.weight ?? null })), weighted,
@@ -1013,7 +1065,7 @@ function presentRobust(manifest, robust, candidates) {
     leaders: { maximin: robust.maximin, minimaxRegret: robust.minimaxRegret },
     cheapestAcceptable, cheapestUnderBase, sameDesign: robust.sameDesign,
     statement: sentences.join(""), choiceRule: choiceRule.join(""),
-    tagText: ROBUST_TAG_TEXT_ZH,
+    powerLabel: quantityLabel ?? "功效", tagText: robustTagText(power),
   };
 }
 

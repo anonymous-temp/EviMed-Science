@@ -56,6 +56,7 @@
 //   and never the run's: its code goes to `report`, the run hears
 //   `vcr_gateway_unavailable`.
 
+import { readingAs } from "./vcrLongitudinalStore.mjs";
 import { VCR_WRITE_FIELDS, vcrContractsRead } from "./vcrWriteContracts.mjs";
 import { VCR_QUESTION_FIELD_LABELS_ZH, VCR_QUESTION_LIMITS } from "@evimed/domain";
 import { VCR_QUESTION_DEFAULT_KEY, VCR_QUESTION_KEY, checkResearchQuestionPatch } from "./vcrResearchQuestions.mjs";
@@ -169,7 +170,7 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   "source_changed", "vcr_intake_source_invalid", "vcr_intake_source_changed", "vcr_intake_payload_invalid", "vcr_intake_format_invalid", "vcr_intake_map_changed", "vcr_field_map_changed", "vcr_field_map_unconfirmed", "vcr_source_withdrawn",
   "vcr_curve_calibration_invalid", "vcr_curve_digitizer_unavailable", "vcr_intake_busy", "vcr_intake_timeout", "vcr_intake_failed",
   "vcr_simulate_action_invalid", "vcr_simulate_payload_invalid", "vcr_simulate_subject_required", "vcr_simulate_subject_unknown",
-  "vcr_job_not_found", "registry_unavailable", "vcr_study_id_invalid", "vcr_study_not_granted",
+  "vcr_job_not_found", "registry_unavailable", "vcr_study_not_granted",
 ]);
 
 class VcrGatewayError extends Error {
@@ -389,6 +390,21 @@ export const VCR_LAB_ACTION_FIELDS = Object.freeze({ search: Object.freeze(["act
   // a record of virtual people (plan R23): the request object, answered with the job that makes it and the records the study holds
   instantiate: Object.freeze(["action", "people"]) });
 const LAB_ACTIONS = Object.freeze(Object.keys(VCR_LAB_ACTION_FIELDS));
+
+/** The patient-level reads of `vcr_read`, which a member's handoff needs the patient-level ability for. */
+const PATIENT_LEVEL_READS = Object.freeze(["subject_document", "matching", "candidate_trials", "fact", "language_judgment", "patient_context", "data_intake"]);
+/** The simulate actions that change nothing: they read what the study already holds. */
+const READ_ONLY_SIMULATE_ACTIONS = Object.freeze(["status", "validate", "shape", "search_status", "compare_status"]);
+/**
+ * The ability a member needs for one call made through a handed-over study, the one the routes ask of the same act: reads read,
+ * patient-level reads read_patient_level, writes and digitizing write, and every simulate action that queues, starts or stops work run.
+ * @param {string} operation @param {Record<string, any>} body
+ */
+function handoffAbility(operation, body) {
+  if (operation === "write" || operation === "digitize") return "write";
+  if (operation === "simulate") return READ_ONLY_SIMULATE_ACTIONS.includes(String(body?.action ?? "start")) ? "read" : "run";
+  return PATIENT_LEVEL_READS.includes(String(body?.what)) ? "read_patient_level" : "read";
+}
 
 /** @param {Record<string, any>} body */
 function simulateRequest(body) {
@@ -1789,14 +1805,17 @@ const WRITERS = {
   /**
    * The study's research question (R22), a field at a time from what the person said. Every field is optional; a patch that changes
    * something is the next version, a field the person edited on the page is kept and named back (`kept`) rather than overwritten, and
-   * a patch that changes nothing writes nothing. The basis is the run's to state as `person_stated` (the person's own words) or
-   * `model_assembled` (its reading of several turns); an edit on the page is the person's alone.
+   * a patch that changes nothing writes nothing. The basis of what a run writes is always `model_assembled` (its reading of the turns):
+   * a run cannot claim a field as the person's own words (review eng round 2, P2-7): a `basis` it sends is checked and not used. `person_stated`
+   * is not the run's to state; an edit on the page is the person's alone.
    */
   async research_question(item, { store, study }, extra) {
     if (!item.only(VCR_WRITE_FIELDS.research_question)) return null;
     const key = item.str("id", { max: VCR_QUESTION_LIMITS.id }) ?? VCR_QUESTION_DEFAULT_KEY;
     if (!VCR_QUESTION_KEY.test(key)) item.bad("id", "id 是小写英文字母开头、只含小写字母、数字和下划线的短词，例如 main；不写就是 main。");
-    const basis = item.choice("basis", ["person_stated", "model_assembled"], { fallback: "model_assembled" });
+    // an old call that still names a basis is read for its shape (a page edit is refused) and recorded as the assistant's reading
+    item.choice("basis", ["person_stated", "model_assembled"], { fallback: "model_assembled" });
+    const basis = "model_assembled";
     const { id: _id, basis: _basis, ...fields } = item.row;
     const { patch, issues } = checkResearchQuestionPatch(fields);
     for (const found of issues) item.bad(found.field, found.message);
@@ -2687,7 +2706,7 @@ function poolingSummary(result, about) {
 /**
  * @param {any} config @param {any} runtimeManager
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
- *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any, dataIntake?: any, experiments?: any } | null,
+ *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any, dataIntake?: any, experiments?: any, access?: any } | null,
  *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null,
  *   readPersonMessages?: ((study:any,sessionId:string)=>Promise<readonly import("./vcrPersonStated.mjs").HumanParameterMessage[] | null>)|null }} dependencies
  */
@@ -2723,11 +2742,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         throw gatewayError(429, "vcr_gateway_rate_limited", "Too many 虚拟临床研究 calls in a minute.");
       }
       const posted = await readJsonBody(req, /** @type {Record<string, number>} */ (requestLimits)[operation]);
-      // An explicit `studyId` names a study handed to this conversation (R11). It is an addressing field of the call, not of the
-      // operation: it is taken off before the operation's own field checks and the native-call proof still covers it.
-      const askedStudyId = posted && typeof posted === 'object' && !Array.isArray(posted) ? posted.studyId : undefined;
-      if (askedStudyId !== undefined && (typeof askedStudyId !== 'string' || !ID.test(askedStudyId))) throw gatewayError(400, 'vcr_study_id_invalid', 'studyId is the id of a study handed to this conversation.');
-      const body = askedStudyId === undefined ? posted : Object.fromEntries(Object.entries(posted).filter(([field]) => field !== "studyId"));
+      const body = posted;
       // Parse before choosing a scope: a malformed syntax probe never creates a scientific task.
       if (operation === 'read') readRequest(body);
       if (operation === 'simulate') simulateRequest(body);
@@ -2780,17 +2795,24 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         return;
       }
       if ((!origin || origin.programme) && !programmeStudy) throw gatewayError(403,'vcr_invocation_unavailable','A current native research call or exact study dispatch is required.');
-      // A study named explicitly is served to the conversation it was handed to and to no other: the grant is read for this very
-      // session and account on every call, so a revocation takes effect at the next one. Authorization of what the call does with
-      // the study (roles, grants, small cells) is unchanged and applies below as for the conversation's own study.
+      // A study handed to this conversation (R11) binds it: the newest grant the calling person made for this very session is read on
+      // every call, so a revocation takes effect at the next one, and the study is the conversation's current study. A member's grant
+      // is judged per operation against the member's role now (the work itself is saved under the study's owner, as the routes do it);
+      // a study the grant names that no longer exists leaves the conversation on its own study.
       let handedStudy = null;
-      if (askedStudyId !== undefined) {
-        const denied = () => gatewayError(403, 'vcr_study_not_granted', 'This study was not handed to this conversation. Ask the researcher to continue it here.');
-        if (!origin || origin.programme) throw denied();
-        const grant = await vcr.store.studyConversationGrant(askedStudyId, origin.rootSessionId);
-        if (!grant || grant.grantedBy !== String(origin.userId)) throw denied();
-        handedStudy = await vcr.service.requireStudy({ id: String(origin.userId) }, askedStudyId).catch(() => null);
-        if (!handedStudy || handedStudy.projectId !== String(origin.projectId)) throw denied();
+      if (origin && !origin.programme) {
+        const grant = await vcr.store.boundStudyGrant?.(String(origin.rootSessionId), String(origin.userId));
+        if (grant) {
+          handedStudy = await vcr.service.requireStudy({ id: String(origin.userId) }, grant.studyId).catch(() => null);
+          // the owner's study is compared with the conversation as a (person, project) pair, never by a bare project id
+          if (handedStudy && String(handedStudy.userId) === String(origin.userId) && handedStudy.projectId !== String(origin.projectId)) {
+            throw gatewayError(403, 'vcr_study_not_granted', 'This study belongs to another project. Ask the researcher to continue it here.');
+          }
+          if (handedStudy && String(handedStudy.userId) !== String(origin.userId)) {
+            await vcr.access.require({ actor: String(origin.userId), studyId: handedStudy.id, ability: handoffAbility(operation, body), note: 'conversation-handoff' })
+              .catch(() => { throw gatewayError(403, 'vcr_study_not_granted', 'Your role in the study does not allow this here. Ask its lead to continue it in this conversation.'); });
+          }
+        }
       }
       let study = handedStudy ?? programmeStudy ?? await vcr.store.studyByControlProject(String(identity.userId),String(identity.projectId));
       if (origin && !programmeStudy && !handedStudy && study && !study.conversationSessionId && resolveStudyConversation) {
@@ -3030,8 +3052,9 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
 
       /** @type {any} */
       let timer;
+      // a run's read in a conversation is judged as the person whose conversation it is, as the page is (review eng round 2, P2-2)
       const result = await Promise.race([
-        work(),
+        origin && !origin.programme ? readingAs(String(origin.userId), work) : work(),
         new Promise((_, reject) => {
           timer = setTimeout(() => reject(gatewayError(504, "vcr_gateway_timeout", "The 虚拟临床研究 gateway timed out.")), budget);
           timer.unref?.();

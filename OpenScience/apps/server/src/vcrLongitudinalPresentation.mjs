@@ -8,12 +8,41 @@
  *   study's own page (`{ page: true }`, the routes only) gets them back from the saved summary, because who was rejected and why is what
  *   the person reads the ledger for. Nothing else is restored, and the model projections never pass the option. */
 import { suppressForModel } from '@evimed/domain';
+import { localForecastProviders } from './vcrLocalIndividualize.mjs';
+
+/** What a person reads for each provider the deployment carries itself (round-2 review: an English descriptive name, a provider id and a method's own
+ * label reached the version list and the prediction select). The same provider is named by its id, its model label or its English name in the records
+ * written so far, so all three read the same Chinese words; a provider that is not ours (an external file, a vendor) is shown as it was written. */
+const LOCAL_PROVIDER_WORDS_ZH = /** @type {Record<string,string>} */ ({
+  'evimed-individualize-linear-mixed':'线性混合模型：按每个人自己之前的数值更新',
+  'evimed-individualize-beta-logit':'阿尔茨海默病 ADAS-cog 11 模型：按每个人自己之前的分数更新',
+});
+const LOCAL_NAMES = new Map(localForecastProviders().flatMap(provider => LOCAL_PROVIDER_WORDS_ZH[provider.id]
+  ? [provider.id,provider.model,provider.name].filter(Boolean).map(name => /** @type {[string,string]} */ ([String(name),LOCAL_PROVIDER_WORDS_ZH[provider.id]])) : []));
+/** @param {unknown} name @returns {unknown} */
+export const forecastProviderWords = name => LOCAL_NAMES.get(String(name)) ?? name;
 
 /** The summary keys only the page projection restores. */
 const PAGE_LEDGER_KEYS = Object.freeze(['accounting','accountingReasons']);
 
+/** A comparison with an observed block that carries no `outcomeHistoryId` was written before the outcome history joined its class and
+ * lineage (F01/F02): its stored class may be a synthetic exemption its real outcomes never had, and its lineage does not hold the
+ * history's. Until the startup repair (`repairComparisons`) settles the row it is read as patient-class with the observed block
+ * withheld, so a stored class weaker than the strictest of its lineage is never what a reader is served.
+ * @param {any} record */
+function unsettledComparison(record) {
+  return record?.kind === 'comparison' && record.summary?.observed != null && record.summary.outcomeHistoryId === undefined;
+}
+
 /** @param {any} record @param {any} options */
 function artifact(record,options) {
+  const shown = artifactShown(record,options);
+  return shown?.summary?.model?.name === undefined ? shown : {...shown,summary:{...shown.summary,model:{...shown.summary.model,name:forecastProviderWords(shown.summary.model.name)}}};
+}
+
+/** @param {any} record @param {any} options */
+function artifactShown(record,options) {
+  if (unsettledComparison(record)) record = {...record,summary:{...record.summary,observed:null,observedWithheld:'lineage_unsettled',dataClass:'patient'}};
   const shown = suppressForModel(record,options);
   if (!record?.summary || !String(record.id).startsWith('vlf_')) return shown;
   if (record.summary.dataClass === 'synthetic') return {...shown,summary:structuredClone(record.summary)};
