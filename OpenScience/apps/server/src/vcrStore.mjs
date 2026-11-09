@@ -1622,18 +1622,19 @@ export class VcrStore extends VcrStoreBase {
   }
 
   /**
-   * A result made from patient-derived forecasts carries that lineage on the job that wrote it (`checkpoint.forecastLineage`), and every
+   * A result made from patient-derived forecasts carries that lineage on the job that wrote it (`checkpoint.forecastLineage`; a result made from
+   * other results names them in `checkpoint.resultLineage`), and every
    * read of the result judges it again with the one check the artifacts use (`longitudinalGuard`): a result whose snapshot, source grant
    * or field binding is gone is not served, whatever stored summary it holds. Rows with no such job pass untouched, in one query.
    * @template {{ id: string, study_id: string }} T @param {T[]} rows @returns {Promise<T[]>}
    */
-  async #inLineage(rows) {
+  async #inLineage(rows, depth = 0) {
     if (!this.longitudinalGuard || !rows.length) return rows;
-    const held = await this.rows(`SELECT r.id, j.checkpoint->'forecastLineage' AS lineage FROM ${VCR_SCHEMA}.results r
+    const held = await this.rows(`SELECT r.id, j.checkpoint->'forecastLineage' AS lineage, j.checkpoint->'resultLineage' AS results FROM ${VCR_SCHEMA}.results r
       JOIN ${VCR_SCHEMA}.executions e ON e.id = r.execution_id JOIN ${VCR_SCHEMA}.jobs j ON j.id = e.job_id
-      WHERE r.id = ANY($1::text[]) AND j.checkpoint ? 'forecastLineage'`, [rows.map((row) => String(row.id))]);
+      WHERE r.id = ANY($1::text[]) AND (j.checkpoint ? 'forecastLineage' OR j.checkpoint ? 'resultLineage')`, [rows.map((row) => String(row.id))]);
     if (!held.length) return rows;
-    const lineage = new Map(held.map((row) => [String(row.id), object(row.lineage)]));
+    const lineage = new Map(held.filter((row) => row.lineage != null).map((row) => [String(row.id), object(row.lineage)]));
     const denied = new Set();
     for (const studyId of new Set(rows.filter((row) => lineage.has(String(row.id))).map((row) => String(row.study_id)))) {
       const pseudo = rows.filter((row) => String(row.study_id) === studyId && lineage.has(String(row.id))).map((row) => {
@@ -1642,6 +1643,18 @@ export class VcrStore extends VcrStoreBase {
       });
       const allowed = await this.longitudinalGuard(studyId, pseudo, null);
       for (const row of pseudo) if (!allowed.has(row.id)) denied.add(row.id);
+    }
+    // A result computed from another result (an effect prior taken from a pooling) is readable only while the result it named is: the same
+    // judgement, applied to it, so a lineage withdrawn upstream reaches everything that was made from it. A result that is gone reads as withdrawn.
+    const dependent = held.filter((row) => list(row.results).length && !denied.has(String(row.id)));
+    if (dependent.length) {
+      const studyOf = new Map(rows.map((row) => [String(row.id), String(row.study_id)]));
+      const named = [...new Set(dependent.flatMap((row) => list(row.results).map(String)))];
+      const sources = depth >= 8 ? [] : await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results WHERE id = ANY($1::text[])`, [named]);
+      const readable = new Set((depth >= 8 ? [] : await this.#inLineage(sources, depth + 1)).map((row) => `${row.study_id}|${row.id}`));
+      for (const row of dependent) {
+        if (list(row.results).some((id) => !readable.has(`${studyOf.get(String(row.id))}|${String(id)}`))) denied.add(String(row.id));
+      }
     }
     return denied.size ? rows.filter((row) => !denied.has(String(row.id))) : rows;
   }

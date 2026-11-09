@@ -21,7 +21,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { VCR_PROGRESSION_PARAMETER_SETS, canonicalScenarioJson } from "@evimed/domain";
+import { VCR_PEOPLE_MODES, VCR_PROGRESSION_PARAMETER_SETS, canonicalScenarioJson } from "@evimed/domain";
 
 /** The table the engine writes. */
 export const VCR_PEOPLE_TABLE = "progression-people";
@@ -95,4 +95,34 @@ export function vcrPeopleRecordView(result) {
     current: made !== null && /** @type {Record<string, string>} */ (VCR_PROGRESSION_PARAMETER_SETS)[made.id] === made.version,
     outsideFittedMmse: Number(progression.outsideFittedMmse ?? 0), fittedMmse: Array.isArray(progression.fittedMmse) ? progression.fittedMmse.map(Number) : null,
     covariatesFrom: progression.covariatesFrom ?? null, tableSha256: table.sha256 ? String(table.sha256) : null };
+}
+
+/**
+ * A plain start of a disease-progression simulation that names a record of virtual people (`people: { recordId, mode }`): the same fields a comparison
+ * carries, bound the same way, so one start on a record is one arm of a comparison on it. The people are the record's, so a scenario that states
+ * its own people, population or study-level uncertainty is refused by name; a paired run is on everyone in the record, so the arm's own group
+ * sizes are not carried. The seed is a function of the record and the mode alone, so two starts that differ only in the drug draw the same people,
+ * dropout and residuals and their difference is the drug's.
+ * @param {Record<string, any>} scenario @param {unknown} people the call's `people`
+ * @returns {{ ok: true, scenario: Record<string, any>, derived: Array<{ resultId: string, table: string, shape: string }>, recordId: string, mode: string, seed: number }
+ *   | { ok: false, issues: Array<{ code: string, field: string, detail: string }> }}
+ */
+export function vcrPeopleStartBinding(scenario, people) {
+  const asked = object(people);
+  const recordId = typeof asked.recordId === "string" ? asked.recordId : "";
+  /** @type {Array<{ code: string, field: string, detail: string }>} */
+  const issues = [];
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,120}$/.test(recordId)) issues.push({ code: "start_people_invalid", field: "people.recordId", detail: "The record of people is named by the id its instantiate step answered with." });
+  if (!VCR_PEOPLE_MODES.includes(asked.mode)) issues.push({ code: "start_people_invalid", field: "people.mode", detail: `A run on a record is ${VCR_PEOPLE_MODES.join(" or ")}.` });
+  for (const key of Object.keys(asked)) if (key !== "recordId" && key !== "mode") issues.push({ code: "start_people_invalid", field: `people.${key}`, detail: "people is { recordId, mode } and nothing else." });
+  for (const key of ["population", "people", "instantiate"]) {
+    if (scenario[key] !== undefined) issues.push({ code: "start_people_conflict", field: `scenario.${key}`, detail: "A start on a record of people takes the people from the record: the scenario does not state them." });
+  }
+  if (object(scenario.model).uncertainty !== undefined) issues.push({ code: "start_people_conflict", field: "scenario.model.uncertainty", detail: "A run on a record is on the study the record was made in; the study is not drawn again." });
+  if (issues.length) return { ok: false, issues };
+  const mode = String(asked.mode);
+  const { design: _sizes, ...withoutSizes } = scenario;
+  const bound = { ...(mode === "paired_counterfactual" ? withoutSizes : scenario), people: { inputId: `${recordId}:${VCR_PEOPLE_TABLE}`, mode } };
+  const seed = Number.parseInt(sha256(`start-on-people|${recordId}|${mode}`).slice(0, 8), 16) % (2 ** 31 - 1);
+  return { ok: true, scenario: bound, derived: [{ resultId: recordId, table: VCR_PEOPLE_TABLE, shape: "subject" }], recordId, mode, seed };
 }

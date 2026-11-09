@@ -53,7 +53,7 @@ import { HttpError } from "./security.mjs";
 import { finishPremises } from "./vcrPremises.mjs";
 import { ALZHEIMER_PARAMETERS_TEXT, ALZHEIMER_REGULATORY_TEXT, ALZHEIMER_REPRODUCTION_TEXT, alzheimerScopeText } from "./vcrProgression.mjs";
 import { measureLabel, measureValue } from "./vcrViewsKit.mjs";
-import { VCR_PEOPLE_TABLE, vcrPeopleInstantiateRequest, vcrPeopleRecordView } from "./vcrPeople.mjs";
+import { VCR_PEOPLE_TABLE, vcrPeopleInstantiateRequest, vcrPeopleRecordView, vcrPeopleStartBinding } from "./vcrPeople.mjs";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 
 const SCHEMA = "evimed_vcr";
@@ -445,6 +445,18 @@ export class VcrExperiments {
     const view = vcrPeopleRecordView(result);
     if (!result || !view) throw invalid("vcr_experiment_invalid", "实验设置不完整：", [{ code: "experiment_people_unknown", field: "people.recordId", detail: "This study has no such record of virtual people." }]);
     return view;
+  }
+
+  /**
+   * A plain start of a progression simulation on a record of people: the record must be this study's own (the same read a comparison makes),
+   * then the start is bound the way an arm is (`vcrPeopleStartBinding`).
+   * @param {{ id: string }} study @param {Record<string, any>} scenario @param {unknown} people
+   */
+  async bindPeopleStart(study, scenario, people) {
+    const bound = vcrPeopleStartBinding(scenario, people);
+    if (!bound.ok) throw invalid("vcr_people_invalid", "虚拟患者记录的设置不完整：", bound.issues);
+    await this.#peopleRecord(study, bound.recordId);
+    return bound;
   }
 
   // --- design experiments ------------------------------------------------------------------------------------------------------

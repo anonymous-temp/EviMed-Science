@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { VCR_RESULT_QUANTITY_LABELS_ZH } from "@evimed/domain";
-import { VCR_PEOPLE_TABLE, vcrPeopleInstantiateRequest, vcrPeopleRecordView } from "../src/vcrPeople.mjs";
+import { VCR_PEOPLE_TABLE, vcrPeopleInstantiateRequest, vcrPeopleRecordView, vcrPeopleStartBinding } from "../src/vcrPeople.mjs";
 import { progressionCard } from "../src/vcrProgression.mjs";
 
 const generation = { populationId: "pop_1", populationVersion: 3, resultId: "res_pop", table: "population", inputId: "res_pop:population" };
@@ -76,4 +76,26 @@ test("a result whose effect is a distribution reads as an assurance on the patie
   assert.equal(assurance.powerName, VCR_RESULT_QUANTITY_LABELS_ZH.assurance);
   assert.equal(assurance.powerQuantity, "assurance");
   assert.equal(card("power", false).powerQuantity === "assurance", false);
+});
+
+test("a start on a record of people is bound the way a comparison's arm is, and states no people of its own (A4)", () => {
+  const scenario = { design: { nTreat: 60, nControl: 60 }, model: { family: "beta_logit" }, treatment: { symptomatic: { pointsAt: { value: -2, basis: "assumed" } } } };
+  const paired = vcrPeopleStartBinding(scenario, { recordId: "res_people1", mode: "paired_counterfactual" });
+  assert.equal(paired.ok, true);
+  assert.deepEqual(paired.scenario.people, { inputId: `res_people1:${VCR_PEOPLE_TABLE}`, mode: "paired_counterfactual" });
+  assert.equal(paired.scenario.design, undefined, "a paired run is on everyone in the record: the group sizes are not carried");
+  assert.deepEqual(paired.derived, [{ resultId: "res_people1", table: VCR_PEOPLE_TABLE, shape: "subject" }]);
+  const resampled = vcrPeopleStartBinding(scenario, { recordId: "res_people1", mode: "resampled_trials" });
+  assert.deepEqual(resampled.scenario.design, scenario.design);
+  // the seed is a function of the record and the mode alone: two drugs on one record share their people, another mode or record does not
+  const other = vcrPeopleStartBinding({ ...scenario, treatment: {} }, { recordId: "res_people1", mode: "paired_counterfactual" });
+  assert.equal(other.seed, paired.seed);
+  assert.notEqual(resampled.seed, paired.seed);
+  assert.notEqual(vcrPeopleStartBinding(scenario, { recordId: "res_people2", mode: "paired_counterfactual" }).seed, paired.seed);
+  const refused = (people, change = {}) => { const out = vcrPeopleStartBinding({ ...scenario, ...change }, people); assert.equal(out.ok, false); return codes(out.issues); };
+  assert.deepEqual(refused({ recordId: "res_people1", mode: "everyone" }), ["start_people_invalid@people.mode"]);
+  assert.deepEqual(refused({ recordId: "../x", mode: "paired_counterfactual" }), ["start_people_invalid@people.recordId"]);
+  assert.deepEqual(refused({ recordId: "res_people1", mode: "paired_counterfactual", path: "x" }), ["start_people_invalid@people.path"]);
+  assert.deepEqual(refused({ recordId: "res_people1", mode: "paired_counterfactual" }, { instantiate: { n: 10 } }), ["start_people_conflict@scenario.instantiate"]);
+  assert.deepEqual(refused({ recordId: "res_people1", mode: "paired_counterfactual" }, { model: { family: "beta_logit", uncertainty: "new_study" } }), ["start_people_conflict@scenario.model.uncertainty"]);
 });

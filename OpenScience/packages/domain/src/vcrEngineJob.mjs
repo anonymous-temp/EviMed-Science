@@ -206,7 +206,7 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // in CI and is never called from the engine.
   'decision.value_of_information': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['voi 1.0.3 (evppi and evsi on the same utility matrix and the same regression formula)', 'closed forms of a normal-normal two-decision problem (EVPI, EVPPI of each input, EVPPI of a group)', 'Strong, Oakley & Brennan (2014), case study 1: the overall EVPI of the decision tree and its partial EVPIs against the printed gold standard', 'closed form of the expected power under a normal design prior (the assurance integral)']), modelTier: 'scenario' },
   // A published whole-body PBPK model (Asaumi et al. 2018): midazolam, oral or intravenous, after repeated rifampicin (induction of CYP3A4 in gut wall and liver).
-  'pk.interaction': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['deSolve (its stiff integrator on the same equations, the doses as events: the 41 states and the area under the curve, to 1e-6)', 'the authors\' own simulation of the model (the Metrum Research Group\'s open vignette: the 3 mg midazolam area after 75 mg rifampicin daily for 7 days, 24.70 and 6.84 ng/mL*h, and its dose-response)']), modelTier: 'literature' },
+  'pk.interaction': { version: '1.1.0', endpoints: frozen([]), crossChecks: frozen(['deSolve (its stiff integrator on the same equations, the doses as events: the 41 states and the area under the curve, to 1e-6; and the 12 states of the ketoconazole inhibition model, to 1e-6)', 'the inhibition models\' own published predictions (Quinney et al. 2013, Table 4: the intravenous midazolam area ratio after ketoconazole 200 mg daily for six days, 2.5 mixed and 2.0 noncompetitive) and the closed-form static mechanistic ratio of the same equations with the inhibitor held constant', 'the authors\' own simulation of the model (the Metrum Research Group\'s open vignette: the 3 mg midazolam area after 75 mg rifampicin daily for 7 days, 24.70 and 6.84 ng/mL*h, and its dose-response)']), modelTier: 'literature' },
 })
 
 export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
@@ -382,14 +382,18 @@ export const VCR_LOCATION_LIMITS = Object.freeze({ maxSegments: 8, maxLength: 51
  * What an input can be. Lineage kinds carry an id with a version (`asm_1@3`),
  * because a result references a version, never an object; `snapshot` is the
  * caller's way to name patient-level data; `analysis_table` and `snapshot_file`
- * are what the control plane turns it into.
+ * are what the control plane turns it into. `result` is a result of the study
+ * that a scenario takes a number from (an effect prior from a pooling): the
+ * control plane reads it through the store's guarded read, writes the number
+ * into the frozen scenario and keeps the result's lineage on the job, so a
+ * lineage withdrawn from the result reaches everything made from it.
  */
 export const VCR_INPUT_KINDS = frozen([
-  'assumption', 'study_definition', 'population', 'comparator_design', 'evidence',
+  'assumption', 'study_definition', 'population', 'comparator_design', 'evidence', 'result',
   'snapshot', 'analysis_table', 'snapshot_file',
 ])
 /** Input kinds whose id is a lineage node and so ends in `@<version>`. */
-export const VCR_VERSIONED_INPUT_KINDS = frozen(['assumption', 'study_definition', 'population', 'comparator_design'])
+export const VCR_VERSIONED_INPUT_KINDS = frozen(['assumption', 'study_definition', 'population', 'comparator_design', 'result'])
 /** Input kinds only the control plane may write, and the engine reads as files. */
 export const VCR_ENGINE_TABLE_INPUT_KINDS = frozen(['analysis_table', 'snapshot_file'])
 /** The kind a caller uses for patient-level data. */

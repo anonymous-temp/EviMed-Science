@@ -28,7 +28,7 @@ function projected(tool, operation, actual, body) {
   // search and their reads from a real conversation was refused here).
   const lab = operation === 'simulate' && Object.hasOwn(VCR_LAB_ACTION_FIELDS, actual.action) ? /** @type {Record<string, readonly string[]>} */ (VCR_LAB_ACTION_FIELDS)[actual.action] : null;
   const keys = operation === 'read' ? ['what', 'filter'] : operation === 'write' ? ['what', 'data', 'items'] : lab ? lab
-    : ['start', 'validate'].includes(actual.action ?? 'start') ? ['action', 'kind', 'scenario', 'inputs', 'seed', 'replicates', 'cpuSecondsLimit', 'subjectId', 'reconstructionResultId', 'selection', 'modelId', 'modelVersion', 'sources'] : ['action', 'jobId'];
+    : ['start', 'validate'].includes(actual.action ?? 'start') ? ['action', 'kind', 'scenario', 'inputs', 'seed', 'replicates', 'cpuSecondsLimit', 'subjectId', 'reconstructionResultId', 'selection', 'modelId', 'modelVersion', 'sources', 'people'] : ['action', 'jobId'];
   const result = Object.fromEntries(keys.filter(key => operation === 'write' ? Object.hasOwn(actual,key) : actual[key] != null).map(key => [key, actual[key]]));
   if (operation === 'simulate') result.action ??= 'start';
   // the study a call names explicitly (one handed to this conversation) is part of what the proof covers

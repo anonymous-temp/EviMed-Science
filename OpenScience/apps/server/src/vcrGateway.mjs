@@ -393,7 +393,7 @@ const LAB_ACTIONS = Object.freeze(Object.keys(VCR_LAB_ACTION_FIELDS));
 /** @param {Record<string, any>} body */
 function simulateRequest(body) {
   const action = body.action ?? "start";
-  if (!LAB_ACTIONS.includes(action)) onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion", "sources"]);
+  if (!LAB_ACTIONS.includes(action)) onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion", "sources", "people"]);
   if (!["start", "status", "cancel", "validate", "shape", ...LAB_ACTIONS].includes(action)) {
     throw gatewayError(400, "vcr_simulate_action_invalid", `action must be start, status, cancel, validate, shape or ${LAB_ACTIONS.join(", ")}.`);
   }
@@ -440,7 +440,11 @@ function simulateRequest(body) {
     }
     if (body.modelVersion != null && body.modelId == null) throw gatewayError(400,'vcr_simulate_payload_invalid','modelVersion requires modelId.');
     if (body.selection != null && !['match_criteria', 'match_extract'].includes(body.kind)) throw gatewayError(400, 'vcr_simulate_payload_invalid', 'selection is for matching only.');
-    return { action, kind: body.kind, modelId: body.modelId ?? null, modelVersion: body.modelVersion ?? null, selection: body.selection == null ? null : body.kind === 'match_extract' ? extractSelection(body.selection) : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
+    // a record of virtual people (R23) is the people of a disease-progression start; its id and mode are checked against the study where it is bound
+    if (body.people != null && (body.kind !== 'generate_progression' || typeof body.people !== 'object' || Array.isArray(body.people))) {
+      throw gatewayError(400, 'vcr_simulate_payload_invalid', 'people is { recordId, mode } of a record of virtual people, for a disease-progression start.');
+    }
+    return { action, kind: body.kind, people: body.people ?? null, modelId: body.modelId ?? null, modelVersion: body.modelVersion ?? null, selection: body.selection == null ? null : body.kind === 'match_extract' ? extractSelection(body.selection) : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
       reconstructionResultId: body.reconstructionResultId == null ? null : body.reconstructionResultId,
       seed: Number.isInteger(body.seed) ? body.seed : null,
       replicates: Number.isInteger(body.replicates) ? body.replicates : null,
@@ -2931,9 +2935,9 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             // The scenario as `start` would check it, answered with its defaults and its replicate count and never queued. A model or a
             // reconstruction named here is a binding the platform makes at start, and is not this call's.
             const asked = /** @type {any} */ (request);
-            if (asked.modelId || asked.reconstructionResultId) {
+            if (asked.modelId || asked.reconstructionResultId || asked.people) {
               return { action: "validate", kind: asked.kind, queued: false, checked: false,
-                message: "有模型或曲线重建结果的计算由平台在启动时绑定，这里不检查；直接 start，被拒的字段会按路径回来。" };
+                message: "有模型、曲线重建结果或虚拟患者记录的计算由平台在启动时绑定，这里不检查；直接 start，被拒的字段会按路径回来。" };
             }
             // An object named with no scenario is checked as the programme would build it from the object (see `startJob`).
             let scenario = asked.scenario;
@@ -3240,6 +3244,15 @@ async function startJob(vcr, study, request, { personMessages = null } = {}) {
   }
   scenario = described.scenario;
   if (described.applied.length) detail = { ...detail, normalizedKeys: described.applied };
+  // A start on a record of virtual people is one arm of a comparison on it: the people are the record's, the table rides beside the scenario
+  // as a derived input the platform filed, and the seed follows the record, so two starts that differ in the drug draw the same people.
+  /** @type {Awaited<ReturnType<NonNullable<typeof vcr.experiments>["bindPeopleStart"]>> | null} */
+  let onPeople = null;
+  if (request.people) {
+    if (typeof vcr.experiments?.bindPeopleStart !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "虚拟患者记录在本部署尚未接入：这一步暂不可用。");
+    onPeople = await vcr.experiments.bindPeopleStart(study, scenario, request.people);
+    scenario = onPeople.scenario; derived = [...derived, ...onPeople.derived];
+  }
   // A computation of a research object names it: its result is filed under that object and replaces only that object's earlier
   // results. The id the run gave is checked against the study; with none, the one object the scenario fits is taken, and several
   // (or none) are refused by name with what the study holds.
@@ -3336,8 +3349,8 @@ async function startJob(vcr, study, request, { personMessages = null } = {}) {
     ...(detail.personStated ? { personStated: detail.personStated } : {}) })).digest("hex").slice(0, 16);
   const { job, notice } = await vcr.jobs.enqueue({
     studyId: study.id, userId: study.userId, kind: request.kind, scenario, inputs, ...(derived.length ? { derived } : {}),
-    ...(population.derived.length ? { internal: true } : {}),
-    seed: request.seed, replicates: request.replicates, cpuSecondsLimit: request.cpuSecondsLimit,
+    ...(population.derived.length || onPeople ? { internal: true } : {}),
+    seed: request.seed ?? onPeople?.seed ?? null, replicates: request.replicates, cpuSecondsLimit: request.cpuSecondsLimit,
     // The same frozen scenario asked for twice is the same job; a changed one is not.
     idempotencyKey: `vcr:${study.id}:runtime:${request.kind}:${subject?.row.id ?? request.subjectId ?? ""}:${scenarioHash}`,
     runId: study.executionOrigin?.runId ?? null,

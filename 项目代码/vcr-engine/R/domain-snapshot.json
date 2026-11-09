@@ -772,10 +772,11 @@
       "modelTier": "scenario"
     },
     "pk.interaction": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
-        "deSolve (its stiff integrator on the same equations, the doses as events: the 41 states and the area under the curve, to 1e-6)",
+        "deSolve (its stiff integrator on the same equations, the doses as events: the 41 states and the area under the curve, to 1e-6; and the 12 states of the ketoconazole inhibition model, to 1e-6)",
+        "the inhibition models' own published predictions (Quinney et al. 2013, Table 4: the intravenous midazolam area ratio after ketoconazole 200 mg daily for six days, 2.5 mixed and 2.0 noncompetitive) and the closed-form static mechanistic ratio of the same equations with the inhibitor held constant",
         "the authors' own simulation of the model (the Metrum Research Group's open vignette: the 3 mg midazolam area after 75 mg rifampicin daily for 7 days, 24.70 and 6.84 ng/mL*h, and its dose-response)"
       ],
       "modelTier": "literature"
@@ -1030,6 +1031,7 @@
     "population",
     "comparator_design",
     "evidence",
+    "result",
     "snapshot",
     "analysis_table",
     "snapshot_file"
@@ -1038,7 +1040,8 @@
     "assumption",
     "study_definition",
     "population",
-    "comparator_design"
+    "comparator_design",
+    "result"
   ],
   "engineTableInputKinds": [
     "analysis_table",
@@ -14942,9 +14945,25 @@
             "drug": {
               "t": "string",
               "values": [
-                "rifampicin"
+                "rifampicin",
+                "ketoconazole"
               ],
               "req": true
+            },
+            "inhibition": {
+              "t": "string",
+              "values": [
+                "competitive",
+                "noncompetitive",
+                "mixed"
+              ],
+              "default": "mixed",
+              "when": {
+                "path": "perpetrator.drug",
+                "in": [
+                  "ketoconazole"
+                ]
+              }
             },
             "doseMg": {
               "t": "number",

@@ -899,6 +899,24 @@ class VcrSimulateTests(_GatewayCase):
                              capture_output=True, text=True, timeout=60, check=True)
         self.assertEqual(json.loads(out.stdout.strip().splitlines()[-1]), {"issues": [], "ok": True})
 
+    def test_a_start_carries_the_people_and_the_result_input_it_names_and_the_help_teaches_them(self):
+        """Plan R23/R31 (A4): a plain start of the progression kind may name a record of virtual people, and take its drug effect from a pooling
+        through a result input; both ride to the gateway whole and the shape of the kind teaches them."""
+        people = {"recordId": "res_people1", "mode": "paired_counterfactual"}
+        inputs = [{"kind": "result", "id": "result:res_pool1@2"}]
+        with mock.patch.object(vcr_platform, "_post", return_value={"action": "start", "jobId": "job_3", "state": "queued", "progress": {}}) as post:
+            vcr_platform.simulate({"action": "start", "kind": "generate_progression", "scenario": {"treatment": {"effectFrom": {"input": "result:res_pool1@2"}}},
+                                   "inputs": inputs, "people": people})
+        body = post.call_args[0][1]
+        self.assertEqual(body["people"], people)
+        self.assertEqual(body["inputs"], inputs)
+        self.assertEqual(body["scenario"], {"treatment": {"effectFrom": {"input": "result:res_pool1@2"}}})
+        shape = vcr_platform.shape({"kind": "generate_progression"})
+        text = json.dumps(shape, ensure_ascii=False)
+        self.assertIn("effectFrom", text)
+        self.assertIn("result:<id>@<version>", text)
+        self.assertTrue(any("One start (kind generate_progression)" in note for note in vcr_platform.shape({"kind": "people"})["data"]["notes"]))
+
     def test_shape_kind_people_gives_a_filled_request_the_domain_accepts(self):
         answer = vcr_platform.shape({"kind": "people"})
         self.assertEqual(answer["status"], "success")

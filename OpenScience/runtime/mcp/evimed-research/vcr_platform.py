@@ -1230,6 +1230,7 @@ def _people_shape() -> dict:
                 "The same request is the same record. Call again to read recordId from records once the job has finished.",
                 "Then compare: action compare, experiment {arms: [{name, method: patients.progression, scenario}], people: {recordId, mode}}; "
                 "paired_counterfactual runs each person under every arm, resampled_trials draws each simulated trial's people from the record.",
+                "One start (kind generate_progression) may carry the same people {recordId, mode} instead of a comparison; its scenario then states no people, population or study-level uncertainty, and two starts that differ only in the drug run on the same people.",
             ],
         },
         "warnings": [],
@@ -1435,7 +1436,7 @@ def simulate(arguments: dict) -> dict:
         if kind not in JOB_KINDS:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
         payload["kind"] = kind
-        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion", "sources"):
+        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion", "sources", "people"):
             if arguments.get(key) is not None:
                 payload[key] = arguments[key]
     else:

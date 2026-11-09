@@ -141,6 +141,7 @@ import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { populationCheckIndependence, populationCheckRows } from "./vcrPopulationCheck.mjs";
 import { vcrCohortInputIssue } from "./vcrSnapshotBinding.mjs";
 import { vcrSynthesisIssue } from "./vcrSynthesisGuard.mjs";
+import { bindVcrEffectPrior } from "./vcrEffectPriorBinding.mjs";
 import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
 
 /** States a job may still move out of. */
@@ -961,7 +962,20 @@ export class VcrJobs {
     if (object(input.scenario).evaluation !== undefined) {
       return { action: "validate", kind, queued: false, checked: true, valid: false, issues: [{ code: "scenario_field_unknown", field: "scenario.evaluation", message: CAMPAIGN_PRECISION_ONLY }] };
     }
-    const unitBound = vcrCanonicalScenarioTimeUnit(method, object(input.scenario));
+    // An effect taken from a result of the study is bound the way a start binds it, so a refusal is learned before the call that would queue it.
+    let named = object(input.scenario);
+    if (object(named.treatment).effectFrom !== undefined) {
+      if (!input.studyId) return { action: "validate", kind, queued: false, checked: false, message: "药效取自本研究的汇总结果，需要在研究里检查；直接 start，被拒的字段会按路径回来。" };
+      try {
+        named = (await bindVcrEffectPrior({ store: this.store, studyId: String(input.studyId), scenario: named, inputs: list(input.inputs) })).scenario;
+      } catch (error) {
+        const refused = /** @type {any} */ (error);
+        if (!Array.isArray(refused?.issues) && Number(refused?.status) !== 404 && Number(refused?.status) !== 409) throw error;
+        const issues = Array.isArray(refused.issues) ? refused.issues : [{ code: String(refused.code ?? "effect_prior_unavailable"), field: "scenario.treatment.effectFrom.input", detail: String(refused.message ?? "") }];
+        return { action: "validate", kind, queued: false, checked: true, valid: false, issues: issues.slice(0, 20).map((/** @type {any} */ issue) => ({ code: issue.code, field: issue.field, message: issue.detail ?? "" })) };
+      }
+    }
+    const unitBound = vcrCanonicalScenarioTimeUnit(method, named);
     // Keys that only describe what the method does anyway (`vcrNormalizeScenarioKeys`) are left out, as the frozen job would leave them.
     const described = vcrNormalizeScenarioKeys(method, unitBound.scenario);
     const scenario = described.scenario;
@@ -1049,6 +1063,14 @@ export class VcrJobs {
 
     // 1. what a caller may send
     let asked = list(input.inputs);
+    // An effect the scenario takes from a result of the study (R31): read through the guarded store, written into the scenario as the
+    // distribution the model samples, and the result's lineage kept on the job.
+    /** @type {Record<string, any>} */
+    let effectDetail = {};
+    if (object(scenario.treatment).effectFrom !== undefined) {
+      const taken = await bindVcrEffectPrior({ store: this.store, studyId, scenario, inputs: asked });
+      scenario = taken.scenario; effectDetail = taken.detail;
+    }
     /** @type {Record<string, any>} */
     let baselineDetail = {};
     if (kind === "literature_population" || kind === "population_check") {
@@ -1223,7 +1245,7 @@ export class VcrJobs {
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(described.applied.length ? { normalizedKeys: described.applied } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: vcrJobCostClass(kind, scenario), ...(questionRef ? { questionRef } : {}) }), questionRef ? JSON.stringify(questionRef) : null])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...effectDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(described.applied.length ? { normalizedKeys: described.applied } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: vcrJobCostClass(kind, scenario), ...(questionRef ? { questionRef } : {}) }), questionRef ? JSON.stringify(questionRef) : null])).rows[0];
       // Completion locks the job before its population. A duplicate enqueue must take the same order:
       // the UPSERT may wait for a finishing job; only then lock and recheck its generation in this transaction.
       if (qualityBasis) {
