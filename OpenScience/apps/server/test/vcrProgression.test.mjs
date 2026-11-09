@@ -222,3 +222,17 @@ test("R26: a run with intercurrent events carries its estimand table and says wh
   assert.equal(progressionCard(fixture("alzheimer-beta-logit")).estimands, null);
   assert.equal(progressionCard(fixture("alzheimer-beta-logit")).premises.some((premise) => premise.key === "progression:ad:estimand"), false);
 });
+
+test("an effect the person typed reads as their data on the Alzheimer page, a half-typed one and an unchecked one do not (round-2 review P1-1)", () => {
+  const withRecord = (personStated) => {
+    const result = fixture("alzheimer-beta-logit");
+    if (personStated) result.diagnostics.personStated = personStated;
+    return Object.fromEntries(progressionCard(result).premises.map((premise) => [premise.key, premise]));
+  };
+  const both = { schema: 2, readable: true, paths: [], bindings: [], matched: ["treatment.symptomatic.pointsAt.value", "treatment.diseaseModifying.fraction.value"] };
+  assert.equal(withRecord(both)["progression:ad:effect"].source, "given");
+  assert.equal(withRecord({ ...both, matched: both.matched.slice(0, 1) })["progression:ad:effect"].source, "assumed", "every number of the hypothesis must be theirs");
+  assert.equal(withRecord(null)["progression:ad:effect"].source, "assumed");
+  assert.equal(withRecord({ schema: 2, readable: false, paths: [], bindings: [] })["progression:ad:effect"].source, "assumed");
+  assert.equal(withRecord(both)["progression:ad:dosing"].source, "default", "an engine default stays a default whatever the person wrote");
+});

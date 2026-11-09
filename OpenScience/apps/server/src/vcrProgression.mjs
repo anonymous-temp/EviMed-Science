@@ -31,6 +31,7 @@
 import { createHash } from "node:crypto";
 import { VCR_PROGRESSION_PARAMETER_SETS, VCR_RESULT_QUANTITY_LABELS_ZH, VCR_SIMULATION_ERROR_SENTENCE_ZH, VCR_UNCERTAINTY_MODE_QUANTITY, vcrEstimandAlignment } from "@evimed/domain";
 import { finishPremises } from "./vcrPremises.mjs";
+import { personWord } from "./vcrPersonStated.mjs";
 import { drugOriginPremises } from "./vcrDrugOriginPremises.mjs";
 import { credibilityPremises } from "./vcrCredibilityPremises.mjs";
 import { researchQuestionPremises, resultQuestionInput } from "./vcrResearchQuestionView.mjs";
@@ -78,8 +79,8 @@ const DECISIVE = new Set(["model.amplitude", "model.betweenPersonSd", "treatment
 /** @param {number} value @param {number} [digits] */
 const plain = (value, digits = 3) => String(Number(value.toPrecision(digits)));
 
-/** @param {Record<string, any>} progression @param {string} timeUnit */
-function premisesOf(progression, timeUnit) {
+/** @param {Record<string, any>} progression @param {string} timeUnit @param {Record<string, any> | null} [personStated] the result's `diagnostics.personStated` */
+function premisesOf(progression, timeUnit, personStated = null) {
   /** @type {Array<Record<string, any>>} */
   const rows = [];
   for (const entry of list(progression.given).map(object)) {
@@ -89,7 +90,7 @@ function premisesOf(progression, timeUnit) {
     if (!label || value === null) continue;
     const citation = text(entry.citation);
     const unit = key === "model.midpoint" || key === "model.halfTime" ? ` ${TIME_WORDS[timeUnit] ?? timeUnit}` : "";
-    rows.push({ key: `progression:${key}`, label, value: key === "treatment.slowing" ? `${plain(value * 100)}%` : `${plain(value)}${unit}`, source: BASIS_SOURCE[String(entry.basis)] ?? "assumed", decisive: DECISIVE.has(key), reason: citation });
+    rows.push({ key: `progression:${key}`, label, value: key === "treatment.slowing" ? `${plain(value * 100)}%` : `${plain(value)}${unit}`, source: statedWord(personStated, BASIS_SOURCE[String(entry.basis)] ?? "assumed", key), decisive: DECISIVE.has(key), reason: citation });
   }
   for (const entry of list(progression.assumed).map(object)) {
     const key = String(entry.key);
@@ -100,6 +101,21 @@ function premisesOf(progression, timeUnit) {
   rows.push({ key: "progression:clock", label: "治疗怎样起作用", value: "把病程的时钟拨慢：治疗组的曲线等于对照组的曲线在 (1 − 减慢比例) × 时间 处的值", source: "default", decisive: false });
   return finishPremises(rows);
 }
+
+/**
+ * A row the run states as an assumption is the person's data when the number is in their own message (the record frozen with the job, round-2 review
+ * P1-1); a literature or default row is never promoted, and a record that says nothing leaves the word as it was.
+ * @param {Record<string, any> | null | undefined} personStated @param {string} word @param {string | readonly string[]} paths
+ */
+function statedWord(personStated, word, paths) {
+  if (word !== "assumed") return word;
+  const keys = Array.isArray(paths) ? paths : [paths];
+  // a parameter is a bare number or `{ value, basis }`: the number's own path is the key or the key's `.value`
+  return keys.length > 0 && keys.every((key) => personWord(personStated, key, "assumed") === "given" || personWord(personStated, `${key}.value`, "assumed") === "given") ? "given" : word;
+}
+
+/** The keys of the drug effect the person states (the hypothesis's own numbers). @param {Record<string, any>} progression */
+const effectPaths = (progression) => list(progression.given).map(object).map((entry) => String(entry.key)).filter((key) => /^treatment\.(symptomatic\.(pointsAt|logitEmax)|diseaseModifying\.fraction)$/.test(key));
 
 /** The given entry of a key, or an empty object. @param {Record<string, any>} progression @param {string} key */
 const givenOf = (progression, key) => object(list(progression.given).map(object).find((entry) => entry.key === key));
@@ -263,7 +279,7 @@ function peopleRows(progression) {
 }
 
 /** The premises of the Alzheimer model (beta_logit): five decisive sentences, the rest folded. @param {Record<string, any>} progression */
-function alzheimerPremisesOf(progression, assessment = null) {
+function alzheimerPremisesOf(progression, assessment = null, personStated = null) {
   const effect = alzheimerEffectWords(progression);
   const tier = effectTier(progression);
   const effectBasis = String(givenOf(progression, "treatment.diseaseModifying.fraction").basis ?? givenOf(progression, "treatment.symptomatic.pointsAt").basis ?? givenOf(progression, "treatment.symptomatic.logitEmax").basis ?? "assumed");
@@ -277,10 +293,10 @@ function alzheimerPremisesOf(progression, assessment = null) {
   const visit = plain(Number(analysis.visit));
   // A value the scenario states with no record of whose words it was is an assumption of the run, not the person's data; only what the engine
   // defaulted is a default (round-2 review P1-1: nothing here reads 你给的数据 without a checked record of the person's messages).
-  const stated = (/** @type {string} */ key) => (assumedHas(progression, key) ? "default" : "assumed");
+  const stated = (/** @type {string | string[]} */ key) => (assumedHas(progression, Array.isArray(key) ? key[0] : key) ? "default" : statedWord(personStated, "assumed", key));
   /** @type {Array<Record<string, any>>} */
   const rows = [
-    { key: "progression:ad:effect", label: "药物效果", decisive: true, source: effect ? (tier === "stated" ? BASIS_SOURCE[effectBasis] ?? "assumed" : "literature") : "default",
+    { key: "progression:ad:effect", label: "药物效果", decisive: true, source: effect ? (tier === "stated" ? statedWord(personStated, BASIS_SOURCE[effectBasis] ?? "assumed", effectPaths(progression).length ? effectPaths(progression) : "treatment.effect") : "literature") : "default",
       value: effect ? `${effect}。${EFFECT_ENDING_ZH[tier]}` : "没有设定药物效果，两组相同：这里看的是检验误判有效的概率" },
     { key: "progression:ad:parameters", label: "模型参数", decisive: true, source: "literature",
       value: ALZHEIMER_PARAMETERS_TEXT },
@@ -369,7 +385,8 @@ function runWords(result, progression, alzheimer) {
 export function progressionPowerQuantity(progression) {
   if (progression.isNull === true) return null;
   if (list(progression.effectDistributions).length > 0) return "assurance";
-  if (Object.keys(object(progression.people)).length > 0) return FIXED_STUDY_QUANTITY;
+  // the engine states the one study of a record as `fixed_study`; `people` decides for results made before it did
+  if (progression.uncertainty === "fixed_study" || Object.keys(object(progression.people)).length > 0) return FIXED_STUDY_QUANTITY;
   return VCR_UNCERTAINTY_MODE_QUANTITY[/** @type {keyof typeof VCR_UNCERTAINTY_MODE_QUANTITY} */ (String(progression.uncertainty ?? "typical_study"))] ?? "conditional_power_typical_study";
 }
 
@@ -404,6 +421,7 @@ function cardOf(result, staleMark, assessment = null, questionStrategies = []) {
   const unitWords = (/** @type {string} */ words) => words.split(" / ").map((part) => zhUnit(part) ?? part).join(" / ");
   const shown = (/** @type {Record<string, any>} */ given) => { const measure = adUnit(given); return measureValue({ ...(measure?.mcse === 0 ? { ...measure, mcse: undefined } : measure),
     ...(typeof measure?.unit === "string" && measure.unit.includes(" / ") ? { unit: unitWords(measure.unit) } : {}) }, { kind: "patient_set", ...context, tab: "patients" }); };
+  const personStated = /** @type {Record<string, any> | null} */ (object(result.diagnostics).personStated ?? null);
   const unit = text(object(curves[0]).timeUnit) ?? "";
   const outcomeUnit = text(progression.outcomeUnit);
   const inUnit = (/** @type {Record<string, any>} */ measure) => (outcomeUnit && !measure.unit ? { ...measure, unit: outcomeUnit } : measure);
@@ -466,7 +484,7 @@ function cardOf(result, staleMark, assessment = null, questionStrategies = []) {
     },
     estimands: alzheimer ? estimandsOf(progression, shown, questionStrategies) : null,
     trials: numeric(progression.trials),
-    premises: alzheimer ? alzheimerPremisesOf(progression, assessment) : premisesOf(progression, unit),
+    premises: alzheimer ? alzheimerPremisesOf(progression, assessment, personStated) : premisesOf(progression, unit, personStated),
     limited: list(object(result.diagnostics).issues).some((issue) => object(issue).code === "cpu_budget_exhausted")
       ? `只模拟完了一部分试验（${numeric(progression.trials) ?? "?"} 次，原定 ${numeric(progression.trialsRequested) ?? "?"} 次），数字按已完成的给出。` : null,
   };

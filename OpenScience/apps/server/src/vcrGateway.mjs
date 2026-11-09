@@ -3337,7 +3337,9 @@ async function startJob(vcr, study, request, { personMessages = null } = {}) {
   }
   // Parameter meaning is explicitly bound by the agent; original human source membership is checked here.
   // Freeze even an unavailable source, so new results cannot inherit historical given labels.
-  if (sourcesAreForKind(request.kind)) detail = { ...detail, personStated: vcrPersonStated(scenario, personMessages ? await personMessages() : null, request.sources) };
+  // Every kind, not only the design kinds (round-2 review P1-1): a PBPK regimen, a VOI utility or a progression hypothesis the person wrote in their own
+  // message is theirs on the result page too. Only literature `sources` stay design-only.
+  detail = { ...detail, personStated: vcrPersonStated(scenario, personMessages ? await personMessages() : null, request.sources) };
   if (Array.isArray(request.sources)) {
     const record = object(detail.personStated);
     sourceReport.push(...request.sources.filter(entry => entry?.origin === "user").slice(0, 200).map(entry => ({

@@ -785,15 +785,50 @@ test("a design started in a conversation freezes which of its numbers the person
   for (const read of [async () => null, async () => [], async () => { throw new Error("ledger unreadable"); }]) {
     assert.deepEqual(await start(handlerWith(/** @type {any} */ (read)), { kind: "design_win_ratio", scenario: winRatio }), { schema: 2, readable: false, paths: [], bindings: [] });
   }
-  // a kind that is not a design is not asked, and a job started outside a conversation has no record (it reads as it read)
+  // a kind that is not a design is checked too (its literature sources stay design-only), and a job started outside a conversation has no record (it reads as it read)
   const network = { label: "response", measure: "log_ratio", direction: "lower_better", studies: [{ studyId: "H1", contrasts: [{ treatment: "B", comparator: "A", effect: -0.3, se: 0.12 }] }] };
   const res = response();
   await handlerWith(async () => [{sessionId:"sess_1",messageSeq:10,text:"effect -0.3"}])(request("/internal/vcr/v1/simulate", { action: "start", kind: "network_meta", scenario: network }, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
-  assert.equal(queued.at(-1).detail.personStated, undefined, "a network meta-analysis is not a design");
+  assert.equal(queued.at(-1).detail.personStated.readable, true, "every kind is checked against the person's messages (round-2 review P1-1), not only the designs");
   const outside = fixture({ jobs });
   const plain = response();
   await outside.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_win_ratio", scenario: winRatio }), plain);
   assert.deepEqual(queued.at(-1).detail.personStated,{schema:2,readable:false,paths:[],bindings:[]}, "new designs without evidence remain assumed");
+});
+
+test("a PBPK regimen, a value-of-information utility and a progression hypothesis the person typed freeze as theirs, through the gateway's start path (round-2 review P1-1)", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_s", state: "queued", progress: {}, checkpoint: input.detail }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_s", state: "canceled" }, canceled: true }; },
+  };
+  const made = fixture({ jobs });
+  made.vcr.store.taskContext = async (/** @type {any} */ origin) => ({ id: "std_task", userId: "u1", projectId: "prj_1", scope: "conversation", purpose: "task", conversationSessionId: origin.rootSessionId });
+  const handlerFor = (/** @type {string} */ typed) => createVcrGatewayHandler(config, runtimeManager, { vcr: made.vcr,
+    resolveInvocation: async () => ({ userId: "u1", projectId: "prj_1", runId: "run_1", rootSessionId: "sess_1", callId: "call_1" }),
+    readPersonMessages: async () => [{ sessionId: "sess_1", messageSeq: 3, text: typed }] });
+  const start = async (/** @type {string} */ typed, /** @type {Record<string, any>} */ body) => {
+    const res = response();
+    await handlerFor(typed)(request("/internal/vcr/v1/simulate", { action: "start", ...body }, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
+    assert.equal(res.status, 200, res.body);
+    return queued.at(-1).detail.personStated;
+  };
+  const pbpk = { victim: { drug: "midazolam", doseMg: 3 }, perpetrator: { drug: "rifampicin", doseMg: 75, doses: 7 } };
+  const voi = { source: "two_arm_continuous", options: [{ label: "a", nPerArm: 0 }, { label: "b", nPerArm: 120 }], utility: "net_benefit", successValue: 5000, costPerPatient: 20,
+    inputs: { effect: { family: "normal", mean: 3, sd: 1 }, sd: { family: "fixed", value: 9 } } };
+  const progression = { endpoint: { type: "continuous", unit: "points" }, design: { nTreat: 60, nControl: 60 }, timeUnit: "weeks", visits: [0, 26, 52, 78],
+    model: { family: "beta_logit", parameterSet: { id: "camd-adas-cog-11", version: "adsim-3.0" } }, treatment: { diseaseModifying: { fraction: { value: 0.3, basis: "assumed" } } } };
+  const said = await start("咪达唑仑 3 mg，利福平 75 mg 连续 7 次", { kind: "pk_interaction", scenario: pbpk });
+  assert.deepEqual([said.readable, said.matched.includes("victim.doseMg"), said.matched.includes("perpetrator.doseMg"), said.matched.includes("perpetrator.doses")], [true, true, true, true], "the PBPK regimen the person wrote is theirs");
+  assert.ok(!said.matched.includes("perpetrator.intervalH"), "a number nobody wrote is not");
+  const stamp = queued.at(-1).idempotencyKey;
+  assert.ok((await start("利福平 75 mg", { kind: "pk_interaction", scenario: pbpk })) && queued.at(-1).idempotencyKey !== stamp, "the record is in the stamp: another message is another job");
+  const voiSaid = await start("净收益，每人成本 20，成功价值 5000", { kind: "decision_voi", scenario: voi });
+  assert.ok(voiSaid.readable && voiSaid.matched.includes("successValue") && voiSaid.matched.includes("costPerPatient") && !voiSaid.matched.includes("alpha"), JSON.stringify(voiSaid));
+  const slowed = await start("疾病修饰效果 0.3", { kind: "generate_progression", scenario: progression });
+  assert.equal(slowed.readable, true);
+  assert.ok(slowed.matched.includes("treatment.diseaseModifying.fraction.value"), JSON.stringify(slowed));
 });
 
 test("a dose-finding design and a Bayesian design start through the gateway, filed under what they are about", async () => {
