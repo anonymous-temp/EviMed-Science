@@ -179,13 +179,21 @@ export function ipcwBrier(rows, horizon, type) {
   return sum/survivalRows.length
 }
 
+/** The provenance class of anything made from several sources is the strictest of them: it is `synthetic` only when every
+ * participating record is, and `patient` as soon as one is not (or declares nothing). One rule for the evaluation, the paired
+ * comparison and the comparison against what was observed, so a real outcome can never inherit a synthetic exemption from its forecasts.
+ * @param {...any} sources records carrying a `dataClass` @returns {'synthetic' | 'patient'} */
+export function strictestDataClass(...sources) {
+  return sources.length > 0 && sources.every(source => source?.dataClass === 'synthetic') ? 'synthetic' : 'patient'
+}
+
 /** @param {any} prediction @param {any} history @param {any} outcomes @param {any} [options] @returns {any} */
 export function evaluateForecast(prediction, history, outcomes, options = {}) {
-  const paired = pairForecastOutcomes(prediction,outcomes.events,{...options,dataClass:history.dataClass === 'synthetic' && outcomes.dataClass === 'synthetic' ? 'synthetic' : 'patient'})
+  const paired = pairForecastOutcomes(prediction,outcomes.events,{...options,dataClass:strictestDataClass(history,outcomes)})
   const role = options.split ?? 'test'
   const probability = ['risk','survival_probability'].includes(prediction.endpoint.type)
   const riskSet = probability && options.eventCodes?.length ? options.riskSet ?? 'incident' : 'all'
-  const actualSources = history.dataClass === 'synthetic' && outcomes.dataClass === 'synthetic' ? ['observed','extracted','synthetic'] : ['observed','extracted']
+  const actualSources = strictestDataClass(history,outcomes) === 'synthetic' ? ['observed','extracted','synthetic'] : ['observed','extracted']
   const evaluationEvents = history.evaluationEvents ?? history.events
   const prevalent = new Set(riskSet === 'incident' ? [...evaluationEvents,...outcomes.events].filter(e =>
     options.eventCodes.includes(e.code) && Date.parse(e.occurredAt) <= Date.parse(prediction.origin)
@@ -195,7 +203,7 @@ export function evaluateForecast(prediction, history, outcomes, options = {}) {
   const rows = paired.paired.filter(eligible), missing = paired.missing.filter(eligible)
   const candidates = new Set(longitudinalSubjects(history).filter(subjectKey => inSplit({subjectKey})))
   const expectedSubjects = new Set([...candidates].filter(subjectKey => !prevalent.has(subjectKey)))
-  const dataClass = history.dataClass === 'synthetic' && outcomes.dataClass === 'synthetic' ? 'synthetic' : 'patient'
+  const dataClass = strictestDataClass(history,outcomes)
   const bootstrap = options.bootstrap ?? 200, seed = options.seed ?? 1
   const groups = prediction.horizonsDays.map((/** @type {number} */ horizonDays) => {
     const cells = rows.filter(r => r.horizonDays === horizonDays), absent = missing.filter(r => r.horizonDays === horizonDays)
@@ -326,7 +334,7 @@ export function compareForecasts(first, second, options = {}) {
     unmatchedHorizons:{first:first.horizonsDays.length-shared.length,second:second.horizonsDays.length-shared.length},
     notes:update && ['risk','survival_probability'].includes(first.endpoint.type) ? ['equal_target_date_different_conditional_risk_windows'] : [],
     interpretation: mode === 'scenario' ? 'paired_model_scenario_contrast' : `paired_forecast_${mode}`, causalEffectIdentified: false,
-    dataClass: first.dataClass === 'synthetic' && second.dataClass === 'synthetic' ? 'synthetic' : 'patient',
+    dataClass: strictestDataClass(first,second),
     scenarios: [first.scenario ?? null,second.scenario ?? null] }
 }
 
@@ -338,16 +346,19 @@ export function compareForecasts(first, second, options = {}) {
  * Real people's outcomes under the small-cell floor are withheld here, at the source, because every reader (the page, the export, a run)
  * reads this block and none of its keys is a head count a boundary would recognise (review eng P0-3): a date observed for fewer than
  * `minCell` people keeps its identity and loses its means, errors and counts; and the split of the people by which version came closer
- * (newer, older, tied: the parts of `observed`) is withheld when one part is a handful of people. A synthetic comparison is shown whole.
- * @param {any} older @param {any} newer @param {any} outcomes @param {{ seed?: number, windowDays?: number, minCell?: number }} [options] */
+ * (newer, older, tied: the parts of `observed`) is withheld when one part is a handful of people. A comparison whose forecasts AND outcomes are all synthetic is shown whole.
+ * @param {any} older @param {any} newer @param {any} outcomes @param {{ seed?: number, windowDays?: number, minCell?: number, dataClass?: string }} [options] */
 export function compareVersionsToObserved(older, newer, outcomes, options = {}) {
   const base = compareForecasts(older, newer, { mode: 'update', bootstrap: 0, seed: options.seed })
   if (!base.available) return { available: false, code: base.code ?? 'paired_inputs_differ', mode: 'update' }
   if (Date.parse(newer.origin) <= Date.parse(older.origin)) return { available: false, code: 'newer_origin_not_later', mode: 'update' }
   const probability = ['risk', 'survival_probability'].includes(older.endpoint.type)
   const events = outcomes.evaluationEvents ?? outcomes.events ?? []
-  const pairOld = pairForecastOutcomes(older, events, options).paired
-  const pairNew = pairForecastOutcomes(newer, events, options).paired
+  // both forecasts AND the outcome history decide the class; a caller's own label can only make it stricter
+  const dataClass = strictestDataClass(older, newer, outcomes, ...(options.dataClass ? [{ dataClass: options.dataClass }] : []))
+  const pairOptions = { ...options, dataClass }
+  const pairOld = pairForecastOutcomes(older, events, pairOptions).paired
+  const pairNew = pairForecastOutcomes(newer, events, pairOptions).paired
   const key = (/** @type {any} */ row, /** @type {number} */ horizon) => `${row.subjectKey}\0${horizon}`
   const oldBy = new Map(pairOld.map((/** @type {any} */ r) => [key(r, r.horizonDays), r]))
   const newBy = new Map(pairNew.map((/** @type {any} */ r) => [key(r, r.horizonDays), r]))
@@ -368,7 +379,7 @@ export function compareVersionsToObserved(older, newer, outcomes, options = {}) 
       olderCloser: rows.filter(r => error(r.older, r.actual) < error(r.newer, r.actual)).length,
       errorMetric: probability ? 'brier' : 'mae' }
     if (rows.length > 0) anyObserved = true
-    if (base.dataClass === 'synthetic') return shown
+    if (dataClass === 'synthetic') return shown
     const small = (/** @type {number} */ count) => count >= 1 && count < minCell
     const hide = (/** @type {string[]} */ keys) => { for (const name of keys) shown[name] = null; shown.suppressed = [...new Set([...(shown.suppressed ?? []), ...keys])] }
     if (small(shown.pairedPredictions)) hide(['pairedPredictions'])
@@ -379,7 +390,7 @@ export function compareVersionsToObserved(older, newer, outcomes, options = {}) 
   return { available: anyObserved, code: anyObserved ? null : 'no_observed_outcomes',
     mode: 'update', endpoint: older.endpoint, origins: [older.origin, newer.origin], groups, changedFactors: base.changedFactors,
     interpretation: 'older_vs_newer_vs_observed', causalEffectIdentified: false,
-    notes: base.notes, dataClass: base.dataClass }
+    notes: base.notes, dataClass }
 }
 
 /** Design assumptions retain their model origin and dispersion meaning. A risk

@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import {
   vcrResultOutputPayload, eventsFromMappedTable, replayClinicalEvents, longitudinalReadiness,
   validateForecast, validateLongitudinalScenario, VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_LIMITS, VCR_LONGITUDINAL_SCHEMAS,
-  compareForecasts, forecastDesignInputs, longitudinalSubjects,
+  compareForecasts, forecastDesignInputs, longitudinalSubjects, strictestDataClass,
 } from '@evimed/domain';
 import { parseTable, studyPseudonymKey, pseudonymOf } from './vcrDataPlane.mjs';
 import { VcrLongitudinalStore, longitudinalHash, longitudinalArtifactView } from './vcrLongitudinalStore.mjs';
@@ -195,29 +195,31 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
           interpretation:'marginal_endpoints_not_joint_event_paths'},
         {snapshotIds:history.row.snapshot_ids,sourceIds:history.row.source_ids,bindings:history.row.bindings,parentId:history.row.id}));
     }
+    const prior = input.priorPredictionId ? await artifacts.read(study,input.priorPredictionId,actor) : null;
+    if (prior && prior.row.kind !== 'prediction') throw invalid('vcr_forecast_unavailable','The preceding record must be a prediction.');
     let rows = input.rows;
     if (!Array.isArray(rows)) throw invalid('vcr_prediction_rows_missing','Supply an array of prediction rows.');
     if (input.subjectKeyMode === 'source_identifier') {
       const key = await studyPseudonymKey(dataPlane.root(),study.id);
       rows = rows.map((/** @type {any} */ r) => r && typeof r === 'object' ? ({...r,subjectKey:pseudonymOf(key,String(r.subjectKey))}) : r);
     }
+    // what the prediction was made from: its history, a later history whose actions it replayed, and the version it continues (review eng P0-4);
+    // its class is the strictest of them, so real actions or a real earlier version never leave a prediction labelled synthetic
+    const from = [history.row,...(Array.isArray(provenance.lineageRows) ? provenance.lineageRows : []),...(prior ? [prior.row] : [])];
+    const dataClass = strictestDataClass(history.content,...from.slice(1).map(row => row.summary));
     const checked = validateForecast({...input,rows},{subjects:new Set(longitudinalSubjects(history.content)),origin:history.content.asOf});
     if (checked.issues.some(issue => issue.code === 'forecast_header_invalid')) {
       throw invalid('vcr_forecast_unavailable','The prediction header needs an endpoint with type and unit, the history origin, and an ordered list of positive horizons.');
     }
     const content = {schema:1,historyId:input.historyId,origin:history.content.asOf,endpoint:input.endpoint,horizonsDays:input.horizonsDays,
       model:input.model ?? {name:'unknown',version:'unknown'},scenario:input.scenario ?? null,rows:checked.rows,
-      issues:checked.issues,rejected:[...(checked.rejected ?? []),...(provenance.rejected ?? [])],dataClass:history.content.dataClass,
+      issues:checked.issues,rejected:[...(checked.rejected ?? []),...(provenance.rejected ?? [])],dataClass,
       received:checked.received,valueSource:'predicted',originKind:provenance.originKind ?? 'external_file',
       provenance:/** @type {Record<string,any>} */ ({...Object.fromEntries(Object.entries(provenance).filter(([key]) => !['accounting','premises','uncertainty','lineageRows','actionSchedule'].includes(key))),importDigest:longitudinalHash(input)}),priorPredictionId:input.priorPredictionId ?? null,
       // the schedule a conditional forecast or a replay was made on, so a comparison of two versions can name it as what changed (stats P2-14)
       actionSchedule:Array.isArray(provenance.actionSchedule) ? provenance.actionSchedule : null};
-    // what the prediction was made from: its history, and a later history whose actions it replayed (review eng P0-4)
-    const from = [history.row,...(Array.isArray(provenance.lineageRows) ? provenance.lineageRows : [])];
     const original = await artifacts.save(study,'prediction_import',input,{historyId:input.historyId,received:rows.length},lineageOf(from,input.historyId));
     content.provenance.importArtifactId = original.id;
-    const prior = input.priorPredictionId ? await artifacts.read(study,input.priorPredictionId,actor) : null;
-    if (prior && prior.row.kind !== 'prediction') throw invalid('vcr_forecast_unavailable','The preceding record must be a prediction.');
     // A cloud batch brings its own ledger; an imported file is accounted the same way (every person of the history, one batch).
     const subjectsOfHistory = longitudinalSubjects(history.content);
     const accounting = provenance.accounting ?? reconcileSubjects({subjects:subjectsOfHistory,horizonsDays:content.horizonsDays,rows:checked.rows,
@@ -232,7 +234,7 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       received:provenance.receipts?.reduce((/** @type {number} */ total,/** @type {any} */ r) => total+(r.receivedRows ?? 0),0) ?? checked.received,
       accepted:checked.rows.length,invalidRows:checked.received-checked.rows.length
         +(provenance.receipts?.reduce((/** @type {number} */ total,/** @type {any} */ r) => total+(r.invalidRows ?? 0),0) ?? 0),
-      issues:checked.issues.slice(0,100),originKind:content.originKind,dataClass:history.content.dataClass,
+      issues:checked.issues.slice(0,100),originKind:content.originKind,dataClass,
       designInputs:content.horizonsDays?.length && checked.rows.length ? forecastDesignInputs(content) : [],
       trajectories:aggregateForecastCurve(content),actualProvider:provenance.receipts?.map((/** @type {any} */ r) => ({provider:r.provider,model:r.actualModel,version:r.actualVersion})),
       cost:provenance.receipts?.map((/** @type {any} */ r) => ({value:r.cost,currency:r.costCurrency})),failures:provenance.failures ?? []};
@@ -365,20 +367,24 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
           sourceIds:[...new Set([...prediction.row.source_ids,...outcomes.row.source_ids])],bindings:[...(prediction.row.bindings ?? []),...(outcomes.row.bindings ?? [])],parentId:prediction.row.id}));
     } else if (job.method === 'forecast.compare') {
       const first = await read(scenario.predictionId), second = await read(scenario.otherPredictionId);
+      // the outcome history is read once: its values, its class and its lineage all reach the saved comparison
+      const outcomes = scenario.outcomeHistoryId ? await read(scenario.outcomeHistoryId) : null;
       const computed = await runForecastCalculation(job.method,[first.content,second.content,{seed:job.seed,bootstrap:scenario.bootstrap,mode:scenario.mode}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled});
       // Old version, new version and what was observed afterwards, on the people and dates all three share.
-      const observed = scenario.outcomeHistoryId
-        ? await runForecastCalculation('forecast.compare_observed',[first.content,second.content,(await read(scenario.outcomeHistoryId)).content,{seed:job.seed,
-          dataClass:first.content.dataClass,windowDays:scenario.windowDays,
+      const observed = outcomes
+        ? await runForecastCalculation('forecast.compare_observed',[first.content,second.content,outcomes.content,{seed:job.seed,
+          dataClass:strictestDataClass(first.content,second.content),windowDays:scenario.windowDays,
           // the deployment's small-cell threshold, not the domain default: these groups reach the model's reads of the comparison
           ...(Number.isInteger(Number(config.vcrMinCellSize)) && Number(config.vcrMinCellSize) >= 2 ? {minCell:Number(config.vcrMinCellSize)} : {})}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled}) : null;
-      const comparison = {...computed,predictionIds:[first.row.id,second.row.id],...(observed ? {observed} : {}),...accuracyOf([first,second])};
+      // the page, the model's reads and the report take the synthetic exemption from the OUTER class, so it is the strictest of
+      // both forecasts and the outcome history, never the forecasts' alone
+      const comparison = {...computed,predictionIds:[first.row.id,second.row.id],...(observed ? {observed,dataClass:strictestDataClass(computed,observed)} : {}),...accuracyOf([first,second])};
       saved = longitudinalArtifactView(await artifacts.save(study,'comparison',comparison,comparison,
-        {snapshotIds:[...new Set([...first.row.snapshot_ids,...second.row.snapshot_ids])],sourceIds:[...new Set([...first.row.source_ids,...second.row.source_ids])],bindings:[...(first.row.bindings ?? []),...(second.row.bindings ?? [])],parentId:first.row.id}));
+        lineageOf([first.row,second.row,...(outcomes ? [outcomes.row] : [])],first.row.id)));
     } else if (job.method === 'forecast.trial_benchmark') {
       const benchmark = await read(scenario.benchmarkId);
       const evaluation = await runForecastCalculation(job.method,[benchmark.content,{bootstrap:scenario.bootstrap,seed:job.seed}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled});
-      saved = longitudinalArtifactView(await artifacts.save(study,'trial_evaluation',evaluation,evaluation,{parentId:benchmark.row.id}));
+      saved = longitudinalArtifactView(await artifacts.save(study,'trial_evaluation',evaluation,evaluation,lineageOf([benchmark.row],benchmark.row.id)));
     }
     if (!saved) throw invalid('vcr_forecast_unavailable','No forecast result is available.');
     const result = {jobId:job.jobId,protocolVersion:1,status:await isCanceled() ? 'canceled' : 'succeeded',method:job.method,
