@@ -604,7 +604,7 @@ def tool_definitions():
         # Alzheimer three-arm simulation, a comparison of designs computed earlier and a forecast for six listed patients went to the
         # model's own scripts; they are named here within the same 420 characters ("modelId requires modelVersion" is said by the
         # gateway's refusal of a modelId without it, the pointer to the result page by the answer of start).
-        "vcr_simulate": "Trial sample size, power or events; comparing designs (saved too) or searching one; dose finding; disease-progression arms (Alzheimer ADAS-cog); patient forecasts; synthetic cohort from a baseline table; external control; comparing several drugs (network meta-analysis): calculate here, not in your script. No study needed. action=shape with kind gives fields; do not guess keys. Jobs that outlive this turn resume here.",
+        "vcr_simulate": "Trial sample size, power or events; comparing designs (saved too) or searching; dose finding; disease-progression (Alzheimer ADAS-cog); patient forecasts; synthetic cohort (baseline table); external control; comparing several drugs (network meta-analysis); value of information; PBPK drug interaction: calculate here, not in your script. action=shape with kind gives fields; do not guess keys. Jobs outlive this turn.",
     }
     tools = _detailed_tool_definitions()
     for tool in tools:

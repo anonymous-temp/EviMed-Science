@@ -218,7 +218,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertLessEqual(len(description), 420)
         for words in ("sample size", "power or events", "comparing designs", "dose finding", "synthetic cohort", "baseline table", "external control",
                       "comparing several drugs", "network meta-analysis",
-                      "saved", "searching", "disease-progression", "Alzheimer ADAS-cog", "patient forecasts", "not in your script"):
+                      "saved", "searching", "disease-progression", "Alzheimer ADAS-cog", "patient forecasts", "not in your script",
+                      "value of information", "PBPK drug interaction"):
             self.assertIn(words, description)
 
     def test_a_refusal_the_gateway_answers_with_400_is_the_run_s_to_fix(self):
