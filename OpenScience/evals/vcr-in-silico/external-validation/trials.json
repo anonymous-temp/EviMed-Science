@@ -1,0 +1,494 @@
+{
+ "schemaVersion": 1,
+ "frozenOn": "2026-11-09",
+ "scale": "ADAS-cog 11 (0 to 70, higher is worse); change from baseline, positive is worse",
+ "trials": [
+  {
+   "id": "bapineuzumab-301",
+   "label": "Bapineuzumab 301 (APOE4 carriers), placebo arm",
+   "citation": "Salloway S et al., N Engl J Med 2014;370:322-333, DOI 10.1056/NEJMoa1304839, PMID 24450891, PMC4159618",
+   "nSimulated": 432,
+   "nBasis": "mITT placebo (Results, Disposition; Table 1)",
+   "endpointWeek": 78,
+   "visits": [
+    0,
+    13,
+    26,
+    52,
+    78
+   ],
+   "age": {
+    "mean": 72.3,
+    "sd": 8.4
+   },
+   "female": 0.56,
+   "mmse": {
+    "mean": 20.7,
+    "sd": 3.2,
+    "entryRange": [
+     16,
+     26
+    ],
+    "entryBasis": "inclusion criterion MMSE 16 to 26 (Methods)"
+   },
+   "apoe4": {
+    "genotypes": [
+     0,
+     0.752,
+     0.248
+    ],
+    "basis": "reported: 100% carriers, 325 heterozygous (75.2%) and 107 homozygous (24.8%) of 432 (Table 1)"
+   },
+   "backgroundShare": 0.926,
+   "backgroundBasis": "acetylcholinesterase inhibitor or memantine 92.6% (400/432), Table 1",
+   "baselineAdas": {
+    "mean": 23.9,
+    "sd": 9.5
+   },
+   "observed": {
+    "change": 8.7,
+    "se": 0.5,
+    "week": 78,
+    "n": null,
+    "kind": "MMRM LS mean (Table 2)"
+   },
+   "analysis": "mmrm",
+   "completion": {
+    "share": 0.754,
+    "basis": "completers 75.4%"
+   },
+   "earlyStop": false,
+   "premises": [
+    "Only the week-78 value is tabulated; intermediate visits are in a figure and are not used.",
+    "The model's visit schedule (weeks 13, 26, 52, 78) is a simplification of the trial's."
+   ]
+  },
+  {
+   "id": "bapineuzumab-302",
+   "label": "Bapineuzumab 302 (APOE4 non-carriers), placebo arm",
+   "citation": "Salloway S et al., N Engl J Med 2014;370:322-333 (as above)",
+   "nSimulated": 493,
+   "nBasis": "mITT placebo",
+   "endpointWeek": 78,
+   "visits": [
+    0,
+    13,
+    26,
+    52,
+    78
+   ],
+   "age": {
+    "mean": 71.9,
+    "sd": 10.1
+   },
+   "female": 0.503,
+   "mmse": {
+    "mean": 21.2,
+    "sd": 3.2,
+    "entryRange": [
+     16,
+     26
+    ],
+    "entryBasis": "inclusion criterion MMSE 16 to 26"
+   },
+   "apoe4": {
+    "genotypes": [
+     1,
+     0,
+     0
+    ],
+    "basis": "reported: 0% carriers by design"
+   },
+   "backgroundShare": 0.897,
+   "backgroundBasis": "AChEI or memantine 89.7% (442/493), Table 1",
+   "baselineAdas": {
+    "mean": 22.2,
+    "sd": 10.1
+   },
+   "observed": {
+    "change": 7.4,
+    "se": 0.5,
+    "week": 78,
+    "n": null,
+    "kind": "MMRM LS mean (Table 2)"
+   },
+   "analysis": "mmrm",
+   "completion": {
+    "share": 0.712,
+    "basis": "completers 71.2%"
+   },
+   "earlyStop": false,
+   "premises": [
+    "Only the week-78 value is tabulated.",
+    "The model's visit schedule is a simplification of the trial's."
+   ]
+  },
+  {
+   "id": "verubecestat-epoch",
+   "label": "Verubecestat EPOCH, placebo arm",
+   "citation": "Egan MF et al., N Engl J Med 2018;378:1691-1703, DOI 10.1056/NEJMoa1706441, PMC6776074",
+   "nSimulated": 653,
+   "nBasis": "randomized placebo (Table 1)",
+   "endpointWeek": 78,
+   "visits": [
+    0,
+    13,
+    26,
+    52,
+    78
+   ],
+   "age": {
+    "mean": 72.4,
+    "sd": 7.6
+   },
+   "female": 0.542,
+   "mmse": {
+    "mean": 20.3,
+    "sd": 3.3,
+    "entryRange": [
+     15,
+     26
+    ],
+    "entryBasis": "MMSE 15 to 26 (mild 21-26, moderate 15-20 strata)"
+   },
+   "apoe4": {
+    "genotypes": [
+     0.364,
+     0.478272,
+     0.157728
+    ],
+    "basis": "reported: 63.6% carriers (415 of 653); Genotype split of the carriers is not reported in this paper: the 24.8% homozygous share of carriers that bapineuzumab 301 reports (Salloway 2014 Table 1: 325 heterozygous, 107 homozygous of 432) is used, an assumption.",
+    "assumedSplit": true
+   },
+   "backgroundShare": 0.893,
+   "backgroundBasis": "AChEI, memantine or both 89.3% (583/653), a stable dose for 3 months before screening",
+   "baselineAdas": {
+    "mean": 21.7,
+    "sd": 7.6
+   },
+   "observed": {
+    "change": 7.7,
+    "se": 0.3,
+    "week": 78,
+    "n": null,
+    "kind": "longitudinal ANCOVA LS mean (Table 2)"
+   },
+   "analysis": "mmrm",
+   "completion": {
+    "share": 0.71,
+    "basis": "70.2 to 72.1% of all arms completed part 1"
+   },
+   "earlyStop": true,
+   "premises": [
+    "Stopped for futility five months before the planned end of part 1: the week-78 count is reduced, which the observed LS mean (a repeated-measures analysis) is built to carry; the model's own dropout is the parameter set's, not the trial's.",
+    "A longitudinal ANCOVA is read as the MMRM family."
+   ]
+  },
+  {
+   "id": "intepirdine-mindset",
+   "label": "Intepirdine MINDSET (all on donepezil), placebo arm",
+   "citation": "Lang FM et al., Alzheimers Dement (N Y) 2021;7:e12136, DOI 10.1002/trc2.12136, PMC8165732",
+   "nSimulated": 633,
+   "nBasis": "mITT placebo (Table 1)",
+   "endpointWeek": 24,
+   "visits": [
+    0,
+    12,
+    24
+   ],
+   "age": {
+    "mean": 72.5,
+    "sd": 7.55
+   },
+   "female": 0.622,
+   "mmse": {
+    "mean": 18.5,
+    "sd": 3.63,
+    "entryRange": [
+     12,
+     24
+    ],
+    "entryBasis": "screening MMSE 12 to 24 (Methods); the baseline strata run 10 to 26 and are not the entry rule"
+   },
+   "apoe4": {
+    "genotypes": null,
+    "basis": "APOE4 not reported: the model's own covariate default is used, an assumption"
+   },
+   "backgroundShare": 1.0,
+   "backgroundBasis": "donepezil 100% (entry criterion): 10 mg 76.1%, 5 mg 23.9% of the placebo arm; 10 mg is used for everyone, an assumption",
+   "baselineAdas": {
+    "mean": 24.8,
+    "sd": 8.8
+   },
+   "observed": {
+    "change": 0.75,
+    "se": 0.21,
+    "week": 24,
+    "n": 577,
+    "kind": "MMRM adjusted mean through week 24 (Table 2)"
+   },
+   "analysis": "mmrm",
+   "completion": {
+    "share": 0.888,
+    "basis": "completers 88.8%"
+   },
+   "earlyStop": false,
+   "premises": [
+    "The visit schedule (weeks 12, 24) is a simplification.",
+    "ADAS-Cog 11 is read for the 'ADAS-Cog' of Table 2 because ADAS-Cog 13 is reported separately (placebo +0.64); the paper's passages read do not say '11-item' in words."
+   ]
+  },
+  {
+   "id": "idalopirdine-starshine",
+   "label": "Idalopirdine STARSHINE (all on a cholinesterase inhibitor), placebo arm",
+   "citation": "Atri A et al., JAMA 2018;319:130-142, DOI 10.1001/jama.2017.20373, PMID 29318278, PMC5833662",
+   "nSimulated": 304,
+   "nBasis": "placebo analysis set (page-summarised table; the abstract confirms study 1's 0.41 and study 3's 0.82 and study 2's 0.56)",
+   "endpointWeek": 24,
+   "visits": [
+    0,
+    12,
+    24
+   ],
+   "age": {
+    "mean": 73.7,
+    "sd": 8.0
+   },
+   "female": 0.638,
+   "mmse": {
+    "mean": 17.4,
+    "sd": 2.9,
+    "entryRange": [
+     12,
+     22
+    ],
+    "entryBasis": "MMSE 12 to 22"
+   },
+   "apoe4": {
+    "genotypes": [
+     0.387,
+     0.460976,
+     0.152024
+    ],
+    "basis": "reported: 61.3% carriers; Genotype split of the carriers is not reported in this paper: the 24.8% homozygous share of carriers that bapineuzumab 301 reports (Salloway 2014 Table 1: 325 heterozygous, 107 homozygous of 432) is used, an assumption.",
+    "assumedSplit": true
+   },
+   "backgroundShare": 1.0,
+   "backgroundBasis": "stable cholinesterase inhibitor 100% (donepezil in studies 1 and 2, donepezil, rivastigmine or galantamine in study 3); donepezil 10 mg is used for everyone, an assumption",
+   "baselineAdas": {
+    "mean": 25.8,
+    "sd": 8.5
+   },
+   "observed": {
+    "change": 0.41,
+    "se": 0.3546,
+    "week": 24,
+    "n": null,
+    "kind": "observed mean change; SE from the reported 95% CI as half-width / 1.96"
+   },
+   "analysis": "change",
+   "completion": {
+    "share": 0.89,
+    "basis": "89% (2254/2525) of all participants completed"
+   },
+   "earlyStop": false,
+   "premises": [
+    "Only the week-24 observed mean is reported.",
+    "The model's visit schedule (weeks 12, 24) is a simplification."
+   ]
+  },
+  {
+   "id": "idalopirdine-starbeam",
+   "label": "Idalopirdine STARBEAM (all on a cholinesterase inhibitor), placebo arm",
+   "citation": "Atri A et al., JAMA 2018;319:130-142, DOI 10.1001/jama.2017.20373, PMID 29318278, PMC5833662",
+   "nSimulated": 279,
+   "nBasis": "placebo analysis set (page-summarised table; the abstract confirms study 1's 0.41 and study 3's 0.82 and study 2's 0.56)",
+   "endpointWeek": 24,
+   "visits": [
+    0,
+    12,
+    24
+   ],
+   "age": {
+    "mean": 73.5,
+    "sd": 8.2
+   },
+   "female": 0.642,
+   "mmse": {
+    "mean": 17.6,
+    "sd": 2.9,
+    "entryRange": [
+     12,
+     22
+    ],
+    "entryBasis": "MMSE 12 to 22"
+   },
+   "apoe4": {
+    "genotypes": [
+     0.426,
+     0.431648,
+     0.142352
+    ],
+    "basis": "reported: 57.4% carriers; Genotype split of the carriers is not reported in this paper: the 24.8% homozygous share of carriers that bapineuzumab 301 reports (Salloway 2014 Table 1: 325 heterozygous, 107 homozygous of 432) is used, an assumption.",
+    "assumedSplit": true
+   },
+   "backgroundShare": 1.0,
+   "backgroundBasis": "stable cholinesterase inhibitor 100% (donepezil in studies 1 and 2, donepezil, rivastigmine or galantamine in study 3); donepezil 10 mg is used for everyone, an assumption",
+   "baselineAdas": {
+    "mean": 25.7,
+    "sd": 8.0
+   },
+   "observed": {
+    "change": 0.56,
+    "se": 0.3776,
+    "week": 24,
+    "n": null,
+    "kind": "observed mean change; SE from the reported 95% CI as half-width / 1.96"
+   },
+   "analysis": "change",
+   "completion": {
+    "share": 0.89,
+    "basis": "89% (2254/2525) of all participants completed"
+   },
+   "earlyStop": false,
+   "premises": [
+    "Only the week-24 observed mean is reported.",
+    "The model's visit schedule (weeks 12, 24) is a simplification."
+   ]
+  },
+  {
+   "id": "idalopirdine-starbright",
+   "label": "Idalopirdine STARBRIGHT (all on a cholinesterase inhibitor), placebo arm",
+   "citation": "Atri A et al., JAMA 2018;319:130-142, DOI 10.1001/jama.2017.20373, PMID 29318278, PMC5833662",
+   "nSimulated": 356,
+   "nBasis": "placebo analysis set (page-summarised table; the abstract confirms study 1's 0.41 and study 3's 0.82 and study 2's 0.56)",
+   "endpointWeek": 24,
+   "visits": [
+    0,
+    12,
+    24
+   ],
+   "age": {
+    "mean": 74.2,
+    "sd": 8.0
+   },
+   "female": 0.635,
+   "mmse": {
+    "mean": 17.5,
+    "sd": 3.0,
+    "entryRange": [
+     12,
+     22
+    ],
+    "entryBasis": "MMSE 12 to 22"
+   },
+   "apoe4": {
+    "genotypes": [
+     0.415,
+     0.43992,
+     0.14508
+    ],
+    "basis": "reported: 58.5% carriers; Genotype split of the carriers is not reported in this paper: the 24.8% homozygous share of carriers that bapineuzumab 301 reports (Salloway 2014 Table 1: 325 heterozygous, 107 homozygous of 432) is used, an assumption.",
+    "assumedSplit": true
+   },
+   "backgroundShare": 1.0,
+   "backgroundBasis": "stable cholinesterase inhibitor 100% (donepezil in studies 1 and 2, donepezil, rivastigmine or galantamine in study 3); donepezil 10 mg is used for everyone, an assumption",
+   "baselineAdas": {
+    "mean": 25.9,
+    "sd": 8.5
+   },
+   "observed": {
+    "change": 0.82,
+    "se": 0.352,
+    "week": 24,
+    "n": null,
+    "kind": "observed mean change; SE from the reported 95% CI as half-width / 1.96"
+   },
+   "analysis": "change",
+   "completion": {
+    "share": 0.89,
+    "basis": "89% (2254/2525) of all participants completed"
+   },
+   "earlyStop": false,
+   "premises": [
+    "Only the week-24 observed mean is reported.",
+    "The model's visit schedule (weeks 12, 24) is a simplification."
+   ]
+  },
+  {
+   "id": "semagacestat-identity",
+   "label": "Semagacestat IDENTITY, placebo arm",
+   "citation": "Doody RS et al., N Engl J Med 2013;369:341-350, DOI 10.1056/NEJMoa1210951, PMID 23883379; results from ClinicalTrials.gov NCT00594568 (API v2)",
+   "nSimulated": 501,
+   "nBasis": "randomized placebo (registry baseline module)",
+   "endpointWeek": 76,
+   "visits": [
+    0,
+    13,
+    26,
+    52,
+    76
+   ],
+   "age": {
+    "mean": 73.9,
+    "sd": 8.1
+   },
+   "female": 0.555,
+   "mmse": {
+    "mean": null,
+    "sd": null,
+    "entryRange": [
+     16,
+     26
+    ],
+    "entryBasis": "inclusion criterion MMSE 16 to 26 (paper abstract level, not re-read in full; the registry's baseline module has no MMSE): ASSUMED"
+   },
+   "apoe4": {
+    "genotypes": null,
+    "basis": "APOE4 not recovered: the model's own covariate default is used, an assumption"
+   },
+   "backgroundShare": null,
+   "backgroundBasis": "not recovered: a stable AChEI background is ASSUMED as in the three 78-week trials of the same years (89 to 93%): donepezil 10 mg for everyone",
+   "assumedBackground": true,
+   "baselineAdas": {
+    "mean": 22.8,
+    "sd": 9.1
+   },
+   "observed": {
+    "change": 6.19,
+    "se": 0.54,
+    "week": 76,
+    "n": 270,
+    "kind": "mixed-model LS mean controlled for baseline, age, investigator, visit and standard-of-care medication (registry)"
+   },
+   "analysis": "mmrm",
+   "completion": {
+    "share": 0.54,
+    "basis": "54% of the randomized had week-76 data"
+   },
+   "earlyStop": true,
+   "premises": [
+    "Stopped early: only 54% had week-76 data, the observed LS mean is a repeated-measures analysis; the model's dropout is the parameter set's.",
+    "MMSE entry range, APOE4 shares and the background therapy are assumptions (not recovered from the registry)."
+   ]
+  }
+ ],
+ "exclusions": [
+  {
+   "trial": "Bapineuzumab 3001 and 3000 (Alz Res Ther 2016)",
+   "why": "the week-78 placebo change is only in a figure (no number in text or table)"
+  },
+  {
+   "trial": "Solanezumab EXPEDITION 1 and 2",
+   "why": "the placebo absolute ADAS-cog 11 change was not retrievable (paper not open; registry has no results)"
+  },
+  {
+   "trial": "Latrepirdine CONNECTION and CONCERT",
+   "why": "no peer-reviewed placebo numbers"
+  },
+  {
+   "trial": "Avagacestat phase 2",
+   "why": "placebo values not retrieved"
+  }
+ ]
+}

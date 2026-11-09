@@ -1,0 +1,10 @@
+{
+ "frozenOn": "2026-11-09",
+ "trialsSha256": "27fab8ff664391a206677ea45bf8dfb0d36b98b8ec58d09293b2786516cd6169",
+ "engineFiles": {
+  "patients_progression_beta_logit.R": "0d00117751ccd5af3938e66b102e59da167e631a6ebc57e56c4de99d80900de5",
+  "patients_progression_intercurrent.R": "7ff62832ea77ce0f2fde8a7a485de4b15baf34e17ec239ba7bed6a092e93d902",
+  "patients_progression_alternative.R": "d924455cdc5ae2a94a75c8b2160ccfb4a1a0236c41a91c76a0d44cb7444299d9"
+ },
+ "note": "the runner refuses to run when trials.json or one of these engine files differs from what is written here"
+}
