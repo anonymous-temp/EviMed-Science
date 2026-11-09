@@ -514,3 +514,152 @@ Check: ours' own verdict and the rule-P pick recomputed from its final estimates
 
 Ours' stop reasons: 40k inconclusive_at_precision x140; 40k no_feasible_beneficial_candidate x60; 80k inconclusive_at_precision x197; 80k no_feasible_beneficial_candidate x1; 80k acceptable_precision x2; 160k inconclusive_at_precision x88; 160k acceptable_precision x112; 320k inconclusive_at_precision x87; 320k acceptable_precision x113; 640k inconclusive_at_precision x78; 640k acceptable_precision x122.
 
+---
+
+# Addendum D5 (2026-11-09): the allocation fixed at its root, `ours2` beside `ours`
+
+The section above stays as it was. This one adds a sixth arm, **ours2**, and reports it on the same protocol, the same worlds, budgets and seeds 1..200
+(`BENCHMARK-PROTOCOL.md`, addendum D5). Run: `node evals/vcr-in-silico/search-benchmark-matched.mjs` (all six arms, 18,000 searches, 65 s, no model call).
+Data: `results/search-benchmark-matched-20261109-d5.json`, tables `results/search-benchmark-matched-20261109-d5-tables.md` (every metric of the
+first run for every arm, plus `ours2` against each arm), curves `results/search-benchmark-matched-{survival,level,level85}-d5.svg`.
+
+**Check that nothing moved.** The five original arms were re-run with the changed domain code and reproduce the first run exactly: all 150 aggregate cells
+(3 worlds x 5 arms x 5 budgets x 2 rules) are byte-identical to `results/search-benchmark-matched-20261109.json`; the domain's own verdict and the
+independent recomputation agreed in 3,000 of 3,000 `ours` runs and 3,000 of 3,000 `ours2` runs.
+
+## Root cause of the cap
+
+`budget.cpuSeconds` was only a ceiling, checked before each unit; it was never an input of the allocation. The stage sizes were fixed in the manifest
+(screening below the floor, alternative case only; at most `finalCountMax` = 5 finalists; one final run each), the finalists were chosen once from the
+screening rank, and after that single round the verdict stopped the campaign with `acceptable_precision` whatever was left. So (1) the curve ends where the
+structure ends (about 125,000 + K x 4,999 trials), (2) when all five finalists fail there is no recourse (the 17-19% no-pick at 160k and above in the level
+world, 39-44% in level85), (3) a design the first run left undecided never got more replicates, and (4) a finalist that failed its power check was still run on
+the 20,000-replicate null truth. Not a bug of the benchmark: the product behaves so.
+
+## The fix (`@evimed/domain` `vcrExperimentSearch.mjs`, opt-in `budget.replicates`)
+
+A campaign that states `budget.replicates` is *budgeted*; one that does not has the same canonical bytes and the same fixed stages as before.
+- Screening is unchanged (ranking and elimination only, never a pass), sized by one stated rule (`vcrCampaignBudgetPlan`: a fifth of the budget, alternative
+  case, below the floor); the first wave is one finalist (plus the reference).
+- Then one unit at a time: the next design judged is the cheapest by the objective whose estimate, less z times its own error, could still beat the best
+  feasible design so far (designs the screening says may meet the design constraints first). A design judged *inconclusive* is run again, fresh, with the
+  replicates its gap to the bound needs (OCBA's rule of thumb), at most twice, and only when that is within 4 times its run: a gap that would take more is
+  inside the indifference zone of what the budget can resolve, so the design is neither passed nor chased. A finalist whose design constraint already fails
+  on its final run is not run on its error-control truth. It stops when nothing in play can beat the best, or nothing in play fits the budget; the stop
+  records `allocation` (budget, spent, unspent, and why: `decided`, `precision_not_reachable`, `next_unit_does_not_fit`) and a reason for every design
+  that was not judged (`not_needed:cannot_beat_best`, `not_evaluated:budget`, `not_screened:budget`).
+- **Error control is untouched.** A verdict still reads one final run at the method's floor or more, on a stream no screening unit and no earlier run of that
+  design used, at the constraints' own confidence (Clopper-Pearson); alpha is frozen; `inconclusive_at_precision` is still a stop reason. A re-run is judged on
+  its own fresh data alone (the earlier run only decided to run it; it is kept as `superseded`, never pooled), so each design's bound stays exact. What more
+  designs judged does change is the chance that one of them passes by luck (the family-wise note of `verdict.selection`, which holds for any larger
+  finalist set); the table below measures it: the picked design violated a constraint in truth in 0 of the picks of `ours2` at every budget in the
+  level world and survival, and in 1 budget of 5 in level85 (80k: 1 of its 14 picks, 7%; the other four budgets 0).
+
+## Disclosure of how the rule was chosen
+
+The first version of the rule (no cap on a re-run's size) was run once on seeds 1..200. It was no improvement in the level world at 320k (platform rule:
+67% correct selection against 83% for `ours`; level85 it was better, 61% against 55% at 320k and 95% against 57% at 640k): it spent 300k-510k chasing designs
+whose true value sits on the bound (a type I error of 2.475% against 2.5%). Its numbers are kept in `results/search-benchmark-matched-20261109-d5-v1-superseded.json`. The cap (re-run
+at most 4 times its run, at most twice) was then chosen on **development seeds 1001..1100** the protocol never reports (`--seed-from 1001`; rounds/growth
+2/4, 3/8 and 3/16 were tried there and 2/4 was best), and the reported run is seeds 1..200 once with that rule. The seeds 1..200 therefore did
+influence one decision (that a cap was needed), the choice of its value did not use them.
+
+## Result
+
+**level, Rule P: probability of correct selection (no pick, trials spent at the median)**
+
+| Arm | 40k | 80k | 160k | 320k | 640k |
+| --- | --- | --- | --- | --- | --- |
+| grid | 6% (38%, 40k) | 22% (13%, 80k) | 48% (0%, 160k) | 89% (0%, 320k) | 99% (0%, 640k) |
+| random | 10% (60%, 25k) | 30% (19%, 75k) | 46% (5%, 150k) | 81% (0%, 300k) | 83% (0%, 300k) |
+| halving | 22% (46%, 40k) | 55% (22%, 80k) | 86% (3%, 160k) | 97% (1%, 320k) | 100% (0%, 640k) |
+| ocba | 28% (50%, 40k) | 59% (22%, 80k) | 86% (4%, 160k) | 100% (0%, 320k) | 100% (0%, 640k) |
+| ours | 4% (96%, 39k) | 34% (67%, 80k) | 81% (18%, 160k) | 83% (17%, 185k) | 81% (19%, 185k) |
+| ours2 | 7% (94%, 37k) | 27% (73%, 71k) | 81% (20%, 127k) | 96% (3%, 148k) | 99% (0%, 159k) |
+
+**level, Rule S: probability of correct selection (no pick, trials spent at the median)**
+
+| Arm | 40k | 80k | 160k | 320k | 640k |
+| --- | --- | --- | --- | --- | --- |
+| grid | 99% (0%, 40k) | 100% (0%, 80k) | 100% (0%, 160k) | 100% (0%, 320k) | 100% (0%, 640k) |
+| random | 26% (20%, 25k) | 69% (0%, 75k) | 91% (0%, 150k) | 100% (0%, 300k) | 100% (0%, 300k) |
+| halving | 84% (0%, 40k) | 91% (0%, 80k) | 95% (0%, 160k) | 100% (0%, 320k) | 100% (0%, 640k) |
+| ocba | 99% (0%, 40k) | 100% (0%, 80k) | 100% (0%, 160k) | 100% (0%, 320k) | 100% (0%, 640k) |
+| ours | 62% (39%, 39k) | 98% (3%, 80k) | 100% (0%, 160k) | 100% (0%, 185k) | 100% (0%, 185k) |
+| ours2 | 65% (36%, 37k) | 93% (8%, 71k) | 100% (1%, 127k) | 100% (0%, 148k) | 100% (0%, 159k) |
+
+**level85, Rule P: probability of correct selection (no pick, trials spent at the median)**
+
+| Arm | 40k | 80k | 160k | 320k | 640k |
+| --- | --- | --- | --- | --- | --- |
+| grid | 4% (54%, 40k) | 8% (27%, 80k) | 27% (2%, 160k) | 66% (0%, 320k) | 91% (0%, 640k) |
+| random | 8% (74%, 25k) | 14% (46%, 75k) | 31% (20%, 150k) | 58% (0%, 300k) | 56% (1%, 300k) |
+| halving | 14% (44%, 40k) | 32% (24%, 80k) | 62% (10%, 160k) | 86% (4%, 320k) | 98% (1%, 640k) |
+| ocba | 6% (84%, 40k) | 22% (57%, 80k) | 55% (21%, 160k) | 92% (3%, 320k) | 100% (0%, 640k) |
+| ours | 0% (100%, 39k) | 1% (99%, 80k) | 54% (44%, 160k) | 55% (44%, 185k) | 57% (39%, 185k) |
+| ours2 | 1% (99%, 37k) | 7% (93%, 71k) | 57% (43%, 142k) | 89% (8%, 196k) | 93% (0%, 187k) |
+
+**level85, Rule S: probability of correct selection (no pick, trials spent at the median)**
+
+| Arm | 40k | 80k | 160k | 320k | 640k |
+| --- | --- | --- | --- | --- | --- |
+| grid | 61% (0%, 40k) | 70% (0%, 80k) | 84% (0%, 160k) | 92% (0%, 320k) | 99% (0%, 640k) |
+| random | 32% (38%, 25k) | 56% (6%, 75k) | 77% (1%, 150k) | 92% (0%, 300k) | 89% (0%, 300k) |
+| halving | 61% (2%, 40k) | 75% (1%, 80k) | 87% (0%, 160k) | 95% (0%, 320k) | 100% (0%, 640k) |
+| ocba | 64% (0%, 40k) | 73% (0%, 80k) | 78% (0%, 160k) | 93% (0%, 320k) | 100% (0%, 640k) |
+| ours | 0% (89%, 39k) | 68% (27%, 80k) | 92% (0%, 160k) | 92% (0%, 185k) | 90% (0%, 185k) |
+| ours2 | 5% (85%, 37k) | 49% (42%, 71k) | 80% (9%, 142k) | 90% (1%, 196k) | 92% (0%, 187k) |
+
+**survival, Rule P: probability of correct selection (no pick, trials spent at the median)**
+
+| Arm | 40k | 80k | 160k | 320k | 640k |
+| --- | --- | --- | --- | --- | --- |
+| grid | 1% (99%, 40k) | 2% (98%, 80k) | 4% (97%, 160k) | 2% (98%, 320k) | 1% (99%, 640k) |
+| random | 0% (100%, 25k) | 0% (100%, 75k) | 1% (100%, 150k) | 0% (100%, 300k) | 4% (96%, 375k) |
+| halving | 1% (99%, 40k) | 2% (99%, 80k) | 2% (98%, 160k) | 3% (98%, 320k) | 2% (98%, 640k) |
+| ocba | 1% (99%, 40k) | 1% (99%, 80k) | 4% (96%, 160k) | 3% (98%, 320k) | 5% (95%, 640k) |
+| ours | 1% (99%, 40k) | 5% (96%, 80k) | 2% (98%, 110k) | 3% (98%, 125k) | 4% (96%, 125k) |
+| ours2 | 1% (99%, 38k) | 4% (97%, 70k) | 5% (96%, 118k) | 5% (95%, 144k) | 2% (99%, 162k) |
+
+**survival, Rule S: probability of correct selection (no pick, trials spent at the median)**
+
+| Arm | 40k | 80k | 160k | 320k | 640k |
+| --- | --- | --- | --- | --- | --- |
+| grid | 38% (30%, 40k) | 40% (32%, 80k) | 44% (31%, 160k) | 46% (35%, 320k) | 44% (38%, 640k) |
+| random | 3% (95%, 25k) | 11% (85%, 75k) | 20% (74%, 150k) | 35% (51%, 300k) | 40% (41%, 375k) |
+| halving | 19% (77%, 40k) | 20% (78%, 80k) | 21% (75%, 160k) | 26% (72%, 320k) | 22% (78%, 640k) |
+| ocba | 28% (28%, 40k) | 33% (37%, 80k) | 43% (28%, 160k) | 43% (34%, 320k) | 54% (33%, 640k) |
+| ours | 14% (71%, 40k) | 50% (34%, 80k) | 47% (33%, 110k) | 47% (32%, 125k) | 45% (34%, 125k) |
+| ours2 | 22% (66%, 38k) | 42% (43%, 70k) | 39% (40%, 118k) | 44% (35%, 144k) | 48% (37%, 162k) |
+
+Trials spent are the median of the whole search; `ours` is capped near 110k-185k, `ours2` stops when its verdict is decided (about 127k-196k in the level
+worlds at 160k and above) or when the next unit does not fit the budget.
+
+**Plain statement of where ours now stands** (rule P is the platform's own verdict and the reading that matters for the product; differences are the
+frozen Newcombe reading, tables file):
+- **The cap is gone.** The structure no longer limits the spend (the domain test `vcrBudgetedSearch` has a campaign spend 265k+ against the fixed structure's
+  ceiling of about 185k, and the first version of the rule spent up to 525k here); in these three worlds the question is settled by 127k-196k, so `ours2` stops there
+  with a stated reason instead of flattening. At 320k and 640k the level worlds are no longer where `ours` flattened: level 96% and 99% (`ours`: 83% and 81%, better by 13 and
+  17 points with intervals above 0), level85 89% and 93% (`ours`: 55% and 57%, better by 35 and 36 points).
+- **Against grid:** better or equal at every budget in the level worlds on rule P (better by 33 and 7 points at 160k and 320k in level, 30 and 24 in level85),
+  worse than grid on rule S at 40k-80k, equal after in level (level85 also worse at 640k).
+- **Against random search:** better at 160k and above on rule P in both worlds; worse at 40k-80k in level85.
+- **Against successive halving and the OCBA-style procedure it still trails at small budgets:** rule P, level: 40k and 80k worse by 16-32 points; level85: 40k-80k
+  worse by 5-26 points. Reason: a verdict at the floors costs 25,000 trials per design and the baselines judge on whatever precision a small budget buys them
+  (spread over 12 designs, 40k-80k is 3,300-6,700 trials a design, a precision the platform's own rules refuse); ours cannot lower that without loosening
+  error control, so below about 100k it stays behind. At 160k: equal to both in both worlds. At 320k: equal to halving, 4 points below OCBA in level (interval
+  [-7, -0], read mechanically as worse) and equal in level85. At 640k: equal in level, 5 and 7 points below halving and OCBA in level85 (worse).
+- **Survival (the near-lottery world):** rule P 1-5% for every arm, ours2 included, and no arm differs from it on rule P except random at 80k-320k (ours2 higher by 4-5
+  points); on rule S ours2 is better than halving from 80k and than random at 40k-160k, and worse than grid at 40k.
+- **Rule S** (point estimates): ours2 is behind ours at 80k-160k in the level worlds (level 93% against 98% at 80k; level85 49% against 68% at 80k, 80% against 92% at
+  160k) because it stops after the first design the verdict passes and so has judged fewer designs at the floors than `ours`' five finalists; at 640k in level85 it
+  is 8 points below halving and OCBA (92% against 100%).
+- **Not verified:** why level85 at 640k ends at 93% while budget remains (the stop reason of those runs is `acceptable_precision`; whether the missing 7% are
+  designs held inconclusive by the re-run cap or truly infeasible by one standard error of the truth table was not measured: the benchmark rows keep the stop
+  reason, not the allocation record). The agent arm (R16) is still the `--score-agent` slot. The product's short form uses `budget.replicates` only when the person
+  states it: without it a campaign keeps the fixed structure, so the default hosted search is not yet on the new allocation (a decision for the controller:
+  a default replicate budget derived from the CPU-second budget needs the engine's seconds per replicate).
+
+Verdict in one sentence: the structural cap is removed and the budgeted campaign now matches grid and the OCBA-style procedure from about 160k trials in the
+level worlds while keeping every error-control rule, but it still trails successive halving and the OCBA-style procedure below that budget (and by 5-7 points
+at 640k in level85), because their small-budget verdicts rest on precision the platform does not allow itself.

@@ -36,7 +36,7 @@
  * @module @evimed/domain/vcrExperimentSearch
  */
 
-import { canonicalScenarioJson, vcrIsNullScenario } from './vcrEngineJob.mjs'
+import { canonicalScenarioJson, vcrIsNullScenario, vcrReplicateFloorFor, VCR_MAX_REPLICATES } from './vcrEngineJob.mjs'
 import { VCR_JOB_METHODS, VCR_ENGINE_METHODS } from './vcrEngineJob.mjs'
 import { VCR_REPLICATES_ALT_MIN } from './vcrVocabulary.mjs'
 import { vcrDiseaseHypothesis } from './vcrExperiment.mjs'
@@ -141,7 +141,7 @@ const DRAW_NEUTRAL = Object.freeze(['truth', 'analysis', 'performance', 'targetM
 
 export const VCR_CAMPAIGN_LIMITS = Object.freeze({
   maxSpace: 10_000, maxCandidates: 200, maxVariables: 6, maxValues: 50, maxTruths: 4, maxConstraints: 8,
-  finalCountMax: 5, cpuSecondsMax: 7 * 24 * 3600, modelCallsMax: 1000, questionMax: 500,
+  finalCountMax: 5, replicatesMax: 500_000_000, cpuSecondsMax: 7 * 24 * 3600, modelCallsMax: 1000, questionMax: 500,
 })
 
 // ---------------------------------------------------------------------------
@@ -436,6 +436,13 @@ export function vcrCampaignManifest(input) {
   if (!(Number.isInteger(budget.maxCandidates) && budget.maxCandidates >= 1 && budget.maxCandidates <= L.maxCandidates)) bad('campaign_budget_invalid', 'budget.maxCandidates', `A campaign evaluates 1 to ${L.maxCandidates} candidates.`)
   if (!(typeof budget.cpuSeconds === 'number' && budget.cpuSeconds > 0 && budget.cpuSeconds <= L.cpuSecondsMax)) bad('campaign_budget_invalid', 'budget.cpuSeconds', 'A campaign states its CPU-second budget.')
   if (!(Number.isInteger(budget.modelCalls) && budget.modelCalls >= 0 && budget.modelCalls <= L.modelCallsMax)) bad('campaign_budget_invalid', 'budget.modelCalls', `Model calls are 0 to ${L.modelCallsMax}.`)
+  // A replicate budget turns the campaign's allocation sequential (`vcrCampaignAdvance`, "budgeted"): it is opt-in, and a manifest without it
+  // keeps its canonical bytes and its fixed stage sizes.
+  if (budgetIn.replicates != null) {
+    if (!(Number.isInteger(budgetIn.replicates) && budgetIn.replicates >= 1 && budgetIn.replicates <= L.replicatesMax)) bad('campaign_budget_invalid', 'budget.replicates', `A replicate budget is 1 to ${L.replicatesMax}.`)
+    else if (exact || !screening || robust) bad('campaign_budget_invalid', 'budget.replicates', 'A replicate budget needs a simulated search with a screening stage and no robust reading.')
+    else /** @type {Record<string, any>} */ (budget).replicates = budgetIn.replicates
+  }
   const evaluated = sample ? Math.min(sample.count, spaceSize) : spaceSize
   if (Number.isInteger(budget.maxCandidates) && evaluated > budget.maxCandidates) {
     bad('campaign_space_exceeds_budget', 'budget.maxCandidates', `The space has ${evaluated} candidates and the budget ${budget.maxCandidates}: narrow the space or sample it (space.sample).`)
@@ -608,11 +615,14 @@ export function vcrSearchFromForm(input) {
   const exact = info?.exact === true
   const candidates = Math.min(size, VCR_CAMPAIGN_LIMITS.maxCandidates)
   const finalCount = Math.min(VCR_SEARCH_FORM_DEFAULTS.finalCount, Math.max(1, candidates))
-  const stages = { screening: exact || info?.precisionBlock === false ? null : { replicates: VCR_SEARCH_FORM_DEFAULTS.screeningReplicates }, final: { count: finalCount } }
-  const cost = /** @type {Record<string, any>} */ (FORM_COST)[method] ?? { candidate: 20, finalist: 60 }
   const budgetIn = object(form.budget)
-  for (const key of Object.keys(budgetIn)) if (!['maxCandidates', 'cpuSeconds'].includes(key)) bad('search_form_field_unknown', `budget.${key}`, 'A budget takes maxCandidates and cpuSeconds.')
-  const budget = { maxCandidates: budgetIn.maxCandidates ?? candidates, cpuSeconds: budgetIn.cpuSeconds ?? Math.ceil(candidates * cost.candidate + finalCount * cost.finalist + 60), modelCalls: 0 }
+  // a stated replicate budget sizes the first stages by one rule (`vcrCampaignBudgetPlan`) and lets the allocation spend the rest
+  const plan = Number.isInteger(budgetIn.replicates) && !exact ? vcrCampaignBudgetPlan({ candidates, replicates: budgetIn.replicates, method }) : null
+  const stages = { screening: exact || info?.precisionBlock === false ? null : { replicates: plan?.screeningReplicates ?? VCR_SEARCH_FORM_DEFAULTS.screeningReplicates }, final: { count: plan ? Math.min(plan.finalCount, finalCount) : finalCount } }
+  const cost = /** @type {Record<string, any>} */ (FORM_COST)[method] ?? { candidate: 20, finalist: 60 }
+  for (const key of Object.keys(budgetIn)) if (!['maxCandidates', 'cpuSeconds', 'replicates'].includes(key)) bad('search_form_field_unknown', `budget.${key}`, 'A budget takes maxCandidates, cpuSeconds and replicates.')
+  const budget = { maxCandidates: budgetIn.maxCandidates ?? candidates, cpuSeconds: budgetIn.cpuSeconds ?? Math.ceil(candidates * cost.candidate + finalCount * cost.finalist + 60), modelCalls: 0,
+    ...(budgetIn.replicates != null ? { replicates: budgetIn.replicates } : {}) }
 
   if (issues.length) return { input: null, issues }
   const space = { method, scenario: base, truths,
@@ -750,18 +760,22 @@ export function vcrCampaignSeed(identity, stage, truth, drawKey) {
  * and shared by every candidate whose applied paths agree.
  * @param {Record<string, any>} manifest @param {string} identity @param {{ key: string, index: number, set: Record<string, any> }} candidate
  * @param {'screening' | 'final'} stage @param {string} truth
+ * @param {{ round?: number, replicates?: number }} [escalation] a budgeted campaign's fresh re-run of a final evaluation, on a stream of its own
  */
-export function vcrCampaignUnit(manifest, identity, candidate, stage, truth) {
+export function vcrCampaignUnit(manifest, identity, candidate, stage, truth, escalation = {}) {
+  const round = Number.isInteger(escalation.round) && /** @type {number} */ (escalation.round) > 0 ? /** @type {number} */ (escalation.round) : 0
   const method = manifest.space.method
   const kind = Object.keys(VCR_JOB_METHODS).find((key) => /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[key] === method)
   const drawKey = vcrCampaignDrawKey(manifest, candidate)
   return {
-    key: `${candidate.key}:${stage}:${truth}`, candidate: candidate.key, stage, truth, method, version: manifest.space.version, kind,
+    key: `${candidate.key}:${stage}:${truth}${round ? `:r${round}` : ''}`, candidate: candidate.key, stage, truth, method, version: manifest.space.version, kind,
+    ...(round ? { round } : {}),
     scenario: vcrCandidateScenario(manifest, candidate, truth, stage),
     // scenarios of a robust reading draw on one stream (common random numbers): they differ by what is assumed, never by luck
-    seed: vcrCampaignSeed(identity, stage, manifest.robust ? '*' : truth, drawKey),
-    replicates: stage === 'final' && Number.isInteger(manifest.stages.final.replicates) ? manifest.stages.final.replicates : null,
-    idempotencyKey: `vcr-campaign:${identity.slice(0, 24)}:${candidate.key}:${stage}:${truth}`,
+    seed: vcrCampaignSeed(identity, round ? `${stage}-r${round}` : stage, manifest.robust ? '*' : truth, drawKey),
+    replicates: Number.isInteger(escalation.replicates) ? /** @type {number} */ (escalation.replicates)
+      : stage === 'final' && Number.isInteger(manifest.stages.final.replicates) ? manifest.stages.final.replicates : null,
+    idempotencyKey: `vcr-campaign:${identity.slice(0, 24)}:${candidate.key}:${stage}:${truth}${round ? `:r${round}` : ''}`,
   }
 }
 
@@ -1084,7 +1098,13 @@ export function vcrCampaignRecord(manifest, state, unit, outcome) {
   }
   const entry = next.candidates[/** @type {string} */ (unit.candidate)]
   if (!entry) return next
-  entry.evaluations[`${unit.stage}:${unit.truth}`] = evaluation
+  // a fresh re-run (budgeted campaign) replaces the evaluation a verdict reads; the one it replaces stays on the record
+  const evaluationKey = `${unit.stage}:${unit.truth}`
+  if (Number(/** @type {any} */ (unit).round) > 0 && entry.evaluations[evaluationKey]) {
+    const old = entry.evaluations[evaluationKey]
+    entry.superseded = [...list(entry.superseded), { truth: unit.truth, replicates: old.replicates, seed: old.seed, measures: old.measures }]
+  }
+  entry.evaluations[evaluationKey] = evaluation
   if (outcome.unsupported) {
     entry.status = 'unsupported'; entry.reason = evaluation.issues[0] ?? 'candidate_unsupported'
   } else if (canceled) {
@@ -1357,6 +1377,156 @@ export function vcrCampaignRobust(manifest, state, baseFeasible) {
     rows: choice.rows.map((row) => { const given = /** @type {Record<string, any>} */ (inputByKey.get(row.key) ?? {}); return { ...row, scenarios: given.scenarios ?? {}, oc: given.oc ?? {}, n: given.n ?? null, duration: given.duration ?? null, cost: given.cost ?? null, costBase: given.costBase ?? null } }) }
 }
 
+// ---------------------------------------------------------------------------
+// The budgeted allocation (R36 root fix)
+// ---------------------------------------------------------------------------
+
+/**
+ * Why the staged campaign used to flatten whatever its budget: `budget.cpuSeconds` was only a ceiling, never an input of the allocation.
+ * The stage sizes were fixed (screening below the floor, at most `finalCountMax` finalists, one final run each), the finalists were chosen
+ * once from the screening rank, and after that single round the verdict stopped the campaign with most of the budget unspent; when all
+ * finalists failed there was no recourse, and a design the first run left undecided never got more replicates.
+ *
+ * With `budget.replicates` the campaign spends what it is given, and only on what can still change the answer, one unit at a time:
+ * - the screening stage is unchanged (ranking and elimination only, never a pass);
+ * - the first wave of finalists is the `stages.final.count` best by the screening rank, as before; every later design enters one at a time;
+ * - the next design to be judged is the cheapest by the objective (the MCSE-aware one: a design is in play only when its estimate, less
+ *   `z` times its own error, could beat the best feasible design so far, z from the constraints' confidence) among those the screening says may
+ *   meet the design constraints first, then the rest; a design already judged "inconclusive" is run again, fresh, with the replicates its
+ *   estimate says it needs (OCBA's rule of thumb: the gap to the bound sets the cost, and a gap that would take more than `maxGrowth` times the
+ *   run to settle is inside the indifference zone of what the budget can resolve, so the design is neither passed nor chased), at most
+ *   `maxRounds` times;
+ * - a finalist whose first constraint already fails on its final evaluation is not run on its other truths (the verdict could not change);
+ * - the campaign stops when nothing in play can still beat the best, or when nothing in play fits the remaining budget.
+ * Error control is untouched: a verdict still reads only a final evaluation at the method's floor or more, on a stream no screening unit and no
+ * earlier run of that design used, at the constraints' own confidence. A re-run is judged on its own fresh data alone (the earlier run decided
+ * only whether to run it; its data are kept as `superseded`, never pooled), which keeps each design's bound exact. More designs judged means more
+ * chances for one to pass by luck, as it always has with more finalists (`verdict.selection`); the benchmark measures it.
+ */
+export const VCR_ALLOCATION = Object.freeze({ maxRounds: 2, maxGrowth: 4, screeningShare: 0.2, firstWave: 1 })
+
+/**
+ * The stage sizes a replicate budget implies, by one stated rule: screening takes a fifth of the budget (alternative case only, below the
+ * method's floor, at least the screening minimum), and the first wave holds one finalist plus the reference when there is one.
+ * @param {{ candidates: number, replicates: number, method?: string }} input
+ */
+export function vcrCampaignBudgetPlan({ candidates, replicates, method = 'design.simulate' }) {
+  const finalFloor = /** @type {Record<string, any>} */ (VCR_SCREENING.methods)[method]?.finalFloor ?? VCR_SCREENING.minReplicates + 1
+  const each = Math.floor((VCR_ALLOCATION.screeningShare * replicates) / Math.max(1, candidates) / 100) * 100
+  return { screeningReplicates: Math.min(finalFloor - 1, Math.max(VCR_SCREENING.minReplicates, each)), finalCount: VCR_ALLOCATION.firstWave }
+}
+
+/** The replicates a unit will use: its own, the screening stage's, or the floor of its scenario. @param {Record<string, any>} manifest @param {Record<string, any>} unit */
+function unitReplicates(manifest, unit) {
+  if (Number.isInteger(unit.replicates)) return unit.replicates
+  return unit.stage === 'screening' ? Number(manifest.stages.screening.replicates) : vcrReplicateFloorFor(unit.scenario)
+}
+
+/** Whether a unit fits what is left of the replicate budget. @param {Record<string, any>} manifest @param {Record<string, any>} state @param {Record<string, any>} unit */
+function affordable(manifest, state, unit) {
+  return state.usage.replicatesCompleted + unitReplicates(manifest, unit) <= manifest.budget.replicates
+}
+
+/**
+ * Record, once the campaign stops, what became of every design and of the budget: nothing is left without a reason.
+ * @param {Record<string, any>} manifest @param {Record<string, any>} state @param {string} stopReason
+ */
+function finalizeAllocation(manifest, state, stopReason) {
+  const unevaluated = []
+  for (const [key, entry] of Object.entries(state.candidates)) {
+    if (entry.status !== 'screened' && entry.status !== 'pending') continue
+    entry.reason = state.allocation?.blocked?.includes(key) ? 'not_evaluated:budget' : entry.status === 'pending' ? 'not_screened:budget' : 'not_needed:cannot_beat_best'
+    unevaluated.push(key)
+  }
+  const spent = state.usage.replicatesCompleted
+  state.allocation = { ...object(state.allocation), budget: manifest.budget.replicates, spent, unspent: Math.max(0, manifest.budget.replicates - spent),
+    unspentReason: stopReason === 'budget_exhausted' ? 'next_unit_does_not_fit' : stopReason === 'user_cancellation' || stopReason === 'persistent_model_failure' ? stopReason
+      : state.allocation?.precisionLimited ? 'precision_not_reachable' : 'decided', unevaluated }
+}
+
+/**
+ * The next final unit of a budgeted campaign, `{ unit }`, `{ blocked: true }` (something in play cannot be afforded) or null (nothing left
+ * to run: the verdict decides). Pure over `state` (it records the wave and round it opens).
+ * @param {Record<string, any>} manifest @param {Record<string, any>} state @param {any[]} candidates @param {string} identity
+ */
+function allocateFinals(manifest, state, candidates, identity) {
+  const byKey = new Map(candidates.map((c) => [c.key, c]))
+  // design and safety constraints are judged on their truths first: a failure there ends the design's run before its error-control truth is paid for
+  const judged = list(manifest.constraints)
+  const order = [...new Set([...judged.filter((c) => c.kind !== 'error_control').map((c) => c.truth), ...finalTruths(manifest)])]
+  state.allocation = { ...object(state.allocation), blocked: list(state.allocation?.blocked) }
+  // 1. finish a finalist that is started
+  for (const key of state.finalists) {
+    const entry = state.candidates[key]
+    if (entry.status !== 'finalist') continue
+    const failed = vcrCandidateVerdicts(manifest, entry, 'final').find((v) => v.status === 'fail')
+    if (failed) { entry.status = 'evaluated'; entry.reason = `final_failed:${failed.measure}`; continue }
+    const truth = order.find((t) => !entry.evaluations[`final:${t}`])
+    if (truth == null) { entry.status = 'evaluated'; continue }
+    const unit = vcrCampaignUnit(manifest, identity, /** @type {any} */ (byKey.get(key)), 'final', truth)
+    return affordable(manifest, state, unit) ? { unit } : { blocked: true }
+  }
+  // 2. what is still in play: it must be able to beat the best feasible design so far
+  const verdict = vcrCampaignVerdict(manifest, state)
+  const z = vcrNormalQuantile(Number(list(manifest.constraints)[0]?.confidence ?? 0.975))
+  const minimize = manifest.objective.direction === 'minimize'
+  const best = verdict.best ? objectiveOf(manifest, state.candidates[verdict.best], 'final') : null
+  const couldBeat = (/** @type {{ value: number, mcse: number | null } | null} */ o) => {
+    if (!o) return false
+    if (!best) return true
+    const slack = z * Number(o.mcse ?? 0)
+    return minimize ? o.value - slack < best.value : o.value + slack > best.value
+  }
+  const meetsScreening = (/** @type {string} */ key) => list(judged).filter((c) => c.kind !== 'error_control').every((c) => {
+    const measure = vcrEvaluationMeasure(state.candidates[key].evaluations[`screening:${c.truth}`], c.measure)
+    return measure != null && (c.op === '<=' ? Number(measure.value) <= c.bound : Number(measure.value) >= c.bound)
+  })
+  /** @type {Array<{ key: string, index: number, value: number, meets: boolean, escalate: { truth: string, replicates: number, round: number } | null }>} */
+  const inPlay = []
+  for (const c of candidates) {
+    const entry = state.candidates[c.key]
+    if (entry.status === 'screened') {
+      const o = objectiveOf(manifest, entry, 'screening')
+      if (couldBeat(o)) inPlay.push({ key: c.key, index: c.index, value: /** @type {any} */ (o).value, meets: meetsScreening(c.key), escalate: null })
+    } else if (entry.status === 'evaluated' && entry.role !== 'reference_only' && verdict.inconclusive.includes(c.key)) {
+      const o = objectiveOf(manifest, entry, 'final')
+      const round = Number(entry.round ?? 0)
+      const row = verdict.undecided.find((/** @type {any} */ u) => u.key === c.key)
+      if (!couldBeat(o) || round >= VCR_ALLOCATION.maxRounds || !row) continue
+      // the undecided constraint with the largest need decides the size of the fresh run
+      let need = 0; let truth = null
+      for (const u of row.constraints) {
+        const constraint = judged[u.index]
+        const given = Number(u.needed?.replicates)
+        const sized = Number.isFinite(given) ? given : NaN // an estimate exactly on the bound names no number of replicates that settles it
+        const current = Number(entry.evaluations[`final:${constraint.truth}`]?.replicates ?? 0)
+        // a design whose gap to the bound would take more than `maxGrowth` times its own run to settle is within the indifference of what the
+        // budget can resolve: it is neither passed nor chased
+        const target = Number.isFinite(sized) && sized <= current * VCR_ALLOCATION.maxGrowth ? Math.max(Math.ceil(sized / 1000) * 1000, Math.ceil(current * 1.5)) : NaN
+        if (Number.isFinite(target) && target > need) { need = Math.min(target, VCR_MAX_REPLICATES); truth = constraint.truth }
+      }
+      if (truth == null) { state.allocation.precisionLimited = true; continue }
+      inPlay.push({ key: c.key, index: c.index, value: /** @type {any} */ (o).value, meets: true, escalate: { truth, replicates: need, round: round + 1 } })
+    }
+  }
+  if (!inPlay.length) return null
+  // 3. the cheapest by the objective first; designs the screening says may meet the design constraints before the rest; a re-run before a new design on a tie
+  inPlay.sort((a, b) => Number(b.meets) - Number(a.meets) || (minimize ? a.value - b.value : b.value - a.value) || Number(Boolean(b.escalate)) - Number(Boolean(a.escalate)) || a.index - b.index)
+  for (const item of inPlay) {
+    const candidate = /** @type {any} */ (byKey.get(item.key))
+    const entry = state.candidates[item.key]
+    let unit
+    if (item.escalate) unit = vcrCampaignUnit(manifest, identity, candidate, 'final', item.escalate.truth, { round: item.escalate.round, replicates: item.escalate.replicates })
+    else unit = vcrCampaignUnit(manifest, identity, candidate, 'final', /** @type {string} */ (order[0]))
+    if (!affordable(manifest, state, unit)) { if (!state.allocation.blocked.includes(item.key)) state.allocation.blocked.push(item.key); continue }
+    if (item.escalate) entry.round = item.escalate.round
+    else { entry.status = 'finalist'; entry.wave = list(state.finalists).length; state.finalists = [...state.finalists, item.key] }
+    state.allocation.opened = Number(state.allocation.opened ?? 0) + 1
+    return { unit }
+  }
+  return { blocked: true }
+}
+
 /**
  * Decide what a campaign does next (pure): evaluate one unit, wait for the unit in flight, or stop with one reason. Finalists are
  * chosen here, once, from the screening ranking (or every survivor of an exact method), and written into the returned state.
@@ -1367,7 +1537,12 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
   const next = clone(state)
   if (next.stop) return { state: next, action: { type: 'none' } }
   if (next.inFlight) return { state: next, action: { type: 'wait' } }
-  const stop = (/** @type {string} */ reason) => { next.stop = { reason, verdict: next.finalists ? vcrCampaignVerdict(manifest, next) : null }; return { state: next, action: /** @type {const} */ ({ type: 'stop', reason }) } }
+  const budgeted = Number.isInteger(manifest.budget.replicates)
+  const stop = (/** @type {string} */ reason) => {
+    if (budgeted) finalizeAllocation(manifest, next, reason)
+    next.stop = { reason, verdict: next.finalists ? vcrCampaignVerdict(manifest, next) : null }
+    return { state: next, action: /** @type {const} */ ({ type: 'stop', reason }) }
+  }
   if (next.cancelRequested) return stop('user_cancellation')
   if (next.consecutiveFailures >= manifest.stopRules.maxConsecutiveFailures) return stop('persistent_model_failure')
   const candidates = vcrCampaignCandidates(manifest)
@@ -1375,7 +1550,8 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
   // a spent budget stops the next unit, never a verdict that needs none: the engine checks its CPU between batches, so the last final
   // unit can end a little over the ceiling (stats P2-3)
   const evaluate = (/** @type {any} */ unit) => (next.usage.cpuSeconds >= manifest.budget.cpuSeconds ? stop('budget_exhausted')
-    : { state: next, action: /** @type {const} */ ({ type: 'evaluate', unit }) })
+    : budgeted && !affordable(manifest, next, unit) ? stop('budget_exhausted')
+      : { state: next, action: /** @type {const} */ ({ type: 'evaluate', unit }) })
 
   // 1. the analytic pre-check: one unit per distinct analytic scenario, then elimination by its rules
   if (manifest.stages.analytic) {
@@ -1451,8 +1627,12 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
     }
   }
 
-  // 4. final evaluations on independent streams
-  for (const key of next.finalists) {
+  // 4. final evaluations on independent streams (a budgeted campaign: sequentially, by the allocation rule below)
+  if (budgeted) {
+    const decided = allocateFinals(manifest, next, candidates, identity)
+    if (decided?.unit) return evaluate(decided.unit)
+    if (decided?.blocked) return stop('budget_exhausted')
+  } else for (const key of next.finalists) {
     const entry = next.candidates[key]
     if (!['finalist'].includes(entry.status)) continue
     const candidate = /** @type {any} */ (candidates.find((c) => c.key === key))

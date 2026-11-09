@@ -22,7 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   vcrCampaignAdvance, vcrCampaignCandidates, vcrCampaignCanonical, vcrCampaignManifest, vcrCampaignRecord, vcrCampaignInitialState,
-  vcrCampaignUnit, vcrCampaignVerdict, vcrClopperPearson,
+  vcrCampaignUnit, vcrCampaignVerdict, vcrClopperPearson, vcrCampaignBudgetPlan,
 } from '../../packages/domain/index.mjs';
 
 const run = promisify(execFile);
@@ -43,8 +43,9 @@ const FROZEN = {
   epsilonPatients: 50, successLevel: 0.8,
   ocba: { stageOneShare: 0.3, indifference: 0.005 },
   calibration: { screeningReplicates: 300, screeningSeeds: 30, finalAltSeeds: 10, finalNullSeeds: 5, sdRatio: [0.8, 1.25] },
-  arms: ['grid', 'random', 'halving', 'ocba', 'ours'],
+  arms: ['grid', 'random', 'halving', 'ocba', 'ours', 'ours2'], // ours2: addendum D5 (sequential allocation); the first five are the 2026-11-09 protocol
 };
+if (option('--arms')) FROZEN.arms = option('--arms').split(','); // a development run of some arms; the reported run has all of them
 const reference = option('--reference', path.join(here, 'results/search-benchmark-20261107.json'));
 
 // --- the two spaces -----------------------------------------------------------------------------------------------------------
@@ -242,32 +243,41 @@ function oursParameters(world, B) {
   const screening = Math.min(4_999, Math.max(200, Math.floor((B - finalCount * (FROZEN.floors.alternative + FROZEN.floors.null)) / K / 100) * 100));
   return { finalCount, screening };
 }
-function oursManifest(world, B) {
-  const key = `${world.name}:${B}`;
+/** Addendum D5: the same campaign with `budget.replicates = B`; the stage sizes follow the domain's one rule (`vcrCampaignBudgetPlan`), the rest is allocated sequentially. */
+function oursParameters2(world, B) {
+  const plan = vcrCampaignBudgetPlan({ candidates: world.items.length, replicates: B });
+  return { finalCount: plan.finalCount, screening: plan.screeningReplicates };
+}
+function oursManifest(world, B, sequential = false) {
+  const key = `${world.name}:${B}:${sequential}`;
   if (!manifests.has(key)) {
-    const { finalCount, screening } = oursParameters(world, B);
+    const { finalCount, screening } = sequential ? oursParameters2(world, B) : oursParameters(world, B);
     const sc = SPACES[world.name].scenario;
     const input = baseManifest({ label: world.name, candidates: SPACES[world.name].candidates(), screeningReplicates: screening, finalCount, cpuSeconds: B / 1000, ...sc, powerBound: world.powerBound });
+    if (sequential) input.budget.replicates = B;
     const { manifest, issues } = vcrCampaignManifest(input);
     if (!manifest) throw new Error(`${world.name}: ${JSON.stringify(issues)}`);
-    manifests.set(key, { manifest, identity: sha256(vcrCampaignCanonical(manifest)), candidates: vcrCampaignCandidates(manifest), ...oursParameters(world, B) });
+    manifests.set(key, { manifest, identity: sha256(vcrCampaignCanonical(manifest)), candidates: vcrCampaignCandidates(manifest), finalCount, screening });
   }
   return manifests.get(key);
 }
-function armOurs(world, B, seed) {
-  const { manifest, identity, candidates } = oursManifest(world, B);
+const armOurs = (world, B, seed) => runOurs(world, B, seed, false);
+const armOurs2 = (world, B, seed) => runOurs(world, B, seed, true);
+function runOurs(world, B, seed, sequential) {
+  const { manifest, identity, candidates } = oursManifest(world, B, sequential);
+  const armName = sequential ? 'ours2' : 'ours';
   const indexOf = new Map(candidates.map((c) => [c.key, c.index]));
   const est = new Map(); const finalEst = new Map(); let spent = 0;
   let state = vcrCampaignInitialState(manifest);
-  for (let step = 0; step < 500; step++) {
+  for (let step = 0; step < 2_000; step++) {
     const { state: next, action } = vcrCampaignAdvance(manifest, state, { identity });
     state = next;
     if (action.type !== 'evaluate') break;
     const unit = action.unit; const index = indexOf.get(unit.candidate); const c = world.items[index];
     const screening = unit.stage === 'screening';
     const alt = unit.truth === 'alternative';
-    const replicates = screening ? manifest.stages.screening.replicates : FROZEN.floors[unit.truth];
-    const k = binomial(replicates, alt ? c.power : c.typeOne, stream(world.name, 'ours', B, seed, unit.key));
+    const replicates = screening ? manifest.stages.screening.replicates : (unit.replicates ?? FROZEN.floors[unit.truth]);
+    const k = binomial(replicates, alt ? c.power : c.typeOne, stream(world.name, armName, B, seed, unit.key));
     const measures = [{ name: 'expected_sample_size', value: c.patients, mcse: 0, simulated: true, ...(screening ? { precision: 'screening' } : {}) },
       alt ? { name: 'power', value: k / replicates, mcse: Math.sqrt((k / replicates) * (1 - k / replicates) / replicates), simulated: true, ...(screening ? { precision: 'screening' } : {}) }
         : { name: 'type_one_error', value: k / replicates, mcse: Math.sqrt((k / replicates) * (1 - k / replicates) / replicates), simulated: true }];
@@ -275,7 +285,8 @@ function armOurs(world, B, seed) {
     spent += replicates;
     if (!screening) {
       const e = finalEst.get(index) ?? emptyCell(); finalEst.set(index, e);
-      if (alt) { e.ka += k; e.na += replicates; } else { e.kn += k; e.nn += replicates; }
+      // a fresh re-run replaces the cell it re-ran (the domain judges it alone; the earlier run only decided to run it)
+      if (alt) { if (unit.round) { e.ka = 0; e.na = 0; } e.ka += k; e.na += replicates; } else { if (unit.round) { e.kn = 0; e.nn = 0; } e.kn += k; e.nn += replicates; }
     }
     state = vcrCampaignRecord(manifest, { ...state, inFlight: { unitKey: unit.key, unit } }, unit, outcome);
   }
@@ -283,7 +294,7 @@ function armOurs(world, B, seed) {
   void est;
   return { est: finalEst, spent, only: null, domainPick: verdict.best == null ? null : indexOf.get(verdict.best), stop: state.stop?.reason ?? null };
 }
-const ARMS = { grid: armGrid, random: armRandom, halving: armHalving, ocba: armOcba, ours: armOurs };
+const ARMS = { grid: armGrid, random: armRandom, halving: armHalving, ocba: armOcba, ours: armOurs, ours2: armOurs2 };
 
 // --- running and aggregating -----------------------------------------------------------------------------------------------------
 function quantile(sorted, q) {
@@ -297,17 +308,19 @@ function wilson(k, n, z = 1.959964) {
   return [(c - h) / d, (c + h) / d];
 }
 
+// development runs use seeds the protocol never reports (`--seed-from 1001`); the reported run is seeds 1..200
+const seedFrom = Number(option('--seed-from', 1));
 function runWorld(world, seeds) {
   const confidence = vcrCampaignManifest(baseManifest({ label: world.name, candidates: SPACES[world.name].candidates(), screeningReplicates: 300, finalCount: 3, cpuSeconds: 3600, ...SPACES[world.name].scenario, powerBound: world.powerBound })).manifest.constraints[0].confidence;
   const rows = [];
-  let disagreements = 0;
+  const disagreements = {};
   for (const B of FROZEN.budgets) {
     for (const arm of FROZEN.arms) {
-      for (let seed = 1; seed <= seeds; seed++) {
+      for (let seed = seedFrom; seed < seedFrom + seeds; seed++) {
         const result = ARMS[arm](world, B, seed);
         const picks = { point: pickPoint(world, result.est, result.only), platform: pickPlatform(world, result.est, confidence, result.only) };
         // ours' own pick is the domain's verdict; my rule P on its final estimates must agree with it
-        if (arm === 'ours') { if (result.domainPick !== picks.platform) disagreements += 1; picks.platform = result.domainPick; }
+        if (arm.startsWith('ours')) { if (result.domainPick !== picks.platform) disagreements[arm] = (disagreements[arm] ?? 0) + 1; picks.platform = result.domainPick; }
         for (const rule of ['point', 'platform']) {
           rows.push({ arm, budget: B, seed, rule, pick: picks[rule], spent: result.spent, stop: result.stop ?? null, ...judge(world, picks[rule], stream(world.name, arm, B, seed, rule, 'reeval')) });
         }
@@ -370,26 +383,28 @@ function tables(worlds, results) {
     }
     lines.push('**Trials actually spent (median) at each budget**', '', `| Arm | ${budgets.map((b) => `${b / 1000}k`).join(' | ')} |`, `| --- | ${budgets.map(() => '---').join(' | ')} |`);
     for (const arm of FROZEN.arms) lines.push(`| ${arm} | ${budgets.map((b) => Math.round(agg.find((x) => x.rule === 'point' && x.arm === arm && x.budget === b).spentMedian / 1000) + 'k').join(' | ')} |`);
-    lines.push('', '**Ours against each baseline: probability of correct selection, 95% interval of the difference (better / equal / worse)**', '');
-    for (const rule of ['point', 'platform']) {
-      lines.push(`Rule ${rule === 'point' ? 'S' : 'P'}:`, '', `| Baseline | ${budgets.map((b) => `${b / 1000}k`).join(' | ')} |`, `| --- | ${budgets.map(() => '---').join(' | ')} |`);
-      for (const arm of FROZEN.arms.filter((a) => a !== 'ours')) {
-        lines.push(`| ${arm} | ${budgets.map((b) => { const c = compare(agg.find((x) => x.rule === rule && x.arm === 'ours' && x.budget === b).pcs, agg.find((x) => x.rule === rule && x.arm === arm && x.budget === b).pcs);
-          return `${c.verdict} (${(100 * c.diff).toFixed(0)} pts [${(100 * c.lower).toFixed(0)}, ${(100 * c.upper).toFixed(0)}])`; }).join(' | ')} |`);
+    for (const mine of FROZEN.arms.filter((a) => a.startsWith('ours'))) {
+      lines.push('', `**${mine} against each other arm: probability of correct selection, 95% interval of the difference (better / equal / worse)**`, '');
+      for (const rule of ['point', 'platform']) {
+        lines.push(`Rule ${rule === 'point' ? 'S' : 'P'}:`, '', `| Other arm | ${budgets.map((b) => `${b / 1000}k`).join(' | ')} |`, `| --- | ${budgets.map(() => '---').join(' | ')} |`);
+        for (const arm of FROZEN.arms.filter((a) => a !== mine)) {
+          lines.push(`| ${arm} | ${budgets.map((b) => { const c = compare(agg.find((x) => x.rule === rule && x.arm === mine && x.budget === b).pcs, agg.find((x) => x.rule === rule && x.arm === arm && x.budget === b).pcs);
+            return `${c.verdict} (${(100 * c.diff).toFixed(0)} pts [${(100 * c.lower).toFixed(0)}, ${(100 * c.upper).toFixed(0)}])`; }).join(' | ')} |`);
+        }
+        lines.push('');
       }
-      lines.push('');
+      lines.push(`Check: ${mine}'s own verdict and the rule-P pick recomputed from its final estimates disagreed in ${results[w.name].disagreements[mine] ?? 0} of ${results[w.name].seeds * budgets.length} runs.`, '');
+      const stops = {};
+      for (const r of results[w.name].rows.filter((x) => x.arm === mine && x.rule === 'platform')) stops[`${r.budget / 1000}k ${r.stop}`] = (stops[`${r.budget / 1000}k ${r.stop}`] ?? 0) + 1;
+      lines.push(`${mine}'s stop reasons: ${Object.entries(stops).map(([k, v]) => `${k} x${v}`).join('; ')}.`, '');
     }
-    lines.push(`Check: ours' own verdict and the rule-P pick recomputed from its final estimates disagreed in ${results[w.name].disagreements} of ${results[w.name].seeds * budgets.length} runs.`, '');
-    const stops = {};
-    for (const r of results[w.name].rows.filter((x) => x.arm === 'ours' && x.rule === 'platform')) stops[`${r.budget / 1000}k ${r.stop}`] = (stops[`${r.budget / 1000}k ${r.stop}`] ?? 0) + 1;
-    lines.push(`Ours' stop reasons: ${Object.entries(stops).map(([k, v]) => `${k} x${v}`).join('; ')}.`, '');
   }
   return lines.join('\n');
 }
 
 /** One SVG per world: probability of correct selection, success within epsilon and violation rate against the budget (log scale), rule S. */
 function svg(world, agg) {
-  const colors = { grid: '#8a8d93', random: '#c98a2b', halving: '#2a9d8f', ocba: '#9b5de5', ours: '#1f5fbf' };
+  const colors = { grid: '#8a8d93', random: '#c98a2b', halving: '#2a9d8f', ocba: '#9b5de5', ours: '#1f5fbf', ours2: '#d62828' };
   const W = 300; const H = 190; const pad = { l: 44, r: 12, t: 28, b: 38 };
   const panels = [['Correct selection', (x) => x.pcs.p, 'point'], ['Success within epsilon', (x) => x.successEps.p, 'point'], ['Violation of picks (truth)', (x) => x.trueViolationOfPicks.p ?? 0, 'point']];
   const lx = (b) => pad.l + (Math.log(b) - Math.log(FROZEN.budgets[0])) / (Math.log(FROZEN.budgets.at(-1)) - Math.log(FROZEN.budgets[0])) * (W - pad.l - pad.r);
@@ -403,12 +418,12 @@ function svg(world, agg) {
     body += `<text x="${(pad.l + W - pad.r) / 2}" y="${H - 6}" font-size="9" text-anchor="middle" font-family="sans-serif" fill="#555">budget (simulated trials)</text>`;
     for (const arm of FROZEN.arms) {
       const pts = FROZEN.budgets.map((b) => [lx(b), ly(f(agg.find((x) => x.rule === rule && x.arm === arm && x.budget === b)))]);
-      body += `<polyline fill="none" stroke="${colors[arm]}" stroke-width="${arm === 'ours' ? 2.6 : 1.6}" points="${pts.map((p) => p.map((v) => v.toFixed(1)).join(',')).join(' ')}"/>`;
+      body += `<polyline fill="none" stroke="${colors[arm]}" stroke-width="${arm.startsWith('ours') ? 2.6 : 1.6}" points="${pts.map((p) => p.map((v) => v.toFixed(1)).join(',')).join(' ')}"/>`;
       for (const p of pts) body += `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.4" fill="${colors[arm]}"/>`;
     }
     body += '</g>';
   });
-  const legend = FROZEN.arms.map((arm, i) => `<g transform="translate(${60 + i * 110},${H + 10})"><rect width="14" height="3" y="4" fill="${colors[arm]}"/><text x="20" y="9" font-size="11" font-family="sans-serif" fill="#222">${arm}</text></g>`).join('');
+  const legend = FROZEN.arms.map((arm, i) => `<g transform="translate(${40 + i * 95},${H + 10})"><rect width="14" height="3" y="4" fill="${colors[arm]}"/><text x="20" y="9" font-size="11" font-family="sans-serif" fill="#222">${arm}</text></g>`).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W * 3}" height="${H + 30}" viewBox="0 0 ${W * 3} ${H + 30}"><rect width="100%" height="100%" fill="#fff"/><text x="4" y="12" font-size="11" font-family="sans-serif" fill="#222">${world.name} world, rule S, ${FROZEN.seeds} seeds</text>${body}${legend}</svg>\n`;
 }
 
@@ -475,12 +490,13 @@ const results = {};
 for (const world of worlds) {
   const { rows, disagreements, confidence } = runWorld(world, seeds);
   results[world.name] = { seeds, disagreements, confidence, rows, aggregate: aggregate(rows) };
-  process.stderr.write(`${world.name}: ${rows.length} rows, ${disagreements} rule-P disagreements\n`);
+  process.stderr.write(`${world.name}: ${rows.length} rows, rule-P disagreements ${JSON.stringify(disagreements)}\n`);
 }
 let revision = null;
 try { revision = (await run('git', ['rev-parse', 'HEAD'], { cwd: here })).stdout.trim(); } catch { /* not a checkout */ }
 const doc = { revision, frozen: FROZEN, referenceSha256: sha256(await fs.readFile(reference, 'utf8')), worlds: worlds.map((w) => ({ name: w.name, items: w.items, feasibleCount: w.feasibleCount, optimalCount: w.optimalCount, bestPatients: w.bestPatients, penaltyScore: w.penaltyScore })),
   ours: Object.fromEntries(worlds.map((w) => [w.name, FROZEN.budgets.map((B) => ({ budget: B, ...oursParameters(w, B) }))])),
+  ours2: Object.fromEntries(worlds.map((w) => [w.name, FROZEN.budgets.map((B) => ({ budget: B, ...oursParameters2(w, B) }))])),
   aggregate: Object.fromEntries(worlds.map((w) => [w.name, results[w.name].aggregate])), disagreements: Object.fromEntries(worlds.map((w) => [w.name, results[w.name].disagreements])) };
 if (option('--out')) await fs.writeFile(option('--out'), `${JSON.stringify(doc, null, 1)}\n`);
 const text = tables(worlds, results);

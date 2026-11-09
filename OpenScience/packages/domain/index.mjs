@@ -2120,6 +2120,8 @@ export {
   vcrCampaignAnalyticScenario,
   vcrCampaignCandidates,
   vcrCampaignCanonical,
+  vcrCampaignBudgetPlan,
+  VCR_ALLOCATION,
   vcrCampaignDrawKey,
   vcrCampaignInitialState,
   vcrCampaignFromInput,

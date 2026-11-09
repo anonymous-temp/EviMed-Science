@@ -108,3 +108,11 @@ the arms at the nearest budget in the RUN file's tables, with at least three sam
 The RUN file states, per world and budget, where ours is better, equal or worse than each baseline on PCS, regret and violation under both rules, and
 which arm needs the least budget to reach success within epsilon. It claims nothing the table does not show, in particular nothing about the engine's
 true rates and nothing about arms or budgets not run.
+
+## Addendum D5 (2026-11-09, after the first result run; the frozen text above is unchanged)
+
+Arm 7, **ours2**, is `ours` with `budget.replicates = B` and the stage sizes of `vcrCampaignBudgetPlan` (screening takes a fifth of B, below the floor,
+alternative case; one finalist in the first wave); the rest of B is allocated by the domain's sequential rule (`VCR_ALLOCATION`, see the RUN file's D5
+addendum). Same worlds, budgets, seeds 1..200, pick rules, metrics and reading as above; the original five arms are re-run unchanged and must reproduce the first run
+byte for byte (they do: 150 of 150 cells). Development of the rule used seeds 1001..1100 (`--seed-from`), never reported; `--arms` runs a subset of arms for such a
+development run. A unit of ours2 may carry its own `replicates` (a fresh re-run of a final evaluation); the simulated world draws it exactly like any other unit.
