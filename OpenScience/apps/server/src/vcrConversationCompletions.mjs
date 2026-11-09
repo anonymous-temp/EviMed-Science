@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import {RuntimePromptStops} from './runtimePromptStops.mjs';
 import { ProductDocuments } from './productStore.mjs';
 import { HttpError,safeId } from './security.mjs';
-import { presentCampaign, VCR_CAMPAIGN_STOP_TEXT_ZH } from './vcrExperiments.mjs';
+import { experimentOutcome, presentCampaign, VCR_CAMPAIGN_STOP_TEXT_ZH } from './vcrExperiments.mjs';
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 /** Agent-run resource IDs are at most 64 characters. Keep the full digest as
  * the dispatch fingerprint while reserving room for the PostgreSQL int retry. */
@@ -96,9 +96,42 @@ export class VcrConversationCompletions {
     }
     return rows.length;
   }
+  /**
+   * A design comparison whose arms have all ended is one completion, whatever its arms were (R04). Its arm jobs carry no conversation
+   * origin, so the job path never sees them: the comparison's own origin wakes the conversation, once, with the aggregate (succeeded,
+   * partial, failed or canceled). The row is the hash of the conversation and the comparison, so a restart, a second tick or a lost
+   * marker never records a second one. A comparison the originating run read after it ended is observed, like a campaign's stop.
+   */
+  async reconcileExperiments() {
+    if (!(await this.store.one("SELECT to_regclass('evimed_vcr.experiments') AS relation"))?.relation) return 0;
+    const rows=await this.store.rows(`SELECT e.*,s.project_id FROM evimed_vcr.experiments e
+      JOIN evimed_vcr.studies s ON s.id=e.study_id AND s.deleted_at IS NULL
+      WHERE e.kind='experiment' AND e.origin->>'runId' IS NOT NULL AND e.origin->>'rootSessionId' IS NOT NULL
+      AND COALESCE(e.state->>'completionRecorded','false')<>'true' AND e.created_at>now()-make_interval(secs=>$2)
+      AND NOT EXISTS (SELECT 1 FROM evimed_vcr.jobs j WHERE j.study_id=e.study_id AND j.checkpoint->'experiment'->>'id'=e.id AND j.state IN ('queued','running','awaiting_budget'))
+      ORDER BY e.updated_at,e.id LIMIT $1`,[this.config.vcrCompletionReconcileBatch ?? 50,this.ageSeconds()]);
+    let recorded=0;
+    for(const row of rows){
+      const outcome=await experimentOutcome(this.store,row);
+      if(!outcome.terminal) continue;
+      const origin=row.origin;
+      const invalid=!origin.callId;
+      if(invalid) this.report('vcr_completion_origin_invalid');
+      const fingerprint=hash([row.user_id,row.project_id,origin.rootSessionId,row.id,'experiment']);
+      await this.store.query(`INSERT INTO evimed_vcr.conversation_completions
+        (id,study_id,job_id,user_id,project_id,root_session_id,result_key,dispatch_id,fingerprint,payload,state,last_error)
+        VALUES ($1,$2,NULL,$3,$4,$5,'experiment',$6,$7,$8::jsonb,$9,$10) ON CONFLICT DO NOTHING`,
+      [`vcc_${fingerprint}`,row.study_id,row.user_id,row.project_id,origin.rootSessionId,vcrCompletionDispatchId(fingerprint),fingerprint,
+        JSON.stringify({completedAt:outcome.finishedAt ?? row.updated_at,state:outcome.state,experimentId:row.id,outcome:outcome.outcome,arms:outcome.arms,resultId:null,resultVersion:null,
+          partial:outcome.partial,error:null,runId:origin.runId,callId:origin.callId ?? null}),invalid?'unavailable':'pending',invalid?'vcr_completion_origin_invalid':null]);
+      await this.store.query(`UPDATE evimed_vcr.experiments SET state=state || '{"completionRecorded":true}'::jsonb WHERE id=$1`,[row.id]);
+      recorded++;
+    }
+    return recorded;
+  }
   async reconcile() {
     await this.jobs?.reconcileFinishHooks();
-    const replayCount=await this.reconcileReplays()+await this.reconcileCampaigns();
+    const replayCount=await this.reconcileReplays()+await this.reconcileCampaigns()+await this.reconcileExperiments();
     const rows = await this.store.rows(`WITH candidates AS (SELECT j.*, s.project_id, e.id AS execution_id, r.id AS result_id, r.version AS result_version,
       r.diagnostics->>'partial' AS partial,row_number() OVER (PARTITION BY j.user_id ORDER BY j.finished_at,j.id) AS account_order FROM evimed_vcr.jobs j
       JOIN evimed_vcr.studies s ON s.id=j.study_id AND s.deleted_at IS NULL
@@ -130,9 +163,9 @@ export class VcrConversationCompletions {
   async observation(row) {
     if(this.readAcknowledgment) return this.readAcknowledgment(row);
     if(!this.store.one) return null;
-    const source=row.payload.campaignId
+    const source=row.payload.campaignId ?? row.payload.experimentId
       ? await this.store.one(`SELECT state->'originTerminalObservation' AS observation,CASE WHEN $2='canceled' THEN 'canceled' ELSE 'stopped' END AS state
-          FROM evimed_vcr.experiments WHERE id=$1 AND user_id=$3`,[row.payload.campaignId,row.payload.state,row.user_id])
+          FROM evimed_vcr.experiments WHERE id=$1 AND user_id=$3`,[row.payload.campaignId ?? row.payload.experimentId,row.payload.state,row.user_id])
       : row.payload.replayId
       ? await this.store.one(`SELECT d.payload->'terminalObservation' AS observation,COALESCE(j.status,d.payload->>'state') AS state
           FROM evimed_product.documents d LEFT JOIN evimed_product.jobs j ON j.id=d.payload->>'jobId' AND j.user_id=d.user_id
@@ -264,11 +297,16 @@ export class VcrConversationCompletions {
         }
         const label={succeeded:'计算已完成',failed:'计算未完成',canceled:'计算已取消'}[outcome.state] ?? '计算状态有更新';
         const campaignText=outcome.campaignId ? `设计搜索已结束：${VCR_CAMPAIGN_STOP_TEXT_ZH[outcome.stopReason] ?? '已停止。'}${outcome.best ? `${outcome.best.source==='feasible'?'最优':'最接近'}的方案是第 ${outcome.best.index} 个。` : ''}` : null;
-        const text = campaignText ? `${campaignText}请继续原来的任务，读取实际结果再解释。` : `${label}${outcome.partial ? '，保留了部分结果' : ''}。请继续原来的任务，读取实际结果再解释。`;
-        const systemSupplement = outcome.campaignId
+        const experimentText=outcome.experimentId ? `方案对比已结束：${{succeeded:'每一组都有结果',partial:`${outcome.arms?.complete ?? 0} 组有结果，${(outcome.arms?.total ?? 0)-(outcome.arms?.complete ?? 0)} 组没有结果`,failed:'没有一组算出结果',canceled:'已按要求停止'}[outcome.outcome] ?? '已结束'}。` : null;
+        const text = experimentText ? `${experimentText}请继续原来的任务，读取实际结果再解释。` : campaignText ? `${campaignText}请继续原来的任务，读取实际结果再解释。` : `${label}${outcome.partial ? '，保留了部分结果' : ''}。请继续原来的任务，读取实际结果再解释。`;
+        const systemSupplement = outcome.experimentId
+          ? `Platform comparison notice. Experiment=${outcome.experimentId}; tool=vcr_simulate action=compare_status; outcome=${outcome.outcome}; arms=${JSON.stringify(outcome.arms)}. This is an automated continuation of the original user request. Read the comparison with compare_status before you explain it and use only its numbers; an arm without a result is not compared and is never estimated. Do not start another comparison without a new user request. Nobody is attending this turn.`
+          : outcome.campaignId
           ? `Platform design-search notice. Campaign=${outcome.campaignId}; tool=vcr_simulate action=search_status; stop=${outcome.stopReason}; best=${JSON.stringify(outcome.best)}. This is an automated continuation of the original user request. Read the campaign with search_status before you explain it and use only its numbers; the frozen constraints never change, and a design undecided on a constraint is neither passed nor failed. Do not start another campaign without a new user request. Nobody is attending this turn.`
           : `Platform computation notice. Original job=${outcome.replayId ?? row.job_id}; tool=${outcome.replayId ? "research_calculate" : "vcr_simulate"}; state=${outcome.state}; result=${outcome.resultId ?? 'none'}; version=${outcome.resultVersion ?? 'none'}; partial=${outcome.partial === true}; error=${outcome.error?.code ?? 'none'}. This is an automated continuation of the original user request. Use the recorded result; do not treat a failure, cancellation or partial result as success. Nobody is attending this turn.${outcome.state === "canceled" ? " The computation was canceled. Do not restart it or queue replacement calculations without a new user request." : ""}`;
-        const alsoText=siblings.map(other=>other.payload.campaignId
+        const alsoText=siblings.map(other=>other.payload.experimentId
+          ? ` Also finished in this conversation: experiment=${other.payload.experimentId}; tool=vcr_simulate action=compare_status; outcome=${other.payload.outcome}.`
+          : other.payload.campaignId
           ? ` Also finished in this conversation: campaign=${other.payload.campaignId}; tool=vcr_simulate action=search_status; stop=${other.payload.stopReason}.`
           : ` Also finished in this conversation: job=${other.payload.replayId ?? other.job_id}; state=${other.payload.state}; result=${other.payload.resultId ?? 'none'}; version=${other.payload.resultVersion ?? 'none'}; error=${other.payload.error?.code ?? 'none'}.`).join('');
         const assertCurrent=async ({runs=null,final=false,signal=null}={}) => {

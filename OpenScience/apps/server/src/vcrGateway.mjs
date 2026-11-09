@@ -2856,6 +2856,13 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
                 WHERE id = $1 AND study_id = $5 AND status = 'stopped' AND origin->>'runId' = $2 AND origin->>'rootSessionId' = $3`,
               [answer.id, origin.runId, origin.rootSessionId, JSON.stringify({ runId: origin.runId, rootSessionId: origin.rootSessionId, callId: origin.callId, state: answer.stop.reason === "user_cancellation" ? "canceled" : answer.stop.reason === "persistent_model_failure" ? "failed" : "succeeded", resultKey: "campaign" }), study.id]);
             }
+            // and so is a comparison it reads once every arm has ended: the same proof, the aggregate's own state
+            if (answer?.kind === "experiment" && origin && !origin.programme && typeof vcr.experiments.completionOf === "function") {
+              const ended = await vcr.experiments.completionOf(study.id, answer.id);
+              if (ended?.terminal) await vcr.store.query(`UPDATE evimed_vcr.experiments SET state = state || jsonb_build_object('originTerminalObservation', $4::jsonb)
+                WHERE id = $1 AND study_id = $5 AND origin->>'runId' = $2 AND origin->>'rootSessionId' = $3`,
+              [answer.id, origin.runId, origin.rootSessionId, JSON.stringify({ runId: origin.runId, rootSessionId: origin.rootSessionId, callId: origin.callId, state: ended.state, resultKey: "experiment" }), study.id]);
+            }
             // What a run reads of an experiment passes the small-cell boundary like every other read (review eng P0-1). The frozen
             // stage sizes and budget are the manifest the run itself sent, never people, and are given back as they were.
             if (typeof vcr.service.forModel !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
