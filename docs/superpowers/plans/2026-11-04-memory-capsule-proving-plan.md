@@ -617,3 +617,74 @@ Remaining work is explicit: authenticated child-turn receipt production and live
 Frozen G7 checkpoint `5d352e48b` is independently reviewed: native-file origins are engine/imported/manual/unknown rather than blanket explicit, confidence remains unknown until attested, and original typed privacy survives resident cards, capsule projection/transfer and trusted bounded run receipts. Required receipt failures block REST/MCP disclosure; capped aggregates retain private/unclassified contributors. Typed private or unknown source context is refused before method embedding, distillation, script counting or candidate writes, including extra shared correction sources and peers.
 
 Final focused G7 evidence includes native attribution3 PostgreSQL cases,4 actual API cases,18 transfer and5 sharing cases,28 method units,20 resident units,3 domain privacy cases,89 gateway/receipt units with4 final receipt checks, and12 drawer cases. Canonical server types/full lint and web types/affected lint pass. These counts overlap earlier checks and must not be added as independent acceptance samples. Product and JS/TS review approve this frozen slice. Capsule recall-to-distillation receipts, unbound/concurrent native attribution, later-turn context inheritance and a raw-account-pack provenance sidecar remain pending. No further development expansion was performed after the owner's closeout instruction.
+
+## 13. 实验规划和待办（2026-11-10）
+
+数据已备齐（第 6.3 节，`verify-data` 105 个清单无问题）。缺的是运行器、成绩本、几项功能和跑大任务的机器。下面按“先能出第一张基线表”排。
+
+### 13.1 现状核对（`github/main` aacd5eee5，只读）
+
+| 项 | 状态 |
+|---|---|
+| 新记忆策略、`people` / `notes`、原话检索、来源删除 | 已上线（11-08、11-09）。上线前没有留基线；原话检索可用开关 `OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED` 关掉补测 |
+| 整理时对照原对话核实 | 没做。整理指令仍是“只合并、不新增” |
+| 开场块按使用升降、膨胀指标、断链检查、做法卡带证据和反例 | 没做 |
+| 学习缺陷 | 1、4、10 已修；12（抽象做法层级）、13（`routine` 只认文件形状）、14（官方层不进蒸馏和整合）核对过仍在；其余未核对 |
+| 官方金字塔、训练营、产品侧模拟网关 | 没做。出题和模拟环境在 `evals/capsule-proving/synthetic/toolverse/`，只是测试数据 |
+| 引擎层运行器、判分器、成绩本 | 没有。现有的只有写入质量（`run_native_eval.mjs`）、端到端场景（`capsule-longitudinal`）、跟进判断（`follow-up-judge/run.mjs`）和离线判分（`offlineJudge.mjs`，Qwen） |
+| 机器 | 没租。`evimed-test` 现在 4 核、内存可用约 4.9G、磁盘剩 9G、负载 0.3，够跑引擎层的记忆测试，不够跑带容器的任务集 |
+
+### 13.2 实验分四段
+
+| 段 | 在哪跑 | 跑什么 | 产出 |
+|---|---|---|---|
+| E0 运行器和基线 | `evimed-test`，引擎层，不等租机 | 先用 3 个开发用户量出每人的 token、费用和耗时；再跑全部开发集：合成用户 17 人 1,151 题、场景题 80、LongMemEval 120、MedMemoryBench 120、M1/M2/M3/M5/M10、G6 假密钥 450、G9、L6 判断器（999 次 Flash 调用）、L4 关系判定 | 第一张基线表；每个数字在成绩本里有一行和原始输出 |
+| E1 功能对照 | 同上 | 每个功能点一个开关，开和关各一行：原话检索；写入说明三组（现行、只讲用途、讲用途加“先查再验证”）；整理三组（不整理、只合并、对照原对话核实，用每个用户的 `corruptions.json` 埋错）；开场块升降。全部做完后跑全关、全开和逐项去掉 | 每个功能点值不值，有数字 |
+| E2 大任务 | 租的机器 | C1（ALFWorld、ScienceWorld）、C2（DABench、DA-Code、SAB）、L3 七组 280 次、L7、L9、SkillsBench | 做法和学习循环的对照 |
+| E3 定版 | 两边 | 冻结版本，封存集只跑一次（合成用户 47 人 3,394 题等），红线计数（G4 3,000 条、G5 600 条、G6），出报告；之后打榜 | 定版报告 |
+
+规矩：没有成绩本记录行的数字不算；判分能用代码就用代码，其余由 Qwen 离线判（业主 11-05）；结果按生成模型分开看一次（封存用户有 33 人部分出自 Codex）；120 题的差距在正负 7 个百分点内记“没看出差别”。
+
+### 13.3 待办
+
+**P0：出基线之前必须有的（我来做，不等机器）**
+
+1. 数据分支 `cc/memory-effect-data-20261109` 合进 `main`（落后 10 个提交，需业主点头）。
+2. 引擎层运行器 `evals/capsule-proving/run/`：按场次顺序把对话送进实验引擎并提交，等提取完成，在题目指定的场次之后提问，保存搜索结果、回答和记忆文件快照；可注入时钟；运行标 `automated`；每步写 `STATUS`，可续跑。
+3. 判分器：用 `normalize.mjs` 做锚点和逐字检查，存储检查读记忆文件快照，其余打包给 `offlineJudge.mjs`。第 6.3 节第 8 条的五项一并补：M7 引文回查、G9 附件以“材料”身份呈现、M11 无历史对照、商品名探针按 `bridged` 计分、G9 短锚点交判分。
+4. 成绩本 `results/ledger.jsonl` 加自动生成的 `SCOREBOARD.md`：提交、引擎版本、开关、题集和划分、题数、指标、区间、token 和费用、判分方、原始输出位置。
+5. 埋错步骤：提取完成后按 `corruptions.json` 改记忆文件，供“核实”功能对照用。
+6. 膨胀指标随每次运行记录：文件数、总字数、每 100 轮新增文件数。
+7. 腾 `evimed-test` 的磁盘（旧运行镜像，删前核对在用的），起一套隔离的引擎和数据库。
+
+**P1：功能点（每个带开关和一条快测）**
+
+8. 整理时对照原对话核实（`native_line_origins` 指回来源，改动走可撤销修订）。
+9. 写入说明的三组对照文字。
+10. 开场块按 `recall_count` 升降，设总预算。
+11. 做法卡带证据、反例和是否证实；学习缺陷 12、13、14。
+12. 做法库和知识页的断链检查（代码）。
+13. 知识页加检索的跨文档题集：**数据缺口**，现有 `knowledge-pages` 没有跨文档题，要新出约 60 题。
+
+**P2：租到机器之后**
+
+14. `fetch-public.mjs --large`（DA-Code 1.25 GB、SkillLearnBench 1.76 GB、SkillsBench 0.45 GB），搬数据目录约 2.5 GB。
+15. C1 的简单循环运行器、C2 和 L3 的产品路径运行器、L7、L9。
+16. 官方金字塔和训练营（第 5.3 节），C1 通过后再做。
+
+**要业主处理的**
+
+- 租机器：建议 8 核、16G 内存、200G 磁盘，按量计费，E2 开始前到位即可，E0 和 E1 不等它。
+- GAIA 在 Hugging Face 上申请访问。
+- L6：模糊标注已由 Claude 复核（见下），但三遍都是同一类模型标的；想把它当金标准用，需要一个人标 100 条作对照。
+- 是否同意先合并数据分支。
+
+### 13.4 L6 模糊标注的复核结果（2026-11-10）
+
+复核人是 Claude，不是人工；这次带着完整的上一轮回复看。记录在数据目录 `l6/review-20261110.json`，原文件留作 `cases.pre-review-20261110.json`。
+
+- 179 条模糊标注：57 条改了类别，42 条定为不模糊，137 条仍模糊（保留第二选项，只用宽松计分）。
+- 最大的问题是首轮把“接着问一个相关问题”标成了接受（30 条改回无关），其次是把“同类新任务”标成了纠正（17 条）。
+- 没标模糊的也有同样的问题：抽查后又改了 40 条，其中 20 条是漏掉的纠正（「这样不对吧」「再简洁一些」「写得一般」「点击确认后，界面卡死」）。另有 113 条“大部分重复上一条请求”的由代码标为模糊，没有重读。
+- 复核后：无关 810、纠正 144、接受 26、拒绝 20；确定的 715 条，模糊的 285 条。还有 593 条“无关”只被读过一遍。
+- 用法：纠正的精确率和 `adopt`、偏好的误报率看 715 条确定的；接受和拒绝的召回不要从这个集读（确定的只有 8 条和 3 条）。
