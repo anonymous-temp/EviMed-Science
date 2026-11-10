@@ -747,3 +747,37 @@ Rule S, correct selection, `ours3` against `ours2`: level 77.0 / 94.0 / 99.0 / 1
   screening in an OCBA campaign, as a screened power whose upper bound is below 80% always did; this can drop a design that is truly feasible (a false elimination, at most 2.5% per look), which
   costs the search a candidate and never certifies one.
 - Not done: the agent arm (slot unchanged), a default for the hosted short form, the engine calibration of the held-out world.
+
+
+# Addendum D6b (2026-11-10): the screening step rule revised after an engine stall; v1 superseded; a second held-out world
+
+**What was wrong in D6.** (1) `ours3` v1 had no end to its screening: every increment went to the critical designs, a cell whose screening interval already excluded its bound still drew
+increments and one cell could be screened past the final floor. On a hosted campaign whose replicate budget is derived from CPU seconds (about 3.1 million replicates for the engine integration
+test's four designs) it screened one design's power at 4,999 replicates per unit for ever and never reached a final. The benchmark's budgets (at most 640k) hide this because the screening share
+runs out first. (2) The D6 addendum said a type I error screened above its bound eliminates a design. It does not: an error-control constraint is judged at the final stage only; the screened
+type I error ranks finalists and steers the allocation. That sentence and its "false elimination" caveat are withdrawn.
+
+**The fix (protocol addendum D6b).** A cell is open only while its one-sided Clopper–Pearson interval still holds the bound and one more increment fits under the final floor (5,000 replicates per cell
+in all); a design with no open cell takes nothing; the phase ends when no critical design has an open cell. Everything else is v1's. Reproduced and held by a domain test (four designs, derived
+budget of 3 million: v1 asked for 138 units without a final, the fix stops with finals queued and no cell screened past 5,000), and the engine integration test now passes on PostgreSQL with real R
+(121 s). The error-control tests (S3 state machine, and its OCBA-screening twin) pass unchanged.
+
+**Did behaviour at the stated budgets change? Yes, slightly: 37 of the 40 `ours3` aggregate cells differ from v1, the other six arms' 240 cells are identical** (`results/search-benchmark-matched-20261110-d6b.json`,
+tables `…-d6b-tables.md`, SVGs `…-d6b.svg`; the D6 files stay as v1, superseded). Rule P, probability of correct selection at 40k / 80k / 160k / 320k / 640k:
+
+| World | ours2 | ours3 v1 | ours3 v2 | halving | OCBA | grid |
+|---|---|---|---|---|---|---|
+| level | 2.5 / 15.0 / 73.0 / 94.0 / 95.5% | 13.5 / 38.5 / 79.0 / 97.0 / 95.5% | 13.0 / 40.0 / 84.0 / 97.0 / 95.5% | 22.0 / 54.5 / 86.0 / 97.0 / 100% | 27.5 / 59.0 / 86.0 / 99.5 / 100% | 5.5 / 21.5 / 48.0 / 89.0 / 99.0% |
+| level85 | 0.5 / 4.5 / 44.5 / 72.0 / 83.0% | 2.0 / 19.5 / 49.0 / 70.5 / 81.5% | 2.0 / 19.5 / 47.5 / 69.0 / 81.5% | 14.0 / 32.0 / 61.5 / 85.5 / 98.0% | 5.5 / 22.0 / 55.0 / 91.5 / 100% | 3.5 / 7.5 / 27.0 / 65.5 / 90.5% |
+| heldout (in-sample for v2) | 0.0 / 9.5 / 64.5 / 91.5 / 97.5% | 6.5 / 47.0 / 71.0 / 95.5 / 94.0% | 6.5 / 50.5 / 76.0 / 94.5 / 94.0% | 6.0 / 21.5 / 47.0 / 69.5 / 83.0% | 2.0 / 6.0 / 18.5 / 35.0 / 66.5% | 1.5 / 2.5 / 13.0 / 40.0 / 74.0% |
+| **heldout2 (new, run once)** | 0.5 / 4.0 / 36.0 / 57.0 / 61.0% | n/a | 1.0 / 21.5 / 44.5 / 63.0 / 63.0% | 4.0 / 14.5 / 26.0 / 43.5 / 61.0% | 1.0 / 2.0 / 15.5 / 36.5 / 60.5% | 0.5 / 2.0 / 8.0 / 18.0 / 44.0% |
+
+Survival (one truly feasible design) is unchanged from D6: every arm is near zero and `ours3` is not different from `ours2`.
+
+**Read plainly.** v2 is within a few points of v1 everywhere (level at 160k 84.0% against 79.0% is the largest move; level85 at 160k to 320k is 1.5 points lower). On the world nothing had been run on,
+`ours3` is above `ours2` at 80k by the Newcombe interval (21.5% against 4.0%) and equal at the other budgets; against halving it is above at 160k and 320k (44.5 against 26.0, 63.0 against 43.5)
+and equal at 40k, 80k and 640k; against OCBA above at 80k to 320k, equal at 40k and 640k; against grid above from 80k. The gain in `heldout2` is smaller than in `heldout` and the in-sample worlds, and at
+640k all of `ours2`, `ours3`, halving and OCBA sit at about 61 to 63% there (the optimum has power 0.8099 and a neighbour 0.8012, so a verdict at the split confidence often cannot certify either).
+In level and level85 `ours3` is still below halving and OCBA at most budgets and below grid at 640k, for the reason X1 gave (the final looks at 99.17%). Picked designs violated a constraint in truth in
+0% of rule-P picks in every cell of `ours3` and `ours2` (one 50% cell: survival at 160k, two picks). It is the short form's default now, on this evidence: not worse than the equal screening in any world
+beyond noise at any budget, better at small and middle budgets and in both worlds not tuned on, and still behind halving and OCBA in the level worlds.
