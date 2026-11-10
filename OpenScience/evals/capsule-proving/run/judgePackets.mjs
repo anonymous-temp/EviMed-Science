@@ -47,7 +47,7 @@ export function memoryStoreJudgePacket(packet) {
   const { id: _id, hash: _hash, ...source } = packet;
   const payload = { ...source, schema: 'capsule-proving-store-judge/1', rubricVersion: 'capsule-proving-store-judge/1',
     taskKind: 'store', judgeClientSha256: STORE_JUDGE_CLIENT_SHA256 };
-  const canonical = stableJson(payload), hash = sha256(canonical);
+  const canonical = stableJson(boundPayload(payload)), hash = sha256(canonical);
   return { id: `run-score:${hash}`, hash, ...JSON.parse(canonical) };
 }
 export const rowKey = row => stableJson([row.runId, row.set, row.split, row.caseId, row.kind, row.id]);
@@ -58,6 +58,80 @@ export function answerTrace(answer, snapshot, anchors = []) {
   return { stored: (memoryLines(snapshot) ?? []).some(l => matches(l.text)),
     searched: (answer?.toolCalls ?? []).some(c => /search/i.test(c.name ?? '')),
     retrieved: (answer?.toolCalls ?? []).some(c => c.isError !== true && (c.blocks ?? []).some(b => typeof b === 'string' && matches(b))) };
+}
+
+// Six bounded packets stay comfortably below the provider context window, including CJK evidence.
+export const PACKET_CHAR_BUDGET = 24_000;
+const jsonSize = value => JSON.stringify(value).length;
+
+/** Keep structured values valid while dropping the least relevant tail, including JSON escaping costs. */
+function fitValue(value, budget) {
+  if (jsonSize(value) <= budget) return value;
+  if (typeof value === 'string') {
+    let low = 0, high = value.length;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (jsonSize(value.slice(0, mid)) <= budget) low = mid; else high = mid - 1;
+    }
+    return value.slice(0, low);
+  }
+  if (!value || typeof value !== 'object') return null;
+  const out = Array.isArray(value) ? [] : {};
+  for (const [key, child] of Object.entries(value)) {
+    const overhead = Array.isArray(value) ? (out.length ? 1 : 0) : jsonSize(key) + 1 + (Object.keys(out).length ? 1 : 0);
+    const remaining = budget - jsonSize(out) - overhead;
+    if (remaining < 4) break;
+    out[key] = fitValue(child, remaining);
+    if (jsonSize(child) > remaining) break;
+  }
+  return out;
+}
+
+/** Rank reference hits first; a late matching line must survive an oversized snapshot. */
+function relevantEvidence(values, references) {
+  const terms = [...new Set(references.flatMap(value => String(value).toLowerCase().match(/[a-z0-9_]{2,}|[\p{Script=Han}]{2,}/gu) ?? [])
+    .flatMap(term => /\p{Script=Han}/u.test(term) ? Array.from({ length: term.length - 1 }, (_, i) => term.slice(i, i + 2)) : [term]))];
+  const score = value => { const text = JSON.stringify(value).toLowerCase(); return terms.reduce((n, term) => n + Number(text.includes(term)), 0); };
+  const excerpt = value => {
+    if (typeof value?.text !== 'string' || value.text.length <= 1600) return value;
+    const windows = [];
+    for (let start = 0; start < value.text.length; start += 1200) {
+      const text = value.text.slice(start, start + 1600);
+      windows.push({ start, text, score: score(text) });
+    }
+    windows.sort((a, b) => b.score - a.score || a.start - b.start);
+    const best = windows[0];
+    return { ...value, text: `${best.start ? '…' : ''}${best.text}${best.start + best.text.length < value.text.length ? '…' : ''}` };
+  };
+  return values.map((value, index) => ({ value: excerpt(value), index, score: score(value) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index).map(hit => hit.value);
+}
+
+function boundPayload(payload, anchors = []) {
+  // Reserve the two SHA-256 identity fields added after hashing.
+  const budget = PACKET_CHAR_BUDGET - 180;
+  if (jsonSize(payload) <= budget) return payload;
+  const reference = [JSON.stringify(payload.gold ?? ''), ...(payload.expected ?? []), ...anchors];
+  const ranked = { ...payload,
+    matchingMemoryLines: relevantEvidence(payload.matchingMemoryLines ?? [], reference),
+    memoryLines: relevantEvidence(payload.memoryLines ?? [], reference),
+    transcriptEvidence: relevantEvidence(payload.transcriptEvidence ?? [], reference) };
+  const out = { schema: payload.schema, model: payload.model, rubricVersion: payload.rubricVersion,
+    judgeClientSha256: payload.judgeClientSha256, rowKey: payload.rowKey, truncated: true,
+    evidenceSha256: sha256(stableJson(payload)), asOf: payload.asOf, checkpoint: payload.checkpoint,
+    ...(payload.taskKind ? { taskKind: payload.taskKind } : {}) };
+  if (jsonSize(out) > budget) throw new Error('judge_packet_identity_too_large');
+  const priorities = [['question', 3000], ['reply', 6000], ['expected', 6000], ['gold', 4000],
+    ['officialPrompt', 12000], ['publicOfficial', 12000], ['asOf'], ['checkpoint'], ['trace'], ['taskKind'], ['matchingMemoryLines', 4000], ['transcriptEvidence', 5000],
+    ['memoryLines'], ['retrieved'], ['source'], ['memorySnapshots']];
+  const fields = [...priorities, ...Object.keys(ranked).filter(key => !priorities.some(([name]) => name === key)).map(key => [key])];
+  for (const [key, limit = budget] of fields) {
+    if (key in out || ranked[key] === undefined) continue;
+    const remaining = budget - jsonSize(out) - jsonSize(key) - 2;
+    if (remaining < 4) break;
+    out[key] = fitValue(ranked[key], Math.min(limit, remaining));
+  }
+  return out;
 }
 
 /** All answer packets carry dated, checkpoint-bounded transcript excerpts. */
@@ -77,7 +151,7 @@ export function buildJudgePacket(row, context) {
     ...(context.publicSet && publicOfficialPacket(context.publicSet, context.gold, context.answer?.answer ?? '')
       ? { publicOfficial: publicOfficialPacket(context.publicSet, context.gold, context.answer?.answer ?? '') } : {}),
     control: context.control ?? null, taskStatus: 'completed', failures: [], checks: row.checks };
-  const canonical = stableJson(payload), hash = sha256(canonical);
+  const canonical = stableJson(boundPayload(payload, context.anchors)), hash = sha256(canonical);
   return { id: `run-score:${hash}`, hash, ...JSON.parse(canonical) };
 }
 
@@ -89,14 +163,21 @@ const validVerdict = (result, packet) => ['correct', 'incorrect', 'gold_disputed
 export function mergeJudgeResults(rows, packets, results) {
   const packetByRow = new Map(packets.map(p => [p.rowKey, p])), byId = new Map();
   for (const result of results) {
-    if (byId.has(result.id) || !validVerdict(result, packets.find(p => p.id === result.id))) throw new Error('judge_checkpoint_invalid');
+    const packet = packets.find(p => p.id === result.id);
+    if (result.verdict === 'error') {
+      if (!packet || result.hash !== packet.hash || typeof result.reason !== 'string' || !result.reason.trim()) throw new Error('judge_checkpoint_invalid');
+      if (!byId.has(result.id)) byId.set(result.id, result);
+      continue;
+    }
+    if ((byId.get(result.id)?.verdict !== 'error' && byId.has(result.id)) || !validVerdict(result, packet)) throw new Error('judge_checkpoint_invalid');
     byId.set(result.id, result);
   }
   const merge = row => {
     if (row.verdict !== 'needs-judge') return row;
     const packet = packetByRow.get(rowKey(row)), result = packet && byId.get(packet.id);
     if (result && result.hash !== packet.hash) throw new Error('judge_resume_identity_mismatch');
-    if (!result) return { ...row, verdict: 'unknown', needsJudge: true, detail: 'judge_pending' };
+    if (!result || result.verdict === 'error') return { ...row, verdict: 'unknown', needsJudge: true,
+      detail: result ? 'judge_failed' : 'judge_pending', ...(result ? { judgeError: result.reason } : {}) };
     if (!/^qwen3\.8-max(?:-(?:0902|2026-09-02))?$/.test(result.model ?? '')) throw new Error('judge_checkpoint_model_invalid');
     return { ...row, verdict: { correct: 'pass', incorrect: 'fail', gold_disputed: 'unknown' }[result.verdict],
       ...(result.verdict === 'gold_disputed' ? { disputed: true } : {}),
@@ -123,7 +204,12 @@ async function judgeBatch(packets, { key, fetchImpl = globalThis.fetch }) {
       messages: [{ role: 'system', content: storeOnly ? STORE_JUDGE_SYSTEM : JUDGE_SYSTEM }, { role: 'user', content: JSON.stringify(packets) }] }),
     signal: AbortSignal.timeout(90_000),
   });
-  if (!response.ok) throw new Error(`judge_http_${response.status}`);
+  if (!response.ok) {
+    const firstLine = (await (response.text?.() ?? Promise.resolve('')).catch(() => '')).split('\n')[0].replaceAll(key, '[REDACTED]').slice(0, 500);
+    const error = new Error(`judge_http_${response.status}`);
+    error.providerReason = firstLine;
+    throw error;
+  }
   const data = await response.json(), choice = data?.choices?.[0];
   if (!/^qwen3\.8-max(?:-(?:0902|2026-09-02))?$/.test(data.model ?? '')) throw new Error('judge_model_mismatch');
   if (choice?.finish_reason !== 'stop' || typeof choice.message?.content !== 'string') throw new Error('judge_incomplete');
@@ -148,29 +234,45 @@ export async function judgePackets(packets, { key, results = [], fetchImpl, pers
     const [runId, set, split, caseId, kind, id] = JSON.parse(p.rowKey);
     return { runId, set, split, caseId, kind, id, verdict: 'needs-judge' };
   }), packets, saved);
-  const done = new Set(saved.map(r => r.id)), pending = packets.filter(p => !done.has(p.id));
+  const done = new Set(saved.filter(r => r.verdict !== 'error').map(r => r.id)), pending = packets.filter(p => !done.has(p.id));
   let next = 0, failure = null, saving = Promise.resolve();
+  const save = rows => {
+    saving = saving.then(async () => {
+      saved.push(...rows);
+      await persist([...saved]);
+    });
+    return saving;
+  };
+  const request = async (batch, attempts) => {
+    for (let attempt = 0; ; attempt++) {
+      let result;
+      try { result = await (batch[0]?.publicOfficial ? judgePublicOfficial : judgeBatch)(batch, { key, fetchImpl }); }
+      catch (error) {
+        // Never persist credentials, even if a transport echoes a request header in its error.
+        const reason = String(error.message ?? 'judge_request_failed').replaceAll(key || '\0', '[REDACTED]').split('\n')[0].slice(0, 500);
+        await save(batch.map(packet => ({ id: packet.id, hash: packet.hash, model: JUDGE_MODEL, verdict: 'error',
+          reason, ...(error.providerReason ? { providerReason: error.providerReason } : {}),
+          batchSize: batch.length, attempt: attempt + 1, at: new Date().toISOString() })));
+        if (attempt >= attempts) throw error;
+        await new Promise(resolve => setTimeout(resolve, retryDelayMs * 2 ** attempt));
+        continue;
+      }
+      await save(result.judgements.map(row => ({ ...row, hash: valid.get(row.id).hash,
+        model: row.model ?? result.model, requestId: row.requestId ?? result.requestId, usage: row.usage ?? result.usage })));
+      return;
+    }
+  };
   const worker = async () => {
     while (next < pending.length) {
       const batch = pending.slice(next, next += batchSize);
-      try {
-        let result;
-        for (let attempt = 0; ; attempt++) {
-          try { result = await (batch[0]?.publicOfficial ? judgePublicOfficial : judgeBatch)(batch, { key, fetchImpl }); break; }
-          catch (error) {
-            if (attempt >= retries) throw error;
-            await new Promise(resolve => setTimeout(resolve, retryDelayMs * 2 ** attempt));
-          }
+      try { await request(batch, batch.length > 1 ? 0 : retries); }
+      catch (error) {
+        if (batch.length === 1) { failure ??= error; continue; }
+        // A bad item, context overflow or malformed multi-row response must not strand its neighbours.
+        for (const packet of batch) {
+          try { await request([packet], retries); } catch (singleError) { failure ??= singleError; }
         }
-        // Save a stable copy; concurrent completions must not race on the atomic temporary file.
-        saving = saving.then(async () => {
-          saved.push(...result.judgements.map(row => ({ ...row, hash: valid.get(row.id).hash,
-            model: row.model ?? result.model, requestId: row.requestId ?? result.requestId, usage: row.usage ?? result.usage })));
-          saved.sort((a, b) => a.id.localeCompare(b.id));
-          await persist([...saved]);
-        });
-        await saving;
-      } catch (error) { failure ??= error; }
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, Math.ceil(pending.length / batchSize)) }, worker));

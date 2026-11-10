@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { checkAnswer, checkStore, checkSecret, citationBackCheck, checkGiven, containsEntity, wilson, checkEntityReplacement, G6_POLICY } from '../run/scoreChecks.mjs';
 import { scoreRun, summarize, summarizeForget, parseArgs, publicRubric, listRedlines } from '../run/score.mjs';
-import { buildJudgePacket, mergeJudgeResults, sha256, judgePackets, JUDGE_SCHEMA, JUDGE_SYSTEM } from '../run/judgePackets.mjs';
+import { buildJudgePacket, mergeJudgeResults, sha256, judgePackets, JUDGE_SCHEMA, JUDGE_SYSTEM, PACKET_CHAR_BUDGET } from '../run/judgePackets.mjs';
 import { registerQuestionPools, sourceSetSha256 } from '../inputs.mjs';
 
 const snap = text => ({ afterSession: 2, files: { 'notes/self/fake.md': text } });
@@ -353,7 +353,8 @@ test('judge transport failures remain unknown with output files and can resume l
   const key = path.join(f.root, 'fake-key'); await writeFile(key, 'fixture-only');
   const r = await f.score({ noJudge: false, judgeKeyFile: key, fetchImpl: async () => { throw new Error('offline fixture failure'); } });
   assert.equal(r.rows[0].verdict, 'unknown'); assert.equal(r.summary.overall.n, 1); assert.equal(r.summary.judge.error, 'judge_request_failed');
-  assert.equal(r.results.length, 0); assert.ok(await readFile(path.join(f.run, 'scores/summary.json'), 'utf8'));
+  assert.equal(r.results.length, 4); assert.ok(r.results.every(row => row.verdict === 'error' && row.reason === 'offline fixture failure'));
+  assert.equal(r.rows[0].detail, 'judge_failed'); assert.ok(await readFile(path.join(f.run, 'scores/summary.json'), 'utf8'));
 });
 
 test('a missing snapshot remains in store recall n, and answer errors stay errors', async t => {
@@ -597,16 +598,18 @@ test('judge batches six items with six concurrent calls, serialized persistence 
   assert.deepEqual(sizes, [1]);
 });
 
-test('concurrent judge failure preserves successful batches for resumption', async () => {
-  const packets = packetsOf(12); let saved = [], calls = 0;
-  await assert.rejects(() => judgePackets(packets, { key: 'fixture', concurrency: 2, persist: async rows => { saved = rows; }, fetchImpl: async (_url, init) => {
-    const batch = JSON.parse(JSON.parse(init.body).messages[1].content);
-    if (++calls === 2) throw new Error('fixture_transport_failure');
-    await new Promise(resolve => setTimeout(resolve, 5)); return responseFor(batch);
-  } }), /fixture_transport_failure/);
-  assert.equal(saved.length, 6); calls = 0;
-  const resumed = await judgePackets(packets, { key: 'fixture', results: saved, fetchImpl: fakeJudge(undefined, () => { calls++; }) });
-  assert.equal(calls, 1); assert.equal(resumed.length, 12);
+test('a rejected batch splits into single calls and records its failed attempt', async () => {
+  const packets = packetsOf(6), sizes = []; let saved = [];
+  const results = await judgePackets(packets, { key: 'fixture', persist: async rows => { saved = rows; }, fetchImpl: async (_url, init) => {
+    const batch = JSON.parse(JSON.parse(init.body).messages[1].content); sizes.push(batch.length);
+    if (batch.length > 1) return { ok: false, status: 413, text: async () => 'request too large\nprivate diagnostic' };
+    return responseFor(batch);
+  } });
+  assert.deepEqual(sizes, [6, 1, 1, 1, 1, 1, 1]);
+  assert.equal(saved.filter(r => r.verdict === 'error').length, 6);
+  assert.ok(saved.filter(r => r.verdict === 'error').every(r => r.reason === 'judge_http_413' && r.providerReason === 'request too large'));
+  assert.equal(results.filter(r => r.verdict === 'correct').length, 6);
+  await judgePackets(packets, { key: 'fixture', results, fetchImpl: async () => assert.fail('Successful singletons resume') });
 });
 
 test('judge rejects old vocabulary, missing failure attribution, duplicate ids and invalid fields', async () => {
@@ -772,12 +775,13 @@ test('failed judge batches retry three times, stay pending, and resume only thei
   const first = await f.score({ noJudge: false, judgeKeyFile: key, retryDelayMs: 1, fetchImpl: async (_url, init) => {
     const packets = JSON.parse(JSON.parse(init.body).messages[1].content), batch = JSON.parse(packets[0].rowKey).at(-1);
     calls.set(batch, (calls.get(batch) ?? 0) + 1);
-    if (batch === 'pending-6') { failedIds = packets.map(p => p.id); return { ok: false, status: 503 }; }
+    if (batch === 'pending-6') { if (packets.length === 1) failedIds = packets.map(p => p.id); return { ok: false, status: 503 }; }
     return responseFor(packets);
   } });
-  assert.equal(calls.get('pending-6'), 4); assert.equal(calls.get('pending-0'), 1); assert.equal(calls.get('pending-12'), 1);
-  assert.equal(first.summary.judge.pending, 6); assert.equal(first.summary.judge.completed, 7);
-  assert.ok(first.rows.filter(r => r.verdict === 'unknown').every(r => r.detail === 'judge_pending'));
+  assert.equal(calls.get('pending-6'), 5); assert.equal(calls.get('pending-0'), 1); assert.equal(calls.get('pending-12'), 1);
+  assert.equal(first.summary.judge.pending, 1); assert.equal(first.summary.judge.completed, 12);
+  assert.equal(first.results.filter(r => r.verdict === 'error').length, 10);
+  assert.ok(first.rows.filter(r => r.verdict === 'unknown').every(r => r.detail === 'judge_failed' && r.judgeError === 'judge_http_503'));
   let retryCalls = 0;
   const second = await f.score({ noJudge: false, judgeKeyFile: key, fetchImpl: fakeJudge(undefined, (_request, packets) => {
     retryCalls++; assert.deepEqual(packets.map(p => p.id), failedIds);
@@ -1033,4 +1037,43 @@ test('live forget attribution joins schedule offsets and keeps missing live evid
   const missing = await f.score();
   assert.deepEqual(missing.summary.forget.forgetToolCalled, { n: 1, count: 0, unknown: 1 });
   assert.deepEqual(missing.summary.forget.forgottenReappeared.unobserved, { n: 1, count: 1, unknown: 0 });
+});
+
+
+test('oversized packets retain reference hits ahead of irrelevant memory and bind omitted evidence', () => {
+  const row = { runId: 'r', set: 'medmemorybench', split: 'dev', caseId: 'c', kind: 'answer', id: 'q', verdict: 'needs-judge', checks: [] };
+  const context = { question: 'What is the current medication?', rubric: ['Reference: Zorvex 7 mg.'],
+    gold: { answer: 'Zorvex 7 mg' }, anchors: ['Zorvex'], answer: { answer: 'Zorvex 7 mg' },
+    snapshot: snap('unrelated '.repeat(30000) + '\nZorvex 7 mg is current.'),
+    transcriptEvidence: [{ text: 'unrelated '.repeat(30000) }, { text: 'The new prescription is Zorvex 7 mg.' }] };
+  const packet = buildJudgePacket(row, context);
+  assert.ok(JSON.stringify(packet).length <= PACKET_CHAR_BUDGET);
+  assert.equal(packet.truncated, true); assert.equal(packet.question, context.question); assert.equal(packet.reply, context.answer.answer);
+  assert.deepEqual(packet.expected, context.rubric); assert.deepEqual(packet.gold, context.gold);
+  assert.match(packet.matchingMemoryLines[0].text, /Zorvex/); assert.match(packet.transcriptEvidence[0].text, /Zorvex/);
+  assert.deepEqual(buildJudgePacket(row, context), packet);
+  assert.notEqual(buildJudgePacket(row, { ...context, snapshot: snap('changed unrelated '.repeat(30000) + '\nZorvex 7 mg is current.') }).hash, packet.hash);
+});
+
+test('all packet fields including quoted replies and references obey the JSON character budget', () => {
+  const row = { runId: 'r', set: 's', split: 'dev', caseId: 'c', kind: 'answer', id: 'q', verdict: 'needs-judge', checks: [] };
+  const packet = buildJudgePacket(row, { question: '\"\n'.repeat(30000), answer: { answer: '答'.repeat(90000) },
+    rubric: ['reference '.repeat(20000)], gold: { answer: 'reference '.repeat(20000) } });
+  assert.ok(JSON.stringify(packet).length <= PACKET_CHAR_BUDGET); assert.equal(packet.truncated, true);
+});
+
+test('malformed batch responses split, and permanent singleton failures persist with redacted reasons', async () => {
+  const packets = packetsOf(6); let saved = [], sizes = [];
+  await assert.rejects(() => judgePackets(packets, { key: 'fixture-secret', retries: 1, retryDelayMs: 1,
+    persist: async rows => { saved = rows; }, fetchImpl: async (_url, init) => {
+      const batch = JSON.parse(JSON.parse(init.body).messages[1].content); sizes.push(batch.length);
+      if (batch.length > 1) return responseFor(batch.slice(0, 1));
+      if (batch[0].id === packets[0].id) throw new Error('fixture-secret transport failed');
+      return responseFor(batch);
+    } }), /transport failed/);
+  assert.deepEqual(sizes, [6, 1, 1, 1, 1, 1, 1, 1]);
+  assert.equal(saved.filter(r => r.verdict === 'error').length, 8);
+  assert.ok(!JSON.stringify(saved).includes('fixture-secret'));
+  const resumed = await judgePackets(packets, { key: 'fixture', results: saved, fetchImpl: fakeJudge(undefined, (_req, batch) => assert.deepEqual(batch.map(p => p.id), [packets[0].id])) });
+  assert.equal(resumed.filter(r => r.verdict === 'correct').length, 6);
 });

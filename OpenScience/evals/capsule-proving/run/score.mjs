@@ -18,7 +18,7 @@ import { publicMemoryRubric, PUBLIC_OFFICIAL } from './publicJudge.mjs';
 import { OFFICIAL, rubricFacts } from './officialJudge.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const SCORER_VERSION = 'capsule-proving-run-score/5';
+export const SCORER_VERSION = 'capsule-proving-run-score/6';
 export const SUPPORTED_SETS = ['synthetic-users', 'scenarios', 'med-m1', 'med-m2', 'med-m3', 'med-m5', 'med-m10',
   ...PUBLIC_MEMORY_SETS, 'g6', 'g9', 'm6', 'm7', 'm11', 'brand-generic', 'longmemeval-s', 'medmemorybench'];
 const json = async file => JSON.parse(await readFile(file, 'utf8'));
@@ -296,7 +296,7 @@ function questionContext(entry, loaded, question, answer, evidence) {
     if (typeof anchor === 'string') anchors.push(anchor);
   }
   const index = createTranscriptIndex(sessions);
-  const queries = [question.question ?? question.text ?? answer?.question ?? '', ...anchors];
+  const queries = [...anchors, question.question ?? question.text ?? answer?.question ?? ''];
   const hits = queries.map(query => index.search(query, 6)), excerpts = [], seen = new Set();
   // Interleave the question and anchor searches so neither can crowd the other out.
   for (let rank = 0; rank < 6 && excerpts.length < 6; rank++) for (const results of hits) {
@@ -513,7 +513,7 @@ async function adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl
       results = await optional(() => jsonl(path.join(out, 'judge-results.jsonl')), []);
     }
   }
-  return { results, judgeError };
+  return { results, judgeError, completed: results.filter(r => r.verdict !== 'error').length };
 }
 
 /** Shards retain their original run identities in packets, so hash resumption remains exact. */
@@ -539,7 +539,7 @@ async function scoreRuns(options) {
     for (const id of own) { if (cases.has(id)) throw new Error(`overlapping_case_id:${id}`); cases.add(id); }
     rows.push(...part.rawRows); packets.push(...part.packets); parts.push(part.summary);
   }
-  const { results, judgeError } = await adjudicate(rows, packets, options);
+  const { results, judgeError, completed } = await adjudicate(rows, packets, options);
   const merged = pairM6(mergeJudgeResults(rows, packets, results));
   const tokens = { extraction: { prompt: 0, completion: 0 }, answer: { prompt: 0, completion: 0, cached: 0 }, prompt: 0, completion: 0 };
   for (const part of parts) {
@@ -549,7 +549,7 @@ async function scoreRuns(options) {
   const walls = parts.map(p => p.wallSeconds).filter(v => v !== null);
   const summary = { ...summarize(merged), runIds: manifests.map(r => r.runId), set: first.set, split: first.split, variant: variant ?? null, rubric, answerModel: parts[0]?.answerModel,
     tokens, wallSeconds: walls.length ? Math.max(...walls) : null,
-    judge: { ...rubricFacts(rubric, parts[0]?.answerModel), model: 'qwen3.8-max', packets: packets.length, completed: results.length, pending: packets.length - results.length, error: judgeError },
+    judge: { ...rubricFacts(rubric, parts[0]?.answerModel), model: 'qwen3.8-max', packets: packets.length, completed, pending: packets.length - completed, error: judgeError },
     controlRun: options.control ? path.resolve(options.control) : null, evidenceNotes: parts[0]?.evidenceNotes ?? [] };
   await saveLines(path.join(out, 'rows.jsonl'), merged);
   await atomic(path.join(out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
@@ -742,7 +742,7 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
   if (!buildHit) await atomic(cacheFile, JSON.stringify({ goldKey, entries: allEntries, buildKey, rows, packets, tokens }));
   const rowIds = rows.map(r => `${r.caseId}\0${r.kind}\0${r.id}`);
   if (new Set(rowIds).size !== rowIds.length) throw new Error('duplicate_score_row');
-  const { results, judgeError } = await adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl, judgeConcurrency, judgeBatchSize, retryDelayMs });
+  const { results, judgeError, completed } = await adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl, judgeConcurrency, judgeBatchSize, retryDelayMs });
   const status = await optional(() => readFile(path.join(runDir, 'STATUS'), 'utf8'), '');
   const times = status.split('\n').filter(l => /^\S+\s+(?:DONE|FAIL)\s+/.test(l)).map(l => Date.parse(l.split(/\s+/)[0])).filter(Number.isFinite);
   tokens.prompt = tokens.extraction.prompt + tokens.answer.prompt;
@@ -750,7 +750,7 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
   const answerModel = run.answerVariants?.find(v => v.name === variant)?.config?.answerModel ?? run.model?.answer;
   const merged = pairM6(mergeJudgeResults(rows, packets, results)), summary = { ...summarize(merged), runId: run.runId, runIds: [run.runId], set: run.set, split: run.split, variant: variant ?? null, rubric, answerModel,
     tokens, wallSeconds: times.length ? Math.max(0, (times.at(-1) - times[0]) / 1000) : null,
-    judge: { ...rubricFacts(rubric, answerModel), model: 'qwen3.8-max', packets: packets.length, completed: results.length, pending: packets.length - results.length, error: judgeError },
+    judge: { ...rubricFacts(rubric, answerModel), model: 'qwen3.8-max', packets: packets.length, completed, pending: packets.length - completed, error: judgeError },
     controlRun: controlDir ? path.resolve(controlDir) : null,
     evidenceNotes: ['Store recall measures normalized anchor presence; attribution and current/history semantics are scored separately.',
       'G6 raw-history results certify recorded search blocks only; no unseen index contents are inferred.',
@@ -814,6 +814,7 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
       for (const [group, result] of Object.entries(f.forgottenReappeared)) process.stdout.write(`forgottenReappeared ${group} ${result.count}/${result.n} (unknown ${result.unknown})\n`);
     }
     process.stdout.write('set\tn\tpass\tfail\tunknown\terror\taccuracy (Wilson 95%)\n');
+    if (summary.judge.error) process.stderr.write(`judge error: ${summary.judge.error} (see judge-results.jsonl)\n`);
     if (summary.judge.pending) {
       process.stderr.write(`${summary.judge.pending} items pending — rerun the same command\n`);
       process.exitCode = 2;
