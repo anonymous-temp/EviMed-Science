@@ -67,6 +67,9 @@ export const CONTRACT_KINDS = Object.freeze([
   // thing that should be graded by the job that produced it.
   'method-candidate',
   'method-relations',
+  // The frame a two-stage distillation writes before any method (`OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED`): which methods on
+  // file a lesson reuses and which sub-skills are new. Never a deliverable either; nothing is written from it but the steps it names.
+  'method-frame',
 ])
 
 /** @param {string} value @returns {value is ContractKind} */
@@ -169,6 +172,7 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'hypothesis-set': '假说集',
   'method-candidate': '方法候选',
   'method-relations': '方法关系',
+  'method-frame': '方法框架',
 })
 
 /** @param {string} kind @returns {string} */
