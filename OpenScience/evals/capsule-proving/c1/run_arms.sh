@@ -94,9 +94,10 @@ ITEMS=(
   "evolving scienceworld seen pyramid pyramid" "evolving scienceworld unseen pyramid pyramid"
 )
 if [ "$ORDER" = pairs-first ]; then
-  # Pyramid and flat side by side, fold by fold (so their comparison is readable first), then the other arms in the brief's order.
+  # Pyramid and flat side by side, fold by fold and the seen folds of both environments first (so their comparison is readable
+  # first), then the other arms in the brief's order.
   ITEMS=()
-  for ef in "alfworld seen" "alfworld unseen" "scienceworld seen" "scienceworld unseen"; do
+  for ef in "alfworld seen" "scienceworld seen" "alfworld unseen" "scienceworld unseen"; do
     ITEMS+=("pyramid $ef pyramid pyramid" "flat $ef pyramid flat")
   done
   for spec in "from-scratch from-scratch pyramid" "no-abstract pyramid pyramid abstract" "no-atomic pyramid pyramid atomic" "add-only add-only pyramid" \
