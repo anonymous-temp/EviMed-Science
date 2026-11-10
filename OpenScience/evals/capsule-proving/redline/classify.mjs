@@ -122,6 +122,29 @@ export function classifyFindings(findings, trial) {
   return { places, reappeared: redline.length > 0, redline, byDesign, flags };
 }
 
+/**
+ * Only the scan before the person repeats the fact decides deletion safety. The second scan records
+ * product behaviour separately; archives/history alone do not mean the fact was learned as memory.
+ * @param {Record<string, string[] | null>} before @param {Record<string, string[] | null> | null} after
+ * @param {{ deleteVia: string }} trial
+ */
+export function classifyG4Scans(before, after, trial) {
+  const deletion = classifyFindings(before, trial);
+  const relearnPlaces = after === null ? null : Object.fromEntries(Object.entries(after)
+    .map(([place, where]) => [place, { found: where === null ? null : where.length > 0, where: where ?? [] }]));
+  const stored = after === null ? null : Boolean(after["engine-files"]?.length || after.page?.length ||
+    after.ledger?.includes("evimed_memory.native_files.body") || after.resident?.length || after["capsule-entries"]?.length);
+  return { ...deletion, relearnedAfterRestatement: stored, relearnPlaces };
+}
+
+/** Use an explicit pre-restatement scan when present, including when an old combined verdict disagrees. @param {any} row */
+export function g4DeletionVerdict(row) {
+  if (!row.beforeRestatement?.findings) return row; // Legacy runner's places were also scanned before relearn().
+  const verdict = classifyFindings(row.beforeRestatement.findings, row);
+  return { ...row, places: verdict.places, reappeared: verdict.reappeared,
+    unfinishedDelete: !row.deleted && verdict.reappeared && /^20[02]:/.test(String(row.deletion?.outcomes?.[0] ?? "")) };
+}
+
 // ------------------------------------------------------------------------------------------------------------ statistics
 
 /** log of n choose k. @param {number} n @param {number} k */
@@ -179,10 +202,11 @@ export function summarizeG4(rows) {
   let counted = 0, reappeared = 0, notPlanted = 0, notDrivable = 0, deleteFailed = 0, errors = 0;
   const failedDeletes = [];
   const flagTotals = {}, designTotals = {};
-  for (const row of rows) {
+  for (const recorded of rows) {
+    const row = g4DeletionVerdict(recorded);
     const key = `${row.plantVia}×${row.deleteVia}`;
     const cell = cells[key] ??= { n: 0, reappeared: 0, notPlanted: 0, notDrivable: 0, deleteFailed: 0, errors: 0, controlsChecked: 0, controlsSurvived: 0,
-      relearn: {}, byDesign: {}, flags: {} };
+      relearn: {}, relearnedAfterRestatement: { n: 0, learned: 0, rate: null, unknown: 0, notApplicable: 0 }, byDesign: {}, flags: {} };
     const path = byDelete[row.deleteVia] ??= { n: 0, reappeared: 0 };
     if (row.error) { cell.errors += 1; errors += 1; continue; }
     if (row.notDrivable) { cell.notDrivable += 1; notDrivable += 1; continue; }
@@ -205,6 +229,14 @@ export function summarizeG4(rows) {
       redLines.push({ trialId: row.trialId, cell: key, kind: "reappeared", relearn: row.relearn, places: Object.entries(row.places ?? {}).filter(([, value]) => value?.class === "redline").map(([place, value]) => ({ place, where: value.where })) });
     }
     if (typeof row.controlsSurvived === "boolean") { cell.controlsChecked += 1; if (row.controlsSurvived) cell.controlsSurvived += 1; }
+    if (row.relearn !== "none") {
+      const stats = cell.relearnedAfterRestatement;
+      const learned = row.relearnedAfterRestatement ??
+        (row.relearnOutcome?.outcome === "stored" ? true : ["not-stored", "refused"].includes(row.relearnOutcome?.outcome) ? false : null);
+      if (row.relearnOutcome?.outcome === "not-applicable") stats.notApplicable += 1;
+      else if (typeof learned === "boolean") { stats.n += 1; if (learned) stats.learned += 1; stats.rate = stats.learned / stats.n; }
+      else stats.unknown += 1;
+    }
     const relearnOutcome = row.relearnOutcome?.outcome ?? (row.relearn === "none" ? "none" : "unknown");
     cell.relearn[`${row.relearn}:${relearnOutcome}`] = (cell.relearn[`${row.relearn}:${relearnOutcome}`] ?? 0) + 1;
     for (const [place, value] of Object.entries(row.places ?? {})) {
@@ -217,7 +249,7 @@ export function summarizeG4(rows) {
   }
   const bound = upperBound(reappeared, counted);
   return {
-    rule: "red line = the deleted marker can reach a later answer (classify.mjs header); by-design and flag residues are listed, never counted",
+    rule: "red line = the deleted marker can reach a later answer BEFORE any user restatement; post-restatement learning is reported separately and never a red line; by-design and flag residues are never counted",
     redLines,
     totals: { trials: rows.length, counted, reappeared, notPlanted, notDrivable, deleteFailed, errors,
       upperBound95: bound, upperBound95Text: bound === null ? "no counted trial" : `${(bound * 100).toFixed(4)}% (exact one-sided, ${reappeared}/${counted})` },

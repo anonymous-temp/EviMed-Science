@@ -202,3 +202,47 @@ test('failed summary reads and vector probes are unknown rather than clean scans
   await assert.rejects(engineFilesWith(sessions, 'test', 'P19-MARKER'), /summary unavailable/);
   await assert.rejects(vectorHits(sessions, 'test', 'P19-MARKER'), /vectors unavailable/);
 });
+
+test('post-restatement storage is learning, never a deletion red line', async () => {
+  const { classifyG4Scans, g4DeletionVerdict } = await import('../redline/classify.mjs');
+  for (const relearn of ['restate-same-conversation', 'restate-new-conversation']) {
+    const trial = { deleteVia: 'forget-in-conversation', relearn };
+    const before = { 'engine-files': [], page: [], 'model-search': [] };
+    const after = { 'engine-files': ['memories/projects/restated.md'], page: ['records'], 'model-search': ['memories:x'] };
+    const verdict = classifyG4Scans(before, after, trial);
+    assert.equal(verdict.reappeared, false);
+    assert.deepEqual(verdict.redline, []);
+    assert.equal(verdict.relearnedAfterRestatement, true);
+    assert.deepEqual(verdict.relearnPlaces['engine-files'].where, after['engine-files']);
+    assert.equal(verdict.relearnPlaces['engine-files'].class, undefined);
+    const row = g4DeletionVerdict({ ...trial, deleted: true, reappeared: true,
+      beforeRestatement: { findings: before }, afterRestatement: { findings: after } });
+    assert.equal(row.reappeared, false, 'an older combined verdict cannot override the before scan');
+    const unsafe = classifyG4Scans(after, before, trial);
+    assert.equal(unsafe.reappeared, true, 'later absence cannot erase a pre-restatement leak');
+    assert.equal(unsafe.relearnedAfterRestatement, false);
+  }
+});
+
+test('restated history alone is not memory learning; unavailable and inapplicable scans stay unknown', async () => {
+  const { classifyG4Scans } = await import('../redline/classify.mjs');
+  assert.equal(classifyG4Scans({}, { archive: ['sessions/dsh-new/messages.jsonl'], 'raw-history': ['new'], 'model-search': ['history@marker'] },
+    { deleteVia: 'delete-conversation' }).relearnedAfterRestatement, false);
+  assert.equal(classifyG4Scans({}, null, { deleteVia: 'delete-account' }).relearnedAfterRestatement, null);
+});
+
+test('G4 learning rates use applicable restatements with observed outcomes per cell', () => {
+  const base = { plantVia: 'explicit-remember', deleteVia: 'forget-in-conversation', planted: true, deleted: true,
+    relearn: 'restate-new-conversation', reappeared: false, places: {} };
+  const summary = summarizeG4([
+    { ...base, relearnedAfterRestatement: true },
+    { ...base, relearnedAfterRestatement: false },
+    { ...base, relearnOutcome: { outcome: 'stored', files: ['memories/projects/x.md'] } },
+    { ...base },
+    { ...base, relearn: 'none' },
+    { ...base, relearnOutcome: { outcome: 'not-applicable' } },
+  ]);
+  assert.equal(summary.totals.reappeared, 0);
+  assert.deepEqual(summary.cells['explicit-remember×forget-in-conversation'].relearnedAfterRestatement,
+    { n: 3, learned: 2, rate: 2 / 3, unknown: 1, notApplicable: 1 });
+});
