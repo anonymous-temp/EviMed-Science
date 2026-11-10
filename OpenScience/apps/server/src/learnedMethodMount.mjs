@@ -464,6 +464,9 @@ export async function selectLearnedMethods(learning, scope) {
   Object.defineProperty(selected, "candidates", { value: candidates.map((entry) => entry.source), enumerable: false });
   // Each method's level in the library as the mount read it (`computeMethodLevels`; with the pyramid, abstract members counted).
   Object.defineProperty(selected, "levels", { value: plan.levels, enumerable: false });
+  // What the selected methods reuse, by pin, whatever library holds it: an official method one of them depends on is the official tier's to
+  // mount (`selectOfficialMethods`, in-loop), because the learned library does not hold it.
+  Object.defineProperty(selected, "dependencies", { value: selected.flatMap((method) => entries.get(method.id)?.dependencies ?? []), enumerable: false });
   return /** @type {any} */ (selected);
 }
 
@@ -511,7 +514,8 @@ function orderByLevel(methods, levels) {
  *     person's own method depends on), reason `dependency`.
  *  2. `ranked`: the `nearest` candidates closest to `query` (`similarity.nearest`, with a cosine floor `minSimilarity` when above
  *     0), reason `similarity`; without a query, or when the similarity cannot answer, every candidate most recently approved first,
- *     reason `recent` (unless `recentFallback` is false, when nothing is ranked).
+ *     reason `recent` (unless `recentFallback` is false, when nothing is ranked). `screenRanked` may take hits back first: those are
+ *     neither selected nor followed.
  *  3. `reused`: what those reuse, by name, from the whole library (`entries`), reason `dependency`, highest level first, capped by
  *     level (`abstractMax` at level 2 and above, `functionalMax` at level 1; atomic ones uncapped).
  *  4. `parents` (pyramid only): for the methods above, in their order, the single most relevant abstract method each was derived
@@ -525,7 +529,7 @@ function orderByLevel(methods, levels) {
  * @param {readonly PlanEntry[]} candidates the entries this run may be offered by similarity or exposure, most recently approved first
  * @param {{ query?: string | null, similarity?: { nearest: Function } | null, pyramid?: boolean, minSimilarity?: number, nearest?: number,
  *   explore?: number, abstractMax?: number, functionalMax?: number, recentFallback?: boolean, pinned?: readonly PlanEntry[],
- *   fits?: ((entry: PlanEntry) => boolean) | null }} [options]
+ *   fits?: ((entry: PlanEntry) => boolean) | null, screenRanked?: ((ranked: PlanEntry[]) => Promise<Set<string> | null>) | null }} [options]
  * @returns {Promise<{ pinned: {entry: PlanEntry, reason: string}[], ranked: {entry: PlanEntry, reason: string}[], reused: {entry: PlanEntry, reason: string}[],
  *   parents: {entry: PlanEntry, reason: string}[], explored: {entry: PlanEntry, reason: string}[], mode: "embedding" | "lexical" | "recent",
  *   topScore: number | null, levels: Map<string, number> }>}
@@ -583,6 +587,12 @@ export async function planMethodSelection(entries, candidates, options = {}) {
   }
   const ranking = mode !== "recent";
   if (!ranking && options.recentFallback !== false) for (const entry of pool) ranked.push({ entry, reason: "recent" });
+  // A caller may take hits back before anything is drawn in for them (the official tier yields a hit to the person's own method that says
+  // the same thing): what it takes back is neither selected nor a reason for a dependency or a parent.
+  if (options.screenRanked && ranked.length) {
+    const dropped = await options.screenRanked(ranked.map(({ entry }) => entry));
+    if (dropped?.size) for (let index = ranked.length - 1; index >= 0; index -= 1) if (dropped.has(ranked[index].entry.id)) ranked.splice(index, 1);
+  }
   for (const { entry } of ranked) taken.add(entry.id);
 
   // What the selected reuse. A dependency is pulled in whatever scope it was learnt in: the reference names a method by name and
@@ -708,8 +718,12 @@ export async function selectMethodsForTask({ library, taskText = null, embed = n
 /**
  * How many official methods one run is offered at most: the platform's defaults are the lowest tier of what a run is given, and a base tier
  * that fills the room is the tax on every conversation that principle 16 forbids. Three cards, the ones nearest to what was asked.
+ *
+ * `inLoop` is the tier's own cap when it is selected like the person's library (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`): still at most
+ * `nearest` by similarity, and room for what those reuse, the abstract method above them and the official methods a person's own selected
+ * method depends on, which count toward it. Provisional, like the other mount numbers: what it leaves out is counted (`onLeftOut`).
  */
-export const OFFICIAL_METHOD_MOUNT = Object.freeze({ nearest: 3 });
+export const OFFICIAL_METHOD_MOUNT = Object.freeze({ nearest: 3, inLoop: 6 });
 
 /**
  * How close an official method must be to one of the person's own, by the cosine of their texts' embeddings (`methodSimilarity.pairs`), for
@@ -753,6 +767,13 @@ export function officialMethodDocument(method) {
  *     the mount carried): an official method about the same thing as one of them (`OFFICIAL_PERSONAL_DELTA_COSINE`) is left out of this run, and
  *     the receipt says which one and how near. Nothing is left out on a guess: with no embedder the delta is not decided.
  *
+ * `inLoop` (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`, off by default; plan 2026-11-04 §5.4 defect 14): instead of "nearest three, flat",
+ * the tier is selected by the same selection as the person's library (`planMethodSelection`): the official methods a selected method of the
+ * person's depends on (`personalDependencies`, by name) first, reason `dependency`, even without a question; then the nearest of this run's
+ * scope, less those the personal delta takes back; what they reuse; and with `pyramid` the abstract method above them (reason `abstraction`,
+ * cards abstract first). All of it within `OFFICIAL_METHOD_MOUNT.inLoop`, the dependencies of the person's methods included. `minSimilarity`
+ * is the similarity floor (`OPEN_SCIENCE_METHOD_MOUNT_MIN_SIMILARITY`).
+ *
  * What is chosen is spent against what the person's own methods left of the byte budget, by the card each costs; whatever does not fit is
  * counted as left out like any other (`onLeftOut`). `keep` names what a running runtime was already given, as for the learned half: those
  * still in force stay readable on disk (`kept`).
@@ -762,17 +783,18 @@ export function officialMethodDocument(method) {
  * @param {readonly import('./officialPacks.mjs').OfficialMethod[]} methods the account's official methods (`OfficialPacks.methodsFor`)
  * @param {{ scopeId?: string | null, family?: "geo" | "research" | null, query?: string | null, similarity?: { nearest: Function, pairs: Function } | null,
  *   personal?: readonly any[], maxCount?: number, maxBytes?: number, cardDirectory?: string | null, keep?: Iterable<string> | null,
- *   onLeftOut?: ((methodKey: string) => void) | null }} scope
+ *   onLeftOut?: ((methodKey: string) => void) | null, inLoop?: boolean, pyramid?: boolean, minSimilarity?: number,
+ *   personalDependencies?: readonly { name: string, digest?: string }[] }} scope
  * @returns {Promise<any[] & { leftOut: { id: string, name: string, reason: "personal_method", twin: { id: string, name: string }, score: number }[], deltaMode: "embedding" | "lexical" | null, kept: any[] }>}
  */
 export async function selectOfficialMethods(methods, scope) {
-  const mounted = (/** @type {any} */ method) => {
+  const mounted = (/** @type {any} */ method, reason = "similarity") => {
     const { document, digest } = officialMethodDocument(method);
     const directoryName = officialMethodDirectoryName(method.key);
     const bytes = Buffer.byteLength(document, "utf8");
     const promptBytes = scope.cardDirectory
       ? learnedMethodCardBytes({ frontmatter: { name: method.name, description: method.description, whenToUse: method.whenToUse } }, directoryName, scope.cardDirectory) : bytes;
-    return { id: method.key, name: method.name, digest, directoryName, document, files: {}, bytes, promptBytes, reason: "similarity", official: true,
+    return { id: method.key, name: method.name, digest, directoryName, document, files: {}, bytes, promptBytes, reason, official: true,
       packId: method.packId, methodId: method.methodId, sha: method.sha, entryId: method.entryId };
   };
   /** @type {any} */
@@ -780,16 +802,57 @@ export async function selectOfficialMethods(methods, scope) {
   Object.defineProperty(result, "leftOut", { value: [], enumerable: false });
   Object.defineProperty(result, "deltaMode", { value: null, enumerable: false, writable: true });
   const wanted = new Set(scope.keep ?? []);
-  const kept = (methods ?? []).map(mounted).filter((method) => wanted.has(method.directoryName));
+  const kept = (methods ?? []).map((method) => mounted(method)).filter((method) => wanted.has(method.directoryName));
   Object.defineProperty(result, "kept", { value: kept, enumerable: false, writable: true });
-  const maxCount = Number.isSafeInteger(scope.maxCount) ? Number(scope.maxCount) : OFFICIAL_METHOD_MOUNT.nearest;
+  const inLoop = scope.inLoop === true;
+  const maxCount = Number.isSafeInteger(scope.maxCount) ? Number(scope.maxCount) : inLoop ? OFFICIAL_METHOD_MOUNT.inLoop : OFFICIAL_METHOD_MOUNT.nearest;
   const maxBytes = Number.isSafeInteger(scope.maxBytes) ? Number(scope.maxBytes) : Number.POSITIVE_INFINITY;
   const query = String(scope.query ?? "").trim();
-  if (!methods?.length || maxCount <= 0 || scope.family === null || scope.family === "geo" || !query || !scope.similarity) return result;
-
   const runScope = scope.scopeId == null ? CONVERSATION_SCOPE : scope.scopeId;
-  const docs = methods.filter((method) => method.scope.includes(runScope)).map((method) => ({ id: method.key,
-    payload: { frontmatter: { name: method.name, description: method.description, whenToUse: method.whenToUse }, contentDigest: `sha256:${method.sha}` }, method }));
+  const docOf = (/** @type {any} */ method) => ({ id: method.key,
+    payload: { frontmatter: { name: method.name, description: method.description, whenToUse: method.whenToUse }, contentDigest: `sha256:${method.sha}` }, method });
+  const finish = () => {
+    const selectedNames = new Set(result.map((/** @type {any} */ method) => method.directoryName));
+    Object.defineProperty(result, "kept", { value: kept.filter((method) => !selectedNames.has(method.directoryName)), enumerable: false, writable: true });
+    return result;
+  };
+
+  if (inLoop) {
+    if (!methods?.length || maxCount <= 0 || scope.family === null || scope.family === "geo") return result;
+    const cap = Math.min(maxCount, OFFICIAL_METHOD_MOUNT.inLoop);
+    /** @type {Map<string, PlanEntry & { method: any }>} */
+    const entries = new Map(methods.map((method) => [method.key, { id: method.key, name: method.name,
+      dependencies: Array.isArray(method.dependencies) ? method.dependencies : [], derivedFrom: [], role: method.role ?? null,
+      approvedAt: 0, carried: 0, source: docOf(method), method }]));
+    const inScope = (/** @type {PlanEntry} */ entry) => /** @type {any} */ (entry).method.scope.includes(runScope);
+    const reused = new Set((scope.personalDependencies ?? []).map((dependency) => String(dependency?.name ?? "")));
+    const plan = await planMethodSelection(entries, [...entries.values()].filter(inScope), {
+      query: scope.similarity ? query : null, similarity: scope.similarity ?? null, pyramid: scope.pyramid === true, minSimilarity: scope.minSimilarity,
+      nearest: Math.min(cap, OFFICIAL_METHOD_MOUNT.nearest), explore: 0, recentFallback: false, fits: inScope,
+      pinned: [...entries.values()].filter((entry) => reused.has(entry.name)),
+      screenRanked: async (hits) => {
+        const covered = await personalTwins(hits.map((entry) => /** @type {any} */ (entry).source), scope, result);
+        for (const hit of hits) {
+          const twin = covered.get(hit.id);
+          if (twin) result.leftOut.push({ id: hit.id, name: hit.name, reason: "personal_method", twin: twin.twin, score: Math.round(twin.score * 1e4) / 1e4 });
+        }
+        return new Set(covered.keys());
+      },
+    });
+    let spent = 0;
+    for (const { entry, reason } of [...plan.pinned, ...plan.ranked, ...plan.reused, ...plan.parents]) {
+      if (result.length >= cap) break;
+      const chosen = mounted(/** @type {any} */ (entry).method, reason);
+      if (spent + chosen.promptBytes > maxBytes) { scope.onLeftOut?.(chosen.id); continue; }
+      spent += chosen.promptBytes;
+      result.push(chosen);
+    }
+    if (scope.pyramid === true) orderByLevel(result, plan.levels);
+    return finish();
+  }
+
+  if (!methods?.length || maxCount <= 0 || scope.family === null || scope.family === "geo" || !query || !scope.similarity) return result;
+  const docs = methods.filter((method) => method.scope.includes(runScope)).map(docOf);
   if (!docs.length) return result;
   /** @type {any[]} */
   let near;
@@ -798,31 +861,7 @@ export async function selectOfficialMethods(methods, scope) {
   if (!hits.length) return result;
 
   // The person's own methods that say the same thing win.
-  /** @type {Map<string, { twin: { id: string, name: string }, score: number }>} */
-  const covered = new Map();
-  const personal = [...(scope.personal ?? [])];
-  if (personal.length) {
-    try {
-      const everything = [...hits, ...personal];
-      const pairs = await scope.similarity.pairs(everything, { topK: everything.length, floor: OFFICIAL_PERSONAL_DELTA_COSINE });
-      result.deltaMode = pairs.mode === "embedding" ? "embedding" : "lexical";
-      if (pairs.mode === "embedding") {
-        const own = new Map(personal.map((document) => [String(document.id), document]));
-        for (const pair of pairs) {
-          const [official, other] = hits.some((hit) => hit.id === pair.a) ? [pair.a, pair.b] : [pair.b, pair.a];
-          if (!hits.some((hit) => hit.id === official) || !own.has(other)) continue;
-          const held = covered.get(official);
-          if (!held || pair.score > held.score) {
-            const document = own.get(other);
-            covered.set(official, { twin: { id: String(other), name: String(document?.payload?.frontmatter?.name ?? document?.name ?? other) }, score: pair.score });
-          }
-        }
-      }
-    } catch {
-      // A nearness that cannot be read leaves both in: nothing is withheld on a failure.
-      result.deltaMode = "lexical";
-    }
-  }
+  const covered = await personalTwins(hits, scope, result);
   let spent = 0;
   for (const hit of hits) {
     const twin = covered.get(hit.id);
@@ -836,7 +875,40 @@ export async function selectOfficialMethods(methods, scope) {
     spent += entry.promptBytes;
     result.push(entry);
   }
-  const selectedNames = new Set(result.map((method) => method.directoryName));
-  Object.defineProperty(result, "kept", { value: kept.filter((method) => !selectedNames.has(method.directoryName)), enumerable: false, writable: true });
-  return result;
+  return finish();
+}
+
+/**
+ * Which official hits say the same thing as one of the person's own methods (`OFFICIAL_PERSONAL_DELTA_COSINE`), each with the method it yields to
+ * and how near: decided only by embedding, and `result.deltaMode` says how it was read. A nearness that cannot be read leaves every hit in.
+ * @param {readonly any[]} hits official method documents (`{ id, payload, method }`) @param {{ personal?: readonly any[], similarity?: any }} scope
+ * @param {any} result the selection, whose `deltaMode` is set
+ * @returns {Promise<Map<string, { twin: { id: string, name: string }, score: number }>>}
+ */
+async function personalTwins(hits, scope, result) {
+  /** @type {Map<string, { twin: { id: string, name: string }, score: number }>} */
+  const covered = new Map();
+  const personal = [...(scope.personal ?? [])];
+  if (!personal.length || !hits.length || !scope.similarity) return covered;
+  try {
+    const everything = [...hits, ...personal];
+    const pairs = await scope.similarity.pairs(everything, { topK: everything.length, floor: OFFICIAL_PERSONAL_DELTA_COSINE });
+    result.deltaMode = pairs.mode === "embedding" ? "embedding" : "lexical";
+    if (pairs.mode === "embedding") {
+      const own = new Map(personal.map((document) => [String(document.id), document]));
+      for (const pair of pairs) {
+        const [official, other] = hits.some((hit) => hit.id === pair.a) ? [pair.a, pair.b] : [pair.b, pair.a];
+        if (!hits.some((hit) => hit.id === official) || !own.has(other)) continue;
+        const held = covered.get(official);
+        if (!held || pair.score > held.score) {
+          const document = own.get(other);
+          covered.set(official, { twin: { id: String(other), name: String(document?.payload?.frontmatter?.name ?? document?.name ?? other) }, score: pair.score });
+        }
+      }
+    }
+  } catch {
+    // A nearness that cannot be read leaves both in: nothing is withheld on a failure.
+    result.deltaMode = "lexical";
+  }
+  return covered;
 }

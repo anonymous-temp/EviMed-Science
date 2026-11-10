@@ -3253,6 +3253,10 @@ export function loadConfig(overrides = {}) {
     methodPyramidEnabled: overrides.methodPyramidEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_PYRAMID_ENABLED", false),
     // A cosine floor for the mount's similarity selection (defect 9); 0 is none, as before.
     methodMountMinSimilarity: methodMountMinSimilarity(overrides),
+    // The official tier in the learning loop (§5.4 defect 14), off by default: official methods join distillation's related methods and the
+    // consolidation's screen and decide as read-only documents, a person's method may depend on one (`sha256:` + its pack sha), and the mount
+    // selects the tier like the person's library (closure, parent, own cap) instead of the nearest three, flat.
+    methodOfficialInLoopEnabled: overrides.methodOfficialInLoopEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED", false),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),
     // The context window the kernel is told it has.

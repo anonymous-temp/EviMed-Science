@@ -49,9 +49,9 @@ function embedder(options = {}) {
 
 /**
  * A ledger and a consolidation over it. `decide(input)` and `build(input)` answer the two model steps by what they were asked.
- * @param {{decide?: (input: any) => any, build?: (input: any) => any, similarity?: any, audit?: any, unusedAfterLoads?: number, now?: () => Date, jobs?: any, replay?: any, pyramid?: boolean}} [options]
+ * @param {{decide?: (input: any) => any, build?: (input: any) => any, similarity?: any, audit?: any, unusedAfterLoads?: number, now?: () => Date, jobs?: any, replay?: any, pyramid?: boolean, officialMethods?: any}} [options]
  */
-function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisions: [] }), similarity = undefined, audit = null, unusedAfterLoads = undefined, now = () => NOW, jobs = null, replay = null, pyramid = undefined } = {}) {
+function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisions: [] }), similarity = undefined, audit = null, unusedAfterLoads = undefined, now = () => NOW, jobs = null, replay = null, pyramid = undefined, officialMethods = undefined } = {}) {
   const documents = productDocumentsDouble();
   const learning = new LearningService({ documents, now });
   /** @type {any[]} */
@@ -78,6 +78,7 @@ function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisi
     onRetirement: (code) => stops.push(code),
     unusedAfterLoads, now, wait: async () => {},
     ...(pyramid === undefined ? {} : { pyramid }),
+    ...(officialMethods === undefined ? {} : { officialMethods }),
   });
   /** @param {string} name @param {string} topic @param {any} [input] */
   const make = (name, topic, input = {}) => learning.createCandidate("u1", {
@@ -546,6 +547,40 @@ test("with the pyramid switch an abstract method is stored one level above the m
     assert.equal((await h.learning.getMethod("u1", pattern.id)).payload.learning.level, pyramid ? 1 : 0, `pyramid ${pyramid}`);
     assert.deepEqual(result.levels, pyramid ? { written: 1, max: 1 } : { written: 0, max: 0 });
   }
+});
+
+test("with the official tier in the loop, an official method is read beside the person's own and never written to (defect 14)", async () => {
+  const official = { key: "official:daily:spans", packId: "daily", methodId: "spans", name: "official-daily-spans", description: "Read spans the official way, axis-a.",
+    whenToUse: "When spans on axis-a come up.", scope: ["conversation"], body: sections(), sha: "e".repeat(64), entryId: "fact-1", capsuleId: "official-copy:daily" };
+  /** @type {any[]} */
+  const decideInputs = [];
+  const h = harness({
+    officialMethods: async () => [official],
+    decide: (input) => { decideInputs.push(input); return { assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "merge", REASON: "Same procedure." }] }; },
+    // The builder tries to rewrite the official method: that revision is not the builder's to make.
+    build: (input) => ({ revisions: [{ assignment: "A1", methodId: official.key, operation: "amend", baseDigest: `sha256:${official.sha}`,
+      skill: renderMethodSkill(frontmatter("official-daily-spans", "axis-a"), sections("- Rewritten.")) }], seen: input }),
+  });
+  const mine = await h.make("span-a-one", "axis-a");
+  const result = await h.sleep("job_1");
+  assert.equal(result.groupsFormed, 1, "one method of the person's and one official method are comparable");
+  assert.deepEqual(decideInputs[0].methods.map((/** @type {any} */ entry) => [entry.id, entry.readOnly ?? false]).sort(),
+    [[mine.id, false], [official.key, true]].sort());
+  assert.match(h.decides()[0].question, /readOnly is the platform's own/);
+  const held = await h.learning.getMethod("u1", mine.id);
+  assert.deepEqual(held.payload.learning.relations.map((/** @type {any} */ relation) => [relation.type, relation.target]), [["merge", official.key]],
+    "the person's method relates to the official one");
+  assert.equal(result.relations, 1, "and nothing is recorded on the official method");
+  assert.equal(result.builds, 0, "a rewrite of the official method is dropped");
+  await assert.rejects(h.learning.getMethod("u1", official.key), "the official method is never written into the person's library");
+  assert.equal(held.payload.learning.decided?.version, DECIDE_VERSION, "the group is stamped on the person's method");
+  const second = await h.sleep("job_2");
+  assert.equal(second.skippedUnchanged, 1, "and read once");
+
+  // Off: the one method is alone, as before.
+  const off = harness({ decide: () => { throw new Error("no decide"); } });
+  await off.make("span-a-one", "axis-a");
+  assert.ok((await off.sleep("job_1")).noop.includes("too_few_methods"));
 });
 
 test("the incremental pass records every relation and builds shared_part and subset, but never a merge, and never under an unproven merge", async () => {

@@ -4860,6 +4860,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const codeVerification = createEvolutionVerification({ execute: (body, options) => codeController.execVerify(body, options),
       prepareDependencies: (requests, options) => codeController.prepareEvolutionDependencies({ requests }, options) });
     const scriptUses = productDatabase ? new ScriptUses({ database: productDatabase, windowDays: config.transcriptRetentionDays }) : null;
+    // The official tier in the learning loop (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`, off by default): the account's official methods as the
+    // copies it holds (no copy is made for a lesson), read by distillation and consolidation as read-only documents, and pinnable in `depends_on`.
+    const officialInLoop = config.methodOfficialInLoopEnabled === true && officialPacks
+      ? (/** @type {string} */ userId) => /** @type {OfficialPacks} */ (officialPacks).methodsFor(userId, { ensure: false }) : null;
+    learningService.officialMethods = officialInLoop;
     const distillation = new MethodDistillationRuns({
       contextProvenance,
       scriptUses, verifyCode: (candidate, options) => codeVerification.verify(candidate, options), onCodeSkill: (outcome) => learningMetrics.observeCodeSkill(outcome),
@@ -4880,6 +4885,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       similarity: methodSimilarity,
       resolveRun: async (peerProject, runId) => (await agentRuns.list(peerProject).catch(() => [])).find((item) => item?.id === runId) ?? null,
       onEvidence: ({ kept, dropped }) => learningMetrics.observeEvidenceQuotes(kept, dropped),
+      // The official tier among the related methods, read-only (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`, off by default).
+      officialMethods: officialInLoop,
     });
     // A method that was just rewritten is read against up to five runs the person accepted, afterwards and never waited for (`methodReplay.mjs`),
     // inside the learning scope the method belongs to (a shared GEO project's runs for its methods, none of them for the account's own).
@@ -4906,6 +4913,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       unusedAfterLoads: config.learningUnusedRetireLoads, onRetirement: (code) => learningMetrics.observeRetirement(code),
       // The levels the pass stores read an abstract method's members (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`, off by default).
       pyramid: config.methodPyramidEnabled === true,
+      // The official tier in the shortlist, the screen and DECIDE, read-only (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`, off by default).
+      officialMethods: officialInLoop,
       // The shortlist is by embedding when there is one; every stage that did nothing, and every relation recorded, is counted.
       similarity: methodSimilarity,
       onNoop: (reason, times) => learningMetrics.observeConsolidateNoop(reason, times),

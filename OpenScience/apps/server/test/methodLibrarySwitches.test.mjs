@@ -97,3 +97,53 @@ test("快测 A: with the pyramid on, the mount writes the abstract parent first 
     await rm(project.rootDir, { recursive: true, force: true });
   }
 });
+
+/* ----------------------------------------------------------------------- B: OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED */
+
+import { METHOD_SKILL_SCHEMA } from "@evimed/domain";
+import { LearningService } from "../src/learningService.mjs";
+import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
+
+const OFFICIAL = { key: "official:daily:base", packId: "daily", methodId: "base", name: "official-daily-base", description: "Base step for reports.",
+  whenToUse: "When a report needs its base step.", scope: ["meta-analysis"], body: "Do the base step.", sha: "c".repeat(64), entryId: "fact-1", capsuleId: "official-copy:daily" };
+const OFFICIAL_PIN = `sha256:${"c".repeat(64)}`;
+
+test("快测 B: off by default; on, a person's method may pin an official one and the mount brings the official card with it", async () => {
+  assert.equal(loadConfig({ rootDir: repoRoot }).methodOfficialInLoopEnabled, false);
+  assert.equal(configUnder({ OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED: "true" }).methodOfficialInLoopEnabled, true);
+
+  // The pin resolves only when the switch gave the learning service the account's official methods.
+  const sections = ["## Purpose", "P.", "", "## When to Use", "W.", "", "## Inputs", "I.", "", "## Workflow", "1. [reuse method: official-daily-base | when: always | provides: the base step]", "",
+    "## Verification", "- Checked.", "", "## Constraints", "- Never.", "", "## Output", "O."].join("\n");
+  const candidate = {
+    projectId: "p1", body: sections, provenance: { origin: "inferred", runId: "run_1" }, dependencies: [{ name: OFFICIAL.name, digest: OFFICIAL_PIN }],
+    frontmatter: { name: "report-on-base", description: "Writes the report on the official base step.", whenToUse: "When a report is asked for.",
+      metadata: { role: "functional", applies_when: "A report.", not_when: "No report.", derived_from: "run:run_1", depends_on: `${OFFICIAL.name}@${OFFICIAL_PIN}`, evimed_schema: METHOD_SKILL_SCHEMA } },
+  };
+  const off = new LearningService({ documents: productDocumentsDouble() });
+  await assert.rejects(off.createCandidate("u1", candidate), /method_depends_on_unresolved/);
+  const on = new LearningService({ documents: productDocumentsDouble() });
+  on.officialMethods = async () => [OFFICIAL];
+  const created = await on.createCandidate("u1", candidate);
+  assert.deepEqual(created.payload.dependencies, [{ name: OFFICIAL.name, digest: OFFICIAL_PIN }]);
+  const stale = new LearningService({ documents: productDocumentsDouble() });
+  stale.officialMethods = async () => [{ ...OFFICIAL, sha: "d".repeat(64) }];
+  await assert.rejects(stale.createCandidate("u1", candidate), /method_depends_on_unresolved/, "a pin to another text of it does not resolve");
+
+  const { project, directory } = await scratchProject();
+  try {
+    const learned = learnedDoc("report-on-base", "Writes the weekly report on the base step", {}, { dependencies: [{ name: OFFICIAL.name, digest: OFFICIAL_PIN }] });
+    const capsules = { async active() { return { record: null, items: [] }; }, async entries() { return { items: [], nextCursor: null }; },
+      async officialMethods() { return [OFFICIAL]; }, official: { noteMount() {} } };
+    const options = { capsules, learning: { async approvedMethods() { return [learned]; } }, project, directory, keepDirectory: true, scopeId: "conversation",
+      learnedFamily: /** @type {const} */ ("research"), similarity: createMethodSimilarity(), query: "Write the weekly report on the base step" };
+    const flat = await materializeCapsuleMethods(options);
+    assert.deepEqual(flat.official, [], "off: an official method of another scope is never offered, and a dependency is not read");
+    const inLoop = await materializeCapsuleMethods({ ...options, methodSelection: { officialInLoop: true } });
+    assert.deepEqual(inLoop.official.map((/** @type {any} */ entry) => entry.id), [OFFICIAL.key]);
+    const selection = JSON.parse(await readFile(path.join(directory, SELECTION_FILE), "utf8"));
+    assert.deepEqual(selection.methods.map((/** @type {any} */ entry) => entry.reason), ["similarity", "dependency"]);
+  } finally {
+    await rm(project.rootDir, { recursive: true, force: true });
+  }
+});

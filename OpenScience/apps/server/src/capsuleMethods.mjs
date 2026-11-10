@@ -502,12 +502,13 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * card names and one that begins now is shown only the selection.
  *
  * `methodSelection` carries the learned-method library's experiment switches, each off by default (plan 2026-11-04 §5.4): `pyramid`
- * (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`) and `minSimilarity` (`OPEN_SCIENCE_METHOD_MOUNT_MIN_SIMILARITY`), read by `selectLearnedMethods`.
+ * (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`) and `minSimilarity` (`OPEN_SCIENCE_METHOD_MOUNT_MIN_SIMILARITY`), read by `selectLearnedMethods`, and
+ * `officialInLoop` (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`), which selects the official tier the same way (`selectOfficialMethods`).
  *
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
  *   learnedFamily?: "geo" | "research" | null, scopeId?: string | null, query?: string | null, similarity?: { nearest: Function, pairs: Function } | null,
  *   keep?: Iterable<string> | null, keepDirectory?: boolean, contextPolicy?:any, contextItems?:any, maxPromptBytes?: number, writeFile?: typeof writeFileAtomicNoFollow,
- *   methodSelection?: { pyramid?: boolean, minSimilarity?: number } | null }} options
+ *   methodSelection?: { pyramid?: boolean, minSimilarity?: number, officialInLoop?: boolean } | null }} options
  * `capsule` is what the capsule half mounted, as the conversation panel shows
  * it (`memorySessions.mjs`): recorded here so a read of the panel does not
  * select the whole capsule again.
@@ -616,6 +617,9 @@ export async function materializeCapsuleMethods({
     cardDirectory: runtimeCapsuleMethodsDir,
     keep,
     onLeftOut: countLeftOut,
+    // The tier selected like the person's library, with the official methods their selected ones reuse (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`).
+    ...(switches.officialInLoop === true ? { inLoop: true, personalDependencies: (/** @type {any} */ (learnedMethods)).dependencies ?? [],
+      ...(switches.pyramid === true ? { pyramid: true } : {}), ...(Number(switches.minSimilarity) > 0 ? { minSimilarity: Number(switches.minSimilarity) } : {}) } : {}),
   });
   const official = capsules?.official;
   if (official) {

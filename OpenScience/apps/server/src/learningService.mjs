@@ -84,6 +84,7 @@ import {
   validateMethodSkill,
   withoutRetiredLearningKeys,
 } from "@evimed/domain";
+import { officialMethodDigest } from "./officialPackSources.mjs";
 import { productId } from "./productPersistence.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -265,6 +266,13 @@ export class LearningService {
      */
     this.onMountChange = null;
     /**
+     * The official methods a person's method may reuse (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`; null, the default, is none): set by the
+     * composition root to the account's official methods (`OfficialPacks.methodsFor`). A `depends_on` pin to one resolves when it names the
+     * method's current text, `sha256:` + its pack sha (`officialMethodDigest`). Never a shared GEO project's: its library is its own.
+     * @type {((userId: string) => Promise<readonly any[]>) | null}
+     */
+    this.officialMethods = null;
+    /**
      * Told, after a write that may have put a method in force, which one it was (`createCandidate`, `amendMethod`, an approval): the composition
      * root hands it to the promotion of general methods to everyone's pack (`officialPromotion.mjs`), which reads the method itself and decides.
      * Told and never asked, like `onMountChange`.
@@ -347,6 +355,12 @@ export class LearningService {
         if (saved?.payload?.contentDigest) known.add(saved.payload.contentDigest);
       }
       digests.set(name, known);
+    }
+    if (this.officialMethods && policy?.kind !== "geo-project") {
+      for (const method of await this.officialMethods(userId).catch(() => []) ?? []) {
+        if (!method?.name || !method?.sha) continue;
+        digests.set(method.name, new Set([...(digests.get(method.name) ?? []), officialMethodDigest(method)]));
+      }
     }
     return (dependency) => Boolean(digests.get(dependency.name)?.has(dependency.digest));
   }

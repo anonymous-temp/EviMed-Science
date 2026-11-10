@@ -79,6 +79,7 @@ import { learnedMethodId, methodRecordFrom, methodSourceProjects, methodStepsOf 
 import { LEARNING_PROJECT_ID, RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
 import { HttpError } from "./security.mjs";
 import { candidatePairs } from "./methodSimilarity.mjs";
+import { isOfficialDocument, officialLibraryDocument } from "./officialPackSources.mjs";
 
 // The lexical shortlist lives with the similarity module (it is that module's fallback); it is still this pass's too.
 export { candidatePairs };
@@ -163,6 +164,9 @@ export function groupKey(members) {
 /** Whether every member holds this group's key at the current decide version: the group has been read and built on already.
  *  @param {readonly any[]} members @param {string} key @returns {boolean} */
 function groupDecided(members, key) {
+  // An official member (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`) is never stamped: its text is in the key (`groupKey`), so a new text is
+  // a new group, and whether the group was read is the person's methods' to say.
+  members = members.filter((member) => !isOfficialDocument(member));
   return members.length > 0 && members.every((member) => {
     const decided = member.payload?.learning?.decided;
     return decided?.key === key && decided?.version === DECIDE_VERSION;
@@ -333,16 +337,20 @@ export class MethodConsolidation {
    *          replay?: { run: (request: { job: any }) => Promise<any> } | null,
    *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>,
    *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null,
-   *          pyramid?: boolean}} dependencies
+   *          pyramid?: boolean, officialMethods?: ((userId: string) => Promise<readonly any[]>) | null}} dependencies
    *   `pyramid` (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`, off by default): the levels the pass stores count an abstract method's members
    *   (`metadata.derived_from`, `methodRecordFrom`'s `libraryNames`), so an abstract method sits one above them instead of at 0.
+   *   `officialMethods` (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`; absent, the default, is none): the account's official methods join the
+   *   shortlist, the screen and DECIDE as read-only documents (`officialLibraryDocument`). A relation of a person's method may name one; nothing
+   *   is written to one — no relation recorded on it, no stamp, no amendment, no retirement — and a group of official methods alone is not read.
+   *   Never in a shared GEO project's pass.
    */
   constructor({
     dispatch, readResult, learning, jobs = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     describe = null, judgeService = null, screenBaseline = null,
     unusedAfterLoads = undefined, onRetirement = null, similarity = null, onNoop = null, onRelation = null, replay = null, contextProvenance = null,
-    pyramid = false,
+    pyramid = false, officialMethods = null,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
@@ -382,6 +390,14 @@ export class MethodConsolidation {
     // on its own runs' counters as it did before.
     this.replay = replay;
     this.pyramid = pyramid === true;
+    this.officialMethods = typeof officialMethods === "function" ? officialMethods : null;
+  }
+
+  /** The account's official methods as read-only documents, when the switch composed them; none in a shared GEO project's pass. @param {any} job */
+  async #officialDocs(job) {
+    if (!this.officialMethods) return [];
+    if (this.contextProvenance && (await this.contextProvenance.policyForJob(job))?.kind === "geo-project") return [];
+    return (await this.officialMethods(job.userId).catch(() => []) ?? []).map(officialLibraryDocument);
   }
 
   /**
@@ -484,7 +500,9 @@ export class MethodConsolidation {
     // retirement — so a researcher's first method could never be promoted, and
     // with learning on by default the nightly job returned at this line every
     // night for every user who had one. The comparison is what is conditional.
-    const comparable = methods.length >= CONSOLIDATION_LIMITS.minGroupSize;
+    // The official tier, read-only, when the switch composed it: a person's one method can be compared with what everyone starts with.
+    const official = await this.#officialDocs(job);
+    const comparable = methods.length + official.length >= CONSOLIDATION_LIMITS.minGroupSize;
     /** @type {string[]} */
     const noop = [];
     /** @param {string} reason @param {number} [count] */
@@ -499,20 +517,23 @@ export class MethodConsolidation {
     // An approval is a write, so the steps below, which amend and retire against the revisions they hold, read the library again.
     if (early.length) methods = await readLibrary();
 
-    const shortlist = comparable ? await this.#shortlist(methods) : { pairs: [], mode: "none" };
+    const pool = official.length ? [...methods, ...official] : methods;
+    const shortlist = comparable ? await this.#shortlist(pool) : { pairs: [], mode: "none" };
     const screen = comparable
-      ? await this.screenPairs(job, shortlist.pairs, methods)
+      ? await this.screenPairs(job, shortlist.pairs, pool)
       : { pairs: [], screened: false, dropped: 0 };
     // Every group the shortlist forms, not the first few: a group that is settled is skipped and costs nothing, so the
     // budget below counts the groups that were *read*, and a library whose first six are settled still reaches its seventh.
     const groups = comparable ? groupPairs(screen.pairs, { maxGroups: CONSOLIDATION_LIMITS.maxMethods }) : [];
     if (comparable && groups.length === 0) said("no_groups");
-    const byId = new Map(methods.map((method) => [method.id, method]));
+    const byId = new Map(pool.map((method) => [method.id, method]));
     const outcome = { groups: 0, skippedUnchanged: 0, blockedUnproven: 0, decideFailed: 0, decidedNothing: 0, deferredGroups: 0, builds: 0, relations: 0,
       /** @type {Record<string, number>} */ relationTypes: {}, /** @type {any[]} */ refusals: [] };
     for (const group of groups) {
       const members = group.map((id) => byId.get(id)).filter(Boolean);
       if (members.length < CONSOLIDATION_LIMITS.minGroupSize) continue;
+      // Nothing of the person's to decide about.
+      if (members.every(isOfficialDocument)) continue;
       if (outcome.groups >= CONSOLIDATION_LIMITS.maxGroups && !groupDecided(members, groupKey(members))) { outcome.deferredGroups += 1; continue; }
       // One group's failure is not the pass's, but a step that could not start
       // is not a failure: the worker defers the job and the pass resumes,
@@ -690,7 +711,7 @@ export class MethodConsolidation {
    *   blockedUnproven: boolean, decidedNothing: boolean, deferredBuilds: number, refusals: any[]}>}
    */
   async #processGroup(job, members, { buildAllowed = true, buildTypes = null } = {}) {
-    if (this.contextProvenance) for (const member of members) if (!await this.#get(job,member.id)) throw new HttpError(409,'geo_learning_target_unverified','A method left this learning scope.');
+    if (this.contextProvenance) for (const member of members) if (!isOfficialDocument(member) && !await this.#get(job,member.id)) throw new HttpError(409,'geo_learning_target_unverified','A method left this learning scope.');
     const empty = { relations: 0, relationTypes: {}, builds: 0, blockedUnproven: false, decidedNothing: false, deferredBuilds: 0, refusals: [] };
     const key = groupKey(members);
     const policy=await this.contextProvenance?.policyForJob(job);
@@ -751,7 +772,10 @@ export class MethodConsolidation {
   async #stamp(job, members, key) {
     if (typeof this.learning.recordDecided !== "function") return;
     const decided = { key, at: this.now().toISOString(), version: DECIDE_VERSION };
-    for (const member of members) await this.learning.recordDecided(job.userId, member.id, decided, member.payload?.contentDigest).catch(() => null);
+    for (const member of members) {
+      if (isOfficialDocument(member)) continue;
+      await this.learning.recordDecided(job.userId, member.id, decided, member.payload?.contentDigest).catch(() => null);
+    }
   }
 
   /**
@@ -800,7 +824,7 @@ export class MethodConsolidation {
     if (!methodId) throw new HttpError(400, "consolidate_payload_invalid", "An integrate job must name a method.");
     const subject = await this.#get(job, methodId);
     if (!subject) throw new HttpError(409,'geo_learning_target_unverified','The method is outside this learning scope.');
-    const neighbours = (await this.#library(job)).filter((item) => item.id !== methodId && item.payload?.status !== "retired");
+    const neighbours = [...(await this.#library(job)).filter((item) => item.id !== methodId && item.payload?.status !== "retired"), ...await this.#officialDocs(job)];
     const nearest = await this.#nearestTo(subject, neighbours);
     const group = [subject, ...nearest];
     if (group.length < CONSOLIDATION_LIMITS.minGroupSize) {
@@ -894,6 +918,8 @@ export class MethodConsolidation {
         links = skills.flatMap((source) => skills.filter((id) => id !== source).map((target) => ({ source, target })));
       }
       for (const source of [...new Set(links.map((link) => link.source))]) {
+        // An official method holds no relation: the person's method that relates to it does.
+        if (isOfficialDocument(byId.get(source))) continue;
         // What the method holds now, not what the pass listed it with: a pass that reads a group again must not count a fact twice.
         const held = (await this.#get(job, source).catch(() => null))?.payload?.learning?.relations ?? byId.get(source)?.payload?.learning?.relations ?? [];
         const relations = links.filter((link) => link.source === source)
@@ -1031,9 +1057,11 @@ export class MethodConsolidation {
           description: member.payload?.frontmatter?.description,
           digest: member.payload?.contentDigest,
           body: member.payload?.body,
+          ...(isOfficialDocument(member) ? { readOnly: true } : {}),
         })),
       },
       question: "Decide how the methods in method-relations-input.json relate, using the method-relations capability with action `decide`. "
+        + (members.some(isOfficialDocument) ? "A method marked readOnly is the platform's own: a relation may name it, and nothing may change it. " : "")
         + "Return ASSIGNMENT, SKILLS, RELATION_TYPE and REASON for each group you find, naming methods by the id the input gives them. "
         + "For subset also return WIDER, the id of the method that does everything the other does; for supersedes also return REPLACES, the id of the method that replaces the other. "
         + "shared_part is for a concrete shared sub-capability, never for vague topical similarity. "
@@ -1094,6 +1122,7 @@ export class MethodConsolidation {
           digest: member.payload?.contentDigest,
           frontmatter: member.payload?.frontmatter,
           body: member.payload?.body,
+          ...(isOfficialDocument(member) ? { readOnly: true } : {}),
         })),
       };
     const generationInputRef=policy?.kind==='geo-project'?await this.contextProvenance.freezeInput(job.userId,policy,dispatchId,input,members):null;
@@ -1104,10 +1133,13 @@ export class MethodConsolidation {
         + "The analyser's ASSIGNMENT and RELATION_TYPE are authoritative and may not be changed. "
         + "Preserve every procedure, constraint, edge case and verification check of each source method. "
         + "Add reuse references only near the passages they affect. Invent no tools, scripts, files or dependencies. "
-        + "Each rewritten method must still read as a standalone SKILL.md.",
+        + "Each rewritten method must still read as a standalone SKILL.md."
+        + (members.some(isOfficialDocument) ? " A method marked readOnly is the platform's own: reuse it through depends_on at its digest, and never rewrite or retire it." : ""),
     });
     if (!result) return { applied: 0, refusals, completed: false };
-    const revisions = result.output?.revisions ?? [];
+    // A revision aimed at an official member is not the builder's to make: an official method is read-only to the loop.
+    const readOnly = new Set(members.filter(isOfficialDocument).map((member) => String(member.id)));
+    const revisions = (result.output?.revisions ?? []).filter((/** @type {any} */ revision) => !readOnly.has(String(revision?.methodId ?? "")));
     if(generationInputRef)return this.#applySharedBuild(job,members,assignments,resolved,revisions,{policy,generationInputRef,dispatchId,resultDigest:this.contextProvenance.digest(result.output)},refusals);
     let applied = 0;
     const created = new Map();
