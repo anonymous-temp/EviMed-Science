@@ -420,10 +420,12 @@ async function worker(args) {
         if (balance !== null && balance < BUDGET_FLOOR) { status(`stop: model balance ${balance} below ${BUDGET_FLOOR}`); return; }
         if (args.gateLoad) {
           let waited = 0;
-          while (loadAverage() > args.gateLoad) {
+          // The other slot may finish this task (or the whole pass) meanwhile: never wait on a task that has its record.
+          while (loadAverage() > args.gateLoad && !fsSync.existsSync(recordFile)) {
             if (waited % 600_000 === 0) status(`load ${loadAverage()} above ${args.gateLoad}: this slot waits`);
             await sleep(60_000); waited += 60_000;
           }
+          if (fsSync.existsSync(recordFile)) continue;
         }
         await runTask(byId.get(id), phase);
       }
