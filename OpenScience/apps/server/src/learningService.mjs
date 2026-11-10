@@ -477,6 +477,10 @@ export class LearningService {
     const learning = withoutRetiredLearningKeys(resetLearningForDigest(current.payload.learning, digest));
     const bodyChanged = digest !== current.payload.contentDigest;
     const at = this.now().toISOString();
+    if (bodyChanged && input.provenance?.trigger === "correction") {
+      const rewrites = learning.rewrites ?? { count: 0, dates: [] };
+      learning.rewrites = { count: rewrites.count + 1, dates: [...rewrites.dates, at] };
+    }
     const steps = cleanMethodSteps(input.steps);
     const scope = cleanMethodScope(input.scope);
     // Where the method was first learnt stays its source; a later lesson from

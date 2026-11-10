@@ -1587,10 +1587,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         methodsInvoked: derived.methodsInvoked,
       });
     }
-    // A method the run read without any delegation to hang it on. It earns no
-    // observation — no mounted digest, no deliverable verdict — but a run that
-    // answered directly out of a learned method and left no trace of it is how
-    // a whole product line comes to look like it never uses the library.
+    // A read with no proven mount stays a read. Mounted ordinary conversations
+    // already earned one run observation above, even without a workflow receipt.
     if (derived.invokedWithoutMount.length) {
       await securityAudit(config, "learning.observation.record", "unmounted", {
         userId: project.userId, projectId: project.id, runId: run.id,

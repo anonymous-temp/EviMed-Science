@@ -525,8 +525,9 @@ test("an answer-line run that opened a carried method's card file names it in th
   assert.deepEqual(derived.methodsInvoked, [{ name: "triage", digest: DIGEST_A }],
     "the digest is the one the file was carried as, which is what a later correction resolves to a revision");
   assert.deepEqual(derived.methodsLoaded.map((entry) => entry.name), ["triage", "quoting"]);
-  assert.deepEqual(derived.invokedWithoutMount, [{ id: "method:learned:triage", name: "triage" }], "still the `read` count: there is no verdict to credit");
-  assert.deepEqual(derived.observations, [], "and still no observation: nothing was delivered");
+  assert.deepEqual(derived.invokedWithoutMount, [], "mounted bytes and their opening are both proven");
+  assert.equal(derived.observations.length, 1);
+  assert.equal(derived.observations[0].observation.outcome, "opened");
   assert.deepEqual(derived.eligible, ["method:learned:quoting"], "the card nobody opened was passed over");
   assert.deepEqual(derived.carried, ["method:learned:triage", "method:learned:quoting"]);
   assert.equal(derived.answered, true);
@@ -610,4 +611,23 @@ test("a method amended since it was carried is in the ledger row under the diges
   assert.deepEqual(derived.methodsInvoked, [{ name: "triage", digest: DIGEST_A }]);
   assert.deepEqual(derived.invokedWithoutMount, [], "crediting the new text with the old text's reading is the confusion `(method, digest)` keying exists to prevent");
   assert.ok(!derived.eligible.includes("method:learned:triage"), "and it was not passed over either");
+});
+
+test("an ordinary mounted method opened repeatedly earns one use, no acceptance or harm verdict", async () => {
+  const { emptyLearning, foldObservation, methodHarmTest } = await import("@evimed/domain");
+  const input = { run: { id: "ordinary", sessionId: "root", status: "succeeded" },
+    projection: { mountedMethods: [{ name: "triage", digest: DIGEST_A }] }, methods: METHODS,
+    sessions: [session("root", [toSkillName("triage", "capsule"), toSkillName("triage", "capsule")])] };
+  const derived = runMethodObservations(input);
+  assert.equal(derived.observations.length, 1);
+  assert.deepEqual(derived.invokedWithoutMount, []);
+  let learning = emptyLearning(DIGEST_A);
+  for (const _attempt of [1, 2]) for (const entry of derived.observations) learning = foldObservation(learning, entry.observation);
+  assert.equal(learning.counts.loaded, 1);
+  assert.equal(learning.counts.invoked, 1);
+  assert.equal(learning.counts.succeeded, 0, "an opening is not the person's acceptance");
+  assert.equal(methodHarmTest(learning).runs, 0, "unknown reaction is not a clean harm-test run");
+  assert.equal(runMethodObservations({ ...input, projection: {} }).invokedWithoutMount.length, 1);
+  assert.equal(runMethodObservations({ ...input, projection: { mountedMethods: [{ name: "triage", digest: DIGEST_B }] } }).observations.length, 0);
+  assert.equal(runMethodObservations({ ...input, run: { ...input.run, status: "failed" } }).observations.length, 1, "an interrupted run still opened the method");
 });

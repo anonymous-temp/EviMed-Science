@@ -398,13 +398,14 @@ export class FeedbackEvents {
    * a next message about something else. A run that was corrected at any time, by a steer or a follow-up read that way or a result corrected
    * in the page, is not in it, however late the correction came (`learningRunOutcome` says the same in code).
    *
+   * Replay passes `requireShape: false`: acceptance is independent of leaving a file. Routine matching keeps the shape requirement.
    * The shape comes from an event of the run that carries one (the settling `silent` row, or the follow-up), so a use that arrives after
    * the settling needs none of its own; the window is the one in which that event was recorded.
    *
-   * @param {string} userId @param {{ scope: string, from: Date, to: Date, limit?: number, projectId?: string|null, toolchainEnabled?: boolean }} window
+   * @param {string} userId @param {{ scope: string, from: Date, to: Date, limit?: number, projectId?: string|null, toolchainEnabled?: boolean, requireShape?: boolean }} window
    * @returns {Promise<{ runId: string, projectId: string | null, at: string, endedAt: string | null, shape: any[], toolchain?: any }[]>}
    */
-  async cleanSettledRuns(userId, { scope, from, to, limit = 200, projectId = undefined, toolchainEnabled = false }) {
+  async cleanSettledRuns(userId, { scope, from, to, limit = 200, projectId = undefined, toolchainEnabled = false, requireShape = true }) {
     productInteger(limit, 1, 1000);
     if (projectId != null) productId(projectId,"project");
     await migrateProductStore(this.database);
@@ -413,7 +414,7 @@ export class FeedbackEvents {
       WHERE e.user_id=$1 AND e.trigger_kind='learning-evidence' AND e.subject_type='run' AND e.detail->>'scope'=$2
         AND e.occurred_at >= $3 AND e.occurred_at < $4
         AND ($7::boolean=false OR e.project_id IS NOT DISTINCT FROM $8::text)
-        AND e.detail->>'evidence' IN ('silent','follow-up','used') AND (e.detail ? 'shape' OR ($9::boolean AND e.detail ? 'toolchain'))
+        AND e.detail->>'evidence' IN ('silent','follow-up','used') AND ($10::boolean=false OR e.detail ? 'shape' OR ($9::boolean AND e.detail ? 'toolchain'))
         AND EXISTS (SELECT 1 FROM evimed_product.feedback_events k
           WHERE k.user_id=e.user_id AND k.trigger_kind='learning-evidence' AND k.subject_type='run' AND k.subject_id=e.subject_id
             AND (k.detail->>'evidence'='used' OR (k.detail->>'evidence'='follow-up' AND k.detail->>'verdict'=ANY($6::text[]))))
@@ -423,7 +424,7 @@ export class FeedbackEvents {
               OR (c.detail->>'evidence' IN ('steer','follow-up') AND c.detail->>'verdict'=ANY($5::text[]))))
       ORDER BY e.subject_id, e.occurred_at, e.id`,
     [productId(userId, "user"), scope, from.toISOString(), to.toISOString(), [...LEARNING_CORRECTION_VERDICTS], [...LEARNING_ACCEPT_VERDICTS],
-      projectId !== undefined, projectId ?? null, toolchainEnabled]);
+      projectId !== undefined, projectId ?? null, toolchainEnabled, requireShape]);
     return result.rows
       .map((/** @type {any} */ row) => ({ runId: String(row.subject_id), projectId: row.project_id ?? null, at: new Date(row.occurred_at).toISOString(),
         endedAt: Number.isFinite(Date.parse(String(row.ended_at ?? ""))) ? new Date(row.ended_at).toISOString() : null, shape: Array.isArray(row.shape) ? row.shape : [],

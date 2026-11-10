@@ -94,6 +94,8 @@ export function methodView(document) {
     // checkable half of 「从你的 3 次研究学到」. Counted from the observations
     // themselves, never asserted by whatever wrote the method.
     trajectories: successfulFamilies(payload.learning ?? {}).length,
+    // Corrective rewrites belong to the method identity, across body-counter resets.
+    rewrites: payload.learning?.rewrites ?? { count: 0, dates: [] },
     contentDigest: payload.contentDigest ?? "",
     mountedDigest: mountedMethodDigest(payload, (text) => createHash("sha256").update(text).digest("hex")),
     origin: payload.provenance?.origin ?? "inferred",

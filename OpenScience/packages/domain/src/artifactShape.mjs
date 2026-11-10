@@ -25,7 +25,7 @@ export const ARTIFACT_SHAPE_MIN_LABELS = 2
 /** The overlap (Jaccard) two label sets need to be the same shape. */
 export const ARTIFACT_SHAPE_MATCH_JACCARD = 0.5
 
-/** @typedef {{ format: string, labels: string[] }} ArtifactShape */
+/** @typedef {{ format: string, labels: string[], scriptRelated?: boolean }} ArtifactShape */
 
 /**
  * A structural label cleaned for comparison: lower case, white space folded, every run of digits one `#` (so "Q3 summary" and
@@ -59,7 +59,7 @@ export function cleanArtifactShape(value) {
     if (label && !labels.includes(label)) labels.push(label)
     if (labels.length >= ARTIFACT_SHAPE_LIMITS.labels) break
   }
-  return { format, labels }
+  return { format, labels, ...(record.scriptRelated === true ? { scriptRelated: true } : {}) }
 }
 
 /**
@@ -90,18 +90,31 @@ function jaccard(left, right) {
 }
 
 /**
- * Whether two runs left the same kind of thing: the same formats, and for each format either labels that overlap enough or too
- * little structure on a side to say. A run with no file has no shape and matches nothing.
+ * Whether two deliveries share a shape: matching formats and structural labels.
+ * With an ambiguous inventory, a strict format superset may omit only extras
+ * whose same-run script lineage was witnessed by the server. A run without
+ * files matches nothing; unknown extras and mismatched shared structure fail.
  * @param {unknown} left @param {unknown} right @returns {boolean}
  */
 export function artifactShapesMatch(left, right) {
   const a = cleanArtifactShapes(left)
   const b = cleanArtifactShapes(right)
   if (!a.length || !b.length) return false
-  if (a.map((shape) => shape.format).join(',') !== b.map((shape) => shape.format).join(',')) return false
+  if (a.map((shape) => shape.format).join(',') !== b.map((shape) => shape.format).join(',')) {
+    // A strict format superset may differ only by files linked to a script
+    // this run itself wrote and executed. Unknown extras remain significant.
+    const formatsA = new Set(a.map(shape => shape.format))
+    const formatsB = new Set(b.map(shape => shape.format))
+    const aContainsB = [...formatsB].every(format => formatsA.has(format))
+    const bContainsA = [...formatsA].every(format => formatsB.has(format))
+    if (aContainsB === bContainsA) return false
+    const larger = aContainsB ? a : b
+    const smaller = aContainsB ? formatsB : formatsA
+    if (larger.some(shape => !smaller.has(shape.format) && !shape.scriptRelated)) return false
+  }
   /** @param {ArtifactShape[]} shapes @param {string} format */
   const labelsOf = (shapes, format) => [...new Set(shapes.filter((shape) => shape.format === format).flatMap((shape) => shape.labels))]
-  for (const format of new Set(a.map((shape) => shape.format))) {
+  for (const format of new Set(a.map((shape) => shape.format).filter(candidate => b.some(shape => shape.format === candidate)))) {
     const first = labelsOf(a, format)
     const second = labelsOf(b, format)
     if (first.length < ARTIFACT_SHAPE_MIN_LABELS || second.length < ARTIFACT_SHAPE_MIN_LABELS) continue

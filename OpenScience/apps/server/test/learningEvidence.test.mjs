@@ -691,3 +691,22 @@ test('a VCR automatic completion does not consume the human reaction to the orig
  const result=await run.evidence.onNewTurn(project,{sessionId:'ses_1',text:'不对，每节只要三行',requestId:'after_vcr'});
  assert.equal(result.runId,'run_prev');assert.equal(run.ledger.rows[0].runId,'run_prev');
 });
+
+test("routine shapes describe presented or receipt-classified deliveries and exclude varying intermediate files", async () => {
+  const runs = [];
+  const state = setup({ runs, answer: JSON.stringify({ verdict: "accept" }), shapes: {
+    "report.docx": { format: "docx", labels: ["summary", "findings"] },
+    "build.py": { format: "py", labels: ["build_report"] }, "copy.md": { format: "md", labels: ["summary", "findings"] },
+  } });
+  for (let i = 0; i < 3; i++) {
+    const run = finished({ id: `delivered_${i}`, sessionId: `delivered_session_${i}`,
+      outputFiles: ["report.docx", ...[[], ["build.py"], ["copy.md"]][i]],
+      ...(i === 1 ? { artifactKinds: { "report.docx": "deliverable", "build.py": "work" } } : { presentedFiles: ["report.docx"] }) });
+    runs.push(run);
+    await state.evidence.afterRun(project, run);
+    await state.evidence.onNewTurn(project, { sessionId: run.sessionId, text: "Looks good, thank you", requestId: `accept_delivery_${i}` });
+    await state.evidence.settle({ job: { userId: project.userId, projectId: project.id, payload: { runId: run.id } } });
+  }
+  assert.equal(state.lessons.length, 1);
+  assert.ok(state.ledger.rows.filter(row => row.detail.shape).every(row => row.detail.shape.length === 1 && row.detail.shape[0].format === "docx"));
+});

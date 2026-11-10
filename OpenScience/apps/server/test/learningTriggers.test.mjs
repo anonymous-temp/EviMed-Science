@@ -123,6 +123,15 @@ test("the ordinary conversation can induce a routine: its scope is `conversation
   assert.equal(lesson?.payload.scope, "conversation");
 });
 
+test("routine peers keep matching a delivered document despite proven same-run script extras", () => {
+  const family = familyOf(2).map((peer, index) => ({ ...peer, shape: [...peer.shape,
+    { format: index ? "py" : "md", labels: [], scriptRelated: true }] }));
+  const input = { run: run({ effectiveAgentId: "open-domain-answer" }), scope: CONVERSATION_SCOPE, shape: weekly, family };
+  assert.deepEqual(routineLessonFor(input)?.payload.peers.map(peer => peer.runId), ["fam_0", "fam_1"]);
+  assert.equal(routineLessonFor({ ...input, family: family.map(peer => ({ ...peer,
+    shape: peer.shape.map(shape => ({ ...shape, scriptRelated: false })) })) }), null, "an extra without lineage is still part of the work");
+});
+
 test("runs that left something else do not count towards a routine, and a run with no file teaches none", () => {
   const subject = run();
   const decks = [{ format: "pptx", labels: ["background", "method"] }];
