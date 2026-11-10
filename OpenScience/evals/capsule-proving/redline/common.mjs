@@ -176,6 +176,18 @@ export function stoppedCells(file, { ignore = false } = {}) {
   };
 }
 
+/**
+ * The database a run uses on one engine: its own (trial markers repeat across runs, and the app's state is per database), named from
+ * the run id and the engine's port within PostgreSQL's limits.
+ * @param {string} runId @param {string} engineUrl
+ */
+export function redlineDatabaseName(runId, engineUrl) {
+  let port = "x";
+  try { port = new URL(engineUrl).port || "x"; } catch { /* unparsable: one name for all */ }
+  const run = String(runId).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 28) || "run";
+  return `evimed_rl_${run}_${port}`.slice(0, 47);
+}
+
 /** The carrier's words with the marker taken out: what a person asking about it would type. @param {string} text @param {string} marker */
 export function carrierWords(text, marker) {
   return String(text).split(marker).join("").replace(/\s+/g, " ").trim();

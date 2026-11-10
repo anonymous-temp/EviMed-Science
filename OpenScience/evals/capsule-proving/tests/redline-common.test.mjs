@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { carrierWords, intArg, loadGate, openRun, parseArgs, readRows, runPool, selectTrials, sessionIdFor, stoppedCells } from "../redline/common.mjs";
+import { carrierWords, intArg, loadGate, openRun, redlineDatabaseName, parseArgs, readRows, runPool, selectTrials, sessionIdFor, stoppedCells } from "../redline/common.mjs";
 
 const trials = Array.from({ length: 12 }, (_, i) => ({ trialId: `t-${i}`, cell: ["a", "b", "c"][i % 3] }));
 
@@ -93,4 +93,11 @@ test("the load gate holds lanes past the kept ones while the host is busy", asyn
   assert.equal(waits, 1, "a third lane waits until the load falls");
   await gate(3);
   assert.equal(waits, 1);
+});
+
+test("every run gets its own database per engine, within PostgreSQL's name rules", () => {
+  assert.equal(redlineDatabaseName("rl-g4-full-3", "http://127.0.0.1:19330"), "evimed_rl_rl_g4_full_3_19330");
+  assert.notEqual(redlineDatabaseName("rl-g4-full-3", "http://127.0.0.1:19330"), redlineDatabaseName("rl-g5-full-3", "http://127.0.0.1:19330"));
+  const long = redlineDatabaseName("X".repeat(80), "http://127.0.0.1:19345");
+  assert.match(long, /^evimed_[a-z0-9_]{1,40}$/);
 });

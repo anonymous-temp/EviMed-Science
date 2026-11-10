@@ -58,27 +58,31 @@ export function zipPathsWith(bytes, marker, prefix = "") {
   return found;
 }
 
-/** @type {WeakMap<any, Promise<{ schema: string, table: string, columns: string[] }[]>>} */
+/** @typedef {{ schema: string, table: string, columns: string[], owners: string[] }} TextTable */
+/** @type {WeakMap<any, Promise<TextTable[]>>} */
 const columnCache = new WeakMap();
+/** Columns that name the account a row belongs to. */
+const OWNER_COLUMNS = new Set(["user_id", "owner_id"]);
 /** @param {any} database */
 function textColumns(database) {
   if (!columnCache.has(database)) {
-    columnCache.set(database, database.query(`SELECT c.table_schema, c.table_name, c.column_name FROM information_schema.columns c
+    columnCache.set(database, database.query(`SELECT c.table_schema, c.table_name, c.column_name, c.data_type, c.udt_name FROM information_schema.columns c
         JOIN information_schema.tables t ON t.table_schema=c.table_schema AND t.table_name=c.table_name AND t.table_type='BASE TABLE'
         WHERE c.table_schema NOT IN ('pg_catalog','information_schema') AND c.table_schema NOT LIKE 'pg_%'
-          AND (c.data_type IN ('text','character varying','json','jsonb') OR (c.data_type='ARRAY' AND c.udt_name IN ('_text','_varchar')))
         ORDER BY 1, 2, 3`).then((/** @type {any} */ result) => {
-      /** @type {Map<string, { schema: string, table: string, columns: string[] }>} */
+      /** @type {Map<string, TextTable>} */
       const tables = new Map();
       for (const row of result.rows) {
         const key = `${row.table_schema}.${row.table_name}`;
-        if (!tables.has(key)) tables.set(key, { schema: row.table_schema, table: row.table_name, columns: [] });
-        /** @type {any} */ (tables.get(key)).columns.push(row.column_name);
+        if (!tables.has(key)) tables.set(key, { schema: row.table_schema, table: row.table_name, columns: [], owners: [] });
+        const table = /** @type {TextTable} */ (tables.get(key));
+        if (OWNER_COLUMNS.has(row.column_name)) table.owners.push(row.column_name);
+        if (["text", "character varying", "json", "jsonb"].includes(row.data_type) || (row.data_type === "ARRAY" && ["_text", "_varchar"].includes(row.udt_name))) table.columns.push(row.column_name);
       }
-      return [...tables.values()];
+      return [...tables.values()].filter((table) => table.columns.length);
     }));
   }
-  return /** @type {Promise<any>} */ (columnCache.get(database));
+  return /** @type {Promise<TextTable[]>} */ (columnCache.get(database));
 }
 /** Forget the column list (a new table appeared after the first scan, e.g. a lazily migrated module). @param {any} database */
 export function refreshColumns(database) { columnCache.delete(database); }
@@ -86,18 +90,21 @@ export function refreshColumns(database) { columnCache.delete(database); }
 const ident = (/** @type {string} */ name) => `"${String(name).replaceAll('"', '""')}"`;
 
 /**
- * Every text column of the database holding the marker: `schema.table.column` → rows. A unique marker needs no owner filter.
- * @param {any} database @param {string} marker
+ * Every text column of the database holding the marker in a row of this account (`schema.table.column` → rows). A table without an
+ * account column is read whole: the marker is unique within one run's database, and a run never shares its database.
+ * @param {any} database @param {string} marker @param {string} userId
  */
-export async function databaseColumnsWith(database, marker) {
+export async function databaseColumnsWith(database, marker, userId) {
   const pattern = `%${marker.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;  // matched with ILIKE: any letter case
   /** @type {Record<string, number>} */
   const found = {};
-  for (const { schema, table, columns } of await textColumns(database)) {
+  for (const { schema, table, columns, owners } of await textColumns(database)) {
     const tests = columns.map((column) => `(${ident(column)}::text ILIKE $1)`);
+    const owned = owners.length ? ` AND (${owners.map((column) => `${ident(column)}::text = $2`).join(" OR ")})` : "";
     let result;
     try {
-      result = await database.query(`SELECT ${tests.map((test, index) => `${test} AS m${index}`).join(", ")} FROM ${ident(schema)}.${ident(table)} WHERE ${tests.join(" OR ")} LIMIT 200`, [pattern]);
+      result = await database.query(`SELECT ${tests.map((test, index) => `${test} AS m${index}`).join(", ")} FROM ${ident(schema)}.${ident(table)} WHERE (${tests.join(" OR ")})${owned} LIMIT 200`,
+        owners.length ? [pattern, userId] : [pattern]);
     } catch (error) {
       if (/** @type {any} */ (error)?.code === "42P01") continue; // dropped meanwhile
       throw error;

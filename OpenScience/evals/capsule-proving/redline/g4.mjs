@@ -26,7 +26,7 @@ import { pathToFileURL } from "node:url";
 
 import { G4_DELETE_VIA, G4_PLANT_VIA } from "../synthetic/trialPlans.mjs";
 import { classifyFindings, summarizeG4 } from "./classify.mjs";
-import { carrierWords, gitState, intArg, loadGate, milestone, openRun, parseArgs, runPool, selectTrials, sessionIdFor, stoppedCells as openStoppedCells } from "./common.mjs";
+import { carrierWords, gitState, intArg, loadGate, milestone, openRun, redlineDatabaseName, parseArgs, runPool, selectTrials, sessionIdFor, stoppedCells as openStoppedCells } from "./common.mjs";
 import { capsulePreview, databaseColumnsWith, engineFilesWith, exportPaths, holds, markerLinePrints, modelSurfaces, pageSurfaces, servedMemoryFiles,
   staleOrigins, vectorHits } from "./scan.mjs";
 import { openStack } from "./stack.mjs";
@@ -142,7 +142,7 @@ async function scanAll(stack, user, trial, prints) {
   const engine = engineHeld ? await engineFilesWith(stack.sessions, user.id, marker) : { files: 0, byPlace: {} };
   for (const place of ["engine-files", "engine-summaries", "archive", "raw-history", "privacy-tree", "engine-other"]) findings[place] = engine.byPlace[place] ?? [];
   findings.vectors = engineHeld ? await vectorHits(stack.sessions, user.id, marker).catch(() => []) : [];
-  findings.ledger = Object.keys(await databaseColumnsWith(stack.database, marker));
+  findings.ledger = Object.keys(await databaseColumnsWith(stack.database, marker, user.id));
   findings["line-origin-index"] = (await staleOrigins(stack.database, user.id, prints)) > 0 ? ["evimed_memory.native_line_origins.fingerprint"] : [];
   if (accountHeld) {
     const [page, model, exported, capsule] = await Promise.all([
@@ -248,7 +248,7 @@ async function main() {
   const shard = intArg(args.shard, 0), shards = Math.max(1, intArg(args.shards, 1));
   const engineUrl = String(args["engine-url"] ?? "http://127.0.0.1:19330");
   const options = { engineUrl, shard, shards, concurrency: Math.max(1, intArg(args.concurrency, 2)), limit: intArg(args.limit, 0), perCell: intArg(args["per-cell"], 0),
-    trials: String(args.trials ?? "/srv/evimed/data/memdata-data/redline/g4-trials.json"), databaseName: String(args["database-name"] ?? `evimed_redline_${new URL(engineUrl).port || "x"}`) };
+    trials: String(args.trials ?? "/srv/evimed/data/memdata-data/redline/g4-trials.json"), databaseName: String(args["database-name"] ?? redlineDatabaseName(runId, engineUrl)) };
   const plan = JSON.parse(await readFile(options.trials, "utf8"));
   const runner = await openRun({ runDir, meta: { runId, kind: "g4", ...gitState(path.resolve(import.meta.dirname, "../../..")), automated: true,
     plan: { schema: plan.schema, seed: plan.seed, count: plan.count }, options } });
