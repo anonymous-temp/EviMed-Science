@@ -65,29 +65,25 @@ const INSTRUCTION = [
   'For corrected or attribution_wrong, supply a single corrected memory line; preserve the appropriate provenance label in its wording.',
   'Copy every hard token in a correction from that line’s own sources. Do not invent names, numbers, dates or identifiers.',
   'Use unsupported only when the sources do not support the line and no grounded correction can be made. Otherwise use supported.',
-  'Return one result per index, with corrected set to null unless correcting. Return JSON only.',
+  'Return JSON only, in exactly this shape: {"results":[{"index":0,"verdict":"supported","corrected":null}]}.',
+  'Return exactly one result per input index, using integer indexes and only the fields shown. No extra fields or missing indexes.',
+  'The verdict must be supported, unsupported, corrected, or attribution_wrong. corrected must be null unless correcting, otherwise a single non-empty string.',
 ].join(' ');
 
 /** @param {string} model @param {any[]} lines */
 export function verificationJudgeRequest(model, lines) {
   return { model, thinking: { type: 'disabled' }, temperature: 0, max_tokens: 6000,
-    response_format: { type: 'json_schema', json_schema: { name: 'memory_verification', strict: true, schema: {
-      type: 'object', additionalProperties: false, required: ['results'], properties: { results: { type: 'array', items: {
-        type: 'object', additionalProperties: false, required: ['index', 'verdict', 'corrected'], properties: {
-          index: { type: 'integer' }, verdict: { type: 'string', enum: VERDICTS }, corrected: { type: ['string', 'null'] },
-        },
-      } } },
-    } } }, messages: [{ role: 'system', content: INSTRUCTION }, { role: 'user', content: JSON.stringify({ lines }) }] };
+    response_format: { type: 'json_object' }, messages: [{ role: 'system', content: INSTRUCTION }, { role: 'user', content: JSON.stringify({ lines }) }] };
 }
 
 /** Strict local validation too: malformed/partial batches and fabricated corrections leave every line alone.
  * @param {unknown} content @param {any[]} lines @returns {Map<number,any>|null} */
 export function parseVerificationJudgement(content, lines) {
   let value; try { value = JSON.parse(String(content ?? '')); } catch { return null; }
-  if (!value || Object.keys(value).join() !== 'results' || !Array.isArray(value.results) || value.results.length !== lines.length) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).join() !== 'results' || !Array.isArray(value.results) || value.results.length !== lines.length) return null;
   const result = new Map();
   for (const row of value.results) {
-    if (!row || Object.keys(row).sort().join() !== 'corrected,index,verdict' || !Number.isInteger(row.index)
+    if (!row || typeof row !== 'object' || Array.isArray(row) || Object.keys(row).sort().join() !== 'corrected,index,verdict' || !Number.isInteger(row.index)
       || row.index < 0 || row.index >= lines.length || result.has(row.index) || !VERDICTS.includes(row.verdict)) return null;
     const fixes = row.verdict === 'corrected' || row.verdict === 'attribution_wrong';
     if (fixes) {
@@ -100,7 +96,7 @@ export function parseVerificationJudgement(content, lines) {
   return result;
 }
 
-/** One call per batch, per-account UTC daily cap, counted before the call (as with createRejectionJudge).
+/** One retry for an invalid JSON verdict; each attempt counts toward the per-account UTC daily cap before the call.
  * @param {{config:any,usageLedger?:any,fetchImpl?:typeof fetch,now?:()=>Date,callModel?:typeof callModelForControlPlane}} dependencies */
 export function createVerificationJudge({ config, usageLedger = null, fetchImpl = globalThis.fetch, now = () => new Date(), callModel = callModelForControlPlane }) {
   const spent = new Map();
@@ -110,21 +106,28 @@ export function createVerificationJudge({ config, usageLedger = null, fetchImpl 
       if (!lines.length) return nothing;
       const model = String(config.memoryExtractionModel || config.deepseekModel || '');
       if (!model || config.deepseekProviderEnabled === false || !config.deepseekApiKey) { recordVerificationJudge('unavailable'); return nothing; }
-      const day = now().toISOString().slice(0, 10), held = spent.get(userId);
-      const calls = held?.day === day ? held.calls : 0;
-      if (calls >= Math.max(0, Number(config.nativeMemoryVerifyDailyCalls ?? 40))) { recordVerificationJudge('over_budget'); return nothing; }
-      spent.set(userId, { day, calls: calls + 1 });
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), Math.max(1000, Math.min(120000, Number(config.memoryExtractionTimeoutMs ?? 30000))));
-      recordVerificationJudge('asked');
-      try {
-        const body = await callModel({ config, usageLedger, fetchImpl }, { userId, projectId: 'default', runId: null,
-          purpose: 'memory-extraction', signal: controller.signal, body: verificationJudgeRequest(model, lines) });
-        const results = parseVerificationJudgement(body?.choices?.[0]?.message?.content, lines);
-        if (!results) recordVerificationJudge('failed');
-        return { results: results ?? new Map(), calls: 1 };
-      } catch { recordVerificationJudge('failed'); return { results: new Map(), calls: 1 }; }
-      finally { clearTimeout(timer); }
+      let made = 0;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const day = now().toISOString().slice(0, 10), held = spent.get(userId);
+        const calls = held?.day === day ? held.calls : 0;
+        if (calls >= Math.max(0, Number(config.nativeMemoryVerifyDailyCalls ?? 40))) {
+          recordVerificationJudge('over_budget'); break;
+        }
+        spent.set(userId, { day, calls: calls + 1 });
+        made++;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), Math.max(1000, Math.min(120000, Number(config.memoryExtractionTimeoutMs ?? 30000))));
+        recordVerificationJudge('asked');
+        try {
+          const body = await callModel({ config, usageLedger, fetchImpl }, { userId, projectId: 'default', runId: null,
+            purpose: 'memory-extraction', signal: controller.signal, body: verificationJudgeRequest(model, lines) });
+          const results = parseVerificationJudgement(body?.choices?.[0]?.message?.content, lines);
+          if (results) return { results, calls: made };
+          recordVerificationJudge('failed');
+        } catch { recordVerificationJudge('failed'); break; }
+        finally { clearTimeout(timer); }
+      }
+      return { results: new Map(), calls: made };
     },
   };
 }
@@ -175,7 +178,7 @@ export class NativeMemoryVerification {
     } catch { return []; }
   }
 
-  /** One model call per bounded batch. Literal support is also read for temporal/attribution errors, never inferred by regex. */
+  /** Bounded batch judging with one malformed-output retry. Literal support is also read for temporal/attribution errors. */
   async assess(userId, entries) {
     const results = [], batchSize = 8;
     let calls = 0;

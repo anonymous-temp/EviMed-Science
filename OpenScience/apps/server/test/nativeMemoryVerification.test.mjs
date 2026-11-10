@@ -45,7 +45,11 @@ test('strict judge checks outdated values and wrong attribution in one batch, wi
   let calls = 0;
   const judge = createVerificationJudge({ config: { deepseekModel: 'test', deepseekApiKey: 'test', nativeMemoryVerifyDailyCalls: 1 }, callModel: async (_deps, request) => {
     calls++;
-    assert.equal(request.body.response_format.json_schema.strict, true);
+    assert.deepEqual(request.body.response_format, { type: 'json_object' });
+    assert.equal(JSON.stringify(request.body).includes('json_schema'), false);
+    assert.deepEqual(request.body.thinking, { type: 'disabled' });
+    assert.ok(request.body.messages[0].content.includes('JSON'));
+    assert.ok(request.body.messages[0].content.includes('{"results":[{"index":0,"verdict":"supported","corrected":null}]}'));
     return response([
       { index: 0, verdict: 'corrected', corrected: 'Weight 68 kg.' },
       { index: 1, verdict: 'attribution_wrong', corrected: 'The assistant suggested trying a vegetarian diet.' },
@@ -67,6 +71,12 @@ test('invalid JSON, duplicate indexes, extra fields and invented correction toke
   const lines = [{ text: 'Dose 99 mg.', sources: [source('Dose 12 mg.')] }];
   for (const value of [
     'invalid',
+    'null',
+    '[]',
+    JSON.stringify({ results: [{ verdict: 'unsupported', corrected: null }] }),
+    JSON.stringify({ results: [{ index: 0, verdict: 'invented', corrected: null }] }),
+    JSON.stringify({ results: [{ index: 0, verdict: 'corrected' }] }),
+    JSON.stringify({ results: [{ index: 1, verdict: 'supported', corrected: null }] }),
     JSON.stringify({ results: [{ index: 0, verdict: 'corrected', corrected: 'Dose 13 mg.' }] }),
     JSON.stringify({ results: [{ index: 0, verdict: 'unsupported', corrected: null, extra: true }] }),
     JSON.stringify({ results: [] }),
@@ -91,4 +101,43 @@ test('the daily cap counts failed calls before asking and resets on the next UTC
   date = new Date('2026-11-11T00:00:01Z');
   assert.equal((await judge.judge(request)).calls, 1);
   assert.equal(calls, 2);
+});
+
+
+test('invalid judge output retries once, charging both attempts and accepting only a valid batch', async () => {
+  const lines = [{ text: 'Dose 99 mg.', sources: [source('Dose 12 mg.')] }];
+  const fixed = [{ index: 0, verdict: 'corrected', corrected: 'Dose 12 mg.' }];
+  for (const first of ['not JSON', JSON.stringify({ results: [{ index: 0, verdict: 'corrected', corrected: 'Dose 13 mg.' }] })]) {
+    let calls = 0;
+    const judge = createVerificationJudge({ config: { deepseekModel: 'test', deepseekApiKey: 'test', nativeMemoryVerifyDailyCalls: 2 },
+      callModel: async (_deps, request) => {
+        assert.deepEqual(request.body.response_format, { type: 'json_object' });
+        return ++calls === 1 ? { choices: [{ message: { content: first } }] } : response(fixed);
+      } });
+    const result = await judge.judge({ userId: 'retry', lines });
+    assert.equal(result.calls, 2);
+    assert.equal(result.results.get(0).corrected, 'Dose 12 mg.');
+    assert.equal((await judge.judge({ userId: 'retry', lines })).calls, 0);
+    assert.equal(calls, 2);
+  }
+});
+
+test('malformed batches exhaust at most two attempts and the retry obeys the daily cap', async () => {
+  const lines = [{ text: 'Dose 99 mg.', sources: [source('Dose 12 mg.')] }];
+  for (const cap of [1, 3]) {
+    let calls = 0;
+    const judge = createVerificationJudge({ config: { deepseekModel: 'test', deepseekApiKey: 'test', nativeMemoryVerifyDailyCalls: cap },
+      callModel: async () => { calls++; return response([{ index: 0, verdict: 'unknown', corrected: null }]); } });
+    const result = await judge.judge({ userId: 'retry-cap', lines });
+    assert.equal(result.results.size, 0);
+    assert.equal(result.calls, Math.min(cap, 2));
+    assert.equal(calls, Math.min(cap, 2));
+  }
+});
+
+test('duplicate or omitted ids invalidate the entire batch', () => {
+  const lines = [{ text: 'Dose 99 mg.', sources: [source('Dose 12 mg.')] }, { text: 'Weight 90 kg.', sources: [source('Weight 70 kg.')] }];
+  assert.equal(parseVerificationJudgement(JSON.stringify({ results: [
+    { index: 0, verdict: 'supported', corrected: null }, { index: 0, verdict: 'unsupported', corrected: null },
+  ] }), lines), null);
 });
