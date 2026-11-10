@@ -29,23 +29,23 @@ async function removeThenWrite(t, { removedText, after, said = "Let us talk abou
   await f.store.remove(f.userId, nativeFileId(first), { keepText: false, actor: "user" });
   writing = after;
   const worker = workerWith(f, judge);
-  await f.commitConversation("rrrr", [{ role: "user", text: said }]);
+  await f.commitConversation("rrrr", [{ role: "user", text: said, at: "2099-01-01T00:00:00.000Z" }]);
   await worker.processCommits({ userId: f.userId });
   return { ...f, worker, uri: `${f.root}/${memoryType}/${name}.md`, read: () => f.sessions.read(f.userId, `${f.root}/${memoryType}/${name}.md`), ...extra };
 }
 
-test("a line that contains a removed line is taken out in code, with no model asked, and remembered as removed in its own words", options, async (t) => {
+test("a line that contains a removed line is taken out in code, while retaining its original removal authority", options, async (t) => {
   const judge = judgeDouble();
   const f = await removeThenWrite(t, { removedText: "Cites with numbered references.", after: "- Cites with numbered references; always gives the DOI.\n- Prefers metric units.", judge });
   assert.equal(await f.read(), "- Prefers metric units.");
-  assert.equal(judge.requests.length, 0, "containment is decidable, so it is code");
+  assert.equal(judge.requests.length, 1, "only the possible semantic restatement needs the judge; literal refusal survives a failed judge");
   const revision = (await f.overlay.revisionsOf(f.userId, f.uri)).find((entry) => entry.actor === "platform");
   assert.equal(revision.reason, "rejected_reworded");
   assert.equal(revision.change, "updated");
   assert.equal(nativeMemoryCounters().checkActions.rejected_reworded, 1);
   assert.equal(nativeMemoryCounters().rejectionLines.contained, 1);
-  // The new wording is on the list too: its own repeat is exact next time.
-  assert.ok((await f.overlay.rejectedFingerprints(f.userId, "preferences")).has(lineFingerprint("Cites with numbered references; always gives the DOI.")));
+  // Refusing a rewrite must not advance the removal time or broaden its hard-token set.
+  assert.ok((await f.overlay.rejectedFingerprints(f.userId, "preferences")).has(lineFingerprint("Cites with numbered references.")));
 });
 
 test("a line that is only near one goes to one call a commit; what the judge says is the same is taken out, the rest stays", options, async (t) => {
@@ -53,7 +53,7 @@ test("a line that is only near one goes to one call a commit; what the judge say
   const f = await removeThenWrite(t, { removedText: "Prefers tables for comparisons.", after: "- Likes comparisons presented as tables.\n- Prefers tables and figures for comparisons of options.\n- Works in a hospital pharmacy.", judge });
   assert.equal(await f.read(), "- Prefers tables and figures for comparisons of options.\n- Works in a hospital pharmacy.", "the line the judge said is the same is out; the one it did not is kept");
   assert.equal(judge.requests.length, 1, "one call for the commit's near lines");
-  assert.equal(judge.requests[0].candidates.length, 2);
+  assert.equal(judge.requests[0].candidates.length, 4, "all token-free lines and the new filename reach the semantic judge");
   assert.equal(judge.requests[0].userId, f.userId);
   assert.deepEqual(judge.requests[0].said, ["Let us talk about something else."], "the call is shown what the person said");
   assert.equal(nativeMemoryCounters().checkActions.rejected_judged, 1);
@@ -62,7 +62,7 @@ test("a line that is only near one goes to one call a commit; what the judge say
   assert.match(revision.reason, /rejected_judged/);
 });
 
-test("a judge that fails keeps the line, and a line no removed one is near is never asked about", options, async (t) => {
+test("a judge that fails keeps the line, and token-free wording is left to the existing judge", options, async (t) => {
   const failing = { requests: [], available: true, same: async () => ({ same: new Map(), stated: new Set() }) };
   const f = await removeThenWrite(t, { removedText: "Prefers tables for comparisons.", after: "- Likes comparisons presented as tables.", judge: failing });
   assert.equal(await f.read(), "- Likes comparisons presented as tables.", "kept: the judge said nothing");
@@ -70,26 +70,26 @@ test("a judge that fails keeps the line, and a line no removed one is near is ne
   const judge = judgeDouble();
   const far = await removeThenWrite(t, { removedText: "Prefers tables for comparisons.", after: "- Works in a hospital pharmacy.", judge });
   assert.equal(await far.read(), "- Works in a hospital pharmacy.");
-  assert.equal(judge.requests.length, 0);
+  assert.equal(judge.requests.length, 1, "semantic candidates no longer depend on lexical resemblance");
   // No judge wired at all: containment and exact repeats are still met, near lines are counted as unjudged and kept.
   const bare = await removeThenWrite(t, { removedText: "Prefers tables for comparisons.", after: "- Likes comparisons presented as tables.", judge: null });
   assert.equal(await bare.read(), "- Likes comparisons presented as tables.");
-  assert.equal(nativeMemoryCounters().rejectionLines.judge_failed, 1);
+  assert.equal(nativeMemoryCounters().rejectionLines.judge_failed, 2);
 });
 
-test("the person's own words win: a line they said themselves is kept and the removal it repeats is lifted, in code and as the judge sees it", options, async (t) => {
+test("the person's own words win: a line they said themselves is kept and a dated restatement authorizes only its own write", options, async (t) => {
   // Word for word: the engine's line contains the removed one and the person said that line themselves in this conversation.
   const judge = judgeDouble();
   const verbatim = await removeThenWrite(t, { removedText: "Cites with numbered references.", after: "- Cites with numbered references; always gives the DOI.", judge,
     said: "Actually: cites with numbered references; always gives the DOI. That is how I want it." });
   assert.equal(await verbatim.read(), "- Cites with numbered references; always gives the DOI.");
-  assert.equal((await verbatim.overlay.rejectedFingerprints(verbatim.userId, "preferences")).has(lineFingerprint("Cites with numbered references.")), false, "their restatement lifted the removal");
+  assert.equal((await verbatim.overlay.rejectedFingerprints(verbatim.userId, "preferences")).has(lineFingerprint("Cites with numbered references.")), true, "the old conversation remains fenced after relearning");
   // In other words: the judge says it is the same and that the person said it themselves.
   const stated = judgeDouble((request) => ({ same: new Map([[0, request.candidates[0].removed[0].fingerprint]]), stated: new Set([0]) }));
   const other = await removeThenWrite(t, { removedText: "Prefers tables for comparisons.", after: "- Likes comparisons presented as tables.", judge: stated,
     said: "When I ask you to compare, please use a table." });
   assert.equal(await other.read(), "- Likes comparisons presented as tables.");
-  assert.equal((await other.overlay.rejectedFingerprints(other.userId, "preferences")).has(lineFingerprint("Prefers tables for comparisons.")), false);
+  assert.equal((await other.overlay.rejectedFingerprints(other.userId, "preferences")).has(lineFingerprint("Prefers tables for comparisons.")), true);
   assert.equal((await other.overlay.revisionsOf(other.userId, other.uri)).filter((entry) => entry.actor === "platform").length, 0);
 });
 

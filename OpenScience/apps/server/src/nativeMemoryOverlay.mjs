@@ -424,6 +424,36 @@ export class NativeMemoryOverlay {
     return new Map(result.rows.map(row=>[String(row.archive_uri),String(row.origin)]));
   }
 
+  /** Preserve the real conversation sources behind an observation promotion.
+   * @param {string} userId @param {string} archiveUri @param {string[]} originals */
+  async linkRemovalSources(userId, archiveUri, originals) {
+    if (!originals.length) return;
+    await this.#query(`INSERT INTO evimed_memory.native_source_copies(user_id,source_archive_uri,copy_archive_uri)
+      SELECT s.user_id,s.archive_uri,c.archive_uri FROM evimed_memory.native_commits s
+      JOIN evimed_memory.native_commits c ON c.user_id=s.user_id AND c.archive_uri=$2
+      WHERE s.user_id=$1 AND s.archive_uri=ANY($3::text[]) AND s.archive_uri<>c.archive_uri
+        AND split_part(s.archive_uri,'/sessions/',1)=split_part(c.archive_uri,'/sessions/',1)
+      ON CONFLICT DO NOTHING`, [owner(userId), archiveUri, originals]);
+  }
+
+  /** Resolve copied/replayed messages to original authorship, never their later processing time.
+   * Promotion and outside-agent candidates are not statements by the person.
+   * @param {string} userId @param {string[]} archiveUris */
+  async removalOrigins(userId, archiveUris) {
+    if (!archiveUris.length) return [];
+    const result = await this.#query(`WITH RECURSIVE edges AS (
+      SELECT replayed_as AS child,archive_uri AS parent FROM evimed_memory.native_commits WHERE user_id=$1 AND replayed_as IS NOT NULL
+      UNION SELECT copy_archive_uri,source_archive_uri FROM evimed_memory.native_source_copies WHERE user_id=$1
+    ), lineage(uri) AS (
+      SELECT unnest($2::text[]) UNION SELECT e.parent FROM edges e JOIN lineage l ON e.child=l.uri
+    ) SELECT l.uri AS archive_uri,c.engine_session,c.project_id,c.project_created_at FROM lineage l
+      LEFT JOIN evimed_memory.native_commits c ON c.user_id=$1 AND c.archive_uri=l.uri
+      WHERE NOT EXISTS(SELECT 1 FROM edges e WHERE e.child=l.uri)
+      AND COALESCE(c.origin,'') NOT IN ('promotion','tool','replay')`, [owner(userId), archiveUris]);
+    return result.rows.map(row => ({ archiveUri: row.archive_uri, engineSession: row.engine_session,
+      projectId: row.project_id, projectCreatedAt: row.project_created_at }));
+  }
+
   /** The archives of one account the ledger already holds. @param {string} userId @returns {Promise<Set<string>>} */
   async knownArchives(userId, { userRoot = null } = {}) {
     const result = await this.#query("SELECT archive_uri FROM evimed_memory.native_commits WHERE user_id=$1 AND ($2::text IS NULL OR archive_uri LIKE $2 || '/sessions/%')",
@@ -1147,9 +1177,9 @@ export class NativeMemoryOverlay {
 
   /**
    * The person removed these lines from a memory of this type. Each is kept as its fingerprint (exact repeats) and as its normalised
-   * text (`normalisedStatement`, at most 400 characters), because recognising a reworded repeat needs the words: a line that contains
+   * text (`normalisedStatement`, without truncation), because recognising a reworded repeat needs the words: a line that contains
    * it, or that a model judges to say the same, is taken out again. The text is the account's own, read by nothing but that
-   * recognition, and goes with the rejection (a restatement by the person, a reset, the account).
+   * recognition. A dated restatement authorizes its write; only explicit undo, reset or account erasure lifts the rejection.
    *
    * `origin` says how the lines were removed: `edit` — the person's own edit of a file replaced them, so their old words may still be drawn as
    * what the memory used to say — or `forget` (the default: a forget, a delete, an undo, the engine's repeat taken out again), which no
@@ -1160,8 +1190,8 @@ export class NativeMemoryOverlay {
   async reject(userId, memoryType, uri, lines, { origin = "forget" } = {}) {
     /** @type {Map<string, string>} */
     const unique = new Map();
-    for (const line of lines) { const print = lineFingerprint(line); if (!unique.has(print)) unique.set(print, normalisedStatement(line).slice(0, 400)); }
-    const prints = [...unique.keys()].slice(0, 500);
+    for (const line of lines) { const print = lineFingerprint(line); if (!unique.has(print)) unique.set(print, normalisedStatement(line)); }
+    const prints = [...unique.keys()];
     if (!prints.length) return 0;
     await this.#query(`INSERT INTO evimed_memory.native_rejections (user_id, memory_type, fingerprint, uri, text, origin)
       SELECT $1, $2, print, $3, text, $6 FROM unnest($4::text[], $5::text[]) AS rejected(print, text)
@@ -1183,6 +1213,16 @@ export class NativeMemoryOverlay {
     const prints = [...new Set(fingerprints.map(String))].filter((print) => /^[a-f0-9]{64}$/.test(print));
     if (!prints.length) return;
     await this.#query("DELETE FROM evimed_memory.native_rejections WHERE user_id=$1 AND memory_type=$2 AND fingerprint = ANY($3::text[])", [owner(userId), String(memoryType), prints]);
+  }
+
+  /** All removals in one native namespace, across categories and without a paging cap.
+   * Moving a fact from a preference to a project card cannot change its removal authority.
+   * @param {string} userId @param {string|null} [namespaceId] */
+  async removals(userId, namespaceId = null) {
+    const types = OPENVIKING_MEMORY_TYPES.map(type => nativeMemoryRejectionType(type, namespaceId));
+    const result = await this.#query(`SELECT memory_type, fingerprint, text, rejected_at FROM evimed_memory.native_rejections
+      WHERE user_id=$1 AND memory_type = ANY($2::text[]) ORDER BY rejected_at DESC`, [owner(userId), types]);
+    return result.rows.map(row => ({ memoryType: row.memory_type, fingerprint: row.fingerprint, text: row.text, rejectedAt: instant(row.rejected_at) }));
   }
 
   /**

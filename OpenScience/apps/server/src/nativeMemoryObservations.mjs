@@ -1,6 +1,6 @@
 import { withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
 import { recordObservationPromotion } from "./nativeMemoryMetrics.mjs";
-import { memoryLines, normalisedStatement } from "./nativeMemoryOverlay.mjs";
+import { memoryLines, normalisedStatement, originalSources } from "./nativeMemoryOverlay.mjs";
 
 /**
  * E3: a choice made in two different conversations becomes a preference (owner decision 6 of 2026-10-25, which amended principle 18).
@@ -71,7 +71,7 @@ export class NativeMemoryObservations {
   /**
    * @param {{ overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay,
    *   sessions: import("./openVikingSessions.mjs").OpenVikingSessions,
-   *   keepRepeatedChoice: (userId: string, choice: string) => Promise<{ archiveUri: string }>,
+   *   keepRepeatedChoice: (userId: string, choice: string, origins?: any[]) => Promise<{ archiveUri: string }>,
    *   memorySettings?: { settings: (userId: string) => Promise<{ learningPaused?: boolean }> } | null,
    *   report?: (line: string) => void }} dependencies
    *   `keepRepeatedChoice` is `NativeMemoryStore.keepRepeatedChoice`; `memorySettings` says whether the account paused learning, in which
@@ -107,7 +107,8 @@ export class NativeMemoryObservations {
         if (body === null) { await this.overlay.removeFile(userId, file.uri); continue; }
         const words = observationWords(body);
         if (!words) { recordObservationPromotion("empty"); continue; }
-        await this.keepRepeatedChoice(userId, words);
+        const origins = (await this.overlay.originsOf(userId, [file.uri])).get(file.uri) ?? new Map();
+        await this.keepRepeatedChoice(userId, words, [...origins.values()].flatMap(originalSources));
         // The note is spent once the engine has the words (a failed extraction is replayed from its archive, as any commit's is).
         await withMemorySummaryInvalidation(this.sessions, this.overlay, userId, file.uri, () => this.sessions.remove(userId, file.uri));
         await this.overlay.addRevision({ userId, uri: file.uri, memoryType: "observations", change: "deleted", actor: "platform", reason: "promoted to a preference",

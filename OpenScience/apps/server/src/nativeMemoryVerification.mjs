@@ -1,3 +1,4 @@
+import { removalLines, removalRefusals } from './nativeMemoryRejections.mjs';
 import { withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
 import { carriesPlatformContext, identifierShapesIn, platformIdentifiersIn } from '@evimed/domain';
 import { callModelForControlPlane } from './modelGateway.mjs';
@@ -104,11 +105,11 @@ export function createVerificationJudge({ config, usageLedger = null, fetchImpl 
 }
 
 /** Bounded, undoable verification on the first-party sessions/overlay path. No scheduler or age gate is required.
- * @param {{config:any,sessions:any,overlay:any,memoryContexts?:any,history?:any,judge?:any}} dependencies */
+ * @param {{config:any,sessions:any,overlay:any,memoryContexts?:any,history?:any,judge?:any,rejectionJudge?:any}} dependencies */
 export class NativeMemoryVerification {
-  constructor({ config, sessions, overlay, memoryContexts = null, history = null, judge = null }) {
+  constructor({ config, sessions, overlay, memoryContexts = null, history = null, judge = null, rejectionJudge = null }) {
     this.config = config ?? {}; this.sessions = sessions; this.overlay = overlay; this.memoryContexts = memoryContexts;
-    this.history = history; this.judge = judge ?? createVerificationJudge({ config });
+    this.history = history; this.rejectionJudge = rejectionJudge; this.judge = judge ?? createVerificationJudge({ config });
   }
 
   /** Read only an archive proven inside this memory namespace, filtered exactly as capture/history readers do. */
@@ -149,6 +150,22 @@ export class NativeMemoryVerification {
     } catch { return []; }
   }
 
+  /** Removal authority follows original sources, excluding newly manufactured promotion/replay messages.
+   * Explicit page revisions are the person's own dated statements too.
+   * @param {string} userId @param {any[]} origins @param {any} [context] @param {Map<any,any>} [cache] */
+  async readRemovalSources(userId, origins, context = null, cache = new Map()) {
+    const archives = await this.overlay.removalOrigins(userId, [...new Set(origins.map(origin => origin.archiveUri).filter(Boolean))]);
+    const sources = await this.readSources(userId, archives, context, cache);
+    for (const origin of origins.filter(origin => !origin.archiveUri && origin.revisionId)) {
+      const revision = await this.overlay.revision(userId, origin.revisionId);
+      if (revision?.actor !== 'user' || !revision.after) continue;
+      const root = (context?.sessions ?? this.sessions).memoryRoot(userId);
+      if (!nativeMemoryFile(revision.uri, root)) continue;
+      sources.push({ role: 'user', text: revision.after, created_at: revision.changedAt });
+    }
+    return sources;
+  }
+
   /** Bounded batch judging with one malformed-output retry. Literal support is also read for temporal/attribution errors. */
   async assess(userId, entries) {
     const results = [], batchSize = 8;
@@ -180,10 +197,13 @@ export class NativeMemoryVerification {
     if (next === file.body) return false;
     const sessions = context?.sessions ?? this.sessions;
     if (await sessions.read(userId, file.uri) !== file.body) return false;
-    const rejectionType = context?.kind === 'geo-project' ? `${context.namespaceId}:${file.type}` : file.type;
-    const rejected = await this.overlay.rejectedFingerprints(userId, rejectionType);
     const prior = new Set(memoryLines(file.body).map(lineFingerprint));
-    if (memoryLines(next).some(line => !prior.has(lineFingerprint(line)) && rejected.has(lineFingerprint(line)))) return false;
+    const candidates = [];
+    for (const text of removalLines(next, file.body)) {
+      candidates.push({ text, sources: await this.readRemovalSources(userId, origins.get(lineFingerprint(text)) ?? [], context) });
+    }
+    if ((await removalRefusals({ userId, overlay: this.overlay, namespaceId: context?.kind === 'geo-project' ? context.namespaceId : null,
+      judge: this.rejectionJudge, candidates })).size) return false;
     // A revision belongs only to sources of statements it brings, not to an earlier correction in the same file.
     const authorities = new Map([...origins].filter(([print]) => !prior.has(print)).flatMap(([, sources]) => sources)
       .map(source => [JSON.stringify([source.engineSession, source.projectId, source.projectCreatedAt]), source]));

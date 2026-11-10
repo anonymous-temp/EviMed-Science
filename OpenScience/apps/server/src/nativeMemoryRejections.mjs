@@ -1,37 +1,18 @@
+import { hardTokens, tokenPresent } from './nativeMemoryHardTokens.mjs';
+import { lineFingerprint, normalisedStatement } from './nativeMemoryOverlay.mjs';
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { recordRejectionJudge, recordRejectionLines } from "./nativeMemoryMetrics.mjs";
 
 /**
- * Recognising a line the person removed when the engine writes it again in other words (2026-10-23, rectification T1.9 / D8).
+ * Shared removal authority (P24, 2026-11-10). Every engine write surface is held against the account's
+ * removals across memory categories, within its native namespace. Hard tokens use the raw-history fence's
+ * comparator and no model budget. Token-free restatements use the existing semantic judge. Only original
+ * user messages dated after each removal can authorize the new write; replaying or promoting old text
+ * cannot renew its date. Relearning never lifts the old conversation's removal.
  *
- * Until then the rejection list met only a verbatim repeat: the line's fingerprint. The engine's extraction words things its own way,
- * so "I prefer tables" removed on Monday was back on Tuesday as "Prefers tables for comparisons" — the owner's rule that a deletion is
- * obeyed held only as far as the engine's habit of copying. Two steps, cheapest first, each on the lines a commit *brought* and
- * nothing else:
- *
- *  1. **Containment, in code.** A written line that contains the removed line's words (after the same normalisation the fingerprint
- *     uses, and without spacing or punctuation) is that line with something added. Decidable, so it is code. A removed line shorter than
- *     `MIN_CONTAINED` characters (compact) is too common a phrase to forbid every line that holds it, and is met only by exact repeat.
- *  2. **Similarity, by the model.** A line that shares enough of a removed line's character pairs (`SIMILAR`) is put to one Flash call:
- *     does it say the same thing as one the person removed? Whether two wordings mean the same is language (principle 1), so it is
- *     the model's, and the code verifies what comes back: JSON of the one shape, indexes that exist, a pair that was offered. Anything
- *     else is dropped. A model that cannot be reached, answers badly or has spent the account's day keeps the line — the person is not
- *     made to wait on, or lose a memory to, a judge that failed — and is counted (`open_science_native_memory_rejection_judge_total` for
- *     the calls, `open_science_native_memory_rejection_lines_total` for the lines).
- *
- * The same call is asked which of the candidates the person said themselves in the conversation the commit came from: their words win
- * over their earlier deletion, as they do word for word (`nativeMemoryWorker.#statedByThePerson`), and a restatement in other words
- * than the engine's is no different.
- *
- * Budgeted: one call per commit, at most `maxCandidates` lines in it, and `dailyCalls` of them per account per UTC day (a counter here:
- * a restart gives the account its day again, which is the bound's own tolerance). Charged to the account as memory extraction.
- *
- * The same judge answers a second question since 2026-10-25 (`nativeMemoryForgetEverywhere.mjs`): when the person forgets a line, which of the lines
- * the platform already holds say the same thing. The candidates are then lines written earlier, not just now, and the instruction says
- * either; nothing else about the call changes (one call, at most `MAX_CANDIDATES` lines, the account's day).
- *
- * Deletable when the engine's extraction takes a "never keep" list of its own (it has none in v0.5.1.1) — then the list and this go.
- *
+ * The judge is bounded per account/day and fails open for semantic candidates. Literal removal and hard
+ * token checks remain code. `nearRemoved` remains a shortlist helper for finding existing duplicates;
+ * the write rule does not use lexical similarity to decide which token-free wording may be a restatement.
  * @module nativeMemoryRejections
  */
 
@@ -222,3 +203,71 @@ export function createRejectionJudge({ config, usageLedger = null, fetchImpl = g
 }
 
 export { MAX_CANDIDATES as REJECTION_JUDGE_MAX_CANDIDATES };
+
+/** Text on every write surface, including headings, compared without Markdown decoration.
+ * @param {string} text */
+export function removalText(text) {
+  return String(text).trim().replace(/^(?:#{1,6}|[-*+]|\d+[.)])\s+/, '');
+}
+
+/** All newly written lines, including titles/headings. @param {string} after @param {string} [before] */
+export function removalLines(after, before = '') {
+  const prior = new Set(String(before).split('\n').map(removalText).map(lineFingerprint));
+  return [...new Set(String(after).split('\n').map(removalText).filter(Boolean))].filter(line => !prior.has(lineFingerprint(line)));
+}
+
+/** One write-side removal rule for extraction, consolidation, corrections and synthetic writes.
+ * Hard tokens are literal shapes, use the history fence's normalization, and never spend a model budget.
+ * Only a person's own source message strictly AFTER each removal may authorize its content. Rejections
+ * remain in place: a new statement authorizes that write, never a replay of the old conversation.
+ * @param {{userId:string, overlay:any, namespaceId?:string|null, judge?:any,
+ * candidates:{text:string,sources?:{role:string,text:string,created_at?:string|null}[]}[]}} input
+ * @returns {Promise<Map<string,{rejected:string,via:'contained'|'judged'}>>} */
+export async function removalRefusals({ userId, overlay, namespaceId = null, judge = null, candidates }) {
+  const removed = await overlay.removals(userId, namespaceId);
+  const refused = new Map();
+  for (const entry of removed) {
+    const text = entry.text ? normalisedStatement(entry.text) : '';
+    const tokens = hardTokens(text);
+    const pending = [];
+    for (const candidate of candidates) {
+      const print = lineFingerprint(candidate.text);
+      if (refused.has(print)) continue;
+      const sources = (candidate.sources ?? []).filter(source => source.role === 'user'
+        && Date.parse(source.created_at ?? '') > Date.parse(entry.rejectedAt ?? ''));
+      if (tokens.length) {
+        if (tokens.every(token => tokenPresent(token, normalisedStatement(candidate.text)))
+          && !sources.some(source => tokens.every(token => tokenPresent(token, normalisedStatement(source.text))))) {
+          refused.set(print, { rejected: entry.fingerprint, via: 'contained' });
+        }
+        continue;
+      }
+      const literal = print === entry.fingerprint || text && containsRemoved(candidate.text, text);
+      const stated = sources.some(source => compact(source.text).includes(compact(candidate.text))
+        || text && compact(source.text).includes(compact(text)));
+      if (stated) continue;
+      if (literal && (!sources.length || !judge)) { refused.set(print, { rejected: entry.fingerprint, via: 'contained' }); continue; }
+      if (text) pending.push({ candidate, sources, literal });
+    }
+    // Batch only candidates sharing the very same source set; another line's message is never authority.
+    const groups = new Map();
+    for (const item of pending) {
+      const key = JSON.stringify(item.sources);
+      const group = groups.get(key) ?? [];
+      group.push(item); groups.set(key, group);
+    }
+    for (const group of groups.values()) for (let start = 0; start < group.length; start += MAX_CANDIDATES) {
+      const batch = group.slice(start, start + MAX_CANDIDATES);
+      if (!judge) { recordRejectionLines('judge_failed', batch.length); continue; }
+      const answer = await judge.same({ userId, candidates: batch.map(({ candidate }) => ({ text: candidate.text, removed: [entry] })),
+        said: batch[0].sources.map(source => source.text) }).catch(() => ({ same: new Map(), stated: new Set() }));
+      for (let index = 0; index < batch.length; index++) {
+        const item = batch[index];
+        if ((item.literal || answer.same.has(index)) && !(item.sources.length && answer.stated.has(index))) {
+          refused.set(lineFingerprint(item.candidate.text), { rejected: entry.fingerprint, via: item.literal ? 'contained' : 'judged' });
+        }
+      }
+    }
+  }
+  return refused;
+}

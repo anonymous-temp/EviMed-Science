@@ -28,7 +28,7 @@
  *  - `native_rejections` — the lines a person removed, as a fingerprint (a line the engine writes back verbatim is removed
  *    again) and, since 2026-10-23, as the line's normalised words: a reworded repeat is recognised by containing them or by a
  *    model judging it to say the same (`nativeMemoryRejections.mjs`). The words are the account's own, read by nothing else, and
- *    go when the rejection does (the person's restatement, a reset, the account); the revisions' text of a hard delete is still
+ *    go when the rejection does (explicit undo, a reset, the account); the revisions' text of a hard delete is still
  *    scrubbed from the history.
  *
  * What this does not hold, and the legacy engine's records did (owner-accepted, README §5.4 of the course correction): a line of
@@ -226,7 +226,9 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_rejections (
   rejected_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (user_id, memory_type, fingerprint)
 );
-ALTER TABLE evimed_memory.native_rejections ADD COLUMN IF NOT EXISTS text text CHECK (text IS NULL OR char_length(text) <= 400);
+ALTER TABLE evimed_memory.native_rejections ADD COLUMN IF NOT EXISTS text text;
+-- A removal must retain every hard token, including the end of a long line.
+ALTER TABLE evimed_memory.native_rejections DROP CONSTRAINT IF EXISTS native_rejections_text_check;
 -- rev-1101: why the line was rejected. 'edit' — the person's own edit took it out of a file and put another line there (its old words stay in
 -- the file's history, and the map may draw them as what the memory used to say); 'forget' — the person forgot or deleted it, or the engine
 -- wrote it back and the platform took it out again (nothing may draw it anywhere). Null — a row older than this column: unknown, and read as
