@@ -2,6 +2,8 @@ import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash } from "node:crypto";
 import { recordNativeConsolidatedFiles, recordNativeConsolidation } from "./nativeMemoryMetrics.mjs";
 import { nativeMemoryFile } from "./openVikingSessions.mjs";
+import { NativeMemoryVerification } from './nativeMemoryVerification.mjs';
+import { parseNativeMemoryConsolidationMode } from './config.mjs';
 
 /**
  * 重读旧记忆 on the native engine: OpenViking's own memory consolidation, run for an account now and then (2026-10-23, rectification
@@ -37,8 +39,7 @@ import { nativeMemoryFile } from "./openVikingSessions.mjs";
  *  - **Never blocking.** A task runs for minutes; the pass that submits it returns, and the passes after it ask the task how it is
  *    doing. One that outlives `TASK_TIMEOUT_MS` is cancelled and counted as failed; one the engine no longer holds is lost.
  *
- * Off by default (`OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED`): the engine's output on real memory is unmeasured here, and the
- * operator switches it on after a probe on an account's real files.
+ * On by default; `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED=false` disables it. The default mode is the original merge path.
  *
  * Build to delete: when the engine runs this on its own schedule (it has a Compile auto-update on `main`), the timer goes and the
  * ingestion of its result stays.
@@ -100,11 +101,12 @@ export class NativeMemoryConsolidation {
    *   sessions: import("./openVikingSessions.mjs").OpenVikingSessions,
    *   resources: import("./openVikingResources.mjs").OpenVikingResources,
    *   overlay: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay,
-   *   ingest: (userId: string, task: { taskId: string, adds: readonly string[], updates: readonly string[], deletes: readonly string[] }) => Promise<{ added: number, updated: number, deleted: number }>,
+   *   ingest: (userId: string, task: { taskId: string, adds: readonly string[], updates: readonly string[], deletes: readonly string[], mode?: string }) => Promise<{ added: number, updated: number, deleted: number }>,
+   *   verification?: NativeMemoryVerification,
    *   now?: () => Date, report?: (line: string) => void,
    * }} dependencies
    */
-  constructor({ config, memorySettings, sessions, resources, overlay, ingest, now = () => new Date(), report = () => {} }) {
+  constructor({ config, memorySettings, sessions, resources, overlay, ingest, verification = null, now = () => new Date(), report = () => {} }) {
     this.config = config ?? {};
     this.memorySettings = memorySettings;
     this.sessions = sessions;
@@ -113,6 +115,8 @@ export class NativeMemoryConsolidation {
     this.ingest = ingest;
     this.now = now;
     this.report = report;
+    this.verification = verification ?? new NativeMemoryVerification({ config: this.config, sessions, overlay });
+    this.modes = new Map();
     this.intervalMs = Math.max(1, Number(this.config.nativeMemoryConsolidationIntervalDays ?? 7)) * DAY_MS;
   }
 
@@ -124,15 +128,34 @@ export class NativeMemoryConsolidation {
 
   /**
    * One pass over one native account: ask for a consolidation when one is due, or look after the one in flight. Never throws.
-   * @param {string} userId @returns {Promise<string>} what became of it, one of `NATIVE_CONSOLIDATION_OUTCOMES`, or "off"
+   * @param {string} userId @param {{force?:boolean,mode?:string}} [options] @returns {Promise<string>} what became of it, one of `NATIVE_CONSOLIDATION_OUTCOMES`, or "off"
    */
-  async tick(userId) { return withNativeMemoryWrite(this.overlay.database,userId,()=>this.#tickOwned(userId)); }
-  async #tickOwned(userId) {
+  async tick(userId, { force = false, mode = this.modes.get(userId) ?? this.config.nativeMemoryConsolidationMode ?? 'merge' } = {}) {
+    mode = parseNativeMemoryConsolidationMode(mode);
+    return withNativeMemoryWrite(this.overlay.database,userId,()=>this.#tickOwned(userId, { force, mode }));
+  }
+
+  /** Explicit experiment entry: advances the same asynchronous engine task without interval/quiet gates.
+   * Poll this method until completed/failed; force never bypasses off, pause, extraction or deletion fences.
+   * @param {string} userId @param {{mode?:string,force?:boolean}} [options] */
+  async consolidate(userId, { mode = this.config.nativeMemoryConsolidationMode ?? 'merge', force = true } = {}) {
+    return this.tick(userId, { mode, force });
+  }
+
+  /** An explicit verification needs no engine merge or scheduler. @param {string} userId @param {{limit?:number,directories?:string[],mode?:string}} [options] */
+  async verifyExisting(userId, options = {}) { return this.verification.verifyExisting(userId, options); }
+
+  async #tickOwned(userId, { force, mode }) {
     if (!this.applicable) return "off";
     try {
       const state = await this.overlay.consolidationState(userId);
-      if (state.task) return await this.#settle(userId, state);
-      const outcome = await this.#maybeSubmit(userId, state);
+      if (state.task) {
+        const outcome = await this.#settle(userId, state, mode);
+        if (outcome !== 'submitted') this.modes.delete(userId);
+        return outcome;
+      }
+      const outcome = await this.#maybeSubmit(userId, state, force);
+      if (outcome === 'submitted') this.modes.set(userId, mode);
       recordNativeConsolidation(outcome);
       return outcome;
     } catch (error) {
@@ -143,22 +166,22 @@ export class NativeMemoryConsolidation {
   }
 
   /** @param {string} userId @param {Awaited<ReturnType<import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay["consolidationState"]>>} state */
-  async #maybeSubmit(userId, state) {
+  async #maybeSubmit(userId, state, force = false) {
     const at = this.now().getTime();
-    if (state.consolidatedAt && at - Date.parse(state.consolidatedAt) < this.intervalMs) return "not_due";
-    if (state.checkedAt && at - Date.parse(state.checkedAt) < CHECK_EVERY_MS) return "not_due";
+    if (!force && state.consolidatedAt && at - Date.parse(state.consolidatedAt) < this.intervalMs) return "not_due";
+    if (!force && state.checkedAt && at - Date.parse(state.checkedAt) < CHECK_EVERY_MS) return "not_due";
     const settings = await this.memorySettings.settings(userId);
     if (settings.learningPaused) return "held_back";
     if(this.overlay.sourceDeletion&&(await this.overlay.sourceDeletion.ledger.recordsForOwner(userId,{pendingOnly:true})).length)return "held_back";
     const open = await this.overlay.openCommits({ userId, limit: 1, now: this.now() });
     const latest = (await this.overlay.commitsOf(userId, { limit: 1 }))[0];
-    if (open.length || (latest && at - Date.parse(latest.createdAt ?? "") < QUIET_AFTER_COMMIT_MS)) return "held_back";
+    if (open.length || (!force && latest && at - Date.parse(latest.createdAt ?? "") < QUIET_AFTER_COMMIT_MS)) return "held_back";
     if (!await this.overlay.claimConsolidation(userId, LEASE_MS)) return "held_back";
     const root = this.sessions.memoryRoot(userId);
     const files = (await this.sessions.tree(userId, root, { levelLimit: 8 })).filter((node) => !node.isDir && nativeMemoryFile(node.uri, root));
-    if (files.length < MIN_FILES) { await this.overlay.noteConsolidationChecked(userId, this.now()); return "too_few"; }
+    if (!force && files.length < MIN_FILES) { await this.overlay.noteConsolidationChecked(userId, this.now()); return "too_few"; }
     const fingerprint = filesFingerprint(files);
-    if (state.fingerprint === fingerprint) { await this.overlay.noteConsolidationChecked(userId, this.now()); return "unchanged"; }
+    if (!force && state.fingerprint === fingerprint) { await this.overlay.noteConsolidationChecked(userId, this.now()); return "unchanged"; }
     // The same files in the same hour, the same key: asked twice (a restart between the answer and the note) is one task. The engine answers
     // a key it has seen with the task it made — a failed one too — so a retry, which waits at least the hour, is a new key.
     const hour = this.now().toISOString().slice(0, 13).replace(/\D/g, "");
@@ -177,7 +200,7 @@ export class NativeMemoryConsolidation {
   }
 
   /** @param {string} userId @param {Awaited<ReturnType<import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay["consolidationState"]>>} state */
-  async #settle(userId, state) {
+  async #settle(userId, state, mode) {
     const taskId = /** @type {string} */ (state.task);
     const task = await this.resources.memoryConsolidationTask(userId, taskId);
     if (!task) {
@@ -202,7 +225,14 @@ export class NativeMemoryConsolidation {
       return this.#follow(userId, task.target, false);
     }
     if (result.errors.length) this.report(`native memory consolidation: ${userId.slice(0, 8)}… completed with ${result.errors.length} error(s): ${result.errors[0].slice(0, 160)}`);
-    const counts = await this.ingest(userId, { taskId, adds: result.adds, updates: result.updates, deletes: result.deletes });
+    const counts = await this.ingest(userId, { taskId, adds: result.adds, updates: result.updates, deletes: result.deletes,
+      ...(mode === 'verify' || this.config.nativeMemoryConsolidationMode === 'verify' ? { mode } : {}) });
+    if (mode === 'verify') {
+      const root = this.sessions.memoryRoot(userId);
+      const directory = task.target?.startsWith(`${root}/`) ? task.target.slice(root.length + 1).split('/')[0] : null;
+      try { await this.verifyExisting(userId, { mode, ...(directory ? { directories: [directory] } : {}) }); }
+      catch { this.report('native memory verification: unavailable; consolidation retained'); }
+    }
     recordNativeConsolidatedFiles(counts);
     recordNativeConsolidation("completed");
     return this.#follow(userId, task.target, true);

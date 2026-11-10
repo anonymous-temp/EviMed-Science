@@ -245,3 +245,132 @@ test("a pass walks the memory directories that hold files, one task at a time, a
   const state = await f.overlay.consolidationState(f.userId);
   assert.deepEqual([state.task, Boolean(state.consolidatedAt && state.fingerprint)], [null, true]);
 });
+
+test('verifyExisting repairs an untouched corrupted profile line from its original archive; merge leaves it unchanged', options, async t => {
+  for (const mode of ['merge', 'verify']) {
+    const original = 'Weight is 70 kg.';
+    const f = await fixture(t, { config: { nativeMemoryConsolidationMode: mode }, extract: () => ({ adds: [{ uri: `${f.root}/profile.md`, memory_type: 'profile', after: original }] }) });
+    await f.commitConversation(`corrupted_${mode}`, [{ role: 'user', text: original }]);
+    await f.worker.processCommits({ userId: f.userId });
+    const uri = `${f.root}/profile.md`;
+    assert.equal(await f.sessions.read(f.userId, uri), original);
+    await f.sessions.replace(f.userId, uri, 'Weight is 90 kg.');
+    let calls = 0;
+    f.worker.verification.history = { enabled: true, search: async () => [{ messages: [{ sourceRole: 'user', text: original, date: '2026-11-01' }] }] };
+    f.worker.verification.judge = { judge: async ({ lines }) => {
+      calls++;
+      assert.equal(lines[0].sources[0].text, original);
+      return { calls: 1, results: new Map([[0, { index: 0, verdict: 'corrected', corrected: original }]]) };
+    } };
+    const result = await f.consolidation.verifyExisting(f.userId, { limit: 10 });
+    assert.equal(await f.sessions.read(f.userId, uri), mode === 'verify' ? original : 'Weight is 90 kg.');
+    assert.equal(calls, mode === 'verify' ? 1 : 0);
+    assert.equal(result.corrected, mode === 'verify' ? 1 : 0);
+    if (mode === 'verify') {
+      const [revision] = await f.overlay.revisionsOf(f.userId, uri);
+      assert.equal(revision.actor, 'platform'); assert.equal(revision.reason, 'verification_corrected');
+      assert.equal(revision.before, 'Weight is 90 kg.'); assert.equal(revision.after, original);
+      assert.ok((await f.overlay.originsOf(f.userId, [uri])).get(uri).get(lineFingerprint(original))?.archiveUri);
+    }
+  }
+});
+
+test('verification includes profile, skips observations, leaves unsupported memory without a pre-image untouched, and honours history off', options, async t => {
+  const f = await fixture(t, { config: { nativeMemoryConsolidationMode: 'verify', memoryHistorySearchEnabled: false } });
+  const uri = f.seed('profile.md', 'An ungrounded claim.');
+  f.seed('observations/note.md', 'A choice.', { type: 'observations' });
+  f.worker.verification.judge = { judge: async () => { throw new Error('no sources must not call'); } };
+  const result = await f.consolidation.verifyExisting(f.userId, { limit: 10 });
+  assert.deepEqual(result, { checked: 1, supported: 0, corrected: 0, unsupported: 0, unverifiable: 1, calls: 0 });
+  f.config.memoryHistorySearchEnabled = true;
+  f.worker.verification.history = { enabled: true, search: async () => [{ messages: [{ sourceRole: 'assistant', text: 'An unrelated suggestion.' }] }] };
+  f.worker.verification.judge = { judge: async () => ({ calls: 1, results: new Map([[0, { index: 0, verdict: 'unsupported', corrected: null }]]) }) };
+  const unsupported = await f.consolidation.verifyExisting(f.userId, { limit: 10 });
+  assert.equal(unsupported.unsupported, 1);
+  assert.equal(await f.sessions.read(f.userId, uri), 'An ungrounded claim.');
+  assert.equal((await f.overlay.revisionsOf(f.userId, uri)).length, 0);
+});
+
+test('verify consolidation snapshots deleted origins, inherits all source archives, and repairs unsupported changes undoably', options, async t => {
+  const f = await account(t, { config: { nativeMemoryConsolidationMode: 'verify' } });
+  const [uri, deleted] = f.uris;
+  const original = 'Weight 70 kg.', other = 'Height 170 cm.';
+  for (const [index, text] of [original, other].entries()) {
+    await f.sessions.replace(f.userId, f.uris[index], text);
+    await f.overlay.upsertFile({ userId: f.userId, uri: f.uris[index], memoryType: 'entities', body: text });
+    const commit = await f.commitConversation(`source_${index}`, [{ role: 'user', text }]);
+    await f.overlay.syncOrigins(f.userId, f.uris[index], { after: text, origin: { engineSession: commit.session, archiveUri: commit.archive_uri } });
+  }
+  await f.sessions.replace(f.userId, uri, 'Weight 90 kg.; height 170 cm.');
+  await f.sessions.remove(f.userId, deleted);
+  f.worker.verification.judge = { judge: async ({ lines }) => {
+    assert.equal(lines.length, 1);
+    assert.deepEqual(lines[0].sources.map(source => source.text).sort(), [original, other].sort());
+    return { calls: 1, results: new Map([[0, { index: 0, verdict: 'unsupported', corrected: null }]]) };
+  } };
+  await f.worker.ingestConsolidation(f.userId, { taskId: 'unverified-test', updates: [uri], deletes: [deleted] });
+  assert.equal(await f.sessions.read(f.userId, uri), original);
+  assert.equal(await f.sessions.read(f.userId, deleted), other);
+  const [revision] = await f.overlay.revisionsOf(f.userId, uri);
+  assert.equal(revision.reason, 'consolidation_unverified'); assert.equal(revision.actor, 'platform');
+  assert.equal((await f.overlay.originsOf(f.userId, [uri])).get(uri).get(lineFingerprint(original)).engineSession, 'dsh-session_source_0');
+});
+
+test('explicit force bypasses interval and quiet gates, while the enabled flag remains the off switch', options, async t => {
+  const f = await account(t);
+  await f.overlay.noteConsolidationDone(f.userId, { succeeded: true, at: new Date() });
+  assert.equal(await f.consolidation.tick(f.userId), 'not_due');
+  assert.equal(await f.consolidation.consolidate(f.userId, { mode: 'merge', force: true }), 'submitted');
+  const off = await account(t, { config: { nativeMemoryConsolidationEnabled: false } });
+  assert.equal(await off.consolidation.consolidate(off.userId, { mode: 'verify', force: true }), 'off');
+});
+
+test('a supported merge retains both departed conversations and the scheduler verifies untouched files afterwards', options, async t => {
+  const f = await account(t, { config: { nativeMemoryConsolidationMode: 'verify' } });
+  const [uri, deleted] = f.uris;
+  const facts = ['Weight 70 kg.', 'Height 170 cm.'];
+  for (const [index, text] of facts.entries()) {
+    await f.sessions.replace(f.userId, f.uris[index], text);
+    await f.overlay.upsertFile({ userId: f.userId, uri: f.uris[index], memoryType: 'entities', body: text });
+    const commit = await f.commitConversation(`supported_${index}`, [{ role: 'user', text }]);
+    await f.overlay.syncOrigins(f.userId, f.uris[index], { after: text, origin: { engineSession: commit.session, archiveUri: commit.archive_uri } });
+  }
+  await f.worker.processCommits({ userId: f.userId });
+  const merged = 'Weight 70 kg.; height 170 cm.';
+  f.stub.consolidate = () => ({ updates: [{ uri, text: merged }], deletes: [deleted] });
+  let calls = 0;
+  f.worker.verification.judge = { judge: async ({ lines }) => {
+    calls++;
+    assert.equal(lines.length, 1);
+    assert.deepEqual(lines[0].sources.map(source => source.text).sort(), [...facts].sort());
+    return { calls: 1, results: new Map([[0, { index: 0, verdict: 'supported', corrected: null }]]) };
+  } };
+  assert.equal(await f.consolidation.consolidate(f.userId, { mode: 'verify', force: true }), 'submitted');
+  assert.equal(await f.consolidation.tick(f.userId), 'submitted');
+  assert.equal(await f.consolidation.tick(f.userId), 'completed');
+  assert.equal(calls, 2, 'changed lines and the independent pass both see the original conversations');
+  const origin = (await f.overlay.originsOf(f.userId, [uri])).get(uri).get(lineFingerprint(merged));
+  assert.equal(origin.sources.length, 2);
+  assert.equal(await f.sessions.read(f.userId, uri), merged);
+});
+
+test('an unsupported new merge file is removed undoably and the consumed source file is restored', options, async t => {
+  const f = await account(t, { config: { nativeMemoryConsolidationMode: 'verify' } });
+  const original = 'Weight 70 kg.', deleted = f.uris[0], added = `${f.root}/entities/new.md`;
+  await f.sessions.replace(f.userId, deleted, original);
+  await f.overlay.upsertFile({ userId: f.userId, uri: deleted, memoryType: 'entities', body: original });
+  const commit = await f.commitConversation('new_unsupported', [{ role: 'user', text: original }]);
+  await f.overlay.syncOrigins(f.userId, deleted, { after: original, origin: { engineSession: commit.session, archiveUri: commit.archive_uri } });
+  await f.sessions.remove(f.userId, deleted);
+  f.seed('entities/new.md', 'Weight 90 kg.');
+  f.worker.verification.judge = { judge: async () => ({ calls: 1, results: new Map([[0, { index: 0, verdict: 'unsupported', corrected: null }]]) }) };
+  await f.worker.ingestConsolidation(f.userId, { taskId: 'new-unsupported', adds: [added], deletes: [deleted] });
+  assert.equal(await f.sessions.read(f.userId, added), null);
+  assert.equal(await f.sessions.read(f.userId, deleted), original);
+  const [revision] = await f.overlay.revisionsOf(f.userId, added);
+  assert.equal(revision.reason, 'consolidation_unverified');
+  assert.equal(revision.before, 'Weight 90 kg.');
+  assert.equal(revision.change, 'deleted');
+  assert.equal((await f.store.undo(f.userId, nativeFileId(added), {})).undone, 'restored');
+  assert.equal(await f.sessions.read(f.userId, added), 'Weight 90 kg.');
+});

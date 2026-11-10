@@ -141,6 +141,13 @@ function boolEnv(name, fallback) {
   return !["0", "false", "no", "off"].includes(value.toLowerCase());
 }
 
+/** @param {unknown} value @returns {'merge'|'verify'} */
+export function parseNativeMemoryConsolidationMode(value) {
+  const mode = String(value ?? 'merge').trim().toLowerCase() || 'merge';
+  if (mode === 'merge' || mode === 'verify') return mode;
+  throw new Error('OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_MODE must be merge or verify.');
+}
+
 function listEnv(name) {
   return (process.env[name] ?? "")
     .split(",")
@@ -2904,6 +2911,8 @@ export function loadConfig(overrides = {}) {
     // Each run is model calls of the engine's, through the gateway as `memory-extraction` on the OpenViking module's daily budget
     // (`OPEN_SCIENCE_OPENVIKING_MODEL_DAILY_BUDGET_CNY`); every change it makes is a revision the memory page can undo.
     nativeMemoryConsolidationEnabled: overrides.nativeMemoryConsolidationEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED", true),
+    nativeMemoryConsolidationMode: parseNativeMemoryConsolidationMode(overrides.nativeMemoryConsolidationMode ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_MODE),
+    nativeMemoryVerifyDailyCalls: boundedInteger(overrides.nativeMemoryVerifyDailyCalls ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_VERIFY_DAILY_CALLS, 40, 0, 10_000, "OPEN_SCIENCE_NATIVE_MEMORY_VERIFY_DAILY_CALLS"),
     nativeMemoryConsolidationIntervalDays: boundedInteger(overrides.nativeMemoryConsolidationIntervalDays ?? process.env.OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS, 7, 1, 90, "OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_INTERVAL_DAYS"),
     // The judge of a reworded repeat (`nativeMemoryRejections.mjs`): a line the engine writes that is near one the person removed is put
     // to one model call a commit (thinking off, memory-extraction, charged to the account), and a line the judge cannot say anything

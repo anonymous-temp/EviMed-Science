@@ -55,6 +55,11 @@ export function lineFingerprint(line) {
   return createHash("sha256").update(normalisedStatement(line)).digest("hex");
 }
 
+/** The original conversation set behind one line, flattened when a merge inherits it. @param {any} origin @returns {any[]} */
+export function originalSources(origin) {
+  return origin ? Array.isArray(origin.sources) && origin.sources.length ? origin.sources : [origin] : [];
+}
+
 /** The platform's own label line in a memory file (a source that changed), which is never a statement (`nativeMemoryStore.SOURCE_LABEL_PREFIX`). */
 const LABEL_LINE = /^>\s*来源变更：/;
 
@@ -771,7 +776,7 @@ export class NativeMemoryOverlay {
   /**
    * The origins of the lines of these files, by file and line fingerprint.
    * @param {string} userId @param {readonly string[]} uris
-   * @returns {Promise<Map<string, Map<string, { revisionId: string | null, engineSession: string | null, archiveUri: string | null, projectId: string | null, projectCreatedAt:string|null, addedAt: string | null }>>>}
+   * @returns {Promise<Map<string, Map<string, { revisionId: string | null, engineSession: string | null, archiveUri: string | null, projectId: string | null, projectCreatedAt:string|null, addedAt: string | null, sources?: any[] }>>>}
    */
   async originsOf(userId, uris) {
     /** @type {Map<string, Map<string, any>>} */
@@ -781,10 +786,26 @@ export class NativeMemoryOverlay {
     for (const row of result.rows) {
       const lines = byUri.get(String(row.uri)) ?? new Map();
       lines.set(String(row.fingerprint), { revisionId: row.revision_id == null ? null : String(row.revision_id), engineSession: row.engine_session ?? null,
-        archiveUri: row.archive_uri ?? null, projectId: row.project_id ?? null, projectCreatedAt:row.source_epoch??null, addedAt: instant(row.added_at) });
+        archiveUri: row.archive_uri ?? null, projectId: row.project_id ?? null, projectCreatedAt:row.source_epoch??null, addedAt: instant(row.added_at),
+        ...(Array.isArray(row.sources) && row.sources.length ? { sources: row.sources } : {}) });
       byUri.set(String(row.uri), lines);
     }
     return byUri;
+  }
+
+  /** Attach the snapshotted conversation sources to each changed line, preserving unchanged lines' first origins.
+   * @param {string} userId @param {string} uri @param {Map<string, any[]>} lines */
+  async inheritOrigins(userId, uri, lines) {
+    for (const [fingerprint, sources] of lines) {
+      if (!sources.length) continue;
+      const first = sources[0];
+      await this.#query(`INSERT INTO evimed_memory.native_line_origins
+        (user_id,uri,fingerprint,revision_id,engine_session,archive_uri,project_id,project_created_at,added_at,sources)
+        VALUES($1,$2,$3,$4::bigint,$5,$6,$7,$8,COALESCE($9::timestamptz,clock_timestamp()),$10::jsonb)
+        ON CONFLICT(user_id,uri,fingerprint) DO NOTHING`,
+      [owner(userId),uri,fingerprint,first.revisionId ?? null,first.engineSession ?? null,first.archiveUri ?? null,
+        first.projectId ?? null,first.projectCreatedAt ?? null,first.addedAt ?? null,JSON.stringify(sources)]);
+    }
   }
 
   /** Whether the account's older revisions were read into the origin index, and the mark that they were. @param {string} userId */

@@ -310,3 +310,16 @@ for (const state of ['retracted', 'current']) for (const boundary of ['replace',
     assert.equal((await f.overlay.revisionsOf(f.owner.id, uri)).filter(row => row.actor === 'platform' && row.reason === revisions[0].reason).length, 1);
   });
 }
+
+test('verify mode refuses foreign consolidation sources before reading or judging them', options, async t => {
+  const f = await fixture(t), user = f.owner.id;
+  f.worker.config.nativeMemoryConsolidationEnabled = true;
+  f.worker.config.nativeMemoryConsolidationMode = 'verify';
+  const a = f.stub.seedMemory(f.a.namespaceId, 'entities/a.md', 'A fact.');
+  const b = f.stub.seedMemory(f.b.namespaceId, 'entities/b.md', 'B fact.');
+  const before = f.stub.requests.length;
+  await assert.rejects(f.worker.ingestConsolidation(user, { taskId: 'foreign-verify', adds: [a, b] }, { context: f.a }), error => error.code === 'memory_scope_denied');
+  assert.equal(f.stub.requests.length, before);
+  assert.deepEqual(await f.worker.verification.readSources(user, [{ archiveUri: `${f.b.userRoot}/sessions/dsh-root/history/archive_001` }], f.a), []);
+  assert.equal(f.stub.requests.length, before);
+});

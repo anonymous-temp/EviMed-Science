@@ -35,6 +35,15 @@ export function nativeAppIntegration() {
     await migrateMemorySettings(app.store.database);
     const username = `native${randomUUID().replaceAll("-", "").slice(0, 10)}`;
     const user = await app.store.createUser(username, PASSWORD, "Native fixture");
+    // This mock runtime owns only this fixture account. Its drain must not process other tests' retained deletion intents.
+    app.sourceDeletion.ledger.pending = async () => {
+      await app.sourceDeletion.ledger.migrate();
+      const due = await app.store.database.query(`SELECT id FROM evimed_source_deletion.conversations
+        WHERE user_id=$1 AND cleanup='pending' AND (next_attempt_at IS NULL OR next_attempt_at<=clock_timestamp())
+        ORDER BY updated_at LIMIT 30`, [user.id]);
+      const own = new Map((await app.sourceDeletion.ledger.recordsForOwner(user.id, { pendingOnly: true })).map(row => [row.id, row]));
+      return due.rows.map(row => own.get(row.id)).filter(Boolean);
+    };
     const address = await app.listen(0, "127.0.0.1");
     const base = `http://127.0.0.1:${address.port}`;
     t.after(async () => {

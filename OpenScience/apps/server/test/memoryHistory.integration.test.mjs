@@ -406,3 +406,34 @@ test('a shared GEO namespace is never indexed as raw history, and nothing is ret
   f.service.contexts = { async forProject() { return shared; } };
   assert.deepEqual(await search(f), []);
 });
+
+test('existing-line verification recovers a planted corruption through product raw-history search and original archive roles', options, async t => {
+  const f = await setup(t);
+  await f.service.ingestArchive(f.commit, f.context);
+  f.config.nativeMemoryConsolidationEnabled = true;
+  f.config.nativeMemoryConsolidationMode = 'verify';
+  f.worker.verification.history = f.service;
+  const uri = f.seed('profile.md', 'I prefer trial charts.');
+  let calls = 0;
+  f.worker.verification.judge = { judge: async ({ lines }) => {
+    calls++;
+    assert.equal(lines[0].sources[0].role, 'user');
+    assert.equal(lines[0].sources[0].text, 'I prefer trial tables.');
+    assert.equal(lines[0].sources[1].role, 'assistant');
+    return { calls: 1, results: new Map([[0, { index: 0, verdict: 'corrected', corrected: lines[0].sources[0].text }]]) };
+  } };
+  const result = await f.consolidation.verifyExisting(f.userId, { limit: 10 });
+  assert.deepEqual(result, { checked: 1, supported: 0, corrected: 1, unsupported: 0, unverifiable: 0, calls: 1 });
+  assert.equal(calls, 1);
+  assert.equal(await f.sessions.read(f.userId, uri), 'I prefer trial tables.');
+  assert.ok(f.calls.some(call => call[0] === 'vector+keyword'));
+  const [revision] = await f.overlay.revisionsOf(f.userId, uri);
+  assert.equal(revision.reason, 'verification_corrected');
+  assert.equal(revision.before, 'I prefer trial charts.');
+  // A deleted source cannot support a later plant, even if its old index bytes remain.
+  await f.service.removeConversation(f.context, 'session_a');
+  await f.sessions.replace(f.userId, uri, 'I prefer trial charts.');
+  const fenced = await f.consolidation.verifyExisting(f.userId, { limit: 10 });
+  assert.equal(fenced.unverifiable, 1);
+  assert.equal(calls, 1);
+});

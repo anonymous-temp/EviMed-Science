@@ -2140,7 +2140,7 @@ function sourceDomain(value) {
 // being reported as a quotation absent from its source — one letter cost a whole
 // package, on a passage that was verbatim in every other respect.
 /** @param {unknown} value @returns {string} */
-function normalizedPassage(value) {
+export function normalizedPassage(value) {
   return String(value ?? "")
     // NFKC alone turns 10³ into 103, changing the scientific value. Preserve
     // exponent notation before normalizing compatible typography.

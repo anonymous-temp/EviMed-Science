@@ -229,7 +229,7 @@ export class MemoryHistory {
   async coverage(ownerId) { return this.ledger.archiveCoverage(ownerId); }
   status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill } }; }
 
-  async search({ user, project, query, limit = 5 }) {
+  async search({ user, project, query, limit = 5 }, { includeOrigins = false } = {}) {
     if (!this.enabled || !query?.trim()) return [];
     const context = await this.contexts.forProject(project);
     if (context.ownerId !== user.id || context.kind === 'geo-project') return [];
@@ -285,7 +285,9 @@ export class MemoryHistory {
       if (await this.ledger.rejected(context,[projectTitle])) projectTitle='Project';
       if (!await this.ledger.lookup(user.id,context.ownerCreatedAt,context.namespaceId,verified.projectId,verified.projectCreatedAt,candidate.uri)) continue;
       hits.push({ conversationTitle: title, conversationUrl: verified.conversationUrl, projectId: verified.projectId, projectTitle, scope: 'project',
-        sessionId: meta.session_id, messages, contextOnly: true, confirmed: false, privateByDefault: privateByDefault({ nativeType: 'people' }) });
+        sessionId: meta.session_id, messages, contextOnly: true, confirmed: false, privateByDefault: privateByDefault({ nativeType: 'people' }),
+        ...(includeOrigins ? { origin: { archiveUri: meta.archive_uri, engineSession: `dsh-${meta.session_id}`,
+          projectId: verified.projectId, projectCreatedAt: verified.projectCreatedAt, addedAt: meta.minimum_date } } : {}) });
       if (hits.length >= asked) break;
     }
     return hits;

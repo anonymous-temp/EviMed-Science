@@ -23,9 +23,12 @@ test('durable deletion intents have no owner cascade and cannot delete a reused 
   await ledger.migrate();
   const row={id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:'2026-01-01T00:00:00Z',projectCreatedAt:'2026-01-01T00:00:00Z',rootSessionId:'a',sessionIds:['a'],frozen:{root:{id:'a'}}};
   await ledger.put(row);
+  // pending() is a global batch of thirty; isolate this fixture from retained audit rows on a reused lab database.
+  await f.database.query("UPDATE evimed_source_deletion.conversations SET updated_at='1970-01-01' WHERE id=$1",[row.id]);
   await f.database.query('DELETE FROM evimed_control.users WHERE id=$1',[f.userId]);
   assert.ok((await ledger.pending()).some(r=>r.id===row.id));
   await assert.rejects(ledger.assertIdentity(row),{status:404});
+  await ledger.update(row,{cleanup:'complete',sourceRemoved:false});
 });
 
 test('a replay of the deleted source retains its source fence and cannot leave source lines or replay work behind', options, async t => {
@@ -239,6 +242,7 @@ test('a completed deletion is never selected or downgraded, and a failed cleanup
   const stamp=(await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[f.userId])).rows[0].stamp;
   const put=id=>ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',accountCreatedAt:stamp,projectCreatedAt:f.projectCreatedAt,rootSessionId:id,sessionIds:[id],frozen:{root:{id}},memoryUserRoot:f.sessions.userRoot(f.userId)});
   const done=await put('done'), retry=await put('retry');
+  await f.database.query("UPDATE evimed_source_deletion.conversations SET updated_at='1970-01-01' WHERE id=$1",[retry.id]);
   await ledger.update(done,{cleanup:'complete',sourceRemoved:true});
   await f.database.query("UPDATE evimed_source_deletion.conversations SET updated_at=clock_timestamp()-interval '1 hour' WHERE id=$1",[done.id]);
   {const ids=(await ledger.pending()).map(r=>r.id);assert.ok(ids.includes(retry.id));assert.ok(!ids.includes(done.id),'a complete row old enough to look stale is not selected');}
@@ -246,8 +250,9 @@ test('a completed deletion is never selected or downgraded, and a failed cleanup
   assert.equal(kept.cleanup,'complete','a busy account cannot downgrade a completed row');
   await ledger.update(retry,{cleanup:'pending',reason:'cleanup_unavailable',backoff:true});
   assert.ok(!(await ledger.pending()).some(r=>r.id===retry.id),'the failed cleanup waits for its next attempt');
-  await f.database.query("UPDATE evimed_source_deletion.conversations SET next_attempt_at=clock_timestamp()-interval '1 second' WHERE id=$1",[retry.id]);
+  await f.database.query("UPDATE evimed_source_deletion.conversations SET next_attempt_at=clock_timestamp()-interval '1 second',updated_at='1970-01-01' WHERE id=$1",[retry.id]);
   assert.ok((await ledger.pending()).some(r=>r.id===retry.id));
+  await ledger.update(retry,{cleanup:'complete'});
 });
 
 test('deleting a conversation whose extraction failed abandons its commit: other memory stays visible and nothing waits on it', options, async t => {
@@ -277,4 +282,22 @@ test('a deleted-source commit with no diff and no proof of failure stays pending
   f.overlay.sourceDeletion={ledger};
   await f.worker.processCommits({userId:f.userId});
   assert.equal((await f.overlay.commit(f.userId,archive.archive_uri)).state,'pending');
+});
+
+test('a secondary inherited origin fences disclosure immediately and cleanup scrubs the combined line undoably', options, async t => {
+  const f = await fixture(t), ledger = new ConversationSourceDeletionLedger(f.database);
+  const body = '# Profile\n- Combined A and B.\n- Independent C.';
+  const uri = f.seed('profile.md', body, { type: 'profile' });
+  await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'profile', body });
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const sources = ['a', 'b'].map(session => ({ engineSession: `dsh-${session}`, archiveUri: `${f.sessions.userRoot(f.userId)}/sessions/dsh-${session}/history/archive_001`, projectId: 'default', projectCreatedAt: f.projectCreatedAt }));
+  await f.overlay.inheritOrigins(f.userId, uri, new Map([[lineFingerprint('Combined A and B.'), sources]]));
+  await f.overlay.addRevision({ userId: f.userId, uri, memoryType: 'profile', change: 'added', actor: 'platform', reason: 'verification_corrected', after: body });
+  const stamp = (await f.database.query('SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1', [f.userId])).rows[0].stamp;
+  await ledger.put({ id: crypto.randomUUID(), userId: f.userId, projectId: 'default', accountCreatedAt: stamp, projectCreatedAt: f.projectCreatedAt,
+    rootSessionId: 'b', sessionIds: ['b'], frozen: { root: { id: 'b' } }, memoryUserRoot: f.sessions.userRoot(f.userId) });
+  assert.ok((await ledger.hiddenMemoryUris(f.userId)).includes(uri));
+  await f.store.removeConversationSource(f.userId, 'default', ['b']);
+  assert.equal(await f.sessions.read(f.userId, uri), '# Profile\n- Independent C.');
+  assert.ok((await f.overlay.revisionsOf(f.userId, uri)).every(revision => ![revision.before, revision.after].some(text => text?.includes('Combined A and B.'))));
 });

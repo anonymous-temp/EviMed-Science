@@ -65,7 +65,7 @@ export function nativeIntegration({ config: settings = {} } = {}) {
     const resources = new OpenVikingResources({ client });
     // The consolidation reads times the database wrote (its own clock): its `now` is the real one, turned forward by hand.
     let skew = 0;
-    const consolidation = new NativeMemoryConsolidation({ config: merged, memorySettings, sessions, resources, overlay, ingest: (id, task) => worker.ingestConsolidation(id, task), now: () => new Date(Date.now() + skew) });
+    const consolidation = new NativeMemoryConsolidation({ config: merged, memorySettings, sessions, resources, overlay, verification: worker.verification, ingest: (id, task) => worker.ingestConsolidation(id, task), now: () => new Date(Date.now() + skew) });
     const root = sessions.memoryRoot(userId);
     const engineUser = sessions.engineUser(userId);
     /** @param {string} relPath @param {string} text @param {{ type?: string, tags?: string[] }} [how] */
