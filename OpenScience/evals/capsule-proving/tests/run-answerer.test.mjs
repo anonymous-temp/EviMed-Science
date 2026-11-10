@@ -552,3 +552,29 @@ test("a network failure reading a response body is retried", async (t) => {
   assert.equal((await client.complete({ messages: [] })).message.content, "Recovered");
   assert.equal(count, 2);
 });
+
+
+test("search hint opt-in changes only the product system prompt", () => {
+  const plain = buildSystemPrompt();
+  assert.equal(buildSystemPrompt({ config: { memorySearchHintEnabled: false } }), plain);
+  const hint = buildSystemPrompt({ config: { memorySearchHintEnabled: true } });
+  assert.notEqual(hint, plain);
+  assert.match(hint, /mcp__openviking__search/);
+});
+
+productTest("each answer configuration builds its own hint prompt and preserves startup listing markers", async () => {
+  const plain = fakeMemory();
+  const hinted = { ...fakeMemory(), config: { memorySearchHintEnabled: true } };
+  const first = fakeClient([reply("answer")]);
+  const second = fakeClient([reply("answer")]);
+  await answerQuestion({ ...options, memory: plain, client: first });
+  await answerQuestion({ ...options, memory: hinted, client: second });
+  assert.equal(first.requests[0].messages[0].content, buildSystemPrompt());
+  assert.equal(second.requests[0].messages[0].content, buildSystemPrompt({ config: hinted.config }));
+  for (const memory of [plain, hinted]) {
+    const lists = memory.paths.map(url => new URL(url, "http://memory.invalid")).filter(url => /\/(preferences|entities)$/.test(url.searchParams.get("uri") ?? ""));
+    assert.equal(lists.length, 2);
+    for (const url of lists) assert.deepEqual(Object.fromEntries([...url.searchParams].filter(([key]) => key !== "uri")),
+      { output: "agent", recursive: "true", abs_limit: "512", node_limit: "512" });
+  }
+});

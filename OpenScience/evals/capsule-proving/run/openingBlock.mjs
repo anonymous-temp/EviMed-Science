@@ -155,14 +155,14 @@ export async function buildSkillCatalog({ pluginTgz = process.env.CAPSULE_PROVIN
 }
 
 /** Rebuild the same persona and guidance as evals/remembered-format/texts.mjs. */
-export function buildSystemPrompt({ model = "deepseek-flash" } = {}) {
+export function buildSystemPrompt({ model = "deepseek-flash", config = {} } = {}) {
   const manifests = readdirSync(path.join(root, "capabilities")).flatMap((id) => {
     try { return [parse(readFileSync(path.join(root, "capabilities", id, "capability.yaml"), "utf8"), quiet)]; }
     catch { return []; }
   });
   const guidance = buildGuidanceText(manifests, {
     askUserEnabled: true, capsuleActive: false, reviewEnabled: false, runPolicyEnabled: true,
-    capsuleToolEnabled: false, openVikingMemory: true,
+    capsuleToolEnabled: false, openVikingMemory: true, memorySearchHint: config.memorySearchHintEnabled === true,
   });
   const rows = parse(readFileSync(path.join(root, "packages/socket/presets/evimed-universal/agent.cordis.yml"), "utf8"), quiet);
   const prefix = String(rows.find((row) => row?.id === "persona")?.config?.prefix ?? "").replace(/\s+/g, " ").trim();

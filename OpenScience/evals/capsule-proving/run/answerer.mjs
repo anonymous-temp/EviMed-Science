@@ -31,7 +31,7 @@ export async function answerQuestion({ question, asOf, arm, memory, materials = 
   try {
     if (!["product", "keyword", "no-memory"].includes(arm)) throw fail("invalid_arm", "Unknown evaluation arm");
     if (!Number.isInteger(maxRounds) || maxRounds < 0) throw fail("invalid_rounds", "maxRounds must be a nonnegative integer");
-    const messages = [{ role: "system", content: buildSystemPrompt({ model: record.model.name }) }];
+    const messages = [{ role: "system", content: buildSystemPrompt({ model: record.model.name, config: arm === "product" ? memory?.config : {} }) }];
     const catalog = await buildSkillCatalog({ pluginTgz, includeMemory: arm === "product" });
     record.opening.skillCatalog = { entries: catalog.entries.length, sha256: createHash("sha256").update(catalog.text).digest("hex") };
     // Ordering assumption: catalogue, profile, resident, question. The kernel's catalogue is
