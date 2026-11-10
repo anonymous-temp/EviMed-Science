@@ -448,6 +448,9 @@ async function main() {
     const gold = JSON.parse(await fs.readFile(`${data}/gold.json`, 'utf8')).people;
     units = persons.map(p => ({ id: p.id, run: ctx => l2Unit(ctx, p, gold.find(g => g.id === p.id)) }));
   }
+  // A unit list for a whole experiment can be set without restarting a running plan: <runs>/lx-units-<exp>.txt (comma-separated ids).
+  const unitsFile = path.join(path.dirname(outDir), `lx-units-${args.exp}.txt`);
+  if (!args.units && fsSync.existsSync(unitsFile)) args.units = fsSync.readFileSync(unitsFile, 'utf8').trim();
   if (args.units) { const want = args.units.split(','); units = units.filter(u => want.includes(u.id)); }
   const finish = async () => {
     const verdicts = [];

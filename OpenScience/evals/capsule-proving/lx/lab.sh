@@ -39,8 +39,12 @@ for s in "${steps[@]}"; do
   done
   [[ "$ok" == 1 ]] || exit 1
   out=/srv/evimed/runs/lx-$exp-$arm-1
-  if [[ -f "$out/ledger-rows.json" && ! -f "$out/ledger-added" ]]; then
-    (cd /srv/evimed/repo/OpenScience && node evals/capsule-proving/run/ledger.mjs add --json "$out/ledger-rows.json" --ledger /srv/evimed/results/ledger.jsonl) >> "$out/ledger-added.log" 2>&1 && touch "$out/ledger-added"
+  # One marker per rows file content: a later run over more units (L2 people) adds its own rows.
+  if [[ -f "$out/ledger-rows.json" ]]; then
+    mark="$out/ledger-added-$(sha1sum "$out/ledger-rows.json" | cut -c1-12)"
+    if [[ ! -f "$mark" ]]; then
+      (cd /srv/evimed/repo/OpenScience && node evals/capsule-proving/run/ledger.mjs add --json "$out/ledger-rows.json" --ledger /srv/evimed/results/ledger.jsonl) >> "$out/ledger-added.log" 2>&1 && touch "$mark"
+    fi
   fi
 done
 printf '%s LX plan %s complete\n' "$(date -u +%FT%TZ)" "$plan" >> "$LX_STATUS_FILE"
