@@ -73,6 +73,7 @@ def parse_scores(text: str) -> dict | None:
 
 def chat(system: str, user: str, key: str, model: str, base: str = BASE_URL, attempts: int = 3) -> str:
     body = json.dumps({"model": model, "temperature": 0, "response_format": {"type": "json_object"},
+                       **({"enable_thinking": False} if model.startswith("qwen") else {}),
                        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}).encode()
     last = None
     for attempt in range(attempts):
@@ -118,6 +119,8 @@ def main() -> None:
     parser.add_argument("--key-file")
     parser.add_argument("--model", default="deepseek-v4-flash")
     parser.add_argument("--only")
+    parser.add_argument("--api-base", default=BASE_URL)
+    parser.add_argument("--phase", choices=["learning", "exam"])
     parser.add_argument("--redo", action="store_true")
     args = parser.parse_args()
     key = resolve_key(args.key_file)
@@ -131,8 +134,12 @@ def main() -> None:
         judged = json.loads(judged_file.read_text(encoding="utf-8"))
         target = out_dir / judged_file.name
         if target.exists() and not args.redo:
-            continue
+            saved = json.loads(target.read_text(encoding="utf-8"))
+            if saved.get("entries") and all(e.get("verdict") in ("satisfied", "not_satisfied") for e in saved["entries"].values()):
+                continue
         record = json.loads((args.run / "records" / judged_file.name).read_text(encoding="utf-8"))
+        if args.phase and record.get("phase") != args.phase:
+            continue
         result = {"name": judged["name"], "model": args.model, "promptVersion": RUBRICS["promptVersion"], "entries": {}}
         for case_id, entry in judged["entries"].items():
             if entry.get("status") == "infra_error" or (only and case_id not in only):
@@ -142,7 +149,7 @@ def main() -> None:
             turns = record["turns"][offset: offset + len(case["turns"])]
             system, user = build_messages(case, entry, turns, excerpts_of(judged_file.parent.parent / "records" / (judged_file.stem + ".files"), offset, len(turns)))
             try:
-                parsed = parse_scores(chat(system, user, key, args.model))
+                parsed = parse_scores(chat(system, user, key, args.model, base=args.api_base))
             except RuntimeError as error:
                 parsed = None
                 print(f"{case_id}: {error}")

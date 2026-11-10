@@ -147,7 +147,7 @@ async function firstRequestOf(dataDir, since, until, evidenceDir) {
 
 const RUN_FIELDS = ['id', 'status', 'effectiveAgentId', 'effectiveRouteReason', 'effectiveAgentVersion', 'agentId', 'verification', 'qualityNotices', 'errorCode',
   'durationMs', 'observedMessages', 'observedToolCalls', 'artifacts', 'unverifiedArtifacts', 'outputFiles', 'presentedFiles', 'artifactKinds', 'artifactCounts',
-  'usage', 'model', 'phase', 'estimatedMinutes', 'title'];
+  'usage', 'methodsLoaded', 'methodsInvoked', 'model', 'phase', 'estimatedMinutes', 'title'];
 
 /**
  * @param {object} args
@@ -156,7 +156,7 @@ const RUN_FIELDS = ['id', 'status', 'effectiveAgentId', 'effectiveRouteReason', 
  * @param {string} args.fixtureRoot @param {string} args.dataDir @param {string} args.outDir directory of this record @param {number} args.timeoutMs per turn
  * @param {(msg:string)=>void} args.log
  */
-export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeoutMs, log }) {
+export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeoutMs, log, account = null, seedMethods = null, waitMemoryTools = false, automated = false, observeMethods = null }) {
   const startedAt = new Date().toISOString();
   const t0 = Date.now();
   const suffix = randomBytes(3).toString('hex');
@@ -165,16 +165,9 @@ export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeout
   const projectId = `ev-${slug}-${suffix}`;
   const record = { schema: 1, cell: spec.id, startedAt, username, projectId, turns: [], inputs: [], notes: [] };
 
-  const registered = await api.call('POST', '/api/auth/register', { username, password: 'eval-pass-1', name: username }, { project: null });
-  if (registered.status !== 201) throw new Error(`register ${registered.status} ${registered.raw.slice(0, 300)}`);
-  api.csrf = registered.json?.data?.csrfToken ?? registered.json?.data?.session?.csrfToken ?? '';
-  if (!api.csrf) {
-    const me = await api.call('GET', '/api/me', undefined, { project: null });
-    api.csrf = me.json?.data?.csrfToken ?? '';
-  }
-  const me = await api.call('GET', '/api/me', undefined, { project: null });
-  const userId = me.json?.data?.user?.id;
-  if (!userId) throw new Error(`no user id from /api/me: ${me.raw.slice(0, 200)}`);
+  const identity = account ?? await registerAccount(api, username);
+  const { userId } = identity;
+  record.username = identity.username;
   api.project = projectId;
   const created = await api.call('POST', '/api/projects', { id: projectId, name: projectId });
   if (created.status !== 200) throw new Error(`project ${created.status} ${created.raw.slice(0, 300)}`);
@@ -182,6 +175,13 @@ export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeout
   const workspace = `${projectDir}/workspace`;
   await fs.mkdir(workspace, { recursive: true });
   record.userId = userId; record.projectDir = projectDir;
+  const seedFile = seedMethods ?? spec.seed_methods;
+  if (seedFile) record.seededMethods = await seedMethodLibrary(api, seedFile);
+  if (waitMemoryTools && process.env.OPEN_SCIENCE_OPENVIKING_URL) {
+    const start = await api.call('POST', '/api/commands/start_runtime', {}, { timeoutMs: 300_000 });
+    if (start.status !== 200) throw new Error(`start runtime: ${start.status} ${start.raw.slice(0, 200)}`);
+    record.memoryToolsWait = await waitForMemoryTools(`${projectDir}/eval-memory-tools.json`);
+  }
 
   // The inputs go in through the upload route the web app uses.
   const attached = [];
@@ -217,7 +217,7 @@ export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeout
     firstTurnOfSession.add(sessionIndex);
     const turn = { index, session: sessionIndex, sessionId, text, startedAt: new Date().toISOString() };
     const turnStart = Date.now();
-    const dispatched = await api.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId: `d_${slug}_${index}_${suffix}`, text });
+    const dispatched = await api.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId: `d_${slug}_${index}_${suffix}`, text, ...(automated ? { automated: true } : {}) });
     if (dispatched.status !== 202) { turn.error = `dispatch ${dispatched.status} ${dispatched.raw.slice(0, 500)}`; record.turns.push(turn); break; }
     let run = dispatched.json.data;
     turn.runId = run.id;
@@ -247,6 +247,12 @@ export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeout
     turn.changed = await snapshotTurn(workspace, before, after, `${outDir}/ws-t${index}`);
     turn.workspaceAfter = after;
     before = after;
+    turn.methodSelection = await readSelection(projectDir);
+    if (observeMethods) {
+      turn.methodObservation = await observeMethods({ userId, projectId, runId: turn.runId });
+      turn.run.methodsLoaded = turn.methodObservation.methodsLoaded;
+      turn.run.methodsInvoked = turn.methodObservation.methodsInvoked;
+    }
     record.turns.push(turn);
     log(`  turn ${index}: ${run.status} route=${run.effectiveAgentId}/${run.effectiveRouteReason} tools=${run.observedToolCalls} wall=${Math.round(turn.wallMs / 1000)}s files=${turn.changed.length}`);
     if (turn.timedOut || turn.error) break;
@@ -265,6 +271,10 @@ export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeout
     record.memoryProfile = await get('/api/memory/profile');
   }
   record.firstRequest = await firstRequestOf(dataDir, startedAt, new Date().toISOString(), outDir);
+  record.firstRequest.memoryToolsPresent = (record.firstRequest.toolNames ?? []).filter(name => name?.startsWith('mcp__openviking__'));
+  record.firstRequest.hadMemoryTools = record.firstRequest.memoryToolsPresent.length > 0;
+  record.methodSelection = await readSelection(projectDir);
+  await fs.writeFile(`${outDir}/_selection.json`, JSON.stringify(record.methodSelection, null, 1));
   await api.call('POST', '/api/commands/stop_runtime', {});
   record.finishedAt = new Date().toISOString();
   record.wallMs = Date.now() - t0;
@@ -287,3 +297,48 @@ async function waitForMemory(api, ms) {
 
 export const _test = { digestTranscript, fixtureFiles };
 export { fsSync };
+
+export async function registerAccount(api, username) {
+  const registered = await api.call('POST', '/api/auth/register', { username, password: 'eval-pass-1', name: username }, { project: null });
+  if (registered.status !== 201) throw new Error(`register ${registered.status} ${registered.raw.slice(0, 300)}`);
+  api.csrf = registered.json?.data?.csrfToken ?? registered.json?.data?.session?.csrfToken ?? '';
+  if (!api.csrf) {
+    const me = await api.call('GET', '/api/me', undefined, { project: null });
+    api.csrf = me.json?.data?.csrfToken ?? '';
+  }
+  const me = await api.call('GET', '/api/me', undefined, { project: null });
+  const userId = me.json?.data?.user?.id;
+  if (!userId) throw new Error(`no user id from /api/me: ${me.raw.slice(0, 200)}`);
+  return { userId, username };
+}
+
+export async function seedMethodLibrary(api, file) {
+  const data = JSON.parse(await fs.readFile(file, 'utf8'));
+  const methods = Array.isArray(data) ? data : data.methods;
+  if (!Array.isArray(methods)) throw new Error('Method seed must be an array or {methods: [SKILL.md strings or {skill}]}');
+  const out = [];
+  for (const item of methods) {
+    const skill = typeof item === 'string' ? item : item.skill;
+    if (typeof skill !== 'string' || !skill.trim()) throw new Error('Method seed needs a full SKILL.md');
+    const response = await api.call('POST', '/api/methods', { skill });
+    if (response.status !== 201) throw new Error(`method seed: ${response.status} ${response.raw.slice(0, 200)}`);
+    out.push(response.json.data);
+  }
+  return out;
+}
+
+async function readSelection(projectDir) {
+  try { return JSON.parse(await fs.readFile(`${projectDir}/runtime/capsule-methods/_selection.json`, 'utf8')); }
+  catch { return null; }
+}
+
+export async function waitForMemoryTools(file, { timeoutMs = 180_000, pollMs = 500 } = {}) {
+  const start = Date.now();
+  let last = null;
+  while (Date.now() - start < timeoutMs) {
+    try { last = JSON.parse(await fs.readFile(file, 'utf8')); } catch {}
+    if (last?.names?.some(name => name.startsWith('mcp__openviking__'))) return { ...last, waitedMs: Date.now() - start };
+    await sleep(pollMs);
+  }
+  throw new Error(`memory tools not registered within ${timeoutMs}ms: ${JSON.stringify(last)}`);
+}
