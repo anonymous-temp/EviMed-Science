@@ -1,5 +1,9 @@
 // Eval-only IPC adapter. All writes use product entry points; no learning evidence or approvals are fabricated.
-export async function control(app, action, { userId, key = 'l3', projectId, runId } = {}) {
+export async function control(app, action, args = {}) {
+  // Optional extra actions for another runner (EVAL_CONTROL_EXTRA names a module exporting `control`); only `lx*` actions go there,
+  // so every existing action keeps its meaning whether or not the variable is set.
+  if (process.env.EVAL_CONTROL_EXTRA && String(action).startsWith('lx')) return (await import(process.env.EVAL_CONTROL_EXTRA)).control(app, action, args);
+  const { userId, key = 'l3', projectId, runId } = args;
   if (action === 'facts') return { nativeMemory: app.openVikingEngine?.ready('nativeMemory') ?? null,
     knowledge: app.openVikingEngine?.ready('knowledge') ?? null, ranker: Boolean(app.runtimeManager.methodSimilarity) };
   if (action === 'usage') return { account: await app.usageLedger.summary(userId),
