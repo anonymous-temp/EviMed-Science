@@ -339,6 +339,7 @@ export function createLabResidentProfiles({ config, memorySettings, nativeMemory
     projectCard: (userId, projectId) => nativeMemory.residentCard(userId, projectId),
     nativeFiles: (userId, projectId, limit) => nativeMemory.openingFiles(userId, projectId, limit),
     nativeIndex: (userId, projectId) => nativeMemory.openingIndex(userId, projectId),
+    safetyNotes: (userId, projectId) => nativeMemory.safetyNotes(userId, projectId),
   });
 }
 
@@ -759,8 +760,8 @@ export async function openLab({
         const root = sessions.memoryRoot(user.userId);
         const operations = { adds: 0, updates: 0, deletes: 0 };
         let observations = 0;
-        const tokens = sessionUsage(commits.map((commit) => commit.task ?? null));
-        const usage = tokens.total;
+        const extractionTokens = sessionUsage(commits.map((commit) => commit.task ?? null));
+        const usage = extractionTokens.total;
         for (const commit of commits) {
           if (!commit.archiveUri) continue;
           const diffUri = typeof commit.task?.result?.memory_diff_uri === "string" ? commit.task.result.memory_diff_uri : `${commit.archiveUri}/memory_diff.json`;
@@ -781,7 +782,7 @@ export async function openLab({
           messages: session.messages.length, userTurns: session.messages.filter((message) => message.role === "user").length, dropped,
           attachmentsWithheld: Array.isArray(session.attachments) ? session.attachments.length : 0,
           commit: { taskId: last?.taskId ?? null, status: String(last?.task?.status ?? last?.outcome ?? "none"), outcome: last?.outcome ?? "none", archiveUri: last?.archiveUri ?? null },
-          ...(commits.length > 1 ? { commits: commits.map((commit, index) => ({ taskId: commit.taskId, status: String(commit.task?.status ?? commit.outcome), outcome: commit.outcome, usage: tokens.perCommit[index] })) } : {}),
+          ...(commits.length > 1 ? { commits: commits.map((commit, index) => ({ taskId: commit.taskId, status: String(commit.task?.status ?? commit.outcome), outcome: commit.outcome, usage: extractionTokens.perCommit[index] })) } : {}),
           operations, observations, usage,
           ledger: ledger ? { state: ledger.state, operations: ledger.operations, error: ledger.error ? scrub(ledger.error).slice(0, 200) : "" } : null,
           refused: Object.fromEntries(refusals.map((row) => [String(row.reason || "unspecified"), Number(row.n)])),

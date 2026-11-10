@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { MEMORY_DECIDE_TEXT, MEMORY_NEVER_KEPT_TEXT } from "../../../../packages/domain/src/memoryNeverKept.mjs";
+import { MEMORY_DECIDE_TEXT, MEMORY_NEVER_KEPT_TEXT, MEMORY_SAFETY_NOTES_TEXT } from "../../../../packages/domain/src/memoryNeverKept.mjs";
 
 const src = path.dirname(fileURLToPath(import.meta.url));
 const out = path.join(src, "..", "memory-templates");
@@ -48,9 +48,10 @@ export const DECIDE_VARIANTS = Object.freeze({ current: MEMORY_DECIDE_TEXT, purp
  * The rendered text of every type, by file name. `variant` is "full" (every type carries the whole never-kept block: what is
  * deployed) or "short-never" (the lab variant above).
  * `decide` names the decide block (`DECIDE_VARIANTS`); anything but `current` is a lab variant.
- * @param {{ variant?: "full" | "short-never", decide?: "current" | "purpose" | "purpose-verify" }} [options]
+ * `safetyNotes` adds the opt-in structural safety section contract to people/profile; the deployed files stay unchanged.
+ * @param {{ variant?: "full" | "short-never", decide?: "current" | "purpose" | "purpose-verify", safetyNotes?: boolean }} [options]
  */
-export function renderMemoryTemplates({ variant = "full", decide: decideName = "current" } = {}) {
+export function renderMemoryTemplates({ variant = "full", decide: decideName = "current", safetyNotes = false } = {}) {
   if (!Object.hasOwn(DECIDE_VARIANTS, decideName)) throw new Error(`unknown decide variant ${decideName}`);
   const indented = (/** @type {string} */ text) => text.trimEnd().split("\n")
     .map((line, index) => (index === 0 ? line : `  ${line}`)).join("\n");
@@ -61,13 +62,18 @@ export function renderMemoryTemplates({ variant = "full", decide: decideName = "
   /** @type {Record<string, string>} */
   const rendered = {};
   for (const name of fs.readdirSync(src).filter((file) => file.endsWith(".yaml")).sort()) {
-    const text = fs.readFileSync(path.join(src, name), "utf8");
+    let text = fs.readFileSync(path.join(src, name), "utf8");
+    if (safetyNotes && name === "profile.yaml") {
+      text = text.replace("No H2/H3 headings, tables, JSON or paragraphs.", "Only the marked safety H2 section described above is allowed; no other H2/H3 headings, tables, JSON or paragraphs.")
+        .replace("No other headings, labels, tables or prose.", "Include the marked safety H2 section and its bullets when applicable; no other headings, labels, tables or prose.");
+    }
     if (!text.includes("__NEVER_KEEP__")) throw new Error(`${name} does not carry the never-kept block`);
     if (!text.includes("__DECIDE__")) throw new Error(`${name} does not carry the decide block`);
     if (!text.includes("__LANGUAGE__")) throw new Error(`${name} does not carry the language block`);
     // A function replacement: the blocks carry `$` characters of their own, which a string replacement would read as patterns.
     const never = variant === "short-never" && name !== "profile.yaml" ? reminder : block;
-    rendered[name] = text.replace("__NEVER_KEEP__", () => never).replace("__DECIDE__", () => decide).replace("__LANGUAGE__", () => language);
+    const safety = safetyNotes && ["people.yaml", "profile.yaml"].includes(name) ? `\n\n  ${indented(MEMORY_SAFETY_NOTES_TEXT)}` : "";
+    rendered[name] = text.replace("__NEVER_KEEP__", () => never).replace("__DECIDE__", () => decide + safety).replace("__LANGUAGE__", () => language);
   }
   return rendered;
 }
@@ -75,18 +81,20 @@ export function renderMemoryTemplates({ variant = "full", decide: decideName = "
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   // `node build.mjs` renders what is deployed. A lab variant is rendered elsewhere, never over it:
   // `node build.mjs --variant short-never --out /tmp/templates-b`, `node build.mjs --decide purpose --out /tmp/templates-purpose`.
+  // `node build.mjs --safety-notes --out /tmp/templates-safety` adds the safety section contract only in a lab variant.
   const arguments_ = process.argv.slice(2);
   const option = (/** @type {string} */ name) => { const at = arguments_.indexOf(name); return at >= 0 ? arguments_[at + 1] : undefined; };
   const variant = option("--variant") ?? "full";
   const decide = option("--decide") ?? "current";
   const target = option("--out");
+  const safetyNotes = arguments_.includes("--safety-notes");
   if (!["full", "short-never"].includes(variant)) throw new Error(`unknown variant ${variant}`);
   if (!Object.hasOwn(DECIDE_VARIANTS, decide)) throw new Error(`unknown decide variant ${decide}`);
-  if ((variant !== "full" || decide !== "current") && !target) throw new Error("a lab variant is rendered with --out <directory>, never over the deployed templates");
+  if ((variant !== "full" || decide !== "current" || safetyNotes) && (!target || path.resolve(target) === out)) throw new Error("a lab variant is rendered with --out <directory>, never over the deployed templates");
   const directory = target ? path.resolve(target) : out;
   fs.mkdirSync(directory, { recursive: true });
   for (const name of fs.readdirSync(directory)) if (name.endsWith(".yaml")) fs.rmSync(path.join(directory, name));
-  for (const [name, text] of Object.entries(renderMemoryTemplates({ variant: /** @type {any} */ (variant), decide: /** @type {any} */ (decide) }))) {
+  for (const [name, text] of Object.entries(renderMemoryTemplates({ variant: /** @type {any} */ (variant), decide: /** @type {any} */ (decide), safetyNotes }))) {
     fs.writeFileSync(path.join(directory, name), text);
     console.log("rendered", name);
   }

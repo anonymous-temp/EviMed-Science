@@ -1248,9 +1248,9 @@ export {
   stripPlatformTags,
   unwrapUserWrappers,
 } from './src/memoryVocabulary.mjs'
-// memoryNeverKept — 2 exports: what a memory never holds and how to decide what it holds, the two texts the native engine's
+// memoryNeverKept — retention texts and the opt-in safety section contract the native engine's
 // type templates and the legacy extraction's instruction both state.
-export { MEMORY_DECIDE_TEXT, MEMORY_NEVER_KEPT_TEXT } from './src/memoryNeverKept.mjs'
+export { MEMORY_DECIDE_TEXT, MEMORY_NEVER_KEPT_TEXT, MEMORY_SAFETY_NOTES_ANCHOR, MEMORY_SAFETY_NOTES_TEXT } from './src/memoryNeverKept.mjs'
 // frontierVocabulary — 68 exports: the frontier feed's closed vocabularies
 // (lane, source type, evidence type, specialty, flag, health, egress, access, and since contract 1.5.0 channel, platform
 // and author role —
