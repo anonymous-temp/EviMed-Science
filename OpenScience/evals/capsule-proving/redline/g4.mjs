@@ -25,7 +25,7 @@ import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { G4_DELETE_VIA, G4_PLANT_VIA } from "../synthetic/trialPlans.mjs";
-import { classifyFindings, summarizeG4 } from "./classify.mjs";
+import { classifyFindings, classifyG4Scans, summarizeG4 } from "./classify.mjs";
 import { carrierWords, capPerCell, gitState, intArg, loadGate, milestone, openRun, readRows, redlineDatabaseName, parseArgs, runPool, selectTrials, sessionIdFor, stoppedCells as openStoppedCells } from "./common.mjs";
 import { capsulePreview, databaseColumnsWith, engineFilesWith, exportPaths, holds, markerLinePrints, modelSurfaces, pageSurfaces, servedMemoryFiles,
   staleOrigins, vectorHits } from "./scan.mjs";
@@ -219,6 +219,7 @@ export async function runG4Trial(stack, trial) {
     await sleep(3_000);
     const scan = await scanAll(stack, user, trial, prints);
     const verdict = classifyFindings(scan.findings, trial);
+    row.beforeRestatement = { ...scan, at: new Date().toISOString(), stage: "after-delete-before-restatement" };
     row.places = verdict.places;
     row.reappeared = verdict.reappeared;
     // Accepted by the product (it answered 2xx and holds the request) but not finished, and the marker still reaches an answer.
@@ -232,7 +233,16 @@ export async function runG4Trial(stack, trial) {
     } else if (controlsPlanted.some(Boolean)) {
       row.controlsSurvived = controlsPlanted.every((planted, index) => !planted || controlsNow[index]);
     }
-    if (trial.relearn !== "none") row.relearnOutcome = await relearn(stack, user, trial, plant);
+    if (trial.relearn !== "none") {
+      row.relearnOutcome = await relearn(stack, user, trial, plant);
+      if (row.relearnOutcome.outcome !== "not-applicable") {
+        const afterScan = await scanAll(stack, user, trial, prints);
+        row.afterRestatement = { ...afterScan, at: new Date().toISOString(), stage: "after-restatement" };
+        const stages = classifyG4Scans(scan.findings, afterScan.findings, trial);
+        row.relearnedAfterRestatement = stages.relearnedAfterRestatement;
+        row.relearnPlaces = stages.relearnPlaces;
+      }
+    }
   } catch (error) {
     row.error = stack.errorLine(error);
   }
@@ -248,6 +258,7 @@ async function main() {
   const shard = intArg(args.shard, 0), shards = Math.max(1, intArg(args.shards, 1));
   const engineUrl = String(args["engine-url"] ?? "http://127.0.0.1:19330");
   const options = { engineUrl, shard, shards, concurrency: Math.max(1, intArg(args.concurrency, 2)), limit: intArg(args.limit, 0), perCell: intArg(args["per-cell"], 0),
+    stopAfter: intArg(args["stop-after"], 0),
     trials: String(args.trials ?? "/srv/evimed/data/memdata-data/redline/g4-trials.json"), databaseName: String(args["database-name"] ?? redlineDatabaseName(runId, engineUrl)) };
   const plan = JSON.parse(await readFile(options.trials, "utf8"));
   const runner = await openRun({ runDir, meta: { runId, kind: "g4", ...gitState(path.resolve(import.meta.dirname, "../../..")), automated: true,
@@ -256,8 +267,8 @@ async function main() {
 
   const cellOf = (/** @type {any} */ trial) => `${trial.plantVia}×${trial.deleteVia}`;
   const stoppedCells = openStoppedCells(path.join(runDir, "stopped-cells.json"), { ignore: Boolean(args["resume-stopped"]) });
-  // A cell stops at its `--stop-after`-th red line (default the first), counting the red lines its rows already hold.
-  const stopAfter = Math.max(1, intArg(args["stop-after"], 1));
+  // Full batches count every trial by default. --stop-after N opts into a per-cell stop; zero means never.
+  const stopAfter = options.stopAfter || Infinity;
   const isRed = (row) => Boolean((row.reappeared && row.deleted) || row.unfinishedDelete);
   /** @type {Map<string, number>} */
   const redCount = new Map();
@@ -284,7 +295,7 @@ async function main() {
   let finished = 0, reappeared = 0, failed = 0;
   try {
     await runPool(selected, options.concurrency, async (trial) => {
-      if (await stoppedCells.has(cellOf(trial))) { await runner.fail(trial.trialId, `cell-stopped ${cellOf(trial)}`); return; }
+      if (Number.isFinite(stopAfter) && await stoppedCells.has(cellOf(trial))) { await runner.fail(trial.trialId, `cell-stopped ${cellOf(trial)}`); return; }
       const row = await runG4Trial(stack, trial);
       await runner.writeRow(row);
       finished += 1;
