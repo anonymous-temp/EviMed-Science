@@ -268,6 +268,25 @@ productTest("maxRounds triggers exactly one final request with tools disabled", 
   assert.equal(client.requests[1].toolChoice, "none");
 });
 
+productTest("live forget reaches the gateway, preserves its error, and still intercepts remember", async () => {
+  for (const isError of [false, true]) {
+    const memory = { ...fakeMemory(), executeForget: true };
+    memory.callTool = async (name, args) => {
+      memory.calls.push({ name, args });
+      return { blocks: [isError ? "Gateway refused deletion" : "Actual gateway deletion"], isError };
+    };
+    const client = fakeClient([reply(null, [tool("remember", { messages: [] }), tool("forget", { uri: "viking://file" })]), reply("Actual reply")]);
+    const conversation = [{ role: "user", text: "Earlier request" }, { role: "assistant", text: "Earlier reply" }];
+    const record = await answerQuestion({ ...options, memory, client, conversation });
+    assert.deepEqual(memory.calls, [{ name: "forget", args: { uri: "viking://file" } }]);
+    assert.equal(record.toolCalls[1].executed, true);
+    assert.equal(record.toolCalls[1].isError, isError);
+    assert.deepEqual(record.toolCalls[1].blocks, [isError ? "Gateway refused deletion" : "Actual gateway deletion"]);
+    assert.deepEqual(client.requests[0].messages.slice(-3, -1).map(m => m.content), conversation.map(m => m.text));
+    assert.equal(record.answer, "Actual reply");
+  }
+});
+
 productTest("materials are prior synthetic tool results, never memory inputs or user words", async () => {
   const memory = fakeMemory();
   const client = fakeClient([reply("The document claims it.")]);

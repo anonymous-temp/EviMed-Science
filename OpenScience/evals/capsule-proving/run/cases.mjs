@@ -2,8 +2,8 @@
 // (`{ caseId, set, split, userKey, sessions, questions }`), which never carries an answer.
 //
 // Sets register a loader (`registerSet(name, loader)`); `loadCases` picks the loader, filters by `only`, and checks the
-// shape. `synthetic-users` is built in: one user per directory, `<dataDir>/<split>/<user>/input.json`. Only `input.json`
-// is read — gold, corruptions and the generator's own files are never opened here.
+// shape. `synthetic-users` is built in: one user per directory, `<dataDir>/<split>/<user>/input.json`. `input.json`
+// and structural schedule/skeleton metadata are read; gold and corruptions are never opened here.
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -11,11 +11,11 @@ import { SET_LOADERS } from "./sets.mjs";
 
 /**
  * @typedef {{ id: string, name: string } | null} CaseProject
- * @typedef {{ role: "user"|"assistant", text: string, at?: string }} CaseMessage
+ * @typedef {{ role: "user"|"assistant", text: string, at?: string, liveTurn?: "forget" }} CaseMessage
  * @typedef {{ afterMessage: number, kind: string, title: string, text: string }} CaseAttachment
  * @typedef {{ sessionId: string, at: string, project: CaseProject, messages: CaseMessage[], attachments?: CaseAttachment[] }} CaseSession
  * @typedef {{ kind: string, title: string, text: string }} CaseMaterial
- * @typedef {{ qid: string, afterSession: number, asOf: string, text: string, project?: CaseProject, materials?: CaseMaterial[] }} CaseQuestion
+ * @typedef {{ qid: string, afterSession: number, asOf: string, text: string, category?: string, project?: CaseProject, materials?: CaseMaterial[] }} CaseQuestion
  * @typedef {{ caseId: string, set: string, split: string, userKey: string, sessions: CaseSession[], questions: CaseQuestion[], meta?: Record<string, unknown> }} Case
  * @typedef {(input: { split: string, dataDir: string, set: string, only?: string[] }) => Promise<Case[]>} SetLoader
  */
@@ -84,6 +84,37 @@ export function normalizeSyntheticUser(raw, { set, split, dirName }) {
     meta: { ...(typeof raw?.kind === "string" ? { kind: raw.kind } : {}), ...(typeof raw?.schema === "string" ? { schema: raw.schema } : {}) } };
 }
 
+/** Apply only structural annotations. Plant identities and their values never enter the Case.
+ * Message offsets are zero-based schedule annotations, reviewed outside the runner; missing offsets fail closed
+ * when live turns are requested. Question categories join on the generator's declared question, never on anchors.
+ * @param {Case} item @param {any} skeleton @param {any} schedule
+ */
+export function annotateSyntheticUser(item, skeleton, schedule) {
+  if (!skeleton || !schedule) return item;
+  const plants = new Map((skeleton.plants ?? []).map(plant => [plant.id, plant]));
+  for (const event of schedule.events ?? []) {
+    if (event.kind !== "forget" || plants.get(event.plantId)?.category !== "forget") continue;
+    const planned = schedule.sessions?.find(session => session.index === event.session);
+    const session = item.sessions.find(session => session.sessionId === planned?.id);
+    if (!session) throw new Error(`${item.caseId}: forget session is missing`);
+    const insert = planned.inserts?.find(insert => insert.plantId === event.plantId && insert.event === "forget");
+    const index = event.messageIndex ?? insert?.messageIndex;
+    if (index === undefined) {
+      item.meta ??= {};
+      item.meta.unlocatedLiveTurns = Number(item.meta.unlocatedLiveTurns ?? 0) + 1;
+      continue;
+    }
+    if (!Number.isInteger(index) || index < 0 || session.messages[index]?.role !== "user"
+      || session.messages[index + 1]?.role !== "assistant") throw new Error(`${item.caseId}: invalid forget messageIndex`);
+    session.messages[index].liveTurn = "forget";
+  }
+  for (const question of item.questions) {
+    const categories = new Set([...plants.values()].filter(plant => plant.question === question.text).map(plant => plant.category));
+    if (categories.size === 1) question.category = [...categories][0];
+  }
+  return item;
+}
+
 /**
  * What is wrong with a Case, as readable lines ([] when it is sound).
  * @param {Case} item @returns {string[]}
@@ -132,18 +163,24 @@ async function isDirectory(directory) {
  * way from `<dataDir>/sealed/` (by symmetry; this code never opens it unless asked to).
  * @type {SetLoader}
  */
-async function loadSyntheticUsers({ split, dataDir, set }) {
+async function loadSyntheticUsers({ split, dataDir, set, only }) {
   if (!/^[a-z][a-z0-9-]{0,31}$/.test(split)) throw new Error(`unknown split ${split}`);
   const root = path.join(dataDir, split);
   if (!await isDirectory(root)) throw new Error(`no ${split} directory under the data directory`);
   const names = (await readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory() && /^[A-Za-z0-9_-]{1,64}$/.test(entry.name)).map((entry) => entry.name).sort();
   const cases = [];
   for (const name of names) {
+    if (only?.length && !only.includes(name)) continue;
     const file = path.join(root, name, "input.json");
     let text;
     try { text = await readFile(file, "utf8"); }
     catch (error) { if (/** @type {any} */ (error)?.code === "ENOENT") continue; throw error; }
-    cases.push(normalizeSyntheticUser(JSON.parse(text), { set, split, dirName: name }));
+    const metadata = async file => {
+      try { return JSON.parse(await readFile(path.join(root, name, file), "utf8")); }
+      catch (error) { if (error?.code === "ENOENT") return null; throw error; }
+    };
+    const [skeleton, schedule] = await Promise.all([metadata("skeleton.json"), metadata("schedule.json")]);
+    cases.push(annotateSyntheticUser(normalizeSyntheticUser(JSON.parse(text), { set, split, dirName: name }), skeleton, schedule));
   }
   return cases;
 }

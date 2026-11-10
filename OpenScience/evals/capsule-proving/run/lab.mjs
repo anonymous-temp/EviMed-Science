@@ -250,16 +250,17 @@ export function toolAnswer({ status, contentType, text }, id) {
  * The model-facing half of the lab surface over one bearer: `tools`, `callTool` (real JSON-RPC `tools/call` to the
  * gateway's `/mcp`) and `fetchJSON` (the gateway's REST routes, answering as the plugin's own `createOvHttp` does:
  * `{ ok, status, result, error }`, never throwing).
- * @param {{ base: string, token: string, readOnly?: boolean, ready?: Promise<unknown> | null, fetchImpl?: typeof fetch, timeoutMs?: number }} options
+ * @param {{ base: string, token: string, readOnly?: boolean, executeForget?: boolean, ready?: Promise<unknown> | null, fetchImpl?: typeof fetch, timeoutMs?: number }} options
  */
-export function createMemoryClient({ base, token, readOnly = true, ready = null, fetchImpl = globalThis.fetch, timeoutMs = 60_000 }) {
+export function createMemoryClient({ base, token, readOnly = true, executeForget = false, ready = null, fetchImpl = globalThis.fetch, timeoutMs = 60_000 }) {
   let rpcId = 0;
   const auth = { authorization: `Bearer ${token}` };
   return {
     tools: memoryTools(),
+    executeForget,
     /** @param {string} name @param {Record<string, any>} [args] @returns {Promise<{ blocks: string[], isError: boolean }>} */
     async callTool(name, args = {}) {
-      if (readOnly && WRITE_TOOLS.has(name)) return { blocks: [`lab_read_only: ${name} is not executed by this memory object`], isError: true };
+      if (readOnly && WRITE_TOOLS.has(name) && !(name === "forget" && executeForget)) return { blocks: [`lab_read_only: ${name} is not executed by this memory object`], isError: true };
       await ready;
       const id = ++rpcId;
       try {
@@ -699,9 +700,9 @@ export async function openLab({
        * One dataset session, as the product would learn it: messages through the gateway's door (with `created_at`), the
        * project line where production writes it, a commit through `commitSession`, the extraction awaited, the worker's settle.
        * Attachments are never sent. A rerun of a session already committed resumes from its commits instead of sending again.
-       * @param {LabUser} user @param {LabSession} session @param {{ commitEvery?: "session" | "turn", timeoutMs?: number }} [options]
+       * @param {LabUser} user @param {LabSession} session @param {{ commitEvery?: "session" | "turn", timeoutMs?: number, resumeMessages?: boolean }} [options]
        */
-      async ingestSession(user, session, { commitEvery: mode = commitEvery, timeoutMs = extractionTimeoutMs } = {}) {
+      async ingestSession(user, session, { commitEvery: mode = commitEvery, timeoutMs = extractionTimeoutMs, resumeMessages = false } = {}) {
         const started = Date.now();
         const deadline = started + timeoutMs;
         const project = session.project && session.project.id !== DEFAULT_PROJECT_ID ? session.project : null;
@@ -727,7 +728,7 @@ export async function openLab({
           const result = answer?.json?.result ?? {};
           commits.push({ taskId: typeof result.task_id === "string" ? result.task_id : null, archiveUri: typeof result.archive_uri === "string" ? result.archive_uri : null, outcome: answer.commit });
         };
-        if (prior.length && mode === "session") {
+        if (prior.length && mode === "session" && !resumeMessages) {
           resumed = true;
           for (const commit of prior) commits.push({ taskId: commit.taskId, archiveUri: commit.archiveUri, outcome: "resumed" });
         } else {
@@ -836,9 +837,9 @@ export async function openLab({
 
       /**
        * What the answering model reaches memory through, in one project of the account.
-       * @param {LabUser} user @param {{ project?: { id: string, name: string } | null, variant?: string, readOnly?: boolean }} [options]
+       * @param {LabUser} user @param {{ project?: { id: string, name: string } | null, variant?: string, readOnly?: boolean, executeForget?: boolean }} [options]
        */
-      memoryFor(user, { project = null, variant = "", readOnly = true } = {}) {
+      memoryFor(user, { project = null, variant = "", readOnly = true, executeForget = false } = {}) {
         const selected = gatewayGroup.gateways.get(variant);
         if (!selected) throw new Error(`unknown answer variant ${variant}`);
         const profiles = variant ? profilesFor(selected.config) : residentProfiles;
@@ -847,7 +848,7 @@ export async function openLab({
         const projectId = named?.id ?? DEFAULT_PROJECT_ID;
         const ready = ensureProject(user.userId, named);
         ready.catch(() => {});
-        const memoryClient = createMemoryClient({ base: selected.base, token: tokenFor(user.userId, projectId), readOnly, ready, timeoutMs: engineTimeoutMs * 2 });
+        const memoryClient = createMemoryClient({ base: selected.base, token: tokenFor(user.userId, projectId), readOnly, executeForget, ready, timeoutMs: engineTimeoutMs * 2 });
         return {
           ...memoryClient,
           config: selected.config,

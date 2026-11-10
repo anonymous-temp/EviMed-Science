@@ -9,6 +9,7 @@
 //     [--commit-every session|turn] [--plant-corruptions-after <afterSession>] [--limit-questions N] [--plugin-tgz <file>] \
 //     [--ingest-only] [--templates-dir <dir>] [--max-rounds N] [--extraction-timeout-ms N] [--gateway-timeout-ms N]
 //     [--config key=value] [--answer-variant name:key=value,...] [--maintain none|consolidate|verify|consolidate+verify]
+//     [--live-turns forget] [--question-category CATEGORY]
 //     [--answers-only] [--variants-only] [--retrieval-only] [--answer-model ID] [--answer-base URL] [--answer-key-file FILE]
 //     [--maintain-after n[,n...]|each] [--no-rejection-judge] [--label text] [--stock-engine] [--database-pool-max N]
 //
@@ -28,6 +29,7 @@ import { checkRestored } from "./corruptions.mjs";
 import { loadCases } from "./cases.mjs";
 import { answerOptions, gatewayOptions } from "./answerVariants.mjs";
 import { firstLine } from "./lab.mjs";
+import { ingestLiveSession } from "./liveTurns.mjs";
 import { openStatus } from "./status.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -81,6 +83,8 @@ export function engineShard(userKey, count) {
 export function assertResumeCompatible(previous, facts) {
   if (!previous) return;
   if (previous.arm !== facts.arm || previous.set !== facts.set || previous.split !== facts.split) throw new Error(`the run directory holds a ${previous.set}/${previous.split} ${previous.arm} run: use another --out`);
+  if ((previous.options?.liveTurns ?? "") !== (facts.options?.liveTurns ?? facts.liveTurns ?? "")) throw new Error("cannot resume with different live turns");
+  if ((previous.options?.questionCategory ?? "") !== (facts.options?.questionCategory ?? facts.questionCategory ?? "")) throw new Error("cannot resume with different question category");
   if ((previous.engine?.templates === "stock") !== Boolean(facts.stockEngine)) throw new Error("cannot resume with different engine templates");
   const urls = (record) => record.engine?.urls ?? record.engineUrls ?? (record.engine?.url ? engineUrlsOf(record.engine.url) : []);
   if (JSON.stringify(urls(previous)) !== JSON.stringify(urls(facts))) throw new Error("cannot resume with a different engine URL list (including order)");
@@ -93,10 +97,11 @@ export function parseArguments(argv) {
     set: "", split: "", data: "", out: "", engineUrl: "", engineKeyFile: "", databaseUrlFile: "", deepseekKeyFile: "",
     arm: "product", only: "", maxSessions: 0, concurrency: 3, databasePoolMax: 2, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
     config: {}, answerVariants: [], maintain: "none", maintainAfter: [], rejectionJudge: true, label: "", thinking: "enabled", reasoningEffort: "high",
-    limitQuestions: 0, pluginTgz: "", ingestOnly: false, templatesDir: "", maxRounds: 8, extractionTimeoutMs: 300_000, gatewayTimeoutMs: 4_000,
+    liveTurns: "", questionCategory: "", limitQuestions: 0, pluginTgz: "", ingestOnly: false, templatesDir: "", maxRounds: 8, extractionTimeoutMs: 300_000, gatewayTimeoutMs: 4_000,
   };
   /** @type {Record<string, [keyof typeof options, "string" | "int"]>} */
   const valued = {
+    "--live-turns": ["liveTurns", "string"], "--question-category": ["questionCategory", "string"],
     "--answer-model": ["answerModel", "string"], "--answer-base": ["answerBase", "string"], "--answer-key-file": ["answerKeyFile", "string"],
     "--set": ["set", "string"], "--split": ["split", "string"], "--data": ["data", "string"], "--out": ["out", "string"],
     "--engine-url": ["engineUrl", "string"], "--engine-key-file": ["engineKeyFile", "string"], "--database-url-file": ["databaseUrlFile", "string"],
@@ -144,6 +149,9 @@ export function parseArguments(argv) {
   for (const [flag, field] of [["--set", "set"], ["--split", "split"], ["--data", "data"], ["--out", "out"]]) {
     if (!/** @type {any} */ (options)[field]) throw new Error(`${flag} is required`);
   }
+  if (options.liveTurns && options.liveTurns !== "forget") throw new Error("--live-turns is forget");
+  if (options.liveTurns && (options.arm !== "product" || options.stockEngine || options.answersOnly || options.ingestOnly)) throw new Error("--live-turns needs product replay with model answers");
+  if (options.questionCategory && options.set !== "synthetic-users") throw new Error("--question-category needs synthetic-users structural categories");
   if (!ARMS.has(options.arm)) throw new Error("--arm is product, no-memory or keyword");
   if (!["session", "turn"].includes(options.commitEvery)) throw new Error("--commit-every is session or turn");
   if (options.databasePoolMax < 1 || options.databasePoolMax > 8) throw new Error("--database-pool-max is 1 to 8 per engine");
@@ -264,6 +272,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   const wallStart = Date.now();
 
   const cases = await (dependencies.loadCases ?? loadCases)({ set: options.set, split: options.split, dataDir: options.data, only: options.only || null });
+  if (options.liveTurns && cases.some(item => item.meta?.unlocatedLiveTurns)) throw new Error("forget_message_index_missing: annotate schedule messageIndex before live replay");
   if (!cases.length) throw new Error("no cases to run");
 
   // The answering side (lane B), only when questions are asked: an ingest-only run needs none of it.
@@ -313,13 +322,24 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   if (options.arm === "product") {
     const { openLab } = await import(pathToFileURL(path.join(here, "lab.mjs")).href);
     try {
-      for (const engineUrl of options.engineUrls) labs.push(await (dependencies.openLab ?? openLab)({
-        databasePoolMax: options.databasePoolMax, stockEngine: options.stockEngine, engineUrl, engineKeyFile: path.resolve(options.engineKeyFile), account: `evlab-${runId}`, runId,
-        databaseUrlFile: path.resolve(options.databaseUrlFile), historySearch: options.historySearch,
-        deepseekKeyFile: options.deepseekKeyFile ? path.resolve(options.deepseekKeyFile) : null, commitEvery: options.commitEvery,
-        extractionTimeoutMs: options.extractionTimeoutMs, gatewayTimeoutMs: options.gatewayTimeoutMs,
-        configOverrides: gatewayOptions(options.config), answerVariants: options.answerVariants.map(v => ({ ...v, config: gatewayOptions(v.config) })), rejectionJudge: options.rejectionJudge,
-      }));
+      for (const engineUrl of options.engineUrls) {
+        // Concurrent lab initializers may race on PostgreSQL DDL. Retry only the explicit deadlock code.
+        for (let attempt = 0; ; attempt++) {
+          try {
+            labs.push(await (dependencies.openLab ?? openLab)({
+              databasePoolMax: options.databasePoolMax, stockEngine: options.stockEngine, engineUrl, engineKeyFile: path.resolve(options.engineKeyFile), account: `evlab-${runId}`, runId,
+              databaseUrlFile: path.resolve(options.databaseUrlFile), historySearch: options.historySearch,
+              deepseekKeyFile: options.deepseekKeyFile ? path.resolve(options.deepseekKeyFile) : null, commitEvery: options.commitEvery,
+              extractionTimeoutMs: options.extractionTimeoutMs, gatewayTimeoutMs: options.gatewayTimeoutMs,
+              configOverrides: gatewayOptions(options.config), answerVariants: options.answerVariants.map(v => ({ ...v, config: gatewayOptions(v.config) })), rejectionJudge: options.rejectionJudge,
+            }));
+            break;
+          } catch (error) {
+            if (attempt >= 4 || !(error?.code === "40P01" || /40P01|deadlock detected/.test(String(error?.message)))) throw error;
+            await new Promise(resolve => setTimeout(resolve, 2_000 * (attempt + 1)));
+          }
+        }
+      }
     } catch (error) { await Promise.all(labs.map((entry) => entry.close())); throw error; }
     lab = labs[0];
   }
@@ -343,7 +363,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     answerVariants: options.answerVariants.map((variant) => ({ ...variant, model: { answer: clients.get(variant.name)?.model ?? null, thinking: clients.get(variant.name)?.thinking ?? null, answerJudgeSameFamily: /^qwen/.test(clients.get(variant.name)?.model ?? "") }, flags: { config: { ...options.config, ...variant.config } } })), label: options.label,
     answerOptions: baseAnswer,
     model: { answer: client?.model ?? null, thinking: client?.thinking ?? null, extraction: options.arm === "product" ? "deepseek-flash (lab engine ov.conf, provider direct)" : null },
-    options: { only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, databasePoolMax: options.databasePoolMax, limitQuestions: options.limitQuestions || null,
+    options: { liveTurns: options.liveTurns, questionCategory: options.questionCategory, only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, databasePoolMax: options.databasePoolMax, limitQuestions: options.limitQuestions || null,
       ingestOnly: options.ingestOnly, answersOnly: options.answersOnly, retrievalOnly: options.retrievalOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, dataDir: path.resolve(options.data) },
     cases: cases.map((item) => item.caseId),
   };
@@ -365,6 +385,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     await mkdir(path.join(caseDir, "snapshots"), { recursive: true, mode: 0o700 });
     const sessions = options.maxSessions ? item.sessions.slice(0, options.maxSessions) : item.sessions;
     let questions = options.ingestOnly ? [] : item.questions.filter((question) => question.afterSession <= sessions.length);
+    if (options.questionCategory) questions = questions.filter(question => question.category === options.questionCategory);
     if (options.limitQuestions) questions = questions.slice(0, options.limitQuestions);
     const plantAfter = options.plantCorruptionsAfter;
     const checkpoints = [...new Set([...checkpointsFor(questions, sessions.length, plantAfter),
@@ -401,7 +422,24 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
             const session = sessions[ingested];
             const key = ingestKey(session);
             let row;
-            try { row = await lab.ingestSession(user, session); }
+            try {
+              if (options.liveTurns) {
+                const file = path.join(caseDir, "live-turns.jsonl");
+                const records = await readJsonl(file);
+                row = await ingestLiveSession({ lab, user, session, caseId: item.caseId, records,
+                  persist: async entry => {
+                    await upsertJsonl(file, "turnId", entry);
+                    const held = records.findIndex(record => record.turnId === entry.turnId);
+                    if (held < 0) records.push(entry); else records[held] = entry;
+                  },
+                  answer: input => answering.answerQuestion({ ...baseAnswer, client, maxRounds: options.maxRounds, ...input }),
+                  onUsage: record => {
+                    stats.answer.prompt += Number(record.usage?.promptTokens) || 0;
+                    stats.answer.completion += Number(record.usage?.completionTokens) || 0;
+                  },
+                });
+              } else row = await lab.ingestSession(user, session);
+            }
             catch (error) {
               await fail(key, errorLine(error));
               stats.stopped = `ingest of ${session.sessionId} failed`;

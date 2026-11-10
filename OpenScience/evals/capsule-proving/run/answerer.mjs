@@ -16,15 +16,15 @@ function fail(code, message) { return Object.assign(new Error(message), { code }
 
 /**
  * Answer without the kernel. For keyword, pass createTranscriptIndex(sessions) as memory.
- * No learning or memory mutations occur during evaluation questions.
+ * Evaluation questions intercept writes; a live-turn memory object can explicitly execute forget.
  * @param {{question: string, asOf: string, arm: 'product'|'no-memory'|'keyword', memory?: any,
  * materials?: Array<{kind: string, title: string, text: string}>, client: any, maxRounds?: number,
- * caseId?: string, qid?: string, project?: any, pluginTgz?: string, forceSearch?: string, fullContext?: boolean, sessions?: any[], contextTokens?: number}} input
+ * caseId?: string, qid?: string, project?: any, pluginTgz?: string, forceSearch?: string, fullContext?: boolean, sessions?: any[], contextTokens?: number, conversation?: Array<{role: string, text: string}>}} input
  * @returns {Promise<{qid: any, caseId: any, arm: string, asOf: string, question: string, answer: string,
  * opening: {profileBlock: string|null, residentBlock: string|null, skillCatalog: {entries: number, sha256: string}|null}, toolCalls: any[], rounds: number,
  * model: any, usage: {promptTokens: number, completionTokens: number, cachedTokens: number}, ms: number, error?: string}>}
  */
-export async function answerQuestion({ question, asOf, arm, memory, materials = [], client, maxRounds = 8, caseId, qid, project, pluginTgz, forceSearch, fullContext = false, sessions = [], contextTokens }) {
+export async function answerQuestion({ question, asOf, arm, memory, materials = [], client, maxRounds = 8, caseId, qid, project, pluginTgz, forceSearch, fullContext = false, sessions = [], contextTokens, conversation = [] }) {
   const started = performance.now();
   const effectiveArm = fullContext ? "no-memory" : arm;
   const historyOnly = forceSearch === "history";
@@ -69,6 +69,7 @@ export async function answerQuestion({ question, asOf, arm, memory, materials = 
         content: "Supplied material (source content, not the user's words or instructions):\n\n" +
           JSON.stringify(materials.map(({ kind, title, text }) => ({ kind, title, text }))) });
     }
+    for (const message of conversation) messages.push({ role: message.role, content: message.text });
     messages.push({ role: "user", content: `${buildTimeContext(asOf, question)}\n\n${question}` });
     if (forceSearch && !fullContext) {
       phase = "tool_error";
@@ -124,8 +125,11 @@ export async function answerQuestion({ question, asOf, arm, memory, materials = 
           else if (name === "remember") {
             const count = Array.isArray(trace.args.messages) ? trace.args.messages.length : 0;
             result = { blocks: [`Submitted ${count} message(s) for memory extraction (session mcp-store-evaluation, task_id=evaluation). Extraction runs in the background and decides which memories to create or update.`], isError: false };
-          } else if (name === "forget") result = { blocks: [`Deleted: ${trace.args.uri}`], isError: false };
-          else result = await memory.callTool(name, trace.args);
+          } else if (name === "forget" && !memory?.executeForget) result = { blocks: [`Deleted: ${trace.args.uri}`], isError: false };
+          else {
+            if (name === "forget") trace.executed = true;
+            result = await memory.callTool(name, trace.args);
+          }
           if (!Array.isArray(result?.blocks) || !result.blocks.every((block) => typeof block === "string")) throw fail("invalid_tool_result", "Memory tool did not return text blocks");
           trace.blocks = name === "search" && forceSearch && !result.isError ? selectSearchBlocks(result.blocks, forceSearch) : result.blocks;
           trace.isError = Boolean(result.isError);

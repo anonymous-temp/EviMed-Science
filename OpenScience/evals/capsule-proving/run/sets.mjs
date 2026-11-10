@@ -93,7 +93,8 @@ export function assertCase(c) {
     if (!Array.isArray(s.messages) || !s.messages.length) bad(`session ${s.sessionId} has no messages`);
     for (const m of s.messages) {
       if (!['user', 'assistant'].includes(m?.role) || !nonEmpty(m.text)) bad(`session ${s.sessionId} has a malformed or empty message`);
-      for (const k of Object.keys(m)) if (!['role', 'text', 'at'].includes(k)) bad(`message key ${k}`);
+      for (const k of Object.keys(m)) if (!['role', 'text', 'at', 'liveTurn'].includes(k)) bad(`message key ${k}`);
+      if (m.liveTurn !== undefined && (m.liveTurn !== 'forget' || m.role !== 'user')) bad('invalid liveTurn');
       if (m.at !== undefined && !isIso(m.at)) bad('message at is not an ISO string');
     }
     for (const a of s.attachments ?? []) {
