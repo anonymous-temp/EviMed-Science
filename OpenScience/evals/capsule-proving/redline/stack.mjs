@@ -217,7 +217,9 @@ export async function openStack({ engineUrl, engineKeyFile, databaseUrlFile, dat
   const geoMembers = new GeoMembers({ store: geoStore });
 
   /** A JSON call of the app's own HTTP surface as a signed-in person. @param {StackUser} user @param {string} method @param {string} path @param {unknown} [body] */
-  async function http(user, method, path, body = undefined, { raw = false, timeoutMs = 180_000 } = {}) {
+  // A loaded host can spend more than 180 s in a multi-step reset. Keep the
+  // engine's own deadlines intact and distinguish them from this harness limit.
+  async function http(user, method, path, body = undefined, { raw = false, timeoutMs = 900_000 } = {}) {
     const response = await fetch(`${base}${path}`, { method, signal: AbortSignal.timeout(timeoutMs), headers: user.headers,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     if (raw) return { status: response.status, bytes: Buffer.from(await response.arrayBuffer()), contentType: response.headers.get("content-type") ?? "" };
@@ -227,7 +229,7 @@ export async function openStack({ engineUrl, engineKeyFile, databaseUrlFile, dat
 
   /** A gateway REST call of the plugin's own kind; a refusal is returned, not thrown. @param {string} token @param {string} method @param {string} path @param {unknown} [body] */
   async function gateway(token, method, path, body = undefined) {
-    const response = await fetch(`${gatewayBase}${path}`, { method, signal: AbortSignal.timeout(120_000),
+    const response = await fetch(`${gatewayBase}${path}`, { method, signal: AbortSignal.timeout(900_000),
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const json = await response.json().catch(() => null);
     return { status: response.status, ok: response.ok && json?.status !== "error", json, code: json?.error?.code ?? null };
@@ -286,7 +288,7 @@ export async function openStack({ engineUrl, engineKeyFile, databaseUrlFile, dat
 
     /** The model-facing tools over one workload (writes allowed: the runner is the model). @param {string} userId @param {string} projectId */
     memory(userId, projectId) {
-      return createMemoryClient({ base: gatewayBase, token: tokenFor(userId, projectId), readOnly: false, timeoutMs: 120_000 });
+      return createMemoryClient({ base: gatewayBase, token: tokenFor(userId, projectId), readOnly: false, timeoutMs: 900_000 });
     },
 
     /**
@@ -360,26 +362,26 @@ export async function openStack({ engineUrl, engineKeyFile, databaseUrlFile, dat
     },
 
     /** The source-deletion worker's drain, run until this account's deletions are complete or the deadline passes. @param {string} userId */
-    async drainSourceDeletion(userId, { timeoutMs = 240_000, pollMs = 2_000 } = {}) {
+    async drainSourceDeletion(userId, { timeoutMs = 1_200_000, pollMs = 2_000 } = {}) {
       const deadline = Date.now() + timeoutMs;
       let rows = [];
       for (;;) {
         // This account's own retained intents only (the fixture's rule): another trial's deletion is not ours to drain. The
-        // backoff a failed attempt sets is not waited out: the runner asks again on its own cadence.
+        // product's backoff is preserved, including its 15 minute cap under sustained load.
         await drainExclusive(async () => {
           app.sourceDeletion.ledger.pending = async () => {
-            const due = await database.query(`SELECT id FROM evimed_source_deletion.conversations WHERE user_id=$1 AND cleanup='pending' ORDER BY updated_at LIMIT 30`, [userId]);
+            const due = await database.query(`SELECT id FROM evimed_source_deletion.conversations WHERE user_id=$1 AND cleanup='pending' AND (next_attempt_at IS NULL OR next_attempt_at<=clock_timestamp()) ORDER BY updated_at LIMIT 30`, [userId]);
             const own = new Map((await app.sourceDeletion.ledger.recordsForOwner(userId, { pendingOnly: true })).map((/** @type {any} */ row) => [row.id, row]));
             return due.rows.map((/** @type {any} */ row) => own.get(row.id)).filter(Boolean);
           };
           await app.sourceDeletion.drainOnce();
         });
-        rows = (await database.query("SELECT cleanup, reason FROM evimed_source_deletion.conversations WHERE user_id=$1", [userId])).rows;
+        rows = (await database.query("SELECT cleanup, reason, attempts, next_attempt_at, updated_at FROM evimed_source_deletion.conversations WHERE user_id=$1", [userId])).rows;
         if (!rows.some((/** @type {any} */ row) => row.cleanup === "pending") || Date.now() >= deadline) break;
         await sleep(pollMs);
       }
       const thrown = cleanupErrors.get(userId) ?? null;
-      return rows.map((/** @type {any} */ row) => ({ cleanup: String(row.cleanup), reason: row.reason ?? null, ...(row.cleanup === "pending" && thrown ? { thrown } : {}) }));
+      return rows.map((/** @type {any} */ row) => ({ cleanup: String(row.cleanup), reason: row.reason ?? null, attempts: row.attempts, updatedAt: row.updated_at, nextAttemptAt: row.next_attempt_at, waitedMs: Date.now() - (deadline - timeoutMs), ...(row.cleanup === "pending" && thrown ? { thrown } : {}) }));
     },
 
     /** Engine users listed under the run's account (admin listing; never a call as the user, which could register it again). */

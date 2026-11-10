@@ -83,7 +83,10 @@ async function deleteMarker(stack, user, trial, plant, served) {
         const answer = await memory.callTool("forget", { uri: `${root}/${rel}` });
         outcomes.push(answer.isError ? `error:${String(answer.blocks[0] ?? "").slice(0, 80)}` : /^Deleted:/.test(answer.blocks[0] ?? "") ? "deleted" : String(answer.blocks[0] ?? "").slice(0, 40));
       }
-      return { deleted: outcomes.length > 0 && outcomes.every((outcome) => outcome === "deleted"), surface: "mcp tools/call forget", outcomes };
+      // One forget can remove duplicate files too. A later URI from the frozen
+      // pre-delete list can therefore already be absent; the following scan still
+      // decides whether any answer surface can expose its original words.
+      return { deleted: outcomes.length > 0 && outcomes.every((outcome) => outcome === "deleted" || outcome.startsWith("Not found:")), surface: "mcp tools/call forget", outcomes };
     }
     case "memory-page-edit":
     case "memory-page-delete": {
@@ -104,8 +107,9 @@ async function deleteMarker(stack, user, trial, plant, served) {
     case "delete-conversation": {
       if (!plant.markerSession) return { notDrivable: "a memory added on the memory page has no source conversation: the product's conversation deletion (DELETE /api/projects/:p/conversations/:id/source → NativeMemoryStore.removeConversationSource) removes only lines whose origin names a deleted dsh- conversation, so there is no conversation of this marker to delete" };
       const answer = await stack.http(user, "DELETE", `/api/projects/default/conversations/${encodeURIComponent(plant.markerSession)}/source`);
-      const rows = answer.status === 200 || answer.status === 202 ? await stack.drainSourceDeletion(user.id, { timeoutMs: 90_000 }) : [];
+      const rows = answer.status === 200 || answer.status === 202 ? await stack.drainSourceDeletion(user.id) : [];
       return { deleted: (answer.status === 200 || answer.status === 202) && rows.length > 0 && rows.every((row) => row.cleanup === "complete"), surface: "DELETE /api/projects/:p/conversations/:id/source + drain",
+        cleanup: rows,
         outcomes: [`${answer.status}:${answer.json?.error?.code ?? answer.json?.data?.cleanup ?? ""}`, ...rows.map((row) => `${row.cleanup}:${row.reason ?? ""}${row.thrown ? ` (${row.thrown})` : ""}`)] };
     }
     case "memory-reset": {
@@ -213,7 +217,7 @@ export async function runG4Trial(stack, trial) {
     const deletion = await deleteMarker(stack, user, trial, plant, served);
     if (deletion.notDrivable) { row.notDrivable = deletion.notDrivable; row.ms = Date.now() - started; return row; }
     row.deleted = deletion.deleted === true;
-    row.deletion = { surface: deletion.surface, outcomes: deletion.outcomes };
+    row.deletion = { surface: deletion.surface, outcomes: deletion.outcomes, ...(deletion.cleanup ? { cleanup: deletion.cleanup } : {}) };
     if (await stack.app.store.userById(user.id)) row.deleteSettle = await stack.settle(user.id, { timeoutMs: 240_000 });
     // The engine indexes and summarises asynchronously: a short quiet before the scan.
     await sleep(3_000);

@@ -101,7 +101,7 @@ export function nativeMemoryRejectionType(memoryType, namespaceId = null) {
 function publicCommit(row) {
   return {
     userId: String(row.user_id), archiveUri: String(row.archive_uri), engineSession: String(row.engine_session),
-    projectId: row.project_id ?? null, projectCreatedAt:row.project_created_at??null, origin: String(row.origin), taskId: row.task_id ?? null, state: String(row.state),
+    projectId: row.project_id ?? null, projectCreatedAt:row.project_created_at??null, ...(row.source_session?{sourceSession:row.source_session}:{}), origin: String(row.origin), taskId: row.task_id ?? null, state: String(row.state),
     operations: Number(row.operations) || 0, error: String(row.error ?? ""), attempts: Number(row.attempts) || 0,
     nextAttemptAt: instant(row.next_attempt_at), replayedAs: row.replayed_as ?? null, pendingText: row.pending_text ?? null,
     extraction: row.extraction && typeof row.extraction === "object" && !Array.isArray(row.extraction) ? row.extraction : {},
@@ -369,19 +369,39 @@ export class NativeMemoryOverlay {
   /**
    * One commit the engine accepted. Written once per archive: a second sighting (the scan finding what the gateway
    * recorded) fills what the first did not know and never moves the state back.
-   * @param {{ userId: string, archiveUri: string, engineSession: string, projectId?: string | null, projectCreatedAt?: string | null, origin: string, taskId?: string | null, state?: string, error?: string, pendingText?: string | null, attempts?: number }} commit `attempts`: how many replays the conversation behind this commit has had already (a replay's own commit carries the count on, so the cap bounds the chain)
+   * @param {{ userId: string, archiveUri: string, engineSession: string, sourceSession?: string | null, projectId?: string | null, projectCreatedAt?: string | null, origin: string, taskId?: string | null, state?: string, error?: string, pendingText?: string | null, attempts?: number }} commit `attempts`: how many replays the conversation behind this commit has had already (a replay's own commit carries the count on, so the cap bounds the chain)
    */
-  async recordCommit({ userId, archiveUri, engineSession, projectId = null, projectCreatedAt=undefined, origin, taskId = null, state = "pending", error = "", pendingText = null, attempts = 0 }) {
+  async recordCommit({ userId, archiveUri, engineSession, sourceSession = null, projectId = null, projectCreatedAt=undefined, origin, taskId = null, state = "pending", error = "", pendingText = null, attempts = 0 }) {
     if (!NATIVE_COMMIT_ORIGINS.includes(origin)) throw new HttpError(500, "memory_commit_invalid", "Unknown commit origin.");
     if(projectCreatedAt===undefined)projectCreatedAt=projectId?(await this.#query('SELECT created_at::text AS created FROM evimed_control.projects WHERE user_id=$1 AND id=$2',[owner(userId),projectId])).rows[0]?.created??null:null;
-    const result = await this.#query(`INSERT INTO evimed_memory.native_commits AS c (user_id, archive_uri, engine_session, project_id, origin, task_id, state, error, next_attempt_at, pending_text, attempts,project_created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $9, $10,$11)
+    const result = await this.#query(`INSERT INTO evimed_memory.native_commits AS c (user_id, archive_uri, engine_session, project_id, origin, task_id, state, error, next_attempt_at, pending_text, attempts,project_created_at,source_session)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $9, $10,$11,$12)
       ON CONFLICT (user_id, archive_uri) DO UPDATE SET
-        task_id = COALESCE(c.task_id, EXCLUDED.task_id), project_id = COALESCE(c.project_id, EXCLUDED.project_id), updated_at = clock_timestamp()
+        task_id = COALESCE(c.task_id, EXCLUDED.task_id), project_id = COALESCE(c.project_id, EXCLUDED.project_id),
+        project_created_at = CASE WHEN EXCLUDED.source_session IS NOT NULL AND (c.project_id IS NULL OR c.project_id=EXCLUDED.project_id)
+          THEN COALESCE(c.project_created_at,EXCLUDED.project_created_at) ELSE c.project_created_at END,
+        source_session = COALESCE(c.source_session, EXCLUDED.source_session), updated_at = clock_timestamp()
       RETURNING *, (xmax = 0) AS inserted`,
     [owner(userId), String(archiveUri), String(engineSession), projectId, origin, taskId, state, String(error ?? "").slice(0, 400),
-      pendingText == null ? null : String(pendingText).slice(0, 2_000), Math.max(0, Math.min(100, Math.trunc(Number(attempts)) || 0)),projectCreatedAt]);
+      pendingText == null ? null : String(pendingText).slice(0, 2_000), Math.max(0, Math.min(100, Math.trunc(Number(attempts)) || 0)),projectCreatedAt,sourceSession]);
+    await this.linkSourceCopies(userId,archiveUri);
     return { ...publicCommit(result.rows[0]), inserted: result.rows[0].inserted === true };
+  }
+
+  /** Repairable from the durable conversation binding if either writer crashed or
+   * both commits arrived concurrently before their counterpart was visible.
+   * @param {string} userId @param {string} archiveUri */
+  async linkSourceCopies(userId,archiveUri) {
+    // Either archive can arrive first. Preserve the gateway's conversation binding even
+    // when remember paraphrased the message and exact-message copy discovery cannot link it.
+    await this.#query(`INSERT INTO evimed_memory.native_source_copies(user_id,source_archive_uri,copy_archive_uri)
+      SELECT s.user_id,s.archive_uri,c.archive_uri FROM evimed_memory.native_commits c
+      JOIN evimed_memory.native_commits s ON s.user_id=c.user_id AND s.engine_session=c.source_session
+        AND s.project_id=c.project_id AND s.project_created_at::timestamptz=c.project_created_at::timestamptz
+        AND split_part(s.archive_uri,'/sessions/',1)=split_part(c.archive_uri,'/sessions/',1)
+      WHERE c.user_id=$1 AND (s.archive_uri=$2 OR c.archive_uri=$2)
+        AND s.engine_session LIKE 'dsh-%'
+      ON CONFLICT DO NOTHING`,[owner(userId),archiveUri]);
   }
 
   /** @param {string} userId @param {string} archiveUri */
@@ -821,6 +841,19 @@ export class NativeMemoryOverlay {
         archiveUri: row.archive_uri ?? null, projectId: row.project_id ?? null, projectCreatedAt:row.source_epoch??null, addedAt: instant(row.added_at),
         ...(Array.isArray(row.sources) && row.sources.length ? { sources: row.sources } : {}) });
       byUri.set(String(row.uri), lines);
+    }
+    const linked = await this.#query(`SELECT copies.copy_archive_uri,s.archive_uri,s.engine_session,s.project_id,s.project_created_at
+      FROM evimed_memory.native_source_copies copies JOIN evimed_memory.native_commits s
+        ON s.user_id=copies.user_id AND s.archive_uri=copies.source_archive_uri
+      WHERE copies.user_id=$1 AND copies.copy_archive_uri=ANY($2::text[])`,
+    [owner(userId),result.rows.flatMap(row=>[row.archive_uri,...(row.sources??[]).map(source=>source.archiveUri)]).filter(Boolean)]);
+    for (const lines of byUri.values()) for (const origin of lines.values()) {
+      // A plain first origin is the parent object itself. Snapshot it before
+      // attaching sources so merge/undo provenance remains JSON-serializable.
+      const sources=originalSources(origin).map(source=>{const copy={...source};delete copy.sources;return copy;});
+      const inherited=linked.rows.filter(row=>sources.some(source=>source.archiveUri===row.copy_archive_uri));
+      if(inherited.length) origin.sources=[...sources,...inherited.map(row=>({archiveUri:row.archive_uri,engineSession:row.engine_session,
+        projectId:row.project_id,projectCreatedAt:row.project_created_at,addedAt:origin.addedAt}))];
     }
     return byUri;
   }

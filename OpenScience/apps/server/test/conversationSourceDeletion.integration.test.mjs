@@ -2,8 +2,28 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
 import { ConversationSourceDeletionLedger } from '../src/conversationSourceDeletionPersistence.mjs';
+import { ConversationSourceDeletionService } from '../src/conversationSourceDeletionService.mjs';
 const native=nativeIntegration(),options=native.options;
 async function fixture(...args){const f=await native.fixture(...args);await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Source fixture',1048576)",[f.userId]);return {...f,projectCreatedAt:(await f.database.query("SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id='default'",[f.userId])).rows[0].stamp};}
+
+test('a reindex conflict remains due after backoff and completes without purging the conversation again', options, async t=>{
+  const f=await fixture(t),ledger=new ConversationSourceDeletionLedger(f.database);
+  const project={userId:f.userId,id:'default'}, identity=await ledger.scope(project);
+  const row=await ledger.put({id:crypto.randomUUID(),userId:f.userId,projectId:'default',...identity,
+    rootSessionId:'conflict',sessionIds:['conflict'],frozen:{root:{id:'conflict'}}});
+  await f.database.query("UPDATE evimed_source_deletion.conversations SET updated_at='1970-01-01' WHERE id=$1",[row.id]);
+  // Isolate this service's account while preserving the real durable due predicate.
+  const pending=ledger.pending.bind(ledger);ledger.pending=async()=> (await pending()).filter(value=>value.id===row.id);
+  let attempts=0,purges=0;
+  const service=new ConversationSourceDeletionService({ledger,resolveProject:async()=>project,removeHistory:async()=>{},
+    runtime:{purgeConversationSource:async()=>{purges++;return {sourceRemoved:true};}},
+    removeDerived:async()=>{if(++attempts===1)throw Object.assign(new Error('reindex in progress'),{code:'memory_index_conflict'});}});
+  await service.drain();
+  const failed=await ledger.get(project,'conflict');assert.equal(failed.cleanup,'pending');assert.equal(failed.sourceRemoved,true,JSON.stringify(failed));
+  assert.equal(failed.reason,'cleanup_unavailable');assert.equal((await ledger.pending()).length,0,'retry waits for the product backoff');
+  await f.database.query("UPDATE evimed_source_deletion.conversations SET next_attempt_at=clock_timestamp()-interval '1 second',updated_at='1970-01-01' WHERE id=$1",[row.id]);
+  await service.drain();assert.equal((await ledger.get(project,'conflict')).cleanup,'complete');assert.equal(attempts,2);assert.equal(purges,1);
+});
 
 test('source cleanup removes only its attributed memory lines, scrubs undo history and preserves unrelated bytes', options, async t => {
   const f=await fixture(t), uri=`${f.root}/profile.md`, body='# Profile\n- Source A preference.\n- Independent B preference.';

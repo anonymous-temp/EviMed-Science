@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
 );
 -- A ledger made before the page's 「记住这一条」 existed gains the column without being rebuilt.
 ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS native_ingested_at timestamptz(3);
+ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS source_session text;
 ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS pending_text text CHECK (pending_text IS NULL OR char_length(pending_text) <= 2000);
 -- A ledger made before 2026-10-23 gains what the extraction said about itself (a commit that wrote nothing is told apart: the
 -- model proposed nothing, or the engine refused what it proposed).
@@ -149,7 +150,7 @@ ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS extraction jso
 CREATE INDEX IF NOT EXISTS native_commits_open_idx ON evimed_memory.native_commits (state, next_attempt_at)
   WHERE state IN ('pending', 'failed');
 CREATE INDEX IF NOT EXISTS native_commits_session_idx ON evimed_memory.native_commits (user_id, engine_session);
--- Whole-message hash equality proves a one-shot write copied an original conversation.
+-- A gateway conversation binding or whole-message hash equality proves a one-shot source copy.
 CREATE TABLE IF NOT EXISTS evimed_memory.native_source_copies (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   source_archive_uri text NOT NULL, copy_archive_uri text NOT NULL,
