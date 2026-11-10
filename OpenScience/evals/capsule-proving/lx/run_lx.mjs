@@ -82,7 +82,7 @@ export function skillOf({ name, whenToUse, body }) {
   const line = s => String(s ?? '').replace(/\s+/g, ' ').trim().replace(/"/g, '\\"');
   const when = line(whenToUse).slice(0, 300);
   return ['---', `name: ${kebab(name, 'method')}`, `description: "${when}"`, `whenToUse: "${when}"`, 'metadata:', '  evimed_schema: "method-skill/1"', '  role: "functional"',
-    `  applies_when: "${when}"`, '  not_when: "与上述情形无关的请求。"', '---',
+    `  applies_when: "${when}"`, '  not_when: "与上述情形无关的请求。"', '  derived_from: "explicit: written by the person (LX evaluation seed)"', '---',
     '## Purpose', '', String(whenToUse ?? '').trim(), '', '## When to Use', '', String(whenToUse ?? '').trim(), '', '## Inputs', '', '用户在请求里给出的材料。', '',
     '## Workflow', '', String(body ?? '').trim(), '', '## Verification', '', '交付前对照上面的步骤核对一遍。', '', '## Constraints', '', '无额外约束。', '', '## Output', '', '按用户要求的形式交付。', ''].join('\n');
 }
