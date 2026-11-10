@@ -861,7 +861,6 @@ class VcrSimulateTests(_GatewayCase):
         self.assertNotIn("topK", selection, "how far the clause stage goes is the deployment's")
         for key in ("subjectKey", "registryIds", "registry", "collection", "collectionRevision", "protocolVersionId", "subjectKeys", "fit", "thinking"):
             self.assertIn(key, selection)
-        self.assertIn("match_judge", definitions["vcr_simulate"]["description"])
         self.assertIn("sentences", definitions["vcr_read"]["description"])
         answer = self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "match_judge"})
         self.assertEqual(answer["status"], "success")
@@ -869,7 +868,6 @@ class VcrSimulateTests(_GatewayCase):
         self.assertTrue(answer["data"]["builtByPlatform"])
         self.assertIn("registryIds", answer["data"]["notes"][0])
         compact = {tool["name"]: tool["description"] for tool in vcr_platform.tool_definitions()}
-        self.assertIn("match_judge", compact["vcr_simulate"])
         self.assertIn("trial_judgment", compact["vcr_write"])
         self.assertIn("sentences", compact["vcr_read"])
 

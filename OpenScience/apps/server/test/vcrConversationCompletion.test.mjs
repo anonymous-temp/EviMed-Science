@@ -41,7 +41,7 @@ test('reconcile: a batch job that ended limited is partial with its reason, and 
   const inserted = [];
   const job = (id, kind, extra) => ({ id, study_id: 's', user_id: 'u', project_id: 'p', kind, state: 'succeeded', finished_at: '2026-11-04T00:00:00Z', checkpoint: { conversationOrigin: { userId: 'u', projectId: 'p', rootSessionId: 'root', runId: 'run', callId: 'call' } }, result_id: `r_${id}`, result_version: 1, ...extra });
   const rows = [job('a', 'match_judge', { conclusion: 'limited', stop_message: '3 对里判完 1 对' }), job('b', 'match_judge', { conclusion: 'estimable' }), job('c', 'weight_comparator', { conclusion: 'limited' }), job('d', 'records_import', { conclusion: 'limited', stop_message: '导入了一部分' })];
-  const store = { rows: async (sql) => (sql.includes('FROM evimed_vcr.jobs') ? rows : []), query: async (sql, values) => { if (sql.includes('INSERT INTO evimed_vcr.conversation_completions')) inserted.push(JSON.parse(values[9])); return { rowCount: 1 }; } };
+  const store = { one: async () => null, rows: async (sql) => (sql.includes('FROM evimed_vcr.jobs') ? rows : []), query: async (sql, values) => { if (sql.includes('INSERT INTO evimed_vcr.conversation_completions')) inserted.push(JSON.parse(values[9])); return { rowCount: 1 }; } };
   await new VcrConversationCompletions({ store }).reconcile();
   assert.deepEqual(inserted.map((row) => [row.partial, row.stopped ?? null]), [[true, '3 对里判完 1 对'], [false, null], [false, null], [true, '导入了一部分']]);
 });

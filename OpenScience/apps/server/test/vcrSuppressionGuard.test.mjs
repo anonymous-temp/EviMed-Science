@@ -47,6 +47,8 @@ const READS_NO_ROWS = [
   "maic_comparator", "evalue", "design_analytic", "design_simulation", "design_grid", "assurance", "procova", "accrual_forecast", "map_prior",
   "negative_control_comparator", "tipping_point", "generate_patients_longitudinal", "population_check", "design_confirmatory", "bias_analysis", "network_meta",
   "dose_response_meta", "effect_shrinkage", "design_dose", "design_bayesian", "design_win_ratio", "borrowing_prior", "generate_progression", "match_extract",
+  // the patient-matching plugin's task rows and the records import read documents through the platform, never an engine snapshot
+  "match_judge", "records_import",
   "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
 ];
 

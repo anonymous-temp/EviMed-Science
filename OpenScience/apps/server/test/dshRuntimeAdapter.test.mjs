@@ -192,7 +192,8 @@ test("the method allow-list is derived from the seam manifest, and 0.1.1's dotte
   // `write`; the adapter calls none of them.
   // 0.2.2 added 51 and retired two: the forge's, liveshare's, plugin details' and action cards' (denied on the proxy as well), the
   // automation tasks' and the session-state reads the page uses; the adapter calls `schedule/list` alone of them.
-  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 200);
+  // The patient-matching plugin adds its two status/cancel methods (allowed).
+  assert.equal(ALLOWED_WIRE_METHODS.size + DENIED_WIRE_METHODS.size, 202);
   for (const method of ALLOWED_WIRE_METHODS) {
     assert.ok(!DENIED_WIRE_METHODS.has(method), `${method} is both allowed and denied`);
   }

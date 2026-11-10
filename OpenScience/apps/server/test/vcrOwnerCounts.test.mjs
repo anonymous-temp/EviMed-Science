@@ -146,6 +146,7 @@ function gatewayFor({ who, native, jobs = null }) {
     async studyByRuntimeDispatch() { return study; },
     async one(/** @type {string} */ sql) { return sql.includes("executions") ? { id: "exe_1" } : { checkpoint: {} }; },
     async allResults() { return [resultRow]; },
+    async resultForExecution() { return resultRow; },
     async query() { return { rows: [] }; },
   };
   const defaultJobs = { async get() { return { id: "job_1", state: "succeeded", method: "design.simulate", progress: {}, cpuSecondsUsed: 1, error: null }; } };
