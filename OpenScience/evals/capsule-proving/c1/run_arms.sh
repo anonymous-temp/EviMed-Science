@@ -63,7 +63,7 @@ run_evolving() {
   if [ ! -f "$dir/export.json" ]; then
     rm -rf "$dir" && cp -a "$LIB/$env-pyramid" "$dir" && rm -f "$dir/seen.json"
     (cd "$C1" && node build_library.mjs evolve --env "$env" --dir "$dir" --export "$dir/export.json" --train-dir $ROOT/c1-train-1 --pool "$TRAINPOOL" \
-      --embed-key-file "$EMB" --key-file "$KEY" >> "$out/run.log" 2>&1)
+      --embed-key-file "$EMB" --key-file "$KEY" ${C1_LEARN_THINKING:+--thinking "$C1_LEARN_THINKING"} >> "$out/run.log" 2>&1)
   fi
   W=$(workers)
   (cd "$C1" && $PY run_c1.py --env "$env" --fold "$fold" --samples "$POOL" --arm evolving --library "$dir/export.json" --mode pyramid \

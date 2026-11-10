@@ -7,6 +7,7 @@
 # Every finished training episode of F2's training pass (/srv/evimed/runs/c1-train-1, not re-run) is a camp lesson — success or failure — with
 # both lab switches on (OPEN_SCIENCE_LEARNING_CAMP_ENABLED: `campLessonFor`; OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED: a frame, then
 # one method per new sub-skill). The code is a frozen copy (./code), so a later sync of the lane's worktree cannot change a running build.
+# The learning steps run with DeepSeek thinking disabled (C1_LEARN_THINKING): with it on, one lesson with its integrate passes took ~20 minutes.
 set -u
 ROOT=/srv/evimed/runs
 OUT=$ROOT/c1-lib-2
@@ -18,7 +19,7 @@ if [ -f "$OUT/$env-$variant.json" ]; then echo "already built: $OUT/$env-$varian
 status "c1 camp library $env-$variant build started (pid $$)"
 cd "$C1" && node build_library.mjs build --lessons camp --env "$env" --variant "$variant" --train-dir $ROOT/c1-train-1 \
   --pool "$CODE/evals/capsule-proving/pools/c1-train-20261110.json" --out "$OUT" --sleep-every 10 \
-  --embed-key-file /srv/evimed/secrets/dashscope.api-key --key-file /srv/evimed/secrets/deepseek.api-key
+  --embed-key-file /srv/evimed/secrets/dashscope.api-key --key-file /srv/evimed/secrets/deepseek.api-key --thinking "${C1_LEARN_THINKING:-disabled}"
 rc=$?
 [ "$rc" = 0 ] || status "c1 camp library $env-$variant build stopped (exit $rc); resume: cd $OUT && setsid nohup ./run.sh $env $variant </dev/null >> run-$env-$variant.log 2>&1 &"
 exit $rc

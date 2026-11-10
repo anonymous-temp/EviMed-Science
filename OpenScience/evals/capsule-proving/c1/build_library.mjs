@@ -110,6 +110,10 @@ async function build(options) {
   const lessons = String(options.lessons ?? "routine");
   if (!["routine", "camp"].includes(lessons)) throw new Error(`Unknown lessons ${lessons}`);
   const camp = lessons === "camp" ? { camp: true, twoStage: options["one-stage"] ? false : true } : {};
+  // The learning steps' thinking (DeepSeek); the product's runtime thinks (reasoning effort high), F2's builds did. `disabled` is ~4x faster
+  // per step, and answers are cached apart from thinking ones.
+  const thinking = String(options.thinking ?? "enabled");
+  if (!["enabled", "disabled"].includes(thinking)) throw new Error(`Unknown thinking ${thinking}`);
   const sleepEvery = Number(options["sleep-every"] ?? 10);
   const out = String(options.out);
   const pool = JSON.parse(await readFile(String(options.pool), "utf8"));
@@ -131,17 +135,17 @@ async function build(options) {
   const dir = path.join(out, `${env}-${variant}`);
   await mkdir(out, { recursive: true });
   const loop = await OfflineLoop.open({ dir, env, variant, policy: { ...VARIANTS[/** @type {keyof typeof VARIANTS} */ (variant)], approve: "immediate", officialInLoop: false, ...camp },
-    model: learningModel({ dryRun: Boolean(options["dry-run"]), keyFile: options["key-file"] ?? undefined }),
-    embed: embedder?.embed ?? null, embedModel: embedder?.model ?? null, cacheDir: path.join(out, "cache") });
+    model: learningModel({ dryRun: Boolean(options["dry-run"]), keyFile: options["key-file"] ?? undefined, thinking }),
+    embed: embedder?.embed ?? null, embedModel: embedder?.model ?? null, cacheDir: path.join(out, thinking === "enabled" ? "cache" : "cache-thinking-disabled") });
   const started = Date.now();
   const tally = await learnFrom(loop, episodes, { gate, sleepEvery, prefix: "" });
   if (loop.policy.consolidate !== "none") await loop.consolidate({ stepId: "sleep:final" });
   const exported = await loop.exportTo(path.join(out, `${env}-${variant}.json`));
-  const summary = { env, variant, lessons, gate, sleepEvery, tally, stats: exported.stats, seconds: Math.round((Date.now() - started) / 1000) };
+  const summary = { env, variant, lessons, thinking, gate, sleepEvery, tally, stats: exported.stats, seconds: Math.round((Date.now() - started) / 1000) };
   await writeFile(path.join(out, `${env}-${variant}.summary.json`), `${JSON.stringify(summary, null, 2)}\n`);
   const live = exported.stats.methods - (exported.stats.byStatus?.retired ?? 0);
   await globalStatus(lessons === "camp"
-    ? `c1 camp library ${path.basename(out)}/${env}-${variant} built: ${live} live methods (${JSON.stringify(exported.stats.byRole)}), levels ${JSON.stringify(exported.stats.byLevel)}, relations ${JSON.stringify(exported.stats.relationsByType)}, lessons ${tally.distilled} (${tally.successes} successes, ${tally.failures} failures), details ${JSON.stringify(exported.stats.camp?.details ?? {})}, model calls ${exported.stats.modelUsage?.calls ?? 0}, ${summary.seconds}s`
+    ? `c1 camp library ${path.basename(out)}/${env}-${variant} built (thinking ${thinking}): ${live} live methods (${JSON.stringify(exported.stats.byRole)}), levels ${JSON.stringify(exported.stats.byLevel)}, relations ${JSON.stringify(exported.stats.relationsByType)}, lessons ${tally.distilled} (${tally.successes} successes, ${tally.failures} failures), details ${JSON.stringify(exported.stats.camp?.details ?? {})}, model calls ${exported.stats.modelUsage?.calls ?? 0}, ${summary.seconds}s`
     : `c1 library ${env}-${variant} built: ${exported.stats.methods} methods (${JSON.stringify(exported.stats.byRole)}), lessons ${tally.distilled}/${tally.successes} successes, product gate would fire ${tally.productGate}, model calls ${exported.stats.modelUsage?.calls ?? 0}`);
   process.stdout.write(`${JSON.stringify(summary)}\n`);
 }
@@ -156,7 +160,7 @@ async function evolve(options) {
   const saved = JSON.parse(await readFile(path.join(dir, "library.json"), "utf8"));
   const embedder = options["embed-key-file"] ? await embedderFrom(String(options["embed-key-file"])) : null;
   const loop = await OfflineLoop.open({ dir, env, variant: saved.variant, policy: saved.policy,
-    model: learningModel({ dryRun: Boolean(options["dry-run"]), keyFile: options["key-file"] ?? undefined }),
+    model: learningModel({ dryRun: Boolean(options["dry-run"]), keyFile: options["key-file"] ?? undefined, thinking: options.thinking === "disabled" ? "disabled" : "enabled" }),
     embed: embedder?.embed ?? null, embedModel: embedder?.model ?? null, cacheDir: options["cache-dir"] ? String(options["cache-dir"]) : undefined });
   const seenPath = path.join(dir, "seen.json");
   let seen = await readFile(seenPath, "utf8").then(JSON.parse).catch(() => null);
