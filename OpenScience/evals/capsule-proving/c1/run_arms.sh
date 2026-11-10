@@ -15,7 +15,10 @@ EMB=/srv/evimed/secrets/dashscope.api-key
 KEY=/srv/evimed/secrets/deepseek.api-key
 
 status() { echo "$(date -u +%FT%TZ) $*" >> $ROOT/c1-STATUS; }
-workers() { local load; load=$(cut -d' ' -f1 /proc/loadavg); if awk "BEGIN{exit !($load < 16)}"; then echo 4; else echo 2; fi; }
+# C1_MAX_WORKERS caps the workers (the commander's budget order of 2026-11-10: 3); C1_ARMS limits the queue to the arms it names.
+MAX_WORKERS=${C1_MAX_WORKERS:-4}
+ARMS=${C1_ARMS:-}
+workers() { local load w; load=$(cut -d' ' -f1 /proc/loadavg); if awk "BEGIN{exit !($load < 16)}"; then w=4; else w=2; fi; [ "$w" -gt "$MAX_WORKERS" ] && w=$MAX_WORKERS; echo "$w"; }
 refresh() { python3 $C1/summarize.py --runs $ROOT --out $ROOT/c1-summary.json > /dev/null 2>&1; }
 
 # run_arm <arm> <env> <fold> <library variant> <mode> [removed roles]
@@ -90,6 +93,7 @@ while true; do
   remaining=0 ran=0
   for item in "${ITEMS[@]}"; do
     read -r arm env fold variant mode roles <<< "$item"
+    if [ -n "$ARMS" ] && [[ " $ARMS " != *" $arm "* ]]; then continue; fi
     grep -qx "$arm $env $fold" "$Q/DONE" && continue
     grep -qx "FAILED $arm $env $fold" "$Q/FAILS" && continue
     remaining=1
