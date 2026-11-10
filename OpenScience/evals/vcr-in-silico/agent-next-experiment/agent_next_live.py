@@ -108,8 +108,8 @@ def summarize(graded):
 
 def cmd_run(a):
     d = json.load(open(SCEN))
-    kit = os.environ.get("KIT") or "/home/coder/evimed-wt/vcrfix-handoff/isl2/LIVE-digest"
-    out = os.environ.get("R") or "/home/coder/evimed-wt/isl2live-state/results"
+    kit = os.environ.get("KIT") or sys.exit("set KIT to the local live-harness kit directory (it is not part of the repository)")
+    out = os.environ.get("R") or sys.exit("set R to the harness results directory")
     only = set(a.only.split(",")) if a.only else None
     spent = 0.0
     scen = os.path.join(os.environ.get("TMPDIR", "/tmp"), f"agent-next-{a.label}.json")

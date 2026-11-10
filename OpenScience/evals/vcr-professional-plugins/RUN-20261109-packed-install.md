@@ -9,10 +9,10 @@ kernel-free half also runs in CI as `packages/research-plugin-runtime/test/packe
 Setup of this run
 - Source: `--source-ref HEAD` of branch `codex/vcr-in-silico-r2-20261108` at `c6f5ea298` (a committed export; the working tree held another
   stream's unfinished domain edit that did not parse, `Duplicate export of 'vcrModelRisk'`, so the working tree itself could not be packed).
-- Kernel: DSH 0.2.2-rc.1 (the pin), the CLI and `@deepseek-ai/*` modules of F2's seeded profile `/tmp/isl2live/dsh-seed` (read only). Standalone
+- Kernel: DSH 0.2.2-rc.1 (the pin), the CLI and `@deepseek-ai/*` modules of the live harness's seeded profile (read only). Standalone
   profiles are created by the release's own `install.mjs` (`--from-default-profile headless`, `--offline`) in a private store; the hosted
   composition is a byte copy of F2's sealed seed (all five bundles, the socket, LoopX, the memory plugin), never the original.
-- Engine: the isl2 tree's `vcr-engine`, R 4.3.3 library `/home/coder/R/vcr-4.3`; standalone calls run real R jobs.
+- Engine: the isl2 tree's `vcr-engine`, the local R 4.3.3 library; standalone calls run real R jobs.
 - Result: **144 of 144 cases pass** (62 pack-time checks, 50 standalone, 32 hosted); about 8 minutes.
 
 What each group proves
@@ -52,7 +52,7 @@ install commands with the image's paths), a hosted adapter with a real engine be
 
 Rerun
 ```
-source isl2/env.sh; export pnpm_config_cache_dir=<a pnpm cache that holds the kernel closure's metadata>
+set the engine environment (VCR_R_LIBS, VCR_ENGINE_ROOT); export pnpm_config_cache_dir=<a pnpm cache that holds the kernel closure's metadata>
 node OpenScience/scripts/ops/vcr-packed-install-probe.mjs --work <new empty dir> --source-ref HEAD \
   --kernel-profile <seeded profile dir> --engine <vcr-engine root> --hosted-home <sealed DSH home> --results <file.json>
 node OpenScience/scripts/ops/vcr-packed-install-probe.mjs --work <new dir> --pack-only     # kernel-free, seconds

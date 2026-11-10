@@ -141,8 +141,8 @@ def items():
 
 def cmd_run(args):
     d, reqs = items()
-    kit = os.environ.get("KIT") or "/home/coder/evimed-wt/vcrfix-handoff/isl2/LIVE-digest"
-    out = os.environ.get("R") or "/home/coder/evimed-wt/isl2live-state/results"
+    kit = os.environ.get("KIT") or sys.exit("set KIT to the local live-harness kit directory (it is not part of the repository)")
+    out = os.environ.get("R") or sys.exit("set R to the harness results directory")
     only = set(args.only.split(",")) if args.only else None
     samples = args.samples or d["samplesPerRequest"]
     spent = 0.0

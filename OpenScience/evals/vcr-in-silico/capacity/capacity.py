@@ -159,7 +159,7 @@ def main():
         work.mkdir(exist_ok=True)
         env = {**os.environ, "VCR_ENGINE_TOKEN_FILE": str(scratch / "token"),
                "VCR_ENGINE_RECEIPT_KEY_FILE": str(scratch / "receipt"), "VCR_ENGINE_WORK_DIR": str(work),
-               "VCR_ENGINE_ROOT": str(ENGINE), "VCR_R_LIBS": os.environ.get("VCR_R_LIBS", "/home/coder/R/vcr-4.3"),
+               "VCR_ENGINE_ROOT": str(ENGINE), "VCR_R_LIBS": os.environ["VCR_R_LIBS"],
                "VCR_ENGINE_CORES": "1", "VCR_ENGINE_CPU_SECONDS": "600", "VCR_ENGINE_DATA_ROOT": str(scratch / "data")}
         log = open(scratch / f"engine{i}.log", "w")
         procs.append(subprocess.Popen([sys.executable, "-m", "uvicorn", "service.app:app", "--host", "127.0.0.1",

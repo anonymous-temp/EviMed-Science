@@ -19,7 +19,7 @@ No product code is changed.
   cores, the shared dev box's other pair belongs to another stream. Job `cores` is
   1 (`VCR_ENGINE_CORES=1`, the production default), so a job uses one core; one
   engine uses 1 of the 2 cores, two engines use both.
-- `VCR_R_LIBS=/home/coder/R/vcr-4.3`, one token and one receipt key from files in
+- `VCR_R_LIBS` = the local R 4.3.3 library built from the runtime lock, one token and one receipt key from files in
   scratch, `VCR_ENGINE_CPU_SECONDS=600`, ports 48891 (and 48892).
 - No paid calls, no container build.
 
