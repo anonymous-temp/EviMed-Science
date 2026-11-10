@@ -422,7 +422,7 @@ export class DocumentParserClient {
     /** @type {any} */
     let failure;
     try {
-      return await this.#remote(request, callerSignal);
+      return await this.#remote(request, callerSignal, textOnly);
     } catch (error) {
       if (callerSignal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
       failure = error;
@@ -446,8 +446,8 @@ export class DocumentParserClient {
   }
 
   /** One request to the configured engine, with its retries and the one metadata fallback.
-   * @param {any} request @param {AbortSignal | undefined} callerSignal */
-  async #remote(request, callerSignal) {
+   * @param {any} request @param {AbortSignal | undefined} callerSignal @param {boolean} [textOnly] the text alone, never the metadata request */
+  async #remote(request, callerSignal, textOnly = false) {
     if (!this.baseUrl) throw parserError(503, "source_parser_unconfigured", "Document parsing is not configured for this deployment.");
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
