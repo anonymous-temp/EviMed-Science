@@ -831,15 +831,9 @@ test("the skill is short, starts the job, judges silence by the model, and repor
   assert.match(authored, /\.\.\/vcr-protocol\/references\/operating-contract\.md/);
   assert.match(operating, /No contact, referral, site CRM/);
   assert.match(operating, /In statistics and structured table screening, unknown is never exclusion, a negative\s+finding or zero/);
-  const legacy = await readFile(path.join(repoRoot,"capabilities","vcr-matching","references","legacy-matching.md"),"utf8");
   assert.match(authored,/match_context/);assert.match(authored,/match_assess/);assert.match(authored,/match_report/);
-  assert.match(authored,/references\/legacy-matching\.md/);
-  assert.match(legacy, /kind `match_judge`/);
-  assert.match(legacy, /what `trial_judgment`/);
-  assert.match(legacy, /a good record could leave this out/);
-  assert.match(legacy, /a 78-year-old is not pregnant/);
-  assert.match(legacy, /A registry that failed is reported and the rest goes on/);
-  assert.match(legacy, /Read it back/);
+  assert.match(authored, /kind `match_criteria`/);
+  assert.doesNotMatch(authored, /references\/legacy/, "the batch judge's reference is gone");
   for (const gone of ["matching.json", "traceability-review", "manuscript-humanize", "evimed_submit_deliverable", "dateQuote", "Age alone does not establish"]) assert.ok(!authored.includes(gone), gone);
 });
 

@@ -108,8 +108,8 @@ answers stay under `--work`. Resamples default to 10,000 with a fixed seed; inte
 `native_projection.mjs` is a pure adapter from the new core's actual saved matching-result JSONL to this directory's existing
 ranking input. It calls `metricInputFromResults` to validate the core invariants and supplied metric profile. It never calls a
 model, reads a label/qrels file, reruns eligibility, derives a score from eligibility, reranks, or removes unjudged positions.
-The official scorers above remain unchanged. `dev_job.mjs` and `e2e_e.mjs` use the historical judge path; their outputs are
-not evidence that the native plugin ran. Do not run them and report their scores as native-plugin scores.
+The official scorers above remain unchanged. The historical batch-judge drivers (`dev_job.mjs`, `e2e_e.mjs`, the product and scenario runners) were deleted
+on 2026-11-10 with the batch judge; every judged result is the native plugin's.
 
 Only original English `sigir` with `trialgpt-judged-pair-ranking`, or `trec2021`, `trec2022`, `trec2023` with `trec-full-corpus`,
 are accepted. Translated board names, non-English declarations and the translated cases' `translatedFrom` marker are refused.
@@ -287,7 +287,7 @@ These live apart from A to C: their prepared inputs are in their own private dir
 `prepare_f.mjs --n2c2-root <dir> --out <inputs> --labels-out <labels>` writes `F-n2c2/cases.jsonl` (one case per training patient: the file's
 own `Record date:` blocks as dated records) and, apart, `F-n2c2/labels.jsonl`. The split is the n2c2 README's: 40 development patients by the
 fixed salted hash of `evals/vcr-matching/n2c2/data.mjs`, the other 162 held out (ids digests `abf3d521...` and `966c56cf...`, checked by a test).
-`dev_job.mjs --board n2c2 --split train-dev|train-heldout --n2c2-boards <inputs> --n2c2-labels <labels> --n2c2-root <dir>` uploads each record as
+`native_replay.mjs --board n2c2 --split train-dev|train-heldout --n2c2-boards <inputs> --n2c2-labels <labels> --n2c2-root <dir>` takes each record as
 a document dated by its record date and judges one protocol, the thirteen criteria in the annotation guide's wording (`n2c2/criteria.mjs`), against
 the whole roster in one job, clause k being tag k. The **sealed test split is refused** by the loader and by the options unless `--unseal` is passed,
 run once, after the prompts are frozen; `prepare_f.mjs` does not write the test notes without `--with-test`; only `unseal_f.mjs` opens the sealed gold, to write the labels `score.py f --split test --unseal` reads.
@@ -309,7 +309,7 @@ Historical instrument only. On 2026-11-05 the owner retained English SIGIR and r
 control plane's gateway call (so the usage ledger books it), under the same guards and a stage budget (default CNY 2). The instruction forbids adding,
 omitting, explaining and inferring, and leaves numbers, units and dates as written; code checks the numbers (a multiset, asked again once, counted when
 it still differs) and that the result is Chinese. Each board is written once with its hashes (`A-sigir-zh`, `A-trec2021-zh-dev`, `A-trec2022-zh-dev`);
-the trials, candidate lists, collections and qrels are A's, so `dev_job.mjs --board sigir-zh --zh-boards <dir> --boards <A's inputs>` changes only the
+the trials, candidate lists, collections and qrels are A's, so a replay on `--board sigir-zh --zh-boards <dir> --boards <A's inputs>` changes only the
 language of the note. Score with `score.py a` as for A; the dev-topic and finished variants are the ones that apply.
 
 ### D: patient-level eligibility (VERDICT's form)

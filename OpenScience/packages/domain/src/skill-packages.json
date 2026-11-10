@@ -1158,12 +1158,9 @@
       "origin": "capability",
       "version": "1.10.0",
       "source": {"kind":"release"},
-      "digest": "sha256:ecd57ddf383cf698753a0b8369d510cb5f56a77a7f2bc7fd59ca6ad33ead213f",
+      "digest": "sha256:a8db50a00ec120b439f97a34d9415366e535d346807a1f8e44736ae54b154049",
       "digestAlgorithm": "release-directory-v1",
-      "references": [
-        {"path":"capability.yaml","sha256":"426b632a4e4c70ec72a71d726f1afbeab67647d34546543ae51271272ce0e5e5"},
-        {"path":"references/legacy-matching.md","sha256":"e20816938dc79be93e9c669c9ff91dd85786664b00bb5e8fe6bd48a0488bc17e"}
-      ],
+      "references": [{"path":"capability.yaml","sha256":"426b632a4e4c70ec72a71d726f1afbeab67647d34546543ae51271272ce0e5e5"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},

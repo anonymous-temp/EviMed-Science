@@ -8,9 +8,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { CRITERIA } from '../vcr-matching/n2c2/criteria.mjs';
-import { EXIT, parseOptions, runDevJob } from './dev_job.mjs';
 import { dropDatabase, scratchUrl } from './devdb.mjs';
-import { EXTRA_BOARDS, boardNames, boardSpec, loadExtraCases } from './extra_boards.mjs';
+import { EXTRA_BOARDS, boardNames, boardSpec } from './extra_boards.mjs';
 import { startFakeProvider } from './fake_provider.mjs';
 import { TAGS, n2c2Protocol, n2c2Record, recordsOfNote, stateOfLabel } from './n2c2_board.mjs';
 import { prepareF } from './prepare_f.mjs';
@@ -109,94 +108,6 @@ describe('board F: preparation on made-up notes', () => {
       assert.equal(result.devDigest, 'abf3d52129f817e06fec1cfb54554133a579681a4c76270f869e5fb74963652c', 'the README\'s frozen development ids');
       assert.equal(result.heldoutDigest, '966c56cf8596a1291afdf38b2b2b78785eaf49e01143d605a8148ce4fcdb5905', 'and its frozen held-out ids');
     } finally { fs.rmSync(out, { recursive: true, force: true }); fs.rmSync(labelsOut, { recursive: true, force: true }); }
-  });
-});
-
-describe('board F: the sealed test split', () => {
-  test('it is refused by the loader and by the options unless unsealed, and no flag of this stream unseals it', () => {
-    const dir = tmp('sealed');
-    try {
-      fs.mkdirSync(path.join(dir, 'F-n2c2'), { recursive: true });
-      fs.writeFileSync(path.join(dir, 'F-n2c2', 'cases.jsonl'), `${JSON.stringify({ patientId: 'n2c2-1', split: 'train-dev', records: [] })}\n`);
-      assert.throws(() => loadExtraCases(dir, 'n2c2', { split: 'test' }), { code: 'test_sealed' });
-      assert.throws(() => loadExtraCases(dir, 'n2c2', { split: 'all' }), { code: 'split_unknown' });
-      assert.equal(loadExtraCases(dir, 'n2c2', { split: 'train-dev' }).length, 1);
-      assert.equal(loadExtraCases(dir, 'n2c2', { split: 'train-heldout' }).length, 0);
-      const base = ['--board', 'n2c2', '--arm', 'f1', '--data-dir', '/tmp/d', '--n2c2-boards', dir, '--plan-only'];
-      assert.throws(() => parseOptions([...base, '--split', 'test'], {}), { code: 'test_sealed' });
-      assert.equal(parseOptions([...base, '--split', 'test', '--unseal'], {}).unseal, true, 'only the owner\'s explicit flag lets it through');
-      assert.equal(parseOptions(base, {}).split, 'train-dev');
-      assert.throws(() => parseOptions([...base, '--mode', 'both'], {}), { code: 'option_invalid' });
-      assert.throws(() => parseOptions(base.filter((value) => value !== dir && value !== '--n2c2-boards'), {}), { code: 'option_missing' });
-      assert.throws(() => loadExtraCases(dir, 'sigir', { split: 'dev' }), { code: 'board_unknown' });
-    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
-  });
-});
-
-describe('board F through the platform\'s judging job', { skip: !SERVER_URL && 'OPEN_SCIENCE_TEST_POSTGRES_URL names no local PostgreSQL' }, () => {
-  /** @type {string} */ let dir, root, boards, labels, dbName, dbUrl, keyFile;
-  before(async () => {
-    dir = tmp('job');
-    root = madeUpRoot(5);
-    boards = path.join(dir, 'boards'); labels = path.join(dir, 'labels');
-    await prepareF({ root, out: boards, labelsOut: labels, rule: { salt: 'n2c2-dev-v1', size: 3 } });
-    dbName = `evimed_test_vmf_t${Math.random().toString(16).slice(2, 10)}`;
-    dbUrl = scratchUrl({ serverUrl: SERVER_URL, name: dbName });
-    keyFile = path.join(dir, 'key');
-    fs.writeFileSync(keyFile, 'not-a-real-key\n', { mode: 0o600 });
-  });
-  after(async () => { await dropDatabase(dbUrl).catch(() => {}); for (const d of [dir, root]) fs.rmSync(d, { recursive: true, force: true }); });
-
-  const run = async (/** @type {string[]} */ extra, /** @type {string} */ url, arm = 'f1') => {
-    const lines = [];
-    const options = parseOptions(['--board', 'n2c2', '--arm', arm, '--data-dir', path.join(dir, 'data'), '--n2c2-boards', boards, '--key-file', keyFile, '--base-url', url,
-      '--db-url', SERVER_URL ?? '', '--db-name', dbName, '--allow-peak', '--score', 'no', '--progress-seconds', '0.05', ...extra], {});
-    const result = await runDevJob(options, { log: (line) => lines.push(line), signals: false });
-    return { ...result, lines };
-  };
-
-  test('one job judges the thirteen clauses of every patient of the split on their dated records, and the export names the tags', async () => {
-    const provider = await startFakeProvider({ expectThinking: 'high', keepPrompts: true });
-    try {
-      const planned = await run(['--plan-only'], provider.url, 'f-plan');
-      assert.equal(planned.exitCode, EXIT.finished);
-      assert.equal(provider.requests.length, 0);
-      assert.equal(planned.summary.pairsTotal, 3, 'three development patients, one protocol');
-      const result = await run(['--concurrency', '2'], provider.url);
-      assert.equal(result.exitCode, EXIT.finished, result.lines.join('\n'));
-      assert.equal(provider.requests.length, 3, 'one clause-level call a patient');
-      assert.ok(provider.requests.every((request) => request.criteria && request.thinking === 'high'));
-      const records = fs.readFileSync(path.join(result.outDir, 'judgments.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
-      assert.equal(records.length, 3);
-      for (const record of records) {
-        assert.equal(record.status, 'complete');
-        assert.deepEqual(Object.keys(record.labels), [...TAGS]);
-        assert.ok(Object.values(record.labels).every((entry) => entry.label && entry.basis));
-        assert.ok(record.usage.inputTokens > 0);
-      }
-      for (const request of provider.requests) {
-        const user = String(request.user);
-        assert.ok(user.indexOf('Record date: 2') >= 0 && user.includes('Inclusion criteria:'));
-        assert.match(user, /\n1\. History of intra abdominal surgery/u, 'the guide\'s own first clause, numbered 1');
-        assert.match(user, /\n13\. Myocardial infarction in the past 6 months/u);
-        const dates = [...user.matchAll(/Record date: (\d{4}-\d{2}-\d{2})/gu)].map((match) => match[1]);
-        assert.equal(dates.length, 2);
-        assert.deepEqual(dates, [...dates].sort(), 'the records reach the model oldest first');
-      }
-      const again = await run(['--concurrency', '2'], provider.url);
-      assert.equal(again.exitCode, EXIT.finished);
-      assert.equal(provider.requests.length, 3, 'a second run pays for nothing');
-    } finally { await provider.close(); }
-  });
-
-  test('the held-out split is a different roster in its own right, judged in the same study without touching the development rows', async () => {
-    const provider = await startFakeProvider();
-    try {
-      const result = await run(['--split', 'train-heldout', '--concurrency', '2'], provider.url, 'f-held');
-      assert.equal(result.exitCode, EXIT.finished, result.lines.join('\n'));
-      assert.equal(provider.requests.length, 2);
-      assert.equal(result.summary.patients, 2);
-    } finally { await provider.close(); }
   });
 });
 
@@ -336,24 +247,5 @@ describe('board G: preparation and a run, against the fake provider', { skip: !S
       assert.equal(result.frozen, true);
       assert.ok(provider.requests.length - paid <= 3, 'only the missing note (asked per board that lacked it) is asked for again');
     } finally { await provider.close(); fs.rmSync(other, { recursive: true, force: true }); }
-  });
-
-  test('board G runs through the dev loop: the note is Chinese, the trials are English, the candidates are the first board\'s, and the board needs its directory named', async () => {
-    const provider = await startFakeProvider({ keepPrompts: true });
-    try {
-      const base = ['--board', 'sigir-zh', '--arm', 'g1', '--data-dir', path.join(dir, 'data'), '--boards', boards, '--zh-boards', zh, '--key-file', keyFile, '--base-url', provider.url, '--db-url', SERVER_URL ?? '', '--db-name', dbName, '--allow-peak', '--score', 'no', '--progress-seconds', '0.05'];
-      assert.throws(() => parseOptions(base.filter((value, index) => value !== '--zh-boards' && base[index - 1] !== '--zh-boards'), {}), { code: 'option_missing' });
-      const lines = [];
-      const result = await runDevJob(parseOptions(base, {}), { log: (line) => lines.push(line), signals: false });
-      assert.equal(result.exitCode, EXIT.finished, lines.join('\n'));
-      assert.equal(provider.requests.length, 15, 'three notes against five trials');
-      for (const request of provider.requests) {
-        assert.equal(readsAsChinese(String(request.user).split('Title:')[0]), true, 'the note part of the request is Chinese');
-        assert.match(String(request.user), /Title: Synthetic trial NCT9100000\d/u, 'the trial is English');
-      }
-      const records = fs.readFileSync(path.join(result.outDir, 'judgments.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
-      assert.deepEqual(records.map((record) => record.patientId), ['sigir-t-1', 'sigir-t-2', 'sigir-t-3']);
-      assert.ok(records.every((record) => record.status === 'complete' && record.ranking.length === 5));
-    } finally { await provider.close(); }
   });
 });

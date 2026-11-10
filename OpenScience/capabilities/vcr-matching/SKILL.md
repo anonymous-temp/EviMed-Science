@@ -25,6 +25,6 @@ When `match_context` and `match_assess` are available, use this native workflow 
 
 For each clause, the model distinguishes stated, silent, inferred and computed bases, records exact evidence identities and visible assumptions, and keeps unresolved facts explicit. A missing fact is not zero and does not automatically satisfy or exclude. Clinical eligibility (`eligible`, `ineligible`, `uncertain`, `not-assessed`) is independent of priority and execution state. Explain those judgments in the user's language without exposing internal identifiers or repeating the record.
 
-## Host compatibility
+## Structured cohort tables
 
-When native matching tools are unavailable, read [references/legacy-matching.md](references/legacy-matching.md) and use the existing host workflow. Its source, silence and saved-result requirements still apply.
+A table with typed columns keeps its own rule evaluation: `mcp__evimed__vcr_read` what `contracts` gives the criteria grammar, what `matching` with `filter.kind` `contract` the fact contract, and `mcp__evimed__vcr_simulate` kind `match_criteria` runs the evaluator, where an unknown stays unknown. Use it for screening on columns and exact arithmetic, not for reading notes. What the table's codes were read to mean is what `matching` with `filter.kind` `table_meaning`; a correction goes to `mcp__evimed__dataset_semantics` on the `datasetId` it names and stands over the model's reading.
