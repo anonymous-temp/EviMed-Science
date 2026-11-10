@@ -1,4 +1,5 @@
 /** Deterministic offline packets and hash-bound, concurrent Qwen checkpoints. */
+import { publicOfficialPacket, judgePublicOfficial } from './publicJudge.mjs';
 import { createHash } from 'node:crypto';
 import { officialPrompt, judgeOfficialBatch } from './officialJudge.mjs';
 import { JUDGE_MODEL } from '../offlineJudge.mjs';
@@ -55,6 +56,8 @@ export function buildJudgePacket(row, context) {
     trace: row.trace ?? null, codeHint: row.codeHint ?? [], languageNote: row.languageNote ?? null,
     memorySnapshots: (context.snapshots ?? []).map(s => ({ afterSession: s.afterSession, lines: memoryLines(s) })),
     ...(context.official ? { officialPrompt: officialPrompt(context.gold, context.answer?.answer ?? ''), officialPin: context.official } : {}),
+    ...(context.publicSet && publicOfficialPacket(context.publicSet, context.gold, context.answer?.answer ?? '')
+      ? { publicOfficial: publicOfficialPacket(context.publicSet, context.gold, context.answer?.answer ?? '') } : {}),
     control: context.control ?? null, taskStatus: 'completed', failures: [], checks: row.checks };
   const canonical = stableJson(payload), hash = sha256(canonical);
   return { id: `run-score:${hash}`, hash, ...JSON.parse(canonical) };
@@ -80,7 +83,7 @@ export function mergeJudgeResults(rows, packets, results) {
     return { ...row, verdict: { correct: 'pass', incorrect: 'fail', gold_disputed: 'unknown' }[result.verdict],
       ...(result.verdict === 'gold_disputed' ? { disputed: true } : {}),
       ...(row.kind === 'store' && row.expectedStored && result.verdict === 'correct' ? { stored: true } : {}), by: 'judge', needsJudge: true,
-      judge: { model: result.model, requestId: result.requestId ?? null, verdict: result.verdict, reason: result.reason, failureStep: result.failureStep } };
+      judge: { model: result.model, requestId: result.requestId ?? null, verdict: result.verdict, reason: result.reason, failureStep: result.failureStep, ...(result.officialResult ? { officialResult: result.officialResult } : {}) } };
   };
   return rows.map(row => {
     const merged = { ...merge(row) };
@@ -115,7 +118,7 @@ async function judgeBatch(packets, { key, fetchImpl = globalThis.fetch }) {
 
 /** Six items per request; serialize durable saves while allowing bounded independent requests. */
 export async function judgePackets(packets, { key, results = [], fetchImpl, persist = async () => {}, batchSize = 6, concurrency = 6, retries = 0, retryDelayMs = 250 } = {}) {
-  if (packets.some(p => p.officialPrompt)) batchSize = 1;
+  if (packets.some(p => p.officialPrompt || p.publicOfficial)) batchSize = 1;
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 12) throw new Error('judge_batch_invalid');
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) throw new Error('judge_concurrency_invalid');
   const valid = new Map(packets.map(p => [p.id, p]));
@@ -132,7 +135,7 @@ export async function judgePackets(packets, { key, results = [], fetchImpl, pers
       try {
         let result;
         for (let attempt = 0; ; attempt++) {
-          try { result = await judgeBatch(batch, { key, fetchImpl }); break; }
+          try { result = await (batch[0]?.publicOfficial ? judgePublicOfficial : judgeBatch)(batch, { key, fetchImpl }); break; }
           catch (error) {
             if (attempt >= retries) throw error;
             await new Promise(resolve => setTimeout(resolve, retryDelayMs * 2 ** attempt));

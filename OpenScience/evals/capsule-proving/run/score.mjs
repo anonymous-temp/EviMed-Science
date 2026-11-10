@@ -13,12 +13,14 @@ import { buildJudgePacket, judgePackets, mergeJudgeResults, sha256, answerTrace,
 import { createTranscriptIndex } from './baselines.mjs';
 import { loadCases } from './cases.mjs';
 
+import { readPublicMemory, PUBLIC_MEMORY_SETS } from './publicSets.mjs';
+import { publicMemoryRubric, PUBLIC_OFFICIAL } from './publicJudge.mjs';
 import { OFFICIAL, rubricFacts } from './officialJudge.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const SCORER_VERSION = 'capsule-proving-run-score/4';
 export const SUPPORTED_SETS = ['synthetic-users', 'scenarios', 'med-m1', 'med-m2', 'med-m3', 'med-m5', 'med-m10',
-  'g6', 'g9', 'm6', 'm7', 'm11', 'brand-generic', 'longmemeval-s', 'medmemorybench'];
+  ...PUBLIC_MEMORY_SETS, 'g6', 'g9', 'm6', 'm7', 'm11', 'brand-generic', 'longmemeval-s', 'medmemorybench'];
 const json = async file => JSON.parse(await readFile(file, 'utf8'));
 const jsonl = async file => (await readFile(file, 'utf8')).split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
 /** An appending runner may leave a torn final record visible during a read; completed records remain usable. */
@@ -98,6 +100,7 @@ export async function loadGold(data, run, { sources, pools } = {}) {
   if (!SUPPORTED_SETS.includes(set)) throw new Error(`unknown_set:${set}; supported: ${SUPPORTED_SETS.join(',')}`);
   if (!poolName(split)) throw new Error(`unknown_split:${split}`);
   if (/sealed|confirmation/.test(split) || data.split(path.sep).some(p => /^(?:.*-)?sealed$/.test(p))) throw new Error('sealed_data_forbidden');
+  if (PUBLIC_MEMORY_SETS.includes(set)) return loadPublicMemoryGold(data, run);
   if (set === 'synthetic-users') {
     const dir = path.join(data, split);
     const entries = (await list(dir)).filter(d => d.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
@@ -134,6 +137,17 @@ export async function loadGold(data, run, { sources, pools } = {}) {
     ];
     return [{ caseId, gold: item, input, ...prov }];
   });
+}
+
+async function loadPublicMemoryGold(data, run) {
+  const entries = await readPublicMemory({ set: run.set, split: run.split, dataDir: data, withGold: true });
+  return entries.map(entry => ({ caseId: entry.caseId, itemId: entry.itemId, generator: 'public', input: null,
+    gold: { questions: entry.gold.map((gold, i) => {
+      const input = entry.inputs[i], rubric = publicMemoryRubric(run.set, gold);
+      return { qid: input.id, question: input.question.text, category: gold.categoryName ?? gold.category_name ?? gold.question_type ?? gold.task,
+        afterSession: input.histories.length, rubric: rubric.status, official: gold,
+        expect: { judge: rubric.text } };
+    }) } }));
 }
 
 async function loadPublic(data, run, { sources, pools }) {
@@ -455,7 +469,7 @@ function assertDevelopment(data, run) {
   if (!poolName(run.split)) throw new Error(`unknown_split:${run.split}`);
 }
 async function goldCacheKey(data, run, { sources, pools }) {
-  const publicName = { 'longmemeval-s': 'longmemeval', medmemorybench: 'medmemorybench-hf', 'brand-generic': 'brand-generic-probe' }[run.set];
+  const publicName = { 'longmemeval-s': 'longmemeval', medmemorybench: 'medmemorybench-hf', 'brand-generic': 'brand-generic-probe', locomo: 'locomo-refined', 'locomo-original': 'locomo', realmem: 'realmem', halumem: 'halumem', memsyco: 'memsyco' }[run.set];
   const root = publicName ? path.join(data, 'public', publicName) : run.set === 'synthetic-users' ? path.join(data, run.split) : setDir(data, run.set, run.split);
   return sha256(stableJson({ version: SCORER_VERSION, set: run.set, split: run.split, options: run.options, sources, pools,
     files: await metadataTree(root), code: await metadataTree(HERE),
@@ -584,7 +598,7 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
     if (invalid) { row.verdict = 'invalid-item'; row.erratum = invalid; }
     rows.push(row);
     if (run.set === 'longmemeval-s') row.rubric = rubric;
-    const packet = buildJudgePacket(row, { ...(rubric === 'official' ? { official: { commit: OFFICIAL.commit, sha256: OFFICIAL.sha256 } } : {}), source: entry.input, ...context, rubric: instructions, gold: context.gold ?? entry.gold });
+    const packet = buildJudgePacket(row, { ...(PUBLIC_MEMORY_SETS.includes(run.set) ? { publicSet: run.set } : {}), ...(rubric === 'official' ? { official: { commit: OFFICIAL.commit, sha256: OFFICIAL.sha256 } } : {}), source: entry.input, ...context, rubric: instructions, gold: context.gold ?? entry.gold });
     if (packet) packets.push(packet);
     if (row.redLineOutcome?.verdict === 'needs-judge') {
       const redPacket = buildJudgePacket({ ...row, ...row.redLineOutcome, kind: 'redline-check' },
@@ -713,6 +727,26 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
       'Unknown generator provenance is reported as unknown, never inferred from the split.',
       'Mixed-generator cases appear in every recorded generator group; those groups overlap.',
       'Public answer objects and any per-item rubric are preserved; rows without a pinned official grading prompt are marked rubric: approximate and grouped by benchmark question type.'] };
+  if (PUBLIC_MEMORY_SETS.includes(run.set)) {
+    const status = run.set.startsWith('locomo') ? 'approximate' : 'official';
+    summary.rubric = status;
+    summary.judge = { ...summary.judge, rubric: status,
+      prompt: PUBLIC_OFFICIAL[run.set]?.url ?? (run.set === 'memsyco' ? 'Pinned per-item evaluation.rubric' : 'Approximate semantic accuracy; official token F1 not run'),
+      officialJudgeModel: false, comparability: 'Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row.' };
+    const answers = merged.filter(row => row.kind === 'answer');
+    const native = answers.map(row => row.judge?.officialResult).filter(Boolean);
+    if (run.set === 'halumem') {
+      summary.answerTrack = { n: answers.length, ...Object.fromEntries(['Correct','Hallucination','Omission'].map(label => {
+        const count = native.filter(r => r.evaluation_result === label).length;
+        return [label, { n: answers.length, count, value: count / answers.length, ci95: wilson(count, answers.length) }];
+      })), unknown: answers.length - native.length };
+      summary.notRun = ['Extraction FMR and update hallucination: require per-session newly written memory export and separate native grading.'];
+    }
+    if (run.set === 'realmem') summary.nativeScore = { scale: [0,3], n: answers.length, judged: native.length,
+      meanWithUnknownZero: native.reduce((n,r) => n+r.score,0) / answers.length,
+      note: 'Unjudged remains in denominator; binary accuracy requires score 3. References are LLM-generated, not human-verified.' };
+    if (run.set === 'memsyco') summary.evidenceNotes.push('Probe with one artificial session per item; source has no sessions or timestamps.');
+  }
   await saveLines(path.join(out, 'rows.jsonl'), merged);
   await atomic(path.join(out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
   return { rows: merged, rawRows: rows, packets, results, summary, caseIds: entries.map(e => e.caseId), cache: { gold: goldHit, packets: buildHit } };

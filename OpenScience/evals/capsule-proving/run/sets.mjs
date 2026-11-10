@@ -18,6 +18,7 @@ import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readPublicMemory, PUBLIC_MEMORY_SETS } from './publicSets.mjs';
 import { longMemRuntimeInput } from '../inputs.mjs';
 import {
   brandGenericRuntimeInput, medLoCoMoRuntimeInput, medMemoryHfKey, medMemoryHfRuntimeInput,
@@ -124,7 +125,12 @@ export function toIso(value) {
   const v = value.trim();
   if (/^\d{4}-\d{2}-\d{2}T.*(Z|[+-]\d{2}:?\d{2})$/.test(v)) { const d = new Date(v); return Number.isNaN(d.getTime()) ? null : d.toISOString(); }
   const m = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?:[^\d]*(\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(v);
-  if (!m) return null;
+  if (!m) {
+    // LoCoMo: "1:56 pm on 8 May, 2023"; HaluMem: "Dec 15, 2025, 06:11:23".
+    const locomo = /^(\d{1,2}:\d{2}\s*[ap]m) on (.+)$/i.exec(v);
+    const parsed = Date.parse(`${locomo ? `${locomo[2]} ${locomo[1]}` : v} UTC`);
+    return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+  }
   const [y, mo, d, h, mi, s] = m.slice(1).map((x) => (x === undefined ? 0 : Number(x)));
   const t = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
   return Number.isNaN(t.getTime()) ? null : t.toISOString();
@@ -478,8 +484,35 @@ export async function loadMedLoCoMo({ split = 'dev', dataDir, only } = {}) {
   return done(cases, only);
 }
 
+/** Public question pools share one user per original conversation/person, with bounded prefixes at every question. */
+export async function loadPublicMemory(options = {}) {
+  const { set, split = 'dev', dataDir, only } = options;
+  const entries = await readPublicMemory({ set, split, dataDir: resolveData(dataDir), only });
+  return entries.map(entry => {
+    const longest = entry.inputs.reduce((a, b) => a.histories.length >= b.histories.length ? a : b);
+    const timingAdjustments = [];
+    let previous = '';
+    const rawSessions = longest.histories.map(h => {
+      const original = toIso(h.at);
+      // HaluMem has an intra-day backwards start time. Its official protocol follows source session order.
+      // Clamp only the session scheduling clock; preserve original per-message times and record the exact adjustment.
+      const at = original && original < previous ? previous : original;
+      if (at !== original) timingAdjustments.push({ session: h.sourceSessionId, original, scheduled: at });
+      if (at) previous = at;
+      return { at, messages: h.messages.map(m => ({ role: m.role, text: m.text,
+        ...(toIso(m.at) ? { at: toIso(m.at) } : {}) })) };
+    });
+    return assertCase(makeCase({ caseId: entry.caseId, set, split, userKey: entry.caseId,
+      rawSessions,
+      rawQuestions: entry.inputs.map(input => ({ qid: input.id, text: input.question.text,
+        afterSession: input.histories.length, asOf: toIso(input.question.asOf) ?? undefined })),
+      extra: { itemId: entry.itemId, ...(timingAdjustments.length ? { timingAdjustments } : {}), ...(longest.roleMapping ? { roleMapping: longest.roleMapping } : {}) } }));
+  });
+}
+
 /** Set name to loader. Every loader takes `{ split, dataDir, only }` and returns `Case[]` (each already through `assertCase`). */
 export const SET_LOADERS = Object.freeze({
+  ...Object.fromEntries(PUBLIC_MEMORY_SETS.map(set => [set, options => loadPublicMemory({ ...options, set })])),
   scenarios: loadScenarios,
   'med-m1': loadMedM1, 'med-m2': loadMedM2, 'med-m3': loadMedM3, 'med-m5': loadMedM5, 'med-m10': loadMedM10,
   g9: loadG9, m6: loadM6, m11: loadM11, m7: loadM7, g6: loadG6,
