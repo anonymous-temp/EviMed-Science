@@ -142,16 +142,34 @@ async function evolve(options) {
     model: learningModel({ dryRun: Boolean(options["dry-run"]), keyFile: options["key-file"] ?? undefined }),
     embed: embedder?.embed ?? null, embedModel: embedder?.model ?? null, cacheDir: options["cache-dir"] ? String(options["cache-dir"]) : undefined });
   const seenPath = path.join(dir, "seen.json");
-  const seen = await readFile(seenPath, "utf8").then(JSON.parse).catch(() => ({ successes: [], position: 0 }));
+  let seen = await readFile(seenPath, "utf8").then(JSON.parse).catch(() => null);
+  if (!seen) {
+    // The evolving library starts where training left it: the training successes are the earlier clean runs a lesson's peers come from.
+    seen = { processed: [], successes: [], position: 0 };
+    if (options["train-dir"] && options.pool) {
+      const pool = JSON.parse(await readFile(String(options.pool), "utf8"));
+      for (const taskId of pool.sets?.[env]?.train ?? []) {
+        const file = trajectoryPath(String(options["train-dir"]), env, "train", "no-skill", taskId);
+        const record = await readFile(file, "utf8").then(JSON.parse).catch(() => null);
+        if (!record) continue;
+        seen.position += 1;
+        if (record.success === true) seen.successes.push(file);
+      }
+    }
+    await writeFile(seenPath, `${JSON.stringify(seen)}\n`);
+  }
   const earlier = [];
   for (const file of seen.successes) earlier.push(JSON.parse(await readFile(file, "utf8")));
   /** @type {any[]} */
   const episodes = [];
   const files = options._.slice(1).concat(String(options.episodes ?? "").split(",").filter(Boolean));
   for (const file of files) episodes.push({ ...JSON.parse(await readFile(file, "utf8")), file });
-  const fresh = episodes.filter((record) => !seen.successes.includes(record.file) && !loop.done(`eval:distill:${record.taskId}`));
+  const fresh = episodes.filter((record) => !seen.processed.includes(record.file));
   const tally = await learnFrom(loop, fresh, { gate: String(options.gate ?? "every-success"), sleepEvery: Number(options["sleep-every"] ?? 10), prefix: "eval:", earlier, offset: seen.position });
-  for (const record of fresh) if (record.success === true && !seen.successes.includes(record.file)) seen.successes.push(record.file);
+  for (const record of fresh) {
+    seen.processed.push(record.file);
+    if (record.success === true && !seen.successes.includes(record.file)) seen.successes.push(record.file);
+  }
   seen.position += fresh.length;
   await writeFile(seenPath, `${JSON.stringify(seen)}\n`);
   if (options.export) await loop.exportTo(String(options.export));
