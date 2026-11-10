@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
-import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
+import { lineFingerprint, contentHash } from '../src/nativeMemoryOverlay.mjs';
 import { nativeFileId } from '../src/nativeMemoryStore.mjs';
 import { NativeMemoryObservations } from '../src/nativeMemoryObservations.mjs';
 import { NativeMemoryWorker } from '../src/nativeMemoryWorker.mjs';
@@ -27,7 +27,7 @@ for (const removal of ['forget', 'page-edit', 'page-delete']) {
     await f.worker.processCommits({ userId: f.userId });
     assert.equal(await f.sessions.read(f.userId, uri), null);
     const files = await f.overlay.files(f.userId);
-    const neutral = [...files.values()].find(file => file.uri.includes('/memory-'));
+    const neutral = [...files.values()].find(file => /\/[a-f0-9]{24}\.md$/.test(file.uri) && file.body.includes('Retained independent fact.'));
     assert.ok(neutral, 'independent content survives under a neutral name');
     assert.equal(neutral.body, '- Retained independent fact.');
     assert.ok((await f.overlay.removals(f.userId)).length, 'refusal never erases the removal');
@@ -64,7 +64,7 @@ test('consolidation cannot merge a removed value into another category, includin
   const uri = f.seed('projects/m-41633_研发项目.md', '# M-41633\n- M-41633\n- Independent goal.', { type: 'project_context' });
   await f.worker.ingestConsolidation(f.userId, { taskId: 'merge', adds: [uri] });
   assert.equal(await f.sessions.read(f.userId, uri), null);
-  const kept = [...(await f.overlay.files(f.userId)).values()].find(file => file.uri.includes('/memory-'));
+  const kept = [...(await f.overlay.files(f.userId)).values()].find(file => /\/[a-f0-9]{24}\.md$/.test(file.uri));
   assert.equal(kept?.body, '- Independent goal.');
 });
 
@@ -172,4 +172,54 @@ test('an unchanged observation can be promoted from a later demonstration after 
   assert.equal((await promoter.promote(f.userId)).promoted, 1);
   await f.worker.processCommits({ userId: f.userId });
   assert.equal(await f.sessions.read(f.userId, uri), fact);
+});
+
+
+test('the platform-generated neutral filename is checked too, including a removed quoted name and an opaque identifier', options, async t => {
+  const f = await fixture(t);
+  const uri = `${f.root}/projects/Memory_project.md`;
+  const firstName = contentHash(`${uri}:0`).slice(0, 24);
+  await f.overlay.reject(f.userId, 'preferences', `${f.root}/preferences/old.md`, ['Project "Memory".']);
+  await f.overlay.reject(f.userId, 'decisions', `${f.root}/decisions/old.md`, [`Project identifier "${firstName}".`]);
+  f.seed('projects/Memory_project.md', '- Independent fact.', { type: 'project_context' });
+  await f.worker.ingestConsolidation(f.userId, { taskId: 'neutral-name', adds: [uri] });
+  assert.equal(await f.sessions.read(f.userId, uri), null);
+  const safe = `${f.root}/projects/${contentHash(`${uri}:1`).slice(0, 24)}.md`;
+  assert.equal(await f.sessions.read(f.userId, safe), '- Independent fact.');
+  assert.equal(await f.sessions.read(f.userId, `${f.root}/projects/${firstName}.md`), null);
+});
+
+test('conversation withdrawal records observation-only removal authority before an old demonstration can be promoted', options, async t => {
+  const f = await fixture(t), fact = 'Project M-41633.';
+  const note = `${f.root}/observations/project.md`;
+  f.stub.extract = ({ session }) => session.includes('source-a')
+    ? { adds: [{ uri: note, memory_type: 'observations', after: fact }] }
+    : { updates: [{ uri: note, memory_type: 'observations', before: fact, after: fact }] };
+  await f.commitConversation('source-a', [{ role: 'user', text: fact, at: old }], { projectId: 'default' });
+  const other = await f.commitConversation('source-b', [{ role: 'user', text: fact, at: old }], { projectId: 'default' });
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal((await f.store.files(f.userId)).length, 0, 'observation notes stay outside public memory readers');
+  await f.store.removeConversationSource(f.userId, 'default', ['session_source-a']);
+  assert.ok((await f.overlay.removals(f.userId)).some(row => row.memoryType === 'observations'));
+  const uri = `${f.root}/preferences/old-choice.md`;
+  f.stub.extract = () => ({ adds: [{ uri, memory_type: 'preferences', after: fact }] });
+  await f.store.keepRepeatedChoice(f.userId, fact, [{ archiveUri: other.archive_uri }]);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), null, 'an old independent archive cannot renew the withdrawn content');
+  await f.commitConversation('fresh-choice', [{ role: 'user', text: fact, at: fresh }], { projectId: 'default' });
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), fact, 'a new statement still authorizes relearning');
+});
+
+test('a page edit uses the same safe-name rule rather than reintroducing a removed name through its fallback prefix', options, async t => {
+  const f = await fixture(t);
+  const uri = f.seed('preferences/Edited_note.md', 'Project "Edited".', { type: 'preferences' });
+  const firstName = contentHash(`${uri}:0`).slice(0, 24);
+  await f.overlay.reject(f.userId, 'decisions', `${f.root}/decisions/old.md`, [`Project identifier "${firstName}".`]);
+  const id = nativeFileId(uri);
+  await f.store.update(f.userId, id, { value: '- Independent replacement.', expectedVersion: (await f.store.getRecord(f.userId, id)).version });
+  assert.equal(await f.sessions.read(f.userId, uri), null);
+  assert.equal(await f.sessions.read(f.userId, `${f.root}/preferences/${firstName}.md`), null);
+  const safe = `${f.root}/preferences/${contentHash(`${uri}:1`).slice(0, 24)}.md`;
+  assert.equal(await f.sessions.read(f.userId, safe), '- Independent replacement.');
 });

@@ -1,5 +1,5 @@
 import { hardTokens, tokenPresent, sourceHasToken } from './nativeMemoryHardTokens.mjs';
-import { lineFingerprint, normalisedStatement } from './nativeMemoryOverlay.mjs';
+import { contentHash, lineFingerprint, normalisedStatement } from './nativeMemoryOverlay.mjs';
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { recordRejectionJudge, recordRejectionLines } from "./nativeMemoryMetrics.mjs";
 
@@ -270,4 +270,15 @@ export async function removalRefusals({ userId, overlay, projectId = null, names
     }
   }
   return refused;
+}
+
+/** A generated replacement name is a new write too. Keep it opaque and apply the same removal rule,
+ * including when a generated identifier happens to equal another value the person removed.
+ * @param {{userId:string,overlay:any,uri:string,namespaceId?:string|null,projectId?:string|null,judge?:any}} input */
+export async function neutralMemoryUri({ userId, overlay, uri, namespaceId = null, projectId = null, judge = null }) {
+  for (let attempt = 0; ; attempt++) {
+    const name = contentHash(`${uri}:${attempt}`).slice(0, 24);
+    const blocked = await removalRefusals({ userId, overlay, namespaceId, projectId, judge, candidates: [{ text: name }] });
+    if (!blocked.has(lineFingerprint(name))) return `${uri.slice(0, uri.lastIndexOf('/'))}/${name}.md`;
+  }
 }

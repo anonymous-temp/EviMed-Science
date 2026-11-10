@@ -10,7 +10,7 @@ import {
   recordPolicySync, recordRejectionLines, recordResetSweep, recordVerificationLines,
 } from "./nativeMemoryMetrics.mjs";
 import { NativeMemoryObservations } from "./nativeMemoryObservations.mjs";
-import { removalLines, removalRefusals, removalText } from "./nativeMemoryRejections.mjs";
+import { neutralMemoryUri, removalLines, removalRefusals, removalText } from "./nativeMemoryRejections.mjs";
 import { NativeMemoryVerification, originalSources, replaceStatement } from './nativeMemoryVerification.mjs';
 import { SOURCE_LABEL_PREFIX, sourcesNamedIn } from "./nativeMemoryStore.mjs";
 import { OPENVIKING_MEMORY_TYPES } from "./openVikingLayout.mjs";
@@ -1014,7 +1014,8 @@ export class NativeMemoryWorker {
         await this.overlay.removeFile(userId, uri);
         return null;
       }
-      const neutral = `${uri.slice(0, uri.lastIndexOf('/'))}/memory-${contentHash(uri).slice(0, 24)}.md`;
+      const neutral = await neutralMemoryUri({ userId, projectId, overlay: this.overlay, uri,
+        namespaceId: memoryContext.kind === 'geo-project' ? memoryContext.namespaceId : null, judge: this.rejectionJudge });
       await withMemorySummaryInvalidation(sessions, this.overlay, userId, neutral, () => sessions.replace(userId, neutral, body));
       await this.overlay.addRevision({ userId, uri: neutral, memoryType: type, change: 'added', actor: 'platform', reason: 'rejected_filename', before: null, after: body, projectId });
       await this.overlay.upsertFile({ userId, uri: neutral, memoryType: type, body, projectId });

@@ -1,7 +1,7 @@
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { hardTokens } from './nativeMemoryHardTokens.mjs';
-import { compact, removalLines } from './nativeMemoryRejections.mjs';
+import { compact, neutralMemoryUri, removalLines } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
@@ -12,7 +12,7 @@ import { freshnessOf } from "./memoryMapSources/common.mjs";
 import { replacedStatements, statementForgotten } from "./memoryMapSources/replacedStatements.mjs";
 import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType, originalSources } from "./nativeMemoryOverlay.mjs";
 import { OPENVIKING_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from "./openVikingLayout.mjs";
-import { MEMORY_SEGMENT_OF_TYPE, OBSERVATIONS_SEGMENT, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri, platformSessionOf, unfinishedArchives } from "./openVikingSessions.mjs";
+import { MEMORY_SEGMENT_OF_TYPE, OBSERVATIONS_SEGMENT, PROJECT_MEMORY_TYPES, nativeMemoryFile, observationFile, parseArchiveUri, platformSessionOf, unfinishedArchives } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
 import { sourceReceiptState } from './memorySourceReceipts.mjs';
 
@@ -1222,8 +1222,8 @@ export class NativeMemoryStore {
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
     if (actor === "user" || actor === "conversation" || reason === "source conversation deleted") {
       await this.overlay.reject(userId, rejectionType, file.uri, removed, { origin });
-      await this.history?.rejectRemoved(context,file,removed,this.rejectionJudge);
-
+      // A deleted source already has its own history fence; recognizing its wording is not a second admission gate.
+      if (actor === "user" || actor === "conversation") await this.history?.rejectRemoved(context,file,removed,this.rejectionJudge);
     }
     await this.history?.retireWriteSessions(context,oldOrigins,removed);
     const oldUri = file.uri, source = await this.#bodySource(userId,file);
@@ -1232,7 +1232,8 @@ export class NativeMemoryStore {
     const nextTokens = new Set(hardTokens(next));
     const pathRemoved = actor === "user" && origin === "edit" && removed.some(text => hardTokens(text)
       .some(token => !nextTokens.has(token) && compact(oldUri.slice(oldUri.lastIndexOf('/')+1)).includes(compact(token))));
-    if (pathRemoved) file.uri = `${oldUri.slice(0,oldUri.lastIndexOf('/'))}/edited-${contentHash(oldUri).slice(0,24)}.md`;
+    if (pathRemoved) file.uri = await neutralMemoryUri({ userId, overlay: this.overlay, uri: oldUri, projectId: file.projectId,
+      namespaceId: context.kind === 'geo-project' ? context.namespaceId : null, judge: this.rejectionJudge });
     await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.replace(userId, file.uri, next)));
     const revision = await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId,...source });
     await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, body: next, projectId: file.projectId, sensitive: file.sensitive });
@@ -1291,7 +1292,7 @@ export class NativeMemoryStore {
       historyLines.set(revision.uri,[...new Set([...prior,...brought])]);
     }
     for (const [uri, lines] of historyLines) {
-      const native = nativeMemoryFile(uri, context.sessions.memoryRoot(userId));
+      const native = nativeMemoryFile(uri, context.sessions.memoryRoot(userId)) ?? observationFile(uri, context.sessions.memoryRoot(userId));
       if (native) await this.overlay.reject(userId, this.#rejectionType(context, native.type), uri, lines);
       await this.overlay.scrubLines(userId,uri,lines,{sourceDeleted:true});
       affected.push({uri,id:nativeFileId(uri),hash:null,recordIds:[nativeFileId(uri),...lines.map(line=>`${nativeFileId(uri)}_${lineFingerprint(line).slice(0,12)}`)]});
