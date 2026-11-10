@@ -38,6 +38,8 @@
 
 import path from "node:path";
 
+export { toolchainFingerprint, toolchainsMatch } from "@evimed/domain";
+
 import { referenceIdentifiers } from "@evimed/domain/clinical-evidence";
 
 import { readTextFileNoFollow, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";

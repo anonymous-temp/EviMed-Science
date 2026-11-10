@@ -451,6 +451,7 @@ export {
 
 // artifactShape + trajectoryDigest — what the learning loop reads of a run: the person's requests and interventions, the files it
 // left (by structural shape) and the order of the work's tools with the platform's choreography removed
+export { toolchainFingerprint, toolchainsMatch, cleanToolchainFingerprint } from './src/toolchainShape.mjs'
 export {
   ARTIFACT_SHAPE_LIMITS,
   ARTIFACT_SHAPE_MATCH_JACCARD,

@@ -650,6 +650,14 @@ function countSetting(overrides, key, name, fallback) {
   return value;
 }
 
+/** @param {any} overrides @param {string} key @param {string} name @param {number} fallback */
+function probabilitySetting(overrides, key, name, fallback) {
+  const raw = overrides[key] ?? process.env[name];
+  const value = raw == null || raw === "" ? fallback : Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error(`${name} must be a number from 0 to 1.`);
+  return value;
+}
+
 /**
  * What the evidence flywheel's learning loop and its figures switch on (evidence-flywheel plan §5.2, §5.5, §11, 2026-10-06), each off by default
  * (the official promotion, on since 2026-10-25, is the one that is on) and each doing nothing at all while off — no table read, no timer, and a route that answers 404 by the module's own "not enabled" code.
@@ -3168,6 +3176,9 @@ export function loadConfig(overrides = {}) {
     evolutionExecutionMaxConcurrency: Number(overrides.evolutionExecutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY ?? 1),
     evolutionExecutionTimeoutMs: Number(overrides.evolutionExecutionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS ?? 30_000),
     evolutionDependencyAllowlist: dependencyAllowlist.value,
+    // File-free routines are experimental; artifact matching remains the default.
+    learningToolchainRoutineEnabled: overrides.learningToolchainRoutineEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_TOOLCHAIN_ROUTINE_ENABLED", false),
+    learningToolchainMinSimilarity: probabilitySetting(overrides, "learningToolchainMinSimilarity", "OPEN_SCIENCE_LEARNING_TOOLCHAIN_MIN_SIMILARITY", 0.8),
     learningEnabled: overrides.learningEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_ENABLED", true),
     learningPollMs: Number(overrides.learningPollMs ?? process.env.OPEN_SCIENCE_LEARNING_POLL_MS ?? 5_000),
     learningLeaseMs: Number(overrides.learningLeaseMs ?? process.env.OPEN_SCIENCE_LEARNING_LEASE_MS ?? 900_000),

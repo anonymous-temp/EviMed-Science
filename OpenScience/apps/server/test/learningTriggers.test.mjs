@@ -12,6 +12,7 @@ import test from "node:test";
 import { EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, METHOD_INDUCTION_MIN_TRAJECTORIES } from "@evimed/domain";
 import { AUTOPILOT_VERIFICATION_ROUTE_REASON as VERIFICATION_ROUTE_REASON } from "@evimed/domain";
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
+import { toolchainFingerprint } from "../src/toolExecutionEdges.mjs";
 import {
   CONVERSATION_SCOPE, LEARNING_REFUSAL_REASONS, LearningTriggers, ROUTINE_PERIOD_DAYS, adoptedLessonFor, correctionLessonFor, deliveredSomething, learningRefusal, learningScopeOf,
   learningTriggersFor, lessonPeers, routineLessonFor, routinePeriodMs, routinePeriodOf,
@@ -133,6 +134,20 @@ test("runs that left something else do not count towards a routine, and a run wi
   assert.ok(routineLessonFor({ run: subject, scope: "s", shape: weekly, family: [...familyOf(1), other([{ format: "docx", labels: ["Summary", "Findings", "Next steps", "Annex"] }], "w")] }),
     "a report with one more section is still that report");
   assert.equal(routineLessonFor({ run: subject, scope: "s", shape: [], family: familyOf(5) }), null, "no shape, no routine");
+});
+
+test("a file-free routine requires both toolchain and request similarity with the experiment on", () => {
+  const toolchain = toolchainFingerprint([{ steps: [{ tool: "web_search" }, { tool: "web_read" }] }]);
+  const family = Array.from({ length: 2 }, (_, i) => ({ runId: `peer_${i}`, shape: [], toolchain, requestSimilarity: 0.9 }));
+  const input = { run: run({ artifacts: [], outputFiles: [], unverifiedArtifacts: [] }), scope: "conversation", shape: [], toolchain, family };
+  assert.equal(routineLessonFor(input), null, "the old no-file pin holds with the switch off even when fingerprints exist");
+  const lesson = routineLessonFor({ ...input, toolchainEnabled: true });
+  assert.equal(lesson?.payload.shapeKind, "toolchain");
+  assert.equal(routineLessonFor({ ...input, toolchainEnabled: true, family: family.map(peer => ({ ...peer, requestSimilarity: 0.49 })) }), null);
+  assert.equal(routineLessonFor({ ...input, toolchainEnabled: true, family: family.map(peer => ({ ...peer, shape: weekly })) }), null,
+    "a file-bearing peer never joins a toolchain family");
+  assert.equal(routineLessonFor({ ...input, toolchainEnabled: true, shape: weekly }), null, "files take precedence over a matching chain");
+  assert.equal(routineLessonFor({ ...input, toolchainEnabled: true, shape: weekly, family: familyOf(2) })?.payload.shapeKind, "artifact");
 });
 
 test("a routine's period is fixed, counted from the epoch, so positions do not move", () => {

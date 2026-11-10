@@ -12,6 +12,7 @@ import {
   carriedIdentifiers,
   completedToolCalls,
   executedToolEdges,
+  toolchainFingerprint,
   serializeExecutedEdges,
 } from "../src/toolExecutionEdges.mjs";
 
@@ -293,7 +294,15 @@ test('persistent evidence uses only current turns and the actual ordinary agent 
     const edges = await persistExecutedToolEdges({ project, run, sessions });
     assert.equal(edges.edges, 1, 'ordinary work is filed under its actual agent scope');
     await persistToolTraces({ project, run, sessions });
-    assert.deepEqual((await readToolTraces(project, run.id)).flatMap(trace => trace.steps.map(step => step.tool)), ['search', 'fetch']);
+    const traces = await readToolTraces(project, run.id);
+    assert.deepEqual(traces.flatMap(trace => trace.steps.map(step => step.tool)), ['search', 'fetch']);
+    assert.deepEqual(toolchainFingerprint(traces)?.tools, ['search', 'fetch'], 'the routine fingerprint never includes the previous turn');
+    const unnamed = { ...run, id: 'unnamed', effectiveAgentId: null };
+    const unnamedEdges = await persistExecutedToolEdges({ project, run: unnamed, sessions });
+    assert.equal(unnamedEdges.edges, 0, 'sessions and runs without a capability still produce no edges');
+    await persistToolTraces({ project, run: unnamed, sessions });
+    assert.deepEqual(toolchainFingerprint(await readToolTraces(project, unnamed.id))?.tools, ['search', 'fetch'],
+      'trace writing already covers even the fully unbound ordinary conversation');
   } finally { await fs.rm(rootDir, { recursive: true, force: true }); }
 });
 

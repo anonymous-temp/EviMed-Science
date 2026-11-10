@@ -86,7 +86,7 @@
  * @module learningTriggers
  */
 
-import { METHOD_INDUCTION_MIN_TRAJECTORIES, artifactShapesMatch, isLearningCorrection, isResearcherOwnedWork } from "@evimed/domain";
+import { METHOD_INDUCTION_MIN_TRAJECTORIES, METHOD_SIMILARITY_PAIR_FLOOR, toolchainsMatch, artifactShapesMatch, isLearningCorrection, isResearcherOwnedWork } from "@evimed/domain";
 import { contextPolicyIdentity } from "./geoContextItems.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
@@ -298,13 +298,18 @@ export function learningTriggersFor({ run, runs, project = null, internalAgent =
  * the run alone, so one run is induced from at most once however often it is settled.
  *
  * Pure. The shapes decide "the same": `artifactShapesMatch` (format, and structure where there is any); a run with no file has no
- * shape and teaches no routine.
- * @param {{ run: any, scope: string, shape: unknown, family: readonly { runId: string, projectId?: string | null, shape: unknown }[],
- *   guestInfluence?: boolean }} input
+ * shape and teaches no routine by default. With toolchainEnabled, file-free work requires matching tool bigrams AND request similarity.
+ * @param {{ run: any, scope: string, shape: unknown, family: readonly { runId: string, projectId?: string | null, shape: unknown, toolchain?: unknown, requestSimilarity?: number }[],
+ *   toolchain?: unknown, toolchainEnabled?: boolean, minSimilarity?: number, guestInfluence?: boolean }} input
  * @returns {{ trigger: string, idempotencyKey: string, payload: Record<string, any> } | null}
  */
-export function routineLessonFor({ run, scope, shape, family, guestInfluence = false }) {
-  const matching = (family ?? []).filter((member) => member.runId !== run?.id && artifactShapesMatch(member.shape, shape));
+export function routineLessonFor({ run, scope, shape, family, guestInfluence = false, toolchain = null, toolchainEnabled = false, minSimilarity = 0.8 }) {
+  const artifact = Array.isArray(shape) && shape.length > 0;
+  const matching = (family ?? []).filter((member) => member.runId !== run?.id && (artifact
+    ? artifactShapesMatch(member.shape, shape)
+    : toolchainEnabled && !(Array.isArray(member.shape) && member.shape.length) && !leftFiles(run)
+      && toolchainsMatch(member.toolchain, toolchain, { minSimilarity })
+      && Number(member.requestSimilarity) >= METHOD_SIMILARITY_PAIR_FLOOR));
   const count = matching.length + 1;
   if (!run?.id || count < METHOD_INDUCTION_MIN_TRAJECTORIES || count % METHOD_INDUCTION_MIN_TRAJECTORIES !== 0) return null;
   return {
@@ -313,6 +318,7 @@ export function routineLessonFor({ run, scope, shape, family, guestInfluence = f
     payload: {
       runId: run.id,
       trigger: "routine",
+      ...(toolchainEnabled ? { shapeKind: artifact ? "artifact" : "toolchain" } : {}),
       scope,
       capabilityId: scope === CONVERSATION_SCOPE ? null : scope,
       // By run and project: a run id names a transcript only inside its own project, and a peer may be in another of the researcher's.
