@@ -70,9 +70,10 @@ export async function ensureDatabase(databaseUrl, name) {
 }
 
 /** The workers a lab app must not run on their own (`pauseRecurringWork` in `server.mjs` clears the same timers). @param {any} app */
+const RECURRING_WORKERS = ["nativeMemoryWorker", "sourceDeletion", "memoryIndexWorker", "learningWorker", "sourceWorker", "knowledgePagesWorker", "sourceSyncWorker", "kbIndex"];
 export function stopRecurringWork(app) {
   const stopped = [];
-  for (const name of ["nativeMemoryWorker", "sourceDeletion", "memoryIndexWorker", "learningWorker", "sourceWorker", "knowledgePagesWorker", "sourceSyncWorker", "kbIndex"]) {
+  for (const name of RECURRING_WORKERS) {
     const worker = app[name];
     if (worker?.timer) { clearInterval(worker.timer); worker.timer = null; stopped.push(name); }
     if (worker?.reconcileTimer) { clearInterval(worker.reconcileTimer); worker.reconcileTimer = null; }
@@ -133,6 +134,9 @@ export async function openStack({ engineUrl, engineKeyFile, databaseUrlFile, dat
   }
   const database = app.store.database;
   await migrateMemorySettings(database);
+  // Never started at all (their first pass at start would scan every account of the database, including another shard's accounts
+  // that live on another engine); the timers are cleared again after start as a second guard.
+  for (const name of RECURRING_WORKERS) if (app[name] && typeof app[name].start === "function") app[name].start = () => {};
   const address = await app.listen(0, "127.0.0.1");
   const stopped = stopRecurringWork(app);
   const base = `http://127.0.0.1:${address.port}`;

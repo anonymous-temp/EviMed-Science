@@ -224,7 +224,7 @@ async function main() {
   const shard = intArg(args.shard, 0), shards = Math.max(1, intArg(args.shards, 1));
   const engineUrl = String(args["engine-url"] ?? "http://127.0.0.1:19330");
   const options = { engineUrl, shard, shards, concurrency: Math.max(1, intArg(args.concurrency, 2)), limit: intArg(args.limit, 0), perCell: intArg(args["per-cell"], 0),
-    trials: String(args.trials ?? "/srv/evimed/data/memdata-data/redline/g5-trials.json"), databaseName: String(args["database-name"] ?? "evimed_redline") };
+    trials: String(args.trials ?? "/srv/evimed/data/memdata-data/redline/g5-trials.json"), databaseName: String(args["database-name"] ?? `evimed_redline_${new URL(engineUrl).port || "x"}`) };
   const plan = JSON.parse(await readFile(options.trials, "utf8"));
   const runner = await openRun({ runDir, meta: { runId, kind: "g5", ...gitState(path.resolve(import.meta.dirname, "../../..")), automated: true,
     plan: { schema: plan.schema, seed: plan.seed, count: plan.count }, options } });
