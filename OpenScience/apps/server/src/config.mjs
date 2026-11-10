@@ -353,6 +353,8 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     memoryEngineEnabled: overrides.memoryEngineEnabled ?? engineConfigured,
     // Raw history is appended only to an explicit memory search, never a profile.
     memoryHistorySearchEnabled: overrides.memoryHistorySearchEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED", true),
+    memorySearchHintEnabled: overrides.memorySearchHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SEARCH_HINT_ENABLED", false),
+    memoryOpeningIndexEnabled: overrides.memoryOpeningIndexEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_INDEX_ENABLED", false),
     memoryOpeningByUseEnabled: overrides.memoryOpeningByUseEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_BY_USE_ENABLED", false),
     // Zero uses the pinned plugin's current effective opening size, including its profile and listing cuts.
     memoryOpeningMaxChars: Number(overrides.memoryOpeningMaxChars ?? process.env.OPEN_SCIENCE_MEMORY_OPENING_MAX_CHARS ?? 0),

@@ -1,3 +1,4 @@
+import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
@@ -917,6 +918,14 @@ export class NativeMemoryStore {
   async residentCard(userId, projectId) {
     const everything = await this.#projectRecords(userId, projectId);
     return [...projectCardRows(everything, projectId, { sections: true }), ...projectExtraRows(everything, projectId)].map(row=>({...row,originalSources:everything.filter(record=>record.id===row.recordId||record.nativeType===row.slot).map(record=>({id:record.id,contentDigest:record.contentHash,sourcePrivacy:record.sourcePrivacy,attribution:record.attribution}))}));
+  }
+
+  /** Metadata-only owned index, with the gateway's privacy and project exclusions.
+   * A failed exclusion lookup leaves no index; it never counts unfiltered files.
+   * @param {string} userId @param {string} projectId */
+  async openingIndex(userId, projectId) {
+    const hiddenUris = [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId)];
+    return nativeMemoryIndex((await this.overlay.files(userId)).values(), { memoryRoot: this.sessions.memoryRoot(userId), hiddenUris });
   }
 
   /** Most-used owned files, through the existing deletion and producer-receipt readers.

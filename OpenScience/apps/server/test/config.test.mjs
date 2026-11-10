@@ -19,6 +19,26 @@ test('opening-by-use defaults off, derives today’s character size, and exposes
   assert.deepEqual([experiment.memoryOpeningByUseEnabled, experiment.memoryOpeningMaxChars, experiment.memoryOpeningNewFileDays, experiment.memoryOpeningTopK], [true, 800, 7, 3]);
 });
 
+test('memory search hint and opening index default off and have independent environment and plain overrides', () => {
+  const names = ['OPEN_SCIENCE_MEMORY_SEARCH_HINT_ENABLED', 'OPEN_SCIENCE_MEMORY_OPENING_INDEX_ENABLED'];
+  const saved = names.map(name => process.env[name]);
+  try {
+    for (const name of names) delete process.env[name];
+    const off = loadConfig({ rootDir: repoRoot });
+    assert.deepEqual([off.memorySearchHintEnabled, off.memoryOpeningIndexEnabled], [false, false]);
+    process.env[names[0]] = 'true';
+    const a = loadConfig({ rootDir: repoRoot });
+    assert.deepEqual([a.memorySearchHintEnabled, a.memoryOpeningIndexEnabled], [true, false]);
+    delete process.env[names[0]]; process.env[names[1]] = 'true';
+    const b = loadConfig({ rootDir: repoRoot });
+    assert.deepEqual([b.memorySearchHintEnabled, b.memoryOpeningIndexEnabled], [false, true]);
+    const both = loadConfig({ rootDir: repoRoot, memorySearchHintEnabled: true, memoryOpeningIndexEnabled: true });
+    assert.deepEqual([both.memorySearchHintEnabled, both.memoryOpeningIndexEnabled], [true, true]);
+  } finally {
+    names.forEach((name, i) => { if (saved[i] === undefined) delete process.env[name]; else process.env[name] = saved[i]; });
+  }
+});
+
 test("review provider selects compatible defaults and refuses invalid provider/model pairs", () => {
   const config = loadConfig({ rootDir: repoRoot, reviewProvider: "deepseek", deepseekApiKey: "test-key" });
   assert.equal(config.reviewProvider, "deepseek");

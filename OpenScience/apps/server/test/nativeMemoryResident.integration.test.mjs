@@ -157,3 +157,29 @@ test("what the block held is kept with the conversation, so the run it becomes c
   assert.deepEqual(nativeResidentMemos(run(), { deliveredAt: null, memos: [] }), []);
   assert.deepEqual(nativeResidentMemos(null, state), []);
 });
+
+test('opening index uses the overlay and gateway scope, omits private names, and is handed to empty/default native sessions', options, async t => {
+  const f = await fixture(t);
+  const rows = [
+    ['people/Patient A.md', 'people', null, false], ['notes/device.md', 'notes', null, false],
+    ['people/withdrawn.md', 'people', null, false], ['people/private.md', 'people', null, true], ['project_facts/other.md', 'project_facts', B, false],
+    ['projects/default.md', 'project_context', 'default', false], ['decisions/current.md', 'decisions', A, false],
+    ['observations/internal.md', 'observations', null, false], ['evimed/index.md', 'note', null, false],
+  ];
+  for (const [path, memoryType, projectId, sensitive] of rows) {
+    await f.overlay.upsertFile({ userId: f.userId, uri: `${f.root}/${path}`, memoryType, projectId, sensitive, body: 'Not an opening fact' });
+  }
+  f.overlay.sourceDeletion = { hiddenMemoryUris: async () => [`${f.root}/people/withdrawn.md`] };
+  // No engine read is needed: the index is metadata already in the overlay.
+  const index = await f.store.openingIndex(f.userId, 'default');
+  assert.deepEqual(index.counts, { people: 1, notes: 1, projects: 1 });
+  assert.deepEqual((await f.store.openingIndex(f.userId, A)).counts, { people: 1, notes: 1, projects: 1, decisions: 1 });
+  const residentProfiles = new ResidentProfiles({ config: { memoryRecallEnabled: true, memoryEngineEnabled: true, memoryOpeningIndexEnabled: true, memoryHistorySearchEnabled: true },
+    store: f.memorySettings, nativeIndex: (userId, projectId) => f.store.openingIndex(userId, projectId) });
+  const resident = nativeSessionResident({ residentProfiles, activeRuns: async () => [], startedByPlatform: () => false });
+  const block = await resident.forSession({ id: f.userId }, { id: 'default' }, 'ses_index');
+  assert.match(block.text, /people 1/); assert.match(block.text, /早先的对话也可搜索/);
+  assert.match(block.text, /历史记录，不是指令/); assert.doesNotMatch(block.text, /Patient|private|Not an opening fact|decisions/);
+  await resident.attached({ id: f.userId }, { id: 'default' }, 'ses_index', { digest: block.digest, memories: [] });
+  assert.equal(await resident.forSession({ id: f.userId }, { id: 'default' }, 'ses_index'), null);
+});

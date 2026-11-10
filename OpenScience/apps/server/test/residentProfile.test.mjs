@@ -388,3 +388,33 @@ test('a resident project memo preserves original source attribution and privacy 
   assert.equal(memo.origin,'engine');assert.equal(memo.attribution.confirmed,false);assert.equal(memo.sourcePrivacy.classification,'private');assert.equal(memo.originalSources[0].id,'native-a');
   assert.match(renderMemoryContext([memo]),/origin="engine-derived"/);
 });
+
+test('index-only openings reach default projects, track count changes, and honor engine, pause and shared-project boundaries', async () => {
+  let counts = { people: 4, notes: 12 };
+  const memory = store();
+  let reads = 0;
+  const nativeIndex = async () => { reads += 1; return { counts }; };
+  const config = { memoryEngineEnabled: true, memoryOpeningIndexEnabled: true };
+  const scope = { projectId: 'default', sessionId: 'ses_index' };
+  const profiles = new ResidentProfiles({ config, store: memory, nativeIndex });
+  const first = await profiles.forDispatch('u1', scope);
+  assert.match(first.text, /people 4/); assert.match(first.text, /早先的对话也可搜索/);
+  assert.equal(first.due, true); assert.deepEqual(first.memories, []);
+  await first.delivered();
+  assert.equal((await profiles.forDispatch('u1', scope)).reason, 'unchanged');
+  counts = { people: 5, notes: 12 };
+  assert.equal((await profiles.forDispatch('u1', scope)).reason, 'changed');
+  for (const settings of [{ ...config, memoryOpeningIndexEnabled: false }, { ...config, memoryEngineEnabled: false }, { ...config, memoryRecallEnabled: false }]) {
+    const before = reads;
+    assert.equal((await new ResidentProfiles({ config: settings, store: memory, nativeIndex }).forDispatch('u1', scope)).text, '');
+    assert.equal(reads, before);
+  }
+  const before = reads;
+  const paused = new ResidentProfiles({ config, store: store({ settings: { recallPaused: true } }), nativeIndex });
+  assert.equal((await paused.forDispatch('u1', scope)).reason, 'paused'); assert.equal(reads, before);
+  const shared = new ResidentProfiles({ config, store: memory, nativeIndex,
+    contextPolicies: { forProject: async () => ({ kind: 'geo-project', ownerId: 'u1', controlProjectId: 'default' }) } });
+  assert.equal((await shared.forDispatch('u1', scope)).text, ''); assert.equal(reads, before);
+  const broken = new ResidentProfiles({ config, store: memory, nativeIndex: async () => { throw new Error('privacy read failed'); } });
+  assert.equal((await broken.forDispatch('u1', scope)).text, '');
+});

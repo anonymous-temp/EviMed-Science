@@ -100,3 +100,23 @@ test('the root is denied every tool of the plugin\'s server beyond the five the 
     'mcp__openviking__add_resource', 'mcp__openviking__add_skill', 'mcp__openviking__find', 'mcp__openviking__grep',
   ])
 })
+
+test('search hint is an independent opt-in sentence, only on a native account, and reaches the plugin section', async () => {
+  const options = { askUserEnabled: false, capsuleActive: false, reviewEnabled: false, capsuleToolEnabled: false, openVikingMemory: true }
+  const hint = '开场展示的只是部分记忆（画像和少量名称）；用户问起自己、身边的人事或以前说过、决定过的事，开场内容里没有时，先用 `mcp__openviking__search` 查一次，搜索结果为空后才说没有记录。'
+  const baseline = buildGuidanceText([], options)
+  assert.equal(buildGuidanceText([], { ...options, memorySearchHint: false }), baseline)
+  assert.equal(buildGuidanceText([], { ...options, memorySearchHint: true }), baseline.replace('不在此列。）', `不在此列。）${hint}`))
+  assert.equal(buildGuidanceText([], { ...options, openVikingMemory: false, memorySearchHint: true }), buildGuidanceText([], { ...options, openVikingMemory: false }))
+  const preset = await readFile(new URL('../presets/evimed-universal/agent.cordis.yml', import.meta.url), 'utf8')
+  assert.ok(preset.includes("memorySearchHint: !!js process.env.EVIMED_MEMORY_SEARCH_HINT_ENABLED === '1'"))
+  const baselineConfig = await readFile(new URL('../../../deploy/runtime-dsh/dump-config.baseline.json', import.meta.url), 'utf8')
+  assert.ok(baselineConfig.includes("memorySearchHint: !!js process.env.EVIMED_MEMORY_SEARCH_HINT_ENABLED === '1'"), 'the image snapshot declares the same default-off expression')
+  const { apply: applyGuidance } = await import('../plugins/guidance.mjs')
+  const sections = []
+  await applyGuidance({
+    get: () => undefined, provide: () => {}, on: () => () => {}, effect: fn => fn(),
+    systemPrompt: { section: section => { sections.push(section); return () => {} } },
+  }, { ...options, capabilitiesDir: '', memorySearchHint: true })
+  assert.ok(sections.some(section => section.text.includes(hint)), 'plugin forwards the pure option')
+})
