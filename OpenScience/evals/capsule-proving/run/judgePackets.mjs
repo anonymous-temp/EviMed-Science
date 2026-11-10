@@ -1,5 +1,6 @@
 /** Deterministic offline packets and hash-bound, concurrent Qwen checkpoints. */
 import { createHash } from 'node:crypto';
+import { officialPrompt, judgeOfficialBatch } from './officialJudge.mjs';
 import { JUDGE_MODEL } from '../offlineJudge.mjs';
 import { memoryLines, containsAnchor } from './scoreChecks.mjs';
 
@@ -53,6 +54,7 @@ export function buildJudgePacket(row, context) {
     transcriptEvidence: (context.transcriptEvidence ?? []).slice(0, 6), transcriptNote: context.transcriptNote ?? null,
     trace: row.trace ?? null, codeHint: row.codeHint ?? [], languageNote: row.languageNote ?? null,
     memorySnapshots: (context.snapshots ?? []).map(s => ({ afterSession: s.afterSession, lines: memoryLines(s) })),
+    ...(context.official ? { officialPrompt: officialPrompt(context.gold, context.answer?.answer ?? ''), officialPin: context.official } : {}),
     control: context.control ?? null, taskStatus: 'completed', failures: [], checks: row.checks };
   const canonical = stableJson(payload), hash = sha256(canonical);
   return { id: `run-score:${hash}`, hash, ...JSON.parse(canonical) };
@@ -89,6 +91,7 @@ export function mergeJudgeResults(rows, packets, results) {
 
 async function judgeBatch(packets, { key, fetchImpl = globalThis.fetch }) {
   if (typeof key !== 'string' || !key.trim()) throw new Error('judge_credential_missing');
+  if (packets.every(p => p.officialPrompt)) return judgeOfficialBatch(packets, { key, fetchImpl });
   const response = await fetchImpl('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
     method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({ model: JUDGE_MODEL, temperature: 0, max_tokens: 4096, enable_thinking: false,
@@ -112,6 +115,7 @@ async function judgeBatch(packets, { key, fetchImpl = globalThis.fetch }) {
 
 /** Six items per request; serialize durable saves while allowing bounded independent requests. */
 export async function judgePackets(packets, { key, results = [], fetchImpl, persist = async () => {}, batchSize = 6, concurrency = 6, retries = 0, retryDelayMs = 250 } = {}) {
+  if (packets.some(p => p.officialPrompt)) batchSize = 1;
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 12) throw new Error('judge_batch_invalid');
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) throw new Error('judge_concurrency_invalid');
   const valid = new Map(packets.map(p => [p.id, p]));
@@ -137,7 +141,7 @@ export async function judgePackets(packets, { key, results = [], fetchImpl, pers
         // Save a stable copy; concurrent completions must not race on the atomic temporary file.
         saving = saving.then(async () => {
           saved.push(...result.judgements.map(row => ({ ...row, hash: valid.get(row.id).hash,
-            model: result.model, requestId: result.requestId, usage: result.usage })));
+            model: row.model ?? result.model, requestId: row.requestId ?? result.requestId, usage: row.usage ?? result.usage })));
           saved.sort((a, b) => a.id.localeCompare(b.id));
           await persist([...saved]);
         });

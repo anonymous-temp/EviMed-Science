@@ -658,7 +658,8 @@ export function rowsFromSummary({
     ? null
     : estimateCostCny({ tokens, prices, extractionCachedShare: share });
   const resolvedCost = explicitCost ? costCny : estimatedCost;
-  const costNote = explicitCost ? null : costAssumptionNote(tokens, resolvedCost, share);
+  const costNote = joinNotes([explicitCost ? null : costAssumptionNote(tokens, resolvedCost, share), summary.judge?.comparability,
+    summary.judge?.answerJudgeSameFamily ? 'Answerer and judge are the same model family (Qwen).' : null]);
 
   const at = isNonEmptyString(run.finishedAt)
     ? run.finishedAt
@@ -682,7 +683,7 @@ export function rowsFromSummary({
     commit: isNonEmptyString(run.commit) ? run.commit : 'unknown',
     engine,
     arm: isNonEmptyString(run.arm) ? run.arm : 'unknown',
-    flags: isPlainObject(run.flags) ? { ...run.flags } : {},
+    flags: { ...(isPlainObject(run.flags) ? run.flags : {}), ...(summary.rubric ? { rubric: summary.rubric } : {}) },
     set: isNonEmptyString(run.set) ? run.set : 'unknown',
     split: isNonEmptyString(run.split) ? run.split : 'unknown',
     ...(isNonEmptyString(run.label) ? { label: run.label } : {}),
@@ -884,6 +885,7 @@ function parseArgs(argv) {
     const arg = argv[index];
     if (arg === '--run') options.run = argv[++index] ?? null;
     else if (arg === '--ledger') options.ledger = argv[++index] ?? null;
+    else if (arg === '--rubric') options.rubric = argv[++index] ?? null;
     else if (arg === '--variant') options.variant = argv[++index] ?? null;
     else if (arg === '--json') options.json = argv[++index] ?? null;
     else if (arg === '--cost-cny') options.costCny = numberFlag(arg, argv[++index]);
@@ -941,9 +943,8 @@ function main() {
 
   const runDir = resolve(options.run);
   const run = JSON.parse(readFileSync(resolve(runDir, 'run.json'), 'utf8'));
-  const summaryFile = options.variant
-    ? resolve(runDir, `scores.${options.variant}`, 'summary.json')
-    : resolve(runDir, 'scores', 'summary.json');
+  if (options.rubric && !['official', 'approximate'].includes(options.rubric)) throw new Error('rubric_invalid');
+  const summaryFile = resolve(runDir, `${options.variant ? `scores.${options.variant}` : 'scores'}${options.rubric === 'official' ? '.official' : ''}`, 'summary.json');
   const summary = JSON.parse(readFileSync(summaryFile, 'utf8'));
   const arm = options.variant
     ? `${isNonEmptyString(run.arm) ? run.arm : 'unknown'}+${options.variant}`

@@ -887,6 +887,13 @@ test('public fallback rubrics cover benchmark categories and mark approximate ro
   assert.ok(a.rows.every(r => r.rubric === 'approximate')); assert.equal(a.summary.byRubric.approximate.n, a.rows.length);
   assert.deepEqual(Object.keys(a.summary.sets['longmemeval-s'].byCategory).sort(), source.filter(s => pool.pools.development.includes(s.question_id)).map(s => s.question_id.endsWith('_abs') ? 'abstention' : s.question_type).sort());
   assert.deepEqual(b.cache, { gold: true, packets: true });
+  const official = await scoreRun({ ...options, rubric: 'official' });
+  assert.equal(official.summary.judge.officialJudgeModel, false);
+  assert.equal(official.summary.judge.rubric, 'official');
+  assert.equal(official.summary.sets['longmemeval-s'].n, a.rows.length);
+  assert.ok(official.rows.every(r => r.rubric === 'official' && r.verdict === 'unknown'));
+  assert.ok(official.packets.every(p => typeof p.officialPrompt === 'string'));
+  assert.notEqual(official.packets[0].hash, a.packets[0].hash);
 });
 
 test('entity storage loss is examined only after introduction and is confirmed independently by the judge', async t => {

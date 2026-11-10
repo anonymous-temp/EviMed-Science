@@ -13,6 +13,8 @@ import { buildJudgePacket, judgePackets, mergeJudgeResults, sha256, answerTrace,
 import { createTranscriptIndex } from './baselines.mjs';
 import { loadCases } from './cases.mjs';
 
+import { OFFICIAL, rubricFacts } from './officialJudge.mjs';
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const SCORER_VERSION = 'capsule-proving-run-score/4';
 export const SUPPORTED_SETS = ['synthetic-users', 'scenarios', 'med-m1', 'med-m2', 'med-m3', 'med-m5', 'med-m10',
@@ -485,7 +487,7 @@ async function adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl
 
 /** Shards retain their original run identities in packets, so hash resumption remains exact. */
 async function scoreRuns(options) {
-  const { runs, data, out, variant } = options;
+  const { runs, data, out, variant, rubric = 'approximate' } = options;
   if (!Array.isArray(runs) || !runs.length || runs.some(r => typeof r !== 'string' || !r)) throw new Error('runs_invalid');
   if (!out) throw new Error('runs_out_required');
   if (!data) throw new Error('run_and_data_required');
@@ -514,9 +516,9 @@ async function scoreRuns(options) {
     tokens.prompt += part.tokens.prompt; tokens.completion += part.tokens.completion;
   }
   const walls = parts.map(p => p.wallSeconds).filter(v => v !== null);
-  const summary = { ...summarize(merged), runIds: manifests.map(r => r.runId), set: first.set, split: first.split, variant: variant ?? null,
+  const summary = { ...summarize(merged), runIds: manifests.map(r => r.runId), set: first.set, split: first.split, variant: variant ?? null, rubric, answerModel: parts[0]?.answerModel,
     tokens, wallSeconds: walls.length ? Math.max(...walls) : null,
-    judge: { model: 'qwen3.8-max', packets: packets.length, completed: results.length, pending: packets.length - results.length, error: judgeError },
+    judge: { ...rubricFacts(rubric, parts[0]?.answerModel), model: 'qwen3.8-max', packets: packets.length, completed: results.length, pending: packets.length - results.length, error: judgeError },
     controlRun: options.control ? path.resolve(options.control) : null, evidenceNotes: parts[0]?.evidenceNotes ?? [] };
   await saveLines(path.join(out, 'rows.jsonl'), merged);
   await atomic(path.join(out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
@@ -525,14 +527,16 @@ async function scoreRuns(options) {
 
 /** @param {object} options */
 export async function scoreRun({ run: runDir, data, control: controlDir, judgeKeyFile, noJudge = false, out,
-  fetchImpl, sources, pools, judgeConcurrency = 6, variant, runs, retryDelayMs = 250, shard = false } = {}) {
+  fetchImpl, sources, pools, judgeConcurrency = 6, variant, runs, retryDelayMs = 250, shard = false, rubric = 'approximate' } = {}) {
+  if (!['approximate', 'official'].includes(rubric)) throw new Error('rubric_invalid');
   if (runs && runDir) throw new Error('run_and_runs_exclusive');
-  if (runs) return scoreRuns({ runs, data, control: controlDir, judgeKeyFile, noJudge, out, fetchImpl, sources, pools, judgeConcurrency, variant, retryDelayMs });
+  if (runs) return scoreRuns({ runs, data, control: controlDir, judgeKeyFile, noJudge, out, fetchImpl, sources, pools, judgeConcurrency, variant, retryDelayMs, rubric });
   if (variant !== undefined && !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(variant)) throw new Error('variant_invalid');
   if (!runDir || !data) throw new Error('run_and_data_required');
   if (!Number.isSafeInteger(judgeConcurrency) || judgeConcurrency < 1) throw new Error('judge_concurrency_invalid');
-  runDir = path.resolve(runDir); data = path.resolve(data); out = path.resolve(out ?? path.join(runDir, variant ? `scores.${variant}` : 'scores'));
+  runDir = path.resolve(runDir); data = path.resolve(data); out = path.resolve(out ?? path.join(runDir, `${variant ? `scores.${variant}` : 'scores'}${rubric === 'official' ? '.official' : ''}`));
   const run = await json(path.join(runDir, 'run.json'));
+  if (rubric === 'official' && run.set !== 'longmemeval-s') throw new Error('official_requires_longmemeval_s');
   if (!run.runId) throw new Error('run_id_missing');
   // Inspect metadata only for reuse; changed bytes invalidate via inode/size/mtime/ctime.
   // No traversal of a parent data directory: only this set's development/public inputs.
@@ -562,14 +566,14 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
     if (control.set !== run.set || control.split !== run.split) throw new Error('control_set_split_mismatch');
     if (run.set === 'm11' && !['no-memory', 'without-memory', 'no-history'].includes(control.arm)) throw new Error('m11_control_requires_no_history_arm');
   }
-  const buildKey = sha256(stableJson({ goldKey, run, variant, ids: entries.map(e => e.caseId),
+  const buildKey = sha256(stableJson({ goldKey, run, variant, rubric, officialPin: rubric === 'official' ? OFFICIAL : null, ids: entries.map(e => e.caseId),
     evidence: await metadataTree(path.join(runDir, 'cases')), control: controlDir ? await metadataTree(controlDir) : null }));
   const buildHit = goldHit && cache.buildKey === buildKey;
   const errata = (await json(path.join(HERE, 'errata.json'))).items;
   const rows = buildHit ? cache.rows : [], packets = buildHit ? cache.packets : [];
   const tokens = buildHit ? cache.tokens : { extraction: { prompt: 0, completion: 0 }, answer: { prompt: 0, completion: 0, cached: 0 } };
   const emit = (entry, id, kind, category, outcome, context = {}, extra = {}) => {
-    const { rubric = [], ...result } = outcome;
+    const { rubric: instructions = [], ...result } = outcome;
     const row = { runId: run.runId, set: run.set, split: run.split, caseId: entry.caseId, id, kind,
       category: category ?? entry.gold.kind ?? entry.gold.domain ?? run.set, generator: entry.generator,
       ...(entry.generators ? { generators: entry.generators } : {}),
@@ -578,7 +582,8 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
     const invalid = errata.find(e => e.set === run.set && e.split === run.split && e.id === id);
     if (invalid) { row.verdict = 'invalid-item'; row.erratum = invalid; }
     rows.push(row);
-    const packet = buildJudgePacket(row, { source: entry.input, ...context, rubric, gold: context.gold ?? entry.gold });
+    if (run.set === 'longmemeval-s') row.rubric = rubric;
+    const packet = buildJudgePacket(row, { ...(rubric === 'official' ? { official: { commit: OFFICIAL.commit, sha256: OFFICIAL.sha256 } } : {}), source: entry.input, ...context, rubric: instructions, gold: context.gold ?? entry.gold });
     if (packet) packets.push(packet);
     if (row.redLineOutcome?.verdict === 'needs-judge') {
       const redPacket = buildJudgePacket({ ...row, ...row.redLineOutcome, kind: 'redline-check' },
@@ -697,9 +702,10 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
   const times = status.split('\n').filter(l => /^\S+\s+(?:DONE|FAIL)\s+/.test(l)).map(l => Date.parse(l.split(/\s+/)[0])).filter(Number.isFinite);
   tokens.prompt = tokens.extraction.prompt + tokens.answer.prompt;
   tokens.completion = tokens.extraction.completion + tokens.answer.completion;
-  const merged = pairM6(mergeJudgeResults(rows, packets, results)), summary = { ...summarize(merged), runId: run.runId, runIds: [run.runId], set: run.set, split: run.split, variant: variant ?? null,
+  const answerModel = run.answerVariants?.find(v => v.name === variant)?.config?.answerModel ?? run.model?.answer;
+  const merged = pairM6(mergeJudgeResults(rows, packets, results)), summary = { ...summarize(merged), runId: run.runId, runIds: [run.runId], set: run.set, split: run.split, variant: variant ?? null, rubric, answerModel,
     tokens, wallSeconds: times.length ? Math.max(0, (times.at(-1) - times[0]) / 1000) : null,
-    judge: { model: 'qwen3.8-max', packets: packets.length, completed: results.length, pending: packets.length - results.length, error: judgeError },
+    judge: { ...rubricFacts(rubric, answerModel), model: 'qwen3.8-max', packets: packets.length, completed: results.length, pending: packets.length - results.length, error: judgeError },
     controlRun: controlDir ? path.resolve(controlDir) : null,
     evidenceNotes: ['Store recall measures normalized anchor presence; attribution and current/history semantics are scored separately.',
       'G6 raw-history results certify recorded search blocks only; no unseen index contents are inferred.',
@@ -712,7 +718,7 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
 }
 
 export function parseArgs(args) {
-  const options = {}, names = { '--run': 'run', '--data': 'data', '--control': 'control', '--judge-key-file': 'judgeKeyFile', '--out': 'out', '--judge-concurrency': 'judgeConcurrency', '--variant': 'variant', '--runs': 'runs' };
+  const options = {}, names = { '--run': 'run', '--data': 'data', '--control': 'control', '--judge-key-file': 'judgeKeyFile', '--out': 'out', '--judge-concurrency': 'judgeConcurrency', '--variant': 'variant', '--rubric': 'rubric', '--runs': 'runs' };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--list-redlines') { options.listRedlines = true; continue; }
     if (args[i] === '--no-judge') { options.noJudge = true; continue; }
