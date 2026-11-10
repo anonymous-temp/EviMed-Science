@@ -75,6 +75,8 @@ function ipc(h, action, args = {}) {
     h.child.send({ evalControl: true, id, action, args });
   });
 }
+/** persons.json keeps each request as `{ request, ... }`; inputs.json as a string. */
+const textOf = entry => (typeof entry === 'string' ? entry : String(entry?.request ?? ''));
 const kebab = (text, fallback) => (String(text ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || fallback);
 /**
  * A method as the product's validator wants it (`validateMethodSkill`: metadata block, the seven SkillPyramid sections). The rule
@@ -164,6 +166,8 @@ class Unit {
       const record = await runConversation({ api, userId, projectId, projectName, sessionId, first, next, maxTurns, dataDir: this.ctx.dataDir, outDir: `${this.dir}/${name}`,
         timeoutMs: this.ctx.args.timeoutMin * 60_000, log: this.ctx.status, observeMethods: identity => ipc(this.ctx.h, 'methods', identity), waitMemoryTools: true });
       await atomic(`${this.dir}/${name}.json`, record);
+      const failed = record.turns.find(t => t.error);
+      if (failed) throw new Error(`${this.id} ${name}: ${failed.error}`);
       return { file: `${name}.json`, runs: record.turns.map(t => t.runId), startedAt: record.startedAt, wallMs: record.wallMs };
     });
   }
@@ -362,7 +366,8 @@ async function l2Unit(ctx, person, gold) {
   const arm = ctx.arm;
   const sessions = [];
   const prior = [];
-  for (const [i, request] of person.sessions.entries()) {
+  for (const [i, entry] of person.sessions.entries()) {
+    const request = textOf(entry);
     const checks = gold.sessions[i].checks;
     const name = `conv-s${String(i + 1).padStart(2, '0')}`;
     const sent = [];
@@ -387,14 +392,16 @@ async function l2Unit(ctx, person, gold) {
     if (learning) await u.drain(`drain-s${String(i + 1).padStart(2, '0')}`, userId, { consolidate: arm !== 'add-only', sleepKey: arm !== 'add-only' ? `lx-${person.id}-${arm}-s${i + 1}` : null });
   }
   const frozen = [];
-  for (const [i, request] of person.frozen.entries()) {
+  for (const [i, entry] of person.frozen.entries()) {
+    const request = textOf(entry);
     const name = `conv-f${i + 1}`;
     await u.conversation(name, { api, userId, projectId: projectA, projectName: person.projectA.title, first: request, next: () => null, maxTurns: 1 });
     const record = await u.record(name);
     frozen.push({ index: i, results: ruleResults(gold.frozen[i].checks, record.turns[0]?.reply), status: record.turns[0]?.run?.status });
   }
   const probes = [];
-  for (const [i, request] of person.probes.entries()) {
+  for (const [i, entry] of person.probes.entries()) {
+    const request = textOf(entry);
     const name = `conv-p${i + 1}`;
     await u.conversation(name, { api, userId, projectId: projectB, projectName: person.projectB.title, first: request, next: () => null, maxTurns: 1 });
     const record = await u.record(name);
