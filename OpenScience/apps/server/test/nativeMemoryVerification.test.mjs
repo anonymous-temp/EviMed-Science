@@ -141,3 +141,14 @@ test('duplicate or omitted ids invalidate the entire batch', () => {
     { index: 0, verdict: 'supported', corrected: null }, { index: 0, verdict: 'unsupported', corrected: null },
   ] }), lines), null);
 });
+
+
+test('source timestamps ground calendar dates without lending their numbers to a correction', () => {
+  const lines = [{ text: 'Dose 99 mg (2026-11-01).', sources: [source('Dose 12 mg.', 'user', '2026-11-01T12:00:00.000Z')] }];
+  const content = corrected => JSON.stringify({ results: [{ index: 0, verdict: 'corrected', corrected }] });
+  assert.equal(parseVerificationJudgement(content('Dose 12 mg (2026-11-01).'), lines).get(0).corrected, 'Dose 12 mg (2026-11-01).');
+  assert.equal(verifyLines({ lines: [line('Dose 12 mg (2026-11-01).')], sources: lines[0].sources })[0].status, 'supported');
+  assert.equal(parseVerificationJudgement(content('Dose 12 mg (2026-11-02).'), lines), null, 'an absent date still invalidates the batch');
+  assert.equal(parseVerificationJudgement(content('Dose 11 mg (2026-11-01).'), lines), null, 'timestamp digits cannot ground a dose');
+  assert.equal(parseVerificationJudgement(content('Dose 12 mg (2026-11-01).'), [{ ...lines[0], sources: [source('Dose 12 mg.', 'user', '2026-11-01 invalid')] }]), null);
+});

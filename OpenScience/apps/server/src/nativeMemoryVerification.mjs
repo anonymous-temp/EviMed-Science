@@ -45,13 +45,23 @@ function tokenPresent(token, source) {
   return false;
 }
 
+/** Conversation timestamps can ground their calendar date, never other numbers or identifiers.
+ * A date in an excerpt is still read for meaning by the judge; this is only its literal provenance.
+ * @param {string} token @param {SourceExcerpt} source */
+function sourceHasToken(token, source) {
+  if (tokenPresent(token, source.text)) return true;
+  const stamp = source.created_at;
+  return typeof stamp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(token)
+    && token === stamp.slice(0, 10) && Number.isFinite(Date.parse(stamp));
+}
+
 /** Pure literal comparison, never a semantic verdict. Sources may be a shared excerpt array or keyed by fingerprint.
  * @param {{lines:VerificationLine[], sources:SourceExcerpt[]|Map<string,SourceExcerpt[]>|Record<string,SourceExcerpt[]>}} input */
 export function verifyLines({ lines, sources }) {
   return lines.map(line => {
     const excerpts = Array.isArray(sources) ? sources : sources instanceof Map ? sources.get(line.fingerprint) ?? [] : sources[line.fingerprint] ?? [];
     const tokens = hardTokens(line.text);
-    const missingTokens = tokens.filter(token => !excerpts.some(source => tokenPresent(token, source.text)));
+    const missingTokens = tokens.filter(token => !excerpts.some(source => sourceHasToken(token, source)));
     return { ...line, status: missingTokens.length ? 'contradicted_or_unsupported' : tokens.length ? 'supported' : 'needs_reading', missingTokens };
   });
 }
@@ -64,6 +74,7 @@ const INSTRUCTION = [
   'Do not turn an assistant suggestion, a document claim or a person’s opinion into an established fact about the user.',
   'For corrected or attribution_wrong, supply a single corrected memory line; preserve the appropriate provenance label in its wording.',
   'Copy every hard token in a correction from that line’s own sources. Do not invent names, numbers, dates or identifiers.',
+  'An as-of date may copy the calendar date from a source created_at timestamp: when it was said, never proof of an event date.',
   'Use unsupported only when the sources do not support the line and no grounded correction can be made. Otherwise use supported.',
   'Return JSON only, in exactly this shape: {"results":[{"index":0,"verdict":"supported","corrected":null}]}.',
   'Return exactly one result per input index, using integer indexes and only the fields shown. No extra fields or missing indexes.',
@@ -89,7 +100,7 @@ export function parseVerificationJudgement(content, lines) {
     if (fixes) {
       if (typeof row.corrected !== 'string' || !row.corrected.trim() || row.corrected.length > 2000 || row.corrected.includes('\n')) return null;
       if (carriesPlatformContext(row.corrected) || identifierShapesIn(row.corrected).length || platformIdentifiersIn(row.corrected).length) return null;
-      if (hardTokens(row.corrected).some(token => !lines[row.index].sources.some(source => tokenPresent(token, source.text)))) return null;
+      if (hardTokens(row.corrected).some(token => !lines[row.index].sources.some(source => sourceHasToken(token, source)))) return null;
     } else if (row.corrected !== null) return null;
     result.set(row.index, row);
   }
