@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:9e1a850d81c1d3a04c858a8a8e5a8ba76cfec1a9bf3790e159e8770af5192d86",
+  "version": "sha256:133cda862b7e966d4219f6130ee0ecd768589d53c8efda77173f46ddbf5142ee",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -1658,7 +1658,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "Trial sample size, power or events; comparing designs (saved too) or searching; dose finding; disease-progression (Alzheimer ADAS-cog); patient forecasts; synthetic cohort (baseline table); external control; comparing several drugs (network meta-analysis); value of information; PBPK drug interaction: calculate here, not in your script. action=shape with kind gives fields; do not guess keys. Jobs outlive this turn.",
+      "description": "Sample size, power or events; comparing designs (saved too) or searching; 几种假设下都站得住的设计; dose finding; disease-progression (Alzheimer ADAS-cog; 脱落/估计目标); patient forecasts; synthetic cohort (baseline table); external control; several drugs (network meta-analysis); 下一步研究什么/哪个不确定性最影响决策; PBPK drug interaction: calculate here, not in your script. action=shape (kind) gives fields; do not guess keys. Jobs outlive this turn.",
       "inputSchema": {
         "type": "object",
         "properties": {

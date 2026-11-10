@@ -604,7 +604,7 @@ def tool_definitions():
         # Alzheimer three-arm simulation, a comparison of designs computed earlier and a forecast for six listed patients went to the
         # model's own scripts; they are named here within the same 420 characters ("modelId requires modelVersion" is said by the
         # gateway's refusal of a modelId without it, the pointer to the result page by the answer of start).
-        "vcr_simulate": "Trial sample size, power or events; comparing designs (saved too) or searching; dose finding; disease-progression (Alzheimer ADAS-cog); patient forecasts; synthetic cohort (baseline table); external control; comparing several drugs (network meta-analysis); value of information; PBPK drug interaction: calculate here, not in your script. action=shape with kind gives fields; do not guess keys. Jobs outlive this turn.",
+        "vcr_simulate": "Sample size, power or events; comparing designs (saved too) or searching; 几种假设下都站得住的设计; dose finding; disease-progression (Alzheimer ADAS-cog; 脱落/估计目标); patient forecasts; synthetic cohort (baseline table); external control; several drugs (network meta-analysis); 下一步研究什么/哪个不确定性最影响决策; PBPK drug interaction: calculate here, not in your script. action=shape (kind) gives fields; do not guess keys. Jobs outlive this turn.",
     }
     tools = _detailed_tool_definitions()
     for tool in tools:
@@ -1235,6 +1235,29 @@ def _people_shape() -> dict:
     }
 
 
+# Which question each job kind answers, in the words a person asks it (the index `shape` answers when no kind is named; one line per kind).
+KIND_QUESTIONS = {
+    "fit_survival_model": "拟合一条生存曲线/参数模型", "apply_prognostic_model": "用已训练的预后模型给人打分", "profile_snapshot": "看一份数据表里有什么、缺什么",
+    "build_cohort": "按入排标准从数据里选出队列", "generate_population": "按基线表生成一批虚拟人群", "literature_population": "按文献里的基线表生成人群",
+    "synthesize_population": "由真实数据合成一批相似的人", "population_quality": "合成人群像不像真实人群", "generate_patients": "生成带生存时间的虚拟患者",
+    "generate_patients_continuous": "生成连续结局的虚拟患者", "generate_patients_binary": "生成二分类结局的虚拟患者", "reconstruct_km": "从发表的生存曲线还原个体数据",
+    "pool_evidence": "把几项研究的效应合并起来", "weight_comparator": "外部对照：熵平衡加权", "propensity_weight_comparator": "外部对照：倾向评分加权",
+    "maic_comparator": "外部对照：匹配调整间接比较", "evalue": "未测混杂要多强才能推翻这个结论（E 值）", "rmst": "限制平均生存时间之差", "design_analytic": "样本量/事件数/功效的解析计算（一个设计）",
+    "design_simulation": "用模拟算一个设计的功效和一类错误", "design_grid": "一组设计一次算完再比较", "assurance": "效应不确定时试验成功的期望把握度", "procova": "用预后协变量能省多少人",
+    "accrual_forecast": "入组要多久、事件几时够", "map_prior": "用历史对照做对照组先验", "match_criteria": "患者是否符合入排标准", "weighted_cox_comparator": "外部对照：加权 Cox",
+    "maic_time_to_event_comparator": "外部对照：生存数据的 MAIC", "aipw_comparator": "外部对照：双重稳健估计", "covariate_set_comparator": "换一组协变量结论变不变",
+    "negative_control_comparator": "阴性对照结局检查偏倚", "tipping_point": "缺失数据要多糟结论才翻转", "prognostic_adjustment_comparator": "用预后分数调整的外部对照",
+    "generate_patients_longitudinal": "生成随访多次的虚拟患者轨迹", "population_check": "虚拟人群是否满足设定", "design_confirmatory": "期中分析/多重检验的确证性设计",
+    "bias_analysis": "偏倚有多大、量化敏感性分析", "stc_comparator": "外部对照：模拟处理比较", "network_meta": "几种药的网络荟萃", "dose_response_meta": "剂量反应荟萃",
+    "effect_shrinkage": "把一项研究的效应向先验收缩", "target_trial_emulation": "用观察数据模拟目标试验", "design_dose": "剂量探索设计", "design_bayesian": "贝叶斯试验设计",
+    "design_win_ratio": "复合终点的胜率设计", "borrowing_prior": "借用外部数据的先验", "train_prognostic_model": "训练预后模型",
+    "generate_progression": "疾病进展：几个组的评分变化与把握度；停药/脱落/换药等中途事件及其估计目标（Alzheimer ADAS-cog 等）",
+    "decision_voi": "下一步该研究什么：哪个不确定性最影响决定、值多少（信息价值）", "pk_interaction": "合用药物后暴露变化多少（咪达唑仑的 PBPK）",
+    "individualize_forecast": "给每个人一个预测（平台自用）", "match_extract": "从病历文本抽取匹配用事实", "forecast_trajectories": "给几位患者各预测一条轨迹",
+    "evaluate_forecast": "预测与实际相差多少", "compare_forecasts": "两种预测哪个更准", "benchmark_trial_effect": "预测的试验效应与实际比",
+}
+
+
 def shape(arguments: dict) -> dict:
     """``vcr_simulate`` action shape: what a job kind's scenario reads, rendered from the generated help. Asks the
     platform nothing, so it answers with the module off too."""
@@ -1243,9 +1266,9 @@ def shape(arguments: dict) -> dict:
     if kind is None:
         return {
             "status": "success",
-            "summary": "%d job kinds; ask for one with action shape and its kind." % len(help_["kinds"]),
+            "summary": "%d job kinds, one line each saying which question it answers; ask for one with action shape and its kind. Robust across assumptions: shape kind search (scenarios)." % len(help_["kinds"]),
             "data": {
-                "kinds": {name: "%s%s" % (entry["method"], " (%s)" % "|".join(help_["methods"][entry["method"]].get("endpoints", []))
+                "kinds": {name: "%s: %s%s" % (KIND_QUESTIONS.get(name, name), entry["method"], " (%s)" % "|".join(help_["methods"][entry["method"]].get("endpoints", []))
                                          if help_["methods"].get(entry["method"], {}).get("endpoints") else "")
                           for name, entry in help_["kinds"].items()},
                 "objects": {name: list(kinds) for name, kinds in OBJECT_SHAPES.items()},

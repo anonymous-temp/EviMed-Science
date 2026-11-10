@@ -216,10 +216,10 @@ class VcrToolDefinitionTests(unittest.TestCase):
         # three classes within the same cap; "modelId requires modelVersion" left it for the gateway's refusal, which says exactly that.
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["description"]
         self.assertLessEqual(len(description), 420)
-        for words in ("sample size", "power or events", "comparing designs", "dose finding", "synthetic cohort", "baseline table", "external control",
-                      "comparing several drugs", "network meta-analysis",
+        for words in ("Sample size", "power or events", "comparing designs", "dose finding", "synthetic cohort", "baseline table", "external control",
+                      "several drugs", "network meta-analysis",
                       "saved", "searching", "disease-progression", "Alzheimer ADAS-cog", "patient forecasts", "not in your script",
-                      "value of information", "PBPK drug interaction"):
+                      "下一步研究什么", "几种假设下都站得住的设计", "脱落/估计目标", "PBPK drug interaction"):
             self.assertIn(words, description)
 
     def test_a_refusal_the_gateway_answers_with_400_is_the_run_s_to_fix(self):
@@ -456,9 +456,9 @@ class VcrToolDefinitionTests(unittest.TestCase):
         answer = vcr_platform.shape({})
         kinds = answer["data"]["kinds"]
         self.assertEqual(list(kinds), list(vcr_platform.JOB_KINDS))
-        self.assertEqual(kinds["design_analytic"], "design.analytic (continuous|binary|time_to_event)")
-        self.assertEqual(kinds["generate_patients"], "patients.time_to_event (time_to_event)")
-        self.assertEqual(kinds["profile_snapshot"], "profile.snapshot")
+        self.assertEqual(kinds["design_analytic"], "样本量/事件数/功效的解析计算（一个设计）: design.analytic (continuous|binary|time_to_event)")
+        self.assertEqual(kinds["generate_patients"], "生成带生存时间的虚拟患者: patients.time_to_event (time_to_event)")
+        self.assertEqual(kinds["看一份数据表里有什么、缺什么: profile.snapshot"], "profile.snapshot")
         self.assertEqual(answer["data"]["objects"]["trial_scenario (configuration)"], ["design_analytic", "design_simulation"])
 
     def test_the_kinds_the_platform_builds_say_what_a_run_states_and_where_the_rest_comes_from(self):
@@ -877,7 +877,7 @@ class VcrSimulateTests(_GatewayCase):
             self.assertIn(fragment, lab["compare"])
         # the tool catalogue the root conversation sees: the five actions and four keys are the whole growth (13,159 -> 13,475 bytes compact), and instantiate with its `people` key and the `people` kind are about 90 more
         import json
-        self.assertLess(len(json.dumps(list(definitions.values()), separators=(",", ":"))), 13_700)
+        self.assertLess(len(json.dumps(list(definitions.values()), separators=(",", ":"))), 13_800)  # 2026-11-10: the root line names its classes in a person's Chinese words and the estimand and scenario classes: 13,587 -> 13,662 UTF-8 bytes (13,605 -> 13,788 as ASCII-escaped JSON)
 
     def test_shape_kind_search_gives_a_filled_form_the_domain_compiles(self):
         answer = vcr_platform.shape({"kind": "search"})
@@ -1609,6 +1609,19 @@ class VcrStudyIdTests(unittest.TestCase):
             with vcr_platform.invocation(None):
                 vcr_platform._post("read", {"what": "study"})
         self.assertEqual(sent, [{"what": "study"}])
+
+
+class VcrShapeIndexTest(unittest.TestCase):
+    def test_shape_without_a_kind_is_an_index_of_questions_one_line_per_kind(self):
+        # live R39 (2026-11-09): the kinds were listed by method name, which a person's question does not use
+        answer = vcr_platform.shape({})
+        self.assertIn("which question it answers", answer["summary"])
+        kinds = answer["data"]["kinds"]
+        self.assertEqual(set(kinds), set(vcr_platform.JOB_KINDS) | set(kinds))
+        missing = [name for name in kinds if name not in vcr_platform.KIND_QUESTIONS]
+        self.assertEqual(missing, [], "every kind says which question it answers")
+        self.assertTrue(kinds["decision_voi"].startswith("下一步该研究什么"))
+        self.assertIn("中途事件", kinds["generate_progression"])
 
 
 if __name__ == "__main__":
