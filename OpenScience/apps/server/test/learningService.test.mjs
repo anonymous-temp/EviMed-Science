@@ -794,3 +794,29 @@ test("giving back a method that was stopped for never being opened starts its co
   assert.equal(restored.payload.learning.counts.eligible, 1, "what else was counted about this body stays");
   assert.deepEqual(await learning.retirementProposals("u1", { nowMs: Date.parse("2026-09-27T00:00:00.000Z"), unusedAfterLoads: 6 }), []);
 });
+
+test("corrective rewrites keep their dates across counter resets, general edits and restores", async () => {
+  const { methodView } = await import("../src/learningRoutes.mjs");
+  const { methodCardFacts, learnedMethodCardEntry } = await import("@evimed/domain");
+  const { learning } = service();
+  let method = await create(learning);
+  for (const step of [1, 2]) {
+    method = await learning.amendMethod("u1", method.id, { expectedRevision: method.revision, frontmatter: frontmatter(),
+      body: `${BODY}\n\nCorrection ${step}.`, provenance: { trigger: "correction" } });
+  }
+  const rewrites = method.payload.learning.rewrites;
+  assert.equal(rewrites.count, 2);
+  assert.equal(rewrites.dates.length, 2);
+  assert.ok(rewrites.dates.every(date => Number.isFinite(Date.parse(date))));
+  const noChange = await learning.amendMethod("u1", method.id, { expectedRevision: method.revision, frontmatter: frontmatter(), body: method.payload.body, provenance: { trigger: "correction" } });
+  method = await learning.amendMethod("u1", method.id, { expectedRevision: noChange.revision, frontmatter: frontmatter(), body: `${BODY}\n\nGeneral refinement.`, provenance: { trigger: "routine" } });
+  method = await learning.rollback("u1", method.id, { expectedRevision: method.revision, targetDigest: noChange.payload.contentDigest });
+  assert.deepEqual(method.payload.learning.rewrites, rewrites);
+  assert.equal(method.payload.learning.counts.loaded, 0);
+  assert.deepEqual(methodView(method).rewrites, rewrites);
+  const card = methodCardFacts(method.payload);
+  assert.deepEqual(card.rewrites, { count: rewrites.count, dates: rewrites.dates.slice(-1) });
+  const base = { name: "method", path: "/SKILL.md" };
+  assert.equal(learnedMethodCardEntry(base).length, 2, "no evidence switch, no evidence lines");
+  assert.ok(learnedMethodCardEntry({ ...base, card }).some(line => line.includes("2 次")));
+});

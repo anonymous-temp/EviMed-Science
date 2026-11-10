@@ -362,9 +362,13 @@ export class LearningEvidence {
 
   /** The shapes of what a run left, in the ledger's form; none when it left nothing readable. @param {any} project @param {any} run */
   async #shapeOf(project, run) {
-    const files = this.#filesOf(run);
+    const presented = (Array.isArray(run?.presentedFiles) ? run.presentedFiles : [])
+      .map((/** @type {any} */ entry) => String(typeof entry === "string" ? entry : entry?.path ?? "")).filter(Boolean);
+    const kinds = Object.entries(run?.artifactKinds ?? {});
+    const delivered = presented.length ? presented : kinds.filter(([, kind]) => kind === "deliverable").map(([file]) => file);
+    const files = presented.length || kinds.length ? [...new Set(delivered)] : this.#filesOf(run);
     if (!files.length) return [];
-    const read = await this.readShapes(project, files).catch(() => ({}));
+    const read = await this.readShapes(project, files, run).catch(() => ({}));
     return files.map((file) => /** @type {Record<string, any>} */ (read)[file]).filter(Boolean);
   }
 

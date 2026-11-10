@@ -251,3 +251,50 @@ test("an adoption on the next turn, through the real triggers and the real queue
   assert.ok(family.some((member) => member.runId === run.id));
   await database.query("DELETE FROM evimed_product.jobs WHERE user_id=$1 AND kind='distill' AND payload->>'runId'=$2", [owner, run.id]);
 });
+
+test("replay includes accepted text-only work without weakening correction and tenant filters", options, async () => {
+  const scope = `text_${randomUUID().slice(0, 8)}`;
+  for (const [id, evidence, verdict] of [["text_accept", "follow-up", "accept"], ["text_adopt", "follow-up", "adopt"], ["text_silent", "silent", "none"], ["text_rejected", "follow-up", "rejection"]]) {
+    await record(id, { scope, evidence, verdict });
+  }
+  await record("text_corrected", { scope, evidence: "follow-up", verdict: "accept" });
+  await record("text_corrected", { scope, evidence: "result-corrected", quote: "Change this", at: at(1) }, "corrected");
+  await record("text_foreign", { scope, evidence: "follow-up", verdict: "accept" }, "k", stranger);
+  const window = { scope, from: new Date("2026-10-23"), to: new Date("2026-10-24") };
+  assert.deepEqual(await feedback.cleanSettledRuns(owner, window), []);
+  const runs = await feedback.cleanSettledRuns(owner, { ...window, requireShape: false });
+  assert.deepEqual(runs.map(run => run.runId).sort(), ["text_accept", "text_adopt"]);
+  assert.ok(runs.every(run => run.shape.length === 0));
+});
+
+test("an amended method replays accepted text-only runs and restores a regressive body", options, async () => {
+  const { MethodReplay, createTrajectoryReader } = await import("../src/methodReplay.mjs");
+  const { LearningService } = await import("../src/learningService.mjs");
+  const { productDocumentsDouble } = await import("./helpers/productDocumentsDouble.mjs");
+  const { METHOD_SKILL_SCHEMA } = await import("@evimed/domain");
+  const scope = `replay-text-${randomUUID().slice(0, 8)}`;
+  for (const runId of ["replay_text_1", "replay_text_2"]) await record(runId, { scope, evidence: "follow-up", verdict: "accept" });
+  const learning = new LearningService({ documents: productDocumentsDouble() });
+  const frontmatter = { name: "weekly-report", description: "Write a weekly report.", whenToUse: "Writing a weekly report.",
+    metadata: { role: "functional", applies_when: "Weekly reporting.", not_when: "Other work.", derived_from: "run:source", evimed_schema: METHOD_SKILL_SCHEMA } };
+  const body = ["## Purpose", "Weekly report.", "## When to Use", "Weekly reporting.", "## Inputs", "User notes.", "## Workflow", "Begin with the conclusion.",
+    "## Verification", "Check source notes.", "## Constraints", "Keep supplied facts.", "## Output", "Weekly report."].join("\n");
+  const original = await learning.createCandidate(owner, { projectId: PROJECT, frontmatter, body, provenance: { origin: "inferred", runId: "source", scope } });
+  const amended = await learning.amendMethod(owner, original.id, { expectedRevision: original.revision, frontmatter, body: body.replace("Begin with the conclusion.", "Begin with background; put the conclusion last.") });
+  const replay = new MethodReplay({ learning, feedback, now: () => new Date("2026-10-24"),
+    readTrajectory: createTrajectoryReader({ resolveProject: async () => ({}),
+      listRuns: async () => ["replay_text_1", "replay_text_2"].map(id => ({ id, sessionId: "s", nativeTurn: { startSeq: 1 }, status: "succeeded" })),
+      readTranscript: async () => ({ header: { sessions: [{ sessionId: "s", parentSessionId: null, seedEndSeq: -1 }] }, messages: [
+        { sessionId: "s", role: "user", source: "user", seq: 1, turnStartSeq: 1, parts: [{ type: "text", text: "Write a weekly report." }] },
+        { sessionId: "s", role: "assistant", source: "user", seq: 2, turnStartSeq: 1, parts: [{ type: "text", text: "Conclusion: the project is on track.\nProgress and next steps follow." }] },
+      ] }), readTraces: async () => [] }),
+    judge: { available: true, read: async shown => {
+      assert.match(shown.runText, /accepted answer:\nConclusion: the project is on track/);
+      return JSON.stringify({ inScope: true, scopeQuote: "Write a weekly report.", contradicts: true,
+        methodQuote: "Begin with background; put the conclusion last.", runQuote: "Conclusion: the project is on track." });
+    } } });
+  const result = await replay.run({ job: { userId: owner, projectId: PROJECT, payload: { methodId: amended.id, digest: amended.payload.contentDigest, previousDigest: original.payload.contentDigest } } });
+  assert.equal(result.outcome, "regressed");
+  assert.equal(result.replayed, 2);
+  assert.equal((await learning.getMethod(owner, original.id)).payload.contentDigest, original.payload.contentDigest);
+});

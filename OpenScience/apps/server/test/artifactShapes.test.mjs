@@ -111,3 +111,28 @@ test("a run's files are read from its workspace, and a link, a missing file or a
   assert.deepEqual(Object.keys(shapes), ["out/plan.md"]);
   assert.deepEqual(shapes["out/plan.md"].labels, ["plan", "risks"]);
 });
+
+test("ambiguous output shapes ignore only a strict superset of same-run script operands", async () => {
+  const { scriptRelatedFiles } = await import("../src/artifactShapes.mjs");
+  const files = ["result.docx", "scratch.md", "maker.py"];
+  const tool = (tool, input, status = "completed") => ({ parts: [{ type: "tool", tool, input, status }] });
+  const source = `open('scratch.md', 'w'); save('result.docx')`;
+  const written = tool("write", { path: "maker.py", content: source });
+  const executed = tool("bash", { command: "python3 maker.py" });
+  assert.deepEqual([...scriptRelatedFiles(files, [written, executed])].sort(), [...files].sort());
+  assert.deepEqual([...scriptRelatedFiles(files, [tool("write", { file_path: "/workspace/maker.py", content: source }),
+    tool("bash", { command: "python3 /workspace/maker.py" })])].sort(), [...files].sort());
+  assert.equal(scriptRelatedFiles(files, [written, tool("edit", { file_path: "maker.py" }), executed]).size, 0);
+  assert.deepEqual([...scriptRelatedFiles(files.slice(0, 2), [written, executed])].sort(), files.slice(0, 2).sort(),
+    "a script written and executed this run need not itself be in the output inventory");
+  assert.equal(scriptRelatedFiles(files, [executed, written]).size, 0, "a preexisting program is not a script this run wrote and executed");
+  assert.equal(scriptRelatedFiles(files, [written, tool("bash", { command: "cat maker.py" })]).size, 0);
+  assert.equal(scriptRelatedFiles(files, [written, tool("bash", { command: "python3 maker.py" }, "failed")]).size, 0);
+  const doc = { format: "docx", labels: ["summary", "findings"] };
+  const helper = { format: "md", labels: ["working notes"], scriptRelated: true };
+  assert.equal(artifactShapesMatch([doc], [doc, helper]), true);
+  assert.equal(artifactShapesMatch([doc, helper], [doc]), true);
+  assert.equal(artifactShapesMatch([doc], [doc, { ...helper, scriptRelated: false }]), false);
+  assert.equal(artifactShapesMatch([doc], [{ ...doc, labels: ["budget", "assumptions"] }, helper]), false, "shared formats still need matching structure");
+  assert.equal(artifactShapesMatch([doc, helper], [doc, { format: "pdf", labels: [], scriptRelated: true }]), false, "neither inventory contains the other");
+});

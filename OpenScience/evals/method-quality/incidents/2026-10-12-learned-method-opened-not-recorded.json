@@ -22,8 +22,8 @@
       ],
       "deliverables": [],
       "mounted": ["zero-cell-continuity-correction", "inclusion-criteria-by-design"],
-      "expect": { "invoked": ["zero-cell-continuity-correction"], "read": ["zero-cell-continuity-correction"], "observations": {}, "carried": ["inclusion-criteria-by-design", "zero-cell-continuity-correction"], "answered": true },
-      "note": "No delegation means no receipt, no mounted digest from a child and no verdict: the open is a `read`, and it is in the run's row under the digest the runtime reported it carried."
+      "expect": { "invoked": ["zero-cell-continuity-correction"], "read": [], "observations": { "zero-cell-continuity-correction": { "outcome": "opened", "invoked": true } }, "carried": ["inclusion-criteria-by-design", "zero-cell-continuity-correction"], "answered": true },
+      "note": "P23 (2026-11-10): the runtime selection proves the mount without a child receipt. The open earns one run observation and loaded/invoked counters, with no acceptance or harm-test verdict."
     },
     {
       "name": "the root session reads a method while a child makes the deliverable",

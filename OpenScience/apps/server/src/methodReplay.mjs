@@ -33,7 +33,7 @@
  * @module methodReplay
  */
 
-import { methodSourceIdentifierShapesIn, trajectoryDigest } from "@evimed/domain";
+import { methodSourceIdentifierShapesIn, trajectoryDigest, scopeRunTranscript, transcriptMessageText } from "@evimed/domain";
 
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { CONVERSATION_SCOPE, methodScopeId } from "./learnedMethodMount.mjs";
@@ -43,6 +43,8 @@ import { callModelForControlPlane } from "./modelGateway.mjs";
 import { readRunTranscript } from "./runTranscripts.mjs";
 import { HttpError } from "./security.mjs";
 import { readToolTraces } from "./toolExecutionEdges.mjs";
+
+/** @typedef {ReturnType<typeof trajectoryDigest> & { answer?: string }} ReplayTrajectory */
 
 /** How many accepted runs one replay reads, and how many verified contradictions stop the new version. Provisional: no distribution yet. */
 export const REPLAY_MAX_RUNS = 5;
@@ -63,7 +65,7 @@ const QUOTE_MAX = 400;
 
 export const REPLAY_INSTRUCTIONS = [
   "You check a rewritten working method against one piece of work the person has already accepted.",
-  "You are given the method's text (`method`) and a digest of one earlier run (`run`): what the person asked, the files the run left with their structure, and the order of the tools it used. The person accepted that run without asking for any change.",
+  "You are given the method's text (`method`) and a digest of one earlier run (`run`): what the person asked, the accepted final answer for text-only work when available, the files the run left with their structure, and the order of the tools it used. The person accepted that run without asking for any change.",
   "Decide whether doing the work in `run` by following the method would have forced something the person accepted to be different: a step, a format, a structure or a tool the method requires that the accepted run did not have, or one the method forbids that the accepted run had.",
   "First decide whether the accepted run is the kind of work the method is for, by its `when to use`, `applies when` and `not when` lines and its description: an internal document is not an external one, a paper summary is not a meeting summary, a one-off request the person scoped differently is not the method's case. A method about a different kind of work never contradicts the run.",
   "A method that says nothing about it does not contradict the run. A detail the method leaves open is not a contradiction. When unsure, it does not contradict.",
@@ -106,12 +108,13 @@ export function methodReplayText(method) {
 /**
  * What the judge is shown of an accepted run: the requests the person typed, what the run left, and the order of its tools — read as
  * text, so a quotation can be checked as a substring of it.
- * @param {ReturnType<typeof trajectoryDigest>} digest
+ * @param {ReplayTrajectory} digest
  * @returns {string}
  */
 export function trajectoryReplayText(digest) {
+  const requests = digest.requests.map((entry) => `asked: ${entry.text}`);
   const lines = [
-    ...digest.requests.map((entry) => `asked: ${entry.text}`),
+    ...(digest.answer ? [requests.join("\n").slice(0, RUN_CHARS / 2), `accepted answer:\n${digest.answer.slice(0, RUN_CHARS / 2 - 50)}`] : requests),
     ...digest.artifacts.map((artifact) => `left: ${artifact.path} (${artifact.format})${artifact.shape?.labels?.length ? ` with sections ${artifact.shape.labels.join("; ")}` : ""}`),
     digest.tools.length ? `tools, in order: ${digest.tools.join(", ")}` : "",
   ].filter(Boolean);
@@ -210,7 +213,7 @@ export class MethodReplayJudge {
  * trace and the structure of what it left. Null when the run cannot be read any more (its project was deleted, its transcript was pruned).
  * @param {{ resolveProject: (userId: string, projectId: string) => Promise<any>, listRuns: (project: any) => Promise<any[]>,
  *   readTranscript?: typeof readRunTranscript, readTraces?: typeof readToolTraces, readShapes?: typeof readArtifactShapes }} dependencies
- * @returns {(userId: string, accepted: { runId: string, projectId: string | null }) => Promise<ReturnType<typeof trajectoryDigest> | null>}
+ * @returns {(userId: string, accepted: { runId: string, projectId: string | null }) => Promise<ReplayTrajectory | null>}
  */
 export function createTrajectoryReader({ resolveProject, listRuns, readTranscript = readRunTranscript, readTraces = readToolTraces, readShapes = readArtifactShapes }) {
   return async (userId, accepted) => {
@@ -223,7 +226,15 @@ export function createTrajectoryReader({ resolveProject, listRuns, readTranscrip
     const files = [...new Set(["artifacts", "unverifiedArtifacts", "outputFiles"].flatMap((field) => (Array.isArray(run[field]) ? run[field] : [])
       .map((/** @type {any} */ entry) => String(typeof entry === "string" ? entry : entry?.path ?? ""))))].filter(Boolean);
     const shapes = files.length ? await readShapes(project, files).catch(() => ({})) : {};
-    return trajectoryDigest(transcript, run, { shapes, toolTraces: await readTraces(project, accepted.runId) });
+    const digest = trajectoryDigest(transcript, run, { shapes, toolTraces: await readTraces(project, accepted.runId) });
+    if (files.length) return digest;
+    // The accepted work is the final answer, not merely the request. Read only
+    // the root's current turn: earlier answers and unowned children are not this run.
+    const scoped = scopeRunTranscript(transcript, run);
+    const final = scoped.messages.filter(message => message.sessionId === run.sessionId && message.role === "assistant"
+      && transcriptMessageText(message).trim()).at(-1);
+    const answer = final ? transcriptMessageText(final).trim() : "";
+    return answer && !unsafeToKeep(answer) ? { ...digest, answer: answer.slice(0, RUN_CHARS) } : digest;
   };
 }
 
@@ -233,8 +244,8 @@ export class MethodReplay {
    * (`createTrajectoryReader`); `judge` is the one model call. `enabled(userId)` is false for a person who paused learning.
    * `onOutcome`, `onVerdict` and `onStopped` (a method this replay took the newer version out of, by the retirement code `replay_regressed`) are
    * counters, told and never asked.
-   * @param {{ learning: any, feedback: { cleanSettledRuns: (userId: string, window: { scope: string, from: Date, to: Date, limit?: number, projectId?: string | null }) => Promise<{ runId: string, projectId: string | null, at?: string, endedAt?: string | null }[]> },
-   *   readTrajectory: (userId: string, accepted: { runId: string, projectId: string | null }) => Promise<ReturnType<typeof trajectoryDigest> | null>,
+   * @param {{ learning: any, feedback: { cleanSettledRuns: (userId: string, window: { scope: string, from: Date, to: Date, limit?: number, projectId?: string | null, requireShape?: boolean }) => Promise<{ runId: string, projectId: string | null, at?: string, endedAt?: string | null }[]> },
+   *   readTrajectory: (userId: string, accepted: { runId: string, projectId: string | null }) => Promise<ReplayTrajectory | null>,
    *   judge: Pick<MethodReplayJudge, "read" | "available">, enabled?: ((userId: string) => Promise<boolean>) | null,
    *   onOutcome?: ((outcome: string) => void) | null, onVerdict?: ((verdict: string) => void) | null, onStopped?: ((code: string) => void) | null, now?: () => Date,
    *   maxRuns?: number, regressionAt?: number, windowDays?: number, contextProvenance?: { policyFor: (project: { userId: string, id: string }) => Promise<any> } | null}} dependencies
@@ -266,15 +277,16 @@ export class MethodReplay {
    * @param {string} userId @param {any} method @param {{ scope: string, from: Date, to: Date, limit: number }} window
    */
   async #accepted(userId, method, window) {
-    if (!this.contextProvenance) return this.feedback.cleanSettledRuns(userId, window);
+    const acceptedWindow = { ...window, requireShape: false };
+    if (!this.contextProvenance) return this.feedback.cleanSettledRuns(userId, acceptedWindow);
     const policyOf = (/** @type {string} */ projectId) => this.contextProvenance?.policyFor({ userId, id: projectId }).catch(() => null) ?? null;
     const source = methodSourceProjects(method.payload?.provenance)[0] ?? null;
     const policy = source ? await policyOf(source) : { kind: "owned" };
     if (!policy) return [];
-    if (policy.kind === "geo-project") return this.feedback.cleanSettledRuns(userId, { ...window, projectId: policy.controlProjectId });
+    if (policy.kind === "geo-project") return this.feedback.cleanSettledRuns(userId, { ...acceptedWindow, projectId: policy.controlProjectId });
     /** @type {any[]} */
     const kept = [];
-    for (const run of await this.feedback.cleanSettledRuns(userId, window)) {
+    for (const run of await this.feedback.cleanSettledRuns(userId, acceptedWindow)) {
       if (!run.projectId || (await policyOf(run.projectId))?.kind === "owned") kept.push(run);
     }
     return kept;

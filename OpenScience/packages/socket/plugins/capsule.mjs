@@ -256,7 +256,7 @@ function conversationMethods(ctx, config, launched) {
 }
 
 /**
- * @typedef {{ evidence: string[], counterexamples: string[], verified: boolean }} SelectionCard
+ * @typedef {{ evidence: string[], counterexamples: string[], verified: boolean, rewrites?: {count: number, dates: string[]} }} SelectionCard
  *   what a learned method's card adds, when the control plane wrote it (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`)
  */
 
@@ -276,8 +276,12 @@ function selectionCard(value) {
   const card = /** @type {Record<string, unknown>} */ (value)
   const facts = (/** @type {unknown} */ list, /** @type {number} */ limit) => (Array.isArray(list) ? list : [])
     .filter((entry) => typeof entry === 'string').map(clipCardFact).filter(Boolean).slice(0, limit)
+  const rewrites = /** @type {any} */ (card.rewrites)
+  const count = Number(rewrites?.count)
+  const dates = (Array.isArray(rewrites?.dates) ? rewrites.dates : [])
+    .filter((/** @type {unknown} */ date) => typeof date === 'string' && date.length <= 30 && Number.isFinite(Date.parse(date))).slice(-1)
   return { evidence: facts(card.evidence, LEARNED_METHOD_CARD_FACTS.evidence), counterexamples: facts(card.counterexamples, LEARNED_METHOD_CARD_FACTS.counterexamples),
-    verified: card.verified === true }
+    verified: card.verified === true, ...(Number.isSafeInteger(count) && count > 0 ? { rewrites: { count, dates } } : {}) }
 }
 
 /**
