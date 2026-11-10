@@ -16,6 +16,7 @@
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
+import net from 'node:net';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +31,7 @@ const SCORE_PY = process.env.C2_SCORE_PYTHON ?? '/srv/evimed/pp/c2-score-venv/bi
 const BUDGET_FILE = '/srv/evimed/runs/BUDGET-LAST';
 const BUDGET_FLOOR = 160; // the lab guard stops everything below CNY 150; stop taking tasks a little before it
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const listening = (port) => new Promise((resolve) => { const s = net.connect(port, '127.0.0.1'); s.once('connect', () => { s.destroy(); resolve(true); }); s.once('error', () => resolve(false)); });
 
 /**
  * What ScienceAgentBench needs that is not in place (assessed 2026-11-10). The inputs are: benchmark_verified.zip (1,769,478,786 bytes,
@@ -141,6 +143,8 @@ export function taskRow({ bench, task, record, verdict }) {
     methodsMounted: (record?.turns ?? []).flatMap((t) => t.run?.methodsLoaded ?? []).map((m) => m.name ?? m),
     methodsOpened: (record?.turns ?? []).flatMap((t) => t.run?.methodsInvoked ?? []).map((m) => m.name ?? m),
     placedDirectly: record?.placedDirectly ?? [],
+    // DA-Code plots: the official post-process found no plotting script it recognises (it looks for `plt.savefig` in a top-level .py).
+    postProcessError: (verdict?.postProcessErrors ?? []).filter(Boolean)[0] ?? null,
   };
 }
 
@@ -187,6 +191,7 @@ export function summarizeRows(rows, { bench, arm, expected }) {
     costCny: total('costCny'), wallSeconds: total('wallSeconds'), medianWallSeconds: median(rows.map((r) => r.wallSeconds)),
     perTask: n ? { costCny: total('costCny') / n, wallSeconds: total('wallSeconds') / n, toolCalls: total('toolCalls') / n, prompt: total('inputTokens') / n, completion: total('outputTokens') / n } : null,
     memoryToolsAtStart: rows.filter((r) => r.memoryToolsAtStart).length, placedDirectly: rows.filter((r) => r.placedDirectly.length).map((r) => r.id),
+    postProcessFailures: rows.filter((r) => r.postProcessError).map((r) => r.id),
     methodsMountedTasks: rows.filter((r) => r.methodsMounted.length).length, methodsOpenedTasks: rows.filter((r) => r.methodsOpened.length).length,
   };
 }
@@ -317,10 +322,12 @@ async function worker(args) {
       : 'One message: the task instruction verbatim, then the official Terminate action description (da_agent/agent/action.py); every source file uploaded through /api/files/upload (files above the 50 MB upload ceiling placed in the workspace directly).',
     scorer: bench === 'dabench' ? 'infiagent-dabench eval_closed_form.py @3d6c4a7 (per task: evaluate_responses; run: the script itself)' : 'da-code Evaluator + evaluate.run_evaluation @b211daf, plot_process post-processing in the product sandbox' });
 
-  let h = null, seeded = null, account = null;
+  let h = null, seeded = null, account = null, infraStreak = 0;
   const shutdown = async () => { if (h) { const old = h; h = null; await stopHarness(old); } };
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => { await shutdown(); process.exit(128 + (signal === 'SIGINT' ? 2 : 15)); });
   const ensureHarness = async () => {
+    // A harness that died (or stopped listening) is replaced before the next task rather than failing every task after it.
+    if (h && (h.child.exitCode !== null || !(await listening(args.port)))) { status('harness gone; restarting'); const old = h; h = null; await stopHarness(old); }
     if (h) return h;
     await ensurePostgres(args.pgPort); await ensureDatabase(args.pgPort, dbName);
     if (!seeded) {
@@ -390,6 +397,9 @@ async function worker(args) {
       record.row = taskRow({ bench, task, record, verdict });
       if (!args.keepData && record.projectDir) await fs.rm(record.projectDir, { recursive: true, force: true }).catch(() => {});
       await atomic(file, record);
+      infraStreak = record.infra ? infraStreak + 1 : 0;
+      if (record.infra && h) { const old = h; h = null; await stopHarness(old); }
+      if (infraStreak >= 4) throw new Error(`${infraStreak} harness failures in a row; stopping so the wrapper restarts this slot (records are kept, infra ones rerun)`);
       status(`${phase} ${task.id} ${record.row.pass ? 'PASS' : 'fail'} score=${record.row.score.toFixed(3)} class=${record.row.failureClass ?? '-'} wall=${Math.round(record.row.wallSeconds)}s tools=${record.row.toolCalls} cost=${record.row.costCny.toFixed(4)}`);
       return 'ran';
     } finally {
