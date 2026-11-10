@@ -81,6 +81,7 @@ export function engineShard(userKey, count) {
 export function assertResumeCompatible(previous, facts) {
   if (!previous) return;
   if (previous.arm !== facts.arm || previous.set !== facts.set || previous.split !== facts.split) throw new Error(`the run directory holds a ${previous.set}/${previous.split} ${previous.arm} run: use another --out`);
+  if ((previous.engine?.templates === "stock") !== Boolean(facts.stockEngine)) throw new Error("cannot resume with different engine templates");
   const urls = (record) => record.engine?.urls ?? record.engineUrls ?? (record.engine?.url ? engineUrlsOf(record.engine.url) : []);
   if (JSON.stringify(urls(previous)) !== JSON.stringify(urls(facts))) throw new Error("cannot resume with a different engine URL list (including order)");
 }
@@ -88,7 +89,7 @@ export function assertResumeCompatible(previous, facts) {
 /** @param {string[]} argv */
 export function parseArguments(argv) {
   const options = {
-    answerModel: "", answerBase: "", answerKeyFile: "", answersOnly: false, retrievalOnly: false, variantsOnly: false,
+    answerModel: "", answerBase: "", answerKeyFile: "", stockEngine: false, answersOnly: false, retrievalOnly: false, variantsOnly: false,
     set: "", split: "", data: "", out: "", engineUrl: "", engineKeyFile: "", databaseUrlFile: "", deepseekKeyFile: "",
     arm: "product", only: "", maxSessions: 0, concurrency: 3, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
     config: {}, answerVariants: [], maintain: "none", maintainAfter: [], rejectionJudge: true, label: "", thinking: "enabled", reasoningEffort: "high",
@@ -107,6 +108,7 @@ export function parseArguments(argv) {
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
+    if (flag === "--stock-engine") { options.stockEngine = true; continue; }
     if (flag === "--answers-only") { options.answersOnly = true; continue; }
     if (flag === "--variants-only") { options.variantsOnly = true; continue; }
     if (flag === "--retrieval-only") { options.retrievalOnly = true; options.answersOnly = true; continue; }
@@ -150,6 +152,7 @@ export function parseArguments(argv) {
     throw new Error("arm product needs --engine-url, --engine-key-file and --database-url-file");
   }
   if (!options.ingestOnly && !options.retrievalOnly && !options.deepseekKeyFile && !options.answerKeyFile) throw new Error("answering needs --deepseek-key-file (or pass --ingest-only)");
+  if (options.stockEngine && options.arm !== "product") throw new Error("--stock-engine needs arm product");
   if (options.arm !== "product" && options.plantCorruptionsAfter >= 0) throw new Error("--plant-corruptions-after needs arm product");
   if (options.arm !== "product" && options.ingestOnly) throw new Error("--ingest-only has nothing to do without the engine (arm product)");
   if (!["none", "consolidate", "verify", "consolidate+verify"].includes(options.maintain)) throw new Error("--maintain is none, consolidate, verify or consolidate+verify");
@@ -305,12 +308,12 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   /** @type {any[]} */ const labs = [];
   /** @type {any} */ let lab = null;
   const templatesDir = path.resolve(options.templatesDir || path.join(repoRoot, "deploy/web/openviking/memory-templates"));
-  const templates = await directoryDigest(templatesDir).catch(() => ({ digest: null, files: 0 }));
+  const templates = options.stockEngine ? { digest: null, files: 0 } : await directoryDigest(templatesDir).catch(() => ({ digest: null, files: 0 }));
   if (options.arm === "product") {
     const { openLab } = await import(pathToFileURL(path.join(here, "lab.mjs")).href);
     try {
       for (const engineUrl of options.engineUrls) labs.push(await (dependencies.openLab ?? openLab)({
-        engineUrl, engineKeyFile: path.resolve(options.engineKeyFile), account: `evlab-${runId}`, runId,
+        stockEngine: options.stockEngine, engineUrl, engineKeyFile: path.resolve(options.engineKeyFile), account: `evlab-${runId}`, runId,
         databaseUrlFile: path.resolve(options.databaseUrlFile), historySearch: options.historySearch,
         deepseekKeyFile: options.deepseekKeyFile ? path.resolve(options.deepseekKeyFile) : null, commitEvery: options.commitEvery,
         extractionTimeoutMs: options.extractionTimeoutMs, gatewayTimeoutMs: options.gatewayTimeoutMs,
@@ -330,8 +333,8 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   const facts = {
     runId, set: options.set, split: options.split, arm: options.arm, automated: true,
     commit: git.commit, dirty: git.dirty, dirtyPaths: git.dirtyPaths, runnerDigest: runnerHash.digest("hex"),
-    engine: lab ? { url: options.engineUrls[0], urls: options.engineUrls, version: lab.facts.engineVersion, account: lab.account, templatesDigest: templates.digest, templatesFiles: templates.files,
-      templatesDir: path.relative(repoRoot, templatesDir) || templatesDir,
+    engine: lab ? { templates: options.stockEngine ? "stock" : "product", url: options.engineUrls[0], urls: options.engineUrls, version: lab.facts.engineVersion, account: lab.account, templatesDigest: templates.digest, templatesFiles: templates.files,
+      templatesDir: options.stockEngine ? null : path.relative(repoRoot, templatesDir) || templatesDir,
       shards: labs.map((entry, index) => ({ url: options.engineUrls[index], account: entry.account, version: entry.facts.engineVersion })) } : null,
     flags: { historySearch: options.arm === "product" ? options.historySearch : false, commitEvery: options.commitEvery, plantCorruptionsAfter: options.plantCorruptionsAfter >= 0 ? options.plantCorruptionsAfter : null,
       consolidation: "manual-only", rejectionJudge: Boolean(lab?.config.nativeMemoryRejectionJudgeEnabled), gatewayCommitsPerHour: 0,

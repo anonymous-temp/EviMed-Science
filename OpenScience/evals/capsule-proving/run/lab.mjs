@@ -409,13 +409,13 @@ async function secretFrom(file) {
  * Open the lab: the product's memory stack against the lab engine and PostgreSQL.
  * @param {{ engineUrl: string, engineKeyFile: string, account: string, databaseUrlFile: string, historySearch?: boolean, deepseekKeyFile?: string | null,
  *   now?: (() => Date) | null, runId?: string | null, commitEvery?: "session" | "turn", extractionTimeoutMs?: number, pollMs?: number,
- *   configOverrides?: Record<string, any>, answerVariants?: {name: string, config: Record<string, any>}[], rejectionJudge?: boolean,
+ *   stockEngine?: boolean, configOverrides?: Record<string, any>, answerVariants?: {name: string, config: Record<string, any>}[], rejectionJudge?: boolean,
  *   gatewayTimeoutMs?: number, residentCardTimeoutMs?: number, engineTimeoutMs?: number, databasePoolMax?: number, report?: (line: string) => void }} options
  */
 export async function openLab({
   engineUrl, engineKeyFile, account, databaseUrlFile, historySearch = true, deepseekKeyFile = null, now = null, runId = null,
   commitEvery = "session", extractionTimeoutMs = 300_000, pollMs = 2_000, gatewayTimeoutMs = 4_000, residentCardTimeoutMs = 1_500,
-  configOverrides = {}, answerVariants = [], rejectionJudge = true,
+  configOverrides = {}, answerVariants = [], rejectionJudge = true, stockEngine = false,
   engineTimeoutMs = 30_000, databasePoolMax = 8, report = (line) => process.stderr.write(`${line}\n`),
 }) {
   if (typeof account !== "string" || !/^evlab-[A-Za-z0-9_-]{1,100}$/.test(account)) throw new Error("the lab engine account is evlab-<runId>");
@@ -668,15 +668,18 @@ export async function openLab({
         await sessions.register(userId);
         await overlay.noteRegistered(userId);
         // The worker's policy check (`#syncPolicy`): the account's type allowlist is the deployment's, restated when it is not.
-        const held = await sessions.settings(userId);
+        const held = stockEngine ? null : await sessions.settings(userId);
         const expected = [...OPENVIKING_MEMORY_TYPES].sort();
         if (held && !(held.memoryTypes.length === expected.length && held.memoryTypes.every((type, index) => type === expected[index]))) {
           const settings = await memorySettings.settings(userId);
           await sessions.setLearning(userId, !settings.learningPaused);
           facts.policyRewritten += 1;
         }
+        // The experiment varies only the engine templates. Its default policy must never be restated with product types.
+        // processCommits normally leaves policy sync to tick; guard that path too for any future lab worker invocation.
+        if (stockEngine) worker.policyChecked.set(userId, Infinity);
         facts.memoryTypes ??= (await sessions.settings(userId))?.memoryTypes ?? null;
-        if (facts.templatesMounted === null) {
+        if (!stockEngine && facts.templatesMounted === null) {
           // 400 "not editable" means the deployment's templates are mounted; 404 means the engine fell back to its built-in types.
           try { await client.request({ path: `/api/v1/admin/accounts/${account}/memory-templates/people`, userId }); facts.templatesMounted = true; }
           catch (error) { const status = Number(/** @type {any} */ (error)?.upstreamStatus) || 0; facts.templatesMounted = status === 400 ? true : status === 404 ? false : null; }
