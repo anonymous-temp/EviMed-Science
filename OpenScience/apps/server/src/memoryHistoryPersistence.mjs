@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS evimed_memory.history_archives (
 );
 CREATE INDEX IF NOT EXISTS history_archives_due ON evimed_memory.history_archives(next_attempt_at,updated_at)
   WHERE state IN ('queued','indexing','unavailable','partial');
+-- Version zero rows may have spent their attempts on the missing project stamp.
+-- Give those generic lookup failures one fresh, bounded window after the fix.
+ALTER TABLE evimed_memory.history_archives ADD COLUMN IF NOT EXISTS source_lookup_version integer NOT NULL DEFAULT 0;
 ALTER TABLE evimed_memory.history_fences ADD COLUMN IF NOT EXISTS project_created_at text NOT NULL DEFAULT '';
 -- The key is rebuilt only while it still has the old shape (before project_created_at joined it), never at every start.
 DO $$ BEGIN
@@ -179,8 +182,8 @@ export class MemoryHistoryLedger {
   async discoverArchives(limit = 100) {
     await this.migrate();
     const result = await this.database.query(`INSERT INTO evimed_memory.history_archives
-      (owner_id,owner_created_at,archive_uri,engine_session,project_id,commit_created_at)
-      SELECT c.user_id,u.created_at::text,c.archive_uri,c.engine_session,c.project_id,c.created_at
+      (owner_id,owner_created_at,archive_uri,engine_session,project_id,commit_created_at,source_lookup_version)
+      SELECT c.user_id,u.created_at::text,c.archive_uri,c.engine_session,c.project_id,c.created_at,1
       FROM evimed_memory.native_commits c JOIN evimed_control.users u ON u.id=c.user_id
       LEFT JOIN evimed_memory.history_archives h ON h.owner_id=c.user_id AND h.owner_created_at=u.created_at::text AND h.archive_uri=c.archive_uri
       WHERE c.state='completed' AND h.archive_uri IS NULL
@@ -189,21 +192,26 @@ export class MemoryHistoryLedger {
   }
   async claimArchives(limit = 4) {
     await this.migrate();
-    const result = await this.database.query(`UPDATE evimed_memory.history_archives h SET state='indexing',attempts=h.attempts+1,
+    const result = await this.database.query(`WITH claimed AS (UPDATE evimed_memory.history_archives h SET state='indexing',
+      attempts=CASE WHEN h.source_lookup_version=0 AND h.state='unavailable' AND h.reason='memory_history_index_unavailable' THEN 1 ELSE h.attempts+1 END,
+      source_lookup_version=1,
       lease_until=clock_timestamp()+interval '10 minutes',updated_at=clock_timestamp()
       WHERE (owner_id,owner_created_at,archive_uri) IN (
         SELECT a.owner_id,a.owner_created_at,a.archive_uri FROM evimed_memory.history_archives a
         JOIN evimed_control.users u ON u.id=a.owner_id AND u.created_at::text=a.owner_created_at
-        WHERE a.state IN ('queued','indexing','unavailable','partial') AND a.next_attempt_at<=clock_timestamp()
+        WHERE a.state IN ('queued','indexing','unavailable','partial')
+        AND ((a.next_attempt_at<=clock_timestamp() AND (a.state<>'unavailable' OR a.attempts<8))
+          OR (a.source_lookup_version=0 AND a.state='unavailable' AND a.reason='memory_history_index_unavailable'))
         AND (a.lease_until IS NULL OR a.lease_until<clock_timestamp())
-        ORDER BY a.next_attempt_at,a.updated_at,a.owner_id,a.archive_uri LIMIT $1 FOR UPDATE OF a SKIP LOCKED) RETURNING h.*`, [Math.max(1, Math.min(4, limit))]);
+        ORDER BY a.commit_created_at NULLS LAST,a.updated_at,a.owner_id,a.archive_uri LIMIT $1 FOR UPDATE OF a SKIP LOCKED) RETURNING h.*)
+      SELECT * FROM claimed ORDER BY commit_created_at NULLS LAST,owner_id,archive_uri`, [Math.max(1, Math.min(4, limit))]);
     return result.rows;
   }
   async startArchive(commit, context) {
     await this.migrate();
     const result = await this.database.query(`INSERT INTO evimed_memory.history_archives
-      (owner_id,owner_created_at,archive_uri,engine_session,namespace_id,project_id,commit_created_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz) ON CONFLICT(owner_id,owner_created_at,archive_uri)
+      (owner_id,owner_created_at,archive_uri,engine_session,namespace_id,project_id,commit_created_at,source_lookup_version)
+      VALUES($1,$2,$3,$4,$5,$6,$7::timestamptz,1) ON CONFLICT(owner_id,owner_created_at,archive_uri)
       DO UPDATE SET namespace_id=EXCLUDED.namespace_id,project_id=COALESCE(history_archives.project_id,EXCLUDED.project_id)
       RETURNING *`, [context.ownerId,context.ownerCreatedAt,commit.archiveUri,commit.engineSession,context.namespaceId,commit.projectId,commit.createdAt ?? null]);
     return result.rows[0];

@@ -478,7 +478,8 @@ import { ConversationSourceDeletionLedger } from './conversationSourceDeletionPe
 import { ConversationSourceDeletionService } from './conversationSourceDeletionService.mjs';
 import { createConversationSourceDeletionRoutes } from './conversationSourceDeletionRoutes.mjs';
 import { nativeFileId } from './nativeMemoryStore.mjs';
-import { MemoryHistory, MemoryHistoryLedger, historyTitle } from './memoryHistory.mjs';
+import { MemoryHistory, MemoryHistoryLedger } from './memoryHistory.mjs';
+import { createMemoryHistorySources } from './memoryHistorySources.mjs';
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
@@ -5101,45 +5102,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // root, separate from KB sources/compilation and every capsule egress surface.
   const historyLedger = productDatabase ? new MemoryHistoryLedger({ database: productDatabase, overlay: nativeMemoryOverlay, client: openVikingClient }) : null;
   const memoryHistory = historyLedger && nativeMemoryContexts ? new MemoryHistory({ config, ledger: historyLedger, contexts: nativeMemoryContexts,
-    resolveSource: async (commit, memoryContext) => {
-      const user = await store.userById(memoryContext.ownerId);
-      if (!user) return null;
-      const projectId = commit.projectId ?? memoryContext.projectId;
-      if (!projectId || memoryContext.kind === 'geo-project' && projectId !== memoryContext.projectId) return null;
-      const project = await store.requireProject(user, projectId);
-      if (project.userId !== memoryContext.ownerId) return null;
-      await nativeMemoryContexts.assertLive({ ...memoryContext, projectId });
-      const row = (await productDatabase.query('SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id=$2', [memoryContext.ownerId, projectId])).rows[0];
-      if (!row) return null;
-      const base = { projectId, projectCreatedAt: row.stamp, project };
-      if (!commit.engineSession) return base;
-      const sessionId = platformSessionOf(commit.engineSession);
-      if (!sessionId) return null;
-      if (memoryContext.kind === 'geo-project') {
-        const bound = await nativeMemoryContexts.session(memoryContext, commit.engineSession);
-        if (!bound || bound.payload.source.kind !== 'dsh' || bound.payload.source.childAddress || bound.payload.source.rootSessionId !== sessionId) return null;
-      } else if (await nativeMemoryOverlay.projectOfSession(memoryContext.ownerId, commit.engineSession) !== projectId) return null;
-      const runs = await agentRuns.conversationRuns(project, sessionId);
-      if (!runs.length || runs.every(run => run.deleted === true)) return null;
-      const named = runs.find(run => typeof run.title === 'string' && run.title.trim());
-      return { ...base, sessionId, runs, conversationTitle: historyTitle(named?.title ?? runs.at(-1)?.question), projectTitle: historyTitle(project.name,'Project'),
-        conversationUrl: `/app/chat/${encodeURIComponent(sessionId)}` };
-    },
-    eligible: async (memoryContext, source) => {
-      if (isInternalProjectOf(config, memoryContext.ownerId, source.projectId)) return false;
-      const state = await memorySettings.sessionState(memoryContext.ownerId, source.projectId, source.sessionId);
-      if (state.trialCapsuleId) return false;
-      // Raw archives cannot reliably date an undated message into a mixed
-      // automated conversation, so exclude that entire conversation here.
-      for (const run of source.runs) {
-        if (run.deleted || isPlatformStartedRun(run) || (await agentRegistry)?.get?.(run.effectiveAgentId ?? run.agentId)?.visibility === 'internal') return false;
-      }
-      if (vcrPrivacyStore && await vcrPrivacyStore.hasClinicalContext(memoryContext.ownerId, source.projectId,
-        source.runs.map(run => ({ sessionId: source.sessionId, runId: run.id })))) return false;
-      return true;
-    },
-    admitMessage: async (memoryContext, source, message) => (await memoryAdmission.admit({ user: { id: memoryContext.ownerId }, project: source.project,
-      engineSessionId: `dsh-${source.sessionId}`, at: Number.isFinite(Date.parse(message.created_at ?? '')) ? Date.parse(message.created_at) : null })).learn,
+    ...createMemoryHistorySources({ config, store, productDatabase, nativeMemoryContexts, nativeMemoryOverlay,
+      agentRuns, memorySettings, agentRegistry, vcrPrivacyStore, memoryAdmission }),
   }) : null;
   // Keep lifecycle fences active even when new history search is switched off.
   nativeMemory.history = memoryHistory;
