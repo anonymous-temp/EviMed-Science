@@ -28,7 +28,7 @@ export function normalizeUsage(usage = {}) {
 /**
  * Minimal non-streaming chat client. A retry count of five means at most six attempts.
  * @param {{keyFile: string, baseURL?: string, model?: string, thinking?: 'disabled'|'enabled',
- * fetch?: typeof globalThis.fetch, timeoutMs?: number, maxRetries?: number,
+ * protocol?: 'deepseek'|'openai', fetch?: typeof globalThis.fetch, timeoutMs?: number, maxRetries?: number,
  * backoffMs?: number, sleep?: (ms: number) => Promise<any>}} options
  * @returns {{model: string, thinking: string, redact: (value: any) => string, complete: (request: any) => Promise<any>}}
  */
@@ -48,7 +48,8 @@ export function createDeepSeekClient(options) {
         catch { throw failure("key_file", "Unable to read API key file"); }
         if (!key) throw failure("key_file", "API key file is empty");
       }
-      const body = { model, messages, stream: false, thinking: { type: thinking } };
+      const body = { model, messages, stream: false, ...(options.protocol === "openai"
+        ? { enable_thinking: thinking === "enabled", max_tokens: 8192 } : { thinking: { type: thinking } }) };
       if (tools.length) body.tools = tools;
       const choice = toolChoice ?? tool_choice;
       if (choice !== undefined) body.tool_choice = choice;
@@ -93,4 +94,9 @@ export function createDeepSeekClient(options) {
       }
     },
   };
+}
+
+/** DashScope's OpenAI format, sharing retry, redaction and tool-call handling with DeepSeek. */
+export function createOpenAICompatibleClient(options) {
+  return createDeepSeekClient({ ...options, protocol: "openai" });
 }

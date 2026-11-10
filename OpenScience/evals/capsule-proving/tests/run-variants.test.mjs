@@ -311,3 +311,38 @@ test("lab consolidation polls the explicit product entry with force and retains 
   assert.deepEqual(seen, Array.from({ length: 3 }, () => ["u", { mode: "verify", force: true }]));
   assert.equal((await pollLabConsolidation({ consolidate: async () => "submitted" }, "u", { timeoutMs: 0 })).outcome, "submitted");
 });
+
+test('answers-only refuses incomplete ingestion and never calls ingestion', async t => {
+  const f = await runnerFixture(t);
+  const result = await main([...f.args, '--answers-only'], f.dependencies);
+  assert.equal(result.failures, 1);
+  assert.equal(result.sessions, 0);
+  assert.equal(f.events.some(e => e.startsWith('ingest:')), false);
+  assert.match(await readFile(path.join(f.out, 'STATUS'), 'utf8'), /answers_only_incomplete_ingestion/);
+});
+
+test('new answer variants reuse settled memory, select their own model and preserve earlier variants on resume', async t => {
+  const f = await runnerFixture(t);
+  f.item.questions = [f.item.questions[1]];
+  await main([...f.args, '--answer-variant', 'prior:memorySearchHintEnabled=true'], f.dependencies);
+  f.events.length = 0;
+  const captured = [];
+  f.dependencies.answering.answerQuestion = async input => {
+    captured.push(input);
+    return { qid: input.qid, caseId: input.caseId, answer: 'fixture', toolCalls: [], usage: {}, model: { name: input.client.model }, fullContext: { truncated: true } };
+  };
+  const args = [...f.args, '--answers-only', '--variants-only', '--answer-variant', 'strong:forceSearch=all,answerModel=qwen3.8-max'];
+  const result = await main(args, f.dependencies);
+  assert.equal(result.sessions, 0); assert.equal(result.answers, 1);
+  assert.equal(captured[0].client.model, 'qwen3.8-max');
+  assert.equal(captured[0].forceSearch, 'all'); assert.equal(captured[0].sessions.length, 2);
+  assert.equal(f.events.some(e => e.startsWith('ingest:')), false);
+  assert.deepEqual(f.opened.at(-1).answerVariants[0].config, {});
+  const manifest = await json(path.join(f.out, 'run.json'));
+  assert.deepEqual(manifest.answerVariants.map(v => v.name), ['prior', 'strong']);
+  assert.equal(manifest.answerVariants[1].model.answerJudgeSameFamily, true);
+  assert.equal(manifest.answerStats.strong.truncatedQuestions, 1);
+  const opens = f.opened.length;
+  await assert.rejects(main([...f.args, '--answers-only', '--answer-variant', 'strong:forceSearch=history'], f.dependencies), /variant strong changed/);
+  assert.equal(f.opened.length, opens);
+});

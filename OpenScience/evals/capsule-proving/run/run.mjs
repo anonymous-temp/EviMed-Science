@@ -9,6 +9,7 @@
 //     [--commit-every session|turn] [--plant-corruptions-after <afterSession>] [--limit-questions N] [--plugin-tgz <file>] \
 //     [--ingest-only] [--templates-dir <dir>] [--max-rounds N] [--extraction-timeout-ms N] [--gateway-timeout-ms N]
 //     [--config key=value] [--answer-variant name:key=value,...] [--maintain none|consolidate|verify|consolidate+verify]
+//     [--answers-only] [--variants-only] [--retrieval-only] [--answer-model ID] [--answer-base URL] [--answer-key-file FILE]
 //     [--maintain-after n[,n...]|each] [--no-rejection-judge] [--label text]
 //
 // `--engine-url` accepts an ordered comma-separated shard list; `each` maintains at every existing checkpoint.
@@ -20,11 +21,12 @@ import { createHash, randomBytes } from "node:crypto";
 import { appendFile, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { promisify } from "node:util";
+import { promisify, isDeepStrictEqual } from "node:util";
 
 import { bloatMetrics } from "./bloat.mjs";
 import { checkRestored } from "./corruptions.mjs";
 import { loadCases } from "./cases.mjs";
+import { answerOptions, gatewayOptions } from "./answerVariants.mjs";
 import { firstLine } from "./lab.mjs";
 import { openStatus } from "./status.mjs";
 
@@ -86,6 +88,7 @@ export function assertResumeCompatible(previous, facts) {
 /** @param {string[]} argv */
 export function parseArguments(argv) {
   const options = {
+    answerModel: "", answerBase: "", answerKeyFile: "", answersOnly: false, retrievalOnly: false, variantsOnly: false,
     set: "", split: "", data: "", out: "", engineUrl: "", engineKeyFile: "", databaseUrlFile: "", deepseekKeyFile: "",
     arm: "product", only: "", maxSessions: 0, concurrency: 3, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
     config: {}, answerVariants: [], maintain: "none", maintainAfter: [], rejectionJudge: true, label: "",
@@ -93,6 +96,7 @@ export function parseArguments(argv) {
   };
   /** @type {Record<string, [keyof typeof options, "string" | "int"]>} */
   const valued = {
+    "--answer-model": ["answerModel", "string"], "--answer-base": ["answerBase", "string"], "--answer-key-file": ["answerKeyFile", "string"],
     "--set": ["set", "string"], "--split": ["split", "string"], "--data": ["data", "string"], "--out": ["out", "string"],
     "--engine-url": ["engineUrl", "string"], "--engine-key-file": ["engineKeyFile", "string"], "--database-url-file": ["databaseUrlFile", "string"],
     "--deepseek-key-file": ["deepseekKeyFile", "string"], "--arm": ["arm", "string"], "--only": ["only", "string"],
@@ -103,6 +107,9 @@ export function parseArguments(argv) {
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
+    if (flag === "--answers-only") { options.answersOnly = true; continue; }
+    if (flag === "--variants-only") { options.variantsOnly = true; continue; }
+    if (flag === "--retrieval-only") { options.retrievalOnly = true; options.answersOnly = true; continue; }
     if (flag === "--no-history-search") { options.historySearch = false; continue; }
     if (flag === "--no-rejection-judge") { options.rejectionJudge = false; continue; }
     if (["--config", "--answer-variant", "--maintain-after"].includes(flag)) {
@@ -142,12 +149,17 @@ export function parseArguments(argv) {
   if (options.arm === "product" && (!options.engineUrl || !options.engineKeyFile || !options.databaseUrlFile)) {
     throw new Error("arm product needs --engine-url, --engine-key-file and --database-url-file");
   }
-  if (!options.ingestOnly && !options.deepseekKeyFile) throw new Error("answering needs --deepseek-key-file (or pass --ingest-only)");
+  if (!options.ingestOnly && !options.retrievalOnly && !options.deepseekKeyFile && !options.answerKeyFile) throw new Error("answering needs --deepseek-key-file (or pass --ingest-only)");
   if (options.arm !== "product" && options.plantCorruptionsAfter >= 0) throw new Error("--plant-corruptions-after needs arm product");
   if (options.arm !== "product" && options.ingestOnly) throw new Error("--ingest-only has nothing to do without the engine (arm product)");
   if (!["none", "consolidate", "verify", "consolidate+verify"].includes(options.maintain)) throw new Error("--maintain is none, consolidate, verify or consolidate+verify");
   if (options.maintain !== "none" && options.maintainAfter.length === 0) throw new Error("--maintain needs --maintain-after");
   if (options.arm !== "product" && (options.answerVariants.length || options.maintain !== "none")) throw new Error("answer variants and maintenance need arm product");
+  answerOptions({ ...options.config, ...(options.answerModel ? { answerModel: options.answerModel } : {}), ...(options.answerBase ? { answerBase: options.answerBase } : {}) });
+  for (const variant of options.answerVariants) answerOptions({ ...options.config, ...variant.config });
+  if (options.retrievalOnly && (options.set !== "longmemeval-s" || options.split !== "dev")) throw new Error("retrieval diagnosis requires longmemeval-s dev");
+  if (options.answersOnly && (options.ingestOnly || options.maintain !== "none" || options.plantCorruptionsAfter >= 0)) throw new Error("answers-only cannot ingest or maintain");
+  if (options.variantsOnly && !options.answerVariants.length) throw new Error("variants-only needs an answer variant");
   options.engineUrls = engineUrlsOf(options.engineUrl);
   if (new Set(options.engineUrls).size !== options.engineUrls.length) throw new Error("engine URLs must be distinct");
   return options;
@@ -254,16 +266,39 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   /** @type {any} */ let answering = null;
   /** @type {any} */ let baselines = null;
   /** @type {any} */ let client = null;
-  if (!options.ingestOnly) {
+  const clients = new Map();
+  const baseAnswer = { ...answerOptions(options.config), ...(options.answerModel ? { answerModel: options.answerModel } : {}), ...(options.answerBase ? { answerBase: options.answerBase } : {}), ...(options.answerKeyFile ? { answerKeyFile: options.answerKeyFile } : {}) };
+  if (!options.ingestOnly && !options.retrievalOnly) {
     if (options.pluginTgz) process.env.CAPSULE_PROVING_PLUGIN_TGZ = path.resolve(options.pluginTgz);
     if (options.arm === "product" && !process.env.CAPSULE_PROVING_PLUGIN_TGZ) throw new Error("arm product answers with the plugin's profile block: pass --plugin-tgz");
     answering = dependencies.answering ?? await import(pathToFileURL(path.join(here, "answerer.mjs")).href);
     if (options.arm === "keyword") baselines = await import(pathToFileURL(path.join(here, "baselines.mjs")).href);
-    const { createDeepSeekClient } = await import(pathToFileURL(path.join(here, "deepseek.mjs")).href);
-    client = dependencies.client ?? createDeepSeekClient({ keyFile: path.resolve(options.deepseekKeyFile) });
+    const { createDeepSeekClient, createOpenAICompatibleClient } = await import(pathToFileURL(path.join(here, "deepseek.mjs")).href);
+    const makeClient = (selected) => {
+      const qwen = /^qwen/.test(selected.answerModel ?? "");
+      return (qwen ? createOpenAICompatibleClient : createDeepSeekClient)({
+        keyFile: selected.answerKeyFile ?? (qwen ? "/srv/evimed/secrets/dashscope.api-key" : path.resolve(options.deepseekKeyFile)),
+        model: selected.answerModel ?? "deepseek-flash", thinking: selected.thinking ?? "disabled",
+        baseURL: selected.answerBase ?? (qwen ? "https://dashscope.aliyuncs.com/compatible-mode/v1" : "https://api.deepseek.com"),
+        timeoutMs: 300_000,
+      });
+    };
+    client = dependencies.client ?? makeClient(baseAnswer);
+    for (const variant of options.answerVariants) clients.set(variant.name, dependencies.clients?.[variant.name] ?? (dependencies.client && !variant.config.answerModel && !variant.config.thinking ? dependencies.client : makeClient({ ...baseAnswer, ...answerOptions(variant.config) })));
   }
 
+  const retrievalRows = [];
+  let retrieval = null, diagnosticGold = null;
+  if (options.retrievalOnly) {
+    retrieval = await import("./retrieval.mjs");
+    const { loadGold } = await import("./score.mjs");
+    diagnosticGold = new Map((await (dependencies.loadGold ?? loadGold)(options.data, options)).map(entry => [entry.caseId, entry]));
+  }
   const previous = await readJson(path.join(out, "run.json"));
+  for (const variant of options.answerVariants) {
+    const held = previous?.answerVariants?.find(v => v.name === variant.name);
+    if (held && !isDeepStrictEqual(held.config, variant.config)) throw new Error(`answer variant ${variant.name} changed: use another name`);
+  }
   assertResumeCompatible(previous, { ...options, engine: options.arm === "product" ? { urls: options.engineUrls } : null });
   /** @type {any[]} */ const labs = [];
   /** @type {any} */ let lab = null;
@@ -277,7 +312,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
         databaseUrlFile: path.resolve(options.databaseUrlFile), historySearch: options.historySearch,
         deepseekKeyFile: options.deepseekKeyFile ? path.resolve(options.deepseekKeyFile) : null, commitEvery: options.commitEvery,
         extractionTimeoutMs: options.extractionTimeoutMs, gatewayTimeoutMs: options.gatewayTimeoutMs,
-        configOverrides: options.config, answerVariants: options.answerVariants, rejectionJudge: options.rejectionJudge,
+        configOverrides: gatewayOptions(options.config), answerVariants: options.answerVariants.map(v => ({ ...v, config: gatewayOptions(v.config) })), rejectionJudge: options.rejectionJudge,
       }));
     } catch (error) { await Promise.all(labs.map((entry) => entry.close())); throw error; }
     lab = labs[0];
@@ -299,16 +334,17 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     flags: { historySearch: options.arm === "product" ? options.historySearch : false, commitEvery: options.commitEvery, plantCorruptionsAfter: options.plantCorruptionsAfter >= 0 ? options.plantCorruptionsAfter : null,
       consolidation: "manual-only", rejectionJudge: Boolean(lab?.config.nativeMemoryRejectionJudgeEnabled), gatewayCommitsPerHour: 0,
       gatewayTimeoutMs: options.gatewayTimeoutMs, capsuleSearch: false, config: options.config, maintain: options.maintain, maintainAfter: options.maintainAfter },
-    answerVariants: options.answerVariants.map((variant) => ({ ...variant, flags: { config: { ...options.config, ...variant.config } } })), label: options.label,
+    answerVariants: options.answerVariants.map((variant) => ({ ...variant, model: { answer: clients.get(variant.name)?.model ?? null, thinking: clients.get(variant.name)?.thinking ?? null, answerJudgeSameFamily: /^qwen/.test(clients.get(variant.name)?.model ?? "") }, flags: { config: { ...options.config, ...variant.config } } })), label: options.label,
+    answerOptions: baseAnswer,
     model: { answer: client?.model ?? null, thinking: client?.thinking ?? null, extraction: options.arm === "product" ? "deepseek-flash (lab engine ov.conf, provider direct)" : null },
     options: { only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, limitQuestions: options.limitQuestions || null,
-      ingestOnly: options.ingestOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, dataDir: path.resolve(options.data) },
+      ingestOnly: options.ingestOnly, answersOnly: options.answersOnly, retrievalOnly: options.retrievalOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, dataDir: path.resolve(options.data) },
     cases: cases.map((item) => item.caseId),
   };
   const runJson = previous ? { ...previous,
     engine: previous.engine ? { ...previous.engine, urls: options.engineUrls, shards: facts.engine.shards } : null,
     flags: { ...previous.flags, config: facts.flags.config, maintain: facts.flags.maintain, maintainAfter: facts.flags.maintainAfter, rejectionJudge: facts.flags.rejectionJudge },
-    answerVariants: facts.answerVariants, label: options.label || previous.label || "",
+    answerVariants: [...(previous.answerVariants ?? []).filter(old => !facts.answerVariants.some(v => v.name === old.name)), ...facts.answerVariants], label: options.label || previous.label || "",
     resumes: [...(previous.resumes ?? []), { at: startedAt, commit: git.commit, dirty: git.dirty, runnerDigest: facts.runnerDigest, options: facts.options, flags: facts.flags, answerVariants: facts.answerVariants, label: facts.label }] }
     : { runId, startedAt, ...facts, resumes: [] };
   await writeAtomic(runFile, `${JSON.stringify(runJson, null, 2)}\n`);
@@ -347,6 +383,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
         const ahead = sessions.slice(ingested).filter((session) => status.isDone(ingestKey(session)));
         if (ahead.length) throw new Error(`STATUS records sessions done past the first one not done (${ahead[0].sessionId}): ingestion order is broken`);
       }
+      if (lab && options.answersOnly && ingested !== sessions.length) throw new Error("answers_only_incomplete_ingestion: refusing to ingest");
       const resumedAt = ingested;
       stats.skipped = ingested;
       /** @type {Map<string, any>} */
@@ -423,7 +460,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
             await writeAtomic(path.join(caseDir, "corruptions-restored.json"), `${JSON.stringify({ afterSession: checkpoint, at: new Date().toISOString(), results: checkRestored(after.files, planted.applied, list.filter((entry) => planted.applied.some((applied) => applied.id === entry.id))) }, null, 2)}\n`);
           }
           const snapKey = `${item.caseId}/snapshot/${checkpoint}`;
-          if (!status.isDone(snapKey) || checkpointChanged) {
+          if (!options.retrievalOnly && (!status.isDone(snapKey) || checkpointChanged)) {
             if (resumedAt > checkpoint) await fail(snapKey, "stale_checkpoint: ingestion has moved past this checkpoint");
             else {
               let lastError = null;
@@ -442,7 +479,20 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
           }
         } else ingested = checkpoint;
         for (const question of questions.filter((entry) => entry.afterSession === checkpoint)) {
-          for (const variant of [null, ...options.answerVariants]) {
+          if (options.retrievalOnly) {
+            const entry = diagnosticGold.get(item.caseId);
+            if (!entry) throw new Error("retrieval_gold_missing");
+            const file = path.join(caseDir, "retrieval.json");
+            let row = await readJson(file);
+            if (!row || row.qid !== question.qid || row.results.some(r => r.isError)) {
+              row = await retrieval.diagnoseQuestion({ entry, item, question, memory: lab.memoryFor(user), lab, user });
+              await writeAtomic(file, `${JSON.stringify(row, null, 2)}\n`);
+            }
+            retrievalRows.push(row);
+            await status.markDone(`${item.caseId}/retrieval/${question.qid}`, `limits=8,20`);
+            continue;
+          }
+          for (const variant of [...(options.variantsOnly ? [] : [null]), ...options.answerVariants]) {
             const key = `${item.caseId}/answer${variant ? `.${variant.name}` : ""}/${question.qid}`;
             if (status.isDone(key)) continue;
             if (lab && resumedAt > checkpoint) { await fail(key, "stale_checkpoint: ingestion has moved past this question's checkpoint"); continue; }
@@ -453,6 +503,8 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
               memory = memories.get(projectKey);
             } else if (options.arm === "keyword") memory = baselines.createTranscriptIndex(sessions.slice(0, checkpoint));
             let record;
+            const selectedClient = variant ? clients.get(variant.name) : client;
+            const selectedOptions = { ...baseAnswer, ...answerOptions(variant?.config ?? {}) };
             try {
               if (Array.isArray(question.probe)) {
                 // A probe is a direct tool call, with no model: what the memory surface returns for a query (the secret red line reads it).
@@ -468,7 +520,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
                   usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: Date.now() - started };
               } else
               record = await answering.answerQuestion({ question: question.text, asOf: question.asOf, arm: options.arm, memory, materials: question.materials ?? [],
-                client, maxRounds: options.maxRounds, caseId: item.caseId, qid: question.qid, project: question.project ?? null });
+                ...selectedOptions, sessions: sessions.slice(0, checkpoint), client: selectedClient, maxRounds: options.maxRounds, caseId: item.caseId, qid: question.qid, project: question.project ?? null });
             } catch (error) {
               record = { qid: question.qid, caseId: item.caseId, arm: options.arm, asOf: question.asOf, question: question.text, answer: "", opening: { profileBlock: null, residentBlock: null },
                 toolCalls: [], rounds: 0, model: client?.model ?? null, usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: 0, error: `runner: ${errorLine(error)}` };
@@ -481,7 +533,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
           }
         }
       }
-      if (lab) await writeAtomic(path.join(caseDir, "bloat.json"), `${JSON.stringify(await bloat(), null, 2)}\n`);
+      if (lab && !options.retrievalOnly) await writeAtomic(path.join(caseDir, "bloat.json"), `${JSON.stringify(await bloat(), null, 2)}\n`);
     } catch (error) {
       stats.failures += 1;
       stats.stopped = errorLine(error);
@@ -515,6 +567,22 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
         }
       } finally { await Promise.all(labs.map((entry) => entry.close().catch(() => {}))); }
     }
+  }
+  if (!options.ingestOnly && !options.retrievalOnly) {
+    const latest = await readJson(runFile);
+    latest.answerStats ??= {};
+    for (const variant of options.answerVariants) {
+      const records = (await Promise.all(cases.map(item => readJsonl(path.join(out, "cases", item.caseId, `answers.${variant.name}.jsonl`))))).flat();
+      latest.answerStats[variant.name] = { questions: records.length, errors: records.filter(r => r.error).length,
+        truncatedQuestions: records.filter(r => r.fullContext?.truncated).length,
+        models: [...new Set(records.map(r => r.model?.resolvedModel ?? r.model?.name).filter(Boolean))] };
+    }
+    await writeAtomic(runFile, `${JSON.stringify(latest, null, 2)}\n`);
+  }
+  if (options.retrievalOnly) {
+    const report = retrieval.retrievalReport(retrievalRows, { runId, expectedQuestions: cases.reduce((n, c) => n + c.questions.length, 0) });
+    await writeAtomic(path.join(out, "retrieval.json"), `${JSON.stringify(report, null, 2)}\n`);
+    process.stdout.write(retrieval.summaryText(report) + "\n");
   }
   const wall = Math.round((Date.now() - wallStart) / 1000);
   process.stdout.write(`total ${cases.length} case(s): sessions ${totals.sessions} (+${totals.skipped} done earlier), extraction ${kilo(totals.extraction.prompt)}/${kilo(totals.extraction.completion)} tok, `
