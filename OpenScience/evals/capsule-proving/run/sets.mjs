@@ -244,8 +244,10 @@ export async function loadG9({ split = 'dev', dataDir, only } = {}) {
         return { afterMessage: a.afterMessage, kind, title: a.title ?? '', text: a.text };
       }) };
     });
+    // The question is asked inside the final session, so that session's material is in front of the answering model when it is asked.
+    const inContext = (rawSessions.at(-1)?.attachments ?? []).map(({ kind, title, text }) => ({ kind, title, text }));
     return makeCase({ caseId: it.itemId, set: 'g9', split, userKey: it.itemId, rawSessions,
-      rawQuestions: [plainQuestion(it.question)], extra: { itemId: it.itemId, itemKind: it.kind } });
+      rawQuestions: [{ ...plainQuestion(it.question), ...(inContext.length ? { materials: inContext } : {}) }], extra: { itemId: it.itemId, itemKind: it.kind } });
   }), only);
 }
 

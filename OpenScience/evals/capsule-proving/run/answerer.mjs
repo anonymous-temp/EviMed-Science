@@ -95,13 +95,15 @@ export async function answerQuestion({ question, asOf, arm, memory, materials = 
           if (!Array.isArray(result?.blocks) || !result.blocks.every((block) => typeof block === "string")) throw fail("invalid_tool_result", "Memory tool did not return text blocks");
           trace.blocks = result.blocks;
           trace.isError = Boolean(result.isError);
-          if (trace.isError) throw fail("tool_error", trace.blocks.join("\n\n") || "Memory tool failed");
-          messages.push({ role: "tool", tool_call_id: call.id, name: trace.name, content: trace.blocks.join("\n\n") });
+          // A tool's own error (a path that does not exist, a refused argument) goes back to the model as the tool's result, as an MCP
+          // client hands it over; the model reads it and goes on. Only a failure of the model call itself ends the question.
+          messages.push({ role: "tool", tool_call_id: call.id, name: trace.name, content: `${trace.isError ? "Error: " : ""}${trace.blocks.join("\n\n") || (trace.isError ? "the tool failed" : "")}` });
         } catch (error) {
           trace.isError = true;
           const diagnostic = firstLine(client?.redact ? client.redact(error) : error);
           trace.blocks = [diagnostic];
-          roundError ??= fail(error?.code ?? "tool_error", diagnostic);
+          if (final) roundError ??= fail(error?.code ?? "tool_error", diagnostic);
+          else messages.push({ role: "tool", tool_call_id: call.id ?? `call_${record.toolCalls.length}`, name: trace.name, content: `Error: ${diagnostic}` });
         } finally { trace.ms = Math.round(performance.now() - toolStarted); }
       }
       if (roundError) throw roundError;

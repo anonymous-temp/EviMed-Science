@@ -139,7 +139,7 @@ productTest("plugin namespaces are isolated across users and empty profiles stay
   assert.deepEqual(client.requests[0].messages.map((m) => m.role), ["system", "user"]);
 });
 
-productTest("tool exceptions, isError results and invalid arguments produce error records", async () => {
+productTest("a tool's own failure goes back to the model as the tool result and the question is still answered", async () => {
   for (const mode of ["throws", "isError", "json", "unknown"]) {
     const memory = fakeMemory();
     memory.callTool = async () => {
@@ -148,20 +148,21 @@ productTest("tool exceptions, isError results and invalid arguments produce erro
     };
     const call = tool(mode === "unknown" ? "not_exposed" : "search", { query: "style" });
     if (mode === "json") call.function.arguments = "{";
-    const record = await answerQuestion({ ...options, memory, client: fakeClient([reply(null, [call])]) });
-    assert.equal(record.answer, "");
-    assert.match(record.error, /^(tool_error|invalid_tool_args|unknown_tool): /);
-    assert.ok(!record.error.includes("\n"));
+    const client = fakeClient([reply(null, [call]), reply("Answered without it.")]);
+    const record = await answerQuestion({ ...options, memory, client });
+    assert.equal(record.answer, "Answered without it.");
+    assert.equal(record.error, undefined);
     assert.equal(record.toolCalls[0].isError, true);
+    assert.equal(record.rounds, 2);
   }
 });
-
 productTest("all returned tool calls are traced even when the first fails", async () => {
-  const client = fakeClient([reply(null, [tool("not_exposed", {}), tool("forget", { uri: "viking://test/file" })])]);
+  const client = fakeClient([reply(null, [tool("not_exposed", {}), tool("forget", { uri: "viking://test/file" })]), reply("Done.")]);
   const record = await answerQuestion({ ...options, memory: fakeMemory(), client });
   assert.equal(record.toolCalls.length, 2);
+  assert.equal(record.toolCalls[0].isError, true);
   assert.equal(record.toolCalls[1].isError, false);
-  assert.match(record.error, /^unknown_tool: /);
+  assert.equal(record.answer, "Done.");
 });
 
 productTest("profile archive digest mismatch is refused before import", async (t) => {
@@ -365,9 +366,11 @@ productTest("tool failure diagnostics redact the client's key as well as model e
   const { keyFile, secret } = await credential(t);
   const memory = fakeMemory();
   memory.callTool = async () => { throw new Error(`Tool failed ${secret}\nprivate trace`); };
-  const client = createDeepSeekClient({ keyFile, fetch: async () => httpReply({ choices: [{ message: reply(null, [tool("search", { query: "style" })]).message }] }) });
+  let calls = 0;
+  const client = createDeepSeekClient({ keyFile, fetch: async () => httpReply({ choices: [{ message: (calls++ === 0 ? reply(null, [tool("search", { query: "style" })]) : reply("No record.")).message }] }) });
   const record = await answerQuestion({ ...options, memory, client });
-  assert.equal(record.error, "tool_error: Tool failed [redacted]");
+  assert.deepEqual(record.toolCalls[0].blocks, ["Tool failed [redacted]"]);
+  assert.equal(record.answer, "No record.");
   assert.ok(!JSON.stringify(record).includes(secret));
 });
 

@@ -317,6 +317,19 @@ async function main() {
           } else if (options.arm === "keyword") memory = baselines.createTranscriptIndex(sessions.slice(0, checkpoint));
           let record;
           try {
+            if (Array.isArray(question.probe)) {
+              // A probe is a direct tool call, with no model: what the memory surface returns for a query (the secret red line reads it).
+              const started = Date.now();
+              const toolCalls = [];
+              if (memory && lab) for (const call of question.probe) {
+                const at = Date.now();
+                const result = await memory.callTool(call.name, call.args ?? {});
+                toolCalls.push({ round: 0, name: call.name, args: call.args ?? {}, blocks: result.blocks, isError: result.isError, ms: Date.now() - at });
+              }
+              record = { qid: question.qid, caseId: item.caseId, arm: options.arm, asOf: question.asOf, question: "", answer: "", probe: true,
+                opening: { profileBlock: null, residentBlock: null }, toolCalls, rounds: 0, model: null,
+                usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: Date.now() - started };
+            } else
             record = await answering.answerQuestion({ question: question.text, asOf: question.asOf, arm: options.arm, memory, materials: question.materials ?? [],
               client, maxRounds: options.maxRounds, caseId: item.caseId, qid: question.qid, project: question.project ?? null });
           } catch (error) {

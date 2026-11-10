@@ -7,6 +7,8 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
+import { SET_LOADERS } from "./sets.mjs";
+
 /**
  * @typedef {{ id: string, name: string } | null} CaseProject
  * @typedef {{ role: "user"|"assistant", text: string, at?: string }} CaseMessage
@@ -89,8 +91,8 @@ export function normalizeSyntheticUser(raw, { set, split, dirName }) {
 export function caseIssues(item) {
   const issues = [];
   const where = item?.caseId ?? "?";
-  if (!item || typeof item.caseId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(item.caseId)) issues.push(`${where}: caseId must be 1-64 of [A-Za-z0-9_-]`);
-  if (typeof item?.userKey !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(item.userKey)) issues.push(`${where}: userKey must be 1-64 of [A-Za-z0-9_-]`);
+  if (!item || typeof item.caseId !== "string" || !/^[A-Za-z0-9_:.-]{1,96}$/.test(item.caseId)) issues.push(`${where}: caseId must be 1-96 of [A-Za-z0-9_:.-]`);
+  if (typeof item?.userKey !== "string" || !/^[A-Za-z0-9_:.-]{1,96}$/.test(item.userKey)) issues.push(`${where}: userKey must be 1-96 of [A-Za-z0-9_:.-]`);
   const sessions = Array.isArray(item?.sessions) ? item.sessions : [];
   const ids = new Set();
   sessions.forEach((session, index) => {
@@ -110,7 +112,7 @@ export function caseIssues(item) {
     qids.add(question?.qid);
     if (!Number.isInteger(question?.afterSession) || question.afterSession < 0 || question.afterSession > sessions.length) issues.push(`${where}: ${question?.qid} afterSession is not 0..${sessions.length}`);
     if (!isoOk(question?.asOf)) issues.push(`${where}: ${question?.qid} has no ISO asOf`);
-    if (!String(question?.text ?? "").trim()) issues.push(`${where}: ${question?.qid} has no text`);
+    if (!String(question?.text ?? "").trim() && !Array.isArray(question?.probe)) issues.push(`${where}: ${question?.qid} has no text`);
   }
   return issues;
 }
@@ -147,6 +149,8 @@ async function loadSyntheticUsers({ split, dataDir, set }) {
 }
 
 registerSet("synthetic-users", loadSyntheticUsers);
+// Every other development and public set (`sets.mjs`), under the name its loader is listed by.
+for (const [name, loader] of Object.entries(SET_LOADERS)) if (!registry.has(name)) registerSet(name, loader);
 
 /** @param {string | readonly string[] | null | undefined} only */
 function onlyList(only) {
