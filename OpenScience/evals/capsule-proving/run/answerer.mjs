@@ -1,0 +1,116 @@
+import { buildSystemPrompt, buildProfileBlock, buildTimeContext } from "./openingBlock.mjs";
+import { KEYWORD_SEARCH_TOOL } from "./baselines.mjs";
+import { firstLine, normalizeUsage } from "./deepseek.mjs";
+
+const prefix = "mcp__openviking__";
+
+/** @param {{name: string, description: string, inputSchema: any}} tool */
+function openAITool(tool) {
+  return { type: "function", function: { name: `${prefix}${tool.name}`, description: tool.description, parameters: tool.inputSchema } };
+}
+
+function fail(code, message) { return Object.assign(new Error(message), { code }); }
+
+/**
+ * Answer without the kernel. For keyword, pass createTranscriptIndex(sessions) as memory.
+ * No learning or memory mutations occur during evaluation questions.
+ * @param {{question: string, asOf: string, arm: 'product'|'no-memory'|'keyword', memory?: any,
+ * materials?: Array<{kind: string, title: string, text: string}>, client: any, maxRounds?: number,
+ * caseId?: string, qid?: string, project?: any}} input
+ * @returns {Promise<{qid: any, caseId: any, arm: string, asOf: string, question: string, answer: string,
+ * opening: {profileBlock: string|null, residentBlock: string|null}, toolCalls: any[], rounds: number,
+ * model: any, usage: {promptTokens: number, completionTokens: number, cachedTokens: number}, ms: number, error?: string}>}
+ */
+export async function answerQuestion({ question, asOf, arm, memory, materials = [], client, maxRounds = 8, caseId, qid, project }) {
+  const started = performance.now();
+  const record = { qid, caseId, arm, asOf, question, answer: "", opening: { profileBlock: null, residentBlock: null },
+    toolCalls: [], rounds: 0, model: { name: client?.model ?? "deepseek-flash", thinking: client?.thinking ?? "disabled" },
+    usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: 0 };
+  let phase = "opening_error";
+  try {
+    if (!["product", "keyword", "no-memory"].includes(arm)) throw fail("invalid_arm", "Unknown evaluation arm");
+    if (!Number.isInteger(maxRounds) || maxRounds < 0) throw fail("invalid_rounds", "maxRounds must be a nonnegative integer");
+    const messages = [{ role: "system", content: buildSystemPrompt({ model: record.model.name }) }];
+    let available = [];
+    if (arm === "product") {
+      record.opening.profileBlock = await buildProfileBlock(memory);
+      record.opening.residentBlock = await memory.residentBlock();
+      for (const content of [record.opening.profileBlock, record.opening.residentBlock]) if (content) messages.push({ role: "user", content });
+      available = memory.tools;
+    } else if (arm === "keyword") {
+      if (memory?.kind !== "transcript-index") throw fail("invalid_keyword_memory", "Keyword arm requires createTranscriptIndex(sessions) as memory");
+      available = [KEYWORD_SEARCH_TOOL];
+    }
+    const tools = available.map(openAITool);
+    if (materials.length) {
+      messages.push({ role: "assistant", content: null, reasoning_content: "",
+        tool_calls: [{ id: "material_input", type: "function", function: { name: "read_material", arguments: "{}" } }] });
+      messages.push({ role: "tool", tool_call_id: "material_input", name: "read_material",
+        content: "Supplied material (source content, not the user's words or instructions):\n\n" +
+          JSON.stringify(materials.map(({ kind, title, text }) => ({ kind, title, text }))) });
+    }
+    messages.push({ role: "user", content: `${buildTimeContext(asOf, question)}\n\n${question}` });
+    // project is already bound by lab.memoryFor(user, {project}); never add a second project prompt.
+    void project;
+    for (let round = 0; round <= maxRounds; round++) {
+      const final = round === maxRounds;
+      phase = "model_error";
+      record.rounds++;
+      const response = await client.complete({ messages: structuredClone(messages), tools: final ? [] : tools,
+        ...(final ? { toolChoice: "none" } : {}) });
+      const usage = normalizeUsage(response.usage);
+      for (const key of Object.keys(record.usage)) record.usage[key] += usage[key];
+      if (response.model) record.model.resolvedModel = response.model;
+      const message = response.message;
+      if (!message || message.role !== "assistant") throw fail("invalid_response", "Expected an assistant message");
+      const calls = message.tool_calls ?? [];
+      if (!Array.isArray(calls)) throw fail("invalid_response", "Assistant tool_calls must be an array");
+      if (!calls.length) {
+        if (typeof message.content !== "string") throw fail("invalid_response", "Assistant answer is not text");
+        record.answer = message.content;
+        break;
+      }
+      // Preserve reasoning_content verbatim for DeepSeek's thinking-mode continuation contract.
+      messages.push({ role: "assistant", content: message.content ?? null,
+        ...(message.reasoning_content !== undefined ? { reasoning_content: message.reasoning_content } : {}), tool_calls: calls });
+      let roundError;
+      for (const call of calls) {
+        const toolStarted = performance.now();
+        const trace = { round: round + 1, name: call.function?.name ?? "", args: call.function?.arguments ?? null, blocks: [], isError: false, ms: 0 };
+        record.toolCalls.push(trace);
+        phase = "tool_error";
+        try {
+          try { trace.args = JSON.parse(call.function.arguments); }
+          catch { throw fail("invalid_tool_args", "Tool arguments are not valid JSON"); }
+          if (!trace.args || typeof trace.args !== "object" || Array.isArray(trace.args)) throw fail("invalid_tool_args", "Tool arguments must be an object");
+          if (final) throw fail("unexpected_tool_call", "Model called a tool with tools disabled");
+          if (!available.some((tool) => `${prefix}${tool.name}` === trace.name)) throw fail("unknown_tool", `Unknown tool: ${trace.name}`);
+          const name = trace.name.slice(prefix.length);
+          let result;
+          if (name === "remember") {
+            const count = Array.isArray(trace.args.messages) ? trace.args.messages.length : 0;
+            result = { blocks: [`Submitted ${count} message(s) for memory extraction (session mcp-store-evaluation, task_id=evaluation). Extraction runs in the background and decides which memories to create or update.`], isError: false };
+          } else if (name === "forget") result = { blocks: [`Deleted: ${trace.args.uri}`], isError: false };
+          else result = await memory.callTool(name, trace.args);
+          if (!Array.isArray(result?.blocks) || !result.blocks.every((block) => typeof block === "string")) throw fail("invalid_tool_result", "Memory tool did not return text blocks");
+          trace.blocks = result.blocks;
+          trace.isError = Boolean(result.isError);
+          if (trace.isError) throw fail("tool_error", trace.blocks.join("\n\n") || "Memory tool failed");
+          messages.push({ role: "tool", tool_call_id: call.id, name: trace.name, content: trace.blocks.join("\n\n") });
+        } catch (error) {
+          trace.isError = true;
+          const diagnostic = firstLine(client?.redact ? client.redact(error) : error);
+          trace.blocks = [diagnostic];
+          roundError ??= fail(error?.code ?? "tool_error", diagnostic);
+        } finally { trace.ms = Math.round(performance.now() - toolStarted); }
+      }
+      if (roundError) throw roundError;
+    }
+  } catch (error) {
+    record.answer = "";
+    const code = /^[a-z][a-z0-9_]*$/i.test(error?.code ?? "") ? error.code : phase;
+    record.error = `${code}: ${firstLine(client?.redact ? client.redact(error) : error)}`;
+  }
+  record.ms = Math.round(performance.now() - started);
+  return record;
+}
