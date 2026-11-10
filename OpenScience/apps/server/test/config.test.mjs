@@ -11,6 +11,18 @@ import { parseByteSize } from "../src/runtimeManager.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
+test("the pasted-instruction attribution experiment defaults off and supports environment and explicit overrides", () => {
+  const key = "OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED";
+  const saved = process.env[key];
+  try {
+    delete process.env[key];
+    assert.equal(loadConfig({ rootDir: repoRoot }).memoryPastedInstructionCheckEnabled, false);
+    process.env[key] = "true";
+    assert.equal(loadConfig({ rootDir: repoRoot }).memoryPastedInstructionCheckEnabled, true);
+    assert.equal(loadConfig({ rootDir: repoRoot, memoryPastedInstructionCheckEnabled: false }).memoryPastedInstructionCheckEnabled, false);
+  } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
+});
+
 test('opening-by-use defaults off, derives today’s character size, and exposes in-process experiment overrides', () => {
   const config = loadConfig({ rootDir: repoRoot });
   assert.equal(config.memoryOpeningByUseEnabled, false);

@@ -52,8 +52,11 @@ export const NATIVE_SKIP_REASONS = Object.freeze([
 export const NATIVE_CONSOLIDATION_OUTCOMES = Object.freeze(["not_due", "unchanged", "too_few", "held_back", "submitted", "completed", "failed", "lost"]);
 /** What a finished consolidation did to the account's files. */
 export const NATIVE_CONSOLIDATION_CHANGES = Object.freeze(["added", "updated", "deleted"]);
-/** What the deterministic after-the-fact checks did, by why: `rejected_line` a verbatim repeat of a line the person removed, `rejected_reworded` a line that contains one, `rejected_judged` one a model judged to say the same. */
-export const NATIVE_CHECK_ACTIONS = Object.freeze(["identifier_shape", "platform_text", "rejected_line", "rejected_reworded", "rejected_judged", "recent_work_default_project"]);
+/** After-the-fact removals by reason. Attribution attempts are counted separately from removals. */
+export const NATIVE_CHECK_ACTIONS = Object.freeze(["identifier_shape", "platform_text", "rejected_line", "rejected_reworded", "rejected_judged", "recent_work_default_project",
+  "pasted_instruction"]);
+/** Outcomes of the optional personal-line attribution check; an unsuccessful check keeps the line. */
+export const NATIVE_PASTED_INSTRUCTION_CHECK_OUTCOMES = Object.freeze(["asked", "failed", "unavailable", "limited", "stale"]);
 /** What became of a call to the model that judges whether a line repeats one the person removed: asked, failed (unreachable, or not the one shape), over the account's day, or no model here. */
 export const NATIVE_REJECTION_JUDGE_OUTCOMES = Object.freeze(["asked", "failed", "over_budget", "unavailable"]);
 /** What became of the lines that were near a removed one: held by containment (code), judged the same or not (the model), or kept because the judge could not say. */
@@ -102,6 +105,7 @@ const rejectionLines = table(NATIVE_REJECTION_LINE_VERDICTS);
 const consolidations = table(NATIVE_CONSOLIDATION_OUTCOMES);
 const consolidatedFiles = table(NATIVE_CONSOLIDATION_CHANGES);
 const checkActions = table(NATIVE_CHECK_ACTIONS);
+const pastedInstructionChecks = table(NATIVE_PASTED_INSTRUCTION_CHECK_OUTCOMES);
 const workerWrites = table(NATIVE_WORKER_WRITES);
 const workerPasses = table(["completed", "failed"]);
 const observationOutcomes = table(NATIVE_OBSERVATION_OUTCOMES);
@@ -171,8 +175,10 @@ export function recordNativeConsolidatedFiles({ added = 0, updated = 0, deleted 
 export function recordRejectionJudge(outcome) { bump(rejectionJudge, outcome); }
 /** Lines that were near a removed one, by what became of them. @param {string} verdict @param {number} [count] */
 export function recordRejectionLines(verdict, count = 1) { bump(rejectionLines, verdict, count); }
-/** A memory the deterministic checks deleted or restored, by why. @param {string} reason */
+/** An after-the-fact removal, by its bounded reason code. @param {string} reason */
 export function recordNativeCheck(reason) { bump(checkActions, reason); }
+/** An attribution attempt, separate from the lines actually removed. @param {string} outcome */
+export function recordPastedInstructionCheck(outcome) { bump(pastedInstructionChecks, outcome); }
 /** @param {string} what */
 export function recordNativeWrite(what) { bump(workerWrites, what); }
 /** One pass of the worker. @param {boolean} ok */
@@ -202,7 +208,7 @@ export function recordMapReplaced(outcome) { bump(mapReplaced, outcome); }
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced, verificationJudge, verificationLines]) {
+  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, pastedInstructionChecks, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced, verificationJudge, verificationLines]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -215,7 +221,7 @@ export function nativeMemoryCounters() {
     messages: plain(messages), masked: plain(masked), commits: plain(commits), withheld: plain(withheld), refusals: plain(refusals),
     upstreamFailures: plain(upstreamFailures), ledgerFailures: plain(ledgerFailures), turnCommits: plain(turnCommits), workerCommits: plain(workerCommits),
     workerOperations: plain(workerOperations), extractionOutcomes: plain(extractionOutcomes), skippedOperations: plain(skippedOperations),
-    rejectionJudge: plain(rejectionJudge), rejectionLines: plain(rejectionLines), consolidations: plain(consolidations), consolidatedFiles: plain(consolidatedFiles), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
+    rejectionJudge: plain(rejectionJudge), rejectionLines: plain(rejectionLines), consolidations: plain(consolidations), consolidatedFiles: plain(consolidatedFiles), checkActions: plain(checkActions), pastedInstructionChecks: plain(pastedInstructionChecks), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
     observationOutcomes: plain(observationOutcomes), resetSweeps: plain(resetSweeps), resetSweptFiles: plain(resetSweptFiles), extractionFailures: plain(extractionFailures),
     privacyDeletes: plain(privacyDeletes), policySyncs: plain(policySyncs), forgetDuplicates: plain(forgetDuplicates), recallNotes: plain(recallNotes), imports: plain(imports), mapReplaced: plain(mapReplaced), verificationJudge: plain(verificationJudge), verificationLines: plain(verificationLines),
   };
@@ -269,7 +275,9 @@ export function nativeMemoryMetricFamilies() {
     { name: "open_science_native_memory_consolidated_files_total", type: "counter", series: series(consolidatedFiles, "change"),
       help: "Memory files a finished consolidation added (a split), updated (a merge target, a compaction) and deleted (merged away); each is an overlay revision by the engine that the memory page can undo." },
     { name: "open_science_native_memory_checks_total", type: "counter", series: series(checkActions, "reason"),
-      help: "Memories the deterministic after-the-fact checks deleted or restored: an identifier shape, platform-injected text or a platform identifier, or a line the person had removed coming back verbatim." },
+      help: "After-the-fact memory removals by reason: identifier shapes, platform text, rejected repeats or an attributed material instruction." },
+    { name: "open_science_native_memory_pasted_instruction_checks_total", type: "counter", series: series(pastedInstructionChecks, "outcome"),
+      help: "Optional personal-line attribution checks: asked, failed, unavailable, limited, or a stale diff whose judgement was not applied. Unsuccessful checks keep the lines." },
     { name: "open_science_native_memory_writes_total", type: "counter", series: series(workerWrites, "what"),
       help: "What the native memory worker wrote besides revisions: project tags, source labels added to and removed from memory files, account registrations." },
     { name: "open_science_native_memory_passes_total", type: "counter", series: series(workerPasses, "outcome"),
