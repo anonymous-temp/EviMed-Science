@@ -35,6 +35,7 @@ import { MemorySettingsStore } from "../../../apps/server/src/memorySettings.mjs
 import { migrateMemorySettings } from "../../../apps/server/src/memorySettingsPersistence.mjs";
 import { defaultDeepSeekModel } from "../../../apps/server/src/modelGateway.mjs";
 import { NativeMemoryConsolidation } from "../../../apps/server/src/nativeMemoryConsolidation.mjs";
+import { nativeMemoryCounters } from "../../../apps/server/src/nativeMemoryMetrics.mjs";
 import { NativeMemoryOverlay } from "../../../apps/server/src/nativeMemoryOverlay.mjs";
 import { createRejectionJudge } from "../../../apps/server/src/nativeMemoryRejections.mjs";
 import { NativeMemoryStore } from "../../../apps/server/src/nativeMemoryStore.mjs";
@@ -52,7 +53,6 @@ import { projectContextLine } from "../../../packages/domain/index.mjs";
 export const DEFAULT_PROJECT_ID = "default";
 /** The tools that change memory: `memory.callTool` refuses them unless the memory object was opened with `readOnly: false`. */
 const WRITE_TOOLS = new Set(["remember", "forget"]);
-const DAY_MS = 24 * 60 * 60_000;
 const sleep = (/** @type {number} */ ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const isoOk = (/** @type {unknown} */ value) => typeof value === "string" && Number.isFinite(Date.parse(value));
 
@@ -330,6 +330,35 @@ export async function startLabGateways(shared, config, variants = []) {
   return { gateways, close: async () => { await Promise.all([...gateways.values()].map((gateway) => gateway.close())); } };
 }
 
+/** The same resident providers as the product composition root; the store owns scope/privacy filtering.
+ * @param {{config: any, memorySettings: any, nativeMemory: any}} parts
+ */
+export function createLabResidentProfiles({ config, memorySettings, nativeMemory }) {
+  return new ResidentProfiles({
+    config, store: memorySettings, capsules: null,
+    projectCard: (userId, projectId) => nativeMemory.residentCard(userId, projectId),
+    nativeFiles: (userId, projectId, limit) => nativeMemory.openingFiles(userId, projectId, limit),
+    nativeIndex: (userId, projectId) => nativeMemory.openingIndex(userId, projectId),
+  });
+}
+
+/** Advance the product's asynchronous explicit entry; retain every product result without translating it.
+ * @param {any} consolidation @param {string} userId
+ * @param {{mode?: string, pollMs?: number, timeoutMs?: number}} [options]
+ */
+export async function pollLabConsolidation(consolidation, userId, { mode = "merge", pollMs = 3_000, timeoutMs = 1_800_000 } = {}) {
+  const started = Date.now();
+  const results = [];
+  let outcome;
+  do {
+    if (results.length) await sleep(pollMs);
+    const result = await consolidation.consolidate(userId, { mode, force: true });
+    results.push(result);
+    outcome = typeof result === "string" ? result : result?.outcome;
+  } while (outcome === "submitted" && Date.now() - started < timeoutMs);
+  return { outcome, results };
+}
+
 /** Feature-detect the product method so older checkouts remain usable.
  * @param {any} consolidation @param {string} userId @param {any} [options]
  */
@@ -447,7 +476,8 @@ export async function openLab({
     const nativeMemory = new NativeMemoryStore({ sessions, overlay, memoryContexts: contexts, rejectionJudge: productRejectionJudge, ...(now ? { now } : {}), report: say });
     const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay, nativeMemory, memoryContexts: contexts, rejectionJudge: productRejectionJudge, now, report: say });
     const resources = new OpenVikingResources({ client });
-    const residentProfiles = new ResidentProfiles({ config, store: memorySettings, capsules: null, projectCard: (userId, projectId) => nativeMemory.residentCard(userId, projectId) });
+    const profilesFor = (selectedConfig) => createLabResidentProfiles({ config: selectedConfig, memorySettings, nativeMemory });
+    const residentProfiles = profilesFor(config);
 
     /** @param {string} userId @param {string} projectId */
     const projectRow = async (userId, projectId) => {
@@ -509,15 +539,13 @@ export async function openLab({
         engineSessionId: `dsh-${source.sessionId}`, at: isoOk(message?.created_at) ? Date.parse(message.created_at) : null })).learn,
     });
     worker.history = history;
+    worker.verification.history = history;
     nativeMemory.history = history;
 
-    // The consolidation's own clock, turned forward by `consolidate()` past its interval, hourly look and post-commit quiet
-    // (the test fixture's skew): the database writes the times it compares against with its own clock.
-    let skew = 0;
     /** @type {Map<string, { taskId: string, adds: number, updates: number, deletes: number, added: number, updated: number, deleted: number }[]>} */
     const consolidationTasks = new Map();
     const consolidation = new NativeMemoryConsolidation({
-      config, memorySettings, sessions, resources, overlay, now: () => new Date(Date.now() + skew), report: say,
+      config, memorySettings, sessions, resources, overlay, verification: worker.verification, now: () => new Date(), report: say,
       ingest: async (userId, task) => {
         const counts = await worker.ingestConsolidation(userId, task);
         const list = consolidationTasks.get(userId) ?? [];
@@ -779,7 +807,22 @@ export async function openLab({
           const texts = await Promise.all(batch.map((item) => sessions.read(user.userId, item.uri)));
           batch.forEach((item, position) => { files[/** @type {string} */ (item.rel)] = texts[position] ?? ""; });
         }
-        return { files, metrics: { files: Object.keys(files).length, chars: Object.values(files).reduce((sum, text) => sum + text.length, 0) } };
+        // Usage and the actual startup REST selection make the by-use experiment auditable.
+        const held = await overlay.files(user.userId);
+        const openingUsage = Object.fromEntries([...held.values()].map((file) => [memoryFileRel(file.uri, root),
+          { usedCount: file.usedCount, lastUsedAt: file.lastUsedAt }]).filter(([rel]) => rel));
+        let openingListing;
+        if (config.memoryOpeningByUseEnabled === true) {
+          const memory = lab.memoryFor(user);
+          openingListing = {};
+          for (const group of ["preferences", "entities"]) {
+            const response = await memory.fetchJSON(`/api/v1/fs/ls?uri=${encodeURIComponent(`${root}/${group}`)}&output=agent&recursive=true&abs_limit=512&node_limit=512`);
+            if (!response.ok) throw new Error(`opening listing failed: ${response.status}`);
+            openingListing[group] = response.result.filter((entry) => !entry.isDir).map((entry) => entry.rel_path ?? entry.name);
+          }
+        }
+        return { files, metrics: { files: Object.keys(files).length, chars: Object.values(files).reduce((sum, text) => sum + text.length, 0) },
+          openingUsage, ...(openingListing ? { openingListing } : {}) };
       },
 
       /**
@@ -789,8 +832,7 @@ export async function openLab({
       memoryFor(user, { project = null, variant = "", readOnly = true } = {}) {
         const selected = gatewayGroup.gateways.get(variant);
         if (!selected) throw new Error(`unknown answer variant ${variant}`);
-        const profiles = variant ? new ResidentProfiles({ config: selected.config, store: memorySettings, capsules: null,
-          projectCard: (userId, projectId) => nativeMemory.residentCard(userId, projectId) }) : residentProfiles;
+        const profiles = variant ? profilesFor(selected.config) : residentProfiles;
         // Reads share the same memory. With opening-by-use enabled, reads count as use, so variants are not independent.
         const named = project && project.id !== DEFAULT_PROJECT_ID ? project : null;
         const projectId = named?.id ?? DEFAULT_PROJECT_ID;
@@ -799,47 +841,36 @@ export async function openLab({
         const memoryClient = createMemoryClient({ base: selected.base, token: tokenFor(user.userId, projectId), readOnly, ready, timeoutMs: engineTimeoutMs * 2 });
         return {
           ...memoryClient,
+          config: selected.config,
           project: named,
-          /** The platform's resident block for this project (the project card), null in the default project. */
+          /** The product dispatch path, including native index and use-ranked files in the default project. */
           async residentBlock() {
             await ready;
-            if (!named) return null;
             const block = await profiles.forDispatch(user.userId, { projectId, sessionId: null, attended: true });
             return block.text ? block.text : null;
           },
         };
       },
 
-      /**
-       * One run of the product's consolidation for the account, past its interval, hourly look and quiet gates (a clock skew,
-       * as the test fixture turns it). `mode: "pass"` (default) follows the pass through every directory it walks;
-       * `mode: "tick"` asks once. Returns the outcome and the files that changed.
-       * @param {LabUser} user @param {{ mode?: "pass" | "tick", timeoutMs?: number }} [options]
+      /** Poll the product's explicit consolidation entry, preserving its mode and result history.
+       * @param {LabUser} user @param {{ mode?: string, timeoutMs?: number }} [options]
        */
-      async consolidate(user, { mode = "pass", timeoutMs = 1_800_000 } = {}) {
+      async consolidate(user, { mode = config.nativeMemoryConsolidationMode ?? "merge", timeoutMs = 1_800_000 } = {}) {
         const started = Date.now();
-        skew += 8 * DAY_MS;
         consolidationTasks.delete(user.userId);
-        const before = await lab.snapshot(user);
-        const outcomes = [await consolidation.tick(user.userId)];
-        while (mode === "pass" && outcomes.at(-1) === "submitted" && Date.now() - started < timeoutMs) {
-          await sleep(Math.max(pollMs, 3_000));
-          outcomes.push(await consolidation.tick(user.userId));
-        }
-        const after = await lab.snapshot(user);
-        const paths = new Set([...Object.keys(before.files), ...Object.keys(after.files)]);
-        const changed = { added: /** @type {string[]} */ ([]), updated: /** @type {string[]} */ ([]), deleted: /** @type {string[]} */ ([]) };
-        for (const rel of [...paths].sort()) {
-          if (!(rel in before.files)) changed.added.push(rel);
-          else if (!(rel in after.files)) changed.deleted.push(rel);
-          else if (before.files[rel] !== after.files[rel]) changed.updated.push(rel);
-        }
-        return { outcome: outcomes.at(-1), ticks: outcomes.length, tasks: consolidationTasks.get(user.userId) ?? [], changed,
-          metrics: { before: before.metrics, after: after.metrics }, ms: Date.now() - started };
+        const before = nativeMemoryCounters();
+        const { outcome, results } = await pollLabConsolidation(consolidation, user.userId, { mode, timeoutMs, pollMs: Math.max(pollMs, 3_000) });
+        const after = nativeMemoryCounters();
+        const delta = (name) => Object.fromEntries(Object.entries(after[name]).map(([key, value]) => [key, value - (before[name][key] ?? 0)]));
+        return { outcome, mode, results, ticks: results.length,
+          tasks: consolidationTasks.get(user.userId) ?? [], verification: delta("verificationLines"),
+          verificationJudge: delta("verificationJudge"), ms: Date.now() - started };
       },
 
-      /** Verify existing lines through the product, if this checkout provides it. */
-      async verifyExisting(user, options = {}) { return verifyLabExisting(consolidation, user.userId, options); },
+      /** Verify existing lines independently of the engine merge. */
+      async verifyExisting(user, { limit = 200 } = {}) {
+        return verifyLabExisting(consolidation, user.userId, { limit, mode: "verify" });
+      },
 
       /** Plant a corruption into both the engine and the control-plane overlay. */
       async replaceFile(user, relPath, text) { return replaceLabFile({ sessions, overlay }, user, String(relPath ?? ""), String(text ?? "")); },

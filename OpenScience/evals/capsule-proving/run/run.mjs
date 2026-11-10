@@ -299,7 +299,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     flags: { historySearch: options.arm === "product" ? options.historySearch : false, commitEvery: options.commitEvery, plantCorruptionsAfter: options.plantCorruptionsAfter >= 0 ? options.plantCorruptionsAfter : null,
       consolidation: "manual-only", rejectionJudge: Boolean(lab?.config.nativeMemoryRejectionJudgeEnabled), gatewayCommitsPerHour: 0,
       gatewayTimeoutMs: options.gatewayTimeoutMs, capsuleSearch: false, config: options.config, maintain: options.maintain, maintainAfter: options.maintainAfter },
-    answerVariants: options.answerVariants, label: options.label,
+    answerVariants: options.answerVariants.map((variant) => ({ ...variant, flags: { config: { ...options.config, ...variant.config } } })), label: options.label,
     model: { answer: client?.model ?? null, thinking: client?.thinking ?? null, extraction: options.arm === "product" ? "deepseek-flash (lab engine ov.conf, provider direct)" : null },
     options: { only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, limitQuestions: options.limitQuestions || null,
       ingestOnly: options.ingestOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, dataDir: path.resolve(options.data) },
@@ -395,17 +395,16 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
           }
           const maintainHere = options.maintain !== "none" && (options.maintainAfter === "each" || options.maintainAfter.includes(checkpoint));
           if (maintainHere) {
-            let maintained = false;
             for (const kind of options.maintain.split("+")) {
               const key = `${item.caseId}/maintain.${kind}/${checkpoint}`;
-              if (status.isDone(key)) { maintained = true; continue; }
+              if (status.isDone(key)) continue;
               if (resumedAt > checkpoint) { await fail(key, "stale_checkpoint: ingestion has moved past maintenance"); continue; }
               checkpointChanged = true;
               const started = Date.now(); const startedAt = new Date(started).toISOString();
               let before = null; let result; let error = ""; let filesChanged = [];
               try {
                 before = await lab.snapshot(user);
-                result = kind === "consolidate" ? await lab.consolidate(user, { mode: "pass" }) : await lab.verifyExisting(user, { force: true });
+                result = kind === "consolidate" ? await lab.consolidate(user, { mode: options.config.nativeMemoryConsolidationMode ?? "merge" }) : await lab.verifyExisting(user, { limit: 200, mode: "verify" });
                 if (["failed", "lost", "submitted"].includes(result?.outcome)) throw new Error(`maintenance_${result.outcome}`);
               } catch (caught) { error = errorLine(caught); result = { ...(result ?? {}), error }; }
               try {
@@ -413,16 +412,15 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
                 if (before) filesChanged = [...new Set([...Object.keys(before.files), ...Object.keys(after.files)])].filter((rel) => before.files[rel] !== after.files[rel]).sort();
               } catch (caught) { error ||= errorLine(caught); result = { ...(result ?? {}), error }; }
               await appendFile(path.join(caseDir, "maintenance.jsonl"), `${JSON.stringify({ afterSession: checkpoint, kind, startedAt, ms: Date.now() - started, result, filesChanged })}\n`, { mode: 0o600 });
-              maintained = true;
               if (error) await fail(key, error);
               else await status.markDone(key, `files=${filesChanged.length} ms=${Date.now() - started}`);
             }
-            if (maintained && resumedAt <= checkpoint && plantAfter >= 0 && checkpoint >= plantAfter && status.isDone(`${item.caseId}/plant/${plantAfter}`)) {
-              const planted = await readJson(path.join(caseDir, "corruptions-applied.json"));
-              const list = (await readJson(item.meta?.corruptionsFile ?? path.join(path.resolve(options.data), options.split, item.userKey, "corruptions.json")))?.corruptions ?? [];
-              const after = await lab.snapshot(user);
-              await writeAtomic(path.join(caseDir, "corruptions-restored.json"), `${JSON.stringify({ afterSession: checkpoint, at: new Date().toISOString(), results: checkRestored(after.files, planted.applied, list) }, null, 2)}\n`);
-            }
+          }
+          if (resumedAt <= checkpoint && plantAfter >= 0 && checkpoint >= plantAfter && status.isDone(`${item.caseId}/plant/${plantAfter}`)) {
+            const planted = await readJson(path.join(caseDir, "corruptions-applied.json"));
+            const list = (await readJson(item.meta?.corruptionsFile ?? path.join(path.resolve(options.data), options.split, item.userKey, "corruptions.json")))?.corruptions ?? [];
+            const after = await lab.snapshot(user);
+            await writeAtomic(path.join(caseDir, "corruptions-restored.json"), `${JSON.stringify({ afterSession: checkpoint, at: new Date().toISOString(), results: checkRestored(after.files, planted.applied, list.filter((entry) => planted.applied.some((applied) => applied.id === entry.id))) }, null, 2)}\n`);
           }
           const snapKey = `${item.caseId}/snapshot/${checkpoint}`;
           if (!status.isDone(snapKey) || checkpointChanged) {

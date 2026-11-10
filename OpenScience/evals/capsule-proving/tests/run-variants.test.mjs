@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { createMemoryClient, firstLine, replaceLabFile, startLabGateways, verifyLabExisting } from "../run/lab.mjs";
+import { createLabResidentProfiles, pollLabConsolidation, createMemoryClient, firstLine, replaceLabFile, startLabGateways, verifyLabExisting } from "../run/lab.mjs";
 import { assertResumeCompatible, engineShard, main, parseArguments } from "../run/run.mjs";
 import { NativeMemoryConsolidation } from "../../../apps/server/src/nativeMemoryConsolidation.mjs";
 import { OpenVikingClient } from "../../../apps/server/src/openVikingClient.mjs";
@@ -124,7 +124,7 @@ async function runnerFixture(t, { questions = true } = {}) {
         },
         snapshot: async () => { events.push("snapshot"); return { files: { ...files }, metrics: { files: Object.keys(files).length, chars: Object.values(files).join("").length } }; },
         replaceFile: async (_user, rel, text) => { events.push("plant"); files[rel] = text; },
-        consolidate: async (_user, options) => { assert.deepEqual(options, { mode: "pass" }); events.push("consolidate"); files["preferences/cups.md"] = "- 12 cups"; return { outcome: "completed" }; },
+        consolidate: async (_user, options) => { assert.deepEqual(options, { mode: "merge" }); events.push("consolidate"); files["preferences/cups.md"] = "- 12 cups"; return { outcome: "completed" }; },
         verifyExisting: async () => { events.push("verify"); throw Object.assign(new Error("verify_unavailable"), { code: "verify_unavailable" }); },
         memoryFor: (_user, { variant }) => ({ variant, residentBlock: async () => { events.push(`opening:${variant || "primary"}`); return Object.values(files).join(""); } }),
       };
@@ -145,7 +145,7 @@ test("runner orders ingest, plant, maintenance, snapshot, primary and variant; m
   const args = [...f.args, "--answer-variant", "nohistory:memoryHistorySearchEnabled=false", "--config", "memoryOpeningByUseEnabled=true", "--maintain", "consolidate+verify", "--maintain-after", "1", "--plant-corruptions-after", "1", "--no-rejection-judge", "--label", "E1 test"];
   const totals = await main(args, f.dependencies);
   assert.equal(totals.failures, 1); assert.equal(totals.answers, 4);
-  assert.deepEqual(f.events, ["ingest:s1", "snapshot", "plant", "snapshot", "consolidate", "snapshot", "snapshot", "verify", "snapshot", "snapshot", "snapshot", "answer:primary", "opening:primary", "answer:nohistory", "opening:nohistory", "ingest:s2", "snapshot", "answer:primary", "opening:primary", "answer:nohistory", "opening:nohistory"]);
+  assert.deepEqual(f.events, ["ingest:s1", "snapshot", "plant", "snapshot", "consolidate", "snapshot", "snapshot", "verify", "snapshot", "snapshot", "snapshot", "answer:primary", "opening:primary", "answer:nohistory", "opening:nohistory", "ingest:s2", "snapshot", "snapshot", "answer:primary", "opening:primary", "answer:nohistory", "opening:nohistory"]);
   assert.equal(f.opened.length, 2); assert.deepEqual(f.opened[0].configOverrides, { memoryOpeningByUseEnabled: true }); assert.equal(f.opened[0].rejectionJudge, false);
   const caseDir = path.join(f.out, "cases/U01");
   const primary = await jsonl(path.join(caseDir, "answers.jsonl"));
@@ -161,6 +161,7 @@ test("runner orders ingest, plant, maintenance, snapshot, primary and variant; m
   assert.equal((await json(path.join(caseDir, "bloat.json"))).addedPer100Turns, 100);
   const run = await json(path.join(f.out, "run.json"));
   assert.equal(run.label, "E1 test"); assert.deepEqual(run.flags.config, { memoryOpeningByUseEnabled: true }); assert.equal(run.answerVariants[0].name, "nohistory");
+  assert.deepEqual(run.answerVariants[0].flags.config, { memoryOpeningByUseEnabled: true, memoryHistorySearchEnabled: false });
   const status = await readFile(path.join(f.out, "STATUS"), "utf8");
   assert.match(status, /DONE U01\/answer.nohistory\/q1/); assert.match(status, /FAIL U01\/maintain.verify\/1 verify_unavailable/);
   f.events.length = 0;
@@ -252,4 +253,61 @@ test("runner sends every userKey to its hash-selected engine and serializes case
   const urls = ["http://127.0.0.1:1", "http://127.0.0.1:2"];
   assert.equal(assignments.length, 3);
   for (const [key, url] of assignments) assert.equal(url, urls[engineShard(key, urls.length)]);
+});
+
+
+test("no-maintenance corruption control reports actual restoration state and skips absent targets", async (t) => {
+  const f = await runnerFixture(t, { questions: false });
+  await writeFile(f.item.meta.corruptionsFile, JSON.stringify({ corruptions: [
+    { id: "c1", kind: "number", find: "12", replace: "99" },
+    { id: "not-yet-present", kind: "number", find: "unseen", replace: "bad" },
+  ] }));
+  await main([...f.args, "--plant-corruptions-after", "2"], f.dependencies);
+  const dir = path.join(f.out, "cases/U01");
+  assert.equal((await json(path.join(dir, "corruptions-applied.json"))).skipped.length, 1);
+  assert.deepEqual((await json(path.join(dir, "corruptions-restored.json"))).results, [{ id: "c1", status: "still_corrupt" }]);
+});
+
+test("maintenance passes the configured verify mode and records product summaries unchanged", async (t) => {
+  const f = await runnerFixture(t, { questions: false });
+  const open = f.dependencies.openLab;
+  const calls = [];
+  const summary = { checked: 3, supported: 1, corrected: 1, unsupported: 0, unverifiable: 1, calls: 2 };
+  f.dependencies.openLab = async (options) => ({ ...await open(options),
+    consolidate: async (_user, opts) => { calls.push(opts); return { outcome: "completed", mode: "verify" }; },
+    verifyExisting: async (_user, opts) => { calls.push(opts); return summary; },
+  });
+  await main([...f.args, "--config", "nativeMemoryConsolidationMode=verify", "--maintain", "consolidate+verify", "--maintain-after", "2"], f.dependencies);
+  assert.deepEqual(calls, [{ mode: "verify" }, { limit: 200, mode: "verify" }]);
+  assert.deepEqual((await jsonl(path.join(f.out, "cases/U01/maintenance.jsonl")))[1].result, summary);
+});
+
+
+test("lab resident providers use the product's scoped index and native files for default projects and variants", async () => {
+  const calls = [];
+  const memorySettings = { settings: async () => ({ learningPaused: false, recallPaused: false, pausedProjects: [] }), sessionState: async () => ({}) };
+  const nativeMemory = {
+    residentCard: async () => { throw new Error("default projects have no card"); },
+    openingFiles: async (...args) => { calls.push(["files", ...args]); return [{ uri: "viking://user/u/memories/notes/n.md", usedCount: 2, body: "A useful fact" }]; },
+    openingIndex: async (...args) => { calls.push(["index", ...args]); return { counts: { notes: 3 } }; },
+  };
+  const config = { memoryRecallEnabled: true, memoryEngineEnabled: true, memoryOpeningIndexEnabled: true, memoryOpeningByUseEnabled: true, memoryOpeningTopK: 2 };
+  const providers = createLabResidentProfiles({ config, memorySettings, nativeMemory });
+  const result = await providers.forDispatch("u", { projectId: "default", sessionId: null, attended: true });
+  assert.match(result.text, /notes 3/); assert.match(result.text, /Most used/); assert.match(result.text, /A useful fact/);
+  assert.deepEqual(calls, [["files", "u", "default", 2], ["index", "u", "default"]]);
+  calls.length = 0;
+  const off = createLabResidentProfiles({ config: { ...config, memoryOpeningIndexEnabled: false, memoryOpeningByUseEnabled: false }, memorySettings, nativeMemory });
+  assert.equal((await off.forDispatch("u", { projectId: "default", sessionId: null })).text, "");
+  assert.deepEqual(calls, []);
+});
+
+test("lab consolidation polls the explicit product entry with force and retains its results", async () => {
+  const results = ["submitted", { outcome: "submitted", taskId: "t1" }, { outcome: "completed", checked: 2 }];
+  const seen = [];
+  const consolidation = { consolidate: async (...args) => { seen.push(args); return results[seen.length - 1]; } };
+  const result = await pollLabConsolidation(consolidation, "u", { mode: "verify", pollMs: 1 });
+  assert.equal(result.outcome, "completed"); assert.deepEqual(result.results, results);
+  assert.deepEqual(seen, Array.from({ length: 3 }, () => ["u", { mode: "verify", force: true }]));
+  assert.equal((await pollLabConsolidation({ consolidate: async () => "submitted" }, "u", { timeoutMs: 0 })).outcome, "submitted");
 });
