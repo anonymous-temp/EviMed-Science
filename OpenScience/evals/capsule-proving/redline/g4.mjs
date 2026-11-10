@@ -27,7 +27,7 @@ import { pathToFileURL } from "node:url";
 import { G4_DELETE_VIA, G4_PLANT_VIA } from "../synthetic/trialPlans.mjs";
 import { classifyFindings, summarizeG4 } from "./classify.mjs";
 import { carrierWords, gitState, intArg, loadGate, milestone, openRun, parseArgs, runPool, selectTrials, sessionIdFor, stoppedCells as openStoppedCells } from "./common.mjs";
-import { capsulePreview, databaseColumnsWith, engineFilesWith, exportPaths, markerLinePrints, modelSurfaces, pageSurfaces, servedMemoryFiles,
+import { capsulePreview, databaseColumnsWith, engineFilesWith, exportPaths, holds, markerLinePrints, modelSurfaces, pageSurfaces, servedMemoryFiles,
   staleOrigins, vectorHits } from "./scan.mjs";
 import { openStack } from "./stack.mjs";
 
@@ -39,7 +39,7 @@ const DESTRUCTIVE = new Set(["memory-reset", "delete-account"]);
 export const EDIT_REPLACEMENT = "（已更换）";
 
 /** @param {Record<string, string>} files @param {string} marker */
-const filesWith = (files, marker) => Object.entries(files).filter(([, text]) => text.includes(marker)).map(([rel]) => rel);
+const filesWith = (files, marker) => Object.entries(files).filter(([rel, text]) => holds(text, marker) || holds(rel, marker)).map(([rel]) => rel);
 
 /**
  * Plant one text the trial's way. Returns what was written where (the conversation id, for a later deletion or restatement).
@@ -88,17 +88,18 @@ async function deleteMarker(stack, user, trial, plant, served) {
     case "memory-page-edit":
     case "memory-page-delete": {
       const listed = await stack.http(user, "GET", "/api/memory/records?pageSize=500");
-      const records = (Array.isArray(listed.json?.data) ? listed.json.data : []).filter((/** @type {any} */ record) => String(record?.value ?? "").includes(marker));
+      // The records the person finds it in: by its words, its title or its file.
+      const records = (Array.isArray(listed.json?.data) ? listed.json.data : []).filter((/** @type {any} */ record) => holds(`${record?.value ?? ""}\n${record?.summary ?? ""}\n${record?.key ?? ""}`, marker));
       const outcomes = [];
       for (const record of records) {
         const id = encodeURIComponent(record.id);
         const answer = trial.deleteVia === "memory-page-delete"
           ? await stack.http(user, "DELETE", `/api/memory/records/${id}`)
-          : await stack.http(user, "PATCH", `/api/memory/records/${id}`, { value: String(record.value).split(marker).join(EDIT_REPLACEMENT), expectedVersion: record.version });
+          : await stack.http(user, "PATCH", `/api/memory/records/${id}`, { value: String(record.value).replace(new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), EDIT_REPLACEMENT), expectedVersion: record.version });
         outcomes.push(answer.status === 200 ? "ok" : `${answer.status}:${answer.json?.error?.code ?? ""}`);
       }
       return { deleted: outcomes.length > 0 && outcomes.every((outcome) => outcome === "ok"), surface: trial.deleteVia === "memory-page-delete" ? "DELETE /api/memory/records/:id" : "PATCH /api/memory/records/:id",
-        outcomes, records: records.length };
+        outcomes: outcomes.length ? outcomes : ["no-page-record-holds-the-marker"], records: records.length };
     }
     case "delete-conversation": {
       if (!plant.markerSession) return { notDrivable: "a memory added on the memory page has no source conversation: the product's conversation deletion (DELETE /api/projects/:p/conversations/:id/source → NativeMemoryStore.removeConversationSource) removes only lines whose origin names a deleted dsh- conversation, so there is no conversation of this marker to delete" };

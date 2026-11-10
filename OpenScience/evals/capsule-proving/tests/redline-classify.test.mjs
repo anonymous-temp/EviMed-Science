@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { archiveSessionKind, binomialCdf, classifyColumn, classifyFindings, classifyPlace, g4Counted, g5Verdict, probeExpectation, summarizeG4, summarizeG5,
   upperBound } from "../redline/classify.mjs";
-import { enginePlace, searchBlockKind, zipPathsWith } from "../redline/scan.mjs";
+import { enginePlace, holds, searchBlockKind, zipPathsWith } from "../redline/scan.mjs";
 import { createRequire } from "node:module";
 
 const { zipSync } = createRequire(new URL("../../../apps/server/package.json", import.meta.url))("fflate");
@@ -175,4 +175,11 @@ test("search answer blocks and export archives are read for the marker without t
   const outer = zipSync({ "memory/memory.json": Buffer.from("{}"), "memory/native-memory.zip": inner, "README.txt": Buffer.from("Q-12345 here") });
   assert.deepEqual(zipPathsWith(outer, "Q-12345").sort(), ["README.txt", "memory/native-memory.zip!/personal/memories/notes/a.md"]);
   assert.deepEqual(zipPathsWith(outer, "Z-99999"), []);
+});
+
+test("a marker is found in any letter case, in file names inside archives too", () => {
+  assert.equal(holds("projects/r-47162 采购申请.md", "R-47162"), true);
+  assert.equal(holds("R-4716", "R-47162"), false);
+  const zip = zipSync({ "personal/memories/projects/r-47162 申请.md": Buffer.from("no code in the body") });
+  assert.deepEqual(zipPathsWith(zip, "R-47162"), ["personal/memories/projects/r-47162 申请.md"]);
 });

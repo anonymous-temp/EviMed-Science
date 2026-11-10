@@ -11,6 +11,15 @@ import { lineFingerprint } from "../../../apps/server/src/nativeMemoryOverlay.mj
 const requireServer = createRequire(new URL("../../../apps/server/package.json", import.meta.url));
 const { unzipSync } = requireServer("fflate");
 
+/**
+ * Whether a text holds the marker, in any letter case: the engine slugs a marker into a lowercase file name (`projects/r-47162 …md`)
+ * and its directory summaries link to it that way.
+ * @param {unknown} text @param {string} marker
+ */
+export function holds(text, marker) {
+  return String(text ?? "").toLowerCase().includes(String(marker).toLowerCase());
+}
+
 /** Where a file of an engine user's tree belongs (path relative to the user's root, no leading slash). @param {string} rel */
 export function enginePlace(rel) {
   const parts = rel.split("/");
@@ -32,7 +41,7 @@ export function searchBlockKind(text, index) {
 
 /** The marker-bearing statements of a text, as the product fingerprints a line (`lineFingerprint` of the bullet-less statement). @param {string} text @param {string} marker */
 export function markerLinePrints(text, marker) {
-  return String(text ?? "").split("\n").filter((line) => line.includes(marker))
+  return String(text ?? "").split("\n").filter((line) => holds(line, marker))
     .map((line) => lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")));
 }
 
@@ -40,11 +49,11 @@ export function markerLinePrints(text, marker) {
 export function zipPathsWith(bytes, marker, prefix = "") {
   const found = [];
   let entries;
-  try { entries = unzipSync(bytes); } catch { return Buffer.from(bytes).includes(marker) ? [`${prefix || "(archive)"}`] : []; }
+  try { entries = unzipSync(bytes); } catch { return holds(Buffer.from(bytes).toString("utf8"), marker) ? [`${prefix || "(archive)"}`] : []; }
   for (const [name, data] of Object.entries(entries)) {
     const path = `${prefix}${name}`;
     if (/\.zip$/i.test(name)) { found.push(...zipPathsWith(data, marker, `${path}!/`)); continue; }
-    if (Buffer.from(data).includes(marker)) found.push(path);
+    if (holds(name, marker) || holds(Buffer.from(data).toString("utf8"), marker)) found.push(path);
   }
   return found;
 }
@@ -81,11 +90,11 @@ const ident = (/** @type {string} */ name) => `"${String(name).replaceAll('"', '
  * @param {any} database @param {string} marker
  */
 export async function databaseColumnsWith(database, marker) {
-  const pattern = `%${marker.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const pattern = `%${marker.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;  // matched with ILIKE: any letter case
   /** @type {Record<string, number>} */
   const found = {};
   for (const { schema, table, columns } of await textColumns(database)) {
-    const tests = columns.map((column) => `(${ident(column)}::text LIKE $1)`);
+    const tests = columns.map((column) => `(${ident(column)}::text ILIKE $1)`);
     let result;
     try {
       result = await database.query(`SELECT ${tests.map((test, index) => `${test} AS m${index}`).join(", ")} FROM ${ident(schema)}.${ident(table)} WHERE ${tests.join(" OR ")} LIMIT 200`, [pattern]);
@@ -113,8 +122,8 @@ export async function engineFilesWith(sessions, userId, marker, { userRoot = nul
     const batch = files.slice(index, index + 8);
     const texts = await Promise.all(batch.map((/** @type {any} */ node) => sessions.read(userId, node.uri).catch(() => null)));
     batch.forEach((/** @type {any} */ node, position) => {
-      if (!String(texts[position] ?? "").includes(marker)) return;
       const rel = node.uri.slice(root.length + 1);
+      if (!holds(texts[position], marker) && !holds(rel, marker)) return;
       (byPlace[enginePlace(rel)] ??= []).push(rel);
     });
   }
@@ -146,7 +155,7 @@ function parseJson(text) { try { return JSON.parse(text); } catch { return null;
 /** The URIs (from `viking://user/<id>/` on) of the search hits whose JSON holds the marker. @param {unknown} hits @param {string} marker */
 export function hitsWith(hits, marker) {
   if (!Array.isArray(hits)) return [];
-  return hits.filter((hit) => JSON.stringify(hit ?? null).includes(marker))
+  return hits.filter((hit) => holds(JSON.stringify(hit ?? null), marker))
     .map((hit) => String(hit?.uri ?? "").replace(/^viking:\/\/user\/[^/]+\//, "") || "(no uri)");
 }
 
@@ -166,7 +175,7 @@ export async function modelSurfaces(stack, { userId, projectId }, marker, querie
     const answer = await memory.callTool("search", { query, limit: 10 });
     if (answer.isError) out.refused.push(`search:${String(answer.blocks[0] ?? "").slice(0, 60)}`);
     answer.blocks.forEach((text, index) => {
-      if (!text.includes(marker)) return;
+      if (!holds(text, marker)) return;
       const kind = searchBlockKind(text, index);
       if (kind !== "memories") { out.search.push(`${kind}${by}`); return; }
       const rels = hitsWith(parseJson(text)?.memories, marker);
@@ -177,7 +186,7 @@ export async function modelSurfaces(stack, { userId, projectId }, marker, querie
     else {
       const result = recalled.json?.result ?? {};
       for (const [key, value] of Object.entries(result)) {
-        if (!JSON.stringify(value ?? null).includes(marker)) continue;
+        if (!holds(JSON.stringify(value ?? null), marker)) continue;
         const rels = Array.isArray(value) ? hitsWith(value, marker).filter((rel) => rel !== "(no uri)") : [];
         out.pluginRecall.push(...(rels.length ? rels.map((rel) => `${key}:${rel}${by}`) : [`${key}${by}`]));
       }
@@ -186,7 +195,7 @@ export async function modelSurfaces(stack, { userId, projectId }, marker, querie
   const listed = await memory.callTool("list", { recursive: true });
   const uris = [];
   for (const text of listed.blocks) {
-    if (text.includes(marker)) out.listRead.push("list");
+    if (holds(text, marker)) out.listRead.push("list");
     try {
       const value = JSON.parse(text);
       const rows = Array.isArray(value) ? value : Array.isArray(value?.items) ? value.items : Array.isArray(value?.result) ? value.result : [];
@@ -195,10 +204,10 @@ export async function modelSurfaces(stack, { userId, projectId }, marker, querie
   }
   for (let index = 0; index < uris.length; index += 10) {
     const read = await memory.callTool("read", { uris: uris.slice(index, index + 10) });
-    if (read.blocks.some((text) => text.includes(marker))) out.listRead.push("read");
+    if (read.blocks.some((text) => holds(text, marker))) out.listRead.push("read");
   }
   const block = await stack.app.residentProfiles.forDispatch(userId, { projectId, sessionId: null, attended: true }).catch(() => null);
-  out.resident = Boolean(block?.text && String(block.text).includes(marker));
+  out.resident = Boolean(block?.text && holds(block.text, marker));
   out.search = [...new Set(out.search)];
   out.listRead = [...new Set(out.listRead)];
   out.pluginRecall = [...new Set(out.pluginRecall)];
@@ -217,23 +226,24 @@ export async function pageSurfaces(stack, user, marker) {
   const records = await stack.http(user, "GET", "/api/memory/records?pageSize=500");
   const rows = Array.isArray(records.json?.data) ? records.json.data : Array.isArray(records.json?.data?.records) ? records.json.data.records : [];
   for (const row of rows) {
-    if (String(row?.value ?? "").includes(marker)) page.add("records");
-    const { value: _value, ...rest } = row ?? {};
-    if (JSON.stringify(rest).includes(marker)) history.add("records-other-fields");
+    // What the page shows as the memory now: its words, its title and its file.
+    if (holds(`${row?.value ?? ""}\n${row?.summary ?? ""}\n${row?.key ?? ""}`, marker)) page.add("records");
+    const { value: _value, summary: _summary, key: _key, ...rest } = row ?? {};
+    if (holds(JSON.stringify(rest), marker)) history.add("records-other-fields");
   }
   const archived = await stack.http(user, "GET", "/api/memory/records?status=archived&pageSize=500");
-  if (JSON.stringify(archived.json?.data ?? null).includes(marker)) history.add("records-archived");
+  if (holds(JSON.stringify(archived.json?.data ?? null), marker)) history.add("records-archived");
   // The route echoes the query back (`query`), and each item carries its earlier versions: only an item's own words are what the
   // page shows as the memory now; the rest is its history.
   const search = await stack.http(user, "GET", `/api/memory/search?q=${encodeURIComponent(marker)}`);
   for (const item of Array.isArray(search.json?.data?.items) ? search.json.data.items : []) {
-    if (`${item?.summary ?? ""}\n${item?.value ?? ""}`.includes(marker)) page.add("search");
-    else if (JSON.stringify(item ?? null).includes(marker)) history.add("search-item-history");
+    if (holds(`${item?.summary ?? ""}\n${item?.value ?? ""}\n${item?.key ?? ""}`, marker)) page.add("search");
+    else if (holds(JSON.stringify(item ?? null), marker)) history.add("search-item-history");
   }
   const profile = await stack.http(user, "GET", "/api/memory/profile");
-  if (JSON.stringify(profile.json?.data ?? null).includes(marker)) history.add("profile");
+  if (holds(JSON.stringify(profile.json?.data ?? null), marker)) history.add("profile");
   const changes = await stack.http(user, "GET", "/api/memory/changes?limit=100");
-  if (JSON.stringify(changes.json?.data ?? null).includes(marker)) history.add("changes");
+  if (holds(JSON.stringify(changes.json?.data ?? null), marker)) history.add("changes");
   return { page: [...page], pageHistory: [...history], status: [records.status, search.status, profile.status] };
 }
 
@@ -250,7 +260,7 @@ export async function capsulePreview(stack, user, marker) {
   const answer = await stack.http(user, "POST", `/api/capsules/${encodeURIComponent(capsule.id)}/exports/preview`, {});
   if (answer.status !== 200) return { status: answer.status, entries: null };
   const entries = Array.isArray(answer.json?.data?.entries) ? answer.json.data.entries : [];
-  return { status: 200, entries: entries.filter((/** @type {any} */ entry) => String(entry?.content ?? "").includes(marker)).map((/** @type {any} */ entry) => String(entry.factKind ?? "entry")) };
+  return { status: 200, entries: entries.filter((/** @type {any} */ entry) => holds(entry?.content, marker)).map((/** @type {any} */ entry) => String(entry.factKind ?? "entry")) };
 }
 
 /**
@@ -260,7 +270,7 @@ export async function capsulePreview(stack, user, marker) {
 export async function vectorHits(sessions, userId, marker, { userRoot = null } = {}) {
   const root = userRoot ?? sessions.userRoot(userId);
   const hits = await sessions.find(userId, marker, { target: root, limit: 20 });
-  return (Array.isArray(hits) ? hits : []).filter((/** @type {any} */ hit) => String(hit?.text ?? "").includes(marker) || String(hit?.abstract ?? "").includes(marker))
+  return (Array.isArray(hits) ? hits : []).filter((/** @type {any} */ hit) => holds(hit?.text, marker) || holds(hit?.abstract, marker) || holds(hit?.uri, marker))
     .map((/** @type {any} */ hit) => String(hit.uri ?? "").slice(root.length + 1));
 }
 

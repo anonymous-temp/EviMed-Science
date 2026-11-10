@@ -29,7 +29,7 @@ import { pathToFileURL } from "node:url";
 import { G5_PROBES, G5_READERS } from "../synthetic/trialPlans.mjs";
 import { CROSS_ACCOUNT_READERS, g5Verdict, summarizeG5 } from "./classify.mjs";
 import { carrierWords, gitState, intArg, loadGate, milestone, openRun, parseArgs, runPool, selectTrials, stoppedCells as openStoppedCells } from "./common.mjs";
-import { exportPaths, searchBlockKind, servedMemoryFiles } from "./scan.mjs";
+import { exportPaths, holds, searchBlockKind, servedMemoryFiles } from "./scan.mjs";
 import { openStack } from "./stack.mjs";
 
 const sleep = (/** @type {number} */ ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -52,11 +52,11 @@ async function probeWorkload(stack, where, marker, queries, foreignUris) {
     const answer = await memory.callTool("search", { query, limit: 10 });
     if (!answer.isError) searchAnswered = true;
     answer.blocks.forEach((text, index) => {
-      if (!text.includes(marker)) return;
+      if (!holds(text, marker)) return;
       if (searchBlockKind(text, index) === "capsule") out["capsule-search"] = true; else out.search = true;
     });
     const recalled = await stack.gateway(token, "POST", "/api/v1/search/search", { query, limit: 10 });
-    if (recalled.ok) { searchAnswered = true; if (JSON.stringify(recalled.json?.result ?? null).includes(marker)) out.search = true; }
+    if (recalled.ok) { searchAnswered = true; if (holds(JSON.stringify(recalled.json?.result ?? null), marker)) out.search = true; }
   }
   const listed = await memory.callTool("list", { recursive: true });
   if (!listed.isError) listAnswered = true;
@@ -64,7 +64,7 @@ async function probeWorkload(stack, where, marker, queries, foreignUris) {
   // A listing names files, never their text: it shows the marker when it carries it, or when it names one of the writer's files that
   // hold it (the reader can see that memory exists).
   for (const text of listed.blocks) {
-    if (text.includes(marker) || foreignUris.some((uri) => text.includes(uri))) out.list = true;
+    if (holds(text, marker) || foreignUris.some((uri) => text.includes(uri))) out.list = true;
     try {
       const value = JSON.parse(text);
       const rows = Array.isArray(value) ? value : Array.isArray(value?.items) ? value.items : Array.isArray(value?.result) ? value.result : [];
@@ -75,10 +75,10 @@ async function probeWorkload(stack, where, marker, queries, foreignUris) {
     if (!batch.length) continue;
     const read = await memory.callTool("read", { uris: batch.slice(0, 10) });
     if (!read.isError) readAnswered = true;
-    if (read.blocks.some((text) => text.includes(marker))) out.read = true;
+    if (read.blocks.some((text) => holds(text, marker))) out.read = true;
   }
   const block = await stack.app.residentProfiles.forDispatch(where.userId, { projectId: where.projectId, sessionId: null, attended: true }).catch(() => null);
-  out["resident-block"] = Boolean(block?.text && String(block.text).includes(marker));
+  out["resident-block"] = Boolean(block?.text && holds(block.text, marker));
   if (!searchAnswered && !out.search) out.search = "refused";
   if (!readAnswered && !out.read) out.read = "refused";
   if (!listAnswered && !out.list) out.list = "refused";
@@ -184,7 +184,7 @@ export async function runG5Trial(stack, trial) {
     row.write = answer.status === 200 ? "pending" : `refused:${answer.json?.error?.code ?? answer.status}`;
     const view = await writerView();
     const files = await servedMemoryFiles(view.sessions, writer.id, { userRoot: view.userRoot });
-    const holding = Object.entries(files).filter(([, text]) => text.includes(trial.marker)).map(([rel]) => rel);
+    const holding = Object.entries(files).filter(([rel, text]) => holds(text, trial.marker) || holds(rel, trial.marker)).map(([rel]) => rel);
     row.writerNamespace = view.kind;
     row.plantFiles = holding;
     row.planted = holding.length > 0;
