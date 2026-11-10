@@ -19,6 +19,13 @@ import { fileURLToPath } from 'node:url';
 /** Default ledger path, resolved next to this module rather than from the caller's cwd. */
 export const DEFAULT_LEDGER_PATH = fileURLToPath(new URL('../results/ledger.jsonl', import.meta.url));
 
+/**
+ * Default share of extraction prompt tokens billed at the cached-input price.
+ * The scorer records extraction usage but not how much of it the engine served
+ * from cache, so the caller states the assumption (and the row records it).
+ */
+export const DEFAULT_EXTRACTION_CACHED_SHARE = 0.9;
+
 /** A string that looks like an API key: `sk-` followed by at least 16 key characters. */
 const API_KEY_PATTERN = /sk-[A-Za-z0-9_-]{16,}/;
 
@@ -178,13 +185,39 @@ export function validateLedgerRow(row) {
   if (!isPlainObject(row.tokens)) {
     problems.push('tokens must be an object');
   } else {
-    for (const field of ['prompt', 'completion']) {
+    for (const field of ['prompt', 'completion', 'cached', 'extractionPrompt', 'extractionCompletion']) {
       if (!isNonNegativeNumber(row.tokens[field])) problems.push(`tokens.${field} must be a non-negative number`);
     }
   }
 
-  if (!isNonNegativeNumber(row.costCny)) problems.push('costCny must be a non-negative finite number');
+  if (row.costCny !== null && !isNonNegativeNumber(row.costCny)) {
+    problems.push('costCny must be null or a non-negative finite number');
+  }
   if (!isNonNegativeNumber(row.wallSeconds)) problems.push('wallSeconds must be a non-negative finite number');
+
+  if (row.valueValid !== undefined && row.valueValid !== null && !isFiniteNumber(row.valueValid)) {
+    problems.push('valueValid must be null or a finite number when present');
+  }
+  if (row.ci95Valid !== undefined && row.ci95Valid !== null) {
+    if (!Array.isArray(row.ci95Valid) || row.ci95Valid.length !== 2 || !row.ci95Valid.every(isFiniteNumber)) {
+      problems.push('ci95Valid must be null or an array of two finite numbers when present');
+    }
+  }
+  for (const field of ['nValid', 'invalid', 'disputed']) {
+    if (row[field] !== undefined && !isNonNegativeInteger(row[field])) {
+      problems.push(`${field} must be a non-negative integer when present`);
+    }
+  }
+  if (row.byStep !== undefined) {
+    if (!isPlainObject(row.byStep)) {
+      problems.push('byStep must be an object when present');
+    } else {
+      for (const [name, count] of Object.entries(row.byStep)) {
+        if (!isNonNegativeInteger(count)) problems.push(`byStep.${name} must be a non-negative integer`);
+      }
+    }
+  }
+  if (row.label !== undefined && !isNonEmptyString(row.label)) problems.push('label must be a non-empty string when present');
 
   for (const field of ['byGenerator', 'byCategory']) {
     const breakdown = row[field];
@@ -243,6 +276,18 @@ function safeWilson(pass, n) {
   if (!isNonNegativeInteger(n) || n === 0) return null;
   if (!isNonNegativeInteger(pass) || pass > n) return null;
   return wilson(pass, n);
+}
+
+/**
+ * Read a `[lo, hi]` interval from a summary value, or null.
+ *
+ * @param {unknown} value
+ * @returns {[number, number] | null}
+ */
+function interval(value) {
+  return Array.isArray(value) && value.length === 2 && value.every(isFiniteNumber)
+    ? /** @type {[number, number]} */ ([value[0], value[1]])
+    : null;
 }
 
 /**
@@ -342,8 +387,31 @@ function breakdown(map) {
   for (const [name, entry] of Object.entries(map)) {
     if (!isPlainObject(entry)) continue;
     const n = toCount(entry.n);
-    const value = isFiniteNumber(entry.value) ? entry.value : n === 0 ? 0 : toCount(entry.pass) / n;
+    const value = isFiniteNumber(entry.value)
+      ? entry.value
+      : isFiniteNumber(entry.accuracy)
+        ? entry.accuracy
+        : n === 0
+          ? 0
+          : toCount(entry.pass) / n;
     out[name] = { n, value };
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Normalise `byStep` counts. The scorer writes four non-negative integers
+ * describing why a failed answer failed.
+ *
+ * @param {unknown} map
+ * @returns {Record<string, number> | undefined}
+ */
+function stepCounts(map) {
+  if (!isPlainObject(map)) return undefined;
+  /** @type {Record<string, number>} */
+  const out = {};
+  for (const [name, count] of Object.entries(map)) {
+    if (isNonNegativeInteger(count)) out[name] = count;
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }
@@ -374,30 +442,202 @@ function judgedCounts(judged, set) {
 }
 
 /**
+ * Token totals in the ledger's five-field shape.
+ *
+ * The scorer writes `tokens.extraction.{prompt,completion}`,
+ * `tokens.answer.{prompt,completion,cached}` and the aggregate
+ * `tokens.{prompt,completion}`; an older run.json may carry only prompt and
+ * completion. Every emitted row carries all five fields.
+ *
+ * @param {unknown} summaryTokens
+ * @param {unknown} legacyTokens
+ * @returns {{ prompt: number, completion: number, cached: number, extractionPrompt: number, extractionCompletion: number }}
+ */
+function tokenTotals(summaryTokens, legacyTokens) {
+  const source = isPlainObject(summaryTokens)
+    ? summaryTokens
+    : isPlainObject(legacyTokens)
+      ? legacyTokens
+      : {};
+  const extraction = isPlainObject(source.extraction) ? source.extraction : {};
+  const answer = isPlainObject(source.answer) ? source.answer : {};
+
+  // Accept both the scorer's nested shape and the ledger's flat five-field
+  // shape, so an already-normalised row can be priced again.
+  const extractionPrompt = toNonNegativeNumber(
+    extraction.prompt,
+    toNonNegativeNumber(source.extractionPrompt, 0),
+  );
+  const extractionCompletion = toNonNegativeNumber(
+    extraction.completion,
+    toNonNegativeNumber(source.extractionCompletion, 0),
+  );
+  const answerPrompt = toNonNegativeNumber(answer.prompt, 0);
+  const answerCompletion = toNonNegativeNumber(answer.completion, 0);
+  const answerCached = toNonNegativeNumber(answer.cached, 0);
+
+  const prompt = isNonNegativeNumber(source.prompt) ? source.prompt : extractionPrompt + answerPrompt;
+  const completion = isNonNegativeNumber(source.completion)
+    ? source.completion
+    : extractionCompletion + answerCompletion;
+  const cached = isNonNegativeNumber(source.cached) ? source.cached : answerCached;
+
+  return { prompt, completion, cached, extractionPrompt, extractionCompletion };
+}
+
+/**
+ * Normalise a caller-supplied price object. Returns null when no usable price
+ * is present, so a caller that names no price never gets a fabricated 0.
+ *
+ * @param {unknown} prices
+ * @returns {{ inputPerMTok: number | null, cachedInputPerMTok: number | null, outputPerMTok: number | null } | null}
+ */
+function normalisePrices(prices) {
+  if (!isPlainObject(prices)) return null;
+  const pick = (value) => (isNonNegativeNumber(value) ? value : null);
+  const out = {
+    inputPerMTok: pick(prices.inputPerMTok),
+    cachedInputPerMTok: pick(prices.cachedInputPerMTok),
+    outputPerMTok: pick(prices.outputPerMTok),
+  };
+  return out.inputPerMTok === null && out.cachedInputPerMTok === null && out.outputPerMTok === null ? null : out;
+}
+
+/**
+ * Estimate a run's cost in CNY from its token totals and caller-supplied prices.
+ *
+ * Prices are per million tokens. There is deliberately no built-in price table:
+ * prices change and an old table would silently misprice old rows. The
+ * extraction prompt is split into cached and uncached input by
+ * `extractionCachedShare` because the scorer records extraction usage without a
+ * cached-token counter. When no usable price is supplied the result is null,
+ * never 0.
+ *
+ * @param {object} input
+ * @param {Record<string, unknown>} [input.tokens] the row's five token fields
+ * @param {{ inputPerMTok?: number, cachedInputPerMTok?: number, outputPerMTok?: number } | null} [input.prices]
+ * @param {number} [input.extractionCachedShare=0.9] 0..1
+ * @returns {number | null} CNY, or null when no usable price was supplied
+ */
+export function estimateCostCny({ tokens, prices, extractionCachedShare = DEFAULT_EXTRACTION_CACHED_SHARE } = {}) {
+  const normalised = normalisePrices(prices);
+  if (!normalised) return null;
+
+  const totals = tokenTotals(tokens, null);
+  const share = isFiniteNumber(extractionCachedShare)
+    ? Math.min(1, Math.max(0, extractionCachedShare))
+    : DEFAULT_EXTRACTION_CACHED_SHARE;
+
+  // Keep the split inside the prompt total when a caller supplies inconsistent
+  // token records: the sum of billed input tokens never exceeds the prompt.
+  const extractionPrompt = Math.min(totals.extractionPrompt, totals.prompt);
+  const cachedAnswer = Math.min(totals.cached, totals.prompt - extractionPrompt);
+  const extractionCached = extractionPrompt * share;
+  const extractionUncached = extractionPrompt - extractionCached;
+  const regularPrompt = totals.prompt - extractionPrompt - cachedAnswer;
+
+  const inputTokens = regularPrompt + extractionUncached;
+  const cachedTokens = cachedAnswer + extractionCached;
+
+  let cost = 0;
+  if (normalised.inputPerMTok !== null) cost += (inputTokens / 1_000_000) * normalised.inputPerMTok;
+  if (normalised.cachedInputPerMTok !== null) cost += (cachedTokens / 1_000_000) * normalised.cachedInputPerMTok;
+  if (normalised.outputPerMTok !== null) cost += (totals.completion / 1_000_000) * normalised.outputPerMTok;
+  // Six decimal places is a micro-CNY; it keeps float noise out of the ledger
+  // without rounding a real per-token charge away.
+  return Number(cost.toFixed(6));
+}
+
+/**
+ * A note stating the extraction-cache assumption, or null when it did not
+ * affect the cost or no cost was estimated.
+ *
+ * @param {{ extractionPrompt: number }} tokens
+ * @param {number | null} costCny
+ * @param {number} share
+ * @returns {string | null}
+ */
+function costAssumptionNote(tokens, costCny, share) {
+  if (costCny === null || tokens.extractionPrompt <= 0 || share <= 0) return null;
+  const percentCached = Number((share * 100).toFixed(1));
+  return `cost assumption: extraction prompt tokens are costed as ${percentCached}% cached input (--extraction-cached-share=${share})`;
+}
+
+/**
+ * Join optional notes without leaving empty separators.
+ *
+ * @param {Array<string | null | undefined>} notes
+ * @returns {string | undefined}
+ */
+function joinNotes(notes) {
+  const present = notes.filter((note) => typeof note === 'string' && note.length > 0);
+  return present.length > 0 ? present.join('; ') : undefined;
+}
+
+/**
+ * Count the disputed items of one set. The scorer writes a top-level
+ * `disputed` array of `{ set, split, caseId, id, reason }`; a summary may also
+ * carry a per-set count.
+ *
+ * @param {Record<string, unknown>} summary
+ * @param {string} setName
+ * @param {Record<string, unknown>} set
+ * @returns {number}
+ */
+function disputedCount(summary, setName, set) {
+  if (isNonNegativeInteger(set.disputed)) return set.disputed;
+  if (isNonNegativeInteger(summary.disputed)) return summary.disputed;
+  if (!Array.isArray(summary.disputed)) return 0;
+  return summary.disputed.filter((entry) => isPlainObject(entry) && entry.set === setName).length;
+}
+
+/** @param {Record<string, any>} run @returns {number} */
+function wallSecondsBetween(run) {
+  const start = Date.parse(String(run.startedAt ?? ''));
+  const end = Date.parse(String(run.finishedAt ?? run.endedAt ?? ''));
+  if (!Number.isNaN(start) && !Number.isNaN(end) && end >= start) return (end - start) / 1000;
+  return 0;
+}
+
+/**
  * Turn a run's `run.json` and a scorer's `summary.json` into ledger rows.
  *
+ * This reads the summary the scorer actually writes (`run/score.mjs`,
+ * `summarize` and `scoreRun`): per set `n`, `pass`, `fail`, `unknown`, `error`,
+ * `invalid-item`, `nValid`, `accuracy`, `ci95`, `accuracyValid`, `ci95Valid`,
+ * `judged`, `byCategory`, `byGenerator`, `byStep`, `store` and `redlines`; and
+ * top-level `disputed`, `wallSeconds`, `tokens` and `redLines`.
+ *
  * One row is emitted per set for `accuracy`; a `store_recall` row is emitted
- * when the set has a `store` block, and a `redline_count` row when it has
- * `redlines`. Category and generator breakdowns are folded into the accuracy
- * row as `byCategory` and `byGenerator`.
+ * when the set has store results, and one `redline_count` row per red line.
+ * Every row carries the five token fields and the run's wall time.
  *
  * @param {object} input
  * @param {Record<string, any>} input.run the run.json object; `rawPath` may be
  *   set by the caller to the run directory
  * @param {Record<string, any>} input.summary the scorer summary
  * @param {string} [input.scorer] commit or version tag of the scorer
- * @param {number} [input.costCny] total run cost in CNY
+ * @param {number | null} [input.costCny] total run cost in CNY; when omitted it
+ *   is estimated from `prices`, and null when no usable price is supplied
  * @param {number} [input.wallSeconds] total run wall time in seconds
+ * @param {{ inputPerMTok?: number, cachedInputPerMTok?: number, outputPerMTok?: number } | null} [input.prices]
+ * @param {number} [input.extractionCachedShare=0.9]
  * @returns {Array<Record<string, unknown>>}
  */
-export function rowsFromSummary({ run, summary, scorer, costCny, wallSeconds } = {}) {
+export function rowsFromSummary({
+  run,
+  summary,
+  scorer,
+  costCny,
+  wallSeconds,
+  prices,
+  extractionCachedShare = DEFAULT_EXTRACTION_CACHED_SHARE,
+} = {}) {
   if (!isPlainObject(run)) throw new TypeError('run must be an object');
   if (!isPlainObject(summary)) throw new TypeError('summary must be an object');
 
-  // The contract's shape is `summary.sets`; the scorer's older/current shape is
-  // `summary.bySet`. Prefer the contract and read the other one only as a
-  // compatibility fallback, so one scorer version cannot silently produce an
-  // empty ledger.
+  // The scorer writes `summary.sets`; `bySet` is the older aggregate view kept
+  // beside it. Prefer the set view and read the other only as a fallback.
   const contractSets = isPlainObject(summary.sets) && Object.keys(summary.sets).length > 0 ? summary.sets : null;
   const sets = contractSets ?? (isPlainObject(summary.bySet) ? summary.bySet : null);
   if (!sets) return [];
@@ -409,17 +649,16 @@ export function rowsFromSummary({ run, summary, scorer, costCny, wallSeconds } =
       }
     : { version: 'unknown', templatesDigest: 'unknown' };
 
-  const tokens = isPlainObject(summary.tokens)
-    ? {
-        prompt: toNonNegativeNumber(summary.tokens.prompt, 0),
-        completion: toNonNegativeNumber(summary.tokens.completion, 0),
-      }
-    : isPlainObject(run.tokens)
-      ? {
-          prompt: toNonNegativeNumber(run.tokens.prompt, 0),
-          completion: toNonNegativeNumber(run.tokens.completion, 0),
-        }
-      : { prompt: 0, completion: 0 };
+  const tokens = tokenTotals(summary.tokens, run.tokens);
+  const share = isFiniteNumber(extractionCachedShare)
+    ? Math.min(1, Math.max(0, extractionCachedShare))
+    : DEFAULT_EXTRACTION_CACHED_SHARE;
+  const explicitCost = isNonNegativeNumber(costCny);
+  const estimatedCost = explicitCost
+    ? null
+    : estimateCostCny({ tokens, prices, extractionCachedShare: share });
+  const resolvedCost = explicitCost ? costCny : estimatedCost;
+  const costNote = explicitCost ? null : costAssumptionNote(tokens, resolvedCost, share);
 
   const at = isNonEmptyString(run.finishedAt)
     ? run.finishedAt
@@ -429,6 +668,14 @@ export function rowsFromSummary({ run, summary, scorer, costCny, wallSeconds } =
         ? run.startedAt
         : new Date().toISOString();
 
+  const resolvedWallSeconds = isNonNegativeNumber(wallSeconds)
+    ? wallSeconds
+    : isNonNegativeNumber(summary.wallSeconds)
+      ? summary.wallSeconds
+      : isNonNegativeNumber(run.wallSeconds)
+        ? run.wallSeconds
+        : wallSecondsBetween(run);
+
   const base = {
     at,
     runId: isNonEmptyString(run.runId) ? run.runId : 'unknown',
@@ -436,10 +683,12 @@ export function rowsFromSummary({ run, summary, scorer, costCny, wallSeconds } =
     engine,
     arm: isNonEmptyString(run.arm) ? run.arm : 'unknown',
     flags: isPlainObject(run.flags) ? { ...run.flags } : {},
+    set: isNonEmptyString(run.set) ? run.set : 'unknown',
     split: isNonEmptyString(run.split) ? run.split : 'unknown',
+    ...(isNonEmptyString(run.label) ? { label: run.label } : {}),
     tokens,
-    costCny: toNonNegativeNumber(costCny ?? run.costCny, 0),
-    wallSeconds: toNonNegativeNumber(wallSeconds ?? run.wallSeconds, 0),
+    costCny: resolvedCost,
+    wallSeconds: resolvedWallSeconds,
     scorer: isNonEmptyString(scorer)
       ? scorer
       : isNonEmptyString(run.scorer)
@@ -459,17 +708,25 @@ export function rowsFromSummary({ run, summary, scorer, costCny, wallSeconds } =
   /** @type {Array<Record<string, unknown>>} */
   const rows = [];
 
+  // `summary.redLines.byType` is global to the summary, so its per-type n is a
+  // per-set denominator only when the summary has one set.
+  const singleSet = Object.keys(sets).length === 1;
+
   for (const [setName, set] of Object.entries(sets)) {
     if (!isPlainObject(set)) continue;
 
     const n = toCount(set.n);
     const pass = toCount(set.pass);
+    const invalid = toCount(set['invalid-item']);
+    const nValid = isNonNegativeInteger(set.nValid) ? set.nValid : Math.max(0, n - invalid);
     const accuracy = isFiniteNumber(set.accuracy) ? set.accuracy : n === 0 ? 0 : pass / n;
-    const ci95 = set.ci95 === null
-      ? null
-      : Array.isArray(set.ci95) && set.ci95.length === 2 && set.ci95.every(isFiniteNumber)
-        ? /** @type {[number, number]} */ ([set.ci95[0], set.ci95[1]])
-        : safeWilson(pass, n);
+    const valueValid = isFiniteNumber(set.accuracyValid)
+      ? set.accuracyValid
+      : nValid === 0
+        ? null
+        : pass / nValid;
+    const ci95 = set.ci95 === null ? null : interval(set.ci95) ?? safeWilson(pass, n);
+    const ci95Valid = set.ci95Valid === null ? null : interval(set.ci95Valid) ?? safeWilson(pass, nValid);
 
     const accuracyRow = {
       ...base,
@@ -478,6 +735,11 @@ export function rowsFromSummary({ run, summary, scorer, costCny, wallSeconds } =
       n,
       value: accuracy,
       ci95,
+      valueValid,
+      ci95Valid,
+      nValid,
+      invalid,
+      disputed: disputedCount(summary, setName, set),
       judged: judgedCounts(set.judged, set),
     };
 
@@ -485,132 +747,216 @@ export function rowsFromSummary({ run, summary, scorer, costCny, wallSeconds } =
     if (byCategory) accuracyRow.byCategory = byCategory;
     const byGenerator = breakdown(set.byGenerator);
     if (byGenerator) accuracyRow.byGenerator = byGenerator;
+    const byStep = stepCounts(set.byStep);
+    if (byStep) accuracyRow.byStep = byStep;
+    if (costNote) accuracyRow.notes = costNote;
 
     rows.push(accuracyRow);
 
     if (isPlainObject(set.store)) {
       const storeN = toCount(set.store.n);
       const storePass = toCount(set.store.pass);
-      rows.push({
-        ...base,
-        set: setName,
-        metric: 'store_recall',
-        n: storeN,
-        value: storeN === 0 ? 0 : storePass / storeN,
-        ci95: safeWilson(storePass, storeN),
-        judged: { code: storeN, judge: 0, unknown: 0, error: 0 },
-      });
+      if (storeN > 0 || storePass > 0 || isFiniteNumber(set.store.value)) {
+        const storeValue = isFiniteNumber(set.store.value)
+          ? set.store.value
+          : storeN === 0
+            ? 0
+            : storePass / storeN;
+        rows.push({
+          ...base,
+          set: setName,
+          metric: 'store_recall',
+          n: storeN,
+          value: storeValue,
+          ci95: interval(set.store.ci95) ?? safeWilson(storePass, storeN),
+          judged: { code: storeN, judge: 0, unknown: 0, error: 0 },
+          ...(costNote ? { notes: costNote } : {}),
+        });
+      }
     }
 
     if (isPlainObject(set.redlines)) {
-      const entries = Object.entries(set.redlines).filter(([, count]) => isNonNegativeNumber(count));
-      if (entries.length > 0) {
-        const total = entries.reduce((sum, [, count]) => sum + count, 0);
+      const byType = isPlainObject(summary.redLines) && isPlainObject(summary.redLines.byType)
+        ? summary.redLines.byType
+        : null;
+      for (const [type, count] of Object.entries(set.redlines)) {
+        if (!isNonNegativeNumber(count)) continue;
+        const typeStats = singleSet && byType && isPlainObject(byType[type]) ? byType[type] : null;
+        const typeN = typeStats && isNonNegativeInteger(typeStats.n) ? typeStats.n : n;
         rows.push({
           ...base,
           set: setName,
           metric: 'redline_count',
-          n,
-          value: total,
+          n: typeN,
+          value: count,
           ci95: null,
-          judged: { code: entries.length, judge: 0, unknown: 0, error: 0 },
-          notes: entries.map(([name, count]) => `${name}=${count}`).join(', '),
+          judged: typeStats ? judgedCounts(typeStats.judged, typeStats) : { code: typeN, judge: 0, unknown: 0, error: 0 },
+          notes: joinNotes([`redline=${type}`, costNote]),
         });
       }
     }
   }
 
-  // Compatibility with the scorer's global store/red-line blocks. The contract
-  // carries these per set; a summary with no `sets`/`bySet` breakdown still
-  // contributes one run-level row for the run's own set.
+  // Compatibility with summaries that carry only the run-level blocks. The
+  // scorer itself writes both, but an external harness may supply only these.
   if (contractSets === null) {
     const fallbackSet = isNonEmptyString(run.set) ? run.set : 'all';
     if (isPlainObject(summary.storeRecall)) {
       const storeN = toCount(summary.storeRecall.n);
       const storePass = toCount(summary.storeRecall.pass);
-      rows.push({
-        ...base,
-        set: fallbackSet,
-        metric: 'store_recall',
-        n: storeN,
-        value: storeN === 0 ? 0 : storePass / storeN,
-        ci95: safeWilson(storePass, storeN),
-        judged: { code: storeN, judge: 0, unknown: 0, error: 0 },
-      });
+      if (storeN > 0 || storePass > 0 || isFiniteNumber(summary.storeRecall.value)) {
+        rows.push({
+          ...base,
+          set: fallbackSet,
+          metric: 'store_recall',
+          n: storeN,
+          value: isFiniteNumber(summary.storeRecall.value)
+            ? summary.storeRecall.value
+            : storeN === 0
+              ? 0
+              : storePass / storeN,
+          ci95: interval(summary.storeRecall.ci95) ?? safeWilson(storePass, storeN),
+          judged: { code: storeN, judge: 0, unknown: toCount(summary.storeRecall.unknown), error: 0 },
+          ...(costNote ? { notes: costNote } : {}),
+        });
+      }
     }
     if (isPlainObject(summary.redLines)) {
-      const redN = toCount(summary.redLines.n);
-      rows.push({
-        ...base,
-        set: fallbackSet,
-        metric: 'redline_count',
-        n: redN,
-        value: toCount(summary.redLines.count),
-        ci95: null,
-        judged: { code: redN, judge: 0, unknown: 0, error: 0 },
-        notes: `redLines.count=${toCount(summary.redLines.count)}`,
-      });
+      const byType = isPlainObject(summary.redLines.byType) ? summary.redLines.byType : null;
+      if (byType && Object.keys(byType).length > 0) {
+        for (const [type, stats] of Object.entries(byType)) {
+          if (!isPlainObject(stats)) continue;
+          const typeN = toCount(stats.n);
+          rows.push({
+            ...base,
+            set: fallbackSet,
+            metric: 'redline_count',
+            n: typeN,
+            value: toCount(stats.fail),
+            ci95: null,
+            judged: judgedCounts(stats.judged, stats),
+            notes: joinNotes([`redline=${type}`, costNote]),
+          });
+        }
+      } else {
+        const redN = toCount(summary.redLines.n);
+        rows.push({
+          ...base,
+          set: fallbackSet,
+          metric: 'redline_count',
+          n: redN,
+          value: toCount(summary.redLines.count),
+          ci95: null,
+          judged: { code: redN, judge: 0, unknown: toCount(summary.redLines.unknown), error: 0 },
+          notes: joinNotes([`redLines.count=${toCount(summary.redLines.count)}`, costNote]),
+        });
+      }
     }
   }
 
   return rows;
 }
 
-/** @returns {{ command: string | null, run: string | null, ledger: string | null, costCny: number | null }} */
-function parseAppendArgs(argv) {
-  const options = { command: null, run: null, ledger: null, costCny: null };
+/** @returns {{ command: string | null, run: string | null, ledger: string | null, json: string | null, variant: string | null, costCny: number | null, prices: object | null, extractionCachedShare: number }} */
+function parseArgs(argv) {
+  const options = {
+    command: null,
+    run: null,
+    ledger: null,
+    json: null,
+    variant: null,
+    costCny: null,
+    prices: null,
+    extractionCachedShare: DEFAULT_EXTRACTION_CACHED_SHARE,
+  };
   if (argv.length === 0) return options;
   options.command = argv[0];
+
+  /** @type {{ inputPerMTok?: number, cachedInputPerMTok?: number, outputPerMTok?: number }} */
+  const prices = {};
+  const numberFlag = (flag, raw) => {
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) throw new Error(`${flag} must be a non-negative number, got ${raw}`);
+    return value;
+  };
+
   for (let index = 1; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--run') options.run = argv[++index] ?? null;
     else if (arg === '--ledger') options.ledger = argv[++index] ?? null;
-    else if (arg === '--cost-cny') {
+    else if (arg === '--variant') options.variant = argv[++index] ?? null;
+    else if (arg === '--json') options.json = argv[++index] ?? null;
+    else if (arg === '--cost-cny') options.costCny = numberFlag(arg, argv[++index]);
+    else if (arg === '--price-input') prices.inputPerMTok = numberFlag(arg, argv[++index]);
+    else if (arg === '--price-cached') prices.cachedInputPerMTok = numberFlag(arg, argv[++index]);
+    else if (arg === '--price-output') prices.outputPerMTok = numberFlag(arg, argv[++index]);
+    else if (arg === '--extraction-cached-share') {
       const raw = argv[++index];
       const value = Number(raw);
-      if (!Number.isFinite(value) || value < 0) throw new Error(`--cost-cny must be a non-negative number, got ${raw}`);
-      options.costCny = value;
+      if (!Number.isFinite(value) || value < 0 || value > 1) {
+        throw new Error(`--extraction-cached-share must be a number between 0 and 1, got ${raw}`);
+      }
+      options.extractionCachedShare = value;
     } else if (arg === '--help' || arg === '-h') {
       options.command = 'help';
     } else {
       throw new Error(`unknown argument: ${arg}`);
     }
   }
+  if (Object.keys(prices).length > 0) options.prices = prices;
   return options;
 }
 
-/** @param {Record<string, any>} run @returns {number} */
-function wallSecondsOf(run) {
-  if (isNonNegativeNumber(run.wallSeconds)) return run.wallSeconds;
-  const start = Date.parse(String(run.startedAt ?? ''));
-  const end = Date.parse(String(run.finishedAt ?? run.endedAt ?? ''));
-  if (!Number.isNaN(start) && !Number.isNaN(end) && end >= start) return (end - start) / 1000;
-  return 0;
-}
-
-const USAGE = 'usage: node run/ledger.mjs append --run <run dir> [--ledger <file>] [--cost-cny N]';
+const USAGE = [
+  'usage: node run/ledger.mjs append --run <run dir> [--variant <name>] [--ledger <file>] [--cost-cny N]',
+  '       [--price-input N] [--price-cached N] [--price-output N] [--extraction-cached-share 0..1]',
+  '       node run/ledger.mjs add --json <file> [--ledger <file>]',
+].join('\n');
 
 /** CLI entry point. */
 function main() {
-  const options = parseAppendArgs(process.argv.slice(2));
+  const options = parseArgs(process.argv.slice(2));
   if (options.command === 'help') {
     process.stdout.write(`${USAGE}\n`);
     return;
   }
-  if (options.command !== 'append') throw new Error(USAGE);
+  if (options.command !== 'append' && options.command !== 'add') throw new Error(USAGE);
+
+  const ledger = resolve(options.ledger ?? DEFAULT_LEDGER_PATH);
+
+  if (options.command === 'add') {
+    if (!isNonEmptyString(options.json)) throw new Error(`--json is required for add\n${USAGE}`);
+    const parsed = JSON.parse(readFileSync(resolve(options.json), 'utf8'));
+    const rows = Array.isArray(parsed) ? parsed : isPlainObject(parsed) ? [parsed] : null;
+    if (!rows) throw new Error('--json must hold one ledger row or an array of rows');
+    const result = appendLedgerRows(ledger, rows);
+    process.stdout.write(`${JSON.stringify({ ...result, ledger, rows: rows.length })}\n`);
+    return;
+  }
+
   if (!isNonEmptyString(options.run)) throw new Error(`--run is required\n${USAGE}`);
+  if (options.variant !== null && !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(options.variant)) {
+    throw new Error('--variant must be a directory-safe name');
+  }
 
   const runDir = resolve(options.run);
   const run = JSON.parse(readFileSync(resolve(runDir, 'run.json'), 'utf8'));
-  const summary = JSON.parse(readFileSync(resolve(runDir, 'scores', 'summary.json'), 'utf8'));
+  const summaryFile = options.variant
+    ? resolve(runDir, `scores.${options.variant}`, 'summary.json')
+    : resolve(runDir, 'scores', 'summary.json');
+  const summary = JSON.parse(readFileSync(summaryFile, 'utf8'));
+  const arm = options.variant
+    ? `${isNonEmptyString(run.arm) ? run.arm : 'unknown'}+${options.variant}`
+    : undefined;
+
   const rows = rowsFromSummary({
-    run: { ...run, rawPath: runDir },
+    run: { ...run, ...(arm ? { arm } : {}), rawPath: runDir },
     summary,
     scorer: run.scorer ?? run.scorerVersion ?? run.commit ?? 'unknown',
-    costCny: options.costCny ?? run.costCny ?? 0,
-    wallSeconds: wallSecondsOf(run),
+    costCny: options.costCny,
+    prices: options.prices,
+    extractionCachedShare: options.extractionCachedShare,
   });
-  const ledger = resolve(options.ledger ?? DEFAULT_LEDGER_PATH);
   const result = appendLedgerRows(ledger, rows);
   process.stdout.write(`${JSON.stringify({ ...result, ledger, rows: rows.length })}\n`);
 }

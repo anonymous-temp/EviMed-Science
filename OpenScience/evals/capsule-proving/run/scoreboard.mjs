@@ -60,31 +60,74 @@ function formatCount(value) {
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : '0';
 }
 
+/** @param {unknown} value @returns {number | null} */
+function finiteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 /** @param {number} value @returns {string} */
 function percent(value) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
 /**
- * A proportion with its interval, or an integer for a count metric.
+ * A plain number for a non-proportion metric: integers stay integers and
+ * decimals keep up to four places without a percent sign.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function formatNumber(value) {
+  const number = finiteNumber(value);
+  if (number === null) return '0';
+  return Number.isInteger(number) ? String(number) : String(Number(number.toFixed(4)));
+}
+
+/** @param {unknown} ci95 @returns {string | null} */
+function formatInterval(ci95, formatter) {
+  if (!Array.isArray(ci95) || ci95.length !== 2 || !ci95.every((entry) => finiteNumber(entry) !== null)) return null;
+  return `[${formatter(ci95[0])}, ${formatter(ci95[1])}]`;
+}
+
+/**
+ * A metric is a proportion when its name is one of the harness's known
+ * proportions. Counts and mean scores are printed as plain numbers.
+ *
+ * @param {string} metric
+ * @returns {boolean}
+ */
+function isProportionMetric(metric) {
+  if (metric.endsWith('_count')) return false;
+  if (/(^|_)(mean|median|avg|average)(_|$)/.test(metric)) return false;
+  if (metric === 'score' || metric.endsWith('_score')) return false;
+  return true;
+}
+
+/**
+ * A proportion with its interval, or a number for a count/mean metric. When the
+ * scorer's valid-item denominator produces a different proportion, that value
+ * is shown beside the all-item value with the invalid-item count.
  *
  * @param {Record<string, unknown>} row
  * @returns {string}
  */
 function formatValue(row) {
   const metric = text(row.metric);
-  const value = typeof row.value === 'number' && Number.isFinite(row.value) ? row.value : 0;
-  if (metric.endsWith('_count')) {
-    if (Array.isArray(row.ci95) && row.ci95.length === 2) {
-      return `${formatCount(value)} [${formatCount(row.ci95[0])}, ${formatCount(row.ci95[1])}]`;
-    }
-    return formatCount(value);
+  const value = finiteNumber(row.value) ?? 0;
+
+  if (!isProportionMetric(metric)) {
+    const interval = formatInterval(row.ci95, formatNumber);
+    return interval ? `${formatNumber(value)} ${interval}` : formatNumber(value);
   }
-  const rendered = percent(value);
-  if (Array.isArray(row.ci95) && row.ci95.length === 2 && row.ci95.every((entry) => typeof entry === 'number' && Number.isFinite(entry))) {
-    return `${rendered} [${percent(row.ci95[0])}, ${percent(row.ci95[1])}]`;
+
+  let rendered = percent(value);
+  const valid = finiteNumber(row.valueValid);
+  if (valid !== null && valid !== value) {
+    const invalid = typeof row.invalid === 'number' && Number.isInteger(row.invalid) && row.invalid >= 0 ? row.invalid : 0;
+    rendered += ` (${percent(valid)} without ${invalid} invalid item${invalid === 1 ? '' : 's'})`;
   }
-  return rendered;
+  const interval = formatInterval(row.ci95, percent);
+  return interval ? `${rendered} ${interval}` : rendered;
 }
 
 /** @param {unknown} judged @returns {string} */
@@ -101,7 +144,8 @@ function formatTokens(tokens) {
 
 /** @param {unknown} value @returns {string} */
 function formatCost(value) {
-  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(2) : '0.00';
+  const number = finiteNumber(value);
+  return number === null ? '—' : number.toFixed(2);
 }
 
 /** @param {Record<string, unknown>} row @returns {string} */
@@ -109,21 +153,75 @@ function formatCommit(row) {
   return text(row.commit).slice(0, 7) || '—';
 }
 
+/** Labels for the scorer's `byStep` failure stages. */
+const STEP_LABELS = {
+  not_stored: 'not stored',
+  not_searched: 'not searched',
+  not_retrieved: 'not retrieved',
+  retrieved_but_wrong: 'misused',
+  misused: 'misused',
+};
+
+/** @type {string[]} */
+const STEP_ORDER = ['not_stored', 'not_searched', 'not_retrieved', 'retrieved_but_wrong'];
+
 /**
- * Stable order required by the scoreboard: set, split, arm, at.
+ * Render `byStep` as `not stored 3 · not searched 40 · …`. Unknown keys keep
+ * their order after the known stages. Returns an em dash when the row has none.
+ *
+ * @param {unknown} byStep
+ * @returns {string}
+ */
+function formatByStep(byStep) {
+  if (!isPlainObject(byStep)) return '—';
+  const keys = Object.keys(byStep);
+  if (keys.length === 0) return '—';
+  const ordered = [
+    ...STEP_ORDER.filter((key) => Object.hasOwn(byStep, key)),
+    ...keys.filter((key) => !STEP_ORDER.includes(key)).sort(),
+  ];
+  return ordered
+    .map((key) => `${STEP_LABELS[key] ?? key.replace(/_/g, ' ')} ${formatCount(byStep[key])}`)
+    .join(' · ');
+}
+
+/**
+ * Stable order required by the scoreboard: set, split, arm, then time. The
+ * metric and run id make ties deterministic so the renderer is a pure function
+ * of the rows.
  *
  * @param {Record<string, unknown>} left
  * @param {Record<string, unknown>} right
  * @returns {number}
  */
 function compareRows(left, right) {
-  for (const field of ['set', 'split', 'arm', 'at']) {
+  for (const field of ['set', 'split', 'arm', 'at', 'metric', 'runId']) {
     const a = text(left[field]);
     const b = text(right[field]);
     if (a < b) return -1;
     if (a > b) return 1;
   }
   return 0;
+}
+
+/**
+ * Group rows by set, then by split, so the arms of one set+split sit together.
+ *
+ * @param {Array<Record<string, unknown>>} rows sorted rows
+ * @returns {Map<string, Map<string, Array<Record<string, unknown>>>>}
+ */
+function groupRows(rows) {
+  /** @type {Map<string, Map<string, Array<Record<string, unknown>>>>} */
+  const groups = new Map();
+  for (const row of rows) {
+    const setName = text(row.set) || '(no set)';
+    const split = text(row.split) || '(no split)';
+    if (!groups.has(setName)) groups.set(setName, new Map());
+    const splits = groups.get(setName);
+    if (!splits.has(split)) splits.set(split, []);
+    splits.get(split).push(row);
+  }
+  return groups;
 }
 
 /**
@@ -141,14 +239,8 @@ export function renderScoreboard(rows, generatedAt = 'unspecified') {
       ? text(generatedAt.generatedAt ?? generatedAt.at ?? 'unspecified')
       : text(generatedAt);
 
-  const sorted = [...rows].sort(compareRows);
-  const groups = new Map();
-  for (const row of sorted) {
-    if (!isPlainObject(row)) continue;
-    const setName = text(row.set) || '(no set)';
-    if (!groups.has(setName)) groups.set(setName, []);
-    groups.get(setName).push(row);
-  }
+  const sorted = rows.filter(isPlainObject).sort(compareRows);
+  const groups = groupRows(sorted);
 
   /** @type {string[]} */
   const lines = [];
@@ -163,17 +255,21 @@ export function renderScoreboard(rows, generatedAt = 'unspecified') {
     return lines.join('\n');
   }
 
-  for (const [setName, setRows] of groups) {
+  for (const [setName, splits] of groups) {
     lines.push(`## ${cell(setName)}`);
     lines.push('');
-    lines.push('| split | arm | flags | n | metric | value (95% CI) | judged (code/judge/unknown/error) | tokens (prompt/completion) | cost (CNY) | commit | runId |');
-    lines.push('|---|---|---|---|---|---|---|---|---|---|---|');
-    for (const row of setRows) {
-      lines.push(
-        `| ${cell(row.split)} | ${cell(row.arm)} | ${cell(formatFlags(row.flags))} | ${formatCount(row.n)} | ${cell(row.metric)} | ${formatValue(row)} | ${formatJudged(row.judged)} | ${formatTokens(row.tokens)} | ${formatCost(row.costCny)} | ${cell(formatCommit(row))} | ${cell(row.runId)} |`,
-      );
+    for (const [split, splitRows] of splits) {
+      lines.push(`### ${cell(split)}`);
+      lines.push('');
+      lines.push('| arm | flags | n | metric | value (95% CI) | wrong because | disputed | judged (code/judge/unknown/error) | tokens (prompt/completion) | cost (CNY) | commit | runId |');
+      lines.push('|---|---|---|---|---|---|---|---|---|---|---|---|');
+      for (const row of splitRows) {
+        lines.push(
+          `| ${cell(row.arm)} | ${cell(formatFlags(row.flags))} | ${formatCount(row.n)} | ${cell(row.metric)} | ${cell(formatValue(row))} | ${cell(formatByStep(row.byStep))} | ${formatCount(row.disputed)} | ${formatJudged(row.judged)} | ${formatTokens(row.tokens)} | ${formatCost(row.costCny)} | ${cell(formatCommit(row))} | ${cell(row.runId)} |`,
+        );
+      }
+      lines.push('');
     }
-    lines.push('');
   }
 
   return lines.join('\n');
