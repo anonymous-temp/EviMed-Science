@@ -147,3 +147,11 @@ test('a delegated child is handed the official method as a card, never whole', (
   assert.doesNotMatch(request.prompt, /### official-daily-writing-status-report/, 'never presented as the user\'s own rule')
   assert.match(request.prompt, /## EviMed 的默认做法（适用时再读）/)
 })
+
+test('a learned method carrying card facts shows them under its card, in a delegation as in the method block', () => {
+  const card = { evidence: ['每节不要超过三行'], counterexamples: ['月报'], verified: false }
+  const text = learnedMethodCardLines([{ ...learned, card }]).join('\n')
+  assert.match(text, /全文：\/runtime\/capsule-methods\/_lma{32}\/SKILL\.md\n {2}依据：「每节不要超过三行」\n {2}不适用：月报/)
+  assert.doesNotMatch(text, /已验证/, 'not verified, no such line')
+  assert.deepEqual(learnedMethodCardLines([learned]), learnedMethodCardLines([{ ...learned, card: null }]), 'no card is the card it always was')
+})

@@ -503,12 +503,14 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  *
  * `methodSelection` carries the learned-method library's experiment switches, each off by default (plan 2026-11-04 §5.4): `pyramid`
  * (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`) and `minSimilarity` (`OPEN_SCIENCE_METHOD_MOUNT_MIN_SIMILARITY`), read by `selectLearnedMethods`, and
- * `officialInLoop` (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`), which selects the official tier the same way (`selectOfficialMethods`).
+ * `officialInLoop` (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`), which selects the official tier the same way (`selectOfficialMethods`), and
+ * `cardEvidence` (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`): each learned method's `_selection.json` entry carries `card` (`methodCardFacts`),
+ * which the capsule plugin renders as extra card lines.
  *
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
  *   learnedFamily?: "geo" | "research" | null, scopeId?: string | null, query?: string | null, similarity?: { nearest: Function, pairs: Function } | null,
  *   keep?: Iterable<string> | null, keepDirectory?: boolean, contextPolicy?:any, contextItems?:any, maxPromptBytes?: number, writeFile?: typeof writeFileAtomicNoFollow,
- *   methodSelection?: { pyramid?: boolean, minSimilarity?: number, officialInLoop?: boolean } | null }} options
+ *   methodSelection?: { pyramid?: boolean, minSimilarity?: number, officialInLoop?: boolean, cardEvidence?: boolean } | null }} options
  * `capsule` is what the capsule half mounted, as the conversation panel shows
  * it (`memorySessions.mjs`): recorded here so a read of the panel does not
  * select the whole capsule again.
@@ -579,6 +581,7 @@ export async function materializeCapsuleMethods({
       keep,
       ...(switches.pyramid === true ? { pyramid: true } : {}),
       ...(Number(switches.minSimilarity) > 0 ? { minSimilarity: Number(switches.minSimilarity) } : {}),
+      ...(switches.cardEvidence === true ? { cardEvidence: true } : {}),
     })
     : [];
   const learnedBytes = learnedMethods.reduce((total, method) => total + method.bytes, 0);
@@ -651,10 +654,14 @@ export async function materializeCapsuleMethods({
     factKind: method.factKind, content: String(method.content).slice(0, 1000) }));
   const rank = { mode: /** @type {any} */ (learnedMethods).mode ?? null, topScore: /** @type {any} */ (learnedMethods).topScore ?? null };
   const reasons = new Map([...learnedMethods, ...officialMethods].map((method) => [method.directoryName, method.reason]));
+  // What a learned method's card adds (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`): written beside its reason, and part of the version, because
+  // the card in front of a run changes with it. None while the switch is off.
+  const cards = new Map(learnedMethods.filter((method) => method.card).map((method) => [method.directoryName, method.card]));
+  const cardOf = (/** @type {string} */ name) => (cards.has(name) ? `\u0000${JSON.stringify(cards.get(name))}` : "");
   const policyIdentity=contextPolicy?.kind === "geo-project" ? contextPolicyIdentity(contextPolicy) : null;
   const identities=policyIdentity ? methods.map(method=>({kind:method.capsuleId?"fact":"method",id:method.id,revision:method.revision,contentDigest:method.contentDigest,directoryName:method.directoryName,...(method.capsuleId?{capsuleId:method.capsuleId}:{})})) : [];
   const selectionScope=policyIdentity ? {contextPolicy:policyIdentity,identities} : {};
-  const version = selectionVersion([...methods.map((method) => ({ directory: method.directoryName, digest: String(method.digest ?? method.document ?? ""), reason: reasons.get(method.directoryName) ?? null })), ...(policyIdentity ? [{directory:"context-policy",digest:JSON.stringify(policyIdentity),reason:null}] : [])]);
+  const version = selectionVersion([...methods.map((method) => ({ directory: method.directoryName, digest: `${String(method.digest ?? method.document ?? "")}${cardOf(method.directoryName)}`, reason: reasons.get(method.directoryName) ?? null })), ...(policyIdentity ? [{directory:"context-policy",digest:JSON.stringify(policyIdentity),reason:null}] : [])]);
   const officialReceipt = officialMethods.map((method) => ({ id: method.id, name: method.name, digest: method.digest, directoryName: method.directoryName }));
   if (methods.length === 0 && !keepDirectory) {
     await fs.rm(directory, { recursive: true, force: true });
@@ -698,7 +705,8 @@ export async function materializeCapsuleMethods({
   await recheck();
   // `leftOut` is the receipt of what the personal delta kept out of this selection (a plugin that predates it ignores the field).
   await writeFile(directory, path.join(directory, SELECTION_FILE), `${JSON.stringify({
-    version, ...(contextPolicy ? {contextPolicy:contextPolicyIdentity(contextPolicy)} : {}), methods: methods.map((method) => ({ directory: method.directoryName, reason: reasons.get(method.directoryName) ?? null })),
+    version, ...(contextPolicy ? {contextPolicy:contextPolicyIdentity(contextPolicy)} : {}), methods: methods.map((method) => ({ directory: method.directoryName, reason: reasons.get(method.directoryName) ?? null,
+      ...(cards.has(method.directoryName) ? { card: cards.get(method.directoryName) } : {}) })),
     ...(officialMethods.leftOut.length ? { leftOut: officialMethods.leftOut } : {}),
   })}\n`, { encoding: "utf8", mode: 0o444 });
   return { ...selectionScope, directory, count: methods.length, bytes, promptBytes: spentBytes, leftOut, learned, learnedBytes, version, rank, capsule, official: officialReceipt, officialLeftOut: officialMethods.leftOut };

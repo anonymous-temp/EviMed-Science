@@ -32,7 +32,7 @@ import { CONTEXT_ITEM_FIELDS, contextPolicyIdentity } from "./geoContextItems.mj
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
-import { METHOD_FILE_PREFIXES, METHOD_MOUNT, abstractMembersOf, computeMethodLevels, learnedMethodCardEntry, mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
+import { METHOD_FILE_PREFIXES, METHOD_MOUNT, abstractMembersOf, computeMethodLevels, learnedMethodCardEntry, methodCardFacts, mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
 import { EVIDENCE_PROJECT_ID, FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "./internalProjects.mjs";
 import { createMethodSimilarity } from "./methodSimilarity.mjs";
 
@@ -211,17 +211,20 @@ function methodFileBytes(payload) {
  * run reads it (2026-09-28). The path is the one the runtime sees
  * (`cardDirectory`); a remote launcher's install path differs from the
  * container's by a few bytes, which a budget of kilobytes does not need to
- * resolve.
+ * resolve. `card`, given only where the mount writes one (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`, `methodCardFacts`), is budgeted with
+ * the lines it adds; without it the bytes are what they always were.
  * @param {any} payload @param {string} directoryName @param {string} cardDirectory
+ * @param {{ evidence: string[], counterexamples: string[], verified: boolean } | null} [card]
  * @returns {number}
  */
-export function learnedMethodCardBytes(payload, directoryName, cardDirectory) {
+export function learnedMethodCardBytes(payload, directoryName, cardDirectory, card = null) {
   const frontmatter = payload?.frontmatter ?? {};
   const lines = learnedMethodCardEntry({
     name: String(frontmatter.name ?? ""),
     description: String(frontmatter.description ?? ""),
     whenToUse: String(frontmatter.whenToUse ?? ""),
     path: `${String(cardDirectory).replace(/\/+$/, "")}/${directoryName}/SKILL.md`,
+    ...(card ? { card } : {}),
   });
   return Buffer.byteLength(`${lines.join("\n")}\n`, "utf8");
 }
@@ -237,6 +240,7 @@ export function learnedMethodCardBytes(payload, directoryName, cardDirectory) {
  * @property {number} bytes
  * @property {number} promptBytes
  * @property {"similarity" | "dependency" | "explore" | "recent" | "abstraction"} reason why its card is in front of the run (`METHOD_MOUNT_REASONS`)
+ * @property {{ evidence: string[], counterexamples: string[], verified: boolean }} [card] what the card adds (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`)
  */
 
 /**
@@ -296,11 +300,14 @@ export function learnedMethodCardBytes(payload, directoryName, cardDirectory) {
  *    relevant abstract parent each, at most `METHOD_MOUNT.abstractMax`, reason `abstraction` (`planMethodSelection`); the cards are
  *    listed abstract → functional → atomic.
  *  - `minSimilarity` (`OPEN_SCIENCE_METHOD_MOUNT_MIN_SIMILARITY`, defect 9): a cosine floor for the similarity selection; 0 is none.
+ * And `cardEvidence` (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`, off by default): each method carries `card` (`methodCardFacts`: up to two
+ * quotations it rests on, two situations it is not for, and whether it was used after its last change and not corrected), budgeted with the
+ * card's lines. SKILL.md and the digest are untouched.
  *
  * @param {any} learning `LearningService`
  * @param {{userId: string, contextPolicy?: any, contextItems?: any, contextProvenance?: any, projectId: string, maxCount?: number, maxBytes?: number, family?: "geo" | "research" | null,
  *   scopeId?: string | null, query?: string | null, similarity?: { nearest: Function } | null, keep?: Iterable<string> | null,
- *   cardDirectory?: string | null, onLeftOut?: ((methodId: string) => void) | null, pyramid?: boolean, minSimilarity?: number}} scope
+ *   cardDirectory?: string | null, onLeftOut?: ((methodId: string) => void) | null, pyramid?: boolean, minSimilarity?: number, cardEvidence?: boolean}} scope
  * @returns {Promise<MountedLearnedMethod[] & { mode?: "embedding" | "lexical" | "recent", topScore?: number | null, kept?: MountedLearnedMethod[], levels?: Map<string, number> }>}
  */
 export async function selectLearnedMethods(learning, scope) {
@@ -385,6 +392,7 @@ export async function selectLearnedMethods(learning, scope) {
     const rendered = renderLearnedMethod(payload);
     const directoryName = learnedMethodDirectoryName(String(document.id));
     const bytes = Buffer.byteLength(rendered, "utf8") + methodFileBytes(payload);
+    const card = scope.cardEvidence === true ? methodCardFacts(payload) : null;
     entries.set(String(document.id), {
       id: String(document.id),
       ...(shared ? {revision:document.revision,contentDigest:payload.contentDigest,contextPolicy:contextPolicyIdentity(scope.contextPolicy)} : {}),
@@ -399,8 +407,10 @@ export async function selectLearnedMethods(learning, scope) {
       // and reads the body and the scripts from the directory.
       files: methodFiles(payload),
       bytes,
-      promptBytes: cardDirectory ? learnedMethodCardBytes(payload, directoryName, cardDirectory) : bytes,
+      promptBytes: cardDirectory ? learnedMethodCardBytes(payload, directoryName, cardDirectory, card) : bytes,
       reason: "recent",
+      // What the card adds (`cardEvidence`); absent when the switch is off, so the entry is what it always was.
+      ...(card ? { card } : {}),
       payload,
       source: document,
       approvedAt: Date.parse(String(payload.statusChangedAt ?? payload.createdAt ?? "")) || 0,
@@ -675,8 +685,8 @@ const OFFLINE_CARD_DIRECTORY = "/runtime/capsule-methods";
  * Returns the cards in the order a run is shown them, each with why it is there (`METHOD_MOUNT_REASONS`), its level in the library,
  * and the card's lines (`learnedMethodCardEntry`); `mode` and `topScore` say how the library was ranked.
  * @param {{ library: readonly any[], taskText?: string | null, embed?: ((texts: string[]) => Promise<number[][]>) | null,
- *   options?: { pyramid?: boolean, minSimilarity?: number, scopeId?: string | null, family?: "geo" | "research" | null, maxCount?: number,
- *     maxBytes?: number, cardDirectory?: string, similarity?: { nearest: Function } | null } }} input
+ *   options?: { pyramid?: boolean, minSimilarity?: number, cardEvidence?: boolean, scopeId?: string | null, family?: "geo" | "research" | null,
+ *     maxCount?: number, maxBytes?: number, cardDirectory?: string, similarity?: { nearest: Function } | null } }} input
  * @returns {Promise<{ cards: { id: string, name: string, reason: string, level: number, digest: string, directoryName: string, promptBytes: number, lines: string[] }[],
  *   mode: "embedding" | "lexical" | "recent", topScore: number | null }>}
  */
@@ -691,6 +701,7 @@ export async function selectMethodsForTask({ library, taskText = null, embed = n
     cardDirectory,
     pyramid: options.pyramid === true,
     minSimilarity: Number(options.minSimilarity ?? 0),
+    cardEvidence: options.cardEvidence === true,
     ...(options.scopeId === undefined ? {} : { scopeId: options.scopeId }),
     ...(options.family === undefined ? {} : { family: options.family }),
     ...(Number.isSafeInteger(options.maxCount) ? { maxCount: options.maxCount } : {}),
@@ -704,8 +715,9 @@ export async function selectMethodsForTask({ library, taskText = null, embed = n
       return {
         id: method.id, name: method.name, reason: method.reason, level: levels.get(method.name) ?? 0, digest: method.digest,
         directoryName: method.directoryName, promptBytes: method.promptBytes,
+        ...(method.card ? { card: method.card } : {}),
         lines: learnedMethodCardEntry({ name: method.name, description: String(frontmatter.description ?? ""), whenToUse: String(frontmatter.whenToUse ?? ""),
-          path: `${cardDirectory.replace(/\/+$/, "")}/${method.directoryName}/SKILL.md` }),
+          path: `${cardDirectory.replace(/\/+$/, "")}/${method.directoryName}/SKILL.md`, ...(method.card ? { card: method.card } : {}) }),
       };
     }),
     mode: /** @type {any} */ (selected).mode ?? "recent",

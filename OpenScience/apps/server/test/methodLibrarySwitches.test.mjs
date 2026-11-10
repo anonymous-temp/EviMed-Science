@@ -147,3 +147,55 @@ test("快测 B: off by default; on, a person's method may pin an official one an
     await rm(project.rootDir, { recursive: true, force: true });
   }
 });
+
+/* -------------------------------------------------------------------------- C: OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED */
+
+import { learnedMethodCardEntry, mountedMethodDigest } from "@evimed/domain";
+import { createHash } from "node:crypto";
+import { selectLearnedMethods, selectMethodsForTask } from "../src/learnedMethodMount.mjs";
+import { runtimeCapsuleMethodsDir } from "../src/capsuleMethods.mjs";
+
+test("快测 C: off by default; on, a card carries its evidence, counter-examples and verified line, budgeted, with SKILL.md untouched", async () => {
+  assert.equal(loadConfig({ rootDir: repoRoot }).methodCardEvidenceEnabled, false);
+  assert.equal(configUnder({ OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED: "1" }).methodCardEvidenceEnabled, true);
+
+  const digest = `sha256:${"9".repeat(64)}`;
+  const document = learnedDoc("weekly-three-lines", "Write the weekly report three lines a section", {}, {
+    contentDigest: digest,
+    learning: { digest, counts: { appliedClean: 2, appliedCorrected: 0 } },
+    provenance: { origin: "inferred", evidence: [{ runId: "r1", seqRange: [1, 2], quote: "每节不要超过三行" }] },
+    scope: { applicability: "周报", counterexamples: ["月报"] },
+  });
+  const learning = { async approvedMethods() { return [document]; } };
+  const scope = { userId: "u1", projectId: "p1", cardDirectory: runtimeCapsuleMethodsDir };
+  const [plain] = await selectLearnedMethods(learning, scope);
+  const [carded] = await selectLearnedMethods(learning, { ...scope, cardEvidence: true });
+  assert.equal("card" in plain, false, "off: the entry is what it always was");
+  assert.deepEqual(carded.card, { evidence: ["每节不要超过三行"], counterexamples: ["月报"], verified: true });
+  assert.equal(carded.document, plain.document, "SKILL.md does not change");
+  assert.equal(carded.digest, plain.digest);
+  assert.equal(carded.digest, mountedMethodDigest(document.payload, (/** @type {string} */ text) => createHash("sha256").update(text, "utf8").digest("hex")));
+  const lines = learnedMethodCardEntry({ name: "weekly-three-lines", whenToUse: document.payload.frontmatter.whenToUse,
+    path: `${runtimeCapsuleMethodsDir}/${carded.directoryName}/SKILL.md`, card: carded.card });
+  assert.equal(carded.promptBytes, Buffer.byteLength(`${lines.join("\n")}\n`, "utf8"), "the budget pays for the lines the card adds");
+  assert.ok(carded.promptBytes > plain.promptBytes);
+
+  // The selection file carries the card beside the reason; off, it carries none and the version is the one it was.
+  const { project, directory } = await scratchProject();
+  try {
+    const options = { capsules: null, learning, project, directory, keepDirectory: true };
+    const read = async () => JSON.parse(await readFile(path.join(directory, SELECTION_FILE), "utf8"));
+    const off = await materializeCapsuleMethods(options);
+    assert.deepEqual((await read()).methods, [{ directory: carded.directoryName, reason: "recent" }]);
+    const on = await materializeCapsuleMethods({ ...options, methodSelection: { cardEvidence: true } });
+    assert.deepEqual((await read()).methods, [{ directory: carded.directoryName, reason: "recent", card: carded.card }]);
+    assert.notEqual(on.version, off.version, "a card in front of a run that changed is another mount");
+    assert.equal(await readFile(path.join(directory, carded.directoryName, "SKILL.md"), "utf8"), plain.document);
+  } finally {
+    await rm(project.rootDir, { recursive: true, force: true });
+  }
+
+  // The offline selection renders the same lines.
+  const offline = await selectMethodsForTask({ library: [document], options: { cardEvidence: true } });
+  assert.deepEqual(offline.cards[0].lines.slice(2), ["  依据：「每节不要超过三行」", "  不适用：月报", "  已验证：最近一次修改后用过，没有被纠正"]);
+});

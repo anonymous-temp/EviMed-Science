@@ -396,12 +396,29 @@ export function renderMethodSkill(frontmatter, body) {
 export const LEARNED_METHOD_CARD_SUMMARY_MAX_CHARS = 300
 
 /**
+ * What a card may add beyond when the method applies (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`): at most this many quotations it rests
+ * on and situations it is not for, each at most `chars` characters, so a card stays a card.
+ */
+export const LEARNED_METHOD_CARD_FACTS = Object.freeze({ evidence: 2, counterexamples: 2, chars: 100 })
+
+/** @param {unknown} text @returns {string} one line, at most `LEARNED_METHOD_CARD_FACTS.chars` characters */
+export function clipCardFact(text) {
+  const line = String(text ?? '').replace(/\s+/g, ' ').trim()
+  return line.length > LEARNED_METHOD_CARD_FACTS.chars ? `${line.slice(0, LEARNED_METHOD_CARD_FACTS.chars)}…` : line
+}
+
+/**
  * One learned method as a run is handed it: a card saying when it applies and
  * which file holds it, in place of its text (2026-09-28). Two parties need the
  * same lines — the socket, which writes them into the method block and every
  * delegation, and the control plane, which budgets a mount by what it puts in
  * front of the model — so they are written here once.
- * @param {{ name: string, description?: string, whenToUse?: string, path?: string }} method
+ *
+ * `card`, present only where the mount wrote one (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`; `methodCardFacts`), adds a line of the
+ * quotations the method rests on, one of the situations it is not for, and one saying it was used after its last change and not
+ * corrected (`verified`). Without it the card is the two lines it always was.
+ * @param {{ name: string, description?: string, whenToUse?: string, path?: string,
+ *   card?: { evidence?: readonly string[], counterexamples?: readonly string[], verified?: boolean } | null }} method
  * @returns {string[]}
  */
 export function learnedMethodCardEntry(method) {
@@ -412,6 +429,25 @@ export function learnedMethodCardEntry(method) {
   return [
     `- ${method?.name ?? ''}${shown ? `：${shown}` : ''}`,
     `  全文：${method?.path ?? ''}`,
+    ...learnedMethodCardFactLines(method?.card),
+  ]
+}
+
+/**
+ * The lines a card's facts add under it (`learnedMethodCardEntry`, and the session's method section in the capsule plugin): the quotations
+ * the method rests on, the situations it is not for, and a verified line when it is. None for no card.
+ * @param {{ evidence?: readonly string[], counterexamples?: readonly string[], verified?: boolean } | null | undefined} card
+ * @returns {string[]}
+ */
+export function learnedMethodCardFactLines(card) {
+  if (!card || typeof card !== 'object') return []
+  const facts = (/** @type {unknown} */ list, /** @type {number} */ limit) => (Array.isArray(list) ? list : []).map(clipCardFact).filter(Boolean).slice(0, limit)
+  const evidence = facts(card.evidence, LEARNED_METHOD_CARD_FACTS.evidence)
+  const counterexamples = facts(card.counterexamples, LEARNED_METHOD_CARD_FACTS.counterexamples)
+  return [
+    ...(evidence.length ? [`  依据：${evidence.map((quote) => `「${quote}」`).join('')}`] : []),
+    ...(counterexamples.length ? [`  不适用：${counterexamples.join('；')}`] : []),
+    ...(card.verified === true ? ['  已验证：最近一次修改后用过，没有被纠正'] : []),
   ]
 }
 

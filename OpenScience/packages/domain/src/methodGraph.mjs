@@ -43,7 +43,7 @@ import {
   METHOD_UNPROVEN_MERGE_MIN_CARRIED,
   METHOD_UNUSED_RETIRE_LOADS,
 } from './constants.mjs'
-import { isMethodDigest, preservedSectionsIntact } from './methodSkill.mjs'
+import { LEARNED_METHOD_CARD_FACTS, clipCardFact, isMethodDigest, preservedSectionsIntact } from './methodSkill.mjs'
 import { scientificOutcomes } from './methodFeedback.mjs'
 
 /**
@@ -1074,6 +1074,33 @@ export function storedEvidenceQuotes(provenance) {
     if (quotes.length >= STORED_QUOTES_LIMIT) break
   }
   return quotes
+}
+
+/**
+ * Whether a learned method's card may say it was verified (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`). The rule: its counters are about the
+ * body it holds now (`learning.digest === contentDigest`; they restart at every body change, `resetLearningForDigest`), and since that change at
+ * least one run that opened it was followed by a clean reaction (`counts.appliedClean >= 1`) and none by a correction
+ * (`counts.appliedCorrected === 0`). Read off the stored counters only; nothing is asked.
+ * @param {any} payload a learned method document's payload @returns {boolean}
+ */
+export function methodCardVerified(payload) {
+  const learning = payload?.learning
+  if (!learning || !payload?.contentDigest || learning.digest !== payload.contentDigest) return false
+  return Number(learning.counts?.appliedClean ?? 0) >= 1 && Number(learning.counts?.appliedCorrected ?? 0) === 0
+}
+
+/**
+ * What a learned method's card carries beyond when it applies (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`): the first quotations it rests on
+ * (`storedEvidenceQuotes` of `provenance.evidence`), the first situations it was declared not to be for (`scope.counterexamples`), each clipped
+ * to a card's line (`LEARNED_METHOD_CARD_FACTS`), and `verified` (`methodCardVerified`). Outside SKILL.md, so nothing that hashes the method
+ * moves when a card does.
+ * @param {any} payload @returns {{ evidence: string[], counterexamples: string[], verified: boolean }}
+ */
+export function methodCardFacts(payload) {
+  const evidence = storedEvidenceQuotes(payload?.provenance).map(clipCardFact).filter(Boolean).slice(0, LEARNED_METHOD_CARD_FACTS.evidence)
+  const counterexamples = (Array.isArray(payload?.scope?.counterexamples) ? payload.scope.counterexamples : [])
+    .filter((/** @type {unknown} */ entry) => typeof entry === 'string').map(clipCardFact).filter(Boolean).slice(0, LEARNED_METHOD_CARD_FACTS.counterexamples)
+  return { evidence, counterexamples, verified: methodCardVerified(payload) }
 }
 
 /**

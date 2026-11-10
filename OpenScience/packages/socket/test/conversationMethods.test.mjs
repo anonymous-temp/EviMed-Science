@@ -184,3 +184,21 @@ test('a selection that cannot be trusted or read costs the conversation its meth
   assert.match((await broken.assemble(four)).sections[0].text, /launch|alpha/)
   assert.deepEqual(broken.degraded.filter((line) => line.startsWith('conversation methods')), ['conversation methods not read: the receipt store is down'])
 })
+
+test('a card the selection carries reaches the conversation and its delegations; a selection without one reads as before', async () => {
+  const card = { evidence: ['每节不要超过三行', 42, '数'.repeat(150)], counterexamples: ['月报', '年报', '会议纪要'], verified: true }
+  const withCard = JSON.stringify({ version: 'v2', methods: [{ directory: A, reason: 'similarity', card }, { directory: B, reason: 'explore' }] })
+  const k = kernel({ [`${DIR}/${A}/SKILL.md`]: skill('alpha'), [`${DIR}/${B}/SKILL.md`]: skill('beta'), [`${DIR}/${SELECTION_FILE}`]: selection('v1', [[A, 'similarity']]) })
+  await apply(k.ctx, config)
+  assert.doesNotMatch(k.sections[0].text, /依据|已验证/, 'no card, no extra line')
+  k.files[`${DIR}/${SELECTION_FILE}`] = withCard
+  const one = root('s1')
+  k.claim(one, 'r1')
+  const text = (await k.assemble(one)).sections.find((/** @type {any} */ section) => section.name === METHODS_SECTION_NAME).text
+  assert.match(text, /alpha[\s\S]*依据：「每节不要超过三行」「数{100}…」\n {2}不适用：月报；年报\n {2}已验证：最近一次修改后用过，没有被纠正[\s\S]*beta/,
+    'strings only, two of each, clipped as the card clips them, under the method they belong to')
+  const methods = k.provided.evimedCapsuleMethods.forSession('s1')
+  assert.deepEqual(methods[0].card, { evidence: ['每节不要超过三行', `${'数'.repeat(100)}…`], counterexamples: ['月报', '年报'], verified: true })
+  assert.equal('card' in methods[1], false)
+  assert.equal(k.sessions[0].methods.every((/** @type {any} */ method) => !('card' in method)), true, 'the receipt is what it was')
+})

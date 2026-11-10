@@ -3257,6 +3257,9 @@ export function loadConfig(overrides = {}) {
     // consolidation's screen and decide as read-only documents, a person's method may depend on one (`sha256:` + its pack sha), and the mount
     // selects the tier like the person's library (closure, parent, own cap) instead of the nearest three, flat.
     methodOfficialInLoopEnabled: overrides.methodOfficialInLoopEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED", false),
+    // A learned method's card carries up to two quotations it rests on, two situations it is not for, and whether it was used after its last
+    // change and not corrected (plan 2026-11-04 item 11), off by default; SKILL.md and the digest never change. Off, the card is two lines.
+    methodCardEvidenceEnabled: overrides.methodCardEvidenceEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED", false),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),
     // The context window the kernel is told it has.
