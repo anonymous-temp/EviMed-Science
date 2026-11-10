@@ -17,7 +17,7 @@ import { SET_LOADERS } from "./sets.mjs";
  * @typedef {{ kind: string, title: string, text: string }} CaseMaterial
  * @typedef {{ qid: string, afterSession: number, asOf: string, text: string, project?: CaseProject, materials?: CaseMaterial[] }} CaseQuestion
  * @typedef {{ caseId: string, set: string, split: string, userKey: string, sessions: CaseSession[], questions: CaseQuestion[], meta?: Record<string, unknown> }} Case
- * @typedef {(input: { split: string, dataDir: string, set: string }) => Promise<Case[]>} SetLoader
+ * @typedef {(input: { split: string, dataDir: string, set: string, only?: string[] }) => Promise<Case[]>} SetLoader
  */
 
 /** @type {Map<string, SetLoader>} */
@@ -169,7 +169,7 @@ export async function loadCases({ set, split, dataDir, only = null }) {
   if (!loader) throw new Error(`unknown set ${set} (registered: ${registeredSets().join(", ") || "none"})`);
   if (!dataDir) throw new Error("a data directory is required");
   const wanted = onlyList(only);
-  const cases = (await loader({ split, dataDir, set })).filter((item) => !wanted || wanted.has(item.caseId) || wanted.has(item.userKey));
+  const cases = (await loader({ split, dataDir, set, ...(wanted ? { only: [...wanted] } : {}) })).filter((item) => !wanted || wanted.has(item.caseId) || wanted.has(item.userKey));
   if (wanted) {
     const found = new Set(cases.flatMap((item) => [item.caseId, item.userKey]));
     const missing = [...wanted].filter((name) => !found.has(name));

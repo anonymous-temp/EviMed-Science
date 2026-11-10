@@ -10,7 +10,7 @@
 //     [--ingest-only] [--templates-dir <dir>] [--max-rounds N] [--extraction-timeout-ms N] [--gateway-timeout-ms N]
 //     [--config key=value] [--answer-variant name:key=value,...] [--maintain none|consolidate|verify|consolidate+verify]
 //     [--answers-only] [--variants-only] [--retrieval-only] [--answer-model ID] [--answer-base URL] [--answer-key-file FILE]
-//     [--maintain-after n[,n...]|each] [--no-rejection-judge] [--label text]
+//     [--maintain-after n[,n...]|each] [--no-rejection-judge] [--label text] [--stock-engine] [--database-pool-max N]
 //
 // `--engine-url` accepts an ordered comma-separated shard list; `each` maintains at every existing checkpoint.
 // Arms `no-memory` and `keyword` never touch the engine. Step keys: `<caseId>/ingest/<sessionId>`, `<caseId>/plant/<n>`,

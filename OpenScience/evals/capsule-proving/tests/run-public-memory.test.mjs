@@ -93,3 +93,11 @@ test('runner bounds database pools independently from ingestion concurrency', ()
   assert.equal(parseArguments([...args,'--database-pool-max','1']).concurrency,8);
   assert.throws(()=>parseArguments([...args,'--database-pool-max','0']),/pool-max/);
 });
+
+test('case selection reaches the public reader before adapting unused people', { skip }, async () => {
+  const { loadCases } = await import('../run/cases.mjs');
+  const cases = await loadCases({set:'realmem',split:'dev',dataDir:DATA,only:'Liam_O_Connor'});
+  assert.equal(cases.length,1);
+  assert.equal(cases[0].caseId,'Liam_O_Connor');
+  assert.equal(cases[0].questions.length,11);
+});
