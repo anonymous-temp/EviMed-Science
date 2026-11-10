@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { checkAnswer, checkStore, checkSecret, citationBackCheck, checkGiven, containsEntity, wilson, checkEntityReplacement, G6_POLICY } from '../run/scoreChecks.mjs';
 import { scoreRun, summarize, summarizeForget, parseArgs, publicRubric, listRedlines } from '../run/score.mjs';
-import { buildJudgePacket, mergeJudgeResults, sha256, judgePackets, JUDGE_SCHEMA, JUDGE_SYSTEM, PACKET_CHAR_BUDGET } from '../run/judgePackets.mjs';
+import { buildJudgePacket, mergeJudgeResults, sha256, judgePackets, JUDGE_SCHEMA, JUDGE_SYSTEM, PACKET_CHAR_BUDGET, memoryStoreJudgePacket } from '../run/judgePackets.mjs';
 import { registerQuestionPools, sourceSetSha256 } from '../inputs.mjs';
 
 const snap = text => ({ afterSession: 2, files: { 'notes/self/fake.md': text } });
@@ -1076,4 +1076,13 @@ test('malformed batch responses split, and permanent singleton failures persist 
   assert.ok(!JSON.stringify(saved).includes('fixture-secret'));
   const resumed = await judgePackets(packets, { key: 'fixture', results: saved, fetchImpl: fakeJudge(undefined, (_req, batch) => assert.deepEqual(batch.map(p => p.id), [packets[0].id])) });
   assert.equal(resumed.filter(r => r.verdict === 'correct').length, 6);
+});
+
+
+test('singleton fallback never bypasses the mixed store-rubric configuration guard', async () => {
+  const [answer] = packetsOf(1);
+  const store = buildJudgePacket({ runId: 'r', set: 's', split: 'dev', caseId: 'c', kind: 'store', id: 's', verdict: 'needs-judge', checks: [] },
+    { rubric: ['Retain the fixture'], snapshot: snap('fixture') });
+  await assert.rejects(judgePackets([answer, memoryStoreJudgePacket(store)], { key: 'fixture',
+    fetchImpl: async () => assert.fail('Mixed rubrics must be rejected before any request') }), /judge_mixed_task_rubrics/);
 });

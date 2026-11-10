@@ -225,6 +225,8 @@ async function judgeBatch(packets, { key, fetchImpl = globalThis.fetch }) {
 
 /** Six items per request; serialize durable saves while allowing bounded independent requests. */
 export async function judgePackets(packets, { key, results = [], fetchImpl, persist = async () => {}, batchSize = 6, concurrency = 6, retries = 0, retryDelayMs = 250 } = {}) {
+  // Rubric configuration errors are not transport failures and must never enter singleton fallback.
+  if (packets.some(p => p.taskKind === 'store') && !packets.every(p => p.taskKind === 'store')) throw new Error('judge_mixed_task_rubrics');
   if (packets.some(p => p.officialPrompt || p.publicOfficial)) batchSize = 1;
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 12) throw new Error('judge_batch_invalid');
   if (!Number.isSafeInteger(concurrency) || concurrency < 1) throw new Error('judge_concurrency_invalid');
