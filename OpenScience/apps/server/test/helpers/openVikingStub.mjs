@@ -254,6 +254,10 @@ export class OpenVikingStub {
       if (!this.tags.has(uri)) this.tags.set(uri, []);
       return send(200, ok({ uri, mode: body?.mode, written_bytes: Buffer.byteLength(String(body?.content ?? "")), content_updated: true, vector_status: "complete" }));
     }
+    if (path === '/api/v1/content/reindex' && req.method === 'POST') {
+      if (!within(String(body?.uri ?? ''))) return send(403, fail('PERMISSION_DENIED', 'Access denied'));
+      return send(200, ok({ status: 'completed', failed_records: 0, queue_status: {} }));
+    }
     if (path === "/api/v1/search/search" || path === "/api/v1/search/find") {
       const context = body?.mode === "context";
       if ((!context && (Object.hasOwn(body ?? {}, "exclude_uris") || Object.hasOwn(body ?? {}, "query_expansion"))) || (context && Object.hasOwn(body ?? {}, "target_uri"))) return send(400, fail("INVALID_ARGUMENT", "Context-only fields require context mode; context mode forbids target_uri"));

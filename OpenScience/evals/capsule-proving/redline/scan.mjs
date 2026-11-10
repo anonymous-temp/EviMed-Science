@@ -127,7 +127,8 @@ export async function engineFilesWith(sessions, userId, marker, { userRoot = nul
   const files = nodes.filter((/** @type {any} */ node) => !node.isDir && String(node.uri).startsWith(`${root}/`));
   for (let index = 0; index < files.length; index += 8) {
     const batch = files.slice(index, index + 8);
-    const texts = await Promise.all(batch.map((/** @type {any} */ node) => sessions.read(userId, node.uri).catch(() => null)));
+    // A failed read is unknown, never evidence that a generated summary is clean.
+    const texts = await Promise.all(batch.map((/** @type {any} */ node) => sessions.read(userId, node.uri)));
     batch.forEach((/** @type {any} */ node, position) => {
       const rel = node.uri.slice(root.length + 1);
       if (!holds(texts[position], marker) && !holds(rel, marker)) return;

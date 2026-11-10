@@ -1,3 +1,4 @@
+import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash } from "node:crypto";
 import { carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn } from "@evimed/domain";
@@ -228,6 +229,7 @@ export class NativeMemoryWorker {
       for (const userId of await this.overlay.accounts()) {
         accounts += 1;
         try {
+          await this.drainSummaryInvalidations(userId);
           await this.#register(userId);
           await this.#syncPolicy(userId);
           await this.#indexOrigins(userId);
@@ -256,6 +258,19 @@ export class NativeMemoryWorker {
       recordNativePass(false);
     }
     return this.last;
+  }
+
+  /** Maintenance waits for active writers, including a crashed writer's expiring lease. */
+  async drainSummaryInvalidations(userId) {
+    if (!(await this.overlay.pendingSummaryInvalidations(userId)).length) return 0;
+    return withNativeMemoryWrite(this.overlay.database, userId, () => drainMemorySummaryInvalidations(this.sessions, this.overlay, userId,
+      this.memoryContexts ? async uri => (await this.memoryContexts.forUri(userId, uri)).sessions : null), { exclusive: true });
+  }
+
+  async #assertSummariesSettled(userId) {
+    if ((await this.overlay.pendingSummaryInvalidations(userId)).length) {
+      throw new HttpError(503, 'memory_summary_rebuild_failed', 'Native memory directory maintenance is incomplete.');
+    }
   }
 
   /** @param {string} userId */
@@ -374,6 +389,7 @@ export class NativeMemoryWorker {
         try { diff = diffText ? JSON.parse(diffText) : null; } catch { diff = null; }
         if (diff && typeof diff === "object") {
           const removed = await this.#removeWrittenBy(userId, diff, sessions);
+          await this.#assertSummariesSettled(userId);
           await this.overlay.closeTombstone(userId, tombstone.archiveUri, "swept", removed);
           recordResetSweep("swept", removed);
         } else if (task && ["completed", "failed", "cancelled"].includes(String(task.status))) {
@@ -406,7 +422,7 @@ export class NativeMemoryWorker {
         if (!nativeMemoryFile(uri, root) && !observationFile(uri, root)) continue;
         const current = await sessions.read(userId, uri).catch(() => null);
         if (current === null || contentHash(current) !== contentHash(String(operation?.after ?? ""))) continue;
-        await sessions.remove(userId, uri);
+        await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.remove(userId, uri));
         await this.overlay.removeFile(userId, uri);
         removed += 1;
       }
@@ -524,6 +540,7 @@ export class NativeMemoryWorker {
           if(task&&!['completed','failed','cancelled','canceled'].includes(String(task.status).toLowerCase()))return false;
           // Keep the exact typed effects as cleanup authority; no deleted source is judged, recalled or promoted as learning.
           await this.ingest(commit,diff,{context,sourceDeleted:true});
+          await this.#assertSummariesSettled(commit.userId);
           await this.overlay.noteNativeIngested(commit.userId,commit.archiveUri);
           await this.overlay.abandonCommit(commit.userId,commit.archiveUri,'source_conversation_deleted');return true;
         }
@@ -532,6 +549,7 @@ export class NativeMemoryWorker {
         // that found this very archive running wrote it down, and then no message needs to be readable to know.
         const tombstone = await this.overlay.tombstone(commit.userId, commit.archiveUri);
         const removed = tombstone ? await this.#removeWrittenBy(commit.userId, diff, sessions) : await this.#undoBeforeReset(commit, diff, context);
+        await this.#assertSummariesSettled(commit.userId);
         if (tombstone && tombstone.state === "open") await this.overlay.closeTombstone(commit.userId, commit.archiveUri, "swept", removed ?? 0);
         if (removed !== null) {
           await this.overlay.completeCommit(commit.userId, commit.archiveUri, { operations: 0, extraction: { skipped: 0, skipReasons: {}, extracted: {}, memoryTypes: [], fromTask: false, beforeReset: removed } });
@@ -547,6 +565,7 @@ export class NativeMemoryWorker {
         // what it refused. A task that is gone (the engine keeps them a day) or unreadable leaves the diff's own account.
         const task = operations === 0 && commit.taskId ? await sessions.task(commit.userId, commit.taskId).catch(() => null) : null;
         const extraction = extractionFacts(diff, task);
+        await this.#assertSummariesSettled(commit.userId);
         await this.overlay.completeCommit(commit.userId, commit.archiveUri, { operations, extraction });
         recordNativeCommit(operations ? "ingested" : "empty");
         recordNativeExtraction(operations, extraction);
@@ -761,11 +780,15 @@ export class NativeMemoryWorker {
         counts[change] += 1;
         const projectId = context.kind === 'geo-project' ? context.projectId : PROJECT_MEMORY_TYPES.includes(file.type) ? commit.projectId ?? null : null;
         if (change === "deleted") {
+          await withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, async () => {});
           await this.overlay.addRevision({ ...base, uri, memoryType: file.type, change, actor: "engine", reason: "", before: operation?.deleted_content ?? operation?.before ?? null, after: null, projectId });
           if(!sourceDeleted)await this.overlay.removeFile(userId, uri);
           continue;
         }
         const after = String(operation?.after ?? "");
+        if (change === 'updated' && String(operation?.before ?? '') !== after) {
+          await withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, async () => {});
+        }
         const recorded = await this.overlay.addRevision({ ...base, uri, memoryType: file.type, change, actor: "engine", reason: "",
           before: change === "updated" ? String(operation?.before ?? "") : null, after, projectId });
         const body = sourceDeleted?await context.sessions.read(userId,uri):await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, diffBefore: change === "updated" ? String(operation?.before ?? "") : "", fresh: recorded !== null, archiveUri: commit.archiveUri, memoryContext: context, rewordings });
@@ -821,6 +844,7 @@ export class NativeMemoryWorker {
     for (const uri of deletes) {
       const file = nativeMemoryFile(uri, root);
       if (!file || await sessions.read(userId, uri) !== null) continue;
+      await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, async () => {});
       const prior = held.get(uri);
       const recorded = await this.overlay.addRevision({ userId, uri, memoryType: file.type, change: "deleted", actor: "engine", reason: "consolidation",
         before: prior?.body ?? null, after: null, archiveUri, projectId: context.kind === 'geo-project' ? context.projectId : PROJECT_MEMORY_TYPES.includes(file.type) ? prior?.projectId ?? null : null });
@@ -838,6 +862,7 @@ export class NativeMemoryWorker {
       const prior = held.get(uri);
       const before = prior?.body ?? null;
       if (before !== null && contentHash(before) === contentHash(current)) continue;
+      if (before !== null) await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, async () => {});
       const projectId = context.kind === 'geo-project' ? context.projectId : PROJECT_MEMORY_TYPES.includes(file.type) ? prior?.projectId ?? null : null;
       const recorded = await this.overlay.addRevision({ userId, uri, memoryType: file.type, change: before === null ? "added" : "updated", actor: "engine", reason: "consolidation",
         before, after: current, archiveUri, projectId });
@@ -893,7 +918,7 @@ export class NativeMemoryWorker {
           // A new file has no pre-merge text. Undo its addition, retaining its full body in the deletion revision.
           await this.overlay.addRevision({ userId, uri: entry.uri, memoryType: entry.type, projectId: entry.projectId,
             actor: 'platform', change: 'deleted', reason: 'consolidation_unverified', before: current, after: null });
-          await sessions.remove(userId, entry.uri);
+          await withMemorySummaryInvalidation(sessions, this.overlay, userId, entry.uri, () => sessions.remove(userId, entry.uri));
           await this.overlay.removeFile(userId, entry.uri);
           restoreDeleted = true;
           continue;
@@ -915,7 +940,7 @@ export class NativeMemoryWorker {
       // If a rejected merge consumed another file, restore that pre-image too. Its deletion revision remains undoable.
       if (restoreDeleted) for (const file of removed) {
         if (await sessions.read(userId, file.uri) !== null) continue;
-        await sessions.replace(userId, file.uri, file.body);
+        await withMemorySummaryInvalidation(sessions, this.overlay, userId, file.uri, () => sessions.replace(userId, file.uri, file.body));
         await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId,
           actor: 'platform', change: 'added', reason: 'consolidation_unverified', before: null, after: file.body });
         await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId, body: file.body });
@@ -941,7 +966,7 @@ export class NativeMemoryWorker {
     // from one is taken out (the project card is never handed over in the default project either).
     if (type === "recent_work" && projectId === CATCH_ALL_PROJECT_ID) {
       recordNativeCheck("recent_work_default_project");
-      await sessions.remove(userId, uri);
+      await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.remove(userId, uri));
       await this.overlay.addRevision({ userId, uri, memoryType: type, change: "deleted", actor: "platform", reason: "recent_work_default_project", before: null, after: null, projectId });
       await this.overlay.removeFile(userId, uri);
       return null;
@@ -981,11 +1006,11 @@ export class NativeMemoryWorker {
       const reworded = broughtLines.filter((line) => ["rejected_reworded", "rejected_judged"].includes(refused.get(lineFingerprint(line)) ?? ""));
       if (reworded.length) await this.overlay.reject(userId, rejectionType, uri, reworded);
       if (cleaned.hasStatements) {
-        await sessions.replace(userId, uri, cleaned.text);
+        await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.replace(userId, uri, cleaned.text));
         await this.overlay.addRevision({ userId, uri, memoryType: type, change: "updated", actor: "platform", reason: reasons.join(","), before: current, after: cleaned.text, projectId });
         body = cleaned.text;
       } else {
-        await sessions.remove(userId, uri);
+        await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.remove(userId, uri));
         await this.overlay.addRevision({ userId, uri, memoryType: type, change: "deleted", actor: "platform", reason: reasons.join(","), before: null, after: null, projectId });
         await this.overlay.forgetText(userId, uri);
         await this.overlay.removeFile(userId, uri);
@@ -1160,7 +1185,7 @@ export class NativeMemoryWorker {
     if (words && !retained) lines.push(`${SOURCE_LABEL_PREFIX}${source.id} ${words}（${this.now().toISOString().slice(0, 10)}）`);
     const next = lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd();
     const changed = contentHash(next) !== contentHash(current);
-    if (changed) await sessions.replace(userId, uri, next);
+    if (changed) await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.replace(userId, uri, next));
     // A retry may find the engine write already complete while the overlay still
     // owes its revision, body or labels. Finish each step before marking the link.
     const before = changed ? current : held?.body;

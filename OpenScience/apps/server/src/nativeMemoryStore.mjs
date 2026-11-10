@@ -1,3 +1,4 @@
+import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { hardTokens } from './nativeMemoryHardTokens.mjs';
 import { compact } from './nativeMemoryRejections.mjs';
@@ -1232,7 +1233,7 @@ export class NativeMemoryStore {
     const pathRemoved = actor === "user" && origin === "edit" && removed.some(text => hardTokens(text)
       .some(token => !nextTokens.has(token) && compact(oldUri.slice(oldUri.lastIndexOf('/')+1)).includes(compact(token))));
     if (pathRemoved) file.uri = `${oldUri.slice(0,oldUri.lastIndexOf('/'))}/edited-${contentHash(oldUri).slice(0,24)}.md`;
-    await this.#engine(() => context.sessions.replace(userId, file.uri, next));
+    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.replace(userId, file.uri, next)));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId,...source });
     await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, body: next, projectId: file.projectId, sensitive: file.sensitive });
     await this.overlay.setSources(userId, file.uri, sourcesNamedIn(next));
@@ -1240,7 +1241,7 @@ export class NativeMemoryStore {
     if (pathRemoved) {
       await this.overlay.inheritOrigins(userId,file.uri,new Map([...oldOrigins].filter(([print])=>kept.has(print)).map(([print,ref])=>[print,originalSources(ref)])));
       await this.history?.ledger.queueWriteSession(context,oldUri);
-      await this.#engine(() => context.sessions.remove(userId,oldUri));
+      await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, oldUri, () => context.sessions.remove(userId,oldUri)));
       await this.overlay.removeFile(userId,oldUri);
       if (file.projectId) await this.#engine(() => context.sessions.setTags(userId,file.uri,[`project=${file.projectId}`]));
     }
@@ -1331,6 +1332,10 @@ export class NativeMemoryStore {
     }
     const withdrawnSessions = await this.overlay.withdrawConversationSource(userId, projectId, sessionIds, context.userRoot ?? context.sessions.userRoot(userId),projectCreatedAt);
     for (const session of withdrawnSessions) await context.sessions.deleteSession(userId, session);
+    // A previous attempt may already have removed the file before maintenance failed.
+    // Its source-deletion job must not be declared complete while that cleanup is owed.
+    await drainMemorySummaryInvalidations(context.sessions, this.overlay, userId,
+      this.memoryContexts ? async uri => (await this.memoryContexts.forUri(userId, uri)).sessions : null);
     this.#touch(userId);
     return affected;
   }
@@ -1418,6 +1423,8 @@ export class NativeMemoryStore {
         await this.overlay.reject(userId, this.#rejectionType(await this.#fileContext(userId, file.uri), file.type), file.uri, removedHere);
         taken += removedHere.length;
       } catch (error) {
+        // Duplicate discovery is advisory; an already-started destructive write is not.
+        if ((await this.overlay.pendingSummaryInvalidations(userId)).length) throw error;
         this.report(`native memory forget duplicates: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
       }
     }
@@ -1466,7 +1473,7 @@ export class NativeMemoryStore {
     await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, statements(file.body));
     if (actor !== "platform") await this.history?.rejectRemoved(context,file,statements(file.body),this.rejectionJudge);
     await this.history?.retireWriteSessions(context,oldOrigins,statements(file.body));
-    const removed = await this.#engine(() => context.sessions.remove(userId, file.uri));
+    const removed = await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.remove(userId, file.uri)));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),
       reason: reason || (keepText ? "forgotten on the memory page" : "deleted"), before: keepText ? file.body : null, after: null, projectId: file.projectId,...await this.#bodySource(userId,file) });
     if (!keepText) await this.overlay.forgetText(userId, file.uri);
@@ -1548,7 +1555,7 @@ export class NativeMemoryStore {
     const had = new Set(statements(before).map(lineFingerprint));
     await this.overlay.reject(userId, rejectionType, uri, statements(live.body).filter((text) => !had.has(lineFingerprint(text))));
     await this.overlay.unreject(userId, rejectionType, statements(before));
-    await this.#engine(() => context.sessions.replace(userId, uri, before));
+    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, before)));
     await this.overlay.addRevision({ userId, uri, memoryType, change: "updated", actor: "user", reason: "undo", before: live.body, after: before, projectId: live.projectId,sourceProjectId:last.sourceProjectId??last.projectId,sourceProjectCreatedAt:last.sourceProjectCreatedAt??null });
     await this.overlay.upsertFile({ userId, uri, memoryType, body: before, projectId });
     await this.overlay.syncOrigins(userId, uri, { after: before });
@@ -1572,7 +1579,7 @@ export class NativeMemoryStore {
   async #restoreText(userId, { uri, text, memoryType, projectId = null, revisionId, reason }) {
     const context = await this.#fileContext(userId, uri);
     if (context.kind === 'geo-project') projectId = context.projectId;
-    await this.#engine(() => context.sessions.replace(userId, uri, text));
+    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, text)));
     await this.overlay.unreject(userId, this.#rejectionType(context, memoryType), statements(text));
     await this.overlay.upsertFile({ userId, uri, memoryType, body: text, projectId: projectId ?? undefined });
     if (projectId) await this.#engine(() => context.sessions.setTags(userId, uri, [`project=${projectId}`])).catch(() => {});
@@ -1923,6 +1930,9 @@ export class NativeMemoryStore {
    * @param {string} userId
    */
   async reset(userId) {
+    return withNativeMemoryWrite(this.overlay.database, userId, () => this.#resetOwned(userId));
+  }
+  async #resetOwned(userId) {
     this.#assertConfigured();
     if (this.history) await this.history.reset(userId);
     this.#touch(userId);
@@ -1937,10 +1947,10 @@ export class NativeMemoryStore {
       const view = context.sessions, root = view.memoryRoot(userId);
       await this.#engine(async () => {
         for (const [type, segment] of Object.entries(MEMORY_SEGMENT_OF_TYPE)) {
-          if (await view.remove(userId, `${root}/${segment}`, { recursive: type !== "profile" })) files += 1;
+          if (await withMemorySummaryInvalidation(view, this.overlay, userId, `${root}/${segment}`, () => view.remove(userId, `${root}/${segment}`, { recursive: type !== "profile" }))) files += 1;
         }
         // The observations are the account's own too, though no page lists them: a reset leaves none behind (a shared project's keeps none).
-        if (context.kind !== 'geo-project' && await view.remove(userId, `${root}/${OBSERVATIONS_SEGMENT}`, { recursive: true })) files += 1;
+        if (context.kind !== 'geo-project' && await withMemorySummaryInvalidation(view, this.overlay, userId, `${root}/${OBSERVATIONS_SEGMENT}`, () => view.remove(userId, `${root}/${OBSERVATIONS_SEGMENT}`, { recursive: true }))) files += 1;
       });
       sessions += await this.#deleteSessions(userId, () => true, context);
     }
@@ -1990,6 +2000,9 @@ export class NativeMemoryStore {
    * @param {string} userId @param {string} projectId
    */
   async deleteProject(userId, projectId) {
+    return withNativeMemoryWrite(this.overlay.database, userId, () => this.#deleteProjectOwned(userId, projectId));
+  }
+  async #deleteProjectOwned(userId, projectId) {
     this.#assertConfigured();
     if (this.history) await this.history.deleteProject(userId, projectId);
     this.#touch(userId);
@@ -2004,7 +2017,7 @@ export class NativeMemoryStore {
       await this.memoryContexts.assertKnown(context);
       const root = context.sessions.memoryRoot(userId);
       const listed = await this.#engine(() => context.sessions.tree(userId, root, { levelLimit: 8 }));
-      if (await this.#engine(() => context.sessions.remove(userId, root, { recursive: true }))) files += listed.filter(node => !node.isDir).length;
+      if (await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, root, () => context.sessions.remove(userId, root, { recursive: true })))) files += listed.filter(node => !node.isDir).length;
       sessions += await this.#deleteSessions(userId, () => true, context);
       await this.overlay.purgeNamespace(userId, context.userRoot);
     }
@@ -2014,7 +2027,7 @@ export class NativeMemoryStore {
     const fromOverlay = await this.overlay.projectFiles(userId, projectId);
     const uris = new Set([...tagged.filter((node) => !node.isDir).map((node) => node.uri), ...fromOverlay.map((file) => file.uri)]
       .filter(uri => nativeMemoryFile(uri, root)));
-    for (const uri of uris) if (await this.#engine(() => personal.sessions.remove(userId, uri))) files += 1;
+    for (const uri of uris) if (await this.#engine(() => withMemorySummaryInvalidation(personal.sessions, this.overlay, userId, uri, () => personal.sessions.remove(userId, uri)))) files += 1;
     const engineSessions = new Set(await this.overlay.projectSessions(userId, projectId));
     sessions += await this.#deleteSessions(userId, (name) => engineSessions.has(name), personal);
     await this.overlay.purgeProject(userId, projectId);

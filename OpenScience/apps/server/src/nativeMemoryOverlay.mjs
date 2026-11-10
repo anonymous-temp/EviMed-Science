@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
 import {
   NATIVE_COMMIT_ORIGINS, NATIVE_REVISION_ACTORS, NATIVE_REVISION_CHANGES, NATIVE_TEXT_LIMIT, migrateNativeMemory,
@@ -148,6 +148,31 @@ export class NativeMemoryOverlay {
 
   async migrate() { await this.#query("SELECT 1"); }
 
+  /** Durable maintenance must outlive any caller transaction that changed the external engine.
+   * @param {string} userId @param {readonly string[]} directories */
+  async queueSummaryInvalidation(userId, directories) {
+    const tickets = directories.map(directory => ({ directory, generation: randomUUID() }));
+    await this.database.withoutTransactionClient(() => this.#query(`INSERT INTO evimed_memory.native_summary_invalidations (user_id,directory,generation)
+      SELECT $1,t.directory,t.generation FROM jsonb_to_recordset($2::jsonb) AS t(directory text,generation text)
+      ON CONFLICT (user_id,directory) DO UPDATE SET generation=EXCLUDED.generation`, [owner(userId), JSON.stringify(tickets)]));
+    return tickets;
+  }
+
+  /** @param {string} userId @returns {Promise<{directory:string,generation:string}[]>} */
+  async pendingSummaryInvalidations(userId) {
+    const result = await this.#query('SELECT directory,generation FROM evimed_memory.native_summary_invalidations WHERE user_id=$1 ORDER BY directory', [owner(userId)]);
+    return result.rows.map(row => ({ directory:String(row.directory), generation:String(row.generation) }));
+  }
+
+  /** Acknowledgement is independent too, and never clears a newer concurrent write.
+   * @param {string} userId @param {readonly {directory:string,generation:string}[]} tickets */
+  async completeSummaryInvalidation(userId, tickets) {
+    await this.database.withoutTransactionClient(async () => {
+      for (const {directory,generation} of tickets) await this.#query(`DELETE FROM evimed_memory.native_summary_invalidations
+        WHERE user_id=$1 AND directory=$2 AND generation=$3`, [owner(userId),directory,generation]);
+    });
+  }
+
   /** External candidates are admitted once per immutable revision, before any extracting session is touched.
    * @param {string} userId @param {any} input */
   async queueAdmission(userId, input) {
@@ -254,6 +279,7 @@ export class NativeMemoryOverlay {
   async accounts({ limit = 100_000 } = {}) {
     const result = await this.#query(`SELECT user_id FROM (
         SELECT user_id FROM evimed_memory.native_accounts UNION SELECT user_id FROM evimed_memory.native_commits
+        UNION SELECT user_id FROM evimed_memory.native_summary_invalidations
         UNION SELECT user_id FROM evimed_memory.native_sessions UNION SELECT user_id FROM evimed_memory.native_admissions
       ) known ORDER BY user_id LIMIT $1`, [Math.max(1, Math.min(1_000_000, Math.trunc(Number(limit)) || 100_000))]);
     return result.rows.map((/** @type {any} */ row) => String(row.user_id));
@@ -269,6 +295,7 @@ export class NativeMemoryOverlay {
     const result = await this.#query(`SELECT (EXISTS (SELECT 1 FROM evimed_memory.native_accounts WHERE user_id=$1)
         OR EXISTS (SELECT 1 FROM evimed_memory.native_commits WHERE user_id=$1)
         OR EXISTS (SELECT 1 FROM evimed_memory.native_sessions WHERE user_id=$1)
+        OR EXISTS (SELECT 1 FROM evimed_memory.native_summary_invalidations WHERE user_id=$1)
         OR EXISTS (SELECT 1 FROM evimed_memory.native_admissions WHERE user_id=$1)) AS held`, [owner(userId)]);
     return result.rows[0]?.held === true;
   }

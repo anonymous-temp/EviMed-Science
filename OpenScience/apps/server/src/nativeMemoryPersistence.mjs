@@ -109,6 +109,14 @@ ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation
 ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_task text CHECK (consolidation_task IS NULL OR consolidation_task ~ '^[A-Za-z0-9_-]{8,128}$');
 ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_started_at timestamptz(3);
 ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS consolidation_lease_until timestamptz(3);
+-- Engine maintenance owes an independently committed ticket even when the caller rolls back.
+-- Separate rows avoid waiting on an account row the caller's transaction already holds.
+CREATE TABLE IF NOT EXISTS evimed_memory.native_summary_invalidations (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  directory text NOT NULL CHECK (char_length(directory) BETWEEN 1 AND 600),
+  generation text NOT NULL,
+  PRIMARY KEY (user_id, directory)
+);
 CREATE TABLE IF NOT EXISTS evimed_memory.native_commits (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   archive_uri text NOT NULL CHECK (char_length(archive_uri) BETWEEN 1 AND 600),

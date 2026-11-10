@@ -1,3 +1,4 @@
+import { withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
 import { recordObservationPromotion } from "./nativeMemoryMetrics.mjs";
 import { memoryLines, normalisedStatement } from "./nativeMemoryOverlay.mjs";
 
@@ -108,7 +109,7 @@ export class NativeMemoryObservations {
         if (!words) { recordObservationPromotion("empty"); continue; }
         await this.keepRepeatedChoice(userId, words);
         // The note is spent once the engine has the words (a failed extraction is replayed from its archive, as any commit's is).
-        await this.sessions.remove(userId, file.uri);
+        await withMemorySummaryInvalidation(this.sessions, this.overlay, userId, file.uri, () => this.sessions.remove(userId, file.uri));
         await this.overlay.addRevision({ userId, uri: file.uri, memoryType: "observations", change: "deleted", actor: "platform", reason: "promoted to a preference",
           before: body, after: null, projectId: null });
         await this.overlay.removeFile(userId, file.uri);

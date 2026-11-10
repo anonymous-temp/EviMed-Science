@@ -4,6 +4,7 @@ import { recordNativeConsolidatedFiles, recordNativeConsolidation } from "./nati
 import { nativeMemoryFile } from "./openVikingSessions.mjs";
 import { NativeMemoryVerification } from './nativeMemoryVerification.mjs';
 import { parseNativeMemoryConsolidationMode } from './config.mjs';
+import { HttpError } from './security.mjs';
 
 /**
  * 重读旧记忆 on the native engine: OpenViking's own memory consolidation, run for an account now and then (2026-10-23, rectification
@@ -232,6 +233,11 @@ export class NativeMemoryConsolidation {
       const directory = task.target?.startsWith(`${root}/`) ? task.target.slice(root.length + 1).split('/')[0] : null;
       try { await this.verifyExisting(userId, { mode, ...(directory ? { directories: [directory] } : {}) }); }
       catch { this.report('native memory verification: unavailable; consolidation retained'); }
+    }
+    // Verification may have changed a file before its engine maintenance failed.
+    // Keep this task on the existing retry ledger until that maintenance completes.
+    if ((await this.overlay.pendingSummaryInvalidations(userId)).length) {
+      throw new HttpError(503, 'memory_summary_rebuild_failed', 'Native memory directory maintenance is incomplete.');
     }
     recordNativeConsolidatedFiles(counts);
     recordNativeConsolidation("completed");

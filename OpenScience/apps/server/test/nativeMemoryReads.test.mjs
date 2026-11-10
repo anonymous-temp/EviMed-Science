@@ -30,12 +30,15 @@ function engine({ count = 20, delay = 5 } = {}) {
       files.set(uri, { body: text, modTime: files.get(uri)?.modTime ?? "" });
       return true;
     },
+    async remove(_user, uri) { return files.delete(uri); },
+    async rebuildMemoryDirectory() {},
   };
   const overlay = {
     configured: true,
     files: async () => new Map(),
     revisionsOfMany: async () => new Map(), attributionCommits: async () => new Map(),
     sources: async () => [],
+    queueSummaryInvalidation: async () => [], completeSummaryInvalidation: async () => {},
     reject: async () => {}, unreject: async () => {}, addRevision: async () => {}, upsertFile: async () => {}, setSources: async () => {}, syncOrigins: async () => {}, originsOf: async () => new Map(),
   };
   return { files, calls, store: new NativeMemoryStore({ sessions: /** @type {any} */ (sessions), overlay: /** @type {any} */ (overlay) }) };
@@ -79,9 +82,11 @@ test("an engine without a modTime is read every time: nothing is kept that canno
 
 test("a write forgets the account's bodies, so the page reads back what it just wrote — even where the engine's clock did not move", async () => {
   const { store, calls, files } = engine({ count: 3 });
-  const [record] = await store.records("u1");
+  // Keep this cache test independent of the removed-identifier filename migration.
+  const original = `${ROOT}/preferences/p0.md`, uri = `${ROOT}/preferences/format.md`;
+  files.set(uri, files.get(original)); files.delete(original);
+  const record = (await store.records("u1")).find(candidate => candidate.uri === uri);
   assert.equal(calls.read, 3);
-  const uri = record.uri;
   const modTime = files.get(uri)?.modTime ?? "";
   // The engine rewrites the file at the same instant and the same length: only the store's own write can tell the cache the body is old.
   await store.update("u1", record.id, { value: "- 偏好 Z", expectedVersion: record.version });
