@@ -41,6 +41,16 @@ export async function control(app, action, { userId, methodId, body, kinds = KIN
       WHERE user_id=$1 AND kind=ANY($2::text[]) AND status='queued' AND run_after>clock_timestamp()`, [userId, kinds]);
     return { broughtForward: result.rowCount ?? 0 };
   }
+  if (action === 'lxSettleApplied') {
+    // The product folds a person's reactions into the counters of the methods a run opened on its consolidation-schedule pass
+    // (server.mjs scheduleConsolidation -> methodApplied.settleUser), hourly by default. The same factory, the same dependencies,
+    // called now for this account (idempotent by run). Official methods' platform-wide records are left out (official: null).
+    const { createMethodAppliedOutcomes } = await import(`${process.env.OS}/apps/server/src/methodAppliedOutcomes.mjs`);
+    const applied = createMethodAppliedOutcomes({ learning: learningService(app), feedback: app.feedbackEvents,
+      resolveProject: async (owner, projectId) => { const user = await app.store.userById(owner); return user ? app.store.requireProject(user, projectId).catch(() => null) : null; },
+      runsOf: project => app.agentRuns.list(project), onApplied: outcome => app.runtimeManager?.learningMetrics?.observeApplied(outcome) });
+    return (await applied.settleUser(userId)) ?? null;
+  }
   if (action === 'lxAmend') {
     const service = learningService(app);
     const current = await service.getMethod(userId, methodId);

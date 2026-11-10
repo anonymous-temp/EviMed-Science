@@ -8,7 +8,7 @@ import { learnedDirectory } from './conversation.mjs';
 export const CORRECTION_CLASS = ['correction', 'preference', 'rejection'];
 export const CLEAN_CLASS = ['accept', 'adopt'];
 const RING_TRIGGER = { correction: 'correction', adopt: 'adopted', routine_file: 'routine', routine_toolchain: 'routine', script: 'script', sleep: 'adopted', replay: null };
-export const L1_LINKS = ['delivered', 'verdict', 'evidence', 'lesson', 'distill', 'approved', 'mounted', 'opened', 'counted', 'consolidated', 'demoted'];
+export const L1_LINKS = ['delivered', 'verdict', 'evidence', 'lesson', 'distill', 'approved', 'mounted', 'opened', 'counted', 'applied', 'consolidated', 'demoted'];
 
 const clip = (value, n = 220) => { const s = typeof value === 'string' ? value : JSON.stringify(value); return s && s.length > n ? `${s.slice(0, n)}…` : s; };
 const verdictMatches = (actual, expected) => actual === expected || (expected === 'correction' && CORRECTION_CLASS.includes(actual));
@@ -105,8 +105,12 @@ export function l1Ring({ ring, gold, runs, turns, state, seeded = [], amend = nu
     !methods.length ? 'no method' : !laterTurns.length ? 'no conversation after the method existed' : mountRows.map(r => `${r.t.label}:${r.selected ? `selected(${r.reason})` : r.loaded ? 'loaded' : 'absent'}`).join(' '));
   set('opened', methods.length > 0, mountRows.some(r => r.opened), mountRows.length ? mountRows.map(r => `${r.t.label}:${r.opened ? 'opened' : '-'}`).join(' ') : 'not mounted');
   const counts = methods.map(m => ({ name: m.payload?.frontmatter?.name, ...countsOf(m) }));
-  set('counted', methods.length > 0, counts.some(c => (c.loaded ?? 0) > 0 && (c.invoked ?? 0) > 0 && ((c.appliedClean ?? 0) + (c.appliedCorrected ?? 0)) > 0),
-    counts.length ? counts.map(c => `${c.name}: loaded=${c.loaded ?? 0} invoked=${c.invoked ?? 0} clean=${c.appliedClean ?? 0} corrected=${c.appliedCorrected ?? 0} read=${c.read ?? 0} carried=${c.carried ?? 0}`).join('; ') : 'no method');
+  // `counted`: the opening reached the method's own loaded/invoked counters (what the plan names); `read`/`carried` shown beside.
+  set('counted', methods.length > 0, counts.some(c => (c.loaded ?? 0) > 0 && (c.invoked ?? 0) > 0),
+    counts.length ? counts.map(c => `${c.name}: loaded=${c.loaded ?? 0} invoked=${c.invoked ?? 0} read=${c.read ?? 0} carried=${c.carried ?? 0} eligible=${c.eligible ?? 0} succeeded=${c.succeeded ?? 0}`).join('; ') : 'no method');
+  // `applied`: the person's reaction to a run that opened it folded into appliedClean / appliedCorrected (methodAppliedOutcomes).
+  set('applied', methods.length > 0, counts.some(c => ((c.appliedClean ?? 0) + (c.appliedCorrected ?? 0)) > 0),
+    counts.length ? counts.map(c => `${c.name}: appliedClean=${c.appliedClean ?? 0} appliedCorrected=${c.appliedCorrected ?? 0}`).join('; ') + `; applied counters=${clip(nonZero(state?.counters?.applied))}` : 'no method');
   // 9. Sleep ring: the two learnt methods consolidated into one (merge), by the sleep pass.
   if (ring === 'sleep') {
     const sleepJob = (state?.jobs ?? []).find(j => j.kind === 'consolidate' && j.payload?.action === 'sleep' && (!sleepJobKey || j.idempotency_key === sleepJobKey));

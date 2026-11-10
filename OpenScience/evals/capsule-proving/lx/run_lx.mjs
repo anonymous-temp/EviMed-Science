@@ -83,21 +83,25 @@ export function skillOf({ name, whenToUse, body }) {
 async function drain(h, userId, { sleepKey = null, consolidate = true, timeoutMin = 45 } = {}, status = () => {}) {
   await ipc(h, 'start', { userId });
   const deadline = Date.now() + timeoutMin * 60_000;
-  let quiet = 0, slept = false, last = null, timedOut = false;
+  let quiet = 0, slept = false, last = null, timedOut = false, settled = false, applied = null;
   for (;;) {
     if (Date.now() > deadline) { timedOut = true; break; }
     await ipc(h, 'lxBring', { userId, kinds: consolidate ? ['distill', 'consolidate', 'learning-evidence'] : ['distill', 'learning-evidence'] });
     last = await ipc(h, 'status', { userId });
     const pending = last.jobs.filter(j => ['queued', 'running'].includes(j.status) && (consolidate || j.kind !== 'consolidate'));
     if (!pending.length && !last.worker.running) quiet++; else quiet = 0;
-    if (quiet >= 3) {
+    if (quiet >= 3 && !settled) {
+      // The consolidation-schedule pass's first step: reactions folded into the opened methods' counters (before any stop is decided).
+      applied = await ipc(h, 'lxSettleApplied', { userId }).catch(error => ({ error: String(error?.message ?? error) }));
+      settled = true; quiet = 0;
+    } else if (quiet >= 3) {
       if (sleepKey && !slept && consolidate) { await ipc(h, 'sleep', { userId, key: sleepKey }); slept = true; quiet = 0; status(`    sleep queued (${sleepKey})`); }
       else break;
     }
     await sleep(5000);
   }
   await ipc(h, 'pause', { userId });
-  const summary = { jobs: last?.jobs?.length ?? 0, byStatus: {}, slept, timedOut };
+  const summary = { jobs: last?.jobs?.length ?? 0, byStatus: {}, slept, timedOut, applied };
   for (const j of last?.jobs ?? []) summary.byStatus[`${j.kind}:${j.status}`] = (summary.byStatus[`${j.kind}:${j.status}`] ?? 0) + 1;
   return summary;
 }
