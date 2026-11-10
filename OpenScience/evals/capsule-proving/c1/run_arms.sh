@@ -9,7 +9,14 @@ C1=$WT/evals/capsule-proving/c1
 POOL=$WT/evals/capsule-proving/pools/c-samples-20261110.json
 TRAINPOOL=$WT/evals/capsule-proving/pools/c1-train-20261110.json
 ROOT=/srv/evimed/runs
-LIB=$ROOT/c1-lib-1
+# A round of arms is a library directory, a queue directory, an output prefix and an order (F3's camp round: C1_LIB=$ROOT/c1-lib-2
+# C1_QUEUE=$ROOT/c1-arms-2 C1_OUT=c1-arm2 C1_ORDER=arm-major C1_SUMMARY=$ROOT/c1-summary-2.json).
+LIB=${C1_LIB:-$ROOT/c1-lib-1}
+QUEUE=${C1_QUEUE:-$ROOT/c1-arms-1}
+OUTP=${C1_OUT:-c1-arm}
+ORDER=${C1_ORDER:-env-interleaved}
+SUMMARY=${C1_SUMMARY:-$ROOT/c1-summary.json}
+SUMMARY_DIRS=${C1_SUMMARY_DIRS:-}
 PY=/srv/evimed/c1/venv/bin/python
 EMB=/srv/evimed/secrets/dashscope.api-key
 KEY=/srv/evimed/secrets/deepseek.api-key
@@ -19,12 +26,12 @@ status() { echo "$(date -u +%FT%TZ) $*" >> $ROOT/c1-STATUS; }
 MAX_WORKERS=${C1_MAX_WORKERS:-4}
 ARMS=${C1_ARMS:-}
 workers() { local load w; load=$(cut -d' ' -f1 /proc/loadavg); if awk "BEGIN{exit !($load < 16)}"; then w=4; else w=2; fi; [ "$w" -gt "$MAX_WORKERS" ] && w=$MAX_WORKERS; echo "$w"; }
-refresh() { python3 $C1/summarize.py --runs $ROOT --out $ROOT/c1-summary.json > /dev/null 2>&1; }
+refresh() { python3 $C1/summarize.py --runs $ROOT --out "$SUMMARY" ${SUMMARY_DIRS:+--dirs "$SUMMARY_DIRS"} > /dev/null 2>&1; }
 
 # run_arm <arm> <env> <fold> <library variant> <mode> [removed roles]
 run_arm() {
   local arm=$1 env=$2 fold=$3 variant=$4 mode=$5 roles=${6:-} out extra=() count W rc
-  out=$ROOT/c1-arm-$arm-1
+  out=$ROOT/$OUTP-$arm-1
   mkdir -p "$out"
   if [ -n "$roles" ]; then
     # An arm that removes a role the library does not hold would be the pyramid arm again: recorded and skipped.
@@ -50,7 +57,7 @@ run_arm() {
 
 # run_evolving <env> <fold>: the pyramid library copied once, seeded with the training successes, then taught each finished wave of 8.
 run_evolving() {
-  local env=$1 fold=$2 out=$ROOT/c1-arm-evolving-1 dir W rc
+  local env=$1 fold=$2 out=$ROOT/$OUTP-evolving-1 dir W rc
   dir=$out/lib-$env
   mkdir -p "$out"
   if [ ! -f "$dir/export.json" ]; then
@@ -86,7 +93,18 @@ ITEMS=(
   "evolving alfworld seen pyramid pyramid" "evolving alfworld unseen pyramid pyramid"
   "evolving scienceworld seen pyramid pyramid" "evolving scienceworld unseen pyramid pyramid"
 )
-Q=$ROOT/c1-arms-1
+if [ "$ORDER" = arm-major ]; then
+  # One arm after another, every fold of it, in the order of the brief: pyramid, flat, from-scratch, no-abstract, no-atomic, add-only, evolving.
+  ITEMS=()
+  for spec in "pyramid pyramid pyramid" "flat pyramid flat" "from-scratch from-scratch pyramid" "no-abstract pyramid pyramid abstract" \
+              "no-atomic pyramid pyramid atomic" "add-only add-only pyramid" "evolving pyramid pyramid"; do
+    read -r arm variant mode roles <<< "$spec"
+    for ef in "alfworld seen" "alfworld unseen" "scienceworld seen" "scienceworld unseen"; do
+      ITEMS+=("$arm $ef $variant $mode${roles:+ $roles}")
+    done
+  done
+fi
+Q=$QUEUE
 touch "$Q/DONE" "$Q/FAILS"
 status "c1 arms queue started (pid $$)"
 while true; do
