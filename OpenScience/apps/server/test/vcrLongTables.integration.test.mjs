@@ -10,8 +10,7 @@ import { ProductDocuments } from "../src/productStore.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { composeVcr } from "../src/vcrComposition.mjs";
 import { createVcrDataIntake } from "../src/vcrDataIntake.mjs";
-import { LONG_LIMITS, acceptLongShapes, acceptRelevance, chooseLongRows, longRowLine, longShapeOf } from "../src/vcrLongTables.mjs";
-import { readSubjectNote } from "../src/vcrMatchJudge.mjs";
+import { LONG_LIMITS, chooseLongRows, longRowLine, longShapeOf } from "../src/vcrLongTables.mjs";
 import { createVcrUploadReceipts } from "../src/vcrUploadReceipts.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { MCP_DIR, localIntakeController, pythonCan } from "./helpers/vcrIntakeLocal.mjs";
@@ -20,9 +19,6 @@ const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
 const options = { timeout: 240_000, skip: (!url && "An isolated PostgreSQL is required") || (!pythonCan("json", "zipfile") && "python3 is needed") };
 let isolated, database, directory, vcr, intake, receipts, project, documents;
 let sequence = 0;
-/** @type {any[]} */ const asked = [];
-/** @type {any} */ let relevance = { relevant: [] };
-const shapes = { tables: [] };
 const origin = { userId: "owner", projectId: "project", rootSessionId: "root", runId: "run", callId: "call" };
 
 before(async () => {
@@ -35,18 +31,12 @@ before(async () => {
   await fs.mkdir(path.join(directory, "plane"));
   const plane = await fs.realpath(path.join(directory, "plane"));
   const config = { vcrEnabled: true, vcrAudience: "all", vcrDataPlaneDir: plane, vcrDataPlaneHostDir: plane, dataDir: path.join(directory, "data"), vcrDataMaxBytes: 50 * 1024 * 1024, vcrIntakeMaxBytes: 25 * 1024 * 1024, vcrIntakeTimeoutMs: 60_000, vcrIntakeMemory: "768m", runtimeContainerImage: "img", runtimeContainerUser: "1000:1000", runtimeDataVolume: "", deepseekBaseUrl: "https://api.example.org", deepseekApiKey: "test", deepseekModel: "deepseek-flash", vcrProviderAgreements: true };
-  const fetchImpl = async (input, init) => {
+  const fetchImpl = async (input) => {
     if (String(input).includes("clinicaltrials.gov")) {
       const id = /NCT\d{8}/.exec(String(input))[0];
       return new Response(JSON.stringify({ protocolSection: { identificationModule: { nctId: id, briefTitle: `Trial ${id}` }, descriptionModule: { briefSummary: "S" }, statusModule: { overallStatus: "RECRUITING" }, conditionsModule: { conditions: ["NSCLC"] }, armsInterventionsModule: { interventions: [{ type: "DRUG", name: "X" }] }, eligibilityModule: { eligibilityCriteria: "Inclusion Criteria:\n* Age >= 18" } } }), { status: 200, headers: { "content-type": "application/json" } });
     }
-    const body = JSON.parse(init.body);
-    const system = body.messages[0].content;
-    asked.push({ system, user: body.messages.at(-1).content });
-    const content = system.includes("say which concepts") || system.includes("Say which concepts") ? JSON.stringify(relevance) : system.includes("what each column is") ? JSON.stringify(shapes)
-      // A part of the record with no dated line (the export's notes) says nothing about the clause, as a model reading it would.
-      : system.includes("criterion level") ? JSON.stringify(((cited) => ({ 1: cited ? ["年龄", [Number(cited[1])], "included"] : ["年龄", [], "not enough information"] }))(/(\d+)\D{0,4}\d{4}-\d{2}-\d{2} (?:诊断|检验|用药|操作)/u.exec(body.messages.at(-1).content))) : '{"score":70,"confidence":0.6,"eligible_reasons":"1. a","ineligible_reasons":"","missing_information":""}';
-    return new Response(JSON.stringify({ id: "x", model: "deepseek-flash", choices: [{ finish_reason: "stop", message: { role: "assistant", content } }], usage: { prompt_tokens: 40, completion_tokens: 10 } }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response("{}", { status: 404 });
   };
   vcr = composeVcr({ config, productDatabase: database, fetchImpl, intakeController: localIntakeController(config) });
   await vcr.store.ready();
@@ -119,81 +109,7 @@ test("a person with thousands of rows shows what bears on the question, its firs
   assert.ok(LONG_LIMITS.lines >= 100);
 });
 
-test("what the model says of a table or a concept is taken only where it exists", () => {
-  const shapes_ = acceptLongShapes(JSON.stringify({ tables: [{ id: "t1", kind: "lab", concept: "TEST", value: "RESULT", unit: "NOPE", date: "WHEN" }, { id: "t2", kind: "lab", concept: "MADE_UP" }, { id: "gone", concept: "TEST" }] }), [{ id: "t1", header: ["USUBJID", "TEST", "RESULT", "WHEN"] }, { id: "t2", header: ["USUBJID", "A"] }]);
-  assert.deepEqual(Object.keys(shapes_), ["t1"]);
-  assert.deepEqual(shapes_.t1.concept, ["TEST"]);
-  assert.equal(shapes_.t1.unit, undefined);
-  assert.deepEqual(acceptRelevance('{"relevant":["A","Z"]}', ["A", "B"]), ["A"]);
-  assert.deepEqual(acceptRelevance("nonsense", ["A"]), []);
-});
 
-test("a FHIR export started from the conversation: converted, mapped and frozen by the job, and its conditions, labs and medications are a person's dated lines", options, async () => {
-  const study = await newStudy();
-  const standard = await importStandard(study, "smart-10-patients.zip", "fhir");
-  assert.match(standard.snapshotId, /./);
-  assert.ok(standard.tables.some((table) => table.name === "fhir_condition" && table.stored));
-  assert.ok(standard.coverage, "what was read and skipped comes back");
-  const reader = await readerOf(study);
-  assert.ok(reader, "the frozen source has long tables");
-  assert.deepEqual(await reader.unknownTables(), [], "the converter's own tables need no one to read their columns");
-  const concepts = await reader.concepts();
-  assert.deepEqual((await reader.described()).filter((table) => table.kind).map((table) => table.kind).sort(), ["condition", "lab", "medication", "procedure"]);
-  assert.ok(concepts.length > 20);
-  const roster = (await vcr.store.rows("SELECT id FROM evimed_vcr.analysis_tables WHERE study_id=$1", [study.id])).length;
-  assert.ok(roster >= 1);
-  const table = await vcr.dataPlane.subjectTableForMatching({ studyId: study.id, principal: "owner", purpose: "vcr" });
-  const at = table.header.indexOf("USUBJID");
-  const keys = [...new Set(table.rows.map((row) => row[at]))];
-  assert.ok(keys.length >= 5);
-  reader.setRelevant([concepts[0]]);
-  const held = await reader.linesFor(keys[0], keys.slice(1));
-  assert.ok(held.lines.length > 0, "a person has lines");
-  assert.ok(held.lines.length <= LONG_LIMITS.lines);
-  const text = held.lines.map((line) => line.text).join("\n");
-  assert.match(text, /\d{4}-\d{2}-\d{2} (诊断|检验|用药|操作) /, "dated, labelled and in the source's words");
-  assert.match(text, /诊断 |用药 /);
-  assert.equal(/\bpatient_id\b|USUBJID/.test(text), false);
-  const note = await readSubjectNote({ study: { ...study, cloudContext: { runId: "r", sessionId: "s" } }, subjectKey: keys[0], documents: vcr.documents, roster: [], long: reader });
-  assert.ok(note.sentences.length >= held.lines.length);
-  assert.ok(note.sentences.every((sentence) => sentence.source?.long && sentence.source.snapshotId === standard.snapshotId));
-
-  // The whole path: a judging job reads them, picks the relevant concepts once, and a reader gets the evidence back.
-  asked.length = 0;
-  relevance = { relevant: concepts.slice(0, 5) };
-  const started = await vcr.matchJudge.start({ ...study, cloudContext: { runId: "r", sessionId: "s" } }, { subjectKey: keys[0], registryIds: ["NCT00000001"], topK: 1 });
-  await drain();
-  const askedRelevance = asked.filter((call) => call.system.includes("Say which concepts"));
-  assert.equal(askedRelevance.length, 1, "the choice is asked once");
-  assert.ok(JSON.parse(askedRelevance[0].user).concepts.includes(concepts[0]));
-  // The export's notes come first and a long record is read in parts, so the dated lines may be in a later part than the first.
-  const judged = asked.filter((call) => call.system.includes("criterion level"));
-  assert.ok(judged.some((call) => /\d{4}-\d{2}-\d{2} (诊断|检验|用药|操作) /.test(call.user)), "the model reads the dated lines");
-  const result = await resultOf(started.jobId);
-  assert.deepEqual([result.diagnostics.finished, result.diagnostics.total], [1, 1]);
-  const context = { ...study, cloudContext: { runId: "r", sessionId: "s" } };
-  const ranking = await vcr.matchJudgmentReads.forSubject(context, keys[0]);
-  assert.equal(ranking.ranking.length, 1);
-  assert.ok(ranking.ranking[0].criteria[0].evidence.length >= 1, "evidence read from a long line comes back");
-  assert.equal(ranking.ranking[0].criteria[0].evidenceWithheld, undefined);
-  // Which cited sentence comes first is the order of the model's answer, not of the record; the long line is among them.
-  assert.ok(ranking.ranking[0].criteria[0].evidence.some((item) => item.source?.long), "a cited sentence comes from a long-table line");
-  // The export's notes come first, so the coded lines may be on a later page of the same reading.
-  const sentences = [];
-  for (let offset = 0, more = true; more;) {
-    const page = await vcr.service.runtimeRead(context, "subject_document", { subjectKey: keys[0], kind: "sentences", offset });
-    sentences.push(...page.sentences);
-    more = Boolean(page.more);
-    offset = page.nextOffset ?? 0;
-  }
-  assert.ok(sentences.length > 0);
-  assert.ok(sentences.some((row) => row.fromTable), "the coded lines are read beside the notes the export carries");
-  // A second start of the same selection reads the same words and pays for nothing, and does not ask again.
-  const calls = asked.length;
-  await vcr.matchJudge.start(context, { subjectKey: keys[0], registryIds: ["NCT00000001"], topK: 1 });
-  await drain();
-  assert.equal(asked.length, calls, "the choice and the judgment are both on record");
-});
 
 test("an OMOP source reads its concept ids as names, and an ADaM source its PARAM rows", options, async () => {
   const study = await newStudy();
@@ -208,21 +124,3 @@ test("an OMOP source reads its concept ids as names, and an ADaM source its PARA
   assert.ok((await adamReader.concepts()).length > 0);
 });
 
-test("a long CSV: the model reads its columns once, a person gets their rows, and a read names no one else's", options, async () => {
-  const study = await newStudy();
-  const source = await vcr.dataPlane.registerSource({ userId: "owner", studyId: study.id, name: "Labs", allowedUses: ["vcr", "matching"], actor: "owner" });
-  const rows = ["PID,TEST,RESULT,UNIT,WHEN"];
-  for (let person = 0; person < 12; person += 1) for (let visit = 0; visit < 6; visit += 1) rows.push(`LAB-${person},eGFR,${60 + person},mL/min,2024-0${visit + 1}-10`);
-  rows.push("LAB-0,HbA1c,7.1,%,2024-03-01");
-  await vcr.dataPlane.storeUpload({ actor: "owner", studyId: study.id, sourceId: source.id, name: "labs.csv", role: "data", stream: (async function* () { yield Buffer.from(rows.join("\n")); })() });
-  const proposed = await vcr.dataPlane.proposeFieldMap({ actor: "owner", userId: "owner", studyId: study.id, sourceId: source.id, by: "run", columns: [{ table: "labs.csv", column: "PID", role: "subject_key", concept: "subject" }] });
-  await vcr.dataPlane.confirmFieldMap({ actor: "owner", userId: "owner", studyId: study.id, sourceId: source.id, hash: proposed.hash, by: "run" });
-  await vcr.dataPlane.freezeSnapshot({ actor: "owner", userId: "owner", studyId: study.id, sourceId: source.id, expectedFieldMapHash: proposed.hash });
-  const reader = await readerOf(study);
-  const unknown = await reader.unknownTables();
-  assert.equal(unknown.length, 1);
-  assert.ok(unknown[0].header.includes("USUBJID"), "pseudonymised before anyone reads it");
-  assert.equal(JSON.stringify(unknown).includes("LAB-0"), false, "the sample holds no original identifier");
-  await reader.setShapes(acceptLongShapes(JSON.stringify({ tables: [{ id: unknown[0].id, kind: "lab", concept: "TEST", value: "RESULT", unit: "UNIT", date: "WHEN" }] }), unknown));
-  assert.deepEqual((await reader.concepts()).sort(), ["HbA1c", "eGFR"]);
-});

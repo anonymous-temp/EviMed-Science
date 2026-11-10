@@ -1731,7 +1731,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_intake_source_invalid', 'vcr_intake_source_changed', 'vcr_intake_payload_invalid', 'vcr_intake_format_invalid', 'vcr_intake_map_changed',
   // a source held in FHIR, OMOP or ADaM, converted to the module's tables in the same container (vcrImport.mjs)
   'vcr_import_not_this_format', 'vcr_import_nothing_to_import', 'vcr_import_unreadable', 'vcr_import_version_unsupported',
-  'vcr_rejudge_failed', 'vcr_import_columns_unknown', 'vcr_import_entry_failed', 'vcr_import_failed', 'vcr_import_original_gone', 'vcr_import_proposal_failed', 'vcr_import_some_skipped',
+'vcr_import_columns_unknown', 'vcr_import_entry_failed', 'vcr_import_failed', 'vcr_import_original_gone', 'vcr_import_proposal_failed', 'vcr_import_some_skipped',
   'vcr_import_converter_unavailable', 'vcr_import_cell_too_long', 'vcr_import_original_changed', 'vcr_import_person_too_many_documents', 'vcr_import_person_too_much_text',
   'vcr_import_row_too_long', 'vcr_import_too_many_bytes', 'vcr_import_too_many_entries', 'vcr_import_zip_too_large', 'vcr_import_zip_too_many_entries',
   // evidence and matching
@@ -2683,7 +2683,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   registry_page_timeout: '登记记录的页面没有及时打开；这一对按标题和适应症判定。',
   registry_page_unreadable: '登记记录的页面读不出入排标准；这一对按标题和适应症判定。',
   registry_watch_timeout: '登记平台没有及时回答；下一轮会再查这条记录。',
-  vcr_rejudge_failed: '这次没能开始重新判定；已有结论保留，可以再试一次。',
   vcr_import_cell_too_long: '这一格太长，这一行没有收下，其他照常；把这一格拆短再导入即可。',
   vcr_import_original_changed: '要导入的文件和上传时不一样了，这一份没有收下；重新上传再导入。',
   vcr_import_person_too_many_documents: '这位患者的病历份数超过一次导入的上限，多出的没有收下；分批再导入即可。',

@@ -643,45 +643,24 @@ describe("a short name for a person, and a record that has moved since the judgm
     expect(screen.getByRole("heading", { name: "P-EE008D 的试验" })).toBeInTheDocument();
   });
 
-  it("says on a trial that its registry record changed, offers 重新判定 for those trials, and asks the server to judge them again for this person only", async () => {
+  it("says on a trial that its registry record changed, and offers no 重新判定 action", async () => {
     const stale = ["NCT05000001", "NCT05000003"];
     await patientPage({
       [JUDGED]: judged((page, query) => (query.get("direction") === "patient_to_trial"
-        ? { ...page, progress: { ...page.progress, state: "done", jobId: null, waiting: 0 }, stale: { label: "登记记录已更新，可重新判定", count: 2, registryIds: stale },
+        ? { ...page, progress: { ...page.progress, state: "done", jobId: null, waiting: 0 }, stale: { label: "登记记录已更新", count: 2, registryIds: stale },
           trials: page.trials.map((trial: any) => (stale.includes(trial.id) ? { ...trial, basisChanged: { kind: "registry_record", label: "登记记录已更新" } } : trial)) }
         : page)),
-      [`POST ${MATCHING.replace("/matching", "")}/rejudge`]: { started: true, jobId: "job_again", jobs: [{ jobId: "job_again" }] },
     });
     expect(trialRow("NCT05000001")).toHaveTextContent("登记记录已更新");
     expect(trialRow("NCT05000002")).not.toHaveTextContent("登记记录已更新");
-    const offer = document.querySelector("[data-vcr-stale]") as HTMLElement;
-    expect(offer).toHaveTextContent("登记记录已更新，可重新判定（2 个试验）");
-    await userEvent.click(within(offer).getByRole("button", { name: "重新判定" }));
-    await waitFor(() => expect(server.calls.some((call) => call.method === "POST" && call.path === `/vcr/studies/${STUDY_ID}/rejudge`)).toBe(true));
-    const sent = server.calls.find((call) => call.method === "POST" && call.path === `/vcr/studies/${STUDY_ID}/rejudge`);
-    expect(sent?.body).toEqual({ subjectKey: "P-0192", registryIds: stale });
+    const note = document.querySelector("[data-vcr-stale]") as HTMLElement;
+    expect(note).toHaveTextContent("登记记录已更新（2 个试验）");
+    expect(within(note).queryByRole("button", { name: "重新判定" })).toBeNull();
   });
 
-  it("offers 重新判定 for the trials judged on an older note, and asks for exactly those", async () => {
-    const older = ["NCT05000002", "NCT05000003"];
-    await patientPage({
-      [JUDGED]: judged((page, query) => (query.get("direction") === "patient_to_trial"
-        ? { ...page, progress: { ...page.progress, state: "done", jobId: null, waiting: 0 },
-          trials: page.trials.map((trial: any) => (older.includes(trial.id) ? { ...trial, basisChanged: { kind: "record", label: "病历在判定之后有更新" } } : trial)) }
-        : page)),
-      [`POST ${MATCHING.replace("/matching", "")}/rejudge`]: { started: true, jobId: "job_again", jobs: [{ jobId: "job_again" }] },
-    });
-    const offer = document.querySelector("[data-vcr-older-note]") as HTMLElement;
-    expect(offer).toHaveTextContent("2 个试验的判定依据的是更新前的病历");
-    await userEvent.click(within(offer).getByRole("button", { name: "重新判定" }));
-    await waitFor(() => expect(server.calls.some((call) => call.method === "POST" && call.path === `/vcr/studies/${STUDY_ID}/rejudge`)).toBe(true));
-    expect(server.calls.find((call) => call.method === "POST" && call.path === `/vcr/studies/${STUDY_ID}/rejudge`)?.body).toEqual({ subjectKey: "P-0192", registryIds: expect.arrayContaining(older) });
-    expect((server.calls.find((call) => call.method === "POST" && call.path === `/vcr/studies/${STUDY_ID}/rejudge`)?.body as any).registryIds).toHaveLength(2);
-  });
-
-  it("offers no 重新判定 while the job is out, and words a chart that changed as one", async () => {
+  it("words a chart that changed as one", async () => {
     const page = (change: any) => judged((raw, query) => (query.get("direction") === "patient_to_trial"
-      ? { ...raw, ...change(raw), stale: { label: "登记记录已更新，可重新判定", count: 1, registryIds: ["NCT05000001"] },
+      ? { ...raw, ...change(raw), stale: { label: "登记记录已更新", count: 1, registryIds: ["NCT05000001"] },
         trials: raw.trials.map((trial: any, at: number) => (at === 0 ? { ...trial, basisChanged: { kind: "record", label: "病历在判定之后有更新" } } : trial)) }
       : raw));
     await patientPage({ [JUDGED]: page(() => ({})) });

@@ -1,16 +1,20 @@
 /** Route the selected native generation from existing controls into one task ledger.
- * Historical VCR jobs and unselected deployments retain their own readers. */
+ * Historical VCR jobs keep their own readers; a deployment without the plugin refuses a start. */
 import { PATIENT_MATCHING_TASK_KIND } from './patientMatchingRepository.mjs';
 import { HttpError } from './security.mjs';
 
 export function installPatientMatchingLegacyBridge({ vcr, adapter, documents, resolveOrigin }) {
   vcr.patientMatching = adapter;
   vcr.service.attach({ patientMatching: adapter });
-  const oldStart = vcr.matchJudge.start.bind(vcr.matchJudge);
-  vcr.matchJudge.start = async (study, selection, options) => {
-    const origin = await resolveOrigin(study);
-    return origin ? adapter.startSelection(origin, selection) : oldStart(study, selection, options);
+  // The one start of a judging job: from the page, the conversation's `vcr_simulate` and a programme run. It is the plugin's, or it is refused.
+  vcr.matchJudge = {
+    start: async (/** @type {any} */ study, /** @type {any} */ selection) => {
+      const origin = await resolveOrigin(study);
+      if (!origin) throw new HttpError(409, 'patient_matching_generation_unavailable', 'Patient matching needs the matching plugin and this study\'s conversation; neither is available in this deployment right now.');
+      return adapter.startSelection(origin, selection);
+    },
   };
+  vcr.service.attach({ matchJudge: vcr.matchJudge });
   async function context(studyId, taskId) {
     const study = await vcr.store.studyById(studyId);
     if (!study) return null;

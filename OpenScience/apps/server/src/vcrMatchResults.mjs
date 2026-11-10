@@ -301,7 +301,7 @@ function searchLineOf(receipt) {
 const CUT_NOTE_ZH = (most) => `这里的对数超过一次能读的上限，只算到前 ${Number(most).toLocaleString("en-US")} 对左右；分批选人可以看全。`;
 
 /** What the page says of a person's trials whose registry record has changed since they were judged. */
-const REGISTRY_STALE_LABEL_ZH = "登记记录已更新，可重新判定";
+const REGISTRY_STALE_LABEL_ZH = "登记记录已更新";
 /** What the page says of a judgment whose record was a document the person's chart has since changed, withdrawn or re-permitted. */
 const RECORD_CHANGED_LABEL_ZH = "病历在判定之后有更新";
 

@@ -142,16 +142,6 @@ test("asking for a person by key does not open one in a group too small to show,
   }
 });
 
-test("minor: the sentence that starts a job prints small counts only to the owner", options, async () => {
-  const vcr = context.app.vcr;
-  const study = { id: seeded.study.id, userId: accounts.owner };
-  const plain = await vcr.matchJudge.start(study, { direction: "trial_to_patient", protocolVersionId: seeded.protocolId, subjectKeys: [seeded.patient, "NO-RECORD-A", "NO-RECORD-B"] }, { actor: "test", exact: false });
-  assert.ok(!/有 \d+ 位没有病历/u.test(plain.statement), plain.statement);
-  await vcr.store.query("UPDATE evimed_vcr.jobs SET state='canceled', lease_owner=NULL, lease_until=NULL WHERE id=$1", [plain.jobId]);
-  const exact = await vcr.matchJudge.start(study, { direction: "trial_to_patient", protocolVersionId: seeded.protocolId, subjectKeys: [seeded.patient, "NO-RECORD-A", "NO-RECORD-C"] }, { actor: "test", exact: true });
-  assert.match(exact.statement, /有 \d+ 位没有病历/u);
-  await vcr.store.query("UPDATE evimed_vcr.jobs SET state='canceled', lease_owner=NULL, lease_until=NULL WHERE id=$1", [exact.jobId]);
-});
 
 test("B2: a row that survived with a sentence whose record has since changed is not printed, on the page or in the export, and the row says so", options, async () => {
   const vcr = context.app.vcr;
@@ -170,21 +160,6 @@ test("B2: a row that survived with a sentence whose record has since changed is 
   assert.match(page.body.data.selected.evidenceNote, /读不到/u);
 });
 
-test("S4: a withdrawn person's page holds nothing, and the newest-work link does not open on them", options, async () => {
-  const vcr = context.app.vcr;
-  const plane = vcr.dataPlane;
-  const source = await plane.registerSource({ userId: accounts.owner, studyId: seeded.study.id, name: "将撤回" });
-  const up = await plane.storeUpload({ actor: accounts.owner, studyId: seeded.study.id, sourceId: source.id, name: "n.txt", role: "document", subject: "SYNTHETIC-GONE", stream: Readable.from([Buffer.from("一份病历。")]) });
-  const key = String(up.file.detail.subjectKey);
-  const started = await vcr.matchJudge.start({ id: seeded.study.id, userId: accounts.owner }, { subjectKey: key, registryIds: ["NCT07777777"] }, { actor: "test" });
-  const withdrawn = await call("owner", "POST", `/api/vcr/studies/${seeded.study.id}/data/subjects/${key}/withdraw`, { reason: "t" });
-  if (withdrawn.status >= 300) await plane.withdrawSubject({ studyId: seeded.study.id, subjectKey: key, actor: accounts.owner, reason: "t" });
-  const page = await judged("owner", `direction=patient_to_trial&subjectKey=${key}`);
-  assert.equal(page.body.data.held, false);
-  const latest = await judged("owner", "");
-  assert.notEqual(latest.body.data.latest?.subjectKey, key);
-  await vcr.store.query("UPDATE evimed_vcr.jobs SET state='canceled', lease_owner=NULL, lease_until=NULL WHERE id=$1", [started.jobId]);
-});
 
 test("the page's 开始评估 reaches the matching package (it answered 503 vcr_unavailable once the contact service left), and the rule file is behind the same export route", options, async () => {
   const started = await call("owner", "POST", `/api/vcr/studies/${seeded.study.id}/jobs`, { kind: "match_criteria", selection: { direction: "trial_to_patient" } });

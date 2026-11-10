@@ -179,12 +179,11 @@ test("the registry watch and the ChiCTR page reader are on, bounded, and each li
 test("batch matching has a bound on one table-code call and on judging", () => {
   const config = loadConfig({ rootDir: repoRoot });
   assert.deepEqual([config.vcrMatchExtractTimeoutMs], [90_000]);
-  assert.deepEqual([config.vcrMatchJudgeConcurrency, config.vcrMatchJudgeTopK, config.vcrMatchJudgeThinking, config.vcrMatchJudgeOutputTokens, config.vcrMatchJudgeTimeoutMs, config.vcrMatchJudgeMaxUpstreamFailures],
-    [8, 20, "off", 32_000, 180_000, 20]);
-  const judged = loadConfig({ rootDir: repoRoot, vcrMatchJudgeConcurrency: "64", vcrMatchJudgeTopK: "all", vcrMatchJudgeThinking: "off", vcrMatchJudgeOutputTokens: "2000", vcrMatchJudgeTimeoutMs: "10000", vcrMatchJudgeMaxUpstreamFailures: "1" });
-  assert.deepEqual([judged.vcrMatchJudgeConcurrency, judged.vcrMatchJudgeTopK, judged.vcrMatchJudgeThinking, judged.vcrMatchJudgeOutputTokens], [64, "all", "off", 2_000]);
+  assert.deepEqual([config.vcrMatchJudgeTopK, config.vcrMatchJudgeThinking, config.vcrMatchJudgeOutputTokens], [20, "off", 32_000]);
+  const judged = loadConfig({ rootDir: repoRoot, vcrMatchJudgeTopK: "all", vcrMatchJudgeThinking: "off", vcrMatchJudgeOutputTokens: "2000" });
+  assert.deepEqual([judged.vcrMatchJudgeTopK, judged.vcrMatchJudgeThinking, judged.vcrMatchJudgeOutputTokens], ["all", "off", 2_000]);
   assert.equal(loadConfig({ rootDir: repoRoot, vcrMatchJudgeTopK: "0" }).vcrMatchJudgeTopK, 0);
-  for (const bad of [{ vcrMatchJudgeConcurrency: "65" }, { vcrMatchJudgeTopK: "some" }, { vcrMatchJudgeTopK: "501" }, { vcrMatchJudgeThinking: "low" }, { vcrMatchJudgeOutputTokens: "1000" }, { vcrMatchJudgeTimeoutMs: "1" }, { vcrMatchJudgeMaxUpstreamFailures: "0" }]) {
+  for (const bad of [{ vcrMatchJudgeTopK: "some" }, { vcrMatchJudgeTopK: "501" }, { vcrMatchJudgeThinking: "low" }, { vcrMatchJudgeOutputTokens: "1000" }]) {
     assert.throws(() => loadConfig({ rootDir: repoRoot, ...bad }), /OPEN_SCIENCE_VCR_MATCH_JUDGE_/, JSON.stringify(bad));
   }
   assert.equal(loadConfig({ rootDir: repoRoot, vcrMatchExtractTimeoutMs: "20000" }).vcrMatchExtractTimeoutMs, 20_000);

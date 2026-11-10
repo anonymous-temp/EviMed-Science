@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cancelVcrJob, rejudgeVcrPatient, runVcrTrialSearch, startVcrJudge, type VcrJudgedPair, type VcrJudgedPatient, type VcrStudy } from "@/lib/vcrClient";
+import { cancelVcrJob, runVcrTrialSearch, startVcrJudge, type VcrJudgedPair, type VcrJudgedPatient, type VcrStudy } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { useWide } from "@/lib/useMediaQuery";
@@ -88,10 +88,8 @@ export function PatientTrials({ studyId, study, judged, picked, onPick, onChange
     setWorking(true);
     void work().then(onChanged).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: failure }))).finally(() => setWorking(false));
   };
-  const rejudge = () => act(() => rejudgeVcrPatient(studyId, { subjectKey: subject, registryIds: judged.stale?.registryIds }), "暂时无法重新判定，请稍后重试。");
-  // What was judged on a note the person has since added to: the same job, for exactly those, the new text read with the old.
+  // What was judged on a note the person has since added to.
   const olderNote = trials.filter((trial) => trial.basisChanged?.kind === "record").map((trial) => trial.id);
-  const rejudgeOlderNote = () => act(() => rejudgeVcrPatient(studyId, { subjectKey: subject, registryIds: olderNote }), "暂时无法重新判定，请稍后重试。");
   const resume = () => act(() => startVcrJudge(studyId, { direction: "patient_to_trial", subjectKey: subject, resume: true }), "暂时无法继续判定，请稍后重试。");
   const stop = () => { if (progress.jobId) act(() => cancelVcrJob(studyId, progress.jobId!), "暂时无法停止，请稍后重试。"); };
 
@@ -116,13 +114,11 @@ export function PatientTrials({ studyId, study, judged, picked, onPick, onChange
         {judged.stale && (
           <div data-vcr-stale={judged.stale.count} className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-surface-2 px-3 py-2">
             <p className="min-w-0 flex-1 text-ui text-text-2">{judged.stale.label}（{judged.stale.count} 个试验）；原来的判定保留为历史。</p>
-            {mayRun && progress.state !== "running" && <Button variant="secondary" size="sm" actionKind="start" loading={working} onClick={rejudge}>重新判定</Button>}
           </div>
         )}
         {olderNote.length > 0 && (
           <div data-vcr-older-note={olderNote.length} className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-surface-2 px-3 py-2">
             <div className="min-w-0 flex-1"><Note result={["病历在判定之后有更新：", { n: olderNote.length }, " 个试验的判定依据的是更新前的病历；原来的判定保留为历史。"]} /></div>
-            {mayRun && progress.state !== "running" && <Button variant="secondary" size="sm" actionKind="start" loading={working} onClick={rejudgeOlderNote}>重新判定</Button>}
           </div>
         )}
         <JudgedProgressNote progress={progress} noun="个试验" mayRun={mayRun} busy={working} onResume={resume} onStop={stop} />

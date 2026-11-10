@@ -1184,27 +1184,18 @@ function vcrSettings(overrides) {
     vcrRunAdoptionWaitMs: integer("vcrRunAdoptionWaitMs", "OPEN_SCIENCE_VCR_RUN_ADOPTION_WAIT_MS", 20_000, 0, 120_000),
     // How long one model call of reading a table's codes may take (vcrTableMeaning).
     vcrMatchExtractTimeoutMs: integer("vcrMatchExtractTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_TIMEOUT_MS", 90_000, 10_000, 300_000),
-    // Judging patients against trials (vcrMatchJudge, owner decisions 2026-11-04). How many pairs are judged at once; how many of a person's best-ranked trials are judged
-    // clause by clause (0 none, "all" every pair); thinking `high` or `off`, recorded on every row; the output allowance of one call, which reasoning counts towards, so an
-    // answer cut off by it is a failed pair rather than a short answer; one call's limit; and how many upstream failures in a row stop a job, with what was done kept.
-    // A selection may name fit, topK and thinking for one job, so a benchmark can ask for each arm. Counters: `open_science_vcr_match_judge_total`.
-    vcrMatchJudgeConcurrency: integer("vcrMatchJudgeConcurrency", "OPEN_SCIENCE_VCR_MATCH_JUDGE_CONCURRENCY", 8, 1, 64),
+    // The plan a judging start states beforehand (vcrMatchJudge `planMatchJudge`, owner decisions 2026-11-04; the plugin runs the judgments): how many of a person's best-ranked trials are judged
+    // clause by clause (0 none, "all" every pair); thinking `high` or `off`; the output allowance of one call; and the most one start may be estimated at.
+    // A selection may name fit, topK and thinking for one start, so a benchmark can ask for each arm.
     vcrMatchJudgeTopK: matchJudgeTopK(overrides.vcrMatchJudgeTopK ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_TOP_K),
     // Measured on public boards, 2026-11-04: the trial-level call ranks as well with thinking off (SIGIR nDCG@10 .669 off, .648 high; TREC 2021 dev .810,
     // .795; TREC 2022 dev .881, .852) at a third of the price and time; clause by clause thinking helps (746 to 782 of 1,015 on the same prompt).
     vcrMatchJudgeThinking: matchJudgeThinking(overrides.vcrMatchJudgeThinking ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_THINKING, "off"),
     vcrMatchJudgeCriteriaThinking: matchJudgeThinking(overrides.vcrMatchJudgeCriteriaThinking ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_CRITERIA_THINKING, "high"),
     vcrMatchJudgeOutputTokens: integer("vcrMatchJudgeOutputTokens", "OPEN_SCIENCE_VCR_MATCH_JUDGE_OUTPUT_TOKENS", 32_000, 2_000, 64_000),
-    vcrMatchJudgeTimeoutMs: integer("vcrMatchJudgeTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_JUDGE_TIMEOUT_MS", 180_000, 10_000, 600_000),
-    vcrMatchJudgeMaxUpstreamFailures: integer("vcrMatchJudgeMaxUpstreamFailures", "OPEN_SCIENCE_VCR_MATCH_JUDGE_MAX_UPSTREAM_FAILURES", 20, 1, 1_000),
     // The most one judging job may spend, in CNY. The `vcr` purpose has no account cap (owner, 2026-10-10), so this is what stops one selection of a long note against hundreds of trials from
     // running the shared key dry: it is a resource limit and not an opinion (principle 15). At it the job stops `limited`, keeps its work, says so, and one action continues it.
     vcrMatchJudgeJobCeilingCny: integer("vcrMatchJudgeJobCeilingCny", "OPEN_SCIENCE_VCR_MATCH_JUDGE_JOB_CEILING_CNY", 500, 1, 1_000_000),
-    // A judging job on the worker's lane hands its turn back after this many pairs or this long (one running slow job per account, so the account's other work runs between its batches), and a
-    // provider that stays down is waited out this many times, with a growing wait, before the job ends with what it did. The counters are `batches` and `outageWaits` of `match_judge_total`.
-    vcrMatchJudgeSlicePairs: integer("vcrMatchJudgeSlicePairs", "OPEN_SCIENCE_VCR_MATCH_JUDGE_SLICE_PAIRS", 400, 1, 100_000),
-    vcrMatchJudgeSliceMs: integer("vcrMatchJudgeSliceMs", "OPEN_SCIENCE_VCR_MATCH_JUDGE_SLICE_MS", 300_000, 1_000, 3_600_000),
-    vcrMatchJudgeOutageWaits: integer("vcrMatchJudgeOutageWaits", "OPEN_SCIENCE_VCR_MATCH_JUDGE_OUTAGE_WAITS", 6, 0, 100),
     // Taking many patients' records in (vcrRecordsImport): how much one turn of the job does, and how many entries are read at once. Each entry may be a conversion in a container or a parser call.
     vcrRecordsImportSliceEntries: integer("vcrRecordsImportSliceEntries", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_SLICE_ENTRIES", 500, 1, 100_000),
     vcrRecordsImportSliceMs: integer("vcrRecordsImportSliceMs", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_SLICE_MS", 300_000, 1_000, 3_600_000),

@@ -115,7 +115,7 @@ import { createPatientDocumentRead } from "./vcrPatientContext.mjs";
 import { createLongTableReader } from "./vcrLongTables.mjs";
 import { VcrCandidateRerank, createRerankMeter } from "./vcrCandidateRerank.mjs";
 import { VcrCandidateSearchStore } from "./vcrCandidateSearchStore.mjs";
-import { createMatchJudge, createMatchJudgeCounters, createMatchJudgeExecutor, createMatchJudgmentReads, createPairJudge, judgmentTargets, tableFieldsOf } from "./vcrMatchJudge.mjs";
+import { createMatchJudgmentReads, judgmentTargets, tableFieldsOf } from "./vcrMatchJudge.mjs";
 import { VcrMatchJudgmentStore } from "./vcrMatchJudgmentStore.mjs";
 import { VcrRegistryPageStore, createRegistryPageCounters, createRegistryPages } from "./vcrRegistryPages.mjs";
 import { createRegistryWatch, createRegistryWatchCounters } from "./vcrRegistryWatch.mjs";
@@ -1283,20 +1283,13 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
 
   // Judging patients against trials (owner decisions 2026-11-04): one job and one record for both directions; a conversation writes the same record through `trial_judgment`.
   const matchJudgments = new VcrMatchJudgmentStore({ database: productDatabase });
-  const matchJudgeCounters = createMatchJudgeCounters();
   // A ChiCTR listing carries no eligibility text; its page is read through the platform's web reader (vcrRegistryPages), and a page that gives nothing is a pair judged on the listing.
   const registryPageCounters = createRegistryPageCounters();
   const registryPages = config.vcrRegistryPagesEnabled !== false && webReader
     ? createRegistryPages({ store: new VcrRegistryPageStore({ database: productDatabase }), webReader, config, report, counters: registryPageCounters }) : null;
   const judgeTargets = judgmentTargets({ evidence, matchStore, pages: registryPages });
-  const pairJudge = createPairJudge({ config, usageLedger, fetchImpl: call, counters: matchJudgeCounters });
-  jobs.localExecutors["matching.judge"] = createMatchJudgeExecutor({
-    store, matchStore, judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, config, report, counters: matchJudgeCounters,
-    judge: pairJudge,
-  });
-  const matchJudge = createMatchJudge({ jobs, matchStore, documents, subjectTable, judgments: matchJudgments, config, counters: matchJudgeCounters });
   /** @type {ReturnType<typeof createPatientDocumentRead> | null} */
-  const patientDocuments = dataPlane ? createPatientDocumentRead({ store, dataStore, dataPlane, jobs, receipts: () => recordsOriginals.receipts, rejudge: (target, input) => matchJudge.rejudge(target, input) }) : null;
+  const patientDocuments = dataPlane ? createPatientDocumentRead({ store, dataStore, dataPlane, jobs, receipts: () => recordsOriginals.receipts }) : null;
   // Many patients' records taken in as a job. The originals are the upload receipts', which the server builds after this module: until it says so, nothing can be located.
   const recordsOriginals = { receipts: /** @type {any} */ (null) };
   if (dataPlane) {
@@ -1314,7 +1307,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     if ((await tableFieldsOf(subjectTable, study))?.subjects.includes(subjectKey)) return true;
     return (await matchJudgments.list({ studyId: study.id, subjectKey, limit: 1 })).length > 0;
   };
-  const matchJudgmentReads = createMatchJudgmentReads({ judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, matchStore, rejudge: matchJudge });
+  const matchJudgmentReads = createMatchJudgmentReads({ judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, matchStore });
   // The trials a person holds a verdict about, read again a few at a time; a verdict made of a record that has since changed is marked (G15).
   const registryWatchCounters = createRegistryWatchCounters();
   const registryWatch = config.vcrRegistryWatchEnabled !== false
@@ -1330,7 +1323,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
       people: (ids) => store.personNames(ids) } });
   // The matching page's reader of the saved judgments, and the start of the judging job from the page.
   const matchResults = new VcrMatchResults({ database: productDatabase, judgments: matchJudgments, documents, matchStore, searches: candidateSearches, minCell: matchBatchMinCell(config) });
-  service.attach({ corrections, knowledge, engineProbe, erasure, matchJudgments: matchJudgmentReads, matchJudge, matchResults, subjectKnown });
+  service.attach({ corrections, knowledge, engineProbe, erasure, matchJudgments: matchJudgmentReads, matchResults, subjectKnown });
   // The study's project carries the study's name: the first definition names a draft, and the sidebar lists projects. A project the
   // researcher renamed since is left alone, like GEO's — the old name is the study's own, or one nobody gave.
   if (projectStore?.renameProject) {
@@ -1364,7 +1357,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, erasure, candidateSearches, candidateReranker, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals, patientDocuments,
+    store, dataStore, matchStore, erasure, candidateSearches, candidateReranker, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals, patientDocuments,
     access, members, dataPlane, dataPlaneSeam, documents, subjectTable, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
@@ -1484,7 +1477,6 @@ export async function vcrMetricsSnapshot(vcr) {
     publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
     predictions: vcr.predictions ? { ...vcr.predictions.counters } : null,
     candidateRerank: vcr.candidateReranker ? vcr.candidateReranker.counts() : null,
-    matchJudge: vcr.matchJudgeCounters ? { ...vcr.matchJudgeCounters } : null,
     registryWatch: vcr.registryWatch ? { ...vcr.registryWatchCounters } : null,
     registryPages: vcr.registryPages ? { ...vcr.registryPageCounters } : null,
     frontierEvents: vcr.frontierEvents ? { ...vcr.frontierEvents.counters } : null,
@@ -1584,10 +1576,6 @@ export function vcrMetricFamilies(enabled, snapshot) {
       { labels: { kind: "batches" }, value: snapshot.candidateRerank.succeeded }, { labels: { kind: "documents" }, value: snapshot.candidateRerank.documents },
       { labels: { kind: "billed_tokens" }, value: snapshot.candidateRerank.billedTokens ?? 0 }, { labels: { kind: "unmetered_requests" }, value: snapshot.candidateRerank.unmetered ?? 0 }, { labels: { kind: "billing_failed" }, value: snapshot.candidateRerank.billingFailed ?? 0 },
       ...Object.entries(snapshot.candidateRerank.failed).map(([code, value]) => ({ labels: { kind: `failed:${code}` }, value: Number(value) }))]);
-  }
-  if (snapshot.matchJudge) {
-    add("match_judge_total", "What judging patients against trials did since this process started: jobs started, pairs judged and failed, model calls retried, jobs stopped by a budget, a ceiling or a run of upstream failures, jobs canceled, and records that changed under a job.", "counter",
-      Object.entries(snapshot.matchJudge).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.registryWatch) {
     add("registry_watch_total", "What the registry watch did since this process started (G15): ticks, trials read again, trials whose record had changed, verdicts marked and marks cleared (the record went back), records the registry no longer has, reads that failed, and trials left for the next tick.", "counter",

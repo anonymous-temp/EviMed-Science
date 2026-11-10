@@ -511,7 +511,7 @@ test("a trial whose registry record changed is marked on its row, the person's p
   const marked = await context.app.vcr.matchJudgments.markRegistryChanged({ studyId: seeded.study.id, targetId: trialId(1), hash: "a-newer-record", at: "2026-11-04T09:00:00.000Z" });
   assert.ok(marked.marked > 0, "the watch marked the judgments of that trial");
   const after = await read(`direction=patient_to_trial&subjectKey=${seeded.patient}`);
-  assert.deepEqual(after.stale, { label: "登记记录已更新，可重新判定", count: 1, registryIds: [trialId(1)] });
+  assert.deepEqual(after.stale, { label: "登记记录已更新", count: 1, registryIds: [trialId(1)] });
   const changed = after.trials.filter((trial) => trial.basisChanged);
   assert.deepEqual(changed.map((trial) => trial.registryId), [trialId(1)]);
   assert.deepEqual(changed[0].basisChanged.kind, "registry_record");

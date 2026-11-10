@@ -3727,7 +3727,7 @@ export function readVcrJudged(raw: unknown): VcrJudged {
     const subjectKey = String(value.subjectKey ?? "");
     return { direction: "patient_to_trial", subjectKey, label: String(value.label ?? vcrSubjectLabel(subjectKey)), ...common, trials: arr(value.trials).map(readJudgedPair),
       ...(text(value.search) ? { search: String(value.search) } : {}),
-      ...(Object.keys(stale).length ? { stale: { label: String(stale.label ?? "登记记录已更新，可重新判定"), count: num(stale.count) ?? 0, registryIds: strings(stale.registryIds) } } : {}) };
+      ...(Object.keys(stale).length ? { stale: { label: String(stale.label ?? "登记记录已更新"), count: num(stale.count) ?? 0, registryIds: strings(stale.registryIds) } } : {}) };
   }
   const tallies = obj(value.tallies);
   const clauses = obj(value.clauses);
@@ -3781,15 +3781,6 @@ export async function startVcrJudge(studyId: string, body: { direction: "trial_t
   | { direction: "patient_to_trial"; subjectKey: string; resume: true }): Promise<VcrJudgeStart> {
   return readJudgeStart(await productRequest<unknown>(`${study(studyId)}/matching/judge`, "POST",
     Object.fromEntries(Object.entries(body).filter(([, value]) => value !== null && value !== undefined))));
-}
-
-/**
- * 「重新判定」: judge again the trials of one patient whose registry record changed since (the page's own `stale` list when `registryIds` is left out). The earlier
- * verdicts stay as history; the answer is the job that was started, which the page then follows through the progress of the same scope.
- */
-export async function rejudgeVcrPatient(studyId: string, body: { subjectKey: string; registryIds?: string[] }): Promise<{ started: boolean; jobId: string | null }> {
-  const value = obj(await productRequest<unknown>(`${study(studyId)}/rejudge`, "POST", body));
-  return { started: value.started === true, jobId: text(value.jobId) };
 }
 
 /** The files of the judged rows: all of them, a row for each pair or for each clause of each pair, in the formats a sheet or a script reads. */

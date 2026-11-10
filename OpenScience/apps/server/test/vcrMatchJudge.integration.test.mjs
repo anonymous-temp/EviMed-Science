@@ -1,5 +1,5 @@
-// Judging patients against trials on the real queue and the real table: one record per pair for given inputs, a resumed job finding them, the slow lane taking it, and what
-// happens to the rows when a person withdraws, a document is erased or changes, and when a study, a project or an account is deleted. PostgreSQL; the model is a double.
+// The saved judgments on the real table: one record per pair for given inputs and what
+// happens to the rows when a person withdraws, a document is erased or changes, and when a study, a project or an account is deleted. PostgreSQL.
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -8,8 +8,6 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { composeVcr } from "../src/vcrComposition.mjs";
 import { VCR_TABLES } from "../src/vcrPersistence.mjs";
-import { VcrJobs } from "../src/vcrJobs.mjs";
-import { createMatchJudge, createMatchJudgeExecutor, createMatchJudgmentReads, createPairJudge, judgmentTargets } from "../src/vcrMatchJudge.mjs";
 import { VcrMatchJudgmentStore } from "../src/vcrMatchJudgmentStore.mjs";
 import { VcrStore } from "../src/vcrStore.mjs";
 import { deleteVcrProjectRows, deleteVcrUserRows } from "../src/vcrStoreBase.mjs";
@@ -187,153 +185,4 @@ test("the model reads through the service: a person's ranking, a protocol's peop
   const protocol = await vcr.service.runtimeRead(context, "matching", { protocolVersionId: "prt_x" });
   assert.deepEqual(protocol.ranking.map((row) => [row.subjectKey, row.target.kind]), [[f.s1, "protocol_version"]]);
   assert.deepEqual(protocol.clauses, []);
-});
-
-/** A judging job on the real queue and the real table, with the model and the registry as doubles. */
-async function queued({ script = null, concurrency = 2 } = {}) {
-  const study = await newStudy("owner_q", `prj_q${++sequence}`);
-  const records = { async roster() { return [{ id: "d1", subjectKey: "P-1", chars: 9 }]; }, async runtimeRead(_s, { documentId }) { return { id: documentId, text: "男性，70 岁。肺腺癌。", sourceHash: "h1" }; }, async runtimeEvidence(_s, entries) { return entries; } };
-  const calls = [];
-  const callModel = async (_d, call) => {
-    calls.push(call);
-    const scripted = script?.(call, calls.length);
-    if (scripted) throw scripted;
-    const criterion = call.body.messages[0].content.includes("criterion level");
-    return { choices: [{ finish_reason: "stop", message: { content: criterion ? '{"1":["理由",[0],"included"]}' : '{"score":80,"confidence":0.7,"eligible_reasons":"1. a","missing_information":"","ineligible_reasons":""}' } }], usage: { prompt_tokens: 10, completion_tokens: 5 } };
-  };
-  const config = { vcrJobCpuSeconds: 60, vcrStudyCpuBudget: 1000, vcrMaxConcurrentJobs: 1, vcrLocalConcurrency: 2, vcrMatchJudgeConcurrency: concurrency, deepseekModel: "deepseek-flash" };
-  const matching = { async withdrawnSubjects() { return new Set(); }, listCriteria: async () => [], latestProtocol: async () => null };
-  const jobs = new VcrJobs({ store: studies, config });
-  const targets = judgmentTargets({ matchStore: matching, evidence: { async judgmentRecord({ registryId }) { return { status: "ok", trial: { registry: "clinicaltrials.gov", registryId, title: "T", summary: "S", eligibility: "Inclusion Criteria:\n* Age >= 18", conditions: [], interventions: [] } }; } } });
-  jobs.localExecutors["matching.judge"] = createMatchJudgeExecutor({ store: studies, matchStore: matching, judgments, documents: records, targets, judge: createPairJudge({ config, callModel, sleep: async () => {} }), config });
-  const start = createMatchJudge({ jobs, matchStore: matching, documents: records, config });
-  return { study, jobs, start, calls, targets, reads: createMatchJudgmentReads({ judgments, documents: records, targets, matchStore: matching }) };
-}
-
-const SELECTION = { subjectKey: "P-1", registryIds: ["NCT00000001", "NCT00000002"], topK: 1 };
-
-test("a judging job is queued by the platform alone, held to its frozen shape, and taken by the slow lane and no other", options, async () => {
-  const f = await queued();
-  await assert.rejects(() => f.jobs.enqueue({ studyId: f.study.id, userId: f.study.userId, kind: "match_judge", scenario: {}, cpuSecondsLimit: 60 }), { code: "vcr_job_scenario_invalid" });
-  const started = await f.start.start(f.study, SELECTION);
-  assert.equal(started.state, "queued");
-  const row = await studies.one("SELECT method, method_version, state, max_attempts FROM evimed_vcr.jobs WHERE id=$1", [started.jobId]);
-  assert.deepEqual([row.method, row.method_version, row.state, row.max_attempts], ["matching.judge", "1.0.0", "queued", 5]);
-  assert.deepEqual(await f.jobs.claim({ lane: "local" }), []);
-  assert.deepEqual(await f.jobs.claim({ lane: "engine" }), []);
-  assert.deepEqual((await f.jobs.claim({ lane: "slow" })).map((job) => job.id), [started.jobId]);
-  await studies.query("UPDATE evimed_vcr.jobs SET state='canceled', lease_owner=NULL, lease_until=NULL WHERE id=$1", [started.jobId]);
-});
-
-test("a job runs on the queue, writes the rows and a result that says what it did, and a second start pays for nothing", options, async () => {
-  const f = await queued();
-  const started = await f.start.start(f.study, SELECTION);
-  const [claimed] = await f.jobs.claim({ lane: "slow" });
-  assert.equal((await f.jobs.advance(claimed)).action, "finished");
-  const job = await studies.one("SELECT state FROM evimed_vcr.jobs WHERE id=$1", [started.jobId]);
-  assert.equal(job.state, "succeeded");
-  assert.equal(f.calls.length, 3, "two trial-level calls and one clause-level");
-  const result = await studies.one("SELECT kind, conclusion, diagnostics, measures FROM evimed_vcr.results WHERE study_id=$1", [f.study.id]);
-  assert.deepEqual([result.kind, result.conclusion], ["match_judge", "estimable"]);
-  assert.deepEqual([result.diagnostics.finished, result.diagnostics.total, result.diagnostics.used.calls], [2, 2, 3]);
-  const stored = await judgments.list({ studyId: f.study.id });
-  assert.equal(stored.length, 3);
-  assert.ok(stored.every((row) => row.producer === "job" && row.jobId === started.jobId && row.model === "deepseek-flash" && row.thinking === (row.mode === "fit" ? "off" : "high") && row.status === "done"));
-  const read = await f.reads.forSubject(f.study, "P-1");
-  assert.deepEqual(read.ranking.map((row) => row.verdict).sort(), ["eligible", "eligible"]);
-  const next = await f.start.start(f.study, SELECTION);
-  assert.notEqual(next.jobId, started.jobId, "a new attempt after the first has ended");
-  const [again] = await f.jobs.claim({ lane: "slow" });
-  await f.jobs.advance(again);
-  assert.equal(f.calls.length, 3, "and the ledger pays for nothing twice");
-});
-
-test("a re-claimed job after a worker dies does the rest and nothing twice", options, async () => {
-  let dead = true;
-  const f = await queued({ concurrency: 1, script: (_call, index) => (dead && index === 2 ? Object.assign(new Error("gone"), { code: "worker_died" }) : null) });
-  await f.start.start(f.study, { ...SELECTION, topK: 0 });
-  const [claimed] = await f.jobs.claim({ lane: "slow" });
-  await f.jobs.advance(claimed);
-  assert.equal(f.calls.length, 2);
-  dead = false;
-  await f.start.start(f.study, { ...SELECTION, topK: 0 });
-  const [resumed] = await f.jobs.claim({ lane: "slow" });
-  await f.jobs.advance(resumed);
-  assert.equal(f.calls.length, 3, "only the pair with no finished row");
-  const rows = await judgments.list({ studyId: f.study.id });
-  assert.ok(rows.every((row) => row.status === "done"), "the failed row was replaced");
-});
-
-test("nothing finished is a failed job with its reason on the row, never a success", options, async () => {
-  const quota = Object.assign(new Error("over"), { code: "insufficient_quota" });
-  const f = await queued({ script: () => quota });
-  const started = await f.start.start(f.study, SELECTION);
-  const [claimed] = await f.jobs.claim({ lane: "slow" });
-  await f.jobs.advance(claimed);
-  const job = await studies.one("SELECT state, error FROM evimed_vcr.jobs WHERE id=$1", [started.jobId]);
-  assert.equal(job.state, "failed");
-  assert.equal(job.error.code, "insufficient_quota");
-  assert.equal((await studies.rows("SELECT 1 FROM evimed_vcr.results WHERE study_id=$1", [f.study.id])).length, 0);
-});
-
-const CHAT = (content) => new Response(JSON.stringify({ id: "x", model: "deepseek-flash", choices: [{ finish_reason: "stop", message: { role: "assistant", content } }], usage: { prompt_tokens: 40, completion_tokens: 10, prompt_cache_hit_tokens: 20 } }), { status: 200, headers: { "content-type": "application/json" } });
-const CTGOV = (id) => ({ protocolSection: { identificationModule: { nctId: id, briefTitle: `Trial ${id}` }, descriptionModule: { briefSummary: "Summary" }, statusModule: { overallStatus: "RECRUITING" }, conditionsModule: { conditions: ["NSCLC"] }, designModule: { phases: ["PHASE2"] },
-  armsInterventionsModule: { interventions: [{ type: "DRUG", name: "Osimertinib" }] }, eligibilityModule: { eligibilityCriteria: "Inclusion Criteria:\n* Age >= 18\nExclusion Criteria:\n* Pregnancy" } } });
-
-test("the whole path on the composed module: a record read through the plane, a live registry, a model double, the saved ranking and a conversation's write", options, async () => {
-  /** @type {string[]} */ const asked = [];
-  const fetchImpl = async (input, init) => {
-    const url = String(input);
-    if (url.includes("clinicaltrials.gov")) { asked.push(url); return new Response(JSON.stringify(CTGOV(/NCT\d{8}/.exec(url)[0])), { status: 200, headers: { "content-type": "application/json" } }); }
-    const body = JSON.parse(init.body);
-    assert.equal(body.model, "deepseek-flash");
-    const system = body.messages[0].content;
-    asked.push(system.includes("criterion level") ? "criteria" : "fit");
-    return CHAT(system.includes("criterion level") ? '{"1":["年龄 62 岁",[0],"included"],"2":["未提及妊娠",[],"not excluded"]}' : '{"score":85,"confidence":0.7,"eligible_reasons":"1. 年龄符合","missing_information":"","ineligible_reasons":"","rationale":"1. 符合"}');
-  };
-  const config = { vcrEnabled: true, vcrAudience: "all", vcrDataPlaneDir: directory, deepseekBaseUrl: "https://api.example.org", deepseekApiKey: "test", deepseekModel: "deepseek-flash", vcrProviderAgreements: true, vcrMatchJudgeTopK: 1, vcrMatchJudgeConcurrency: 2, vcrLocalConcurrency: 2 };
-  const composed = composeVcr({ config, productDatabase: database, fetchImpl });
-  await composed.store.ready();
-  const target = await composed.store.createStudy({ userId: "owner", projectId: `prj_${++sequence}`, name: `Whole path ${sequence}`, question: "q", dataTier: "T0" });
-  const source = await composed.dataPlane.registerSource({ userId: "owner", studyId: target.id, name: "Synthetic notes" });
-  const upload = async (text, subject) => (await composed.dataPlane.storeUpload({ actor: "owner", studyId: target.id, sourceId: source.id, name: "note.txt", role: "document", subject, stream: streamOf(text) })).file;
-  const file = await upload("年龄 62 岁。肺腺癌 IV 期。", "A-REAL-ID");
-  const subjectKey = file.detail.subjectKey;
-
-  const started = await composed.matchJudge.start(target, { subjectKey, registryIds: ["NCT00000001", "NCT00000002"] });
-  assert.equal(started.state, "queued", JSON.stringify(started));
-  assert.match(started.statement, /判定 2 对/);
-  const [claimed] = await composed.jobs.claim({ lane: "slow" });
-  const ended = await composed.jobs.advance(claimed);
-  assert.equal(ended.action, "finished");
-  assert.deepEqual(asked.filter((entry) => entry === "fit" || entry === "criteria").sort(), ["criteria", "fit", "fit"]);
-  assert.equal(asked.filter((entry) => entry.includes("clinicaltrials.gov")).length, 2, "a registry record is read once for the job");
-
-  const row = await composed.store.one("SELECT conclusion, diagnostics FROM evimed_vcr.results WHERE study_id=$1", [target.id]);
-  assert.deepEqual([row.conclusion, row.diagnostics.finished, row.diagnostics.total, row.diagnostics.used.calls], ["estimable", 2, 2, 3]);
-  assert.equal(row.diagnostics.used.currency, "CNY");
-  assert.ok(row.diagnostics.used.cost > 0);
-
-  const context = { ...target, cloudContext: { runId: "run_whole", sessionId: "session_whole" } };
-  const read = await composed.service.runtimeRead(context, "candidate_trials", { subjectKey });
-  assert.equal(read.ranking.length, 2);
-  const first = read.ranking[0];
-  assert.deepEqual([first.target.registry, first.verdict, first.verdictLabel, first.fit, first.eligibilitySource], ["clinicaltrials.gov", "eligible", "符合", 85, "registry"]);
-  assert.deepEqual(first.criteria.map((entry) => [entry.number, entry.display]), [[1, "符合"], [2, "未见记载，按未排除"]]);
-  assert.deepEqual(first.criteria[0].evidence.map((item) => [item.text, item.documentId]), [["年龄 62 岁。", file.id]], "evidence read back from the record, under the cloud path");
-
-  const { documentHash, sentences } = await composed.service.runtimeRead(context, "subject_document", { subjectKey, kind: "sentences" });
-  assert.deepEqual(sentences.map((entry) => entry.id), [0, 1]);
-  const written = await composed.matchJudgmentReads.writeConversation(context, { subjectKey, registryId: "NCT00000003", fit: 12, confidence: 0.9, reasons: { ineligible: ["诊断不符"] },
-    criteria: [{ number: 1, reason: "62 岁", sentenceIds: [0], label: "included" }, { number: 2, reason: "妊娠", sentenceIds: [1], label: "excluded" }], documentHash });
-  assert.deepEqual([written.verdict, written.notices], ["ineligible", []]);
-  const after = await composed.service.runtimeRead(context, "candidate_trials", { subjectKey });
-  assert.deepEqual(after.ranking.map((entry) => entry.target.id), ["NCT00000001", "NCT00000002", "NCT00000003"], "a stated disqualifier sorts last");
-  assert.equal(after.ranking[2].producer, "conversation");
-
-  // A withdrawal takes all of it, and the read says the person is gone.
-  await composed.dataPlane.withdrawSubject({ studyId: target.id, actor: "owner", subjectKey, reason: "consent withdrawn" });
-  assert.equal(await count(target.id), 0);
-  assert.equal((await composed.service.runtimeRead(context, "candidate_trials", { subjectKey })).withdrawn, true);
-  assert.equal((await composed.service.runtimeRead(context, "subject_document", { subjectKey, kind: "sentences" })).code, "vcr_document_withdrawn");
 });

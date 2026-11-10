@@ -39,9 +39,9 @@ async function priorDocument(dataStore, studyId, provenance) {
 /**
  * The job that reads one attached PDF, Word file or scan into a person's record: starting it (`start`) and doing it (`run`, the local executor of its scenario). No transaction is open
  * while the converter or the parser works.
- * @param {{ store: any, dataStore: any, dataPlane: any, jobs: any, receipts: () => any, rejudge?: ((study: any, input: { subjectKey: string, documentId?: string, reason?: string, actor?: string }) => Promise<any>) | null, now?: () => Date }} deps
+ * @param {{ store: any, dataStore: any, dataPlane: any, jobs: any, receipts: () => any, now?: () => Date }} deps
  */
-export function createPatientDocumentRead({ store, dataStore, dataPlane, jobs, receipts, rejudge = null, now = () => new Date() }) {
+export function createPatientDocumentRead({ store, dataStore, dataPlane, jobs, receipts, now = () => new Date() }) {
   const METHOD = 'matching.import_records';
   const lockHash = digest(`evimed-control-plane:patient-document:${VCR_MATCH_BATCH_METHODS[METHOD].version}`);
   return {
@@ -99,11 +99,8 @@ export function createPatientDocumentRead({ store, dataStore, dataPlane, jobs, r
         const upload = prior ? { file: prior, created: false } : await dataPlane.storeUpload({ actor: origin.userId, studyId, sourceId: source.id, name: `patient-context.${format}`, role: 'document',
           ...(subjectKey ? { subjectKey } : { subject: newCase(identity) }), importedFrom: original.provenance, stream: (async function* () { yield bytes; })() });
         const key = upload.file.detail.subjectKey;
-        // Only what is new to a person they already had changes what was concluded.
-        const rejudging = subjectKey && upload.created && rejudge
-          ? await rejudge({ ...study, ...(checkpoint.conversationOrigin ? { completionOrigin: checkpoint.conversationOrigin } : {}) }, { subjectKey, documentId: upload.file.id, reason: 'follow_up', actor: origin.userId }).catch(() => null) : null;
         return finish({ status: 'succeeded', statement: `已读完 ${vcrSubjectLabel(key)} 的这份病历。`,
-          detail: { subjectKey: key, documentId: upload.file.id, ...(rejudging ? { rejudging: { jobIds: rejudging.jobs.map((/** @type {any} */ entry) => entry.jobId) } } : {}) } });
+          detail: { subjectKey: key, documentId: upload.file.id } });
       } catch (/** @type {any} */ error) {
         if (!KEPT_FOR_RETRY.includes(error?.code)) throw error;
         // The reader failed and the original is where it was. A later call with the same handle starts this again.
@@ -113,7 +110,7 @@ export function createPatientDocumentRead({ store, dataStore, dataPlane, jobs, r
   };
 }
 
-export function createVcrPatientContext({ store, dataStore, dataPlane, documents, transcript, isHumanMessage, sources = null, uploadReceipts = null, rejudge = null, subjectKnown = null, documentJobs = null }) {
+export function createVcrPatientContext({ store, dataStore, dataPlane, documents, transcript, isHumanMessage, sources = null, uploadReceipts = null, subjectKnown = null, documentJobs = null }) {
   const intake = async (study, input, origin) => {
     if(input?.sourceId?.startsWith('upl_')&&input.generation==null&&input.sha256==null&&uploadReceipts?.patientHandle){
       const handle=await uploadReceipts.patientHandle(origin,input.sourceId);if(!handle)throw invalid();input={...input,...handle};
@@ -201,12 +198,8 @@ export function createVcrPatientContext({ store, dataStore, dataPlane, documents
     const key = upload.file.detail.subjectKey;
     // The same judged read/projection and recorded quote window used by all patient evidence.
     const material = await documents.subjectDocuments(study,{subjectKey:key,documentId:upload.file.id});
-    // Only what is new to a person they already had changes what was concluded; a repeat of the same call finds the document and starts nothing.
-    const joined = subjectKey && uploads.some(item => item.created);
-    const rejudging = joined && rejudge ? await rejudge(study, { subjectKey, documentId: upload.file.id, reason: 'follow_up', actor: origin.userId }).catch(() => null) : null;
     return {ok:true,ids:uploads.map(item => item.file.id),issues:material.available===false ? [{field:'material',code:material.code ?? 'vcr_projection_unavailable',message:material.message ?? 'The original was preserved but cannot currently be read by the model.'}] : [],sourceId:source.id,subjectKey:key,subjectLabel:vcrSubjectLabel(key),documentId:upload.file.id,material,
       ...(uploads.length > 1 ? {documents:uploads.length} : {}),...(upload.file.detail.extraction?.reader ? {readBy:upload.file.detail.extraction.reader} : {}),
-      ...(rejudging ? {rejudging:{jobIds:rejudging.jobs.map(job => job.jobId),statement:rejudging.statement}} : {}),
       basis:provenance.kind,valueSource:'extracted'};
   };
   /** Resolve original user material without creating a patient. Protocol intake uses this

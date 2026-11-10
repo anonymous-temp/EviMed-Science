@@ -46,7 +46,7 @@ before(async () => {
   receipts = createVcrUploadReceipts({ documents, sources: null, resolveProject: async () => project });
   vcr.recordsOriginals.receipts = receipts;
   intake = createVcrPatientContext({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane, documents: vcr.documents, uploadReceipts: receipts, documentJobs: vcr.patientDocuments,
-    sources: { list: async () => ({ items: [] }), get: async () => null }, rejudge: (target, input) => vcr.matchJudge.rejudge(target, input), subjectKnown: vcr.subjectKnown, isHumanMessage: async () => true,
+    sources: { list: async () => ({ items: [] }), get: async () => null }, subjectKnown: vcr.subjectKnown, isHumanMessage: async () => true,
     transcript: async () => ({ sessionId: "root", exhausted: true, messages: messages.map((m) => ({ role: "user", source: "user", seq: m.seq, parts: [{ type: "text", text: m.text }] })) }) });
   study = await vcr.store.createStudy({ userId: "owner", projectId: "project", name: "S", question: "q", dataTier: "T0" });
 });
@@ -54,111 +54,11 @@ after(async () => {
   if (!url) return; await database?.close(); await isolated?.drop(); if (directory) await fs.rm(directory, { recursive: true, force: true }); });
 const conv = () => ({ ...study, cloudContext: { runId: "run", sessionId: "root" } });
 let seq = 0; const say = (text) => { seq += 2; messages.push({ seq, text }); return seq; };
-const runJobs = async () => { for (let t = 0; t < 60; t += 1) { const c = await vcr.jobs.claim({ lane: "slow" }); if (!c.length) return; for (const j of c) await vcr.jobs.advance(j, { mayYield: true }); } assert.fail("no finish"); };
 const viewer = { id: "owner" };
-const csv = async (subjectKey, kind = "pairs") => { let out = ""; const f = await vcr.matchResults.exporter(study, { format: "csv", kind, direction: "patient_to_trial", subjectKey, viewer }); await f.run({ write: async (c) => { out += c; } }); return out; };
 
 
 const reads = () => vcr.service.packages.matchJudgments;
 const readOf = (subjectKey) => reads().forSubject(study, subjectKey, {});
-
-test("a re-judgment that failed leaves the last verdict, marked, and the pair owed on the page, the conversation read and the resume", options, async () => {
-  const { subjectKey } = await intake(conv(), { messageSeq: say("男性，62 岁。肺腺癌 IV 期。") }, origin);
-  await vcr.matchJudge.start(conv(), { subjectKey, registryIds: ["NCT00000001", "NCT00000002"] });
-  await runJobs();
-  const before = await vcr.matchResults.forPatient(study, subjectKey, { viewer });
-  assert.equal(before.progress.state, "done");
-  assert.equal((await vcr.matchResults.latest(study.id, "patient_to_trial")).subjectKey, subjectKey);
-  assert.equal(await vcr.matchResults.latest(study.id, "trial_to_patient"), null, "only a patient was judged, so there is no protocol to land on");
-  model.failFit = true; model.failCriteria = true;
-  await intake(conv(), { messageSeq: say("补充：已怀孕，脑转移。"), subjectKey }, origin);
-  await runJobs();
-  model.failFit = false; model.failCriteria = false;
-
-  const page = await vcr.matchResults.forPatient(study, subjectKey, { viewer });
-  assert.notEqual(page.progress.state, "done");
-  assert.equal(page.progress.failed, 2);
-  assert.equal(page.failed.count, 2);
-  assert.ok(page.failed.listed.every((entry) => entry.reason.includes("重新判定没有完成")));
-  assert.equal(page.trials.length, 2, "the last verdict stays on the list");
-  assert.ok(page.trials.every((trial) => trial.verdictLabel && trial.clausesNote?.includes("上一次的结论")));
-
-  const read = await readOf(subjectKey);
-  assert.notEqual(read.state, "done");
-  assert.equal(read.left, 2);
-  assert.equal(read.clausesFailed.length, 2);
-  assert.ok(read.ranking.every((row) => row.rejudgeFailed?.note && row.verdictLabel));
-
-  assert.equal(page.selected.previous, undefined, "judged once: no reading before");
-  const resume = await vcr.matchResults.resumeSelection(study, { direction: "patient_to_trial", subjectKey });
-  assert.deepEqual([...resume.ids].sort(), ["NCT00000001", "NCT00000002"]);
-
-  // The model answers again: the continuation clears every mark.
-  await vcr.matchJudge.start(conv(), { subjectKey, registryIds: resume.ids, ...resume.settings });
-  await runJobs();
-  const after = await vcr.matchResults.forPatient(study, subjectKey, { viewer });
-  assert.equal(after.progress.state, "done");
-  // The cost is the whole of this person's judging, not the newest job's: three jobs have run, and the sum of what the first and the last spent is under it.
-  assert.ok(before.progress.cost.spent > 0, "the first job spent something");
-  assert.ok(after.progress.cost.spent > before.progress.cost.spent, `${after.progress.cost.spent} > ${before.progress.cost.spent}`);
-  assert.equal(after.failed.count, 0);
-  assert.ok(after.trials.every((trial) => !trial.clausesNote));
-  // The pair was judged twice, on two notes: the sheet says what the reading before was.
-  assert.match(after.selected.previous.line, /^上一次判定（\d{4}-\d{2}-\d{2}）：.+，读的是更早的病历。$/u);
-  assert.ok(after.selected.previous.verdictLabel);
-});
-
-test("a read right after a job started, before its first row, says it is running and not that nothing is there", options, async () => {
-  const { subjectKey } = await intake(conv(), { messageSeq: say("男性，40 岁。胃癌。") }, origin);
-  await vcr.matchJudge.start(conv(), { subjectKey, registryIds: ["NCT00000021", "NCT00000022"] });
-  const answer = await vcr.service.runtimeRead(study, "candidate_trials", { subjectKey }, { ownerView: true });
-  assert.equal(answer.total, 2);
-  assert.ok(["running", "stopped"].includes(answer.state), String(answer.state));
-  assert.equal(answer.left, 2);
-  await runJobs();
-});
-
-const jsonExport = async (subjectKey, kind = "pairs") => { let out = ""; const f = await vcr.matchResults.exporter(study, { format: "json", kind, direction: "patient_to_trial", subjectKey, viewer }); await f.run({ write: async (c) => { out += c; } }); return JSON.parse(out); };
-
-test("an export of work that was not whole says so: notes beside the verdict, the failed and unjudged pairs as rows, and how far the job got", options, async () => {
-  const { subjectKey } = await intake(conv(), { messageSeq: say("女性，55 岁。乳腺癌。") }, origin);
-  model.failCriteria = true;
-  await vcr.matchJudge.start(conv(), { subjectKey, registryIds: ["NCT00000011", "NCT00000012"] });
-  await runJobs();
-  model.failCriteria = false; model.failFit = true;
-  await vcr.matchJudge.start(conv(), { subjectKey, registryIds: ["NCT00000013"] });
-  await runJobs();
-  model.failFit = false;
-
-  const lines = (await csv(subjectKey)).split("\r\n").filter(Boolean);
-  assert.ok(lines[0].endsWith("备注"));
-  const rows = lines.slice(1);
-  assert.ok(rows.some((line) => line.includes("NCT00000011") && line.includes("逐条判定没有完成")), "the owed clause stage is in the row");
-  const unjudged = rows.filter((line) => line.includes("未判定"));
-  assert.equal(unjudged.length, 1);
-  assert.ok(unjudged[0].includes("NCT00000013"));
-  assert.ok(rows.some((line) => line.startsWith("判定没有做完")), "a closing line says the job is not whole");
-  assert.ok(!rows.some((line) => line.includes("判定作业")), "no job word");
-
-  const file = await jsonExport(subjectKey);
-  assert.notEqual(file.progress.state, "done");
-  assert.equal(file.progress.finished, 2);
-  assert.ok(file.rows.every((row) => /^P-/.test(row.label)));
-  assert.ok(file.rows.some((row) => row.verdictLabel === "未判定" && row.target.registryId === "NCT00000013"));
-  assert.ok(file.rows.some((row) => row.clausesNote?.includes("逐条判定没有完成")));
-  assert.ok(file.unfinishedNote);
-});
-
-test("the closing line of an export names the pairs that still owe their clause by clause, not only the ones without a verdict", options, async () => {
-  const { subjectKey } = await intake(conv(), { messageSeq: say("男性，61 岁。肺癌。") }, origin);
-  model.failCriteria = true;
-  await vcr.matchJudge.start(conv(), { subjectKey, registryIds: ["NCT00000011", "NCT00000012"] });
-  await runJobs();
-  model.failCriteria = false;
-  const closing = (await csv(subjectKey)).split("\r\n").filter(Boolean).find((line) => line.startsWith("判定没有做完"));
-  assert.ok(closing?.includes("2 个的逐条判定没做完"), closing);
-  assert.equal((await jsonExport(subjectKey)).unfinishedNote, closing);
-});
 
 test("every failure code a pair can carry has words that say what the person can do", async () => {
   const { vcrMatchFailureReason, VCR_MATCH_FAILURE_FALLBACK_ZH } = await import("@evimed/domain");
@@ -184,13 +84,6 @@ test("the patient page carries one line from the newest search for this person: 
   assert.equal((await vcr.matchResults.forPatient(study, subjectKey, { viewer })).search, undefined, "every registry answered, nothing for the reader to do");
 });
 
-test("a judging job reserves no engine seconds it never uses", options, async () => {
-  const { subjectKey } = await intake(conv(), { messageSeq: say("女性，33 岁。乳腺癌。") }, origin);
-  const started = await vcr.matchJudge.start(conv(), { subjectKey, registryIds: ["NCT00000041"] });
-  const [row] = await vcr.store.rows("SELECT cpu_seconds_limit FROM evimed_vcr.jobs WHERE id = $1", [started.jobId]);
-  assert.equal(Number(row.cpu_seconds_limit), 1);
-  await runJobs();
-});
 
 test("the conversation says the name the page shows, also when two people's short names would have met", options, async () => {
   const twin = "P4c1b0f11aaaaaaaa", twin2 = "P4c1b0f11bbbbbbbb";

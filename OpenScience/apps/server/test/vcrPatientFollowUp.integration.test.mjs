@@ -53,7 +53,7 @@ before(async () => {
   receipts = createVcrUploadReceipts({ documents, sources: null, resolveProject: async () => project });
   vcr.recordsOriginals.receipts = receipts;
   intake = createVcrPatientContext({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane, documents: vcr.documents, uploadReceipts: receipts, documentJobs: vcr.patientDocuments,
-    sources: { list: async () => library, get: async () => null }, rejudge: (target, input) => vcr.matchJudge.rejudge(target, input), subjectKnown: vcr.subjectKnown, isHumanMessage: async () => true,
+    sources: { list: async () => library, get: async () => null }, subjectKnown: vcr.subjectKnown, isHumanMessage: async () => true,
     transcript: async () => ({ sessionId: "root", exhausted: true, messages: messages.map((message) => ({ role: "user", source: "user", seq: message.seq, parts: [{ type: "text", text: message.text }] })) }) });
   study = await vcr.store.createStudy({ userId: "owner", projectId: "project", name: "Follow-up", question: "q", dataTier: "T0" });
 });
@@ -70,58 +70,7 @@ const runJobs = async () => {
   assert.fail("the jobs did not finish");
 };
 
-test("a later message about the same person joins them, re-judges only what they have, keeps the old row and says what changed", options, async () => {
-  const first = await intake(conversation(), { messageSeq: say(1, "男性，62 岁。肺腺癌 IV 期。") }, origin);
-  assert.equal(first.ok, true);
-  const { subjectKey } = first;
-  await vcr.matchJudge.start(conversation(), { subjectKey, registryIds: ["NCT00000001", "NCT00000002"], topK: 0 });
-  await runJobs();
-  const before_ = await vcr.matchJudgments.list({ studyId: study.id, subjectKey });
-  assert.deepEqual(before_.map((row) => row.verdict), ["eligible", "eligible"]);
 
-  score = 5;
-  const read = await intake.candidates(origin, {}, study);
-  assert.deepEqual(read.patients.map((row) => row.subjectKey), [subjectKey], "the model can see who is here");
-  const second = await intake(conversation(), { messageSeq: say(3, "补充：ECOG 是 1，且已怀孕。"), subjectKey }, origin);
-  assert.equal(second.subjectKey, subjectKey, "the same person, not a new one");
-  assert.notEqual(second.documentId, first.documentId);
-  assert.equal(second.rejudging.jobIds.length, 1, "no confirmation: the job is already queued");
-  assert.match(second.rejudging.statement, /已有结论保留为历史/);
-  const roster = await vcr.documents.roster(study);
-  assert.equal(roster.filter((row) => row.subjectKey === subjectKey).length, 2);
-  await runJobs();
-
-  const rows = await vcr.matchJudgments.list({ studyId: study.id, subjectKey });
-  assert.equal(rows.length, 4, "the earlier row stays readable beside the new one");
-  assert.deepEqual(rows.slice(0, 2).map((row) => row.verdict), ["ineligible", "ineligible"]);
-  assert.notEqual(rows[0].documentHash, rows.at(-1).documentHash);
-  const ranking = await vcr.matchJudgmentReads.forSubject(conversation(), subjectKey);
-  assert.deepEqual(ranking.ranking.map((row) => row.verdict), ["ineligible", "ineligible"], "a reader sees the newest");
-  const result = await vcr.store.one("SELECT diagnostics FROM evimed_vcr.results WHERE study_id=$1 ORDER BY created_at DESC LIMIT 1", [study.id]);
-  assert.equal(result.diagnostics.changes.changed, 2);
-  assert.equal(result.diagnostics.changes.sentence, "重算后 2 个试验结论变化。");
-  assert.equal(result.diagnostics.changes.followUp.documentId, second.documentId);
-  assert.ok(result.diagnostics.changes.pairs.every((pair) => pair.from === "符合" && pair.to === "不符合"));
-
-  // The same call again finds the document and starts nothing.
-  const jobs = await vcr.store.one("SELECT count(*)::int AS n FROM evimed_vcr.jobs WHERE study_id=$1", [study.id]);
-  const again = await intake(conversation(), { messageSeq: 3, subjectKey }, origin);
-  assert.equal(again.documentId, second.documentId);
-  assert.equal(again.rejudging, undefined);
-  assert.equal((await vcr.store.one("SELECT count(*)::int AS n FROM evimed_vcr.jobs WHERE study_id=$1", [study.id])).n, jobs.n);
-});
-
-test("a new fact while a re-judgment runs is its own job, and a person with no verdict starts nothing", options, async () => {
-  const fresh = await intake(conversation(), { messageSeq: say(5, "女性，50 岁。") }, origin);
-  const joined = await intake(conversation(), { messageSeq: say(7, "ECOG 2。"), subjectKey: fresh.subjectKey }, origin);
-  assert.equal(joined.rejudging, undefined, "nothing was judged, so nothing is redone");
-  await vcr.matchJudge.start(conversation(), { subjectKey: fresh.subjectKey, registryIds: ["NCT00000003"], topK: 0 });
-  await runJobs();
-  const one = await intake(conversation(), { messageSeq: say(9, "ECOG 1。"), subjectKey: fresh.subjectKey }, origin);
-  const two = await intake(conversation(), { messageSeq: say(11, "肌酐 80。"), subjectKey: fresh.subjectKey }, origin);
-  assert.notEqual(one.rejudging.jobIds[0], two.rejudging.jobIds[0], "the second names newer words, so it does not join the first");
-  await runJobs();
-});
 
 test("a person who is not in this study, or who withdrew, cannot be added to", options, async () => {
   await assert.rejects(() => intake(conversation(), { messageSeq: say(13, "ECOG 1。"), subjectKey: "NO-ONE" }, origin), { code: "vcr_subject_not_found" });

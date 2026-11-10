@@ -1,6 +1,6 @@
 // The registry watch (G15) on a real table: a trial whose record changed has its finished verdicts marked and kept, one that did not has nothing marked, a frozen collection and
 // a withdrawn person are left alone, a tick reads a bounded number the least recently checked first, a registry that is down costs its own entries and nobody else's, and a read of
-// a person's trials shows the mark, offers to judge them again and, in an attended conversation, does so once. The registry and the judging job are doubles. PostgreSQL.
+// a person's trials shows the mark. The registry is a double. PostgreSQL.
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
@@ -230,18 +230,12 @@ test("one trial held by two studies is read once in a tick and marked in both", 
   assert.deepEqual([done.due, done.changed, done.marked, registry.reads.length], [2, 2, 2, 1]);
 });
 
-// ---- the read: the mark shown, the offer, and the attended conversation
+// ---- the read: the mark shown
 
-/** A read of a study's judgments with a double for the judging job. */
-function reader({ job = { jobId: "job_r1" } } = {}) {
-  const calls = [];
-  const reports = [];
-  const rejudge = { async rejudge(study, input) { calls.push([study.id, input]); if (job instanceof Error) throw job; return job; } };
-  let at = T0;
-  const reads = createMatchJudgmentReads({ judgments, documents: {}, targets: {}, matchStore: {}, rejudge, report: (code) => reports.push(code), now: () => at });
-  return { reads, calls, reports, advance: (ms) => { at = new Date(at.getTime() + ms); } };
+/** A read of a study's judgments. */
+function reader() {
+  return { reads: createMatchJudgmentReads({ judgments, documents: {}, targets: {}, matchStore: {} }) };
 }
-const attended = (study) => ({ ...study, completionOrigin: { runId: "run_1", rootSessionId: "ses_1" } });
 
 async function marked() {
   await clean();
@@ -253,72 +247,17 @@ async function marked() {
   return study;
 }
 
-test("a read shows the mark beside the old verdict and offers one action to judge it again; an unattended read starts nothing", options, async () => {
+test("a read shows the mark beside the old verdict", options, async () => {
   const study = await marked();
-  const { reads, calls } = reader();
+  const { reads } = reader();
   const answer = await reads.forSubject(study, "P-1");
   assert.equal(answer.ranking.length, 2, "the old verdicts are still shown");
   const stale = answer.ranking.find((entry) => entry.target.id === "NCT00000001");
   const fresh = answer.ranking.find((entry) => entry.target.id === "NCT00000002");
   assert.equal(stale.restsOnOlder, "登记记录已更新，结论来自旧版本");
   assert.equal(stale.verdictLabel.length > 0, true);
-  assert.deepEqual(stale.rejudge, { reason: "registry_record", label: "重新判定", subjectKey: "P-1", registryIds: ["NCT00000001"] });
   assert.equal(fresh.restsOnOlder, undefined);
-  assert.equal(fresh.rejudge, undefined);
-  assert.deepEqual(answer.rejudge, { reason: "registry_record", label: "登记记录已更新，可重新判定", subjectKey: "P-1", registryIds: ["NCT00000001"] });
-  assert.equal(answer.rejudging, undefined);
-  assert.deepEqual(calls, [], "no conversation asked, so nothing started");
-  assert.deepEqual(await reads.staleTargets(study, "P-1"), ["NCT00000001"]);
-  assert.deepEqual(await reads.staleTargets(study, "P-2"), []);
 });
-
-test("an attended conversation that asks gets the changed trials judged again without asking, once: the old rows stay, and a second read names the same job", options, async () => {
-  const study = await marked();
-  const { reads, calls } = reader();
-  const first = await reads.forSubject(attended(study), "P-1");
-  assert.deepEqual(calls, [[study.id, { subjectKey: "P-1", reason: "registry_record", targetIds: ["NCT00000001"] }]]);
-  assert.deepEqual(first.rejudging, { jobId: "job_r1" });
-  assert.equal(first.ranking.length, 2, "beside the old rows, which stay shown with their label");
-  assert.ok(first.ranking.some((entry) => entry.restsOnOlder));
-  const again = await reads.forSubject(attended(study), "P-1");
-  assert.equal(calls.length, 1, "the same trials are not started twice");
-  assert.deepEqual(again.rejudging, { jobId: "job_r1" });
-  // The job's rows replace the old ones as the current verdict, the label goes, and the old rows are still in the table.
-  await judgments.save(row(study.id, { targetId: "NCT00000001", targetHash: "h2", fit: 20 }));
-  const after = await reads.forSubject(attended(study), "P-1");
-  const now = after.ranking.find((entry) => entry.target.id === "NCT00000001");
-  assert.equal(now.fit, 20);
-  assert.equal(now.basisChanged, undefined);
-  assert.equal(after.rejudge, undefined);
-  assert.equal(after.rejudging, undefined);
-  assert.equal(calls.length, 1);
-  assert.equal((await rowsOf(study.id, "NCT00000001")).length, 2, "the verdict made of the old record is kept");
-});
-
-test("a re-judgment that cannot be started is quiet: the read is the old rows, and the failure is counted", options, async () => {
-  const study = await marked();
-  const failing = reader({ job: Object.assign(new Error("no documents"), { code: "vcr_match_judge_nothing_to_read" }) });
-  const answer = await failing.reads.forSubject(attended(study), "P-1");
-  assert.equal(answer.ranking.length, 2);
-  assert.equal(answer.rejudging, undefined);
-  assert.deepEqual(failing.reports, ["vcr_match_judge_nothing_to_read"]);
-  const nothing = reader({ job: null });
-  assert.equal((await nothing.reads.forSubject(attended(study), "P-1")).rejudging, undefined, "nothing to re-judge is not a job");
-});
-
-test("the same trials may be asked for again after half an hour", options, async () => {
-  const study = await marked();
-  const { reads, calls, advance } = reader();
-  await reads.forSubject(attended(study), "P-1");
-  advance(29 * 60_000);
-  await reads.forSubject(attended(study), "P-1");
-  assert.equal(calls.length, 1);
-  advance(2 * 60_000);
-  await reads.forSubject(attended(study), "P-1");
-  assert.equal(calls.length, 2, "a job that came to nothing is tried again, not forever");
-});
-
-// ---- the page cache on a real table
 
 test("a ChiCTR page read is kept across processes: a second job finds the words in the table and makes no request", options, async () => {
   const store = new VcrRegistryPageStore({ database });

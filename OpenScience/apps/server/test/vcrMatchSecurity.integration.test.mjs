@@ -8,7 +8,6 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { VCR_MATCH_JUDGE_LIMITS } from "@evimed/domain";
 import { strToU8, zipSync } from "fflate";
 import pg from "pg";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
@@ -18,7 +17,7 @@ import { vcrCloudDestinationNotes } from "../src/vcrCloudProjection.mjs";
 import { composeVcr } from "../src/vcrComposition.mjs";
 import { createVcrDataIntake } from "../src/vcrDataIntake.mjs";
 import { createVcrEvidencePipeline } from "../src/vcrEvidence.mjs";
-import { createMatchJudgeCounters, createMatchJudgeExecutor, planMatchJudge } from "../src/vcrMatchJudge.mjs";
+import { planMatchJudge } from "../src/vcrMatchJudge.mjs";
 import { createRecordsImportExecutor } from "../src/vcrRecordsImport.mjs";
 import { createVcrUploadReceipts } from "../src/vcrUploadReceipts.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
@@ -161,62 +160,6 @@ test("B1: an archive behind a link, and a standard import's original behind a li
 });
 
 // ---------------------------------------------------------------------------- B2
-
-const fakeTargets = { trial: async ({ registryId }) => ({ kind: "candidate_trial", id: registryId, title: "T", summary: "", eligibility: "Inclusion Criteria:\n* 成年", conditions: [], interventions: [], clauses: [{ number: 1, kind: "inclusion", text: "成年", start: 0, end: 2 }], hash: `h${registryId}`, eligibilitySource: "registry",
-  summaryOfTarget: { kind: "candidate_trial", id: registryId, registry: "clinicaltrials.gov", registryId, title: "T" } }) };
-const TRIALS = ["NCT00000001", "NCT00000002", "NCT00000003", "NCT00000004", "NCT00000005"];
-const answerFor = (said) => (said.includes("sentence_id") ? JSON.stringify({ 1: ["理由", [0], "included"] }) : JSON.stringify({ score: 90, confidence: 0.9, eligible_reasons: `1. ${said.includes(ID_NUMBER) ? ID_NUMBER : "成年"}`, ineligible_reasons: "", missing_information: "", rationale: "x" }));
-
-/** A real executor over a real plane and table; `onFirstCall` happens while the first model call is out. */
-async function holdingJob({ text = SECRET, more = null, onFirstCall, selection = {}, config = {}, cost = 0.001, counters = createMatchJudgeCounters() }) {
-  const study = await newStudy();
-  const source = await vcr.dataPlane.registerSource({ userId: "owner", studyId: study.id, name: "n" });
-  const up = await vcr.dataPlane.storeUpload({ actor: "owner", studyId: study.id, sourceId: source.id, name: "n.txt", role: "document", subject: "REAL-ID", stream: Readable.from([Buffer.from(text)]) });
-  const other = more ? await vcr.dataPlane.storeUpload({ actor: "owner", studyId: study.id, sourceId: source.id, name: "m.txt", role: "document", subject: "REAL-ID", stream: Readable.from([Buffer.from(more)]) }) : null;
-  const key = String(up.file.detail.subjectKey);
-  const built = await planMatchJudge({ study, selection: { subjectKey: key, registryIds: TRIALS, fit: true, topK: 2, thinking: "off", thinkingCriteria: "off", ...selection }, matchStore: vcr.matchStore, documents: vcr.documents, config: {} });
-  const calls = [];
-  let first = true;
-  const judge = { model: "deepseek-flash", maxTokens: 1000, timeoutMs: 1000, call: async ({ messages }) => {
-    const said = messages.map((message) => message.content).join("\n");
-    calls.push({ afterTheEvent: !first, carries: said.includes(ID_NUMBER) });
-    if (first) { first = false; await onFirstCall?.({ study, key, file: up.file, other: other?.file, source }); }
-    return { content: answerFor(said), usage: { inputTokens: 10, outputTokens: 10, cacheHitTokens: 0, reasoningTokens: 0 }, cost, currency: "CNY" };
-  } };
-  const executor = createMatchJudgeExecutor({ store: vcr.store, matchStore: vcr.matchStore, judgments: vcr.matchJudgments, documents: vcr.documents, targets: fakeTargets, judge, counters, config: { vcrMatchJudgeConcurrency: 1, ...config } });
-  const jobId = `job_s9_${sequence}`;
-  const result = await executor({ job: { studyId: study.id, id: jobId, jobId, scenario: built.scenario, scenarioHash: "" }, onProgress: async () => {} });
-  const rows = (await database.query("SELECT mode, status, answer, usage FROM evimed_vcr.match_judgments WHERE study_id=$1 AND subject_key=$2", [study.id, key])).rows;
-  const after = calls.filter((call) => call.afterTheEvent);
-  return { study, key, file: up.file, other: other?.file, source, result, calls, after, rows, carrying: after.filter((call) => call.carries).length, quoting: rows.filter((row) => JSON.stringify(row.answer).includes(ID_NUMBER)).length, plan: built };
-}
-
-test("B2: a document deleted while a job holds the note: no later call carries it, and no row quotes it", options, async () => {
-  const held = await holdingJob({ onFirstCall: ({ study, file }) => vcr.dataPlane.removeUpload({ actor: "owner", studyId: study.id, fileId: file.id }) });
-  assert.equal(held.carrying, 0);
-  assert.equal(held.quoting, 0);
-  assert.equal(held.rows.filter((row) => row.status === "done").length, 0, "the person has nothing else on record");
-  assert.equal(held.result.diagnostics.finished, 0);
-});
-
-test("B2: with a second document, the pairs go on with what is left, and the deleted text stays out", options, async () => {
-  const held = await holdingJob({ more: "另一份病历：肌酐 1.0。", onFirstCall: ({ study, file }) => vcr.dataPlane.removeUpload({ actor: "owner", studyId: study.id, fileId: file.id }) });
-  assert.equal(held.carrying, 0);
-  assert.equal(held.quoting, 0);
-  assert.ok(held.rows.some((row) => row.status === "done"), "the record that remains is judged");
-});
-
-test("B2: a person withdrawn while a job holds the note: no more calls carry their text and no row is kept", options, async () => {
-  const held = await holdingJob({ onFirstCall: ({ study, key }) => vcr.dataPlane.withdrawSubject({ studyId: study.id, subjectKey: key, actor: "owner", reason: "t" }) });
-  assert.equal(held.after.length, 0, "no further call for this person");
-  assert.equal(held.rows.length, 0);
-  assert.equal(held.result.status, "failed");
-});
-
-test("B2: a retired projection and a revoked source stop the calls the same way", options, async () => {
-  const revoked = await holdingJob({ onFirstCall: ({ study, source }) => vcr.dataPlane.setCloudPermission({ studyId: study.id, sourceId: source.id, actor: "owner", permission: { status: "revoked" } }) });
-  assert.equal(revoked.carrying, 0, "a revoked source's text does not leave again");
-});
 
 test("B2: a save between a withdrawal's delete and its commit does not survive it", options, async () => {
   const study = await newStudy();
@@ -408,7 +351,9 @@ test("S4: a withdrawal takes the upload original and its receipt, the names in a
   const key = up.file.detail.subjectKey;
   await vcr.dataPlane.appendJobReport(study.id, "job_x", [{ name: "张三_坏文件.pdf", code: "vcr_document_unreadable", subjectKey: key }, { name: "王五_坏文件.pdf", code: "vcr_document_unreadable", subjectKey: "someone-else" }], 100);
   await vcr.candidateSearches.save({ id: study.id, userId: "owner" }, { subjectKey: key, request: { condition: "肺腺癌", terms: ["EGFR 19del"], age: 62, sex: "male", region: "China" }, registries: [], rerank: null, found: 1, items: [{ registryId: "NCT05000001", title: "t" }] });
-  const started = await vcr.matchJudge.start(study, { subjectKey: key, registryIds: ["NCT05000001"] });
+  // A job row an earlier release's batch judge left behind, naming the person in its scenario.
+  const started = { jobId: `job_s4_${sequence}` };
+  await database.query("INSERT INTO evimed_vcr.jobs (id, study_id, user_id, kind, method, state, scenario) VALUES ($1, $2, 'owner', 'match_judge', 'matching.judge', 'canceled', $3::jsonb)", [started.jobId, study.id, JSON.stringify({ direction: "patient_to_trial", subjects: [key], trials: [{ registry: "clinicaltrials.gov", registryId: "NCT05000001" }] })]);
 
   await vcr.dataPlane.withdrawSubject({ studyId: study.id, subjectKey: key, actor: "owner", reason: "t" });
 
@@ -423,7 +368,6 @@ test("S4: a withdrawal takes the upload original and its receipt, the names in a
   const job = await vcr.store.one("SELECT scenario FROM evimed_vcr.jobs WHERE id=$1", [started.jobId]);
   assert.ok(!JSON.stringify(job.scenario.subjects).includes(key), "the job's scenario no longer names them");
   assert.equal((await vcr.matchResults.latest(study.id)), null, "the page does not open on them");
-  await vcr.store.query("UPDATE evimed_vcr.jobs SET state='canceled', lease_owner=NULL, lease_until=NULL WHERE id=$1", [started.jobId]);
 });
 
 test("S4: a link planted where an original's folder was is removed by name, and what it points at stays", options, async () => {
@@ -531,48 +475,7 @@ test("S5: after a revocation a conversation's read keeps the verdict and loses t
 
 // ---------------------------------------------------------------------------- S1
 
-test("S1: a job that reaches its ceiling stops as limited, keeps its work, says so, is counted, and a later start pays only for what is left", options, async () => {
-  const counters = createMatchJudgeCounters();
-  const held = await holdingJob({ text: "一份普通的病历。", cost: 0.6, config: { vcrMatchJudgeJobCeilingCny: 1 }, counters, selection: { topK: 0 } });
-  assert.equal(held.result.conclusion, "limited");
-  assert.equal(held.result.diagnostics.stopped.code, "vcr_match_job_ceiling");
-  assert.match(held.result.diagnostics.stopped.reason, /1(\.00)? 元/u);
-  assert.match(held.result.diagnostics.stopped.reason, /继续/u);
-  assert.equal(held.calls.length, 2, "it stopped at the first pair past the ceiling");
-  assert.equal(held.rows.filter((row) => row.status === "done").length, 2, "what was done stands");
-  assert.equal(counters.ceilingStops, 1);
-  assert.equal(held.result.diagnostics.used.cost.toFixed(1), "1.2");
-});
 
-test("S1: a job stopped at its ceiling is continued by the page's one action, and the continuation pays only for what is left", options, async () => {
-  const study = await newStudy();
-  const source = await vcr.dataPlane.registerSource({ userId: "owner", studyId: study.id, name: "n" });
-  const up = await vcr.dataPlane.storeUpload({ actor: "owner", studyId: study.id, sourceId: source.id, name: "n.txt", role: "document", subject: "CEILING", stream: Readable.from([Buffer.from("一份普通的病历。")]) });
-  const key = String(up.file.detail.subjectKey);
-  let calls = 0;
-  const judge = { model: "deepseek-flash", maxTokens: 1000, timeoutMs: 1000, call: async ({ messages }) => { calls += 1; return { content: answerFor(messages.map((message) => message.content).join("\n")), usage: { inputTokens: 10, outputTokens: 10, cacheHitTokens: 0, reasoningTokens: 0 }, cost: 0.6, currency: "CNY" }; } };
-  const executorWith = (config) => createMatchJudgeExecutor({ store: vcr.store, matchStore: vcr.matchStore, judgments: vcr.matchJudgments, documents: vcr.documents, targets: fakeTargets, judge, config: { vcrMatchJudgeConcurrency: 1, ...config } });
-  const start = (selection) => vcr.matchJudge.start(study, { subjectKey: key, topK: 0, thinking: "off", ...selection }, { actor: "test" });
-  const real = vcr.jobs.localExecutors["matching.judge"];
-  try {
-    vcr.jobs.localExecutors["matching.judge"] = executorWith({ vcrMatchJudgeJobCeilingCny: 1 });
-    await start({ registryIds: TRIALS });
-    await drain();
-    assert.equal(calls, 2);
-    const stopped = await vcr.matchResults.forPatient(study, key, { viewer: { id: "owner" } });
-    assert.equal(stopped.progress.state, "stopped");
-    const left = await vcr.matchResults.resumeSelection(study, { direction: "patient_to_trial", subjectKey: key });
-    assert.deepEqual(left.ids.sort(), TRIALS.slice(2).sort());
-    calls = 0;
-    vcr.jobs.localExecutors["matching.judge"] = executorWith({});
-    await start({ registryIds: left.ids });
-    await drain();
-    assert.equal(calls, 3, "the two already judged cost nothing");
-    const done = await vcr.matchResults.forPatient(study, key, { viewer: { id: "owner" } });
-    assert.equal(done.progress.state, "done");
-    assert.equal(done.trials.length, 5);
-  } finally { vcr.jobs.localExecutors["matching.judge"] = real; }
-});
 
 test("S1: 最多约 counts the re-asks and the retries and never promises more than the ceiling", options, async () => {
   const study = { id: "s", userId: "u" };
@@ -588,25 +491,3 @@ test("S1: 最多约 counts the re-asks and the retries and never promises more t
   assert.match(capped.statement, /上限/u);
 });
 
-test("S1: spent counts every call: the parts a failed try paid for, under the row that replaced it", options, async () => {
-  const study = await newStudy();
-  const source = await vcr.dataPlane.registerSource({ userId: "owner", studyId: study.id, name: "n" });
-  // Two parts: the first is paid for, the second times out, and the end of the stage tries the pair again.
-  const up = await vcr.dataPlane.storeUpload({ actor: "owner", studyId: study.id, sourceId: source.id, name: "n.txt", role: "document", subject: "SPENT", stream: Readable.from([Buffer.from("一份普通的病历。\n\n".repeat(Math.ceil(VCR_MATCH_JUDGE_LIMITS.noteChars / 5)))]) });
-  const key = String(up.file.detail.subjectKey);
-  const built = await planMatchJudge({ study, selection: { subjectKey: key, registryIds: ["NCT00000001"], topK: 0, thinking: "off" }, matchStore: vcr.matchStore, documents: vcr.documents, config: {} });
-  const started = await vcr.jobs.enqueue({ studyId: study.id, userId: "owner", kind: "match_judge", scenario: built.scenario, inputs: [], internal: true, cpuSecondsLimit: 60, maxAttempts: 5, idempotencyKey: `s9-spent-${sequence}`, detail: { principal: "owner" } });
-  let call = 0;
-  const judge = { model: "deepseek-flash", maxTokens: 1000, timeoutMs: 1000, call: async ({ messages }) => {
-    call += 1;
-    if (call === 2) throw Object.assign(new Error("timed out"), { code: "vcr_match_judge_timeout" });
-    return { content: answerFor(messages.map((message) => message.content).join("\n")), usage: { inputTokens: 10, outputTokens: 10, cacheHitTokens: 0, reasoningTokens: 0 }, cost: 0.25, currency: "CNY" };
-  } };
-  const real = vcr.jobs.localExecutors["matching.judge"];
-  vcr.jobs.localExecutors["matching.judge"] = createMatchJudgeExecutor({ store: vcr.store, matchStore: vcr.matchStore, judgments: vcr.matchJudgments, documents: vcr.documents, targets: fakeTargets, judge, config: { vcrMatchJudgeConcurrency: 1 } });
-  try { await drain(); } finally { vcr.jobs.localExecutors["matching.judge"] = real; }
-  const page = await vcr.matchResults.forPatient(study, key, { viewer: { id: "owner" } });
-  assert.equal(page.progress.jobId, started.job.id);
-  assert.ok(call > 3, "the pair was tried again");
-  assert.equal(page.progress.cost.spent, 0.25 * (call - 1), "every call that answered, the replaced try's too");
-});
