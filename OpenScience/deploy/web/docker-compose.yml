@@ -786,6 +786,7 @@ services:
       # turns it off.
       OPEN_SCIENCE_VCR_ENABLED:
       OPEN_SCIENCE_PATIENT_MATCHING_CATALOGUE:
+      OPEN_SCIENCE_PATIENT_MATCHING_DEFAULT_RELEASE:
       OPEN_SCIENCE_PATIENT_MATCHING_JEV_ENABLED:
       OPEN_SCIENCE_PATIENT_MATCHING_DISCOVERY_DEPTH:
       OPEN_SCIENCE_PATIENT_MATCHING_JEV_DEPTH:
@@ -1550,8 +1551,6 @@ services:
         APT_MIRROR: ${OPEN_SCIENCE_APT_MIRROR:-http://deb.debian.org/debian}
         DEBIAN_SECURITY_MIRROR: ${OPEN_SCIENCE_DEBIAN_SECURITY_MIRROR:-http://deb.debian.org/debian-security}
     environment:
-      OPEN_SCIENCE_PATIENT_MATCHING_WORKER_CONTAINER:
-      OPEN_SCIENCE_PATIENT_MATCHING_WORKER_IMAGE_DIGEST:
       # Read by this agent's own code; unwired until 2026-08-27, the same
       # shape as the OpenGWAS split. One host variable per credential.
       PUBMED_API_KEY: ${OPEN_SCIENCE_NCBI_API_KEY:-}
@@ -2261,6 +2260,9 @@ services:
     image: ${OPEN_SCIENCE_WEB_CONTAINER_IMAGE:-open-science-web:0.1.3}
     command: ["node", "apps/server/src/runtimeControllerIndex.mjs"]
     environment:
+      # The contained matching worker the controller inspects (`inspectPatientMatchingWorker`): its fixed name and image.
+      OPEN_SCIENCE_PATIENT_MATCHING_WORKER_CONTAINER:
+      OPEN_SCIENCE_PATIENT_MATCHING_WORKER_IMAGE_DIGEST:
       # 循证进化's signal floor and retention, and the executor code skills are verified in (shared with the controller, so both read the same values).
       OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR: ${OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR:-1}
       OPEN_SCIENCE_EVOLUTION_SIGNAL_RETENTION_DAYS: ${OPEN_SCIENCE_EVOLUTION_SIGNAL_RETENTION_DAYS:-180}

@@ -23,6 +23,26 @@ export class PatientMatchingLifecycleService {
     this.database = database; this.config = config; this.catalogue = patientMatchingCatalogue(catalogue);
     this.access = access; this.runtime = runtime; this.plugins = plugins; this.ledgerBusy = ledgerBusy; this.workerImageIdentity = workerImageIdentity;
     this.documents = new ProductDocuments(database); this.jobs = new ProductJobs(database);
+    // The release a project gets when its owner never chose (owner, 2026-10-10: every 虚拟临床研究 feature takes effect by default):
+    // `OPEN_SCIENCE_PATIENT_MATCHING_DEFAULT_RELEASE` names one, `none` turns the default off, and unset is the catalogue's only release.
+    const named = String(config?.patientMatchingDefaultRelease ?? '').trim();
+    this.defaultReleaseId = named === 'none' ? null : named || (this.catalogue.size === 1 ? [...this.catalogue.keys()][0] : null);
+  }
+  /** The default release reaches a project whose owner never chose (no settings document at all): queued as the owner's install and
+   * applied by the worker at the project's next idle moment, through the same preparation, proof and rollback as a chosen one. An
+   * owner's disable or uninstall is a document, so it stands; an internal project gets nothing. Answers whether an install was queued.
+   * @param {any} project @param {{ internal?: (project:any) => boolean }} [options] */
+  async ensureDefault(project, { internal = () => false } = {}) {
+    const releaseId = this.defaultReleaseId;
+    if (!releaseId || !this.catalogue.has(releaseId) || !project?.id || !project?.userId || internal(project)) return false;
+    if (await this.current(project)) return false;
+    try {
+      await this.reconcile({ id: project.userId }, project.id, { action: 'install', releaseId, expectedRevision: 0 });
+      return true;
+    } catch (error) {
+      if (/** @type {any} */ (error)?.code === 'product_revision_conflict') return false;
+      throw error;
+    }
   }
   /** @param {any} project */
   current(project) { return this.documents.get(project.userId, KIND, stateId(project)); }

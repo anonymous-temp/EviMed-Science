@@ -1166,6 +1166,9 @@ function vcrSettings(overrides) {
     patientMatchingJevDepth: integer("patientMatchingJevDepth", "OPEN_SCIENCE_PATIENT_MATCHING_JEV_DEPTH", 300, 0, 500),
     patientMatchingTrialIndexManifest: String(overrides.patientMatchingTrialIndexManifest ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_TRIAL_INDEX_MANIFEST ?? ''),
     patientMatchingCataloguePath: String(overrides.patientMatchingCataloguePath ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_CATALOGUE ?? ''),
+    // The release a project gets when its owner never chose one (`PatientMatchingLifecycleService.ensureDefault`): a catalogue release id,
+    // `none` for no default, unset for the catalogue's only release.
+    patientMatchingDefaultRelease: String(overrides.patientMatchingDefaultRelease ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_DEFAULT_RELEASE ?? '').trim(),
     patientMatchingWorkerSocket: String(overrides.patientMatchingWorkerSocket ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_WORKER_SOCKET ?? ''),
     patientMatchingWorkerTokenFile: String(overrides.patientMatchingWorkerTokenFile ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_WORKER_TOKEN_FILE ?? ''),
     patientMatchingWorkerContainer: String(overrides.patientMatchingWorkerContainer ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_WORKER_CONTAINER ?? ''),

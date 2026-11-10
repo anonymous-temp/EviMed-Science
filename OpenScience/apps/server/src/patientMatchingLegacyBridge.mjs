@@ -10,7 +10,7 @@ export function installPatientMatchingLegacyBridge({ vcr, adapter, documents, re
   vcr.matchJudge = {
     start: async (/** @type {any} */ study, /** @type {any} */ selection) => {
       const origin = await resolveOrigin(study);
-      if (!origin) throw new HttpError(409, 'patient_matching_generation_unavailable', 'Patient matching needs the matching plugin and this study\'s conversation; neither is available in this deployment right now.');
+      if (!origin) throw new HttpError(409, 'patient_matching_generation_unavailable', 'Patient matching is being prepared for this project, or is not installed in this deployment; start again in a minute.');
       return adapter.startSelection(origin, selection);
     },
   };

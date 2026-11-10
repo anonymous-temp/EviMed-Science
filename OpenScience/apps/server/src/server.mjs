@@ -5600,7 +5600,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     workerImageIdentity: async () => (await runtimeManager.inspectPatientMatchingWorker()).imageId,
   }) : null;
   const patientMatchingLifecycleWorker = patientMatchingLifecycle ? new PatientMatchingLifecycleWorker({service:patientMatchingLifecycle}) : null;
-  runtimeManager.patientMatchingGenerationResolver = patientMatchingLifecycle ? project => patientMatchingLifecycle.selectForRuntime(project) : null;
+  // A runtime's start is where a project first meets matching: a project whose owner never chose gets the default release queued here
+  // (applied once the project is idle), and this start mounts only what was already proven.
+  const patientMatchingInternal = (/** @type {any} */ project) => isInternalProjectOf(config, project.userId, project.id);
+  const ensurePatientMatchingDefault = (/** @type {any} */ project) => patientMatchingLifecycle?.ensureDefault(project, { internal: patientMatchingInternal })
+    .catch((/** @type {any} */ error) => { process.stderr.write(`patient matching: default install ${error?.code ?? 'failed'}\n`); return false; }) ?? Promise.resolve(false);
+  runtimeManager.patientMatchingGenerationResolver = patientMatchingLifecycle ? project => { void ensurePatientMatchingDefault(project); return patientMatchingLifecycle.selectForRuntime(project); } : null;
   /** @type {any} */ let patientMatchingAdapter = null;
   /** @type {PatientMatchingContinuation|null} */ let patientMatchingContinuation = null;
   const patientMatchingModels = createPatientMatchingModelPorts({config,usageLedger,
@@ -5647,7 +5652,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     installPatientMatchingLegacyBridge({vcr,adapter:patientMatchingAdapter,documents:productDocuments,resolveOrigin:async study=>{
       const sessionId=study.scope==='conversation'?study.conversationSessionId:(await resolveStudyConversation(study,{create:true}).catch(()=>null))?.sessionId;
       if(!sessionId)return null;
-      const project=await sourceProject({userId:study.userId,projectId:study.projectId}),descriptor=await patientMatchingDispatchDescriptor({lifecycle:patientMatchingLifecycle,runtime:runtimeManager,project});
+      const project=await sourceProject({userId:study.userId,projectId:study.projectId});
+      await ensurePatientMatchingDefault(project);
+      const descriptor=await patientMatchingDispatchDescriptor({lifecycle:patientMatchingLifecycle,runtime:runtimeManager,project});
       const original=(await agentRuns.list(project)).find(run=>run.sessionId===sessionId);
       return descriptor?{userId:study.userId,projectId:study.projectId,rootSessionId:sessionId,pluginGeneration:descriptor.generation,runId:study.executionOrigin?.runId??original?.id??null}:null;
     }});

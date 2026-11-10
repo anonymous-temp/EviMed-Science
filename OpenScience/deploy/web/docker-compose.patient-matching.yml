@@ -1,0 +1,30 @@
+# The patient-matching plugin's contained worker and the operator-owned release directory (deploy/patient-matching/README.md).
+# Composed by the release switch only where `.env` names PATIENT_MATCHING_WORKER_IMAGE. The worker has no network, a read-only
+# root and no capabilities; the web boundary reaches it over the Unix socket in the private run directory, which both mount.
+# The release directory holds catalogue.json and the exact plugin tarballs it names; it is read-only everywhere.
+services:
+  patient-matching-worker:
+    container_name: ${OPEN_SCIENCE_PATIENT_MATCHING_WORKER_CONTAINER:-evimed-patient-matching-worker}
+    image: ${PATIENT_MATCHING_WORKER_IMAGE:?An immutable matching worker image is required}
+    # The web boundary reads the token only when it owns it (patientMatchingWorkerClient.mjs); where it runs as root, so does
+    # the worker, with every capability dropped.
+    user: ${PATIENT_MATCHING_WORKER_UID:-1000}:${PATIENT_MATCHING_WORKER_GID:-1000}
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 32
+    mem_limit: 256m
+    cpus: 1
+    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
+    environment:
+      PATIENT_MATCHING_WORKER_SOCKET: /run/patient-matching/worker.sock
+      PATIENT_MATCHING_WORKER_TOKEN_FILE: /run/patient-matching/worker.token
+    volumes:
+      - ${PATIENT_MATCHING_WORKER_RUN_DIR:?Private matching worker socket directory is required}:/run/patient-matching:rw
+    restart: unless-stopped
+
+  open-science-web:
+    volumes:
+      - ${PATIENT_MATCHING_WORKER_RUN_DIR:?Private matching worker socket directory is required}:/run/patient-matching:ro
+      - ${PATIENT_MATCHING_RELEASE_DIR:?The patient-matching release directory is required}:/run/patient-matching-release:ro

@@ -178,3 +178,29 @@ test('recurring worker serializes claims and close joins its in-flight preparati
   const closing = f.worker.close(); assert.equal(settled, false);
   release(); await Promise.all([first, second, closing]); assert.equal(settled, true);
 });
+
+test('the default release reaches a project whose owner never chose, once; an owner\'s uninstall and an internal project stand', async t => {
+  const f = await serviceFixture(t);
+  assert.equal(f.service.defaultReleaseId, f.entry.releaseId, 'unset names the catalogue\'s only release');
+  assert.equal(await f.service.ensureDefault(project, { internal: () => true }), false, 'an internal project gets nothing');
+  assert.equal(f.queued.length, 0);
+  assert.equal(await f.service.ensureDefault(project), true);
+  assert.equal(f.queued.length, 1, 'queued as an install, applied by the worker like a chosen one');
+  assert.deepEqual((await f.service.current(project)).payload.selected, { releaseId: f.entry.releaseId, enabled: true });
+  assert.equal(await f.service.ensureDefault(project), false, 'a second start queues nothing');
+  assert.equal((await f.worker.runClaimed(f.queued.at(-1))).phase, 'effective');
+  assert.ok(await f.service.selectForRuntime(project), 'the next runtime mounts the proven release');
+  await f.reconcile('uninstall'); await f.worker.runClaimed(f.queued.at(-1));
+  assert.equal(await f.service.ensureDefault(project), false, 'the owner\'s uninstall stands');
+  assert.equal(await f.service.selectForRuntime(project), null);
+});
+
+test('the default release can be named or turned off by the deployment', async t => {
+  const f = await serviceFixture(t);
+  const make = (patientMatchingDefaultRelease) => new PatientMatchingLifecycleService(null, { config: { ...f.service.config, patientMatchingDefaultRelease },
+    catalogue: [f.entry], access: f.service.access, runtime: f.runtime, plugins: f.service.plugins, ledgerBusy: f.service.ledgerBusy, workerImageIdentity: f.service.workerImageIdentity });
+  assert.equal(make('none').defaultReleaseId, null);
+  assert.equal(await make('none').ensureDefault(project), false);
+  assert.equal(make(f.entry.releaseId).defaultReleaseId, f.entry.releaseId);
+  assert.equal(await make('not-in-catalogue').ensureDefault(project), false, 'a name the catalogue does not hold installs nothing');
+});
