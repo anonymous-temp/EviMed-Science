@@ -36,7 +36,7 @@ export function argsOf(argv) {
   const out = { port: 48852, pgPort: 55682, timeoutMin: 15, learningTimeoutMin: 45, data: '/srv/evimed/data/memdata-data' };
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i].slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-    if (['summarizeOnly'].includes(key)) out[key] = true; else out[key] = argv[++i];
+    if (['summarizeOnly', 'reverdict'].includes(key)) out[key] = true; else out[key] = argv[++i];
   }
   for (const k of ['port', 'pgPort', 'timeoutMin', 'learningTimeoutMin']) out[k] = Number(out[k]);
   if (!EXPERIMENTS[out.exp]?.includes(out.arm)) throw new Error(`--exp ${out.exp} --arm ${out.arm}: expected one of ${JSON.stringify(EXPERIMENTS)}`);
@@ -185,6 +185,29 @@ function labelledTurns(records) {
 }
 
 // ---------- L1 ----------
+/** The L1 verdict of a finished ring, from what its unit directory holds (records, final state, progress): rerunnable offline. */
+export async function l1VerdictFromFiles(dir, script, gold, id = script.id) {
+  const p = await readJson(`${dir}/progress.json`, { steps: {} });
+  const state = await readJson(`${dir}/state-final.json`);
+  const usage = await readJson(`${dir}/usage.json`);
+  const groups = [];
+  for (const [k, run] of script.runs.entries()) {
+    const last = groups.at(-1);
+    if (last && last.conversationId === run.conversationId) last.ks.push(k); else groups.push({ conversationId: run.conversationId, ks: [k] });
+  }
+  const records = [];
+  for (const group of groups) records.push({ label: group.conversationId, record: await readJson(`${dir}/conv-${group.conversationId}.json`), roles: group.ks.flatMap(() => ['request', 'followUp']), ks: group.ks });
+  records.push({ label: 'probe', record: await readJson(`${dir}/conv-probe.json`), roles: ['request', 'followUp'] });
+  const runs = [];
+  for (const r of records.filter(r => r.ks)) r.ks.forEach((k, j) => { const t = r.record?.turns?.[2 * j]; runs.push({ k, runId: t?.runId ?? null, status: t?.run?.status ?? (t?.error ? 'dispatch_error' : 'missing'), followUpRunId: r.record?.turns?.[2 * j + 1]?.runId ?? null }); });
+  runs.sort((a, b) => a.k - b.k);
+  const approvedSeen = new Set(Object.values(p.steps).flatMap(step => step?.approved ?? []));
+  const seeded = p.steps.seed && p.steps.seed.id ? [p.steps.seed] : [];
+  return { id, ring: script.ring, ...l1Ring({ ring: script.ring, gold, runs, turns: labelledTurns(records), state, seeded, amend: p.steps.amend ?? null, approvedSeen,
+    sleepJobKey: script.ring === 'sleep' ? `consolidate:sleep:eval:lx-${id}-${p.attempt}-sleep` : null }),
+  runs, attempt: p.attempt, interrupted: p.interrupted ?? [], counters: nonZero(state?.counters), usage: usage ?? (await readJson(`${dir}/verdict.json`))?.usage ?? null };
+}
+
 async function l1Unit(ctx, script, gold, { seededSleep = false } = {}) {
   const id = seededSleep ? `${script.id}-seeded` : script.id;
   const u = await new Unit(ctx, id).load();
@@ -251,15 +274,9 @@ async function l1Unit(ctx, script, gold, { seededSleep = false } = {}) {
   await u.conversation('conv-probe', { api, userId, projectId, first: probeTexts[0], next: (_t, i) => probeTexts[i + 1] ?? null, maxTurns: 2 });
   records.push({ label: 'probe', record: await u.record('conv-probe'), roles: ['request', 'followUp'] });
   await u.drain('drain-probe', userId, {});
-  const state = await ipc(ctx.h, 'lxState', { userId });
-  await atomic(`${u.dir}/state-final.json`, state);
-  const usage = await ipc(ctx.h, 'usage', { userId });
-  const runs = [];
-  for (const r of records.filter(r => r.ks)) r.ks.forEach((k, j) => { const t = r.record.turns[2 * j]; runs.push({ k, runId: t?.runId ?? null, status: t?.run?.status ?? (t?.error ? 'dispatch_error' : 'missing'), followUpRunId: r.record.turns[2 * j + 1]?.runId ?? null }); });
-  runs.sort((a, b) => a.k - b.k);
-  const approvedSeen = new Set(Object.values(u.p.steps).flatMap(s => s?.approved ?? []));
-  const verdict = { id, ring: script.ring, ...l1Ring({ ring: script.ring, gold, runs, turns: labelledTurns(records), state, seeded, amend, approvedSeen, sleepJobKey: script.ring === 'sleep' ? `consolidate:sleep:eval:lx-${id}-${u.p.attempt}-sleep` : null }),
-    runs, attempt: u.p.attempt, interrupted: u.p.interrupted ?? [], counters: nonZero(state.counters), usage };
+  await atomic(`${u.dir}/state-final.json`, await ipc(ctx.h, 'lxState', { userId }));
+  await atomic(`${u.dir}/usage.json`, await ipc(ctx.h, 'usage', { userId }));
+  const verdict = await l1VerdictFromFiles(u.dir, script, gold, id);
   await atomic(`${u.dir}/verdict.json`, verdict);
   return verdict;
 }
@@ -480,6 +497,17 @@ async function main() {
     await fs.writeFile(`${outDir}/summary.md`, markdown(sum));
     return { sum, done: verdicts.length === units.length };
   };
+  if (args.reverdict) {
+    if (args.exp !== 'l1') throw new Error('--reverdict is for l1');
+    const inputs = JSON.parse(await fs.readFile(`${data}/inputs.json`, 'utf8')).scripts;
+    const gold = JSON.parse(await fs.readFile(`${data}/gold.json`, 'utf8')).scripts;
+    for (const s of inputs) {
+      const dir = `${outDir}/units/${s.id}`;
+      if (!fsSync.existsSync(`${dir}/verdict.json`) || !fsSync.existsSync(`${dir}/state-final.json`)) continue;
+      await atomic(`${dir}/verdict.json`, await l1VerdictFromFiles(dir, s, gold.find(g => g.id === s.id)));
+    }
+    await finish(); return;
+  }
   if (args.summarizeOnly) { await finish(); return; }
   const dbName = `evimed_test_${path.basename(outDir).replace(/[^a-z0-9]+/gi, '_').toLowerCase()}`.slice(0, 60);
   await ensurePostgres(args.pgPort); await ensureDatabase(args.pgPort, dbName);

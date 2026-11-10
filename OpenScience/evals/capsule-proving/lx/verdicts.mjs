@@ -117,8 +117,11 @@ export function l1Ring({ ring, gold, runs, turns, state, seeded = [], amend = nu
     const merged = (state?.methods ?? []).filter(m => m.payload?.provenance?.consolidatedBy);
     const superseded = (state?.methods ?? []).filter(m => (m.payload?.learning?.relations ?? []).some(r => r.type === 'supersedes'));
     const relations = (state?.methods ?? []).flatMap(m => (m.payload?.learning?.relations ?? []).map(r => `${m.payload?.frontmatter?.name}-${r.type}->${r.target}`));
-    set('consolidated', true, merged.length > 0 || superseded.length > 0,
-      `sleep job ${sleepJob ? `${sleepJob.status} result=${clip(sleepJob.result, 200)}` : 'none'}; merged=${merged.length}; superseded=${superseded.length}; relations=${relations.join(', ') || 'none'}; noop=${clip(nonZero(state?.counters?.consolidateNoop))}`);
+    // The two adopt lessons may already have become one method at distillation (the second amends the first): one rule, as the gold wants.
+    const lessonMethods = distillJobsFor(state, scripted, 'adopted').map(j => `${j.status}:${j.result?.operation ?? '-'}${j.result?.methodId ? `:${j.result.methodId}` : ''}`);
+    const oneMethod = new Set(distillJobsFor(state, scripted, 'adopted').filter(j => j.result?.methodId).map(j => j.result.methodId)).size === 1 && distillJobsFor(state, scripted, 'adopted').length >= 2;
+    set('consolidated', true, merged.length > 0 || superseded.length > 0 || oneMethod,
+      `${oneMethod ? 'one method after both adopt lessons (the later lesson amended it or found it already covered: no_change); ' : ''}lessons=${lessonMethods.join(', ')}; sleep job ${sleepJob ? `${sleepJob.status} result=${clip(sleepJob.result, 200)}` : 'none'}; merged=${merged.length}; superseded=${superseded.length}; relations=${relations.join(', ') || 'none'}; noop=${clip(nonZero(state?.counters?.consolidateNoop))}`);
   }
   // 10. Replay ring: the scripted amendment regresses what the person accepted and is rolled back.
   if (ring === 'replay') {
