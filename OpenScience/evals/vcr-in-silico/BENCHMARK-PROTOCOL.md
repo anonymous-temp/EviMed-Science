@@ -154,3 +154,23 @@ power 0.816, type I error 0.0209); no design at alpha 0.025 is feasible (type I 
 the first three worlds nothing was tuned on it and no search had been run on it when this was written. It is **not calibrated against the real engine** (the first world's
 `--calibrate` is the only engine check) and the manifest shell is the level family's (nothing in a search reads the endpoint; a unit's outcome is a draw from the truth table).
 Budgets, seeds 1..200, pick rules, metrics and reading are those above, for every arm; the earlier arms re-run on the three first worlds must reproduce the previous result file.
+
+## Addendum D6b (2026-11-10, after the first D6 run; written and committed before any run of the revised rule; the text above is unchanged)
+
+**Why the screening rule was revised.** The first `ours3` ("v1", results `search-benchmark-matched-20261110-d6.json`, kept) gave every remaining screening increment to the designs the rule found critical,
+with no end: a cell whose screening interval already excluded its bound still drew increments and one cell could be screened past the final floor. On a hosted campaign whose replicate budget
+is derived from CPU seconds (about 3 million replicates) this became screening one design's power forever (found by the controller's engine integration test; reproduced by a domain test).
+**Correction of v1's text:** addendum D6 above says a type I error screened above its bound eliminates a design. It does not: the domain judges an error-control constraint at the final stage only
+(`error_control_judged_at_final`), and the screened type I error only ranks finalists and steers the allocation. Nothing in the elimination changed.
+
+**`ours3` v2 (the revised step rule, the arm's name unchanged; the v1 results stay in the RUN file as superseded).** A cell is *open* while its one-sided Clopper-Pearson interval, at the constraint's
+confidence on the pooled screening data, still holds the bound (decided on either side closes it) and one more increment of at least 200 replicates fits below the final floor (5,000 replicates per cell
+in all). A critical design takes its increment on its dominant *open* cell; a design with no open cell takes nothing; the screening phase ends when no critical design has an open cell or the screening share
+is spent. First look, increment sizes, OCBA weights, indifference 0.005 and every other parameter are v1's. The short form now asks for `budget.screening: 'ocba'` beside the sequential allocation, and
+the manifest then screens the error-control truth too (unless it names its screening truths).
+
+**Disclosure.** The rule was revised after the first D6 result run, so `heldout` (the first held-out world, run once on v1) is no longer untouched for v2 and is reported as in-sample for it, with the three first
+worlds. A second held-out world, `heldout2`, is frozen here and has not been run on any arm: the same construction (pooled t against the normal critical value, SD 1) with true difference 0.45,
+n per arm 65, 70, ..., 105 x alpha {0.025, 0.02, 0.015}, 27 designs, 80% power, type I error at most 2.5%; `Rscript heldout-world.R <out> 0.45 65 105` ->
+`results/search-benchmark-heldout2-world-20261110.tsv` (SHA-256 `72f748d036133f7128b125893ca77312856e1190c54bd9fc2ceb1046206e3c9b`). By the table 9 designs are truly feasible and one is optimal (170 patients, alpha 0.02, power 0.8099, type I error 0.0208; a
+second design, 180 patients at alpha 0.015, has power 0.8012); no design at alpha 0.025 is feasible. Budgets, seeds 1..200, pick rules, metrics and reading are as above; all arms are re-run on all five worlds.

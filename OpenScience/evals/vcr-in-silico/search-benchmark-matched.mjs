@@ -79,14 +79,18 @@ const SPACES = {
   heldout: { reference: null, candidates: () => [40, 45, 50, 55, 60, 65, 70, 75, 80].flatMap((n) => [0.025, 0.02, 0.015].map((a) => ({ set: { 'design.nTreat': n, 'design.nControl': n, 'analysis.alpha': a } }))),
     scenario: { accrual: 24, nTreat: 200 } },
 };
+// addendum D6b: a second world nothing was run on before the screening rule was revised (difference 0.45, n per arm 65..105)
+SPACES.heldout2 = { reference: null, file: 'results/search-benchmark-heldout2-world-20261110.tsv', scenario: SPACES.heldout.scenario,
+  candidates: () => [65, 70, 75, 80, 85, 90, 95, 100, 105].flatMap((n) => [0.025, 0.02, 0.015].map((a) => ({ set: { 'design.nTreat': n, 'design.nControl': n, 'analysis.alpha': a } }))) };
 const heldoutFile = path.join(here, 'results/search-benchmark-heldout-world-20261110.tsv');
+const heldout2File = path.join(here, SPACES.heldout2.file);
 
 /** A world: for each candidate, the patients and the true power and type I error (the reference's full-precision values). */
 async function loadWorld(name) {
   const space = SPACES[name].candidates();
   let items;
   if (SPACES[name].reference == null) {
-    const lines = (await fs.readFile(heldoutFile, 'utf8')).trim().split('\n').map((l) => l.split('\t'));
+    const lines = (await fs.readFile(SPACES[name].file ? path.join(here, SPACES[name].file) : heldoutFile, 'utf8')).trim().split('\n').map((l) => l.split('\t'));
     items = lines.map(([n, alpha, power, typeOne], i) => {
       const set = { 'design.nTreat': Number(n), 'design.nControl': Number(n), 'analysis.alpha': Number(alpha) };
       if (JSON.stringify(set) !== JSON.stringify(space[i].set)) throw new Error(`${name}: candidate ${i} differs from the world file`);
@@ -503,7 +507,7 @@ if (flag('--calibrate')) {
   process.exit(0);
 }
 const seeds = Number(option('--seeds', FROZEN.seeds));
-const worlds = await Promise.all(option('--worlds', 'survival,level,level85,heldout').split(',').map((name) => loadWorld(name)));
+const worlds = await Promise.all(option('--worlds', 'survival,level,level85,heldout,heldout2').split(',').map((name) => loadWorld(name)));
 const results = {};
 for (const world of worlds) {
   const { rows, disagreements, confidence } = runWorld(world, seeds);
@@ -512,7 +516,7 @@ for (const world of worlds) {
 }
 let revision = null;
 try { revision = (await run('git', ['rev-parse', 'HEAD'], { cwd: here })).stdout.trim(); } catch { /* not a checkout */ }
-const doc = { revision, frozen: FROZEN, referenceSha256: sha256(await fs.readFile(reference, 'utf8')), heldoutWorldSha256: sha256(await fs.readFile(heldoutFile, 'utf8')), worlds: worlds.map((w) => ({ name: w.name, items: w.items, feasibleCount: w.feasibleCount, optimalCount: w.optimalCount, bestPatients: w.bestPatients, penaltyScore: w.penaltyScore })),
+const doc = { revision, frozen: FROZEN, referenceSha256: sha256(await fs.readFile(reference, 'utf8')), heldoutWorldSha256: sha256(await fs.readFile(heldoutFile, 'utf8')), heldout2WorldSha256: sha256(await fs.readFile(heldout2File, 'utf8')), worlds: worlds.map((w) => ({ name: w.name, items: w.items, feasibleCount: w.feasibleCount, optimalCount: w.optimalCount, bestPatients: w.bestPatients, penaltyScore: w.penaltyScore })),
   ours: Object.fromEntries(worlds.map((w) => [w.name, FROZEN.budgets.map((B) => ({ budget: B, ...oursParameters(w, B) }))])),
   ours2: Object.fromEntries(worlds.map((w) => [w.name, FROZEN.budgets.map((B) => ({ budget: B, ...oursParameters2(w, B) }))])),
   ours3: Object.fromEntries(worlds.map((w) => [w.name, FROZEN.budgets.map((B) => ({ budget: B, ...oursParameters2(w, B, 'ocba') }))])),

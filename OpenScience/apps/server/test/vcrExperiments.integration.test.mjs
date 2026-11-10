@@ -130,6 +130,33 @@ test('a campaign screens, re-checks its finalists at the floor on new streams an
   assert.equal(Number((await vcr.store.one("SELECT count(*) AS n FROM evimed_vcr.jobs WHERE checkpoint->'experiment'->>'id' = $1", [started.id])).n), 8);
 });
 
+test('a campaign with the default allocation (sequential, OCBA screening) runs end to end on the engine and keeps the verdict rules (R36/D6)', options, async () => {
+  const started = await experiments.startCampaign(study, manifest({ question: 'sequential with OCBA screening',
+    budget: { maxCandidates: 4, cpuSeconds: 3000, modelCalls: 0, allocation: 'sequential', screening: 'ocba' } }), { userId: origin.userId });
+  assert.equal(started.created, true);
+  await drain(started.id, { limit: 200 });
+  const row = await vcr.store.one('SELECT manifest, state FROM evimed_vcr.experiments WHERE id = $1', [started.id]);
+  assert.deepEqual([row.manifest.budget.allocation, row.manifest.budget.screening], ['sequential', 'ocba'], 'the frozen manifest keeps both');
+  const view = await experiments.view(study, started.id);
+  assert.equal(view.status, 'stopped');
+  assert.ok(['acceptable_precision', 'inconclusive_at_precision', 'budget_exhausted', 'no_feasible_beneficial_candidate'].includes(view.stop.reason), view.stop.reason);
+  // the replicate budget was derived from the measured CPU seconds per replicate, never past the CPU-second ceiling
+  assert.ok(row.state.rate && Number(row.state.rate.perReplicateCpuSeconds ?? row.state.rate.value ?? 0) >= 0, JSON.stringify(row.state.rate));
+  assert.ok(view.budget.used.cpuSeconds <= 3000);
+  const jobs = await vcr.store.rows("SELECT id, seed, replicates, scenario, checkpoint FROM evimed_vcr.jobs WHERE checkpoint->'experiment'->>'id' = $1", [started.id]);
+  assert.equal(new Set(jobs.map((job) => job.checkpoint.experiment.unitKey)).size, jobs.length, 'every unit ran once');
+  const screening = jobs.filter((job) => job.scenario.evaluation?.screeningReplicates);
+  const finals = jobs.filter((job) => !job.scenario.evaluation?.screeningReplicates);
+  assert.ok(screening.length >= 4, 'every design was screened');
+  assert.ok(finals.every((job) => !screening.some((s) => Number(s.seed) === Number(job.seed))), 'no final unit reused a screening stream');
+  if (view.best) {
+    const best = view.candidates.find((c) => c.key === view.best);
+    assert.deepEqual(best.constraints.map((c) => c.final.status), ['pass', 'pass'], 'a pick passed every constraint on its own final run');
+    const nullFinal = finals.filter((job) => String(job.checkpoint.experiment.unitKey).endsWith(':final:null'));
+    assert.ok(nullFinal.length >= 1 && nullFinal.every((job) => Number(job.replicates) >= 20000), 'the null finals ran at or above the floor');
+  }
+});
+
 test('a crash between deciding and queueing, and a restart, rerun nothing and charge nothing twice', options, async () => {
   const started = await experiments.startCampaign(study, manifest({ question: 'restart', stages: { screening: { replicates: 250 }, final: { count: 1 } } }), { userId: origin.userId });
   // the process died after the decision and before the job id was written down

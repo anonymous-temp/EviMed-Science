@@ -31,6 +31,8 @@ test('a short form compiles to a frozen manifest with the evaluator written by c
   assert.equal(m.stages.final.count, 3)
   assert.equal(m.budget.maxCandidates, 3)
   assert.ok(m.budget.cpuSeconds > 0 && m.budget.modelCalls === 0)
+  // R36/D6: a simulated search with a screening stage spends its budget sequentially and its screening share by OCBA
+  assert.deepEqual([m.budget.allocation, m.budget.screening], ['sequential', 'ocba'])
   assert.equal(vcrCampaignCandidates(m).length, 3)
   // paths that move together are rows, not a cartesian product
   assert.deepEqual(vcrCampaignCandidates(m).map((c) => c.set), [
@@ -114,6 +116,9 @@ test('a dose search, an exact search and a disease search compile on their own w
   vary: { 'design.allocation': [0.5, 0.6] }, goal: { minimize: 'required_patients', atMost: { required_events: 330 } } })
   assert.deepEqual(exact.issues, [])
   assert.equal(/** @type {any} */ (exact.manifest).stages.screening, null)
+  // R36/D6: a simulated search spends its screening share by OCBA; an exact one has no screening, so neither the allocation nor OCBA applies
+  assert.equal(/** @type {any} */ (exact.manifest).budget.screening, undefined)
+  assert.equal(/** @type {any} */ (exact.manifest).budget.allocation, undefined)
   const disease = vcrCampaignFromInput({ method: 'patients.progression',
     scenario: { design: { kind: 'two_arm_fixed', nTreat: 100, nControl: 100 }, population: { mmseRange: { value: [16, 26], basis: 'assumed' } }, analysis: { kind: 'change', visit: 78, alpha: 0.05 },
       treatment: { symptomatic: { pointsAt: { value: 2, basis: 'assumed' } } } },
@@ -123,5 +128,7 @@ test('a dose search, an exact search and a disease search compile on their own w
   assert.deepEqual(dm.space.truths.map((/** @type {any} */ t) => t.name), ['drug', 'none'])
   assert.equal(dm.space.scenario.treatment, undefined)
   assert.equal(dm.constraints.find((/** @type {any} */ c) => c.kind === 'error_control').bound, 0.05)
+  // a disease search without a screening stage takes neither the sequential allocation nor OCBA screening
+  assert.deepEqual([dm.budget.allocation, dm.budget.screening], [undefined, undefined])
   assert.equal(dm.stages.screening, null)
 })

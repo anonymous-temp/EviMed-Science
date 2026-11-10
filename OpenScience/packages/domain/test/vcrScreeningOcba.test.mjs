@@ -11,6 +11,8 @@ const BASE = { design: { kind: 'two_arm_fixed', nTreat: 100, nControl: 100 }, en
   truth: { hazardRatio: 0.7, controlMedian: 12 }, accrual: { kind: 'uniform', duration: 24, followup: 12 }, analysis: { method: 'logrank', alpha: 0.025, sided: 1 } }
 // twelve designs by patients: the cheap ones are underpowered, 700..1100 are powered but their type I error is above the bound, the last three pass
 const WORLD = Array.from({ length: 12 }, (_, i) => ({ n: 100 + 100 * i, power: Math.min(0.97, 0.5 + 0.05 * i), typeOne: i >= 5 && i < 9 ? 0.0285 : 0.021 }))
+// the same twelve with their powers near the bound where it matters, so the first look does not decide them
+const CLOSE = WORLD.map((w, i) => ({ ...w, power: [0.55, 0.6, 0.65, 0.7, 0.75, 0.78, 0.81, 0.82, 0.85, 0.9, 0.93, 0.95][i] }))
 const input = (/** @type {any} */ budget = {}, /** @type {any} */ world = WORLD) => ({
   question: 'q', objective: { measure: 'expected_sample_size', direction: 'minimize', truth: 'alternative' },
   constraints: [{ measure: 'power', op: '>=', bound: 0.8, kind: 'design', truth: 'alternative' }, { measure: 'type_one_error', op: '<=', bound: 0.025, kind: 'error_control', truth: 'null' }],
@@ -65,8 +67,8 @@ test('the plan keeps the first look to a share of the screening share, split ove
 })
 
 test('screening increments go to the designs that decide the pick, within the screening share, each on a stream of its own', () => {
-  const manifest = frozen()
-  const { state, units, candidates } = drive(manifest, 7)
+  const manifest = frozen({}, CLOSE)
+  const { state, units, candidates } = drive(manifest, 7, CLOSE)
   const screening = units.filter((u) => u.stage === 'screening')
   const increments = screening.filter((u) => u.round > 0)
   assert.ok(increments.length >= 3, `the rule allocated ${increments.length} increments`)
@@ -88,9 +90,10 @@ test('screening increments go to the designs that decide the pick, within the sc
   const cheap = candidates.slice(0, 9).map((c) => byCandidate.get(c.key) ?? 0)
   assert.ok(Math.max(...cheap) > Math.max(...expensive), 'the increments went to the cheaper designs')
   // pooled: a design's screening estimate carries every increment it got
-  const pooled = state.candidates[candidates[0].key]
-  const own = increments.filter((u) => u.candidate === candidates[0].key && u.truth === 'alternative').reduce((s, u) => s + u.screeningReplicates, 0)
-  assert.equal(pooled.evaluations['screening:alternative'].replicates === undefined ? 0 : pooled.evaluations['screening:alternative'].replicates, manifest.stages.screening.replicates + own)
+  const taken = increments.find((u) => u.truth === 'alternative') ?? increments[0]
+  const pooled = state.candidates[taken.candidate]
+  const own = increments.filter((u) => u.candidate === taken.candidate && u.truth === taken.truth).reduce((s, u) => s + u.screeningReplicates, 0)
+  assert.equal(pooled.evaluations[`screening:${taken.truth}`].replicates, manifest.stages.screening.replicates + own)
   assert.equal(state.usage.replicatesCompleted, units.reduce((s, u) => s + (u.stage === 'screening' ? (u.screeningReplicates ?? manifest.stages.screening.replicates) : (u.replicates ?? (u.truth === 'alternative' ? 5_000 : 20_000))), 0))
   assert.ok(state.usage.replicatesCompleted <= 400_000)
 })
@@ -116,4 +119,27 @@ test('error control is untouched: a design exactly on its type I error bound is 
   }
   const rate = hits / N; const mcse = Math.sqrt(0.025 * 0.975 / N)
   assert.ok(rate <= 0.025 + 2 * mcse, `certified ${rate} of ${N} campaigns for a design exactly on its bound (nominal 0.025)`)
+})
+
+test('a large derived budget does not become endless screening of one design (the integration stall)', () => {
+  // four designs, the budget derived from CPU seconds (about 3 million replicates): the two cheap ones are eliminated at the first look, the third is powered
+  // (0.84, its screening interval leaves the 0.8 bound after a few thousand replicates) and the fourth is dominated by it
+  const FOUR = [{ n: 80, power: 0.5, typeOne: 0.021 }, { n: 110, power: 0.66, typeOne: 0.021 }, { n: 140, power: 0.84, typeOne: 0.021 }, { n: 170, power: 0.92, typeOne: 0.021 }]
+  const manifest = frozen({ replicates: undefined, allocation: 'sequential', cpuSeconds: 3000 }, FOUR)
+  assert.deepEqual(manifest.stages.screening.truths, ['alternative', 'null'], 'an OCBA screening looks at the error-control truth unless the manifest said otherwise')
+  const { state, units, candidates } = drive(manifest, 5, FOUR)
+  assert.ok(state.stop, 'the campaign stops')
+  assert.ok(units.length < 120, `${units.length} units`)
+  const screening = units.filter((u) => u.stage === 'screening')
+  // no cell is screened past the final floor, and the type I error was screened where it could decide
+  const perCell = new Map()
+  for (const u of screening) perCell.set(`${u.candidate}:${u.truth}`, (perCell.get(`${u.candidate}:${u.truth}`) ?? 0) + (u.screeningReplicates ?? manifest.stages.screening.replicates))
+  for (const [cell, n] of perCell) assert.ok(n <= 5_000, `${cell} screened ${n}`)
+  assert.ok(screening.some((u) => u.truth === 'null'), 'the type I error cell is screened')
+  // a cell whose screening interval already excluded its bound is not given another increment
+  const third = candidates[2].key
+  const increments = screening.filter((u) => u.candidate === third && u.truth === 'alternative' && u.round > 0)
+  assert.ok(increments.length <= 1, `the powered design took ${increments.length} increments`)
+  assert.ok(units.some((u) => u.stage === 'final'), 'finals were queued')
+  assert.ok(vcrCampaignVerdict(manifest, state).best, `stop ${state.stop.reason}`)
 })

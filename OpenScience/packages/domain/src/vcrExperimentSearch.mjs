@@ -469,8 +469,14 @@ export function vcrCampaignManifest(input) {
   // `screening: 'ocba'` spends the screening share of a budgeted campaign by OCBA-CO instead of equally (`screeningIncrement`); opt-in, so every other manifest keeps its bytes
   if (budgetIn.screening != null) {
     if (budgetIn.screening !== 'ocba') bad('campaign_budget_invalid', 'budget.screening', 'The screening allocation is "ocba" or absent.')
-    else if (!/** @type {Record<string, any>} */ (budget).allocation && !Number.isInteger(/** @type {Record<string, any>} */ (budget).replicates)) bad('campaign_budget_invalid', 'budget.screening', 'An OCBA screening allocation needs a budgeted campaign (budget.replicates or allocation).')
-    else /** @type {Record<string, any>} */ (budget).screening = 'ocba'
+    else if (!/** @type {Record<string, any>} */ (budget).allocation && !Number.isInteger(/** @type {Record<string, any>} */ (budget).replicates)) {
+      // asked beside an allocation that cannot apply here (an exact method, no screening stage, a robust reading): left out like the allocation
+      if (budgetIn.allocation == null) bad('campaign_budget_invalid', 'budget.screening', 'An OCBA screening allocation needs a budgeted campaign (budget.replicates or allocation).')
+    } else {
+      /** @type {Record<string, any>} */ (budget).screening = 'ocba'
+      // an OCBA screening looks at the error-control truth too (it ranks finalists, never certifies), unless the manifest named the screening truths itself
+      if (screening && !list(screeningIn?.truths).length) for (const c of constraints) if (c.kind === 'error_control' && !screening.truths.includes(c.truth)) screening.truths.push(c.truth)
+    }
   }
   const evaluated = sample ? Math.min(sample.count, spaceSize) : spaceSize
   if (Number.isInteger(budget.maxCandidates) && evaluated > budget.maxCandidates) {
@@ -664,12 +670,14 @@ export function vcrSearchFromForm(input) {
   const finalCount = Math.min(VCR_SEARCH_FORM_DEFAULTS.finalCount, Math.max(1, candidates))
   const budgetIn = object(form.budget)
   // a stated replicate budget sizes the first stages by one rule (`vcrCampaignBudgetPlan`) and lets the allocation spend the rest
-  const plan = Number.isInteger(budgetIn.replicates) && !exact ? vcrCampaignBudgetPlan({ candidates, replicates: budgetIn.replicates, method }) : null
+  const plan = Number.isInteger(budgetIn.replicates) && !exact ? vcrCampaignBudgetPlan({ candidates, replicates: budgetIn.replicates, method, screening: 'ocba', cells: errorControlled && nullName ? 2 : 1 }) : null
   const stages = { screening: exact || info?.precisionBlock === false ? null : { replicates: plan?.screeningReplicates ?? VCR_SEARCH_FORM_DEFAULTS.screeningReplicates }, final: { count: plan ? Math.min(plan.finalCount, finalCount) : finalCount } }
   const cost = /** @type {Record<string, any>} */ (FORM_COST)[method] ?? { candidate: 20, finalist: 60 }
   for (const key of Object.keys(budgetIn)) if (!['maxCandidates', 'cpuSeconds', 'replicates'].includes(key)) bad('search_form_field_unknown', `budget.${key}`, 'A budget takes maxCandidates, cpuSeconds and replicates.')
   const budget = { maxCandidates: budgetIn.maxCandidates ?? candidates, cpuSeconds: budgetIn.cpuSeconds ?? Math.ceil(candidates * cost.candidate + finalCount * cost.finalist + 60), modelCalls: 0,
-    ...(budgetIn.replicates != null ? { replicates: budgetIn.replicates } : {}), allocation: 'sequential' }
+    ...(budgetIn.replicates != null ? { replicates: budgetIn.replicates } : {}), allocation: 'sequential',
+    // the screening share by OCBA (R36, D6): at or above the equal screening in every benchmark world within noise, better at small budgets and on the held-out world
+    screening: 'ocba' }
 
   if (issues.length) return { input: null, issues }
   const space = { method, scenario: base, truths,
@@ -1590,7 +1598,7 @@ function screeningIncrement(manifest, state, candidates, identity) {
   const remaining = Math.floor(VCR_ALLOCATION.screeningShare * total) - spent
   if (remaining < VCR_SCREENING.minReplicates) return null
   const minimize = manifest.objective.direction === 'minimize'
-  /** @type {Array<{ key: string, index: number, value: number, rows: Array<{ c: any, n: number, p: number, w: number, ok: boolean }> }>} */
+  /** @type {Array<{ key: string, index: number, value: number, rows: Array<{ c: any, n: number, p: number, w: number, ok: boolean, open: boolean }> }>} */
   const rows = []
   for (const c of candidates) {
     const entry = state.candidates[c.key]
@@ -1598,13 +1606,20 @@ function screeningIncrement(manifest, state, candidates, identity) {
     const o = objectiveOf(manifest, entry, 'screening')
     if (!o) continue
     const perCell = cells.map((constraint) => {
-      const e = vcrEvaluationMeasure(entry.evaluations[`screening:${constraint.truth}`], constraint.measure)
-      const n = Number(entry.evaluations[`screening:${constraint.truth}`]?.replicates ?? 0)
+      const evaluation = entry.evaluations[`screening:${constraint.truth}`]
+      const e = vcrEvaluationMeasure(evaluation, constraint.measure)
+      const n = Number(evaluation?.replicates ?? 0)
       if (!e || !(n > 0)) return null
       const p = Math.min(1, Math.max(0, Number(e.value)))
       const ps = (p * n + 0.5) / (n + 1)
       const ok = constraint.op === '<=' ? p <= constraint.bound : p >= constraint.bound
-      return { c: constraint, n, p, ok, w: Math.sqrt(ps * (1 - ps)) ** 2 / Math.max(Math.abs(ps - constraint.bound), VCR_ALLOCATION.ocba.indifference) ** 2 }
+      // a cell is open while its screening interval still holds the bound and one more increment fits below the final floor: a decided cell
+      // (the interval excludes the bound, either side) and a cell as precise as a final run would be gain nothing from more screening
+      // (read here, not through the screening verdict: an error-control constraint is judged at the final stage only)
+      const cp = vcrClopperPearson(Math.round(p * n), n, Number(constraint.confidence ?? 0.975))
+      const decided = constraint.op === '<=' ? cp.upper <= constraint.bound || cp.lower > constraint.bound : cp.lower >= constraint.bound || cp.upper < constraint.bound
+      const open = !decided && n + VCR_SCREENING.minReplicates <= finalFloor
+      return { c: constraint, n, p, ok, open, w: Math.sqrt(ps * (1 - ps)) ** 2 / Math.max(Math.abs(ps - constraint.bound), VCR_ALLOCATION.ocba.indifference) ** 2 }
     })
     if (perCell.some((x) => x == null)) continue
     rows.push({ key: c.key, index: c.index, value: o.value, rows: /** @type {any} */ (perCell) })
@@ -1612,15 +1627,18 @@ function screeningIncrement(manifest, state, candidates, identity) {
   const feasible = rows.filter((r) => r.rows.every((x) => x.ok))
   const best = feasible.length ? (minimize ? Math.min : Math.max)(...feasible.map((r) => r.value)) : null
   const critical = rows.filter((r) => best == null || (minimize ? r.value <= best : r.value >= best))
-  // each critical design on its dominant cell: a feasible one on its hardest constraint, an infeasible one on its most clearly violated
+  // each critical design on its dominant open cell: a feasible one on its hardest constraint, an infeasible one on its most clearly violated; a design with
+  // no open cell is settled as far as screening can settle it and takes nothing
   /** @type {Array<{ key: string, truth: string, n: number, w: number }>} */
   const targets = []
   for (const r of critical) {
     const ok = r.rows.every((x) => x.ok)
-    const pool = ok ? r.rows : r.rows.filter((x) => !x.ok)
+    const pool = (ok ? r.rows : r.rows.filter((x) => !x.ok)).filter((x) => x.open)
+    if (!pool.length) continue
     const pick = pool.reduce((a, b) => (b.w > a.w ? b : a))
     targets.push({ key: r.key, truth: pick.c.truth, n: pick.n, w: pick.w })
   }
+  // the phase ends when nothing is left that could change which designs go to the finals
   if (!targets.length) return null
   const sumW = targets.reduce((s, t) => s + t.w, 0)
   const sumN = targets.reduce((s, t) => s + t.n, 0)
@@ -1629,7 +1647,8 @@ function screeningIncrement(manifest, state, candidates, identity) {
   let chosen = targets[0]; let deficit = -Infinity
   for (const t of targets) { const d = (goal * t.w) / sumW - t.n; if (d > deficit) { deficit = d; chosen = t } }
   if (!(deficit > 0)) return null
-  const size = Math.min(finalFloor - 1, budgetNow, Math.max(VCR_SCREENING.minReplicates, Math.round(deficit / 100) * 100))
+  // never past the final floor in all: screening that precise is a final run
+  const size = Math.min(finalFloor - 1, finalFloor - chosen.n, budgetNow, Math.max(VCR_SCREENING.minReplicates, Math.round(deficit / 100) * 100))
   if (size < VCR_SCREENING.minReplicates) return null
   const entry = state.candidates[chosen.key]
   const round = Number(entry.screeningRounds ?? 0) + 1
