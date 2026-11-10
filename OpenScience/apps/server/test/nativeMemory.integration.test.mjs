@@ -453,7 +453,7 @@ test("the map's reader: the same records, sources and no sensitive file", option
   assert.deepEqual(map.conflicts, []);
 });
 
-test("the person's own words win over their deletion: a line they say again, word for word, stays and leaves the rejection list", options, async (t) => {
+test("the person's own words win over their deletion: a dated restatement stays while the old conversation remains rejected", options, async (t) => {
   const { userId, store, worker, overlay, stub, engineUser, sessions, root, seed } = await fixture(t);
   seed("preferences/window.md", "Release window is Wednesday night.", { type: "preferences" });
   await store.remove(userId, nativeFileId(`${root}/preferences/window.md`), { keepText: false });
@@ -461,12 +461,12 @@ test("the person's own words win over their deletion: a line they say again, wor
   stub.extract = ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/window.md`, memory_type: "preferences", after: "Release window is Wednesday night." }] });
   const session = "dsh-session_9999999999999999999999999999999a";
   stub.sessions.set(`${engineUser}/${session}`, { id: session, user: engineUser, archives: 0, commitCount: 0,
-    messages: [{ role: "user", parts: [{ type: "text", text: "To be clear: Release window is Wednesday night. Please keep that." }] }] });
+    messages: [{ role: "user", created_at: "2099-01-01T00:00:00.000Z", parts: [{ type: "text", text: "To be clear: Release window is Wednesday night. Please keep that." }] }] });
   stub.commitSession(engineUser, session);
   await worker.scanArchives(userId);
   await worker.processCommits({ userId });
   assert.equal(await sessions.read(userId, `${root}/preferences/window.md`), "Release window is Wednesday night.", "said again by the person: it stays");
-  assert.ok(!(await overlay.rejectedFingerprints(userId, "preferences")).has(lineFingerprint("Release window is Wednesday night.")), "and is theirs again");
+  assert.ok((await overlay.rejectedFingerprints(userId, "preferences")).has(lineFingerprint("Release window is Wednesday night.")), "old archives still cannot restore it without a dated restatement");
 });
 
 test("the project tab's card reads the labels of an English conversation as well as a Chinese one", options, async (t) => {

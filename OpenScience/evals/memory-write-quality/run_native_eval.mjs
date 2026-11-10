@@ -336,6 +336,8 @@ async function main() {
         completeSummaryInvalidation: async (_user, tickets) => {
           for (const ticket of tickets) if (summaryInvalidations.get(ticket.directory) === ticket.generation) summaryInvalidations.delete(ticket.directory);
         },
+        // This raw-engine observation count has no retained source-origin overlay.
+        originsOf: async () => new Map(),
         observationFiles: async () => [...kept].filter((uri) => !gone.has(uri)).map((uri) => ({ uri })),
         revisionsOf: async (_user, uri) => (noteRevisions.get(userId) ?? []).filter((revision) => revision.uri === uri).map((revision) => ({ actor: "engine", change: revision.change, undoneAt: null, engineSession: revision.engineSession, archiveUri: null })),
         conversationOf: async (_user, engineSession) => (String(engineSession).startsWith("evmq-") ? String(engineSession) : null),

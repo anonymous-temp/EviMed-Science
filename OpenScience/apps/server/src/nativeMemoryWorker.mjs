@@ -980,7 +980,7 @@ export class NativeMemoryWorker {
     const filename = uri.slice(uri.lastIndexOf('/') + 1).replace(/\.md$/, '');
     const filenameVariants = [...new Set([filename, filename.replace(/_/g, ' ')])];
     if (!priorBody) candidates.push(...filenameVariants.map(text => ({ text, sources: [...archive, ...inherited] })));
-    const matches = await removalRefusals({ userId, overlay: this.overlay,
+    const matches = await removalRefusals({ userId, projectId, overlay: this.overlay,
       namespaceId: memoryContext.kind === 'geo-project' ? memoryContext.namespaceId : null,
       judge: this.rejectionJudge, candidates });
     const refused = new Map([...matches].map(([print, hit]) => [print, print === hit.rejected ? 'rejected_line' : hit.via === 'judged' ? 'rejected_judged' : 'rejected_reworded']));

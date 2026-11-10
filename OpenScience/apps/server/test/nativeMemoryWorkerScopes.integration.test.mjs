@@ -43,7 +43,7 @@ async function fixture(t, { type = 'entities', after = 'A scoped project fact. d
   const archive = async (context, text = 'A user statement unrelated to the extracted line.') => {
     if (context.kind === 'geo-project') await contexts.configure(context); else await sessions.register(owner.id);
     await context.sessions.createSession(owner.id, 'dsh-root');
-    await context.sessions.addMessage(owner.id, 'dsh-root', { role: 'user', content: text });
+    await context.sessions.addMessage(owner.id, 'dsh-root', { role: 'user', content: text, created_at: new Date().toISOString() });
     return (await context.sessions.commit(owner.id, 'dsh-root')).result.archive_uri;
   };
   return { owner, accounts, contexts, geo, a, b, personal, overlay, worker, stub, reports, archive,
@@ -100,7 +100,7 @@ test('project rejection keys do not erase equal facts in another namespace or cl
   assert.equal((await f.overlay.rejectedFingerprints(f.owner.id, 'project_facts')).size, 1);
   await f.archive(f.a, text); await f.worker.scanArchives(f.owner.id); await f.worker.processCommits({ userId: f.owner.id });
   assert.equal(await f.a.sessions.read(f.owner.id, f.file(f.a)), text);
-  assert.equal((await f.overlay.rejectedFingerprints(f.owner.id, `${f.a.namespaceId}:project_facts`)).size, 0);
+  assert.equal((await f.overlay.rejectedFingerprints(f.owner.id, `${f.a.namespaceId}:project_facts`)).size, 1, 'relearning preserves old-archive rejection authority');
   assert.equal((await f.overlay.rejectedFingerprints(f.owner.id, 'project_facts')).size, 1);
 });
 
@@ -122,7 +122,7 @@ test('semantic rejections and the person restating them use only the accepted ar
   await f.archive(f.a, 'A researcher chose this again.');
   await f.worker.scanArchives(user); await f.worker.processCommits({ userId: user });
   assert.equal(await f.a.sessions.read(user, f.file(f.a)), reworded);
-  assert.equal((await f.overlay.rejectedFingerprints(user, `${f.a.namespaceId}:project_facts`)).size, 0);
+  assert.equal((await f.overlay.rejectedFingerprints(user, `${f.a.namespaceId}:project_facts`)).size, 1, 'only the new statement is authorized');
   assert.equal((await f.overlay.rejectedFingerprints(user, 'project_facts')).size, 1);
   for (const request of f.stub.sent('GET', '/api/v1/content/read')) assert.ok(request.query.uri.startsWith(`viking://user/${request.user}/`));
 });

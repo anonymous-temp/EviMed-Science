@@ -1696,6 +1696,7 @@ export class NativeMemoryStore {
     if (document) {
       const body = document.body.replace(/\s+$/, "");
       await this.#write(userId, document, `${body}\n${line}`, { actor: "user", reason: "restored from forgotten" });
+      await this.overlay.unreject(userId, this.#rejectionType(await this.#fileContext(userId, document.uri), memoryType), [entry.value]);
       await this.overlay.markUndone(userId, revision.id);
     } else {
       // The document itself was forgotten since: it comes back with its headings and this one line.

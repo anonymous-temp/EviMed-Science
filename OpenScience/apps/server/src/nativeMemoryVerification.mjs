@@ -156,7 +156,7 @@ export class NativeMemoryVerification {
   async readRemovalSources(userId, origins, context = null, cache = new Map()) {
     const archives = await this.overlay.removalOrigins(userId, [...new Set(origins.map(origin => origin.archiveUri).filter(Boolean))]);
     const sources = await this.readSources(userId, archives, context, cache);
-    for (const origin of origins.filter(origin => !origin.archiveUri && origin.revisionId)) {
+    for (const origin of origins.filter(source => !source.archiveUri && source.revisionId)) {
       const revision = await this.overlay.revision(userId, origin.revisionId);
       if (revision?.actor !== 'user' || !revision.after) continue;
       const root = (context?.sessions ?? this.sessions).memoryRoot(userId);
@@ -202,7 +202,7 @@ export class NativeMemoryVerification {
     for (const text of removalLines(next, file.body)) {
       candidates.push({ text, sources: await this.readRemovalSources(userId, origins.get(lineFingerprint(text)) ?? [], context) });
     }
-    if ((await removalRefusals({ userId, overlay: this.overlay, namespaceId: context?.kind === 'geo-project' ? context.namespaceId : null,
+    if ((await removalRefusals({ userId, projectId: file.projectId ?? null, overlay: this.overlay, namespaceId: context?.kind === 'geo-project' ? context.namespaceId : null,
       judge: this.rejectionJudge, candidates })).size) return false;
     // A revision belongs only to sources of statements it brings, not to an earlier correction in the same file.
     const authorities = new Map([...origins].filter(([print]) => !prior.has(print)).flatMap(([, sources]) => sources)

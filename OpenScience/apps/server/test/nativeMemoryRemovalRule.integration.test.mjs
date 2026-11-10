@@ -120,3 +120,14 @@ test('removal authority has no first-page limit and keeps hard tokens beyond the
   await f.worker.ingestConsolidation(f.userId, { taskId: 'merge-many', adds: [uri] });
   assert.equal(await f.sessions.read(f.userId, uri), null);
 });
+
+test('a fresh explicit remember-tool message remains a human restatement without a conversation binding', options, async t => {
+  const f = await fixture(t);
+  const fact = 'Project M-41633.';
+  await f.overlay.reject(f.userId, 'preferences', `${f.root}/preferences/old.md`, [fact]);
+  const uri = `${f.root}/projects/restated.md`;
+  f.stub.extract = () => ({ adds: [{ uri, memory_type: 'project_context', after: fact }] });
+  await f.commitConversation('remember', [{ role: 'user', text: fact, at: fresh }], { engineSession: 'mcp-store-restated', origin: 'tool' });
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), fact);
+});

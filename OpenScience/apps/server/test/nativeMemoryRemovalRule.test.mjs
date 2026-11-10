@@ -36,3 +36,11 @@ test('headings are changed lines, and a judge cannot authorize a no-token rewrit
   assert.deepEqual(requests[0].said, []);
   assert.equal((await removalRefusals({ userId: 'u', overlay: guard, judge, candidates: [{ text, sources: [source(text)] }] })).size, 0);
 });
+
+test('a message timestamp grounds its provenance date when relearning, without lending any other token', async () => {
+  const guard = { removals: async () => [{ ...removal, text: 'Project M-41633 (user told us on 2026-11-10).' }] };
+  const text = 'Project M-41633 (2026-11-10, user stated).';
+  assert.equal((await removalRefusals({ userId: 'u', overlay: guard, candidates: [{ text, sources: [source('My project is M-41633.')] }] })).size, 0);
+  assert.equal((await removalRefusals({ userId: 'u', overlay: guard, candidates: [{ text, sources: [source('My project is M-41633.', '2026-11-10T09:00:00.000Z')] }] })).size, 1);
+  assert.equal((await removalRefusals({ userId: 'u', overlay: guard, candidates: [{ text, sources: [source('My project is M-41634.')] }] })).size, 1);
+});
