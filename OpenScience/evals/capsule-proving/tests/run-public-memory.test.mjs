@@ -101,3 +101,18 @@ test('case selection reaches the public reader before adapting unused people', {
   assert.equal(cases[0].caseId,'Liam_O_Connor');
   assert.equal(cases[0].questions.length,11);
 });
+
+test('LoCoMo preserves named speakers and original shared captions like the pinned QA reader', { skip }, async () => {
+  const { readPublicMemory } = await import('../run/publicSets.mjs');
+  for (const set of ['locomo','locomo-original']) {
+    const source=await readPublicMemory({set,split:'dev',dataDir:DATA,only:['conv-26']});
+    const cases=await SET_LOADERS[set]({split:'dev',dataDir:DATA,only:['conv-26']});
+    const original=source[0].inputs[0].histories.flatMap(h=>h.messages), adapted=cases[0].sessions.flatMap(s=>s.messages);
+    assert.equal(adapted.length,original.length);
+    assert.ok(original.some(m=>m.imageCaption),'real source includes shared image captions');
+    original.forEach((m,i)=>{
+      assert.equal(adapted[i].role,m.role);
+      assert.equal(adapted[i].text,`${m.speaker} said, "${m.text}"\n${m.imageCaption?` and shared ${m.imageCaption}.`:''}`);
+    });
+  }
+});

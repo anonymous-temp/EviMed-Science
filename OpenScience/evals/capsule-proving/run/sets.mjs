@@ -499,7 +499,10 @@ export async function loadPublicMemory(options = {}) {
       const at = original && original < previous ? previous : original;
       if (at !== original) timingAdjustments.push({ session: h.sourceSessionId, original, scheduled: at });
       if (at) previous = at;
-      return { at, messages: h.messages.map(m => ({ role: m.role, text: m.text,
+      return { at, messages: h.messages.map(m => ({ role: m.role,
+        // Pinned snap-research/locomo task_eval/gpt_utils.py get_input_context: keep the named speaker and shared caption.
+        // These are original visible conversation content, not QA annotations or inferred image descriptions.
+        text: set.startsWith('locomo') ? `${m.speaker} said, \"${m.text}\"\n${m.imageCaption ? ` and shared ${m.imageCaption}.` : ''}` : m.text,
         ...(toIso(m.at) ? { at: toIso(m.at) } : {}) })) };
     });
     return assertCase(makeCase({ caseId: entry.caseId, set, split, userKey: entry.caseId,
