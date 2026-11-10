@@ -34,12 +34,12 @@ export function normalizeUsage(usage = {}) {
  */
 export function createDeepSeekClient(options) {
   const { keyFile, baseURL = "https://api.deepseek.com", model = "deepseek-flash",
-    thinking = "disabled", fetch: fetchImpl = globalThis.fetch, timeoutMs = 120000,
+    thinking = "disabled", reasoningEffort = "high", fetch: fetchImpl = globalThis.fetch, timeoutMs = 120000,
     maxRetries = 5, backoffMs = 500, sleep = delay } = options;
   let key = "";
   const redact = (value) => firstLine(value, [key]);
   return {
-    model, thinking, redact,
+    model, thinking, reasoningEffort: thinking === "enabled" ? reasoningEffort : null, redact,
     async complete({ messages, tools = [], toolChoice, tool_choice }) {
       if (!["enabled", "disabled"].includes(thinking)) throw failure("invalid_thinking", "Unsupported thinking mode");
       if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw failure("invalid_timeout", "Timeout must be positive");
@@ -49,7 +49,9 @@ export function createDeepSeekClient(options) {
         if (!key) throw failure("key_file", "API key file is empty");
       }
       const body = { model, messages, stream: false, ...(options.protocol === "openai"
-        ? { enable_thinking: thinking === "enabled", max_tokens: 8192 } : { thinking: { type: thinking } }) };
+        ? { enable_thinking: thinking === "enabled", max_tokens: 8192 }
+        // What the product's model gateway sends upstream (`reasoningFields`, modelReasoningPolicy.mjs): the thinking switch and, when on, the effort.
+        : { thinking: { type: thinking }, ...(thinking === "enabled" ? { reasoning_effort: reasoningEffort } : {}) }) };
       if (tools.length) body.tools = tools;
       const choice = toolChoice ?? tool_choice;
       if (choice !== undefined) body.tool_choice = choice;

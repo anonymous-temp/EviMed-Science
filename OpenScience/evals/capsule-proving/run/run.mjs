@@ -91,7 +91,7 @@ export function parseArguments(argv) {
     answerModel: "", answerBase: "", answerKeyFile: "", answersOnly: false, retrievalOnly: false, variantsOnly: false,
     set: "", split: "", data: "", out: "", engineUrl: "", engineKeyFile: "", databaseUrlFile: "", deepseekKeyFile: "",
     arm: "product", only: "", maxSessions: 0, concurrency: 3, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
-    config: {}, answerVariants: [], maintain: "none", maintainAfter: [], rejectionJudge: true, label: "",
+    config: {}, answerVariants: [], maintain: "none", maintainAfter: [], rejectionJudge: true, label: "", thinking: "enabled", reasoningEffort: "high",
     limitQuestions: 0, pluginTgz: "", ingestOnly: false, templatesDir: "", maxRounds: 8, extractionTimeoutMs: 300_000, gatewayTimeoutMs: 4_000,
   };
   /** @type {Record<string, [keyof typeof options, "string" | "int"]>} */
@@ -103,7 +103,7 @@ export function parseArguments(argv) {
     "--max-sessions": ["maxSessions", "int"], "--concurrency": ["concurrency", "int"], "--commit-every": ["commitEvery", "string"],
     "--plant-corruptions-after": ["plantCorruptionsAfter", "int"], "--limit-questions": ["limitQuestions", "int"], "--plugin-tgz": ["pluginTgz", "string"],
     "--templates-dir": ["templatesDir", "string"], "--max-rounds": ["maxRounds", "int"], "--extraction-timeout-ms": ["extractionTimeoutMs", "int"],
-    "--gateway-timeout-ms": ["gatewayTimeoutMs", "int"], "--maintain": ["maintain", "string"], "--label": ["label", "string"],
+    "--gateway-timeout-ms": ["gatewayTimeoutMs", "int"], "--maintain": ["maintain", "string"], "--label": ["label", "string"], "--thinking": ["thinking", "string"], "--reasoning-effort": ["reasoningEffort", "string"],
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
@@ -278,7 +278,9 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
       const qwen = /^qwen/.test(selected.answerModel ?? "");
       return (qwen ? createOpenAICompatibleClient : createDeepSeekClient)({
         keyFile: selected.answerKeyFile ?? (qwen ? "/srv/evimed/secrets/dashscope.api-key" : path.resolve(options.deepseekKeyFile)),
-        model: selected.answerModel ?? "deepseek-flash", thinking: selected.thinking ?? "disabled",
+        model: selected.answerModel ?? "deepseek-flash",
+        // Production's default for a conversation is thinking on at effort "high" (OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT); runs before 2026-11-10 10:30Z answered with thinking off.
+        thinking: selected.thinking ?? options.thinking, reasoningEffort: selected.reasoningEffort ?? options.reasoningEffort,
         baseURL: selected.answerBase ?? (qwen ? "https://dashscope.aliyuncs.com/compatible-mode/v1" : "https://api.deepseek.com"),
         timeoutMs: 300_000,
       });
