@@ -332,13 +332,17 @@ export class MethodConsolidation {
    *          onNoop?: ((reason: string, count?: number) => void) | null, onRelation?: ((type: string, count?: number) => void) | null,
    *          replay?: { run: (request: { job: any }) => Promise<any> } | null,
    *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>,
-   *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null}} dependencies
+   *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null,
+   *          pyramid?: boolean}} dependencies
+   *   `pyramid` (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`, off by default): the levels the pass stores count an abstract method's members
+   *   (`metadata.derived_from`, `methodRecordFrom`'s `libraryNames`), so an abstract method sits one above them instead of at 0.
    */
   constructor({
     dispatch, readResult, learning, jobs = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     describe = null, judgeService = null, screenBaseline = null,
     unusedAfterLoads = undefined, onRetirement = null, similarity = null, onNoop = null, onRelation = null, replay = null, contextProvenance = null,
+    pyramid = false,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
@@ -377,6 +381,7 @@ export class MethodConsolidation {
     // Optional: the replay of a changed method against the runs the person accepted. Without it the job ends saying it was not run, and the change stands
     // on its own runs' counters as it did before.
     this.replay = replay;
+    this.pyramid = pyramid === true;
   }
 
   /**
@@ -595,7 +600,8 @@ export class MethodConsolidation {
     // `validateMethodGraph` derives it, written back where it differs. It was computed and returned as `graphIssues` and
     // never stored, so every method read level 0 (the page reads `learning.level`, the mount ignores it).
     const final = await this.#library(job);
-    const graph = validateMethodGraph(final.map((document) => methodRecordFrom(document)));
+    const libraryNames = this.pyramid ? new Set(final.map((document) => String(document.payload?.frontmatter?.name ?? "")).filter(Boolean)) : null;
+    const graph = validateMethodGraph(final.map((document) => methodRecordFrom(document, { libraryNames })));
     const levels = await this.#writeLevels(job, final, graph.levels);
 
     return {

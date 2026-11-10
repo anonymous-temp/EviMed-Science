@@ -3938,6 +3938,18 @@ export class RuntimeManager {
     return policy ?? {kind:'owned',ownerId:project.userId,controlProjectId:project.id};
   }
 
+  /**
+   * The learned-method library's experiment switches as the mount reads them (`materializeCapsuleMethods`), each off by default so the
+   * same commit runs with and without it (plan 2026-11-04 §5.4).
+   * @returns {{ pyramid: boolean, minSimilarity: number }}
+   */
+  methodSelectionSwitches() {
+    return {
+      pyramid: this.config?.methodPyramidEnabled === true,
+      minSimilarity: Number(this.config?.methodMountMinSimilarity ?? 0) || 0,
+    };
+  }
+
   async prepareSharedContext(project, policy) {
     const paused = await this.recallPausedFor(project);
     return prepareContextGeneration(this.config, project, policy, (directory, trustRoot) => materializeCapsuleMethods({
@@ -3946,6 +3958,7 @@ export class RuntimeManager {
       contextPolicy:policy,contextItems:this.contextItems,project:{...project,rootDir:trustRoot},directory,keepDirectory:true,
       // Shared mounts deliberately have no global keep and no actor/session-dependent ranking.
       maxPromptBytes:this.config.mountedMethodPromptBytes,
+      methodSelection:this.methodSelectionSwitches(),
     }));
   }
 
@@ -4152,6 +4165,8 @@ export class RuntimeManager {
       // What the methods may put in front of the model, in bytes of what is
       // injected (`OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES`).
       maxPromptBytes: this.config.mountedMethodPromptBytes,
+      // The learned-method library's experiment switches, all off by default (`materializeCapsuleMethods`).
+      methodSelection: this.methodSelectionSwitches(),
     });
     // What the learned half put in the room, for the loop's own counters.
     try { this.learningMetrics?.observeMount?.({ methods: mounted.learned?.length ?? 0, bytes: mounted.learnedBytes ?? 0, reasons: (mounted.learned ?? []).map((method) => method.reason), mode: mounted.rank?.mode ?? null }); } catch { /* a counter never fails a launch */ }

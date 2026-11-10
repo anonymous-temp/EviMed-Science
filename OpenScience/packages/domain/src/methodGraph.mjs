@@ -115,11 +115,13 @@ export const METHOD_COUNT_KINDS = Object.freeze(['eligible', 'loaded', 'invoked'
  *  - `dependency`: reused by a method that was selected.
  *  - `explore`: the exploration slot, a method nothing about the question picked.
  *  - `recent`: no question to rank by (a runtime start, a recall through the API), so the most recently approved.
- * Only the first two say the method was meant for the work; the other two are exposure, and a card that was exposure is not
- * counted as passed over (`METHOD_RELEVANT_MOUNT_REASONS`).
+ *  - `abstraction`: the abstract method a selected one was derived into (`metadata.derived_from` of a `role: abstract` method), pulled
+ *    upward by the pyramid mount (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`); never written while that switch is off.
+ * `similarity`, `dependency` and `abstraction` say the method was meant for the work; the other two are exposure, and a card that was
+ * exposure is not counted as passed over (`METHOD_RELEVANT_MOUNT_REASONS`).
  */
-export const METHOD_MOUNT_REASONS = Object.freeze(['similarity', 'dependency', 'explore', 'recent'])
-export const METHOD_RELEVANT_MOUNT_REASONS = Object.freeze(['similarity', 'dependency'])
+export const METHOD_MOUNT_REASONS = Object.freeze(['similarity', 'dependency', 'explore', 'recent', 'abstraction'])
+export const METHOD_RELEVANT_MOUNT_REASONS = Object.freeze(['similarity', 'dependency', 'abstraction'])
 
 /** What the researcher's reaction to a run that opened a method was. */
 export const METHOD_APPLIED_OUTCOMES = Object.freeze(['corrected', 'clean'])
@@ -185,6 +187,8 @@ export const METHOD_APPLIED_OUTCOMES = Object.freeze(['corrected', 'clean'])
  * @property {string} digest
  * @property {string} status
  * @property {readonly {name: string, digest: string}[]} dependencies
+ * @property {readonly string[]} [derivedFrom]  for a `role: abstract` method, the library's methods it abstracts (`abstractMembersOf`);
+ *   present only where the caller reads the pyramid (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`)
  * @property {MethodLearning} learning
  * @property {MethodProvenance} provenance
  * @property {any} [scientific]  what became of the results produced under each revision (`methodFeedback.mjs`)
@@ -1101,8 +1105,41 @@ export function bodyPreservation(source, afterBody) {
  */
 
 /**
+ * The methods of the library an abstract method abstracts: the names its `metadata.derived_from` lists, read only when its
+ * `metadata.role` is `abstract` (the builder writes an `abstract_pattern` that way and does not list the members in
+ * `depends_on`, `capabilities/method-relations/SKILL.md`), and only those that are names in `names`. On any other method
+ * `derived_from` names the runs and feedback events it was learnt from, never methods, so it is not read at all.
+ *
+ * `derived_from` is a comma-separated list of identifiers; a member may be written as its name, as `method:<name>`, as its id
+ * `method:learned:<name>`, and with an `@sha256:…` pin. A closed reading of identifiers the platform mints, never of prose.
+ * @param {{metadata?: Record<string, unknown>} | null | undefined} frontmatter
+ * @param {Iterable<string>} names the method names the library holds
+ * @returns {string[]}
+ */
+export function abstractMembersOf(frontmatter, names) {
+  const metadata = frontmatter?.metadata
+  if (!metadata || metadata.role !== 'abstract' || typeof metadata.derived_from !== 'string') return []
+  const known = names instanceof Set ? names : new Set(names ?? [])
+  /** @type {string[]} */
+  const members = []
+  for (const token of metadata.derived_from.split(',')) {
+    let name = token.trim()
+    const at = name.indexOf('@')
+    if (at >= 0) name = name.slice(0, at)
+    for (const prefix of ['method:learned:', 'method:']) {
+      if (name.startsWith(prefix)) { name = name.slice(prefix.length); break }
+    }
+    if (name && name !== /** @type {any} */ (frontmatter)?.name && known.has(name) && !members.includes(name)) members.push(name)
+  }
+  return members
+}
+
+/**
  * Level, as SkillPyramid derives it: a method with no dependencies sits at 0,
  * and anything else sits one above the highest thing it reuses.
+ *
+ * An abstract method's members (`derivedFrom`, present only where the caller reads the pyramid) count as what it stands on:
+ * its level is one above the highest of them, the paper's formula. A record without `derivedFrom` is read as before.
  *
  * Not read from `metadata.role`. The role is a label a model writes; the level
  * is a fact about the graph, and when the two disagree the graph is right.
@@ -1130,9 +1167,10 @@ export function computeMethodLevels(methods) {
     state.set(name, 1)
     const method = byName.get(name)
     let level = 0
-    for (const dependency of method?.dependencies ?? []) {
-      if (!byName.has(dependency.name)) continue
-      level = Math.max(level, visit(dependency.name, [...path, name]) + 1)
+    const below = [...(method?.dependencies ?? []).map((dependency) => dependency.name), ...(method?.derivedFrom ?? [])]
+    for (const lower of below) {
+      if (!byName.has(lower)) continue
+      level = Math.max(level, visit(lower, [...path, name]) + 1)
     }
     state.set(name, 2)
     levels.set(name, level)

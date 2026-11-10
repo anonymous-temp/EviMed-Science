@@ -49,9 +49,9 @@ function embedder(options = {}) {
 
 /**
  * A ledger and a consolidation over it. `decide(input)` and `build(input)` answer the two model steps by what they were asked.
- * @param {{decide?: (input: any) => any, build?: (input: any) => any, similarity?: any, audit?: any, unusedAfterLoads?: number, now?: () => Date, jobs?: any, replay?: any}} [options]
+ * @param {{decide?: (input: any) => any, build?: (input: any) => any, similarity?: any, audit?: any, unusedAfterLoads?: number, now?: () => Date, jobs?: any, replay?: any, pyramid?: boolean}} [options]
  */
-function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisions: [] }), similarity = undefined, audit = null, unusedAfterLoads = undefined, now = () => NOW, jobs = null, replay = null } = {}) {
+function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisions: [] }), similarity = undefined, audit = null, unusedAfterLoads = undefined, now = () => NOW, jobs = null, replay = null, pyramid = undefined } = {}) {
   const documents = productDocumentsDouble();
   const learning = new LearningService({ documents, now });
   /** @type {any[]} */
@@ -77,6 +77,7 @@ function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisi
     onRelation: (type, count) => relations.push([type, count ?? 1]),
     onRetirement: (code) => stops.push(code),
     unusedAfterLoads, now, wait: async () => {},
+    ...(pyramid === undefined ? {} : { pyramid }),
   });
   /** @param {string} name @param {string} topic @param {any} [input] */
   const make = (name, topic, input = {}) => learning.createCandidate("u1", {
@@ -529,6 +530,22 @@ test("levels come from the dependency graph and are written back where they diff
   assert.equal((await h.learning.getMethod("u1", base.id)).payload.learning.level, 0);
   const again = await h.sleep("job_2");
   assert.equal(again.levels.written, 0, "an unchanged level is not rewritten");
+});
+
+test("with the pyramid switch an abstract method is stored one level above the members its derived_from names (defect 12)", async () => {
+  for (const pyramid of [false, true]) {
+    const h = harness({ similarity: null, pyramid });
+    await h.make("span-step", "axis-a");
+    await h.make("tidy-step", "axis-b");
+    const pattern = await h.learning.createCandidate("u1", {
+      projectId: "p1",
+      frontmatter: { ...frontmatter("evidence-pattern", "axis-c"), metadata: { ...frontmatter("evidence-pattern", "axis-c").metadata, role: "abstract", derived_from: "span-step, tidy-step" } },
+      body: sections(), provenance: { origin: "inferred", runId: "run_1" },
+    });
+    const result = await h.sleep();
+    assert.equal((await h.learning.getMethod("u1", pattern.id)).payload.learning.level, pyramid ? 1 : 0, `pyramid ${pyramid}`);
+    assert.deepEqual(result.levels, pyramid ? { written: 1, max: 1 } : { written: 0, max: 0 });
+  }
 });
 
 test("the incremental pass records every relation and builds shared_part and subset, but never a merge, and never under an unproven merge", async () => {

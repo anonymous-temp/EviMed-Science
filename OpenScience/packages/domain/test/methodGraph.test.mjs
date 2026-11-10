@@ -12,6 +12,7 @@ import { METHOD_COUNT_KINDS, METHOD_SCIENTIFIC_HARM_TEST, METHOD_UNUSED_RETIRE_L
 import {
   METHOD_GRAPH_ISSUE_CODES,
   METHOD_RELATION_TYPES,
+  abstractMembersOf,
   computeMethodLevels,
   emptyLearning,
   bodyPreservation,
@@ -280,6 +281,34 @@ test("levels come from the dependency graph, not from the role label", () => {
   // Two parents reusing one atom is the point of extracting it, not an error.
   const other = method({ id: "m4", name: "other", digest: DIGEST_C, dependencies: [{ name: "atom", digest: DIGEST_A }] });
   assert.equal(validateMethodGraph([atom, mid, other]).ok, true);
+});
+
+test("an abstract method's members count toward its level only where the record carries them (defect 12)", () => {
+  const atom = method({ id: "m1", name: "atom", digest: DIGEST_A });
+  const mid = method({ id: "m2", name: "mid", digest: DIGEST_B, dependencies: [{ name: "atom", digest: DIGEST_A }] });
+  const flat = method({ id: "m3", name: "pattern", digest: DIGEST_C });
+  // Without `derivedFrom` (the pyramid switch off) an abstract method that lists its members only in `derived_from` reads level 0.
+  assert.equal(computeMethodLevels([atom, mid, flat]).levels.get("pattern"), 0);
+  // With it, one above the highest member: the paper's formula.
+  const pattern = { ...flat, derivedFrom: ["mid", "atom"] };
+  const { levels, cycles } = computeMethodLevels([atom, mid, pattern]);
+  assert.deepEqual([levels.get("atom"), levels.get("mid"), levels.get("pattern")], [0, 1, 2]);
+  assert.deepEqual(cycles, []);
+  // A member the library does not hold is not a level.
+  assert.equal(computeMethodLevels([atom, { ...flat, derivedFrom: ["ghost"] }]).levels.get("pattern"), 0);
+  assert.equal(validateMethodGraph([atom, mid, pattern]).ok, true, "derived members are not dependencies: no pin to check");
+});
+
+test("abstractMembersOf reads derived_from of an abstract method only, as names the library holds", () => {
+  const names = new Set(["span-check", "table-tidy", "pattern"]);
+  const front = (/** @type {Record<string, string>} */ metadata) => ({ name: "pattern", metadata });
+  assert.deepEqual(abstractMembersOf(front({ role: "abstract", derived_from: "span-check, method:learned:table-tidy@sha256:abc, run:run_1, ghost" }), names),
+    ["span-check", "table-tidy"], "a name, an id with a pin; a run id and an unknown name are not members");
+  assert.deepEqual(abstractMembersOf(front({ role: "abstract", derived_from: "method:span-check, span-check, pattern" }), names), ["span-check"],
+    "a member once, and never the method itself");
+  assert.deepEqual(abstractMembersOf(front({ role: "functional", derived_from: "span-check" }), names), [], "only an abstract method's derived_from names methods");
+  assert.deepEqual(abstractMembersOf(front({ role: "abstract" }), names), []);
+  assert.deepEqual(abstractMembersOf(undefined, names), []);
 });
 
 test("the graph refuses cycles, dangling pins, moved digests and duplicate names", () => {

@@ -501,9 +501,13 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
  * (current, written like the rest) and are not in `_selection.json`, so a conversation that began earlier can still read the file its
  * card names and one that begins now is shown only the selection.
  *
+ * `methodSelection` carries the learned-method library's experiment switches, each off by default (plan 2026-11-04 §5.4): `pyramid`
+ * (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`) and `minSimilarity` (`OPEN_SCIENCE_METHOD_MOUNT_MIN_SIMILARITY`), read by `selectLearnedMethods`.
+ *
  * @param {{ capsules: any, project: any, directory: string, learning?: any,
  *   learnedFamily?: "geo" | "research" | null, scopeId?: string | null, query?: string | null, similarity?: { nearest: Function, pairs: Function } | null,
- *   keep?: Iterable<string> | null, keepDirectory?: boolean, contextPolicy?:any, contextItems?:any, maxPromptBytes?: number, writeFile?: typeof writeFileAtomicNoFollow }} options
+ *   keep?: Iterable<string> | null, keepDirectory?: boolean, contextPolicy?:any, contextItems?:any, maxPromptBytes?: number, writeFile?: typeof writeFileAtomicNoFollow,
+ *   methodSelection?: { pyramid?: boolean, minSimilarity?: number } | null }} options
  * `capsule` is what the capsule half mounted, as the conversation panel shows
  * it (`memorySessions.mjs`): recorded here so a read of the panel does not
  * select the whole capsule again.
@@ -536,7 +540,9 @@ export async function materializeCapsuleMethods({
   contextItems = null,
   maxPromptBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES,
   writeFile = writeFileAtomicNoFollow,
+  methodSelection = null,
 }) {
+  const switches = methodSelection ?? {};
   await assertNoSymlinkPath(project.rootDir, directory, { allowMissingTail: true });
   const userId = String(project.userId);
   const projectId = String(project.id);
@@ -570,6 +576,8 @@ export async function materializeCapsuleMethods({
       query,
       similarity,
       keep,
+      ...(switches.pyramid === true ? { pyramid: true } : {}),
+      ...(Number(switches.minSimilarity) > 0 ? { minSimilarity: Number(switches.minSimilarity) } : {}),
     })
     : [];
   const learnedBytes = learnedMethods.reduce((total, method) => total + method.bytes, 0);

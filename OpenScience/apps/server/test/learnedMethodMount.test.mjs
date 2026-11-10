@@ -344,3 +344,86 @@ test("a tight budget drops the exposure first and the nearest last, and counts w
   assert.deepEqual(tight.map((method) => method.name), ["grade-first"]);
   assert.deepEqual(left, ["method:learned:far"]);
 });
+
+/* ------------------------------------------------- the pyramid (plan 2026-11-04 §5.4 defect 12, defect 9) */
+
+import { planMethodSelection, selectMethodsForTask } from "../src/learnedMethodMount.mjs";
+
+/** An abstract method over named members: `derived_from` names them, `depends_on` does not (the builder's convention). */
+const abstractOver = (/** @type {string} */ name, /** @type {string[]} */ members, /** @type {string} */ words, /** @type {any} */ extra = {}) => {
+  const document = topical(name, name, words, extra);
+  document.payload.frontmatter.metadata = { ...document.payload.frontmatter.metadata, role: "abstract", derived_from: members.join(", ") };
+  return document;
+};
+
+// The abstract method and the kayak notes have been in front of a model before, so the exposure slot goes to table-tidy.
+const shown = { payload: { learning: { counts: { carried: 5 } } } };
+const pyramidLibrary = () => [
+  topical("span", "span-check", "Check GRADE certainty of evidence spans before effect sizes in the evidence summary table"),
+  topical("tidy", "table-tidy", "Round figures in tables to the precision the source gives"),
+  abstractOver("frame", ["span-check", "table-tidy"], "Zebra quartz framing for any multi step deliverable", shown),
+  topical("kayak", "kayak-notes", "Kayak river rafting notes for the weekend", shown),
+];
+const PYRAMID_QUERY = "GRADE certainty of evidence spans and effect sizes for the evidence summary table";
+
+test("flat, an abstract method its member was selected for is out of reach; the pyramid pulls it upward and lists it first", async () => {
+  const flat = await ask(pyramidLibrary(), { scopeId: CONVERSATION_SCOPE, query: PYRAMID_QUERY });
+  assert.deepEqual(flat.map((method) => [method.name, method.reason]), [["span-check", "similarity"], ["table-tidy", "explore"]],
+    "the switch off is the mount as it was: the abstract method is no hit and not the least exposed");
+  assert.equal(flat.levels.get("frame"), 0, "and reads level 0");
+
+  const pyramid = await ask(pyramidLibrary(), { scopeId: CONVERSATION_SCOPE, query: PYRAMID_QUERY, pyramid: true });
+  assert.deepEqual(pyramid.map((method) => [method.name, method.reason]), [["frame", "abstraction"], ["span-check", "similarity"], ["table-tidy", "explore"]],
+    "the parent of the selected method comes in as `abstraction`, and the cards run from the abstract down");
+  assert.equal(pyramid.levels.get("frame"), 1, "one above its members, which are atomic");
+  assert.equal(pyramid.mode, "lexical");
+});
+
+test("the upward pass adds at most abstractMax parents, the one covering most of the selection first", async () => {
+  const documents = [
+    topical("one", "alpha-step", "quokka marmalade zeppelin nebula alpha"),
+    topical("two", "beta-step", "quokka marmalade zeppelin nebula beta"),
+    abstractOver("wide", ["alpha-step", "beta-step"], "unrelated wide pattern words"),
+    abstractOver("narrow", ["alpha-step"], "unrelated narrow pattern words"),
+  ];
+  const selected = await ask(documents, { scopeId: CONVERSATION_SCOPE, query: "quokka marmalade zeppelin nebula", pyramid: true });
+  const parents = selected.filter((method) => method.reason === "abstraction").map((method) => method.name);
+  assert.deepEqual(parents, ["wide"], "one parent (METHOD_MOUNT.abstractMax), and the one both selected methods belong to");
+  // A parent of another scope is not offered: the parent must be one this run may carry.
+  documents[2].payload.provenance = { origin: "inferred", scope: "geo-content" };
+  const scoped = await ask(documents, { scopeId: CONVERSATION_SCOPE, query: "quokka marmalade zeppelin nebula", pyramid: true });
+  assert.deepEqual(scoped.filter((method) => method.reason === "abstraction").map((method) => method.name), ["narrow"]);
+});
+
+test("a cosine floor keeps a far method out of the similarity selection; 0 passes no floor at all (defect 9)", async () => {
+  const AXES_ = ["a", "b"];
+  const embed = async (/** @type {string[]} */ texts) => texts.map((text) => AXES_.map((letter) => (text.includes(`axis${letter}`) ? 1 : 0.05)));
+  const documents = [topical("near", "near-method", "Words axisa"), topical("far", "far-method", "Words axisb")];
+  const similarity = createMethodSimilarity({ embed });
+  const open = await ask(documents, { scopeId: CONVERSATION_SCOPE, query: "question axisa", similarity });
+  assert.deepEqual(open.map((method) => [method.name, method.reason]), [["near-method", "similarity"], ["far-method", "similarity"]]);
+  const floored = await ask(documents, { scopeId: CONVERSATION_SCOPE, query: "question axisa", similarity, minSimilarity: 0.5 });
+  assert.deepEqual(floored.map((method) => [method.name, method.reason]), [["near-method", "similarity"], ["far-method", "explore"]]);
+  /** @type {any[]} */
+  const asked = [];
+  const spy = { nearest: async (/** @type {string} */ _query, /** @type {any[]} */ _docs, /** @type {any} */ options) => { asked.push(options); return Object.assign([], { mode: "embedding" }); } };
+  await ask(documents, { scopeId: CONVERSATION_SCOPE, query: "question", similarity: spy });
+  await ask(documents, { scopeId: CONVERSATION_SCOPE, query: "question", similarity: spy, minSimilarity: 0 });
+  await ask(documents, { scopeId: CONVERSATION_SCOPE, query: "question", similarity: spy, minSimilarity: 0.3 });
+  assert.deepEqual(asked, [{ limit: 6 }, { limit: 6 }, { limit: 6, minScore: 0.3 }], "the flat call is the one it always was");
+});
+
+test("selectMethodsForTask runs the product's selection on a bare library: flat and pyramid, with reasons, levels and card lines", async () => {
+  const library = pyramidLibrary();
+  library.push({ id: "method:learned:gone", payload: { ...payloadFor("gone-method"), status: "retired" } });
+  const flat = await selectMethodsForTask({ library, taskText: PYRAMID_QUERY });
+  assert.deepEqual(flat.cards.map((card) => [card.name, card.reason, card.level]), [["span-check", "similarity", 0], ["table-tidy", "explore", 0]]);
+  assert.equal(flat.mode, "lexical");
+  assert.match(flat.cards[0].lines[1], /^ {2}全文：\/runtime\/capsule-methods\/_lm[0-9a-f]{32}\/SKILL\.md$/);
+  const pyramid = await selectMethodsForTask({ library, taskText: PYRAMID_QUERY, options: { pyramid: true } });
+  assert.deepEqual(pyramid.cards.map((card) => [card.name, card.reason, card.level]), [["frame", "abstraction", 1], ["span-check", "similarity", 0], ["table-tidy", "explore", 0]]);
+  // The same selection the mount makes, with no scope: the planner alone is pure apart from the similarity call.
+  const entries = new Map([["a", { id: "a", name: "a", dependencies: [], derivedFrom: [], role: null, approvedAt: 0, carried: 0, source: {} }]]);
+  const plan = await planMethodSelection(/** @type {any} */ (entries), /** @type {any} */ ([...entries.values()]), {});
+  assert.deepEqual(plan.ranked.map(({ entry, reason }) => [entry.id, reason]), [["a", "recent"]]);
+});

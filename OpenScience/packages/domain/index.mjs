@@ -850,6 +850,7 @@ export {
   METHOD_RELATION_TYPES,
   METHOD_RELEVANT_MOUNT_REASONS,
   METHOD_SUCCESS_OUTCOMES,
+  abstractMembersOf,
   computeMethodLevels,
   emptyLearning,
   foldApplied,

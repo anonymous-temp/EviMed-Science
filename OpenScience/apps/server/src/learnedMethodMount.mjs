@@ -32,8 +32,9 @@ import { CONTEXT_ITEM_FIELDS, contextPolicyIdentity } from "./geoContextItems.mj
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
-import { METHOD_FILE_PREFIXES, METHOD_MOUNT, computeMethodLevels, learnedMethodCardEntry, mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
+import { METHOD_FILE_PREFIXES, METHOD_MOUNT, abstractMembersOf, computeMethodLevels, learnedMethodCardEntry, mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
 import { EVIDENCE_PROJECT_ID, FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "./internalProjects.mjs";
+import { createMethodSimilarity } from "./methodSimilarity.mjs";
 
 /** @param {string} text @returns {string} */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -235,7 +236,7 @@ export function learnedMethodCardBytes(payload, directoryName, cardDirectory) {
  * @property {Record<string, string>} files
  * @property {number} bytes
  * @property {number} promptBytes
- * @property {"similarity" | "dependency" | "explore" | "recent"} reason why its card is in front of the run (`METHOD_MOUNT_REASONS`)
+ * @property {"similarity" | "dependency" | "explore" | "recent" | "abstraction"} reason why its card is in front of the run (`METHOD_MOUNT_REASONS`)
  */
 
 /**
@@ -287,13 +288,20 @@ export function learnedMethodCardBytes(payload, directoryName, cardDirectory) {
  *
  * The array carries non-enumerable facts for the caller, as `methodSimilarity`'s do: `mode`, `"embedding"`, `"lexical"` or
  * `"recent"`, and `topScore`, the closeness of the nearest method (null when nothing was ranked), so the number of methods
- * pulled in by similarity can be read against a real library; and `kept`, above.
+ * pulled in by similarity can be read against a real library; `kept`, above; and `levels`, each method's level as the mount read it.
+ *
+ * Two experiment switches, both off by default (plan 2026-11-04 §5.4), so one commit runs with and without them:
+ *  - `pyramid` (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`, defect 12): an abstract method's members (`metadata.derived_from`) count toward
+ *    its level, and after the similarity selection and the downward closure the mount adds, for the selected methods, the most
+ *    relevant abstract parent each, at most `METHOD_MOUNT.abstractMax`, reason `abstraction` (`planMethodSelection`); the cards are
+ *    listed abstract → functional → atomic.
+ *  - `minSimilarity` (`OPEN_SCIENCE_METHOD_MOUNT_MIN_SIMILARITY`, defect 9): a cosine floor for the similarity selection; 0 is none.
  *
  * @param {any} learning `LearningService`
  * @param {{userId: string, contextPolicy?: any, contextItems?: any, contextProvenance?: any, projectId: string, maxCount?: number, maxBytes?: number, family?: "geo" | "research" | null,
  *   scopeId?: string | null, query?: string | null, similarity?: { nearest: Function } | null, keep?: Iterable<string> | null,
- *   cardDirectory?: string | null, onLeftOut?: ((methodId: string) => void) | null}} scope
- * @returns {Promise<MountedLearnedMethod[] & { mode?: "embedding" | "lexical" | "recent", topScore?: number | null, kept?: MountedLearnedMethod[] }>}
+ *   cardDirectory?: string | null, onLeftOut?: ((methodId: string) => void) | null, pyramid?: boolean, minSimilarity?: number}} scope
+ * @returns {Promise<MountedLearnedMethod[] & { mode?: "embedding" | "lexical" | "recent", topScore?: number | null, kept?: MountedLearnedMethod[], levels?: Map<string, number> }>}
  */
 export async function selectLearnedMethods(learning, scope) {
   /** @type {any} */
@@ -357,7 +365,13 @@ export async function selectLearnedMethods(learning, scope) {
     }
   }
 
-  /** @typedef {MountedLearnedMethod & { payload: any, approvedAt: number, carried: number, dependencies: {name: string, digest?: string}[], source: any }} Entry */
+  // The pyramid (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`, `pyramid`): an abstract method's members count toward its level and the mount
+  // adds the most relevant abstract parent above what it selected. Off, every line below reads the library as it always did.
+  const pyramid = scope.pyramid === true;
+  const libraryNames = pyramid
+    ? new Set([...library.values()].map((document) => String(document?.payload?.frontmatter?.name ?? "")).filter(Boolean)) : null;
+
+  /** @typedef {MountedLearnedMethod & PlanEntry & { payload: any }} Entry */
   /** @type {Map<string, Entry>} */
   const entries = new Map();
   for (const document of library.values()) {
@@ -392,6 +406,8 @@ export async function selectLearnedMethods(learning, scope) {
       approvedAt: Date.parse(String(payload.statusChangedAt ?? payload.createdAt ?? "")) || 0,
       carried: Number(payload.learning?.counts?.carried ?? 0) + Number(payload.learning?.counts?.explored ?? 0),
       dependencies: Array.isArray(payload.dependencies) ? payload.dependencies : [],
+      derivedFrom: libraryNames ? abstractMembersOf(payload.frontmatter, libraryNames) : [],
+      role: typeof payload.frontmatter?.metadata?.role === "string" ? payload.frontmatter.metadata.role : null,
     });
   }
 
@@ -402,77 +418,19 @@ export async function selectLearnedMethods(learning, scope) {
   const fits = (/** @type {Entry} */ entry) => (scoped
     ? methodFitsScope(entry.payload, { scopeId: scope.scopeId ?? null, family })
     : family === null || methodFamily(entry.payload?.provenance?.capabilityId) === family);
-  const byRecency = (/** @type {Entry} */ left, /** @type {Entry} */ right) => right.approvedAt - left.approvedAt
-    || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
   const candidates = [...entries.values()].filter(fits).sort(byRecency);
 
-  /** @type {{entry: Entry, reason: MountedLearnedMethod["reason"]}[]} */
-  const ranked = [];
-  /** @type {"embedding" | "lexical" | "recent"} */
-  let mode = "recent";
-  /** @type {number | null} */
-  let topScore = null;
-  const query = String(scope.query ?? "").trim();
-  if (query && scope.similarity && candidates.length) {
-    try {
-      const near = await scope.similarity.nearest(query, candidates.map((entry) => entry.source), { limit: METHOD_MOUNT.nearest });
-      mode = near.mode === "embedding" ? "embedding" : "lexical";
-      topScore = near.length ? Number(near[0].score) : null;
-      for (const hit of near) {
-        const entry = entries.get(String(hit.method?.id));
-        if (entry) ranked.push({ entry, reason: "similarity" });
-      }
-    } catch {
-      // A ranking that cannot be made is a mount that has no question to rank by, never a run without methods.
-      ranked.length = 0;
-      mode = "recent";
-    }
-  }
-  const ranking = mode !== "recent";
-  if (!ranking) for (const entry of candidates) ranked.push({ entry, reason: "recent" });
-
-  // What the nearest reuse. A dependency is pulled in whatever scope it was learnt in: the reference names a method by name and
-  // would point at nothing without it. Higher levels are capped (the bundle SkillPyramid retrieves is one abstract method, a few
-  // functional ones and the atomic ones they need), the highest level first.
-  const levels = computeMethodLevels(/** @type {any} */ ([...entries.values()].map((entry) => ({ name: entry.name, dependencies: entry.dependencies }))));
-  const byName = new Map([...entries.values()].map((entry) => [entry.name, entry]));
-  const taken = new Set(ranked.map(({ entry }) => entry.id));
-  /** @type {{entry: Entry, reason: MountedLearnedMethod["reason"]}[]} */
-  const reused = [];
-  let abstract = 0;
-  let functional = 0;
-  const queue = ranked.map(({ entry }) => entry);
-  while (queue.length) {
-    const entry = /** @type {Entry} */ (queue.shift());
-    const wanted = entry.dependencies
-      .map((dependency) => byName.get(String(dependency?.name ?? "")))
-      .filter((dependency) => dependency && !taken.has(dependency.id))
-      .sort((left, right) => (levels.levels.get(/** @type {Entry} */ (right).name) ?? 0) - (levels.levels.get(/** @type {Entry} */ (left).name) ?? 0));
-    for (const dependency of /** @type {Entry[]} */ (wanted)) {
-      if (taken.has(dependency.id)) continue;
-      const level = levels.levels.get(dependency.name) ?? 0;
-      if (level >= 2) { if (abstract >= METHOD_MOUNT.abstractMax) continue; abstract += 1; }
-      else if (level === 1) { if (functional >= METHOD_MOUNT.functionalMax) continue; functional += 1; }
-      taken.add(dependency.id);
-      reused.push({ entry: dependency, reason: "dependency" });
-      queue.push(dependency);
-    }
-  }
-
-  // The exposure slot: only where a question ranked the library, because without one every method is already exposure.
-  /** @type {{entry: Entry, reason: MountedLearnedMethod["reason"]}[]} */
-  const explored = [];
-  if (ranking) {
-    const pool = candidates.filter((entry) => !taken.has(entry.id))
-      .sort((left, right) => left.carried - right.carried || left.approvedAt - right.approvedAt || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
-    for (const entry of pool.slice(0, METHOD_MOUNT.explore)) explored.push({ entry, reason: "explore" });
-  }
+  const plan = await planMethodSelection(/** @type {Map<string, PlanEntry>} */ (entries), candidates, {
+    query: scope.query, similarity: scope.similarity, pyramid, minSimilarity: scope.minSimilarity,
+    fits: (/** @type {PlanEntry} */ entry) => fits(/** @type {Entry} */ (entry)),
+  });
 
   /** @type {MountedLearnedMethod[]} */
   const selected = [];
   let spent = 0;
-  const exposure = explored.length;
-  for (const { entry, reason } of [...ranked, ...reused, ...explored]) {
+  const exposure = plan.explored.length;
+  for (const { entry: planned, reason } of [...plan.ranked, ...plan.reused, ...plan.parents, ...plan.explored]) {
+    const entry = /** @type {Entry} */ (planned);
     if (selected.length >= maxCount) break;
     // The exposure slot is held: the others may not take it.
     if (reason !== "explore" && selected.length >= maxCount - exposure) continue;
@@ -486,24 +444,263 @@ export async function selectLearnedMethods(learning, scope) {
     }
     if(shared && !await scope.contextItems.method(scope.contextPolicy,entry.source)) continue;
     spent += entry.promptBytes;
-    const { payload: _payload, approvedAt: _approvedAt, carried: _carried, dependencies: _dependencies, source: _source, ...mounted } = entry;
-    selected.push({ ...mounted, reason });
+    selected.push({ ...mountedOf(entry), reason });
   }
+  // The pyramid lists the cards from the most abstract down, so a run reads the frame before the steps (SkillPyramid's two-stage
+  // use); within a level the order is the selection's. The budget above was spent in the selection's order, nearest first.
+  if (pyramid) orderByLevel(selected, plan.levels);
   const selectedNames = new Set(selected.map((method) => method.directoryName));
   const wanted = new Set(shared ? [] : scope.keep ?? []);
   /** @type {MountedLearnedMethod[]} */
   const kept = [];
   for (const entry of entries.values()) {
     if (!wanted.has(entry.directoryName) || selectedNames.has(entry.directoryName)) continue;
-    const { payload: _payload, approvedAt: _approvedAt, carried: _carried, dependencies: _dependencies, source: _source, ...mounted } = entry;
-    kept.push({ ...mounted, reason: "recent" });
+    kept.push({ ...mountedOf(entry), reason: "recent" });
   }
-  Object.defineProperty(selected, "mode", { value: mode, enumerable: false });
-  Object.defineProperty(selected, "topScore", { value: topScore, enumerable: false });
+  Object.defineProperty(selected, "mode", { value: plan.mode, enumerable: false });
+  Object.defineProperty(selected, "topScore", { value: plan.topScore, enumerable: false });
   Object.defineProperty(selected, "kept", { value: kept, enumerable: false });
   // The person's own methods that were candidates for this run, selected or not: what an official method of the same scope is read against.
   Object.defineProperty(selected, "candidates", { value: candidates.map((entry) => entry.source), enumerable: false });
+  // Each method's level in the library as the mount read it (`computeMethodLevels`; with the pyramid, abstract members counted).
+  Object.defineProperty(selected, "levels", { value: plan.levels, enumerable: false });
   return /** @type {any} */ (selected);
+}
+
+/** Most recently approved first, ties on id compared as code units (see `selectLearnedMethods`). @param {PlanEntry} left @param {PlanEntry} right */
+const byRecency = (left, right) => right.approvedAt - left.approvedAt || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+
+/** The fields a selection works with and never hands out. */
+const PLAN_FIELDS = ["payload", "approvedAt", "carried", "dependencies", "source", "derivedFrom", "role", "method"];
+
+/** A selected entry as the caller receives it: what is mounted, without what the selection read. @param {Record<string, any>} entry */
+function mountedOf(entry) {
+  /** @type {Record<string, any>} */
+  const mounted = {};
+  for (const [key, value] of Object.entries(entry)) if (!PLAN_FIELDS.includes(key)) mounted[key] = value;
+  return /** @type {any} */ (mounted);
+}
+
+/**
+ * Sort in place from the highest level to the lowest, stable within a level: abstract, then functional, then atomic.
+ * @param {{ name: string }[]} methods @param {Map<string, number>} levels
+ */
+function orderByLevel(methods, levels) {
+  const indexed = methods.map((method, index) => ({ method, index, level: levels.get(method.name) ?? 0 }));
+  indexed.sort((left, right) => right.level - left.level || left.index - right.index);
+  indexed.forEach(({ method }, index) => { methods[index] = method; });
+}
+
+/**
+ * @typedef {object} PlanEntry
+ * @property {string} id
+ * @property {string} name
+ * @property {{ name: string, digest?: string }[]} dependencies  what it reuses (`depends_on`)
+ * @property {string[]} derivedFrom  for an abstract method, the library's methods it abstracts (`abstractMembersOf`); empty unless the pyramid is read
+ * @property {string | null} role  `metadata.role`, a label: only `abstract` is read, to find a selected method's parents
+ * @property {number} approvedAt
+ * @property {number} carried  how often it has been in front of a model (`counts.carried` + `counts.explored`)
+ * @property {any} source  the document the similarity module reads
+ */
+
+/**
+ * The order in which a library is offered to a run, before any budget is spent: the retrieval SkillPyramid makes (plan 2026-10-23
+ * §5, S5), with the upward pass of plan 2026-11-04 §5.4 defect 12 when `pyramid` is set. Pure apart from the similarity call.
+ *
+ *  1. `pinned`, when given: methods the run must carry because something else it carries reuses them (an official method a
+ *     person's own method depends on), reason `dependency`.
+ *  2. `ranked`: the `nearest` candidates closest to `query` (`similarity.nearest`, with a cosine floor `minSimilarity` when above
+ *     0), reason `similarity`; without a query, or when the similarity cannot answer, every candidate most recently approved first,
+ *     reason `recent` (unless `recentFallback` is false, when nothing is ranked).
+ *  3. `reused`: what those reuse, by name, from the whole library (`entries`), reason `dependency`, highest level first, capped by
+ *     level (`abstractMax` at level 2 and above, `functionalMax` at level 1; atomic ones uncapped).
+ *  4. `parents` (pyramid only): for the methods above, in their order, the single most relevant abstract method each was derived
+ *     into or is reused by (`role: abstract`, its `derivedFrom` or `dependencies` naming the method), at most `abstractMax` in all,
+ *     reason `abstraction`. Most relevant: covering the most of what was selected, then closest to the query, then most recently
+ *     approved. A parent must be one this run may be offered (`fits`).
+ *  5. `explored`: when a query ranked the library, `explore` slots for the candidates that have been in front of a model least.
+ *
+ * `levels` is `computeMethodLevels` over the library — with the pyramid, abstract members counted.
+ * @param {Map<string, PlanEntry>} entries the whole library by id
+ * @param {readonly PlanEntry[]} candidates the entries this run may be offered by similarity or exposure, most recently approved first
+ * @param {{ query?: string | null, similarity?: { nearest: Function } | null, pyramid?: boolean, minSimilarity?: number, nearest?: number,
+ *   explore?: number, abstractMax?: number, functionalMax?: number, recentFallback?: boolean, pinned?: readonly PlanEntry[],
+ *   fits?: ((entry: PlanEntry) => boolean) | null }} [options]
+ * @returns {Promise<{ pinned: {entry: PlanEntry, reason: string}[], ranked: {entry: PlanEntry, reason: string}[], reused: {entry: PlanEntry, reason: string}[],
+ *   parents: {entry: PlanEntry, reason: string}[], explored: {entry: PlanEntry, reason: string}[], mode: "embedding" | "lexical" | "recent",
+ *   topScore: number | null, levels: Map<string, number> }>}
+ */
+export async function planMethodSelection(entries, candidates, options = {}) {
+  const pyramid = options.pyramid === true;
+  const nearestLimit = Number.isSafeInteger(options.nearest) ? Number(options.nearest) : METHOD_MOUNT.nearest;
+  const abstractMax = Number.isSafeInteger(options.abstractMax) ? Number(options.abstractMax) : METHOD_MOUNT.abstractMax;
+  const functionalMax = Number.isSafeInteger(options.functionalMax) ? Number(options.functionalMax) : METHOD_MOUNT.functionalMax;
+  const exploreSlots = Number.isSafeInteger(options.explore) ? Number(options.explore) : METHOD_MOUNT.explore;
+  const minSimilarity = Number(options.minSimilarity ?? 0);
+  const byId = (/** @type {PlanEntry} */ left, /** @type {PlanEntry} */ right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+
+  /** @type {{entry: PlanEntry, reason: string}[]} */
+  const pinned = [];
+  const taken = new Set();
+  for (const entry of options.pinned ?? []) {
+    if (taken.has(entry.id)) continue;
+    taken.add(entry.id);
+    pinned.push({ entry, reason: "dependency" });
+  }
+
+  /** @type {{entry: PlanEntry, reason: string}[]} */
+  const ranked = [];
+  /** @type {"embedding" | "lexical" | "recent"} */
+  let mode = "recent";
+  /** @type {number | null} */
+  let topScore = null;
+  /** @type {Map<string, number>} closeness to the query of every candidate the similarity scored, for choosing a parent */
+  const scores = new Map();
+  const query = String(options.query ?? "").trim();
+  const pool = candidates.filter((entry) => !taken.has(entry.id));
+  if (query && options.similarity && pool.length) {
+    try {
+      // The pyramid asks for every candidate's closeness, so a parent can be chosen by it; the flat mount asks for the nearest only.
+      const near = await options.similarity.nearest(query, pool.map((entry) => entry.source), {
+        limit: pyramid ? pool.length : nearestLimit,
+        ...(Number.isFinite(minSimilarity) && minSimilarity > 0 ? { minScore: minSimilarity } : {}),
+      });
+      mode = near.mode === "embedding" ? "embedding" : "lexical";
+      topScore = near.length ? Number(near[0].score) : null;
+      for (const hit of near) {
+        const entry = entries.get(String(hit.method?.id));
+        if (!entry || taken.has(entry.id)) continue;
+        scores.set(entry.id, Number(hit.score));
+        if (ranked.length < nearestLimit) ranked.push({ entry, reason: "similarity" });
+      }
+    } catch {
+      // A ranking that cannot be made is a mount that has no question to rank by, never a run without methods.
+      ranked.length = 0;
+      scores.clear();
+      mode = "recent";
+      topScore = null;
+    }
+  }
+  const ranking = mode !== "recent";
+  if (!ranking && options.recentFallback !== false) for (const entry of pool) ranked.push({ entry, reason: "recent" });
+  for (const { entry } of ranked) taken.add(entry.id);
+
+  // What the selected reuse. A dependency is pulled in whatever scope it was learnt in: the reference names a method by name and
+  // would point at nothing without it. Higher levels are capped (the bundle SkillPyramid retrieves is one abstract method, a few
+  // functional ones and the atomic ones they need), the highest level first.
+  const levels = computeMethodLevels(/** @type {any} */ ([...entries.values()].map((entry) => ({
+    name: entry.name, dependencies: entry.dependencies, ...(pyramid && entry.derivedFrom?.length ? { derivedFrom: entry.derivedFrom } : {}),
+  })))).levels;
+  const byName = new Map([...entries.values()].map((entry) => [entry.name, entry]));
+  /** @type {{entry: PlanEntry, reason: string}[]} */
+  const reused = [];
+  let abstract = 0;
+  let functional = 0;
+  const queue = [...pinned, ...ranked].map(({ entry }) => entry);
+  while (queue.length) {
+    const entry = /** @type {PlanEntry} */ (queue.shift());
+    const wanted = entry.dependencies
+      .map((dependency) => byName.get(String(dependency?.name ?? "")))
+      .filter((dependency) => dependency && !taken.has(dependency.id))
+      .sort((left, right) => (levels.get(/** @type {PlanEntry} */ (right).name) ?? 0) - (levels.get(/** @type {PlanEntry} */ (left).name) ?? 0));
+    for (const dependency of /** @type {PlanEntry[]} */ (wanted)) {
+      if (taken.has(dependency.id)) continue;
+      const level = levels.get(dependency.name) ?? 0;
+      if (level >= 2) { if (abstract >= abstractMax) continue; abstract += 1; }
+      else if (level === 1) { if (functional >= functionalMax) continue; functional += 1; }
+      taken.add(dependency.id);
+      reused.push({ entry: dependency, reason: "dependency" });
+      queue.push(dependency);
+    }
+  }
+
+  // Upward: the abstract method a selected one belongs to, which the similarity alone almost never reaches (defect 12).
+  /** @type {{entry: PlanEntry, reason: string}[]} */
+  const parents = [];
+  if (pyramid && abstractMax > 0) {
+    /** @param {PlanEntry} entry @returns {Set<string>} */
+    const membersOf = (entry) => new Set([...(entry.derivedFrom ?? []), ...entry.dependencies.map((dependency) => String(dependency?.name ?? ""))]);
+    /** @type {Map<string, PlanEntry[]>} */
+    const parentsOf = new Map();
+    for (const entry of entries.values()) {
+      if (entry.role !== "abstract") continue;
+      for (const member of membersOf(entry)) parentsOf.set(member, [...(parentsOf.get(member) ?? []), entry]);
+    }
+    const chosen = [...pinned, ...ranked, ...reused].map(({ entry }) => entry);
+    const chosenNames = new Set(chosen.map((entry) => entry.name));
+    const covers = (/** @type {PlanEntry} */ parent) => [...membersOf(parent)].filter((name) => chosenNames.has(name)).length;
+    const closeness = (/** @type {PlanEntry} */ parent) => scores.get(parent.id) ?? Number.NEGATIVE_INFINITY;
+    for (const entry of chosen) {
+      if (parents.length >= abstractMax) break;
+      const options_ = (parentsOf.get(entry.name) ?? []).filter((parent) => !taken.has(parent.id) && (!options.fits || options.fits(parent)));
+      if (!options_.length) continue;
+      options_.sort((left, right) => covers(right) - covers(left) || (closeness(right) - closeness(left) || 0) || right.approvedAt - left.approvedAt || byId(left, right));
+      taken.add(options_[0].id);
+      parents.push({ entry: options_[0], reason: "abstraction" });
+    }
+  }
+
+  // The exposure slot: only where a question ranked the library, because without one every method is already exposure.
+  /** @type {{entry: PlanEntry, reason: string}[]} */
+  const explored = [];
+  if (ranking && exploreSlots > 0) {
+    const rest = candidates.filter((entry) => !taken.has(entry.id))
+      .sort((left, right) => left.carried - right.carried || left.approvedAt - right.approvedAt || byId(left, right));
+    for (const entry of rest.slice(0, exploreSlots)) explored.push({ entry, reason: "explore" });
+  }
+  return { pinned, ranked, reused, parents, explored, mode, topScore, levels };
+}
+
+/** Where a runtime sees the mounted methods (`runtimeCapsuleMethodsDir` in `capsuleMethods.mjs`, which imports this module): the path a card names. */
+const OFFLINE_CARD_DIRECTORY = "/runtime/capsule-methods";
+
+/**
+ * The mount's own selection, for an offline experiment that has a library of method documents and no control-plane database (plan
+ * 2026-11-04 §5.5 C1: libraries built from text-game trajectories, selected "flat" — every switch off — or "pyramid" — `options.pyramid`
+ * — by exactly the product's code). A thin adapter over `selectLearnedMethods`: the library stands in for the account's approved
+ * methods (a document without a `status` is read as approved; any other status is not mounted, as in the product), the task text is
+ * the conversation's first message, and `embed` (texts → vectors) is the embedder, without which closeness is read by shared words
+ * (`createMethodSimilarity`). No scope is applied unless `options.scopeId` or `options.family` names one.
+ *
+ * Returns the cards in the order a run is shown them, each with why it is there (`METHOD_MOUNT_REASONS`), its level in the library,
+ * and the card's lines (`learnedMethodCardEntry`); `mode` and `topScore` say how the library was ranked.
+ * @param {{ library: readonly any[], taskText?: string | null, embed?: ((texts: string[]) => Promise<number[][]>) | null,
+ *   options?: { pyramid?: boolean, minSimilarity?: number, scopeId?: string | null, family?: "geo" | "research" | null, maxCount?: number,
+ *     maxBytes?: number, cardDirectory?: string, similarity?: { nearest: Function } | null } }} input
+ * @returns {Promise<{ cards: { id: string, name: string, reason: string, level: number, digest: string, directoryName: string, promptBytes: number, lines: string[] }[],
+ *   mode: "embedding" | "lexical" | "recent", topScore: number | null }>}
+ */
+export async function selectMethodsForTask({ library, taskText = null, embed = null, options = {} }) {
+  const documents = (library ?? []).filter((document) => document && (document.payload?.status ?? "approved") === "approved");
+  const cardDirectory = typeof options.cardDirectory === "string" && options.cardDirectory ? options.cardDirectory : OFFLINE_CARD_DIRECTORY;
+  const selected = await selectLearnedMethods({ approvedMethods: async () => documents }, {
+    userId: "offline",
+    projectId: "offline",
+    query: taskText,
+    similarity: options.similarity ?? createMethodSimilarity({ embed }),
+    cardDirectory,
+    pyramid: options.pyramid === true,
+    minSimilarity: Number(options.minSimilarity ?? 0),
+    ...(options.scopeId === undefined ? {} : { scopeId: options.scopeId }),
+    ...(options.family === undefined ? {} : { family: options.family }),
+    ...(Number.isSafeInteger(options.maxCount) ? { maxCount: options.maxCount } : {}),
+    ...(Number.isSafeInteger(options.maxBytes) ? { maxBytes: options.maxBytes } : {}),
+  });
+  const byId = new Map(documents.map((document) => [String(document.id), document]));
+  const levels = /** @type {any} */ (selected).levels ?? new Map();
+  return {
+    cards: selected.map((method) => {
+      const frontmatter = byId.get(method.id)?.payload?.frontmatter ?? {};
+      return {
+        id: method.id, name: method.name, reason: method.reason, level: levels.get(method.name) ?? 0, digest: method.digest,
+        directoryName: method.directoryName, promptBytes: method.promptBytes,
+        lines: learnedMethodCardEntry({ name: method.name, description: String(frontmatter.description ?? ""), whenToUse: String(frontmatter.whenToUse ?? ""),
+          path: `${cardDirectory.replace(/\/+$/, "")}/${method.directoryName}/SKILL.md` }),
+      };
+    }),
+    mode: /** @type {any} */ (selected).mode ?? "recent",
+    topScore: /** @type {any} */ (selected).topScore ?? null,
+  };
 }
 
 // ------------------------------------------------------------------------------------------------------ the platform's tier

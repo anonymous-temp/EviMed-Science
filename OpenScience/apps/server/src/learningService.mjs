@@ -54,6 +54,7 @@ import { createHash } from "node:crypto";
 import {
   METHOD_RELEVANT_MOUNT_REASONS,
   METHOD_STATUSES,
+  abstractMembersOf,
   appendMethodLink,
   cleanMethodDisplay,
   cleanMethodScope,
@@ -212,17 +213,23 @@ export function methodSourceProjects(provenance) {
  * The shape `promotionVerdict` and `retirementProposal` read, assembled from a
  * stored document. Kept in one function because the two callers that build it
  * by hand would be the two that disagree.
- * @param {any} document @param {{revisions?: readonly string[]}} [extra]
+ *
+ * `libraryNames`, given only where the pyramid is read (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`), is every method name of the library: an
+ * abstract method then carries `derivedFrom`, the members its `metadata.derived_from` names that the library holds (`abstractMembersOf`),
+ * so `computeMethodLevels` puts it one above them. Without it the record is what it always was.
+ * @param {any} document @param {{revisions?: readonly string[], libraryNames?: Iterable<string> | null}} [extra]
  * @returns {any}
  */
-export function methodRecordFrom(document, { revisions = undefined } = {}) {
+export function methodRecordFrom(document, { revisions = undefined, libraryNames = null } = {}) {
   const payload = document?.payload ?? {};
+  const derivedFrom = libraryNames ? abstractMembersOf(payload.frontmatter, libraryNames) : [];
   return {
     id: document?.id,
     name: payload.frontmatter?.name ?? "",
     digest: payload.contentDigest ?? "",
     status: payload.status ?? "candidate",
     dependencies: payload.dependencies ?? [],
+    ...(derivedFrom.length ? { derivedFrom } : {}),
     learning: payload.learning ?? emptyLearning(payload.contentDigest ?? ""),
     provenance: payload.provenance ?? { origin: "inferred" },
     // When the body it holds now was written, for the rules that read an age (a merge nobody has used expires).
