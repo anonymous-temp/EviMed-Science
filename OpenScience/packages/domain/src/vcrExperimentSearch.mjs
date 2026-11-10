@@ -466,6 +466,12 @@ export function vcrCampaignManifest(input) {
       if (budgetIn.allocation != null && !exact && screening && !robust) /** @type {Record<string, any>} */ (budget).allocation = 'sequential'
     }
   }
+  // `screening: 'ocba'` spends the screening share of a budgeted campaign by OCBA-CO instead of equally (`screeningIncrement`); opt-in, so every other manifest keeps its bytes
+  if (budgetIn.screening != null) {
+    if (budgetIn.screening !== 'ocba') bad('campaign_budget_invalid', 'budget.screening', 'The screening allocation is "ocba" or absent.')
+    else if (!/** @type {Record<string, any>} */ (budget).allocation && !Number.isInteger(/** @type {Record<string, any>} */ (budget).replicates)) bad('campaign_budget_invalid', 'budget.screening', 'An OCBA screening allocation needs a budgeted campaign (budget.replicates or allocation).')
+    else /** @type {Record<string, any>} */ (budget).screening = 'ocba'
+  }
   const evaluated = sample ? Math.min(sample.count, spaceSize) : spaceSize
   if (Number.isInteger(budget.maxCandidates) && evaluated > budget.maxCandidates) {
     bad('campaign_space_exceeds_budget', 'budget.maxCandidates', `The space has ${evaluated} candidates and the budget ${budget.maxCandidates}: narrow the space or sample it (space.sample).`)
@@ -751,7 +757,7 @@ export function vcrCampaignCandidates(manifest) {
  * The scenario a unit runs: the base, the candidate's settings, the named truth and, for a simulated method, the precision block.
  * @param {Record<string, any>} manifest @param {{ set: Record<string, any> }} candidate @param {string} truthName @param {'screening' | 'final'} stage
  */
-export function vcrCandidateScenario(manifest, candidate, truthName, stage) {
+export function vcrCandidateScenario(manifest, candidate, truthName, stage, screeningReplicates = /** @type {number | null} */ (null)) {
   const scenario = clone(object(manifest.space?.scenario))
   for (const [path, value] of Object.entries(object(candidate.set))) setPath(scenario, path, value)
   const truth = list(manifest.space?.truths).find((entry) => entry.name === truthName)
@@ -760,7 +766,7 @@ export function vcrCandidateScenario(manifest, candidate, truthName, stage) {
   if (truth) scenario[info?.truthField ?? 'truth'] = clone(truth.truth)
   if (!info?.exact && info?.precisionBlock !== false && vcrEvaluationAllowed(manifest.space.method, scenario)) {
     scenario.evaluation = stage === 'screening'
-      ? { version: VCR_SCREENING.version, screeningReplicates: manifest.stages.screening.replicates }
+      ? { version: VCR_SCREENING.version, screeningReplicates: screeningReplicates ?? manifest.stages.screening.replicates }
       : { version: VCR_SCREENING.version }
   }
   return scenario
@@ -801,7 +807,8 @@ export function vcrCampaignSeed(identity, stage, truth, drawKey) {
  * and shared by every candidate whose applied paths agree.
  * @param {Record<string, any>} manifest @param {string} identity @param {{ key: string, index: number, set: Record<string, any> }} candidate
  * @param {'screening' | 'final'} stage @param {string} truth
- * @param {{ round?: number, replicates?: number }} [escalation] a budgeted campaign's fresh re-run of a final evaluation, on a stream of its own
+ * @param {{ round?: number, replicates?: number, screeningReplicates?: number }} [escalation] a budgeted campaign's fresh re-run of a final evaluation, or one more
+ *   screening increment of an OCBA allocation, on a stream of its own
  */
 export function vcrCampaignUnit(manifest, identity, candidate, stage, truth, escalation = {}) {
   const round = Number.isInteger(escalation.round) && /** @type {number} */ (escalation.round) > 0 ? /** @type {number} */ (escalation.round) : 0
@@ -811,7 +818,8 @@ export function vcrCampaignUnit(manifest, identity, candidate, stage, truth, esc
   return {
     key: `${candidate.key}:${stage}:${truth}${round ? `:r${round}` : ''}`, candidate: candidate.key, stage, truth, method, version: manifest.space.version, kind,
     ...(round ? { round } : {}),
-    scenario: vcrCandidateScenario(manifest, candidate, truth, stage),
+    ...(stage === 'screening' && Number.isInteger(escalation.screeningReplicates) ? { screeningReplicates: escalation.screeningReplicates } : {}),
+    scenario: vcrCandidateScenario(manifest, candidate, truth, stage, stage === 'screening' && Number.isInteger(escalation.screeningReplicates) ? /** @type {number} */ (escalation.screeningReplicates) : null),
     // scenarios of a robust reading draw on one stream (common random numbers): they differ by what is assumed, never by luck
     seed: vcrCampaignSeed(identity, round ? `${stage}-r${round}` : stage, manifest.robust ? '*' : truth, drawKey),
     replicates: Number.isInteger(escalation.replicates) ? /** @type {number} */ (escalation.replicates)
@@ -1121,6 +1129,24 @@ export function vcrCandidateVerdicts(manifest, entry, stage) {
 }
 
 /**
+ * Two screening runs of one design and truth on independent streams as one estimate: each simulated measure is the replicate-weighted mean and
+ * its error combines in quadrature (independent runs); a calculated measure is kept. Screening estimates only rank and eliminate, so adaptive
+ * sampling cannot touch a verdict, which reads a fresh final run alone.
+ * @param {Record<string, any>} first @param {Record<string, any>} more
+ */
+function poolScreening(first, more) {
+  const n1 = Number(first.replicates), n2 = Number(more.replicates), n = n1 + n2
+  const measures = list(first.measures).map((a) => {
+    const b = list(more.measures).find((m) => object(m).name === a.name)
+    if (!b || a.simulated !== true || !(n > 0)) return a
+    const mcse = a.mcse == null || b.mcse == null ? null : Math.sqrt((n1 * a.mcse) ** 2 + (n2 * b.mcse) ** 2) / n
+    return { ...a, value: (n1 * Number(a.value) + n2 * Number(b.value)) / n, mcse }
+  })
+  return { ...more, replicates: n, measures, drawSignature: null, rejects: null, pooledFrom: Number(first.pooledFrom ?? 1) + 1,
+    cpuSeconds: Number(first.cpuSeconds ?? 0) + Number(more.cpuSeconds ?? 0), queueSeconds: Number(first.queueSeconds ?? 0) + Number(more.queueSeconds ?? 0), wallSeconds: Number(first.wallSeconds ?? 0) + Number(more.wallSeconds ?? 0) }
+}
+
+/**
  * Record a finished unit and return the next state (pure). A failed unit counts towards the consecutive-failure stop; an unsupported
  * one (refused by validation before it ran) marks its candidate unsupported and does not. A cancelled unit is neither: whoever
  * cancelled it, the campaign is being stopped (`cancelRequested`), so the next decision is `user_cancellation`, never the next
@@ -1165,11 +1191,13 @@ export function vcrCampaignRecord(manifest, state, unit, outcome) {
   if (!entry) return next
   // a fresh re-run (budgeted campaign) replaces the evaluation a verdict reads; the one it replaces stays on the record
   const evaluationKey = `${unit.stage}:${unit.truth}`
-  if (Number(/** @type {any} */ (unit).round) > 0 && entry.evaluations[evaluationKey]) {
+  if (Number(/** @type {any} */ (unit).round) > 0 && unit.stage === 'final' && entry.evaluations[evaluationKey]) {
     const old = entry.evaluations[evaluationKey]
     entry.superseded = [...list(entry.superseded), { truth: unit.truth, replicates: old.replicates, seed: old.seed, measures: old.measures }]
   }
-  entry.evaluations[evaluationKey] = evaluation
+  // a screening increment (OCBA allocation) adds to the screening estimate it extends: screening only ranks and eliminates, never certifies
+  entry.evaluations[evaluationKey] = unit.stage === 'screening' && Number(/** @type {any} */ (unit).round) > 0 && outcome.state === 'succeeded' && entry.evaluations[evaluationKey]?.state === 'succeeded'
+    ? poolScreening(entry.evaluations[evaluationKey], evaluation) : evaluation
   if (outcome.unsupported) {
     entry.status = 'unsupported'; entry.reason = evaluation.issues[0] ?? 'candidate_unsupported'
   } else if (canceled) {
@@ -1473,22 +1501,28 @@ export function vcrCampaignRobust(manifest, state, baseFeasible) {
  * stated 1 - confidence. More designs judged means more chances for one to pass by luck, as it always has with more finalists (`verdict.selection`);
  * the benchmark measures it.
  */
-export const VCR_ALLOCATION = Object.freeze({ maxRounds: 2, maxGrowth: 4, screeningShare: 0.2, firstWave: 1 })
+export const VCR_ALLOCATION = Object.freeze({ maxRounds: 2, maxGrowth: 4, screeningShare: 0.2, firstWave: 1,
+  // OCBA screening (`budget.screening: 'ocba'`): the first look takes `firstShare` of the screening share equally, the rest goes out in steps of at most
+  // `1 / steps` of what remains, never below the screening minimum; `indifference` is the distance to a bound below which two estimates are not told apart
+  ocba: Object.freeze({ firstShare: 0.5, steps: 4, indifference: 0.005 }) })
 
 /**
  * The stage sizes a replicate budget implies, by one stated rule: screening takes a fifth of the budget (alternative case only, below the
  * method's floor, at least the screening minimum), and the first wave holds one finalist plus the reference when there is one.
- * @param {{ candidates: number, replicates: number, method?: string }} input
+ * @param {{ candidates: number, replicates: number, method?: string, screening?: 'ocba' | null, cells?: number }} input
  */
-export function vcrCampaignBudgetPlan({ candidates, replicates, method = 'design.simulate' }) {
+export function vcrCampaignBudgetPlan({ candidates, replicates, method = 'design.simulate', screening = null, cells = 1 }) {
   const finalFloor = /** @type {Record<string, any>} */ (VCR_SCREENING.methods)[method]?.finalFloor ?? VCR_SCREENING.minReplicates + 1
-  const each = Math.floor((VCR_ALLOCATION.screeningShare * replicates) / Math.max(1, candidates) / 100) * 100
+  // an OCBA screening looks at every design once with `firstShare` of the screening share; the other part is allocated by the rule
+  const share = VCR_ALLOCATION.screeningShare * (screening === 'ocba' ? VCR_ALLOCATION.ocba.firstShare : 1)
+  const each = Math.floor((share * replicates) / Math.max(1, candidates) / Math.max(1, cells) / 100) * 100
   return { screeningReplicates: Math.min(finalFloor - 1, Math.max(VCR_SCREENING.minReplicates, each)), finalCount: VCR_ALLOCATION.firstWave }
 }
 
 /** The replicates a unit will use: its own, the screening stage's, or the floor of its scenario. @param {Record<string, any>} manifest @param {Record<string, any>} unit */
 function unitReplicates(manifest, unit) {
   if (Number.isInteger(unit.replicates)) return unit.replicates
+  if (unit.stage === 'screening' && Number.isInteger(unit.screeningReplicates)) return unit.screeningReplicates
   return unit.stage === 'screening' ? Number(manifest.stages.screening.replicates) : vcrReplicateFloorFor(unit.scenario)
 }
 
@@ -1520,6 +1554,89 @@ function finalizeAllocation(manifest, state, stopReason) {
     spent, unspent: Math.max(0, (Number.isFinite(total) ? total : spent) - spent),
     unspentReason: stopReason === 'budget_exhausted' ? 'next_unit_does_not_fit' : stopReason === 'user_cancellation' || stopReason === 'persistent_model_failure' ? stopReason
       : state.allocation?.precisionLimited ? 'precision_not_reachable' : 'decided', unevaluated }
+}
+
+/** The replicate budget a budgeted campaign may spend in total: the stated one and the one its CPU seconds derive at the measured rate, whichever is smaller. @param {Record<string, any>} manifest @param {Record<string, any>} state */
+function replicateBudget(manifest, state) {
+  const rate = Number(state.rate?.perReplicate)
+  const derived = rate > 0 ? Math.floor(manifest.budget.cpuSeconds / rate) : null
+  const total = Math.min(...[manifest.budget.replicates, derived].filter((x) => Number.isInteger(x)))
+  return Number.isFinite(total) ? total : null
+}
+
+/**
+ * The next screening increment of an OCBA screening allocation, a unit, or null when the screening share is spent or nothing is left to separate.
+ *
+ * OCBA-CO (Pujowidianto et al. 2009; Lee, Pujowidianto, Li, Chen & Yap 2012, IEEE TAC 57:2940) allocates replicates to maximise the probability of
+ * selecting the best design among those that satisfy stochastic constraints. Its structure, as used here: a design whose objective is worse than
+ * the sample-best feasible design b needs no replicates on its constraint (optimality dominance); a design with a better objective needs just enough
+ * to be shown infeasible, and b enough to be shown feasible, both in proportion to (sigma / delta)^2, delta being the distance of the constraint's
+ * estimate to its bound. Here the objective is a function of the design (patients), exact, so every design worse than b is dominated for free and
+ * the sample goes to b and the designs cheaper than b, each on its dominant cell (a feasible design on its hardest constraint, an infeasible one on
+ * its most clearly violated). It is the asymptotic allocation applied as a step rule on the screening estimates of one-sided proportions
+ * (smoothed (k + 1/2) / (n + 1); a distance floor of `indifference` stands for the OCBA indifference zone), recomputed after every unit. It is
+ * NOT the exact OCBA-CO of the paper (I could not retrieve its theorem; the ratios above are the published structure), and the benchmark measures it.
+ * Error control is untouched: screening ranks and eliminates, never certifies; a verdict reads a fresh final run alone.
+ * @param {Record<string, any>} manifest @param {Record<string, any>} state @param {Array<{ key: string, index: number }>} candidates @param {string} identity
+ */
+function screeningIncrement(manifest, state, candidates, identity) {
+  const total = replicateBudget(manifest, state)
+  if (total == null) return null
+  const finalFloor = /** @type {Record<string, any>} */ (VCR_SCREENING.methods)[manifest.space.method]?.finalFloor ?? VCR_SCREENING.minReplicates + 1
+  const cells = list(manifest.constraints).filter((c) => list(manifest.stages.screening?.truths).includes(c.truth))
+  const info = /** @type {Record<string, any>} */ (VCR_CAMPAIGN_METHODS)[manifest.space.method]
+  if (!cells.length || cells.some((c) => !['proportion', 'error_rate'].includes(info?.measures?.[c.measure]))) return null
+  const spent = Object.values(state.candidates).reduce((sum, entry) => sum + list(cells).reduce((s, c) => s + Number(object(object(entry.evaluations)[`screening:${c.truth}`]).replicates ?? 0), 0), 0)
+  const remaining = Math.floor(VCR_ALLOCATION.screeningShare * total) - spent
+  if (remaining < VCR_SCREENING.minReplicates) return null
+  const minimize = manifest.objective.direction === 'minimize'
+  /** @type {Array<{ key: string, index: number, value: number, rows: Array<{ c: any, n: number, p: number, w: number, ok: boolean }> }>} */
+  const rows = []
+  for (const c of candidates) {
+    const entry = state.candidates[c.key]
+    if (entry.status !== 'screened') continue
+    const o = objectiveOf(manifest, entry, 'screening')
+    if (!o) continue
+    const perCell = cells.map((constraint) => {
+      const e = vcrEvaluationMeasure(entry.evaluations[`screening:${constraint.truth}`], constraint.measure)
+      const n = Number(entry.evaluations[`screening:${constraint.truth}`]?.replicates ?? 0)
+      if (!e || !(n > 0)) return null
+      const p = Math.min(1, Math.max(0, Number(e.value)))
+      const ps = (p * n + 0.5) / (n + 1)
+      const ok = constraint.op === '<=' ? p <= constraint.bound : p >= constraint.bound
+      return { c: constraint, n, p, ok, w: Math.sqrt(ps * (1 - ps)) ** 2 / Math.max(Math.abs(ps - constraint.bound), VCR_ALLOCATION.ocba.indifference) ** 2 }
+    })
+    if (perCell.some((x) => x == null)) continue
+    rows.push({ key: c.key, index: c.index, value: o.value, rows: /** @type {any} */ (perCell) })
+  }
+  const feasible = rows.filter((r) => r.rows.every((x) => x.ok))
+  const best = feasible.length ? (minimize ? Math.min : Math.max)(...feasible.map((r) => r.value)) : null
+  const critical = rows.filter((r) => best == null || (minimize ? r.value <= best : r.value >= best))
+  // each critical design on its dominant cell: a feasible one on its hardest constraint, an infeasible one on its most clearly violated
+  /** @type {Array<{ key: string, truth: string, n: number, w: number }>} */
+  const targets = []
+  for (const r of critical) {
+    const ok = r.rows.every((x) => x.ok)
+    const pool = ok ? r.rows : r.rows.filter((x) => !x.ok)
+    const pick = pool.reduce((a, b) => (b.w > a.w ? b : a))
+    targets.push({ key: r.key, truth: pick.c.truth, n: pick.n, w: pick.w })
+  }
+  if (!targets.length) return null
+  const sumW = targets.reduce((s, t) => s + t.w, 0)
+  const sumN = targets.reduce((s, t) => s + t.n, 0)
+  const budgetNow = Math.min(remaining, Math.max(VCR_SCREENING.minReplicates, Math.round(remaining / VCR_ALLOCATION.ocba.steps / 100) * 100))
+  const goal = sumN + budgetNow
+  let chosen = targets[0]; let deficit = -Infinity
+  for (const t of targets) { const d = (goal * t.w) / sumW - t.n; if (d > deficit) { deficit = d; chosen = t } }
+  if (!(deficit > 0)) return null
+  const size = Math.min(finalFloor - 1, budgetNow, Math.max(VCR_SCREENING.minReplicates, Math.round(deficit / 100) * 100))
+  if (size < VCR_SCREENING.minReplicates) return null
+  const entry = state.candidates[chosen.key]
+  const round = Number(entry.screeningRounds ?? 0) + 1
+  const candidate = /** @type {any} */ (candidates.find((c) => c.key === chosen.key))
+  state.allocation = { ...object(state.allocation), screening: { budget: Math.floor(VCR_ALLOCATION.screeningShare * total), steps: Number(object(state.allocation?.screening).steps ?? 0) + 1 } }
+  entry.screeningRounds = round
+  return vcrCampaignUnit(manifest, identity, candidate, 'screening', chosen.truth, { round, screeningReplicates: size })
 }
 
 /**
@@ -1555,7 +1672,7 @@ function allocateFinals(manifest, state, candidates, identity) {
     const slack = z * Number(o.mcse ?? 0)
     return minimize ? o.value - slack < best.value : o.value + slack > best.value
   }
-  const meetsScreening = (/** @type {string} */ key) => list(judged).filter((c) => c.kind !== 'error_control').every((c) => {
+  const meetsScreening = (/** @type {string} */ key) => list(judged).filter((c) => c.kind !== 'error_control' || (manifest.budget.screening === 'ocba' && list(manifest.stages.screening?.truths).includes(c.truth))).every((c) => {
     const measure = vcrEvaluationMeasure(state.candidates[key].evaluations[`screening:${c.truth}`], c.measure)
     return measure != null && (c.op === '<=' ? Number(measure.value) <= c.bound : Number(measure.value) >= c.bound)
   })
@@ -1668,6 +1785,12 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
     }
   }
 
+  // 2b. an OCBA screening allocation spends the rest of the screening share where it separates the designs that decide the pick
+  if (manifest.stages.screening && !next.finalists && budgeted && manifest.budget.screening === 'ocba') {
+    const increment = screeningIncrement(manifest, next, candidates, identity)
+    if (increment) return evaluate(increment)
+  }
+
   // 3. finalists, chosen once
   if (!next.finalists) {
     const survivors = candidates.filter((c) => open(c.key) && (exact || !manifest.stages.screening || next.candidates[c.key].status === 'screened'))
@@ -1681,7 +1804,9 @@ export function vcrCampaignAdvance(manifest, state, { identity }) {
       // Ranking only, never a pass: a survivor whose screening point estimates meet every screened constraint comes before one whose
       // estimates do not, then the objective decides. Without the first key the cheapest designs on the edge of the power constraint
       // took every finalist place and all failed their final check.
-      const meets = (/** @type {string} */ key) => list(manifest.constraints).filter((c) => c.kind !== 'error_control').every((c) => {
+      // an OCBA screening has looked at the error-control constraint's truth as well (never to eliminate: it only ranks)
+      const screened = (/** @type {any} */ c) => c.kind !== 'error_control' || (manifest.budget.screening === 'ocba' && list(manifest.stages.screening?.truths).includes(c.truth))
+      const meets = (/** @type {string} */ key) => list(manifest.constraints).filter(screened).every((c) => {
         const measure = vcrEvaluationMeasure(next.candidates[key].evaluations[`screening:${c.truth}`], c.measure)
         return measure != null && (c.op === '<=' ? Number(measure.value) <= c.bound : Number(measure.value) >= c.bound)
       }) && list(manifest.robust?.scenarios).every((name) => {

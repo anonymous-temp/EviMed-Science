@@ -43,7 +43,7 @@ const FROZEN = {
   epsilonPatients: 50, successLevel: 0.8,
   ocba: { stageOneShare: 0.3, indifference: 0.005 },
   calibration: { screeningReplicates: 300, screeningSeeds: 30, finalAltSeeds: 10, finalNullSeeds: 5, sdRatio: [0.8, 1.25] },
-  arms: ['grid', 'random', 'halving', 'ocba', 'ours', 'ours2'], // ours2: addendum D5 (sequential allocation); the first five are the 2026-11-09 protocol
+  arms: ['grid', 'random', 'halving', 'ocba', 'ours', 'ours2', 'ours3'], // ours2: addendum D5 (sequential allocation); ours3: addendum D6 (OCBA screening); the first five are the 2026-11-09 protocol
 };
 if (option('--arms')) FROZEN.arms = option('--arms').split(','); // a development run of some arms; the reported run has all of them
 const reference = option('--reference', path.join(here, 'results/search-benchmark-20261107.json'));
@@ -74,17 +74,32 @@ const SPACES = {
   level85: { reference: 'level', powerBound: 0.85, candidates: () => SPACES.level.candidates(), scenario: { accrual: 24, nTreat: 200 } },
   level: { reference: 'level', candidates: () => [200, 225, 250].flatMap((n) => [0.025, 0.0235, 0.022, 0.02].map((a) => ({ set: { 'design.nTreat': n, 'design.nControl': n, 'analysis.alpha': a } }))),
     scenario: { accrual: 24, nTreat: 200 } },
+  // addendum D6, the held-out world: an exact closed-form truth table (`heldout-world.R`, written before any search was run on it). The manifest shell is the level
+  // family's (nothing in a search reads the endpoint; a unit's outcome is a draw from the truth table), the designs are 9 sizes x 3 analysis levels
+  heldout: { reference: null, candidates: () => [40, 45, 50, 55, 60, 65, 70, 75, 80].flatMap((n) => [0.025, 0.02, 0.015].map((a) => ({ set: { 'design.nTreat': n, 'design.nControl': n, 'analysis.alpha': a } }))),
+    scenario: { accrual: 24, nTreat: 200 } },
 };
+const heldoutFile = path.join(here, 'results/search-benchmark-heldout-world-20261110.tsv');
 
 /** A world: for each candidate, the patients and the true power and type I error (the reference's full-precision values). */
 async function loadWorld(name) {
-  const doc = JSON.parse(await fs.readFile(reference, 'utf8'));
-  const rows = doc[SPACES[name].reference].exhaustive.candidates;
   const space = SPACES[name].candidates();
-  const items = rows.map((row, i) => {
-    if (JSON.stringify(row.set) !== JSON.stringify(space[i].set)) throw new Error(`${name}: candidate ${i} differs from the reference`);
-    return { index: i, set: row.set, patients: row.final.expected_sample_size.value, power: row.final.power.value, typeOne: row.final.type_one_error.value };
-  });
+  let items;
+  if (SPACES[name].reference == null) {
+    const lines = (await fs.readFile(heldoutFile, 'utf8')).trim().split('\n').map((l) => l.split('\t'));
+    items = lines.map(([n, alpha, power, typeOne], i) => {
+      const set = { 'design.nTreat': Number(n), 'design.nControl': Number(n), 'analysis.alpha': Number(alpha) };
+      if (JSON.stringify(set) !== JSON.stringify(space[i].set)) throw new Error(`${name}: candidate ${i} differs from the world file`);
+      return { index: i, set, patients: 2 * Number(n), power: Number(power), typeOne: Number(typeOne) };
+    });
+  } else {
+    const doc = JSON.parse(await fs.readFile(reference, 'utf8'));
+    const rows = doc[SPACES[name].reference].exhaustive.candidates;
+    items = rows.map((row, i) => {
+      if (JSON.stringify(row.set) !== JSON.stringify(space[i].set)) throw new Error(`${name}: candidate ${i} differs from the reference`);
+      return { index: i, set: row.set, patients: row.final.expected_sample_size.value, power: row.final.power.value, typeOne: row.final.type_one_error.value };
+    });
+  }
   const powerBound = SPACES[name].powerBound ?? FROZEN.powerBound;
   const feasible = items.filter((c) => c.power >= powerBound && c.typeOne <= FROZEN.typeOneBound);
   const best = Math.min(...feasible.map((c) => c.patients));
@@ -244,17 +259,18 @@ function oursParameters(world, B) {
   return { finalCount, screening };
 }
 /** Addendum D5: the same campaign with `budget.replicates = B`; the stage sizes follow the domain's one rule (`vcrCampaignBudgetPlan`), the rest is allocated sequentially. */
-function oursParameters2(world, B) {
-  const plan = vcrCampaignBudgetPlan({ candidates: world.items.length, replicates: B });
+function oursParameters2(world, B, screening = null) {
+  const plan = vcrCampaignBudgetPlan({ candidates: world.items.length, replicates: B, screening, cells: screening ? 2 : 1 }); // an OCBA screening looks at both constraints' truths
   return { finalCount: plan.finalCount, screening: plan.screeningReplicates };
 }
-function oursManifest(world, B, sequential = false) {
-  const key = `${world.name}:${B}:${sequential}`;
+function oursManifest(world, B, sequential = false, ocba = false) {
+  const key = `${world.name}:${B}:${sequential}:${ocba}`;
   if (!manifests.has(key)) {
-    const { finalCount, screening } = sequential ? oursParameters2(world, B) : oursParameters(world, B);
+    const { finalCount, screening } = sequential ? oursParameters2(world, B, ocba ? 'ocba' : null) : oursParameters(world, B);
     const sc = SPACES[world.name].scenario;
     const input = baseManifest({ label: world.name, candidates: SPACES[world.name].candidates(), screeningReplicates: screening, finalCount, cpuSeconds: B / 1000, ...sc, powerBound: world.powerBound });
     if (sequential) input.budget.replicates = B;
+    if (ocba) { input.budget.screening = 'ocba'; input.stages.screening.truths = ['alternative', 'null']; }
     const { manifest, issues } = vcrCampaignManifest(input);
     if (!manifest) throw new Error(`${world.name}: ${JSON.stringify(issues)}`);
     manifests.set(key, { manifest, identity: sha256(vcrCampaignCanonical(manifest)), candidates: vcrCampaignCandidates(manifest), finalCount, screening });
@@ -263,9 +279,10 @@ function oursManifest(world, B, sequential = false) {
 }
 const armOurs = (world, B, seed) => runOurs(world, B, seed, false);
 const armOurs2 = (world, B, seed) => runOurs(world, B, seed, true);
-function runOurs(world, B, seed, sequential) {
-  const { manifest, identity, candidates } = oursManifest(world, B, sequential);
-  const armName = sequential ? 'ours2' : 'ours';
+const armOurs3 = (world, B, seed) => runOurs(world, B, seed, true, true); // addendum D6: ours2 with the screening share allocated by OCBA-CO
+function runOurs(world, B, seed, sequential, ocba = false) {
+  const { manifest, identity, candidates } = oursManifest(world, B, sequential, ocba);
+  const armName = ocba ? 'ours3' : sequential ? 'ours2' : 'ours';
   const indexOf = new Map(candidates.map((c) => [c.key, c.index]));
   const est = new Map(); const finalEst = new Map(); let spent = 0;
   let state = vcrCampaignInitialState(manifest);
@@ -276,7 +293,7 @@ function runOurs(world, B, seed, sequential) {
     const unit = action.unit; const index = indexOf.get(unit.candidate); const c = world.items[index];
     const screening = unit.stage === 'screening';
     const alt = unit.truth === 'alternative';
-    const replicates = screening ? manifest.stages.screening.replicates : (unit.replicates ?? FROZEN.floors[unit.truth]);
+    const replicates = screening ? (unit.screeningReplicates ?? manifest.stages.screening.replicates) : (unit.replicates ?? FROZEN.floors[unit.truth]);
     const k = binomial(replicates, alt ? c.power : c.typeOne, stream(world.name, armName, B, seed, unit.key));
     const measures = [{ name: 'expected_sample_size', value: c.patients, mcse: 0, simulated: true, ...(screening ? { precision: 'screening' } : {}) },
       alt ? { name: 'power', value: k / replicates, mcse: Math.sqrt((k / replicates) * (1 - k / replicates) / replicates), simulated: true, ...(screening ? { precision: 'screening' } : {}) }
@@ -294,7 +311,7 @@ function runOurs(world, B, seed, sequential) {
   void est;
   return { est: finalEst, spent, only: null, domainPick: verdict.best == null ? null : indexOf.get(verdict.best), stop: state.stop?.reason ?? null };
 }
-const ARMS = { grid: armGrid, random: armRandom, halving: armHalving, ocba: armOcba, ours: armOurs, ours2: armOurs2 };
+const ARMS = { grid: armGrid, random: armRandom, halving: armHalving, ocba: armOcba, ours: armOurs, ours2: armOurs2, ours3: armOurs3 };
 
 // --- running and aggregating -----------------------------------------------------------------------------------------------------
 function quantile(sorted, q) {
@@ -318,7 +335,7 @@ function runWorld(world, seeds) {
     for (const arm of FROZEN.arms) {
       for (let seed = seedFrom; seed < seedFrom + seeds; seed++) {
         const result = ARMS[arm](world, B, seed);
-        const picks = { point: pickPoint(world, result.est, result.only), platform: pickPlatform(world, result.est, arm === 'ours2' ? 1 - (1 - confidence) / (VCR_ALLOCATION.maxRounds + 1) : confidence, result.only) };
+        const picks = { point: pickPoint(world, result.est, result.only), platform: pickPlatform(world, result.est, arm === 'ours2' || arm === 'ours3' ? 1 - (1 - confidence) / (VCR_ALLOCATION.maxRounds + 1) : confidence, result.only) };
         // ours' own pick is the domain's verdict; my rule P on its final estimates must agree with it (a budgeted arm's looks share the constraints' error:
         // review S3, each look is read at 1 - (1 - confidence) / (maxRounds + 1), so its recomputation is too)
         if (arm.startsWith('ours')) { if (result.domainPick !== picks.platform) disagreements[arm] = (disagreements[arm] ?? 0) + 1; picks.platform = result.domainPick; }
@@ -405,7 +422,7 @@ function tables(worlds, results) {
 
 /** One SVG per world: probability of correct selection, success within epsilon and violation rate against the budget (log scale), rule S. */
 function svg(world, agg) {
-  const colors = { grid: '#8a8d93', random: '#c98a2b', halving: '#2a9d8f', ocba: '#9b5de5', ours: '#1f5fbf', ours2: '#d62828' };
+  const colors = { grid: '#8a8d93', random: '#c98a2b', halving: '#2a9d8f', ocba: '#9b5de5', ours: '#1f5fbf', ours2: '#d62828', ours3: '#111111' };
   const W = 300; const H = 190; const pad = { l: 44, r: 12, t: 28, b: 38 };
   const panels = [['Correct selection', (x) => x.pcs.p, 'point'], ['Success within epsilon', (x) => x.successEps.p, 'point'], ['Violation of picks (truth)', (x) => x.trueViolationOfPicks.p ?? 0, 'point']];
   const lx = (b) => pad.l + (Math.log(b) - Math.log(FROZEN.budgets[0])) / (Math.log(FROZEN.budgets.at(-1)) - Math.log(FROZEN.budgets[0])) * (W - pad.l - pad.r);
@@ -486,7 +503,7 @@ if (flag('--calibrate')) {
   process.exit(0);
 }
 const seeds = Number(option('--seeds', FROZEN.seeds));
-const worlds = [await loadWorld('survival'), await loadWorld('level'), await loadWorld('level85')];
+const worlds = await Promise.all(option('--worlds', 'survival,level,level85,heldout').split(',').map((name) => loadWorld(name)));
 const results = {};
 for (const world of worlds) {
   const { rows, disagreements, confidence } = runWorld(world, seeds);
@@ -495,9 +512,10 @@ for (const world of worlds) {
 }
 let revision = null;
 try { revision = (await run('git', ['rev-parse', 'HEAD'], { cwd: here })).stdout.trim(); } catch { /* not a checkout */ }
-const doc = { revision, frozen: FROZEN, referenceSha256: sha256(await fs.readFile(reference, 'utf8')), worlds: worlds.map((w) => ({ name: w.name, items: w.items, feasibleCount: w.feasibleCount, optimalCount: w.optimalCount, bestPatients: w.bestPatients, penaltyScore: w.penaltyScore })),
+const doc = { revision, frozen: FROZEN, referenceSha256: sha256(await fs.readFile(reference, 'utf8')), heldoutWorldSha256: sha256(await fs.readFile(heldoutFile, 'utf8')), worlds: worlds.map((w) => ({ name: w.name, items: w.items, feasibleCount: w.feasibleCount, optimalCount: w.optimalCount, bestPatients: w.bestPatients, penaltyScore: w.penaltyScore })),
   ours: Object.fromEntries(worlds.map((w) => [w.name, FROZEN.budgets.map((B) => ({ budget: B, ...oursParameters(w, B) }))])),
   ours2: Object.fromEntries(worlds.map((w) => [w.name, FROZEN.budgets.map((B) => ({ budget: B, ...oursParameters2(w, B) }))])),
+  ours3: Object.fromEntries(worlds.map((w) => [w.name, FROZEN.budgets.map((B) => ({ budget: B, ...oursParameters2(w, B, 'ocba') }))])),
   aggregate: Object.fromEntries(worlds.map((w) => [w.name, results[w.name].aggregate])), disagreements: Object.fromEntries(worlds.map((w) => [w.name, results[w.name].disagreements])) };
 if (option('--out')) await fs.writeFile(option('--out'), `${JSON.stringify(doc, null, 1)}\n`);
 const text = tables(worlds, results);

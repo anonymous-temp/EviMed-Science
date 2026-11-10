@@ -118,3 +118,39 @@ byte for byte (they do: 150 of 150 cells). Development of the rule used seeds 10
 development run. A unit of ours2 may carry its own `replicates` (a fresh re-run of a final evaluation); the simulated world draws it exactly like any other unit.
 
 The product default (2026-11-09, controller) derives the same budget from `budget.cpuSeconds` and a measured CPU rate when `budget.replicates` is absent; `ours2` states the replicate budget directly, so this addendum's numbers do not change.
+
+## Addendum D6 (2026-11-10, written and committed before the first search was run on the held-out world; the text above is unchanged)
+
+**Why.** After X1 the campaign (`ours2`) matched grid but trailed the OCBA-style and halving arms at most budgets. The reading of the RUN file is that the loss is in
+*which* design the final evaluations are spent on: screening looks at power alone, so a cheap design that is powered but fails its type I error looks as good as one
+that passes, and the sequential final stage then spends 25,000 trials on it. Screening was an equal split of a fifth of the budget.
+
+**Arm 8, `ours3`:** `ours2` with `budget.screening = 'ocba'` (domain `screeningIncrement`): the campaign's screening share (a fifth of B, as before) is allocated by an
+OCBA-CO-style rule instead of equally. (1) First look: `ocba.firstShare` = 0.5 of the screening share, equally over the designs and over **both** constraint cells (power under
+the alternative, type I error under the null; the cell size is `floor(0.5 x 0.2 B / K / 2 / 100) x 100`, at least 200). (2) Then, one unit at a time, the rest in
+steps of at most 1/`ocba.steps` = 1/4 of what remains: the cheapest design whose point estimates meet every screened constraint is b; the designs with at most b's patients
+are critical (all designs when none meets), each on its dominant cell (a feasible one on its hardest constraint, an infeasible one on its most clearly violated); the
+unit goes to the cell furthest below its OCBA target share w_i / sum w, w_i = sigma_i^2 / max(|estimate - bound|, 0.005)^2 with the smoothed estimate (k + 1/2) / (n + 1)
+and 0.005 as the indifference zone. A design more expensive than b is dominated for free because patients are exact. Screening increments are pooled into the design's
+screening estimate; a screening estimate still never certifies, and a type I error screened above its bound by the one-sided Clopper-Pearson interval eliminates a design
+exactly as a screened power below its bound already did; the screened error-control estimate otherwise ranks only. The sources for the rule: Chen et al. 2000 (OCBA) and
+Lee, Pujowidianto, Li, Chen & Yap 2012 (OCBA-CO, IEEE TAC 57:2940). The paper's theorem could not be retrieved from the web here, so the ratios are the structure of
+OCBA-CO written for an exact objective and one-sided proportions, not a transcription of its formulas; the arm is called OCBA-CO-style and nothing is claimed for the
+paper's optimality.
+
+**The final verdict is untouched:** a fresh final run at or above the floor, each look read at `1 - (1 - c)/(maxRounds + 1)`, frozen alpha, `inconclusive_at_precision`.
+`test/vcrBudgetedSearchErrorControl.test.mjs` (the S3 state machine) and the same test under OCBA screening (`vcrScreeningOcba.test.mjs`) hold.
+
+**Parameter choice, disclosed.** `firstShare` 0.5, `steps` 4 and the 0.005 indifference were written before any run. Development used seeds 1001..1100 of the three existing worlds
+only (never reported, never the held-out world): a first version that screened the power cell alone gave no gain over `ours2`; a version whose screening also looked at the type I
+error cell and ranked finalists by it gave the gain; three alternative settings (firstShare 0.3 / 0.7, steps 8) differed from 0.5 / 4 by less than the seed noise, so 0.5 / 4 stayed.
+The three existing worlds are therefore in-sample for the *design* of `ours3`, as they were for the re-run cap (review S16).
+
+**Held-out world `heldout` (frozen now).** An exact closed-form truth table, `heldout-world.R` -> `results/search-benchmark-heldout-world-20261110.tsv`
+(SHA-256 `6e18fcd79de51ef12293ed8876cb3d370ef11a61c25b9bbae0ed2148251b4a4c`): a two-arm comparison of means, SD 1, true difference 0.5, one-sided test of the pooled-variance t statistic against the **normal** critical value z(1 - alpha),
+so the type I error is P(T_{2n-2} > z) and exceeds alpha at every size; power is the noncentral t tail. Designs: n per arm 40, 45, ..., 80 (total patients 80..160) x analysis
+alpha {0.025, 0.02, 0.015}, 27 designs, power requirement 80%, type I error at most 2.5%. By the table 5 designs are truly feasible and one is optimal (140 patients, alpha 0.02,
+power 0.816, type I error 0.0209); no design at alpha 0.025 is feasible (type I 0.0258-0.0268). No part of the table is an estimate, so its feasibility is exact; unlike
+the first three worlds nothing was tuned on it and no search had been run on it when this was written. It is **not calibrated against the real engine** (the first world's
+`--calibrate` is the only engine check) and the manifest shell is the level family's (nothing in a search reads the endpoint; a unit's outcome is a draw from the truth table).
+Budgets, seeds 1..200, pick rules, metrics and reading are those above, for every arm; the earlier arms re-run on the three first worlds must reproduce the previous result file.
