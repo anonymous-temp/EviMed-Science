@@ -9,6 +9,7 @@ import { directionalCounts } from './directional.mjs';
 import { chooseSkillCandidate, inSkillSlice, skillArmsIssues, skillCampaignConsumerIdentity, skillObservations, skillScorer, skillSlice, SKILL_BASELINE_ARM } from './skill_campaign.mjs';
 import { chooseHarnessCandidate, harnessCampaignConsumerIdentity, harnessCampaignIssue, harnessDevelopmentResult, harnessObservations } from './harness_campaign.mjs';
 import { toolPatchCampaignConsumerIdentity } from './tool_patch_campaign.mjs';
+import { chooseModuleCandidate, moduleCampaignConsumerIdentity, moduleCampaignIssue, moduleConfirmation, moduleConfirmationSealed, moduleDirectional } from './module_campaign.mjs';
 export const digest = rsiDigest;
 const stop = reason => ({status:'not-qualified',reason});
 /** Statistics answers that are a verdict on the evidence; anything else (authority, receipt, process failure) is retried. */
@@ -149,6 +150,20 @@ const harnessConsumer={
    return {result:{observations:measured.observations,scores:measured.scores ?? null},reason:measured.reason};
   },
  };
+/** One component of one of the platform's own module policies, measured on arms the operator's box ran with production's classes (module_campaign.mjs): the harness consumer with that surface's kit, and each surface's own error budget. */
+const moduleConsumer={
+  ...harnessConsumer,
+  directional:moduleDirectional,
+  // A round on the repo's cases says what it is, and runs as a directional reading; only this consumer's validation can tell.
+  exposedConfirmationAllowed:registration=>!moduleConfirmationSealed(registration),
+  identity:moduleCampaignConsumerIdentity,
+  validate:moduleCampaignIssue,
+  develop(source, registration) {
+   const choice=chooseModuleCandidate(source,registration);
+   return {result:harnessDevelopmentResult(choice),frozen:choice.frozen,reason:choice.reason};
+  },
+  confirm:moduleConfirmation,
+ };
 /** Closed consumer registry: no executable paths, prompts, dynamic module imports or arbitrary callbacks in inputs. */
 const consumers = Object.freeze({
  'frontier-selection': {
@@ -237,6 +252,8 @@ const consumers = Object.freeze({
   * identity, and the runtime image's error budget, shared with harness-patch (`alphaLedger`).
   */
  'tool-patch': {...harnessConsumer,identity:toolPatchCampaignConsumerIdentity},
+ 'frontier-screen': moduleConsumer,
+ 'frontier-edit': moduleConsumer,
 });
 function validateInputs(manifest, inputs) {
  if (!inputs || typeof inputs !== 'object' || !inputs.registration || !inputs.sources) return 'campaign_inputs_missing';
@@ -245,7 +262,7 @@ function validateInputs(manifest, inputs) {
  if (digest(inputs.target) !== digest(manifest.target)) return 'campaign_target_changed';
  const dev=manifest.data.sources.find(row=>row.role==='development'), confirm=manifest.data.sources.find(row=>row.role==='confirmation');
  if(!dev || !confirm || dev.id===confirm.id || dev.digest===confirm.digest) return 'campaign_independent_sources_missing';
- if(manifest.data.classification!=='synthetic' && confirm.exposure!=='sealed') return 'campaign_confirmation_not_independent';
+ if(manifest.data.classification!=='synthetic' && confirm.exposure!=='sealed' && !consumers[manifest.surface]?.exposedConfirmationAllowed?.(inputs.registration)) return 'campaign_confirmation_not_independent';
  return consumers[manifest.surface]?.validate(manifest,inputs,dev,confirm) ?? null;
 }
 export async function runCampaign({manifest,inputs,configuration,store,attestLab,now=()=>new Date().toISOString(),signal,attestEvaluation,statisticsPython,statisticsModulePath,incidentTransport}) {
@@ -377,7 +394,7 @@ async function evaluateCampaignEvidence({manifest,inputs,state,request,attestEva
  const attestations=authority.receipt?.attestations;
  const observed={registration_digest:digest(registration),confirmation_exposed:false,look:state.confirmationLooks,complete_costs:true,cost_identity:registration.cost_identity,expired_budget:Date.parse(now())>=Date.parse(registration.expires_at)};
  if(!attestations || ATTESTED.some(key=>digest(attestations[key] ?? null)!==digest(observed[key] ?? null))) return verdict('not-qualified','campaign_integrity_attestation_differs');
- if(Number.isFinite(inputs.registration.maxVolumeRatio) && !(confirmation.volumeRatio<=inputs.registration.maxVolumeRatio)) return verdict('not-qualified','campaign_volume_guard',{volumeRatio:confirmation.volumeRatio});
+ if((Number.isFinite(inputs.registration.maxVolumeRatio) && !(confirmation.volumeRatio<=inputs.registration.maxVolumeRatio)) || (Number.isFinite(inputs.registration.minVolumeRatio) && !(confirmation.volumeRatio>=inputs.registration.minVolumeRatio))) return verdict('not-qualified','campaign_volume_guard',{volumeRatio:confirmation.volumeRatio});
  const costs=new Map(authority.costs.map(row=>[`${row.group}\0${row.arm}\0${row.form}\0${row.repeat}`,row.cost]));
  if(costs.size!==confirmation.observations.length) return retry('campaign_cost_measurement_missing');
  const observations=[];
@@ -392,7 +409,7 @@ async function evaluateCampaignEvidence({manifest,inputs,state,request,attestEva
  if(!VERDICTS.includes(evaluated.decision)) return retry(evaluated.reason ?? 'campaign_statistics_failed');
  // Below the procedure's minimum groups nothing can be qualified, whatever the arms scored: a directional reading, said as such.
  const directional=consumers[manifest.surface].directional?.(inputs.registration) ?? null;
- if(directional) evaluated={...evaluated,decision:'inconclusive',reasons:['campaign_directional_below_minimum_groups',...(evaluated.reasons ?? [])],directional};
+ if(directional) evaluated={...evaluated,decision:'inconclusive',reasons:[directional.code ?? 'campaign_directional_below_minimum_groups',...(evaluated.reasons ?? [])],directional};
  const scope=directional?'directional-reference':manifest.data.classification==='synthetic'?'synthetic-finite-corpus-only':registration.mode==='paired-t'?'registered-population-task-family':'registered-finite-confirmation-corpus';
  return {final:true,...evaluated,statisticsInput,...(authority.expiresAt?{expiresAt:authority.expiresAt}:{}),observationDigest:digest(observations),costProvenance:authority.costProvenance,authorityReceiptDigest:digest(authority),...(confirmation.volumeRatio===undefined?{}:{volumeRatio:confirmation.volumeRatio}),scope};
 }

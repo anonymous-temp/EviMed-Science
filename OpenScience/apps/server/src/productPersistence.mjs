@@ -175,6 +175,9 @@ CREATE TABLE IF NOT EXISTS evimed_product.revisions (
 CREATE INDEX IF NOT EXISTS product_result_replay_unrecorded_completion_idx ON evimed_product.documents (updated_at,user_id) WHERE kind='result-replay' AND deleted_at IS NULL AND payload->>'completionOutboxResultKey' IS DISTINCT FROM COALESCE(payload->>'outputVersionId','none');
 CREATE INDEX IF NOT EXISTS product_result_replay_completion_idx ON evimed_product.documents (updated_at,user_id)
   WHERE kind='result-replay' AND deleted_at IS NULL;
+-- What serving dated for retention (evolutionRetention.mjs). Rows that carry no date, every row written before the date existed included, are not in it.
+CREATE INDEX IF NOT EXISTS product_documents_retain_until_idx ON evimed_product.documents ((payload->>'retainUntil'))
+  WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'retainUntil' IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS evimed_product.prompt_stop_intents (
  user_id text NOT NULL,project_id text NOT NULL,session_id text NOT NULL,run_id text NOT NULL,
@@ -247,6 +250,15 @@ BEGIN
     INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-29-evidence-programme-retired-v1') ON CONFLICT DO NOTHING;
   END IF;
 END $programme_retired$;
+-- 「循证进化」's tool serving was deleted (2026-11-09) and nothing claims an evolution-* job any more: at every start the queued and the lease-expired ones are cancelled,
+-- rows kept (their identity stays evidence, and their idempotency keys stay taken). Every start, not once: a job an old worker still held at the first start, or one an old
+-- release enqueued during a switch, would otherwise stay queued or running for good. A live lease is left to the worker holding it. Both partial indexes serve the scan.
+UPDATE evimed_product.jobs SET status='canceled',
+  result=coalesce(result,'{}'::jsonb)||jsonb_build_object('servingRetired',jsonb_build_object('priorStatus',status,'priorError',error)),
+  error=jsonb_build_object('code','evolution_serving_retired','message','Tool serving was deleted; the job is kept as a record.'),
+  lease_token=NULL,lease_expires_at=NULL,finished_at=clock_timestamp(),updated_at=clock_timestamp()
+  WHERE kind IN (${EVOLUTION_JOB_KINDS.map(kind => `'${kind}'`).join(",")})
+    AND (status='queued' OR (status='running' AND lease_expires_at<clock_timestamp()));
 DO $migration$
 DECLARE constraint_name text;
 BEGIN

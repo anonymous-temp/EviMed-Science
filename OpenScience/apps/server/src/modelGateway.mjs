@@ -1,4 +1,3 @@
-import { evolutionUsageContext } from './evolutionUsage.mjs';
 import { reasoningFields } from "./modelReasoningPolicy.mjs";
 // The production model is certified end to end, not merely configured: the
 // release gate exercises the whole tool chain against it and signs a receipt
@@ -1105,11 +1104,9 @@ export function createModelGatewayHandler(config, runtimeManager, {
         // A runtime's request is the kernel's unless its run says otherwise.
         // Asking can fail (the run ledger is a file); the answer is a report
         // column, so a failure records `kernel` rather than costing the call.
-        const evolutionEngine = caller.engine && config.evolutionEnabled === true && config.operatorUsers?.includes(caller.userId)
-          && (caller.projectId === 'evimed-evolution' || /^eval-paper-[a-z0-9_-]+$/.test(caller.projectId));
         // Project/owner are authenticated signed engine-token claims, never request-body purpose.
         // The service caller's purpose is the one its bearer named; nothing in its request can change it.
-        const purpose = caller.service ? caller.purpose : caller.engine ? (evolutionEngine ? "evolution" : "engine") : runPurpose
+        const purpose = caller.service ? caller.purpose : caller.engine ? "engine" : runPurpose
           ? await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }).catch(() => "kernel")
           : "kernel";
         reservation = await usageLedger.reserveModel({
@@ -1119,8 +1116,8 @@ export function createModelGatewayHandler(config, runtimeManager, {
           priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency, requestFingerprint: fingerprint,
           estimatedCost: estimate.cost,
           // The platform's account has no personal caps: the service caller was admitted against the module's own day.
-          dailyLimit: caller.service ? 0 : purpose === "evolution" ? minimumPositive(caller.dailyLimit, config.evolutionDailyBudgetCny) : minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
-          weeklyLimit: caller.service || purpose === "evolution" ? 0 : minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
+          dailyLimit: caller.service ? 0 : minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
+          weeklyLimit: caller.service ? 0 : minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
           runLimit,
           now: requestStartedAt,
         });
@@ -1333,7 +1330,6 @@ const CONTROL_PLANE_NEVER_SENT = /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREA
  * @returns {Promise<any>} the provider's parsed JSON response
  */
 export async function callModelForControlPlane({ config, usageLedger, fetchImpl = fetch }, call) {
-  if (evolutionUsageContext()) call={...call,purpose:'evolution',limits:{daily:config.evolutionDailyBudgetCny,weekly:0,run:call.limits?.run??0}};
   const at = call.at ?? new Date();
   const body = { ...call.body, stream: false };
   if (!supportedDeepSeekModels.has(String(body.model ?? ""))) {

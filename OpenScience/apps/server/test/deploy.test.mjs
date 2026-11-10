@@ -435,8 +435,7 @@ test("web Dockerfile only copies sources that exist in the build context", async
 
 test("every evals/ file the server reads at run time is in the web image", async () => {
   // 2026-10-07: 循证进化's module loops read three development case files the image never
-  // carried, so each 前沿动态, 循证 GEO and 主动科研 mission would have stopped on ENOENT. The
-  // evolution packaging test watched paper-gold only; this derives every literal read.
+  // carried, so each mission would have stopped on ENOENT. This derives every literal read.
   const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
   const copied = dockerfile.split("\n").filter((line) => line.startsWith("COPY --from=build "))
     .flatMap((line) => splitDockerWords(line).slice(2, -1)).filter((source) => source.startsWith("/app/evals/"))
@@ -450,7 +449,7 @@ test("every evals/ file the server reads at run time is in the web image", async
     const body = await readFile(path.join(sourceRoot, name), "utf8");
     for (const [, file] of body.matchAll(/["'`]\.\.\/\.\.\/\.\.\/(evals\/[^"'`$]+)["'`]/g)) read.add(file);
   }
-  assert.ok(read.has("evals/frontier-editing/cases.json") && read.has("evals/paper-gold/evaluator.mjs"), "the scan, not the image, is wrong");
+  assert.ok(covers("evals/tool-graph/x.json") && !covers("evals/paper-gold/evaluator.mjs"), "the check, not the image, is wrong");
   const missing = [...read].filter((file) => !covers(file)).sort();
   assert.deepEqual(missing, [], `read at run time but not in the web image: ${missing.join(", ")}`);
 });
@@ -2446,10 +2445,8 @@ test("file-delivery capabilities fix the two pre-delivery steps instead of leavi
     // use proportional numerical checks and optional companions, as covered by
     // their capability suites: their numbers are rendered from a tool's or a
     // script's results, not typed from sources. They do not inherit the full
-    // report pipeline's mandatory skill sequence. The two 循证进化 packages
-    // (evolution-scout, tool-builder) deliver one JSON artifact to a platform job,
-    // not prose to a reader, so they have no report to trace or humanize.
-    if (["dataset-research-scoping", "statistical-analysis", "gene-expression-analysis", "evolution-scout", "tool-builder"].includes(name)) continue;
+    // report pipeline's mandatory skill sequence.
+    if (["dataset-research-scoping", "statistical-analysis", "gene-expression-analysis"].includes(name)) continue;
     for (const step of ["traceability-review", "manuscript-humanize"]) {
       assert.ok(skill.includes(step), `${name}/SKILL.md does not name ${step} as a pre-delivery step`);
       assert.ok(shipped.includes(step), `capability-skills/${name}/SKILL.md does not name ${step}; the authored copy is not what the run reads`);

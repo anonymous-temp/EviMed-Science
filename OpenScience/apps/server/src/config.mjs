@@ -8,7 +8,7 @@ import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 import { researchDbSettings } from "./researchDbConfig.mjs";
-import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
+import { EVOLUTION_CONFIG_SCHEMA, validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
 import { REGISTER_JUDGE_MAX_LINES } from "./reportRegisterJudge.mjs";
 import { PINNED } from "./pinnedVersions.mjs";
 
@@ -21,17 +21,6 @@ import { PINNED } from "./pinnedVersions.mjs";
  * other way is an error message nobody receives.
  */
 const GATEWAY_RESPONSE_MARGIN_MS = 30_000;
-
-/** Trusted immutable Docker identities; names cannot certify peer isolation. @param {unknown} value */
-function runtimeEgressPeers(value) {
-  if (!Array.isArray(value) || value.length > 16 || value.some(peer => !peer || typeof peer !== 'object'
-    || Object.keys(peer).some(key => !['containerId', 'imageId'].includes(key))
-    || !/^[a-f0-9]{64}$/.test(peer.containerId) || !/^sha256:[a-f0-9]{64}$/.test(peer.imageId))
-    || new Set(value.map(peer => peer.containerId)).size !== value.length) {
-    throw new Error('OPEN_SCIENCE_RUNTIME_EGRESS_ALLOWED_PEERS must contain unique immutable containerId/imageId tuples.');
-  }
-  return value.map(peer => ({ containerId: peer.containerId, imageId: peer.imageId }));
-}
 
 /**
  * One JSON setting of the evolution module, read from the environment without
@@ -671,9 +660,6 @@ function countSetting(overrides, key, name, fallback) {
  *   document for the eval corpus and an observation on the methods of the run that produced it. Ticked by the learning worker's housekeeping timer, so it
  *   needs the learning loop on; off, no table is read and no timer exists. `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH` (25, at most 200) is the
  *   change-log entries one pass reads: a bound on the database's work, not on how soon an outcome is noticed.
- * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (循证 GEO, 虚拟临床研究) hand 循证进化 what they could
- *   not do as research leads; needs the evolution module on. `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY` (5, at most 50) bounds the new leads of these
- *   sources taken in a day, because each lead is a scouting run on the module's own budget.
  * - `OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED` (on): a method the learning loop wrote for a person that holds no personal or project fact may join the platform's
  *   pack 「大家的做法」 (`officialPromotion.mjs`), after the code's field checks, a generality judge, a harm judge, the author rule and an independent re-check by a
  *   model of another family. It needs the learning loop on and a review provider that is not DeepSeek: with none, nothing is considered and nothing is spent.
@@ -697,9 +683,6 @@ function evidenceFlywheelSettings(overrides) {
     if (!Number.isSafeInteger(value) || value < 0 || value > max) throw new Error(`${name} must be a whole number from 0 to ${max}, got ${JSON.stringify(raw)}.`);
     return value;
   };
-  const perDayRaw = overrides.evolutionModuleLeadsPerDay !== undefined ? overrides.evolutionModuleLeadsPerDay : process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY;
-  const moduleLeadsPerDay = perDayRaw == null || perDayRaw === "" ? 5 : Number(perDayRaw);
-  if (!Number.isSafeInteger(moduleLeadsPerDay) || moduleLeadsPerDay < 1 || moduleLeadsPerDay > 50) throw new Error(`OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY must be a whole number from 1 to 50, got ${JSON.stringify(perDayRaw)}.`);
   const batchRaw = overrides.learningEvidenceOutcomesBatch !== undefined ? overrides.learningEvidenceOutcomesBatch : process.env.OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH;
   const outcomesBatch = batchRaw == null || batchRaw === "" ? 25 : Number(batchRaw);
   if (!Number.isSafeInteger(outcomesBatch) || outcomesBatch < 1 || outcomesBatch > 200) throw new Error(`OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH must be a whole number from 1 to 200, got ${JSON.stringify(batchRaw)}.`);
@@ -707,8 +690,6 @@ function evidenceFlywheelSettings(overrides) {
     evidenceFlywheelMetricsEnabled: overrides.evidenceFlywheelMetricsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED", false),
     learningEvidenceOutcomesEnabled: overrides.learningEvidenceOutcomesEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED", false),
     learningEvidenceOutcomesBatch: outcomesBatch,
-    evolutionModuleLeadsEnabled: overrides.evolutionModuleLeadsEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED", false),
-    evolutionModuleLeadsPerDay: moduleLeadsPerDay,
     officialPromotionEnabled: overrides.officialPromotionEnabled ?? boolEnv("OPEN_SCIENCE_OFFICIAL_PROMOTION_ENABLED", true),
     officialPromotionPerDay: promotionPerDay,
     officialPromotionMinAccountAgeDays: standingFloor("officialPromotionMinAccountAgeDays", "OPEN_SCIENCE_OFFICIAL_PROMOTION_MIN_ACCOUNT_AGE_DAYS", 14, 365),
@@ -1814,8 +1795,6 @@ export function loadConfig(overrides = {}) {
   const publicSourceCredentialSpecs = {
     evimedEvidence: ["evimedApiKey", "OPEN_SCIENCE_EVIMED_API_KEY", "evimed.api-key"],
     semanticScholar: ["semanticScholarApiKey", "OPEN_SCIENCE_SEMANTIC_SCHOLAR_API_KEY", "semantic-scholar.api-key"],
-    // Optional, and read by the control plane only (evolutionScholarEnrichment.mjs): without it OpenAlex is not asked about a shortlisted paper.
-    openAlex: ["openAlexApiKey", "OPEN_SCIENCE_OPENALEX_API_KEY", "openalex.api-key"],
     core: ["coreApiKey", "OPEN_SCIENCE_CORE_API_KEY", "core.api-key"],
     unpaywall: ["unpaywallEmail", "OPEN_SCIENCE_UNPAYWALL_EMAIL", "unpaywall.email"],
     umls: ["umlsApiKey", "OPEN_SCIENCE_UMLS_API_KEY", "umls.api-key"],
@@ -2005,11 +1984,7 @@ export function loadConfig(overrides = {}) {
   const runtimeTransport = runtimeProvider === "agentbay" ? "wss" : runtimeTransportSetting;
   const backupDir = overrides.backupDir ?? process.env.OPEN_SCIENCE_BACKUP_DIR ?? "";
 
-  // The two JSON settings of the evolution module are read without throwing (see
-  // `environmentJsonList`); a value a caller passes in code is still checked as before.
-  const egressPeers = overrides.runtimeEgressAllowedPeers !== undefined
-    ? { value: runtimeEgressPeers(overrides.runtimeEgressAllowedPeers), issue: false }
-    : environmentJsonList("OPEN_SCIENCE_RUNTIME_EGRESS_ALLOWED_PEERS", runtimeEgressPeers);
+  // The JSON setting of the evolution module is read without throwing (`environmentJsonList`).
   const dependencyAllowlist = overrides.evolutionDependencyAllowlist !== undefined
     ? { value: overrides.evolutionDependencyAllowlist, issue: false }
     : environmentJsonList("OPEN_SCIENCE_EVOLUTION_DEPENDENCY_ALLOWLIST");
@@ -2527,7 +2502,6 @@ export function loadConfig(overrides = {}) {
       (runtimeTransport === "unix" ? "none" : "bridge"),
     runtimeInternalNetworkName:
       overrides.runtimeInternalNetworkName ?? process.env.OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME ?? "",
-    runtimeEgressAllowedPeers: egressPeers.value,
     allowRuntimeNetworkEgress:
       overrides.allowRuntimeNetworkEgress ?? boolEnv("OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS", !production),
     runtimeNetworkEgressPolicyAck:
@@ -3182,76 +3156,18 @@ export function loadConfig(overrides = {}) {
     // under a budget it shares with the researcher cannot be tested at all.
     // Both remain settable; setting `OPEN_SCIENCE_LEARNING_ENABLED=false`
     // still turns the loop off.
-    // Literature-driven platform development (循证进化) has its own accounting. On by default since
-    // 2026-10-07 (owner: 「循证进化默认打开」); it still needs PostgreSQL and the product ledger, and
-    // `OPEN_SCIENCE_EVOLUTION_ENABLED=false` turns it off.
-    rsiOnlineConfigFile: overrides.rsiOnlineConfigFile ?? process.env.OPEN_SCIENCE_RSI_ONLINE_CONFIG_FILE ?? "",
-    evolutionEnabled: overrides.evolutionEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_ENABLED", true),
-    evolutionEvaluationNetwork: overrides.evolutionEvaluationNetwork ?? process.env.OPEN_SCIENCE_EVOLUTION_EVALUATION_NETWORK ?? '',
+    // 循证进化's closed-code signal store and the code skills' executor (the module that served published tools was deleted 2026-11-09, and its switch with it).
     // Defaults live in `evolutionConfiguration.mjs`'s schema, with the reasons and the bounds; the defaults written here must equal it (`evolutionConfiguration.test.mjs` holds them equal).
-    evolutionDailyBudgetCny: Number(overrides.evolutionDailyBudgetCny ?? process.env.OPEN_SCIENCE_EVOLUTION_DAILY_BUDGET_CNY ?? 100),
-    evolutionRunBudgetCny: Number(overrides.evolutionRunBudgetCny ?? process.env.OPEN_SCIENCE_EVOLUTION_RUN_BUDGET_CNY ?? 10),
-    evolutionMaxConcurrency: Number(overrides.evolutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY ?? 1),
-    evolutionLightConcurrency: Number(overrides.evolutionLightConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY ?? 2),
-    evolutionSearchPaused: overrides.evolutionSearchPaused ?? boolEnv("OPEN_SCIENCE_EVOLUTION_SEARCH_PAUSED", false),
-    // The serving cutover (2026-10-26, the offline RSI lab): on, the control plane composes only what serves published state (events, decision
-    // expiries, the operators' digest, a retirement's completion) and nothing experimental runs online. It is a
-    // one-way cutover of queued experimental work: at the first worker poll the nine experimental job kinds that are queued or lease-expired are
-    // cancelled as `evolution_offline_only`, queued events of any other type are closed as `retired-to-lab`, pending decision cards whose default
-    // is an experiment are closed, an unanswered harm review takes the protective retirement, the experimental POST /api/evolution routes answer
-    // 409, and the search pause above is implied. Off (the default), evolution composes exactly as before the lab and `evolutionSearchPaused`
-    // alone governs the pause.
-    evolutionServingOnly: overrides.evolutionServingOnly ?? boolEnv("OPEN_SCIENCE_EVOLUTION_SERVING_ONLY", false),
-    evolutionMaxDecisionCards: Number(overrides.evolutionMaxDecisionCards ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS ?? 3),
-    // How many different accounts of a class a user-originated signal or lead needs before the platform loop reads it (review D-E12). Researchers
-    // need five, always: one person's private work must not steer the platform. An operator's own account is the platform's, and on a deployment
-    // with a handful of accounts five could never be reached, so the operator class is counted on its own against this floor (1 to 5).
-    // The hours the heavy, model-intensive evolution work (scouting, building, evaluation, missions with their confirmation runs and fresh-paper sets,
-    // the monthly policy loop, the audits, the weekly self-research that writes mechanism cards) is claimed in, `HH:MM-HH:MM` in China time, or `always`.
-    // 22:00-07:00 is 14:00-23:00 UTC, wholly inside DeepSeek's half-price hours (peak: weekdays 01:00-04:00 and 06:00-10:00 UTC), so it halves the cost of
-    // this work and leaves the daytime to researchers. Collection and the light jobs run at any hour. A value that cannot be read is no window.
-    evolutionHeavyWindow: String(overrides.evolutionHeavyWindow ?? process.env.OPEN_SCIENCE_EVOLUTION_HEAVY_WINDOW ?? "22:00-07:00").trim(),
+    rsiOnlineConfigFile: overrides.rsiOnlineConfigFile ?? process.env.OPEN_SCIENCE_RSI_ONLINE_CONFIG_FILE ?? "",
+    // How many different accounts of the operator class a lead needs before it reads as ready for the offline lab; researchers are counted on their own (1 to 5).
     evolutionOperatorSignalFloor: Number(overrides.evolutionOperatorSignalFloor ?? process.env.OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR ?? 1),
-    // The weekly self-research funnel (evolutionSelfResearch.mjs): what a week may screen, shortlist, read whole and write.
-    // The caps are the platform's attention, not its money (a full week is about half a million input tokens); the text bound keeps one paper's
-    // full text to what a card can quote from in one call.
-    evolutionSelfResearchScreenLimit: Number(overrides.evolutionSelfResearchScreenLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_SCREEN_LIMIT ?? 300),
-    evolutionSelfResearchShortlistLimit: Number(overrides.evolutionSelfResearchShortlistLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_SHORTLIST_LIMIT ?? 30),
-    evolutionSelfResearchFullTextLimit: Number(overrides.evolutionSelfResearchFullTextLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_FULL_TEXT_LIMIT ?? 12),
-    evolutionSelfResearchCardLimit: Number(overrides.evolutionSelfResearchCardLimit ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_CARD_LIMIT ?? 8),
-    // A request the knowledge-source plugin has not taken in this many days is closed as lapsed. The plugin pulls the list daily, so a request it still
-    // has not taken after a month is one it declines, and it must not hold one of the twenty-five places for ever.
-    evolutionSourceRequestLapseDays: Number(overrides.evolutionSourceRequestLapseDays ?? process.env.OPEN_SCIENCE_EVOLUTION_SOURCE_REQUEST_LAPSE_DAYS ?? 30),
-    evolutionSelfResearchTextChars: Number(overrides.evolutionSelfResearchTextChars ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_RESEARCH_TEXT_CHARS ?? 60_000),
-    evolutionMaxPaperScoutsPerDay: Number(overrides.evolutionMaxPaperScoutsPerDay ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY ?? 2),
-    evolutionScoutBudgetShare: Number(overrides.evolutionScoutBudgetShare ?? process.env.OPEN_SCIENCE_EVOLUTION_SCOUT_BUDGET_SHARE ?? 0.2),
-    evolutionModuleLoopBudgetShare: Number(overrides.evolutionModuleLoopBudgetShare ?? process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LOOP_BUDGET_SHARE ?? 0.5),
-    evolutionRecordRetentionDays: Number(overrides.evolutionRecordRetentionDays ?? process.env.OPEN_SCIENCE_EVOLUTION_RECORD_RETENTION_DAYS ?? 14),
+    evolutionSignalRetentionDays: Number(overrides.evolutionSignalRetentionDays ?? process.env.OPEN_SCIENCE_EVOLUTION_SIGNAL_RETENTION_DAYS ?? 180),
     evolutionRetentionBatchRows: Number(overrides.evolutionRetentionBatchRows ?? process.env.OPEN_SCIENCE_EVOLUTION_RETENTION_BATCH_ROWS ?? 5000),
-    evolutionDecisionTimeoutMs: Number(overrides.evolutionDecisionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS ?? 86_400_000),
-    evolutionPollMs: Number(overrides.evolutionPollMs ?? process.env.OPEN_SCIENCE_EVOLUTION_POLL_MS ?? 15_000),
-    evolutionLeaseMs: Number(overrides.evolutionLeaseMs ?? process.env.OPEN_SCIENCE_EVOLUTION_LEASE_MS ?? 120_000),
-    evolutionRetryMs: Number(overrides.evolutionRetryMs ?? process.env.OPEN_SCIENCE_EVOLUTION_RETRY_MS ?? 60_000),
-    evolutionEvaluationTimeoutMs: Number(overrides.evolutionEvaluationTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_EVALUATION_TIMEOUT_MS ?? 3_600_000),
-    evolutionMaxBuildAttempts: Number(overrides.evolutionMaxBuildAttempts ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_BUILD_ATTEMPTS ?? 3),
-    evolutionMaxJobAttempts: Number(overrides.evolutionMaxJobAttempts ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_JOB_ATTEMPTS ?? 3),
-    evolutionMaxArtifactBytes: Number(overrides.evolutionMaxArtifactBytes ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_ARTIFACT_BYTES ?? 2_000_000),
-    // Candidate execution has its own controller instance, slots and timeout (`evolutionVerificationController.mjs`):
-    // static checks, self tests, hidden-case replicates and every tenant call of a published tool are one disposable
-    // container each, hundreds per build cycle, and they must never share a slot, an admission lock or the
-    // sticky `blocked` latch with the document tools tenants use (S2).
+    // Code execution has its own controller instance, slots and timeout (`evolutionVerificationController.mjs`): a learned method's scripts run in one disposable
+    // container each, and must never share a slot, an admission lock or the sticky `blocked` latch with the document tools tenants use (S2).
     evolutionExecutionMaxConcurrency: Number(overrides.evolutionExecutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY ?? 1),
     evolutionExecutionTimeoutMs: Number(overrides.evolutionExecutionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS ?? 30_000),
-    // What one tenant project may ask of a published tool through the gateway, so one run's loop cannot queue every
-    // other tenant behind it: calls in flight at once, and calls in a minute (S4).
-    evolutionToolMaxConcurrentPerProject: Number(overrides.evolutionToolMaxConcurrentPerProject ?? process.env.OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT ?? 2),
-    evolutionToolCallsPerMinute: Number(overrides.evolutionToolCallsPerMinute ?? process.env.OPEN_SCIENCE_EVOLUTION_TOOL_CALLS_PER_MINUTE ?? 60),
     evolutionDependencyAllowlist: dependencyAllowlist.value,
-    // Why the module is off although it was switched on: the first thing wrong with its settings
-    // (`{ code, key }`, never a value), or null. A module that is wrongly configured refuses to
-    // start and says why; it never stops the platform (principle 14).
-    evolutionRefusal: null,
-    evaluationDataDir: overrides.evaluationDataDir ?? process.env.OPEN_SCIENCE_EVALUATION_DATA_DIR ?? "",
     learningEnabled: overrides.learningEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_ENABLED", true),
     learningPollMs: Number(overrides.learningPollMs ?? process.env.OPEN_SCIENCE_LEARNING_POLL_MS ?? 5_000),
     learningLeaseMs: Number(overrides.learningLeaseMs ?? process.env.OPEN_SCIENCE_LEARNING_LEASE_MS ?? 900_000),
@@ -3761,20 +3677,11 @@ export function loadConfig(overrides = {}) {
     runtimeAnnotationEnabled: overrides.runtimeAnnotationEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ANNOTATION_ENABLED", true),
     runtimeMermaidEnabled: overrides.runtimeMermaidEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED", true),
   };
-  if (config.evolutionEnabled) {
-    // The module is on: anything wrong with its settings keeps it off, with the code and key of
-    // the first finding in `evolutionRefusal` for the entrypoints to report. It used to throw
-    // here, which stopped the API and the runtime controller — research included — for a
-    // setting of an optional module.
-    const issues = [
-      ...(egressPeers.issue ? [{ code: "evolution_setting_invalid", key: "runtimeEgressAllowedPeers" }] : []),
-      ...(dependencyAllowlist.issue ? [{ code: "evolution_dependency_allowlist_invalid", key: "evolutionDependencyAllowlist" }] : []),
-      ...validateEvolutionConfiguration(config),
-    ];
-    if (issues.length) {
-      config.evolutionEnabled = false;
-      config.evolutionRefusal = { code: issues[0].code, key: issues[0].key };
-    }
+  // A wrong setting of the signal store or the code executor never stops the platform (principle 14): it is said by key (never its value) and the default is used.
+  // An invalid dependency allowlist admits nothing.
+  for (const issue of [...(dependencyAllowlist.issue ? [{ code: "evolution_dependency_allowlist_invalid", key: "evolutionDependencyAllowlist" }] : []), ...validateEvolutionConfiguration(config)]) {
+    process.stderr.write(`evolution: ${issue.code} (${issue.key}); the default is used\n`);
+    /** @type {Record<string, any>} */ (config)[issue.key] = issue.key === "evolutionDependencyAllowlist" ? [] : /** @type {Record<string, any>} */ (EVOLUTION_CONFIG_SCHEMA)[issue.key].default;
   }
   return config;
 }

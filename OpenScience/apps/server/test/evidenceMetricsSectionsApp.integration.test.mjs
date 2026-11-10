@@ -52,7 +52,7 @@ test("with 循证 GEO and its question bank composed the page shows the bank's m
   assert.ok(page.includes("AI 助手回答常见用药问题"), "the section");
   assert.match(page, /<tr><td>用法用量<\/td><td class="num">3<\/td><td class="num">2<\/td><td class="num">1<\/td><td class="num">50%<\/td><\/tr>/);
   assert.match(asked[0].month, /^\d{4}-\d{2}$/);
-  assert.equal(page.includes("预测的校准"), false, "no registry composed: no calibration section");
+  assert.equal(page.includes("预测的校准"), false, "no calibration section, composed or not");
 
   const off = await boot(false);
   assert.equal(off.app.geo?.questionBank, undefined);

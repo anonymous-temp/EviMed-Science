@@ -288,24 +288,3 @@ test("admission freezes the validated session policy in each job and rejects unr
   assert.equal(response.status, 400);
 });
 
-test('trusted operator evaluation engine calls share evolution purpose and daily cap without runtime-reported purpose', async t => {
-  const cfg = config({ evolutionEnabled: true, operatorUsers: ['user-1'], evolutionDailyBudgetCny: 50 });
-  for (const projectId of ['eval-paper-budget', 'evimed-evolution']) {
-    const events = [];
-    const response = await gatewayCall(t, { cfg, token: engineToken({ projectId, limits: { dailyLimit: 100, runLimit: 1 } }), events });
-    assert.equal(response.status, 200);
-    assert.equal(events[0].input.purpose, 'evolution');
-    assert.equal(events[0].input.dailyLimit, 50);
-    assert.equal(events[0].input.weeklyLimit, 0);
-    assert.equal(events[0].input.runLimit, 1);
-  }
-  for (const overrides of [{ projectId: 'ordinary' }, { userId: 'other', projectId: 'eval-paper-budget' }]) {
-    const events = [];
-    await gatewayCall(t, { cfg, token: engineToken(overrides), events });
-    assert.equal(events[0].input.purpose, 'engine');
-  }
-  const upstreamBodies = [];
-  const response = await gatewayCall(t, { cfg, token: engineToken({ projectId: 'eval-paper-budget' }), upstreamBodies, usageLedger: { reserveModel: async input => { assert.equal(input.purpose, 'evolution'); assert.equal(input.dailyLimit, 50); throw Object.assign(new Error('Shared daily budget exhausted'), { status: 402, code: 'usage_budget_exceeded' }); } } });
-  assert.equal(response.status, 402);
-  assert.equal(upstreamBodies.length, 0);
-});

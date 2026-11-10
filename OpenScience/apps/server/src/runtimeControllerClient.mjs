@@ -32,6 +32,8 @@ import { VCR_INTAKE_LONG_KINDS } from "./vcrIntakeLayout.mjs";
 // web image refuses an older controller that would launch without them instead of mis-launching the project's choices.
 // Version 18 adds bounded source-session capture and idle-only purge. Only project references and frozen identity proofs
 // cross the socket; the controller derives every storage path itself.
+// The start field `platformSkillGeneration` and the `evolution-admission` operation were removed with published-tool serving (2026-11-09)
+// without a version of their own: the field was sent only for a published generation, and none exists.
 export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 18;
 
 function controllerError(code, message, status = 503) {
@@ -259,11 +261,6 @@ export class RuntimeControllerClient {
 
   execVerify(body, { signal = undefined } = {}) { return this.request("POST", "/v1/runtime/exec-verify", body, { signal, timeoutMs: 75000, maxResponseBytes: 128 * 1024 }); }
 
-  captureRunEgressProof(project,runId,phase,{signal=undefined}={}) { return this.request('POST','/v1/runtime/egress-proof',{userId:project.userId,projectId:project.id,activeWorkspace:project.activeWorkspace??'',runId,phase},{signal}); }
-  verifyRunEgressProof(project,runId,{signal=undefined,promptDispatchStartedAt=undefined,completedAt=undefined}={}) { return this.request('POST','/v1/runtime/egress-proof-verify',{userId:project.userId,projectId:project.id,activeWorkspace:project.activeWorkspace??'',runId,promptDispatchStartedAt,completedAt},{signal}); }
-
-  evolutionAdmissionAvailable() { return this.request("POST", "/v1/runtime/evolution-admission", {}); }
-
   extensionToolAdmission() { return this.request("POST", "/v1/extensions/tool/admission", {}); }
   async admissionAvailable() { return (await this.extensionToolAdmission())?.available === true; }
 
@@ -314,11 +311,11 @@ export class RuntimeControllerClient {
 
   /** @param {any} project @param {number} port @param {string} password @param {string} [capsuleGatewayUrl]
    * @param {string} [revisionGatewayUrl] @param {string} [publicSourceGatewayUrl] @param {any} [pluginConfig]
-   * @param {any} [personalSkillGeneration] @param {any} [extensionGeneration] @param {any} [platformSkillGeneration]
+   * @param {any} [personalSkillGeneration] @param {any} [extensionGeneration]
    * @param {string} [memoryGatewayUrl] @param {boolean} [geoSkills] @param {string} [modelGatewayProfile]
    * @param {any} [contextGeneration] @param {string} [attendancePublicKey]
    * The controller gets only an Ed25519 public verifier; the API's signing secret stays in the API process. */
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = undefined, contextGeneration = null, attendancePublicKey = "") {
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = undefined, contextGeneration = null, attendancePublicKey = "") {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -330,7 +327,6 @@ export class RuntimeControllerClient {
       pluginConfig,
       ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
       ...(extensionGeneration ? { extensionGeneration } : {}),
-      ...(platformSkillGeneration ? { platformSkillGeneration } : {}),
       ...(contextGeneration ? { contextGeneration } : {}),
       // Protocol 13: the account's memory engine, as the memory gateway's base for one on the native engine. Sent only
       // then; absent, the runtime is launched for the legacy path.

@@ -57,6 +57,7 @@ test("every file the RSI dependency closure reads is in the web image's final st
   // 2026-10-27: the closure reads pnpm-lock.yaml and packages/domain/package.json from the app root; the image carried neither, so every
   // closure was unqualified and no campaign could be imported on the hosted deployment.
   const { RSI_DEPENDENCY_PROFILES, computeRsiDependencyClosure } = await import("../src/rsiDependencyClosure.mjs");
+  const { rsiClosureSettings } = await import("../src/rsiClosureSettings.mjs");
   const sources = await finalStageCopies();
   // `pnpm deploy` copies apps/server as `src` and its manifest (package.json "files"); nothing else of it is in the image.
   const inImage = (/** @type {string} */ wanted) => wanted === "apps/server/package.json" || wanted.startsWith("apps/server/src/") || sources.some((source) => covers(wanted, source));
@@ -65,7 +66,7 @@ test("every file the RSI dependency closure reads is in the web image's final st
     for (const file of [...profile.roots, ...(profile.resources ?? [])]) wanted.add(file);
     for (const declaration of Object.values(profile.runtimeFileDependencies ?? {})) for (const resource of declaration.resources) wanted.add(resource);
     // And what the walk actually opens: workspace manifests, the entry of each package it imports.
-    const closure = await computeRsiDependencyClosure({ rootDir: repoRoot, surface, settings: { model: "model", provider: "deepseek" } });
+    const closure = await computeRsiDependencyClosure({ rootDir: repoRoot, surface, settings: rsiClosureSettings(surface) });
     assert.equal(closure.qualified, true, `${surface}: ${closure.issues.join(",")}`);
     for (const entry of closure.entries) wanted.add(entry.path);
   }

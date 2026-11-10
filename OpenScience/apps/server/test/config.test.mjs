@@ -609,7 +609,6 @@ test("credentialed public-source adapters load server-only credentials from priv
       "evimedEvidence",
       "ncbi",      // rate ceiling, not authorization: injected by host
       "omim",
-      "openAlex",  // optional, read by the control plane's own self-research only
       "openFda",   // same
       "opengwas",
       "semanticScholar",

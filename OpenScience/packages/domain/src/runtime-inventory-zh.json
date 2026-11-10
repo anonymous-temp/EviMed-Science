@@ -610,10 +610,6 @@
     "personal": {
       "listed": true,
       "how": "The person's own skills (我的技能), read from the skill library."
-    },
-    "platform-learned": {
-      "listed": false,
-      "reason": "What the platform itself built and tested (循证进化's tools and methods): the platform's, not the account's own, whose home is the 做法 of the memory page."
     }
   }
 }

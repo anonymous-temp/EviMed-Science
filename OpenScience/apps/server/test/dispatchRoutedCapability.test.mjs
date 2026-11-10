@@ -100,7 +100,7 @@ const sites = sources.flatMap(({ file, source }) => dispatchSites(file, source))
 
 test("the walk reads every dispatcher, and tells a request object's properties from the text inside them", () => {
   assert.ok(sites.length >= 10, `found only ${sites.length} dispatch sites; the parse is wrong`);
-  for (const file of ["server.mjs", "learningRuntime.mjs", "sourceUnderstandingRuntime.mjs", "evolutionRuns.mjs"]) {
+  for (const file of ["server.mjs", "learningRuntime.mjs", "sourceUnderstandingRuntime.mjs"]) {
     assert.ok(sites.some((site) => site.file === file && site.keys.includes("system")), `${file} sends a context and no site was found in it`);
   }
   const [site] = dispatchSites("fixture", "x.dispatchPrompt(p, s, {\n  // system: a comment\n  text: `a ${(b, { system: 1 })}, c`, runId });");

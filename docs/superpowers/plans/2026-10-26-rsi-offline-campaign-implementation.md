@@ -26,7 +26,7 @@
 - [x] WP3 (frontier surface, 2026-10-26 review round): day-unit replay of production's export from the pre-mix state, a calibrated two-pass Qwen label jury, fixed labelled sets, supply/replay-fidelity/drift/MDE reporting.
 - [x] WP4 (core and first policy consumer; skill/tool activation not yet qualified): signed campaign bundle, deterministic importer, compatible baseline CAS, surface-specific shadow/cohort/global activation and rollback receipts.
 - [x] WP5 (local lifecycle only): complete local synthetic/benign lifecycle and historical-gold analysis, without claiming live lab or fresh-confirmation acceptance.
-- [~] WP6: serving composition separated and its review regressions fixed (2026-10-26); physical deletion of the old experimental implementation still waits for the first accepted live campaign and a production cutover window.
+- [x] WP6: physical deletion of the old experimental implementation done in the tree on 2026-11-04, on the owner's word and ahead of the first accepted campaign; serving's first production run is the release that carries it (design §23). Not deployed.
 - [~] WP7: offline-only optimizer interfaces and recorded stop rules. The Harness2 arm ran in rounds 1 and 2 (2026-11-01/02, `evals/harness-adaptation`, Claude improvers since 2026-11-03); the design's matched-budget best-of-n comparison has not been run, so no generator has qualified.
 
 ## WP0 build sequence
@@ -95,3 +95,7 @@ Three independent reviews (statistics/runner, import/transport security, pause/s
 Lab binding (owner, 2026-10-26: first trial without OSS/KMS, lab only, no production import): the lab is the Alibaba host `evimed-test` (instance `i-2ze3rsk5p2bh4xisit81`, cn-beijing) — its own users (`rsi-lab` uid 10001, `rsi-inbox`), its own PostgreSQL container and network, keys generated on the host, the image built there, timer on the 1st at 02:00. Production pushes its read-only export on the 1st at 00:30 through a key forced to `rrsync -wo` and pinned to production's address; the lab holds no production credential. The existing OSS key (RAM user `oss-bucket-put-object`) is refused by RAM as a leakage risk and KMS is not activated on the account, so the OSS transport and Secrets Manager signer stay unbound; the lab configuration says `transport: {kind: "none"}`. First run: 2026-11-01, monthly after that.
 
 Still open: paid DSH consumers and skill/tool activation, the production import of a bundle (thin layer opt-in, not deployed), authorized-incident campaigns (need OSS), physical deletion of the old experimental code (WP6), and the Harness2/GEPA arms (WP7).
+
+## 2026-11-04 big-loop upgrade
+
+Design §23. Online engine deleted (WP6). New: module-policy campaigns, tool-lead intake, signals export, round spend, directory bundle carrier, promotion on broad activation, volume-bound fuse, a 6-file closure for frontier selection, `rsi-policy-stop`. Still open: paid DSH consumers for skill and tool activation, the `isolated-tool` consumer, authorized-incident campaigns (they need OSS), the Harness2 and GEPA comparisons (WP7), and installing any of this on the lab or production.

@@ -23,6 +23,9 @@
  *    only, and a confirmation source is exported without gold or verdict scores (the lab's sealed assembly adds them);
  *  - a run's status must be a delivery outcome (succeeded, failed, timeout): an infrastructure failure is never scored, the
  *    source is refused as not a measurement.
+ *
+ * A surface that is not a patch of the image specialises this consumer through a kit (`HARNESS_KIT`, 2026-11-04; module_campaign.mjs is the
+ * other one): this file never imports what specialises it, and every function takes the kit last, defaulting to the harness's own.
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -249,13 +252,35 @@ export async function harnessCampaignConsumerIdentity(registration) {
 
 // ------------------------------------------------------------------------------------------------------------------ sources
 
+/** A harness or tool patch's candidate arm: its digest recomputed from its bundle on the source's image, within the always-on cap. A tool patch's arm holds code, a harness patch's does not, and neither surface admits the other's arms. */
+function harnessCandidateValid(id, arm, source, registration) {
+  const h = arm?.harness, toolPatch = registrationSurface(registration) === TOOL_PATCH_SURFACE, bundle = normalizeHarnessBundle(h?.bundle, { allowEmpty: toolPatch });
+  const ok = keysWithin(arm, ['harness']) && keysWithin(h, toolPatch ? ['digest', 'chars', 'alwaysOnChars', 'title', 'bundle', 'code'] : ['digest', 'chars', 'alwaysOnChars', 'title', 'bundle'])
+    && bundle && /^cand-[a-f0-9]{12}$/.test(id) && HEX64.test(h.digest ?? '') && id === `cand-${h.digest.slice(0, 12)}`
+    && harnessImageValid(source.image) && (h.title === undefined || isText(h.title)) && (!toolPatch || normalizeToolPatchCode(h.code) !== null);
+  if (!ok) return false;
+  const code = toolPatch ? h.code : undefined;
+  const sizes = harnessPatchSizes(bundle, code);
+  return h.digest === harnessPatchDigest(bundle, source.image, code) && h.chars === sizes.chars && h.alwaysOnChars === sizes.alwaysOnChars && sizes.alwaysOnChars <= HARNESS_ALWAYS_ON_MAX_CHARS;
+}
+
+/**
+ * What a surface specialises of this consumer: the surfaces it serves, the kind of its sources, its closed scorer table, its cost identity, what a candidate
+ * arm, an answer and a cost must be. Optional: `sourceIssues` (more of a source to refuse), `developmentIssue` (more of a registration to refuse), `bar`
+ * (a condition of a candidate's eligibility beside the choice rule, recorded on its row of the development result).
+ */
+export const HARNESS_KIT = Object.freeze({
+  surfaces: Object.freeze([HARNESS_SURFACE, TOOL_PATCH_SURFACE]), sourceKind: 'harness-arms', scorer: harnessScorer, costIdentity: HARNESS_COST_IDENTITY, candidateValid: harnessCandidateValid,
+  answerValid: (answer) => answer === null || isText(answer), costValid: (cost) => cost === null || (finite(cost) && cost >= 0),
+});
+
 /**
  * What a recorded-arms source must be for the scorer its registration names.
- * @param {any} source @param {any} registration @returns {string[]}
+ * @param {any} source @param {any} registration @param {any} [kit] @returns {string[]}
  */
-export function harnessArmsIssues(source, registration) {
-  const scorer = harnessScorer(registration);
-  if (!scorer || !record(source) || source.kind !== 'harness-arms' || source.schema !== HARNESS_ARMS_SCHEMA || !scorerBenchmarks(scorer).includes(source.benchmark)) return ['harness_arms_invalid'];
+export function harnessArmsIssues(source, registration, kit = HARNESS_KIT) {
+  const scorer = kit.scorer(registration);
+  if (!scorer || !record(source) || source.kind !== kit.sourceKind || source.schema !== HARNESS_ARMS_SCHEMA || !scorerBenchmarks(scorer).includes(source.benchmark)) return ['harness_arms_invalid'];
   const issues = new Set();
   if (!['development', 'confirmation'].includes(source.role)) issues.add('harness_arms_role_invalid');
   if (!harnessImageValid(source.image)) issues.add('harness_arms_image_invalid');
@@ -270,17 +295,7 @@ export function harnessArmsIssues(source, registration) {
       if (!keysWithin(arm, ['harness', 'control']) || arm.harness !== null || arm.control !== 'A/A' || source.role !== 'development') issues.add('harness_arms_control_invalid');
       continue;
     }
-    // A tool patch's arm holds code, a harness patch's does not, and neither surface admits the other's arms.
-    const h = arm?.harness, toolPatch = registrationSurface(registration) === TOOL_PATCH_SURFACE, bundle = normalizeHarnessBundle(h?.bundle, { allowEmpty: toolPatch });
-    let ok = keysWithin(arm, ['harness']) && keysWithin(h, toolPatch ? ['digest', 'chars', 'alwaysOnChars', 'title', 'bundle', 'code'] : ['digest', 'chars', 'alwaysOnChars', 'title', 'bundle'])
-      && bundle && /^cand-[a-f0-9]{12}$/.test(id) && HEX64.test(h.digest ?? '') && id === `cand-${h.digest.slice(0, 12)}`
-      && harnessImageValid(source.image) && (h.title === undefined || isText(h.title)) && (!toolPatch || normalizeToolPatchCode(h.code) !== null);
-    if (ok) {
-      const code = toolPatch ? h.code : undefined;
-      const sizes = harnessPatchSizes(bundle, code);
-      ok = h.digest === harnessPatchDigest(bundle, source.image, code) && h.chars === sizes.chars && h.alwaysOnChars === sizes.alwaysOnChars && sizes.alwaysOnChars <= HARNESS_ALWAYS_ON_MAX_CHARS;
-    }
-    if (!ok) issues.add('harness_arms_candidate_invalid');
+    if (!kit.candidateValid(id, arm, source, registration)) issues.add('harness_arms_candidate_invalid');
   }
   const repeats = source.repeats;
   if (!Number.isInteger(repeats) || repeats < 1 || repeats > 10) issues.add('harness_arms_repeats_invalid');
@@ -289,15 +304,16 @@ export function harnessArmsIssues(source, registration) {
   for (const run of Array.isArray(source.runs) ? source.runs : []) {
     const key = runKey(run?.row, run?.arm, run?.repeat);
     if (!rowIds.has(String(run?.row)) || !Object.hasOwn(arms, run?.arm) || !Number.isInteger(run?.repeat) || run.repeat < 0 || run.repeat >= repeats || seen.has(key)) { issues.add('harness_arms_runs_invalid'); wellFormed = false; break; }
-    if (!isText(run.runId) || !isText(run.status) || !(run.answer === null || isText(run.answer))) { issues.add('harness_arms_runs_invalid'); wellFormed = false; break; }
+    if (!isText(run.runId) || !isText(run.status) || !kit.answerValid(run.answer)) { issues.add('harness_arms_runs_invalid'); wellFormed = false; break; }
     if (!HARNESS_RUN_STATUSES.includes(run.status)) { issues.add('harness_arms_runs_infrastructure'); wellFormed = false; break; }
-    if (!(run.cost === null || (finite(run.cost) && run.cost >= 0))) { issues.add('harness_arms_runs_invalid'); wellFormed = false; break; }
+    if (!kit.costValid(run.cost)) { issues.add('harness_arms_runs_invalid'); wellFormed = false; break; }
     seen.add(key);
   }
   if (!issues.size && seen.size !== rows.length * Object.keys(arms).length * repeats) issues.add('harness_arms_runs_incomplete');
   if (scorer.judged) {
     if (wellFormed && !issues.size) for (const issue of judgedIssues(source, registration)) issues.add(issue);
   } else if (source.judged !== undefined) issues.add('harness_arms_judged_unexpected');
+  if (wellFormed && !issues.size) for (const issue of kit.sourceIssues?.(source, registration) ?? []) issues.add(issue);
   return [...issues];
 }
 
@@ -307,8 +323,8 @@ export function harnessArmsIssues(source, registration) {
 const runScore = (scorer, run, row, verdicts) => scorer.score(run.status === 'succeeded' ? run.answer : null, row, run, verdicts);
 
 /** Per arm: every row's mean score over its repeats, overall and over the registered failure slice. */
-function armScores(source, registration) {
-  const scorer = /** @type {NonNullable<ReturnType<typeof harnessScorer>>} */ (harnessScorer(registration));
+function armScores(source, registration, kit) {
+  const scorer = /** @type {NonNullable<ReturnType<typeof harnessScorer>>} */ (kit.scorer(registration));
   const slice = skillSlice(registration, scorer);
   const byRow = new Map(source.rows.map((row) => [String(row.id), row]));
   const verdicts = scorer.judged ? judgedVerdicts(source) : null;
@@ -334,16 +350,16 @@ export const harnessDevelopmentResult = (choice) => ({ scores: choice.scores, ca
  * (in absolute value: the noise a second run of the unmodified image shows); ties go to the smaller always-on growth, then the
  * smaller patch, then the id. The control is never a candidate. No candidate left ends the campaign.
  * It reads a development source only: a confirmation source is not scored before the runner opens it.
- * @param {any} source @param {any} registration
+ * @param {any} source @param {any} registration @param {any} [kit]
  */
-export function chooseHarnessCandidate(source, registration) {
+export function chooseHarnessCandidate(source, registration, kit = HARNESS_KIT) {
   if (source?.role !== 'development') throw new Error('harness_confirmation_scored_before_opening');
-  const scores = armScores(source, registration), base = scores[HARNESS_BASELINE_ARM];
+  const scores = armScores(source, registration, kit), base = scores[HARNESS_BASELINE_ARM];
   const difference = (arm) => ({ overallDifference: scores[arm].overall - base.overall, sliceDifference: base.slice === null || scores[arm].slice === null ? null : scores[arm].slice - base.slice });
   const controls = Object.keys(source.arms).filter((id) => isControlArm(source.arms[id])).sort().map((arm) => ({ arm, ...difference(arm) }));
   const noiseFloor = controls.reduce((floor, control) => Math.max(floor, Math.abs(control.sliceDifference ?? 0)), 0);
-  const candidates = candidateArmIds(source).map((arm) => ({ arm, harnessDigest: source.arms[arm].harness.digest, chars: source.arms[arm].harness.chars, alwaysOnChars: source.arms[arm].harness.alwaysOnChars, ...difference(arm) }));
-  const eligible = candidates.filter((c) => c.sliceDifference !== null && c.sliceDifference > 0 && c.sliceDifference > noiseFloor && c.overallDifference >= -registration.margin);
+  const candidates = candidateArmIds(source).map((arm) => ({ arm, harnessDigest: source.arms[arm].harness.digest, chars: source.arms[arm].harness.chars, alwaysOnChars: source.arms[arm].harness.alwaysOnChars, ...difference(arm), ...kit.bar?.(source, registration, arm) }));
+  const eligible = candidates.filter((c) => c.sliceDifference !== null && c.sliceDifference > 0 && c.sliceDifference > noiseFloor && c.overallDifference >= -registration.margin && c.deterministic?.eligible !== false);
   eligible.sort((a, b) => b.sliceDifference - a.sliceDifference || a.alwaysOnChars - b.alwaysOnChars || a.chars - b.chars || cmp(a.arm, b.arm));
   const winner = eligible[0];
   return { scores, candidates, controls, noiseFloor, frozen: winner ? { arm: winner.arm, harnessDigest: winner.harnessDigest, imageDigest: source.image.digest } : null, reason: winner ? null : 'campaign_no_improving_candidate' };
@@ -353,21 +369,21 @@ export function chooseHarnessCandidate(source, registration) {
  * Confirmation: the frozen candidate and the baseline only, every row x arm x repeat; each run is one observation of its row's
  * group and quality is its score. It reads a confirmation source only, and only for the arm development froze on the image it
  * froze on. Costs are not read here: the evaluator attests them from the same records.
- * @param {any} source @param {any} registration @param {{ arm: string, harnessDigest: string, imageDigest: string }} frozen
+ * @param {any} source @param {any} registration @param {{ arm: string, harnessDigest: string, imageDigest: string }} frozen @param {any} [kit]
  */
-export function harnessObservations(source, registration, frozen) {
+export function harnessObservations(source, registration, frozen, kit = HARNESS_KIT) {
   if (source?.role !== 'confirmation') return { observations: [], reason: 'campaign_source_role_mismatch' };
   const arms = Object.keys(source.arms).sort();
   if (arms.length !== 2 || !arms.includes(HARNESS_BASELINE_ARM) || !arms.includes(frozen.arm) || isControlArm(source.arms[frozen.arm])
     || source.arms[frozen.arm].harness?.digest !== frozen.harnessDigest || source.image?.digest !== frozen.imageDigest) return { observations: [], reason: 'campaign_confirmation_candidate_mismatch' };
-  const scorer = /** @type {NonNullable<ReturnType<typeof harnessScorer>>} */ (harnessScorer(registration));
+  const scorer = /** @type {NonNullable<ReturnType<typeof harnessScorer>>} */ (kit.scorer(registration));
   const byRow = new Map(source.rows.map((row) => [String(row.id), row]));
   const verdicts = scorer.judged ? judgedVerdicts(source) : null;
   const observations = source.runs.map((run) => ({
     group: `row-${run.row}`, arm: run.arm === HARNESS_BASELINE_ARM ? 'baseline' : 'candidate', form: 'answer', repeat: run.repeat,
     status: 'measured', quality: runScore(scorer, run, byRow.get(String(run.row)), verdicts), critical_violations: 0,
   })).sort((a, b) => cmp(a.group, b.group) || cmp(a.arm, b.arm) || a.repeat - b.repeat);
-  return { observations, scores: armScores(source, registration), reason: null };
+  return { observations, scores: armScores(source, registration, kit), reason: null };
 }
 
 /** The settled cost of every confirmation observation, keyed as the runner keys it; null where any run lacks one. @param {any} source @param {{ arm: string }} frozen */
@@ -390,17 +406,17 @@ const sameIds = (rows, ids) => Array.isArray(ids) && ids.length === rows.length 
  * preview (`harness_assemble.mjs --preview`, `--development-only`) and the runner's validation both apply, so a preview that says a
  * campaign is eligible has passed every refusal a development source can meet before the confirmation is opened. A closed
  * `campaign_*` code, or null.
- * @param {any} registration @param {any} development
+ * @param {any} registration @param {any} development @param {any} [kit]
  */
-export function harnessDevelopmentIssue(registration, development) {
-  const scorer = harnessScorer(registration);
+export function harnessDevelopmentIssue(registration, development, kit = HARNESS_KIT) {
+  const scorer = kit.scorer(registration);
   if (!scorer) return 'campaign_scorer_not_qualified';
   // The judge first: a judge that is not Claude, or one that does not meet the procedure's thresholds, is named as such before anything is read through it.
   const judgeIssue = scorer.judged ? harnessJudgeRegistrationIssue(registration.judge, registration.margin) : (registration.judge === undefined ? null : 'campaign_judge_unexpected');
   if (judgeIssue) return judgeIssue;
   const improvementIssue = harnessImprovementIssue(registration.improvement);
   if (improvementIssue) return improvementIssue;
-  if (harnessArmsIssues(development, registration).length) return 'campaign_source_invalid';
+  if (harnessArmsIssues(development, registration, kit).length) return 'campaign_source_invalid';
   if (development.role !== 'development') return 'campaign_source_role_mismatch';
   const slice = registration[scorer.slice.registration];
   if (!Array.isArray(slice) || !slice.length || slice.some((id) => !scorer.slice.valid(id)) || !(registration.margin > 0 && registration.margin < 1)) return 'campaign_registration_invalid';
@@ -413,24 +429,24 @@ export function harnessDevelopmentIssue(registration, development) {
   if (!record(registration.image) || registration.image.digest !== development.image.digest || registration.image.id !== development.image.id) return 'campaign_image_changed';
   if (!record(registration.rows) || !sameIds(development.rows, registration.rows.development)) return 'campaign_rows_unregistered';
   if (!record(registration.repeats) || registration.repeats.development !== development.repeats) return 'campaign_repeats_unregistered';
-  return null;
+  return kit.developmentIssue?.(registration, development) ?? null;
 }
 
 /**
  * The runner's validation of a harness-patch campaign's inputs (`campaign_runner.mjs`): a closed `campaign_*` code, or null. The
  * development half is `harnessDevelopmentIssue`, shared with the preview.
- * @param {any} manifest @param {any} inputs @param {{ id: string }} dev @param {{ id: string }} confirm
+ * @param {any} manifest @param {any} inputs @param {{ id: string }} dev @param {{ id: string }} confirm @param {any} [kit]
  */
-export function harnessCampaignIssue(manifest, inputs, dev, confirm) {
-  const registration = inputs.registration, scorer = harnessScorer(registration);
+export function harnessCampaignIssue(manifest, inputs, dev, confirm, kit = HARNESS_KIT) {
+  const registration = inputs.registration, scorer = kit.scorer(registration);
   if (!scorer) return 'campaign_scorer_not_qualified';
-  if (![HARNESS_SURFACE, TOOL_PATCH_SURFACE].includes(registrationSurface(registration)) || registrationSurface(registration) !== manifest.surface) return 'campaign_surface_registration_mismatch';
+  if (!kit.surfaces.includes(registrationSurface(registration)) || registrationSurface(registration) !== manifest.surface) return 'campaign_surface_registration_mismatch';
   const development = inputs.sources[dev.id], confirmation = inputs.sources[confirm.id];
   const judgeIssue = scorer.judged ? harnessJudgeRegistrationIssue(registration.judge, registration.margin) : (registration.judge === undefined ? null : 'campaign_judge_unexpected');
   if (judgeIssue) return judgeIssue;
-  for (const source of [development, confirmation]) if (harnessArmsIssues(source, registration).length) return 'campaign_source_invalid';
+  for (const source of [development, confirmation]) if (harnessArmsIssues(source, registration, kit).length) return 'campaign_source_invalid';
   if (development.role !== 'development' || confirmation.role !== 'confirmation') return 'campaign_source_role_mismatch';
-  const developmentIssue = harnessDevelopmentIssue(registration, development);
+  const developmentIssue = harnessDevelopmentIssue(registration, development, kit);
   if (developmentIssue) return developmentIssue;
   // The manifest names who wrote the candidates and who judged them: exactly the registration's improvement record and judge.
   if (canonicalRsiJson(manifest.models) !== canonicalRsiJson(harnessModels(registration))) return 'campaign_models_registration_mismatch';

@@ -372,12 +372,12 @@ export function frontierGatewayProviderUrl(config) {
  * @param {any} config
  * @param {any} runtimeManager
  * @param {{ service: any, topics?: any, zones?: { resolve: (user: { id: string }, ref: string) => Promise<{ id: string, title: string } | null> } | null,
- *   evaluationIsolation?: any, report?: (code: string) => void, budgetMs?: number }} dependencies the frontier service,
+ *   report?: (code: string) => void, budgetMs?: number }} dependencies the frontier service,
  *   or null when the module is off; `zones` resolves the id or slug a search names to a zone the account may read, absent where there
  *   are no topic zones; `report` hears the code of a failure the run is only told was one; `budgetMs`
  *   is the plan's five seconds everywhere but in a test that would otherwise wait them out
  */
-export function createFrontierGatewayHandler(config, runtimeManager, { service, topics = null, zones = null, report = () => {}, budgetMs = answerBudgetMs, evaluationIsolation = null }) {
+export function createFrontierGatewayHandler(config, runtimeManager, { service, topics = null, zones = null, report = () => {}, budgetMs = answerBudgetMs }) {
   const windows = new Map();
   return async function frontierGatewayHandler(req, res, onFailure) {
     try {
@@ -416,12 +416,8 @@ export function createFrontierGatewayHandler(config, runtimeManager, { service, 
         if (!zone) throw gatewayError(404, "frontier_search_zone_not_found", "No such evidence zone is open to this account: search without a zone, or name another.");
       }
       let timer;
-      // An evaluation run is frozen at a date and kept from what the platform has written since: a topic is
-      // written after any such cutoff, and may be about the very paper being evaluated.
-      const isolated = Boolean(evaluationIsolation && await evaluationIsolation.isEvaluation(identity));
-      // A search inside a zone is about that zone's items: the hot-event topics are not its answer. A topic is written after any
-      // evaluation's cutoff too.
-      const topicsForRun = topics && !isolated && !zone ? topics : null;
+      // A search inside a zone is about that zone's items: the hot-event topics are not its answer.
+      const topicsForRun = topics && !zone ? topics : null;
       const result = await Promise.race([
         itemId ? readItem(service, user, itemId) : Promise.all([search(service, user, /** @type {ReturnType<typeof validatedRequest>} */ (request), zone),
           topicPart(topicsForRun, user, /** @type {ReturnType<typeof validatedRequest>} */ (request), report)]).then(([items, topicsFound]) => ({ ...items, ...topicsFound })),
@@ -430,7 +426,7 @@ export function createFrontierGatewayHandler(config, runtimeManager, { service, 
           timer.unref?.();
         }),
       ]).finally(() => clearTimeout(timer));
-      sendJson(res, 200, { data: evaluationIsolation ? await evaluationIsolation.filter(identity, "frontier-knowledge-plugin", result) : result });
+      sendJson(res, 200, { data: result });
     } catch (error) {
       const known = error instanceof FrontierGatewayError;
       const status = known ? error.status : 503;

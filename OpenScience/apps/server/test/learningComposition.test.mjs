@@ -394,8 +394,8 @@ test("a new turn of a conversation is read once as the answer to the run before 
   assert.match(call, /methodsOpened: methodFeedback \? async \(project, run\) => \[\s*\.\.\.\(await methodFeedback\.usedBy\(project, run\)\)\.methods\.map/);
   assert.match(call, /\.\.\.await officialOpenedBy\(project\.userId, run\),/, "and the platform's official methods it opened, so a reaction can be about one of them");
   assert.match(call, /report: \(reason\) => learningMetrics\.observeEvidenceFailure\(reason\)/);
-  // The loop's own evidence is not a researcher-feedback signal of the evolution module.
-  assert.match(serverSource, /event\.trigger === "learning-evidence"\) return;/);
+  // The loop's own evidence is no researcher-feedback signal of the evolution module: since 2026-11-09 no reaction is handed to it at all.
+  assert.doesNotMatch(serverSource, /type: "researcher-feedback"/);
 });
 
 test("the gates that turn a finished run away before the loop is asked are counted too, by their reason", () => {

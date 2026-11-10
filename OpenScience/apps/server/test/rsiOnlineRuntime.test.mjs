@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { generateKeyPairSync } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PLATFORM_PUBLISHER_USER_ID } from '@evimed/domain';
@@ -68,12 +69,12 @@ test('maintenance admission is checked both before and inside the online queue c
   allowed = true; await worker.tick(); assert.equal(claimed, 1);
   await worker.close();
 });
-test('production server composes evolution through the one serving switch and declares dedicated online queues', async () => {
+test('production server composes the signal store of evolution and no tool serving, and declares dedicated online queues', async () => {
   const code = await readFile(new URL('../src/server.mjs', import.meta.url), 'utf8');
-  // Neither composition is built directly: the switch (evolutionMode.mjs) decides, and the members only the full composition has are
-  // reached through `experimental`, inside the blocks that serving skips.
-  assert.doesNotMatch(code, /import\s*\{\s*createEvolution(?:Serving)?\s*\}|createEvolution(?:Serving)?\(/);
-  assert.match(code, /composeEvolution\(/);
+  // Owner, 2026-11-04 and 2026-11-09: the online experiment engine and then tool serving are deleted; what is composed is the closed-code signal store.
+  assert.match(code, /new EvolutionLedger\(/);
+  assert.doesNotMatch(code, /createEvolutionServing\(|evolutionServing\.mjs|evolutionGateway\.mjs/);
+  assert.doesNotMatch(code, /composeEvolution\(|createEvolution\(/);
   assert.doesNotMatch(code, /evolution\.model\(|evolution\.loops|evolution\.budgeted\(|evolution\.runtimeSession/);
   assert.ok(PRODUCT_JOB_KINDS.includes('rsi-incident-export'));
   assert.ok(PRODUCT_JOB_KINDS.includes('rsi-bundle-poll'));
@@ -249,6 +250,120 @@ test('a valid transport alone publishes withdrawals, and a removed agreement wit
     assert.deepEqual(uploads.map(input => [input.kind, input.generation, JSON.parse(input.serializedBody).type]), [['withdrawal', 2, 'withdrawal']]);
     assert.equal(await runtime.sweepAgreement(), null, 'reconciled once per agreement change');
     await runtime.worker.close();
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+/** The public records a deployment's trust reads, written as the deployment does: private files. */
+async function trustRecords(dir) {
+  const pem = () => generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'pem' });
+  const publisherRef = path.join(dir, 'publisher.json'), evaluatorRef = path.join(dir, 'evaluators.json');
+  await writeFile(publisherRef, JSON.stringify({ keyId: 'publisher', publicKey: pem(), surfaces: ['frontier-selection'], kinds: ['policy'] }), { mode: 0o600 });
+  await writeFile(evaluatorRef, JSON.stringify({ schemaVersion: 1, version: 1, evaluators: [{ keyId: 'evaluator', publicKey: pem(), surfaces: ['frontier-selection'], procedureDigests: ['a'.repeat(64)], consumerDigests: ['b'.repeat(64)] }] }), { mode: 0o600 });
+  return { trustedKeyRefs: [publisherRef], evaluatorRegistryRef: evaluatorRef };
+}
+const stubServing = () => ({ publicationOwnerId: PLATFORM_PUBLISHER_USER_ID, connectImporter() {}, setObservationReporter() {}, currentTarget: async () => null, adapters: {}, verifyObservation: async () => null });
+const stubStore = (touched = () => {}) => ({ userById: async id => { touched(); return { id }; }, requireProject: async (user, projectId) => { touched(); return { userId: user.id, id: projectId }; } });
+
+test('a directory deployment imports on its trust alone: no agreement file, no cloud client, and no incident is offered, extracted or uploaded', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'rsi-directory-runtime-'));
+  try {
+    const bundles = path.join(dir, 'bundles');
+    await mkdir(bundles);
+    const file = path.join(dir, 'online.json');
+    await writeFile(file, JSON.stringify({ schemaVersion: 1, transport: { kind: 'directory', role: 'production', path: bundles }, ...await trustRecords(dir) }), { mode: 0o600 });
+    const documents = memoryDocuments(), jobs = memoryJobs(), said = [];
+    let lookups = 0, modelCalls = 0;
+    const runtime = await createRsiOnlineRuntime({ config: { rsiOnlineConfigFile: file }, documents, jobs, database: {}, agentRuns: { list: () => assert.fail('no run is read') }, servingAdapters: stubServing(),
+      store: stubStore(() => { lookups++; }), report: code => said.push(code), model: async () => { modelCalls++; return {}; } });
+    assert.deepEqual([runtime.configured(), runtime.canExport(), runtime.canWithdraw()], [true, false, false]);
+    assert.ok(runtime.importer, 'the importer is composed');
+    assert.deepEqual(said, [], 'no agreement is missed: this deployment has no use for one');
+    assert.deepEqual(jobs.jobs.map(job => [job.kind, job.idempotencyKey]), [['rsi-bundle-poll', 'rsi-bundle-poll:bootstrap']]);
+    // A run's failure offers nothing, by name, and reads nothing to say so.
+    const before = lookups;
+    assert.deepEqual(await runtime.offerRun({ id: 'research', userId: 'researcher' }, 'run-1'), { offered: false, reason: 'rsi_incident_channel_absent' });
+    assert.equal(lookups, before);
+    // The worker polls with what this deployment has: the empty directory.
+    await runtime.worker.tick();
+    assert.equal(jobs.jobs[0].status, 'succeeded');
+    assert.deepEqual(jobs.jobs[0].result, { processed: 0, outcomes: {} });
+    assert.equal(jobs.jobs[1].idempotencyKey, 'rsi-bundle-poll:after:job-1', 'and the next poll is queued');
+    // A journal an earlier life of the deployment left: nothing reads the source, calls the model or uploads, and its withdrawal stays owed.
+    const id = 'rsi-incident-left';
+    await documents.put(PLATFORM_PUBLISHER_USER_ID, 'knowledge', id, { recordType: 'rsi-incident-export', userId: 'researcher', projectId: 'research', sourceRunId: 'run', sourceRevision: 'a'.repeat(64), authorizationId: 'rsi-agreement-old', status: 'queued' }, { expectedRevision: 0 });
+    await jobs.enqueue(PLATFORM_PUBLISHER_USER_ID, 'rsi-incident-export', { id }, { idempotencyKey: id });
+    jobs.jobs[1].status = 'done-elsewhere';
+    await runtime.worker.tick();
+    assert.equal(documents.rows.get(`${PLATFORM_PUBLISHER_USER_ID}:${id}`).payload.status, 'awaiting-configuration');
+    assert.equal(modelCalls, 0);
+    assert.equal(await runtime.sweepAgreement(), null, 'no agreement to reconcile with');
+    // A source deletion still marks what it must, with no channel to publish on.
+    assert.deepEqual(await runtime.invalidateSource({ userId: 'researcher', projectId: 'research' }), { invalidated: [id] });
+    assert.equal(documents.rows.get(`${PLATFORM_PUBLISHER_USER_ID}:${id}`).payload.invalidated, true);
+    await runtime.worker.close();
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('a broken directory deployment says why and binds nothing: no transport, no poll, no publisher project, and an active campaign would read as unbound', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'rsi-directory-broken-'));
+  try {
+    const file = path.join(dir, 'online.json');
+    const records = await trustRecords(dir);
+    const deployment = { schemaVersion: 1, transport: { kind: 'directory', role: 'production', path: path.join(dir, 'bundles') }, ...records };
+    const said = [], jobs = memoryJobs();
+    const start = (extra = {}) => createRsiOnlineRuntime({ config: { rsiOnlineConfigFile: file }, documents: memoryDocuments(), jobs, database: {}, agentRuns: {}, servingAdapters: stubServing(), store: stubStore(), report: code => said.push(code), ...extra });
+    await writeFile(file, JSON.stringify({ ...deployment, agreementRef: path.join(dir, 'agreement.json') }), { mode: 0o600 });
+    const invalid = await start({ transportFactory: () => assert.fail('no transport on an invalid file'), store: { userById: () => assert.fail('no publisher on an invalid file') } });
+    assert.deepEqual(said, ['rsi_online_configuration_invalid']);
+    assert.deepEqual([invalid.configured(), invalid.canWithdraw()], [false, false]);
+    assert.ok(invalid.importer, 'it still reconciles journals left by an earlier configuration');
+    assert.equal(invalid.importer.isBound(), false);
+    assert.deepEqual(jobs.jobs, []);
+    await invalid.worker.close();
+    // The file is whole but the directory is not there: the same as an OSS client that cannot start.
+    said.length = 0;
+    await writeFile(file, JSON.stringify(deployment), { mode: 0o600 });
+    const absent = await start();
+    assert.deepEqual(said, ['rsi_online_transport_unavailable']);
+    assert.equal(absent.configured(), false);
+    assert.deepEqual(jobs.jobs, []);
+    await absent.worker.close();
+    // The directory is there, the evaluator registry is not: no import without its trust.
+    said.length = 0;
+    await mkdir(path.join(dir, 'bundles'));
+    await rm(records.evaluatorRegistryRef);
+    const untrusted = await start();
+    assert.deepEqual(said, ['rsi_deployment_binding_unavailable']);
+    assert.equal(untrusted.configured(), false);
+    assert.deepEqual(jobs.jobs, []);
+    untrusted.worker.start();
+    assert.equal(await untrusted.worker.tick(), null, 'nothing to claim with');
+    await untrusted.worker.close();
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('an OSS deployment imports without an agreement in force, and only its incidents wait for one', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'rsi-oss-import-'));
+  try {
+    const file = path.join(dir, 'online.json'), agreementRef = path.join(dir, 'agreement.json');
+    await writeFile(file, JSON.stringify({ schemaVersion: 1, agreementRef, ...await trustRecords(dir), extractionDailyCny: 1,
+      transport: { role: 'production', region: 'cn-beijing', endpoint: 'https://oss-cn-beijing.aliyuncs.com', incidentBucket: 'fixture-incidents', bundleBucket: 'fixture-bundles', identityRefs: { production: '/run/prod', lab: '/run/lab' } } }), { mode: 0o600 });
+    const said = [], run = { id: 'run-1', status: 'failed', transcript: { sha256: 'a'.repeat(64) } };
+    const start = () => { const jobs = memoryJobs(); return createRsiOnlineRuntime({ config: { rsiOnlineConfigFile: file }, documents: memoryDocuments(), jobs, database: {}, agentRuns: { list: async () => [run] }, servingAdapters: stubServing(), store: stubStore(), report: code => said.push(code),
+      transportFactory: async () => ({ available: true, listBundles: async () => ({ keys: [], cursor: null }), readBundle: async () => null, headObject: async () => null, putObject: async input => ({ digest: input.digest }) }) }).then(runtime => ({ runtime, jobs })); };
+    const missing = await start();
+    assert.deepEqual([missing.runtime.configured(), missing.runtime.canWithdraw(), missing.runtime.canExport()], [true, true, false]);
+    assert.ok(said.includes('rsi_deployment_agreement_unavailable'));
+    assert.equal(await missing.runtime.offerRun({ id: 'research', userId: 'researcher' }, run.id), null);
+    assert.deepEqual(missing.jobs.jobs.map(job => job.kind), ['rsi-bundle-poll'], 'the poll runs; no incident was queued');
+    await missing.runtime.worker.close();
+    await writeFile(agreementRef, JSON.stringify({ id: 'quality', version: 1, purpose: 'platform-quality', providers: ['deepseek', 'dashscope'], scope: 'authorized-incident' }), { mode: 0o600 });
+    const agreed = await start();
+    assert.deepEqual([agreed.runtime.configured(), agreed.runtime.canWithdraw(), agreed.runtime.canExport()], [true, true, true]);
+    const offered = await agreed.runtime.offerRun({ id: 'research', userId: 'researcher' }, run.id);
+    assert.equal(offered.payload.recordType, 'rsi-incident-export');
+    assert.deepEqual(agreed.jobs.jobs.map(job => job.kind), ['rsi-bundle-poll', 'rsi-incident-export']);
+    await agreed.runtime.worker.close();
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 

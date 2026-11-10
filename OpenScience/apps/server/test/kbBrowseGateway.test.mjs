@@ -478,14 +478,6 @@ test("document authorization fails closed when the source ledger is unavailable"
   assert.equal((await call({ op: "read", root: "sources", path: `${KICKOFF}.md` })).status, 503);
 });
 
-test("what it returns passes through the evaluation isolation, as a knowledge-base answer", async (t) => {
-  const { resources } = await engine();
-  const seen = [];
-  const { ok } = await withGateway(t, { resources, dependencies: { evaluationIsolation: {
-    async filter(identity, gateway, value) { seen.push([identity.userId, identity.projectId, gateway]); return { ...value, filtered: true }; } } } });
-  assert.equal((await ok({ op: "overview" })).filtered, true);
-  assert.deepEqual(seen, [["user-1", "project-1", "knowledge-base"]]);
-});
 
 test("a runaway loop is bounded per project, not per request", async (t) => {
   const { resources } = await engine();

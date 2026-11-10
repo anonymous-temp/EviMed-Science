@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { canonicalRsiJson, rsiDigest } from '../../../apps/server/src/rsiCampaignBundle.mjs';
 import { computeRsiDependencyClosure } from '../../../apps/server/src/rsiDependencyClosure.mjs';
+import { rsiClosureSettings } from '../../../apps/server/src/rsiClosureSettings.mjs';
 import { runCampaign, signedEvaluatorReceipt } from '../campaign_runner.mjs';
 import { evaluatorKey, evaluatorReceiptPayload, finalizerEvidencePayload, procedureQualification, qualificationDigests, signEnvelope } from '../evaluator.mjs';
 import { frontierCampaignConsumerIdentity } from '../frontier_campaign.mjs';
@@ -139,7 +140,7 @@ test('the registered consumer, corpus and cost identity are checked against what
   await refuses((c) => { c.inputs.registration.statistics.consumer_id = 'f'.repeat(64); rebound(c); }, 'campaign_evaluation_consumer_or_corpus_changed');
   await refuses((c) => { c.inputs.registration.statistics.corpus_digest = 'f'.repeat(64); rebound(c); }, 'campaign_evaluation_consumer_or_corpus_changed');
   await refuses((c) => { c.inputs.registration.statistics.cost_identity = 'all paid attempts'; rebound(c); }, 'campaign_cost_identity_unsupported');
-  await refuses((c) => { c.manifest.surface = 'frontier-screen'; }, 'campaign_consumer_not_qualified');
+  await refuses((c) => { c.manifest.surface = 'geo-supplements'; }, 'campaign_consumer_not_qualified');
 });
 
 test('the signed envelope verifies through the runner\'s trust profile and nothing else does', async () => {
@@ -224,7 +225,7 @@ test('the procedure qualification is the statistics report for the claim, lapsin
 
 test('the digests an owner pins are those the finalizer evidence will carry', async () => {
   const report = procedureReport({ generatedAt: '2026-10-20T00:00:00Z' });
-  const closure = await computeRsiDependencyClosure({ rootDir: root, surface: 'frontier-selection', settings: { model: 'deepseek-flash', provider: 'deepseek' } });
+  const closure = await computeRsiDependencyClosure({ rootDir: root, surface: 'frontier-selection', settings: rsiClosureSettings('frontier-selection') });
   assert.equal(closure.qualified, true);
   const pinned = await qualificationDigests(report, { claim: 'superiority', rootDir: root });
   const q = procedureQualification(report, { claim: 'superiority', procedure: report.development.procedure, consumerDigest: closure.dependencyDigest });

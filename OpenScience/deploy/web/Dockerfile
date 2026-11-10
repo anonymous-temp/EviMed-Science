@@ -132,19 +132,9 @@ COPY --from=build /app/scripts/vcr ./scripts/vcr
 COPY --from=build /app/content/evidence ./content/evidence
 # The platform's official starter packs (capsules/official/), read and published once at start (`officialPackSources.mjs`).
 COPY --from=build /app/capsules ./capsules
-# Public evaluator code and capability dependency inventory; hidden case bodies are deployment state.
-COPY --from=build /app/evals/paper-gold/*.mjs ./evals/paper-gold/
-COPY --from=build /app/evals/paper-gold/economics-reference-manifest.json /app/evals/paper-gold/calibration-manifest.json /app/evals/paper-gold/calibration-replacements.json /app/evals/paper-gold/scoped-research-manifest.json /app/evals/paper-gold/aggregate-candidate-cards.json /app/evals/paper-gold/aligned-faers-manifest.json /app/evals/paper-gold/score_existing_methods.py /app/evals/paper-gold/aggregate_reference.py /app/evals/paper-gold/darth_reference_export.R ./evals/paper-gold/
-COPY --from=build /app/evals/paper-gold/development-contract.json /app/evals/paper-gold/diagnostic-posterior-development.json /app/evals/paper-gold/decision-net-benefit-development.json ./evals/paper-gold/
+# The capability dependency inventory.
 COPY --from=build /app/evals/tool-graph/*.json ./evals/tool-graph/
 COPY --from=build /app/evals/method-quality ./evals/method-quality
-# 循证进化's module loops read their development cases at run time (moduleEvolutionPreparation,
-# moduleEvolutionEvaluators, moduleEvolutionCalibration): without them every 前沿动态 and 循证 GEO
-# mission stopped on a missing file before its first smoke.
-COPY --from=build /app/evals/frontier-editing/cases.json ./evals/frontier-editing/cases.json
-COPY --from=build /app/evals/geo-judge-cards/cases.json ./evals/geo-judge-cards/cases.json
-COPY --from=build /app/evals/evidence-appraisal/briefs.json ./evals/evidence-appraisal/briefs.json
-COPY --from=build /app/evals/evidence-appraisal/hidden ./evals/evidence-appraisal/hidden
 # The ops scripts ship inside this image and several of them import workspace
 # packages — the release gate, the runtime-image check, the gate health probe,
 # the session-stream acceptance run. `pnpm deploy` puts those packages under

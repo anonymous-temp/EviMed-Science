@@ -1174,7 +1174,7 @@ test("diagnostic provenance uses the resolved policy and actual bounded calls", 
   const editor = new FrontierEditor(config, { owner, callModel: stubModel([() => answer()]).callModel,
     policies: { resolve: async (_module, policy) => ({ revisionId: "policy:v2", policy }) } });
   const result = await editor.edit(item());
-  assert.equal(result.editorVersion,"policy:v2");
+  assert.equal(result.editorVersion,FRONTIER_EDITOR_VERSION,"the stamp says which prompts wrote the item, not which policy revision was in force");
   assert.equal(result.attempts,1);
   assert.equal(result.modelInputSha256,sha256(result.modelInput));
 });
@@ -1349,7 +1349,27 @@ test("a served edit policy older than the answer's keys is not used: the shipped
   const second = stubModel([() => answer()]);
   const used = await new FrontierEditor(config, { owner, callModel: second.callModel, policies: currentPolicy }).edit(item());
   assert.match(second.calls[0].body.messages[0].content, /补充：只写原文有的。$/);
-  assert.equal(used.editorVersion, "evolved:frontier:8");
+  assert.notEqual(used.editorVersion, FRONTIER_EDITOR_VERSION, "other prompts wrote it, and the stamp says so");
+  assert.match(used.editorVersion, /^frontier-editor-policy\.[a-f0-9]{12}$/);
+});
+
+test("the stamp moves only when what the editor uses moves: a promoted threshold or a selection campaign re-edits nothing, and the same prompts under another revision are one stamp", async () => {
+  const editWith = async (/** @type {string} */ revisionId, /** @type {Record<string, any>} */ policy) => {
+    const editor = new FrontierEditor(config, { owner, callModel: stubModel([() => answer()]).callModel,
+      policies: { resolve: async (/** @type {string} */ _module, /** @type {any} */ defaults) => ({ revisionId, policy: { ...defaults, ...policy } }) } });
+    return (await editor.edit(item())).editorVersion;
+  };
+  // A promoted threshold, and a selection campaign's candidate in global mode: the prompts are the shipped ones, byte for byte.
+  assert.equal(await editWith("evolution-module-policy-frontier:1", { selectionThreshold: 72 }), FRONTIER_EDITOR_VERSION);
+  assert.equal(await editWith("rsi-serving:abcdef", { selectionThreshold: 72 }), FRONTIER_EDITOR_VERSION);
+  assert.equal(await editWith("default:abcdef", {}), FRONTIER_EDITOR_VERSION);
+  // What the editor reads moved: the stamp moves, and only with the text.
+  const editInstructions = `${FRONTIER_EDIT_INSTRUCTIONS}\n补充：只写原文有的。`;
+  const edited = await editWith("evolution-module-policy-frontier:2", { editInstructions, selectionThreshold: 72 });
+  assert.notEqual(edited, FRONTIER_EDITOR_VERSION);
+  assert.equal(await editWith("evolution-module-policy-frontier:3", { editInstructions, selectionThreshold: 80 }), edited, "another revision and another threshold over the same prompts");
+  assert.notEqual(await editWith("evolution-module-policy-frontier:4", { screenInstructions: `${FRONTIER_SCREEN_INSTRUCTIONS}\n补充。` }), FRONTIER_EDITOR_VERSION, "the screen's too");
+  assert.equal(await editWith("evolution-module-policy-frontier:5", { screenInstructions: FRONTIER_SCREEN_INSTRUCTIONS, editInstructions: FRONTIER_EDIT_INSTRUCTIONS }), FRONTIER_EDITOR_VERSION, "the shipped prompts named outright are the shipped stamp");
 });
 
 test("the tree's candidates ride with the edit call after its input, and the input — the source's identity — stays without them", async () => {

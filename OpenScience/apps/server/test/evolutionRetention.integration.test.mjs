@@ -1,128 +1,76 @@
-// Retention of the two high-frequency record types of 循证进化 against the real ledger (`evolutionRetention.mjs`): the rows, their revisions and the transaction are
-// the database's, which a Map double has none of. What is folded is what no reader can ask for again; what a reader can ask for stays, whatever its age.
-import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { after, before, test } from "node:test";
-import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
-import { EvolutionService } from "../src/evolutionService.mjs";
-import { createEvolutionRetention, EVOLUTION_FOLDED_EVENT_TYPES } from "../src/evolutionRetention.mjs";
-import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
+// The bound on what serving writes at a rate, on the real ledger: what a pass takes, in what order, when it refuses, and that the scan has its index.
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { after, before, test } from 'node:test';
+import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
+import { ProductDocuments, ProductJobs } from '../src/productStore.mjs';
+import { EVOLUTION_RETENTION_DUE_SELECT, compactEvolutionRecords } from '../src/evolutionRetention.mjs';
+import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
-const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
-const options = { skip: !databaseUrl && "Local test Postgres is not configured" };
+const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? '';
+const options = { skip: !url && 'A disposable localhost test database is required' };
 const owner = `retention_${randomUUID()}`;
-const DAY = 86_400_000;
-let isolated, database, documents, jobs;
+/** @type {any} */ let isolated, database, documents, jobs;
+/** @param {string} id @param {string} recordType @param {string|null} retainUntil @param {Record<string, any>} [extra] */
+const row = (id, recordType, retainUntil, extra = {}) => documents.put(owner, 'knowledge', id, { recordType, ...(retainUntil ? { retainUntil } : {}), ...extra }, { expectedRevision: 0, projectId: 'research' });
+const left = async () => (await database.query("SELECT id FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' ORDER BY id", [owner])).rows.map((/** @type {any} */ entry) => entry.id);
+const now = new Date('2026-11-05T00:00:00Z');
 
 before(async () => {
-  if (!databaseUrl) return;
-  isolated = await createGeoTestDatabase(databaseUrl, "evoret");
-  database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 8, databaseConnectionTimeoutMs: 2000 });
-  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Evolution operator','development')", [owner]);
-  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,'evimed-evolution','Evolution',1048576)", [owner]);
+  if (!url) return;
+  isolated = await createGeoTestDatabase(url, 'evoretain');
+  database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2000 });
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'Operator','development')", [owner]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES ($1,'research','Research',1048576)", [owner]);
   documents = new ProductDocuments(database); jobs = new ProductJobs(database);
+  await documents.get(owner, 'knowledge', 'migrates-the-store');
 });
-after(async () => {
-  if (!database) return;
-  await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
-  await database.close();
-  await isolated.drop();
-});
+after(async () => { if (database) { await database.close(); await isolated.drop(); } });
 
-/** The service, and the retention, over the shared ledger; time is `ageDays` ahead of when the rows were written so that they are that old. */
-function engine(config = {}, ageDays = 20) {
-  const service = new EvolutionService({ documents, jobs, ownerId: owner, now: () => new Date(Date.now() + ageDays * DAY), config });
-  return { service, retention: createEvolutionRetention({ service, config: { evolutionRecordRetentionDays: 14, evolutionRetentionBatchRows: 5000, ...config } }) };
-}
-const count = async (recordType) => Number((await database.query("SELECT count(*)::integer AS n FROM evimed_product.documents WHERE user_id=$1 AND payload->>'recordType'=$2", [owner, recordType])).rows[0].n);
-const revisions = async (id) => Number((await database.query("SELECT count(*)::integer AS n FROM evimed_product.revisions WHERE user_id=$1 AND id=$2", [owner, id])).rows[0].n);
-/** Make a row young again: written 19 days after the old ones, i.e. one day old at the retention's clock. */
-const rejuvenate = (id) => database.query("UPDATE evimed_product.documents SET created_at=clock_timestamp()+interval '19 days', updated_at=clock_timestamp()+interval '19 days' WHERE user_id=$1 AND id=$2", [owner, id]);
-
-test("old observations that counted no failure are folded into the count of their day; the ones that counted a failure, and the young, stay", options, async () => {
-  const { service, retention } = engine();
-  const run = randomUUID().slice(0, 8);
-  const clean = [], failing = [];
-  for (let index = 0; index < 5; index++) clean.push((await service.save("module-observation", `evolution-module-observation-${run}-clean-${index}`, { moduleId: "frontier", kind: "edit-verification", counts: { failed: 0, numbersChecked: 3, numberFailures: 0, unitMismatches: 0 }, policyRevisionId: "frontier-editor-1.abc" })).id);
-  for (let index = 0; index < 3; index++) clean.push((await service.save("module-observation", `evolution-module-observation-${run}-screened-${index}`, { moduleId: "frontier", kind: "screened-out", counts: {}, policyRevisionId: "policy-x" })).id);
-  failing.push((await service.save("module-observation", `evolution-module-observation-${run}-title-only`, { moduleId: "frontier", kind: "edit-verification", counts: { failed: 1, numbersChecked: 0 } })).id);
-  failing.push((await service.save("module-observation", `evolution-module-observation-${run}-numbers`, { moduleId: "frontier", kind: "edit-verification", counts: { failed: 0, numberFailures: 2 } })).id);
-  failing.push((await service.save("module-observation", `evolution-module-observation-${run}-units`, { moduleId: "frontier", kind: "edit-verification", counts: { unitMismatches: 1 } })).id);
-  const young = (await service.save("module-observation", `evolution-module-observation-${run}-young`, { moduleId: "frontier", kind: "edit-verification", counts: { failed: 0 } })).id;
-  await rejuvenate(young);
-  // The same rows seen by the platform's own readers: each failing one is an evidence root, read again by id.
-  const before = await count("evolution-module-observation");
-  const result = await retention.compact();
-  assert.equal(result.observations, 8, "the five clean edits and the three screened-out entries");
-  assert.equal(await count("evolution-module-observation"), before - 8);
-  for (const id of clean) { assert.equal(await service.get(id), null); assert.equal(await revisions(id), 0, "its revisions went with it"); }
-  for (const id of [...failing, young]) assert.ok(await service.get(id), `${id} is kept`);
-  // The day's counts: one record per module, kind and day, with what the rows carried.
-  const days = await service.list("module-observation-daily");
-  const edits = days.find((row) => row.payload.kind === "edit-verification" && row.payload.counts.numbersChecked === 15), screened = days.find((row) => row.payload.kind === "screened-out");
-  assert.ok(edits && screened);
-  assert.equal(edits.payload.rows, 5); assert.equal(edits.payload.counts["revision:frontier-editor-1.abc"], 5); assert.equal(screened.payload.rows, 3);
-  assert.equal(screened.payload.moduleId, "frontier");
-  // A daily record is not an observation: the opportunity collector lists observations by their own record type and never meets one.
-  assert.ok(!(await service.list("module-observation")).some((row) => row.payload.recordType !== "evolution-module-observation" || row.id.includes("-daily-")));
-  // A second pass has nothing to do and counts nothing twice.
-  assert.deepEqual(await retention.compact(), { observations: 0, events: 0 });
-  assert.equal((await service.get(edits.id)).payload.rows, 5);
-  assert.equal(retention.counters.observationsFolded, 8);
+test('a pass takes at most the batch, oldest first, and the next pass the rest; what carries no date or is not yet due stays', options, async () => {
+  await row('signal-3', 'evolution-signal', '2026-10-03T00:00:00.000Z');
+  await row('signal-1', 'evolution-signal', '2026-10-01T00:00:00.000Z');
+  await row('occurrence-2', 'evolution-lead-occurrence', '2026-10-02T00:00:00.000Z');
+  await row('signal-future', 'evolution-signal', '2026-12-01T00:00:00.000Z');
+  await row('signal-history', 'evolution-signal', null);
+  await row('other-kind', 'evolution-tool', '2026-10-01T00:00:00.000Z');
+  await row('event-queued', 'evolution-event', '2026-10-01T00:00:00.000Z', { status: 'queued' });
+  assert.equal(await compactEvolutionRecords(database, owner, { config: { evolutionRetentionBatchRows: 2 }, now }), 2);
+  assert.deepEqual(await left(), ['event-queued', 'other-kind', 'signal-3', 'signal-future', 'signal-history'], 'the two oldest went');
+  assert.equal(await compactEvolutionRecords(database, owner, { config: { evolutionRetentionBatchRows: 2 }, now }), 1);
+  assert.deepEqual(await left(), ['event-queued', 'other-kind', 'signal-future', 'signal-history'], 'and the next pass took the rest');
 });
 
-test("only the platform's own processed events of the closed types are folded; a dataset, a queued event and any other type stay", options, async () => {
-  const { service, retention } = engine();
-  const run = randomUUID().slice(0, 8);
-  const event = async (type, status, extra = {}) => {
-    const row = await service.save("event", `evolution-event-${run}-${type}-${status}-${randomUUID().slice(0, 4)}`, { id: `${type}:${run}`, type, status, createdAt: new Date().toISOString(), ...extra });
-    return row.id;
-  };
-  const folded = [await event("frontier-publication", "processed"), await event("frontier-publication", "processed"), await event("handbook-gap-scan", "processed"), await event("tool-ready", "processed")];
-  const kept = [await event("dataset-ready", "processed"), await event("frontier-publication", "queued"), await event("prospective-registration", "processed"), await event("evaluation-gap", "processed")];
-  const young = await event("frontier-publication", "processed"); await rejuvenate(young);
-  for (const type of ["dataset-ready", "prospective-registration", "evaluation-gap"]) assert.ok(!EVOLUTION_FOLDED_EVENT_TYPES.includes(type), type);
-  const result = await retention.compact();
-  assert.equal(result.events, 4);
-  for (const id of folded) assert.equal(await service.get(id), null);
-  for (const id of [...kept, young]) assert.ok(await service.get(id), `${id} is kept`);
-  const days = await service.list("event-daily");
-  assert.equal(days.find((row) => row.payload.type === "frontier-publication").payload.rows, 2);
-  assert.equal(days.find((row) => row.payload.type === "tool-ready").payload.rows, 1);
-  assert.ok(days.every((row) => row.payload.recordType === "evolution-event-daily" && !("payload" in row.payload)), "a daily count carries counts and no event");
-  // An event another owner holds is not this owner's to fold.
-  assert.equal((await service.list("event")).filter((row) => EVOLUTION_FOLDED_EVENT_TYPES.includes(row.payload.type) && row.payload.status === "processed" && Date.parse(row.updatedAt) < Date.now() + 5 * DAY).length, 0);
+test('a processed event goes with its finished job and its revisions; a job still queued stays', options, async () => {
+  await row('event-done', 'evolution-event', '2026-10-01T00:00:00.000Z', { status: 'processed' });
+  await row('event-live', 'evolution-event', '2026-10-01T00:00:00.000Z', { status: 'processed' });
+  const done = await jobs.enqueue(owner, 'evolution-event', { eventId: 'event-done' }, { idempotencyKey: 'evolution:event-done' });
+  await jobs.enqueue(owner, 'evolution-event', { eventId: 'event-live' }, { idempotencyKey: 'evolution:event-live' });
+  await database.query("UPDATE evimed_product.jobs SET status='succeeded',finished_at=clock_timestamp() WHERE id=$1", [done.id]);
+  assert.ok((await compactEvolutionRecords(database, owner, { now })) >= 2);
+  const keys = (await database.query('SELECT idempotency_key FROM evimed_product.jobs WHERE user_id=$1 ORDER BY 1', [owner])).rows.map((/** @type {any} */ entry) => entry.idempotency_key);
+  assert.deepEqual(keys, ['evolution:event-live']);
+  assert.equal((await database.query("SELECT count(*)::integer AS n FROM evimed_product.revisions WHERE user_id=$1 AND id='event-done'", [owner])).rows[0].n, 0);
 });
 
-test("a pass takes at most the batch, oldest first, and the next pass takes the rest", options, async () => {
-  const { service, retention } = engine({ evolutionRetentionBatchRows: 3 });
-  const run = randomUUID().slice(0, 8), ids = [];
-  for (let index = 0; index < 7; index++) ids.push((await service.save("module-observation", `evolution-module-observation-${run}-b${index}`, { moduleId: "geo", kind: "screened-out", counts: {} })).id);
-  assert.equal((await retention.compact()).observations, 3);
-  assert.equal((await retention.compact()).observations, 3);
-  assert.equal((await retention.compact()).observations, 1);
-  assert.equal((await retention.compact()).observations, 0);
-  const total = (await service.list("module-observation-daily")).filter((row) => row.payload.moduleId === "geo").reduce((sum, row) => sum + row.payload.rows, 0);
-  assert.equal(total, 7, "the days' counts add up to what was folded, across the passes");
+test('a pass refuses during maintenance and on its caller\'s admission, and deletes nothing', options, async () => {
+  await row('signal-maintenance', 'evolution-signal', '2026-10-01T00:00:00.000Z');
+  assert.equal(await compactEvolutionRecords(database, owner, { now, admission: () => false }), 0);
+  await database.query("INSERT INTO evimed_product.maintenance_lease(singleton,request_id,requested_at,expires_at,durable_hold) VALUES (true,$1,clock_timestamp(),clock_timestamp()+interval '1 hour',false)", [randomUUID()]);
+  try { assert.equal(await compactEvolutionRecords(database, owner, { now }), 0); }
+  finally { await database.query('DELETE FROM evimed_product.maintenance_lease'); }
+  assert.ok((await left()).includes('signal-maintenance'));
+  assert.equal(await compactEvolutionRecords(database, owner, { now }), 1);
 });
 
-test("a pass that fails leaves every row where it was and never reaches the job that called it", options, async () => {
-  const { service, retention } = engine();
-  const run = randomUUID().slice(0, 8);
-  const id = (await service.save("module-observation", `evolution-module-observation-${run}-fail`, { moduleId: "geo", kind: "screened-out", counts: {} })).id;
-  const save = service.save.bind(service);
-  service.save = async (type, ...rest) => { if (type === "module-observation-daily") throw new Error("ledger unavailable"); return save(type, ...rest); };
-  assert.deepEqual(await retention.compact(), { observations: 0, events: 0, skipped: "failed" });
-  assert.ok(await service.get(id), "the transaction rolled back");
-  assert.equal(retention.counters.failures, 1);
-  service.save = save;
-  assert.equal((await retention.compact()).observations, 1, "and the next pass does it");
-});
-
-test("a deployment without a database, or with retention switched off, folds nothing", async () => {
-  const bare = { config: {}, documents: {}, now: () => new Date(), owner: async () => "operator" };
-  assert.deepEqual(await createEvolutionRetention({ service: bare }).compact(), { observations: 0, events: 0, skipped: "no-database" });
-  const off = { ...bare, documents: { database: { query: async () => assert.fail("off means no query") } } };
-  assert.deepEqual(await createEvolutionRetention({ service: off, config: { evolutionRecordRetentionDays: 0 } }).compact(), { observations: 0, events: 0, skipped: "retention-off" });
+test('the scan is served by its partial index, in the order the pass takes', options, async () => {
+  const index = (await database.query("SELECT indexdef FROM pg_indexes WHERE schemaname='evimed_product' AND indexname='product_documents_retain_until_idx'")).rows[0];
+  assert.ok(index, 'the migration creates it');
+  assert.match(index.indexdef, /WHERE/, 'partial, so it costs only the rows that carry a date');
+  const plan = await database.transaction(async (/** @type {any} */ client) => {
+    await client.query('SET LOCAL enable_seqscan=off');
+    return (await client.query(`EXPLAIN ${EVOLUTION_RETENTION_DUE_SELECT.replace('$1', "'2026-11-05T00:00:00.000Z'").replace('$2', '10')}`)).rows.map((/** @type {any} */ entry) => entry['QUERY PLAN']).join('\n');
+  });
+  assert.match(plan, /product_documents_retain_until_idx/);
+  assert.doesNotMatch(plan, /Sort\b/, 'the index gives the order, so a limit stops early');
 });

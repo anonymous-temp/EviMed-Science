@@ -101,10 +101,10 @@ export function kbSearchGatewayProviderUrl(config) {
 /**
  * @param {any} config
  * @param {any} runtimeManager
- * @param {{ index: any, evaluationIsolation?: any, sourceScope?: (identity: any, sessionId: string) => Promise<readonly string[] | null>,
+ * @param {{ index: any, sourceScope?: (identity: any, sessionId: string) => Promise<readonly string[] | null>,
  * contextFor?: ((identity:any)=>Promise<any>) | null }} dependencies
  */
-export function createKbSearchGatewayHandler(config, runtimeManager, { index, evaluationIsolation = null, sourceScope, contextFor = null }) {
+export function createKbSearchGatewayHandler(config, runtimeManager, { index, sourceScope, contextFor = null }) {
   const windows = new Map();
   return async function kbSearchGatewayHandler(req, res, onFailure) {
     try {
@@ -152,9 +152,8 @@ export function createKbSearchGatewayHandler(config, runtimeManager, { index, ev
           timer.unref?.();
         }),
       ]).finally(() => clearTimeout(timer));
-      const data = evaluationIsolation ? await evaluationIsolation.filter(identity, "knowledge-base", result) : result;
       if (shared && typeof policy.current === "function") await policy.current();
-      sendJson(res, 200, { data });
+      sendJson(res, 200, { data: result });
     } catch (error) {
       const known = error instanceof KbSearchGatewayError;
       const status = known ? error.status : 503;

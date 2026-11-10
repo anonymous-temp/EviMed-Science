@@ -76,7 +76,6 @@ import {
   FRONTIER_SOURCE_TYPE_LABELS_ZH,
   doiOf,
   frontierAuthorityScore,
-  frontierFloorEligible,
   frontierPracticeAdmissible,
   frontierPracticeAdmit,
   frontierRepublisher,
@@ -89,7 +88,6 @@ import {
   frontierMixGenre,
   frontierMixGenreFloors,
   frontierMixSelect,
-  frontierMixSourceCap,
   FRONTIER_CODE_GENRES,
   frontierGenreDecision,
   frontierIndustryKindDecision,
@@ -104,6 +102,7 @@ import { FRONTIER_REASON_VERSION, FRONTIER_RETAG_BATCH, FRONTIER_SCORE_VERSION, 
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, sha256, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT_CHARS, buildModelInput, frontierParagraphs,
   isChineseProse, isChineseTitle } from "./frontierEditor.mjs";
 import { isDiscoveryOnlySource } from "./evolutionDiscoverySources.mjs";
+import { frontierJournalWithoutAbstract, frontierMixCandidate, frontierSelectThreshold, FRONTIER_SELECT_THRESHOLD_DEFAULT } from "./frontierSelection.mjs";
 import { FrontierGlossary, FrontierGlossaryStore } from "./frontierGlossary.mjs";
 import { bumpFrontierVersion, FRONTIER_FEED_TIME_ZONE, FRONTIER_META_KEYS, metaNumber, migrateFrontier } from "./frontierPersistence.mjs";
 import { FrontierTagStore } from "./frontierTags.mjs";
@@ -121,6 +120,9 @@ import { frontierScreenExcerpt, frontierScreenSource } from "./frontierIngest.mj
 import { tsvectorLiteral } from "./kbChunker.mjs";
 import { recordFrontierNotices } from "./sourceChanges.mjs";
 import { FrontierTrack } from "./frontierTrack.mjs";
+
+// What decides selection lives in frontierSelection.mjs (the rsi closure of the surface); the pipeline's importers read it from here as ever.
+export { frontierJournalWithoutAbstract, frontierMixCandidate, frontierSelectThreshold, FRONTIER_SELECT_THRESHOLD_DEFAULT };
 
 const MINUTE = 60_000;
 /** Tagging calls one batch makes side by side (`#retag`). */
@@ -245,20 +247,6 @@ export function frontierSourceGrade(source, fallbackId = null) {
   return republisher ? Math.min(Number.isFinite(grade) && grade > 0 ? grade : 1, republisher.authorityCap) : source?.authority;
 }
 
-/**
- * The selection line when `OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD` is unset (config.mjs holds the same number; frontierConfig.test.mjs
- * holds them equal). Recalibrated 2026-10-25 (c3-select) with the score: the editor's scoring was rewritten (a ladder for impact and
- * novelty, a ceiling for each fact the platform holds - `@evimed/domain` `frontierScoreCeilings`), so its totals sit lower and spread
- * wider than the 82 of 2026-09-28 was drawn for. On the 248-item gold set (two labellers, kappa 0.87) chosen on the dev split alone as
- * the highest line that keeps the stored scores' recall of 0.50: at 64, 16 of 124 items reach the line, 12 of them picks (precision
- * 0.75, recall 0.60; the stored scores of the older prompts gave 0.145 / 0.50); the same line on the test split, reported once: 20
- * selected, precision 0.750, recall 0.714. The prompt of round 2 re-run on the same items puts 2 of 124 on the old line of 82 - a
- * release of round 2 without this move would fill 精选 from its floors alone. The expected day, from the dev split's weights over the
- * seven days to 2026-10-25, is 62 items a day above the line before the source caps, the one-pick-per-event rule and the day's size of
- * 60 (90% interval 38-87, wide: the dev split is 124 items); `scripts/ops/frontier-mix-replay.mjs` reads the first real week after the
- * rescore. Re-read a week's distribution before moving it.
- */
-export const FRONTIER_SELECT_THRESHOLD_DEFAULT = 64;
 /**
  * The preprint lane (`OPEN_SCIENCE_FRONTIER_PREPRINT_LANE_PER_DAY` / `_MIN_SCORE`; config.mjs holds the same numbers and
  * frontierConfig.test.mjs holds them equal). Review B, D-08: a preprint server tops out at a total of 77 and a company newsroom at 76
@@ -446,19 +434,6 @@ export function frontierBudgetState(spentCny, budgetCny) {
   if (spentCny >= budgetCny) return "exhausted";
   if (spentCny >= budgetCny * 0.8) return "throttled";
   return "ok";
-}
-
-/**
- * The selection line (`OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD`,
- * `FRONTIER_SELECT_THRESHOLD_DEFAULT` unless set): what the pipeline selects
- * by and what a card's score band is read against (`frontierService.mjs`),
- * from one reading of the config.
- * @param {Record<string, any> | null | undefined} config @returns {number}
- */
-export function frontierSelectThreshold(config) {
-  const value = Number(config?.frontierSelectThreshold);
-  return config?.frontierSelectThreshold != null && config.frontierSelectThreshold !== "" && Number.isFinite(value)
-    ? value : FRONTIER_SELECT_THRESHOLD_DEFAULT;
 }
 
 /**
@@ -673,14 +648,6 @@ export function frontierTextGivenUp({ entry = null, item = null, now, source = n
  */
 export function frontierRecordEntry(entry, source) {
   return ["json-api", "evimed-api"].includes(String(source?.access ?? "")) && !entry?.doi && !entry?.pmid;
-}
-
-/**
- * Whether an item is a journal's without its abstract (flag `no-abstract`): never selected (2026-10-22).
- * @param {{ source: any, flags: string[] }} input
- */
-export function frontierJournalWithoutAbstract({ source, flags }) {
-  return source?.source_type === "journal" && flags.includes("no-abstract");
 }
 
 /**
@@ -1018,7 +985,7 @@ export function frontierLexemeText(item) {
 export class FrontierPipeline {
   /**
    * @param {{ database: any, editor: any, plugin: any, embedder?: any, glossary?: any, config?: Record<string, any>,
-   *           sourceChanges?: any, policies?: any, evolution?: any, webReader?: { read: (url: string, options?: any) => Promise<any> } | null,
+   *           sourceChanges?: any, policies?: any, webReader?: { read: (url: string, options?: any) => Promise<any> } | null,
    *           parser?: { parseBytes: Function, configured?: boolean } | null,
  *           media?: ((id: string) => Promise<{ bytes: Buffer, contentType: string }>) | null, tags?: FrontierTagStore | null, now?: () => Date, workerId?: string }} options
    *   `editor` a `FrontierEditor` (its `owner` is the operator's internal
@@ -1029,7 +996,7 @@ export class FrontierPipeline {
    *   (`sourceChanges.mjs`), which each retraction, correction, concern or
    *   withdrawal notice is also written to (absent: nothing is).
    */
-  constructor({ database, editor, plugin, evolution = null, policies = createModuleEvolutionPolicies(), embedder = null, glossary = null, config = {}, sourceChanges = null, webReader = null, parser = null, media = null, tags = null, now = () => new Date(), workerId = `frontier-${randomUUID()}` }) {
+  constructor({ database, editor, plugin, policies = createModuleEvolutionPolicies(), embedder = null, glossary = null, config = {}, sourceChanges = null, webReader = null, parser = null, media = null, tags = null, now = () => new Date(), workerId = `frontier-${randomUUID()}` }) {
     if (!database) throw new TypeError("The frontier pipeline needs a database.");
     if (typeof editor?.screen !== "function" || typeof editor?.edit !== "function") throw new TypeError("The frontier pipeline needs an editor.");
     if (typeof plugin?.text !== "function") throw new TypeError("The frontier pipeline needs the plugin client.");
@@ -1058,7 +1025,6 @@ export class FrontierPipeline {
     this.idleStageRecheckMs = Math.max(0, Number(this.config.frontierIdleStageRecheckMs) || 0);
     /** @type {Map<string, number>} a stage that found nothing owed → when it may look again */
     this.stageRestingUntil = new Map();
-    this.evolution = evolution;
     this.policies = policies;
     this.threshold = frontierSelectThreshold(this.config);
     this.preprintLanePerDay = frontierPreprintLanePerDay(this.config);
@@ -1205,7 +1171,6 @@ export class FrontierPipeline {
   async processBatch() {
     const policy = await this.policies.resolve("frontier", { selectionThreshold: frontierSelectThreshold(this.config) });
     this.threshold = policy.policy.selectionThreshold;
-    this.policyRevisionId = policy.revisionId;
     /** @type {FrontierBatchSummary} */
     const summary = { claimed: 0, promoted: 0, published: 0, merged: 0, screenedOut: 0, held: 0, failed: 0, dropped: 0,
       waiting: 0, deferred: 0, edited: 0, rescored: 0, embedded: 0, preprintLane: 0, genreFloor: 0, zhTarget: 0, eventPrimary: 0,
@@ -1738,8 +1703,6 @@ export class FrontierPipeline {
         if (!keep) {
           await this.#finishEntry(entry, "screened-out", verdict.medical ? "not-news" : "not-medical");
           summary.screenedOut += 1;
-          try { await this.evolution?.observe?.({ moduleId: "frontier", kind: "screened-out", eventId: `frontier-entry:${entry.id}:${entry.revision}`,
-            codes: [verdict.medical ? "not-news" : "not-medical"], policyRevisionId: this.policyRevisionId }); } catch { /* Observation does not affect publication. */ }
           continue;
         }
         const created = await this.#createItem(entry, source, verdict, context);
@@ -2545,9 +2508,6 @@ export class FrontierPipeline {
         await bumpFrontierVersion(client);
       }
     });
-    try { await this.evolution?.observe?.({ moduleId: "frontier", kind: "edit-verification", eventId: `frontier-edit:${item.id}:${result.modelInputSha256}:${result.editorVersion}`,
-      codes: [result.verification], policyRevisionId: result.editorVersion,
-      counts: { failed: Number(result.verification === "title-only"), numbersChecked: result.numbers?.checked ?? 0, numberFailures: result.numbers?.missing?.length ?? 0, unitMismatches: result.numbers?.unitMismatches?.length ?? 0 } }); } catch { /* Observation does not affect publication. */ }
   }
 
   /** The words search finds an item by. @param {any} item */
@@ -2698,7 +2658,7 @@ export class FrontierPipeline {
         let result;
         try {
           result = this.policies.evaluateFrontierSelection
-            ? await this.policies.evaluateFrontierSelection(selectionInput, { executionId: `frontier-mix:${day}:${now.toISOString()}`, now })
+            ? await this.policies.evaluateFrontierSelection(selectionInput, { executionId: `frontier-mix:${day}:${now.toISOString()}`, now, day })
             : frontierMixSelect(selectionInput);
         } catch {
           this.counters.mixSelectionFallbacks += 1;
@@ -4075,32 +4035,4 @@ export class FrontierPipeline {
     this.lastEmbedError = null;
     return rows.length;
   }
-}
-
-/** Project the published SQL row into the production mix consumer.
- * @param {any} row
- */
-export function frontierMixCandidate(row) {
-  const flags = Array.isArray(row.flags) ? row.flags : [];
-  const source = { source_type: row.source_source_type, authority: row.source_authority };
-  return {
-    id: String(row.id), genre: frontierMixGenre(row),
-    zh: String(row.lang ?? "").startsWith("zh") || isChineseTitle(row.title_raw),
-    // A score is weighed against the line only once the scoring of 2026-10-25 wrote it (`scoreVersion`): an older score sits on
-    // another scale, and selection is sticky, so a total of 64-81 from the old prompts would fill the day until the rescore
-    // (`frontier-rewrite.mjs --steps score`) reached it. Such an item waits for that, or for its next edit; a safety alert does not.
-    score: row.score_total == null || !row.score_version ? null : Number(row.score_total),
-    selected: row.selected === true, rule: row.selected_rule ?? null, safety: row.safety_alert === true,
-    sourceId: String(row.primary_source_id), sourceCap: frontierMixSourceCap(source),
-    eligible: ["passed", "repaired"].includes(row.verification) && !flags.includes("retracted")
-      && !frontierJournalWithoutAbstract({ source, flags })
-      && !frontierEvidenceFromPublicationTypes(row.publication_types, { modelType: row.evidence_type }).demote,
-    summarized: row.summarized === true, besideSelected: row.beside_selected === true,
-    // A republisher (frontier-selection.json) takes no place under the line.
-    floorEligible: frontierFloorEligible(row.primary_source_id),
-    // The research's own record (a journal's or a preprint server's item) fills a research place before a report of research.
-    primary: row.source_source_type === "journal" || row.source_source_type === "preprint",
-    addsValue: typeof row.adds_value === "boolean" ? row.adds_value : null,
-    eventId: row.event_id == null ? null : String(row.event_id),
-  };
 }

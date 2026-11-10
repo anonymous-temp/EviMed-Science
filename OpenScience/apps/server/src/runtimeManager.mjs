@@ -1,9 +1,8 @@
 import {withSessionPromptAdmission,runtimePromptAdmissionStatus} from './runtimePromptAdmission.mjs';
 import { contextGenerationPaths, prepareContextGeneration, verifyContextGeneration, remediateStartupContext } from './runtimeContextGeneration.mjs';
 import { contextPolicyIdentity, sameContextPolicy } from './geoContextItems.mjs';
-import { PLATFORM_SKILLS_RUNTIME_DIR, platformSkillGenerationRoot, verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
-import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProjectOf, isEvolutionProject, isDataAnalysisProject } from "./internalProjects.mjs";
+import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProjectOf, isDataAnalysisProject } from "./internalProjects.mjs";
 import { projectLibraryViewDir } from "./libraryScope.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Buffer } from "node:buffer";
@@ -2148,10 +2147,6 @@ export function memoryGatewayProviderUrl(config) {
 export const MEMORY_GATEWAY_URL_ENV = "EVIMED_MEMORY_GATEWAY_URL";
 
 /** Only trusted configuration selects the internal origin, never a tool argument. @param {any} config */
-export function evolutionGatewayEndpointUrl(config) {
-  const url = new URL(modelGatewayProviderUrl(config)); url.pathname = "/internal/evolution/v1"; url.search = ""; url.hash = ""; return url.href.replace(/\/$/, "");
-}
-/** @param {any} config */
 export function extensionGatewayEndpointUrl(config) {
   const url = new URL(modelGatewayProviderUrl(config)); url.pathname = "/internal/extensions/v1"; url.search = ""; url.hash = ""; return url.href.replace(/\/$/, "");
 }
@@ -2241,8 +2236,6 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     extensionGatewayUrl: plan.extensionGeneration?.reference ? extensionGatewayEndpointUrl(config) : "",
     personalSkillsDir: plan.personalSkillsRuntimeDir ?? PERSONAL_SKILLS_RUNTIME_DIR,
     disabledPlatformSkills: plan.personalSkillGeneration?.platformSkills?.disabled ?? [],
-    platformSkillsDir: plan.platformSkillGeneration ? (plan.platformSkillsRuntimeDir ?? PLATFORM_SKILLS_RUNTIME_DIR) : "",
-    evolutionGatewayUrl: plan.platformSkillGeneration ? (gateways?.evolution ?? evolutionGatewayEndpointUrl(config)) : "",
     capsuleGatewayUrl,
     revisionGatewayUrl: gateways ? String(gateways.revision ?? "") : revisionGatewayProviderUrl(config),
     attendanceAuthority: {
@@ -2634,7 +2627,7 @@ export function pluginUpstreamHealth(value) {
  */
 /** @param {any} config @param {any} project @param {number} port
  * @param {{modelGatewayProfile?:string,contextGeneration?:any,disabledPlatformSkills?:string[],disabledClientBundles?:string[],capsuleGatewayUrl?:string,revisionGatewayUrl?:string,publicSourceGatewayUrl?:string,webSearchGatewayUrl?:string,memoryGatewayUrl?:string,
- *   attendancePublicKey?:string,geoSkills?:boolean,pluginConfig?:any,platformSkillGeneration?:any,personalSkillGeneration?:any,
+ *   attendancePublicKey?:string,geoSkills?:boolean,pluginConfig?:any,personalSkillGeneration?:any,
  *   personalSkillImageId?:string|null,extensionGeneration?:any,extensionImageId?:string|null,installedSearchTopicsVersion?:string}} [options]
  * `attendancePublicKey` is a public Ed25519 verifier, never a runtime signing key. */
 export function buildRuntimeLaunchPlan(config, project, port, {
@@ -2653,7 +2646,6 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   // carries no pack (the catalogue it would put in front of the model is 51 skills shorter).
   geoSkills = false,
   pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } },
-  platformSkillGeneration = null,
   personalSkillGeneration = null,
   personalSkillImageId = null,
   disabledPlatformSkills = [],
@@ -2676,9 +2668,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     if (transport !== "unix") {
       throw new HttpError(400, "invalid_runtime_transport", "Unsupported runtime transport.");
     }
-    const evaluationNetwork = config.evolutionEnabled === true && isEvolutionProject(project.id)
-      ? String(config.evolutionEvaluationNetwork ?? "").trim() : "";
-    const networkMode = evaluationNetwork || String(config.runtimeNetworkMode ?? "").trim();
+    const networkMode = String(config.runtimeNetworkMode ?? "").trim();
     if (!config.allowRuntimeHostNetwork && runtimeNetworkUsesHostOrContainer(networkMode)) {
       throw new HttpError(
         403,
@@ -2733,8 +2723,6 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     const extensionReference = extensionGeneration ? validateExtensionGenerationReference(project, extensionGeneration) : null;
     if (extensionReference && !/^sha256:[a-f0-9]{64}$/.test(String(extensionImageId))) throw new HttpError(400, "extension_contract_invalid", "An immutable extension runtime image is required.");
     if (extensionImageId && personalSkillImageId && extensionImageId !== personalSkillImageId) throw new HttpError(400, "extension_contract_invalid", "Runtime generation images must agree.");
-    const platformReference = platformSkillGeneration?.reference ?? platformSkillGeneration;
-    if (platformReference) platformSkillGenerationRoot(config, platformReference);
     const personalReference = validatePersonalGenerationReference(project, personalSkillGeneration);
     if (personalReference && !/^sha256:[a-f0-9]{64}$/.test(String(personalSkillImageId))) throw new HttpError(400, "extension_contract_invalid", "An immutable personal-skill runtime image is required.");
     const topicsSource = searchTopicsSource(config);
@@ -2821,7 +2809,6 @@ export function buildRuntimeLaunchPlan(config, project, port, {
             ]
           : []),
         ...(extensionReference ? ["--mount", `${dockerRuntimeMount(config, path.join(extensionGenerationRoot(config, extensionReference), "selected"), "/opt/evimed/extensions")},readonly`] : []),
-        ...(platformReference ? ["--mount", `${dockerRuntimeMount(config, path.join(platformSkillGenerationRoot(config, platformReference), "skills"), PLATFORM_SKILLS_RUNTIME_DIR)},readonly`] : []),
         ...(personalReference ? ["--mount", `${dockerRuntimeMount(config, path.join(personalGenerationRoot(config, personalReference), 'skills'), PERSONAL_SKILLS_RUNTIME_DIR)},readonly`] : []),
         ...(isolatedControlMount
           ? [
@@ -2937,8 +2924,6 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           personalSkillsDir: PERSONAL_SKILLS_RUNTIME_DIR,
           disabledPlatformSkills,
           disabledClientBundles: [...new Set([...disabledClientBundles, ...(config.runtimeAnnotationEnabled === false ? ['annotation'] : []), ...(config.runtimeMermaidEnabled === false ? ['mermaid'] : [])])],
-          platformSkillsDir: platformReference ? PLATFORM_SKILLS_RUNTIME_DIR : "",
-          evolutionGatewayUrl: platformReference ? evolutionGatewayEndpointUrl(config) : "",
           capsuleGatewayUrl,
           attendanceAuthority: { publicKey: attendancePublicKey, userId: String(project.userId ?? ""), projectId: String(project.id ?? "") },
           revisionGatewayUrl,
@@ -3343,7 +3328,7 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
  *
  * @typedef {object} RuntimeProvider
  * @property {'docker'|'agentbay'} name
- * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?: any, personalSkillGeneration?: any, extensionGeneration?: any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }) => Promise<Record<string, any>>} prepare
+ * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?: any, extensionGeneration?: any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }) => Promise<Record<string, any>>} prepare
  *   the launch plan: `sandboxMode`, `runtimeUrl`, `socketPath`, `proxyWorkspaceDir`, `containerName`, …
  * @property {(project: Record<string, any>, plan: Record<string, any>, options: { budgetScope?: any }) => Promise<Record<string, any>>} bootstrap
  *   writes the profile patch, the credentials and the tokens where the kernel reads them
@@ -3405,8 +3390,8 @@ export class DockerRuntimeProvider {
     if (checked.status !== 0 || checked.stdout.trim() !== imageId) throw new HttpError(503, 'runtime_image_unavailable', 'The pinned personal-skill runtime image is unavailable.');
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, platformSkillGeneration?:any, personalSkillGeneration?:any, extensionGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }} input */
-  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration = null, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = "", contextGeneration = null }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?:any, extensionGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }} input */
+  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = "", contextGeneration = null }) {
     const manager = this.manager;
     if (contextGeneration) contextGeneration = await verifyContextGeneration(this.config, project, contextGeneration.reference);
     // Before the plan, for the same reason as the capsule methods: the
@@ -3421,17 +3406,11 @@ export class DockerRuntimeProvider {
     const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference,
       personalSkillGeneration.identity.baseRuntimeImageDigest) : null;
     if (personal) await this.assertPersonalImage(personal.identity.baseRuntimeImageDigest);
-    // Verified once more at the last moment before it is mounted; an extension that fails here starts the runtime without it.
-    if (platformSkillGeneration) {
-      try { await verifyPlatformSkillGeneration(this.config, platformSkillGeneration.reference); }
-      catch { manager.platformSkillSupply?.noteFailure?.("platform_skill_generation_unverified"); platformSkillGeneration = null; }
-    }
-    const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, platformSkillGeneration: platformSkillGeneration?.reference ?? null, personalSkillGeneration: personal?.reference ?? null,
+    const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, personalSkillGeneration: personal?.reference ?? null,
       personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, disabledPlatformSkills: personal?.platformSkills?.disabled ?? [], disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? [], extensionGeneration: extensionGeneration?.reference ?? null,
       extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration,
       ...(this.config.searchTopicsEnabled === true && manager.runtimeController
         ? { installedSearchTopicsVersion: String((await manager.inspectRuntimeImage())?.searchTopicsVersion ?? '') } : {}) });
-    plan.platformSkillGeneration = platformSkillGeneration;
     plan.personalSkillGeneration = personal ? { ...personalSkillGeneration, platformSkills: personal.platformSkills } : personalSkillGeneration;
     plan.extensionGeneration = extensionGeneration;
     plan.pluginConfig = pluginConfig;
@@ -3505,7 +3484,6 @@ export class DockerRuntimeProvider {
         plan.pluginConfig,
         plan.personalSkillGeneration?.reference ?? null,
         plan.extensionGeneration?.reference ?? null,
-        plan.platformSkillGeneration?.reference ?? null,
         String(plan.memoryGatewayUrl ?? ""),
         plan.geoSkills === true,
         plan.modelGatewayProfile,
@@ -3619,8 +3597,6 @@ export class RuntimeManager {
   constructor(config, {
     assessmentAuthority = null,
     agentRegistry = null,
-    recordRuntimeEgressDispatch = null,
-    readRuntimeEgressRun = null,
     workloadTokenWriter = refreshEviMedWorkloadToken,
     setWorkloadTimer = setTimeout,
     clearWorkloadTimer = clearTimeout,
@@ -3638,15 +3614,9 @@ export class RuntimeManager {
     /** @type {any} */ this.sourceDeletion = null;
     this.sourceMaintenance = new Set();
     this.runtimeCreationMutation = runtimeCreationMutation;
-    this.recordRuntimeEgressDispatch = recordRuntimeEgressDispatch;
-    this.readRuntimeEgressRun = readRuntimeEgressRun;
     /** @type {any} */ this.pluginService = null;
     /** @type {any} Server-owned database for the short per-session prompt fence. */ this.promptAdmissionDatabase=null;
     /** @type {any} Immutable personal methods, assigned only by the composition root. */
-    this.platformSkillSupply = null;
-    this.platformSkillScopes = new Map();
-    this.platformSkillRefreshes = new Map();
-    this.platformSkillOverrides = new Map();
     this.personalSkillGenerations = null;
     /** @type {any} */ this.rebasePersonalComposite = null;
     /** What an optional part of a start could not do, counted by code (principle 15), and the last one per project. */
@@ -4036,8 +4006,8 @@ export class RuntimeManager {
       digest:generation.digest,policy:structuredClone(generation.manifest.policy),reference:structuredClone(generation.reference),
       contextDirectory:generation.directory,contextFiles:structuredClone(generation.manifest.files),items:structuredClone(generation.manifest.identities),
       pendingDirectory:generation.pendingDirectory,pendingHostDirectory:generation.pendingHostDirectory,stateDirectory:generation.stateDirectory,
-      mounts,platformSkillReference:plan.platformSkillGeneration?.reference ?? null,remediation,
-      restrictions:{personalSkills:"excluded-until-shared-byte-authorization",personalExtensions:"excluded-until-shared-byte-authorization",platformSkills:"separate-published-generation"},
+      mounts,remediation,
+      restrictions:{personalSkills:"excluded-until-shared-byte-authorization",personalExtensions:"excluded-until-shared-byte-authorization"},
       previousState:{directory:containerRuntimeRoot(project),action:'retained-outside-runtime',historicalTargets:'exact-target-refusal-without-migration-proof'}};
     const referenceId=`gcr_${createHash('sha256').update(canonicalJson(identity)).digest('hex')}`;
     const receipt={...identity,referenceId};
@@ -4650,7 +4620,6 @@ export class RuntimeManager {
 
   async reserveBoundedRuntimeSession(project, budgetScope) {
     const key = this.key(project);
-    if(budgetScope?.capabilityId!==undefined)this.platformSkillScopes.set(key,budgetScope.capabilityId);
     if (this.failedRuntimeStops.has(key)) await this.settleFailedStop(project);
     const scope = {
       runId: safeId(budgetScope?.runId, "bounded run id"),
@@ -5116,13 +5085,12 @@ export class RuntimeManager {
     this.lastMountedCapsuleMethods.set(this.key(project), mountedMethods.capsule ?? []);
     // The provider's own preparation: a container's plan, directories and
     // orphan cleanup, or a cloud session with the project's files carried in.
-    const platformSkillGeneration = this.platformSkillOverrides.has(key)?this.platformSkillOverrides.get(key):(await this.selectPlatformSkills(project,this.platformSkillScopes.get(key))).generation;
     // The memory gateway's address, read once per launch: empty when the deployment has no memory engine.
     const memoryGatewayUrl = await this.memoryGatewayUrlFor(project);
     // And whether the project is a 「循证 GEO」 one: the method pack is mounted for it alone (`geoSkillsFor`).
     const geoSkills = await this.geoSkillsFor(project);
     const remediation = contextGeneration ? await remediateStartupContext(this.config, project, contextPolicy) : [];
-    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration });
+    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration, extensionGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration });
 
     // Nothing is copied into a project any more: the image carries the skill
     // roots and the agent packages read-only, shared across every project. The
@@ -5269,7 +5237,6 @@ export class RuntimeManager {
         tokenRoot: plan.contextGeneration ? this.config.dataDir : project.rootDir } : null,
       contextGeneration: plan.contextGeneration ?? null,
       contextLaunchReceipt: null,
-      platformSkillGeneration,
       personalSkillGeneration,
       personalSkillsRuntimeDir: plan.personalSkillsRuntimeDir ?? PERSONAL_SKILLS_RUNTIME_DIR,
       builtinPlugins: { annotation: this.config.runtimeAnnotationEnabled !== false && !(personalSkillGeneration?.platformSkills?.disabledPlugins ?? []).includes('annotation'),
@@ -6100,22 +6067,6 @@ export class RuntimeManager {
    * caller from the same decision its research context gets (`attended`); a person-initiated path says `false`.
    * @returns {Promise<void>}
    */
-  /** Control-only observed proof; unsupported providers and failed probes never block delivery. @param {any} input */
-  async captureRunEgressProof({project,runId,phase,signal}) {
-    if(this.config.evolutionEnabled!==true||!isEvolutionProject(project.id)||String(this.config.runtimeProvider??'docker')!=='docker'||!this.runtimeController)return{nativeCoverageVerified:false,reason:'provider_unsupported'};
-    try{return await this.runtimeController.captureRunEgressProof(project,runId,phase,{signal});}catch{return{nativeCoverageVerified:false,reason:'proof_probe_unavailable'};}
-  }
-  /** Read the controller-authenticated pair after a complete durable run, never transcript self-certification. @param {any} input */
-  async verifyRunEgressCoverage({project,run,signal}) {
-    if(!run?.id||!this.readRuntimeEgressRun)return{nativeCoverageVerified:false,reason:'proof_binding_invalid'};
-    let authoritative;
-    try{authoritative=await this.readRuntimeEgressRun(project,run.id);}catch{return{nativeCoverageVerified:false,reason:'proof_binding_invalid'};}
-    if(!authoritative||authoritative.id!==run.id||!authoritative.finishedAt||!authoritative.promptDispatchStartedAt||authoritative.finishedAt!==run.finishedAt||authoritative.promptDispatchStartedAt!==run.promptDispatchStartedAt)return{nativeCoverageVerified:false,reason:'proof_binding_invalid'};
-    const end=await this.captureRunEgressProof({project,runId:run.id,phase:'end',signal});
-    if(end.nativeCoverageVerified!==true)return end;
-    try{return await this.runtimeController.verifyRunEgressProof(project,run.id,{signal,promptDispatchStartedAt:authoritative.promptDispatchStartedAt,completedAt:authoritative.finishedAt});}catch{return{nativeCoverageVerified:false,reason:'proof_verification_unavailable'};}
-  }
-
   async dispatchPrompt(project, sessionId, input) {
     try {
       const context = await this.ensureContextPolicyGeneration(project);
@@ -6202,7 +6153,6 @@ export class RuntimeManager {
     }
     await this.writePromptAttendance(project, { sessionId, requestId, content: [{ type: "text", text }] }, { runId, unattended: dispatchedUnattended, origin: "dispatch" });
     await this.enforceProjectQuota(project);
-    if(runId&&this.config.evolutionEnabled===true&&isEvolutionProject(project.id))await this.captureRunEgressProof({project,runId,phase:'start'});
     this.beginProxy(project);
     try {
       await this.withRuntimeDeadline(
@@ -6232,10 +6182,6 @@ export class RuntimeManager {
         await withSessionPromptAdmission(this,project,sessionId,async signal=>{
           // Bind the authenticated actor under the same fence as native input.
           if(recordPromptActor) await recordPromptActor(promptRequest);
-          if(runId && this.config.evolutionEnabled===true && isEvolutionProject(project.id)) {
-            try {await this.recordRuntimeEgressDispatch?.(project,runId,new Date().toISOString());}
-            catch {/* Without a durable dispatch cutoff exposure remains unknown. */}
-          }
           signal.throwIfAborted();
           await withProjectStorageMutation(project,async()=>{
             signal.throwIfAborted();
@@ -6747,9 +6693,6 @@ export class RuntimeManager {
       throw new HttpError(429, "runtime_limit_exceeded", `Too many running runtimes for this user; limit is ${maxPerUser}.`, {
         retryAfterSeconds: 5,
       });
-    }
-    if(this.config.evolutionEnabled===true&&isEvolutionProject(project.id)&&maxGlobal!=null&&this.runtimeCount()-own>=maxGlobal-1){
-      throw this.roomFull(project,'Evolution waits to preserve the final research runtime slot.',60);
     }
     if (maxGlobal != null && this.runtimeCount() - own >= maxGlobal) {
       throw this.roomFull(project, `Every runtime slot of the server is taken; limit is ${maxGlobal}.`, ROOM_RETRY_AFTER_SECONDS);
@@ -7395,69 +7338,6 @@ export class RuntimeManager {
     return { reference: expected.reference, runtimeGeneration: generation, baseRuntimeImageDigest: runtime.extensionGeneration.identity.baseRuntimeImageDigest,
       adapterRevision: runtime.extensionGeneration.identity.adapterRevision, permissionProfileRevision: runtime.extensionGeneration.identity.permissionProfileRevision,
       inventory, personal: structuredClone(personal) };
-  }
-
-  /** Adopt only between completed runs, before the next run's immutable snapshot is reserved.
-   * The existing plugin exclusive fence excludes all prompt admissions during replacement. */
-  async setPlatformSkillScope(project,capabilityId) {
-    // No supply (the module is off): nothing to scope, and no entry is kept for every project that ever dispatched.
-    if(!this.platformSkillSupply)return{adopted:false};
-    const key=this.key(project),previous=this.platformSkillRefreshes.get(key)??Promise.resolve();
-    const task=previous.catch(()=>{}).then(async()=>{
-      this.platformSkillScopes.set(key,capabilityId);
-      if(!this.platformSkillSupply||!this.runtimes.has(key))return{adopted:false};
-      const refresh=async()=>{
-        const runtime=this.runtimes.get(key);if(!runtime)return{adopted:false};
-        const {generation:wanted,degraded}=await this.selectPlatformSkills(project,capabilityId);
-        // A selection that failed is not a request to mount nothing: what the runtime has stays, and the next boundary asks again.
-        if(degraded)return{adopted:false};
-        if((wanted?.reference?.generationHash??null)===(runtime.platformSkillGeneration?.reference?.generationHash??null))return{adopted:false};
-        if(this.starts.has(key)||this.runtimeStops.has(key)||this.boundedRuntimeScope(project)||await this.idleVerdict(project)!=='idle')return{adopted:false,pending:true};
-        if(this.pluginService&&await this.pluginService.hasPendingPrompts(project))return{adopted:false,pending:true};
-        const guard=async()=>this.runtimes.get(key)===runtime&&await this.idleVerdict(project)==='idle'&&(!this.pluginService||!await this.pluginService.hasPendingPrompts(project));
-        this.platformSkillOverrides.set(key,wanted);
-        try{
-          let replaced=false;
-          await this.startAdmitted(project,{replaceRuntime:async()=>{
-            replaced=await this.stopIdleRuntime(project,{event:'platform_skills_updated',evenIfConnected:true,guard});
-            return replaced;
-          }});
-          return replaced?{adopted:true,generationHash:wanted?.reference?.generationHash??null}:{adopted:false,pending:true};
-        }finally{this.platformSkillOverrides.delete(key);}
-      };
-      if(!this.pluginService)return refresh();
-      const operation=()=>this.pluginService.database.transaction(async client=>{
-        const locked=await client.query('SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired',[`plugin-project:${project.userId}:${project.id}`]);
-        if(!locked.rows[0]?.acquired)return{adopted:false,pending:true};
-        await this.pluginService.scope(project.userId,project,client);return refresh();
-      });
-      return typeof this.pluginService.database.withoutTransactionClient==='function'?this.pluginService.database.withoutTransactionClient(operation):operation();
-    });
-    this.platformSkillRefreshes.set(key,task);
-    try{return await task;}finally{if(this.platformSkillRefreshes.get(key)===task)this.platformSkillRefreshes.delete(key);}
-  }
-
-  runtimePlatformSkills(project) { return this.runtimes.get(this.key(project))?.platformSkillGeneration?.pins ?? []; }
-
-  /**
-   * The platform skills a runtime for this project would mount. An optional extension failing never withholds
-   * unrelated research: the supply falls back to the last generation that verified, or to none, and says so
-   * (`degraded`); a supply that throws anyway is counted and treated the same. Every runtime start and every
-   * dispatch on a live runtime asks this, so a corrupt file under `<data>/.openscience/platform-skills/` used to
-   * fail them all.
-   * @param {Record<string, any>} project @param {string | null | undefined} capabilityId
-   * @returns {Promise<{ generation: any, degraded: boolean }>}
-   */
-  async selectPlatformSkills(project, capabilityId) {
-    const supply = this.platformSkillSupply;
-    if (!supply) return { generation: null, degraded: false };
-    const scoped = { ...project, capabilityId: project.capabilityId ?? capabilityId };
-    try {
-      return supply.selectForRuntime ? await supply.selectForRuntime(scoped) : { generation: await supply.prepareForRuntime(scoped), degraded: false };
-    } catch {
-      supply.noteFailure?.("platform_skill_selection_failed");
-      return { generation: null, degraded: true };
-    }
   }
 
   runtimePersonalSkillGeneration(project) { return this.runtimes.get(this.key(project))?.personalSkillGeneration ?? null; }

@@ -183,7 +183,6 @@ def lab_overrides(lanes):
         "OPEN_SCIENCE_VCR_ENABLED": ("false", "module off"),
         "OPEN_SCIENCE_GEO_ENABLED": ("false", "module off"),
         "OPEN_SCIENCE_FRONTIER_ENABLED": ("false", "module off"),
-        "OPEN_SCIENCE_EVOLUTION_ENABLED": ("false", "module off"),
         "OPEN_SCIENCE_IM_ENABLED": ("false", "no messaging channel"),
         "OPEN_SCIENCE_WEB_RENDER_ENABLED": ("false", "no cloud browser account"),
         "OPEN_SCIENCE_MANAGED_BROWSER_ENABLED": ("false", "the managed browser container is not run"),

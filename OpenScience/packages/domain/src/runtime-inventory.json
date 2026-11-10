@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "composition": {
     "source": "deploy/runtime-dsh/dump-config.baseline.json",
-    "sha256": "1590aa9da23a3994b93740d7a4ca7639171b0768e06b1deba2591bc026e5f9c2",
+    "sha256": "50abb750063af7c9633d6d18c2ec5d195b123e3785a9656b26d70cf7afec4972",
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@changfenhuang/dsh-annotation",
@@ -1707,7 +1707,7 @@
   },
   "preset": {
     "source": "packages/socket/presets/evimed-universal/agent.cordis.yml",
-    "sha256": "cb2e9a9a490f2d71b646aa0311196a6f899aa28c8cacf8357e0bcfd5f2b76583",
+    "sha256": "7d988f7a10f4d5c333f4ee65eadfcac0ec52b497c11bdc23010d7db09c57e63b",
     "rows": [
       {
         "id": "persona",
@@ -1993,13 +1993,6 @@
       "mount": "personal-skills",
       "gate": null,
       "kind": "account",
-      "source": null
-    },
-    {
-      "id": "platform-learned",
-      "mount": "platform-skills",
-      "gate": null,
-      "kind": "learned",
       "source": null
     }
   ],

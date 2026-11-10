@@ -9,6 +9,7 @@
  * row the baseline or any registered threshold selects — so the measured set never depends on which candidate wins.
  */
 import { createHash } from 'node:crypto';
+import { RSI_FRONTIER_VOLUME_BOUND } from '../../packages/domain/src/rsiCampaign.mjs';
 import { readFileSync } from 'node:fs';
 import { replayFrontierPool, frontierConsumerIdentity } from './frontier_selection.mjs';
 
@@ -128,12 +129,14 @@ export function evaluateFrontierDays(source, registration) {
 
 /**
  * Development: the registered threshold with the highest mean day difference over the baseline, among those that lose no
- * safety pick and select at most `maxVolumeRatio` of the baseline's volume; ties go to the threshold nearest the baseline.
+ * safety pick and select between `minVolumeRatio` and `maxVolumeRatio` of the baseline's volume (the domain's one bound, `RSI_FRONTIER_VOLUME_BOUND`, unless a registration narrows it); ties go to the
+ * threshold nearest the baseline.
  * No positive mean difference freezes nothing.
  */
 export function chooseFrontierCandidate(evaluation, registration) {
   if (!evaluation.eligible) return { frozen: null, reason: 'campaign_consumer_failed', candidates: [] };
-  const base = String(registration.baselineThreshold), maxVolume = registration.maxVolumeRatio ?? 1.1;
+  const base = String(registration.baselineThreshold), maxVolume = Math.min(registration.maxVolumeRatio ?? RSI_FRONTIER_VOLUME_BOUND.max, RSI_FRONTIER_VOLUME_BOUND.max),
+    minVolume = Math.max(registration.minVolumeRatio ?? RSI_FRONTIER_VOLUME_BOUND.min, RSI_FRONTIER_VOLUME_BOUND.min);
   const measured = evaluation.days.filter((day) => day.measured);
   const candidates = registration.thresholds.filter((t) => t !== registration.baselineThreshold).map((t) => {
     const key = String(t);
@@ -142,7 +145,7 @@ export function chooseFrontierCandidate(evaluation, registration) {
     const lostSafety = evaluation.days.reduce((sum, day) => sum + day.arms[key].lostSafety.length, 0);
     const mean = differences.length ? differences.reduce((a, b) => a + b, 0) / differences.length : null;
     return { threshold: t, days: differences.length, meanDifference: mean, volumeRatio: volume, lostSafety,
-      eligible: mean !== null && lostSafety === 0 && volume <= maxVolume };
+      eligible: mean !== null && lostSafety === 0 && volume <= maxVolume && volume >= minVolume };
   });
   const eligible = candidates.filter((c) => c.eligible && c.meanDifference > 0)
     .sort((a, b) => b.meanDifference - a.meanDifference || Math.abs(a.threshold - registration.baselineThreshold) - Math.abs(b.threshold - registration.baselineThreshold) || a.threshold - b.threshold);

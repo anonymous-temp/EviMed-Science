@@ -34,3 +34,23 @@ test('every arm of an exposed campaign names the candidate under observation, so
  assert.equal(rsiCampaignSelection({...row,mode:'global'},{}).candidateDigest,'a'.repeat(64))
  assert.equal(rsiCampaignSelection({...row,state:'staged'},{}).candidateDigest,undefined,'nothing is observed before exposure')
 })
+
+test('the volume bound stops past its floor, on either side, and only there',()=>{
+ const policy={minExecutions:100,minDays:3,maxErrors:0,volumeBound:{max:1.1,min:0.5,minPicks:50}}
+ const fuse=volumeByDay=>rsiCampaignFuse({candidateExecutions:1,days:['a'],errors:0,volumeByDay},policy)
+ const day=(incumbentPicks,candidatePicks)=>({incumbentPicks,candidatePicks})
+ // Under the floor nothing fires, however far apart the two lines are.
+ assert.equal(fuse(undefined).state,'inconclusive')
+ assert.equal(fuse({a:day(49,1)}).state,'inconclusive')
+ assert.equal(fuse({a:day(1,49)}).state,'inconclusive')
+ // Past it, on the stage's sum of days: above max, below min, and a candidate selecting where the incumbent selects nothing.
+ assert.deepEqual(fuse({a:day(25,30),b:day(25,30)}),{state:'stop',reason:'registered-volume-bound',volume:{incumbent:50,candidate:60}})
+ assert.deepEqual(fuse({a:day(60,29)}),{state:'stop',reason:'registered-volume-bound',volume:{incumbent:60,candidate:29}})
+ assert.equal(fuse({a:day(0,50)}).reason,'registered-volume-bound')
+ // The range's own ends are inside it.
+ assert.equal(fuse({a:day(100,110)}).state,'inconclusive')
+ assert.equal(fuse({a:day(100,50)}).state,'inconclusive')
+ // Inside the bound the exposure decides as ever, and no bound means no such check.
+ assert.equal(rsiCampaignFuse({candidateExecutions:100,days:['a','b','c'],errors:0,volumeByDay:{a:day(100,80)}},policy).state,'sufficient')
+ assert.equal(rsiCampaignFuse({candidateExecutions:100,days:['a','b','c'],errors:0,volumeByDay:{a:day(100,1)}},{minExecutions:100,minDays:3,maxErrors:0}).state,'sufficient')
+})

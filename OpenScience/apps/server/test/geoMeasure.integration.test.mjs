@@ -23,6 +23,9 @@ import { coverageKeyOf, roundCoverages } from "../src/geoCoverage.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { GEO_TABLES_FOR_TESTS, fakeModel, judgeCallParts, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
 
+// The child's script imports `./apps/server/src/...`: `pnpm test:server` runs from apps/server, and a child that cannot start left its test waiting on a lock and the file alive.
+const REPOSITORY_ROOT = new URL("../../../", import.meta.url).pathname;
+
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
   const parsed = new URL(databaseUrl);
@@ -242,7 +245,7 @@ for (const attempt of [1,2,3]) test(`a different process crashing after dispatch
     const now=new Date('2026-09-25T15:00:00Z'); const job=await store.leaseNextJob({now,owner:'crashed-worker',leaseUntil:new Date(now.getTime()-1),engines:['deepseek'],paused:[],nightOpen:true,nightMinAsks:100,weekStart:new Date('2026-09-21T00:00:00Z'),weeklyCap:0});
     if(job?.attempts!==Number(process.env.TEST_ATTEMPT)) process.exit(2); await db.query("UPDATE evimed_geo.probe_jobs SET lease_until=clock_timestamp()+interval '1 minute' WHERE id=$1",[job.id]);
     if(!await store.markConfirmationDispatch(job)) process.exit(3); await db.query('INSERT INTO evimed_geo.test_confirm_sends(job_id) VALUES ($1)',[job.id]); process.exit(0);`;
-  const child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: process.cwd(), env: { ...process.env, TEST_URL: isolatedUrl, TEST_ATTEMPT: String(attempt) }, stdio: "ignore" });
+  const child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: REPOSITORY_ROOT, env: { ...process.env, TEST_URL: isolatedUrl, TEST_ATTEMPT: String(attempt) }, stdio: "ignore" });
   const [exit] = await once(child, "exit");
   assert.equal(exit, 0);
   await database.query(`UPDATE evimed_geo.probe_jobs SET lease_until=$1 WHERE id='gj_crash'`,[new Date(now.getTime()-1000)]);
@@ -399,7 +402,7 @@ test("another process saving a question set wins before a waiting confirmation c
       const pid=(await db.query('SELECT pg_backend_pid() AS pid')).rows[0].pid; process.stdout.write(String(pid)+'\\n');
       await store.writeQuestionSet('user_geo_race','geo_race',{groups:[{name:'new',questions:[{text:'New?',isMeasured:true}]}],contract:{samplingMode:'recurring',engines:['deepseek'],repeats:7}});
       await db.close();`;
-    child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: process.cwd(), env: { ...process.env, TEST_URL: isolatedUrl }, stdio: ["ignore", "pipe", "pipe"] });
+    child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: REPOSITORY_ROOT, env: { ...process.env, TEST_URL: isolatedUrl }, stdio: ["ignore", "pipe", "pipe"] });
     const childExit = once(child, "exit");
     const [chunk] = await once(child.stdout, "data");
     const pid = Number(String(chunk).trim());
@@ -444,7 +447,7 @@ for (const action of ["lock", "project"]) test(`another process changing ${actio
       await new Promise(resolve=>process.stdin.once('data',resolve));
       if(process.env.TEST_ACTION==='lock') await store.lockQuestionSet('geo_cross',1,3);
       else await store.updateProject('user_geo_cross','geo_cross',{coverageDays:180}); await db.close();`;
-    child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: process.cwd(), env: { ...process.env, TEST_URL: isolatedUrl, TEST_ACTION: action }, stdio: ["pipe", "pipe", "pipe"] });
+    child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: REPOSITORY_ROOT, env: { ...process.env, TEST_URL: isolatedUrl, TEST_ACTION: action }, stdio: ["pipe", "pipe", "pipe"] });
     const childExit = once(child, "exit");
     const [chunk] = await once(child.stdout, "data");
     const pid = Number(String(chunk).trim());

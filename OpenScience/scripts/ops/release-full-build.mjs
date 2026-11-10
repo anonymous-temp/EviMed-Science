@@ -178,8 +178,9 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // 2026-11-05 (platform scheduler retired, main): the autopilot-next-action eval case COPY line and its mention in the comment above it were
 // removed. 2026-11-05 (VCR research plugins, branch): six manifest COPY lines in the build stage (research-plugin-runtime and the five research
 // bundles) and one COPY of packages/research-plugin-runtime into the final stage. 2026-11-07: the two merged; this digest is the merged recipe's.
-// Stages, commands, secrets and build arguments are unchanged.
-export const WEB_DOCKERFILE_SHA256 = "sha256:04a4bea2e6cc50a991f6e246057150991dff074e6b57ded8a9a6ac4be239412f";
+// 2026-11-09: main merged into the online cut of 循证进化 (branch), whose final stage dropped the COPY lines for evals/paper-gold and the four case files the deleted
+// module loops read at run time. Stages, commands, secrets and build arguments are unchanged.
+export const WEB_DOCKERFILE_SHA256 = "sha256:0b996f93607f2b4ff7148a97543135c90600a82f628bcd251c5f497b894e0016";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

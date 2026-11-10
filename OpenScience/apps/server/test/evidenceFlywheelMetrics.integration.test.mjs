@@ -228,19 +228,14 @@ test("the asset groups report what exists and say null with a reason for what do
   await officialCard(card("Base card", [found, lost]));
   await aliceCard(card("Alice's card", [found]));
   await db.query("INSERT INTO evimed_frontier.evidence_zone_follows(user_id,zone_id) VALUES('bob',$1)", [userZone.id]);
-  const view = await metrics({ evolutionTools: async () => [{ status: "active", validationLevel: "V2" }, { status: "active", validationLevel: "V1" }, { status: "retired", validationLevel: "V3" }],
-    predictionCalibration: async () => ({ available: false, scored: 3 }) }).snapshot({ weeks: 1 });
+  const view = await metrics().snapshot({ weeks: 1 });
   assert.deepEqual(view.assets.evidenceBase.currentCards, { value: 2, byZoneKind: { official: 1, user: 1 } });
   assert.deepEqual(view.assets.evidenceBase.currentShare, { value: 1, numerator: 2, denominator: 2 });
   assert.equal(view.assets.evidenceBase.verifiedClaims.value, 2, "one ✓ claim on each card; the ⚠ one is not counted");
-  assert.deepEqual(view.assets.toolLibrary.toolsAtV2OrAbove, { value: 1, activeTools: 2 });
-  assert.equal(view.assets.publicRecord.predictionBrier.value, null);
-  assert.match(view.assets.publicRecord.predictionBrier.reason, /3 predictions/);
+  assert.equal("predictionBrier" in view.assets.publicRecord, false, "nothing online scores a prediction");
   assert.deepEqual([view.assets.network.publicAuthors.value, view.assets.network.userPublishedCards.value, view.assets.network.follows.value], [1, 1, 1]);
   assert.equal(view.assets.measurement.questionBankRounds.value, null);
   const bare = await metrics().snapshot({ weeks: 1 });
-  assert.equal(bare.assets.toolLibrary.toolsAtV2OrAbove.value, null);
-  assert.match(bare.assets.toolLibrary.toolsAtV2OrAbove.reason, /not enabled/);
   assert.deepEqual(bare.definition.notOutcomes, ["card count", "page views", "words generated"]);
 });
 

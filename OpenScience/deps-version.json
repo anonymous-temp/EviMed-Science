@@ -241,18 +241,6 @@
           "threshold": 0.8,
           "calibration": "uncalibrated"
         },
-        "J10": {
-          "threshold": 0.8,
-          "calibration": "uncalibrated"
-        },
-        "J11": {
-          "threshold": 0.8,
-          "calibration": "uncalibrated"
-        },
-        "J12": {
-          "threshold": 0.8,
-          "calibration": "uncalibrated"
-        },
         "J13": {
           "threshold": 0.8,
           "calibration": "uncalibrated"
@@ -266,10 +254,6 @@
           "calibration": "uncalibrated"
         },
         "J16": {
-          "threshold": 0.8,
-          "calibration": "uncalibrated"
-        },
-        "J17": {
           "threshold": 0.8,
           "calibration": "uncalibrated"
         },

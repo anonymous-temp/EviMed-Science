@@ -11,9 +11,14 @@
  * @returns {{ groups: number, sliceGroups: number | null, minimum: number } | null} the counts when directional (`sliceGroups` null for a claim without a slice), null otherwise
  */
 export function directionalCounts(statistics) {
+  const counts = groupCounts(statistics);
+  return counts && (counts.groups < counts.minimum || (counts.sliceGroups !== null && counts.sliceGroups < counts.minimum)) ? counts : null;
+}
+
+/** The registered counts themselves, or null without a procedure and groups. @param {any} statistics @returns {{ groups: number, sliceGroups: number | null, minimum: number } | null} */
+export function groupCounts(statistics) {
   const minimum = statistics?.procedure?.minimum_slice_groups;
   if (!Number.isFinite(minimum) || !Array.isArray(statistics?.groups)) return null;
   const sliced = Object.hasOwn(statistics.claims ?? {}, 'targeted-repair');
-  const groups = statistics.groups.length, sliceGroups = sliced ? statistics.groups.filter((group) => group?.failure_slice === true).length : null;
-  return groups < minimum || (sliced && sliceGroups < minimum) ? { groups, sliceGroups, minimum } : null;
+  return { groups: statistics.groups.length, sliceGroups: sliced ? statistics.groups.filter((group) => group?.failure_slice === true).length : null, minimum };
 }

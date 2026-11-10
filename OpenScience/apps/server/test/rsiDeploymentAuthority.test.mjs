@@ -83,3 +83,13 @@ test('activation profiles reject unbounded or malformed exposure thresholds', ()
     assert.throws(() => validateRsiActivationPolicies({ 'geo-supplements': { ...policy, ...patch } }), /activation_policy_invalid/);
   }
 });
+
+test('a volume bound is registered data: its shape and range are checked, and it is optional', () => {
+  const policy = { mode: 'shadow', afterShadow: 'global', allowGlobal: true, allowExpansion: true, minExecutions: 200, minDays: 2, maxErrors: 0 };
+  const bound = { max: 1.1, min: 0.5, minPicks: 50 };
+  assert.deepEqual(validateRsiActivationPolicies({ 'frontier-selection': { ...policy, volumeBound: bound } })['frontier-selection'].volumeBound, bound);
+  assert.equal(validateRsiActivationPolicies({ 'frontier-selection': policy })['frontier-selection'].volumeBound, undefined);
+  for (const volumeBound of [null, 7, {}, { ...bound, extra: 1 }, { ...bound, max: 0.9 }, { ...bound, max: Infinity }, { ...bound, min: 1.5 }, { ...bound, min: -0.1 }, { ...bound, minPicks: 0 }, { ...bound, minPicks: 1.5 }, { max: 1.1, min: 0.5 }]) {
+    assert.throws(() => validateRsiActivationPolicies({ 'frontier-selection': { ...policy, volumeBound } }), /rsi_activation_policy_invalid/, JSON.stringify(volumeBound));
+  }
+});

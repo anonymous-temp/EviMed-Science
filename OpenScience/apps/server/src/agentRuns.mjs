@@ -2,9 +2,7 @@ import { sourcePrivacyOf } from '@evimed/domain';
 import { sourceReceiptState } from './memorySourceReceipts.mjs';
 import {RuntimePromptStops} from './runtimePromptStops.mjs';
 import { mergeInputAttribution } from "./geoNativeInputs.mjs";
-import { PLATFORM_SKILL_GENERATION_MAX_PINS } from './platformSkillLimits.mjs';
 import { normalizeDisabledPlatformSkills, normalizeDisabledBuiltinPlugins } from '@evimed/domain/platform-skill-policy';
-import { createPlatformSkillTelemetry } from './platformSkillTelemetry.mjs';
 import { reviewDeliveredRegister } from "./reportRegisterJudge.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
@@ -616,7 +614,6 @@ function foldEvents(events) {
         ...(Object.hasOwn(event, "baselineCursor") ? { baselineCursor: event.baselineCursor } : {}),
         ...(event.nativeTurn ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
         ...(event.kernelRequestIds ? { kernelRequestIds: event.kernelRequestIds.map(storedKernelRequestId) } : {}),
-        ...(event.platformSkillGeneration ? { platformSkillGeneration: normalizePlatformSkillGeneration(event.platformSkillGeneration) } : {}),
         ...(event.personalSkillGeneration ? { personalSkillGeneration: normalizePersonalSkillGeneration(event.personalSkillGeneration) } : {}),
         sessionId: safeStoredId(event.sessionId, "sessionId"),
         mode,
@@ -851,7 +848,6 @@ function foldEvents(events) {
         ...(event.methodsLoaded ? { methodsLoaded: normalizeMethodDigests(event.methodsLoaded) } : {}),
         ...(event.methodsInvoked ? { methodsInvoked: normalizeMethodDigests(event.methodsInvoked) } : {}),
         ...(event.mountedSkills ? { mountedSkills: normalizeMountedSkills(event.mountedSkills) } : {}),
-        ...(event.platformSkillGeneration ? { platformSkillGeneration: normalizePlatformSkillGeneration(event.platformSkillGeneration) } : {}),
         ...(event.personalSkillGeneration ? { personalSkillGeneration: normalizePersonalSkillGeneration(event.personalSkillGeneration) } : {}),
         ...(event.recalledMemories ? { recalledMemories: normalizeRecalledMemories(event.recalledMemories) } : {}),
         ...(event.originalSources?sourceReceiptState(event.originalSources,{trusted:true,inheritedPrivacy:event.sourcePrivacy}):{}),
@@ -999,37 +995,6 @@ function normalizeMountedSkills(value) {
     .filter((item) => typeof item === "string" && item.trim())
     .map((item) => item.trim().slice(0, 160));
   return names.length > 0 ? [...new Set(names)].slice(0, 32) : undefined;
-}
-
-/**
- * What a run records of the platform tools that were mounted for it: which generation and how many pins, never the
- * pins. A generation is content-addressed, so `generationId` names the exact manifest — every tool, revision and digest
- * — under `<data>/.openscience/platform-skills/generations/`, immutable and verified; and what a run actually used is
- * in the evolution module's own use records, keyed by run. The ledger is one file capped at 1 MiB per project, past
- * which `serializeNext` answers 413 and the project can record no more runs, and the full pin list (about 250 bytes a
- * pin, written at the start and again when learning is recorded) was about 7 KB twice over for thirty tools and 37 KB
- * twice over for an unscoped session of a hundred and fifty. Personal skills, the precedent, cap their list at 64.
- * A stored record that still carries pins (written before) is validated and reduced to the same two fields.
- * Public provenance contains only identities, never code, evaluator assets or researcher values. @param {any} value
- */
-function normalizePlatformSkillGeneration(value) {
-  const raw = Array.isArray(value) ? value : value?.pins
-  const generationShape = /^[a-f0-9]{64}$/.test(value?.generationId ?? '')
-  if (raw === undefined && generationShape && Number.isSafeInteger(value.pinCount) && value.pinCount > 0 && value.pinCount <= PLATFORM_SKILL_GENERATION_MAX_PINS) {
-    return { generationId: value.generationId, pinCount: value.pinCount }
-  }
-  if (!Array.isArray(raw) || raw.length > PLATFORM_SKILL_GENERATION_MAX_PINS || raw.length === 0) return undefined
-  const pins = [], seen = new Set()
-  for (const pin of raw) {
-    if (!pin || !/^[A-Za-z0-9_-]{1,100}$/.test(pin.id ?? '') || seen.has(pin.id)
-      || !Number.isSafeInteger(pin.revision) || pin.revision < 1 || !/^sha256:[a-f0-9]{64}$/.test(pin.digest ?? '')
-      || !/^platform-[a-f0-9]{24}$/.test(pin.nativeName ?? '') || !['skill','isolated-tool'].includes(pin.publicationKind)) return undefined
-    seen.add(pin.id)
-    pins.push({ id: pin.id, revision: pin.revision, digest: pin.digest, nativeName: pin.nativeName, publicationKind: pin.publicationKind, source: 'platform' })
-  }
-  const generationId = generationShape ? value.generationId
-    : createHash('sha256').update(JSON.stringify(pins)).digest('hex')
-  return { generationId, pinCount: pins.length }
 }
 
 /** Exact observed personal revisions, without resources, instructions or
@@ -4475,8 +4440,6 @@ export class AgentRunStore {
     this.runtimeWorkspaceRoot = options.runtimeWorkspaceRoot ?? (async (project) => project.workspaceDir);
     this.runtimeGeneration = options.runtimeGeneration ?? (async () => null);
     this.runtimePersonalSkills = options.runtimePersonalSkills ?? (() => null);
-    this.runtimePlatformSkills = options.runtimePlatformSkills ?? (() => null);
-    this.captureRuntimeEgressProof = options.captureRuntimeEgressProof ?? null;
     // The evidence card a research session was started from (flywheel F06, `evidenceOrigins.mjs`): asked when a run is
     // reserved, so both roads that start one — the dispatch route and an adopted native turn — record it the same way,
     // and told once the run exists so the card's citations can be counted. Absent, no run carries one.
@@ -4484,9 +4447,6 @@ export class AgentRunStore {
     this.originCardOf = typeof options.originCardOf === "function" ? options.originCardOf : null;
     /** @type {((project: any, run: any) => Promise<unknown>) | null} */
     this.onOriginCardRun = typeof options.onOriginCardRun === "function" ? options.onOriginCardRun : null;
-    this.setRuntimePlatformSkillScope = options.setRuntimePlatformSkillScope ?? (() => {});
-    this.onPlatformSkillExecution = options.onPlatformSkillExecution ?? (async () => {});
-    this.onPlatformSkillRetrieval = options.onPlatformSkillRetrieval ?? (async () => {});
     // What the independent reviewer found on this run's deliverables, as
     // notices (reviewService.mjs). Placed first in the finished run's list:
     // behind forty gate notices, the 2026-09-22 review's seven contradictions
@@ -5197,7 +5157,6 @@ export class AgentRunStore {
       const id = safeId(this.id(), "agent run id");
       if (runs.has(id)) throw new HttpError(409, "agent_run_id_conflict", "Agent run id already exists.");
       const personalSkillGeneration = normalizePersonalSkillGeneration(await this.runtimePersonalSkills(project, { nativeTurn, startedAt }));
-      const platformSkillGeneration = normalizePlatformSkillGeneration(await this.runtimePlatformSkills(project, { nativeTurn, startedAt }));
       // A label that cannot be read leaves the run as it would have been (`evidenceOrigins.mjs`).
       const originCardId = this.originCardOf ? await Promise.resolve().then(() => this.originCardOf?.(project, session)).catch(() => null) : null;
       const event = {
@@ -5231,7 +5190,6 @@ export class AgentRunStore {
         startedAt: startedAt == null ? now : storedTimestamp(startedAt, "startedAt"),
         baselineCursor,
         ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
-        ...(platformSkillGeneration ? { platformSkillGeneration } : {}),
       };
       // The caller's final admission check sees the same immutable ledger
       // snapshot that this reservation owns under the project storage lock.
@@ -5272,8 +5230,7 @@ export class AgentRunStore {
    * @param {any} project @param {string} runId */
   async recordRuntimePersonalSkills(project, runId) {
     const snapshot = normalizePersonalSkillGeneration(await this.runtimePersonalSkills(project));
-    const platform = normalizePlatformSkillGeneration(await this.runtimePlatformSkills(project));
-    if (snapshot || platform) await this.recordLearning(project, runId, { ...(snapshot ? { personalSkillGeneration: snapshot } : {}), ...(platform ? { platformSkillGeneration: platform } : {}) });
+    if (snapshot) await this.recordLearning(project, runId, { personalSkillGeneration: snapshot });
   }
 
   async dispatch(project, input, sendPrompt, {beforeReserve=null} = {}) {
@@ -5315,7 +5272,6 @@ export class AgentRunStore {
           effectiveRouteReason: effectiveRouteReason ?? "session-binding",
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
-    await this.setRuntimePlatformSkillScope(project, selected.effectiveAgentId ?? null);
     // The run is recorded under the identity it ran as. A ledger row whose specialist pin differs from its effective identity is
     // refused by the fold (and the whole project's ledger with it), so a turn of another capability than the conversation's
     // binding carries its own capability's pin: the binding stays what it is in the research-session record, which no run reads back.
@@ -5338,7 +5294,6 @@ export class AgentRunStore {
       // `failed` through the catch below, which is what releases the hold. A hold that could not be placed never
       // stops research.
       try { await this.onRunReserved(project, record); } catch { /* billing failing never stops a run */ }
-      try{await this.captureRuntimeEgressProof?.(project,record);}catch{/* Missing observed proof is unknown exposure, never a delivery gate. */}
       const result = await sendPrompt(session, record);
       if (result?.accepted === false) {
         throw new HttpError(502, "runtime_prompt_rejected", "Runtime rejected the prompt before accepting it.");
@@ -5533,21 +5488,8 @@ export class AgentRunStore {
    * reason a run fails.
    * @param {any} project
    * @param {string} rawRunId
-   * @param {{platformSkillGeneration?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], originalSources?:any[], recalledMemories?: {id: string, kind?: string, scope?: string,originalSources?:any[]}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
+   * @param {{inputAttribution?: any, personalSkillGeneration?: any, transcript?: any, methodsLoaded?: any[], methodsInvoked?: any[], mountedSkills?: string[], originalSources?:any[], recalledMemories?: {id: string, kind?: string, scope?: string,originalSources?:any[]}[], appendRecalledMemories?: {id: string, kind?: string, scope?: string}[], repairRounds?: {content?: number, structural?: number}, compaction?: any[], appendCompaction?: any, pagesRead?: any[], pagesReadTotal?: number}} patch
    */
-  /** Recorded by the trusted manager immediately before its first native prompt; never retroactive. @param {any} project @param {string} runId @param {string} at */
-  async recordRuntimeEgressDispatch(project,runId,at){
-    return withProjectStorageMutation(project,async()=>{
-      const events=parseEvents(await readLedgerText(project,this.maxBytes)),current=foldEvents(events).get(safeId(runId,'agent run id'));
-      if(!current||current.status!=='running'||current.dispatchStatus!=='dispatching'||current.promptDispatchStartedAt)return null;
-      if(!Number.isFinite(Date.parse(at)))return null;
-      const previous=events.findLast(event=>event.event==='learning'&&event.id===runId);
-      const event={...previous,event:'learning',id:runId,at,promptDispatchStartedAt:at};
-      await writeFileAtomicNoFollow(project.rootDir,ledgerFile(project),serializeNext(events,event,this.maxBytes),{encoding:'utf8',mode:0o600});
-      return at;
-    });
-  }
-
   async recordLearning(project, rawRunId, patch) {
     const runId = safeId(rawRunId, "agent run id");
     return withProjectStorageMutation(project, async () => {
@@ -5578,8 +5520,6 @@ export class AgentRunStore {
         ...(patch.methodsLoaded ? { methodsLoaded: patch.methodsLoaded } : current.methodsLoaded ? { methodsLoaded: current.methodsLoaded } : {}),
         ...(patch.methodsInvoked ? { methodsInvoked: patch.methodsInvoked } : current.methodsInvoked ? { methodsInvoked: current.methodsInvoked } : {}),
         ...(patch.mountedSkills ? { mountedSkills: patch.mountedSkills } : current.mountedSkills ? { mountedSkills: current.mountedSkills } : {}),
-        ...(current.platformSkillGeneration ? { platformSkillGeneration: current.platformSkillGeneration }
-          : patch.platformSkillGeneration ? { platformSkillGeneration: normalizePlatformSkillGeneration(patch.platformSkillGeneration) } : {}),
         ...(current.personalSkillGeneration ? { personalSkillGeneration: current.personalSkillGeneration }
           : patch.personalSkillGeneration ? { personalSkillGeneration: normalizePersonalSkillGeneration(patch.personalSkillGeneration) } : {}),
         // Which durable memories this dispatch actually recalled.
@@ -6280,7 +6220,6 @@ export class AgentRunStore {
       await this.dropBrief(project, runId);
       const tracker = this.progressTrackers.get(runId);
       if (tracker?.timer) clearTimeout(tracker.timer);
-      await tracker?.platformSkillObservations;
       this.progressTrackers.delete(runId);
     }
     if (outcome.transitioned) {
@@ -7259,8 +7198,6 @@ export class AgentRunStore {
     let tracker = this.progressTrackers.get(runId);
     if (!tracker) {
       tracker = {
-        platformSkillTelemetry: null,
-        platformSkillObservations: Promise.resolve(),
         /** sessionId -> call key -> the observed call. Root and children alike. @type {Map<string, Map<string, import('./runProgress.mjs').ObservedCall>>} */
         sessions: new Map(),
         /** Sessions the kernel attributed to this run as children. @type {Set<string>} */
@@ -7317,12 +7254,6 @@ export class AgentRunStore {
   noteRunEvent(project, runId, observed) {
     if (!runId || !observed?.sessionId || !observed.event) return;
     const tracker = this.progressTracker(runId);
-    tracker.platformSkillTelemetry ??= createPlatformSkillTelemetry(this.runtimePlatformSkills(project) ?? [],`${project.userId}:${project.id}:${runId}`);
-    if(observed.event.type==='tool/call'||observed.event.type==='tool/result')for(const event of tracker.platformSkillTelemetry.observe({...observed.event,callId:`${observed.sessionId}:${observed.event.callId??observed.event.seq}`})){
-      const observation={projectId:project.id,userId:project.userId,runId,...event};
-      tracker.platformSkillObservations=tracker.platformSkillObservations.then(()=>this.independentWork(()=>
-        (event.kind==='retrieval'?this.onPlatformSkillRetrieval:this.onPlatformSkillExecution)(observation))).catch(()=>{});
-    }
     tracker.project ??= project;
     const nowMs = this.now().getTime();
     if (!observed.replay) tracker.activity.set(observed.sessionId, nowMs);

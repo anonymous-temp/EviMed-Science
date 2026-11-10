@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { frontierMixSelect } from '../../packages/domain/src/frontierMix.mjs';
 import { execFileSync } from 'node:child_process';
-import { frontierMixCandidate } from '../../apps/server/src/frontierPipeline.mjs';
+import { frontierMixCandidate, frontierSelectedIds } from '../../apps/server/src/frontierSelection.mjs';
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 /** Frozen full-day SQL projection plus all external selection inputs. Missing truth is ineligible, never imputed. */
 export function replayFrontierPool(pool, threshold) {
@@ -72,8 +72,7 @@ export function replayFrontierPool(pool, threshold) {
   const candidates = rows.map(frontierMixCandidate);
   const result = frontierMixSelect({ candidates, threshold, events: pool.events, genreFloors: pool.genreFloors,
     congressActive: pool.congressActive, preprintPlaces: pool.preprintPlaces, preprintMinScore: pool.preprintMinScore });
-  const selectedIds = [...new Set([...candidates.filter((c) => c.selected).map((c) => c.id), ...result.picks.map((p) => p.id)])]
-    .filter((id) => !result.superseded.some((entry) => entry.id === id)).sort();
+  const selectedIds = frontierSelectedIds(candidates, result);
   return { eligible: true, missing: [], selectedIds, selectedVolume: selectedIds.length, result, datasetHash: hash(JSON.stringify(pool)), status: 'offline-candidate-only' };
 }
 function countBy(rows, key) { return rows.reduce((counts, row) => { const value = String(row[key] ?? 'unspecified'); counts[value] = (counts[value] ?? 0) + 1; return counts; }, {}); }
@@ -134,7 +133,7 @@ export function sweepFrontierThresholds(pool, { baselineThreshold, thresholds, p
   });
 }
 function consumerIdentity() {
-  const paths = ['../../apps/server/src/frontierPipeline.mjs', '../../apps/server/src/frontierEditor.mjs', '../../packages/domain/src/frontierMix.mjs', '../../packages/domain/src/frontierSelection.mjs', '../../packages/domain/src/frontier-selection.json', '../../packages/domain/src/frontierGenres.mjs', '../../packages/domain/src/frontierVocabulary.mjs'];
+  const paths = ['../../apps/server/src/frontierSelection.mjs', '../../packages/domain/src/frontierMix.mjs', '../../packages/domain/src/frontierSelection.mjs', '../../packages/domain/src/frontier-selection.json', '../../packages/domain/src/frontierGenres.mjs', '../../packages/domain/src/frontierVocabulary.mjs'];
   const contents = paths.map((path) => readFileSync(new URL(path, import.meta.url)));
   // Container build contexts intentionally exclude .git. Compatibility is the
   // measured dependency closure; unavailable commit metadata never invents a pin.

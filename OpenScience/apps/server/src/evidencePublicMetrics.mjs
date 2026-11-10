@@ -11,15 +11,11 @@
 //   a challenge) to the current one, newest first, at most twelve; a month inside that range with no claims, no corrections and no
 //   challenges is `data: false` and the page writes “没有数据”, never 0.
 // - **Months are Asia/Shanghai calendar months**, the platform's own day.
-// - **Two more sections, each from a reader somebody else composes.** The medication-question bank's month (per-class accuracy and the share
-//   of cited answers that cited an EviMed page: `questionBankSummary`, composed only where 循证 GEO and its question-bank lever are on) and the
-//   prediction registry's calibration (`predictionCalibration`, composed only with its switches) are handed in as functions. A reader that is
-//   absent, answers nothing or fails leaves its section out and the three figures as they were; a calibration that is not yet available says how
-//   many predictions are scored and that the overall calibration is published from `PREDICTION_CALIBRATION_MIN_SCORED`. They are remembered for ten
-//   minutes like the figures.
+// - **One more section, from a reader somebody else composes.** The medication-question bank's month (per-class accuracy and the share of cited answers that cited an EviMed
+//   page: `questionBankSummary`, composed only where 循证 GEO and its question-bank lever are on) is handed in as a function. A reader that is absent, answers nothing or fails
+//   leaves its section out and the three figures as they were. It is remembered for ten minutes like the figures.
 
 import { monthlyEvidenceFigures } from "./evidenceFigures.mjs";
-import { PREDICTION_CALIBRATION_MIN_SCORED } from "./predictionRegistry.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 
 const MONTHS = 12;
@@ -55,28 +51,13 @@ function publicBank(summary) {
   };
 }
 
-/** The calibration as the public page and API carry it, with the number it waits for. @param {any} value */
-function publicCalibration(value) {
-  const base = { scored: Number(value?.scored ?? 0), minScored: PREDICTION_CALIBRATION_MIN_SCORED };
-  if (value?.available !== true) return { available: false, ...base };
-  const number = (/** @type {unknown} */ entry) => (typeof entry === "number" && Number.isFinite(entry) ? entry : null);
-  return {
-    available: true, ...base,
-    probability: {
-      n: Number(value.probability?.n ?? 0), brierMean: number(value.probability?.brierMean),
-      bins: (Array.isArray(value.probability?.bins) ? value.probability.bins : []).map((/** @type {any} */ bin) => ({ from: Number(bin.from), to: Number(bin.to), n: Number(bin.n), meanPredicted: number(bin.meanPredicted), observedRate: number(bin.observedRate) })),
-    },
-    estimate: { n: Number(value.estimate?.n ?? 0), meanAbsoluteError: number(value.estimate?.meanAbsoluteError), coverage: { n: Number(value.estimate?.coverage?.n ?? 0), rate: number(value.estimate?.coverage?.rate) } },
-  };
-}
-
 /**
  * @param {{ database: any, now?: () => Date, ttlMs?: number, figures?: (query: { month: string }) => Promise<any>,
- *   questionBank?: ((query: { month: string }) => Promise<any>) | null, predictionCalibration?: (() => Promise<any>) | null, report?: (code: string) => void }} options
- *   `figures` is the month's computation; the default is the domain's own, over the database. `questionBank` and `predictionCalibration` are the
- *   readers of the two optional sections; absent, the section is not there. `report` hears a section whose reader failed.
+ *   questionBank?: ((query: { month: string }) => Promise<any>) | null, report?: (code: string) => void }} options
+ *   `figures` is the month's computation; the default is the domain's own, over the database. `questionBank` is the
+ *   reader of the optional section; absent, the section is not there. `report` hears a section whose reader failed.
  */
-export function createEvidencePublicMetrics({ database, now = () => new Date(), ttlMs = DEFAULT_TTL_MS, figures = (query) => monthlyEvidenceFigures(database, query), questionBank = null, predictionCalibration = null, report = () => {} }) {
+export function createEvidencePublicMetrics({ database, now = () => new Date(), ttlMs = DEFAULT_TTL_MS, figures = (query) => monthlyEvidenceFigures(database, query), questionBank = null, report = () => {} }) {
   const counters = { computed: 0, cacheHits: 0, failures: 0, sectionFailures: 0 };
   /** @type {{ at: number, value: any[] } | null} */
   let cached = null;
@@ -136,10 +117,6 @@ export function createEvidencePublicMetrics({ database, now = () => new Date(), 
     }
     return null;
   } : null);
-  const calibration = section(predictionCalibration ? async () => {
-    const value = await predictionCalibration();
-    return value ? publicCalibration(value) : null;
-  } : null);
 
   return {
     /** The last twelve months, newest first, each with its figures or `data: false`. */
@@ -154,8 +131,6 @@ export function createEvidencePublicMetrics({ database, now = () => new Date(), 
     },
     /** The question bank's latest month, or null where there is none to show. */
     questionBank: bank,
-    /** The prediction registry's calibration (or how many predictions are scored so far), or null where the registry is not composed. */
-    predictionCalibration: calibration,
     stats: () => ({ ...counters }),
   };
 }

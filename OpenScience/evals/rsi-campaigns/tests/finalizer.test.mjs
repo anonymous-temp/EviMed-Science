@@ -1,14 +1,18 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, createHash, sign, verify } from 'node:crypto';
-import { chmod, mkdtemp, writeFile, rm, symlink } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, writeFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { authenticateEvaluation, consumerClosure, finalizeCampaign } from '../finalize.mjs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
+import { authenticateEvaluation, consumerClosure, finalizeCampaign, finalizeCli } from '../finalize.mjs';
 import { createCampaignSigner } from '../signing.mjs';
-import { unboundBaselineRevision } from '../frontier_assemble.mjs';
+import { UNBOUND_CONSUMER_PREFIX, unboundBaselineRevision } from '../frontier_assemble.mjs';
 import { canonicalRsiJson, rsiDigest, verifyRsiCampaignBundle } from '../../../apps/server/src/rsiCampaignBundle.mjs';
 import { computeRsiDependencyClosure } from '../../../apps/server/src/rsiDependencyClosure.mjs';
+import { rsiClosureSettings } from '../../../apps/server/src/rsiClosureSettings.mjs';
 import { finalizerEvidencePayload, procedureQualification, qualificationDigests } from '../evaluator.mjs';
 import {
   STATISTICS_MODULE_PATH, STATISTICS_PYTHON, procedureReport, registeredCampaignFixture, runToVerdict, withSource,
@@ -17,7 +21,7 @@ import {
 const NOW = '2026-10-26T12:00:00Z';
 const BUNDLE_EXPIRES = '2026-10-26T23:00:00Z';
 const root = new URL('../../../', import.meta.url).pathname;
-const closureSettings = { provider: 'deepseek', model: 'deepseek-flash' };
+const closureSettings = rsiClosureSettings('frontier-selection');
 const workDir = await mkdtemp(join(tmpdir(), 'rsi-finalizer-'));
 after(() => rm(workDir, { recursive: true, force: true }));
 let counter = 0;
@@ -249,6 +253,23 @@ test('a campaign measured against an unbound baseline (its export carried no inc
   baseline(`default:${'a'.repeat(64)}`);
   const envelope = await c.finalize();
   assert.equal(JSON.parse(envelope.evaluatorReceipt.payload).status, 'qualified');
+});
+
+test('a month measured against another consumer than production\'s (its export\'s digest was not this lab\'s) is never finalized, by its own name', async () => {
+  const c = await context('qualified');
+  const baseline = (revision) => { c.manifest.target.baselineRevision = revision; c.inputs.target = structuredClone(c.manifest.target); c.signed.consumerProof.baselineRevision = revision; c.rebind(); };
+  baseline(`${UNBOUND_CONSUMER_PREFIX}release-test.1`);
+  await refuses(c, 'campaign_export_consumer_changed', 'a moved consumer');
+  baseline(`default:${'a'.repeat(64)}`);
+  assert.equal(JSON.parse((await c.finalize()).evaluatorReceipt.payload).status, 'qualified', 'the very same record with the incumbent\'s identity signs');
+});
+
+test('a statistics process that runs out of time says so by its own code, signs nothing, and the same finalize signs once it has the time', async () => {
+  const c = await context('qualified');
+  c.overrides.statisticsTimeoutMs = 1;
+  await refuses(c, 'campaign_statistics_timeout', 'a host too busy for the statistics');
+  delete c.overrides.statisticsTimeoutMs;
+  assert.equal(JSON.parse((await c.finalize()).evaluatorReceipt.payload).status, 'qualified', 'resumable: the next start signs it');
 });
 
 test('a synthetic campaign never finalizes, even when everything else about it is in order', async () => {
@@ -483,4 +504,51 @@ test('an incident campaign finalizes only while its authorization is current', a
   late.overrides.incidentTransport = { assertIncidentCurrent: async () => { if (++count >= 3) throw new Error('revoked late'); } };
   await assert.rejects(late.finalize(), { message: 'revoked late' });
   assert.deepEqual(late.signatures, { publisher: 0, evaluator: 1 });
+});
+
+const execFileAsync = promisify(execFile);
+const evaluatorScript = new URL('../evaluator.mjs', import.meta.url).pathname;
+// The wall clock is past the fixture's deadline; both commands read `new Date()`, so both run under the fixture's NOW (the finalize one in this process, the preload restored after).
+const FAKE_CLOCK = `const Real = Date, fixed = Real.parse(${JSON.stringify(NOW)});
+globalThis.Date = class extends Real { constructor(...args) { if (args.length) super(...args); else super(fixed); } static now() { return fixed; } };
+`;
+
+test('the evidence command and the finalize command meet: the file one writes is the record the other signs a bundle from', async () => {
+  const base = await qualifiedBase('qualified');
+  const dir = await mkdtemp(join(workDir, 'command-'));
+  const mount = join(dir, 'run-rsi-lab') + '/';
+  await mkdir(mount);
+  const owner = async (name, content) => { const path = join(mount, name); await writeFile(path, content, { mode: 0o600 }); await chmod(path, 0o600); return path; };
+  const plain = async (name, content) => { const path = join(dir, name); await writeFile(path, typeof content === 'string' ? content : JSON.stringify(content)); return path; };
+  const preload = await plain('clock.mjs', FAKE_CLOCK);
+  const { fixture, completed, report, issuer } = base;
+  const files = { manifest: await plain('manifest.json', fixture.manifest), inputs: await plain('inputs.json', fixture.inputs), checkpoint: await plain('checkpoint.json', completed),
+    report: await plain('report.json', report), key: await owner('issuer.pem', issuer.privateKey.export({ type: 'pkcs8', format: 'pem' })), out: join(dir, 'finalize-input.json') };
+  const node = (args) => execFileAsync(process.execPath, ['--import', pathToFileURL(preload).href, evaluatorScript, ...args], { cwd: dir, env: { PATH: process.env.PATH } });
+  const signedEvidence = JSON.parse((await node(['evidence', files.manifest, files.inputs, files.checkpoint, files.report, files.key, files.out])).stdout);
+  assert.equal(signedEvidence.status, 'signed');
+  const pinned = JSON.parse((await node(['qualification', files.report, 'superiority', fixture.manifest.surface])).stdout);
+  // What the owner mounts: the profile that pins the issuer and the qualification, two owner-only signer keys and the finalize record.
+  const publisher = localSigner('publisher'), evaluator = localSigner('evaluator');
+  const signer = async (keyId, keys) => ({ provider: 'file', keyId, publicKeySha256: fingerprint(keys.publicKey), path: await owner(`${keyId}.pem`, keys.privateKey.export({ type: 'pkcs8', format: 'pem' })) });
+  const profileRef = await owner('profile.json', JSON.stringify({ publicKey: issuer.publicKey.export({ type: 'spki', format: 'pem' }), publicKeySha256: fingerprint(issuer.publicKey),
+    qualificationDigests: [pinned.qualificationDigest], procedureDigests: [pinned.procedureDigest] }));
+  const outputPath = join(dir, 'bundle.json');
+  const record = await owner('finalize.json', JSON.stringify({ purpose: 'production', inputPath: files.out, profileRef, outputPath, consumerRoot: root, closurePaths: [], currentTarget: 'manifest',
+    publisher: await signer('publisher', publisher), evaluator: await signer('evaluator', evaluator), statisticsPython: STATISTICS_PYTHON, statisticsModulePath: STATISTICS_MODULE_PATH }));
+  // A production call still refuses a record outside the owner's mount, whatever else about it is in order.
+  await assert.rejects(finalizeCli(record), { message: 'campaign_owner_mount_required' });
+  const RealDate = Date;
+  let signed;
+  try { await import(pathToFileURL(preload).href); signed = await finalizeCli(record, { ownerMount: mount }); } finally { globalThis.Date = RealDate; }
+  assert.equal(signed.status, 'signed');
+  const envelope = JSON.parse(await readFile(outputPath, 'utf8'));
+  assert.equal(signed.bundleDigest, rsiDigest(envelope));
+  const proof = JSON.parse(envelope.evaluatorReceipt.payload);
+  const result = await verifyRsiCampaignBundle(envelope, { now: NOW, trustStore: { publisher: { publicKey: publisher.publicKey, surfaces: ['frontier-selection'], kinds: ['policy'] } },
+    expectedIdentity: { id: `${fixture.manifest.id}-bundle`, campaignId: fixture.manifest.id }, currentTarget: fixture.manifest.target, qualification: { ...proof, verifyReceipt: async () => true } });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.manifest.expiresAt, fixture.manifest.deadline);
+  assert.deepEqual(result.files.map((file) => file.path), ['policy.json']);
+  assert.equal(result.files[0].content, canonicalRsiJson({ selectionThreshold: completed.checkpoint.frozenPolicy.threshold }));
 });

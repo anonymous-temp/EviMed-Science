@@ -761,8 +761,9 @@ test('a source with an incomplete day is not consumed: the campaign ends with th
 test('only a registered consumer is run, and the manifest contract is checked first', async () => {
   const fixture = await registeredCampaignFixture();
   const other = structuredClone(fixture);
-  other.manifest.surface = 'frontier-screen';
-  other.manifest.target.surface = 'frontier-screen';
+  // A surface the domain lists and no consumer measures (2026-11-04: frontier-screen, which this test used to read, has one now).
+  other.manifest.surface = 'geo-supplements';
+  other.manifest.target.surface = 'geo-supplements';
   // Not a registered grid: its manifest names who would write its candidates, so what refuses it is the consumer registry, not the contract.
   other.manifest.models.improvers = [{ role: 'proposing', provider: 'anthropic', model: 'claude-opus-5-5' }];
   other.inputs.target = other.manifest.target;

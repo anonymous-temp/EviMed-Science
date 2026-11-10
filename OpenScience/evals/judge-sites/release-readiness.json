@@ -253,45 +253,6 @@
         "reason": "Settled 9 of 14 traits, all right; the other 5 requests fail because one tied candidate of 50 voids the whole request. The comparison with the engine's own structured call, required by the plan, was not run; the site also selects one id where the original selects up to three. Switching it on also needs an engine change (the engine keeps one id where the original keeps up to three fallbacks)."
       }
     },
-    "J10": {
-      "implementation": "implemented-through-J17-ranking-only-per-plan-4.6",
-      "qualification": "uncalibrated",
-      "threshold": 0.8,
-      "missing": [
-        "Shared J17 ranking calibration remains unqualified; no independent capability assignment is introduced."
-      ],
-      "benefit": {
-        "record": null,
-        "decision": "original-path",
-        "reason": "Registry-only alias of J17 (no caller of its own), and no labelled scout outcomes exist in the repository."
-      }
-    },
-    "J11": {
-      "implementation": "wired",
-      "qualification": "uncalibrated",
-      "threshold": 0.8,
-      "missing": [
-        "A reviewed live method/tool-pair corpus and current incumbent comparison are required."
-      ],
-      "benefit": {
-        "record": null,
-        "decision": "original-path",
-        "reason": "No reviewed method corpus exists in the repository. Advisory until calibrated: its answer feeds no eligibility gate (evolutionScout.mjs)."
-      }
-    },
-    "J12": {
-      "implementation": "wired",
-      "qualification": "uncalibrated",
-      "threshold": 0.8,
-      "missing": [
-        "A reviewed live method/tool-pair corpus and current incumbent comparison are required."
-      ],
-      "benefit": {
-        "record": null,
-        "decision": "original-path",
-        "reason": "No reviewed tool-pair corpus exists in the repository. Advisory until calibrated: its answer decides no merge review (evolutionMaintenance.mjs)."
-      }
-    },
     "J13": {
       "implementation": "wired",
       "qualification": "uncalibrated",
@@ -361,19 +322,6 @@
         "record": null,
         "decision": "original-path",
         "reason": "Registry-only, no caller, and no reviewed method-pair corpus in the repository."
-      }
-    },
-    "J17": {
-      "implementation": "wired",
-      "qualification": "uncalibrated",
-      "threshold": 0.8,
-      "missing": [
-        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
-      ],
-      "benefit": {
-        "record": null,
-        "decision": "original-path",
-        "reason": "No labelled scout-lead corpus exists in the repository; ranking-only and labelled as the judge's."
       }
     },
     "J18": {
@@ -652,8 +600,7 @@
     ],
     "addedCallers": {
       "J13": "Reorder a complete authorized prefix; retain every candidate and meter against the runtime project or subscribed project.",
-      "J14": "Resolve exact titles first; compare public topic candidates outside vote transactions; keep account/project attribution, quota checks, related links and durable model costs.",
-      "J17": "Rank preserved publication leads before bounded scout admission, retain all papers, preserve durable queue order and atomically enforce the daily scout limit."
+      "J14": "Resolve exact titles first; compare public topic candidates outside vote transactions; keep account/project attribution, quota checks, related links and durable model costs."
     },
     "sourceCommit": "59977aa968b0acfc07e567e5a76a4d34399aa4dd"
   },
@@ -691,7 +638,7 @@
     },
     "audits": "Source credential, dependency, hosted compliance (78 checks), SaaS alignment, capability manifests, curated digests, skill package generation, vocabulary and tool graphs passed. Capability execution audit still requires new live probes.",
     "liveDeploymentManifest": "Not generated in this source-only worktree; real release image IDs are required.",
-    "databaseFocused": "Jev accounting, J13/J14 context and durable billing, related-topic links and race handling, J17 actual queue leases and concurrent daily-cap admission passed against isolated PostgreSQL.",
+    "databaseFocused": "Jev accounting, J13/J14 context and durable billing, related-topic links and race handling, passed against isolated PostgreSQL.",
     "packages": {
       "domain": {
         "passed": 965

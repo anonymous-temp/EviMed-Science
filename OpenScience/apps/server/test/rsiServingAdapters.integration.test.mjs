@@ -134,3 +134,35 @@ test('an observation or policy failure never aborts the feed round, and corrupt 
     await database.close()
   }
 })
+
+test('a promotion writes the one component into the module\'s own policy, beside what it holds, only over the baseline it was measured against', { skip: !url }, async () => {
+  const database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 5, databaseConnectionTimeoutMs: 2000 })
+  const owner = `rsi_promote_${randomUUID().replaceAll('-', '')}`, publisher = `rsi_promote_pub_${randomUUID().replaceAll('-', '')}`
+  try {
+    await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'RSI promotion test','development'),($2,'RSI promotion publisher','development')", [owner, publisher])
+    const documents = new ProductDocuments(database)
+    await documents.put(owner, 'knowledge', 'evolution-module-policy-frontier', { status: 'active', policy: { selectionThreshold: 65, screenInstructions: 'keep me' } }, { expectedRevision: 0 })
+    const serving = createRsiServingAdapters({ config: { frontierModel: 'deepseek-flash', frontierSelectThreshold: 64 }, service: { owner: async () => owner }, database, documents, publicationOwnerId: publisher })
+    const target = await serving.currentTarget('frontier-selection')
+    assert.equal(target.baselineRevision, 'evolution-module-policy-frontier:1')
+    const stage = await serving.adapters.policy.publish({ operationId: 'promote-test', surface: 'frontier-selection', phase: 'stage', files, expectedTarget: target })
+    const input = { operationId: 'promote-test', campaignId: 'campaign', surface: 'frontier-selection', candidateDigest: stage.candidateDigest, revision: stage.revision, previousRevision: target.baselineRevision, dependencyDigest: target.dependencyDigest }
+    await assert.rejects(() => serving.adapters.policy.promote({ ...input, previousRevision: 'default:other' }), { code: 'campaign_target_changed' })
+    await assert.rejects(() => serving.adapters.policy.promote({ ...input, dependencyDigest: 'a'.repeat(64) }), { code: 'campaign_target_changed' })
+    await assert.rejects(() => serving.adapters.policy.promote({ ...input, candidateDigest: 'a'.repeat(64) }), { code: 'campaign_installed_bytes_changed' })
+    assert.equal((await documents.get(owner, 'knowledge', 'evolution-module-policy-frontier')).revision, 1, 'a refusal writes nothing')
+    assert.deepEqual(await serving.adapters.policy.promote(input), { installed: true, operationId: 'promote-test', revisionId: 'evolution-module-policy-frontier:2' })
+    const promoted = await documents.get(owner, 'knowledge', 'evolution-module-policy-frontier')
+    assert.deepEqual(promoted.payload.policy, { selectionThreshold: 80, screenInstructions: 'keep me' })
+    assert.deepEqual([promoted.payload.status, promoted.payload.previousRevision, promoted.payload.campaignId, promoted.payload.operationId], ['active', 'evolution-module-policy-frontier:1', 'campaign', 'promote-test'])
+    assert.deepEqual(await serving.readPolicy('frontier'), { revisionId: 'evolution-module-policy-frontier:2', policy: { selectionThreshold: 80, screenInstructions: 'keep me' } })
+    // The operator's stop: the revision it replaced, whole, as a new one; then nothing is promoted any more.
+    assert.deepEqual(await serving.adapters.policy.restorePromoted({ surface: 'frontier-selection', reason: 'campaign_operator_stop', at: '2026-11-05T00:00:00Z' }), { restored: true, revisionId: 'evolution-module-policy-frontier:3' })
+    assert.deepEqual((await serving.readPolicy('frontier')).policy, { selectionThreshold: 65, screenInstructions: 'keep me' })
+    assert.deepEqual(await serving.adapters.policy.restorePromoted({ surface: 'frontier-selection', reason: 'campaign_operator_stop', at: '2026-11-05T00:00:00Z' }), { restored: false, revisionId: 'evolution-module-policy-frontier:3' })
+    assert.deepEqual((await documents.history(owner, 'knowledge', 'evolution-module-policy-frontier')).map(row => row.revision), [3, 2, 1], 'history kept')
+  } finally {
+    await database.query('DELETE FROM evimed_control.users WHERE id=ANY($1::text[])', [[owner, publisher]])
+    await database.close()
+  }
+})

@@ -419,20 +419,6 @@ test("the node's SearXNG is searched first, and this host's answers when the nod
   assert.deepEqual(res.json().data.results.map((row) => row.url), ["https://example.org/local"], "no node configured, the edge URL is ignored");
 });
 
-test("trusted evolution run purpose reserves paid search against its own budget", async () => {
-  const ledger = fakeLedger();
-  let identity;
-  const res = await metered({ ...withBailian, evolutionDailyBudgetCny: 7, userDailySpendLimit: 1, userWeeklySpendLimit: 2, userRunSpendLimit: 0.01 }, async url => String(url).startsWith("https://dashscope.aliyuncs.com/")
-    ? searxngResponse({ output: { search_info: { search_results: [] } }, usage: { input_tokens: 10, output_tokens: 1 } })
-    : searxngResponse({ results: [] }), ledger, { runPurpose: async input => { identity = input; return "evolution"; } });
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(identity, { userId: "alice", projectId: "paper1", runId: "run-7" });
-  const reserve = ledger.calls.find(([kind]) => kind === "reserve")[1];
-  assert.equal(reserve.purpose, "evolution");
-  assert.equal(reserve.dailyLimit, 7);
-  assert.equal(reserve.weeklyLimit, 0);
-  assert.equal(reserve.runLimit, 0);
-});
 
 test("a run ledger that cannot be read does not cost the search its paid engine: the call is booked as web-search", async () => {
   const ledger = fakeLedger();

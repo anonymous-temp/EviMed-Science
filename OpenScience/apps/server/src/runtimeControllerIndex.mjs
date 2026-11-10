@@ -18,7 +18,6 @@ net.setDefaultAutoSelectFamilyAttemptTimeout(
 );
 
 const config = loadConfig();
-if (config.evolutionRefusal) process.stderr.write(`evolution: ${config.evolutionRefusal.code} (${config.evolutionRefusal.key}); the module stays off and the controller starts\n`);
 const deployment = loadExtensionDeployment(config);
 const extensions = createControllerExtensionComposition({ config, deployment });
 await extensions?.ready;

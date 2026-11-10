@@ -94,7 +94,6 @@ const CONTEXT_IMPORTS = {
 const WIRING_IMPORTS = {
   "deploymentComposition.mjs": { geoGateway: ["geoGatewayProviderUrl"], geoService: ["geoAudienceAllows"] },
   "imService.mjs": { geoNotify: ["geoNoticeHref"] },
-  "moduleEvolutionEvaluators.mjs": { geoJudge: ["quantityTokens"] },
   "runtimeGatewayEntry.mjs": { geoGateway: ["geoGatewayProviderUrl"] },
   "runtimeManager.mjs": { geoGateway: ["geoGatewayProviderUrl"], geoService: ["geoAudienceAllows"], geoContextItems: ["contextPolicyIdentity", "sameContextPolicy"] },
 };
@@ -233,12 +232,6 @@ test("only the GEO modules query the GEO schema, and only the composition, the r
   // availability label) from the same gateway address and audience. None of
   // them is on the path of an answer's retrieval or ranking.
   assert.deepEqual(importing.sort(), [...Object.keys(CONTEXT_IMPORTS), ...Object.keys(WIRING_IMPORTS), "server.mjs"].sort());
-  // The evolution scorer imports a pure numeric-token checker only. Its injected
-  // judge sees evaluator-owned public tasks, never a GEO client/schema gateway.
-  const evaluator=await readFile(path.join(serverSource,"moduleEvolutionEvaluators.mjs"),"utf8");
-  const geoImports=[...evaluator.matchAll(/import\s+([^;]+?)\s+from\s+['"]\.\/(geo[A-Za-z]*)\.mjs['"]/g)];
-  assert.deepEqual(geoImports.map(match=>[match[1].replace(/\s+/g,""),match[2]]),[["{quantityTokens}","geoJudge"]]);
-  assert.equal(/evimed_geo|geo(?:Service|Store|Gateway|Market|Orchestrator|Measure)|social_posts_search|\/internal\/geo/.test(evaluator),false);
   for (const name of ["researchContext.mjs", "specialistRouting.mjs", "publicSourceGateway.mjs", "webSearchGateway.mjs", "kbSearchGateway.mjs",
     "clinicalEvidenceQuality.mjs", "agentRuns.mjs"]) {
     const text = await readFile(path.join(serverSource, name), "utf8");

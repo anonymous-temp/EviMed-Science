@@ -188,7 +188,6 @@ test("every deployment value the preset reads is a value the container is given"
   const sources = await Promise.all([
     readFile(new URL("../../../packages/socket/presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8"),
     readFile(new URL("../../../packages/socket/cordis.patch.yml", import.meta.url), "utf8"),
-    readFile(new URL("../src/platformSkillSupply.mjs", import.meta.url), "utf8"),
   ]);
   const provided = runtimeEnvironment(input);
   const read = new Set(sources.flatMap((text) => [...text.matchAll(/(?:process\.env\.|os\.environ\[')([A-Z0-9_]+)/g)].map((match) => match[1])));

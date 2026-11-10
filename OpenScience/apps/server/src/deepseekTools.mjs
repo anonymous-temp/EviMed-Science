@@ -197,12 +197,12 @@ async function boundedJson(response) {
 
 /**
  * @param {any} config
- * @param {{ fetchImpl?: typeof fetch, usageLedger?: any, attributeRun?: any, runPurpose?: any,
+ * @param {{ fetchImpl?: typeof fetch, usageLedger?: any, attributeRun?: any,
  *   now?: () => number, wait?: (ms: number, signal?: AbortSignal) => Promise<unknown> }} [options]
- *   `usageLedger` / `attributeRun` / `runPurpose`: where a request is booked and which run it is charged
+ *   `usageLedger` / `attributeRun`: where a request is booked and which run it is charged
  *   to, as for the Bailian search; `now` / `wait` drive the pacers (a test's clock)
  */
-export function createDeepSeekTools(config, { fetchImpl = fetch, usageLedger = null, attributeRun = null, runPurpose = null, now = Date.now, wait } = {}) {
+export function createDeepSeekTools(config, { fetchImpl = fetch, usageLedger = null, attributeRun = null, now = Date.now, wait } = {}) {
   const key = String(config.deepseekApiKey ?? "").trim();
   const base = String(config.deepseekBaseUrl ?? "").trim().replace(/\/+$/, "") || `https://${API_HOST}`;
   const interval = Math.ceil(1_000 / DEEPSEEK_TOOL_REQUESTS_PER_SECOND);
@@ -235,7 +235,7 @@ export function createDeepSeekTools(config, { fetchImpl = fetch, usageLedger = n
       let reservation;
       try {
         reservation = await reserveGatewaySpend({
-          config, usageLedger, caller, attributeRun, runPurpose, model, estimatedCost: price.cost,
+          config, usageLedger, caller, attributeRun, model, estimatedCost: price.cost,
           fingerprint: { tool: model, ...body },
         });
       } catch (error) {

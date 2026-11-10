@@ -16,8 +16,7 @@
  * - **A prediction is filed once.** The same scenario result, trial and endpoint asked for again is the filing that exists: the
  *   study's schedule marks hold one claim per prediction (`prediction:<trial>:<endpoint>:<receipt>`), taken before the registry is
  *   asked and released if it refuses, so a retry after a failure is possible and a double click is not a second filing.
- * - **Nothing here is public.** The registry decides what is ever shown (no individual prediction before the trial reports; the
- *   calibration curve after thirty scored ones); this module shows nothing and stores nothing but the claim.
+ * - **Nothing here is public.** A filing is filed and shown to nobody; this module stores nothing but the claim.
  * - **Off is a 404 by name.** With no registry given the module is absent, whatever the study.
  *
  * @module vcrPredictions

@@ -1602,10 +1602,6 @@ export class GeoOrchestrator {
         if (!await this.#update(project.id, spec.key, { detail: { policyContext,
           policyRevisionId: policyContext.supplements.length ? policyContext.revisionId : null } }, ["claimed"])) return { busy: true };
       }
-      if (policyContext.supplements.length && this.policies.revisionUsable && !await this.policies.revisionUsable('geo', policyContext.revisionId)) {
-        await this.#update(project.id, spec.key, { state: 'pending', detail: { policyContext: null, policyRevisionId: null } }, ['claimed']);
-        return { deferred: 'policy_basis_changed' };
-      }
       const brief = policyContext.supplements.length ? `${spec.brief}\n\nPlatform strategy supplements (${policyContext.revisionId}):\n${policyContext.supplements.join("\n")}` : spec.brief;
       const out = await this.dispatching.run(project.id, () => /** @type {NonNullable<GeoOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({
         userId: project.userId, projectId: project.projectId, geoProjectId: project.id, capabilityId: spec.capabilityId,

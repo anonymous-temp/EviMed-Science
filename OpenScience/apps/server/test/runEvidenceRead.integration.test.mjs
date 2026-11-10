@@ -13,7 +13,7 @@ test('completion captures durable child ownership and authenticated HTTP reads s
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'run-evidence-'));
   const app = createWebApiApp({ dataDir, databaseUrl: database.url, stateStore: 'postgres', requireSharedStateStore: true,
     runtimeMode: 'mock', devAuth: false, authMode: 'local', bootstrapUser: '', bootstrapPassword: '',
-    learningEnabled: false, evolutionEnabled: false });
+    learningEnabled: false });
   t.after(async () => { await app.close(); await database.drop(); await rm(dataDir, { recursive: true, force: true }); });
   await app.store.createUser('archive_owner', 'test-only-password', 'Owner');
   await app.store.createUser('archive_other', 'test-only-password', 'Other');

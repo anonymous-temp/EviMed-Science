@@ -99,14 +99,12 @@ async function columnExists(database, schema, table, column) {
 /**
  * @param {{ database: any, platformPublisherUserId?: string | null, now?: () => Date,
  *   citationReaders?: { communication?: CitationReader | null, vcr?: CitationReader | null, assistant?: CitationReader | null } | null,
- *   predictionCalibration?: (() => Promise<any>) | null,
- *   evolutionTools?: (() => Promise<{ id?: string, status?: string, validationLevel?: string }[]>) | null,
  *   assistantCoverage?: (() => Promise<{ rounds: number | null, citedShare: number | null } | null>) | null,
  *   report?: ((code: string) => void) | null }} options
  *   A citation reader answers the card ids cited in `[from, to)` — or null with a reason when its input does not exist.
  * @typedef {(window: { from: Date, to: Date }) => Promise<{ cards: string[] } | { cards: null, reason: string }>} CitationReader
  */
-export function createEvidenceFlywheelMetrics({ database, platformPublisherUserId = null, now = () => new Date(), citationReaders = null, predictionCalibration = null, evolutionTools = null, assistantCoverage = null, report = null }) {
+export function createEvidenceFlywheelMetrics({ database, platformPublisherUserId = null, now = () => new Date(), citationReaders = null, assistantCoverage = null, report = null }) {
   const counters = { snapshots: 0, snapshotFailures: 0, readerFailures: 0 };
   /** @type {{ at: number, value: any } | null} */
   let kept = null;
@@ -213,35 +211,16 @@ export function createEvidenceFlywheelMetrics({ database, platformPublisherUserI
     };
   }
 
-  /** The public record: the month's verification rate, correction time and upheld share, and the predictions' calibration when there are enough. @param {Date} at */
+  /** The public record: the month's verification rate, correction time and upheld share. @param {Date} at */
   async function publicRecord(at) {
     const month = new Date(at.getTime() + 8 * 3_600_000).toISOString().slice(0, 7);
     const figures = await monthlyEvidenceFigures(database, { month });
-    /** @type {{ value: number | null, reason?: string, scored?: number }} */
-    let calibration = absent("The prediction registry is not enabled in this deployment.");
-    if (predictionCalibration) {
-      try {
-        const answer = await predictionCalibration();
-        calibration = answer.available && answer.probability?.brierMean != null
-          ? { value: round(answer.probability.brierMean, 4), scored: answer.scored }
-          : absent(`Only ${answer.scored ?? 0} predictions have been scored: not enough for a calibration yet.`);
-      } catch { counters.readerFailures += 1; calibration = absent("The prediction registry could not be read."); }
-    }
     return {
       month,
       verificationPassRate: figures.verification.passRate == null ? absent("No quotation-checked claim on a card published this month.") : { value: figures.verification.passRate, claims: figures.verification.claims },
       medianCorrectionHours: figures.corrections.medianLatencyHours == null ? absent("No correction this month started from a signal.") : { value: figures.corrections.medianLatencyHours, entries: figures.corrections.entries },
       challengesUpheldShare: figures.challenges.upheldShare == null ? absent("No challenge has been judged this month.") : { value: figures.challenges.upheldShare, filed: figures.challenges.filed },
-      predictionBrier: calibration,
     };
-  }
-
-  async function toolLibrary() {
-    if (!evolutionTools) return { toolsAtV2OrAbove: absent("The evolution module is not enabled in this deployment.") };
-    try {
-      const tools = (await evolutionTools()).filter((tool) => tool.status === "active" || tool.status === undefined);
-      return { toolsAtV2OrAbove: { value: tools.filter((tool) => Number(String(tool.validationLevel ?? "").slice(1)) >= 2).length, activeTools: tools.length } };
-    } catch { counters.readerFailures += 1; return { toolsAtV2OrAbove: absent("The tool ledger could not be read.") }; }
   }
 
   async function network() {
@@ -361,7 +340,6 @@ export function createEvidenceFlywheelMetrics({ database, platformPublisherUserI
       assets: {
         evidenceBase: evidence,
         publicRecord: await publicRecord(at),
-        toolLibrary: await toolLibrary(),
         network: await network(),
         measurement: await measurement(),
       },

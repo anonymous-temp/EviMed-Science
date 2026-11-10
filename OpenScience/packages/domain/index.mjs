@@ -2589,9 +2589,6 @@ export {
   summarizeSemantics,
 } from './src/dataSemantics.mjs'
 
-// evolution — the sequential test a published tool's real use is read with (the rest of the module's vocabulary is exported at the end of this file)
-export { EVOLUTION_TOOL_HARM_TEST } from './src/evolution.mjs'
-
 // geneExpression — NCBI Gene Expression Omnibus series to differential expression (plan 2026-10-02 §11.3 N17): the
 // accessions, the six limits, the tool's refusals and the advisory findings over its package. Not 「循证 GEO」.
 export {
@@ -2617,7 +2614,7 @@ export {
   geneExpressionFindings,
 } from './src/geneExpression.mjs'
 
-export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_DATA_LEVELS, EVOLUTION_VALIDATION_LEVELS, EVOLUTION_DECISION_CLASSES, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_ORIGINS, EVOLUTION_BUILD_FORMS, EVOLUTION_CASE_GROUPS, EVOLUTION_TOOL_STATES, EVOLUTION_JOB_KINDS, EVOLUTION_EXECUTABLE_OPERATIONS, EVOLUTION_ONE_WAY_OPERATIONS, evolutionDecisionClass, evolutionAdaptiveClass, evolutionValidationLevel, evolutionToolVisible, evolutionMethodFields, evolutionDataMatch, validateEvolutionDataRequirements } from './src/evolution.mjs'
+export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_JOB_KINDS, evolutionMethodFields } from './src/evolution.mjs'
 
 // geoEvidenceChain — 「循证 GEO」 as one evidence chain (flywheel F21, F28, 2026-10-06): the product zone's cards made from a
 // project's verified claims, the closed vocabulary of how a difference is known, the producer settings and the disclosure's
@@ -2762,19 +2759,6 @@ export {
 
 /** @typedef {import('./src/evidenceCard.mjs').EvidenceCalculationReceipt} EvidenceCalculationReceipt */
 
-export {
-  EVOLUTION_SELECTION_OUTCOMES,
-  evolutionMechanismLimit,
-  evolutionNoiseBand,
-  evolutionProposalIssues,
-  evolutionNormalizeProposal,
-  evolutionProposalDescriptionLength,
-  EVOLUTION_PROPOSAL_DESCRIPTION_LIMIT,
-  EVOLUTION_PROPOSAL_FIELD_BUDGET,
-  selectEvolutionCandidate,
-  selectEvolutionParent,
-  evolutionPruningCandidates,
-} from './src/evolutionSelection.mjs';
 export {
   CLINICAL_FACT_SCHEMA,
   CLINICAL_FACT_CONTRACT,

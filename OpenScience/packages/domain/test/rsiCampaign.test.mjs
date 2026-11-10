@@ -81,7 +81,7 @@ test('the frontier jury is the one non-Claude adjudicator (owner 2026-11-03, aft
   assert.equal(rsiOfflineRoleIssue('judge', QWEN_JURY, 'frontier-selection'), null)
   assert.equal(rsiOfflineRoleIssue('judge', { role: 'jury', provider: 'dashscope', model: 'qwen3.8-max' }, 'frontier-selection'), null, 'its id is optional like any judge\'s')
   // refused on every other surface, in the manifest and as a role
-  for (const surface of ['harness-patch', 'tool-patch', 'capability-skill', 'frontier-screen', 'isolated-tool']) {
+  for (const surface of ['harness-patch', 'tool-patch', 'capability-skill', 'frontier-screen']) {
     assert.ok(rsiCampaignIssues(onSurface(surface, [{ ...QWEN_JURY }])).includes('campaign_judge_refused'), surface)
     assert.equal(rsiOfflineRoleIssue('judge', QWEN_JURY, surface), 'campaign_judge_refused', surface)
   }
@@ -130,6 +130,11 @@ test('only a registered-grid surface names no improver; an empty judge list is t
   // the shape every manifest had before 2026-11-03: its version and its models are both refused, and nothing reads it as a new campaign
   const old = { ...manifest(), schemaVersion: 1, models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improver: { provider: 'none', model: 'registered-grid' }, reviewer: { provider: 'dashscope', model: 'qwen3.8-max' } } }
   assert.deepEqual(rsiCampaignIssues(old), ['campaign_manifest_invalid', 'campaign_model_invalid'])
+})
+
+test('frontier-screen and frontier-edit change one class and one policy document, so they are one consumer, and one error budget', () => {
+  assert.equal(RSI_CAMPAIGN_SURFACES['frontier-screen'].consumer, RSI_CAMPAIGN_SURFACES['frontier-edit'].consumer)
+  assert.notEqual(RSI_CAMPAIGN_SURFACES['frontier-edit'].consumer, RSI_CAMPAIGN_SURFACES['frontier-selection'].consumer)
 })
 
 test('the harness-patch and tool-patch surfaces are two registered shadow surfaces of one consumer (the runtime image, so one error budget), each with its own kind, and a manifest names the kind of its own surface', () => {

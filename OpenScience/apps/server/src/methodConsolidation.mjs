@@ -292,25 +292,6 @@ export function groupPairs(pairs, limits = {}) {
 }
 
 /**
- * What the relation pass is told about the platform's own tools, and only when there is something to tell:
- * the tools a group's methods are declared for (`capabilityIds`, a closed list), bounded, and nothing of a
- * tool's papers or data requirements. Whether a description is "about" the same thing as a method is a language
- * judgement, so it is not made here by shared words; the pass reads the descriptions and decides.
- * With none (the module off, or no tool for these capabilities) the brief carries no `platformTools` key, and is
- * byte for byte the one the pass was given before the module existed.
- * @param {any[]} tools @param {readonly any[]} members @returns {{platformTools: any} | {}}
- */
-export function relevantPlatformTools(tools, members) {
-  const capabilities = new Set(members.flatMap((member) => [member.payload?.capabilityId, ...(member.payload?.capabilityIds ?? [])].filter(Boolean)));
-  const relevant = tools.filter((tool) => tool.capabilityIds?.some((/** @type {string} */ id) => capabilities.has(id)))
-    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  if (!relevant.length) return {};
-  return { platformTools: { items: relevant.slice(0, 30).map((tool) => ({ id: tool.id, digest: tool.digest ?? tool.artifactDigest, revision: tool.revision,
-    capabilityIds: (tool.capabilityIds ?? []).slice(0, 30), name: String(tool.name ?? "").slice(0, 160), description: String(tool.description ?? "").slice(0, 1000) })),
-  omitted: Math.max(0, relevant.length - 30), irrelevant: tools.length - relevant.length, selectionBasis: "declared-capability" } };
-}
-
-/**
  * Whether a merged (canonical) method has cleared the harm test on its own runs, which is what lets the originals it replaces go (owner ruling of
  * 2026-10-10, review L-1): it is in force, and the sequential test over the runs that invoked the body it holds now (`methodHarmTest`, the detector that
  * retires an inferred method) has read clear. Being approved at birth is not that, a run that merely had it mounted is not that, and neither is a verdict
@@ -344,7 +325,7 @@ export class MethodConsolidation {
    * audit line (plan 2026-09-23 §5.8).
    *
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any,
-   *          contextProvenance?: any, jobs?: any, judgeService?: any, screenBaseline?: any, platformTools?: () => Promise<any[]>,
+   *          contextProvenance?: any, jobs?: any, judgeService?: any, screenBaseline?: any,
    *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date,
    *          unusedAfterLoads?: number, onRetirement?: ((code: string) => void) | null,
    *          similarity?: {pairs: (methods: readonly any[]) => Promise<any[]>, nearest: (text: string, methods: readonly any[], options?: any) => Promise<any[]>, methodText: (method: any) => string} | null,
@@ -356,7 +337,7 @@ export class MethodConsolidation {
   constructor({
     dispatch, readResult, learning, jobs = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    describe = null, platformTools = async () => [], judgeService = null, screenBaseline = null,
+    describe = null, judgeService = null, screenBaseline = null,
     unusedAfterLoads = undefined, onRetirement = null, similarity = null, onNoop = null, onRelation = null, replay = null, contextProvenance = null,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
@@ -370,7 +351,6 @@ export class MethodConsolidation {
     this.readResult = readResult;
     this.learning = learning;
     this.jobs = jobs;
-    this.platformTools = platformTools;
     // Optional, and optional on purpose: a consolidation pass that cannot write
     // an audit line still has to finish, because the line is a record of what
     // happened and not a step in it.
@@ -1039,7 +1019,6 @@ export class MethodConsolidation {
         schemaVersion: 1,
         action: "decide",
         relationTypes: [...METHOD_RELATION_TYPES],
-        ...relevantPlatformTools(await this.platformTools(), members),
         methods: members.map((member) => ({
           id: member.id,
           name: member.payload?.frontmatter?.name,

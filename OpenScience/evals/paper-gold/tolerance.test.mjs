@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { printedNumber, printedTokenIn, boundedHalfWidth, curatedReference, curatedCaseNumeric, defaultHalfWidth, TOLERANCE_LIMITS } from "./tolerance.mjs";
-import { numericScore, crossImplementationScore } from "./evaluator.mjs";
+import { numericScore } from "./evaluator.mjs";
 
 const close = (actual, expected) => Math.abs(actual - expected) <= Math.abs(expected) * 1e-9 + 1e-300;
 
@@ -101,13 +101,6 @@ test("a quotation bonds a number by token, never by substring", () => {
   assert.equal(printedTokenIn("p = 1.2 × 10−5", 1.2e-5), "1.2 × 10-5");
   assert.equal(printedTokenIn("version 1.30.2 of the package", 1.3), null);
   assert.equal(printedTokenIn(null, 1), null);
-});
-
-test("cross-implementation agreement uses the published tolerance and the same bound", () => {
-  const tolerances = { effect: { value: 1.3, printed: "1.30", absoluteTolerance: 0.5 } };
-  const scored = crossImplementationScore({ implementationId: "candidate", numeric: { effect: 0.9 } }, { implementationId: "reference", numeric: { effect: 1.2987 } }, tolerances);
-  assert.equal(scored.effect.valid, false);
-  assert.equal(crossImplementationScore({ implementationId: "candidate", numeric: { effect: 1.3001 } }, { implementationId: "reference", numeric: { effect: 1.2987 } }, tolerances).effect.valid, true);
 });
 
 test("the Python port in score_existing_methods.py reaches the same half-widths", async () => {

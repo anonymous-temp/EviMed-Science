@@ -86,7 +86,7 @@ not mounted and the rest of the platform is unaffected.
 | Knowledge-base intake | `source*.mjs`, `openList*.mjs`, `documentParserClient.mjs` | `OPEN_SCIENCE_SOURCE_INGESTION_ENABLED` (on in production) |
 | Knowledge pages and graph (OpenViking Resources and Compile) | `knowledgePage*.mjs`, `openViking*.mjs`, `kbBrowseGateway.mjs` | `OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED` (on with the engine) |
 | Learning loop | `learning*.mjs`, `method*.mjs`, `handbook*.mjs` | `OPEN_SCIENCE_LEARNING_ENABLED` (on) |
-| Research evolution | `evolution*.mjs` | `OPEN_SCIENCE_EVOLUTION_ENABLED` (on) |
+| Research evolution (signal store, retention, code-skill executor) | `evolution*.mjs` | none: present wherever the product ledger is |
 | Memory and recall (OpenViking's engine; one engine for every account) | `memorySettings.mjs` (switches, pauses, conversation state), `nativeMemory*.mjs`, `memoryGateway.mjs`, `memoryAdmission.mjs` | `OPEN_SCIENCE_MEMORY_ENABLED` (on), `OPEN_SCIENCE_MEMORY_RECALL_ENABLED`; the engine itself is on exactly when OpenViking is configured (`config.memoryEngineEnabled`, derived, not a lever) |
 | Data semantics, result versions | `dataSemantics*.mjs`, `result*.mjs` | `OPEN_SCIENCE_DATA_SEMANTICS_ENABLED`, `OPEN_SCIENCE_RESULTS_ENABLED` (on) |
 | Frontier feed | `frontier*.mjs` | `OPEN_SCIENCE_FRONTIER_ENABLED` (off) |

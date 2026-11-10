@@ -9,7 +9,7 @@ vi.mock("@/lib/apiClient", async () => {
   const actual = await vi.importActual<typeof import("@/lib/apiClient")>("@/lib/apiClient");
   return { ...actual, fetchWebMe: mocks.fetchWebMe, hasWebApi: true };
 });
-vi.mock("./OpsPage", () => ({ OpsPage: () => <div>运维分区<p>循证进化</p></div> }));
+vi.mock("./OpsPage", () => ({ OpsPage: () => <div>运维分区<p>部署配置检查</p></div> }));
 
 const me = (operator: boolean) => ({
   user: { id: "alice", name: "Alice", tenantId: "alice" }, tenant: { id: "alice", model: "individual-account", role: "owner" },
@@ -36,7 +36,7 @@ describe("运维", () => {
     open();
     expect(await screen.findByText("运维分区")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "运维" })).toBeInTheDocument();
-    expect(screen.getByText("循证进化")).toBeInTheDocument();
+    expect(screen.getByText("部署配置检查")).toBeInTheDocument();
   });
 
   it("sends any other account to 设置, and shows the console to nobody while it does not know", async () => {

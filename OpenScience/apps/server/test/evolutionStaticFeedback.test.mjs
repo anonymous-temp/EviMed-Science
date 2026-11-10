@@ -6,7 +6,6 @@ import os from 'node:os';
 import {spawnSync} from 'node:child_process';
 import {EVOLUTION_STATIC_CHECK} from '../src/evolutionVerification.mjs';
 import {verifyCodeSkill} from '../src/codeSkillVerification.mjs';
-import {createEvolutionBuilder} from '../src/evolutionBuild.mjs';
 test('static Python checks accept standard UTF-8 BOM without weakening forbidden constructs',async()=>{
  const root=await mkdtemp(path.join(os.tmpdir(),'candidate-bom-'));
  try{
@@ -15,11 +14,6 @@ test('static Python checks accept standard UTF-8 BOM without weakening forbidden
  const issues=JSON.parse(result.stdout).issues;assert.equal(issues.some(issue=>issue.path==='valid.py'),false);assert.equal(issues.some(issue=>issue.code==='candidate_syntax_invalid'),false);assert.ok(issues.some(issue=>issue.code==='candidate_control_override'));assert.ok(issues.some(issue=>issue.code==='candidate_network_import_denied'));
  }finally{await rm(root,{recursive:true,force:true});}
 });
-test('builder returns its own static diagnostics but does not evaluate or return hidden material',async()=>{
- const builder=createEvolutionBuilder({dispatch:async()=>({publicationKind:'skill',files:{'script.py':'bad'}}),verification:{verify:async()=>({ok:false,issues:[{code:'candidate_control_override',path:'script.py',message:'Dynamic getattr is forbidden',hiddenExpected:42}]})},evaluator:{evaluate:async()=>{throw new Error('Static failure must stop evaluation');}},publisher:{},recordFailure:async()=>{}});
- const result=await builder.build({id:'card'});assert.deepEqual(result.feedback.issues,[{code:'candidate_control_override',path:'script.py',message:'Dynamic getattr is forbidden'}]);assert.equal(JSON.stringify(result).includes('42'),false);
-});
-
 test('BOM at the first Python function passes the schema and self-test stage without changing frozen bytes',async()=>{
  const source='\ufeffdef method(specification):\n return specification\nif __name__ == "__main__":\n assert method({}) == {}\n';
  const files={'scripts/method.py':source,'tests/test_method.py':'from scripts.method import method\nassert method({}) == {}','scripts/method.tool.json':JSON.stringify({name:'method',description:'Echo',parameters:{type:'object',properties:{specification:{type:'object',description:'Input specification'}},required:['specification']}})};

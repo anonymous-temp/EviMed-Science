@@ -87,6 +87,7 @@ import {
   isFrontierIndustryKind,
 } from "@evimed/domain";
 import { checkNumbers } from "./frontierNumbers.mjs";
+import { isChineseTitle } from "./frontierSelection.mjs";
 import { FRONTIER_SENTENCE_RULE, FRONTIER_STYLE_CARDS, FRONTIER_TITLE_RULE } from "./frontierStyle.mjs";
 import { FRONTIER_ITEM_TAG_LIMIT, frontierTagNameRefusal, tagKey, tagName } from "./frontierTags.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
@@ -966,6 +967,18 @@ export const FRONTIER_EDITOR_VERSION = `frontier-editor-1.${createHash("sha256")
   .update(`${FRONTIER_SCREEN_INSTRUCTIONS}\n${FRONTIER_EDIT_INSTRUCTIONS}\n${FRONTIER_DIGEST_INSTRUCTIONS}\n${FRONTIER_AI_MINUTE_INSTRUCTIONS}`)
   .digest("hex").slice(0, 12)}`;
 
+/**
+ * The stamp of an item written under a served policy: it moves only when what the editor uses moves (the screen and edit instructions), never with the policy's revision, because a revision that changes
+ * nothing the editor reads (a promoted selection threshold, a selection campaign serving) would otherwise read as an older item to `scripts/ops/frontier-reader-backfill.mjs`, and be re-edited at cost.
+ * The shipped prompts are the shipped stamp, byte for byte.
+ * @param {{ screenInstructions?: string, editInstructions?: string }} policy @returns {string}
+ */
+function frontierPolicyEditorVersion(policy) {
+  const screen = policy?.screenInstructions ?? FRONTIER_SCREEN_INSTRUCTIONS, edit = policy?.editInstructions ?? FRONTIER_EDIT_INSTRUCTIONS;
+  if (screen === FRONTIER_SCREEN_INSTRUCTIONS && edit === FRONTIER_EDIT_INSTRUCTIONS) return FRONTIER_EDITOR_VERSION;
+  return `frontier-editor-policy.${createHash("sha256").update(`${screen}\n${edit}`).digest("hex").slice(0, 12)}`;
+}
+
 /** What the event digest and the AI minute may be, in code points. */
 export const FRONTIER_WRITING_LIMITS = Object.freeze({ digest: 320, latest: 80, aiMinute: 240 });
 const DIGEST_MAX_TOKENS = 1_500;
@@ -1011,6 +1024,7 @@ function codePoints(text) {
   return [...String(text ?? "")].length;
 }
 
+export { isChineseTitle };
 const CJK = /[\u3400-\u9fff\uf900-\ufaff]/gu;
 const LATIN = /[A-Za-z]/g;
 
@@ -1025,16 +1039,6 @@ export function isChineseProse(text) {
   const han = value.match(CJK)?.length ?? 0;
   const latin = value.match(LATIN)?.length ?? 0;
   return han >= 2 && han >= 0.3 * (han + latin);
-}
-
-/** Whether a title is a Chinese source's own (and so is not translated): Han
- *  characters, no kana, and Han at least half of its letters. @param {unknown} text */
-export function isChineseTitle(text) {
-  const value = String(text ?? "");
-  if (/[\u3040-\u30ff]/u.test(value)) return false;
-  const han = value.match(CJK)?.length ?? 0;
-  const latin = value.match(LATIN)?.length ?? 0;
-  return han >= 2 && han >= 0.5 * (han + latin);
 }
 
 const LINK = /https?:\/\/|www\.|\b[a-z0-9-]+\.(?:com|org|net|gov|edu|cn|io|ai|int|info|co)\b/i;
@@ -2300,7 +2304,7 @@ export class FrontierEditor {
     /** @type {FrontierEditResult} */
     const result = {
       verification: "pending", output: null, modelInput, modelInputSha256: sha256(modelInput), attempts: 0,
-      issues: [], fieldDiagnostics: { title_zh: ["not_checked"], summary_zh: item.abstract || item.summary || item.bodyExcerpt ? ["not_checked"] : ["source_missing"] }, numbers: null, error: null, model: this.model, editorVersion: policy.revisionId.startsWith("default:") ? FRONTIER_EDITOR_VERSION : policy.revisionId,
+      issues: [], fieldDiagnostics: { title_zh: ["not_checked"], summary_zh: item.abstract || item.summary || item.bodyExcerpt ? ["not_checked"] : ["source_missing"] }, numbers: null, error: null, model: this.model, editorVersion: frontierPolicyEditorVersion(policy.policy),
     };
     // The tree's candidates ride after the input and outside it: the input's hash is the source's identity (a new revision, an
     // obsolete claim), and a tag promoted overnight is not a change of the source.

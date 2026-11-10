@@ -1259,7 +1259,7 @@ test("what every conversation reads stays under its budget with the whole catalo
     assert.ok(index.length >= 12 && index.length <= 20, `${index.length} workflows are indexed`);
     assert.ok(index.every((line) => line.length < 110), "an index line is an id, its contract kinds and a name");
     assert.ok(!index.some((line) => /`(geo|vcr)-/.test(line)), "a module's capabilities are opened from the module");
-    assert.ok(!index.some((line) => /source-understanding|knowledge-compile|method-distillation|tool-builder|evolution-scout/.test(line)), "an internal capability is a platform job's");
+    assert.ok(!index.some((line) => /source-understanding|knowledge-compile|method-distillation/.test(line)), "an internal capability is a platform job's");
   }
 });
 
