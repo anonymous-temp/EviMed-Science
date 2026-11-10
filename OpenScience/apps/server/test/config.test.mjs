@@ -1164,3 +1164,12 @@ test('history semantic secret redaction defaults off with a bounded daily cap an
     assert.equal(loadConfig({rootDir:repoRoot,memoryHistorySecretRedactionDailyCalls:3}).memoryHistorySecretRedactionDailyCalls,3);
   } finally { if(saved===undefined)delete process.env[name];else process.env[name]=saved; }
 });
+
+test('history retrieval V2 defaults off and accepts environment and explicit overrides',()=>{
+  const name='OPEN_SCIENCE_MEMORY_HISTORY_RETRIEVAL_V2_ENABLED',saved=process.env[name];
+  try {
+    delete process.env[name];assert.equal(loadConfig({rootDir:repoRoot}).memoryHistoryRetrievalV2Enabled,false);
+    process.env[name]='true';assert.equal(loadConfig({rootDir:repoRoot}).memoryHistoryRetrievalV2Enabled,true);
+    assert.equal(loadConfig({rootDir:repoRoot,memoryHistoryRetrievalV2Enabled:false}).memoryHistoryRetrievalV2Enabled,false);
+  } finally { if(saved===undefined)delete process.env[name];else process.env[name]=saved; }
+});

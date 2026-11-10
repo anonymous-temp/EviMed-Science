@@ -11,7 +11,7 @@ import { createMemoryGatewayHandler, parseEventStream } from '../src/memoryGatew
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
 const { options, fixture } = nativeIntegration();
 
-async function setup(t) {
+async function setup(t, retrievalV2 = false) {
   const f = await fixture(t);
   const files = new Map(); const calls = []; let failWrite = false; let failRemove = false; let duringWrite = null;
   const resources = {
@@ -24,7 +24,7 @@ async function setup(t) {
   const context = { kind: 'owned', ownerId: f.userId, ownerCreatedAt: stamp, namespaceId: f.engineUser, userRoot: f.sessions.userRoot(f.userId), projectId: 'default', sessions: f.sessions };
   const ledger = new MemoryHistoryLedger({ database: f.database, overlay: f.overlay });
   ledger.removeResource = row => resources.removeSource(row.owner_id, row.uri);
-  const service = new MemoryHistory({ config: { memoryHistorySearchEnabled: true }, ledger, contexts: { async forProject(p) { return { ...context, projectId: p.id }; } },
+  const service = new MemoryHistory({ config: { memoryHistorySearchEnabled: true, memoryHistoryRetrievalV2Enabled:retrievalV2 }, ledger, contexts: { async forProject(p) { return { ...context, projectId: p.id }; } },
     resourcesFor: () => resources, resolveSource: async (c, _ctx) => ({ projectId: c.projectId, projectCreatedAt: '2026-01-01T00:00:00Z', sessionId: c.engineSession?.slice(4), conversationTitle: 'Kidney trial', conversationUrl: '/app/projects/default?session=session_a' }),
     eligible: async () => true, admitMessage: async () => true,
   });
@@ -33,6 +33,53 @@ async function setup(t) {
   return { ...f, context, ledger, service, files, calls, commit, resources, failWrites: x => { failWrite = x; }, failDeletes: x => { failRemove = x; }, onWrite: x => { duringWrite = x; } };
 }
 const search = f => f.service.search({ user: { id: f.userId }, project: { id: 'default', userId: f.userId }, query: 'trial', limit: 5 });
+
+test('V2 search honors requested limits through the registry, diversifies and removes repeated source messages; off is identical', options, async t => {
+  const f=await setup(t);
+  const ingest=async (id,messages)=>{
+    const archive=await f.commitConversation(id,messages,{projectId:'default'});
+    await f.service.ingestArchive({userId:f.userId,projectId:'default',engineSession:archive.session,archiveUri:archive.archive_uri},f.context);
+  };
+  await ingest('many',Array.from({length:24},(_,i)=>({role:i%2?'assistant':'user',text:`trial exchange ${i}: measured ${i} samples.`})));
+  for(let i=0;i<22;i++)await ingest(`other${i}`,[{role:'user',text:`trial observation ${i}`}]);
+  const request={user:{id:f.userId},project:{id:'default',userId:f.userId},query:'trial',limit:20};
+  const before=await f.service.search(request);
+  assert.equal(before.length,8);assert.ok(before.every(h=>h.sessionId==='session_many'));
+  f.service.config.memoryHistoryRetrievalV2Enabled=true;
+  const after=await f.service.search(request);
+  assert.equal(after.length,20);assert.equal(after.filter(h=>h.sessionId==='session_many').length,2);
+  const keys=after.flatMap(h=>h.messages.map(m=>`${h.sessionId}:${m.index}:${m.text}`));
+  assert.equal(new Set(keys).size,keys.length);
+  assert.ok(after.reduce((sum,h)=>sum+h.messages.reduce((n,m)=>n+m.text.length+80,160),0)<=48_000);
+  f.service.config.memoryHistoryRetrievalV2Enabled=false;
+  assert.deepEqual(await f.service.search(request),before);
+});
+
+for (const boundary of ['rejection','fence','changed source','secret review','revoked source']) {
+  test(`V2 candidate path preserves ${boundary} boundary`,options,async t=>{
+    const f=await setup(t,true);await f.service.ingestArchive(f.commit,f.context);
+    assert.equal((await search(f)).length,1);
+    if(boundary==='rejection')await f.overlay.reject(f.userId,'preferences',`${f.root}/preferences/a.md`,['I prefer trial tables.']);
+    if(boundary==='fence')await f.service.removeConversation(f.context,'session_a');
+    if(boundary==='revoked source')f.service.resolveSource=async c=>c.engineSession?null:{projectId:'default',projectCreatedAt:'2026-01-01T00:00:00Z'};
+    if(boundary==='secret review')f.service.config.memoryHistorySecretRedactionEnabled=true;
+    if(boundary==='changed source'){
+      await f.sessions.client.request({method:'POST',path:`/api/v1/content/write`,userId:f.userId,body:{uri:`${f.commit.archiveUri}/messages.jsonl`,content:'changed',mode:'replace'}});
+      await assert.rejects(search(f),/privacy_unavailable/);return;
+    }
+    assert.deepEqual(await search(f),[]);
+  });
+}
+
+test('V2 clips and ranks only after applying the account secret filter',options,async t=>{
+  const f=await setup(t,true);await f.service.ingestArchive(f.commit,f.context);
+  f.service.config.memoryHistorySecretRedactionEnabled=true;
+  f.ledger.secretReviewed=async()=>true;
+  f.service.secrets.filterFor=async()=>text=>text.replaceAll('trial','[redacted]');
+  const hits=await search(f);assert.equal(hits.length,1);
+  assert.ok(!JSON.stringify(hits).includes('trial'));
+  assert.match(hits[0].messages[0].text,/\[redacted\]/);
+});
 
 test('history uses exact registry provenance and returns only own project with preserved roles', options, async t => {
   const f = await setup(t); await f.service.ingestArchive(f.commit, f.context);

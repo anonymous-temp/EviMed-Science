@@ -95,6 +95,8 @@ test('retrieval uses session links and line origins, deduplicates gold IDs, isol
   assert.equal(report.limits[0].withGoldSessions, 1); assert.equal(report.limits[0].microRecall, 0.5);
   assert.equal(measureRetrieval({ blocks: [], goldIds: ['sourceA'], mapping, limit: 8, isError: true }).history.hit, false);
   assert.ok(summaryText(report).includes('recall@8/20=50.0%/50.0%'));
+  const v2=retrievalReport([{questionType:'multi-session',results:[r,result(20)]}],{historyExcerptCap:20});
+  assert.equal(v2.productHistoryExcerptCap,20);assert.ok(summaryText(v2).includes('up to 20'));
   const item = { userKey: 'u', sessions: sessions };
   const entry = { runtimeInput: { histories: [{ sourceSessionId: 'b', at: sessions[1].at }, { sourceSessionId: 'a', at: sessions[0].at }] } };
   assert.deepEqual(sessionMapping(entry, item, 'run').map(s => s.sourceSessionId), ['a', 'b']);

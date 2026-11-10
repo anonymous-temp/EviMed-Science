@@ -164,8 +164,9 @@ export class OpenVikingResources {
 
   /** Vector and literal keyword recall over this one proven root. Model text
    * never chooses a namespace. The ledger hydrates only registered exact URIs. */
-  async searchHistory(userId, root, query, { limit = 40 } = {}) {
+  async searchHistory(userId, root, query, { limit = 40, retrievalV2 = false } = {}) {
     this.historyAddress(root);
+    if (retrievalV2) return this.searchHistoryV2(userId,root,query);
     const bound = Math.max(1, Math.min(40, Number(limit) || 40));
     const pattern = String(query).split(/\s+/).filter(Boolean).slice(0, 8).map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
     const results = await Promise.allSettled([
@@ -185,6 +186,53 @@ export class OpenVikingResources {
       found.set(hit.uri, (found.get(hit.uri) ?? 0) + 1 / (60 + rank));
     }
     return [...found].sort((a, b) => b[1] - a[1]).slice(0, bound * 2).map(([uri, score]) => ({ uri, score }));
+  }
+
+  /** Request-local BM25 over grep's actual resource text, fused with vectors.
+   * This deliberately retains no corpus cache: every result is reauthorized and
+   * re-read by MemoryHistory, including after a reset, rejection or secret edit. */
+  async searchHistoryV2(userId, root, query) {
+    const { historyTokens, historyLexicalScorer } = await import('./memoryHistoryRetrieval.mjs');
+    const terms = [...new Set(historyTokens(query))].slice(0,64);
+    const channels = await Promise.allSettled([
+      this.client.request({ method:'POST',path:'/api/v1/search/find',userId,timeoutMs:READ_TIMEOUT_MS,
+        body:{ query:String(query),target_uri:root,limit:40 } }),
+      terms.length ? this.grep(userId,root,terms.map(escapeGrepPattern).join('|'),{limit:500,caseInsensitive:true}) : Promise.resolve({matches:[]}),
+    ]);
+    if (channels.every(c=>c.status==='rejected')) throw /** @type {PromiseRejectedResult} */ (channels[0]).reason;
+    const vector = channels[0].status==='fulfilled' ? channels[0].value?.result?.resources??[] : [];
+    const matches = channels[1].status==='fulfilled' ? channels[1].value.matches : [];
+    const records = new Map();
+    const collect = rows => {
+      for (const row of rows) {
+        if (!row.uri?.startsWith(`${root}/`) || typeof row.content!=='string' || row.content.length>32_000) continue;
+        let parsed; try { parsed=JSON.parse(row.content); } catch { continue; }
+        if (!Array.isArray(parsed?.messages) || !parsed.messages.length || parsed.messages.length>6 ||
+          !parsed.messages.every(m=>m && ['user','assistant'].includes(m.sourceRole) && typeof m.text==='string' && m.text.length<=1800 && (m.date===null || typeof m.date==='string'))) continue;
+        records.set(row.uri,{uri:row.uri,messages:parsed.messages});
+      }
+    };
+    collect(matches);
+    // A full grep page may be dominated by common words. Rescue the four
+    // rarest query terms separately, including terms absent from that page.
+    if (matches.length>=500) {
+      const sample = historyLexicalScorer([...records.values()],query);
+      const salient = [...terms].sort((a,b)=>sample.rarity(b)-sample.rarity(a)||b.length-a.length).slice(0,4);
+      const extra = await Promise.allSettled(salient.map(term=>this.grep(userId,root,escapeGrepPattern(term),{limit:200,caseInsensitive:true})));
+      for (const result of extra) if (result.status==='fulfilled') collect(result.value.matches);
+    }
+    const corpus = [...records.values()], scorer = historyLexicalScorer(corpus,query);
+    const lexical = corpus.map(record=>({uri:record.uri,lexical:scorer.best(record.messages)?.score??0}))
+      .filter(record=>record.lexical>0).sort((a,b)=>b.lexical-a.lexical||a.uri.localeCompare(b.uri));
+    const found = new Map();
+    for (const {hits:channel,weight} of [{hits:lexical,weight:3},{hits:Array.isArray(vector)?vector:[],weight:1}]) {
+      const seen = new Set();
+      for (const [rank,hit] of channel.entries()) {
+        if (typeof hit?.uri!=='string' || !hit.uri.startsWith(`${root}/`) || seen.has(hit.uri)) continue;
+        seen.add(hit.uri); found.set(hit.uri,(found.get(hit.uri)??0)+weight/(20+rank));
+      }
+    }
+    return [...found].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,80).map(([uri,score])=>({uri,score}));
   }
 
   // -------------------------------------------------------------------------------------------------------------------
