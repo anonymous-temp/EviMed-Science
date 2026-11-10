@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { checkAnswer, checkStore, checkSecret, citationBackCheck, checkGiven, containsEntity, wilson, checkEntityReplacement, G6_POLICY } from '../run/scoreChecks.mjs';
-import { scoreRun, summarize, parseArgs, publicRubric, listRedlines } from '../run/score.mjs';
+import { scoreRun, summarize, summarizeForget, parseArgs, publicRubric, listRedlines } from '../run/score.mjs';
 import { buildJudgePacket, mergeJudgeResults, sha256, judgePackets, JUDGE_SCHEMA, JUDGE_SYSTEM } from '../run/judgePackets.mjs';
 import { registerQuestionPools, sourceSetSha256 } from '../inputs.mjs';
 
@@ -1002,4 +1002,35 @@ test('list-redlines CLI prints one masked line per violation with identifying fi
   assert.ok(!stdout.includes(secret));
   assert.equal(parseArgs(['--run', 'r', '--data', 'd', '--list-redlines']).listRedlines, true);
   assert.equal(listRedlines([{ set: 'scenarios', caseId: 'c', id: 'q', category: 'secret', redLine: 'secret-recalled', verdict: 'fail', checks: [{ detail: secret }] }])[0].includes(secret), false);
+});
+
+test('forget summary separates action, inaction and missing evidence without shrinking n', () => {
+  const row = (toolCalled, reappeared) => ({ kind: 'answer', forget: { toolCalled, reappeared } });
+  assert.deepEqual(summarizeForget([row(true, true), row(true, false), row(false, true), row(false, null), row(null, null)]), {
+    forgetToolCalled: { n: 5, count: 2, unknown: 1 }, forgottenReappeared: {
+      toolCalled: { n: 2, count: 1, unknown: 0 }, toolNotCalled: { n: 2, count: 1, unknown: 1 }, unobserved: { n: 1, count: 0, unknown: 1 },
+    },
+  });
+});
+
+test('live forget attribution joins schedule offsets and keeps missing live evidence unknown', async t => {
+  const f = await fixture(t, 'synthetic-users', { questions: [
+    q('before', { mustContain: ['fake-old-value'] }, { category: 'forget', type: 'before-forget', plantId: 'plant' }),
+    q('after', { mustNotContain: ['fake-old-value'] }, { category: 'forget', type: 'after-forget', plantId: 'plant' }),
+    q('other', { mustContain: ['other'] })], store: [] }, { options: { questionCategory: 'forget', liveTurns: 'forget' } });
+  await writeFile(path.join(f.dir, 'schedule.json'), json({ sessions: [{ index: 1, id: 's001' }],
+    events: [{ plantId: 'plant', kind: 'forget', session: 1, messageIndex: 2 }] }));
+  await f.evidence([{ qid: 'before', answer: 'fake-old-value' }, { qid: 'after', answer: 'fake-old-value' }]);
+  const journal = path.join(f.run, 'cases', f.caseId, 'live-turns.jsonl');
+  await writeFile(journal, lines([{ turnId: 's001:2', sessionId: 's001', messageIndex: 2, state: 'settled',
+    forgetCalled: true, gatewayAnswers: [{ isError: false }], record: { usage: { promptTokens: 12, completionTokens: 5 } } }]));
+  const scored = await f.score();
+  assert.equal(scored.summary.answers.n, 2);
+  assert.deepEqual(scored.summary.forget.forgetToolCalled, { n: 1, count: 1, unknown: 0 });
+  assert.deepEqual(scored.summary.forget.forgottenReappeared.toolCalled, { n: 1, count: 1, unknown: 0 });
+  assert.equal(scored.summary.tokens.answer.prompt, 12);
+  await writeFile(journal, '');
+  const missing = await f.score();
+  assert.deepEqual(missing.summary.forget.forgetToolCalled, { n: 1, count: 0, unknown: 1 });
+  assert.deepEqual(missing.summary.forget.forgottenReappeared.unobserved, { n: 1, count: 1, unknown: 0 });
 });

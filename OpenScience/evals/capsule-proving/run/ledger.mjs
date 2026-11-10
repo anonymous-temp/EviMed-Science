@@ -798,6 +798,20 @@ export function rowsFromSummary({
     }
   }
 
+  if (singleSet && summary.forget?.forgetToolCalled?.n) {
+    const called = summary.forget.forgetToolCalled;
+    rows.push({ ...base, set: Object.keys(sets)[0], metric: 'forget_tool_called', n: called.n,
+      value: called.count / called.n, ci95: safeWilson(called.count, called.n),
+      judged: { code: called.n - called.unknown, judge: 0, unknown: called.unknown, error: 0 },
+      notes: joinNotes(['Live forget requests; unknown interventions remain in n.', costNote]) });
+    for (const [group, stats] of Object.entries(summary.forget.forgottenReappeared)) {
+      rows.push({ ...base, set: Object.keys(sets)[0], metric: 'forgotten_reappeared_count', n: stats.n,
+        value: stats.count, ci95: null,
+        judged: { code: stats.n - stats.unknown, judge: 0, unknown: stats.unknown, error: 0 },
+        notes: joinNotes([`forget=${group}; literal prohibited-anchor reappearance in subsequent answers`, costNote]) });
+    }
+  }
+
   // Compatibility with summaries that carry only the run-level blocks. The
   // scorer itself writes both, but an external harness may supply only these.
   if (contractSets === null) {

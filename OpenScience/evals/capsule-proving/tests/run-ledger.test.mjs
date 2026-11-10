@@ -829,3 +829,20 @@ test('the scoreboard CLI writes the generated Markdown', (t) => {
   assert.match(markdown, /a number without a ledger row does not count/);
   assert.match(markdown, /run-invented-06/);
 });
+
+test('live forget metrics reach the append-only ledger with separate action groups', () => {
+  const summary = realSummary();
+  summary.forget = { forgetToolCalled: { n: 3, count: 1, unknown: 1 }, forgottenReappeared: {
+    toolCalled: { n: 1, count: 1, unknown: 0 }, toolNotCalled: { n: 1, count: 0, unknown: 0 }, unobserved: { n: 1, count: 0, unknown: 1 },
+  } };
+  const rows = rowsFromSummary({ run: inventedRun(), summary });
+  const called = rows.find(row => row.metric === 'forget_tool_called');
+  assert.equal(called.n, 3);
+  assert.equal(called.value, 1 / 3);
+  assert.equal(called.judged.unknown, 1);
+  const groups = rows.filter(row => row.metric === 'forgotten_reappeared_count');
+  assert.equal(groups.length, 3);
+  assert.deepEqual(groups.map(row => row.n), [1, 1, 1]);
+  assert.deepEqual(groups.map(row => row.value), [1, 0, 0]);
+  for (const row of [called, ...groups]) assert.deepEqual(validateLedgerRow(row), []);
+});

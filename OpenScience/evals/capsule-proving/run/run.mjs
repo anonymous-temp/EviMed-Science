@@ -357,7 +357,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     engine: lab ? { templates: options.stockEngine ? "stock" : "product", url: options.engineUrls[0], urls: options.engineUrls, version: lab.facts.engineVersion, account: lab.account, templatesDigest: templates.digest, templatesFiles: templates.files,
       templatesDir: options.stockEngine ? null : path.relative(repoRoot, templatesDir) || templatesDir,
       shards: labs.map((entry, index) => ({ url: options.engineUrls[index], account: entry.account, version: entry.facts.engineVersion })) } : null,
-    flags: { historySearch: options.arm === "product" ? options.historySearch : false, commitEvery: options.commitEvery, plantCorruptionsAfter: options.plantCorruptionsAfter >= 0 ? options.plantCorruptionsAfter : null,
+    flags: { liveTurns: options.liveTurns, questionCategory: options.questionCategory, historySearch: options.arm === "product" ? options.historySearch : false, commitEvery: options.commitEvery, plantCorruptionsAfter: options.plantCorruptionsAfter >= 0 ? options.plantCorruptionsAfter : null,
       consolidation: "manual-only", rejectionJudge: Boolean(lab?.config.nativeMemoryRejectionJudgeEnabled), gatewayCommitsPerHour: 0,
       gatewayTimeoutMs: options.gatewayTimeoutMs, capsuleSearch: false, config: options.config, maintain: options.maintain, maintainAfter: options.maintainAfter },
     answerVariants: options.answerVariants.map((variant) => ({ ...variant, model: { answer: clients.get(variant.name)?.model ?? null, thinking: clients.get(variant.name)?.thinking ?? null, answerJudgeSameFamily: /^qwen/.test(clients.get(variant.name)?.model ?? "") }, flags: { config: { ...options.config, ...variant.config } } })), label: options.label,
