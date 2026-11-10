@@ -11,6 +11,7 @@ import { createModelSteps, fakeLearningModel, filesOfReply } from "../learn/mode
 import { episodeAsRun, toolNameOf } from "../learn/gameTranscript.mjs";
 import { buildDistillationInput } from "../../../apps/server/src/methodDistillationRuns.mjs";
 import { createMethodSimilarity } from "../../../apps/server/src/methodSimilarity.mjs";
+import { learnFrom } from "../c1/build_library.mjs";
 
 /** A C1 trajectory record as run_c1.py writes it. @param {string} taskId @param {string} task @param {string[]} actions @param {boolean} [success] */
 function episode(taskId, task, actions, success = true) {
@@ -174,4 +175,19 @@ test("a package the contract rejects is handed back with the gate's issues and r
   assert.equal(calls, 2);
   assert.equal(steps.usage.cacheHits, 1);
   assert.deepEqual(filesOfReply("Here:\n```json\n{\"a.json\": {\"x\": 1}}\n```"), { "a.json": JSON.stringify({ x: 1 }, null, 2) });
+});
+
+test("the library build teaches successes only, waits for two earlier clean runs, and consolidates on its cadence", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "c1-learn-from-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const foods = ["apple", "egg", "bread", "potato", "tomato"];
+  const episodes = foods.map((food, index) => episode(`train/${food}`, `heat some ${food} and put it in fridge.`, HEAT.map((action) => action.replace(/apple/g, food)), index !== 3));
+  const loop = await OfflineLoop.open({ dir: path.join(dir, "every"), env: "alfworld", model: fakeLearningModel() });
+  const tally = await learnFrom(loop, episodes, { gate: "every-success", sleepEvery: 2, prefix: "" });
+  assert.deepEqual([tally.episodes, tally.successes, tally.failures, tally.distilled, tally.sleeps], [5, 4, 1, 2, 2],
+    "the first two successes are only peers; the failure teaches nothing; a pass after every second episode");
+  assert.ok(tally.productGate >= 1, "the product's own gate is counted beside");
+  const gated = await OfflineLoop.open({ dir: path.join(dir, "product"), env: "alfworld", model: fakeLearningModel() });
+  const strict = await learnFrom(gated, episodes, { gate: "product", sleepEvery: 0, prefix: "" });
+  assert.equal(strict.distilled, strict.productGate);
 });
