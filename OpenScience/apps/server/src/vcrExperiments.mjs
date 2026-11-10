@@ -388,7 +388,14 @@ export class VcrExperiments {
     const rows = await this.store.rows(`UPDATE ${SCHEMA}.experiments SET state = jsonb_set(state, '{cancelRequested}', 'true'::jsonb),
       revision = revision + 1, updated_at = now() WHERE study_id = $1 AND kind = 'campaign' AND status = 'running' RETURNING id`, [study.id]);
     for (const row of rows) await this.advance(study.id, String(row.id)).catch((error) => this.report(String(/** @type {any} */ (error)?.code ?? "vcr_experiment_cancel_failed")));
-    return rows.length;
+    // and every comparison that still has an arm to queue or an arm job open: a start interrupted before the stop must not queue its
+    // remaining arms after it (review eng round 2, P1-1); a queuing that is running reads the flag before each arm
+    const comparisons = await this.store.rows(`UPDATE ${SCHEMA}.experiments e SET state = jsonb_set(e.state, '{cancelRequested}', 'true'::jsonb),
+      revision = revision + 1, updated_at = now() WHERE e.study_id = $1 AND e.kind = 'experiment' AND COALESCE(e.state->>'cancelRequested', 'false') <> 'true'
+      AND ((SELECT count(*) FROM jsonb_object_keys(COALESCE(e.state->'arms', '{}'::jsonb))) < jsonb_array_length(e.manifest->'arms')
+        OR EXISTS (SELECT 1 FROM ${SCHEMA}.jobs j WHERE j.study_id = e.study_id AND j.checkpoint->'experiment'->>'id' = e.id AND j.state IN ('queued', 'running', 'awaiting_budget')))
+      RETURNING e.id`, [study.id]);
+    return rows.length + comparisons.length;
   }
 
   // --- design experiments ------------------------------------------------------------------------------------------------------
@@ -416,7 +423,7 @@ export class VcrExperiments {
     const identity = sha256(vcrDesignExperimentCanonical(record));
     const id = `exp_${sha256(`${study.id}:${identity}`).slice(0, 24)}`;
     const inserted = await this.store.one(`INSERT INTO ${SCHEMA}.experiments (id, study_id, user_id, kind, identity, manifest, state, origin)
-      VALUES ($1, $2, $3, 'experiment', $4, $5::jsonb, '{"arms":{}}'::jsonb, $6::jsonb) ON CONFLICT (study_id, kind, identity) DO NOTHING RETURNING id`,
+      VALUES ($1, $2, $3, 'experiment', $4, $5::jsonb, '{"arms":{},"resumable":true}'::jsonb, $6::jsonb) ON CONFLICT (study_id, kind, identity) DO NOTHING RETURNING id`,
     [id, study.id, String(userId), identity, JSON.stringify(record), JSON.stringify(originOf(origin))]);
     if (inserted) this.counters.experiments += 1;
     await this.#queueArms(study, id, identity, record, String(userId));
@@ -478,10 +485,15 @@ export class VcrExperiments {
    * comparison still ends. An infrastructure failure leaves it for the next call.
    */
   async #resumeStarts() {
+    // Only a comparison the new start wrote (`resumable`: rows written by a release that kept its arms only when the start ended were never
+    // meant to be resumed, and are not) and one no older than the completion window: nobody is waiting on an old comparison, and
+    // queuing its arms would bill a person for work nobody asked for now. A row that failed goes to the back (its `updated_at` is bumped).
     const rows = await this.store.rows(`SELECT * FROM ${SCHEMA}.experiments WHERE kind = 'experiment' AND COALESCE(state->>'cancelRequested', 'false') <> 'true'
+      AND state->>'resumable' = 'true' AND created_at > now() - make_interval(secs => $3)
       AND updated_at < now() - make_interval(secs => $2)
       AND (SELECT count(*) FROM jsonb_object_keys(COALESCE(state->'arms', '{}'::jsonb))) < jsonb_array_length(manifest->'arms')
-      ORDER BY updated_at LIMIT $1`, [Number(this.config.vcrCompletionReconcileBatch ?? 20), Number(this.config.vcrExperimentResumeAfterMs ?? 30000) / 1000]);
+      ORDER BY updated_at LIMIT $1`, [Number(this.config.vcrCompletionReconcileBatch ?? 20), Number(this.config.vcrExperimentResumeAfterMs ?? 30000) / 1000,
+      Number(this.config.vcrCompletionMaxAgeMs ?? 86_400_000) / 1000]);
     let resumed = 0;
     for (const row of rows) {
       const study = { id: String(row.study_id) };
@@ -497,7 +509,10 @@ export class VcrExperiments {
               state = jsonb_set(state, '{arms}', COALESCE(state->'arms', '{}'::jsonb) || jsonb_build_object($2::text, $3::jsonb)) WHERE id = $1`,
             [row.id, arm.name, JSON.stringify({ refused: ["study_unavailable"] })]);
           }
-        } else this.report(code || "vcr_experiment_resume_failed");
+        } else {
+          this.report(code || "vcr_experiment_resume_failed");
+          await this.store.query(`UPDATE ${SCHEMA}.experiments SET updated_at = now() WHERE id = $1`, [row.id]).catch(() => null);
+        }
       }
     }
     return resumed;
