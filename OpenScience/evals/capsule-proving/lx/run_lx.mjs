@@ -432,6 +432,19 @@ export function summarizeExp(exp, arm, verdicts) {
   return { exp, arm, people: verdicts.length, table: verdicts.map(v => ({ id: v.id, corrections: v.correctionsPerSession, firstTimeRight: v.firstTimeRight, frozenCompliance: v.frozenCompliance, probeLeaks: v.probeLeaks.length, probePositiveChecks: v.probePositiveChecks })) };
 }
 
+/** Account usage of every unit (the product's own usage ledger: settled model calls, learning included). */
+async function tokensOf(outDir, units) {
+  const tokens = { prompt: 0, completion: 0, cached: 0, costCny: 0 };
+  for (const u of units) {
+    const dir = `${outDir}/units/${u.id}`;
+    const a = ((await readJson(`${dir}/usage.json`)) ?? (await readJson(`${dir}/verdict.json`))?.usage)?.account;
+    if (!a) continue;
+    tokens.prompt += (a.cacheHitTokens ?? 0) + (a.cacheMissTokens ?? 0); tokens.cached += a.cacheHitTokens ?? 0;
+    tokens.completion += a.completionTokens ?? a.outputTokens ?? 0; tokens.costCny += a.actualCost ?? 0;
+  }
+  return tokens;
+}
+
 export function ledgerRows(sum, { runId, commit, flags, rawPath, wallSeconds, tokens }) {
   const base = { runId, commit, engine: { version: 'ovlab-pp', templatesDigest: 'ovlab-pp-same-as-ovlab' }, arm: sum.arm, flags, set: sum.exp, split: 'dev', scorer: SCORER, rawPath,
     tokens: { prompt: tokens.prompt, completion: tokens.completion, cached: tokens.cached, extractionPrompt: 0, extractionCompletion: 0 }, costCny: tokens.costCny ?? null, wallSeconds, ci95: null };
@@ -498,15 +511,22 @@ async function main() {
     return { sum, done: verdicts.length === units.length };
   };
   if (args.reverdict) {
-    if (args.exp !== 'l1') throw new Error('--reverdict is for l1');
-    const inputs = JSON.parse(await fs.readFile(`${data}/inputs.json`, 'utf8')).scripts;
-    const gold = JSON.parse(await fs.readFile(`${data}/gold.json`, 'utf8')).scripts;
-    for (const s of inputs) {
+    const inputs = args.exp === 'l1' ? JSON.parse(await fs.readFile(`${data}/inputs.json`, 'utf8')).scripts : [];
+    const gold = args.exp === 'l1' ? JSON.parse(await fs.readFile(`${data}/gold.json`, 'utf8')).scripts : [];
+    for (const s of args.exp === 'l1' ? inputs : []) {
       const dir = `${outDir}/units/${s.id}`;
       if (!fsSync.existsSync(`${dir}/verdict.json`) || !fsSync.existsSync(`${dir}/state-final.json`)) continue;
       await atomic(`${dir}/verdict.json`, await l1VerdictFromFiles(dir, s, gold.find(g => g.id === s.id)));
     }
-    await finish(); return;
+    const { sum, done } = await finish();
+    // Rows already written keep their run facts (commit, flags, wall time, tokens); only the values are recomputed.
+    const old = await readJson(`${outDir}/ledger-rows.json`);
+    if (done && Array.isArray(old) && old.length) {
+      const [r] = old;
+      await atomic(`${outDir}/ledger-rows.json`, ledgerRows(sum, { runId: r.runId, commit: r.commit, flags: { ...r.flags, reverdict: SCORER }, rawPath: r.rawPath, wallSeconds: r.wallSeconds,
+        tokens: await tokensOf(outDir, units) }));
+    }
+    return;
   }
   if (args.summarizeOnly) { await finish(); return; }
   const dbName = `evimed_test_${path.basename(outDir).replace(/[^a-z0-9]+/gi, '_').toLowerCase()}`.slice(0, 60);
@@ -537,12 +557,7 @@ async function main() {
     }
     const { sum, done } = await finish();
     if (done) {
-      const tokens = { prompt: 0, completion: 0, cached: 0, costCny: 0 };
-      for (const u of units) {
-        const a = (await readJson(`${outDir}/units/${u.id}/verdict.json`))?.usage?.account;
-        if (!a) continue;
-        tokens.prompt += (a.cacheHitTokens ?? 0) + (a.cacheMissTokens ?? 0); tokens.cached += a.cacheHitTokens ?? 0; tokens.completion += a.outputTokens ?? 0; tokens.costCny += a.actualCost ?? 0;
-      }
+      const tokens = await tokensOf(outDir, units);
       const rows = ledgerRows(sum, { runId: `lx-${args.exp}-${args.arm}-1`, commit, flags: { lane: 'LX', exp: args.exp, arm: args.arm, toolchain: env.OPEN_SCIENCE_LEARNING_TOOLCHAIN_ROUTINE_ENABLED === 'true', addOnly: env.EVAL_ADD_ONLY === '1', automated: false },
         rawPath: outDir, wallSeconds: (Date.now() - t0) / 1000, tokens });
       await atomic(`${outDir}/ledger-rows.json`, rows);
