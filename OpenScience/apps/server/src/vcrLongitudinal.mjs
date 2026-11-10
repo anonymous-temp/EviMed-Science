@@ -9,7 +9,7 @@ import {
   compareForecasts, forecastDesignInputs, longitudinalSubjects, strictestDataClass,
 } from '@evimed/domain';
 import { parseTable, studyPseudonymKey, pseudonymOf } from './vcrDataPlane.mjs';
-import { VcrLongitudinalStore, longitudinalHash, longitudinalArtifactView } from './vcrLongitudinalStore.mjs';
+import { VcrLongitudinalStore, longitudinalHash, longitudinalArtifactView, currentReader } from './vcrLongitudinalStore.mjs';
 import { createForecastProviders } from './vcrForecastProvider.mjs';
 import { HttpError } from './security.mjs';
 import { runForecastCalculation } from './vcrForecastCalculation.mjs';
@@ -73,7 +73,7 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
   // every list, report model and run read of an artifact goes through the store's index; this is the lineage judgement it applies
   store.longitudinalGuard = async (/** @type {string} */ studyId,/** @type {any[]} */ rows,/** @type {string | null | undefined} */ actor) => {
     const study = await store.studyById(studyId);
-    return study ? artifacts.permitted(study,rows,actor) : new Set();
+    return study ? artifacts.permitted(study,rows,actor ?? currentReader()) : new Set();
   };
   const providers = createForecastProviders({file:config.vcrForecastProvidersFile,fetchImpl,now});
   /** @param {any} study @param {string} actor @param {string} ability */

@@ -10,6 +10,8 @@ import { composeVcr } from '../src/vcrComposition.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 import { streamOf } from './helpers/vcrIntakeData.mjs';
 import { presentLongitudinal } from '../src/vcrLongitudinalPresentation.mjs';
+import { readingAs } from '../src/vcrLongitudinalStore.mjs';
+import { readModelAnalysisInputs } from '../src/vcrModelDocuments.mjs';
 
 const options = {skip:!process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'An isolated test PostgreSQL is required'};
 let database,isolated,root,vcr,study;
@@ -179,4 +181,20 @@ test('P1-2 the repair adds the outcome history to the lineage, recomputes the ob
   const second = await vcr.longitudinal.repairComparisons();
   assert.equal(second.repaired,0,JSON.stringify(second));
   assert.equal(JSON.stringify((await vcr.store.rows("SELECT id,summary,snapshot_ids,source_ids,bindings FROM evimed_vcr.longitudinal_artifacts WHERE kind='comparison' ORDER BY id"))),before);
+});
+
+// Review eng round 2, P2-2: lineage is judged as the requesting person on every person-facing read, as the owner only for platform-internal
+// reads. A clinical reviewer holds `export` but not `read_patient_level`: what the page withholds from her, her report and export do too.
+test('P2-2 report model, export inputs, run read and index judge the lineage as the requesting person',options,async () => {
+  const {comparison} = await runMixedComparison();
+  await vcr.store.query(`INSERT INTO evimed_vcr.members (study_id,user_id,role,invited_by) VALUES ($1,'reviewer','clinical_reviewer','owner') ON CONFLICT DO NOTHING`,[study.id]);
+  const ids = (/** @type {any} */ shown) => JSON.stringify(shown ?? null).includes(comparison.id);
+  const everyPath = async () => ({
+    report: (await vcr.service.reportModel(study)).longitudinal,
+    exportInputs: (await readModelAnalysisInputs(vcr.store,study)).longitudinal,
+    index: await vcr.store.longitudinalIndex(study.id,{all:true}),
+  });
+  for (const [name,shown] of Object.entries(await everyPath())) assert.ok(ids(shown),`${name}: the owner (and any platform-internal read) is served it`);
+  for (const [name,shown] of Object.entries(await readingAs('reviewer',everyPath))) assert.ok(!ids(shown),`${name}: the reviewer without patient-level access is not served it`);
+  for (const [name,shown] of Object.entries(await readingAs('owner',everyPath))) assert.ok(ids(shown),`${name}: the owner as requester is served it`);
 });

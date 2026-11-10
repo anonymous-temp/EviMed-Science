@@ -1,10 +1,24 @@
 /** Immutable longitudinal artifacts. Patient rows live only in the data plane;
  * the existing VCR database stores identities, lineage and aggregate summaries. */
 import fs from 'node:fs/promises';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { canonicalScenarioJson } from '@evimed/domain';
 import { writeContentAddressed, studyRelative } from './vcrDataPlane.mjs';
 import { HttpError } from './security.mjs';
+
+/**
+ * Who a read is made for. A person-facing read (a route, a run's read in a conversation) runs inside `readingAs(person, …)`, and the
+ * lineage of everything it reaches (list, report model, export inputs, a job's result) is judged as that person; with no one named it is
+ * a platform-internal read and is judged as the study's owner (review eng round 2, P2-2: the page judged the requester and the report and
+ * exports the owner, so a reviewer without patient-level access read in an export what the page withheld).
+ * @type {AsyncLocalStorage<string>}
+ */
+const reader = new AsyncLocalStorage();
+/** @template T @param {string} person @param {() => Promise<T>} work @returns {Promise<T>} */
+export const readingAs = (person, work) => reader.run(String(person), work);
+/** The person the current read is made for, or null. @returns {string | null} */
+export const currentReader = () => reader.getStore() ?? null;
 
 /** @param {any} value */
 export const longitudinalHash = value => createHash('sha256').update(canonicalScenarioJson(value)).digest('hex');

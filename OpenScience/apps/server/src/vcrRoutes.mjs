@@ -77,6 +77,7 @@ import { measureValue, zhTime } from "./vcrViewsKit.mjs";
 import { presentSplineFit } from "./vcrSplineFit.mjs";
 import { checkRegulatoryContact } from "./vcrScheduleView.mjs";
 import { VCR_ROWS_PAGE_MAX } from "./vcrRows.mjs";
+import { readingAs } from "./vcrLongitudinalStore.mjs";
 import { readRunMarks } from "./vcrStudyStatus.mjs";
 
 /**
@@ -411,6 +412,8 @@ export function createVcrRoutes(dependencies) {
     const { user } = await store.ensureSessionUser(req, res, { allowDevAuth: false });
     await store.assertCsrf(req, url.pathname);
     if (!service.allows(user)) throw NOT_ENABLED();
+    // everything this request reads is judged as the person asking (`readingAs`)
+    return readingAs(String(user.id), async () => {
     let parts;
     try { parts = url.pathname.slice("/api/vcr".length).split("/").filter(Boolean).map(decodeURIComponent); }
     catch { throw new HttpError(400, "vcr_path_invalid", "Invalid 虚拟临床研究 path."); }
@@ -1682,6 +1685,7 @@ export function createVcrRoutes(dependencies) {
     }
 
     throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
+    });
   };
 }
 

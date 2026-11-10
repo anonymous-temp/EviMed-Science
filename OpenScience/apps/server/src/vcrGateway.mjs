@@ -100,6 +100,7 @@ import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultK
 import { vcrPublicationId } from "./vcrPublicationSources.mjs";
 import { assumptionSourceEntry, carrySourceEntries, checkSourceEntries, standingSourceBindings } from "./vcrScenarioSources.mjs";
 import { resolveJobSubject, prepareVcrSubjectPopulation, vcrConversationSubject, vcrJobFroze } from "./vcrSubjects.mjs";
+import { readingAs } from "./vcrLongitudinalStore.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
 import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, evidenceItemGaps, EVIDENCE_DERIVED_VALUE_SOURCES, EVIDENCE_ITEM_WORDS_ZH, VCR_POOL_MAX_STUDIES, SECOND_READ_CARD_WAIT_MS } from "./vcrEvidence.mjs";
@@ -2975,8 +2976,9 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
 
       /** @type {any} */
       let timer;
+      // a run's read in a conversation is judged as the person whose conversation it is, as the page is (review eng round 2, P2-2)
       const result = await Promise.race([
-        work(),
+        origin && !origin.programme ? readingAs(String(origin.userId), work) : work(),
         new Promise((_, reject) => {
           timer = setTimeout(() => reject(gatewayError(504, "vcr_gateway_timeout", "The 虚拟临床研究 gateway timed out.")), budget);
           timer.unref?.();
