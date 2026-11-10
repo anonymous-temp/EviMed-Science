@@ -2952,6 +2952,8 @@ export function loadConfig(overrides = {}) {
     // of — unreachable, not the one answer shape, or the account's day spent — is kept. The day's calls per account are the bound
     // (`open_science_native_memory_rejection_judge_total`); off, only a verbatim repeat and a line that contains a removed one are met.
     nativeMemoryRejectionJudgeEnabled: overrides.nativeMemoryRejectionJudgeEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED", true),
+    // Experimental attribution check after extraction; a failed check keeps the written line.
+    memoryPastedInstructionCheckEnabled: overrides.memoryPastedInstructionCheckEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED", false),
     // The page's import of what another assistant remembered (`nativeMemoryImport.mjs`): one Flash call splits the pasted text, the person
     // reviews the list, the engine writes what they keep. The offers an account may ask for in an hour are the bound on that call
     // (`open_science_native_memory_imports_total{outcome="rate_limited"}`); 0 refuses every import.

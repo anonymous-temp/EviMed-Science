@@ -483,6 +483,7 @@ import { createMemoryHistorySources } from './memoryHistorySources.mjs';
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
+import { createPastedInstructionJudge } from "./nativeMemoryPastedInstructions.mjs";
 import { createVerificationJudge } from './nativeMemoryVerification.mjs';
 import { NativeMemoryConsolidation } from "./nativeMemoryConsolidation.mjs";
 import { nativeMemoryMetricFamilies } from "./nativeMemoryMetrics.mjs";
@@ -1390,6 +1391,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const nativeMemoryWorker = new NativeMemoryWorker({
     config, memorySettings, sessions: openVikingSessions, overlay: nativeMemoryOverlay, nativeMemory, memoryContexts: nativeMemoryContexts,
     rejectionJudge,
+    pastedInstructionJudge: createPastedInstructionJudge({ config, usageLedger }),
     report: (line) => process.stderr.write(`${line}\n`),
   });
   nativeMemoryWorker.verification.judge = createVerificationJudge({ config, usageLedger });

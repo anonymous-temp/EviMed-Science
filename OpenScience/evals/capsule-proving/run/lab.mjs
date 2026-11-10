@@ -38,6 +38,7 @@ import { NativeMemoryConsolidation } from "../../../apps/server/src/nativeMemory
 import { nativeMemoryCounters } from "../../../apps/server/src/nativeMemoryMetrics.mjs";
 import { NativeMemoryOverlay } from "../../../apps/server/src/nativeMemoryOverlay.mjs";
 import { createRejectionJudge } from "../../../apps/server/src/nativeMemoryRejections.mjs";
+import { createPastedInstructionJudge } from "../../../apps/server/src/nativeMemoryPastedInstructions.mjs";
 import { NativeMemoryStore } from "../../../apps/server/src/nativeMemoryStore.mjs";
 import { NativeMemoryWorker } from "../../../apps/server/src/nativeMemoryWorker.mjs";
 import { withNativeMemoryWrite } from "../../../apps/server/src/nativeMemoryWriteFence.mjs";
@@ -474,7 +475,8 @@ export async function openLab({
     });
     const productRejectionJudge = createRejectionJudge({ config: rejectionJudge ? config : { ...config, deepseekApiKey: "", nativeMemoryRejectionJudgeEnabled: false } });
     const nativeMemory = new NativeMemoryStore({ sessions, overlay, memoryContexts: contexts, rejectionJudge: productRejectionJudge, ...(now ? { now } : {}), report: say });
-    const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay, nativeMemory, memoryContexts: contexts, rejectionJudge: productRejectionJudge, now, report: say });
+    const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay, nativeMemory, memoryContexts: contexts, rejectionJudge: productRejectionJudge,
+      pastedInstructionJudge: createPastedInstructionJudge({ config }), now, report: say });
     const resources = new OpenVikingResources({ client });
     const profilesFor = (selectedConfig) => createLabResidentProfiles({ config: selectedConfig, memorySettings, nativeMemory });
     const residentProfiles = profilesFor(config);
