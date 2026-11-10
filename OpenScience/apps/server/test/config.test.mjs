@@ -51,6 +51,27 @@ test('memory search hint and opening index default off and have independent envi
   }
 });
 
+test('answer grounding switches default off and support independent environment and explicit overrides', () => {
+  const switches = [
+    ['memoryFormatGroundingEnabled', 'OPEN_SCIENCE_MEMORY_FORMAT_GROUNDING_ENABLED'],
+    ['memoryMaterialAttributionEnabled', 'OPEN_SCIENCE_MEMORY_MATERIAL_ATTRIBUTION_ENABLED'],
+  ];
+  const saved = switches.map(([, env]) => process.env[env]);
+  try {
+    for (const [, env] of switches) delete process.env[env];
+    for (const [key, env] of switches) {
+      assert.equal(loadConfig({ rootDir: repoRoot })[key], false);
+      process.env[env] = 'true';
+      assert.equal(loadConfig({ rootDir: repoRoot })[key], true);
+      assert.equal(loadConfig({ rootDir: repoRoot, [key]: false })[key], false);
+      delete process.env[env];
+      assert.equal(loadConfig({ rootDir: repoRoot, [key]: true })[key], true);
+    }
+  } finally {
+    switches.forEach(([, env], i) => { if (saved[i] === undefined) delete process.env[env]; else process.env[env] = saved[i]; });
+  }
+});
+
 test("review provider selects compatible defaults and refuses invalid provider/model pairs", () => {
   const config = loadConfig({ rootDir: repoRoot, reviewProvider: "deepseek", deepseekApiKey: "test-key" });
   assert.equal(config.reviewProvider, "deepseek");

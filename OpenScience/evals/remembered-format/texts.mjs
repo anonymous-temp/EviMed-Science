@@ -17,12 +17,17 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const modelFlag = process.argv.indexOf("--model");
 const model = modelFlag > 0 ? process.argv[modelFlag + 1] : "deepseek-flash";
 
+const configFlag = process.argv.indexOf("--config");
+const config = configFlag > 0 ? JSON.parse(process.argv[configFlag + 1]) : {};
+
 const manifestsDirectory = path.join(root, "capabilities");
 const manifests = readdirSync(manifestsDirectory).flatMap((id) => {
   try { return [parse(readFileSync(path.join(manifestsDirectory, id, "capability.yaml"), "utf8"), QUIET)]; } catch { return []; }
 });
 const guidance = buildGuidanceText(manifests, {
   askUserEnabled: true, capsuleActive: false, reviewEnabled: false, runPolicyEnabled: true, capsuleToolEnabled: false, openVikingMemory: true,
+  memoryFormatGrounding: config.memoryFormatGroundingEnabled === true,
+  memoryMaterialAttribution: config.memoryMaterialAttributionEnabled === true,
 });
 
 const rows = parse(readFileSync(path.join(root, "packages/socket/presets/evimed-universal/agent.cordis.yml"), "utf8"), QUIET);

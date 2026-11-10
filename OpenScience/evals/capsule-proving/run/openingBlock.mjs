@@ -164,6 +164,8 @@ export function buildSystemPrompt({ model = "deepseek-flash", config = {} } = {}
   });
   const guidance = buildGuidanceText(manifests, {
     askUserEnabled: true, capsuleActive: false, reviewEnabled: false, runPolicyEnabled: true,
+    memoryFormatGrounding: config.memoryFormatGroundingEnabled === true,
+    memoryMaterialAttribution: config.memoryMaterialAttributionEnabled === true,
     capsuleToolEnabled: false, openVikingMemory: true, memorySearchHint: config.memorySearchHintEnabled === true,
   });
   const rows = parse(readFileSync(path.join(root, "packages/socket/presets/evimed-universal/agent.cordis.yml"), "utf8"), quiet);

@@ -578,3 +578,18 @@ productTest("each answer configuration builds its own hint prompt and preserves 
       { output: "agent", recursive: "true", abs_limit: "512", node_limit: "512" });
   }
 });
+
+
+test("answer grounding variants preserve original guidance bytes off and enable only their own wording", () => {
+  const plain = buildSystemPrompt();
+  const guidance = plain.slice(plain.indexOf('<evimed-orchestration>'));
+  // Recorded before either change, by the 20-pair diagnosis replay against the original guidance.
+  assert.equal(createHash('sha256').update(guidance).digest('hex'), '32046716dca679e404100b960f21b5c98fdd1bca225606193459a73347e3f894');
+  assert.equal(buildSystemPrompt({ config: { memoryFormatGroundingEnabled: false, memoryMaterialAttributionEnabled: false } }), plain);
+  const format = buildSystemPrompt({ config: { memoryFormatGroundingEnabled: true } });
+  assert.ok(format.includes('否则整句改成【待补：…】'));
+  assert.ok(!format.includes('对用户的描述只算材料的主张'));
+  const material = buildSystemPrompt({ config: { memoryMaterialAttributionEnabled: true } });
+  assert.ok(material.includes('对用户的描述只算材料的主张'));
+  assert.ok(!material.includes('否则整句改成【待补：…】'));
+});

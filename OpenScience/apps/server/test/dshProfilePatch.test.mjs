@@ -627,4 +627,8 @@ test('all fixed research rows default disabled; selection forces hosted mode and
 test('the memory-search hint reaches socket guidance through the runtime environment and defaults off', () => {
   assert.equal(runtimeEnvironment(input).EVIMED_MEMORY_SEARCH_HINT_ENABLED, '0');
   assert.equal(runtimeEnvironment({ ...input, flags: { ...input.flags, memorySearchHint: true } }).EVIMED_MEMORY_SEARCH_HINT_ENABLED, '1');
+  for (const [flag, env] of [['memoryFormatGrounding', 'EVIMED_MEMORY_FORMAT_GROUNDING_ENABLED'], ['memoryMaterialAttribution', 'EVIMED_MEMORY_MATERIAL_ATTRIBUTION_ENABLED']]) {
+    assert.equal(runtimeEnvironment(input)[env], '0');
+    assert.equal(runtimeEnvironment({ ...input, flags: { ...input.flags, [flag]: true } })[env], '1');
+  }
 });

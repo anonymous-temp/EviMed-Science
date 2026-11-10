@@ -2269,6 +2269,8 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
       // OPEN_SCIENCE_RUNTIME_ASK_USER or ..._REVIEW_ENABLED and nothing
       // downstream would ever look at the result.
       askUser: Boolean(config.runtimeAskUserEnabled),
+      memoryFormatGrounding: config.memoryFormatGroundingEnabled === true,
+      memoryMaterialAttribution: config.memoryMaterialAttributionEnabled === true,
       memorySearchHint: config.memorySearchHintEnabled === true,
       askUserMode: config.runtimeAskUserMode === 'timed' ? 'timed' : 'attended',
       scheduleNewSessionIntervalSeconds: config.scheduleNewSessionIntervalSeconds,
@@ -2955,6 +2957,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
             hosted: Boolean(config.production || config.runtimeUiProxyEnabled),
             // Same two settings as `dshProfileInput`; see there.
             askUser: Boolean(config.runtimeAskUserEnabled),
+            memoryFormatGrounding: config.memoryFormatGroundingEnabled === true,
+            memoryMaterialAttribution: config.memoryMaterialAttributionEnabled === true,
             memorySearchHint: config.memorySearchHintEnabled === true,
             askUserMode: config.runtimeAskUserMode === 'timed' ? 'timed' : 'attended',
       scheduleNewSessionIntervalSeconds: config.scheduleNewSessionIntervalSeconds,

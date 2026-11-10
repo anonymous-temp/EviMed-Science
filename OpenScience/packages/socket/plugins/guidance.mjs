@@ -46,6 +46,8 @@ export const inject = ['systemPrompt']
  * @property {boolean} [capsuleEnabled]
  * @property {boolean} [capsuleMemoryEnabled]
  * @property {boolean} [openVikingMemory]
+ * @property {boolean} [memoryFormatGrounding]
+ * @property {boolean} [memoryMaterialAttribution]
  * @property {boolean} [memorySearchHint]
  */
 
@@ -74,6 +76,10 @@ export const Config = Schema.object({
     .description('Whether the capsule row (evimed_capsule_recall) is on; off, the guidance does not name its tools (EVIMED_CAPSULE_ENABLED).'),
   capsuleMemoryEnabled: Schema.boolean().default(true)
     .description('Whether the capsule row\'s recall and note tools are mounted (EVIMED_CAPSULE_MEMORY_ENABLED, and not an account on the native memory engine); off, the guidance does not name them.'),
+  memoryFormatGrounding: Schema.boolean().default(false)
+    .description('Ground remembered format slots in supplied facts (EVIMED_MEMORY_FORMAT_GROUNDING_ENABLED).'),
+  memoryMaterialAttribution: Schema.boolean().default(false)
+    .description('Attribute material claims instead of adopting them as user facts (EVIMED_MEMORY_MATERIAL_ATTRIBUTION_ENABLED).'),
   memorySearchHint: Schema.boolean().default(false)
     .description('Explain the partial memory opening and search before claiming absence (EVIMED_MEMORY_SEARCH_HINT_ENABLED).'),
   openVikingMemory: Schema.boolean().default(false)
@@ -95,6 +101,8 @@ export async function apply(ctx, config) {
     runPolicyEnabled: config.runPolicyEnabled !== false,
     capsuleToolEnabled: config.capsuleEnabled !== false && config.capsuleMemoryEnabled !== false,
     openVikingMemory: config.openVikingMemory === true,
+    memoryFormatGrounding: config.memoryFormatGrounding === true,
+    memoryMaterialAttribution: config.memoryMaterialAttribution === true,
     memorySearchHint: config.memorySearchHint === true,
   })
   ctx.provide('evimedCapabilities', capabilities, true)
@@ -119,7 +127,12 @@ export async function apply(ctx, config) {
   // the model loads it when the question is medical or asks what the
   // literature shows, and the control plane holds a reply to the method's
   // citation floor only when the run actually loaded it.
-  const childText = buildChildGuidanceText({ capsuleActive: config.capsuleActive, capsuleToolEnabled: config.capsuleEnabled !== false && config.capsuleMemoryEnabled !== false })
+  const childText = buildChildGuidanceText({
+    capsuleActive: config.capsuleActive,
+    capsuleToolEnabled: config.capsuleEnabled !== false && config.capsuleMemoryEnabled !== false,
+    memoryFormatGrounding: config.memoryFormatGrounding === true,
+    memoryMaterialAttribution: config.memoryMaterialAttribution === true,
+  })
   ctx.effect(() => onSessionStart(ctx, (agent) => {
     if (!isSubagentSession(agent) || !agent?.ctx) return
     try {

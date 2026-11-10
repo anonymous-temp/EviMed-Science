@@ -91,6 +91,18 @@ test('the control-plane search-hint switch reaches the socket environment throug
   }
 });
 
+test('answer grounding switches cross the control-plane profile and socket environment independently', () => {
+  const config = { production: false, modelGatewayInternalUrl: 'http://gateway:8787/internal/model/v1', runtimeSandboxEnforcement: 'partial' };
+  const plan = { sandboxMode: 'docker', dshHomeDir: '/runtime/dsh-home', capsuleMethodCount: 0 };
+  for (const enabled of [false, true]) {
+    for (const [flag, env] of [['memoryFormatGrounding', 'EVIMED_MEMORY_FORMAT_GROUNDING_ENABLED'], ['memoryMaterialAttribution', 'EVIMED_MEMORY_MATERIAL_ATTRIBUTION_ENABLED']]) {
+      const input = dshProfileInput({ ...config, [`${flag}Enabled`]: enabled }, project, plan, 'deepseek-flash', '/runtime/workload-token');
+      assert.equal(input.flags[flag], enabled);
+      assert.equal(runtimeEnvironment(input)[env], enabled ? '1' : '0');
+    }
+  }
+});
+
 test("a session that has chosen no thinking intensity starts from the deployment's configured one", () => {
   // The composer's thinking-intensity seat reads the session's own choice, else the model's default effort -- which the adapter takes from this
   // row. So the profile has to carry the deployment's effort, and a session that picked one keeps its own (the kernel stores that per session).
