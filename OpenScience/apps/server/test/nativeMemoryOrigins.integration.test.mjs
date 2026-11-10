@@ -115,6 +115,26 @@ test("a recall notes the file: when it last came back and how often, for a file 
 
 // ----------------------------------------------------------------------------------------------- the type allowlist
 
+test('explicit use has independent counters, survives extraction rewrites, and disappears with a deleted file', options, async t => {
+  const f = await growing(t, 1), uri = `${f.root}/profile.md`;
+  assert.deepEqual([(await f.overlay.file(f.userId, uri)).usedCount, (await f.overlay.file(f.userId, uri)).lastUsedAt], [0, null]);
+  assert.equal(await f.overlay.noteUsed(f.userId, [uri, uri, `${f.root}/preferences/unknown.md`]), 1);
+  assert.equal(await f.overlay.noteUsed(f.userId, []), 0);
+  const first = await f.overlay.file(f.userId, uri);
+  assert.equal(first.usedCount, 1); assert.equal(first.recallCount, 0);
+  assert.ok(Number.isFinite(Date.parse(first.lastUsedAt)));
+  await f.overlay.noteRecalled(f.userId, [uri]);
+  assert.equal((await f.overlay.file(f.userId, uri)).usedCount, 1);
+  await f.commitConversation('c2', [{ role: 'user', text: 'Another fact.' }]);
+  await f.worker.processCommits({ userId: f.userId });
+  const rewritten = await f.overlay.file(f.userId, uri);
+  assert.equal(rewritten.usedCount, 1); assert.equal(rewritten.lastUsedAt, first.lastUsedAt);
+  assert.ok(rewritten.body.includes('2'));
+  await f.overlay.removeFile(f.userId, uri);
+  await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'profile', body: 'A new subject' });
+  assert.deepEqual([(await f.overlay.file(f.userId, uri)).usedCount, (await f.overlay.file(f.userId, uri)).lastUsedAt], [0, null]);
+});
+
 test("an account whose stored settings predate a memory type is rewritten to the deployment's list, with its own learning switch restated", options, async (t) => {
   const f = await fixture(t);
   // An account PATCHed before `observations` and `recent_work` existed holds the old eight: the deployment's default no longer reaches it.

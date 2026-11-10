@@ -46,6 +46,7 @@ export const inject = ['systemPrompt']
  * @property {boolean} [capsuleEnabled]
  * @property {boolean} [capsuleMemoryEnabled]
  * @property {boolean} [openVikingMemory]
+ * @property {boolean} [memorySearchHint]
  */
 
 export const Config = Schema.object({
@@ -73,6 +74,8 @@ export const Config = Schema.object({
     .description('Whether the capsule row (evimed_capsule_recall) is on; off, the guidance does not name its tools (EVIMED_CAPSULE_ENABLED).'),
   capsuleMemoryEnabled: Schema.boolean().default(true)
     .description('Whether the capsule row\'s recall and note tools are mounted (EVIMED_CAPSULE_MEMORY_ENABLED, and not an account on the native memory engine); off, the guidance does not name them.'),
+  memorySearchHint: Schema.boolean().default(false)
+    .description('Explain the partial memory opening and search before claiming absence (EVIMED_MEMORY_SEARCH_HINT_ENABLED).'),
   openVikingMemory: Schema.boolean().default(false)
     .description('Whether this account\'s memory is kept by the official OpenViking plugin (EVIMED_MEMORY_GATEWAY_URL is set); the guidance then says how to read what the plugin injects and returns.'),
 })
@@ -92,6 +95,7 @@ export async function apply(ctx, config) {
     runPolicyEnabled: config.runPolicyEnabled !== false,
     capsuleToolEnabled: config.capsuleEnabled !== false && config.capsuleMemoryEnabled !== false,
     openVikingMemory: config.openVikingMemory === true,
+    memorySearchHint: config.memorySearchHint === true,
   })
   ctx.provide('evimedCapabilities', capabilities, true)
   ctx.effect(() => registerSection(ctx, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text }))

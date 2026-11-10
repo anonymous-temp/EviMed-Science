@@ -396,6 +396,10 @@ services:
       OPEN_SCIENCE_MEMORY_RECALL_ENABLED:
       # Raw-history search over the person's own conversations (config.mjs, default on). Value-less: unset keeps that default.
       OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED:
+      OPEN_SCIENCE_MEMORY_OPENING_BY_USE_ENABLED:
+      OPEN_SCIENCE_MEMORY_OPENING_MAX_CHARS:
+      OPEN_SCIENCE_MEMORY_OPENING_NEW_FILE_DAYS:
+      OPEN_SCIENCE_MEMORY_OPENING_TOP_K:
       # The memory dashboard's document (总览): the read-only map of what is remembered (unset follows OPEN_SCIENCE_MEMORY_ENABLED), and
       # the topics a model groups an account's memories into (switch, groupings per account per day, memories needed before there is
       # anything to group).

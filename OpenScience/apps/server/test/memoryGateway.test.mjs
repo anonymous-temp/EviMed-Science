@@ -25,6 +25,18 @@ const OV_USER = openVikingUserId(USER);
 const ROOT = `viking://user/${OV_USER}`;
 const SESSION = "dsh-session_0123456789abcdef0123456789abcdef";
 
+test('opening promotion does not bypass hidden-file filtering in REST or MCP reads', async t => {
+  const hidden = `${ROOT}/memories/preferences/private.md`, writes = [];
+  const f = await fixture(t, { config: { memoryOpeningByUseEnabled: true }, overlay: {
+    configured: true, sensitiveUris: async () => [hidden], noteUsed: async (...args) => writes.push(args),
+    files: async () => new Map([[hidden, { uri: hidden, usedCount: 999 }]]) } });
+  f.stub.seedMemory(OV_USER, 'preferences/private.md', 'Hidden fact');
+  assert.equal((await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(hidden)}`)).status, 404);
+  await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read', arguments: { uris: [hidden] } } });
+  const listing = await f.call('GET', `/api/v1/fs/ls?uri=${encodeURIComponent(`${ROOT}/memories/preferences`)}&output=agent&recursive=true&abs_limit=512&node_limit=512`);
+  assert.deepEqual(listing.json.result, []); assert.deepEqual(writes, []);
+});
+
 /** An admission that says what the test wants, and records what it was asked. */
 function fixedAdmission(answer = {}) {
   const asked = [];

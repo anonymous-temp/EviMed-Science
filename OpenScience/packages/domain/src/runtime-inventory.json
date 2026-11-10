@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "composition": {
     "source": "deploy/runtime-dsh/dump-config.baseline.json",
-    "sha256": "50abb750063af7c9633d6d18c2ec5d195b123e3785a9656b26d70cf7afec4972",
+    "sha256": "db0bf64ee47a6280a81eac9f35b72f8140d4dd65d3f1cfb59c508360da189ee6",
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@changfenhuang/dsh-annotation",
@@ -1707,7 +1707,7 @@
   },
   "preset": {
     "source": "packages/socket/presets/evimed-universal/agent.cordis.yml",
-    "sha256": "7d988f7a10f4d5c333f4ee65eadfcac0ec52b497c11bdc23010d7db09c57e63b",
+    "sha256": "30531c565a10acc69aec82612ad8c663c0ed75ab51037fc6e10d96455a24a7ad",
     "rows": [
       {
         "id": "persona",

@@ -45,6 +45,18 @@ const entry = (/** @type {Record<string, any>} */ over = {}) => ({ id: "p1", fac
 // millisecond are the same instant, which says neither came first.
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
+test('native use changes the resident digest only when its selected content or order changes', options, async () => {
+  const rows = [{ uri: 'viking://user/u/memories/preferences/a.md', usedCount: 1, body: 'A fact' },
+    { uri: 'viking://user/u/memories/preferences/b.md', usedCount: 2, body: 'B fact' }];
+  const profiles = new ResidentProfiles({ config: { memoryOpeningByUseEnabled: true }, store, nativeFiles: async () => rows });
+  const scope = { projectId: 'prj_native', sessionId: 'ses_native' };
+  const first = await profiles.forDispatch(owner, scope); await first.delivered();
+  rows[1].usedCount++;
+  assert.equal((await profiles.forDispatch(owner, scope)).reason, 'unchanged', 'a counter alone is not profile prose');
+  rows[0].usedCount = 9;
+  assert.equal((await profiles.forDispatch(owner, scope)).reason, 'changed');
+});
+
 test("a conversation's state says what it was last handed and when the kernel compacted it", options, async () => {
   const digest = "a".repeat(64);
   assert.deepEqual(await store.residentState(owner, "prj_state", "ses_state"), { digest: null, deliveredAt: null, compactedAt: null, compactedSince: false, memos: [] });

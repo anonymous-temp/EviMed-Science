@@ -20,7 +20,21 @@ import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 import { startOpenVikingStub } from './helpers/openVikingStub.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposable PostgreSQL required' };
-async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000 } = {}) {
+
+test('opening-by-use leaves shared GEO listing unchanged and counts explicit reads in that namespace alone', options, async t => {
+  const f = await fixture(t, { config: { memoryOpeningByUseEnabled: true, memoryOpeningMaxChars: 1 } });
+  let ranked = 0, used = 0;
+  f.overlay.files = async () => { ranked++; return new Map(); };
+  f.overlay.noteUsed = async () => { used++; };
+  const context = await f.contexts.forProject(f.a);
+  const uri = f.stub.seedMemory(context.namespaceId, 'preferences/corrections/a.md', 'Shared correction');
+  const listed = await f.call(f.a, 'GET', `/api/v1/fs/ls?uri=${encodeURIComponent(`${context.userRoot}/memories/preferences`)}&output=agent&recursive=true&abs_limit=512&node_limit=512`);
+  assert.equal(listed.status, 200); assert.ok(listed.text.includes(uri));
+  const read = await f.call(f.a, 'GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}`);
+  assert.equal(read.status, 200); assert.deepEqual([ranked, used], [0, 1]);
+});
+
+async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000, config = {} } = {}) {
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'memorygatewaycontext');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'memory-gateway-context-'));
   const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: 1 }));
@@ -47,7 +61,7 @@ async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000 } = {}
     noteSession: async (...args) => { noted.push(args); }, recordCommit: async row => { commits.push(row); }, commit: async (_owner, uri) => commits.find(row => row.archiveUri === uri) ?? null };
   const journal = new GeoNativeMemoryRemember({ contexts, overlay });
   const admission = { admit: async () => ({ native: true, learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null }) };
-  const handler = createMemoryGatewayHandler({ config: { memoryEngineEnabled: true, memoryEnabled: true, memoryGatewayTimeoutMs:gatewayTimeoutMs }, sessions, admission, overlay,
+  const handler = createMemoryGatewayHandler({ config: { memoryEngineEnabled: true, memoryEnabled: true, memoryGatewayTimeoutMs:gatewayTimeoutMs, ...config }, sessions, admission, overlay,
     runtimeManager: { assertActiveEviMedWorkloadToken: async token => {
       if (![a.id, b.id, ordinary.id, solo.id].includes(token)) throw new Error('Unknown workload');
       return { userId: owner.id, projectId: token };
