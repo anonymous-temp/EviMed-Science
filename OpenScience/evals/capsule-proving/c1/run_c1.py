@@ -7,6 +7,7 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
+import subprocess
 import time
 
 from loop import (DeepSeekModel, JsonSkillProvider, NoSkillProvider, STEP_CAPS,
@@ -60,6 +61,7 @@ class ScienceWorld:
             # Never substitute a task merely because its list index is nearby.
             self.env.load(name, int(variation.removeprefix("var")), "")
             variations = (self.env.get_variations_dev() if fold == "seen"
+                          else self.env.get_variations_train() if fold == "train"
                           else self.env.get_variations_test())
             if int(variation.removeprefix("var")) not in variations:
                 raise ValueError("Variation is outside the requested ScienceWorld fold")
@@ -83,6 +85,11 @@ class ScienceWorld:
 def sample_tasks(pool, env_name, fold):
     pool_doc = json.loads(Path(pool).read_text())
     spec = pool_doc["sets"][env_name]
+    if fold == "train":
+        # The training pool (train_tasks.py) lists its tasks explicitly, in the order they are learnt from.
+        if pool_doc.get("schema") != "capsule-proving-c1-train/1":
+            raise ValueError("The train fold reads only a c1 training pool")
+        return list(spec["train"])
     if env_name == "scienceworld":
         return spec[fold]
     if spec["run"] != "whole":
@@ -119,14 +126,31 @@ def episode_key(env_name, fold, arm, task_id):
     return f"{env_name}-{fold}-{arm}-{digest}"
 
 
+_PROVIDERS = {}
+
+
+def provider_for(job):
+    """One provider per worker process and configuration: the product selector keeps its bridge (and embeddings) across episodes."""
+    if not job["library"]:
+        return NoSkillProvider()
+    if job["selector"] == "json":
+        return JsonSkillProvider(job["library"], job["mode"])
+    key = (job["library"], job["mode"], tuple(job["removeRoles"]), job["embedKeyFile"], job["out"])
+    if key not in _PROVIDERS:
+        from product_provider import ProductSkillProvider
+        _PROVIDERS[key] = ProductSkillProvider(job["library"], job["mode"], job["removeRoles"], job["embedKeyFile"],
+                                               cache_dir=None if job["evolve"] else Path(job["out"]) / "selections")
+    return _PROVIDERS[key]
+
+
 def execute(job):
-    env_name, fold, arm, task_id, library, mode, key_file, out = job
+    env_name, fold, arm, task_id, key_file, out = (job[k] for k in ("env", "fold", "arm", "taskId", "keyFile", "out"))
     key = episode_key(env_name, fold, arm, task_id)
     path = Path(out) / "trajectories" / f"{key}.json"
     start = time.monotonic()
     env = None
     try:
-        provider = JsonSkillProvider(library, mode) if library else NoSkillProvider()
+        provider = provider_for(job)
         env = (AlfWorld if env_name == "alfworld" else ScienceWorld)(task_id, fold)
         record = run_episode(env, DeepSeekModel(key_file), env_name, fold, provider,
                              checkpoint=lambda row: write_json(path, row))
@@ -142,9 +166,11 @@ def execute(job):
     record.update(taskId=task_id, arm=arm, fold=fold, env=env_name,
                   seconds=time.monotonic() - start)
     write_json(path, record)
+    cached = sum(step.get("reply", {}).get("usage", {}).get("prompt_cache_hit_tokens", 0) for step in record.get("steps", []))
     return {"env": env_name, "fold": fold, "taskId": task_id, "arm": arm,
             "success": record["success"], "score": record["score"], "steps": len(record["steps"]),
             "promptTokens": record["promptTokens"], "completionTokens": record["completionTokens"],
+            "cachedPromptTokens": cached, "cards": len(record.get("cards", [])),
             "seconds": record["seconds"], "error": record["error"]}
 
 
@@ -158,7 +184,7 @@ def append_sync(path, text):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env", choices=STEP_CAPS, required=True)
-    parser.add_argument("--fold", choices=["seen", "unseen"], required=True)
+    parser.add_argument("--fold", choices=["seen", "unseen", "train"], required=True)
     parser.add_argument("--samples", required=True)
     parser.add_argument("--arm", required=True)
     parser.add_argument("--library")
@@ -167,13 +193,24 @@ def main():
     parser.add_argument("--limit", type=int)
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--key-file", default="/srv/evimed/secrets/deepseek.api-key")
+    parser.add_argument("--selector", choices=["json", "product"], default="json",
+                        help="json: JsonSkillProvider; product: the product's selection (learn/offlineLoop.mjs serve)")
+    parser.add_argument("--remove-roles", default="", help="comma list of method roles left out at selection (no-atomic, no-abstract)")
+    parser.add_argument("--embed-key-file", help="DashScope key for the product selector's embedder; absent, shared words")
+    parser.add_argument("--evolve", help="evolving arm: the library directory that keeps learning between waves")
+    parser.add_argument("--wave", type=int, default=8, help="evolving arm: episodes run before each learning step")
     args = parser.parse_args()
+    remove_roles = [role for role in args.remove_roles.split(",") if role]
+    if (args.remove_roles or args.evolve or args.embed_key_file) and args.selector != "product":
+        parser.error("--remove-roles, --evolve and --embed-key-file need --selector product")
     if args.workers < 1 or (args.limit is not None and args.limit < 0):
         parser.error("workers must be positive and limit nonnegative")
     if (args.arm == "no-skill" and args.library) or (args.arm != "no-skill" and not args.library):
         parser.error("no-skill forbids a library; other arm labels require --library")
-    if args.library:
+    if args.library and args.selector == "json":
         JsonSkillProvider(args.library, args.mode)
+    if args.library and args.selector == "product" and not isinstance(json.loads(Path(args.library).read_text()).get("methods"), list):
+        parser.error("--selector product reads a library export (build_library.mjs)")
     out = Path(args.out)
     (out / "trajectories").mkdir(parents=True, exist_ok=True)
     # One writer per output directory. Different envs/folds may share it sequentially.
@@ -182,7 +219,10 @@ def main():
         start = time.monotonic()
         identity = {"env": args.env, "fold": args.fold, "arm": args.arm, "mode": args.mode,
                     "poolSha256": file_digest(args.samples),
-                    "librarySha256": file_digest(args.library) if args.library else None,
+                    # An evolving library changes as the arm runs; its starting point is in the evolve directory.
+                    "librarySha256": file_digest(args.library) if args.library and not args.evolve else None,
+                    "selector": args.selector, "removeRoles": remove_roles, "evolve": args.evolve,
+                    "embedding": bool(args.embed_key_file), "wave": args.wave if args.evolve else None,
                     "runnerSha256": file_digest(__file__),
                     "loopSha256": file_digest(Path(__file__).with_name("loop.py")),
                     "setupManifestSha256": file_digest(DATA.parent / "setup-manifest.json")
@@ -206,27 +246,46 @@ def main():
             if key not in done:
                 append_sync(status_path, "DONE " + key)
                 done.add(key)
-        jobs = [(args.env, args.fold, args.arm, task, args.library, args.mode, args.key_file, str(out))
-                for task in tasks if episode_key(args.env, args.fold, args.arm, task) not in done]
+        def job_for(task):
+            return {"env": args.env, "fold": args.fold, "arm": args.arm, "taskId": task, "library": args.library,
+                    "mode": args.mode, "keyFile": args.key_file, "out": str(out), "selector": args.selector,
+                    "removeRoles": remove_roles, "embedKeyFile": args.embed_key_file, "evolve": args.evolve}
+        jobs = [job_for(task) for task in tasks if episode_key(args.env, args.fold, args.arm, task) not in done]
         print(json.dumps({"selected": len(tasks), "skipped": len(tasks) - len(jobs), "pending": len(jobs)}), flush=True)
-        if jobs:
+        # The evolving arm runs the fold in task order, `--wave` episodes at a time, and teaches each finished wave to its library
+        # (build_library.mjs evolve, idempotent) before the next wave selects; the frozen arms are one wave.
+        waves = [tasks[i:i + args.wave] for i in range(0, len(tasks), args.wave)] if args.evolve else [tasks]
+        if jobs or args.evolve:
             with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers,
                     mp_context=multiprocessing.get_context("spawn")) as executor:
-                futures = {executor.submit(execute, job): job for job in jobs}
-                for future in concurrent.futures.as_completed(futures):
-                    row = future.result()
-                    append_sync(rows_path, json.dumps(row))
-                    append_sync(status_path, "DONE " + episode_key(row["env"], row["fold"], row["arm"], row["taskId"]))
-                    rows.append(row)
-                    print(json.dumps(row), flush=True)
+                for wave in waves:
+                    pending = [job for job in jobs if job["taskId"] in set(wave)]
+                    futures = {executor.submit(execute, job): job for job in pending}
+                    for future in concurrent.futures.as_completed(futures):
+                        row = future.result()
+                        append_sync(rows_path, json.dumps(row))
+                        append_sync(status_path, "DONE " + episode_key(row["env"], row["fold"], row["arm"], row["taskId"]))
+                        rows.append(row)
+                        print(json.dumps(row), flush=True)
+                    if args.evolve:
+                        files = [str(out / "trajectories" / f"{episode_key(args.env, args.fold, args.arm, task)}.json") for task in wave]
+                        command = ["node", str(Path(__file__).with_name("build_library.mjs")), "evolve", "--env", args.env,
+                                   "--dir", args.evolve, "--export", args.library, "--key-file", args.key_file,
+                                   "--episodes", ",".join(files)]
+                        if args.embed_key_file:
+                            command += ["--embed-key-file", args.embed_key_file]
+                        subprocess.run(command, check=True)
         selected = [r for r in rows if r["env"] == args.env and r["fold"] == args.fold
                     and r["arm"] == args.arm and r["taskId"] in set(tasks)]
         n = len(selected)
         metric = "successRate" if args.env == "alfworld" else "meanScore"
-        summary = {"env": args.env, "fold": args.fold, "arm": args.arm, "n": n,
+        summary = {"env": args.env, "fold": args.fold, "arm": args.arm, "n": n, "mode": args.mode if args.library else None,
+                   "selector": args.selector if args.library else None, "removeRoles": remove_roles,
+                   "librarySha256": identity["librarySha256"],
                    metric: sum(r["success"] if args.env == "alfworld" else r["score"] for r in selected) / n if n else None,
                    "errors": sum(r["error"] is not None for r in selected),
                    "promptTokens": sum(r["promptTokens"] for r in selected),
+                   "cachedPromptTokens": sum(r.get("cachedPromptTokens", 0) for r in selected),
                    "completionTokens": sum(r["completionTokens"] for r in selected),
                    "episodeSeconds": sum(r["seconds"] for r in selected),
                    "invocationWallSeconds": time.monotonic() - start, "workers": args.workers,

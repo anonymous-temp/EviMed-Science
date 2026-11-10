@@ -134,8 +134,13 @@ def run_episode(env, model, env_name, phase, provider=None, checkpoint=None):
         obs, task = env.reset()
         record["task"] = task
         record["initialObservation"] = obs
-        cards = (provider or NoSkillProvider()).cards_for(task, env_name, phase)
+        provider = provider or NoSkillProvider()
+        # A provider that reads the opening observation (the product's selection queries the first message) is given it.
+        select = getattr(provider, "cards_for_episode", None)
+        cards = select(task, obs, env_name, phase) if select else provider.cards_for(task, env_name, phase)
         record["cards"] = cards
+        if getattr(provider, "last", None) is not None:
+            record["selection"] = provider.last
         system = ("You are solving a text game. Complete the task using observations and actions.\n"
                   "At each turn write a brief Thought: then exactly one Action: <game command>.\n"
                   "Use only game commands; do not invent observations. Do not restart the game.\n"
