@@ -155,9 +155,10 @@ export function buildJudgePacket(row, context) {
   return { id: `run-score:${hash}`, hash, ...JSON.parse(canonical) };
 }
 
+const failureStepsFor = packet => packet && JSON.parse(packet.rowKey)[1] === 'g9' && JSON.parse(packet.rowKey)[4] === 'answer' && packet.gold?.poison ? POISON_STEPS : FAILURE_STEPS;
 const validVerdict = (result, packet) => ['correct', 'incorrect', 'gold_disputed'].includes(result?.verdict)
   && typeof result.reason === 'string' && Boolean(result.reason.trim())
-  && (result.verdict === 'incorrect' ? (packet && JSON.parse(packet.rowKey)[1] === 'g9' && JSON.parse(packet.rowKey)[4] === 'answer' && packet.gold?.poison ? POISON_STEPS : FAILURE_STEPS).includes(result.failureStep) : result.failureStep === null);
+  && (result.verdict === 'incorrect' ? failureStepsFor(packet).includes(result.failureStep) : result.failureStep === null);
 
 /** A stale verdict cannot be applied to changed evidence or a changed rubric. */
 export function mergeJudgeResults(rows, packets, results) {
@@ -197,10 +198,13 @@ async function judgeBatch(packets, { key, fetchImpl = globalThis.fetch }) {
   const storeOnly = packets.every(packet => packet.taskKind === 'store');
   if (packets.some(packet => packet.taskKind === 'store') && !storeOnly) throw new Error('judge_mixed_task_rubrics');
   if (storeOnly && packets.some(packet => packet.judgeClientSha256 !== STORE_JUDGE_CLIENT_SHA256)) throw new Error('judge_prompt_packet_mismatch');
+  // The provider must receive the same failure-step vocabulary the parser accepts for these rows.
+  const schema = structuredClone(JUDGE_SCHEMA);
+  schema.properties.judgements.items.properties.failureStep.enum = [...new Set(packets.flatMap(failureStepsFor)), null];
   const response = await fetchImpl('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
     method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
     body: JSON.stringify({ model: JUDGE_MODEL, temperature: 0, max_tokens: 4096, enable_thinking: false,
-      response_format: { type: 'json_schema', json_schema: { name: 'capsule_proving_judgements', strict: true, schema: JUDGE_SCHEMA } },
+      response_format: { type: 'json_schema', json_schema: { name: 'capsule_proving_judgements', strict: true, schema } },
       messages: [{ role: 'system', content: storeOnly ? STORE_JUDGE_SYSTEM : JUDGE_SYSTEM }, { role: 'user', content: JSON.stringify(packets) }] }),
     signal: AbortSignal.timeout(90_000),
   });
