@@ -322,6 +322,7 @@ export async function startLabGateways(shared, config, variants = []) {
     for (const entry of [{ name: "", config: {} }, ...variants]) {
       const merged = { ...config, ...entry.config };
       const handler = createMemoryGatewayHandler({ ...shared, config: merged,
+        ...(shared.historySearchFor ? { historySearch:shared.historySearchFor(merged) } : {}),
         admission: entry.name && shared.admissionFor ? shared.admissionFor(merged) : shared.admission });
       gateways.set(entry.name, { ...await startGatewayServer(handler), handler, config: merged });
     }
@@ -588,6 +589,7 @@ export async function openLab({
       admissionFor: (merged) => createMemoryAdmission({ config: merged, memorySettings }),
       historySecrets: history.secrets,
       historySearch: (request) => history.search(request),
+      historySearchFor: selected => request => history.search(request,{ retrievalV2:selected.memoryHistoryRetrievalV2Enabled === true }),
     }, config, answerVariants);
     const gateway = gatewayGroup.gateways.get("");
     const handler = gateway.handler;

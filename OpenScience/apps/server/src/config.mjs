@@ -362,6 +362,7 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     memoryHistorySecretRedactionEnabled: overrides.memoryHistorySecretRedactionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_ENABLED", false),
     memoryHistorySecretRedactionDailyCalls: boundedInteger(overrides.memoryHistorySecretRedactionDailyCalls ?? process.env.OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS, 120, 0, 10_000, "OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS"),
     memoryHistorySearchEnabled: overrides.memoryHistorySearchEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED", true),
+    memoryHistoryRetrievalV2Enabled: overrides.memoryHistoryRetrievalV2Enabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_RETRIEVAL_V2_ENABLED", false),
     memorySearchHintEnabled: overrides.memorySearchHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SEARCH_HINT_ENABLED", false),
     memorySafetyNotesEnabled: overrides.memorySafetyNotesEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED", false),
     memoryOpeningIndexEnabled: overrides.memoryOpeningIndexEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_INDEX_ENABLED", false),

@@ -49,7 +49,7 @@ test("stable userKey sharding refuses any changed or reordered resume engine lis
   assertResumeCompatible({ ...facts, engine: { url: options.engineUrls[0] } }, { ...facts, engine: { urls: options.engineUrls.slice(0, 1) } });
 });
 
-test("variant gateways read the same engine memory but only the enabled one returns raw history", async (t) => {
+test("variant gateways read the same engine memory and select history retrieval without mutating primary configuration", async (t) => {
   const stub = await startOpenVikingStub(t);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
   const sessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
@@ -57,13 +57,14 @@ test("variant gateways read the same engine memory but only the enabled one retu
   const engineUser = sessions.engineUser(userId);
   await sessions.register(userId);
   const uri = stub.seedMemory(engineUser, "preferences/tea.md", "- keeps a blue teapot", { type: "preferences" });
-  let historyCalls = 0;
+  let historyCalls = 0; const retrievalModes=[];
   const group = await startLabGateways({ sessions,
     runtimeManager: { assertActiveEviMedWorkloadToken: async () => ({ userId, projectId: "default" }) },
     store: { userById: async (id) => ({ id }), requireProject: async (user, id) => ({ id, userId: user.id, name: "Default" }) },
     admission: { admit: async () => ({ learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null }) },
     historySearch: async () => { historyCalls += 1; return [{ conversationTitle: "Teapot", conversationUrl: "/chat/tea", messages: [{ sourceRole: "user", date: "2026-01-02", text: "The teapot is blue." }] }]; },
-  }, { memoryEngineEnabled: true, memoryEnabled: true, memoryHistorySearchEnabled: true }, [{ name: "nohistory", config: { memoryHistorySearchEnabled: false } }]);
+    historySearchFor: config=>async()=>{historyCalls++;retrievalModes.push(config.memoryHistoryRetrievalV2Enabled===true);return [{conversationTitle:'Teapot',conversationUrl:'/chat/tea',messages:[{sourceRole:'user',date:'2026-01-02',text:'The teapot is blue.'}]}];},
+  }, { memoryEngineEnabled: true, memoryEnabled: true, memoryHistorySearchEnabled: true }, [{ name: "nohistory", config: { memoryHistorySearchEnabled: false } },{name:'hv2',config:{memoryHistoryRetrievalV2Enabled:true}}]);
   t.after(() => group.close());
   const primary = createMemoryClient({ base: group.gateways.get("").base, token: "lab-test" });
   const variant = createMemoryClient({ base: group.gateways.get("nohistory").base, token: "lab-test" });
@@ -74,6 +75,10 @@ test("variant gateways read the same engine memory but only the enabled one retu
   assert.match(first.blocks.join("\n"), /Original conversation excerpts/);
   assert.doesNotMatch(second.blocks.join("\n"), /Original conversation excerpts/);
   assert.equal(historyCalls, 1);
+  const hv2=createMemoryClient({base:group.gateways.get('hv2').base,token:'lab-test'});
+  assert.deepEqual(await hv2.callTool('search',{query:'teapot'}),first);
+  await primary.callTool('search',{query:'teapot'});
+  assert.deepEqual(retrievalModes,[false,true,false]);
   assert.deepEqual(await primary.callTool("read", { uris: [uri] }), await variant.callTool("read", { uris: [uri] }));
   const request = `/api/v1/content/read?uri=${encodeURIComponent(uri)}`;
   assert.deepEqual(await primary.fetchJSON(request), await variant.fetchJSON(request));

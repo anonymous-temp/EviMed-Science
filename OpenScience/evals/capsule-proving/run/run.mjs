@@ -526,7 +526,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
           if (options.retrievalOnly) {
             const entry = diagnosticGold.get(item.caseId);
             if (!entry) throw new Error("retrieval_gold_missing");
-            const file = path.join(caseDir, "retrieval.json");
+            const file = path.join(caseDir, options.config.memoryHistoryRetrievalV2Enabled===true ? 'retrieval.v2.json' : 'retrieval.json');
             let row = await readJson(file);
             if (!row || row.qid !== question.qid || row.results.some(r => r.isError)) {
               row = await retrieval.diagnoseQuestion({ entry, item, question, memory: lab.memoryFor(user), lab, user });
@@ -624,8 +624,9 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     await writeAtomic(runFile, `${JSON.stringify(latest, null, 2)}\n`);
   }
   if (options.retrievalOnly) {
-    const report = retrieval.retrievalReport(retrievalRows, { runId, expectedQuestions: cases.reduce((n, c) => n + c.questions.length, 0) });
-    await writeAtomic(path.join(out, "retrieval.json"), `${JSON.stringify(report, null, 2)}\n`);
+    const report = retrieval.retrievalReport(retrievalRows, { runId, expectedQuestions: cases.reduce((n, c) => n + c.questions.length, 0),
+      historyExcerptCap:options.config.memoryHistoryRetrievalV2Enabled===true?20:8 });
+    await writeAtomic(path.join(out, options.config.memoryHistoryRetrievalV2Enabled===true ? 'retrieval.v2.json' : 'retrieval.json'), `${JSON.stringify(report, null, 2)}\n`);
     process.stdout.write(retrieval.summaryText(report) + "\n");
   }
   const wall = Math.round((Date.now() - wallStart) / 1000);

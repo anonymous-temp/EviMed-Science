@@ -85,19 +85,20 @@ function aggregate(rows, limit) {
     originLineCoverage: all.reduce((s, r) => s + r.memory.originLines, 0) / (all.reduce((s, r) => s + r.memory.totalLines, 0) || 1) };
 }
 export function retrievalReport(rows, identity = {}) {
+  const cap=identity.historyExcerptCap??8;
   return { schema: 'longmemeval-retrieval/1', ...identity, completed: rows.length, limits: [8, 20].map(k => aggregate(rows, k)),
     answerableOnly: [8, 20].map(k => aggregate(rows.filter(r => r.questionType !== 'abstention'), k)),
-    productHistoryExcerptCap: 8,
+    productHistoryExcerptCap: cap,
     byType: Object.fromEntries([...new Set(rows.map(r => r.questionType))].sort().map(type => [type, [8, 20].map(k => aggregate(rows.filter(r => r.questionType === type), k))])),
     notes: ['Search uses the original question and product gateway; no answer model or ingestion.',
       'Recall is over unique gold answer_session_ids, not answer strings. Repeated source IDs remain one logical session.',
       'Memory origin matches use exact returned-line fingerprints. Date-only matches are proxies, not proof of answer content.',
       'Source-session presence does not prove that an excerpt contains the answer. Source-session metrics retain abstention references; answerableOnly excludes _abs questions. Cases with no gold session IDs are excluded from recall; errors count as misses.',
-      'The product history search caps requested limits at 8 excerpts. Limit 20 is a gateway request, not a true history top-20 measurement.'], rows };
+      cap===8 ? 'The product history search caps requested limits at 8 excerpts. Limit 20 is a gateway request, not a true history top-20 measurement.' : `The product history search honors requested limits up to ${cap} excerpts within its character and latency budgets.`], rows };
 }
 export function summaryText(report) {
   const pct = v => v === null ? 'n/a' : `${(v * 100).toFixed(1)}%`;
   const line = (type, rows) => `${type}: n=${rows[0].questions} history recall@8/20=${rows.map(r => pct(r.microRecall)).join('/')} memory any@8/20=${rows.map(r => pct(r.memoryHitRate)).join('/')} origins@8/20=${rows.map(r => pct(r.memoryOriginHitRate)).join('/')}`;
   return ['LongMemEval-S product retrieval (no answer model)', line('ALL', report.limits),
-    ...Object.entries(report.byType).map(([type, rows]) => line(type, rows)), 'History is capped at 8 excerpts even for limit=20; date matches are proxies, not answer-content recall.'].join('\n');
+    ...Object.entries(report.byType).map(([type, rows]) => line(type, rows)), report.productHistoryExcerptCap===8 ? 'History is capped at 8 excerpts even for limit=20; date matches are proxies, not answer-content recall.' : `History follows the requested limit up to ${report.productHistoryExcerptCap}; date matches are proxies, not answer-content recall.`].join('\n');
 }
