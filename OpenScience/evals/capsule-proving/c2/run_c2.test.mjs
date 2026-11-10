@@ -66,7 +66,7 @@ test('failure classes are decided from the record and the official verdict', () 
 });
 
 test('rows, summary and ledger row: every task counts, infra failures are wrong and excluded only from valueValid', () => {
-  const record = (status, usage) => ({ wallMs: 60_000, turns: [{ run: { status, effectiveAgentId: 'a', effectiveRouteReason: 'r', usage }, tools: [{ name: 'bash' }], changed: ['x.py'] }], firstRequest: { hadMemoryTools: false } });
+  const record = (status, usage) => ({ wallMs: 60_000, turns: [{ run: { status, model: 'm', effectiveAgentId: 'a', effectiveRouteReason: 'r', usage }, tools: [{ name: 'bash' }], changed: ['x.py'] }], firstRequest: { hadMemoryTools: false } });
   const usage = { requests: 3, inputTokens: 1000, cachedInputTokens: 800, outputTokens: 100, costCny: 0.01 };
   const rows = [
     taskRow({ bench: 'dabench', task: { id: 'dabench-0', level: 'easy' }, record: record('succeeded', usage), verdict: { pass: true, score: 1 } }),
@@ -77,7 +77,7 @@ test('rows, summary and ledger row: every task counts, infra failures are wrong 
   assert.equal(summary.n, 3); assert.equal(summary.passed, 1); assert.equal(summary.value, 1 / 3);
   assert.equal(summary.nValid, 2); assert.equal(summary.valueValid, 0.5); assert.equal(summary.complete, true);
   assert.deepEqual(summary.failureClasses, { reasoning: 1, 'execution limit': 1 });
-  assert.equal(summary.tokens.prompt, 2000); assert.equal(summary.byCategory.hard.n, 2);
+  assert.equal(summary.tokens.prompt, 2000); assert.equal(summary.byCategory.hard.n, 2); assert.deepEqual(summary.models, { m: 2 });
   const row = ledgerRow(summary, { runId: 'c2-dabench-baseline-1', commit: 'abc', engineVersion: 'v0.5.3', flags: { a: 'b' }, rawPath: '/srv/x', notes: { scorer: 'official', text: 'n' }, label: 'C2' });
   assert.deepEqual(validateLedgerRow(row), []);
   assert.equal(row.arm, 'product-baseline'); assert.equal(row.set, PAPER.dabench.set); assert.equal(row.metric, 'accuracy');

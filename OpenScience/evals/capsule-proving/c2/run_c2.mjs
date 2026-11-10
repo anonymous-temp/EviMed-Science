@@ -136,7 +136,7 @@ export function taskRow({ bench, task, record, verdict }) {
     id: task.id, bench, phase: record?.phase ?? null, category: bench === 'dabench' ? task.level : task.type, score, pass: Boolean(verdict?.pass),
     scored: Boolean(verdict) && !verdict.error, scorerError: verdict?.error ?? null, infra: Boolean(record?.infra),
     failureClass: failureClass({ bench, record, verdict }), wallSeconds: (record?.wallMs ?? 0) / 1000,
-    status: turn.run?.status ?? null, timedOut: Boolean(turn.timedOut), route: turn.run ? `${turn.run.effectiveAgentId}/${turn.run.effectiveRouteReason}` : null,
+    status: turn.run?.status ?? null, timedOut: Boolean(turn.timedOut), model: turn.run?.model ?? null, route: turn.run ? `${turn.run.effectiveAgentId}/${turn.run.effectiveRouteReason}` : null,
     toolCalls: (record?.turns ?? []).reduce((n, t) => n + (t.tools?.length ?? 0), 0), ...usage,
     outputs: (record?.turns ?? []).flatMap((t) => t.changed ?? []), transcripts: record?.transcripts ?? [],
     memoryToolsAtStart: record?.firstRequest?.hadMemoryTools ?? null,
@@ -178,15 +178,16 @@ export function summarizeRows(rows, { bench, arm, expected }) {
     byCategory[key] ??= { n: 0, sum: 0 };
     byCategory[key].n += 1; byCategory[key].sum += row.score;
   }
-  const routes = {};
+  const routes = {}, models = {};
   for (const row of rows) routes[row.route ?? 'none'] = (routes[row.route ?? 'none'] ?? 0) + 1;
+  for (const row of rows) if (row.model) models[row.model] = (models[row.model] ?? 0) + 1;
   const total = (key) => rows.reduce((a, r) => a + (r[key] ?? 0), 0);
   return {
     bench, arm, set: PAPER[bench].set, expected, n, complete: expected ? n >= expected : null, passed, value,
     ci95: binary ? wilson(passed, n) : meanInterval(scores), interval: binary ? 'Wilson 95% on pass/fail' : 'normal 95% on the mean score, clipped to [0, 1]',
     valueValid: validValue, nValid: valid.length, infra: n - valid.length, scorerErrors: rows.filter((r) => r.scorerError).length,
     paper: { baseline: PAPER[bench].baseline, reuse: PAPER[bench].reuse, metric: PAPER[bench].metric },
-    failureClasses: classes, byCategory: Object.fromEntries(Object.entries(byCategory).map(([k, v]) => [k, { n: v.n, value: v.sum / v.n }])), routes,
+    failureClasses: classes, byCategory: Object.fromEntries(Object.entries(byCategory).map(([k, v]) => [k, { n: v.n, value: v.sum / v.n }])), routes, models,
     tokens: { prompt: total('inputTokens'), cached: total('cachedInputTokens'), completion: total('outputTokens'), requests: total('requests') },
     costCny: total('costCny'), wallSeconds: total('wallSeconds'), medianWallSeconds: median(rows.map((r) => r.wallSeconds)),
     perTask: n ? { costCny: total('costCny') / n, wallSeconds: total('wallSeconds') / n, toolCalls: total('toolCalls') / n, prompt: total('inputTokens') / n, completion: total('outputTokens') / n } : null,
@@ -544,7 +545,7 @@ async function ledger(args) {
   const notes = {
     scorer: run.scorer,
     text: [`C2 ${args.arm} arm on the product path (real control plane, DSH 0.2.2-rc.1, DeepSeek, memory engine ovlab-pp), one fresh project per task${args.arm === 'reuse' ? ' in one account; test part of a 3:2 practice/test split' : ', one fresh account per task'}.`,
-      `Official scorer: ${run.scorer}. Paper (EvoDS) ${paper.metric}: baseline ${paper.baseline}, with reuse ${paper.reuse}; DeepSeek here, so absolute values are not comparable, only direction.`,
+      `Official scorer: ${run.scorer}. Paper (EvoDS) ${paper.metric}: baseline ${paper.baseline}, with reuse ${paper.reuse}; the product's model here (${Object.keys(summary.models).join(', ') || 'unknown'}), so absolute values are not comparable, only direction.`,
       `Presentation: ${run.presentation}`,
       `Value counts every task (harness failures as wrong); valueValid excludes them. ${summary.interval}.`,
       summary.official ? `Official aggregate: ${JSON.stringify(summary.official)}.` : ''].join(' '),
