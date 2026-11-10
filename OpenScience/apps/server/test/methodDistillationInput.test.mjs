@@ -347,6 +347,41 @@ test("the related methods are the nearest to what the lesson is about, the files
   assert.equal(lessonQueryText({ run: { id: "x" }, trigger: "correction", transcript: null, shapes: null }), "", "nothing to be near, nothing to rank by");
 });
 
+test("with the official tier in the loop, official methods join the related methods read-only, and a proposal to change one changes nothing", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-distill-official-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { project, run } = await projectWith(root);
+  const library = [method("method:learned:m0", "m0", "method number 0")];
+  const official = { key: "official:daily:weekly", packId: "daily", methodId: "weekly", name: "official-daily-weekly", description: "周报", whenToUse: "写周报时",
+    scope: ["conversation"], body: "没给的栏留空。", sha: "f".repeat(64), entryId: "fact-1", capsuleId: "official-copy:daily" };
+  /** @type {any[]} */ const dispatched = [];
+  const make = (/** @type {any} */ extra) => new MethodDistillationRuns({
+    learning: { async listMethods() { return { items: library }; } },
+    dispatch: async (request) => { dispatched.push(request); return { runId: "lr_1", sessionId: "ls_1", dispatchId: request.dispatchId }; },
+    readResult: async () => ({ status: "running" }),
+    ...extra,
+  });
+  const lesson = { userId: "u1", projectId: "p", payload: { runId: run.id, trigger: "correction", steeredCorrections: 1 } };
+  await make({}).execute({ project, run, job: lesson });
+  assert.deepEqual(dispatched[0].input.relatedMethods.map((/** @type {any} */ entry) => entry.id), ["method:learned:m0"], "off: the person's library only");
+  assert.doesNotMatch(dispatched[0].question, /readOnly/);
+  await make({ officialMethods: async () => [official] }).execute({ project, run, job: lesson });
+  const related = dispatched[1].input.relatedMethods;
+  assert.deepEqual(related.map((/** @type {any} */ entry) => entry.id), ["method:learned:m0", "official:daily:weekly"]);
+  assert.deepEqual({ ...related[1], frontmatter: undefined, body: undefined },
+    { id: "official:daily:weekly", digest: `sha256:${"f".repeat(64)}`, status: "approved", official: true, readOnly: true, frontmatter: undefined, body: undefined });
+  assert.equal(related[0].official, undefined, "the person's own method is not marked");
+  assert.match(dispatched[1].question, /readOnly is the platform's own/);
+
+  // A proposal aimed at an official method is no change while the switch is on; with it off the target is simply not one of the person's.
+  const on = new MethodDistillationRuns({ learning: ledger(), dispatch: async () => { throw new Error("no dispatch"); }, readResult: async () => { throw new Error("no result"); },
+    jobs: { enqueue: async () => ({ id: "job" }) }, officialMethods: async () => [official] });
+  const amendOfficial = { skill: SKILL, candidate: { operation: "amend", targetMethodId: "official:daily:weekly" } };
+  assert.deepEqual(await on.applyCandidate(job, { id: "run_1" }, amendOfficial, { signal: "researcher" }),
+    { operation: "no_change", methodId: undefined, skipped: "official_read_only" });
+  await assert.rejects(distillationOver(ledger()).applyCandidate(job, { id: "run_1" }, amendOfficial, { signal: "researcher" }), (error) => /** @type {any} */ (error).status === 409);
+});
+
 test("a routine's peer is digested from its own ledger record, and the lesson's own project is never asked for", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "evimed-distill-peers-"));
   t.after(() => rm(root, { recursive: true, force: true }));

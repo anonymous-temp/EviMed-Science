@@ -84,8 +84,10 @@ export function splitMountedMethods(methods) {
 
 /**
  * The card blocks for learned and official methods: nothing for none. What EviMed learned from the person's own work comes first and is
- * said to be an inference; the platform's default methods follow, and yield to anything of the person's.
- * @param {readonly { name: string, description?: string, whenToUse?: string, path?: string, directory?: string }[]} methods
+ * said to be an inference; the platform's default methods follow, and yield to anything of the person's. A method that carries `card` (the
+ * selection file's, `OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`) shows its evidence, counter-examples and verified line under its card.
+ * @param {readonly { name: string, description?: string, whenToUse?: string, path?: string, directory?: string,
+ *   card?: { evidence?: readonly string[], counterexamples?: readonly string[], verified?: boolean } | null }[]} methods
  * @returns {string[]}
  */
 export function learnedMethodCardLines(methods) {

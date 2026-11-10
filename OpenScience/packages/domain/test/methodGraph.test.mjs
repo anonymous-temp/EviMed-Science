@@ -12,6 +12,7 @@ import { METHOD_COUNT_KINDS, METHOD_SCIENTIFIC_HARM_TEST, METHOD_UNUSED_RETIRE_L
 import {
   METHOD_GRAPH_ISSUE_CODES,
   METHOD_RELATION_TYPES,
+  abstractMembersOf,
   computeMethodLevels,
   emptyLearning,
   bodyPreservation,
@@ -280,6 +281,59 @@ test("levels come from the dependency graph, not from the role label", () => {
   // Two parents reusing one atom is the point of extracting it, not an error.
   const other = method({ id: "m4", name: "other", digest: DIGEST_C, dependencies: [{ name: "atom", digest: DIGEST_A }] });
   assert.equal(validateMethodGraph([atom, mid, other]).ok, true);
+});
+
+test("an abstract method's members count toward its level only where the record carries them (defect 12)", () => {
+  const atom = method({ id: "m1", name: "atom", digest: DIGEST_A });
+  const mid = method({ id: "m2", name: "mid", digest: DIGEST_B, dependencies: [{ name: "atom", digest: DIGEST_A }] });
+  const flat = method({ id: "m3", name: "pattern", digest: DIGEST_C });
+  // Without `derivedFrom` (the pyramid switch off) an abstract method that lists its members only in `derived_from` reads level 0.
+  assert.equal(computeMethodLevels([atom, mid, flat]).levels.get("pattern"), 0);
+  // With it, one above the highest member: the paper's formula.
+  const pattern = { ...flat, derivedFrom: ["mid", "atom"] };
+  const { levels, cycles } = computeMethodLevels([atom, mid, pattern]);
+  assert.deepEqual([levels.get("atom"), levels.get("mid"), levels.get("pattern")], [0, 1, 2]);
+  assert.deepEqual(cycles, []);
+  // A member the library does not hold is not a level.
+  assert.equal(computeMethodLevels([atom, { ...flat, derivedFrom: ["ghost"] }]).levels.get("pattern"), 0);
+  assert.equal(validateMethodGraph([atom, mid, pattern]).ok, true, "derived members are not dependencies: no pin to check");
+});
+
+test("abstractMembersOf reads derived_from of an abstract method only, as names the library holds", () => {
+  const names = new Set(["span-check", "table-tidy", "pattern"]);
+  const front = (/** @type {Record<string, string>} */ metadata) => ({ name: "pattern", metadata });
+  assert.deepEqual(abstractMembersOf(front({ role: "abstract", derived_from: "span-check, method:learned:table-tidy@sha256:abc, run:run_1, ghost" }), names),
+    ["span-check", "table-tidy"], "a name, an id with a pin; a run id and an unknown name are not members");
+  assert.deepEqual(abstractMembersOf(front({ role: "abstract", derived_from: "method:span-check, span-check, pattern" }), names), ["span-check"],
+    "a member once, and never the method itself");
+  assert.deepEqual(abstractMembersOf(front({ role: "functional", derived_from: "span-check" }), names), [], "only an abstract method's derived_from names methods");
+  assert.deepEqual(abstractMembersOf(front({ role: "abstract" }), names), []);
+  assert.deepEqual(abstractMembersOf(undefined, names), []);
+});
+
+test("a card's facts: two quotations, two counter-examples, and verified only after a clean use of the body it holds and no correction since", async () => {
+  const { methodCardFacts, methodCardVerified, learnedMethodCardEntry, LEARNED_METHOD_CARD_FACTS } = await import("../index.mjs");
+  const counted = (/** @type {Record<string, number>} */ counts, digest = DIGEST_A) => ({ ...emptyLearning(digest), counts: { ...emptyLearning(digest).counts, ...counts } });
+  const payload = (/** @type {any} */ learning, extra = {}) => ({ contentDigest: DIGEST_A, learning, ...extra });
+  assert.equal(methodCardVerified(payload(counted({ appliedClean: 1 }))), true);
+  assert.equal(methodCardVerified(payload(counted({ appliedClean: 3, appliedCorrected: 1 }))), false, "a correction since the change");
+  assert.equal(methodCardVerified(payload(counted({}))), false, "never used clean");
+  assert.equal(methodCardVerified(payload(counted({ appliedClean: 2 }, DIGEST_B))), false, "counters of another body");
+  assert.equal(methodCardVerified({ contentDigest: DIGEST_A }), false);
+
+  const long = "数".repeat(LEARNED_METHOD_CARD_FACTS.chars + 20);
+  const facts = methodCardFacts(payload(counted({ appliedClean: 1 }), {
+    provenance: { evidence: [{ runId: "r1", seqRange: [1, 2], quote: "每节不要超过三行" }, { runId: "r1", seqRange: [3, 4], quote: long }, { runId: "r2", seqRange: [1, 1], quote: "第三条引用的内容" }] },
+    scope: { applicability: "周报", counterexamples: ["月报", "年度总结", "会议纪要"] },
+  }));
+  assert.deepEqual(facts, { evidence: ["每节不要超过三行", `${"数".repeat(LEARNED_METHOD_CARD_FACTS.chars)}…`], counterexamples: ["月报", "年度总结"], verified: true });
+  assert.deepEqual(methodCardFacts({}), { evidence: [], counterexamples: [], verified: false });
+
+  const base = { name: "weekly", whenToUse: "写周报时", path: "/runtime/capsule-methods/_lm/SKILL.md" };
+  assert.deepEqual(learnedMethodCardEntry(base), ["- weekly：写周报时", "  全文：/runtime/capsule-methods/_lm/SKILL.md"], "no card, the two lines it always was");
+  assert.deepEqual(learnedMethodCardEntry({ ...base, card: facts }).slice(2), [
+    `  依据：「每节不要超过三行」「${"数".repeat(LEARNED_METHOD_CARD_FACTS.chars)}…」`, "  不适用：月报；年度总结", "  已验证：最近一次修改后用过，没有被纠正"]);
+  assert.deepEqual(learnedMethodCardEntry({ ...base, card: { evidence: [], counterexamples: [], verified: false } }).length, 2, "an empty card adds nothing");
 });
 
 test("the graph refuses cycles, dangling pins, moved digests and duplicate names", () => {

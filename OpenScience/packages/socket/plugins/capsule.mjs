@@ -50,7 +50,7 @@ import { configSchema, defineTool, injectContext, isSubagentSession, listDirAt, 
 import { skillBodyDigestAsync } from '../src/digest.mjs'
 import { isLearnedMethod, isOfficialMethod } from '../src/learnedMethods.mjs'
 import { sendWithFreshWorkloadToken } from '../src/workloadRequest.mjs'
-import { SOURCE_SCOPE_UNAVAILABLE_CONTEXT } from '@evimed/domain'
+import { LEARNED_METHOD_CARD_FACTS, SOURCE_SCOPE_UNAVAILABLE_CONTEXT, clipCardFact, learnedMethodCardFactLines } from '@evimed/domain'
 
 const Schema = await configSchema()
 
@@ -256,10 +256,29 @@ function conversationMethods(ctx, config, launched) {
 }
 
 /**
+ * @typedef {{ evidence: string[], counterexamples: string[], verified: boolean }} SelectionCard
+ *   what a learned method's card adds, when the control plane wrote it (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`)
+ */
+
+/**
  * @typedef {object} Selection
  * @property {string} version
- * @property {{ directory: string, reason: string | null }[]} entries  in the order they are listed
+ * @property {{ directory: string, reason: string | null, card?: SelectionCard }[]} entries  in the order they are listed
  */
+
+/**
+ * A card's facts as the selection file carries them, or null when there are none or they are not that shape: strings only, as many as a card
+ * shows, each clipped the way the card clips it. What the control plane wrote is read, never trusted for its size.
+ * @param {unknown} value @returns {SelectionCard | null}
+ */
+function selectionCard(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const card = /** @type {Record<string, unknown>} */ (value)
+  const facts = (/** @type {unknown} */ list, /** @type {number} */ limit) => (Array.isArray(list) ? list : [])
+    .filter((entry) => typeof entry === 'string').map(clipCardFact).filter(Boolean).slice(0, limit)
+  return { evidence: facts(card.evidence, LEARNED_METHOD_CARD_FACTS.evidence), counterexamples: facts(card.counterexamples, LEARNED_METHOD_CARD_FACTS.counterexamples),
+    verified: card.verified === true }
+}
 
 /**
  * The selection file the control plane wrote beside the methods, or null when there is none (a control plane that predates it) or it
@@ -279,7 +298,8 @@ async function readSelection(ctx, directory) {
       const directoryName = String(entry?.directory ?? '')
       // A name the control plane wrote is a directory under this one, never a path out of it.
       if (!directoryName || /[\\/]/.test(directoryName) || directoryName.startsWith('.')) continue
-      entries.push({ directory: directoryName, reason: typeof entry?.reason === 'string' && entry.reason ? entry.reason : null })
+      const card = selectionCard(entry?.card)
+      entries.push({ directory: directoryName, reason: typeof entry?.reason === 'string' && entry.reason ? entry.reason : null, ...(card ? { card } : {}) })
     }
     return { version: String(parsed.version ?? ''), entries }
   } catch {
@@ -394,12 +414,14 @@ async function loadMethods(ctx, directory, selection = undefined) {
       directory: entry.directory,
       path: `${directory.replace(/\/+$/, '')}/${entry.directory}/SKILL.md`,
       reason: entry.reason,
+      // What the card adds beyond when the method applies, as the selection wrote it (`learnedMethodCardEntry` renders it).
+      ...('card' in entry && entry.card ? { card: /** @type {SelectionCard} */ (entry.card) } : {}),
     })
   }
   return methods
 }
 
-/** @typedef {{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string, path: string, reason?: string | null }} MountedMethod */
+/** @typedef {{ name: string, description: string, whenToUse: string, body: string, digest: string, directory: string, path: string, reason?: string | null, card?: SelectionCard }} MountedMethod */
 
 /**
  * What the model is told a mounted method is: where it came from, and nothing
@@ -425,7 +447,7 @@ export function mountedMethodDescription(method) {
 
 /**
  * The section that tells the model which methods it has and where each one is.
- * @param {readonly { name: string, description: string, whenToUse?: string, directory?: string }[]} methods
+ * @param {readonly { name: string, description: string, whenToUse?: string, directory?: string, card?: SelectionCard }[]} methods
  * @param {string} directory where the methods are mounted in the container
  * @returns {string}
  */
@@ -443,6 +465,8 @@ export function methodsSectionText(methods, directory) {
       `- ${method.name}：${mountedMethodDescription(method).replace(/\s*\n\s*/g, ' ')}`,
       ...(method.whenToUse ? [`  适用：${method.whenToUse}`] : []),
       `  全文：${directory}/${method.directory}/SKILL.md`,
+      // What a learned method's card adds, when the selection carried it (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`); nothing otherwise.
+      ...learnedMethodCardFactLines(method.card),
     ].join('\n')
     if (used + entry.length + 1 > METHODS_SECTION_MAX_CHARS) break
     lines.push(entry)

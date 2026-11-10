@@ -100,3 +100,32 @@ test("a layout's places are filled only from what the person gave: each daily-wr
   }
   assert.ok(daily.methods.some((method) => /不替用户补写|不替人指派|不替用户做承诺/.test(method.body)));
 });
+
+test("a pack method may carry role and depends_on; without them its sha is what it always was (defect 14)", async () => {
+  const { buildOfficialMethod, officialLibraryDocument, officialMethodDigest, isOfficialDocument } = await import("../src/officialPackSources.mjs");
+  const plain = /** @type {any} */ (parseOfficialMethod(GOOD, "daily", "weekly")).method;
+  // The hash a method without the pyramid keys always had: the four fields, nothing else.
+  const { createHash } = await import("node:crypto");
+  assert.equal(plain.sha, createHash("sha256").update(JSON.stringify({ scope: plain.scope, title: plain.title, whenToUse: plain.whenToUse, body: plain.body }), "utf8").digest("hex"));
+  assert.equal(plain.sha, buildOfficialMethod("daily", "weekly", { scope: plain.scope, title: plain.title, whenToUse: plain.whenToUse, body: plain.body }).sha);
+  assert.equal("role" in plain || "dependencies" in plain, false);
+  const pin = `official-daily-base@sha256:${"a".repeat(64)}`;
+  const withPyramid = /** @type {any} */ (parseOfficialMethod(`---\nscope: conversation\nwhenToUse: 写周报时。\nrole: functional\ndepends_on: ${pin}\n---\n# 周报\n\n正文。\n`, "daily", "weekly")).method;
+  assert.equal(withPyramid.role, "functional");
+  assert.deepEqual(withPyramid.dependencies, [{ name: "official-daily-base", digest: `sha256:${"a".repeat(64)}` }]);
+  const issue = (/** @type {string} */ extra) => /** @type {any} */ (parseOfficialMethod(`---\nscope: conversation\nwhenToUse: x\n${extra}\n---\n# 标题\n\n正文`, "daily", "weekly")).issue;
+  assert.equal(issue("role: boss"), "role_invalid");
+  assert.equal(issue("depends_on: official-daily-base"), "depends_on_invalid", "a pin names a digest");
+  assert.equal(issue(`depends_on: official-daily-weekly@sha256:${"b".repeat(64)}`), "depends_on_invalid", "never itself");
+  assert.equal(issue("owner_name: me"), "frontmatter_key_unknown");
+
+  // What the learning loop reads it as: read-only, at `sha256:` + its sha.
+  const document = officialLibraryDocument({ ...withPyramid, entryId: "fact-1", capsuleId: "official-copy:daily" });
+  assert.equal(document.id, "official:daily:weekly");
+  assert.equal(document.payload.contentDigest, officialMethodDigest(withPyramid));
+  assert.equal(document.payload.contentDigest, `sha256:${withPyramid.sha}`);
+  assert.deepEqual(document.payload.frontmatter.metadata, { role: "functional", depends_on: pin });
+  assert.equal(isOfficialDocument(document), true);
+  assert.equal(isOfficialDocument({ id: "method:learned:x", payload: { official: true } }), false);
+  assert.equal(officialLibraryDocument(plain).payload.frontmatter.metadata, undefined);
+});

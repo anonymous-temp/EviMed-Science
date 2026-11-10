@@ -170,3 +170,54 @@ test("a deployment with no official packs mounts exactly what it always did", as
     assert.equal(existsSync(directory), false);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+// ------------------------------------------------------------------- the tier in the loop (plan 2026-11-04 §5.4 defect 14)
+
+const pinTo = (/** @type {any} */ official) => ({ name: official.name, digest: `sha256:${official.sha}` });
+
+test("in the loop, the official methods a person's selected method depends on come first, even without a question, and count toward the cap", async () => {
+  const base = method("official:daily:base", { scope: ["meta-analysis"] });
+  const all = [...methods, base];
+  // Flat (the switch off) reads no dependency: without a question nothing at all.
+  assert.equal((await selectOfficialMethods(all, { query: "", similarity: similarityWith(), personalDependencies: [pinTo(base)] })).length, 0);
+  const quiet = await selectOfficialMethods(all, { inLoop: true, query: "", similarity: similarityWith(), personalDependencies: [pinTo(base)] });
+  assert.deepEqual(quiet.map((entry) => [entry.id, entry.reason]), [["official:daily:base", "dependency"]], "out of this run's scope, and still the reference's text");
+  const asked = await selectOfficialMethods(all, { inLoop: true, query: ASK, similarity: similarityWith(), personalDependencies: [pinTo(base)] });
+  assert.deepEqual(asked.map((entry) => [entry.id, entry.reason]), [["official:daily:base", "dependency"], ["official:daily:weekly", "similarity"],
+    ["official:daily:mail", "similarity"], ["official:daily:minutes", "similarity"]], "at most the nearest three by similarity, after it");
+  const capped = await selectOfficialMethods(all, { inLoop: true, query: ASK, similarity: similarityWith(), personalDependencies: [pinTo(base)], maxCount: 2 });
+  assert.deepEqual(capped.map((entry) => entry.id), ["official:daily:base", "official:daily:weekly"], "the dependency takes a place of the cap");
+  assert.ok(OFFICIAL_METHOD_MOUNT.inLoop >= OFFICIAL_METHOD_MOUNT.nearest);
+});
+
+test("in the loop, what an official hit reuses comes with it, and with the pyramid the abstract method above it, listed first", async () => {
+  const atom = method("official:p:atom");
+  const step = method("official:p:step", { dependencies: [pinTo(atom)] });
+  const frame = method("official:p:frame", { role: "abstract", dependencies: [pinTo(step)] });
+  const onlyStep = {
+    ...similarityWith(),
+    nearest: async (/** @type {string} */ _query, /** @type {any[]} */ docs) => {
+      const list = docs.filter((doc) => doc.id === "official:p:step").map((doc) => ({ method: doc, score: 0.9 }));
+      Object.defineProperty(list, "mode", { value: "embedding", enumerable: false });
+      return list;
+    },
+  };
+  const flat = await selectOfficialMethods([atom, step, frame], { query: ASK, similarity: onlyStep });
+  assert.deepEqual(flat.map((entry) => entry.id), ["official:p:step"], "the switch off is the nearest, flat");
+  const inLoop = await selectOfficialMethods([atom, step, frame], { inLoop: true, query: ASK, similarity: onlyStep });
+  assert.deepEqual(inLoop.map((entry) => [entry.id, entry.reason]), [["official:p:step", "similarity"], ["official:p:atom", "dependency"]]);
+  const pyramid = await selectOfficialMethods([atom, step, frame], { inLoop: true, pyramid: true, query: ASK, similarity: onlyStep });
+  assert.deepEqual(pyramid.map((entry) => [entry.id, entry.reason]), [["official:p:frame", "abstraction"], ["official:p:step", "similarity"], ["official:p:atom", "dependency"]]);
+});
+
+test("in the loop, a hit the person's own method covers is left out before anything is drawn in for it", async () => {
+  // Out of this run's scope, so only a dependency could bring it.
+  const base = method("official:daily:base", { scope: ["meta-analysis"] });
+  const weekly = method("official:daily:weekly", { dependencies: [pinTo(base)] });
+  const mine = personalDoc("method:learned:weekly-habit", "我的周报写法");
+  const picked = await selectOfficialMethods([weekly, method("official:daily:mail"), base], { inLoop: true, query: ASK, personal: [mine],
+    similarity: similarityWith({ scores: { "official:daily:weekly|method:learned:weekly-habit": OFFICIAL_PERSONAL_DELTA_COSINE + 0.1 } }) });
+  assert.deepEqual(picked.leftOut.map((entry) => entry.id), ["official:daily:weekly"]);
+  assert.deepEqual(picked.map((entry) => entry.id), ["official:daily:mail"], "the covered hit's dependency is not pulled in for it");
+  assert.equal(picked.deltaMode, "embedding");
+});

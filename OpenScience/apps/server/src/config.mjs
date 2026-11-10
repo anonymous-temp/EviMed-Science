@@ -1481,6 +1481,22 @@ function mountedMethodPromptBytes(overrides) {
   return bytes;
 }
 
+/**
+ * The cosine a learned method must reach against the conversation's first message to be mounted by similarity
+ * (`selectLearnedMethods`, `OPEN_SCIENCE_METHOD_MOUNT_MIN_SIMILARITY`, plan 2026-11-04 §5.4 defect 9). 0, the default, sets no floor,
+ * which is the mount as it was; the lexical fallback has no cosine and ignores it (`methodSimilarity.nearest`).
+ * @param {Record<string, any>} overrides
+ */
+function methodMountMinSimilarity(overrides) {
+  const value = overrides.methodMountMinSimilarity ?? process.env.OPEN_SCIENCE_METHOD_MOUNT_MIN_SIMILARITY ?? "";
+  if (value === "") return 0;
+  const floor = Number(value);
+  if (!Number.isFinite(floor) || floor < 0 || floor >= 1) {
+    throw new Error(`OPEN_SCIENCE_METHOD_MOUNT_MIN_SIMILARITY must be a number from 0 to below 1, got ${JSON.stringify(value)}.`);
+  }
+  return floor;
+}
+
 /** @param {Record<string, any>} overrides */
 function reviewConfigured(overrides) {
   return overrides.reviewEnabled ?? boolEnv("OPEN_SCIENCE_REVIEW_ENABLED", false);
@@ -3247,6 +3263,19 @@ export function loadConfig(overrides = {}) {
       ?? process.env.OPEN_SCIENCE_OPERATOR_USERS ?? "")
       .split(",").map((value) => value.trim()).filter(Boolean),
     mountedMethodPromptBytes: mountedMethodPromptBytes(overrides),
+    // The learned-method pyramid (plan 2026-11-04 §5.2 SkillPyramid, §5.4 defect 12), off by default for a measured comparison: an abstract
+    // method's level counts the members its `derived_from` names, and the mount adds, above what it selected, the most relevant abstract
+    // parent (`METHOD_MOUNT.abstractMax`, reason `abstraction`) and lists the cards abstract first. Off is the flat mount as it was.
+    methodPyramidEnabled: overrides.methodPyramidEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_PYRAMID_ENABLED", false),
+    // A cosine floor for the mount's similarity selection (defect 9); 0 is none, as before.
+    methodMountMinSimilarity: methodMountMinSimilarity(overrides),
+    // The official tier in the learning loop (§5.4 defect 14), off by default: official methods join distillation's related methods and the
+    // consolidation's screen and decide as read-only documents, a person's method may depend on one (`sha256:` + its pack sha), and the mount
+    // selects the tier like the person's library (closure, parent, own cap) instead of the nearest three, flat.
+    methodOfficialInLoopEnabled: overrides.methodOfficialInLoopEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED", false),
+    // A learned method's card carries up to two quotations it rests on, two situations it is not for, and whether it was used after its last
+    // change and not corrected (plan 2026-11-04 item 11), off by default; SKILL.md and the digest never change. Off, the card is two lines.
+    methodCardEvidenceEnabled: overrides.methodCardEvidenceEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED", false),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),
     // The context window the kernel is told it has.

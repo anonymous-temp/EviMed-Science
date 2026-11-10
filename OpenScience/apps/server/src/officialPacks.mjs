@@ -39,7 +39,7 @@
  */
 
 import { PLATFORM_ACCOUNT_AUTH_TYPE, PLATFORM_PUBLISHER_NAME, PLATFORM_PUBLISHER_USER_ID, emptyLearning, foldApplied, methodHarmTest, trimObservations } from "@evimed/domain";
-import { OFFICIAL_PACKS_DIR, officialPack, readOfficialPackSources } from "./officialPackSources.mjs";
+import { OFFICIAL_PACKS_DIR, officialPack, officialPyramidFields, readOfficialPackSources } from "./officialPackSources.mjs";
 import { createHash } from "node:crypto";
 
 /** The publisher's record of a published pack, of a method body's outcomes, and of a promoted method (`officialPromotion.mjs`). */
@@ -67,6 +67,7 @@ const SETTLED_LIMIT = 5_000;
 
 /** The key one method body's record is kept under. @param {string} methodKey @param {string} sha */
 export const officialBodyKey = (methodKey, sha) => `${methodKey}@${sha}`;
+
 
 /** The counters of this process, for the operator's metrics (`officialPackMetricFamilies`). */
 function newCounters() {
@@ -98,6 +99,8 @@ function newCounters() {
  * @property {string} packId @property {string} methodId @property {string} name @property {string} description @property {string} whenToUse
  * @property {string[]} scope @property {string} body @property {string} sha the body's own hash
  * @property {string} entryId the fact it is held as in the account @property {string} capsuleId
+ * @property {string} [role] its pack file's `role`, when it has one (`officialPyramidFields`)
+ * @property {{ name: string, digest: string }[]} [dependencies] the official methods its pack file's `depends_on` pins, when it has any
  */
 
 export class OfficialPacks {
@@ -246,7 +249,7 @@ export class OfficialPacks {
       signingKeyFingerprint: made.signingKeyFingerprint, card: made.snapshot.card ?? null,
       scan: { model: scan.model, checkedAt: scan.checkedAt, dropped: scan.dropped, safety: scan.safety },
       methods: kept.map((method) => ({ key: method.key, packId: method.packId, methodId: method.id, name: method.name, description: method.description,
-        whenToUse: method.whenToUse, scope: method.scope, body: method.body, content: method.content, sha: method.sha })),
+        whenToUse: method.whenToUse, scope: method.scope, body: method.body, content: method.content, sha: method.sha, ...officialPyramidFields(method) })),
       ...(previous ? { previous: { contentHash: previous.payload.contentHash, snapshotId: previous.payload.snapshotId ?? null, version: previous.payload.version ?? null } } : {}),
     };
     try {
@@ -428,7 +431,8 @@ export class OfficialPacks {
         const held = fact.payload.official;
         if (!held?.key || !held.body || stopped.has(officialBodyKey(held.key, held.sha))) continue;
         methods.push({ key: held.key, packId: held.packId, methodId: held.methodId, name: held.name, description: held.description, whenToUse: held.whenToUse,
-          scope: Array.isArray(held.scope) ? held.scope : [], body: held.body, sha: held.sha, entryId: String(fact.id), capsuleId: String(copy.id) });
+          scope: Array.isArray(held.scope) ? held.scope : [], body: held.body, sha: held.sha, entryId: String(fact.id), capsuleId: String(copy.id),
+          ...officialPyramidFields(held) });
       }
     }
     return methods.sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));

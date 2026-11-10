@@ -11,6 +11,7 @@ import { guestMarkedRuns } from "./capsuleShareTrust.mjs";
 import { CapsuleScanner } from "./capsuleScan.mjs";
 import { SCAN_METER_PROJECT } from "./capsuleService.mjs";
 import { nativeMemoryFile, PROJECT_MEMORY_TYPES } from "./openVikingSessions.mjs";
+import { officialPyramidFields } from "./officialPackSources.mjs";
 import { nativeMemoryRoot } from "./openVikingLayout.mjs";
 import { PAGE_KIND_OF_TYPE, versionOfHash } from "./nativeMemoryStore.mjs";
 import { reachableAccounts } from "./capsuleRecipients.mjs";
@@ -889,7 +890,7 @@ export class CapsuleTransferService {
       sha256: digest(method.content), path: `methods/${method.methodId}/SKILL.md` });
     /** @param {any} method */
     const officialOf = (method) => ({ packId: method.packId, methodId: method.methodId, key: method.key, sha: method.sha, scope: method.scope, name: method.name,
-      description: method.description, whenToUse: method.whenToUse, body: method.body });
+      description: method.description, whenToUse: method.whenToUse, body: method.body, ...officialPyramidFields(method) });
     const scan = { kept: [], unchecked: [], held: [], dropped: publication.scan?.dropped ?? [], safety: publication.scan?.safety ?? [], model: publication.scan?.model ?? "unavailable",
       checkedAt: publication.scan?.checkedAt ?? publication.publishedAt };
     const packOfficial = { packId: publication.packId, contentHash: publication.contentHash, version: publication.version };

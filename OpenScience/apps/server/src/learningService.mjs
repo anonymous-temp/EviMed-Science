@@ -54,6 +54,7 @@ import { createHash } from "node:crypto";
 import {
   METHOD_RELEVANT_MOUNT_REASONS,
   METHOD_STATUSES,
+  abstractMembersOf,
   appendMethodLink,
   cleanMethodDisplay,
   cleanMethodScope,
@@ -83,6 +84,7 @@ import {
   validateMethodSkill,
   withoutRetiredLearningKeys,
 } from "@evimed/domain";
+import { officialMethodDigest } from "./officialPackSources.mjs";
 import { productId } from "./productPersistence.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -212,17 +214,23 @@ export function methodSourceProjects(provenance) {
  * The shape `promotionVerdict` and `retirementProposal` read, assembled from a
  * stored document. Kept in one function because the two callers that build it
  * by hand would be the two that disagree.
- * @param {any} document @param {{revisions?: readonly string[]}} [extra]
+ *
+ * `libraryNames`, given only where the pyramid is read (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`), is every method name of the library: an
+ * abstract method then carries `derivedFrom`, the members its `metadata.derived_from` names that the library holds (`abstractMembersOf`),
+ * so `computeMethodLevels` puts it one above them. Without it the record is what it always was.
+ * @param {any} document @param {{revisions?: readonly string[], libraryNames?: Iterable<string> | null}} [extra]
  * @returns {any}
  */
-export function methodRecordFrom(document, { revisions = undefined } = {}) {
+export function methodRecordFrom(document, { revisions = undefined, libraryNames = null } = {}) {
   const payload = document?.payload ?? {};
+  const derivedFrom = libraryNames ? abstractMembersOf(payload.frontmatter, libraryNames) : [];
   return {
     id: document?.id,
     name: payload.frontmatter?.name ?? "",
     digest: payload.contentDigest ?? "",
     status: payload.status ?? "candidate",
     dependencies: payload.dependencies ?? [],
+    ...(derivedFrom.length ? { derivedFrom } : {}),
     learning: payload.learning ?? emptyLearning(payload.contentDigest ?? ""),
     provenance: payload.provenance ?? { origin: "inferred" },
     // When the body it holds now was written, for the rules that read an age (a merge nobody has used expires).
@@ -257,6 +265,13 @@ export class LearningService {
      * @type {((userId: string) => unknown) | null}
      */
     this.onMountChange = null;
+    /**
+     * The official methods a person's method may reuse (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`; null, the default, is none): set by the
+     * composition root to the account's official methods (`OfficialPacks.methodsFor`). A `depends_on` pin to one resolves when it names the
+     * method's current text, `sha256:` + its pack sha (`officialMethodDigest`). Never a shared GEO project's: its library is its own.
+     * @type {((userId: string) => Promise<readonly any[]>) | null}
+     */
+    this.officialMethods = null;
     /**
      * Told, after a write that may have put a method in force, which one it was (`createCandidate`, `amendMethod`, an approval): the composition
      * root hands it to the promotion of general methods to everyone's pack (`officialPromotion.mjs`), which reads the method itself and decides.
@@ -340,6 +355,12 @@ export class LearningService {
         if (saved?.payload?.contentDigest) known.add(saved.payload.contentDigest);
       }
       digests.set(name, known);
+    }
+    if (this.officialMethods && policy?.kind !== "geo-project") {
+      for (const method of await this.officialMethods(userId).catch(() => []) ?? []) {
+        if (!method?.name || !method?.sha) continue;
+        digests.set(method.name, new Set([...(digests.get(method.name) ?? []), officialMethodDigest(method)]));
+      }
     }
     return (dependency) => Boolean(digests.get(dependency.name)?.has(dependency.digest));
   }
