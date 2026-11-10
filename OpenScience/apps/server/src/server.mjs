@@ -483,6 +483,7 @@ import { createMemoryHistorySources } from './memoryHistorySources.mjs';
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
+import { createVerificationJudge } from './nativeMemoryVerification.mjs';
 import { NativeMemoryConsolidation } from "./nativeMemoryConsolidation.mjs";
 import { nativeMemoryMetricFamilies } from "./nativeMemoryMetrics.mjs";
 import { knowledgeQueueMetricFamilies } from "./knowledgeQueueMetrics.mjs";
@@ -1391,12 +1392,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     rejectionJudge,
     report: (line) => process.stderr.write(`${line}\n`),
   });
+  nativeMemoryWorker.verification.judge = createVerificationJudge({ config, usageLedger });
   // 重读旧记忆 on the native engine: the engine's own memory consolidation, asked for now and then and read back into the overlay as
   // revisions (`nativeMemoryConsolidation.mjs`). On by default since 2026-10-24; `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED=false` turns it
   // off (config.mjs); the worker's pass asks it.
   nativeMemoryWorker.consolidation = new NativeMemoryConsolidation({
     config, memorySettings, sessions: openVikingSessions, resources: openVikingResources, overlay: nativeMemoryOverlay,
     ingest: (userId, task) => nativeMemoryWorker.ingestConsolidation(userId, task),
+    verification: nativeMemoryWorker.verification,
     report: (line) => process.stderr.write(`${line}\n`),
   });
   /**
@@ -5125,6 +5128,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // Keep lifecycle fences active even when new history search is switched off.
   nativeMemory.history = memoryHistory;
   nativeMemoryWorker.history = memoryHistory;
+  nativeMemoryWorker.verification.history = memoryHistory;
   const sourceDeletionLedger = productDatabase ? new ConversationSourceDeletionLedger(productDatabase) : null;
   const sourceDeletion = sourceDeletionLedger ? new ConversationSourceDeletionService({ ledger: sourceDeletionLedger, runtime: runtimeManager,
     recordIdForUri:nativeFileId,

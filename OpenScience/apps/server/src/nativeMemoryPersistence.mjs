@@ -230,6 +230,8 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_line_origins (
   PRIMARY KEY (user_id, uri, fingerprint)
 );
 -- The line origins of an account's older revisions are read in once, by the worker (nativeMemoryWorker.mjs), and this says when.
+-- A verified merge can inherit several original conversations; the legacy columns retain its first source.
+ALTER TABLE evimed_memory.native_line_origins ADD COLUMN IF NOT EXISTS sources jsonb;
 ALTER TABLE evimed_memory.native_accounts ADD COLUMN IF NOT EXISTS origins_indexed_at timestamptz(3);
 -- The commits a reset found still being extracted: whatever the engine writes from them after the reset is taken out again.
 CREATE TABLE IF NOT EXISTS evimed_memory.native_reset_tombstones (

@@ -159,3 +159,32 @@ test("an extraction that failed with budget_exhausted is counted in its own buck
   assert.equal(counts.other, 1, "a 429 is no budget of the output");
   assert.equal(counts.quota, 0);
 });
+
+test('inherited consolidation origins retain every archive durably and disappear with their memory file', options, async t => {
+  const f = await fixture(t);
+  const uri = f.seed('entities/merged.md', 'A merged statement.');
+  const sources = [
+    { engineSession: 'dsh-session_a', archiveUri: `${f.sessions.userRoot(f.userId)}/sessions/dsh-session_a/history/archive_001`, projectId: null },
+    { engineSession: 'dsh-session_b', archiveUri: `${f.sessions.userRoot(f.userId)}/sessions/dsh-session_b/history/archive_001`, projectId: null },
+  ];
+  const print = lineFingerprint('A merged statement.');
+  await f.overlay.inheritOrigins(f.userId, uri, new Map([[print, sources]]));
+  const origin = (await f.overlay.originsOf(f.userId, [uri])).get(uri).get(print);
+  assert.equal(origin.archiveUri, sources[0].archiveUri);
+  assert.deepEqual(origin.sources, sources);
+  await f.overlay.syncOrigins(f.userId, uri, { after: 'An unrelated new statement.' });
+  assert.equal((await f.overlay.originsOf(f.userId, [uri])).size, 0);
+});
+
+test('sequential verification corrections bind each revision only to the source of its newly corrected statement', options, async t => {
+  const f = await fixture(t), uri = f.seed('profile.md', '- Wrong A.\n- Wrong B.');
+  const origins = new Map([[lineFingerprint('Correct A.'), [{ engineSession: 'dsh-a', projectId: 'default' }]]]);
+  assert.equal(await f.worker.verification.write(f.userId, { uri, type: 'profile', body: '- Wrong A.\n- Wrong B.' }, '- Correct A.\n- Wrong B.', 'verification_corrected', origins), true);
+  origins.set(lineFingerprint('Correct B.'), [{ engineSession: 'dsh-b', projectId: 'default' }]);
+  assert.equal(await f.worker.verification.write(f.userId, { uri, type: 'profile', body: '- Correct A.\n- Wrong B.' }, '- Correct A.\n- Correct B.', 'verification_corrected', origins), true);
+  const [second, first] = await f.overlay.revisionsOf(f.userId, uri);
+  assert.equal(first.engineSession, 'dsh-a');
+  assert.equal(second.engineSession, 'dsh-b');
+  await f.store.removeConversationSource(f.userId, 'default', ['a']);
+  assert.equal(await f.sessions.read(f.userId, uri), '- Correct B.');
+});

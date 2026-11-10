@@ -6,7 +6,7 @@ import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhe
 import { recordForgetDuplicates, recordMapReplaced } from "./nativeMemoryMetrics.mjs";
 import { freshnessOf } from "./memoryMapSources/common.mjs";
 import { replacedStatements, statementForgotten } from "./memoryMapSources/replacedStatements.mjs";
-import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType } from "./nativeMemoryOverlay.mjs";
+import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType, originalSources } from "./nativeMemoryOverlay.mjs";
 import { OPENVIKING_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from "./openVikingLayout.mjs";
 import { MEMORY_SEGMENT_OF_TYPE, OBSERVATIONS_SEGMENT, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri, platformSessionOf, unfinishedArchives } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
@@ -1241,9 +1241,11 @@ export class NativeMemoryStore {
         for(const print of historicalPrints.get(file.uri)??[])if(!origins.get(file.uri)?.get(print)?.engineSession)prints.add(print);
       }
       for (const [print, origin] of origins.get(file.uri) ?? []) {
-        if (origin.projectId !== projectId || projectCreatedAt&&origin.projectCreatedAt&&origin.projectCreatedAt!==projectCreatedAt) continue;
-        const source = await this.overlay.conversationOf(userId, origin.engineSession, origin.archiveUri);
-        if (deleted.has(source)) prints.add(print);
+        for (const inherited of originalSources(origin)) {
+          if (inherited.projectId !== projectId || projectCreatedAt&&inherited.projectCreatedAt&&inherited.projectCreatedAt!==projectCreatedAt) continue;
+          const source = await this.overlay.conversationOf(userId, inherited.engineSession, inherited.archiveUri);
+          if (deleted.has(source)) prints.add(print);
+        }
       }
       if (!prints.size) continue;
       const removed = [], kept = [];

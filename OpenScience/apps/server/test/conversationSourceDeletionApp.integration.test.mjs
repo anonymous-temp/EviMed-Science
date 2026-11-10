@@ -91,7 +91,7 @@ test('pending source deletion suppresses replaced history and its private snapsh
 test('only controller-proven native namespace copies are cleaned and equal ids in another project survive',options,async t=>{
   const {app,base,headers,user,stub}=await fixture(t),owner=await app.store.userById(user.id),project=await app.store.requireProject(owner,'default');
   const {GeoStore}=await import('../src/geoStore.mjs'),geo=new GeoStore({database:app.store.database});await geo.ready();
-  const colleague=await app.store.createUser('source-copy-colleague','synthetic-source-copy-password','Colleague');
+  const colleague=await app.store.createUser(`source-copy-colleague-${crypto.randomUUID().slice(0,8)}`,'synthetic-source-copy-password','Colleague');
   const register=async(projectId)=>{const item=await geo.createProject({userId:user.id,projectId,engines:['deepseek'],coverageDays:30});await geo.addMember({geoId:item.id,userId:colleague.id,role:'editor',invitedBy:user.id});return app.nativeMemory.memoryContexts.forProject(await app.store.requireProject(owner,projectId));};
   const shared=await register('default');await app.store.createProject(owner,'other','Independent project');const other=await register('other');
   const personal=(await app.nativeMemory.memoryContexts.all(user.id)).find(view=>view.kind==='owned'),overlay=app.nativeMemory.overlay;

@@ -6,10 +6,11 @@ import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType } 
 import { HttpError } from './security.mjs';
 import {
   recordNativeCheck, recordNativeCommit, recordNativeExtraction, recordNativeExtractionFailure, recordNativeOperations, recordNativePass, recordNativeWrite,
-  recordPolicySync, recordRejectionLines, recordResetSweep,
+  recordPolicySync, recordRejectionLines, recordResetSweep, recordVerificationLines,
 } from "./nativeMemoryMetrics.mjs";
 import { NativeMemoryObservations } from "./nativeMemoryObservations.mjs";
 import { containsRemoved, nearRemoved } from "./nativeMemoryRejections.mjs";
+import { NativeMemoryVerification, originalSources, replaceStatement } from './nativeMemoryVerification.mjs';
 import { SOURCE_LABEL_PREFIX, sourcesNamedIn } from "./nativeMemoryStore.mjs";
 import { OPENVIKING_MEMORY_TYPES } from "./openVikingLayout.mjs";
 import { PROJECT_MEMORY_TYPES, nativeMemoryFile, observationFile, parseArchiveUri } from "./openVikingSessions.mjs";
@@ -163,10 +164,11 @@ export class NativeMemoryWorker {
     this.history = null;
     this.projectOfSession = projectOfSession;
     this.memoryContexts = memoryContexts;
+    this.verification = new NativeMemoryVerification({ config: this.config, sessions, overlay, memoryContexts });
     /** Namespace scans rotate independently of pending commits. @type {Map<string, string>} */
     this.scanCursors = new Map();
     this.rejectionJudge = rejectionJudge;
-    /** The consolidation of an account's memories, set by the composition root beside this worker (it reads files back through `ingestConsolidation`). @type {{ tick: (userId: string) => Promise<string> } | null} */
+    /** The consolidation of an account's memories, set by the composition root beside this worker (it reads files back through `ingestConsolidation`). @type {import("./nativeMemoryConsolidation.mjs").NativeMemoryConsolidation | null} */
     this.consolidation = null;
     /** What promotes a choice two conversations repeated (`nativeMemoryObservations.mjs`); built from the store when there is one. @type {{ promote: (userId: string) => Promise<any> } | null} */
     this.observations = nativeMemory && typeof nativeMemory.keepRepeatedChoice === "function"
@@ -790,11 +792,11 @@ export class NativeMemoryWorker {
    * memory page's undo restores from. The checks after the fact hold what a consolidation wrote as they hold what an extraction wrote —
    * a merge can bring back a line the person removed, in its words or in others' — and a file that is unchanged from what the overlay
    * held is not a change however the engine lists it.
-   * @param {string} userId @param {{ taskId: string, adds?: readonly string[], updates?: readonly string[], deletes?: readonly string[] }} task
+   * @param {string} userId @param {{ taskId: string, adds?: readonly string[], updates?: readonly string[], deletes?: readonly string[], mode?: string }} task
    * @param {{ context?: any }} [options]
    * @returns {Promise<{ added: number, updated: number, deleted: number }>}
    */
-  async ingestConsolidation(userId, { taskId, adds = [], updates = [], deletes = [] }, { context = null } = {}) {
+  async ingestConsolidation(userId, { taskId, adds = [], updates = [], deletes = [], mode = this.config.nativeMemoryConsolidationMode }, { context = null } = {}) {
     context ??= await this.#contextForUri(userId, this.sessions.memoryRoot(userId));
     if (context.ownerId !== userId) throw new HttpError(403, 'memory_scope_denied', 'The consolidation owner does not match.');
     if (this.memoryContexts) await this.memoryContexts.assertKnown(context);
@@ -810,6 +812,9 @@ export class NativeMemoryWorker {
       if (this.memoryContexts) this.memoryContexts.assertUri(context, uri);
     }
     const held = await this.overlay.files(userId);
+    const verify = mode === 'verify' && this.config.nativeMemoryConsolidationEnabled === true;
+    const origins = verify ? await this.overlay.originsOf(userId, [...new Set([...adds, ...updates, ...deletes])]) : new Map();
+    const removed = [];
     // One revision per file and task, however often the same task is read (the revisions' own uniqueness key).
     const archiveUri = `consolidation:${taskId}`;
     const counts = { added: 0, updated: 0, deleted: 0 };
@@ -820,6 +825,7 @@ export class NativeMemoryWorker {
       const recorded = await this.overlay.addRevision({ userId, uri, memoryType: file.type, change: "deleted", actor: "engine", reason: "consolidation",
         before: prior?.body ?? null, after: null, archiveUri, projectId: context.kind === 'geo-project' ? context.projectId : PROJECT_MEMORY_TYPES.includes(file.type) ? prior?.projectId ?? null : null });
       await this.overlay.removeFile(userId, uri);
+      if (verify && prior) removed.push({ uri, type: file.type, projectId: prior.projectId, body: prior.body });
       if (recorded) counts.deleted += 1;
     }
     /** @type {{ uri: string, type: string, projectId: string | null, before: string, after: string }[]} */
@@ -846,10 +852,75 @@ export class NativeMemoryWorker {
       return new Map();
     });
     // The tag of a project's file is put back: a rewrite is not known to keep it.
+    const candidates = [], archiveCache = new Map();
     for (const entry of written) {
       const body = await this.#afterWrite(userId, entry.uri, entry.type, { projectId: entry.projectId, diffAfter: entry.after, diffBefore: entry.before, fresh: true, archiveUri: null, memoryContext: context, rewordings });
       // A line the consolidation wrote anew names no conversation; a line it kept is already in the index with its own.
-      if (body !== null) await this.overlay.syncOrigins(userId, entry.uri, { after: body, before: entry.before, origin: { engineSession: null, archiveUri, projectId: entry.projectId } });
+      if (!verify) {
+        if (body !== null) await this.overlay.syncOrigins(userId, entry.uri, { after: body, before: entry.before, origin: { engineSession: null, archiveUri, projectId: entry.projectId } });
+        continue;
+      }
+      if (body === null) continue;
+      entry.after = body;
+      const now = new Set(memoryLines(body).map(lineFingerprint));
+      const before = new Set(memoryLines(entry.before).map(lineFingerprint));
+      const departed = [
+        ...memoryLines(entry.before).filter(line => !now.has(lineFingerprint(line))).flatMap(line => originalSources(origins.get(entry.uri)?.get(lineFingerprint(line)))),
+        ...removed.flatMap(file => [...(origins.get(file.uri)?.values() ?? [])].flatMap(originalSources)),
+      ];
+      const unique = [...new Map(departed.filter(origin => origin.archiveUri).map(origin => [JSON.stringify(origin), origin])).values()];
+      const inherited = new Map();
+      for (const text of memoryLines(body).filter(line => !before.has(lineFingerprint(line)))) {
+        const fingerprint = lineFingerprint(text);
+        inherited.set(fingerprint, unique);
+        candidates.push({ text, fingerprint, uri: entry.uri, sources: await this.verification.readSources(userId, unique, context, archiveCache), origins: unique });
+      }
+      await this.overlay.syncOrigins(userId, entry.uri, { after: body });
+      await this.overlay.inheritOrigins(userId, entry.uri, inherited);
+    }
+    if (verify && candidates.length) {
+      const assessed = await this.verification.assess(userId, candidates);
+      for (const row of assessed.results) recordVerificationLines(row.corrected ? 'corrected' : row.status);
+      let restoreDeleted = false;
+      for (const entry of written) {
+        const rows = assessed.results.filter(row => row.uri === entry.uri);
+        const current = await sessions.read(userId, entry.uri);
+        if (current === null || current !== entry.after) continue;
+        let next = current;
+        const unsupported = rows.some(row => row.status === 'unsupported');
+        const inherited = new Map();
+        if (unsupported && !entry.before) {
+          // A new file has no pre-merge text. Undo its addition, retaining its full body in the deletion revision.
+          await this.overlay.addRevision({ userId, uri: entry.uri, memoryType: entry.type, projectId: entry.projectId,
+            actor: 'platform', change: 'deleted', reason: 'consolidation_unverified', before: current, after: null });
+          await sessions.remove(userId, entry.uri);
+          await this.overlay.removeFile(userId, entry.uri);
+          restoreDeleted = true;
+          continue;
+        }
+        if (unsupported && entry.before) {
+          next = entry.before;
+          restoreDeleted = true;
+          for (const [print, origin] of origins.get(entry.uri) ?? []) inherited.set(print, originalSources(origin));
+        } else {
+          if (unsupported) restoreDeleted = true;
+          for (const row of rows) if (row.corrected) {
+            next = replaceStatement(next, row.fingerprint, row.corrected);
+            inherited.set(lineFingerprint(row.corrected), row.origins);
+          }
+        }
+        await this.verification.write(userId, { ...entry, body: current }, next,
+          unsupported ? 'consolidation_unverified' : 'consolidation_corrected', inherited, context);
+      }
+      // If a rejected merge consumed another file, restore that pre-image too. Its deletion revision remains undoable.
+      if (restoreDeleted) for (const file of removed) {
+        if (await sessions.read(userId, file.uri) !== null) continue;
+        await sessions.replace(userId, file.uri, file.body);
+        await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId,
+          actor: 'platform', change: 'added', reason: 'consolidation_unverified', before: null, after: file.body });
+        await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId, body: file.body });
+        await this.overlay.inheritOrigins(userId, file.uri, new Map([...(origins.get(file.uri) ?? [])].map(([print, origin]) => [print, originalSources(origin)])));
+      }
     }
     return counts;
   }

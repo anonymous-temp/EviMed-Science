@@ -114,6 +114,13 @@ const forgetDuplicates = table(NATIVE_FORGET_DUPLICATE_OUTCOMES);
 const recallNotes = table(NATIVE_RECALL_NOTE_OUTCOMES);
 const imports = table(NATIVE_IMPORT_OUTCOMES);
 const mapReplaced = table(NATIVE_MAP_REPLACED_OUTCOMES);
+const verificationJudge = table(['asked', 'failed', 'over_budget', 'unavailable']);
+const verificationLines = table(['supported', 'corrected', 'unsupported', 'unverifiable']);
+
+/** @param {string} outcome */
+export function recordVerificationJudge(outcome) { bump(verificationJudge, outcome); }
+/** @param {string} outcome @param {number} [count] */
+export function recordVerificationLines(outcome, count = 1) { bump(verificationLines, outcome, count); }
 
 /** One gateway request. @param {string} route @param {string} outcome */
 export function recordGatewayRequest(route, outcome) {
@@ -195,7 +202,7 @@ export function recordMapReplaced(outcome) { bump(mapReplaced, outcome); }
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced]) {
+  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced, verificationJudge, verificationLines]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -210,7 +217,7 @@ export function nativeMemoryCounters() {
     workerOperations: plain(workerOperations), extractionOutcomes: plain(extractionOutcomes), skippedOperations: plain(skippedOperations),
     rejectionJudge: plain(rejectionJudge), rejectionLines: plain(rejectionLines), consolidations: plain(consolidations), consolidatedFiles: plain(consolidatedFiles), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
     observationOutcomes: plain(observationOutcomes), resetSweeps: plain(resetSweeps), resetSweptFiles: plain(resetSweptFiles), extractionFailures: plain(extractionFailures),
-    privacyDeletes: plain(privacyDeletes), policySyncs: plain(policySyncs), forgetDuplicates: plain(forgetDuplicates), recallNotes: plain(recallNotes), imports: plain(imports), mapReplaced: plain(mapReplaced),
+    privacyDeletes: plain(privacyDeletes), policySyncs: plain(policySyncs), forgetDuplicates: plain(forgetDuplicates), recallNotes: plain(recallNotes), imports: plain(imports), mapReplaced: plain(mapReplaced), verificationJudge: plain(verificationJudge), verificationLines: plain(verificationLines),
   };
 }
 
@@ -222,6 +229,10 @@ const series = (map, label) => [...map].map(([key, value]) => ({ value, labels: 
  */
 export function nativeMemoryMetricFamilies() {
   return [
+    { name: 'open_science_native_memory_verification_judge_total', type: 'counter', series: series(verificationJudge, 'outcome'),
+      help: 'Source verification judge calls, including failed and unavailable calls and the daily cap.' },
+    { name: 'open_science_native_memory_verification_lines_total', type: 'counter', series: series(verificationLines, 'outcome'),
+      help: 'Memory lines checked against original conversation excerpts; unsupported without a pre-image remains report-only.' },
     { name: "open_science_memory_gateway_requests_total", type: "counter",
       series: [...requests].map(([key, value]) => { const [route, outcome] = key.split("\u0000"); return { value, labels: { route, outcome } }; }),
       help: "Requests the memory gateway answered, by route and by what became of them: forwarded to the engine, answered locally, withheld (answered as nothing because the caller is not read or learned from), refused by name, or failed upstream." },
