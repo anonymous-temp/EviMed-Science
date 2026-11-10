@@ -341,9 +341,18 @@ export async function openStack({ engineUrl, engineKeyFile, databaseUrlFile, dat
       let rounds = 0, settled = 0, open = [];
       for (;;) {
         rounds += 1;
+        // Recurring workers are stopped here: advance their durable maintenance queue too.
+        // An engine conflict during an extraction must be retried as the real worker retries it.
+        try { await app.nativeMemoryWorker.drainSummaryInvalidations(userId); }
+        catch (error) { say(`native summary maintenance retry: ${errorLine(error)}`); }
         settled += Number(await app.nativeMemoryWorker.processCommits({ userId, limit: 50 })) || 0;
         open = await overlay.openCommits({ userId, limit: 50 });
-        if (!open.length || Date.now() >= deadline) break;
+        const maintenance = await overlay.pendingSummaryInvalidations(userId);
+        if (!open.length && !maintenance.length) break;
+        if (Date.now() >= deadline) {
+          if (maintenance.length) throw new Error('native summary maintenance did not finish');
+          break;
+        }
         await sleep(pollMs);
       }
       await app.memoryHistory?.drainDeletes(userId).catch(() => {});

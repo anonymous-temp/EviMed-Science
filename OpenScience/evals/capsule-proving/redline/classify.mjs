@@ -47,6 +47,9 @@ export function archiveSessionKind(rel) {
  */
 export function classifyPlace(place, where, { deleteVia }) {
   const source = SOURCE_DELETES.has(deleteVia);
+  // A generated memory summary (or its vector) is a second copy of the removed memory.
+  // Retained conversation archives keep their separate, path-specific interpretation below.
+  if ((place === 'engine-summaries' || place === 'vectors') && where.some(rel => rel.startsWith('memories/'))) return { class: 'redline', reasons: [] };
   if (ALWAYS_REDLINE.has(place)) return { class: "redline", reasons: [] };
   if (place === "ledger") {
     let worst = "by-design";

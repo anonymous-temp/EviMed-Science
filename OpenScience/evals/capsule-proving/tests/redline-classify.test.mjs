@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { archiveSessionKind, binomialCdf, classifyColumn, classifyFindings, classifyPlace, g4Counted, g5Verdict, probeExpectation, summarizeG4, summarizeG5,
   upperBound } from "../redline/classify.mjs";
-import { enginePlace, holds, searchBlockKind, zipPathsWith } from "../redline/scan.mjs";
+import { engineFilesWith, enginePlace, holds, searchBlockKind, vectorHits, zipPathsWith } from "../redline/scan.mjs";
 import { createRequire } from "node:module";
 
 const { zipSync } = createRequire(new URL("../../../apps/server/package.json", import.meta.url))("fflate");
@@ -44,8 +44,8 @@ test("source copies are red lines only for the deletions that destroy the source
   // A page write session is not the deleted conversation; it is flagged, not a red line, when only a conversation was deleted.
   assert.equal(classifyPlace("archive", ["sessions/evimed-page-x/history/archive_001/messages.jsonl"], { deleteVia: "delete-conversation" }).class, "flag");
   assert.equal(classifyPlace("archive", ["sessions/mcp-store-x/history/archive_001/messages.jsonl"], { deleteVia: "memory-page-delete" }).class, "flag");
-  assert.equal(classifyPlace("vectors", ["memories/notes/a.md"], { deleteVia: "memory-page-delete" }).class, "flag");
-  assert.equal(classifyPlace("engine-summaries", ["memories/notes/.overview.md"], { deleteVia: "delete-account" }).class, "flag");
+  assert.equal(classifyPlace("vectors", ["memories/notes/a.md"], { deleteVia: "memory-page-delete" }).class, "redline");
+  assert.equal(classifyPlace("engine-summaries", ["memories/notes/.overview.md"], { deleteVia: "delete-account" }).class, "redline");
 });
 
 test("ledger columns: rejection words and undo/edit history are by design, other clear text is a flag", () => {
@@ -182,4 +182,23 @@ test("a marker is found in any letter case, in file names inside archives too", 
   assert.equal(holds("R-4716", "R-47162"), false);
   const zip = zipSync({ "personal/memories/projects/r-47162 申请.md": Buffer.from("no code in the body") });
   assert.deepEqual(zipPathsWith(zip, "R-47162"), ["personal/memories/projects/r-47162 申请.md"]);
+});
+
+test('memory directory sidecars and their vectors are red lines after every memory removal', () => {
+  for (const deleteVia of ['forget-in-conversation', 'memory-page-edit', 'memory-page-delete', 'delete-conversation', 'memory-reset', 'delete-account']) {
+    for (const place of ['engine-summaries', 'vectors']) {
+      for (const name of ['.overview.md', '.abstract.md']) assert.equal(classifyPlace(place, [`memories/projects/${name}`], { deleteVia }).class, 'redline');
+    }
+  }
+});
+
+test('failed summary reads and vector probes are unknown rather than clean scans', async () => {
+  const root = 'viking://user/test';
+  const sessions = { userRoot: () => root,
+    tree: async () => [{ uri: `${root}/memories/projects/.overview.md`, isDir: false }],
+    read: async () => { throw new Error('summary unavailable'); },
+    find: async () => { throw new Error('vectors unavailable'); },
+  };
+  await assert.rejects(engineFilesWith(sessions, 'test', 'P19-MARKER'), /summary unavailable/);
+  await assert.rejects(vectorHits(sessions, 'test', 'P19-MARKER'), /vectors unavailable/);
 });

@@ -275,3 +275,41 @@ test('conversation deletion follows exact one-shot remember copies even when onl
   }
   assert.equal(await overlay.conversationOf(user.id,independent.engineSession,independent.archiveUri),'independent');
 });
+
+test('source deletion stays pending after the file is gone until summary maintenance is retried', options, async t => {
+  const { app, base, headers, user, stub, engineUser } = await fixture(t);
+  const project = await app.store.requireProject(await app.store.userById(user.id), 'default');
+  const context = await app.nativeMemory.memoryContexts.forProject(project), overlay = app.nativeMemory.overlay;
+  const marker = 'P19-STALE-SOURCE', uri = stub.seedMemory(engineUser, 'notes/deep/source.md', marker, { type: 'notes' });
+  const archive = `${context.userRoot}/sessions/dsh-source/history/archive_001`;
+  await overlay.upsertFile({ userId: user.id, uri, memoryType: 'notes', body: marker });
+  await overlay.syncOrigins(user.id, uri, { after: marker, origin: { engineSession: 'dsh-source', archiveUri: archive, projectId: 'default' } });
+  const root = context.sessions.memoryRoot(user.id);
+  const directories = [`${root}/notes/deep`, `${root}/notes`, root];
+  for (const directory of directories) {
+    for (const name of ['.overview.md', '.abstract.md']) stub.files.set(`${directory}/${name}`, marker);
+  }
+  app.runtimeManager.captureConversationSource = async () => ({ root: { id: 'source', createdAt: 1, cwd: '/workspace', isSeeded: false }, sessions: [{ id: 'source' }], generation: 'synthetic-fixture' });
+  app.runtimeManager.purgeConversationSource = async () => ({ sourceRemoved: true, removedSessionIds: ['source'] });
+  const sessions = context.sessions;
+  // Contexts are recreated on lookup, so fail the shared root client at the maintenance API.
+  const client = sessions.rootClient, request = client.request.bind(client);
+  let failed = true;
+  client.request = async input => {
+    if (failed && input.path === '/api/v1/content/reindex') throw Object.assign(new Error('engine unavailable'), { code: 'memory_index_unavailable' });
+    return request(input);
+  };
+  const target = `${base}/api/projects/default/conversations/source/source`;
+  assert.equal((await fetch(target, { method: 'DELETE', headers })).status, 202);
+  await app.sourceDeletion.drain();
+  assert.equal(await sessions.read(user.id, uri), null, 'the destructive operation already reached the engine');
+  assert.equal((await app.sourceDeletion.status(project, 'source')).cleanup, 'pending');
+  assert.ok((await overlay.pendingSummaryInvalidations(user.id)).length);
+  failed = false;
+  await app.store.database.query('UPDATE evimed_source_deletion.conversations SET next_attempt_at=NULL WHERE user_id=$1', [user.id]);
+  const { ConversationSourceDeletionService } = await import('../src/conversationSourceDeletionService.mjs');
+  await new ConversationSourceDeletionService({ ...app.sourceDeletion }).drain();
+  assert.equal((await app.sourceDeletion.status(project, 'source')).cleanup, 'complete');
+  assert.deepEqual(await overlay.pendingSummaryInvalidations(user.id), []);
+  for (const directory of directories) for (const name of ['.overview.md', '.abstract.md']) assert.equal(stub.files.get(`${directory}/${name}`)?.includes(marker) ?? false, false);
+});

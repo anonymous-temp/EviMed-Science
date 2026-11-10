@@ -1025,3 +1025,32 @@ test('when the failure itself cannot be recorded on the run the recall is refuse
     assert.equal(rest.status,503);assert.doesNotMatch(rest.text,/RECEIPT_CANARY_2/);
   }
 });
+
+test('generated directory summaries never reach memory search, read, list, REST recall or the plugin opening list', async t => {
+  const f = await fixture(t);
+  const marker = 'STALE_SUMMARY_P19', root = `${ROOT}/memories`;
+  const summaries = [];
+  for (const directory of [root, `${root}/preferences`, `${root}/preferences/corrections`]) {
+    for (const name of ['.overview.md', '.abstract.md']) {
+      const uri = `${directory}/${name}`;
+      summaries.push(uri); f.stub.files.set(uri, marker);
+    }
+  }
+  f.stub.seedMemory(OV_USER, 'preferences/real.md', 'Use green folders.', { type: 'preferences' });
+  const list = await f.call('GET', `/api/v1/fs/ls?uri=${encodeURIComponent(`${root}/preferences`)}&output=agent&recursive=true&abs_limit=512&node_limit=512`);
+  assert.equal(list.status, 200);
+  assert.equal(JSON.stringify(list.json).includes(marker), false);
+  assert.ok(list.json.result.some(entry => entry.uri.endsWith('/real.md')), 'opening still discovers actual preference files');
+  for (const uri of [...summaries, ...summaries.map(summaryUri => summaryUri.replace('/.', '/%2E'))]) {
+    assert.equal((await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}`)).status, 404);
+    const read = await f.mcp({ jsonrpc: '2.0', id: 19, method: 'tools/call', params: { name: 'read', arguments: { uris: [uri] } } });
+    assert.equal(JSON.stringify(read).includes(marker), false);
+  }
+  for (const mode of [undefined, 'context']) {
+    const answer = await f.call('POST', '/api/v1/search/search', { query: marker, limit: 20, ...(mode ? { mode } : {}) });
+    assert.equal(answer.status, 200);
+    assert.equal(JSON.stringify(answer.json).includes(marker), false);
+  }
+  const searched = await f.mcp({ jsonrpc: '2.0', id: 20, method: 'tools/call', params: { name: 'search', arguments: { query: marker, limit: 20 } } });
+  assert.equal(JSON.stringify(searched).includes(marker), false);
+});

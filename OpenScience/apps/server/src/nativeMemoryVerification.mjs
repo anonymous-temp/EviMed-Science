@@ -1,3 +1,4 @@
+import { withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
 import { carriesPlatformContext, identifierShapesIn, platformIdentifiersIn } from '@evimed/domain';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { filterCapturedMessage } from './memoryGateway.mjs';
@@ -187,7 +188,7 @@ export class NativeMemoryVerification {
     const authorities = new Map([...origins].filter(([print]) => !prior.has(print)).flatMap(([, sources]) => sources)
       .map(source => [JSON.stringify([source.engineSession, source.projectId, source.projectCreatedAt]), source]));
     const authority = authorities.size === 1 ? [...authorities.values()][0] : null;
-    await sessions.replace(userId, file.uri, next);
+    await withMemorySummaryInvalidation(sessions, this.overlay, userId, file.uri, () => sessions.replace(userId, file.uri, next));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId ?? null,
       change: 'updated', actor: 'platform', reason, before: file.body, after: next,
       engineSession: authority?.engineSession ?? null,

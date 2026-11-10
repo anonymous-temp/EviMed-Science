@@ -1,6 +1,7 @@
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { historySearchText } from './memoryHistory.mjs';
 import { openingProfileRead, selectOpeningEntries } from './memoryOpeningByUse.mjs';
+import { isMemorySummary } from './nativeMemorySummaries.mjs';
 import { carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
 import { withoutResearchGoalGesture } from "./researchGoal.mjs";
 
@@ -198,7 +199,7 @@ async function scopedListSearch(sessions, ctx, given) {
   for (const kind of ["memories", "resources", "skills"]) {
     result[kind] = (Array.isArray(answer.result[kind]) ? answer.result[kind] : []).filter(hit => {
       const uri = typeof hit?.uri === "string" ? hit.uri : "";
-      return uri === absolute(uri, ctx.userRoot) && Boolean(nativeMemoryFile(uri, `${ctx.userRoot}/memories`)) && (uri === target || uri.startsWith(`${target}/`)) && !hidden(uri);
+      return !isMemorySummary(uri) && uri === absolute(uri, ctx.userRoot) && Boolean(nativeMemoryFile(uri, `${ctx.userRoot}/memories`)) && (uri === target || uri.startsWith(`${target}/`)) && !hidden(uri);
     }).slice(0, remaining).map(hit => ({ uri: hit.uri,
       ...(typeof hit.context_type === "string" ? { context_type: hit.context_type } : {}),
       ...(Number.isFinite(hit.score) ? { score: hit.score } : {}), ...(Number.isInteger(hit.level) ? { level: hit.level } : {}),
@@ -223,7 +224,7 @@ async function scopedMemoryList(sessions, ctx, requested, query = {}) {
   const hidden = await ctx.hiddenSet();
   const entries = body.result.filter(entry => {
     const uri = typeof entry?.uri === "string" ? entry.uri : "";
-    return uri === absolute(uri, ctx.userRoot) && insideNativeMemories(uri, ctx.userRoot) && (uri === target || uri.startsWith(`${target}/`))
+    return !isMemorySummary(uri) && uri === absolute(uri, ctx.userRoot) && insideNativeMemories(uri, ctx.userRoot) && (uri === target || uri.startsWith(`${target}/`))
       && !hidden.some(prefix => uri === prefix || uri.startsWith(`${prefix}/`))
       && Boolean(nativeMemoryFile(entry.isDir === true ? `${uri}/scope-check.md` : uri, root));
   }).map(entry => ({ uri: entry.uri, isDir: entry.isDir === true,
@@ -965,7 +966,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           const hiddenUris = await ctx.hiddenSet();
           const isHidden = (/** @type {string} */ uri, directory = false) => {
             const full = absolute(uri, ctx.userRoot);
-            return hiddenUris.some((/** @type {string} */ prefix) => full === prefix || full.startsWith(`${prefix}/`))
+            return isMemorySummary(full) || hiddenUris.some((/** @type {string} */ prefix) => full === prefix || full.startsWith(`${prefix}/`))
               || ctx.shared && !projectMemoryVisible(full, ctx.userRoot, ctx.sessions.memoryTypes, directory);
           };
           if (name === "read") {
@@ -1217,7 +1218,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           })();
           return hiddenList;
         },
-        hidden: async (/** @type {string} */ uri, directory = false) => (await ctx.hiddenSet()).some((prefix) => uri === prefix || uri.startsWith(`${prefix}/`))
+        hidden: async (/** @type {string} */ uri, directory = false) => isMemorySummary(uri) || (await ctx.hiddenSet()).some((prefix) => uri === prefix || uri.startsWith(`${prefix}/`))
           || shared && !projectMemoryVisible(uri, userRoot, view.memoryTypes, directory),
         // `exclude_uris` of a search: the account-shared areas hold nothing of this user's and their scaffolding ranks as hits.
         excluded: async (/** @type {unknown[]} */ given, context = false) => {

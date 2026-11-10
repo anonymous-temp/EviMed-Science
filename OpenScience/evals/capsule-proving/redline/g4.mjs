@@ -141,7 +141,7 @@ async function scanAll(stack, user, trial, prints) {
   const findings = {};
   const engine = engineHeld ? await engineFilesWith(stack.sessions, user.id, marker) : { files: 0, byPlace: {} };
   for (const place of ["engine-files", "engine-summaries", "archive", "raw-history", "privacy-tree", "engine-other"]) findings[place] = engine.byPlace[place] ?? [];
-  findings.vectors = engineHeld ? await vectorHits(stack.sessions, user.id, marker).catch(() => []) : [];
+  findings.vectors = engineHeld ? await vectorHits(stack.sessions, user.id, marker) : [];
   findings.ledger = Object.keys(await databaseColumnsWith(stack.database, marker, user.id));
   findings["line-origin-index"] = (await staleOrigins(stack.database, user.id, prints)) > 0 ? ["evimed_memory.native_line_origins.fingerprint"] : [];
   if (accountHeld) {

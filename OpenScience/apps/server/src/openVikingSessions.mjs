@@ -409,8 +409,29 @@ export class OpenVikingSessions {
   }
 
   /** Delete a file or a subtree. @returns {Promise<boolean>} false when nothing was there */
-  remove(userId, uri, { recursive = false } = {}) {
-    return this.client.remove(userId, uri, { recursive });
+  remove(userId, uri, { recursive = false, wait = false } = {}) {
+    return this.client.remove(userId, uri, { recursive, wait });
+  }
+
+  /** Rebuild this directory only, after its children and old sidecars were cleaned.
+   * Missing directories were removed with their subtree; other failures remain retryable. */
+  async rebuildMemoryDirectory(userId, uri) {
+    const root = this.memoryRoot(userId);
+    if ((uri !== root && !uri.startsWith(`${root}/`)) || uri.split('/').some(part => part === '..' || part === '.')) {
+      throw new HttpError(403, 'memory_scope_denied', 'The directory is outside native memories.');
+    }
+    try {
+      const answer = await this.client.request({ method: 'POST', path: '/api/v1/content/reindex', userId,
+        body: { uri, mode: 'semantic_and_vectors', recursive: false, wait: true }, timeoutMs: Math.max(this.timeoutMs, 60_000) });
+      const result = answer?.result;
+      if (result?.status !== 'completed' || result.failed_records > 0 || Object.values(result.queue_status ?? {}).some(queue => /** @type {any} */ (queue)?.error_count > 0)) {
+        throw new HttpError(503, 'memory_summary_rebuild_failed', 'Native memory directory maintenance is incomplete.');
+      }
+      return true;
+    } catch (error) {
+      if (error?.code === 'memory_index_not_found') return false;
+      throw error;
+    }
   }
 
   // ------------------------------------------------------------------ recall

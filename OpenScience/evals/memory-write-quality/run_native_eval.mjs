@@ -323,9 +323,19 @@ async function main() {
     noteRevisions.set(userId, revisions);
     const kept = new Set(revisions.filter((revision) => revision.change !== "deleted").map((revision) => revision.uri));
     const gone = new Set();
+    // This raw-engine eval has an in-memory overlay rather than the product database.
+    const summaryInvalidations = new Map();
     const promoter = new NativeMemoryObservations({
       sessions,
       overlay: {
+        queueSummaryInvalidation: async (_user, directories) => directories.map(directory => {
+          const generation = randomBytes(8).toString('hex');
+          summaryInvalidations.set(directory, generation);
+          return { directory, generation };
+        }),
+        completeSummaryInvalidation: async (_user, tickets) => {
+          for (const ticket of tickets) if (summaryInvalidations.get(ticket.directory) === ticket.generation) summaryInvalidations.delete(ticket.directory);
+        },
         observationFiles: async () => [...kept].filter((uri) => !gone.has(uri)).map((uri) => ({ uri })),
         revisionsOf: async (_user, uri) => (noteRevisions.get(userId) ?? []).filter((revision) => revision.uri === uri).map((revision) => ({ actor: "engine", change: revision.change, undoneAt: null, engineSession: revision.engineSession, archiveUri: null })),
         conversationOf: async (_user, engineSession) => (String(engineSession).startsWith("evmq-") ? String(engineSession) : null),

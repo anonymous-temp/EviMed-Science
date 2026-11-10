@@ -308,3 +308,9 @@ test("GEO monitoring recovery codes are exported with actionable Chinese message
     assert.ok(!looksLikeAnIdentifier(personErrorCodeMessage(code) ?? ""));
   }
 });
+
+test('incomplete native summary maintenance is an upstream retry with a person-readable message', () => {
+  assert.equal(errorCodeOutcome('memory_summary_rebuild_failed'), 'upstream');
+  assert.ok(hasChinese(knownErrorCodeMessage('memory_summary_rebuild_failed')));
+  assert.equal(errorCodeAudience('memory_summary_rebuild_failed'), 'person');
+});
