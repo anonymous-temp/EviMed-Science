@@ -1,0 +1,12 @@
+{
+  "items": [
+    {
+      "set": "synthetic-users",
+      "split": "dev",
+      "id": "M01-q005",
+      "reason": "the rendered conversation says the swimming day moved to Thursday in session s001, off the skeleton; the gold expects the planned value",
+      "decidedBy": "commander",
+      "date": "2026-11-10"
+    }
+  ]
+}

@@ -1,13 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { writeFile, mkdtemp, rm, access } from "node:fs/promises";
+import { writeFile, mkdtemp, mkdir, rm, access, readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { answerQuestion } from "../run/answerer.mjs";
-import { buildProfileBlock, buildSystemPrompt, buildTimeContext } from "../run/openingBlock.mjs";
+import { buildProfileBlock, buildSystemPrompt, buildTimeContext, buildSkillCatalog, SKILL_TOOL, loadSkill,
+  catalogDescription, renderCatalogMessage, renderCatalogEntries, renderSkillContent, escapeText, isModelInvocable } from "../run/openingBlock.mjs";
 import { createDeepSeekClient, firstLine } from "../run/deepseek.mjs";
 import { createTranscriptIndex, KEYWORD_SEARCH_TOOL, tokenize } from "../run/baselines.mjs";
 import { MEMORY_GATEWAY_TOOLS } from "../../../apps/server/src/memoryGateway.mjs";
@@ -21,6 +23,9 @@ if (hasArchive) process.env.CAPSULE_PROVING_PLUGIN_TGZ = archive;
 const productTest = (name, fn) => test(name, { skip: !hasArchive && "Set CAPSULE_PROVING_PLUGIN_TGZ to run the real pinned-plugin tests" }, fn);
 const options = { question: "What do I prefer?", asOf: "2026-03-23T03:41:24.000Z", arm: "product", caseId: "test-case", qid: "q1" };
 const tool = (name, args, id = name) => ({ id, type: "function", function: { name: `mcp__openviking__${name}`, arguments: JSON.stringify(args) } });
+const skillCall = (name) => ({ id: "load_skill", type: "function", function: { name: "skill", arguments: JSON.stringify({ name }) } });
+const skillTool = { type: "function", function: { name: SKILL_TOOL.name, description: SKILL_TOOL.description, parameters: SKILL_TOOL.inputSchema } };
+const catalogSummary = (catalog) => ({ entries: catalog.entries.length, sha256: createHash("sha256").update(catalog.text).digest("hex") });
 const reply = (content, calls = []) => ({ message: { role: "assistant", content, ...(calls.length ? { tool_calls: calls, reasoning_content: "Look up the prior preference." } : {}) }, usage: { promptTokens: 10, completionTokens: 3, cachedTokens: 2 } });
 
 function fakeClient(replies) {
@@ -63,20 +68,174 @@ async function credential(t) {
 }
 const httpReply = (data, status = 200) => ({ status, ok: status >= 200 && status < 300, async json() { return data; } });
 
+// Internal renderers are not exported by DSH. Evaluate their unmodified function declarations
+// with only createUserMessage stubbed to expose text; never import a kernel package at runtime.
+function kernelFunction(source, name) {
+  const start = source.indexOf(`function ${name}(`);
+  assert.ok(start >= 0, `Kernel function ${name} exists`);
+  const end = source.indexOf("\n}", start);
+  assert.ok(end > start);
+  return source.slice(start, end + 2);
+}
+
+test("pure catalogue, content and tool definitions match the installed pinned kernel when present", async (t) => {
+  const directory = "/home/coder/.npm-global/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai";
+  let toolSource, skillSource;
+  try {
+    [toolSource, skillSource] = await Promise.all([
+      readFile(path.join(directory, "dsh-tool-skill/lib/index.js"), "utf8"),
+      readFile(path.join(directory, "dsh-skill/lib/index.js"), "utf8"),
+    ]);
+  } catch (error) {
+    if (error.code === "ENOENT") return t.skip("Pinned kernel is not installed on this host");
+    throw error;
+  }
+  const toolNames = ["catalogDescription", "renderCatalogEntries", "renderCatalogMessage", "incompleteCatalogNotice", "apply"];
+  const skillNames = ["escapeText", "escapeAttr", "isModelInvocable", "renderSkillContent", "renderResourceHint"];
+  const declarations = [...toolNames.map((name) => kernelFunction(toolSource, name)), ...skillNames.map((name) => kernelFunction(skillSource, name))].join("\n");
+  let definition;
+  const kernel = new Function("createUserMessage", "defineTool", "assertPositiveInteger", `${declarations}\nreturn { ${[...toolNames, ...skillNames].join(", ")} };`)(
+    (message) => message, (tool) => tool, () => {},
+  );
+  const sample = [
+    { name: "alpha", description: "  Read\n\tfiles with <tags> & details.  " },
+    { name: "long-description", description: `Multi-line\n description ${"x".repeat(600)}` },
+    { name: "unicode", description: "Sample \u4e2d\u6587 text with > and &amp;." },
+  ];
+  const entries = sample.map(({ name, description }) => ({ name, description: catalogDescription(description) }));
+  assert.deepEqual(entries, sample.map(({ name, description }) => ({ name, description: kernel.catalogDescription(description, 500) })));
+  assert.equal(entries[1].description.length, 500);
+  assert.ok(entries[1].description.endsWith("..."));
+  assert.equal(escapeText("< & >"), kernel.escapeText("< & >"));
+  assert.deepEqual(renderCatalogEntries(entries), kernel.renderCatalogEntries(entries));
+  for (const list of [entries, []]) assert.equal(renderCatalogMessage(list), kernel.renderCatalogMessage(list, false).content[0].text);
+  for (const modelInvocable of [true, false]) {
+    const skill = { invocation: { modelInvocable } };
+    assert.equal(isModelInvocable(skill), kernel.isModelInvocable(skill));
+  }
+  const skill = { body: "# Instructions\n\nUse <verbatim> content.\nPreserve whitespace.", path: "/local/<skills>&/sample/SKILL.md" };
+  assert.equal(renderSkillContent("sample", skill), kernel.renderSkillContent({ name: "sample", provider: "filesystem",
+    content: skill.body, resourceBase: { kind: "directory", path: path.dirname(skill.path) } }));
+  kernel.apply({ tools: { register(tool) { definition = tool; } }, on() {} }, { catalogDescriptionMaxLength: 500 });
+  const properties = Object.fromEntries(Object.entries(definition.parameters).map(([name, value]) => {
+    const { required, ...schema } = value;
+    assert.equal(required, true);
+    return [name, schema];
+  }));
+  assert.deepEqual(SKILL_TOOL, { name: definition.name, description: definition.description,
+    inputSchema: { type: "object", properties, required: ["name"] } });
+  assert.equal(renderSkillContent("sample", skill), definition.output.render({}, { name: "sample", provider: "filesystem",
+    content: skill.body, resourceBase: { kind: "directory", path: path.dirname(skill.path) } })[0].text);
+});
+
+productTest("catalogue uses only shipped conversation roots, native name order, and the visible plugin skill", async () => {
+  const product = await buildSkillCatalog({ pluginTgz: archive });
+  const baseline = await buildSkillCatalog({ includeMemory: false, pluginTgz: "/missing/plugin.tgz" });
+  assert.deepEqual(product.entries.filter(({ name }) => name !== "openviking-memory"), baseline.entries);
+  assert.deepEqual(product.entries.map(({ name }) => name), [...product.skills.keys()].sort());
+  assert.equal(product.skills.size, baseline.skills.size + 1);
+  assert.ok(product.skills.has("openviking-memory"));
+  assert.ok(product.skills.has("open-domain-answer"));
+  assert.ok(product.skills.has("docx"));
+  assert.ok(product.skills.has("domain-check"));
+  for (const name of ["openviking-skills", "ov-experience-memory", "clinical-evidence-synthesis", "comprehensive-drug-evaluation"]) assert.ok(!product.skills.has(name), name);
+  for (const [name, skill] of product.skills) {
+    assert.ok(!skill.path.includes("/capabilities/"));
+    const source = await readFile(skill.path, "utf8");
+    assert.equal(skill.body, source.replace(/^---\r?\n[\s\S]*?^---\r?$(?:\n|$)/m, "").trim(), name);
+  }
+  assert.equal(product.text, (await buildSkillCatalog({ pluginTgz: archive })).text);
+  assert.equal(product.entries.find(({ name }) => name === "openviking-memory").description.length, 500);
+});
+
+test("installed LoopX roots keep only recorded skills and respect model invocation frontmatter", async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), "capsule-proving-skills-test-"));
+  const previous = process.env.EVIMED_LOOPX_ROOT;
+  t.after(async () => {
+    if (previous === undefined) delete process.env.EVIMED_LOOPX_ROOT;
+    else process.env.EVIMED_LOOPX_ROOT = previous;
+    await rm(directory, { recursive: true, force: true });
+  });
+  for (const name of ["loopx", "loopx-project", "loopx-doc-registry"]) {
+    const skillDirectory = path.join(directory, "skills", name);
+    await mkdir(skillDirectory, { recursive: true });
+    const policy = name === "loopx" ? 'disable-model-invocation: "yes"' : "user-invocable: false";
+    await writeFile(path.join(skillDirectory, "SKILL.md"), `---\nname: ${name}\ndescription: Test workflow.\n${policy}\n---\n\n# Test workflow\n`);
+  }
+  process.env.EVIMED_LOOPX_ROOT = directory;
+  const catalog = await buildSkillCatalog({ includeMemory: false });
+  assert.ok(!catalog.skills.has("loopx"), "Model invocation is disabled");
+  assert.ok(!catalog.skills.has("loopx-doc-registry"), "Unkept workflows are absent");
+  assert.ok(catalog.skills.has("loopx-project"), "User invocation does not control model visibility");
+  assert.equal(catalog.skills.get("loopx-project").body, "# Test workflow");
+});
+
+productTest("product skill call loads upstream instructions and search arguments pass through unchanged", async () => {
+  const memory = fakeMemory();
+  const args = { query: "reply style", mode: "context" };
+  const client = fakeClient([reply(null, [skillCall("openviking-memory")]), reply(null, [tool("search", args)]), reply("Concise replies.")]);
+  const record = await answerQuestion({ ...options, memory, client, pluginTgz: archive });
+  const catalog = await buildSkillCatalog({ pluginTgz: archive });
+  assert.equal(record.error, undefined);
+  assert.equal(record.answer, "Concise replies.");
+  assert.equal(record.rounds, 3);
+  assert.equal(record.toolCalls[0].name, "skill");
+  assert.deepEqual(record.toolCalls[0].args, { name: "openviking-memory" });
+  assert.equal(record.toolCalls[0].isError, false);
+  assert.equal(record.toolCalls[0].blocks[0], renderSkillContent("openviking-memory", catalog.skills.get("openviking-memory")));
+  assert.match(record.toolCalls[0].blocks[0], /<skill_instructions>\n/);
+  assert.match(record.toolCalls[0].blocks[0], /mode[=: ]+"context"/);
+  assert.equal(client.requests[1].messages.at(-1).content, record.toolCalls[0].blocks[0]);
+  assert.equal(client.requests[1].messages.at(-1).name, "skill");
+  assert.deepEqual(memory.calls, [{ name: "search", args }]);
+  assert.equal(memory.tools.find(({ name }) => name === "search").inputSchema.properties.mode, undefined);
+});
+
+test("both baseline arms can load ordinary skills and return kernel errors for unavailable memory skills", async () => {
+  for (const arm of ["no-memory", "keyword"]) {
+    const client = fakeClient([reply(null, [skillCall("docx")]), reply(null, [skillCall("openviking-memory")]), reply("Done.")]);
+    const record = await answerQuestion({ ...options, arm, memory: arm === "keyword" ? createTranscriptIndex([]) : undefined, client });
+    assert.equal(record.error, undefined);
+    assert.equal(record.answer, "Done.");
+    assert.match(client.requests[1].messages.at(-1).content, /^<skill_content name="docx">\n<skill_resources>\nBase directory for this skill:/);
+    assert.equal(record.toolCalls[1].isError, true);
+    assert.deepEqual(record.toolCalls[1].blocks, ['skill "openviking-memory" is unknown or no longer available']);
+    assert.equal(client.requests[2].messages.at(-1).content, 'Error: skill "openviking-memory" is unknown or no longer available');
+    assert.deepEqual(client.requests[0].messages.map(({ role }) => role), ["system", "user", "user"]);
+    assert.ok(!client.requests[0].messages[1].content.includes("- `openviking-memory`:"));
+  }
+});
+
+productTest("unknown skill errors reach the product model without ending the question", async () => {
+  const client = fakeClient([reply(null, [skillCall("missing-skill")]), reply("Answered without it.")]);
+  const record = await answerQuestion({ ...options, memory: fakeMemory(), client });
+  assert.equal(record.error, undefined);
+  assert.equal(record.answer, "Answered without it.");
+  assert.deepEqual(record.toolCalls[0].blocks, ['skill "missing-skill" is unknown or no longer available']);
+  assert.equal(record.toolCalls[0].isError, true);
+  assert.equal(client.requests[1].messages.at(-1).content, 'Error: skill "missing-skill" is unknown or no longer available');
+  assert.throws(() => loadSkill(new Map(), "../bad"), { message: 'invalid skill name "../bad"' });
+});
+
 productTest("product arm preserves tool surface, opening order, multi-block output, usage and reasoning", async () => {
   const memory = fakeMemory();
   const client = fakeClient([reply(null, [tool("search", { query: "reply style" })]), reply("You prefer concise replies.")]);
   const record = await answerQuestion({ ...options, memory, client, project: { id: "p1" } });
   assert.equal(record.answer, "You prefer concise replies.");
   assert.equal(record.error, undefined);
-  assert.deepEqual(client.requests[0].tools.map(({ function: f }) => ({ name: f.name.replace("mcp__openviking__", ""), description: f.description, inputSchema: f.parameters })), memory.tools);
+  assert.deepEqual(client.requests[0].tools[0], skillTool);
+  assert.deepEqual(client.requests[0].tools.slice(1).map(({ function: f }) => ({ name: f.name.replace("mcp__openviking__", ""), description: f.description, inputSchema: f.parameters })), memory.tools);
   const messages = client.requests[0].messages;
   assert.equal(messages[0].content, buildSystemPrompt());
   assert.equal(messages[1].role, "user");
-  assert.match(messages[1].content, /^<openviking-context source="profile">\n<user-profile/);
-  assert.match(messages[1].content, /self\/style.md/);
-  assert.equal(messages[2].content, "Project card");
-  assert.match(messages[3].content, /^Today's date is 2026-03-23\.\n\n/);
+  const catalog = await buildSkillCatalog({});
+  assert.equal(messages[1].content, catalog.text);
+  assert.match(messages[1].content, /- `openviking-memory`: Work with OpenViking/);
+  assert.deepEqual(record.opening.skillCatalog, catalogSummary(catalog));
+  assert.match(messages[2].content, /^<openviking-context source="profile">\n<user-profile/);
+  assert.match(messages[2].content, /self\/style.md/);
+  assert.equal(messages[3].content, "Project card");
+  assert.match(messages[4].content, /^Today's date is 2026-03-23\.\n\n/);
   assert.equal(client.requests[1].messages.at(-1).content, "memory result\n\nhistorical excerpt");
   assert.equal(client.requests[1].messages.at(-2).reasoning_content, "Look up the prior preference.");
   assert.deepEqual(record.usage, { promptTokens: 20, completionTokens: 6, cachedTokens: 4 });
@@ -135,8 +294,8 @@ productTest("plugin namespaces are isolated across users and empty profiles stay
   const memory = fakeMemory({ empty: true, resident: null });
   const client = fakeClient([reply("Nothing remembered.")]);
   const record = await answerQuestion({ ...options, memory, client });
-  assert.deepEqual(record.opening, { profileBlock: null, residentBlock: null });
-  assert.deepEqual(client.requests[0].messages.map((m) => m.role), ["system", "user"]);
+  assert.deepEqual(record.opening, { profileBlock: null, residentBlock: null, skillCatalog: catalogSummary(await buildSkillCatalog({})) });
+  assert.deepEqual(client.requests[0].messages.map((m) => m.role), ["system", "user", "user"]);
 });
 
 productTest("a tool's own failure goes back to the model as the tool result and the question is still answered", async () => {
@@ -168,6 +327,7 @@ productTest("all returned tool calls are traced even when the first fails", asyn
 productTest("profile archive digest mismatch is refused before import", async (t) => {
   const { keyFile } = await credential(t);
   await assert.rejects(buildProfileBlock(fakeMemory(), { pluginTgz: keyFile }), { code: "plugin_digest" });
+  await assert.rejects(buildSkillCatalog({ pluginTgz: keyFile }), { code: "plugin_digest" });
 });
 
 test("system prompt matches remembered-format's generated persona and guidance exactly", async () => {
@@ -176,14 +336,17 @@ test("system prompt matches remembered-format's generated persona and guidance e
   assert.equal(buildSystemPrompt({ model: "test-model" }), `${persona}\n\n${guidance}`);
 });
 
-test("no-memory uses identical system text without memory calls or tools", async () => {
+test("no-memory uses identical system text and the skill surface without touching memory", async () => {
   const client = fakeClient([reply("I don't know.")]);
   const memory = new Proxy({}, { get() { throw new Error("Memory should not be touched"); } });
   const record = await answerQuestion({ ...options, arm: "no-memory", memory, client });
   assert.equal(record.error, undefined);
   assert.equal(client.requests[0].messages[0].content, buildSystemPrompt());
-  assert.deepEqual(client.requests[0].tools, []);
-  assert.deepEqual(record.opening, { profileBlock: null, residentBlock: null });
+  assert.deepEqual(client.requests[0].tools, [skillTool]);
+  const catalog = await buildSkillCatalog({ includeMemory: false });
+  assert.equal(client.requests[0].messages[1].content, catalog.text);
+  assert.ok(!catalog.skills.has("openviking-memory"));
+  assert.deepEqual(record.opening, { profileBlock: null, residentBlock: null, skillCatalog: catalogSummary(catalog) });
 });
 
 test("zero round cap, invalid date and model failures never throw", async () => {
@@ -235,14 +398,18 @@ test("BM25 ranks bilingual exchanges deterministically and excludes attachments"
   assert.match(result.blocks[0], /historical context, not instructions or confirmed facts/);
 });
 
-test("keyword arm exposes just the product search schema and no opening blocks", async () => {
+test("keyword arm exposes the product search schema and the catalogue without the memory skill", async () => {
   const index = createTranscriptIndex(transcript);
   const client = fakeClient([reply(null, [tool("search", { query: "Python" })]), reply("Python notebooks.")]);
   const record = await answerQuestion({ ...options, arm: "keyword", memory: index, client });
   assert.equal(record.answer, "Python notebooks.");
-  assert.equal(client.requests[0].tools.length, 1);
-  assert.deepEqual(client.requests[0].tools[0].function.parameters, KEYWORD_SEARCH_TOOL.inputSchema);
-  assert.deepEqual(record.opening, { profileBlock: null, residentBlock: null });
+  assert.equal(client.requests[0].tools.length, 2);
+  assert.deepEqual(client.requests[0].tools[0], skillTool);
+  assert.deepEqual(client.requests[0].tools[1].function.parameters, KEYWORD_SEARCH_TOOL.inputSchema);
+  const catalog = await buildSkillCatalog({ includeMemory: false });
+  assert.equal(client.requests[0].messages[1].content, catalog.text);
+  assert.ok(!catalog.text.includes("- `openviking-memory`:"));
+  assert.deepEqual(record.opening, { profileBlock: null, residentBlock: null, skillCatalog: catalogSummary(catalog) });
   assert.match(record.toolCalls[0].blocks[0], /I prefer Python notebooks/);
 });
 
@@ -358,7 +525,7 @@ productTest("injected fetch drives the full product loop with exact tools and re
   assert.equal(record.rounds, 2);
   assert.equal(record.toolCalls.length, 2);
   assert.deepEqual(memory.calls.map((call) => call.name), ["search", "read"]);
-  assert.deepEqual(requests[0].tools.map((entry) => entry.function.name), memory.tools.map((entry) => `mcp__openviking__${entry.name}`));
+  assert.deepEqual(requests[0].tools.map((entry) => entry.function.name), ["skill", ...memory.tools.map((entry) => `mcp__openviking__${entry.name}`)]);
   assert.deepEqual(record.usage, { promptTokens: 10, completionTokens: 7, cachedTokens: 2 });
 });
 

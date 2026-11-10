@@ -1,12 +1,13 @@
-import { buildSystemPrompt, buildProfileBlock, buildTimeContext } from "./openingBlock.mjs";
+import { createHash } from "node:crypto";
+import { buildSystemPrompt, buildProfileBlock, buildTimeContext, buildSkillCatalog, SKILL_TOOL, loadSkill } from "./openingBlock.mjs";
 import { KEYWORD_SEARCH_TOOL } from "./baselines.mjs";
 import { firstLine, normalizeUsage } from "./deepseek.mjs";
 
 const prefix = "mcp__openviking__";
 
 /** @param {{name: string, description: string, inputSchema: any}} tool */
-function openAITool(tool) {
-  return { type: "function", function: { name: `${prefix}${tool.name}`, description: tool.description, parameters: tool.inputSchema } };
+function openAITool(tool, namespace = prefix) {
+  return { type: "function", function: { name: `${namespace}${tool.name}`, description: tool.description, parameters: tool.inputSchema } };
 }
 
 function fail(code, message) { return Object.assign(new Error(message), { code }); }
@@ -16,14 +17,14 @@ function fail(code, message) { return Object.assign(new Error(message), { code }
  * No learning or memory mutations occur during evaluation questions.
  * @param {{question: string, asOf: string, arm: 'product'|'no-memory'|'keyword', memory?: any,
  * materials?: Array<{kind: string, title: string, text: string}>, client: any, maxRounds?: number,
- * caseId?: string, qid?: string, project?: any}} input
+ * caseId?: string, qid?: string, project?: any, pluginTgz?: string}} input
  * @returns {Promise<{qid: any, caseId: any, arm: string, asOf: string, question: string, answer: string,
- * opening: {profileBlock: string|null, residentBlock: string|null}, toolCalls: any[], rounds: number,
+ * opening: {profileBlock: string|null, residentBlock: string|null, skillCatalog: {entries: number, sha256: string}|null}, toolCalls: any[], rounds: number,
  * model: any, usage: {promptTokens: number, completionTokens: number, cachedTokens: number}, ms: number, error?: string}>}
  */
-export async function answerQuestion({ question, asOf, arm, memory, materials = [], client, maxRounds = 8, caseId, qid, project }) {
+export async function answerQuestion({ question, asOf, arm, memory, materials = [], client, maxRounds = 8, caseId, qid, project, pluginTgz }) {
   const started = performance.now();
-  const record = { qid, caseId, arm, asOf, question, answer: "", opening: { profileBlock: null, residentBlock: null },
+  const record = { qid, caseId, arm, asOf, question, answer: "", opening: { profileBlock: null, residentBlock: null, skillCatalog: null },
     toolCalls: [], rounds: 0, model: { name: client?.model ?? "deepseek-flash", thinking: client?.thinking ?? "disabled" },
     usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: 0 };
   let phase = "opening_error";
@@ -31,9 +32,16 @@ export async function answerQuestion({ question, asOf, arm, memory, materials = 
     if (!["product", "keyword", "no-memory"].includes(arm)) throw fail("invalid_arm", "Unknown evaluation arm");
     if (!Number.isInteger(maxRounds) || maxRounds < 0) throw fail("invalid_rounds", "maxRounds must be a nonnegative integer");
     const messages = [{ role: "system", content: buildSystemPrompt({ model: record.model.name }) }];
+    const catalog = await buildSkillCatalog({ pluginTgz, includeMemory: arm === "product" });
+    record.opening.skillCatalog = { entries: catalog.entries.length, sha256: createHash("sha256").update(catalog.text).digest("hex") };
+    // Ordering assumption: catalogue, profile, resident, question. The kernel's catalogue is
+    // appended in tool-skill's pre-step waterfall; the plugin can inject its profile at
+    // agent creation OR append it after next() on pre-step, and capsule injects its resident
+    // through the hook adapter. Their relative placement depends on startup scheduling.
+    messages.push({ role: "user", content: catalog.text });
     let available = [];
     if (arm === "product") {
-      record.opening.profileBlock = await buildProfileBlock(memory);
+      record.opening.profileBlock = await buildProfileBlock(memory, { pluginTgz });
       record.opening.residentBlock = await memory.residentBlock();
       for (const content of [record.opening.profileBlock, record.opening.residentBlock]) if (content) messages.push({ role: "user", content });
       available = memory.tools;
@@ -41,7 +49,7 @@ export async function answerQuestion({ question, asOf, arm, memory, materials = 
       if (memory?.kind !== "transcript-index") throw fail("invalid_keyword_memory", "Keyword arm requires createTranscriptIndex(sessions) as memory");
       available = [KEYWORD_SEARCH_TOOL];
     }
-    const tools = available.map(openAITool);
+    const tools = [openAITool(SKILL_TOOL, ""), ...available.map((tool) => openAITool(tool))];
     if (materials.length) {
       messages.push({ role: "assistant", content: null, reasoning_content: "",
         tool_calls: [{ id: "material_input", type: "function", function: { name: "read_material", arguments: "{}" } }] });
@@ -84,10 +92,11 @@ export async function answerQuestion({ question, asOf, arm, memory, materials = 
           catch { throw fail("invalid_tool_args", "Tool arguments are not valid JSON"); }
           if (!trace.args || typeof trace.args !== "object" || Array.isArray(trace.args)) throw fail("invalid_tool_args", "Tool arguments must be an object");
           if (final) throw fail("unexpected_tool_call", "Model called a tool with tools disabled");
-          if (!available.some((tool) => `${prefix}${tool.name}` === trace.name)) throw fail("unknown_tool", `Unknown tool: ${trace.name}`);
+          if (trace.name !== SKILL_TOOL.name && !available.some((tool) => `${prefix}${tool.name}` === trace.name)) throw fail("unknown_tool", `Unknown tool: ${trace.name}`);
           const name = trace.name.slice(prefix.length);
           let result;
-          if (name === "remember") {
+          if (trace.name === SKILL_TOOL.name) result = loadSkill(catalog.skills, trace.args.name);
+          else if (name === "remember") {
             const count = Array.isArray(trace.args.messages) ? trace.args.messages.length : 0;
             result = { blocks: [`Submitted ${count} message(s) for memory extraction (session mcp-store-evaluation, task_id=evaluation). Extraction runs in the background and decides which memories to create or update.`], isError: false };
           } else if (name === "forget") result = { blocks: [`Deleted: ${trace.args.uri}`], isError: false };
