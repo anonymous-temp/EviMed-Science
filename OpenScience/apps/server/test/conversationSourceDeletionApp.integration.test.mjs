@@ -202,3 +202,76 @@ test('native personal facts from a replacement project incarnation are never att
   assert.ok((await app.nativeMemory.records(user.id)).some(record=>record.value==='New independent fact.'));
   assert.equal((await app.sourceDeletion.ledger.get({...old,sourceProjectCreatedAt:oldCommit.projectCreatedAt},'same')),null,'current SQL authority is not replaced by a stale object');
 });
+
+test('real source route drains history outside the transaction and resumes after a crash between history and derived cleanup',options,async t=>{
+  const {app,base,headers,user,stub,engineUser}=await fixture(t);
+  const project=await app.store.requireProject(await app.store.userById(user.id),'default');
+  const context=await app.nativeMemory.memoryContexts.forProject(project),ledger=app.memoryHistory.ledger;
+  const uri=stub.seedMemory(engineUser,'notes/source.md','Private F-25429 source.',{type:'notes'});
+  const archive=`${context.userRoot}/sessions/dsh-source/history/archive_001`;
+  await app.nativeMemory.overlay.upsertFile({userId:user.id,uri,memoryType:'notes',body:'Private F-25429 source.'});
+  await app.nativeMemory.overlay.syncOrigins(user.id,uri,{after:'Private F-25429 source.',origin:{engineSession:'dsh-source',archiveUri:archive,projectId:'default'}});
+  const other=stub.seedMemory(engineUser,'notes/unrelated space.md','Independent space-named memory.',{type:'notes'});
+  await app.nativeMemory.overlay.upsertFile({userId:user.id,uri:other,memoryType:'notes',body:'Independent space-named memory.'});
+  ledger.client=context.sessions.client;
+  const chunk=`${app.memoryHistory.root(context,{projectId:'default',projectCreatedAt:context.projectCreatedAt})}/${'a'.repeat(24)}/${'b'.repeat(24)}-0.md`;
+  const meta={ownerId:user.id,ownerCreatedAt:context.ownerCreatedAt,namespaceId:context.namespaceId,projectId:'default',projectCreatedAt:context.projectCreatedAt,sessionId:'source',archiveUri:archive,uri:chunk,minimumDate:null};
+  await ledger.reserve(meta,'test-digest');await ledger.ready(meta);
+  await app.memoryHistory.resourcesFor(context).writeHistory(user.id,chunk,'Private history source.');
+  app.runtimeManager.captureConversationSource=async()=>({root:{id:'source',createdAt:1,cwd:'/workspace',isSeeded:false},sessions:[{id:'source'}]});
+  let crash=true;
+  app.runtimeManager.purgeConversationSource=async()=>{if(crash)throw new Error('simulated process interruption');return {sourceRemoved:true,removedSessionIds:['source']};};
+  const drain=app.memoryHistory.drainDeletes.bind(app.memoryHistory);
+  app.memoryHistory.drainDeletes=async()=>{};
+  const target=`${base}/api/projects/default/conversations/source/source`;
+  assert.equal((await fetch(target,{method:'DELETE',headers})).status,202);
+  app.memoryHistory.drainDeletes=drain;
+  await app.sourceDeletion.drain();
+  assert.equal((await app.sourceDeletion.status(project,'source')).cleanup,'pending');
+  assert.equal(await context.sessions.read(user.id,chunk),null,'history engine deletion completed before the interruption');
+  assert.ok((await app.store.database.query('SELECT cleaned_at FROM evimed_memory.history_chunks WHERE uri=$1',[chunk])).rows[0].cleaned_at);
+  await app.store.database.query("UPDATE evimed_source_deletion.conversations SET next_attempt_at=NULL WHERE user_id=$1",[user.id]);
+  const {ConversationSourceDeletionService}=await import('../src/conversationSourceDeletionService.mjs');
+  const resumed=new ConversationSourceDeletionService({...app.sourceDeletion});
+  crash=false;await resumed.drain();
+  const status=(await (await fetch(target,{headers})).json()).data;
+  assert.equal(status.cleanup,'complete',JSON.stringify(status));assert.equal(status.sourceRemoved,true);
+  assert.equal(await context.sessions.read(user.id,uri),null);
+  assert.equal(await context.sessions.read(user.id,other),'Independent space-named memory.');
+});
+
+test('conversation deletion follows exact one-shot remember copies even when only the tool extracted the memory',options,async t=>{
+  const {app,base,headers,user,stub,engineUser}=await fixture(t),overlay=app.nativeMemory.overlay;
+  const project=await app.store.requireProject(await app.store.userById(user.id),'default');
+  const context=await app.nativeMemory.memoryContexts.forProject(project),text='Please remember locker F-25429.';
+  app.memoryHistory.ledger.client=context.sessions.client;
+  await context.sessions.register(user.id);
+  const commits=[];
+  for(const name of ['dsh-source','mcp-store-sourcecopy']) {
+    stub.sessions.set(`${engineUser}/${name}`,{id:name,user:engineUser,archives:0,commitCount:0,messages:[{role:'user',parts:[{type:'text',text}]}]});
+    const result=stub.commitSession(engineUser,name);
+    commits.push(await overlay.recordCommit({userId:user.id,engineSession:name,archiveUri:result.archive_uri,projectId:'default',origin:name.startsWith('dsh-')?'gateway':'tool',state:'completed'}));
+    await app.memoryHistory.ledger.registerWriteMessages(context,result.archive_uri,[text]);
+  }
+  const tool=commits[1],uri=stub.seedMemory(engineUser,'notes/tool-only.md',text,{type:'notes'});
+  await overlay.upsertFile({userId:user.id,uri,memoryType:'notes',body:text});
+  await overlay.addRevision({userId:user.id,uri,memoryType:'notes',change:'added',actor:'engine',after:text,engineSession:tool.engineSession,archiveUri:tool.archiveUri,projectId:'default'});
+  await overlay.syncOrigins(user.id,uri,{after:text,origin:{engineSession:tool.engineSession,archiveUri:tool.archiveUri,projectId:'default'}});
+  assert.equal(await overlay.conversationOf(user.id,tool.engineSession,tool.archiveUri),'source');
+  app.runtimeManager.captureConversationSource=async()=>({root:{id:'source',createdAt:1,cwd:'/workspace',isSeeded:false},sessions:[{id:'source'}]});
+  app.runtimeManager.purgeConversationSource=async()=>({sourceRemoved:true,removedSessionIds:['source']});
+  assert.equal((await fetch(`${base}/api/projects/default/conversations/source/source`,{method:'DELETE',headers})).status,202);
+  await app.sourceDeletion.drain();const status=await app.sourceDeletion.status(project,'source');
+  assert.equal(status.cleanup,'complete',JSON.stringify(status));
+  assert.equal(await context.sessions.read(user.id,uri),null);
+  assert.equal(await context.sessions.read(user.id,`${tool.archiveUri}/messages.jsonl`),null);
+  // A later independent restatement cannot inherit the deleted conversation's authority.
+  let independent;
+  for(const name of ['dsh-independent','mcp-store-independent']) {
+    stub.sessions.set(`${engineUser}/${name}`,{id:name,user:engineUser,archives:0,commitCount:0,messages:[{role:'user',parts:[{type:'text',text}]}]});
+    const result=stub.commitSession(engineUser,name);
+    independent=await overlay.recordCommit({userId:user.id,engineSession:name,archiveUri:result.archive_uri,projectId:'default',origin:name.startsWith('dsh-')?'gateway':'tool',state:'completed'});
+    await app.memoryHistory.ledger.registerWriteMessages(context,result.archive_uri,[text]);
+  }
+  assert.equal(await overlay.conversationOf(user.id,independent.engineSession,independent.archiveUri),'independent');
+});

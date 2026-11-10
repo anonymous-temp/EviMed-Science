@@ -673,8 +673,9 @@ export class NativeMemoryOverlay {
     for (let depth = 0; session && depth < 12; depth += 1) {
       const conversation = platformSessionOf(session);
       if (conversation) return conversation;
-      if (!session.startsWith("evimed-replay-") || !archive) return null;
-      const parent = await this.#query("SELECT engine_session, archive_uri FROM evimed_memory.native_commits WHERE user_id=$1 AND replayed_as=$2 LIMIT 1", [owner(userId), archive]);
+      if (!/^(?:evimed-replay-|mcp-store-|evimed-page-)/.test(session) || !archive) return null;
+      const parent = await this.#query(`SELECT engine_session, archive_uri FROM evimed_memory.native_commits WHERE user_id=$1 AND (replayed_as=$2 OR archive_uri IN
+        (SELECT source_archive_uri FROM evimed_memory.native_source_copies WHERE user_id=$1 AND copy_archive_uri=$2)) LIMIT 1`, [owner(userId), archive]);
       if (!parent.rows[0]) return null;
       session = String(parent.rows[0].engine_session);
       archive = String(parent.rows[0].archive_uri);
@@ -688,7 +689,8 @@ export class NativeMemoryOverlay {
     const ids=sessionIds.map(id=>`dsh-${id}`);
     const commits=await this.#query(`WITH RECURSIVE source AS (
       SELECT archive_uri,engine_session,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[]) AND left(archive_uri,length($4)+10)=$4||'/sessions/'
-      UNION SELECT c.archive_uri,c.engine_session,c.replayed_as FROM evimed_memory.native_commits c JOIN source s ON c.archive_uri=s.replayed_as WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
+      UNION SELECT c.archive_uri,c.engine_session,c.replayed_as FROM evimed_memory.native_commits c JOIN source s ON (c.archive_uri=s.replayed_as OR EXISTS
+        (SELECT 1 FROM evimed_memory.native_source_copies x WHERE x.user_id=c.user_id AND x.source_archive_uri=s.archive_uri AND x.copy_archive_uri=c.archive_uri)) WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
     ) SELECT c.* FROM evimed_memory.native_commits c WHERE c.user_id=$1 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
       AND (c.engine_session=ANY($3::text[]) OR c.engine_session IN (SELECT engine_session FROM source))`,[owner(userId),projectId,ids,userRoot]);
     const sessionIdsFound=[...new Set([...ids,...commits.rows.map(row=>String(row.engine_session))])];
@@ -712,7 +714,8 @@ export class NativeMemoryOverlay {
     const removed = await this.#query(`WITH RECURSIVE sources AS (
       SELECT archive_uri,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])
         AND left(archive_uri,length($4)+10)=$4||'/sessions/'
-      UNION SELECT c.archive_uri,c.replayed_as FROM evimed_memory.native_commits c JOIN sources s ON c.archive_uri=s.replayed_as
+      UNION SELECT c.archive_uri,c.replayed_as FROM evimed_memory.native_commits c JOIN sources s ON (c.archive_uri=s.replayed_as OR EXISTS
+        (SELECT 1 FROM evimed_memory.native_source_copies x WHERE x.user_id=c.user_id AND x.source_archive_uri=s.archive_uri AND x.copy_archive_uri=c.archive_uri))
         WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
     ) UPDATE evimed_memory.native_commits SET native_ingested_at=CASE WHEN state='completed' THEN COALESCE(native_ingested_at,ingested_at,clock_timestamp()) ELSE native_ingested_at END,state='abandoned',pending_text=NULL,error='source_conversation_deleted',updated_at=clock_timestamp()
       WHERE user_id=$1 AND archive_uri IN (SELECT archive_uri FROM sources) AND ($5::text[] IS NULL OR archive_uri=ANY($5::text[])) RETURNING engine_session`, [owner(userId), projectId, sessions, userRoot,proof?.archiveUris??null]);
@@ -735,7 +738,8 @@ export class NativeMemoryOverlay {
       SELECT archive_uri,engine_session,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2
         AND engine_session=ANY($3::text[]) AND left(archive_uri,length($4)+10)=$4||'/sessions/'
         AND ($5::timestamptz IS NULL OR project_created_at::timestamptz=$5::timestamptz OR project_created_at IS NULL AND created_at>=$5::timestamptz AND NOT EXISTS(SELECT 1 FROM evimed_control.projects p WHERE p.user_id=$1 AND p.id=$2 AND p.created_at>$5::timestamptz AND native_commits.created_at>=p.created_at))
-      UNION SELECT c.archive_uri,c.engine_session,c.replayed_as FROM evimed_memory.native_commits c JOIN sources s ON c.archive_uri=s.replayed_as
+      UNION SELECT c.archive_uri,c.engine_session,c.replayed_as FROM evimed_memory.native_commits c JOIN sources s ON (c.archive_uri=s.replayed_as OR EXISTS
+        (SELECT 1 FROM evimed_memory.native_source_copies x WHERE x.user_id=c.user_id AND x.source_archive_uri=s.archive_uri AND x.copy_archive_uri=c.archive_uri))
         WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
         AND ($5::timestamptz IS NULL OR c.project_created_at::timestamptz=$5::timestamptz OR c.project_created_at IS NULL AND c.created_at>=$5::timestamptz AND NOT EXISTS(SELECT 1 FROM evimed_control.projects p WHERE p.user_id=$1 AND p.id=$2 AND p.created_at>$5::timestamptz AND c.created_at>=p.created_at))
     ) SELECT r.* FROM evimed_memory.native_revisions r LEFT JOIN evimed_memory.native_commits c

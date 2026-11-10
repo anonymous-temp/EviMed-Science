@@ -1,3 +1,5 @@
+import { lineFingerprint, normalisedStatement, nativeMemoryRejectionType } from './nativeMemoryOverlay.mjs';
+import { hardTokens, sourceHasToken } from './nativeMemoryHardTokens.mjs';
 import { createHash } from 'node:crypto';
 import { MemoryHistorySecrets, createHistorySecretJudge } from './memoryHistorySecrets.mjs';
 import { privateByDefault } from '@evimed/domain';
@@ -120,7 +122,97 @@ export class MemoryHistory {
     return `${context.userRoot}/resources/history/${hash(context.ownerCreatedAt).slice(0, 24)}/${hash(JSON.stringify([source.projectId, source.projectCreatedAt])).slice(0, 24)}`;
   }
 
+  /** Populate missing legacy source hashes before acknowledging destructive work.
+   * Progress commits before a retry; no source text is stored in PostgreSQL. */
+  async ensureSourceCopies(context) {
+    await this.ledger.migrate();
+    if (!context.ownerCreatedAt) context = {...context,ownerCreatedAt:(await this.ledger.database.query(
+      'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[context.ownerId])).rows[0]?.stamp};
+    const rows = (await this.ledger.database.query(`SELECT c.archive_uri FROM evimed_memory.native_commits c
+      WHERE c.user_id=$1 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/' AND c.engine_session ~ '^(dsh-|evimed-page-|mcp-store-)'
+        AND NOT EXISTS(SELECT 1 FROM evimed_memory.history_write_messages h WHERE h.owner_id=$1 AND h.owner_created_at=$2
+          AND h.namespace_id=$3 AND h.archive_uri=c.archive_uri) ORDER BY c.archive_uri LIMIT 101`,
+      [context.ownerId,context.ownerCreatedAt,context.namespaceId,context.userRoot])).rows;
+    for (const row of rows.slice(0,100)) {
+      const raw = await context.sessions.read(context.ownerId,`${row.archive_uri}/messages.jsonl`);
+      if (raw !== null && Buffer.byteLength(raw)>MAX_ARCHIVE_BYTES) throw new Error('memory_history_privacy_unavailable');
+      const texts = raw === null ? [] : raw.split('\n').filter(entry=>entry.trim()).map(entry=>JSON.parse(entry))
+        .filter(message=>message.role==='user').map(message=>messageText(message,this.secretRedaction)).filter(Boolean);
+      await this.ledger.registerWriteMessages(context,row.archive_uri,texts);
+    }
+    if (rows.length>100) throw Object.assign(new Error('Source copy indexing is still pending.'),{code:'memory_source_cleanup_busy'});
+  }
+
+  /** Resolve only the removed line's snapshotted origins before syncOrigins drops them.
+   * Persist message hashes activated by the rejection: undo lifts the fence, and a repeated forget reinstates it. */
+  async rejectRemoved(context, file, removed, judge) {
+    if (!removed.length) return;
+    if (!context.ownerCreatedAt) context = {...context,ownerCreatedAt:(await this.ledger.database.query(
+      'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[context.ownerId])).rows[0]?.stamp};
+    await this.ensureSourceCopies(context);
+    const origins = (await this.ledger.overlay.originsOf(context.ownerId,[file.uri])).get(file.uri);
+    const type = nativeMemoryRejectionType(file.type,context.kind === 'geo-project' ? context.namespaceId : null);
+    for (const text of removed) {
+      const fingerprint = lineFingerprint(text), origin = origins?.get(fingerprint);
+      const archives = [...new Set([origin?.archiveUri,...(origin?.sources ?? []).map(source=>source.archiveUri)].filter(Boolean))];
+      const messages = [];
+      for (const archiveUri of archives) {
+        const archive = parseArchiveUri(archiveUri);
+        if (!archive || archive.userRoot !== context.userRoot || archive.rest) throw new Error('memory_history_privacy_unavailable');
+        const raw = await context.sessions.read(context.ownerId,`${archiveUri}/messages.jsonl`);
+        if (raw === null) continue; // An absent archive has no original words to return.
+        if (Buffer.byteLength(raw)>MAX_ARCHIVE_BYTES) throw new MemoryHistoryLimitError('archive_bytes');
+        for (const line of raw.split('\n').filter(entry=>entry.trim())) {
+          const body = JSON.parse(line);
+          const words = messageText(body,this.secretRedaction);
+          if (words) messages.push({archiveUri,text:words,created_at:body.created_at});
+        }
+      }
+      const tokens = hardTokens(normalisedStatement(text));
+      let matched;
+      if (tokens.length) matched = messages.filter(message=>tokens.every(token=>sourceHasToken(token,message)));
+      else if (messages.length) {
+        // One semantic call per removed line, with all its origin messages offered.
+        if (!judge?.same) throw new Error('memory_history_privacy_unavailable');
+        const verdict = await judge.same({userId:context.ownerId,originMessages:true,
+          candidates:messages.map(message=>({text:message.text,removed:[{fingerprint,text}]}))});
+        matched = messages.filter((_message,index)=>verdict?.same.has(index));
+      } else matched = [];
+      await this.ledger.rejectMessages(context,type,fingerprint,matched);
+    }
+  }
+
+  /** One-shot write sessions are source copies, never conversations to retain.
+   * Retire every synthetic source of a removed line, preserving the other derived memories. */
+  async retireWriteSessions(context, origins, removed) {
+    const prints = new Set(removed.map(lineFingerprint));
+    if (!context.ownerCreatedAt) context = {...context,ownerCreatedAt:(await this.ledger.database.query(
+      'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[context.ownerId])).rows[0]?.stamp};
+    const archives = [...new Set([...origins].filter(([print])=>prints.has(print))
+      .flatMap(([,origin])=>[origin,...(origin.sources??[])])
+      .map(origin=>origin.archiveUri).filter(Boolean).concat(await this.ledger.writeCopies(context,[...prints])))];
+    for (const uri of archives) {
+      const archive = parseArchiveUri(uri);
+      if (!archive || archive.userRoot!==context.userRoot || !/^(?:evimed-page-|mcp-store-)/.test(archive.session)) continue;
+      await this.ledger.queueWriteSession(context,`${context.userRoot}/sessions/${archive.session}`);
+    }
+  }
+
   async ingestArchive(commit, context) {
+    // Even a no-op extraction keeps a one-shot source copy. Hash its messages
+    // before discarding it as non-conversation history; the first-origin index
+    // intentionally records no second origin for an unchanged memory line.
+    const sourceArchive = parseArchiveUri(commit.archiveUri);
+    let rawArchive;
+    if (context?.ownerCreatedAt && sourceArchive?.userRoot === context.userRoot && /^(?:dsh-|evimed-page-|mcp-store-)/.test(sourceArchive.session)) {
+      const raw = await context.sessions.read(context.ownerId,`${commit.archiveUri}/messages.jsonl`);
+      rawArchive = raw;
+      if (raw !== null && Buffer.byteLength(raw)<=MAX_ARCHIVE_BYTES) {
+        const texts = raw.split('\n').filter(entry=>entry.trim()).map(entry=>JSON.parse(entry))
+          .filter(message=>message.role==='user').map(message=>messageText(message,this.secretRedaction)).filter(Boolean);
+        await this.ledger.registerWriteMessages(context,commit.archiveUri,texts);
+      }
+    }
     if (!this.enabled || !this.ledger || !context?.ownerCreatedAt) return;
     // A shared 循证 GEO namespace holds its members' conversations under the owner's identity; raw history would index and admit
     // every member's words as the owner's, past member isolation and the context provenance rules. It is never indexed.
@@ -133,7 +225,7 @@ export class MemoryHistory {
     if (['excluded','withdrawn'].includes(progress.state) || progress.state === 'complete' && (!this.secretRedaction || progress.secret_review_version === 1)) return;
     try {
       if (this.secretRedaction && progress.secret_review_version !== 1) await this.ledger.retireSecretChunks(commit,context);
-      const outcome = await this.indexArchive(commit, context);
+      const outcome = await this.indexArchive(commit, context,rawArchive);
       await this.ledger.finishArchive(commit, context, outcome.state, outcome);
     } catch (error) {
       const code = String(error?.code ?? error?.message ?? '');
@@ -147,7 +239,7 @@ export class MemoryHistory {
     }
   }
 
-  async indexArchive(commit, context) {
+  async indexArchive(commit, context, rawArchive = undefined) {
     const archive = parseArchiveUri(commit.archiveUri);
     if (!archive || archive.userRoot !== context.userRoot || archive.session !== commit.engineSession || !platformSessionOf(commit.engineSession)) return { state: 'excluded', reason: 'not_original_conversation' };
     // A saved native association is provenance, never permission. Re-resolve
@@ -158,7 +250,7 @@ export class MemoryHistory {
     if (!source || source.sessionId !== platformSessionOf(commit.engineSession) || !source.projectId || !source.projectCreatedAt) return { state: 'excluded', reason: 'memory_history_source_unproven' };
     if (!await this.eligible(context, source)) { await this.removeConversation({ ...context, projectId: source.projectId, projectCreatedAt: source.projectCreatedAt }, source.sessionId); return { state: 'withdrawn', reason: 'conversation_excluded' }; }
     if (commit.createdAt && Date.parse(commit.createdAt) < Date.parse(source.projectCreatedAt)) return { state: 'withdrawn', reason: 'project_incarnation_changed' };
-    const raw = await context.sessions.read(commit.userId, `${commit.archiveUri}/messages.jsonl`);
+    const raw = rawArchive === undefined ? await context.sessions.read(commit.userId, `${commit.archiveUri}/messages.jsonl`) : rawArchive;
     if (raw === null) throw new Error('memory_history_archive_unavailable');
     const bytes = Buffer.byteLength(raw);
     if (!await this.ledger.bindArchive(commit, context, source, hash(raw), bytes)) throw new Error('memory_history_source_changed');
@@ -185,7 +277,7 @@ export class MemoryHistory {
     const removedIndices = new Set();
     for (const [index,message] of messages.entries()) {
       const text = messageText(message,this.secretRedaction);
-      if (text && await this.ledger.rejected(context,[text])) removedIndices.add(sourceIndices[index]);
+      if (text && await this.ledger.rejected(context,[text],commit.archiveUri)) removedIndices.add(sourceIndices[index]);
     }
     const safeMessages = this.secretRedaction ? messages.map(message => {
       const captured = filterCapturedMessage(message,{ semanticSecrets:this.secretRedaction });
@@ -201,7 +293,7 @@ export class MemoryHistory {
       const meta = { ownerId: context.ownerId, ownerCreatedAt: context.ownerCreatedAt, namespaceId: context.namespaceId, projectId: source.projectId,
         projectCreatedAt: source.projectCreatedAt, sessionId: source.sessionId, archiveUri: commit.archiveUri, uri, minimumDate };
       const body = JSON.stringify({ messages: chunk.messages });
-      if (chunk.messages.some(message => removedIndices.has(message.index)) || await this.ledger.rejected(context, chunk.messages.map(message => message.text))) { rejected++; continue; }
+      if (chunk.messages.some(message => removedIndices.has(message.index)) || await this.ledger.rejected(context, chunk.messages.map(message => message.text),commit.archiveUri)) { rejected++; continue; }
       if (await this.ledger.alreadyIndexed(meta, hash(body))) { indexed++; continue; }
       if (!await this.ledger.reserve(meta, hash(body))) { refused++; continue; }
       await resources.writeHistory(context.ownerId, uri, body);
@@ -305,7 +397,7 @@ export class MemoryHistory {
           .some(chunk=>chunk.messages.some(part=>part.text.includes(redact(message.text))));
       });
       if (!proven) continue;
-      if (await this.ledger.rejected(context,originalTexts)) continue;
+      if (await this.ledger.rejected(context,originalTexts,meta.archive_uri)) continue;
       let title = historyTitle(verified.conversationTitle,'Conversation',this.secretRedaction);
       let projectTitle = historyTitle(verified.projectTitle ?? verified.project?.name,'Project',this.secretRedaction);
       if (await this.ledger.rejected(context,[title])) title='Conversation';
@@ -330,6 +422,16 @@ export class MemoryHistory {
   async eraseAccount(userId) { await this.ledger.fence(userId, { permanent: true }); }
   /** @param {string | null} [ownerId] only this account's chunks, as a source cleanup asks; every account's for the worker */
   async drainDeletes(ownerId = null) {
+    await this.ledger.migrate();
+    const sessions = await this.ledger.database.query(`SELECT * FROM evimed_memory.history_write_session_deletes WHERE cleaned_at IS NULL
+      AND ($1::text IS NULL OR owner_id=$1) LIMIT 100`,[ownerId]);
+    for (const row of sessions.rows) {
+      try {
+        await this.ledger.removeResource(row);
+        await this.ledger.database.query('UPDATE evimed_memory.history_write_session_deletes SET cleaned_at=clock_timestamp() WHERE uri=$1',[row.uri]);
+      } catch { /* Durable retry after engine failure or process crash. */ }
+    }
+
     for (const row of await this.ledger.pendingDeletes(ownerId)) {
       // Cleanup works after account deletion: namespace identity and opaque URI
       // were persisted before removing the owner. No live authority is inferred.

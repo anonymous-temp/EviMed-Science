@@ -141,6 +141,12 @@ ALTER TABLE evimed_memory.native_commits ADD COLUMN IF NOT EXISTS extraction jso
 CREATE INDEX IF NOT EXISTS native_commits_open_idx ON evimed_memory.native_commits (state, next_attempt_at)
   WHERE state IN ('pending', 'failed');
 CREATE INDEX IF NOT EXISTS native_commits_session_idx ON evimed_memory.native_commits (user_id, engine_session);
+-- Whole-message hash equality proves a one-shot write copied an original conversation.
+CREATE TABLE IF NOT EXISTS evimed_memory.native_source_copies (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  source_archive_uri text NOT NULL, copy_archive_uri text NOT NULL,
+  PRIMARY KEY(user_id,source_archive_uri,copy_archive_uri)
+);
 -- Which project an engine session (a conversation) was held in, noted when the gateway forwards its first message: the
 -- engine's own idle commits never pass the gateway, and their project is read from here.
 CREATE TABLE IF NOT EXISTS evimed_memory.native_sessions (

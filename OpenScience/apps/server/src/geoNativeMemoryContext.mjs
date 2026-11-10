@@ -16,7 +16,7 @@ const keyOf = (context, session) => `gnms_${createHash('sha256').update(canonica
  * its own-space alias before calling this helper; a URI never chooses an owner.
  */
 function canonicalUri(uri) {
-  if (typeof uri !== 'string' || uri.length > 4000 || hasControl(uri) || !/^viking:\/\/user\/[A-Za-z0-9_-]+(?:\/[^?#\s\\]+)*$/.test(uri)) throw refused();
+  if (typeof uri !== 'string' || uri.length > 4000 || hasControl(uri) || !/^viking:\/\/user\/[A-Za-z0-9_-]+(?:\/[^?#\\]+)*$/.test(uri)) throw refused();
   for (const part of uri.slice('viking://user/'.length).split('/')) {
     let decoded;
     try { decoded = decodeURIComponent(part); } catch { throw refused(); }

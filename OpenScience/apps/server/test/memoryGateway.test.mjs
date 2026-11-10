@@ -777,6 +777,15 @@ test("a conversation of one project reads no other named project's card, decisio
   const found = await call("POST", "/api/v1/search/search", { query: "项目简介" });
   assert.deepEqual(found.json.result.memories.map((hit) => hit.abstract), ["OWN-CARD"], "the project's own card only");
   assert.deepEqual(asked[0], [USER, "p1"], "asked for the files of projects other than the conversation's");
+  sessions.search = async () => ({result:{entries:[
+    {uri:otherCard,detail:'content',text:'OTHER PROJECT WORDS'},
+    {uri:own,detail:'content',text:'OWN PROJECT WORDS'},
+  ],rendered:'OTHER PROJECT WORDS\nOWN PROJECT WORDS',digest:'unfiltered'}});
+  const context = await call('POST','/api/v1/search/search',{query:'project',mode:'context'});
+  assert.equal(context.status,200);assert.match(context.json.result.rendered,/OWN PROJECT WORDS/);
+  assert.doesNotMatch(JSON.stringify(context.json),/OTHER PROJECT WORDS/,'returned context is filtered even if the engine ignores exclude_uris');
+  sessions.search = async () => ({result:{memories:[{uri:otherCard,abstract:'OTHER-DECISION'},{uri:own,abstract:'OWN-CARD'}]}});
+
   assert.equal((await call("GET", `/api/v1/content/read?uri=${encodeURIComponent(otherCard)}`)).status, 404);
   const viaTool = await mcp({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "search", arguments: { query: "英文" } } });
   assert.doesNotMatch(JSON.stringify(viaTool.messages), /一律用英文|OTHER-DECISION/);

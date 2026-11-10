@@ -167,18 +167,18 @@ export function createRejectionJudge({ config, usageLedger = null, fetchImpl = g
     get available() { return enabled && Boolean(model) && Boolean(config.deepseekProviderEnabled !== false && config.deepseekApiKey); },
 
     /**
-     * @param {{ userId: string, projectId?: string | null, runId?: string | null, candidates: { text: string, removed: { fingerprint: string, text: string }[] }[], said?: readonly string[] }} request
+     * @param {{ userId: string, projectId?: string | null, runId?: string | null, originMessages?: boolean, candidates: { text: string, removed: { fingerprint: string, text: string }[] }[], said?: readonly string[] }} request
      * @returns {Promise<{ same: Map<number, string>, stated: Set<number> }>} for each candidate index judged the same, the fingerprint of the removed line it repeats; and the candidates the person said themselves. Empty whenever the judge could not be asked or did not answer in the one shape: the lines are kept.
      */
-    async same({ userId, projectId = null, runId = null, candidates, said = [] }) {
+    async same({ userId, projectId = null, runId = null, candidates, said = [], originMessages = false }) {
       const nothing = { same: /** @type {Map<number, string>} */ (new Map()), stated: /** @type {Set<number>} */ (new Set()) };
-      const shown = candidates.slice(0, MAX_CANDIDATES);
+      const shown = originMessages ? candidates : candidates.slice(0, MAX_CANDIDATES);
       if (!shown.length) return nothing;
-      if (!this.available) { recordRejectionJudge("unavailable"); recordRejectionLines("judge_failed", shown.length); return nothing; }
+      if (!this.available) { recordRejectionJudge("unavailable"); recordRejectionLines("judge_failed", shown.length); if(originMessages) throw new Error("memory_history_privacy_unavailable"); return nothing; }
       const day = now().toISOString().slice(0, 10);
       const held = spent.get(userId);
       const calls = held && held.day === day ? held.calls : 0;
-      if (calls >= dailyCalls) { recordRejectionJudge("over_budget"); recordRejectionLines("judge_failed", shown.length); return nothing; }
+      if (calls >= dailyCalls) { recordRejectionJudge("over_budget"); recordRejectionLines("judge_failed", shown.length); if(originMessages) throw new Error("memory_history_privacy_unavailable"); return nothing; }
       // Counted before the call: a model that keeps failing is asked a bounded number of times a day, not without end.
       spent.set(userId, { day, calls: calls + 1 });
       // The removed lines the call is shown, once each, and each candidate's own shortlist as indexes into them.
@@ -187,10 +187,10 @@ export function createRejectionJudge({ config, usageLedger = null, fetchImpl = g
       /** @type {string[]} */
       const removedPrints = [];
       const offered = shown.map((candidate) => ({
-        text: candidate.text.slice(0, 300),
+        text: candidate.text.slice(0, originMessages ? 2_000_000 : 300),
         options: candidate.removed.map((line) => {
           let index = removedPrints.indexOf(line.fingerprint);
-          if (index < 0) { removedPrints.push(line.fingerprint); removedTexts.push(line.text.slice(0, 300)); index = removedPrints.length - 1; }
+          if (index < 0) { removedPrints.push(line.fingerprint); removedTexts.push(line.text.slice(0, originMessages ? 2_000_000 : 300)); index = removedPrints.length - 1; }
           return index;
         }),
       }));
@@ -203,7 +203,7 @@ export function createRejectionJudge({ config, usageLedger = null, fetchImpl = g
           body: judgeRequestBody(model, { candidates: offered, removed: removedTexts, said: said.slice(0, MAX_SAID).map((text) => String(text).slice(0, 300)) }),
         });
         const judged = parseJudgement(body?.choices?.[0]?.message?.content, offered, removedTexts.length);
-        if (!judged) { recordRejectionJudge("failed"); recordRejectionLines("judge_failed", shown.length); return nothing; }
+        if (!judged) { recordRejectionJudge("failed"); recordRejectionLines("judge_failed", shown.length); if(originMessages) throw new Error("memory_history_privacy_unavailable"); return nothing; }
         const result = { same: /** @type {Map<number, string>} */ (new Map()), stated: judged.stated };
         for (const [candidate, removed] of judged.same) result.same.set(candidate, removedPrints[removed]);
         recordRejectionLines("judged_same", result.same.size);
@@ -212,6 +212,7 @@ export function createRejectionJudge({ config, usageLedger = null, fetchImpl = g
       } catch {
         recordRejectionJudge("failed");
         recordRejectionLines("judge_failed", shown.length);
+        if(originMessages) throw new Error("memory_history_privacy_unavailable");
         return nothing;
       } finally {
         clearTimeout(timeout);

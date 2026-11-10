@@ -5154,6 +5154,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       .map(root=>nativeMemory.sourceHistoryContributions(row.userId,row.projectId,row.sessionIds,root,row.projectCreatedAt)))).flat(),
     prepareFence: async (project,sessionIds)=>{
       await nativeMemoryOverlay.migrate();
+      if(memoryHistory) await memoryHistory.ensureSourceCopies(await nativeMemoryContexts.forProject(project));
       const runs=(await agentRuns.list(project)).filter(run=>sessionIds.includes(run.sessionId));
       return ()=>{for(const run of runs)runEvents.revoke(run.id);};
     },
@@ -5165,7 +5166,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (nativeMemoryContexts && memoryHistory) {
         const deletionContext = await nativeMemoryContexts.forProject(project);
         for (const sessionId of row.sessionIds) await memoryHistory.removeConversation({ ...deletionContext, projectId: project.id, projectCreatedAt: row.projectCreatedAt }, sessionId);
-        await memoryHistory.drainDeletes(project.userId);
+        await productDatabase.withoutTransactionClient(() => memoryHistory.drainDeletes(project.userId));
+        const owed = await productDatabase.query(`SELECT 1 FROM evimed_memory.history_chunks WHERE owner_id=$1 AND owner_created_at=$2
+          AND project_id=$3 AND project_created_at=$4 AND session_id=ANY($5::text[]) AND state='withdrawn' AND cleaned_at IS NULL LIMIT 1`,
+          [project.userId,row.accountCreatedAt,project.id,row.projectCreatedAt,row.sessionIds]);
+        if (owed.rows.length) throw new HttpError(409,'memory_source_cleanup_busy','Conversation history cleanup is still pending.');
       }
       const history=await sourceDeletion.contributionsFor(row);
       await sourceDeletionLedger.rememberHistory(row,history);
@@ -5212,8 +5217,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         for(const nativeRoot of row.nativeRoots?.length?row.nativeRoots:row.memoryUserRoot?[row.memoryUserRoot]:[]) {
         const sourceView=views.find(view=>view.userRoot===nativeRoot);
         if(!sourceView)throw new HttpError(409,'memory_source_cleanup_busy','The frozen native namespace cannot be verified.');
+        if(memoryHistory)await memoryHistory.ensureSourceCopies(sourceView);
         const commits=[];
         for(const sessionId of row.sessionIds)commits.push(...await nativeMemoryOverlay.commitsOfSession(project.userId,`dsh-${sessionId}`,{userRoot:nativeRoot}));
+        const sourceScope=await nativeMemoryOverlay.conversationSourceScope(project.userId,project.id,row.sessionIds,nativeRoot,row.projectCreatedAt);
+        for(const archiveUri of sourceScope.archiveUris){const copy=await nativeMemoryOverlay.commit(project.userId,archiveUri);if(copy)commits.push(copy);}
         const visited=new Set();
         for(let index=0;index<commits.length;index++) {
           const commit=commits[index];if(visited.has(commit.archiveUri))continue;visited.add(commit.archiveUri);

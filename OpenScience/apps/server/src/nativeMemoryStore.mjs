@@ -1,4 +1,6 @@
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
+import { hardTokens } from './nativeMemoryHardTokens.mjs';
+import { compact } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
@@ -1180,7 +1182,7 @@ export class NativeMemoryStore {
       }
       await this.#write(userId, file, next, { actor: "user", reason: "edited on the memory page", origin: "edit" });
     }
-    return this.getRecord(userId, line ? `${nativeFileId(file.uri)}_${lineFingerprint(String(value ?? "").trim().replace(AS_OF, "")).slice(0, 12)}` : id)
+    return this.getRecord(userId, line ? `${nativeFileId(file.uri)}_${lineFingerprint(String(value ?? "").trim().replace(AS_OF, "")).slice(0, 12)}` : nativeFileId(file.uri))
       .catch(() => this.getRecord(userId, nativeFileId(file.uri)));
   }
 
@@ -1212,19 +1214,38 @@ export class NativeMemoryStore {
     const context = await this.#fileContext(userId, file.uri);
     const rejectionType = this.#rejectionType(context, file.type);
     this.#touch(userId);
-    await this.#engine(() => context.sessions.replace(userId, file.uri, next));
     const before = statements(file.body);
     const after = statements(next);
     const kept = new Set(after.map(lineFingerprint));
-    if (actor === "user") {
-      await this.overlay.reject(userId, rejectionType, file.uri, before.filter((text) => !kept.has(lineFingerprint(text))), { origin });
+    const removed = before.filter(text=>!kept.has(lineFingerprint(text)));
+    const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
+    if (actor === "user" || actor === "conversation") {
+      await this.overlay.reject(userId, rejectionType, file.uri, removed, { origin });
+      await this.history?.rejectRemoved(context,file,removed,this.rejectionJudge);
       await this.overlay.unreject(userId, rejectionType, after);
     }
-    await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId,...await this.#bodySource(userId,file) });
-    await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, body: next, projectId: file.projectId });
+    await this.history?.retireWriteSessions(context,oldOrigins,removed);
+    const oldUri = file.uri, source = await this.#bodySource(userId,file);
+    // A removed value in a filename is still returned by list/search. Keep the
+    // edited document at an opaque address; the before-image remains undoable.
+    const nextTokens = new Set(hardTokens(next));
+    const pathRemoved = actor === "user" && origin === "edit" && removed.some(text => hardTokens(text)
+      .some(token => !nextTokens.has(token) && compact(oldUri.slice(oldUri.lastIndexOf('/')+1)).includes(compact(token))));
+    if (pathRemoved) file.uri = `${oldUri.slice(0,oldUri.lastIndexOf('/'))}/edited-${contentHash(oldUri).slice(0,24)}.md`;
+    await this.#engine(() => context.sessions.replace(userId, file.uri, next));
+    await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId,...source });
+    await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, body: next, projectId: file.projectId, sensitive: file.sensitive });
     await this.overlay.setSources(userId, file.uri, sourcesNamedIn(next));
     // A line the person took out leaves the index of origins with it; one they wrote names no conversation.
+    if (pathRemoved) {
+      await this.overlay.inheritOrigins(userId,file.uri,new Map([...oldOrigins].filter(([print])=>kept.has(print)).map(([print,ref])=>[print,originalSources(ref)])));
+      await this.history?.ledger.queueWriteSession(context,oldUri);
+      await this.#engine(() => context.sessions.remove(userId,oldUri));
+      await this.overlay.removeFile(userId,oldUri);
+      if (file.projectId) await this.#engine(() => context.sessions.setTags(userId,file.uri,[`project=${file.projectId}`]));
+    }
     await this.overlay.syncOrigins(userId, file.uri, { after: next });
+    await this.history?.drainDeletes(userId);
     this.#touch(userId);
   }
 
@@ -1283,7 +1304,7 @@ export class NativeMemoryStore {
         for (const inherited of originalSources(origin)) {
           if (inherited.projectId !== projectId || projectCreatedAt&&inherited.projectCreatedAt&&inherited.projectCreatedAt!==projectCreatedAt) continue;
           const source = await this.overlay.conversationOf(userId, inherited.engineSession, inherited.archiveUri);
-          if (deleted.has(source)) prints.add(print);
+          if (deleted.has(source) || sourceScope?.archiveUris.includes(inherited.archiveUri)) prints.add(print);
         }
       }
       if (!prints.size) continue;
@@ -1441,12 +1462,16 @@ export class NativeMemoryStore {
   async #forgetFileOwned(userId, file, { keepText = false, actor = "user", reason = "" } = {}) {
     const context = await this.#fileContext(userId, file.uri);
     this.#touch(userId);
-    const removed = await this.#engine(() => context.sessions.remove(userId, file.uri));
+    const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
     await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, statements(file.body));
+    if (actor !== "platform") await this.history?.rejectRemoved(context,file,statements(file.body),this.rejectionJudge);
+    await this.history?.retireWriteSessions(context,oldOrigins,statements(file.body));
+    const removed = await this.#engine(() => context.sessions.remove(userId, file.uri));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),
       reason: reason || (keepText ? "forgotten on the memory page" : "deleted"), before: keepText ? file.body : null, after: null, projectId: file.projectId,...await this.#bodySource(userId,file) });
     if (!keepText) await this.overlay.forgetText(userId, file.uri);
     await this.overlay.removeFile(userId, file.uri);
+    await this.history?.drainDeletes(userId);
     this.#touch(userId);
     return { removed, uri: file.uri };
   }

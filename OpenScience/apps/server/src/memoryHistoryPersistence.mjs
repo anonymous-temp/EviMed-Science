@@ -8,6 +8,22 @@ import { compact } from './nativeMemoryRejections.mjs';
 
 const migrations = new WeakMap();
 const sql = `
+CREATE SCHEMA IF NOT EXISTS evimed_memory;
+CREATE TABLE IF NOT EXISTS evimed_memory.history_message_rejections (
+  owner_id text NOT NULL, owner_created_at text NOT NULL, namespace_id text NOT NULL,
+  memory_type text NOT NULL, fingerprint text NOT NULL, archive_uri text NOT NULL, message_hash text NOT NULL,
+  PRIMARY KEY(owner_id,owner_created_at,namespace_id,memory_type,fingerprint,archive_uri,message_hash)
+);
+CREATE TABLE IF NOT EXISTS evimed_memory.history_write_messages (
+  owner_id text NOT NULL, owner_created_at text NOT NULL, namespace_id text NOT NULL,
+  archive_uri text NOT NULL, message_hash text NOT NULL,
+  PRIMARY KEY(owner_id,owner_created_at,namespace_id,archive_uri,message_hash)
+);
+CREATE TABLE IF NOT EXISTS evimed_memory.history_write_session_deletes (
+  owner_id text NOT NULL, namespace_id text NOT NULL, uri text PRIMARY KEY,
+  cleaned_at timestamptz
+);
+
 -- No cascading owner FK: physical deletion remains owed after account erasure.
 -- Text is held only by the engine. These are provenance, hashes and outbox state.
 CREATE TABLE IF NOT EXISTS evimed_memory.history_chunks (
@@ -125,10 +141,17 @@ export class MemoryHistoryLedger {
    * rows. Keyset pages cover the complete namespace; overflow is unavailable,
    * never a truncated privacy list. No PostgreSQL character-class substitute.
    */
-  async rejected(context, texts) {
+  async rejected(context, texts, archiveUri = null) {
     await this.migrate();
     const types = (context.kind === 'geo-project' ? OPENVIKING_PROJECT_MEMORY_TYPES : OPENVIKING_MEMORY_TYPES)
       .map(type => nativeMemoryRejectionType(type, context.kind === 'geo-project' ? context.namespaceId : null));
+    // A one-shot remember/page archive can duplicate a conversation capture.
+    // Only exact complete-message hashes bridge those copies; a shared number never does.
+    if (archiveUri && (await this.database.query(`SELECT 1 FROM evimed_memory.history_message_rejections h
+      JOIN evimed_memory.native_rejections r ON r.user_id=h.owner_id AND r.memory_type=h.memory_type AND r.fingerprint=h.fingerprint
+      WHERE h.owner_id=$1 AND h.owner_created_at=$2 AND h.namespace_id=$3 AND (h.archive_uri=$4 OR h.archive_uri ~ '/sessions/(mcp-store-|evimed-page-)')
+      AND h.message_hash=ANY($5::text[]) LIMIT 1`,
+      [context.ownerId,context.ownerCreatedAt,context.namespaceId,archiveUri,texts.map(lineFingerprint)])).rows.length) return true;
     const prints = new Set(texts.flatMap(text => text.split('\n')).map(normalisedStatement).filter(Boolean).map(lineFingerprint));
     const candidates = texts.map(compact);
     let type = '', fingerprint = '', count = 0;
@@ -145,6 +168,43 @@ export class MemoryHistoryLedger {
       if (result.rows.length < 500) return false;
       const last = result.rows.at(-1); type = last.memory_type; fingerprint = last.fingerprint;
     }
+  }
+  async rejectMessages(context, memoryType, fingerprint, messages) {
+    await this.migrate();
+    for (const message of messages) await this.database.query(`INSERT INTO evimed_memory.history_message_rejections
+      (owner_id,owner_created_at,namespace_id,memory_type,fingerprint,archive_uri,message_hash)
+      VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+      [context.ownerId,context.ownerCreatedAt,context.namespaceId,memoryType,fingerprint,message.archiveUri,lineFingerprint(message.text)]);
+  }
+  async registerWriteMessages(context, archiveUri, texts) {
+    await this.migrate();
+    await this.database.query(`INSERT INTO evimed_memory.history_write_messages(owner_id,owner_created_at,namespace_id,archive_uri,message_hash)
+      SELECT $1,$2,$3,$4,unnest($5::text[]) ON CONFLICT DO NOTHING`,
+      [context.ownerId,context.ownerCreatedAt,context.namespaceId,archiveUri,texts.length ? texts.map(lineFingerprint) : ['']]);
+    await this.database.query(`INSERT INTO evimed_memory.native_source_copies(user_id,source_archive_uri,copy_archive_uri)
+      SELECT DISTINCT a.owner_id,a.archive_uri,b.archive_uri FROM evimed_memory.history_write_messages a
+      JOIN evimed_memory.history_write_messages b ON b.owner_id=a.owner_id AND b.owner_created_at=a.owner_created_at
+        AND b.namespace_id=a.namespace_id AND b.message_hash=a.message_hash
+      JOIN evimed_memory.native_commits s ON s.user_id=a.owner_id AND s.archive_uri=a.archive_uri
+      JOIN evimed_memory.native_commits c ON c.user_id=b.owner_id AND c.archive_uri=b.archive_uri
+      WHERE a.owner_id=$1 AND a.owner_created_at=$2 AND a.namespace_id=$3 AND (a.archive_uri=$4 OR b.archive_uri=$4)
+        AND a.message_hash<>'' AND s.state<>'abandoned' AND c.state<>'abandoned' AND s.engine_session LIKE 'dsh-%' AND c.engine_session ~ '^(mcp-store-|evimed-page-)'
+        AND c.project_id=s.project_id AND c.project_created_at::timestamptz=s.project_created_at::timestamptz
+      ON CONFLICT DO NOTHING`,[context.ownerId,context.ownerCreatedAt,context.namespaceId,archiveUri]);
+  }
+  async writeCopies(context, fingerprints) {
+    await this.migrate();
+    return (await this.database.query(`SELECT DISTINCT w.archive_uri FROM evimed_memory.history_write_messages w
+      JOIN evimed_memory.history_message_rejections h ON h.owner_id=w.owner_id AND h.owner_created_at=w.owner_created_at
+        AND h.namespace_id=w.namespace_id AND h.message_hash=w.message_hash
+      WHERE h.owner_id=$1 AND h.owner_created_at=$2 AND h.namespace_id=$3 AND h.fingerprint=ANY($4::text[])`,
+      [context.ownerId,context.ownerCreatedAt,context.namespaceId,fingerprints])).rows.map(row=>row.archive_uri);
+  }
+  /** Durable exact-address removal for one-shot sessions and edited-away memory paths. */
+  async queueWriteSession(context, uri) {
+    await this.migrate();
+    await this.database.query(`INSERT INTO evimed_memory.history_write_session_deletes(owner_id,namespace_id,uri) VALUES($1,$2,$3)
+      ON CONFLICT(uri) DO UPDATE SET cleaned_at=NULL`, [context.ownerId,context.namespaceId,uri]);
   }
   /** Only salted fingerprints and lengths leave transient model response memory. */
   async recordSecrets(commit, context, secrets) {
@@ -221,7 +281,7 @@ export class MemoryHistoryLedger {
           [ownerId,stamp,projectId,sessionId,projectStamp]);
           await c.query(`UPDATE evimed_memory.history_chunks SET state='withdrawn',cleaned_at=NULL,lease_until=NULL,updated_at=clock_timestamp()
             WHERE owner_id=$1 AND owner_created_at=$2 AND ($3='' OR project_id=$3) AND ($4='' OR session_id=$4)
-              AND ($5='' OR project_created_at=$5)`, [ownerId, stamp, projectId, sessionId, projectStamp]);
+              AND ($5='' OR project_created_at=$5) AND state<>'withdrawn'`, [ownerId, stamp, projectId, sessionId, projectStamp]);
         }
       }
     });
@@ -317,6 +377,11 @@ export class MemoryHistoryLedger {
     return { ...counts, undiscovered: Number(pending.rows[0]?.n ?? 0) };
   }
   async removeResource(row) {
-    await this.client.remove(row.owner_id, row.uri, { openVikingUser: row.namespace_id });
+    if (/\/sessions\/(?:evimed-page-|mcp-store-)[^/]+$/.test(row.uri)) {
+      const session = row.uri.slice(row.uri.lastIndexOf('/')+1);
+      try { await this.client.request({method:'DELETE',path:`/api/v1/sessions/${session}`,userId:row.owner_id,openVikingUser:row.namespace_id}); }
+      catch (error) { if (error?.code !== 'memory_index_not_found') throw error; }
+      await this.client.remove(row.owner_id,row.uri,{recursive:true,openVikingUser:row.namespace_id});
+    } else await this.client.remove(row.owner_id, row.uri, { openVikingUser: row.namespace_id });
   }
 }

@@ -836,7 +836,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const body = { ...rest, query_expansion: "off", exclude_uris: await ctx.excluded(Array.isArray(given.exclude_uris) ? given.exclude_uris : [], true) };
       /** @type {any} */
       let answered;
-      if (!ctx.shared) answered = await ctx.sessions.search(ctx.user.id, body);
+      if (!ctx.shared) answered = await sharedSearchResult(ctx,await ctx.sessions.search(ctx.user.id, body),true);
       else {
         // A project's shared namespace (「循证 GEO」): its context hits are rebuilt from leaf files only, and the capsule's half is added.
         await ctx.ensureRegistered();

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MemoryHistory, MemoryHistoryLedger } from '../src/memoryHistory.mjs';
+import { nativeFileId } from '../src/nativeMemoryStore.mjs';
+import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { OpenVikingResources } from '../src/openVikingResources.mjs';
 import { projectNativeMemoryNamespace } from '../src/openVikingLayout.mjs';
 import { createServer } from 'node:http';
@@ -278,10 +280,10 @@ async function gateway(t, f, { secrets = false, capsuleSearch = null } = {}) {
     admission: { admit: async () => ({ learn: true, recall: true }) } });
   const server = createServer((req,res) => { void handler(req,res); }); server.listen(0,'127.0.0.1'); await once(server,'listening');
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
-  return async (mcp = false, context = false) => {
+  return async (mcp = false, context = false, query = 'trial') => {
     const response = await fetch(`http://127.0.0.1:${server.address().port}/internal/memory/v1/${mcp ? 'mcp' : 'api/v1/search/search'}`, {
       method: 'POST', headers: { authorization: 'Bearer history-test', 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
-      body: JSON.stringify(mcp ? { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search', arguments: { query: 'trial' } } } : { query: 'trial', ...(context ? {mode:'context'} : {}) }),
+      body: JSON.stringify(mcp ? { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search', arguments: { query } } } : { query, ...(context ? {mode:'context'} : {}) }),
     });
     const text = await response.text(); assert.equal(response.status,200); return { text, json: response.headers.get('content-type').includes('event-stream') ? parseEventStream(text) : JSON.parse(text) };
   };
@@ -508,4 +510,116 @@ test('gateway filters listed secrets in memory JSON, capsule prose, raw history 
   const context=(await call(false,true)).text;assert.ok(!context.includes(password));assert.match(context,/已省略/);
   f.service.secrets.filterValue=async()=>{throw new Error('database unavailable');};
   await assert.rejects(call(true),/200/,'privacy failure never returns an unfiltered result');
+});
+
+for (const action of ['forget','edit','delete']) for (const hard of [true,false]) {
+  test(`${action} fences original origin messages and neighbour windows (${hard?'hard tokens':'semantic'}), and undo lifts it`,options,async t=>{
+    const f=await setup(t);
+    const removed=hard?'The locker code is F-25429 (2026-11-10 user supplied).':'Prefers comparisons displayed as tables.';
+    const original=hard?'My locker is F-25429, please keep that handy.':'I like seeing comparisons laid out in tables.';
+    const archive=await f.commitConversation('removed',[{role:'user',text:original,at:'2026-11-10T08:00:00Z'},{role:'assistant',text:'Independent nearby response.'}],{projectId:'default'});
+    const commit={...f.commit,engineSession:archive.session,archiveUri:archive.archive_uri};
+    await f.service.ingestArchive(commit,f.context);
+    const other=await f.commitConversation('unrelated',[{role:'user',text:hard?'The unrelated invoice is F-25429.':'I prefer walking outside.'}],{projectId:'default'});
+    await f.service.ingestArchive({...f.commit,engineSession:other.session,archiveUri:other.archive_uri},f.context);
+    const uri=f.seed('notes/removed.md',removed,{type:'notes'});
+    await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'notes',body:removed});
+    await f.overlay.syncOrigins(f.userId,uri,{after:removed,origin:{archiveUri:commit.archiveUri,engineSession:commit.engineSession,projectId:'default'}});
+    f.store.history=f.service;
+    f.store.memoryContexts={forUri:async()=>f.context,all:async()=>[f.context],assertUri:()=>{},assertKnown:async()=>{}};
+    let judged=0;
+    f.store.rejectionJudge={same:async request=>{judged++;assert.equal(request.originMessages,true);assert.equal(request.candidates.length,2);return {same:new Map([[0,lineFingerprint(removed)]]),stated:new Set()};}};
+    // Avoid the independent duplicate-memory scan: this test measures history's one origin call.
+    const file=(await f.store.files(f.userId)).find(row=>row.uri===uri);
+    if(action==='edit') await f.store.update(f.userId,nativeFileId(uri),{value:'The new locker code is K-77777.',expectedVersion:(await f.store.getRecord(f.userId,nativeFileId(uri))).version});
+    else await f.store.forgetFile(f.userId,file,{keepText:action==='forget'});
+    const hits=await search(f);
+    const call=await gateway(t,f);
+    for(const mcp of [false,true]) assert.ok(!(await call(mcp)).text.includes(original),'both REST recall and MCP search withhold the original wording');
+    if(action==='edit') for(const mcp of [false,true]) assert.match((await call(mcp,false,'K-77777')).text,/K-77777/,'the edited-in value remains searchable');
+    assert.ok(hits.some(hit=>hit.sessionId==='session_unrelated'),'an unrelated conversation survives even with the same number');
+    assert.ok(!hits.some(hit=>hit.sessionId==='session_removed'),'neighbour windows cannot disclose a withheld message');
+    assert.equal(judged,hard?0:1);
+    const fences=(await f.database.query('SELECT * FROM evimed_memory.history_message_rejections WHERE owner_id=$1',[f.userId])).rows;
+    assert.equal(fences.length,1);assert.equal(fences[0].message_hash,lineFingerprint(original));assert.ok(!JSON.stringify(fences).includes(original));
+    if(action==='delete') await f.overlay.unreject(f.userId,'notes',[removed]);
+    else await f.store.undo(f.userId,nativeFileId(uri));
+    assert.ok((await search(f)).some(hit=>hit.sessionId==='session_removed'));
+    for(const mcp of [false,true]) assert.ok((await call(mcp)).text.includes(original),'undo lifts both surface fences');
+    if(action==='edit') assert.equal(await f.sessions.read(f.userId,uri),removed);
+    if(action==='forget') {
+      await f.store.forgetFile(f.userId,(await f.store.files(f.userId)).find(row=>row.uri===uri),{keepText:true});
+      assert.ok(!(await search(f)).some(hit=>hit.sessionId==='session_removed'),'a repeated forget after undo reinstates the original fence');
+    }
+  });
+}
+
+for(const prefix of ['evimed-page-','mcp-store-']) test(`${prefix} write archives are removed durably when their last memory is deleted`,options,async t=>{
+  const f=await setup(t),text='Stored code F-25429.';
+  const archive=await f.commitConversation('write',[{role:'user',text}],{projectId:'default',engineSession:`${prefix}testwrite`});
+  const uri=f.seed('notes/write.md',text,{type:'notes'});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'notes',body:text});
+  await f.overlay.syncOrigins(f.userId,uri,{after:text,origin:{engineSession:archive.session,archiveUri:archive.archive_uri,projectId:'default'}});
+  f.store.history=f.service;
+  const file=(await f.store.files(f.userId)).find(row=>row.uri===uri);
+  f.ledger.removeResource=async()=>{throw new Error('interrupted engine cleanup');};
+  await f.store.forgetFile(f.userId,file,{keepText:true});
+  const owed=(await f.database.query('SELECT * FROM evimed_memory.history_write_session_deletes WHERE owner_id=$1',[f.userId])).rows;
+  assert.equal(owed.length,1);assert.ok(!owed[0].cleaned_at);
+  // An interruption after the outbox commit leaves the same retry obligation.
+  const ledger=new MemoryHistoryLedger({database:f.database,overlay:f.overlay,client:f.sessions.client});
+  f.service.ledger=ledger;
+  await f.service.drainDeletes(f.userId);
+  assert.equal(await f.sessions.read(f.userId,`${archive.archive_uri}/messages.jsonl`),null);
+  assert.ok((await f.database.query('SELECT cleaned_at FROM evimed_memory.history_write_session_deletes WHERE owner_id=$1',[f.userId])).rows[0].cleaned_at);
+  await f.store.undo(f.userId,nativeFileId(uri));
+  assert.equal(await f.sessions.read(f.userId,uri),text,'undo restores the memory without recreating an obsolete write session');
+});
+
+test('a remember-only origin fences the exact captured conversation copy without fencing another message with the same number',options,async t=>{
+  const f=await setup(t),original='Please remember my locker is F-25429.',removed='Locker code is F-25429 (2026-11-10 supplied).';
+  const stamp='2026-11-10T08:00:00Z';
+  const source=await f.commitConversation('copy',[{role:'user',text:original,at:stamp}],{projectId:'default'});
+  await f.service.ingestArchive({...f.commit,engineSession:source.session,archiveUri:source.archive_uri},f.context);
+  const other=await f.commitConversation('othercopy',[{role:'user',text:'Invoice F-25429 is unrelated.',at:stamp}],{projectId:'default'});
+  await f.service.ingestArchive({...f.commit,engineSession:other.session,archiveUri:other.archive_uri},f.context);
+  const tool=await f.commitConversation('tool',[{role:'user',text:original,at:stamp}],{projectId:'default',engineSession:'mcp-store-copytest'});
+  const uri=f.seed('notes/tool-copy.md',removed,{type:'notes'});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'notes',body:removed});
+  await f.overlay.syncOrigins(f.userId,uri,{after:removed,origin:{engineSession:tool.session,archiveUri:tool.archive_uri,projectId:'default'}});
+  f.store.history=f.service;
+  await f.store.forgetFile(f.userId,(await f.store.files(f.userId)).find(row=>row.uri===uri),{keepText:true});
+  const hits=await search(f);assert.deepEqual(hits.map(hit=>hit.sessionId),['session_othercopy']);
+  await f.store.undo(f.userId,nativeFileId(uri));assert.equal((await search(f)).length,2);
+});
+
+test('an edited-out identifier leaves the filename too, while the new value, undo and unchanged source origins survive',options,async t=>{
+  const f=await setup(t),old='Locker code F-25429.',kept='Independent code G-12345.';
+  const source=await f.commitConversation('filename',[{role:'user',text:'My locker is F-25429.'},{role:'user',text:'The other code is G-12345.'}],{projectId:'default'});
+  const body=`${old}\n${kept}`,uri=f.seed('notes/locker F-25429.md',body,{type:'notes'});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'notes',body});
+  await f.overlay.syncOrigins(f.userId,uri,{after:body,origin:{engineSession:source.session,archiveUri:source.archive_uri,projectId:'default'}});
+  f.store.history=f.service;
+  const record=await f.store.getRecord(f.userId,nativeFileId(uri));
+  const updated=await f.store.update(f.userId,record.id,{value:`Locker code K-77777.\n${kept}`,expectedVersion:record.version});
+  assert.notEqual(updated.uri,uri);assert.ok(!updated.uri.includes('F-25429'));
+  assert.equal(await f.sessions.read(f.userId,uri),null);assert.match(updated.value,/K-77777/);
+  assert.ok((await f.overlay.originsOf(f.userId,[updated.uri])).get(updated.uri).has(lineFingerprint(kept)));
+  await f.store.undo(f.userId,updated.id);
+  assert.equal(await f.sessions.read(f.userId,updated.uri),body);
+});
+
+test('deletion also retires a no-op remember archive that repeated a conversation-derived line',options,async t=>{
+  const f=await setup(t),text='Please remember my locker code F-25429.';
+  const source=await f.commitConversation('noop-source',[{role:'user',text}],{projectId:'default'});
+  const tool=await f.commitConversation('noop-tool',[{role:'user',text}],{projectId:'default',engineSession:'mcp-store-noopcopy'});
+  // Both commits predate the hash index: deletion fills their provenance on demand.
+  const uri=f.seed('notes/noop-source.md',text,{type:'notes'});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'notes',body:text});
+  await f.overlay.syncOrigins(f.userId,uri,{after:text,origin:{engineSession:source.session,archiveUri:source.archive_uri,projectId:'default'}});
+  f.store.history=f.service;f.ledger.client=f.sessions.client;
+  f.ledger.removeResource=MemoryHistoryLedger.prototype.removeResource.bind(f.ledger);
+  await f.store.forgetFile(f.userId,(await f.store.files(f.userId)).find(row=>row.uri===uri),{keepText:true});
+  assert.equal(await f.sessions.read(f.userId,`${tool.archive_uri}/messages.jsonl`),null);
+  assert.ok(await f.sessions.read(f.userId,`${source.archive_uri}/messages.jsonl`),'the original conversation remains');
 });
