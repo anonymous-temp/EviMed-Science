@@ -410,22 +410,31 @@ async function secretFrom(file) {
 
 /** Run the product's per-user settlement work without its account scheduler or consolidation.
  * A completed engine task can still owe summary cleanup and overlay/history ingestion. Never advance past it.
- * @param {{worker: any, overlay: any, userId: string, deadline: number, waitTask: Function}} input
+ * @param {{worker: any, overlay: any, userId: string, deadline: number, waitTask: Function, pollMs?: number}} input
  */
-export async function settleLabCommits({ worker, overlay, userId, deadline, waitTask }) {
+export async function settleLabCommits({ worker, overlay, userId, deadline, waitTask, pollMs = 2_000 }) {
   let settled = 0;
   let rounds = 0;
-  for (; rounds < 8; rounds += 1) {
-    await worker.drainSummaryInvalidations(userId);
+  const transient = new Set(["memory_index_conflict", "memory_index_timeout", "memory_engine_unavailable", "memory_summary_rebuild_failed"]);
+  for (;;) {
+    rounds += 1;
+    try { await worker.drainSummaryInvalidations(userId); }
+    catch (error) {
+      if (!transient.has(error?.code) || Date.now() >= deadline) throw error;
+      await sleep(pollMs);
+      continue;
+    }
     settled += await worker.processCommits({ userId, limit: 50 });
     const open = await overlay.openCommits({ userId, limit: 50 });
-    const running = open.filter((commit) => commit.state === "pending" && commit.taskId);
-    if (!open.length || Date.now() >= deadline || (!running.length && !open.some((commit) => commit.state === "failed"))) break;
-    for (const commit of running) await waitTask(userId, /** @type {string} */ (commit.taskId), deadline);
+    if (!open.length) return { settled, rounds, open: 0 };
+    if (Date.now() >= deadline) throw Object.assign(new Error(`Product commits remain unsettled: ${open.length}`), { code: "lab_unsettled_commits" });
+    for (const commit of open.filter(commit => commit.state === "pending" && commit.taskId)) {
+      await waitTask(userId, commit.taskId, deadline);
+    }
+    // A completed task may still have a writer lease or a retryable cleanup conflict. The hosted worker tries on
+    // its next pass; poll within the session's deadline rather than spinning eight times and advancing anyway.
+    await sleep(pollMs);
   }
-  const left = await overlay.openCommits({ userId, limit: 50 });
-  if (left.length) throw Object.assign(new Error(`Product commits remain unsettled: ${left.length}`), { code: "lab_unsettled_commits" });
-  return { settled, rounds: rounds + 1, open: 0 };
 }
 
 /**
@@ -642,7 +651,7 @@ export async function openLab({
      * repeated choice, a replay), waited for in bounded rounds.
      * @param {string} userId @param {number} deadline
      */
-    const settle = (userId, deadline) => settleLabCommits({ worker, overlay, userId, deadline, waitTask });
+    const settle = (userId, deadline) => settleLabCommits({ worker, overlay, userId, deadline, waitTask, pollMs });
 
     /** The messages of the session's archives that came from the conversation (the project line is the gateway's own). @param {string} userId @param {any[]} commits @param {string | null} line */
     const archivedMessages = async (userId, commits, line) => {
