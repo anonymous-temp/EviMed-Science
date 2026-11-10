@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { Api, registerAccount } from '../../general-tasks/runner/cell.mjs';
 import { ensurePostgres, ensureDatabase, startHarness, stopHarness } from '../../general-tasks/runner/run.mjs';
 import { runConversation } from './conversation.mjs';
+import { parseSkillFrontmatter } from '../../../packages/domain/src/methodSkill.mjs';
 import { l1Ring, l10Family, l5Item, l2Summary, ruleResults, correctionFor, followUpOf, methodById, countsOf, mountOf, toolChainOf, nonZero } from './verdicts.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -27,6 +28,7 @@ const SUITE = path.resolve(HERE, '../../general-tasks');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 export const EXPERIMENTS = { l1: ['tc-off', 'tc-on'], l10: ['tc-off', 'tc-on'], l5: ['base'], l2: ['evolve', 'frozen', 'add-only'] };
 const ACCEPTS = ['好的，可以。', '行，就这样。', '收到，没问题。'];
+const REPLAY_WHEN = '用户给出本周项目进展的零散记录，要求整理成可直接发到项目群的周报时。';
 const PASSWORD = 'eval-pass-1';
 export const SCORER = 'lx/1';
 
@@ -192,7 +194,7 @@ async function l1Unit(ctx, script, gold, { seededSleep = false } = {}) {
   const seeded = [];
   if (script.ring === 'replay') {
     const seed = await u.step('seed', async () => {
-      const r = await api.call('POST', '/api/methods', { skill: skillOf({ name: 'project-weekly-report', whenToUse: '用户给出本周项目进展的零散记录，要求整理成可直接发到项目群的周报时。', body: script.method.before }) });
+      const r = await api.call('POST', '/api/methods', { skill: skillOf({ name: 'project-weekly-report', whenToUse: REPLAY_WHEN, body: script.method.before }) });
       if (r.status !== 201) throw new Error(`seed method: ${r.status} ${r.raw.slice(0, 200)}`);
       return { id: r.json.data.id, status: r.json.data.status, digest: r.json.data.contentDigest };
     });
@@ -239,7 +241,9 @@ async function l1Unit(ctx, script, gold, { seededSleep = false } = {}) {
   if (script.ring === 'sleep') await u.drain('sleep', userId, { sleepKey: `lx-${id}-${u.p.attempt}-sleep` });
   let amend = null;
   if (script.ring === 'replay') {
-    amend = await u.step('amend', () => ipc(ctx.h, 'lxAmend', { userId, methodId: seeded[0].id, body: script.method.after }));
+    // The amended text in the same SKILL.md shape as the seed (only the rule text in `## Workflow` changes).
+    const body = parseSkillFrontmatter(skillOf({ name: 'project-weekly-report', whenToUse: REPLAY_WHEN, body: script.method.after })).body;
+    amend = await u.step('amend', () => ipc(ctx.h, 'lxAmend', { userId, methodId: seeded[0].id, body }));
     await u.drain('drain-amend', userId, {});
   }
   // One more same-kind conversation: is the learnt method mounted, opened and counted? (the scripted runs alone end where it is born)
