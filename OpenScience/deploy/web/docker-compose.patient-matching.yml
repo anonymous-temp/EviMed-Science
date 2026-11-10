@@ -16,7 +16,7 @@ services:
     pids_limit: 32
     mem_limit: 256m
     cpus: 1
-    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
     environment:
       PATIENT_MATCHING_WORKER_SOCKET: /run/patient-matching/worker.sock
       PATIENT_MATCHING_WORKER_TOKEN_FILE: /run/patient-matching/worker.token

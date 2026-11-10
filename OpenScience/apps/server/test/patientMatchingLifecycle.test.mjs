@@ -155,7 +155,7 @@ test('runtime descriptor is unavailable until native registry proof and a change
   const candidate = { reference: { generationHash: 'generation-a' } }, runtime = { patientMatchingGeneration: candidate, patientMatchingProven: false };
   let epoch = 'runtime-a', observed = { enabled: true, tools: [...PATIENT_MATCHING_TOOLS], skill: 'patient-matching' };
   const fake = { runtimes: new Map([['key', runtime]]), key: () => 'key', runtimeGeneration: () => epoch,
-    preparePatientMatchingGeneration: async () => candidate, callKernel: async () => observed };
+    preparePatientMatchingGeneration: async () => candidate, callKernel: async () => observed, patientMatchingStatus: RuntimeManager.prototype.patientMatchingStatus };
   assert.equal(RuntimeManager.prototype.currentPatientMatchingGeneration.call(fake, project), null);
   assert.equal((await RuntimeManager.prototype.probePatientMatchingGeneration.call(fake, project, candidate)).runtimeGeneration, epoch);
   assert.equal(RuntimeManager.prototype.currentPatientMatchingGeneration.call(fake, project), candidate);

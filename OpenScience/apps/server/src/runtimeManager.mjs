@@ -7375,12 +7375,26 @@ export class RuntimeManager {
     try { await this.startAdmitted(project, { replaceRuntime: async () => { if (this.runtimes.has(key)) await this.stop(project); } }); return { joined: true }; }
     finally { this.patientMatchingGenerationOverrides.delete(key); }
   }
+  /** The kernel's web host answers before an enabled bundle has registered its route: on DSH 0.2.2-rc.1 the status route is 404 for
+   * about 0.2 s after the first HTTP answer, and the one immediate call of the first production install (2026-11-10) landed there and
+   * rolled the plugin back. Only a 404 from the same runtime generation is waited out, for at most `waitMs`.
+   * @param {any} runtime @param {any} project @param {string} generation @param {number} [waitMs] */
+  async patientMatchingStatus(runtime, project, generation, waitMs = 15000) {
+    const deadline = Date.now() + waitMs;
+    for (;;) {
+      try { return await this.callKernel(runtime, project, 'patientMatching/status', {}, AbortSignal.timeout(10000)); }
+      catch (error) {
+        if (/** @type {any} */ (error)?.wire?.kernelCode !== 'http_404' || Date.now() >= deadline || this.runtimeGeneration(project) !== generation) throw error;
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    }
+  }
   async probePatientMatchingGeneration(project, expected) {
     const runtime = this.runtimes.get(this.key(project)), generation = this.runtimeGeneration(project);
     if (!runtime || !generation || canonicalJson(runtime.patientMatchingGeneration?.reference ?? null) !== canonicalJson(expected?.reference ?? null)) throw new HttpError(409, 'patient_matching_release_invalid', 'The native matching runtime changed.');
     if (expected) {
       await this.preparePatientMatchingGeneration(project, expected);
-      const proof = await this.callKernel(runtime, project, 'patientMatching/status', {}, AbortSignal.timeout(10000));
+      const proof = await this.patientMatchingStatus(runtime, project, generation);
       if (proof?.enabled !== true || proof.skill !== 'patient-matching' || canonicalJson(proof.tools) !== canonicalJson(PATIENT_MATCHING_TOOLS)) throw new HttpError(502, 'patient_matching_probe_failed', 'The native matching inventory did not match.');
     }
     if (this.runtimeGeneration(project) !== generation) throw new HttpError(409, 'patient_matching_release_invalid', 'The native matching runtime changed.');
