@@ -458,7 +458,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertEqual(list(kinds), list(vcr_platform.JOB_KINDS))
         self.assertEqual(kinds["design_analytic"], "样本量/事件数/功效的解析计算（一个设计）: design.analytic (continuous|binary|time_to_event)")
         self.assertEqual(kinds["generate_patients"], "生成带生存时间的虚拟患者: patients.time_to_event (time_to_event)")
-        self.assertEqual(kinds["看一份数据表里有什么、缺什么: profile.snapshot"], "profile.snapshot")
+        self.assertEqual(kinds["profile_snapshot"], "看一份数据表里有什么、缺什么: profile.snapshot")
         self.assertEqual(answer["data"]["objects"]["trial_scenario (configuration)"], ["design_analytic", "design_simulation"])
 
     def test_the_kinds_the_platform_builds_say_what_a_run_states_and_where_the_rest_comes_from(self):
