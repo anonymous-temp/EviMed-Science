@@ -100,6 +100,21 @@ export function filesOfReply(text) {
   return null;
 }
 
+/** The transport faults a step asks again after (the client has spent its own retries, or does not retry these): not a verdict on the package. */
+const TRANSIENT_MODEL_ERRORS = new Set(["invalid_response", "timeout", "network", "http_429", "http_500", "http_502", "http_503", "http_504"]);
+
+/** One model call, asked again up to twice after a transient fault (an empty or unreadable reply, a timeout, a 5xx). @param {any} model @param {any[]} messages */
+async function completeWithRetry(model, messages) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await model.complete({ messages });
+    } catch (error) {
+      if (attempt >= 3 || !TRANSIENT_MODEL_ERRORS.has(String(/** @type {any} */ (error)?.code ?? ""))) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 5_000 * attempt));
+    }
+  }
+}
+
 /**
  * @param {{ model: { complete: (request: { messages: any[] }) => Promise<{ message: any, usage: any, model?: string }> }, cacheDir?: string | null,
  *   callsLog?: string | null, label?: string, maxAttempts?: number }} options
@@ -133,7 +148,7 @@ export function createModelSteps({ model, cacheDir = null, callsLog = null, labe
     let outcome = { ok: false, attempts: 0, files: null, issues: [] };
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const started = Date.now();
-      const reply = await model.complete({ messages });
+      const reply = await completeWithRetry(model, messages);
       const text = String(reply?.message?.content ?? "");
       const tokens = { promptTokens: Number(reply?.usage?.promptTokens) || 0, completionTokens: Number(reply?.usage?.completionTokens) || 0, cachedTokens: Number(reply?.usage?.cachedTokens) || 0 };
       usage.calls += 1;

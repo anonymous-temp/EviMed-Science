@@ -44,6 +44,8 @@ import { createDeepSeekClient } from "../run/deepseek.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const OFFLINE_USER = "c1-offline";
+/** The error codes of a step a resumed build runs again: the model client's transport faults. */
+const TRANSIENT_STEP_ERRORS = new Set(["invalid_response", "timeout", "network", "http_429", "http_500", "http_502", "http_503", "http_504"]);
 const STEP_MS = 60_000;
 
 /** Which lesson policies exist: every successful episode as a routine lesson, or the product's routine gate (τ = 3, toolchain switch on). */
@@ -218,8 +220,15 @@ export class OfflineLoop {
     await appendFile(this.statusPath, `${new Date().toISOString()} ${stepId} ${JSON.stringify(summary)}\n`);
   }
 
-  /** Whether a step is already in the saved library. @param {string} stepId */
-  done(stepId) { return Object.hasOwn(this.state.steps, stepId); }
+  /**
+   * Whether a step is already in the saved library. A lesson that ended in a transport fault (the model's reply never came, or came empty) is
+   * not done: a resumed build asks it again. A contract or store refusal is a result and stays.
+   * @param {string} stepId
+   */
+  done(stepId) {
+    const step = this.state.steps[stepId];
+    return Boolean(step) && !(step.state === "error" && TRANSIENT_STEP_ERRORS.has(String(step.code ?? "")));
+  }
 
   /** Register an episode as a run of this offline project, with its transcript on disk. @param {any} record */
   async registerEpisode(record) {
