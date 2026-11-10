@@ -8,6 +8,7 @@ import { recordResidentCard, recordResidentOmitted, recordResidentProfile } from
 import { estimatePromptTokens } from "./modelGateway.mjs";
 import { renderMemoryContext } from "./researchContext.mjs";
 import { memoryPausedFor } from "./memorySettings.mjs";
+import { mostUsedMemos } from "./memoryOpeningByUse.mjs";
 
 /**
  * The resident profile: what the platform itself puts in front of a conversation of the researcher's memory.
@@ -22,6 +23,7 @@ import { memoryPausedFor } from "./memorySettings.mjs";
  *  - **The person's own profile and preferences are the engine's to hand over**: the unmodified memory plugin gives a session
  *    `profile.md` and the listing of `preferences/` and `entities/` at its start, and the rest is looked up through the plugin's
  *    tools. What the platform adds is what the engine has no place for: the project's card and the capsule's profile entries.
+ *    The opt-in opening-by-use experiment also adds a small native most-used slice inside the existing profile budget.
  *    (The legacy engine's records — the durable kinds, the lookup counts, the usage counters — were this block's first half until
  *    that engine was deleted on 2026-10-25.)
  *  - **The project's card is resident inside a project** (the owner's 「和项目连起来」 standard, which was reachable only by the
@@ -107,12 +109,13 @@ export function lookupLine({ omitted = 0, capsule = 0 }) {
  * more entry of the person's profile); then the capsule's entries. An entry that does not fit the token budget is left out and a
  * later, shorter one may still fit; the rest is counted in the line beside the profile.
  *
- * @param {{ capsuleFacts?: readonly any[], card?: any | null, capsuleCount?: number, maxRecords?: number, maxTokens?: number }} input
+ * @param {{ capsuleFacts?: readonly any[], card?: any | null, capsuleCount?: number, maxRecords?: number, maxTokens?: number,
+ *   nativeFiles?: any[], config?: any }} input
  * @returns {{ text: string, profile: string, memos: any[], omitted: number }}
  *   `profile` is the memos alone, which is what the digest is taken over: the counts beside it move with every record written.
  */
-export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleCount = 0, maxRecords = 24, maxTokens = CAPSULE_PROFILE_MAX_TOKENS }) {
-  const candidates = capsuleFactMemos(capsuleFacts);
+export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleCount = 0, maxRecords = 24, maxTokens = CAPSULE_PROFILE_MAX_TOKENS, nativeFiles = [], config = {} }) {
+  const candidates = [...mostUsedMemos(nativeFiles, config), ...capsuleFactMemos(capsuleFacts)];
   const bound = Math.max(0, Math.trunc(Number(maxRecords)) || 0);
   // Room kept for the line, so saying what was left out cannot itself break the budget.
   const reserve = estimatePromptTokens(lookupLine({ omitted: 9_999, capsule: 9_999 }));
@@ -189,18 +192,20 @@ export function nativeSessionResident({ residentProfiles, activeRuns, startedByP
 export class ResidentProfiles {
   /**
    * @param {{ config: any, store: any, capsules?: { profileFacts: Function, lookupCount?: Function } | null,
-   *   contextPolicies?: any, projectCard?: ((userId: string, projectId: string) => Promise<readonly any[]>) | null }} dependencies
+   *   contextPolicies?: any, projectCard?: ((userId: string, projectId: string) => Promise<readonly any[]>) | null,
+   *   nativeFiles?: ((userId: string, projectId: string, limit: number) => Promise<any[]>) | null }} dependencies
    *   `store` is the memory settings store (the switches and the conversation's hand-over state); `capsules` the capsule service,
    *   whose absence leaves the profile to the card. `projectCard` reads the rows of a project's card (the rows the memory page's
    *   项目 tab shows); without it no card is handed over. `contextPolicies` says whether the project is a shared GEO project, whose
    *   conversations are handed the project's card and none of the owner's personal capsule profile.
    */
-  constructor({ config, store, capsules = null, projectCard = null, contextPolicies = null }) {
+  constructor({ config, store, capsules = null, projectCard = null, contextPolicies = null, nativeFiles = null }) {
     this.config = config;
     this.store = store;
     this.capsules = capsules;
     this.projectCard = projectCard;
     this.contextPolicies = contextPolicies;
+    this.nativeFiles = nativeFiles;
     // `OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS`: the cap on how many entries the profile may carry, for the reason it has a token
     // cap — what is always present is paid for on every request, and the attention it takes is taken from the question.
     this.maxRecords = Math.max(0, Math.min(100, Math.trunc(Number(config?.memoryProfileMaxRecords ?? 24)) || 0));
@@ -270,7 +275,9 @@ export class ResidentProfiles {
     // engine: with one, a lookup is the engine's own.
     const capsuleCount = !shared && this.config?.memoryEngineEnabled !== true && typeof this.capsules?.lookupCount === "function"
       ? await this.capsules.lookupCount(userId, projectId, CAPSULE_PROFILE_FACT_KINDS).catch(() => 0) : 0;
-    const block = renderResidentProfile({ capsuleFacts, card, capsuleCount, maxRecords: this.maxRecords });
+    const nativeFiles = !shared && this.config?.memoryOpeningByUseEnabled === true && this.nativeFiles
+      ? await this.nativeFiles(userId, projectId, Math.max(0, Math.min(100, Math.trunc(Number(this.config.memoryOpeningTopK ?? 5)) || 0))).catch(() => []) : [];
+    const block = renderResidentProfile({ capsuleFacts, card, capsuleCount, maxRecords: this.maxRecords, nativeFiles, config: this.config });
     if (!block.text) return none("empty");
     if (block.omitted > 0) recordResidentOmitted(block.omitted);
 

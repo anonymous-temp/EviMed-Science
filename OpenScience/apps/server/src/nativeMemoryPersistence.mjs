@@ -19,7 +19,8 @@
  *  - `native_line_origins` — for each line of a memory file, the first revision that brought it (2026-10-25): its engine session and archive. A
  *    file keeps 32 revisions, so a line brought by an older one named no conversation; this index is small (one row per line) and is
  *    pruned when the line leaves its file. `native_files.last_recalled_at` and `recall_count` say when a memory search or read through
- *    the gateway last returned the file, and how often — recorded for a later decision, acted on by nothing.
+ *    the gateway last returned the file, and how often (the memory map reads it). The separate `used_count` / `last_used_at`
+ *    count successful explicit model reads for the optional opening selection, never automatic exposure.
  *  - `native_reset_tombstones` — what a reset found still being extracted: the archives (and their tasks) of commits the engine had
  *    accepted. An extraction accepted before a reset can still write files after it; the worker takes them out whenever they land.
  *  - `native_imports` — the statements the page's import split out of a pasted text, offered to the person until they save or the hour is
@@ -182,6 +183,8 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_files (
   content_hash text CHECK (content_hash IS NULL OR content_hash ~ '^[a-f0-9]{64}$'),
   body text CHECK (body IS NULL OR char_length(body) <= ${NATIVE_TEXT_LIMIT}),
   labels jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(labels) = 'array' AND jsonb_array_length(labels) <= 16),
+  used_count integer NOT NULL DEFAULT 0 CHECK (used_count >= 0),
+  last_used_at timestamptz(3),
   created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (user_id, uri)
@@ -217,6 +220,9 @@ ALTER TABLE evimed_memory.native_rejections ADD COLUMN IF NOT EXISTS origin text
 -- When a memory search or read through the gateway last returned a file, and how many times (2026-10-25). No behaviour reads it.
 ALTER TABLE evimed_memory.native_files ADD COLUMN IF NOT EXISTS last_recalled_at timestamptz(3);
 ALTER TABLE evimed_memory.native_files ADD COLUMN IF NOT EXISTS recall_count integer NOT NULL DEFAULT 0 CHECK (recall_count >= 0);
+-- Explicit model reads only; opening injection and search exposure retain the separate recall statistics.
+ALTER TABLE evimed_memory.native_files ADD COLUMN IF NOT EXISTS used_count integer NOT NULL DEFAULT 0 CHECK (used_count >= 0);
+ALTER TABLE evimed_memory.native_files ADD COLUMN IF NOT EXISTS last_used_at timestamptz(3);
 -- Where each line of a memory file came from, kept beyond the 32 revisions a file holds. One row per line, gone with the line.
 CREATE TABLE IF NOT EXISTS evimed_memory.native_line_origins (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,

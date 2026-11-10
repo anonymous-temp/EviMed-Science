@@ -17,6 +17,16 @@ import { PROJECT_CARD_MAX_CHARS, ResidentProfiles, lookupLine, projectCardMemo, 
 
 beforeEach(() => resetMemoryMetrics());
 
+test('most-used native memos share the resident token and record budgets and preserve their provenance', () => {
+  const source = { id: 'source', attribution: { origins: ['assistant'], confirmed: false }, sourcePrivacy: { classification: 'private' } };
+  const file = { uri: 'viking://user/owner/memories/people/person.md', usedCount: 3, body: 'Assistant suggested a follow-up.', originalSources: [source] };
+  const block = renderResidentProfile({ nativeFiles: [file], config: { memoryOpeningByUseEnabled: true }, capsuleFacts: [fact()] });
+  assert.equal(block.memos[0].originalSources[0], source);
+  assert.equal(block.memos[0].origin, 'unknown', 'usage does not confirm a source');
+  assert.ok(estimatePromptTokens(block.text) <= CAPSULE_PROFILE_MAX_TOKENS);
+  assert.equal(renderResidentProfile({ nativeFiles: [file], config: { memoryOpeningByUseEnabled: true }, maxRecords: 0 }).memos.length, 0);
+});
+
 const outcome = (/** @type {string} */ label) => memoryMetricFamilies().find((family) => family.name === "open_science_memory_resident_profile_total")
   ?.series.find((item) => item.labels?.outcome === label)?.value;
 

@@ -119,6 +119,7 @@ function publicFile(row) {
     uri: String(row.uri), memoryType: String(row.memory_type), projectId: row.project_id ?? null, sensitive: row.sensitive === true,
     contentHash: row.content_hash ?? null, body: row.body ?? null, labels: Array.isArray(row.labels) ? row.labels : [],
     lastRecalledAt: instant(row.last_recalled_at), recallCount: Number(row.recall_count) || 0,
+    lastUsedAt: instant(row.last_used_at), usedCount: Number(row.used_count) || 0,
     createdAt: instant(row.created_at), updatedAt: instant(row.updated_at),
   };
 }
@@ -818,6 +819,16 @@ export class NativeMemoryOverlay {
     const unique = [...new Set(uris.map(String))].slice(0, 50);
     if (!unique.length) return 0;
     const result = await this.#query(`UPDATE evimed_memory.native_files SET last_recalled_at=clock_timestamp(), recall_count=recall_count+1
+      WHERE user_id=$1 AND uri = ANY($2::text[])`, [owner(userId), unique]);
+    return result.rowCount ?? 0;
+  }
+
+  /** Successful explicit reads, once per file per call. Rewrites preserve these columns; deletion removes them.
+   * @param {string} userId @param {readonly string[]} uris @returns {Promise<number>} */
+  async noteUsed(userId, uris) {
+    const unique = [...new Set(uris.map(String))].slice(0, 50);
+    if (!unique.length) return 0;
+    const result = await this.#query(`UPDATE evimed_memory.native_files SET last_used_at=clock_timestamp(), used_count=used_count+1
       WHERE user_id=$1 AND uri = ANY($2::text[])`, [owner(userId), unique]);
     return result.rowCount ?? 0;
   }

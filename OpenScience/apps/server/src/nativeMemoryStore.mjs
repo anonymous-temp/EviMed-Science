@@ -10,6 +10,7 @@ import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType } 
 import { OPENVIKING_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from "./openVikingLayout.mjs";
 import { MEMORY_SEGMENT_OF_TYPE, OBSERVATIONS_SEGMENT, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri, platformSessionOf, unfinishedArchives } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
+import { sourceReceiptState } from './memorySourceReceipts.mjs';
 
 /**
  * The memory page, the memory map and the account's own operations over an account's memory: OpenViking's native engine
@@ -916,6 +917,35 @@ export class NativeMemoryStore {
   async residentCard(userId, projectId) {
     const everything = await this.#projectRecords(userId, projectId);
     return [...projectCardRows(everything, projectId, { sections: true }), ...projectExtraRows(everything, projectId)].map(row=>({...row,originalSources:everything.filter(record=>record.id===row.recordId||record.nativeType===row.slot).map(record=>({id:record.id,contentDigest:record.contentHash,sourcePrivacy:record.sourcePrivacy,attribution:record.attribution}))}));
+  }
+
+  /** Most-used owned files, through the existing deletion and producer-receipt readers.
+   * No shared namespace, sensitive file, observation or other project's fact enters this opening slice.
+   * @param {string} userId @param {string} projectId @param {number} [limit] */
+  async openingFiles(userId, projectId, limit = 5) {
+    const root = this.sessions.memoryRoot(userId);
+    const hidden = [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId)];
+    const selected = [...(await this.overlay.files(userId)).values()]
+      .filter(file => file.usedCount > 0 && !file.sensitive && nativeMemoryFile(file.uri, root)
+        && (!file.projectId || file.projectId === projectId)
+        && !hidden.some(prefix => file.uri === prefix || file.uri.startsWith(`${prefix}/`)))
+      .sort((a, b) => b.usedCount - a.usedCount || String(b.lastUsedAt ?? '').localeCompare(String(a.lastUsedAt ?? '')) || a.uri.localeCompare(b.uri))
+      .slice(0, Math.max(0, Math.min(100, limit)));
+    if (!selected.length) return [];
+    const files = (await this.files(userId, { uris: selected.map(file => file.uri) }))
+      .filter(file => !file.sensitive && (!file.projectId || file.projectId === projectId) && nativeMemoryFile(file.uri, root));
+    const records = await this.records(userId, { files });
+    return files.flatMap(file => {
+      const sources = records.filter(record => record.uri === file.uri);
+      if (!sources.length) return [];
+      const receipt = sourceReceiptState(sources.map(record => ({ id: record.id, contentDigest: record.contentHash,
+        sourcePrivacy: record.sourcePrivacy, attribution: record.attribution })), { trusted: true });
+      const origins = [...new Set(sources.flatMap(record => record.attribution?.origins ?? ['unknown']))];
+      return [{ ...selected.find(row => row.uri === file.uri), ...file,
+        body: sources.map(record => record.value).join('\n'),
+        originalSources: receipt.originalSources, sourcePrivacy: receipt.sourcePrivacy,
+        attribution: { schemaVersion: 1, origins, confirmed: false } }];
+    });
   }
 
   /** The records a project's card is read from: a shared GEO project's namespace, or the account's own memories. @param {string} userId @param {string} projectId */

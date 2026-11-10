@@ -1,5 +1,6 @@
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { historySearchText } from './memoryHistory.mjs';
+import { openingProfileRead, selectOpeningEntries } from './memoryOpeningByUse.mjs';
 import { carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
 import { withoutResearchGoalGesture } from "./researchGoal.mjs";
 
@@ -396,6 +397,60 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       catch{throw new HttpError(503,"memory_scope_denied","The memory source receipt could not be stored.");}
     }}
     void Promise.resolve().then(() => overlay.noteRecalled(userId, files)).then(() => recordRecallNote("noted"), () => recordRecallNote("failed"));
+  }
+
+  /** Count use only after an explicit read succeeded. Search exposure alone never trains the opening.
+   * @param {any} ctx @param {string[]} uris */
+  async function noteUsed(ctx, uris) {
+    if (config.memoryOpeningByUseEnabled !== true || !overlay?.configured || typeof overlay.noteUsed !== 'function') return;
+    const root = `${ctx.userRoot}/memories`;
+    const files = [...new Set(uris.filter(uri => nativeMemoryFile(uri, root)))];
+    if (!files.length) return;
+    // Statistics are advisory. Wait for the bounded database write so a following opening sees the new count.
+    try { await overlay.noteUsed(ctx.user.id, files); } catch { recordRecallNote('failed'); }
+  }
+
+  /** The startup listing has a distinct REST query; MCP list never enters here.
+   * Both directories are measured together because the plugin builds them concurrently and shares one budget.
+   * @param {any} ctx @param {string} uri @param {Record<string,string>} query */
+  async function openingList(ctx, uri, query) {
+    const listed = await scopedMemoryList(ctx.sessions, ctx, uri, query);
+    const root = `${ctx.userRoot}/memories`;
+    const group = uri === `${root}/preferences` ? 'preferences' : uri === `${root}/entities` ? 'entities' : null;
+    if (config.memoryOpeningByUseEnabled !== true || !group || query.output !== 'agent' || query.recursive !== 'true'
+      || query.abs_limit !== '512' || query.node_limit !== '512' || !overlay?.configured || typeof overlay.files !== 'function') return listed;
+    try {
+      const other = group === 'preferences' ? 'entities' : 'preferences';
+      const files = await overlay.files(ctx.user.id);
+      if (!(Number(config.memoryOpeningMaxChars) > 0) && ![...files.values()].some(file => file.usedCount > 0 &&
+        (file.uri.startsWith(`${root}/preferences/`) || file.uri.startsWith(`${root}/entities/`)))) return listed;
+      const [companion, profile] = await Promise.all([
+        scopedMemoryList(ctx.sessions, ctx, `${root}/${other}`, query),
+        ctx.hidden(`${root}/profile.md`).then(hidden => hidden ? '' : ctx.sessions.read(ctx.user.id, `${root}/profile.md`, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 })),
+      ]);
+      // Rank before the engine's 512-node page cut too. Bound traversal at the same 10,000-file limit as privacy metadata;
+      // a server without pagination support is detected by repeated pages. No unfiltered metadata crosses this boundary.
+      const complete = async (directory, first) => {
+        const entries = new Map(first.result.map(entry => [entry.uri, entry]));
+        let page = first;
+        for (let offset = 512; page.has_more !== false && offset < 10_000; offset += 512) {
+          page = await scopedMemoryList(ctx.sessions, ctx, `${root}/${directory}`, { ...query, offset: String(offset) });
+          let added = 0;
+          for (const entry of page.result) if (!entries.has(entry.uri)) { entries.set(entry.uri, entry); added++; }
+          if (page.result.length && !added) break;
+        }
+        return [...entries.values()];
+      };
+      const [full, fullOther] = await Promise.all([complete(group, listed), complete(other, companion)]);
+      if (!(Number(config.memoryOpeningMaxChars) > 0) && ![...full, ...fullOther].some(entry => files.get(entry.uri)?.usedCount > 0)) return listed;
+      const groups = { [group]: full, [other]: fullOther }, current = { [group]: listed.result, [other]: companion.result };
+      const selected = selectOpeningEntries({ preferences: groups.preferences, entities: groups.entities,
+        currentPreferences: current.preferences, currentEntities: current.entities, profile: profile ?? '', root, files, config });
+      return { ...listed, result: selected[group] };
+    } catch {
+      // A ranking failure cannot withhold today's visible listing. Its privacy filtering already succeeded above.
+      return listed;
+    }
   }
 
   async function rawHistory(ctx, given) {
@@ -801,7 +856,12 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const text = await ctx.sessions.read(ctx.user.id, uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
       if (text === null) return { ...missing, outcome: "forwarded" };
       await noteRecalled(ctx, [absolute(uri, ctx.userRoot)]);
-      return { status: 200, json: ok(text), outcome: "forwarded" };
+      // Startup reads this exact REST profile path without a caller marker. An explicit REST profile reader can opt in;
+      // MCP profile reads always count and return the complete source.
+      const startupProfile = !ctx.shared && uri === `${ctx.userRoot}/memories/profile.md` && ctx.query.get('model_use') !== 'true';
+      if (!startupProfile) await noteUsed(ctx, [absolute(uri, ctx.userRoot)]);
+      return { status: 200, json: ok(startupProfile
+        ? openingProfileRead(text, `${ctx.userRoot}/memories`, config) : text), outcome: "forwarded" };
     },
     async list(ctx) {
       let uri = String(ctx.query.get("uri") ?? "");
@@ -822,7 +882,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         const value = ctx.query.get(name);
         if (value !== null && value.length <= 600) query[name] = value;
       }
-      if (!ctx.shared) return { status: 200, json: await scopedMemoryList(ctx.sessions, ctx, uri, query), outcome: "forwarded" };
+      if (!ctx.shared) return { status: 200, json: await openingList(ctx, uri, query), outcome: "forwarded" };
       // A project's shared namespace: navigation metadata only, its own six types, and an explicit continuation.
       query.uri = uri;
       Object.assign(query, { output: 'original', include_abstract: 'false', include_overview: 'false' });
@@ -911,7 +971,17 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) && !isHidden(uri)).slice(0, 10).map(uri => absolute(uri, ctx.userRoot));
             if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件。")); continue; }
             forward.push({ ...message, params: { ...message.params, arguments: { uris } } });
-            afterCall.set(message.id, async (answer) => { if (!answer?.error) await noteRecalled(ctx, uris.map((/** @type {string} */ uri) => absolute(uri, ctx.userRoot))); });
+            afterCall.set(message.id, async (answer) => {
+              if (!answer?.error) await noteRecalled(ctx, uris);
+              if (config.memoryOpeningByUseEnabled !== true) return;
+              if (answer?.error || answer?.result?.isError === true || !answer?.result?.content?.some(part => part.type === 'text')) return;
+              // MCP read returns combined prose. Verify existence per URI rather than count a missing member of a batch.
+              const present = await Promise.all(uris.map(async uri => {
+                try { return await ctx.sessions.read(ctx.user.id, uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 }) !== null ? uri : null; }
+                catch { return null; }
+              }));
+              await noteUsed(ctx, present.filter(uri => uri !== null));
+            });
           } else if (name === "list") {
             const uri = typeof args.uri === "string" && args.uri ? absolute(args.uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
             if (isHidden(uri, true)) { local.push(toolText(message.id, "（空）")); continue; }

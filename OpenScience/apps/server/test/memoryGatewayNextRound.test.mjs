@@ -22,13 +22,13 @@ const ROOT = `viking://user/${OV_USER}`;
 const SESSION = "dsh-session_0123456789abcdef0123456789abcdef";
 const everything = { native: true, learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null };
 
-async function fixture(t, { overlay = null } = {}) {
+async function fixture(t, { overlay = null, config = {} } = {}) {
   resetNativeMemoryMetrics();
   const stub = await startOpenVikingStub(t);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
   const sessions = new OpenVikingSessions(client, { timeoutMs: 4_000, fastTimeoutMs: 1_300 });
   const handler = createMemoryGatewayHandler({
-    config: { memoryEngineEnabled: true, memoryEnabled: true },
+    config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); } },
     store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER }) },
     sessions, admission: { admit: async () => everything }, overlay,
@@ -53,6 +53,19 @@ async function fixture(t, { overlay = null } = {}) {
 }
 
 const overlayDouble = (extra = {}) => ({ configured: true, account: async () => ({ registeredAt: "x" }), noteRegistered: async () => {}, recordCommit: async () => {}, noteSession: async () => {}, sensitiveUris: async () => [], ...extra });
+
+test('use accounting adds no search exposure to the opening counter while keeping recall statistics', async t => {
+  const recalled = [], used = [];
+  const f = await fixture(t, { config: { memoryOpeningByUseEnabled: true }, overlay: overlayDouble({
+    noteRecalled: async (_user, uris) => recalled.push(...uris), noteUsed: async (_user, uris) => used.push(...uris) }) });
+  const uri = f.stub.seedMemory(OV_USER, 'preferences/self/prose.md', 'Concise prose');
+  await f.call('POST', '/api/v1/search/search', { query: 'Concise', mode: 'context' });
+  await f.call('POST', '/api/v1/search/search', { query: 'Concise' });
+  await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}`);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(recalled.filter(value => value === uri).length >= 3);
+  assert.deepEqual(used, [uri]);
+});
 
 test("the engine's three privacy tools are refused by name, and tools/list names the five of this platform alone", async (t) => {
   const { stub, mcp } = await fixture(t, { overlay: overlayDouble() });

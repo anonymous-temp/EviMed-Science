@@ -11,6 +11,14 @@ import { parseByteSize } from "../src/runtimeManager.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
+test('opening-by-use defaults off, derives today’s character size, and exposes in-process experiment overrides', () => {
+  const config = loadConfig({ rootDir: repoRoot });
+  assert.equal(config.memoryOpeningByUseEnabled, false);
+  assert.equal(config.memoryOpeningMaxChars, 0); assert.equal(config.memoryOpeningNewFileDays, 30); assert.equal(config.memoryOpeningTopK, 5);
+  const experiment = loadConfig({ rootDir: repoRoot, memoryOpeningByUseEnabled: true, memoryOpeningMaxChars: 800, memoryOpeningNewFileDays: 7, memoryOpeningTopK: 3 });
+  assert.deepEqual([experiment.memoryOpeningByUseEnabled, experiment.memoryOpeningMaxChars, experiment.memoryOpeningNewFileDays, experiment.memoryOpeningTopK], [true, 800, 7, 3]);
+});
+
 test("review provider selects compatible defaults and refuses invalid provider/model pairs", () => {
   const config = loadConfig({ rootDir: repoRoot, reviewProvider: "deepseek", deepseekApiKey: "test-key" });
   assert.equal(config.reviewProvider, "deepseek");

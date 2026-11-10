@@ -1678,6 +1678,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The researcher's standing profile and the decision whether a dispatch hands it over (review M6, `residentProfile.mjs`).
   const residentProfiles = new ResidentProfiles({
     config, store: memorySettings, capsules: capsuleService, contextPolicies: sharedContextPolicies,
+    nativeFiles: config.memoryEngineEnabled ? (userId, projectId, limit) => nativeMemory.openingFiles(userId, projectId, limit) : null,
     // The project's card, read as the memory page's 项目 tab reads it: the engine's own project-context file. Handed to a
     // conversation a person is in (`ResidentProfiles.forDispatch`); a deployment without the engine has no card to hand over.
     // What a conversation of the project is handed up front is the card and the project's other standing files (`residentCard`); the

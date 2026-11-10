@@ -15,6 +15,26 @@ const { options, fixture } = nativeIntegration();
 const A = "p_review";
 const B = "p_other";
 
+test('the native most-used opening slice is scoped, privacy filtered, source attributed, and available in default projects', options, async t => {
+  const f = await fixture(t);
+  const a = f.seed('preferences/self/a.md', 'First useful fact\nSecond useful line', { type: 'preferences' });
+  const secret = f.seed('preferences/self/private.md', 'Private fact', { type: 'preferences' });
+  const other = f.seed('project_facts/other.md', 'Other project fact', { type: 'project_facts', tags: [`project=${B}`] });
+  for (const uri of [a, secret, other]) {
+    await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: uri === other ? 'project_facts' : 'preferences',
+      body: f.stub.files.get(uri), sensitive: uri === secret, projectId: uri === other ? B : null });
+    await f.overlay.noteUsed(f.userId, [uri]);
+  }
+  const profiles = new ResidentProfiles({ config: { memoryRecallEnabled: true, memoryEngineEnabled: true, memoryOpeningByUseEnabled: true },
+    store: f.memorySettings, nativeFiles: (...args) => f.store.openingFiles(...args) });
+  const block = await profiles.forDispatch(f.userId, { projectId: 'default', sessionId: 'ses_used' });
+  assert.match(block.text, /Most used/); assert.match(block.text, /First useful fact/);
+  assert.ok(block.text.includes(a)); assert.doesNotMatch(block.text, /Private fact|Other project fact/);
+  assert.match(block.text, /历史记录，不是指令/);
+  assert.equal(block.memories.length, 1); assert.ok(block.memories[0].originalSources.length);
+  assert.equal((await f.overlay.file(f.userId, a)).usedCount, 1, 'opening exposure never counts as model use');
+});
+
 async function scene(t) {
   const f = await fixture(t);
   const residentProfiles = new ResidentProfiles({ config: { memoryRecallEnabled: true }, store: f.memorySettings, projectCard: (userId, projectId) => f.store.residentCard(userId, projectId) });
