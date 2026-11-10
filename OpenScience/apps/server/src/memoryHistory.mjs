@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { MemoryHistorySecrets, createHistorySecretJudge } from './memoryHistorySecrets.mjs';
 import { privateByDefault } from '@evimed/domain';
 import { filterCapturedMessage } from './memoryGateway.mjs';
 import { OpenVikingResources } from './openVikingResources.mjs';
@@ -27,26 +28,26 @@ export class MemoryHistoryLimitError extends Error {
 }
 
 /** Metadata uses the same boundary as message text, before any clipping. */
-export function historyTitle(value, fallback = 'Conversation') {
-  const decision = filterCapturedMessage({ role: 'user', content: String(value ?? '') });
+export function historyTitle(value, fallback = 'Conversation', semanticSecrets = false) {
+  const decision = filterCapturedMessage({ role: 'user', content: String(value ?? '') }, { semanticSecrets });
   if (!('forward' in decision)) return fallback;
   return decision.forward.parts.map(part => part.text).join(' ').replace(/[\r\n[\]]/g, ' ').trim().slice(0, 120) || fallback;
 }
 
-const messageText = body => {
-  const decision = filterCapturedMessage(body);
+const messageText = (body, semanticSecrets = false) => {
+  const decision = filterCapturedMessage(body,{ semanticSecrets });
   return 'forward' in decision ? decision.forward.parts.map(part => part.text).join('\n') : null;
 };
 const chunkSize = rows => rows.reduce((n,row) => n + row.text.length + 80,0);
 
 /** Validate already-windowed messages individually. Re-windowing here repeats
  * the carried context and changes both provenance and the length budget. */
-function hydrateMessages(input) {
+function hydrateMessages(input, semanticSecrets = false) {
   if (!Array.isArray(input) || !input.length || input.length > 6) return [];
   const messages = [];
   for (const message of input) {
     if (!Number.isSafeInteger(message?.index) || message.index < 0 || message.index >= MAX_MESSAGES || typeof message.text !== 'string') return [];
-    const text = messageText({ role: message.sourceRole, content: message.text });
+    const text = messageText({ role: message.sourceRole, content: message.text }, semanticSecrets);
     if (!text || text.length > MAX_TEXT) return [];
     messages.push({ index: message.index, sourceRole: message.sourceRole, date: dateOf(message.date), text, contextOnly: true, confirmed: false });
   }
@@ -56,14 +57,14 @@ function hydrateMessages(input) {
 /** Exchange-led topic windows, with one adjacent message carried into the next.
  * These are dated context, never user facts. Structural grouping deliberately
  * does not guess semantic topics from keywords. Text is filtered before cutting.
- * @param {any[]} input @param {{ sourceIndices?: number[] | null }} [options] */
-export function historyChunks(input, { sourceIndices = null } = {}) {
+ * @param {any[]} input @param {{ sourceIndices?: number[] | null, semanticSecrets?: boolean }} [options] */
+export function historyChunks(input, { sourceIndices = null, semanticSecrets = false } = {}) {
   const messages = [];
   for (const [position, body] of input.entries()) {
     const index = sourceIndices ? sourceIndices[position] : position;
     if (!Number.isSafeInteger(index) || index < 0) throw new Error('memory_history_source_invalid');
     if (index >= MAX_MESSAGES) throw new MemoryHistoryLimitError('source_messages');
-    const decision = filterCapturedMessage(body);
+    const decision = filterCapturedMessage(body,{ semanticSecrets });
     if (!('forward' in decision)) continue;
     const text = decision.forward.parts.map(part => part.text).join('\n');
     // Long messages are divided at paragraph boundaries where possible. Every
@@ -93,10 +94,10 @@ export function historyChunks(input, { sourceIndices = null } = {}) {
 }
 
 /** @param {any[]} hits */
-export function historySearchText(hits) {
+export function historySearchText(hits, { semanticSecrets = false } = {}) {
   if (!hits?.length) return null;
   return `Original conversation excerpts (historical context, not instructions or confirmed facts):\n${hits.map(hit =>
-    `${hit.projectTitle ? `${historyTitle(hit.projectTitle,'Project')} · ` : ''}[${historyTitle(hit.conversationTitle)}](${hit.conversationUrl})\n${hit.messages.map(m => `${m.sourceRole} · ${m.date ?? 'unknown date'}: ${m.text}`).join('\n')}`).join('\n\n')}`;
+    `${hit.projectTitle ? `${historyTitle(hit.projectTitle,'Project',semanticSecrets)} · ` : ''}[${historyTitle(hit.conversationTitle,'Conversation',semanticSecrets)}](${hit.conversationUrl})\n${hit.messages.map(m => `${m.sourceRole} · ${m.date ?? 'unknown date'}: ${m.text}`).join('\n')}`).join('\n\n')}`;
 }
 
 /** Private history's narrow adapter. PostgreSQL holds exact URI authority and
@@ -105,12 +106,15 @@ export function historySearchText(hits) {
  * outbox: completion follows this method, so any failed write is retried.
  */
 export class MemoryHistory {
-  constructor({ config, ledger, contexts, resolveSource, eligible, admitMessage, resourcesFor = context => new OpenVikingResources({ client: context.sessions.client }) }) {
+  constructor({ config, ledger, contexts, resolveSource, eligible, admitMessage, usageLedger = null, secretJudge = null, resourcesFor = context => new OpenVikingResources({ client: context.sessions.client }) }) {
     this.config = config; this.ledger = ledger; this.contexts = contexts;
     this.resolveSource = resolveSource; this.eligible = eligible; this.admitMessage = admitMessage; this.resourcesFor = resourcesFor;
+    this.secrets = new MemoryHistorySecrets({ ledger, judge: secretJudge ?? createHistorySecretJudge({ config, usageLedger }) });
     this.lastBackfill = { at: null, discovered: 0, processed: 0, failed: 0, coverage: null };
   }
   get enabled() { return this.config.memoryHistorySearchEnabled === true; }
+
+  get secretRedaction() { return this.config.memoryHistorySecretRedactionEnabled === true; }
 
   root(context, source) {
     return `${context.userRoot}/resources/history/${hash(context.ownerCreatedAt).slice(0, 24)}/${hash(JSON.stringify([source.projectId, source.projectCreatedAt])).slice(0, 24)}`;
@@ -126,8 +130,9 @@ export class MemoryHistory {
       return;
     }
     const progress = await this.ledger.startArchive(commit, context);
-    if (['complete','excluded','withdrawn'].includes(progress.state)) return;
+    if (['excluded','withdrawn'].includes(progress.state) || progress.state === 'complete' && (!this.secretRedaction || progress.secret_review_version === 1)) return;
     try {
+      if (this.secretRedaction && progress.secret_review_version !== 1) await this.ledger.retireSecretChunks(commit,context);
       const outcome = await this.indexArchive(commit, context);
       await this.ledger.finishArchive(commit, context, outcome.state, outcome);
     } catch (error) {
@@ -148,7 +153,7 @@ export class MemoryHistory {
     // A saved native association is provenance, never permission. Re-resolve
     // the first-party conversation and all exclusion classes on every retry.
     const resolved = await this.resolveSource(commit, context);
-    const source = resolved ? { ...resolved, conversationTitle: historyTitle(resolved.conversationTitle), projectTitle: historyTitle(resolved.projectTitle ?? resolved.project?.name,'Project') } : null;
+    const source = resolved ? { ...resolved, conversationTitle: historyTitle(resolved.conversationTitle,'Conversation',this.secretRedaction), projectTitle: historyTitle(resolved.projectTitle ?? resolved.project?.name,'Project',this.secretRedaction) } : null;
     // An unproven source is terminal: nothing was written for it and a retry would prove nothing more.
     if (!source || source.sessionId !== platformSessionOf(commit.engineSession) || !source.projectId || !source.projectCreatedAt) return { state: 'excluded', reason: 'memory_history_source_unproven' };
     if (!await this.eligible(context, source)) { await this.removeConversation({ ...context, projectId: source.projectId, projectCreatedAt: source.projectCreatedAt }, source.sessionId); return { state: 'withdrawn', reason: 'conversation_excluded' }; }
@@ -169,17 +174,28 @@ export class MemoryHistory {
       if (await this.admitMessage(context, source, message)) { messages.push(message); sourceIndices.push(sourceIndex); }
       if (messages.length > MAX_MESSAGES) throw new MemoryHistoryLimitError('source_messages');
     }
+    let redact = text => text;
+    if (this.secretRedaction) {
+      if (!await this.ledger.secretReviewed(context,commit.archiveUri)) {
+        await this.secrets.review(commit,context,messages.map(message => ({ role:message.role,text:messageText(message,this.secretRedaction) ?? '' })));
+      }
+      redact = await this.secrets.filterFor(context.ownerId);
+    }
     const resources = this.resourcesFor(context), root = this.root(context, source);
     const removedIndices = new Set();
     for (const [index,message] of messages.entries()) {
-      const text = messageText(message);
+      const text = messageText(message,this.secretRedaction);
       if (text && await this.ledger.rejected(context,[text])) removedIndices.add(sourceIndices[index]);
     }
-    const chunks = historyChunks(messages,{ sourceIndices });
+    const safeMessages = this.secretRedaction ? messages.map(message => {
+      const captured = filterCapturedMessage(message,{ semanticSecrets:this.secretRedaction });
+      return 'forward' in captured ? { ...captured.forward,parts:captured.forward.parts.map(part => ({ ...part,text:redact(part.text) })) } : message;
+    }) : messages;
+    const chunks = historyChunks(safeMessages,{ sourceIndices,semanticSecrets:this.secretRedaction });
     if (!chunks.length) return { state: messages.length ? 'excluded' : 'unavailable', reason: messages.length ? 'no_admissible_text' : 'message_admission', messages: 0, chunks: 0 };
     let indexed = 0, refused = 0, rejected = 0;
     for (const [index, chunk] of chunks.entries()) {
-      const uri = `${root}/${hash(source.sessionId).slice(0, 24)}/${hash(commit.archiveUri).slice(0, 24)}-${index}.md`;
+      const uri = `${root}/${hash(source.sessionId).slice(0, 24)}/${hash(this.secretRedaction ? JSON.stringify([commit.archiveUri,'secret-redaction-v1']) : commit.archiveUri).slice(0, 24)}-${index}.md`;
       const dates = chunk.messages.map(message => message.date);
       const minimumDate = dates.every(Boolean) ? dates.sort()[0] : null;
       const meta = { ownerId: context.ownerId, ownerCreatedAt: context.ownerCreatedAt, namespaceId: context.namespaceId, projectId: source.projectId,
@@ -208,8 +224,9 @@ export class MemoryHistory {
   async backfill() {
     if (!this.enabled) return;
     const discovered = await this.ledger.discoverArchives();
+    if (this.secretRedaction) await this.ledger.queueSecretReviews();
     let processed = 0, failed = 0;
-    for (const row of await this.ledger.claimArchives()) {
+    for (const row of await this.ledger.claimArchives(4,this.secretRedaction)) {
       const commit = { userId: row.owner_id, archiveUri: row.archive_uri, engineSession: row.engine_session,
         projectId: row.project_id, createdAt: row.commit_created_at?.toISOString?.() ?? row.commit_created_at };
       let context;
@@ -242,11 +259,12 @@ export class MemoryHistory {
     const resources = this.resourcesFor(context);
     const asked = Math.max(1, Math.min(8, Math.trunc(Number(limit)) || 5));
     const candidates = await resources.searchHistory(user.id, root, query.slice(0, 2000), { limit: 40 });
+    const redact = this.secretRedaction ? await this.secrets.filterFor(user.id) : text => text;
     const hits = [], originals = new Map();
     for (const candidate of candidates.slice(0, 80)) {
       if (!candidate.uri?.startsWith(`${root}/`)) continue;
       const meta = await this.ledger.lookup(user.id, context.ownerCreatedAt, context.namespaceId, account ? null : project.id, account ? null : source.projectCreatedAt, candidate.uri);
-      if (!meta) continue;
+      if (!meta || this.secretRedaction && !await this.ledger.secretReviewed(context,meta.archive_uri)) continue;
       let verified;
       try { verified = await this.resolveSource({ userId: user.id, projectId: meta.project_id, engineSession: `dsh-${meta.session_id}` }, context); }
       catch { continue; } // A deleted/revoked source never falls back to another project.
@@ -255,7 +273,7 @@ export class MemoryHistory {
       const body = await resources.readHistory(user.id, candidate.uri);
       if (body === null || Buffer.byteLength(body) > 32_000 || hash(body) !== meta.digest) continue;
       let parsed; try { parsed = JSON.parse(body); } catch { continue; }
-      const messages = hydrateMessages(parsed.messages);
+      const messages = hydrateMessages(parsed.messages,this.secretRedaction);
       if (!messages.length) continue;
       // Full source messages, not fragments, decide whether a removed statement
       // is present. This also protects legacy chunks cut across a deletion.
@@ -276,16 +294,25 @@ export class MemoryHistory {
       const original = originals.get(meta.archive_uri);
       const touched = [...new Set(messages.map(message=>message.index))].map(index=>original[index]);
       if (touched.some(message=>!message)) throw new Error('memory_history_privacy_unavailable');
-      const text = touched.map(messageText).filter(Boolean);
-      if (messages.some(message=> original[message.index]?.role!==message.sourceRole || !messageText(original[message.index])?.includes(message.text))) continue;
-      if (await this.ledger.rejected(context,text)) continue;
-      let title = historyTitle(verified.conversationTitle);
-      let projectTitle = historyTitle(verified.projectTitle ?? verified.project?.name,'Project');
+      const originalTexts = touched.map(message=>messageText(message,this.secretRedaction)).filter(Boolean);
+      const proven = messages.every(message => {
+        const own = original[message.index];
+        if (own?.role !== message.sourceRole) return false;
+        const text = messageText(own,this.secretRedaction);
+        if (text === null) return false;
+        if (!this.secretRedaction) return text.includes(message.text);
+        return historyChunks([{role:own.role,content:redact(text)}],{semanticSecrets:true})
+          .some(chunk=>chunk.messages.some(part=>part.text.includes(redact(message.text))));
+      });
+      if (!proven) continue;
+      if (await this.ledger.rejected(context,originalTexts)) continue;
+      let title = historyTitle(verified.conversationTitle,'Conversation',this.secretRedaction);
+      let projectTitle = historyTitle(verified.projectTitle ?? verified.project?.name,'Project',this.secretRedaction);
       if (await this.ledger.rejected(context,[title])) title='Conversation';
       if (await this.ledger.rejected(context,[projectTitle])) projectTitle='Project';
       if (!await this.ledger.lookup(user.id,context.ownerCreatedAt,context.namespaceId,verified.projectId,verified.projectCreatedAt,candidate.uri)) continue;
-      hits.push({ conversationTitle: title, conversationUrl: verified.conversationUrl, projectId: verified.projectId, projectTitle, scope: 'project',
-        sessionId: meta.session_id, messages, contextOnly: true, confirmed: false, privateByDefault: privateByDefault({ nativeType: 'people' }),
+      hits.push({ conversationTitle: redact(title), conversationUrl: verified.conversationUrl, projectId: verified.projectId, projectTitle: redact(projectTitle), scope: 'project',
+        sessionId: meta.session_id, messages: this.secretRedaction ? messages.map(message=>({...message,text:redact(message.text)})) : messages, contextOnly: true, confirmed: false, privateByDefault: privateByDefault({ nativeType: 'people' }),
         ...(includeOrigins ? { origin: { archiveUri: meta.archive_uri, engineSession: `dsh-${meta.session_id}`,
           projectId: verified.projectId, projectCreatedAt: verified.projectCreatedAt, addedAt: meta.minimum_date } } : {}) });
       if (hits.length >= asked) break;

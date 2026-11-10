@@ -5123,7 +5123,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // Its registry is metadata only; raw text stays in a private engine Resource
   // root, separate from KB sources/compilation and every capsule egress surface.
   const historyLedger = productDatabase ? new MemoryHistoryLedger({ database: productDatabase, overlay: nativeMemoryOverlay, client: openVikingClient }) : null;
-  const memoryHistory = historyLedger && nativeMemoryContexts ? new MemoryHistory({ config, ledger: historyLedger, contexts: nativeMemoryContexts,
+  const memoryHistory = historyLedger && nativeMemoryContexts ? new MemoryHistory({ config, ledger: historyLedger, contexts: nativeMemoryContexts, usageLedger,
     ...createMemoryHistorySources({ config, store, productDatabase, nativeMemoryContexts, nativeMemoryOverlay,
       agentRuns, memorySettings, agentRegistry, vcrPrivacyStore, memoryAdmission }),
   }) : null;
@@ -5248,6 +5248,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const memoryGatewayHandler = createMemoryGatewayHandler({
     config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
     memoryContexts: nativeMemoryContexts, rememberJournal: nativeRememberJournal,
+    historySecrets: memoryHistory?.secrets,
     historySearch: memoryHistory ? request => memoryHistory.search(request) : null,
     sourceDeletion,
     sourceReceipt:async({user,project,sessionId,uris,context:sourceContext})=>{

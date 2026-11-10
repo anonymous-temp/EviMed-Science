@@ -1,3 +1,5 @@
+import { randomBytes } from 'node:crypto';
+import { secretHash } from './memoryHistorySecrets.mjs';
 import { migrateMemorySettings } from './memorySettingsPersistence.mjs';
 import { migrateNativeMemory } from './nativeMemoryPersistence.mjs';
 import { lineFingerprint, normalisedStatement, nativeMemoryRejectionType } from './nativeMemoryOverlay.mjs';
@@ -51,6 +53,17 @@ DO $$ BEGIN
 END $$;
 -- A withdrawn chunk's address is re-checked a few times after its removal (a slow engine write can still land), not hourly forever.
 ALTER TABLE evimed_memory.history_chunks ADD COLUMN IF NOT EXISTS sweeps integer NOT NULL DEFAULT 0;
+ALTER TABLE evimed_memory.history_archives ADD COLUMN IF NOT EXISTS secret_review_version integer NOT NULL DEFAULT 0;
+ALTER TABLE evimed_memory.history_archives ADD COLUMN IF NOT EXISTS secret_review_requested boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS evimed_memory.history_secret_salts (
+  owner_id text NOT NULL, owner_created_at text NOT NULL, salt text NOT NULL,
+  PRIMARY KEY(owner_id,owner_created_at)
+);
+CREATE TABLE IF NOT EXISTS evimed_memory.history_secrets (
+  owner_id text NOT NULL, owner_created_at text NOT NULL, archive_uri text NOT NULL,
+  fingerprint text NOT NULL, length integer NOT NULL CHECK(length>0), count integer NOT NULL DEFAULT 1,
+  PRIMARY KEY(owner_id,owner_created_at,archive_uri,fingerprint)
+);
 `;
 
 /** Exact URI authority and durable cleanup obligations, never raw messages. */
@@ -133,6 +146,55 @@ export class MemoryHistoryLedger {
       const last = result.rows.at(-1); type = last.memory_type; fingerprint = last.fingerprint;
     }
   }
+  /** Only salted fingerprints and lengths leave transient model response memory. */
+  async recordSecrets(commit, context, secrets) {
+    await this.locked(context.ownerId, async c => {
+      await c.query(`INSERT INTO evimed_memory.history_secret_salts(owner_id,owner_created_at,salt) VALUES($1,$2,$3)
+        ON CONFLICT DO NOTHING`, [context.ownerId,context.ownerCreatedAt,randomBytes(32).toString('hex')]);
+      const salt = (await c.query(`SELECT salt FROM evimed_memory.history_secret_salts WHERE owner_id=$1 AND owner_created_at=$2`,
+        [context.ownerId,context.ownerCreatedAt])).rows[0].salt;
+      for (const secret of secrets) await c.query(`INSERT INTO evimed_memory.history_secrets(owner_id,owner_created_at,archive_uri,fingerprint,length)
+        VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`, [context.ownerId,context.ownerCreatedAt,commit.archiveUri,secretHash(salt,secret),secret.length]);
+      await c.query(`UPDATE evimed_memory.history_archives SET secret_review_version=1,secret_review_requested=true
+        WHERE owner_id=$1 AND owner_created_at=$2 AND archive_uri=$3 AND state<>'withdrawn'`, [context.ownerId,context.ownerCreatedAt,commit.archiveUri]);
+    });
+  }
+  async secretRecords(ownerId) {
+    await this.migrate();
+    // One snapshot binds salt and hashes to the same live account incarnation.
+    const rows = (await this.database.query(`SELECT DISTINCT a.salt,s.fingerprint,s.length FROM evimed_control.users u
+      LEFT JOIN evimed_memory.history_secret_salts a ON a.owner_id=u.id AND a.owner_created_at=u.created_at::text
+      LEFT JOIN evimed_memory.history_secrets s ON s.owner_id=u.id AND s.owner_created_at=u.created_at::text
+      WHERE u.id=$1 LIMIT 10001`, [ownerId])).rows;
+    const salt = rows[0]?.salt ?? '';
+    const records = rows.filter(row=>row.fingerprint).map(row=>({fingerprint:row.fingerprint,length:row.length}));
+    if (!rows.length || records.length>10000 || records.length && !salt) throw new Error('memory_history_secret_review_unavailable');
+    return { salt, records };
+  }
+  async secretReviewed(context, archiveUri) {
+    await this.migrate();
+    return Boolean((await this.database.query(`SELECT 1 FROM evimed_memory.history_archives WHERE owner_id=$1 AND owner_created_at=$2
+      AND archive_uri=$3 AND secret_review_version=1 AND state NOT IN ('withdrawn','excluded')`, [context.ownerId,context.ownerCreatedAt,archiveUri])).rows.length);
+  }
+  /** Retire legacy addresses before review. New redacted resources use a new
+   * digest, so a slow old write can never become searchable again. */
+  async retireSecretChunks(commit, context) {
+    await this.locked(context.ownerId, async c => {
+      await c.query(`UPDATE evimed_memory.history_archives SET secret_review_requested=true WHERE owner_id=$1 AND owner_created_at=$2 AND archive_uri=$3`, [context.ownerId,context.ownerCreatedAt,commit.archiveUri]);
+      await c.query(`UPDATE evimed_memory.history_chunks SET state='withdrawn',cleaned_at=NULL,lease_until=NULL,updated_at=clock_timestamp()
+        WHERE owner_id=$1 AND owner_created_at=$2 AND archive_uri=$3 AND state<>'withdrawn'
+        AND EXISTS(SELECT 1 FROM evimed_memory.history_archives a WHERE a.owner_id=$1 AND a.owner_created_at=$2 AND a.archive_uri=$3 AND a.secret_review_version=0)`, [context.ownerId,context.ownerCreatedAt,commit.archiveUri]);
+    });
+  }
+  async queueSecretReviews(limit = 4) {
+    await this.migrate();
+    return this.database.query(`UPDATE evimed_memory.history_archives SET state='queued',secret_review_requested=true,attempts=0,
+      next_attempt_at=clock_timestamp(),lease_until=NULL WHERE (owner_id,owner_created_at,archive_uri) IN
+      (SELECT a.owner_id,a.owner_created_at,a.archive_uri FROM evimed_memory.history_archives a JOIN evimed_control.users u
+        ON u.id=a.owner_id AND u.created_at::text=a.owner_created_at
+        WHERE a.secret_review_version=0 AND NOT a.secret_review_requested AND a.state IN ('complete','partial','unavailable')
+        AND (a.lease_until IS NULL OR a.lease_until<clock_timestamp()) ORDER BY a.commit_created_at NULLS LAST LIMIT $1 FOR UPDATE OF a SKIP LOCKED)`, [limit]);
+  }
   async archiveSourceHash(context, archiveUri) {
     await this.migrate();
     const result = await this.database.query(`SELECT source_hash FROM evimed_memory.history_archives
@@ -190,7 +252,7 @@ export class MemoryHistoryLedger {
       ORDER BY c.created_at,c.user_id,c.archive_uri LIMIT $1 ON CONFLICT DO NOTHING RETURNING archive_uri`, [Math.max(1, Math.min(100, limit))]);
     return result.rows.length;
   }
-  async claimArchives(limit = 4) {
+  async claimArchives(limit = 4, secretReview = false) {
     await this.migrate();
     const result = await this.database.query(`WITH claimed AS (UPDATE evimed_memory.history_archives h SET state='indexing',
       attempts=CASE WHEN h.source_lookup_version=0 AND h.state='unavailable' AND h.reason='memory_history_index_unavailable' THEN 1 ELSE h.attempts+1 END,
@@ -200,11 +262,11 @@ export class MemoryHistoryLedger {
         SELECT a.owner_id,a.owner_created_at,a.archive_uri FROM evimed_memory.history_archives a
         JOIN evimed_control.users u ON u.id=a.owner_id AND u.created_at::text=a.owner_created_at
         WHERE a.state IN ('queued','indexing','unavailable','partial')
-        AND ((a.next_attempt_at<=clock_timestamp() AND (a.state<>'unavailable' OR a.attempts<8))
+        AND ((a.next_attempt_at<=clock_timestamp() AND (a.state<>'unavailable' OR a.attempts<8 OR ($2 AND a.reason='memory_history_secret_review_unavailable')))
           OR (a.source_lookup_version=0 AND a.state='unavailable' AND a.reason='memory_history_index_unavailable'))
         AND (a.lease_until IS NULL OR a.lease_until<clock_timestamp())
         ORDER BY a.commit_created_at NULLS LAST,a.updated_at,a.owner_id,a.archive_uri LIMIT $1 FOR UPDATE OF a SKIP LOCKED) RETURNING h.*)
-      SELECT * FROM claimed ORDER BY commit_created_at NULLS LAST,owner_id,archive_uri`, [Math.max(1, Math.min(4, limit))]);
+      SELECT * FROM claimed ORDER BY commit_created_at NULLS LAST,owner_id,archive_uri`, [Math.max(1, Math.min(4, limit)),secretReview]);
     return result.rows;
   }
   async startArchive(commit, context) {

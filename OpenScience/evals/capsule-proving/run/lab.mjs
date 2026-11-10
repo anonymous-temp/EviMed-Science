@@ -582,6 +582,7 @@ export async function openLab({
     const gatewayGroup = await startLabGateways({
       runtimeManager, store, sessions, admission, overlay, memoryContexts: contexts, memoryTool: nativeMemory,
       admissionFor: (merged) => createMemoryAdmission({ config: merged, memorySettings }),
+      historySecrets: history.secrets,
       historySearch: (request) => history.search(request),
     }, config, answerVariants);
     const gateway = gatewayGroup.gateways.get("");

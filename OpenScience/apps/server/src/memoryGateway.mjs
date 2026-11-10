@@ -266,10 +266,10 @@ function projectMemoryVisible(uri, userRoot, types, directory = false) {
  * time — never a tool part, a peer, or a field this gateway does not know.
  * In the turn that set a research goal the person's message is `/loopx <their sentence>`: the gesture is the platform's and is taken out
  * of what a user says there (`withoutResearchGoalGesture`); a message that was only the gesture is no text.
- * @param {any} body @param {{ researchGoal?: boolean }} [turn]
+ * @param {any} body @param {{ researchGoal?: boolean, semanticSecrets?: boolean }} [turn]
  * @returns {{ forward: { role: string, parts: { type: "text", text: string }[], created_at?: string }, masked: boolean } | { drop: "invalid" | "platform_context" | "no_text" }}
  */
-export function filterCapturedMessage(body, { researchGoal = false } = {}) {
+export function filterCapturedMessage(body, { researchGoal = false, semanticSecrets = false } = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body) || !["user", "assistant"].includes(body.role)) return { drop: "invalid" };
   const texts = typeof body.content === "string" ? [body.content]
     : Array.isArray(body.parts) ? body.parts.filter((/** @type {any} */ part) => part?.type === "text" && typeof part.text === "string").map((/** @type {any} */ part) => part.text) : [];
@@ -280,7 +280,7 @@ export function filterCapturedMessage(body, { researchGoal = false } = {}) {
   for (const text of texts) {
     const own = researchGoal && body.role === "user" ? withoutResearchGoalGesture(unwrapUserWrappers(text)).trim() : unwrapUserWrappers(text);
     if (!own) continue;
-    const safe = maskIdentifiers(own);
+    const safe = maskIdentifiers(own, { shapesOnly: semanticSecrets });
     if (safe !== own) masked = true;
     parts.push({ type: "text", text: safe });
   }
@@ -355,6 +355,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
  *   memoryTool?: { forget: (user: any, project: any, uri: string, options?: any) => Promise<{ removed: boolean }> } | null,
  *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
+ *   historySecrets?: import("./memoryHistorySecrets.mjs").MemoryHistorySecrets | null,
  *   historySearch?: ((request: any) => Promise<any[]>) | null,
  *   now?: () => number,
  * }} dependencies
@@ -364,7 +365,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  * @returns {((req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>) & { commitSession: MemoryGatewayCommitSession }}
  *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
-export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, now = () => Date.now() }) {
+export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, historySecrets = null, now = () => Date.now() }) {
   const enabled = config.memoryEngineEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
   const maxBodyBytes = Math.max(1_024, Number(config.memoryGatewayMaxBodyBytes) || 1_048_576);
   const ratePerMinute = Math.max(0, Number(config.memoryGatewayRatePerMinute ?? 600) || 0);
@@ -777,7 +778,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         if (admitted.learnReason === "clinical_context") dropClinicalSession(ctx.user.id, sessionId, ctx.sessions);
         return { ...accepted, outcome: "withheld" };
       }
-      const decision = filterCapturedMessage(ctx.json, { researchGoal: admitted.researchGoal === true });
+      const decision = filterCapturedMessage(ctx.json, { researchGoal: admitted.researchGoal === true, semanticSecrets: config.memoryHistorySecretRedactionEnabled === true });
       if ("drop" in decision) {
         recordGatewayMessage(decision.drop);
         if (decision.drop === "invalid") throw new HttpError(400, "memory_gateway_body_invalid", "A message needs a role and text.");
@@ -1026,7 +1027,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
               const text = capsuleSearchText(/** @type {any} */ (items));
               if (text) content.push({ type: "text", text });
             }
-            const original = historySearchText(await rawHistory(ctx, args));
+            const original = historySearchText(await rawHistory(ctx, args), { semanticSecrets: config.memoryHistorySecretRedactionEnabled === true });
             if (original) content.push({ type: "text", text: original });
             local.push({ jsonrpc: "2.0", id: message.id, result: { content } });
           }
@@ -1041,7 +1042,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           // The same door as a captured message: what the platform wrote is not something to remember.
           const kept = [];
           for (const item of (Array.isArray(args.messages) ? args.messages : []).slice(0, 6)) {
-            const decision = filterCapturedMessage({ role: item?.role, content: typeof item?.content === "string" ? item.content : "" });
+            const decision = filterCapturedMessage({ role: item?.role, content: typeof item?.content === "string" ? item.content : "" }, { semanticSecrets: config.memoryHistorySecretRedactionEnabled === true });
             if ("drop" in decision) { recordGatewayMessage(decision.drop); continue; }
             if (decision.masked) recordGatewayMasked();
             kept.push({ role: decision.forward.role, content: decision.forward.parts.map((part) => part.text).join("\n") });
@@ -1249,8 +1250,20 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // Only the routes that write are fenced here; a read never takes the owner's fence. `mcp` is fenced where it writes: its remember and forget
       // calls go through the engine client (every non-GET request) and the store, each of which takes the fence itself.
       const writes = route === 'sessionCreate' || route === 'messageWrite' || route === 'commit';
-      const answer = writes ? await withNativeMemoryWrite(overlay?.database,user.id,()=>handlers[route](ctx)) : await handlers[route](ctx);
+      let answer = writes ? await withNativeMemoryWrite(overlay?.database,user.id,()=>handlers[route](ctx)) : await handlers[route](ctx);
       if (sourceDeletion && await sourceDeletion.version(user.id) !== deletionVersion) throw new HttpError(503, 'memory_gateway_source_changed', 'The source privacy state changed during this request.');
+      if (config.memoryHistorySecretRedactionEnabled === true && ['search','mcp'].includes(route)) {
+        // One account filter after all search blocks have been assembled. A
+        // failed privacy lookup returns no result, never an unfiltered answer.
+        if (!historySecrets) throw new HttpError(503,'memory_gateway_secret_filter_unavailable','The memory privacy state is unavailable.');
+        if ('json' in answer) answer = { ...answer,json:await historySecrets.filterValue(user.id,answer.json) };
+        else if ('text' in answer && answer.text) {
+          const stream = 'contentType' in answer && String(answer.contentType).includes('text/event-stream');
+          const value = stream ? parseEventStream(answer.text) : JSON.parse(answer.text);
+          const safe = await historySecrets.filterValue(user.id,value);
+          answer = { ...answer,text:stream ? safe.map(message=>`event: message\ndata: ${JSON.stringify(message)}\n\n`).join('') : JSON.stringify(safe) };
+        }
+      }
       recordGatewayRequest(route, answer.outcome);
       send(answer);
     } catch (error) {

@@ -374,7 +374,7 @@ const KEY_FORMAT = /\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}|\bAKIA[0-9A-Z]{16}\b|\bgh[
 // Assignment labels are structural. A small value scanner is shared by detection and masking: quotes may contain
 // whitespace, escaped quotes and line breaks, while every ASCII punctuation character inside an unquoted token is secret.
 const SECRET_ASSIGNMENT_PREFIX = /(?:api[ _-]?key|access[ _-]?token|secret|password|passwd|密码|口令|密钥|令牌|verification[ _-]?code|one[ -]?time[ _-]?(?:password|code)|OTP|验证码|校验码|动态口令)\s*(?:(?:is\b|为|是)\s*(?:[:=：]\s*)?|[:=：]\s*)/gi
-const IDENTIFIER_MASK = '[已省略]'
+export const IDENTIFIER_MASK = '[已省略]'
 const SECRET_QUOTES = new Map([['"', '"'], ["'", "'"], ['“', '”'], ['‘', '’']])
 
 /** The assigned values, including delimiters when quoted. @param {string} text @returns {{ start: number, end: number }[]} */
@@ -507,15 +507,14 @@ export function identifierShapesIn(text) {
  * A text with the identifier-shaped spans `identifierShapesIn` finds replaced
  * by 「[已省略]」, and otherwise untouched: what a quote or a conversation's
  * opening question keeps once it is stored.
- * @param {unknown} text @returns {string}
+ * @param {unknown} text @param {{ shapesOnly?: boolean }} [options] @returns {string}
  */
-export function maskIdentifiers(text) {
+export function maskIdentifiers(text, { shapesOnly = false } = {}) {
   const masked = IDENTIFIER_MASK
   const safe = String(text ?? '')
     .replace(RESIDENT_ID, masked)
     .replace(CARD, (match) => { const digits = match.replace(/[ -]/g, ''); return digits.length >= 16 && luhnValid(digits) ? masked : match })
     .replace(KEY_FORMAT, masked)
     .replace(KEY_FORMAT_MORE, masked)
-    .replace(VERIFICATION_CODE, (_match, label) => `${label}${masked}`)
-  return maskAssignedSecrets(safe).replace(LONG_TOKEN, (run) => (isTokenShaped(run) ? masked : run))
+  return (shapesOnly ? safe : maskAssignedSecrets(safe.replace(VERIFICATION_CODE, (_match, label) => `${label}${masked}`))).replace(LONG_TOKEN, (run) => (isTokenShaped(run) ? masked : run))
 }
