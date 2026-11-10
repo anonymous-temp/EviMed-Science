@@ -2,8 +2,8 @@
   "id": "c20-stance-is-not-a-memory",
   "class": "refuse-stance",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C20); every name, number and identifier is invented",
-  "expected": "Nothing is kept of the person's stance, and no profile line is made from the topic of the question.",
-  "decidable": true,
+  "expected": "Keep a worthwhile opinion as user believes, never as an established clinical conclusion or a rule to seek only supporting evidence.",
+  "decidable": false,
   "replay": {
     "synthetic": true,
     "projectId": "default",
@@ -21,11 +21,15 @@
     ]
   },
   "expect": {
-    "noTextContains": [
-      "没用"
+    "requireTextContains": [
+      "SGLT2",
+      "HFpEF"
     ],
     "noRecordOfKinds": [
-      "profile"
+      "preference"
     ]
-  }
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04",
+  "judge": "Does the memory preserve useful information with the origin, limited scope, uncertainty and current-vs-historical distinction described in expected, without promoting a claim to an established fact or permission?"
 }

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { PatientsTab } from "./PatientsTab";
 import { renderTab } from "../__fixtures__/tabFrame";
+import borrowingPayloads from "../__fixtures__/borrowingPayloads.json";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
 
 /**
@@ -257,6 +258,29 @@ describe("虚拟患者 · the charts", () => {
     expect(container.querySelector("[data-vcr-legend-band]")).toHaveTextContent("80% 预测区间");
   });
 
+  it("draws every panel the result carries, not only the first: a longitudinal result's estimand panel stands beside the arms panel", async () => {
+    const raw = fixture("ev201/patients.json");
+    const value = (n: number, unit: string | null) => ({ value: n, text: null, unit, source: "predicted", interval: null, mcse: null, review: "ai_set", precision: null, reason: null, stale: false, detail: null });
+    raw.panels = [
+      { key: "arms", title: "两组的生成结果", kind: "binary", note: "情景仿真生成，非观察", rows: [{ label: "试验组人数", value: value(150, "人") }], series: [], footnote: null },
+      {
+        key: "estimands", title: "按不同的估计目标，末次随访的效应", kind: "binary", note: "两种估计目标的真值是已知的",
+        rows: [
+          { label: "假想策略（假如没有救援药）：末次随访两组均值之差", value: value(-2.4, null) },
+          { label: "假想策略（假如没有救援药）：每组需要的人数（90% 把握，单侧 2.5%）", value: value(412, "人") },
+        ],
+        series: [], footnote: null,
+      },
+    ];
+    installVcrServer(network.productRequest, { [tab("patients")]: raw });
+    const { container } = draw();
+    await found(container, '[data-vcr-panel-row="试验组人数"]');
+    expect(screen.getByRole("heading", { name: "两组的生成结果" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "按不同的估计目标，末次随访的效应" })).toBeInTheDocument();
+    expect(container.querySelector('[data-vcr-panel-row="假想策略（假如没有救援药）：末次随访两组均值之差"]')).toHaveTextContent("-2.4");
+    expect(container.querySelector('[data-vcr-panel-row="假想策略（假如没有救援药）：每组需要的人数（90% 把握，单侧 2.5%）"]')).toHaveTextContent("412人");
+  });
+
   it("draws a spread nobody named as no band at all: an unnamed range is not an interval", async () => {
     const raw = fixture("ev201/patients.json");
     for (const line of raw.trajectories.series) { line.bandKind = null; line.bandLevel = null; }
@@ -443,7 +467,7 @@ describe("虚拟患者 · a study with no people yet", () => {
       return node as HTMLElement;
     });
     expect(within(recipe).getByRole("button", { name: "让 AI 生成虚拟患者" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "预测验证" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "轨迹预测" })).toBeInTheDocument();
     expect(screen.queryByText("预测与验证")).toBeNull();
     expect(screen.queryByText("模型评估")).toBeNull();
     expect(container.querySelector("[data-vcr-example]")).toBeNull();
@@ -459,21 +483,55 @@ describe("虚拟患者 · a study with no people yet", () => {
       return node as HTMLElement;
     });
     expect(running).toHaveTextContent("生成虚拟患者");
-    expect(screen.getByRole("button", { name: "预测验证" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "轨迹预测" })).toBeInTheDocument();
     expect(screen.queryByText("预测与验证")).toBeNull();
     expect(screen.queryByRole("button", { name: /导入/ })).toBeNull();
   });
 });
 
-describe("虚拟患者 · the second view, 预测验证", () => {
+describe("虚拟患者 · the second view, 轨迹预测", () => {
   const history = { id: "history-1", kind: "history", createdAt: "2026-01-01", hash: "h", summary: { origin: "2026-01-01", subjects: 40, events: 80 } };
   const longitudinal = (records: unknown[]) => ({ available: true, records, providers: [], templates: { events: { columns: ["subject_id"], example: ["synthetic"] }, prediction: { schema: 1 } } });
+
+  it("mounts the batch workspace for a prediction: its denominator and the server's page of people", async () => {
+    const counts = { submitted: 10, admitted: 10, completed: 8, rejected: 2, failed: 0, unprocessed: 0, partial: 0 };
+    const prediction = { id: "pred-1", kind: "prediction", createdAt: "2026-01-02", hash: "h", summary: { origin: "2026-01-01", historyId: "history-1", endpoint: { code: "x", unit: "%", type: "continuous" }, horizonsDays: [30], accepted: 8, invalidRows: 0, model: { name: "m", version: "1" }, accounting: counts, versionNumber: 1, premises: [] } };
+    const line = { subjectKey: "subject-0001-abcdef", status: "completed", reason: null, horizonsRequested: 1, horizonsAccepted: 1 };
+    installVcrServer(network.productRequest, { [tab("longitudinal")]: longitudinal([history, prediction]),
+      [`GET /vcr/studies/${STUDY_ID}/longitudinal/pred-1/subjects?offset=0&limit=50`]: { id: "pred-1", total: 10, matching: 1, offset: 0, limit: 50, more: false, lines: [line], trajectories: {}, actionContext: null } });
+    const { container } = draw();
+    await screen.findByRole("table", { name: "患者" });
+    await userEvent.click(within(band(container)).getByRole("button", { name: "轨迹预测" }));
+    expect(await screen.findByLabelText("患者轨迹预测")).toBeInTheDocument();
+    expect(await screen.findByText((_, el) => el?.getAttribute("data-note") === "" && /共提交 10 人：8 人已完成，2 人未纳入/.test(el.textContent ?? ""))).toBeInTheDocument();
+    expect(await screen.findByRole("table", { name: "逐人预测去向" })).toBeInTheDocument();
+  });
+
+  it("opens on the batch prediction when the entrance's address asks for it and a prediction exists; the patient list's own address and a patient record keep the patients", async () => {
+    const prediction = { id: "pred-1", kind: "prediction", createdAt: "2026-01-02", hash: "h", summary: { origin: "2026-01-01", historyId: "history-1", endpoint: { code: "x", unit: "%", type: "continuous" }, horizonsDays: [30], accepted: 8, invalidRows: 0, model: { name: "m", version: "1" }, accounting: { submitted: 10, admitted: 10, completed: 8, rejected: 2, failed: 0, unprocessed: 0, partial: 0 }, versionNumber: 1, premises: [] } };
+    installVcrServer(network.productRequest, { [tab("longitudinal")]: longitudinal([history, prediction]), [`GET /vcr/studies/${STUDY_ID}/longitudinal/pred-1/subjects?offset=0&limit=50`]: { id: "pred-1", total: 10, matching: 0, offset: 0, limit: 50, more: false, lines: [], trajectories: {}, actionContext: null } });
+    const plain = draw();
+    await screen.findByRole("table", { name: "患者" });
+    plain.unmount();
+    // the population selector, the overview link and the old /patients address all carry level=individual: the list stays
+    const list = draw(ev201(), "/?level=individual");
+    await screen.findByRole("table", { name: "患者" });
+    list.unmount();
+    // a patient's record opens the list with its drawer, even beside the entrance's view
+    const record = draw(ev201(), "/?level=individual&view=forecast&patient=P7");
+    await screen.findByRole("table", { name: "患者" });
+    expect(screen.queryByLabelText("患者轨迹预测")).toBeNull();
+    record.unmount();
+    draw(ev201(), "/?level=individual&view=forecast");
+    expect(await screen.findByLabelText("患者轨迹预测")).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: "患者" })).toBeNull();
+  });
 
   it("keeps independently available longitudinal records reachable when the patients endpoint fails", async () => {
     installVcrServer(network.productRequest, { [tab("patients")]: () => { throw new Error("patients unavailable"); }, [tab("longitudinal")]: longitudinal([history]) });
     const { container } = draw();
     await screen.findByRole("button", { name: "重试" });
-    await userEvent.click(within(band(container)).getByRole("button", { name: "预测验证" }));
+    await userEvent.click(within(band(container)).getByRole("button", { name: "轨迹预测" }));
     expect(await screen.findByLabelText("输入历史")).toBeInTheDocument();
     await userEvent.click(within(band(container)).getByRole("button", { name: "虚拟患者" }));
     expect(await screen.findByRole("button", { name: "重试" })).toBeInTheDocument();
@@ -488,15 +546,45 @@ describe("虚拟患者 · the second view, 预测验证", () => {
     const { container } = draw();
     await screen.findByRole("table", { name: "患者" });
     const chips = within(band(container));
-    expect(await chips.findByRole("button", { name: "预测验证" })).toHaveAttribute("aria-pressed", "false");
+    expect(await chips.findByRole("button", { name: "轨迹预测" })).toHaveAttribute("aria-pressed", "false");
     expect(chips.getByRole("button", { name: "虚拟患者" })).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(chips.getByRole("button", { name: "预测验证" }));
+    await userEvent.click(chips.getByRole("button", { name: "轨迹预测" }));
     expect(await screen.findByLabelText("输入历史")).toBeInTheDocument();
     expect(screen.queryByRole("table", { name: "患者" })).toBeNull();
     expect(container.querySelectorAll("[data-page-chrome]")).toHaveLength(1);
     // The templates and imports are behind the band's ⋯ here, and the switch is still beside it.
     expect(within(band(container)).getByRole("button", { name: "模板与导入" })).toBeInTheDocument();
     await userEvent.click(within(band(container)).getByRole("button", { name: "虚拟患者" }));
+    expect(await screen.findByRole("table", { name: "患者" })).toBeInTheDocument();
+  });
+});
+
+describe("虚拟患者 · a spline survival fit made in the conversation", () => {
+  it("is on the page with how far beyond the data its last number lies, and is not an empty tab when it is the only result", async () => {
+    const raw = fixture("empty/patients.json");
+    raw.splineFits = [borrowingPayloads.spline];
+    installVcrServer(network.productRequest, { [tab("patients")]: raw });
+    const { container } = draw();
+    const block = await waitFor(() => {
+      const found = container.querySelector("[data-vcr-spline-fit]") as HTMLElement | null;
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    expect(block).toHaveTextContent("风险曲线不单调时，长期生存和 RMST 是多少？");
+    expect(block).toHaveTextContent("外推");
+    expect(block).toHaveTextContent("最后一个时间点离数据有多远");
+    expect(screen.queryByText(/还没有|尚未/)).toBeNull();
+  });
+
+  it("carries what the model behind the people was not validated for, as one sentence in the one block", async () => {
+    const raw = fixture("ev201/patients.json");
+    raw.premises = [{ key: "use:use_not_validated", label: "模型的适用范围", value: "这个模型尚未验证过这种用途；结果表示在所列模型假设下可能怎样变化。", source: "assumed", decisive: true }];
+    installVcrServer(network.productRequest, { [tab("patients")]: raw });
+    const { container } = draw();
+    const block = await found(container, "[data-vcr-premises]");
+    expect(block).toHaveTextContent("这个模型尚未验证过这种用途");
+    expect(container.querySelectorAll("[data-vcr-premises]")).toHaveLength(1);
+    // the premises block can be drawn before the people's table: wait for the table rather than read it in the same tick
     expect(await screen.findByRole("table", { name: "患者" })).toBeInTheDocument();
   });
 });

@@ -18,6 +18,9 @@
  * or a deployment with no operator to own the policy, cannot name it as the serving layer would: the export omits `incumbent` and keeps
  * the configured threshold, and the lab measures the month against an `unbound:` baseline no bundle can be imported against.
  *
+ * `consumerDigest` is this release's dependency digest of the `frontier-selection` surface, by the serving layer's own `currentTarget`: what a bundle's target is compared with at import. The
+ * lab compares it on the 1st, so a release that moved it is an early answer instead of a late refusal. A release that cannot say omits it and the month is measured as not importable.
+ *
  * Public frontier content only: items, sources and events of the feed, no account, project, conversation or reader data.
  * The texts a labeller reads are the source's own (title, abstract or page excerpt, at most 1,200 characters), never the
  * platform's model-written fields. One REPEATABLE READ, READ ONLY transaction; nothing is written.
@@ -43,7 +46,7 @@ const serving = await load("apps/server/src/rsiServingAdapters.mjs").catch((/** 
 const namesIncumbent = typeof serving.rsiIncumbent === "function" && typeof serving.rsiPolicyDefaults === "function";
 
 const MIX_RULES = new Set(["threshold", "genre-floor", "zh-target", "preprint-lane", "event-primary", "lane-floor"]);
-const CONSUMER_PATHS = ["apps/server/src/frontierPipeline.mjs", "apps/server/src/frontierEditor.mjs", "packages/domain/src/frontierMix.mjs",
+const CONSUMER_PATHS = ["apps/server/src/frontierSelection.mjs", "packages/domain/src/frontierMix.mjs",
   "packages/domain/src/frontierSelection.mjs", "packages/domain/src/frontier-selection.json", "packages/domain/src/frontierGenres.mjs",
   "packages/domain/src/frontierVocabulary.mjs"];
 const sha256 = (/** @type {string | Buffer} */ value) => createHash("sha256").update(value).digest("hex");
@@ -57,7 +60,9 @@ const settings = {
   preprintPlaces: pipeline.frontierPreprintLanePerDay(config), preprintMinScore: pipeline.frontierPreprintLaneMinScore(config),
   scoreVersion: FRONTIER_SCORE_VERSION, timeZone,
 };
-const consumer = await Promise.all(CONSUMER_PATHS.map(async (path) => ({ path, sha256: sha256(await readFile(`${APP}/${path}`)) })));
+// A release from before a file has no such file: nothing of it to compare, and the export goes on.
+const consumer = (await Promise.all(CONSUMER_PATHS.map(async (path) => ({ path, sha256: sha256(await readFile(`${APP}/${path}`).catch(() => "")) })))).filter((row) => row.sha256 !== sha256(""));
+const consumerTarget = await serving.createRsiServingAdapters?.({ config: { ...config, rootDir: APP }, service: { owner: async () => "" }, database: {}, documents: {} })?.currentTarget("frontier-selection", { query: async () => ({ rows: [] }) }).catch(() => null);
 const database = new ControlPlaneDatabase({ ...config, databasePoolMax: 1 });
 const client = await database.pool.connect();
 
@@ -170,7 +175,7 @@ try {
   await client.query("COMMIT");
   process.stdout.write(JSON.stringify({ schema: "rsi-frontier-export-v1", exportedAt: new Date().toISOString(),
     releaseId: process.env.OPEN_SCIENCE_RELEASE_ID ?? null, from, to, settings, ...(incumbent ? { incumbent: { revisionId: incumbent.revisionId, threshold: settings.threshold } } : {}),
-    consumer, days, texts, signals }));
+    ...(consumerTarget?.qualified ? { consumerDigest: consumerTarget.dependencyDigest } : {}), consumer, days, texts, signals }));
 } catch (error) {
   await client.query("ROLLBACK").catch(() => {});
   throw error;

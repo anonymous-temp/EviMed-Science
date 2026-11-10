@@ -182,13 +182,9 @@ function parseTokenRequest(raw) {
  * admitting one job.
  * @param {{ config: Record<string, any>, runtimeManager: any,
  *   attributeRun?: ((owner: { userId: string, projectId: string }) => Promise<string | null>) | null,
- *   resolveExecutionContext?: ((owner: {userId:string,projectId:string}, context:any) => Promise<any>) | null,
- *   runScope?: ((request: { userId: string, projectId: string, runId: string }) => Promise<{ usageRunId: string, runLimit: number } | null>) | null }} dependencies
- *   `runScope`: the cap a scheduled execution in the researcher's own runtime is held to (`autopilotEpisodeScope.mjs`). A bounded
- *   runtime's engine job carries the runtime's scope; an interactive one's carries the same figures through this, so an engine's
- *   model calls are the episode's too and stop at its limit.
+ *   resolveExecutionContext?: ((owner: {userId:string,projectId:string}, context:any) => Promise<any>) | null }} dependencies
  */
-export function createEngineModelTokenHandler({ config, runtimeManager, attributeRun = null, resolveExecutionContext = null, runScope = null }) {
+export function createEngineModelTokenHandler({ config, runtimeManager, attributeRun = null, resolveExecutionContext = null }) {
   /** @param {any} req @param {any} res @param {(failure: any) => void} [onFailure] */
   return async (req, res, onFailure) => {
     try {
@@ -220,7 +216,7 @@ export function createEngineModelTokenHandler({ config, runtimeManager, attribut
       try { identity = await runtimeManager.assertActiveEviMedWorkloadToken(bearer); }
       catch { throw new HttpError(401, "evimed_workload_token_invalid", "The workload is unavailable."); }
       // Whose run the job belongs to, decided now, while the run that started
-      // it is the one running. A bounded runtime (autopilot, a GEO step, a
+      // it is the one running. A bounded runtime (a GEO step, a
       // verification) says so itself, with its budget; an interactive one is
       // the project's single running run, and two at once stay unattributed
       // rather than guessed — they still count toward the account's caps.
@@ -244,12 +240,6 @@ export function createEngineModelTokenHandler({ config, runtimeManager, attribut
       } else if (!bounded && attributeRun) {
         runId = await attributeRun({ userId: identity.userId, projectId: identity.projectId }).catch(() => null);
         limits = runId ? { runLimit: Number(config.userRunSpendLimit) || 0 } : null;
-      }
-      // A scheduled execution in the researcher's runtime: booked under its episode and held to its limit, as the runtime's own calls are.
-      // A scope that cannot be read issues no credential (the catch below answers 503), never an uncapped one.
-      if (!bounded && runScope && runId) {
-        const scope = await runScope({ userId: identity.userId, projectId: identity.projectId, runId });
-        if (scope) { runId = scope.usageRunId; limits = { ...limits, runLimit: scope.runLimit }; }
       }
       const { token, payload } = issueEngineModelToken({
         secret: config.modelGatewaySigningSecret,

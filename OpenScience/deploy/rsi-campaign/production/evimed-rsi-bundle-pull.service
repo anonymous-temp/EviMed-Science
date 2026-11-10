@@ -1,0 +1,8 @@
+[Unit]
+Description=Pull signed RSI bundles from the lab's read-only outbox into the directory the web container reads
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/evimed-rsi/rsi-bundle-pull.sh
+TimeoutStartSec=15min
+Nice=10

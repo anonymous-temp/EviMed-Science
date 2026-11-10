@@ -11,7 +11,7 @@ import test from "node:test";
 
 import { AGENT_KEY_SCOPES } from "../src/agentApiKeys.mjs";
 import { AGENT_MEMORY_PATH, createAgentMemoryRoutes } from "../src/agentMemoryRoutes.mjs";
-import { nativeRecallSource } from "../src/agentMemoryRecall.mjs";
+import { nativeRecallSource, recallForAgent } from "../src/agentMemoryRecall.mjs";
 import { agentMemoryOpenApi } from "../src/agentMemoryOpenApi.mjs";
 import { HttpError } from "../src/security.mjs";
 
@@ -30,7 +30,7 @@ function request(path, body = undefined, method = body === undefined ? "GET" : "
 const nativeRecord = (overrides = {}) => ({
   id: "nm_0123456789abcdef01234567", scope: "user", scopeId: "", kind: "preference", key: "preferences/self/引用格式.md", value: "<!-- MEMORY_FIELDS {} -->\n- 参考文献一律用 AMA 格式。",
   summary: "引用格式", origin: "explicit", status: "active", confidence: 1, importance: 0.5, sensitive: false, version: 77, revisions: [],
-  createdAt: "2026-10-20T00:00:00Z", updatedAt: "2026-10-21T00:00:00Z", nativeType: "preferences", ...overrides,
+  createdAt: "2026-10-20T00:00:00Z", updatedAt: "2026-10-21T00:00:00Z", nativeType: "preferences", sourcePrivacy: { schemaVersion: 1, classification: "ordinary", reasons: ["own-conversation"] }, ...overrides,
 });
 
 /**
@@ -67,6 +67,7 @@ function fixture({ configured = true, subjects = false, knownSubjects = [], nati
   };
   const nativeMemory = {
     configured,
+    async getRecord(_userId, id) { return nativeRecord({ id }); },
     async admitCandidate(userId,input){calls.push(["native.admit",userId,input]);return {state:"pending",taskId:"task-owned"};},
     async search(userId, query) {
       calls.push(["native.search", userId, query]);
@@ -130,7 +131,9 @@ test("the list and the dashboard are the engine's, without measured usage counts
   const { run, calls } = fixture();
   const list = await run(`${AGENT_MEMORY_PATH}/records?kind=preference&scope=user&query=AMA&pageSize=5`);
   assert.deepEqual(list.body.data.map((record) => record.id), ["nm_0123456789abcdef01234567"]);
-  assert.deepEqual(called(calls, "native.listRecords")[0][2], { scopes: ["user"], kinds: ["preference"], scopeId: "", query: "AMA", pageSize: 5 });
+  const { allowRecord, ...listInput } = called(calls, "native.listRecords")[0][2];
+  assert.equal(allowRecord(nativeRecord({ kind: "person" })), false);
+  assert.deepEqual(listInput, { scopes: ["user"], kinds: ["preference"], scopeId: "", query: "AMA", pageSize: 5 });
   // The engine's memories are all in force: a proposal, a replaced or a forgotten one is none of them.
   const pending = await run(`${AGENT_MEMORY_PATH}/records?status=pending`);
   assert.deepEqual(pending.body.data, []);
@@ -217,4 +220,61 @@ test('note mutations respect project-bound key before admission',async()=>{
   assert.equal(response.status,200);
   assert.equal(same.calls.filter(c=>['native.admit','candidate.update'].includes(c[0])).length,1);
  }
+});
+
+
+test("people remain first-party memories but never cross an external memory key, including subject keys", async () => {
+  const person = nativeRecord({ id: "nm_aaaaaaaaaaaaaaaaaaaaaaaa", kind: "person", nativeType: "people", value: "Patient A has an allergy" });
+  const note = nativeRecord({ id: "nm_bbbbbbbbbbbbbbbbbbbbbbbb", kind: "note", nativeType: "notes", value: "Ordinary note" });
+  for (const subjects of [false, true]) {
+    const { run } = fixture({ subjects, knownSubjects: ["doctor"], native: {
+      async search() { return { items: [person, note] }; },
+      async listRecords() { return [person, note]; },
+      async changes() { return [{ ...person, summary: person.value, change: "created", changedAt: "2026-11-05T00:00:00Z" }]; },
+    } });
+    const headers = subjects ? { "x-subject": "doctor" } : {};
+    const recalled = await run(`${AGENT_MEMORY_PATH}/recall`, { query: "allergy", methods: "none" }, "POST", headers);
+    assert.deepEqual(recalled.body.data.items.map(item => item.id), [note.id]);
+    const listed = await run(`${AGENT_MEMORY_PATH}/records?pageSize=1`, undefined, "GET", headers);
+    assert.deepEqual(listed.body.data.map(item => item.id), [note.id], "exclude before the requested page size");
+    const board = await run(`${AGENT_MEMORY_PATH}/dashboard`, undefined, "GET", headers);
+    assert.ok(!JSON.stringify(board.body).includes(person.value));
+  }
+});
+
+test("guessed people IDs cannot edit, forget or undo even after the file was forgotten", async () => {
+  const person = nativeRecord({ id: "nm_aaaaaaaaaaaaaaaaaaaaaaaa", kind: "person", nativeType: "people", status: "archived" });
+  for (const act of ["edit", "forget", "undo"]) {
+    const { run, calls } = fixture({ native: { async listRecords() { return [person]; }, async getRecord() { throw new HttpError(404,"memory_not_found","Missing"); }, async forgotten() { return [person]; } } });
+    const error = await rejected(run(`${AGENT_MEMORY_PATH}/records/${person.id}${act === "edit" ? "" : `/${act}`}`, { expectedVersion: 77, ...(act === "edit" ? { value: "Replacement" } : {}) }, act === "edit" ? "PATCH" : "POST"));
+    assert.equal(error?.status, 404);
+    assert.equal(called(calls, "native.update").length + called(calls,"native.undo").length, 0);
+  }
+});
+
+
+test("received and named capsule people stay private in external recall", async () => {
+  const rows = [{ id: "person", factKind: "person", content: "Other person allergy" }, { id: "note", factKind: "note", content: "Ordinary note" }];
+  const capsules = { async recall() { return { items: rows }; }, async get() { return { payload: { title: "Selected pack" } }; } };
+  for (const capsuleIds of [undefined, ["pack-a"]]) {
+    const found = await recallForAgent({ capsules }, { user: { id: "u1" } }, { query: "allergy", methods: "none", capsuleIds });
+    assert.deepEqual(found.items.map(item => item.id), ["note"]);
+    assert.equal(found.sources.capsule, 1);
+  }
+});
+
+test("a live person beyond the first page is rejected by target before any mutation", async () => {
+  const person = nativeRecord({ id: "nm_cccccccccccccccccccccccc", kind: "person", nativeType: "people" });
+  const { run, calls } = fixture({ native: { async listRecords() { return Array.from({ length: 500 }, () => nativeRecord()); }, async getRecord() { return person; } } });
+  const error = await rejected(run(`${AGENT_MEMORY_PATH}/records/${person.id}/forget`, { expectedVersion: 77 }));
+  assert.equal(error?.status, 404);
+  assert.equal(called(calls, "native.update").length, 0);
+});
+
+
+test("a project-bound key gets no existence clue for a private person outside its scope", async () => {
+  const person = nativeRecord({ id: "nm_cccccccccccccccccccccccc", kind: "person", nativeType: "people" });
+  const { run, calls } = fixture({ projectId: "p1", native: { async getRecord() { return person; } } });
+  const error = await rejected(run(`${AGENT_MEMORY_PATH}/records/${person.id}/forget`, { expectedVersion: 77 }));
+  assert.equal(error?.status, 404); assert.equal(called(calls, "native.update").length, 0);
 });

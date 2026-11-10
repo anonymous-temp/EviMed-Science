@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evolutionAccountClass, evolutionAccountFloors } from '../src/evolutionAccountClasses.mjs';
-import { evolutionPriorityBreakdown } from '../src/evolutionScout.mjs';
-import { deriveEvolutionCapabilityMap } from '../src/evolutionCapabilityMap.mjs';
+import { evolutionAccountFloors } from '../src/evolutionAccountClasses.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { validateEvolutionConfiguration } from '../src/evolutionConfiguration.mjs';
 
@@ -14,32 +12,15 @@ test('one researcher qualifies while operator floor retains its independent one-
   for (const unset of [null, undefined]) assert.equal(evolutionAccountFloors({ evolutionOperatorSignalFloor: unset }).operator, 1, String(unset));
   // Not a whole number of accounts: refused by name, never read as another number (2.5 used to become 1 in silence).
   for (const bad of [2.5, 1.5, 0, -2, Number.NaN, Number.POSITIVE_INFINITY, 'x', '3']) assert.throws(() => evolutionAccountFloors({ evolutionOperatorSignalFloor: bad }), { code: 'evolution_setting_invalid' }, String(bad));
-  assert.deepEqual(['operator', 'user', undefined, 'other'].map(evolutionAccountClass), ['operator', 'user', 'user', 'user']);
 });
 test('the setting is read from the environment and held to one to five', () => {
   const name = 'OPEN_SCIENCE_EVOLUTION_OPERATOR_SIGNAL_FLOOR', prior = process.env[name];
   try {
     delete process.env[name]; assert.equal(loadConfig().evolutionOperatorSignalFloor, 1);
     process.env[name] = '2'; assert.equal(loadConfig().evolutionOperatorSignalFloor, 2); assert.deepEqual(validateEvolutionConfiguration(loadConfig()), []);
-    for (const bad of ['0', '6', '1.5']) { process.env[name] = bad; assert.ok(validateEvolutionConfiguration(loadConfig()).some(issue => issue.key === 'evolutionOperatorSignalFloor'), bad); }
+    for (const bad of ['0', '6', '1.5']) {
+      assert.ok(validateEvolutionConfiguration({ evolutionOperatorSignalFloor: Number(bad) }).some(issue => issue.key === 'evolutionOperatorSignalFloor'), bad);
+      process.env[name] = bad; assert.equal(loadConfig().evolutionOperatorSignalFloor, 1, `${bad}: the default replaces it at start`);
+    }
   } finally { if (prior === undefined) delete process.env[name]; else process.env[name] = prior; }
-});
-test('demand scores once the account count reaches the floor the opportunity carries, and one otherwise', () => {
-  assert.ok(evolutionPriorityBreakdown({ distinctAccounts: 1 }).demand > 0);
-  assert.ok(evolutionPriorityBreakdown({ distinctAccounts: 4 }).demand > 0);
-  assert.ok(evolutionPriorityBreakdown({ distinctAccounts: 5 }).demand > 0);
-  assert.ok(evolutionPriorityBreakdown({ distinctAccounts: 1, demandFloor: 1 }).demand > 0, 'one operator account meets the operator floor');
-  assert.equal(evolutionPriorityBreakdown({ distinctAccounts: 1, demandFloor: 2 }).demand, 0);
-  assert.equal(evolutionPriorityBreakdown({ distinctAccounts: 3, demandFloor: 99 }).demand, 0, 'a carried floor is held to one to five');
-  assert.ok(evolutionPriorityBreakdown({ distinctAccounts: 1, demandFloor: 0 }).demand > 0, 'invalid floor falls back to one');
-});
-test('the capability map counts either account class at its own floor', () => {
-  const codes = { capability: 'statistical-analysis', operation: 'transform', dataShape: 'table', reason: 'missing-tool' };
-  const registry = [{ id: 'statistical-analysis', visibility: 'public' }];
-  const signal = (patch) => ({ id: `s-${patch.distinctAccounts}-${patch.accountClass ?? 'user'}`, payload: { kind: 'unmet-demand', codes, occurrences: 3, scope: 'platform-aggregate', ...patch } });
-  const demand = (signals) => deriveEvolutionCapabilityMap({ registry, methods: {}, signals, now: new Date('2026-10-10') }).cells.find(cell => cell.version === 'unavailable')?.demand?.distinctAccounts ?? null;
-  assert.equal(demand([signal({ distinctAccounts: 4 })]), 4);
-  assert.equal(demand([signal({ distinctAccounts: 5 })]), 5);
-  assert.equal(demand([signal({ distinctAccounts: 1, accountClass: 'operator' })]), 1, 'one operator account meets the operator floor');
-  assert.equal(demand([signal({ distinctAccounts: 1, accountClass: 'user' })]), 1);
 });

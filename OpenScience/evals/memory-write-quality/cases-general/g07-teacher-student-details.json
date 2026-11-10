@@ -2,7 +2,7 @@
   "id": "g07-teacher-student-details",
   "class": "third-party-details",
   "observedIn": "written for LAB-MEM on 2026-10-12; every name, number and identifier is invented",
-  "expected": "Nothing about the student: no name, phone, family situation or the parent’s illness.",
+  "expected": "Preserve the student and family context, parent contact and illness separately with user labels and attribution. Do not infer family identities or merge uncertain people.",
   "decidable": true,
   "replay": {
     "synthetic": true,
@@ -21,12 +21,15 @@
     ]
   },
   "expect": {
-    "noTextContains": [
-      "13700137000",
+    "requireKinds": {
+      "person": 1
+    },
+    "requireTextContains": [
       "张小北",
-      "离异",
+      "13700137000",
       "肝癌"
-    ],
-    "atMostRecords": 0
-  }
+    ]
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }

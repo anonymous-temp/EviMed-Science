@@ -120,11 +120,13 @@ END $foreign_keys$;
 /** @param {any} database */
 export async function migrateMemorySettings(database) {
   if (migrations.has(database)) return migrations.get(database);
-  const attempt = database.transaction(async (/** @type {any} */ client) => {
+  // Memoised, so never inside a caller's transaction scope: a rollback there could undo DDL the memo records as done.
+  const outside = (/** @type {() => Promise<any>} */ work) => typeof database.withoutTransactionClient === "function" ? database.withoutTransactionClient(work) : work();
+  const attempt = outside(() => database.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-memory-v1'))");
     await client.query(sql);
     await refreshVocabularyChecks(client, sql, "evimed_memory");
-  });
+  }));
   migrations.set(database, attempt);
   try { await attempt; }
   catch (error) { migrations.delete(database); throw error; }

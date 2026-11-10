@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import YAML from "yaml";
 
-import { RUNTIME_UI_DENIED_NAMESPACES, RUNTIME_UI_READABLE_SETTINGS } from "@evimed/domain";
+import { RESEARCH_NATIVE_BUNDLES, RUNTIME_UI_DENIED_NAMESPACES, RUNTIME_UI_READABLE_SETTINGS } from "@evimed/domain";
 import { CHAT_PRESENTATION, EVIMED_PRESET, HOSTED_DISABLED_BROWSER_PANELS, HOSTED_PERMISSION_PRESET, MODEL_RETRY_POLICY, OPERATOR_ONLY_BROWSER_PANELS, WORKLOAD_TOKEN_REF, renderCredentialsFile, renderProfilePatch, runtimeEnvironment, yamlScalar } from "../src/dshProfilePatch.mjs";
 
 const input = {
@@ -24,7 +24,7 @@ const input = {
   capsuleGatewayUrl: "https://open-science-web:8787/internal/capsule/v1",
   workloadTokenFile: "/runtime/secrets/workload-token",
   bundleVersion: "0.1.0",
-  dshVersion: "0.2.1-rc.5",
+  dshVersion: "0.2.2-rc.1",
   limits: { deliveryAttemptLimit: 3, maxParallelChildren: 30, maxSteps: 200, maxTokens: 4000000, evidenceStaleMinutes: 10 },
   flags: { hosted: true, askUser: false, review: false, capsule: true, requiredEnforcement: "full" },
 };
@@ -147,7 +147,8 @@ test("the patch only names rows that exist in the host composition", async () =>
   // runs on its schema defaults while the deployment believes it was
   // configured. Only the two rows the bundle inserts, plus stock rows, are
   // reachable from here.
-  const bundlePatch = await readFile(new URL("../../../packages/socket/cordis.patch.yml", import.meta.url), "utf8");
+  const nativePatches = await Promise.all(Object.keys(RESEARCH_NATIVE_BUNDLES).map(id => readFile(new URL(`../../../packages/${id}/cordis.patch.yml`, import.meta.url), "utf8")));
+  const bundlePatch = [await readFile(new URL("../../../packages/socket/cordis.patch.yml", import.meta.url), "utf8"), ...nativePatches].join("\n");
   const preset = await readFile(
     new URL("../../../packages/socket/presets/evimed-universal/agent.cordis.yml", import.meta.url),
     "utf8",
@@ -187,7 +188,6 @@ test("every deployment value the preset reads is a value the container is given"
   const sources = await Promise.all([
     readFile(new URL("../../../packages/socket/presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8"),
     readFile(new URL("../../../packages/socket/cordis.patch.yml", import.meta.url), "utf8"),
-    readFile(new URL("../src/platformSkillSupply.mjs", import.meta.url), "utf8"),
   ]);
   const provided = runtimeEnvironment(input);
   const read = new Set(sources.flatMap((text) => [...text.matchAll(/(?:process\.env\.|os\.environ\[')([A-Z0-9_]+)/g)].map((match) => match[1])));
@@ -288,7 +288,10 @@ test("a running turn's steps fold into one work group: the profile sets the chat
   assert.ok(HOSTED_DISABLED_BROWSER_PANELS.includes("ui-settings-general"));
   assert.match(rendered, /- id: ui-settings-general\n {2}disabled: true/);
   assert.ok(RUNTIME_UI_DENIED_NAMESPACES.includes("settings"));
-  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat"]);
+  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat", "ui-settings"]);
+  // The second readable namespace is the developer-tools boolean; without it the page reads false and the 「运行」 tab never draws.
+  assert.match(rendered, /^- id: ui-settings\n {2}config:\n {4}enabled: true$/m);
+  assert.deepEqual(recorded.result.value.namespaces.find((view) => view.ns === "ui-settings").value, { enabled: true });
   // The chat itself stays mounted — folding is its behaviour, not ours.
   assert.doesNotMatch(rendered, /- id: ui-chat\n {2}disabled: true/);
 });
@@ -603,4 +606,19 @@ test("the kernel reserves a bounded answer, so compaction leaves the run most of
   assert.equal(deepseek(renderProfilePatch({ ...input, maxOutputTokens: 32768 })).maxTokens, 32768);
   const trigger = 400_000 - deepseek(renderProfilePatch(input)).maxTokens - 65_536;
   assert.ok(trigger > 250_000, `compaction would fire at ${trigger} tokens`);
+});
+
+test('all fixed research rows default disabled; selection forces hosted mode and no standalone paths',async()=>{
+  const {RESEARCH_NATIVE_BUNDLES}=await import('@evimed/domain');
+  const selected=Object.entries(RESEARCH_NATIVE_BUNDLES).map(([extensionId,spec])=>({extensionId,coordinate:{kind:'npm',name:spec.name,version:'0.1.0'},executionClass:'managed-native',enabled:true,integrity:'sha256:'+'a'.repeat(64),artifactDigest:'sha256:'+'b'.repeat(64),settings:{},connectionRefs:[]}));
+  for(const count of [0,1,4,5]){
+    const parsed=YAML.parse(renderProfilePatch({...input,nativeResearchPlugins:selected.slice(0,count)}));
+    for(const [id,spec]of Object.entries(RESEARCH_NATIVE_BUNDLES)){
+      const row=parsed.find(row=>row.id===spec.row);
+      assert.equal(row.disabled,!selected.slice(0,count).some(selected=>selected.extensionId===id));
+      assert.deepEqual(row.config,{mode:'hosted',workspace:'',engineRoot:'',rscript:'Rscript'});
+    }
+  }
+  assert.throws(()=>renderProfilePatch({...input,nativeResearchPlugins:[{...selected[0],extensionId:'arbitrary'}]}),/extension_contract_invalid/);
+  assert.throws(()=>renderProfilePatch({...input,nativeResearchPlugins:[selected[0],selected[0]]}),/extension_contract_invalid/);
 });

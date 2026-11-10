@@ -3,13 +3,13 @@ export const RSI_CAMPAIGN_LIMITS = Object.freeze({ campaignCny: 1000, monthCny: 
 /** 2 (2026-11-03): `models` names every role, `{solver, improvers, judges}`; a version-1 manifest (`{solver, improver, reviewer}`) is refused. */
 export const RSI_CAMPAIGN_SCHEMA_VERSION = 2
 /** `superiority` is for a deterministic consumer whose arms make no model call: quality alone is claimed, cost is not. */
-export const RSI_CAMPAIGN_CLAIMS = Object.freeze(['efficiency', 'targeted-repair', 'superiority', 'absolute-contract'])
+export const RSI_CAMPAIGN_CLAIMS = Object.freeze(['efficiency', 'targeted-repair', 'superiority'])
 /** `consumer` is also the key of a quarter's error budget (campaign_runner.mjs): surfaces that change one consumer draw on one ledger, and renaming a consumer starts a new one. */
 export const RSI_CAMPAIGN_SURFACES = Object.freeze({
   'frontier-selection': { kind: 'policy', consumer: 'frontier-mix', activation: 'shadow' },
-  'frontier-screen': { kind: 'policy', consumer: 'frontier-screen', activation: 'shadow' },
-  'frontier-edit': { kind: 'policy', consumer: 'frontier-edit', activation: 'shadow' },
-  'autopilot-planner': { kind: 'policy', consumer: 'autopilot-planner', activation: 'cohort' },
+  // One class, one closure of it, one policy document: one consumer, because a new surface name never buys a fresh error budget (2026-11-05).
+  'frontier-screen': { kind: 'policy', consumer: 'frontier-editor', activation: 'shadow' },
+  'frontier-edit': { kind: 'policy', consumer: 'frontier-editor', activation: 'shadow' },
   'geo-supplements': { kind: 'policy', consumer: 'geo-capability', activation: 'cohort' },
   'capability-skill': { kind: 'skill', consumer: 'dsh-capability', activation: 'cohort' },
   // A patched runtime image (guidance supplement + skills) measured offline on lane runs (2026-11-01). Shadow only: nothing of it is imported into production in this round, a qualified result is a pull-request proposal.
@@ -17,8 +17,13 @@ export const RSI_CAMPAIGN_SURFACES = Object.freeze({
   // The same consumer (the runtime image) for a candidate that holds code (a tool, a connector) as well as text, with a consumer identity of its own (2026-11-02);
   // its error budget is the runtime image's, shared with harness-patch (2026-11-03).
   'tool-patch': { kind: 'tool-patch', consumer: 'dsh-harness', activation: 'shadow' },
-  'isolated-tool': { kind: 'isolated-tool', consumer: 'isolated-executor', activation: 'cohort' },
 })
+/**
+ * How far a `frontier-selection` candidate may move the day's selected volume, as a ratio to the incumbent's over the same days, safety alerts counted on both sides. One rule, named once: the
+ * development choice refuses a line outside it (`chooseFrontierCandidate`), the confirmation refuses a month outside it (`campaign_volume_guard`), and the online fuse stops a campaign outside it
+ * (`rsiCampaignFuse`, the installed activation policy, `rsi-online-records.py`). Otherwise a line could spend its alpha offline and be stopped in shadow. `minPicks` is the online reading's floor.
+ */
+export const RSI_FRONTIER_VOLUME_BOUND = Object.freeze({ max: 1.1, min: 0.5, minPicks: 50 })
 /** Surfaces whose candidates come from a registered grid (a threshold sweep) with no model call: the only ones whose manifest may name no improver. */
 export const RSI_REGISTERED_GRID_SURFACES = Object.freeze(['frontier-selection'])
 /**
@@ -88,7 +93,7 @@ export function rsiCampaignIssues(value) {
     || value.schemaVersion !== RSI_CAMPAIGN_SCHEMA_VERSION || !identifier(value.id)) issues.push('campaign_manifest_invalid')
   const surface = Object.hasOwn(RSI_CAMPAIGN_SURFACES, value.surface ?? '') ? RSI_CAMPAIGN_SURFACES[/** @type {keyof typeof RSI_CAMPAIGN_SURFACES} */ (value.surface)] : null
   if (!surface || value.candidateKind !== surface.kind) issues.push('campaign_surface_invalid')
-  if (!RSI_CAMPAIGN_CLAIMS.includes(value.claim) || value.claim === 'absolute-contract' && value.candidateKind !== 'isolated-tool') issues.push('campaign_claim_invalid')
+  if (!RSI_CAMPAIGN_CLAIMS.includes(value.claim)) issues.push('campaign_claim_invalid')
   if (value.automated !== true) issues.push('campaign_automated_required')
   if (!instant(value.createdAt) || !instant(value.deadline) || Date.parse(value.deadline) <= Date.parse(value.createdAt)) issues.push('campaign_time_invalid')
   const budget = value.budget

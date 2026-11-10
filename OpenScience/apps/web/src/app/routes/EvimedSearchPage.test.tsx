@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
+import { SearchWorkspaceNav } from "@/components/search/SearchWorkspaceNav";
 import { EvimedSearchPage } from "./EvimedSearchPage";
 import * as api from "@/lib/evimedSearchClient";
 import { readEvimedSearchTopics } from "@/lib/evimedSearchTopicsClient";
@@ -37,7 +38,7 @@ function Location() {
 }
 function open(path = "/app/search/literature?q=高血压") {
   return render(<MemoryRouter initialEntries={[path]}><Routes>
-    <Route path="/app/search/:category?" element={<><Location /><EvimedSearchPage /></>} />
+    <Route path="/app/search/:category?" element={<><Location /><SearchWorkspaceNav /><EvimedSearchPage /></>} />
     <Route path="*" element={<Location />} />
   </Routes></MemoryRouter>);
 }
@@ -102,7 +103,7 @@ async function selectFilter(label: string, option: string) {
 }
 
 async function switchTab(label: string, category: api.EvimedSearchCategory, query = "高血压", page = 1) {
-  await userEvent.click(screen.getByRole("tab", { name: label }));
+  await userEvent.click(screen.getByRole("link", { name: label }));
   return screen.findByRole("link", { name: resultTitle(category, query, page) });
 }
 
@@ -152,10 +153,9 @@ it("keeps one unsubmitted homepage query across categories and searches only the
   open("/app/search");
   await userEvent.type(screen.getByRole("textbox", { name: "检索关键词" }), " 高血压 ");
   for (const label of ["查指南", "找药品", "搜文献", "临床试验"]) {
-    await userEvent.click(screen.getByRole("tab", { name: label }));
-    expect(screen.getByRole("tab", { name: label })).toHaveAttribute("aria-selected", "true");
+    await userEvent.click(screen.getByRole("link", { name: label }));
+    expect(screen.getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("textbox", { name: "检索关键词" })).toHaveValue(" 高血压 ");
-    expect(screen.getByRole("tabpanel", { name: label })).toContainElement(screen.getByRole("textbox", { name: "检索关键词" }));
   }
   expect(api.searchEvimed).not.toHaveBeenCalled();
   expect(api.readEvimedSearchFacets).not.toHaveBeenCalled();
@@ -218,7 +218,7 @@ it("allows a multiline homepage query without submitting on Shift+Enter", async 
   await userEvent.type(input, "高血压{Shift>}{Enter}{/Shift}治疗");
   expect(input).toHaveValue("高血压\n治疗");
   expect(api.searchEvimed).not.toHaveBeenCalled();
-  await userEvent.click(screen.getByRole("tab", { name: "查指南" }));
+  await userEvent.click(screen.getByRole("link", { name: "查指南" }));
   expect(screen.getByRole("textbox", { name: "检索关键词" })).toHaveValue("高血压\n治疗");
   await userEvent.click(screen.getByRole("button", { name: "检索" }));
   await waitFor(() => expect(api.searchEvimed).toHaveBeenCalledTimes(1));
@@ -257,13 +257,12 @@ it("shows source context and paginates the same search without dropping its filt
   expect(queryParams().get("page")).toBe("2");
 });
 
-it("switches categories by keyboard, keeping the query and resetting incompatible filters", async () => {
+it("switches categories from the sidebar directory, keeping the query and resetting incompatible filters", async () => {
   open("/app/search/literature?q=高血压&page=3&language=en");
   await screen.findByRole("link", { name: item.title });
-  screen.getByRole("tab", { name: "搜文献" }).focus();
-  await userEvent.keyboard("{ArrowRight}");
+  await userEvent.click(screen.getByRole("link", { name: "查指南" }));
   await waitFor(() => expect(api.searchEvimed).toHaveBeenLastCalledWith("guidelines", expect.objectContaining({ query: "高血压", page: 1, filters: { language: "", sort: "comprehensive" } }), expect.any(AbortSignal)));
-  expect(screen.getByRole("tab", { name: "查指南" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("link", { name: "查指南" })).toHaveAttribute("aria-current", "page");
   expect(screen.getByTestId("location")).not.toHaveTextContent("page=3");
   expect(screen.getByTestId("location")).not.toHaveTextContent("language=en");
 });
@@ -460,11 +459,11 @@ it("ignores a late response from the previous category", async () => {
   let finishOld!: (value: api.EvimedSearchResult) => void;
   vi.mocked(api.searchEvimed).mockImplementationOnce(() => new Promise((done) => { finishOld = done; }));
   open();
-  await userEvent.click(screen.getByRole("tab", { name: "找药品" }));
+  await userEvent.click(screen.getByRole("link", { name: "找药品" }));
   await screen.findByRole("link", { name: item.title });
   await act(async () => finishOld({ ...result, items: [{ ...item, title: "Stale result" }] }));
   expect(screen.queryByText("Stale result")).toBeNull();
-  expect(screen.getByRole("tab", { name: "找药品" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("link", { name: "找药品" })).toHaveAttribute("aria-current", "page");
 });
 
 it("keeps the current URL when the browser navigates between prior queries", async () => {
@@ -545,7 +544,7 @@ it("retains the horizontal collapse choice across tabs and reader return", async
   open();
   await screen.findByRole("link", { name: item.title });
   await userEvent.click(screen.getByRole("button", { name: "收起筛选栏" }));
-  await userEvent.click(screen.getByRole("tab", { name: "查指南" }));
+  await userEvent.click(screen.getByRole("link", { name: "查指南" }));
   await waitFor(() => expect(api.searchEvimed).toHaveBeenLastCalledWith("guidelines", expect.anything(), expect.any(AbortSignal)));
   expect(screen.getByRole("button", { name: "展开筛选栏" })).toHaveAttribute("aria-expanded", "false");
   await userEvent.click(await screen.findByRole("link", { name: item.title }));
@@ -668,7 +667,7 @@ it.each(["button", "escape"])("clears the entire search round with %s and cannot
     await userEvent.keyboard("{Escape}");
   }
   expect(screen.getByText("输入关键词，开始检索。")).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("tab", { name: "搜文献" }));
+  await userEvent.click(screen.getByRole("link", { name: "搜文献" }));
   expect(screen.getByRole("textbox", { name: "检索关键词" })).toHaveValue("");
   expect(queryParams().get("q")).toBeNull();
   expect(queryParams().get("language")).toBeNull();
@@ -696,14 +695,13 @@ it("changes only the active category's filters and resets only its current page"
   expect(api.searchEvimed).toHaveBeenCalledTimes(requests);
 });
 
-it("treats selecting the already active category as a no-op, including keyboard Home", async () => {
+it("treats selecting the already active category as a no-op", async () => {
   serveByRequest();
   open("/app/search/literature?q=高血压&page=3&language=en");
   await screen.findByRole("link", { name: resultTitle("literature", "高血压", 3) });
   fireEvent.change(screen.getByRole("searchbox", { name: "检索关键词" }), { target: { value: "草稿关键词" } });
   fireEvent.scroll(pageScroller(), { target: { scrollTop: 440 } });
-  await userEvent.click(screen.getByRole("tab", { name: "搜文献" }));
-  await userEvent.keyboard("{Home}");
+  await userEvent.click(screen.getByRole("link", { name: "搜文献" }));
   expect(queryParams().get("page")).toBe("3");
   expect(queryParams().get("language")).toBe("en");
   expect(screen.getByRole("searchbox", { name: "检索关键词" })).toHaveValue("草稿关键词");
@@ -745,9 +743,9 @@ it("reuses successful empty results but does not cache a failed tab", async () =
   open();
   await screen.findByText(/没有找到符合条件的结果/);
   vi.mocked(api.searchEvimed).mockRejectedValueOnce(new Error("upstream temporarily unavailable"));
-  await userEvent.click(screen.getByRole("tab", { name: "查指南" }));
+  await userEvent.click(screen.getByRole("link", { name: "查指南" }));
   await screen.findByRole("alert");
-  await userEvent.click(screen.getByRole("tab", { name: "搜文献" }));
+  await userEvent.click(screen.getByRole("link", { name: "搜文献" }));
   await screen.findByText(/没有找到符合条件的结果/);
   expect(api.searchEvimed).toHaveBeenCalledTimes(2);
   await switchTab("查指南", "guidelines");
@@ -875,7 +873,7 @@ it("clears private tab state on a cross-tab session signal while ignoring unrela
   expect(screen.getByText("输入关键词，开始检索。")).toBeInTheDocument();
   expect(screen.getByRole("textbox", { name: "检索关键词" })).toHaveValue("");
   expect(queryParams().get("q")).toBeNull();
-  await userEvent.click(screen.getByRole("tab", { name: "搜文献" }));
+  await userEvent.click(screen.getByRole("link", { name: "搜文献" }));
   expect(queryParams().get("page")).toBeNull();
   expect(queryParams().get("language")).toBeNull();
   expect(api.searchEvimed).toHaveBeenCalledTimes(2);
@@ -945,16 +943,17 @@ it("keeps the result count outside the tabs and search controls across loading a
   const heading = container.querySelector("[data-search-result-heading]")!;
   expect(count).toHaveTextContent("共 100 条");
   expect(heading).toContainElement(count as HTMLElement);
-  expect(screen.getByRole("tablist", { name: "检索类别" })).not.toContainElement(count as HTMLElement);
+  expect(screen.getByRole("navigation", { name: "医学检索类别" })).not.toContainElement(count as HTMLElement);
   expect(screen.getByRole("searchbox", { name: "检索关键词" }).closest("[data-toolbar]")).not.toContainElement(count as HTMLElement);
   vi.mocked(api.searchEvimed).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-  await userEvent.click(screen.getByRole("tab", { name: "查指南" }));
+  await userEvent.click(screen.getByRole("link", { name: "查指南" }));
   expect(container.querySelector("[data-search-count]")).toBe(count);
   expect(count).toHaveTextContent("正在检索");
   await act(async () => finish({ ...result, category: "guidelines", total: 2_345_678 }));
   expect(container.querySelector("[data-search-count]")).toBe(count);
   expect(count).toHaveTextContent("共 2,345,678 条");
-  expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["搜文献", "查指南", "找药品", "临床试验"]);
+  expect(screen.queryAllByRole("tab")).toEqual([]);
+  expect(within(screen.getByRole("navigation", { name: "医学检索类别" })).getAllByRole("link").map(link => link.textContent)).toEqual(["搜文献", "查指南", "找药品", "临床试验"]);
 });
 
 it("applies a year draft once, resets pagination and reuses facets when only years, sort or page change", async () => {
@@ -1202,12 +1201,12 @@ it("retains selected literature across pages and sorting while category tabs kee
   await screen.findByRole("link", { name: "literature 1-0" });
   expect(screen.getByRole("checkbox", { name: "选择《literature 1-0》" })).toBeChecked();
   expect(screen.getByRole("button", { name: "导出已选 2 篇" })).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("tab", { name: "查指南" }));
+  await userEvent.click(screen.getByRole("link", { name: "查指南" }));
   await screen.findByRole("link", { name: "guidelines 1-0" });
   expect(screen.queryByRole("group", { name: "已选文献操作" })).toBeNull();
   expect(screen.queryByRole("checkbox", { name: "选择本页" })).toBeNull();
   await selectFilter("语言", "英文");
-  await userEvent.click(screen.getByRole("tab", { name: "搜文献" }));
+  await userEvent.click(screen.getByRole("link", { name: "搜文献" }));
   await screen.findByRole("link", { name: "literature 1-0" });
   expect(screen.getByRole("checkbox", { name: "选择《literature 1-0》" })).toBeChecked();
   expect(screen.getByRole("button", { name: "导出已选 2 篇" })).toBeInTheDocument();
@@ -1233,9 +1232,9 @@ it.each(["filter", "new-keyword", "same-keyword", "session"])("clears selected r
   await screen.findByRole("link", { name: "literature 1-0" });
   expect(screen.queryByRole("group", { name: "已选文献操作" })).toBeNull();
   expect(screen.getByRole("checkbox", { name: "选择《literature 1-0》" })).not.toBeChecked();
-  await userEvent.click(screen.getByRole("tab", { name: "查指南" }));
+  await userEvent.click(screen.getByRole("link", { name: "查指南" }));
   await screen.findByRole("link", { name: "guidelines 1-0" });
-  await userEvent.click(screen.getByRole("tab", { name: "搜文献" }));
+  await userEvent.click(screen.getByRole("link", { name: "搜文献" }));
   await screen.findByRole("link", { name: "literature 1-0" });
   expect(screen.queryByRole("group", { name: "已选文献操作" })).toBeNull();
   expect(screen.getByRole("checkbox", { name: "选择《literature 1-0》" })).not.toBeChecked();
@@ -1279,10 +1278,10 @@ it("synchronizes collection from the reader back to cached rows without crossing
   }));
   open();
   await screen.findByRole("link", { name: "literature collection record" });
-  await userEvent.click(screen.getByRole("tab", { name: "查指南" }));
+  await userEvent.click(screen.getByRole("link", { name: "查指南" }));
   await screen.findByRole("link", { name: "guidelines collection record" });
   expect(screen.getByRole("button", { name: /^收藏$/ })).toHaveAttribute("aria-pressed", "false");
-  await userEvent.click(screen.getByRole("tab", { name: "搜文献" }));
+  await userEvent.click(screen.getByRole("link", { name: "搜文献" }));
   await userEvent.click(await screen.findByRole("link", { name: "literature collection record" }));
   await screen.findByRole("heading", { name: "literature collection reader", level: 1 });
   await userEvent.click(screen.getByRole("button", { name: /^收藏$/ }));
@@ -1291,10 +1290,10 @@ it("synchronizes collection from the reader back to cached rows without crossing
   await userEvent.click(screen.getByRole("link", { name: "返回" }));
   await screen.findByRole("link", { name: "literature collection record" });
   expect(screen.getByRole("button", { name: "已收藏" })).toHaveAttribute("aria-pressed", "true");
-  await userEvent.click(screen.getByRole("tab", { name: "查指南" }));
+  await userEvent.click(screen.getByRole("link", { name: "查指南" }));
   await screen.findByRole("link", { name: "guidelines collection record" });
   expect(screen.getByRole("button", { name: /^收藏$/ })).toHaveAttribute("aria-pressed", "false");
-  await userEvent.click(screen.getByRole("tab", { name: "搜文献" }));
+  await userEvent.click(screen.getByRole("link", { name: "搜文献" }));
   await screen.findByRole("link", { name: "literature collection record" });
   await userEvent.click(screen.getByRole("button", { name: "已收藏" }));
   await screen.findByRole("button", { name: /^收藏$/ });
@@ -1315,12 +1314,12 @@ it("aborts a pending collection on tab change and ignores its late response", as
   await screen.findByRole("link", { name: "literature collection record" });
   await userEvent.click(screen.getByRole("button", { name: /^收藏$/ }));
   const signal = vi.mocked(api.setEvimedSearchCollection).mock.calls[0][3];
-  await userEvent.click(screen.getByRole("tab", { name: "查指南" }));
+  await userEvent.click(screen.getByRole("link", { name: "查指南" }));
   await screen.findByRole("link", { name: "guidelines collection record" });
   expect(signal?.aborted).toBe(true);
   await act(async () => finish({ collected: true }));
   expect(screen.getByRole("button", { name: /^收藏$/ })).toHaveAttribute("aria-pressed", "false");
-  await userEvent.click(screen.getByRole("tab", { name: "搜文献" }));
+  await userEvent.click(screen.getByRole("link", { name: "搜文献" }));
   await screen.findByRole("link", { name: "literature collection record" });
   expect(screen.getByRole("button", { name: /^收藏$/ })).toHaveAttribute("aria-pressed", "false");
 });

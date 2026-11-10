@@ -119,8 +119,6 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   //               switching bundles in a running kernel, and probing registries
   // - `account`   signing the kernel into a DeepSeek account (an OAuth flow
   //               and a stored provider credential); runtimes hold none
-  // - `schedule`  cron-like prompts the control plane does not know about,
-  //               the `goals` reason again
   // - `speech`    experimental voice input that ships audio to a recognizer
   // - `permissionPresets` the permission table behind the access-mode chip,
   //               which the hosted page does not show
@@ -132,7 +130,6 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   "pluginManager",
   "pluginRegistryProbe",
   "account",
-  "schedule",
   "speech",
   "permissionPresets",
   // Arrived in 0.2.0, classified the day the pin moved rather than found open later
@@ -171,7 +168,53 @@ export const RUNTIME_UI_DENIED_NAMESPACES = Object.freeze([
   // decide what to draw. It narrows; refusing it would only leave the page guessing.
   "pluginMarket",
   "cotTranslation",
+  // Arrived in 0.2.2, classified the day the pin moved. None of their rows is in this composition, so nothing answers today:
+  //
+  // - `forgePanel`       Git worktrees and pull requests on a forge, with a token of its own
+  // - `liveshareShares`  publishing a session through a relay to people outside the deployment
+  // - `pluginRecommendations`  an index of plugins to install, which a hosted runtime never does
+  // - `actionCards`      cards that act for the person, from a plugin this composition does not mount
+  //
+  // `schedule` left this list the same day: the kernel's automation tasks are the product's scheduled tasks now, and what
+  // a browser could do with them beyond its own project is held by `runtimeUiScheduleRefusal` below.
+  "forgePanel",
+  "liveshareShares",
+  "pluginRecommendations",
+  "actionCards",
 ]);
+
+/** The two calls that can name where a task's conversations open. */
+const SCHEDULE_TARGET_METHODS = new Set(["schedule/create", "schedule/edit"]);
+
+/**
+ * A scheduled task from the browser opens its conversations in this project and this composition, or not at all.
+ *
+ * Hidden knowledge: `schedule/create` and `schedule/edit` take `target.create.cwd` and `target.create.agentPreset` as given,
+ * with nothing confining them, and the session they make runs there at the first delivery: the same hole as the
+ * `working_directory` tool the composition leaves out, reached a day later. The model's tools cannot name either value (they
+ * capture the calling session's), so this is the browser's half. Omitting both is always fine: the Host's defaults are the
+ * project's workspace and the composition.
+ *
+ * @param {string | null | undefined} method
+ * @param {unknown} payload the native RPC's payload on either transport (`{ args: { request } }`)
+ * @param {string} workspaceRoot
+ * @param {string} presetId the only agent preset a hosted session runs
+ * @returns {string | null} why it is refused, or null
+ */
+export function runtimeUiScheduleRefusal(method, payload, workspaceRoot, presetId) {
+  if (!method || !SCHEDULE_TARGET_METHODS.has(String(method))) return null;
+  const request = /** @type {any} */ (payload)?.args?.request;
+  if (!request || typeof request !== "object" || Array.isArray(request)) return "a scheduled-task call must carry its request";
+  const target = method === "schedule/create" ? request.target : request.patch?.target;
+  if (target === undefined) return null;
+  if (!target || typeof target !== "object" || Array.isArray(target)) return "a task's destination must be an object";
+  const create = target.create;
+  if (create === undefined) return null;
+  if (!create || typeof create !== "object" || Array.isArray(create)) return "a task's new-conversation settings must be an object";
+  if (create.cwd !== undefined && !isRuntimeUiWorkspacePath(create.cwd, workspaceRoot)) return "a task's conversations open in this project's workspace";
+  if (create.agentPreset !== undefined && create.agentPreset !== presetId) return "a task's conversations run this deployment's composition";
+  return null;
+}
 
 /**
  * The file-reading methods whose `path` the kernel resolves against the
@@ -376,8 +419,16 @@ export const RUNTIME_UI_ANSWERED_METHODS = Object.freeze({
  */
 export const RUNTIME_UI_SETTINGS_READ = "settings/describe";
 
-/** The settings namespaces a hosted page may read: the chat's presentation, nothing else. */
-export const RUNTIME_UI_READABLE_SETTINGS = Object.freeze(["ui-chat"]);
+/**
+ * The settings namespaces a hosted page may read: the chat's presentation and the shared developer-tools preference.
+ *
+ * `ui-settings` carries one boolean, `enabled`, which the kernel's page reads for three things: the conversation's
+ * 「运行」 (trajectory) tab, the deliverables' code diff and the interactive HTML preview. The page reads it as `false`
+ * when the namespace is missing from the answer, which is how a hosted conversation lost its trajectory tab from
+ * 2026-10-28 until 2026-11-05 although the row was mounted. The profile sets it true (`dshProfilePatch.mjs`) and a
+ * write stays refused.
+ */
+export const RUNTIME_UI_READABLE_SETTINGS = Object.freeze(["ui-chat", "ui-settings"]);
 
 const readableSettings = new Set(RUNTIME_UI_READABLE_SETTINGS);
 
@@ -547,9 +598,42 @@ export function runtimeUiMethodFromPath(pathname) {
   const clean = String(pathname ?? "").split("?")[0];
   if (!clean.startsWith("/api/")) return null;
   const method = clean.slice("/api/".length).replace(/\/+$/, "");
-  // The pinned LoopX native bundle registers this one dotted HTTP endpoint.
-  if (method !== "loopx.goalbar" && !ENDPOINT_NAME.test(method)) return null;
+  // The pinned LoopX native bundle registers this one dotted HTTP endpoint; the deliverables client reads two more.
+  if (method !== "loopx.goalbar" && !RUNTIME_UI_READ_ROUTES.includes(method) && !ENDPOINT_NAME.test(method)) return null;
   return method;
+}
+
+/**
+ * The two dotted GET routes of the kernel's changed-files card (`ui-deliverables`), the one a turn that wrote files ends with:
+ * `changes.summary?sessionId&seq` (which files the turn changed, with line counts) and `changes.diff?sessionId&seq&index` (one of
+ * them, the file at turn start and at turn end). They are the kernel's own record of what its workspace changed during the
+ * turn, read while the session lives; neither names a path. Not `<namespace>/<method>`, so the gate answered 400 to both and the
+ * card never drew (2026-11-05). `changes.open` and `present.open` stay refused: they launch an application on the serving host.
+ */
+export const RUNTIME_UI_READ_ROUTES = Object.freeze(["changes.summary", "changes.diff"]);
+
+const READ_ROUTE_QUERY = Object.freeze({
+  "changes.summary": ["sessionId", "seq"],
+  "changes.diff": ["sessionId", "seq", "index"],
+});
+
+/**
+ * Why a read route must not be forwarded, or `null` when it may: GET, exactly its own query parameters, a session id and
+ * non-negative integers, nothing else.
+ * @param {string | null | undefined} method
+ * @param {string} httpMethod
+ * @param {URLSearchParams} query
+ * @returns {string | null}
+ */
+export function runtimeUiReadRouteRefusal(method, httpMethod, query) {
+  if (!method || !RUNTIME_UI_READ_ROUTES.includes(method)) return null;
+  if (String(httpMethod).toUpperCase() !== "GET") return "this route is read-only";
+  const allowed = READ_ROUTE_QUERY[/** @type {keyof typeof READ_ROUTE_QUERY} */ (method)];
+  const keys = [...query.keys()];
+  if (keys.length !== allowed.length || new Set(keys).size !== keys.length || !allowed.every((key) => keys.includes(key))) return "the query is not the route's own";
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(query.get("sessionId") ?? "")) return "a session id is required";
+  for (const key of allowed.slice(1)) if (!/^\d{1,12}$/.test(query.get(key) ?? "")) return `${key} must be a non-negative integer`;
+  return null;
 }
 
 /**

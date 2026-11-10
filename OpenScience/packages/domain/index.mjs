@@ -17,7 +17,7 @@
  * two modules defining the same name resolve to `undefined` at the root rather
  * than to either of them, and every consumer sees a defined-looking import that
  * is nothing. It happened twice during the migration — `CLAIM_TIERS` and
- * `AUTOPILOT_TASK_TYPES` — and the tests that caught it were not the ones that
+ * a second constant — and the tests that caught it were not the ones that
  * should have. Named re-exports make the same mistake a `SyntaxError: Duplicate
  * export` at load time, which nobody can ship past.
  *
@@ -60,7 +60,6 @@ export { knowledgeGraphToGraph, wikiPagesToGraph } from './src/knowledgeGraphs.m
 // knowledgeQuotations — the after-the-fact ✓ / ⚠ of a compiled page's quotations: a label, never a condition
 export { KNOWLEDGE_QUOTATION_STATUSES, checkPageQuotations, knowledgeSourceIdOfUri } from './src/knowledgeQuotations.mjs'
 
-/** @typedef {import('./src/agenda.mjs').AgendaResultKind} AgendaResultKind */
 
 export {
   GEO_VALUE_DOMAINS,
@@ -239,7 +238,6 @@ export {
 export {
   ALL_ERROR_CODES,
   ANALYSIS_ERROR_CODES,
-  AUTOPILOT_BUDGET_ERROR_CODES,
   BALANCE_REFUSAL_CODES,
   CAPSULE_SHARE_ERROR_CODES,
   CONTROL_PLANE_ERROR_CODES,
@@ -297,14 +295,9 @@ export { READINESS_ERROR_CODES, READINESS_ERROR_MESSAGES_ZH } from './src/readin
 
 // constants — 24 exports
 export {
-  AGENDA_PROJECTION_TOKEN_BUDGET,
-  AUTOPILOT_DIMINISHING_RETURN_EPISODES,
-  AUTOPILOT_PRIORITY_WEIGHTS,
-  AUTOPILOT_USER_SIGNALS,
   CAPSULE_PROFILE_TOKEN_BUDGET,
   CAPSULE_RECALL_TOP_K,
   CAPSULE_SOURCE_WEIGHTS,
-  DATASET_EXPLORATORY_FRACTION,
   DEDUP_MINHASH_JACCARD,
   DEDUP_SEMANTIC_COSINE,
   MAX_DELEGATION_DEPTH,
@@ -326,7 +319,6 @@ export {
   OMISSION_AUDIT_SAMPLE_RATES,
   OMISSION_RATE_TARGETS,
   PERSONA_SCORECARD_FLOORS,
-  REPRODUCTION_RELATIVE_TOLERANCE,
   SKILL_AUTHORING_LIMITS,
   TOOL_RESULT_PRUNER,
 } from './src/constants.mjs'
@@ -360,15 +352,10 @@ export {
 
 // capabilityManifest — 13 exports
 export {
-  AUTOPILOT_EPISODE_CAPABILITIES,
-  AUTOPILOT_TASK_TYPES,
-  ROUTINE_TASK_TYPE,
   CLAIM_TOOLS,
-  COST_CLASSES,
   DELEGATION_BASE_TOOLS,
   EVIDENCE_MATRIX_OUTPUT,
   KERNEL_GLOBAL_TOOL_NAMES,
-  autopilotEpisodeCapability,
   capabilityCatalogueLine,
   delegationToolFilter,
   resolveContractKind,
@@ -481,6 +468,8 @@ export {
   trajectoryDigest,
   transcriptMessageText,
 } from './src/trajectoryDigest.mjs'
+export { scopeRunTranscript } from './src/runTurnScope.mjs'
+export { methodSourceIdentifierShapesIn } from './src/methodSourcePrivacy.mjs'
 
 // learningEvidence — one reaction of the researcher to a run, as the feedback ledger keeps it (steer, follow-up, result-corrected, silent, used)
 export {
@@ -741,36 +730,6 @@ export {
   outputBelowFloor,
 } from './src/analysis.mjs'
 
-// agenda — 25 exports
-export {
-  AGENDA_ITEM_TYPES,
-  ALLOWED_EFFECT_MEASURES,
-  AUTOPILOT_PROHIBITIONS,
-  DATASET_CLASSIFICATIONS,
-  DATASET_PARTITIONS,
-  DEFAULT_ENABLED_TASK_TYPES,
-  EPISODE_STATES,
-  SCHEDULED_TASK_DEFAULT_TYPES,
-  REFUTATION_VERDICTS,
-  AGENDA_DEFAULT_BUDGETS,
-  AGENDA_MIN_EPISODE_BUDGET_CNY,
-  MIN_RUN_BUDGET_CNY,
-  STOPPING_RULES,
-  USER_SIGNALS,
-  VERIFICATION_BUDGET_SHARE,
-  VERIFICATION_CANCELED_BY_STOP,
-  VERIFICATION_UNSCHEDULED_REASONS,
-  agendaResultKind,
-  datasetPartitionOf,
-  digestPlacement,
-  directionVerdict,
-  splitEpisodeBudget,
-  standingVerdict,
-  tierRaiseAllowed,
-  userSignalScore,
-  validateAgendaClaim,
-} from './src/agenda.mjs'
-
 // runtimeUiSurface — 16 exports
 export {
   RUNTIME_UI_MUX_RESPONSE_MAX_BYTES,
@@ -786,9 +745,12 @@ export {
   isDeniedRuntimeUiHostRoute,
   isDeniedRuntimeUiMethod,
   runtimeUiMethodFromPath,
+  RUNTIME_UI_READ_ROUTES,
+  runtimeUiReadRouteRefusal,
   RUNTIME_UI_WORKSPACE_PATH_METHODS,
   isRuntimeUiWorkspacePath,
   runtimeUiWorkspacePathRefusal,
+  runtimeUiScheduleRefusal,
 } from './src/runtimeUiSurface.mjs'
 
 // Types are re-exported separately because they are not runtime bindings: a
@@ -1810,7 +1772,7 @@ export {
 export { frontierNoticeTarget, frontierNoticeHref, FRONTIER_ARRIVAL } from './src/frontierPresentation.mjs';
 export { shareNoticeHref } from './src/shareNotice.mjs';
 
-export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, DISPLAY_TIME_ZONE, agendaDueOccurrence, agendaNextOccurrence, AGENDA_WEEKDAY_WORDS, describeAgendaSchedule, agendaZoneName, agendaInstantText } from "./src/agendaSchedule.mjs";
+export { agendaLocalDate, DISPLAY_TIME_ZONE } from './src/displayDate.mjs'
 
 // vcrVocabulary — 138 exports: 「虚拟临床研究」's closed vocabularies (nine value sources, three scientific
 // conclusions, review states, missing reasons, intended uses, model risk and
@@ -1921,6 +1883,7 @@ export {
   VCR_PREMISE_SOURCE_LABELS_ZH,
   VCR_PROGNOSTIC_QUALIFICATION,
   VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH,
+  VCR_TRAINED_MODEL_LABEL_ZH,
   VCR_QUALITY_CATEGORIES,
   VCR_QUALITY_CATEGORY_LABELS_ZH,
   VCR_REAL_PATIENT_SOURCES,
@@ -1950,6 +1913,12 @@ export {
   vcrBalanceBand,
   VCR_SOURCE_FORMATS,
   VCR_SPENDING_FUNCTIONS,
+  VCR_CONFIRMATORY_DESIGNS,
+  VCR_CONFIRMATORY_SPENDING,
+  VCR_DOSE_DESIGNS,
+  VCR_DOSE_FINDING_DESIGNS,
+  VCR_BAYESIAN_DESIGNS,
+  VCR_BAYESIAN_OBJECTIVES,
   VCR_SPENDING_FUNCTION_LABELS_ZH,
   VCR_STALE_REASONS,
   VCR_STALE_REASON_LABELS_ZH,
@@ -2091,15 +2060,83 @@ export {
   VCR_FORECAST_MODEL_INTERFACES,
   VCR_HORIZON_UNIT_DAYS,
   VCR_HOSTED_MODEL_INTERFACES,
+  VCR_MECHANISTIC_ENGINES,
+  VCR_MECHANISTIC_REQUIRED,
   VCR_MODEL_INTERFACES,
   VCR_MODEL_INTERFACE_LABELS_ZH,
   VCR_MODEL_TRIPOD_FIELDS,
   VCR_MODEL_TRIPOD_MAX_CHARS,
   vcrEventHistoryScopeIssues,
+  vcrMechanisticRuntimeIssues,
   vcrModelCardIssues,
   vcrModelInterfaceOf,
   vcrModelTripod,
 } from './src/vcrModelInterfaces.mjs'
+
+// vcrModelUse — can a model be run for a question (execution issues) and what the reader is told about the answer (premises)
+export {
+  VCR_EXECUTION_ISSUE_CODES,
+  VCR_PREDICTION_MODES,
+  VCR_PREMISE_CODES,
+  VCR_UNIT_DIMENSIONS,
+  assessModelUse,
+  vcrUnitsConvertible,
+} from './src/vcrModelUse.mjs'
+
+// vcrExperiment — the immutable experiment version record and the canonical bytes its identity is the hash of
+export {
+  VCR_EXPERIMENT_FIELDS,
+  VCR_DESIGN_EXPERIMENT_LIMITS,
+  VCR_EXPERIMENT_ALIGNED_FIELDS,
+  VCR_DISEASE_EXPERIMENT_ALIGNED_FIELDS,
+  VCR_DISEASE_EXPERIMENT_METHODS,
+  vcrDesignExperiment,
+  vcrDesignExperimentCanonical,
+  vcrDiseaseHypothesis,
+  vcrExperimentAlignment,
+  vcrExperimentCanonical,
+  vcrExperimentIssues,
+  vcrExperimentRecord,
+} from './src/vcrExperiment.mjs'
+
+// vcrExperimentSearch — a bounded design-search campaign: frozen manifest, candidates, staged precision, conservative constraint verdicts, stop reasons
+export {
+  VCR_CAMPAIGN_FROZEN_PATHS,
+  VCR_CAMPAIGN_LIMITS,
+  VCR_CAMPAIGN_METHODS,
+  VCR_CAMPAIGN_SCHEMA_VERSION,
+  VCR_CAMPAIGN_STOP_REASONS,
+  VCR_CONSTRAINT_KINDS,
+  VCR_CONSTRAINT_OPS,
+  VCR_CONSTRAINT_STATUSES,
+  VCR_EVALUATION_PURPOSES,
+  VCR_SCREENING,
+  vcrBetaQuantile,
+  vcrCampaignAdvance,
+  vcrCampaignAnalyticScenario,
+  vcrCampaignCandidates,
+  vcrCampaignCanonical,
+  vcrCampaignDrawKey,
+  vcrCampaignInitialState,
+  vcrCampaignManifest,
+  vcrCampaignRecord,
+  vcrCampaignSeed,
+  vcrCampaignUnit,
+  vcrCampaignVerdict,
+  vcrCandidateScenario,
+  vcrCandidateVerdicts,
+  vcrClopperPearson,
+  vcrEvaluationContrast,
+  vcrEvaluationMeasure,
+  vcrJudgeConstraint,
+  vcrNominalErrorControl,
+  vcrNormalQuantile,
+  vcrRegularizedBeta,
+  vcrScenarioDerivedMeasures,
+  VCR_EXACT_CALIBRATIONS,
+  VCR_CAMPAIGN_ALPHA_SEARCH_METHODS,
+  VCR_CAMPAIGN_ALPHA_PATH,
+} from './src/vcrExperimentSearch.mjs'
 
 // vcrTimeUnits — the one closed table of time units (the model cards' horizon table), the spellings a source writes them in, and
 // the conversions: evidence in mixed units is converted before it is pooled, and a scenario's unit is stated, taken from its
@@ -2122,6 +2159,8 @@ export {
   VCR_SYNTHPOP_COST,
   vcrSynthpopBudgetSeconds,
   vcrSynthpopEstimateSeconds,
+  vcrSynthpopCalibrationSeconds,
+  VCR_SYNTHPOP_CALIBRATION_COST,
   vcrSynthpopFeasibility,
   vcrSynthpopHelpNotes,
 } from './src/vcrSynthesisLimits.mjs'
@@ -2235,6 +2274,7 @@ export {
   VCR_CALLER_SNAPSHOT_KIND,
   VCR_COLUMN_SOURCE_LIMITS,
   VCR_DESIGN_SUPPORT,
+  VCR_CONFIRMATORY_SUPPORT,
   VCR_ENGINE_METHODS,
   VCR_ENGINE_METHOD_IDS,
   VCR_ENGINE_PROTOCOL_VERSION,
@@ -2270,6 +2310,46 @@ export {
   vcrResultOutputPayload,
 } from './src/vcrEngineJob.mjs'
 
+// vcrEvidencePriors — empirical priors for the heterogeneity of a pooling and the reference mixture of the trials of the Cochrane Database,
+// with the place in each paper every number was read at (algorithm round E7, E8)
+export {
+  VCR_BARTOS_2023_EFFECT_SCALES,
+  VCR_BARTOS_2023_EFFECT_SCALE_LABELS_ZH,
+  VCR_BARTOS_2023_PRIORS,
+  VCR_BARTOS_2023_SOURCE,
+  VCR_TURNER_2015_GENERIC,
+  VCR_TURNER_2015_PRIORS,
+  VCR_TURNER_2015_SOURCE,
+  VCR_TURNER_COMPARISONS,
+  VCR_TURNER_COMPARISON_LABELS_ZH,
+  VCR_TURNER_OUTCOMES,
+  VCR_TURNER_OUTCOME_LABELS_ZH,
+  VCR_VAN_ZWET_2023_MIXTURE,
+  VCR_VAN_ZWET_2023_SOURCE,
+  VCR_VAN_ZWET_2023_TABLE_2,
+  VCR_VAN_ZWET_2023_TABLE_3,
+} from './src/vcrEvidencePriors.mjs'
+
+// vcrSuccessRates — historical success rates of clinical development, BIO 2011-2020 and Wong 2019 side by side (algorithm round E6)
+export {
+  VCR_BIO_2011_2020,
+  VCR_SUCCESS_RATE_AREAS,
+  VCR_SUCCESS_RATE_PHASES,
+  VCR_SUCCESS_RATE_PHASE_LABELS_ZH,
+  VCR_SUCCESS_RATE_SOURCES,
+  VCR_WONG_2019,
+  VCR_WONG_2019_GROUP_LABELS_ZH,
+  vcrSuccessRates,
+} from './src/vcrSuccessRates.mjs'
+
+// vcrValueConsistency — do the numbers an extraction carries agree with each other (interval symmetry, p against interval, counts against rate,
+// arms against total); a pure function whose findings are advice, never a refusal (algorithm round E2)
+export {
+  P_LEVELS,
+  extractedValueConsistency,
+  printedHalfUnit,
+} from './src/vcrValueConsistency.mjs'
+
 // vcrScenarioSchemas — 4 exports: the walker that checks a scenario against its method's schema, and the two tables of
 // which analysis a design may run
 export {
@@ -2277,6 +2357,7 @@ export {
   VCR_TWO_ARM_ANALYSIS_METHODS,
   validateScenario,
   vcrAppliedDefaults,
+  vcrEvaluationAllowed,
   vcrNoClosedFormFields,
   vcrNullTruth,
   whenHolds,
@@ -2300,7 +2381,7 @@ export {
   vcrWordList,
 } from './src/vcrWriteWords.mjs'
 
-// vcrScenarioHelp — 9 exports: what a model is given to write a scenario from, rendered from the schemas above
+// vcrScenarioHelp — 10 exports: what a model is given to write a scenario from, rendered from the schemas above
 // (`runtime/mcp/evimed-research/vcr_scenario_help.json` is generated from it), and the keys read inside a node
 export {
   VCR_RUN_SCENARIO_FIELDS,
@@ -2312,6 +2393,7 @@ export {
   vcrScenarioParentOf,
   vcrRowRole,
   vcrScenarioRows,
+  VCR_FORECAST_FIELD_NOTES,
 } from './src/vcrScenarioHelp.mjs'
 
 // vcrLineage — 8 exports: lineage: which results a changed input makes stale, and whether a
@@ -2470,17 +2552,6 @@ export {
   monthlyDateOf,
 } from './src/creditLots.mjs';
 
-// taskTools — the two runtime tools that create and change a scheduled task from a conversation (N-13): the limits and
-// the codes their gateway answers with.
-export {
-  TASK_INSTRUCTION_MAX_CHARS,
-  TASK_TITLE_MAX_CHARS,
-  TASK_TOOLS_DEFAULT_MAX_TASKS,
-  TASK_TOOL_ERROR_CODES,
-  TASK_TOOL_RUN_FIXES,
-  TASK_TOOL_ERROR_MESSAGE_ZH,
-} from './src/taskTools.mjs'
-
 // dataSemantics — the reusable meaning of a researcher's tables (plan 2026-10-02 §11.3 N03): facts with a basis,
 // exact source versions, versioned transformations and the named outcomes of the deterministic data checks.
 export {
@@ -2535,9 +2606,6 @@ export {
   summarizeSemantics,
 } from './src/dataSemantics.mjs'
 
-// evolution — the sequential test a published tool's real use is read with (the rest of the module's vocabulary is exported at the end of this file)
-export { EVOLUTION_TOOL_HARM_TEST } from './src/evolution.mjs'
-
 // geneExpression — NCBI Gene Expression Omnibus series to differential expression (plan 2026-10-02 §11.3 N17): the
 // accessions, the six limits, the tool's refusals and the advisory findings over its package. Not 「循证 GEO」.
 export {
@@ -2563,7 +2631,7 @@ export {
   geneExpressionFindings,
 } from './src/geneExpression.mjs'
 
-export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_DATA_LEVELS, EVOLUTION_VALIDATION_LEVELS, EVOLUTION_DECISION_CLASSES, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_ORIGINS, EVOLUTION_BUILD_FORMS, EVOLUTION_CASE_GROUPS, EVOLUTION_TOOL_STATES, EVOLUTION_JOB_KINDS, EVOLUTION_EXECUTABLE_OPERATIONS, EVOLUTION_ONE_WAY_OPERATIONS, evolutionDecisionClass, evolutionAdaptiveClass, evolutionValidationLevel, evolutionToolVisible, evolutionMethodFields, evolutionDataMatch, validateEvolutionDataRequirements } from './src/evolution.mjs'
+export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_JOB_KINDS, evolutionMethodFields } from './src/evolution.mjs'
 
 // geoEvidenceChain — 「循证 GEO」 as one evidence chain (flywheel F21, F28, 2026-10-06): the product zone's cards made from a
 // project's verified claims, the closed vocabulary of how a difference is known, the producer settings and the disclosure's
@@ -2709,19 +2777,6 @@ export {
 /** @typedef {import('./src/evidenceCard.mjs').EvidenceCalculationReceipt} EvidenceCalculationReceipt */
 
 export {
-  EVOLUTION_SELECTION_OUTCOMES,
-  evolutionMechanismLimit,
-  evolutionNoiseBand,
-  evolutionProposalIssues,
-  evolutionNormalizeProposal,
-  evolutionProposalDescriptionLength,
-  EVOLUTION_PROPOSAL_DESCRIPTION_LIMIT,
-  EVOLUTION_PROPOSAL_FIELD_BUDGET,
-  selectEvolutionCandidate,
-  selectEvolutionParent,
-  evolutionPruningCandidates,
-} from './src/evolutionSelection.mjs';
-export {
   CLINICAL_FACT_SCHEMA,
   CLINICAL_FACT_CONTRACT,
   FACT_EVIDENCE_RULE,
@@ -2785,7 +2840,7 @@ export { VCR_LONGITUDINAL_SCHEMA, VCR_LONGITUDINAL_ERROR_CODES, VCR_LONGITUDINAL
   longitudinalVariance, longitudinalQuantile, eventsFromMappedTable, replayClinicalEvents, longitudinalReadiness,
   validateForecast, validateLongitudinalScenario, longitudinalSubjects } from './src/vcrLongitudinal.mjs'
 export { forecastRandom, empiricalCrps, discrimination, forecastMetrics, metricIntervals, pairForecastOutcomes,
-  continuousBaselines, ipcwBrier, evaluateForecast, compareForecasts, forecastDesignInputs, forecastShiftDiagnostics } from './src/vcrForecastEvaluation.mjs'
+  continuousBaselines, ipcwBrier, evaluateForecast, compareForecasts, compareVersionsToObserved, forecastDesignInputs, forecastShiftDiagnostics } from './src/vcrForecastEvaluation.mjs'
 
 export { evaluateTrialBenchmark } from './src/vcrTrialBenchmark.mjs'
 export { VCR_OBJECT_REFERENCE_KINDS, vcrObjectReference } from './src/vcrObjectReference.mjs';
@@ -2801,3 +2856,7 @@ export { GEO_STEP_DEPENDENCIES, geoWorkflowState, geoAutomationEnabled } from '.
 export { WORK_STATES, WORK_STATE_LABEL, WORK_NEED_KINDS, WORK_NEED_LABEL, WORK_ACTION_KINDS, workStateLabel } from './src/workState.mjs'
 
 export { dnsKey, registrableDomain } from './src/geoDomains.mjs'
+
+export { RESEARCH_NATIVE_BUNDLES, researchNativeReceiptDigest, researchNativeArtifactDigest } from './src/researchNativeBundles.mjs'
+export { nativeResearchRowIsAdmitted, nativeResearchToolProfileHolds } from './src/researchNativeBundles.mjs'
+export { privateByDefault, sourcePrivacyOf, sourceAllowsEgress } from "./src/memoryPrivacy.mjs";

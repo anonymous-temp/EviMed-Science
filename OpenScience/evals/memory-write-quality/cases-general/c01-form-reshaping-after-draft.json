@@ -2,9 +2,9 @@
   "id": "c01-form-reshaping-after-draft",
   "class": "work-order-form-reshaping",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C01); every name, number and identifier is invented",
-  "expected": "The reshaping the person asked for after a first draft is kept as a rule about the weekly report (about 200 characters, three points); neither the numbers nor a rule about every answer.",
-  "decidable": true,
-  "judge": "Is the kept rule scoped to the weekly report (a form rule about 周报: about 200 characters, three points), and not a rule about all answers? The two numbers must appear nowhere.",
+  "expected": "Keep the scoped weekly-report format correction. Preserve the corrected value 37% if useful, without carrying the earlier mistaken 29% as current.",
+  "decidable": false,
+  "judge": "Does the memory preserve useful information with the origin, limited scope, uncertainty and current-vs-historical distinction described in expected, without promoting a claim to an established fact or permission?",
   "replay": {
     "synthetic": true,
     "projectId": "default",
@@ -48,10 +48,8 @@
     ],
     "requireTextContains": [
       "周报"
-    ],
-    "noTextContains": [
-      "37%",
-      "29%"
     ]
-  }
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }

@@ -368,10 +368,16 @@ export class GeoNativeAuthority {
     });
   }
 
-  /** Reserve before contacting the kernel. An uncertain result is never retried as another creation. */
+  /**
+   * Reserve before contacting the kernel, under the id the kernel will be asked for. The id is a function of the request, so a retry after
+   * any outcome finishes the same creation: if the kernel has that session the first attempt got through and only its answer was lost,
+   * otherwise the same id is asked for again. One request is never two sessions. A receipt written before the id was recorded names
+   * no session and still answers `geo_creation_pending`.
+   */
   async createExplicit(user, geoId, identity, requestId) {
     if (typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{16,128}$/.test(requestId)) throw missing();
     const key = `gnr_${hash([this.base(identity), String(user.id), requestId])}`;
+    const intended = `gnc_${key.slice(4, 44)}`;
     return this.#once(key, async () => {
       const reserved = await this.store.transaction(client => this.store.database.withTransactionClient(client, async () => {
         await client.query(PRIMARY_LOCK, [geoId]);
@@ -384,21 +390,22 @@ export class GeoNativeAuthority {
           return { saved, fresh };
         }
         await this.documents.put(fresh.geo.userId, 'geo-plan-context', key,
-          { recordType: 'geo-native-create-request', base: this.base(fresh), state: 'pending' },
+          { recordType: 'geo-native-create-request', base: this.base(fresh), state: 'pending', sessionId: intended },
           { expectedRevision: 0, projectId: fresh.geo.projectId, transactionClient: client });
         return { saved: null, fresh };
       }));
-      if (reserved.saved) {
-        if (reserved.saved.payload.state === 'complete') return this.proveSession(reserved.fresh, reserved.saved.payload.sessionId);
-        throw new HttpError(409, 'geo_creation_pending', 'The conversation creation outcome is not yet known.');
-      }
-      const sessionId = (await this.createSession(reserved.fresh.project)).id;
+      if (reserved.saved?.payload.state === 'complete') return this.proveSession(reserved.fresh, reserved.saved.payload.sessionId);
+      const wanted = reserved.saved ? reserved.saved.payload.sessionId : intended;
+      if (!sessionIdValid(wanted)) throw new HttpError(409, 'geo_creation_pending', 'The conversation creation outcome is not yet known.');
+      const sessionId = reserved.saved && await this.#present(reserved.fresh.project, wanted)
+        ? wanted : (await this.createSession(reserved.fresh.project, { sessionId: wanted })).id;
       if (!sessionIdValid(sessionId)) throw missing();
       return this.store.transaction(client => this.store.database.withTransactionClient(client, async () => {
         await client.query(PRIMARY_LOCK, [geoId]);
         const fresh = await this.identity(user, geoId, { client });
         if (canonicalJson(fresh.principal) !== canonicalJson(reserved.fresh.principal)) throw changed();
         const receipt = await this.documents.get(fresh.geo.userId, 'geo-plan-context', key);
+        if (receipt?.payload.state === 'complete') return receipt.payload.sessionId;
         if (!receipt || receipt.payload.state !== 'pending') throw changed();
         await this.documents.put(fresh.geo.userId, 'geo-plan-context', this.sessionKey(fresh, sessionId),
           { recordType: 'geo-native-session', base: this.base(fresh), sessionId, association: 'explicit' },

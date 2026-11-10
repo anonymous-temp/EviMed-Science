@@ -1,0 +1,19 @@
+{"pmcid": "PMC12306052", "page": 6, "table": "Table 3", "caption": "Baseline characteristics of participants by gratitude and behavioral activation intervention groups", "columns": ["Gratitude (n = 22)", "Behavioral Activation (n = 23)", "P-value"], "keys": ["Gratitude", "Behavioral Activation", "P-value"], "note": "the p-value sits on the heading row of a categorical variable, the categories below it have none; a second table on the same page","rows":[
+["Age (years), mean ± SD", "44.5 ± 12.5", "47.0 ± 8.2", "0.439"],
+["Marital status, n (%)", "", "", "0.134"],
+["Married", "18 (81.8%)", "19 (82.6%)", ""],
+["Widowed", "3 (13.6%)", "3 (13.0%)", ""],
+["Divorced", "1 (4.5%)", "0 (0.0%)", ""],
+["Employment status, n (%)", "", "", "0.903"],
+["Unemployed", "11 (50.0%)", "12 (52.2%)", ""],
+["Employed", "5 (22.7%)", "6 (26.1%)", ""],
+["Place of residence, n (%)", "", "", "0.570"],
+["City", "16 (72.7%)", "20 (87.0%)", ""],
+["Village", "3 (13.6%)", "3 (13.0%)", ""],
+["Insurance status, n (%)", "", "", "0.329"],
+["Yes", "17 (77.3%)", "20 (87.0%)", ""],
+["No", "2 (9.1%)", "2 (8.7%)", ""],
+["Anxiety, mean ± SD", "10.8 ± 3.1", "12.1 ± 2.7", "0.433"],
+["Depression, mean ± SD", "8.6 ± 1.5", "9.3 ± 1.1", "0.517"],
+["HADS total, mean ± SD", "19.5 ± 1.9", "21.4 ± 2.7", "0.380"]
+]}

@@ -8,6 +8,8 @@
 #   -> (only when one froze) label confirmation -> merge -> build -> run -> receipt -> resume -> statistics -> report (-> evidence -> finalize when qualified)
 #
 # A month whose development finds no candidate ends at decide: its confirmation month is never labelled, never opened, no alpha is drawn.
+# A qualified month publishes its signed bundle (outbox/bundles/<digest>.json) and the report names it; production imports it only where the import layer is installed. A refused evidence or finalize is
+# outcome `finalize-refused`, exit 8, and the next start signs the evidence anew; a month measured against no baseline or another consumer is `not-importable`, exit 0, and asks nothing of the signers.
 # An export without the incumbent identity (production runs an older export script until its next release) does not stop the month: it is
 # measured against an `unbound:` baseline and reported as not importable, and finalize refuses it (campaign_export_incumbent_missing).
 #
@@ -25,7 +27,7 @@
 # refused as it is, exit 5 (campaign_run_directory_legacy), nothing in it changed. A rehearsal is named by `--id-prefix rehearsal-[<a-z0-9->-]`, checked
 # before it names a path; any other prefix is refused (exit 2). Steps run in the lab image as uid 10001 with a read-only root; the jury and the database
 # steps have a network, the evaluator and signer steps have none and are the only ones that see a signing key, and only the jury steps see the provider
-# credential. The lab never connects to production: production pushes its export into the write-only inbox.
+# credential. The lab never connects to production: production pushes its export into the write-only inbox and pulls a signed bundle from the read-only outbox/bundles.
 #
 # RSI_LAB_ROOT (/srv/rsi-lab), RSI_LAB_ETC (/etc/rsi-lab), RSI_LAB_DOCKER (docker), RSI_LAB_OWNER (10001:10001) and RSI_LAB_POLL_SECONDS (300) move the host layout and the docker
 # binary: the tests run this script against a stand-in docker. RSI_LAB_DRY_RUN=1 runs it with a docker that only prints the command, which shows the steps up to the
@@ -111,6 +113,19 @@ sign_report() {
 }
 step() { local name=$1; shift; if done_step "$name"; then return 0; fi; log "step $name"; if "$@" > "$RUN/$name.out" 2> "$RUN/$name.err"; then mark "$name"; else log "step $name failed: $(tail -c 400 "$RUN/$name.err")"; return 1; fi; }
 reason_of() { grep -o 'campaign_[a-z_]*' "$RUN/$1.err" 2>/dev/null | head -1 || true; }
+# The carrier: a signed bundle goes under the name of its own bytes into the one directory production's pull reads (forced `rrsync -ro`), whole or not at all
+# (a hidden name, then a rename), never over a bundle already there, so a restarted month changes nothing. Only the bundle is world-readable: a month's directory stays the lab's.
+publish_bundle() {
+  [ -s "$RUN/bundle.json" ] || return 0
+  local name dir=$OUTBOX/bundles
+  name=$(sha256sum "$RUN/bundle.json" | cut -d' ' -f1).json
+  install -d -o "${OWNER%%:*}" -g "${OWNER##*:}" -m 0755 "$dir"
+  if [ ! -e "$dir/$name" ]; then
+    install -o "${OWNER%%:*}" -g "${OWNER##*:}" -m 0644 "$RUN/bundle.json" "$dir/.$name.tmp"
+    mv -f "$dir/.$name.tmp" "$dir/$name"
+  fi
+  log "bundle published: outbox/bundles/$name"
+}
 
 # A step that calls the jury: the only steps that mount the provider credential. The key is checked first (docker would create a directory at a missing bind-mount source),
 # and a step that did not finish ends the month with a named reason: the stop its output file records when it is a campaign code (the budget's), else the code the
@@ -198,24 +213,29 @@ VERDICT=$(jsonfield "$RUN/run/resume.json" qualification)
 [ -n "$VERDICT" ] || VERDICT=$(jsonfield "$RUN/run/resume.json" status)
 log "verdict: ${VERDICT:-unknown}"
 if [ "$VERDICT" = "qualified" ] && [ -z "$PREFIX" ]; then
+  # Measured against no baseline production serves, or another consumer: the month has its verdict and no bundle of it could be imported, so nothing is asked of the signers.
+  BASELINE=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["target"]["baselineRevision"])' "$RUN/manifest.json" 2>/dev/null || true)
+  case $BASELINE in
+    unbound-consumer:*) outcome not-importable campaign_export_consumer_changed; finish 0 ;;
+    unbound:*) outcome not-importable campaign_export_incumbent_missing; finish 0 ;;
+  esac
+  FAILED=""
   step evidence lab rsi-lab-net "${KEYS[@]}" "$IMAGE" evals/rsi-campaigns/evaluator.mjs evidence "$C/manifest.json" "$C/inputs.json" "$C/run/resume.json" \
-    /run/rsi-lab/statistics-qualification.json /run/rsi-keys/evaluator.pem "$C/evidence.json" || log "evidence refused"
-  if done_step evidence; then
-    python3 - "$RUN" "$OWNER" <<'PY'
-import json, sys, os
-run, owner = sys.argv[1], sys.argv[2]
-resume = json.load(open(f'{run}/run/resume.json')); evidence = json.load(open(f'{run}/evidence.json'))
-json.dump({'completed': resume, 'manifest': json.load(open(f'{run}/manifest.json')), 'inputs': json.load(open(f'{run}/inputs.json')),
-           'files': evidence['files'], 'evidenceEnvelope': evidence['evidenceEnvelope'], 'bundleId': f"{resume['checkpoint']['campaignId']}-bundle",
-           'expiresAt': evidence['evidenceEnvelope']['payload']['expiresAt']}, open(f'{run}/finalize-input.json', 'w'))
-uid, gid = owner.split(':')
-os.chown(f'{run}/finalize-input.json', int(uid), int(gid))
-PY
+    /run/rsi-lab/statistics-qualification.json /run/rsi-keys/evaluator.pem "$C/finalize-input.json" || { FAILED=evidence; log "evidence refused: $(tail -c 300 "$RUN/evidence.err")"; }
+  if [ -z "$FAILED" ]; then
     step finalize "$DOCKER" run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user "$OWNER" \
       -v "$ETC/keys":/run/rsi-keys:ro -v "$ETC/owner-inputs":/run/rsi-lab:ro -v "$STATE":/srv/rsi-lab/state -v "$OUTBOX":/srv/rsi-lab/outbox "$IMAGE" \
-      evals/rsi-campaigns/finalize.mjs /run/rsi-lab/finalize.json || log "finalize refused: $(tail -c 300 "$RUN/finalize.err")"
-    [ -s "$RUN/bundle.json" ] && cp -f "$RUN/bundle.json" "$OUTBOX/$KEY/bundle.json"
+      evals/rsi-campaigns/finalize.mjs /run/rsi-lab/finalize.json || { FAILED=finalize; log "finalize refused: $(tail -c 300 "$RUN/finalize.err")"; }
   fi
+  if [ -n "$FAILED" ] || [ ! -s "$RUN/bundle.json" ]; then
+    # A qualified month that published nothing is no success: an outcome of its own, the report says it, the unit fails. The evidence is signed for a week and is not left marked done, or a later
+    # start would find it expired and refuse for ever: the next start signs it anew and finalizes again.
+    REASON=$(reason_of "${FAILED:-finalize}")
+    sed -i '/^evidence ok/d;/^finalize ok/d' "$RUN/STATUS"
+    outcome finalize-refused "${REASON:-campaign_finalization_failed}"; finish 8
+  fi
+  cp -f "$RUN/bundle.json" "$OUTBOX/$KEY/bundle.json"
+  publish_bundle
 fi
 outcome "${VERDICT:-not-qualified}" "$(jsonfield "$RUN/run/resume.json" reason)"
 finish 0

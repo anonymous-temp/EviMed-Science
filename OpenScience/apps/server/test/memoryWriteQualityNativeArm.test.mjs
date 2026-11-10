@@ -20,7 +20,7 @@ test("both directories are replayed, and every case in them is shaped for this a
   const cases = (await Promise.all(NATIVE_CASE_DIRECTORIES.map(load))).flat();
   assert.deepEqual(cases.flatMap(nativeCaseIssues), []);
   const general = await load("cases-general");
-  assert.equal(general.length, 50, "the eleven general cases of 2026-10-12, the 25 work-order cases of 2026-10-23 (C01-C24, the last in two variants), the upgrade, the eleven of 2026-10-25 (misconception, symptom-to-trait, import, repetition), the project rule given with a small request (M8), and the same rule said back by the assistant (S7, 2026-10-27)");
+  assert.equal(general.length, 55, "the prior 50 general cases plus five development controls for unnamed people, fiction, identity separation and nonnumeric personal context (2026-11-05)");
   assert.ok(general.every((item) => item.replay.synthetic === true), "every name and number in them is invented");
   assert.ok(cases.length >= 35);
 });
@@ -31,14 +31,14 @@ test("the work-order corpus holds every case of research G section 6, each with 
   const ids = workOrder.map((item) => item.id.split("-")[0]);
   for (let number = 1; number <= 23; number += 1) assert.ok(ids.includes(`c${String(number).padStart(2, "0")}`), `case C${number} is in the corpus`);
   assert.ok(ids.includes("c24a") && ids.includes("c24b") && ids.includes("u01"), "the platform-tag pair and the upgrade");
-  assert.ok(workOrder.every((item) => item.decidable === true && item.expect), "each is decided by code; a reading is a judge question beside it");
+  assert.ok(workOrder.every((item) => (item.decidable === true && item.expect) || (item.decidable === false && item.judge)), "code checks stay decidable and attribution questions explicitly require reading");
   // The keep side and the refuse side are both there: the corpus that was blind to the owner's account asked only for refusals and statements.
   const keeps = workOrder.filter((item) => item.expect.requireAnyKind || item.expect.requireTextContains?.length);
   const refuses = workOrder.filter((item) => item.expect.atMostRecords === 0 || item.expect.noRecordOfKinds);
-  assert.ok(keeps.length >= 10 && refuses.length >= 12, `${keeps.length} keep cases, ${refuses.length} refuse cases`);
+  assert.ok(keeps.length >= 10 && refuses.length >= 6, `${keeps.length} keep cases, ${refuses.length} refuse cases`);
   // A case that starts from a memory has the engine write it: C17 (the recall echo), C22 (a choice shown in two conversations), the
   // upgrade, and the repetition that is no repetition (two different choices).
-  assert.deepEqual(workOrder.filter((item) => item.replay.seed).map((item) => item.id.split("-")[0]).sort(), ["c17", "c22", "e3c", "u01"]);
+  assert.deepEqual(workOrder.filter((item) => item.replay.seed).map((item) => item.id.split("-")[0]).sort(), ["c17", "c22", "e3c", "m06", "u01"]);
   // The cross-key conflict was the deleted extractor's own (its `conflictsWith` never fired on production) and went with it.
   assert.equal(ids.includes("x01"), false);
 });
@@ -171,27 +171,23 @@ test("repetition across conversations (owner decision 6): kept after the second,
   assert.deepEqual(alone.replay.messages.filter((message) => message.role === "user").length, 2, "the same choice twice inside one conversation");
   assert.equal(alone.replay.seed, undefined);
   assert.deepEqual(scoreNative(alone, {}, 0), []);
-  assert.deepEqual(scoreNative(alone, { "preferences/format.md": "- 汇总表要带透视表" }, 1), ['carries "透视表"', "1 memory operations > 0"]);
+  assert.deepEqual(scoreNative(alone, { "preferences/format.md": "- 汇总表要带透视表" }, 1), ["1 preference"]);
   const different = by("e3c");
   assert.deepEqual(scoreNative(different, {}, 0, {}), []);
-  assert.deepEqual(scoreNative(different, { "preferences/format.md": "- 月度汇总用折线图" }, 1, {}), ['carries "折线图"', "1 memory operations > 0"]);
+  assert.deepEqual(scoreNative(different, { "preferences/format.md": "- 月度汇总用折线图" }, 1, {}), ["1 preference"]);
 });
 
-test("a misbelief or a passing symptom is written as nothing, and the case fails on the line it must not carry", async () => {
+test("beliefs and symptoms are retained with attribution and dates; semantic errors require reading", async () => {
   const { by } = await nextRound();
-  for (const [prefix, line] of [["m01", "- 相信人只用了大脑的 10%"], ["m02", "- 认为糖会让孩子多动"], ["m03", "- 认同酸性体质致癌的说法"]]) {
+  for (const prefix of ["m01", "m02", "m03", "s01", "s03"]) {
     const item = by(prefix);
-    assert.equal(item.class, "refuse-misconception");
-    assert.deepEqual(scoreNative(item, {}, 0), [], prefix);
-    assert.ok(scoreNative(item, { "profile.md": line }, 1).length > 0, `${prefix} fails when the belief is written`);
+    assert.equal(item.decidable, false, `${prefix}: a substring cannot establish attribution or chronicity`);
+    assert.match(item.judge, /origin.*current-vs-historical/);
+    assert.ok(scoreNative(item, {}, 0).length > 0, `${prefix}: useful content is required`);
   }
-  for (const [prefix, line] of [["s01", "- 经常头疼"], ["s02", "- 常处理 58 岁胸痛患者"], ["s03", "- 习惯熬夜，每天睡四个小时"]]) {
-    const item = by(prefix);
-    assert.equal(item.class, "refuse-symptom-as-trait");
-    assert.deepEqual(scoreNative(item, {}, 0), [], prefix);
-    assert.ok(scoreNative(item, { "profile.md": line }, 1).length > 0, `${prefix} fails when the symptom becomes a trait`);
-  }
-  // The misconception cases state the belief in the person's own message and say it was corrected or not theirs: the corrections are the assistant's.
+  const patient = by("s02");
+  assert.ok(scoreNative(patient, { "profile.md": "- 常处理 58 岁胸痛患者 V1–V4" }, 1).length > 0, "a patient is not the user's trait");
+  assert.deepEqual(scoreNative(patient, { "people/病例1.md": "- 58 岁，胸痛 3 小时，V1–V4 ST 段抬高" }, 1), []);
   assert.ok(by("m02").replay.messages.some((message) => message.role === "assistant" && /并不成立/.test(message.text)));
 });
 
@@ -222,4 +218,28 @@ test("a case held in a named project is replayed with the platform's project lin
   assert.equal(CASE_PROJECT_NAMES["orders-service"], "订单服务重构");
   assert.equal(parseArguments(["--offline"]).projectLine, true);
   assert.equal(parseArguments(["--offline", "--no-project-line"]).projectLine, false);
+});
+
+test("development policy cases preserve health and people while keeping hard identifiers out", async () => {
+  const cases = (await Promise.all(NATIVE_CASE_DIRECTORIES.map(load))).flat();
+  for (const name of ["2026-10-12-own-health", "2026-10-12-own-health-in-passing", "2026-10-12-patient-identifiers", "g07-teacher-student-details", "g08-lawyer-client-case", "c14-childs-details", "s02-one-off-case-detail-not-a-trait"]) {
+    const item = cases.find((entry) => entry.id === name);
+    assert.ok(item.expect.requireTextContains?.length > 0, `${name}: useful details are required`);
+    assert.equal(item.policyRevision, "2026-11-04");
+    assert.equal(item.evaluationSplit, "development");
+  }
+  const written = kindsOf({ "people/张某.md": "# 张某\n- INR 2.4", "notes/hypothesis.md": "- User believes X" });
+  assert.deepEqual(written.person, ["people/张某.md"]);
+  assert.deepEqual(written.note, ["notes/hypothesis.md"]);
+});
+
+test("an unadopted assistant offer requires attribution review even when its kind checks pass", async () => {
+  const { by } = await nextRound();
+  const item = by("c18");
+  const falseCommitment = {
+    "notes/proposed-followup.md": "User decided to receive an automatic literature summary every week and maintain a citation library.",
+  };
+  assert.deepEqual(scoreNative(item, falseCommitment, 1), [], "mechanical kind checks cannot establish attribution");
+  assert.equal(item.decidable, false, "a mechanically passing false commitment must be reported as needs-reading");
+  assert.match(item.judge, /unconfirmed.*assistant|assistant.*unconfirmed/i);
 });

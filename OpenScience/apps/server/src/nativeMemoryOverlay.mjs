@@ -96,11 +96,11 @@ export function nativeMemoryRejectionType(memoryType, namespaceId = null) {
 function publicCommit(row) {
   return {
     userId: String(row.user_id), archiveUri: String(row.archive_uri), engineSession: String(row.engine_session),
-    projectId: row.project_id ?? null, origin: String(row.origin), taskId: row.task_id ?? null, state: String(row.state),
+    projectId: row.project_id ?? null, projectCreatedAt:row.project_created_at??null, origin: String(row.origin), taskId: row.task_id ?? null, state: String(row.state),
     operations: Number(row.operations) || 0, error: String(row.error ?? ""), attempts: Number(row.attempts) || 0,
     nextAttemptAt: instant(row.next_attempt_at), replayedAs: row.replayed_as ?? null, pendingText: row.pending_text ?? null,
     extraction: row.extraction && typeof row.extraction === "object" && !Array.isArray(row.extraction) ? row.extraction : {},
-    createdAt: instant(row.created_at), updatedAt: instant(row.updated_at), ingestedAt: instant(row.ingested_at),
+    createdAt: instant(row.created_at), updatedAt: instant(row.updated_at), ingestedAt: instant(row.ingested_at), nativeIngestedAt: instant(row.native_ingested_at),
   };
 }
 
@@ -109,7 +109,7 @@ function publicRevision(row) {
   return {
     id: String(row.id), uri: String(row.uri), memoryType: String(row.memory_type), change: String(row.change), actor: String(row.actor),
     reason: String(row.reason ?? ""), before: row.before ?? null, after: row.after ?? null, archiveUri: row.archive_uri ?? null,
-    engineSession: row.engine_session ?? null, projectId: row.project_id ?? null, undoneAt: instant(row.undone_at), changedAt: instant(row.changed_at),
+    engineSession: row.engine_session ?? null, projectId: row.project_id ?? null, sourceProjectId:row.source_project_id??null, sourceProjectCreatedAt:row.source_project_created_at??null, undoneAt: instant(row.undone_at), changedAt: instant(row.changed_at),
   };
 }
 
@@ -127,6 +127,7 @@ export class NativeMemoryOverlay {
   /** @param {{ database?: any }} dependencies */
   constructor({ database = null } = {}) {
     this.database = database ?? null;
+    /** @type {any} */ this.sourceDeletion = null;
   }
 
   get configured() { return Boolean(this.database); }
@@ -335,17 +336,18 @@ export class NativeMemoryOverlay {
   /**
    * One commit the engine accepted. Written once per archive: a second sighting (the scan finding what the gateway
    * recorded) fills what the first did not know and never moves the state back.
-   * @param {{ userId: string, archiveUri: string, engineSession: string, projectId?: string | null, origin: string, taskId?: string | null, state?: string, error?: string, pendingText?: string | null, attempts?: number }} commit `attempts`: how many replays the conversation behind this commit has had already (a replay's own commit carries the count on, so the cap bounds the chain)
+   * @param {{ userId: string, archiveUri: string, engineSession: string, projectId?: string | null, projectCreatedAt?: string | null, origin: string, taskId?: string | null, state?: string, error?: string, pendingText?: string | null, attempts?: number }} commit `attempts`: how many replays the conversation behind this commit has had already (a replay's own commit carries the count on, so the cap bounds the chain)
    */
-  async recordCommit({ userId, archiveUri, engineSession, projectId = null, origin, taskId = null, state = "pending", error = "", pendingText = null, attempts = 0 }) {
+  async recordCommit({ userId, archiveUri, engineSession, projectId = null, projectCreatedAt=undefined, origin, taskId = null, state = "pending", error = "", pendingText = null, attempts = 0 }) {
     if (!NATIVE_COMMIT_ORIGINS.includes(origin)) throw new HttpError(500, "memory_commit_invalid", "Unknown commit origin.");
-    const result = await this.#query(`INSERT INTO evimed_memory.native_commits AS c (user_id, archive_uri, engine_session, project_id, origin, task_id, state, error, next_attempt_at, pending_text, attempts)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $9, $10)
+    if(projectCreatedAt===undefined)projectCreatedAt=projectId?(await this.#query('SELECT created_at::text AS created FROM evimed_control.projects WHERE user_id=$1 AND id=$2',[owner(userId),projectId])).rows[0]?.created??null:null;
+    const result = await this.#query(`INSERT INTO evimed_memory.native_commits AS c (user_id, archive_uri, engine_session, project_id, origin, task_id, state, error, next_attempt_at, pending_text, attempts,project_created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $9, $10,$11)
       ON CONFLICT (user_id, archive_uri) DO UPDATE SET
         task_id = COALESCE(c.task_id, EXCLUDED.task_id), project_id = COALESCE(c.project_id, EXCLUDED.project_id), updated_at = clock_timestamp()
       RETURNING *, (xmax = 0) AS inserted`,
     [owner(userId), String(archiveUri), String(engineSession), projectId, origin, taskId, state, String(error ?? "").slice(0, 400),
-      pendingText == null ? null : String(pendingText).slice(0, 2_000), Math.max(0, Math.min(100, Math.trunc(Number(attempts)) || 0))]);
+      pendingText == null ? null : String(pendingText).slice(0, 2_000), Math.max(0, Math.min(100, Math.trunc(Number(attempts)) || 0)),projectCreatedAt]);
     return { ...publicCommit(result.rows[0]), inserted: result.rows[0].inserted === true };
   }
 
@@ -360,6 +362,13 @@ export class NativeMemoryOverlay {
     const result = await this.#query("SELECT * FROM evimed_memory.native_commits WHERE user_id=$1 AND engine_session=$2 AND archive_uri LIKE $3 || '/sessions/%' ORDER BY created_at",
       [owner(userId), String(engineSession), scopedRoot(userRoot)]);
     return result.rows.map(publicCommit);
+  }
+
+  /** Exact retained archive receipts identify producers, never truth or human authorship. */
+  async attributionCommits(userId,archiveUris) {
+    if(!archiveUris.length)return new Map();
+    const result=await this.#query('SELECT archive_uri,origin FROM evimed_memory.native_commits WHERE user_id=$1 AND archive_uri=ANY($2::text[])',[owner(userId),archiveUris]);
+    return new Map(result.rows.map(row=>[String(row.archive_uri),String(row.origin)]));
   }
 
   /** The archives of one account the ledger already holds. @param {string} userId @returns {Promise<Set<string>>} */
@@ -422,6 +431,15 @@ export class NativeMemoryOverlay {
     return result.rows.map(publicCommit);
   }
 
+  /** Complete coverage: an unbounded outbox cannot be declared quiet from its first page. Replayed and abandoned commits are terminal (a replay's successor is a row of its own). */
+  async hasUnprovenNativeWrites(userId) {
+    const result=await this.#query("SELECT 1 FROM evimed_memory.native_commits WHERE user_id=$1 AND state IN ('pending','failed') AND native_ingested_at IS NULL AND ingested_at IS NULL LIMIT 1",[owner(userId)]);
+    return result.rows.length>0;
+  }
+  /** Native extraction ingestion is separate from the optional raw-history indexing outbox. */
+  async noteNativeIngested(userId,archiveUri) {
+    await this.#query('UPDATE evimed_memory.native_commits SET native_ingested_at=COALESCE(native_ingested_at,clock_timestamp()) WHERE user_id=$1 AND archive_uri=$2',[owner(userId),archiveUri]);
+  }
   /** The extraction failed: a replay is owed at `nextAttemptAt`. @param {string} userId @param {string} archiveUri @param {{ error?: string, nextAttemptAt?: Date | null }} failure */
   async failCommit(userId, archiveUri, { error = "", nextAttemptAt = null } = {}) {
     await this.#query(`UPDATE evimed_memory.native_commits SET state='failed', error=$3, next_attempt_at=COALESCE($4::timestamptz, clock_timestamp()),
@@ -468,22 +486,27 @@ export class NativeMemoryOverlay {
    * One change of one file. A change read from an archive's diff is written once however often the diff is read.
    * @returns {Promise<ReturnType<typeof publicRevision> | null>} null when this archive's change was already there
    */
-  async addRevision({ userId, uri, memoryType, change, actor, reason = "", before = null, after = null, archiveUri = null, engineSession = null, projectId = null, changedAt = null }) {
+  async addRevision({ userId, uri, memoryType, change, actor, reason = "", before = null, after = null, archiveUri = null, engineSession = null, projectId = null, sourceProjectId=null,sourceProjectCreatedAt=undefined, changedAt = null }) {
     if (!NATIVE_REVISION_CHANGES.includes(change) || !NATIVE_REVISION_ACTORS.includes(actor)) throw new HttpError(500, "memory_revision_invalid", "Unknown revision change or actor.");
+    if(sourceProjectCreatedAt===undefined&&archiveUri&&engineSession){
+      const source=(await this.#query('SELECT project_id,project_created_at FROM evimed_memory.native_commits WHERE user_id=$1 AND archive_uri=$2 AND engine_session=$3',[owner(userId),archiveUri,engineSession])).rows[0];
+      sourceProjectId=sourceProjectId??source?.project_id??null;sourceProjectCreatedAt=source?.project_created_at??null;
+    }
     const result = await this.#query(`INSERT INTO evimed_memory.native_revisions
-      (user_id, uri, memory_type, change, actor, reason, before, after, archive_uri, engine_session, project_id, changed_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::timestamptz, clock_timestamp()))
+      (user_id, uri, memory_type, change, actor, reason, before, after, archive_uri, engine_session, project_id, changed_at,source_project_id,source_project_created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::timestamptz, clock_timestamp()),$13,$14)
       ON CONFLICT (user_id, archive_uri, uri, change) WHERE archive_uri IS NOT NULL DO NOTHING RETURNING *`,
     [owner(userId), String(uri), String(memoryType), change, actor, String(reason ?? "").slice(0, 200), bounded(before, NATIVE_TEXT_LIMIT), bounded(after, NATIVE_TEXT_LIMIT),
-      archiveUri, engineSession, projectId, changedAt]);
+      archiveUri, engineSession, projectId, changedAt,sourceProjectId,sourceProjectCreatedAt]);
     return result.rows[0] ? publicRevision(result.rows[0]) : null;
   }
 
+  async protectRevisions(userId,rows) { return this.sourceDeletion ? this.sourceDeletion.redactRevisions(userId,rows) : rows; }
   /** @param {string} userId @param {string} uri @param {{ limit?: number }} [options] newest first */
   async revisionsOf(userId, uri, { limit = 32 } = {}) {
     const result = await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri=$2 ORDER BY id DESC LIMIT $3",
       [owner(userId), String(uri), Math.max(1, Math.min(200, Math.trunc(Number(limit)) || 32))]);
-    return result.rows.map(publicRevision);
+    return this.protectRevisions(userId,result.rows.map(publicRevision));
   }
 
   /**
@@ -497,7 +520,7 @@ export class NativeMemoryOverlay {
       WHERE user_id=$1 AND undone_at IS NULL AND actor IN ('user', 'conversation') AND before IS NOT NULL
         AND ((change = 'deleted') OR (change = 'updated' AND after IS NOT NULL AND reason LIKE 'forgotten on the memory page%'))
       ORDER BY id DESC LIMIT $2`, [owner(userId), Math.max(1, Math.min(1_000, Math.trunc(Number(limit)) || 300))]);
-    return result.rows.map(publicRevision);
+    return this.protectRevisions(userId,result.rows.map(publicRevision));
   }
 
   /** The revisions of many files in one read, newest first per file. @param {string} userId @param {readonly string[]} uris */
@@ -508,9 +531,9 @@ export class NativeMemoryOverlay {
     const result = await this.#query(`SELECT * FROM (SELECT r.*, row_number() OVER (PARTITION BY uri ORDER BY id DESC) AS position
       FROM evimed_memory.native_revisions r WHERE user_id=$1 AND uri = ANY($2::text[])) ranked WHERE position <= $3 ORDER BY uri, id DESC`,
     [owner(userId), [...uris], Math.max(1, Math.min(200, perFile))]);
-    for (const row of result.rows) {
+    for (const row of await this.protectRevisions(userId,result.rows.map(publicRevision))) {
       const list = byUri.get(String(row.uri)) ?? [];
-      list.push(publicRevision(row));
+      list.push(row);
       byUri.set(String(row.uri), list);
     }
     return byUri;
@@ -525,14 +548,14 @@ export class NativeMemoryOverlay {
       WHERE user_id=$1 AND ($2::timestamptz IS NULL OR changed_at > $2) AND ($3::text IS NULL OR engine_session = $3) AND actor = ANY($4::text[])
         AND undone_at IS NULL AND ($6::text IS NULL OR uri LIKE $6 || '/%')
       ORDER BY id DESC LIMIT $5`, [owner(userId), since, engineSession, actors, Math.max(1, Math.min(100, Math.trunc(Number(limit)) || 20)), root]);
-    return result.rows.map(publicRevision);
+    return this.protectRevisions(userId,result.rows.map(publicRevision));
   }
 
   /** Exact admission lineage is not the dashboard's bounded recent-changes list.
    * @param {string} userId @param {string} archiveUri */
   async admissionRevisions(userId, archiveUri) {
     const result = await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND archive_uri=$2 ORDER BY id", [owner(userId), archiveUri]);
-    return result.rows.map(publicRevision);
+    return this.protectRevisions(userId,result.rows.map(publicRevision));
   }
 
   /** Every revision of an account inside a range, oldest first: the timeline and the map's events. */
@@ -540,14 +563,14 @@ export class NativeMemoryOverlay {
     const result = await this.#query(`SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1
       AND ($2::timestamptz IS NULL OR changed_at >= $2) AND ($3::timestamptz IS NULL OR changed_at <= $3) ORDER BY id LIMIT $4`,
     [owner(userId), from, to, Math.max(1, Math.min(20_000, limit))]);
-    return result.rows.map(publicRevision);
+    return this.protectRevisions(userId,result.rows.map(publicRevision));
   }
 
   /** @param {string} userId @param {string} id */
   async revision(userId, id) {
     if (!/^\d{1,18}$/.test(String(id))) return null;
     const result = await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND id=$2", [owner(userId), String(id)]);
-    return result.rows[0] ? publicRevision(result.rows[0]) : null;
+    return result.rows[0] ? (await this.protectRevisions(userId,[publicRevision(result.rows[0])]))[0] : null;
   }
 
   /** @param {string} userId @param {string} id */
@@ -565,7 +588,7 @@ export class NativeMemoryOverlay {
    * the history holds, the rest of each text stays.
    * @param {string} userId @param {string} uri @param {readonly string[]} lines
    */
-  async scrubLines(userId, uri, lines) {
+  async scrubLines(userId, uri, lines, {sourceDeleted=false}={}) {
     const prints = new Set(lines.map(lineFingerprint));
     if (!prints.size) return 0;
     const scrub = (/** @type {string | null} */ text) => (text === null ? null
@@ -576,7 +599,7 @@ export class NativeMemoryOverlay {
       const before = scrub(row.before);
       const after = scrub(row.after);
       if (before === row.before && after === row.after) continue;
-      await this.#query("UPDATE evimed_memory.native_revisions SET before=$3, after=$4 WHERE user_id=$1 AND id=$2", [owner(userId), String(row.id), before, after]);
+      await this.#query("UPDATE evimed_memory.native_revisions SET before=$3, after=$4,reason=CASE WHEN $5 THEN reason||' [source-deleted]' ELSE reason END WHERE user_id=$1 AND id=$2", [owner(userId), String(row.id), before, after,sourceDeleted]);
       changed += 1;
     }
     return changed;
@@ -653,6 +676,73 @@ export class NativeMemoryOverlay {
     return null;
   }
 
+  /** Freeze one exact native source scope before any destructive cleanup. A shared engine session alias is never deletion authority. */
+  async conversationSourceScope(userId,projectId,sessionIds,userRoot,projectCreatedAt) {
+    scopedRoot(userRoot);
+    const ids=sessionIds.map(id=>`dsh-${id}`);
+    const commits=await this.#query(`WITH RECURSIVE source AS (
+      SELECT archive_uri,engine_session,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[]) AND left(archive_uri,length($4)+10)=$4||'/sessions/'
+      UNION SELECT c.archive_uri,c.engine_session,c.replayed_as FROM evimed_memory.native_commits c JOIN source s ON c.archive_uri=s.replayed_as WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
+    ) SELECT c.* FROM evimed_memory.native_commits c WHERE c.user_id=$1 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
+      AND (c.engine_session=ANY($3::text[]) OR c.engine_session IN (SELECT engine_session FROM source))`,[owner(userId),projectId,ids,userRoot]);
+    const sessionIdsFound=[...new Set([...ids,...commits.rows.map(row=>String(row.engine_session))])];
+    const registry=userRoot===userRootUri(userId)?(await this.#query('SELECT project_id,project_created_at FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session=ANY($2::text[])',[owner(userId),sessionIdsFound])).rows:[];
+    const origins=(await this.#query(`SELECT o.project_id,o.project_created_at FROM evimed_memory.native_line_origins o WHERE o.user_id=$1 AND left(o.uri,length($2)+1)=$2||'/' AND o.engine_session=ANY($3::text[])`,[owner(userId),userRoot,sessionIdsFound])).rows;
+    const rows=[...commits.rows,...registry,...origins];
+    let verified=!rows.some(row=>row.project_id!==projectId||!row.project_created_at);
+    for(const epoch of new Set(rows.map(row=>row.project_created_at).filter(Boolean))) {
+      if(!(await this.#query('SELECT $1::timestamptz=$2::timestamptz AS same',[epoch,projectCreatedAt])).rows[0].same)verified=false;
+    }
+    if(!verified)throw new HttpError(409,'memory_source_lineage_unverified','The native source session has unknown or conflicting incarnation authority.');
+    return {archiveUris:commits.rows.map(row=>String(row.archive_uri)),engineSessions:[...new Set([...commits.rows.map(row=>String(row.engine_session)),...(registry.length?ids:[])])]};
+  }
+
+  /** Pending extractions and their replay text cannot re-enrol a deliberately deleted source.
+   * @param {string} userId @param {string} projectId @param {string[]} sessionIds */
+  async withdrawConversationSource(userId, projectId, sessionIds, userRoot,projectCreatedAt=null) {
+    const proof=projectCreatedAt?await this.conversationSourceScope(userId,projectId,sessionIds,userRoot,projectCreatedAt):null;
+    scopedRoot(userRoot);
+    const sessions = sessionIds.map(id => `dsh-${id}`);
+    const removed = await this.#query(`WITH RECURSIVE sources AS (
+      SELECT archive_uri,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])
+        AND left(archive_uri,length($4)+10)=$4||'/sessions/'
+      UNION SELECT c.archive_uri,c.replayed_as FROM evimed_memory.native_commits c JOIN sources s ON c.archive_uri=s.replayed_as
+        WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
+    ) UPDATE evimed_memory.native_commits SET native_ingested_at=CASE WHEN state='completed' THEN COALESCE(native_ingested_at,ingested_at,clock_timestamp()) ELSE native_ingested_at END,state='abandoned',pending_text=NULL,error='source_conversation_deleted',updated_at=clock_timestamp()
+      WHERE user_id=$1 AND archive_uri IN (SELECT archive_uri FROM sources) AND ($5::text[] IS NULL OR archive_uri=ANY($5::text[])) RETURNING engine_session`, [owner(userId), projectId, sessions, userRoot,proof?.archiveUris??null]);
+    if (userRoot === userRootUri(userId)) await this.#query(`UPDATE evimed_memory.native_admissions SET state='cancelled',pending_text=NULL,error='source_conversation_deleted',
+      updated_at=clock_timestamp() WHERE user_id=$1 AND project_id=$2 AND engine_session=ANY($3::text[])`, [owner(userId), projectId, sessions]);
+    return [...new Set(removed.rows.map(row => row.engine_session))];
+  }
+
+  /** Raw consolidation receipts are inspected before source scrubbing can remove their inputs. */
+  async consolidationRevisions(userId,userRoot) {
+    scopedRoot(userRoot);
+    const rows=await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND left(uri,length($2)+1)=$2||'/' AND reason LIKE 'consolidation%' ORDER BY id",[owner(userId),userRoot]);
+    return rows.rows.map(publicRevision);
+  }
+  /** Source-bound historical revisions remain relevant after their current origin or file was removed.
+   * @param {string} userId @param {string} projectId @param {string[]} sessionIds @param {string} userRoot */
+  async sourceRevisions(userId, projectId, sessionIds, userRoot,projectCreatedAt=null) {
+    scopedRoot(userRoot);
+    const result = await this.#query(`WITH RECURSIVE sources AS (
+      SELECT archive_uri,engine_session,replayed_as FROM evimed_memory.native_commits WHERE user_id=$1 AND project_id=$2
+        AND engine_session=ANY($3::text[]) AND left(archive_uri,length($4)+10)=$4||'/sessions/'
+        AND ($5::timestamptz IS NULL OR project_created_at::timestamptz=$5::timestamptz OR project_created_at IS NULL AND created_at>=$5::timestamptz AND NOT EXISTS(SELECT 1 FROM evimed_control.projects p WHERE p.user_id=$1 AND p.id=$2 AND p.created_at>$5::timestamptz AND native_commits.created_at>=p.created_at))
+      UNION SELECT c.archive_uri,c.engine_session,c.replayed_as FROM evimed_memory.native_commits c JOIN sources s ON c.archive_uri=s.replayed_as
+        WHERE c.user_id=$1 AND c.project_id=$2 AND left(c.archive_uri,length($4)+10)=$4||'/sessions/'
+        AND ($5::timestamptz IS NULL OR c.project_created_at::timestamptz=$5::timestamptz OR c.project_created_at IS NULL AND c.created_at>=$5::timestamptz AND NOT EXISTS(SELECT 1 FROM evimed_control.projects p WHERE p.user_id=$1 AND p.id=$2 AND p.created_at>$5::timestamptz AND c.created_at>=p.created_at))
+    ) SELECT r.* FROM evimed_memory.native_revisions r LEFT JOIN evimed_memory.native_commits c
+      ON c.user_id=r.user_id AND c.archive_uri=r.archive_uri AND c.engine_session=r.engine_session
+      WHERE r.user_id=$1 AND left(r.uri,length($4)+1)=$4||'/' AND (
+        r.engine_session=ANY($3::text[]) AND COALESCE(r.source_project_id,r.project_id,c.project_id)=$2
+        OR EXISTS(SELECT 1 FROM sources s WHERE s.archive_uri=r.archive_uri AND s.engine_session=r.engine_session)) AND ($5::timestamptz IS NULL OR COALESCE(r.source_project_created_at,CASE WHEN c.created_at<=r.changed_at THEN c.project_created_at END)::timestamptz=$5::timestamptz
+        OR r.source_project_created_at IS NULL AND (c.project_created_at IS NULL OR c.created_at>r.changed_at) AND LEAST(r.changed_at,c.created_at)>=$5::timestamptz
+          AND NOT EXISTS(SELECT 1 FROM evimed_control.projects p WHERE p.user_id=$1 AND p.id=$2 AND p.created_at>$5::timestamptz AND LEAST(r.changed_at,c.created_at)>=p.created_at)) ORDER BY r.id`,
+    [owner(userId),projectId,sessionIds.map(id=>`dsh-${id}`),userRoot,projectCreatedAt]);
+    return result.rows.map(publicRevision);
+  }
+
   // ------------------------------------------------------------ line origins
 
   /**
@@ -660,36 +750,38 @@ export class NativeMemoryOverlay {
    * `origin` is given — each line `after` has and `before` did not is recorded as brought by it (the first row of a line stays: the
    * line's source is the first commit that brought it). With no `origin` (the person's own edit, a restore, a platform check) lines only leave.
    * @param {string} userId @param {string} uri
-   * @param {{ after: string, before?: string, origin?: { revisionId?: string | number | null, engineSession?: string | null, archiveUri?: string | null, projectId?: string | null, at?: string | null } | null }} change
+   * @param {{ after: string, before?: string, origin?: { revisionId?: string | number | null, engineSession?: string | null, archiveUri?: string | null, projectId?: string | null, projectCreatedAt?:string|null, at?: string | null } | null }} change
    */
   async syncOrigins(userId, uri, { after, before = "", origin = null }) {
     const prints = (/** @type {string} */ text) => [...new Set(memoryLines(String(text ?? "").split("\n").filter((line) => !LABEL_LINE.test(line.trim())).join("\n")).map(lineFingerprint))];
     const present = prints(after);
     await this.#query("DELETE FROM evimed_memory.native_line_origins WHERE user_id=$1 AND uri=$2 AND NOT (fingerprint = ANY($3::text[]))", [owner(userId), String(uri), present]);
     if (!origin) return;
+    let projectCreatedAt=origin.projectCreatedAt;
+    if(projectCreatedAt===undefined)projectCreatedAt=origin.projectId?(await this.#query('SELECT created_at::text AS created FROM evimed_control.projects WHERE user_id=$1 AND id=$2',[owner(userId),origin.projectId])).rows[0]?.created??null:null;
     const had = new Set(prints(before));
     const brought = present.filter((print) => !had.has(print));
     if (!brought.length) return;
-    await this.#query(`INSERT INTO evimed_memory.native_line_origins (user_id, uri, fingerprint, revision_id, engine_session, archive_uri, project_id, added_at)
-      SELECT $1, $2, print, $4::bigint, $5, $6, $7, COALESCE($8::timestamptz, clock_timestamp()) FROM unnest($3::text[]) AS brought(print)
+    await this.#query(`INSERT INTO evimed_memory.native_line_origins (user_id, uri, fingerprint, revision_id, engine_session, archive_uri, project_id, added_at,project_created_at)
+      SELECT $1, $2, print, $4::bigint, $5, $6, $7, COALESCE($8::timestamptz, clock_timestamp()),$9 FROM unnest($3::text[]) AS brought(print)
       ON CONFLICT (user_id, uri, fingerprint) DO NOTHING`,
-    [owner(userId), String(uri), brought, origin.revisionId == null ? null : String(origin.revisionId), origin.engineSession ?? null, origin.archiveUri ?? null, origin.projectId ?? null, origin.at ?? null]);
+    [owner(userId), String(uri), brought, origin.revisionId == null ? null : String(origin.revisionId), origin.engineSession ?? null, origin.archiveUri ?? null, origin.projectId ?? null, origin.at ?? null,projectCreatedAt]);
   }
 
   /**
    * The origins of the lines of these files, by file and line fingerprint.
    * @param {string} userId @param {readonly string[]} uris
-   * @returns {Promise<Map<string, Map<string, { revisionId: string | null, engineSession: string | null, archiveUri: string | null, projectId: string | null, addedAt: string | null }>>>}
+   * @returns {Promise<Map<string, Map<string, { revisionId: string | null, engineSession: string | null, archiveUri: string | null, projectId: string | null, projectCreatedAt:string|null, addedAt: string | null }>>>}
    */
   async originsOf(userId, uris) {
     /** @type {Map<string, Map<string, any>>} */
     const byUri = new Map();
     if (!uris.length) return byUri;
-    const result = await this.#query("SELECT * FROM evimed_memory.native_line_origins WHERE user_id=$1 AND uri = ANY($2::text[])", [owner(userId), [...uris]]);
+    const result = await this.#query("SELECT o.*,COALESCE(o.project_id,c.project_id) AS project_id,COALESCE(o.project_created_at,CASE WHEN c.created_at<=o.added_at THEN c.project_created_at END) AS source_epoch FROM evimed_memory.native_line_origins o LEFT JOIN evimed_memory.native_commits c ON c.user_id=o.user_id AND c.archive_uri=o.archive_uri AND c.engine_session=o.engine_session WHERE o.user_id=$1 AND o.uri = ANY($2::text[])", [owner(userId), [...uris]]);
     for (const row of result.rows) {
       const lines = byUri.get(String(row.uri)) ?? new Map();
       lines.set(String(row.fingerprint), { revisionId: row.revision_id == null ? null : String(row.revision_id), engineSession: row.engine_session ?? null,
-        archiveUri: row.archive_uri ?? null, projectId: row.project_id ?? null, addedAt: instant(row.added_at) });
+        archiveUri: row.archive_uri ?? null, projectId: row.project_id ?? null, projectCreatedAt:row.source_epoch??null, addedAt: instant(row.added_at) });
       byUri.set(String(row.uri), lines);
     }
     return byUri;
@@ -711,7 +803,7 @@ export class NativeMemoryOverlay {
   async revisionsForIndex(userId, { afterId = "0", limit = 500 } = {}) {
     const result = await this.#query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND id > $2::bigint AND undone_at IS NULL ORDER BY id LIMIT $3",
       [owner(userId), /^\d{1,18}$/.test(String(afterId)) ? String(afterId) : "0", Math.max(1, Math.min(2_000, limit))]);
-    return result.rows.map(publicRevision);
+    return this.protectRevisions(userId,result.rows.map(publicRevision));
   }
 
   // ------------------------------------------------------------ last recalled
@@ -814,7 +906,10 @@ export class NativeMemoryOverlay {
     const result = await this.#query("SELECT uri FROM evimed_memory.native_files WHERE user_id=$1 AND sensitive ORDER BY uri LIMIT $2",
       [owner(userId), bound + 1]);
     if (result.rows.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete sensitive-file set exceeds its safe recall bound.");
-    return result.rows.map((/** @type {any} */ row) => String(row.uri));
+    const withdrawn = this.sourceDeletion ? await this.sourceDeletion.hiddenMemoryUris(userId) : [];
+    const uris = [...new Set([...result.rows.map(row => String(row.uri)), ...withdrawn])];
+    if (uris.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete privacy set exceeds its safe recall bound.");
+    return uris;
   }
 
   /**
@@ -846,12 +941,32 @@ export class NativeMemoryOverlay {
   }
 
   /** The gateway forwarded a conversation's first message: the project it is held in is recorded, once. @param {string} userId @param {string} engineSession @param {string | null} projectId */
-  async noteSession(userId, engineSession, projectId) {
-    await this.#query(`INSERT INTO evimed_memory.native_sessions (user_id, engine_session, project_id) VALUES ($1, $2, $3)
-      ON CONFLICT (user_id, engine_session) DO UPDATE SET project_id = COALESCE(evimed_memory.native_sessions.project_id, EXCLUDED.project_id)`,
-    [owner(userId), String(engineSession), projectId]);
+  async noteSession(userId, engineSession, projectId,projectCreatedAt=undefined) {
+    if(projectCreatedAt===undefined)projectCreatedAt=projectId?(await this.#query('SELECT created_at::text AS created FROM evimed_control.projects WHERE user_id=$1 AND id=$2',[owner(userId),projectId])).rows[0]?.created??null:null;
+    const result=await this.#query(`INSERT INTO evimed_memory.native_sessions AS held (user_id, engine_session, project_id,project_created_at) VALUES ($1, $2, $3,$4)
+      ON CONFLICT (user_id, engine_session) DO UPDATE SET project_id=held.project_id, project_created_at=COALESCE(held.project_created_at,EXCLUDED.project_created_at)
+      -- A binding made before the incarnation stamp existed (NULL) takes the incoming one; a stamped one must match exactly.
+      WHERE held.project_id IS NOT DISTINCT FROM EXCLUDED.project_id AND (held.project_created_at IS NULL OR held.project_created_at::timestamptz IS NOT DISTINCT FROM EXCLUDED.project_created_at::timestamptz) RETURNING project_id`,
+    [owner(userId), String(engineSession), projectId,projectCreatedAt]);
+    if(!result.rows.length)throw new HttpError(403,'memory_scope_denied','The native session belongs to another project incarnation.');
   }
 
+  /** A read may inspect an existing exact binding but never create or reassign it. */
+  async assertSessionScope(userId,engineSession,projectId,projectCreatedAt=undefined) {
+    if(projectCreatedAt===undefined)projectCreatedAt=(await this.#query('SELECT created_at::text AS created FROM evimed_control.projects WHERE user_id=$1 AND id=$2',[owner(userId),projectId])).rows[0]?.created??null;
+    const result=await this.#query('SELECT 1 FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session=$2 AND project_id=$3 AND project_created_at::timestamptz IS NOT DISTINCT FROM $4::timestamptz',[owner(userId),engineSession,projectId,projectCreatedAt]);
+    // A binding written before the stamp existed takes the project's current one (the same exact-project rule, written once).
+    if(!result.rows.length&&projectCreatedAt)result.rows=(await this.#query('UPDATE evimed_memory.native_sessions SET project_created_at=$4 WHERE user_id=$1 AND engine_session=$2 AND project_id=$3 AND project_created_at IS NULL RETURNING 1',[owner(userId),engineSession,projectId,projectCreatedAt])).rows;
+    if(!result.rows.length)throw new HttpError(403,'memory_scope_denied','The native session scope is unavailable.');
+  }
+
+  async projectEpochOfSession(userId,engineSession,{userRoot=userRootUri(userId)}={}) {
+    const root=scopedRoot(userRoot);const result=await this.#query(`WITH found AS (
+      SELECT project_id,project_created_at FROM evimed_memory.native_sessions WHERE user_id=$1 AND engine_session=$2 AND $4::boolean
+      UNION ALL SELECT project_id,project_created_at FROM evimed_memory.native_commits WHERE user_id=$1 AND engine_session=$2 AND left(archive_uri,length($3)+10)=$3||'/sessions/')
+      SELECT min(f.project_created_at) AS project_created_at FROM found f LEFT JOIN evimed_control.projects p ON p.user_id=$1 AND p.id=f.project_id
+      HAVING count(DISTINCT f.project_created_at::timestamptz)=1 AND bool_and(f.project_created_at IS NOT NULL AND p.created_at=f.project_created_at::timestamptz)`,[owner(userId),engineSession,root,root===userRootUri(userId)]);return result.rows[0]?.project_created_at??null;
+  }
   /** The project an engine session was held in: as noted when it began, else as its earlier commits recorded. @param {string} userId @param {string} engineSession */
   async projectOfSession(userId, engineSession, { userRoot = userRootUri(userId) } = {}) {
     const root = scopedRoot(userRoot);

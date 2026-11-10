@@ -78,19 +78,22 @@ vcr_sim_continuous <- function(n_treat, n_control, delta, sd = 1, rho = 0,
 #' reference DGM is homoscedastic and the analytic power formula this is
 #' checked against is the pooled one). `alpha` is the total; the interval and
 #' the decision spend `alpha / sided` per tail.
-vcr_analyse_ttest <- function(data, alpha = 0.025, sided = 1) {
+#' `null` (T1) is the difference the null hypothesis states: 0, or minus the margin of a non-inferiority test, which rejects on the upper
+#' tail only (a margin has no lower tail), or PLUS the margin when a lower value is better, which rejects on the lower tail only. The
+#' statistic is oriented either way: positive favours the treatment against the margin.
+vcr_analyse_ttest <- function(data, alpha = 0.025, sided = 1, null = 0) {
   sided <- vcr_check_sided(sided)
   y1 <- data$y[data$arm == 1L]; y0 <- data$y[data$arm == 0L]
   n1 <- length(y1); n0 <- length(y0)
   est <- mean(y1) - mean(y0)
   sp2 <- ((n1 - 1) * var(y1) + (n0 - 1) * var(y0)) / (n1 + n0 - 2)
   se <- sqrt(sp2 * (1 / n1 + 1 / n0))
-  tstat <- est / se
+  tstat <- (if (null > 0) null - est else est - null) / se
   df <- n1 + n0 - 2
-  p <- if (sided == 1) pt(tstat, df, lower.tail = FALSE) else 2 * pt(-abs(tstat), df)
+  p <- if (sided == 1 || null != 0) pt(tstat, df, lower.tail = FALSE) else 2 * pt(-abs(tstat), df)
   crit <- qt(1 - alpha / sided, df)
   c(estimate = est, se = se, statistic = tstat, p = p,
-    reject = as.numeric(if (sided == 1) tstat > crit else abs(tstat) > crit),
+    reject = as.numeric(if (sided == 1 || null != 0) tstat > crit else abs(tstat) > crit),
     ci_low = est - crit * se, ci_high = est + crit * se)
 }
 
@@ -159,20 +162,29 @@ vcr_binary_treatment_rate <- function(p_control, p_treat = NULL, risk_difference
 #' Risk difference with a Wald interval on the unpooled variance, and the
 #' pooled-variance score test for the hypothesis (the test the two-proportion
 #' sample-size formula is derived from).
-vcr_analyse_risk_difference <- function(data, alpha = 0.025, sided = 1) {
+#' `null` (T1): minus the margin of a non-inferiority test (plus the margin when a lower rate is better), whose standard error under the null
+#' is Farrington & Manning's, from the rates restricted to that difference (`vcr_fm_restricted`); one-sided, as `vcr_analyse_ttest`.
+vcr_analyse_risk_difference <- function(data, alpha = 0.025, sided = 1, null = 0) {
   sided <- vcr_check_sided(sided)
   y1 <- data$y[data$arm == 1L]; y0 <- data$y[data$arm == 0L]
   n1 <- length(y1); n0 <- length(y0)
   p1 <- mean(y1); p0 <- mean(y0)
   est <- p1 - p0
   se <- sqrt(p1 * (1 - p1) / n1 + p0 * (1 - p0) / n0)
-  pbar <- (sum(y1) + sum(y0)) / (n1 + n0)
-  se0 <- sqrt(pbar * (1 - pbar) * (1 / n1 + 1 / n0))
-  z <- if (se0 > 0) est / se0 else 0
-  p <- if (sided == 1) pnorm(z, lower.tail = FALSE) else 2 * pnorm(-abs(z))
+  if (null != 0) {
+    tilde <- vcr_fm_restricted(p1, p0, n1, n0, null)
+    se0 <- sqrt(tilde[["treat"]] * (1 - tilde[["treat"]]) / n1 + tilde[["control"]] * (1 - tilde[["control"]]) / n0)
+    away <- if (null > 0) null - est else est - null     # a positive null (a lower rate is better) is tested on the lower tail
+    z <- if (se0 > 0) away / se0 else if (away > 0) Inf else 0
+  } else {
+    pbar <- (sum(y1) + sum(y0)) / (n1 + n0)
+    se0 <- sqrt(pbar * (1 - pbar) * (1 / n1 + 1 / n0))
+    z <- if (se0 > 0) est / se0 else 0
+  }
+  p <- if (sided == 1 || null != 0) pnorm(z, lower.tail = FALSE) else 2 * pnorm(-abs(z))
   crit <- qnorm(1 - alpha / sided)
   c(estimate = est, se = se, statistic = z, p = p,
-    reject = as.numeric(if (sided == 1) z > crit else abs(z) > crit),
+    reject = as.numeric(if (sided == 1 || null != 0) z > crit else abs(z) > crit),
     ci_low = est - crit * se, ci_high = est + crit * se)
 }
 
@@ -398,24 +410,30 @@ vcr_accrual_times <- function(n, accrual) .vcr_accrual_from_u(runif(n), accrual)
 #' the engine does not depend on `survival`'s tie handling changing under it;
 #' `tests/numeric/N02` cross-checks the operating characteristics against the
 #' analytic Schoenfeld number.
-vcr_analyse_logrank <- function(data, alpha = 0.025, sided = 1) {
+#' `null_hr` (T1): the margin of a non-inferiority test. The statistic is then the score test of that hazard ratio (the observed events of
+#' the treated arm against what the margin predicts from the at-risk counts), one-sided like the margin; `estimate` and `se` are the
+#' one-step estimate of the log hazard ratio as ever.
+vcr_analyse_logrank <- function(data, alpha = 0.025, sided = 1, null_hr = 1) {
   sided <- vcr_check_sided(sided)
   ord <- order(data$time, -data$status)
   time <- data$time[ord]; status <- data$status[ord]; arm <- data$arm[ord]
   n <- length(time)
   at_risk1 <- sum(arm == 1L); at_risk <- n
-  O1 <- 0; E1 <- 0; V <- 0
+  O1 <- 0; E1 <- 0; V <- 0; Ep <- 0; Vp <- 0   # Ep, Vp: the expectation and variance at a hazard ratio of 1, for the estimate beside a margin test
   i <- 1L
   while (i <= n) {
     j <- i
     while (j < n && time[j + 1L] == time[i]) j <- j + 1L
     d <- sum(status[i:j]); d1 <- sum(status[i:j] & arm[i:j] == 1L)
     if (d > 0 && at_risk > 1 && at_risk1 > 0 && at_risk1 < at_risk) {
-      e <- d * at_risk1 / at_risk
-      v <- d * (at_risk1 / at_risk) * (1 - at_risk1 / at_risk) * (at_risk - d) / (at_risk - 1)
+      share <- if (null_hr == 1) at_risk1 / at_risk else null_hr * at_risk1 / (null_hr * at_risk1 + at_risk - at_risk1)
+      e <- if (null_hr == 1) d * at_risk1 / at_risk else d * share   # (the superiority arithmetic is kept to the bit)
+      v <- d * share * (1 - share) * (at_risk - d) / (at_risk - 1)
       O1 <- O1 + d1; E1 <- E1 + e; V <- V + v
+      if (null_hr != 1) { Ep <- Ep + d * at_risk1 / at_risk; Vp <- Vp + d * (at_risk1 / at_risk) * (1 - at_risk1 / at_risk) * (at_risk - d) / (at_risk - 1) }
     } else if (d > 0) {
       O1 <- O1 + d1; E1 <- E1 + d * at_risk1 / max(at_risk, 1)
+      if (null_hr != 1) Ep <- Ep + d * at_risk1 / max(at_risk, 1)
     }
     removed <- j - i + 1L
     at_risk1 <- at_risk1 - sum(arm[i:j] == 1L)
@@ -425,12 +443,13 @@ vcr_analyse_logrank <- function(data, alpha = 0.025, sided = 1) {
   z <- if (V > 0) (O1 - E1) / sqrt(V) else 0
   # log HR by the one-step (Peto) estimate; the sign convention is treatment
   # relative to control, so a protective effect is negative.
-  loghr <- if (V > 0) (O1 - E1) / V else 0
-  se <- if (V > 0) 1 / sqrt(V) else Inf
-  p <- if (sided == 1) pnorm(z, lower.tail = TRUE) else 2 * pnorm(-abs(z))
+  if (null_hr == 1) { Ep <- E1; Vp <- V }
+  loghr <- if (Vp > 0) (O1 - Ep) / Vp else 0
+  se <- if (Vp > 0) 1 / sqrt(Vp) else Inf
+  p <- if (sided == 1 || null_hr != 1) pnorm(z, lower.tail = TRUE) else 2 * pnorm(-abs(z))
   crit <- qnorm(1 - alpha / sided)
   c(estimate = loghr, se = se, statistic = z, p = p,
-    reject = as.numeric(if (sided == 1) z < -crit else abs(z) > crit),
+    reject = as.numeric(if (sided == 1 || null_hr != 1) z < -crit else abs(z) > crit),
     events = sum(status), events_treat = O1,
     ci_low = loghr - crit * se, ci_high = loghr + crit * se)
 }
@@ -508,6 +527,49 @@ vcr_analyse_maxcombo <- function(data, alpha = 0.025, sided = 1) {
   stat <- if (sided == 1) min(fh$z) else fh$z[which.max(abs(fh$z))]
   p <- vcr_maxcombo_p(stat, (fh$corr + t(fh$corr)) / 2, sided)
   base[c("statistic", "p", "reject")] <- c(stat, p, as.numeric(p < alpha))
+  base
+}
+
+# --- the modestly weighted log-rank test (algorithm round T12) ----------------------------------------------------------------------
+#
+# Hidden knowledge:
+#
+# - **The weight is 1 / max(S(t-), s*) of the pooled Kaplan-Meier curve S, and s* is the one parameter (Magirr and Burman 2019).** Early
+#   differences count as in the log-rank test (weight 1 while S is above s*) and later ones count more, up to 1 / s* times as much: for the
+#   default s* = 0.5 the weight at most doubles. That is what it protects against: a test that weights the late follow-up heavily (a
+#   Fleming-Harrington (0,1) weight, MaxCombo) gains power when the effect starts late, and rejects too often when the treatment is WORSE early
+#   and equal later, because it reads the early harm as a late difference. The cap on the weight is the guard. Where the effect does not start
+#   late it loses little against the log-rank test; it is not a replacement for it and is never a default.
+# - **The statistic has the log-rank's sign and shape**: negative is protective, `statistic` is the standardized weighted sum of observed
+#   minus expected events of the treated arm, `estimate` is the log-rank test's one-step log hazard ratio and is only descriptive.
+
+#' The standardized modestly weighted statistic from event times and arms: one z, negative in favour of the treatment arm.
+vcr_mw_statistic <- function(time, status, arm, s_star = 0.5) {
+  ts <- sort(unique(time[status == 1L]))
+  if (!length(ts)) return(NA_real_)
+  tm1 <- sort(time[arm == 1L]); tm <- sort(time)
+  n <- length(tm) - findInterval(ts, tm, left.open = TRUE)
+  n1 <- length(tm1) - findInterval(ts, tm1, left.open = TRUE)
+  at <- match(time[status == 1L], ts)
+  d <- tabulate(at, length(ts))
+  d1 <- tabulate(at[arm[status == 1L] == 1L], length(ts))
+  s_minus <- c(1, cumprod(1 - d / n))[seq_along(ts)]
+  e1 <- d * n1 / n
+  v <- ifelse(n > 1, d * (n1 / n) * (1 - n1 / n) * (n - d) / pmax(n - 1, 1), 0)
+  w <- 1 / pmax(s_minus, s_star)
+  sig2 <- sum(w^2 * v)
+  if (!(sig2 > 0)) return(NA_real_)
+  sum(w * (d1 - e1)) / sqrt(sig2)
+}
+
+#' The modestly weighted test of a two-arm time-to-event trial, in the log-rank's own return shape.
+vcr_analyse_modestly_weighted <- function(data, alpha = 0.025, sided = 1, s_star = 0.5) {
+  sided <- vcr_check_sided(sided)
+  base <- vcr_analyse_logrank(data, alpha, sided)
+  z <- vcr_mw_statistic(data$time, data$status, data$arm, s_star)
+  if (!is.finite(z)) { base[c("statistic", "p", "reject")] <- c(0, 1, 0); return(base) }
+  p <- if (sided == 1) stats::pnorm(z) else 2 * stats::pnorm(-abs(z))
+  base[c("statistic", "p", "reject")] <- c(z, p, as.numeric(p < alpha))
   base
 }
 

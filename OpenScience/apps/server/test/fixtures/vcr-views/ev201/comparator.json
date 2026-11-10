@@ -556,7 +556,26 @@
   ],
   "prior": [],
   "operatingCharacteristics": null,
-  "premises": [],
+  "premises": [
+    {
+      "key": "origin:reconstructed",
+      "label": "对照组的数据",
+      "value": "对照组的个体数据是按发表的生存曲线重建的伪个体（共 801 个），不是真实观察到的人；样本量按重建的数据算，不当作真实患者数。",
+      "source": "literature",
+      "decisive": true,
+      "reason": null
+    }
+  ],
+  "origins": {
+    "origin": "reconstructed",
+    "origins": [
+      "reconstructed"
+    ],
+    "observedPeople": 0,
+    "reconstructedPseudoPatients": 801,
+    "simulatedMembers": 0,
+    "modelConditional": false
+  },
   "limits": [
     {
       "key": "balance",
@@ -568,6 +587,13 @@
     }
   ],
   "robustness": null,
+  "biasAnalysis": null,
+  "borrowing": null,
+  "prognosticModels": [],
+  "trim": null,
+  "imputation": null,
+  "targetTrialEmulation": null,
+  "stcComparison": null,
   "gaps": {
     "title": "真实外部对照：不可估计",
     "needs": "需要 T2 完整治疗与纵向结局",

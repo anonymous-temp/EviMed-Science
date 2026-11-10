@@ -1,0 +1,9 @@
+{
+  "documents": 24,
+  "lines": 172,
+  "nonBlankLines": 148,
+  "p50": 310,
+  "p90": 994,
+  "max": 1384,
+  "over400": 51
+}

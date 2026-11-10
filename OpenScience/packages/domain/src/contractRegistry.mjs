@@ -51,7 +51,7 @@ const NATIVE_DATA_CONTRACTS = new Set(['statistical-analysis-package', 'dataset-
  * an unregistered id (`vocabulary.test.mjs`, "every check id a contract module
  * raises is on the one axis…"). A comment cannot fail.
  *
- * Some findings still carry no `check` at all — the JSON-shaped autopilot kinds
+ * Some findings still carry no `check` at all — the JSON-shaped kinds
  * and the shared `deliverable_rejected` paths. Those are counted as
  * unattributed rather than bucketed under a default that would read as
  * coverage. The line this list holds is narrower and checkable: an id that is
@@ -922,15 +922,9 @@ const VALIDATORS = Object.freeze({
   'vcr-cohort-snapshot': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrCohortFindings(input)),
   'vcr-matching-assessment': (input) => validateReportShaped(input, proseFilesOf(input)),
   'clinical-decision-brief': (input) => validateReportShaped(input, proseFilesOf(input)),
-  'episode-plan': (input) => validateJsonShaped(input, { file: 'episode-plan.json', check: checkEpisodePlan }),
-  'agenda-delta': (input) => validateJsonShaped(input, { file: 'agenda-delta.json', check: checkAgendaDelta }),
-  'analysis-plan': (input) => validateJsonShaped(input, { file: 'analysis-plan.json', check: checkAnalysisPlan }),
-  'reproducibility-pack': (input) => validateJsonShaped(input, { file: 'reproducibility-pack.json', check: checkReproducibilityPack }),
   'surveillance-diff': (input) => validateJsonShaped(input, { file: 'surveillance-diff.json', check: checkSurveillanceDiff }),
   'hypothesis-set': (input) => validateJsonShaped(input, { file: 'hypothesis-set.json', check: checkHypothesisSet }),
   'method-candidate': validateMethodCandidatePackage,
-  'evolution-research-card': (input) => validateEvolutionPackage(input, 'research-card.json', false),
-  'evolution-tool-candidate': (input) => validateEvolutionPackage(input, 'tool-candidate.json', true),
   'method-relations': validateMethodRelationsPackage,
 })
 
@@ -1027,70 +1021,6 @@ function citedSourceIssues(input) {
     ...audit.unretrieved.slice(0, UNRECORDED_LIMIT).map((entry) => issue('cited_source_unretrieved', unretrievedCitationMessage(entry),
       { severity: 'advisory', path: entry.path, line: entry.line, check: 'cited-sources-recorded' })),
   ]
-}
-
-/** @param {any} value @returns {string[]} */
-function checkEpisodePlan(value) {
-  const errors = []
-  if (!isRecord(value)) return ['must be an object.']
-  const tasks = Array.isArray(value.tasks) ? value.tasks : null
-  if (!tasks || !tasks.length) errors.push('tasks[] must be a non-empty array.')
-  for (const task of tasks ?? []) {
-    if (!isRecord(task)) { errors.push('each task must be an object.'); continue }
-    if (!task.type) errors.push('each task needs a type.')
-    if (!task.costClass) errors.push('each task needs a costClass.')
-    if (!Array.isArray(task.inputs)) errors.push('each task needs inputs[].')
-  }
-  return errors
-}
-
-/** @param {any} value @returns {string[]} */
-function checkAgendaDelta(value) {
-  const errors = []
-  if (!isRecord(value)) return ['must be an object.']
-  const claims = Array.isArray(value.claims) ? value.claims : []
-  for (const claim of claims) {
-    if (!isRecord(claim)) { errors.push('each claim must be an object.'); continue }
-    if (!claim.statement) errors.push('each claim needs a statement.')
-    if (!['direct', 'synthesized', 'derived'].includes(String(claim.type))) errors.push(`claim type "${claim.type}" must be direct / synthesized / derived.`)
-    if (claim.tier !== 'unverified') errors.push('a new claim must enter as tier "unverified"; only a verification episode raises it.')
-    if (!Array.isArray(claim.sources) || !claim.sources.length) errors.push('each claim needs sources[].')
-    if (!isRecord(claim.provenance)) errors.push('each claim needs provenance.')
-    if (claim.type !== 'direct' && !claim.what_would_change) errors.push('a synthesized or derived claim must say what would change it.')
-  }
-  for (const hypothesis of Array.isArray(value.hypotheses) ? value.hypotheses : []) {
-    if (!isRecord(hypothesis)) { errors.push('each hypothesis must be an object.'); continue }
-    if (!hypothesis.statement) errors.push('each hypothesis needs a statement.')
-    if (!Array.isArray(hypothesis.evidence_for) || !Array.isArray(hypothesis.evidence_against)) {
-      errors.push('each hypothesis needs evidence_for[] and evidence_against[].')
-    }
-  }
-  if (!claims.length && !Array.isArray(value.hypotheses)) errors.push('a delta must carry claims[] or hypotheses[], even when empty.')
-  return errors
-}
-
-/** @param {any} value @returns {string[]} */
-function checkAnalysisPlan(value) {
-  const errors = []
-  if (!isRecord(value)) return ['must be an object.']
-  if (!value.hypothesis_id) errors.push('needs hypothesis_id.')
-  if (!Array.isArray(value.variables) || !value.variables.length) errors.push('needs variables[].')
-  if (!value.model) errors.push('needs a model.')
-  if (!value.multiplicity) errors.push('needs a multiplicity correction.')
-  if (!value.stopping) errors.push('needs a stopping rule.')
-  if (!value.primary_endpoint) errors.push('needs exactly one primary_endpoint.')
-  return errors
-}
-
-/** @param {any} value @returns {string[]} */
-function checkReproducibilityPack(value) {
-  const errors = []
-  if (!isRecord(value)) return ['must be an object.']
-  for (const field of ['code_path', 'image_digest', 'dataset_partition_id', 'random_seed', 'run_id']) {
-    if (!value[field]) errors.push(`needs ${field}.`)
-  }
-  if (!Array.isArray(value.results) || !value.results.length) errors.push('needs results[].')
-  return errors
 }
 
 /** @param {any} value @returns {string[]} */
@@ -1692,36 +1622,4 @@ export function layeredIssues(issues) {
     advisory: issues.filter((item) => item.severity === 'advisory'),
     optional: issues.filter((item) => item.severity === 'optional'),
   }
-}
-
-/** Internal development artifacts: schema findings are advisory, never research-delivery vetoes.
- * @param {GateInput} input @param {string} file @param {boolean} candidate @returns {GateVerdict} */
-function validateEvolutionPackage(input, file, candidate) {
-  const value = json(input, file)
-  /** @type {GateIssue[]} */
-  const issues = []
-  /** @param {string} message */
-  const finding = message => issues.push(issue('deliverable_rejected', `${file}: ${message}`, { path: file, check: 'structured-output', severity: 'advisory' }))
-  if (!isRecord(value)) finding('Expected a JSON object.')
-  else {
-    if (typeof value.id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(value.id)) finding('A canonical candidate identity is required.')
-    if (!['E','P','M','U','X','T'].includes(String(value.track))) finding('A supported research track is required.')
-    if (!['skill','isolated-tool','engine-pr'].includes(String(value.publicationKind))) finding('A supported publication form is required.')
-    if (candidate && value.status === 'impossible') {
-      if (typeof value.reason !== 'string' || !value.reason.trim()) finding('Faithful impossibility must name what is missing.')
-    } else if (candidate) {
-      const inline = isRecord(value.files) ? value.files : {}
-      const references = isRecord(value.filePaths) ? value.filePaths : {}
-      const safePath = (/** @type {unknown} */ resource) => typeof resource === 'string' && /^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+$/.test(resource) && !resource.split('/').some(part => part === '.' || part === '..')
-      if ((value.files !== undefined && !isRecord(value.files)) || (value.filePaths !== undefined && !isRecord(value.filePaths)) || (!Object.keys(inline).length && !Object.keys(references).length)) finding('The candidate must carry reusable artifact files or delivered file references.')
-      for (const [name, artifactText] of Object.entries(inline)) if (!safePath(name) || typeof artifactText !== 'string' || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(artifactText)) finding('Artifact paths must be relative regular UTF-8 resources.')
-      for (const [name, reference] of Object.entries(references)) if (!safePath(name) || !safePath(reference) || Object.hasOwn(inline,name)) finding('Delivered artifact references must use safe relative paths and distinct artifact keys.')
-      if (value.publicationKind === 'isolated-tool' && !/^scripts\/[A-Za-z0-9_-]+\.py:[A-Za-z_][A-Za-z0-9_]*$/.test(String(value.entrypoint ?? ''))) finding('An isolated implementation must name its script and callable.')
-    } else {
-      if (typeof value.goal !== 'string' || !value.goal.trim()) finding('A development goal is required.')
-      if (!Array.isArray(value.developmentCases)) finding('Visible development cases must be listed separately.')
-    }
-    if (Object.hasOwn(value, 'hiddenCases') || Object.hasOwn(value, 'scoringRules') || Object.hasOwn(value, 'goldAnswers')) finding('Evaluator assets do not belong in a development artifact.')
-  }
-  return { ok: true, contractKind: input.contractKind, issues, metrics: {}, errorCode: null }
 }

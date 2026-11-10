@@ -33,10 +33,11 @@
 
 import { createHash } from "node:crypto";
 import { runOwnsRuntimeScope } from "./runUsage.mjs";
+import { collectedRunScope } from './runLearningScope.mjs';
 import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { SOCKET_TOOL_NAMES, identifierShapesIn } from "@evimed/domain";
+import { SOCKET_TOOL_NAMES, methodSourceIdentifierShapesIn } from "@evimed/domain";
 import { delegatedChildrenOf, socketToolResult } from "./dshRuntimeAdapter.mjs";
 import { HttpError, openScopedFileNoFollow, readStableFileHandle, readTextFileNoFollow, safeId, withProjectStorageMutation, writeFileAtomicNoFollow } from "./security.mjs";
 
@@ -392,10 +393,12 @@ function describeSession(session) {
  *
  * Separate from writing so a test can assert the bytes without a filesystem,
  * and so the size cap is applied to the thing that is actually stored.
- * @param {{ runId: string, capturedAt: string, sessions: CollectedSession[], maxBytes?: number, ownedChildSessionIds?:string[] }} input
+ * @param {{ runId: string, capturedAt: string, sessions: CollectedSession[], maxBytes?: number, ownedChildSessionIds?:string[], run?:any, childTurnOwnership?:readonly any[] }} input
  * @returns {{ text: string, header: any, messages: number }}
  */
-export function serializeRunTranscript({ runId, capturedAt, sessions, maxBytes = TRANSCRIPT_MAX_BYTES, ownedChildSessionIds = undefined }) {
+export function serializeRunTranscript({ runId, capturedAt, sessions, maxBytes = TRANSCRIPT_MAX_BYTES, ownedChildSessionIds = undefined, run = undefined, childTurnOwnership = [] }) {
+  const learning = run ? collectedRunScope(run, sessions, { ownedChildSessionIds: ownedChildSessionIds ?? [], childTurnOwnership }) : null;
+  const claimedChildren = learning?.ownedChildSessionIds ?? ownedChildSessionIds;
   /** @type {TranscriptSessionRecord[]} */
   const records = [];
   /** @type {TranscriptGap[]} */
@@ -405,7 +408,7 @@ export function serializeRunTranscript({ runId, capturedAt, sessions, maxBytes =
   let messages = 0;
   for (const session of sessions) {
     const described = describeSession(session);
-    records.push(described.record);
+    records.push({ ...described.record, ...(learning?.metadata.get(session.sessionId) ?? {}) });
     missing.push(...described.gaps);
     for (const message of session.transcript?.messages ?? []) {
       lines.push(JSON.stringify({ sessionId: session.sessionId, ...message }));
@@ -431,7 +434,7 @@ export function serializeRunTranscript({ runId, capturedAt, sessions, maxBytes =
   let kept = lines.length;
   const headerFor = () => ({
     schemaVersion: TRANSCRIPT_SCHEMA_VERSION,
-    ...(ownedChildSessionIds === undefined ? {} : { runChildSessionIds: [...new Set(ownedChildSessionIds)].slice(0, 64) }),
+    ...(claimedChildren === undefined ? {} : { runChildSessionIds: [...new Set(claimedChildren)].slice(0, 64) }),
     runId,
     capturedAt,
     completeness: completenessOf(records, missing),
@@ -552,12 +555,13 @@ function completenessOf(records, missing) {
 /**
  * Write one run's transcript and return the receipt the ledger records.
  *
- * @param {{ project: any, run: { id: string, sessionId: string }, sessions: CollectedSession[], now?: Date, maxBytes?: number, ownedChildSessionIds?:string[] }} input
+ * @param {{ project: any, run: any, sessions: CollectedSession[], now?: Date, maxBytes?: number, ownedChildSessionIds?:string[], childTurnOwnership?:readonly any[] }} input
  * @returns {Promise<TranscriptReceipt>}
  */
-export async function persistRunTranscript({ project, run, sessions, now = new Date(), maxBytes = TRANSCRIPT_MAX_BYTES, ownedChildSessionIds = undefined }) {
+export async function persistRunTranscript({ project, run, sessions, now = new Date(), maxBytes = TRANSCRIPT_MAX_BYTES, ownedChildSessionIds = undefined, childTurnOwnership = [] }) {
   const { text, header, messages } = serializeRunTranscript({
     runId: run.id,
+    run, childTurnOwnership,
     capturedAt: now.toISOString(),
     ownedChildSessionIds,
     sessions,
@@ -691,7 +695,7 @@ function stringLeaves(value, into = []) {
  * The excerpt a distillation run is allowed to see.
  *
  * Two filters, both of which are the reason this lives here rather than in the
- * distiller: a message carrying a credential or an identifier by SHAPE (`identifierShapesIn`: an ID number, a phone, a card, an e-mail,
+ * distiller: a message carrying a credential or an identifier by SHAPE (`methodSourceIdentifierShapesIn`: an ID number, a phone, a card, an e-mail,
  * a provider key, a secret assigned to a name, a long bare token — not a word list, which dropped any message that mentioned a
  * `token`, a `secret` or 密码, tool output included) is dropped
  * whole rather than redacted, and the excerpt is bounded by message count so a
@@ -713,7 +717,7 @@ export function transcriptExcerpt(messages, range = {}) {
   });
   const clean = inRange.filter((message) => {
     // The strings a message holds, as text: the shapes are those of plain text, and JSON's escaping would break a labelled secret in two.
-    if (identifierShapesIn(stringLeaves(message.parts).join("\n")).length) { sensitive += 1; return false; }
+    if (methodSourceIdentifierShapesIn(stringLeaves(message.parts).join("\n")).length) { sensitive += 1; return false; }
     return true;
   });
   const bounded = Math.max(0, clean.length - limit);

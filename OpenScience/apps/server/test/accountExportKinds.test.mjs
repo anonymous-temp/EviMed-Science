@@ -339,12 +339,11 @@ async function resultFixture(t) {
     producer: { kind: "tool", sessionId: run.sessionId, runId: run.id, callId: "call-write", eventId: "17" },
   });
 
-  // A correction to the source, and the owner continuing research from it.
-  await documents.put(OWNER, "agenda", "agenda-one", { title: "Follow the evidence", enabled: true, status: "active" }, { expectedRevision: 0, projectId: project.id });
+  await documents.put(OWNER, "preferences", "pref-one", { items: [] }, { expectedRevision: 0 });
+  // A correction to the source.
   const impacts = new ResultImpactService({
     documents,
     results,
-    autopilot: { schedule: async () => ({ episode: { id: "episode-one" } }) },
   });
   const changed = await impacts.reconcileSourceUpdate(OWNER, {
     projectId: project.id,
@@ -352,7 +351,6 @@ async function resultFixture(t) {
     status: { state: "changed", checkedAt: "2026-10-02T00:00:00Z", updates: [{ kind: "correction", noticeDoi: "10.9999/correction", date: "2026-10-01", source: "crossref" }] },
   });
   const impact = changed.items.find((item) => item.payload.versionId === report.versionId);
-  await impacts.continueImpact(OWNER, project.id, impact.id, { agendaId: "agenda-one" });
 
   // A selection staged and submitted by the collaborator.
   const revisions = new ResultRevisionService({ results, documents });
@@ -590,10 +588,7 @@ test("selections, source corrections and calculations leave as what the research
   assert.equal(impact.effect, "potentially_affected");
   assert.deepEqual(impact.claimIds, ["CLM-001", "CLM-002"]);
   assert.equal(impact.historicalResultPreserved, true);
-  assert.equal(impact.continuation.status, "scheduled");
-  assert.equal(impact.continuation.agendaId, "agenda-one");
-  assert.equal(impact.continuation.episodeId, "episode-one");
-  assert.deepEqual(state.revisions.filter((row) => row.id === f.impact.id).map((row) => row.payload.continuation.status), ["awaiting_user", "preparing", "scheduled"]);
+  assert.equal(impact.continuation, undefined);
 
   // The first calculation: what was asked, by which call, and what came out.
   const calculation = payloadOf(f.calculation.id);
@@ -770,7 +765,7 @@ test("a stored kind with no export decision is left out and named, and the rest 
   assert.ok(!state.revisions.some((row) => row.kind.includes("future")));
   // Everything with a contract is still there.
   assert.equal(state.documents.find((row) => row.id === f.report.versionId).payload.digest, sha(REPORT));
-  assert.ok(state.documents.some((row) => row.kind === "agenda"));
+  assert.ok(state.documents.some((row) => row.kind === "preferences"));
   // And whoever runs the deployment is told, by kind and count.
   assert.deepEqual(reported, [
     "account export left out another-future-kind: no_export_contract, 1 documents\n",

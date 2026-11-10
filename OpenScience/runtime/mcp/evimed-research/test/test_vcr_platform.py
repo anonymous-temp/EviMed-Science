@@ -207,6 +207,20 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertIn("validate", definitions["vcr_simulate"]["inputSchema"]["properties"]["action"]["enum"])
         self.assertNotIn("validate", definitions["vcr_simulate"]["description"], "it is found in the schema and in the answer of shape, not in the description")
 
+    def test_the_one_line_a_general_conversation_always_reads_names_dose_finding_and_the_comparison_of_several_drugs(self):
+        # Live check 2026-11-04: a pasted small table of three drugs asked for the best one was worked out in a script of the conversation's own (no
+        # vcr tool opened), and dose escalation reached the engine in two of five runs. The line stays within its cap and says both, in the words a
+        # person uses, beside what it already covered; shortened elsewhere (the pointer to the result page, the examples of dose finding) to fit.
+        # Live check 2026-11-07: an Alzheimer three-arm ADAS-cog simulation (no vcr tool opened), a comparison of three designs computed in an
+        # earlier conversation and a forecast for six listed patients were each worked out in the model's own scripts. The line names the
+        # three classes within the same cap; "modelId requires modelVersion" left it for the gateway's refusal, which says exactly that.
+        description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["description"]
+        self.assertLessEqual(len(description), 420)
+        for words in ("sample size", "power or events", "comparing designs", "dose finding", "synthetic cohort", "baseline table", "external control",
+                      "comparing several drugs", "network meta-analysis",
+                      "saved", "searching", "disease-progression", "Alzheimer ADAS-cog", "patient forecasts", "not in your script"):
+            self.assertIn(words, description)
+
     def test_a_refusal_the_gateway_answers_with_400_is_the_run_s_to_fix(self):
         # "Go on without the study" is for a module that is not there, not for a sentence that says what to write first.
         fixable = vcr_platform.VcrPlatformError("vcr_simulate_subject_required", "first write a trial_scenario", status=400)
@@ -227,9 +241,13 @@ class VcrToolDefinitionTests(unittest.TestCase):
         # 2026-11-02: a median read in a paper went straight into the scenario in 6 of 6 live designs and the result page called it an assumption.
         simulate = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]
         sources = simulate["inputSchema"]["properties"]["sources"]
-        self.assertEqual(sorted(sources["items"]["properties"]), ["field", "publication", "quote"])
-        self.assertFalse(sources["items"]["additionalProperties"])
-        self.assertLess(len(sources["description"]), 300, "a property description rides every request of the run too")
+        literature, user = sources["items"]["oneOf"]
+        self.assertEqual(sorted(literature["properties"]), ["field", "publication", "quote"])
+        self.assertEqual(user["properties"]["origin"], {"const": "user"})
+        self.assertEqual(set(user["required"]), {"origin", "field", "value", "quote", "unit", "context"})
+        self.assertFalse(user["additionalProperties"])
+        self.assertFalse(literature["additionalProperties"])
+        self.assertLess(len(sources["description"]), 700, "source guidance is bounded on the shared transport")
         for kind in vcr_platform.SOURCE_KINDS:
             self.assertIn(kind, vcr_platform.JOB_KINDS)
             self.assertIn("sources", " ".join(vcr_platform.shape({"kind": kind})["next_actions"]), kind)
@@ -259,8 +277,10 @@ class VcrToolDefinitionTests(unittest.TestCase):
         # A description rides every request of the run; the per-method shapes are served on demand from the generated help.
         description = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["description"]
         self.assertLess(len(description), 1700, "the shapes live in the shape action, not here")
-        for fragment in ("action=shape", "do not guess keys", "outlive this turn", "modelVersion"):
+        for fragment in ("action=shape", "do not guess keys", "outlive this turn"):
             self.assertIn(fragment, description)
+        # modelVersion is in the schema and in the gateway's refusal of a modelId without it, no longer in the line (2026-11-07, for room)
+        self.assertIn("modelVersion", {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]["inputSchema"]["properties"])
         for typed in ("accrual?", "dropoutAnnual", "design_simulation {", "truth{", "[time_to_event]", "isNull", "dropoutRate"):
             self.assertNotIn(typed, description, "a hand-typed shape is what drifted")
         self.assertIn("shape", vcr_platform.SIMULATE_ACTIONS)
@@ -300,6 +320,16 @@ class VcrToolDefinitionTests(unittest.TestCase):
                 self.assertFalse(any(line.startswith(guess + ":") for line in lines), kind)
         self.assertGreater(walked, 500, "the walk proves it walked")
 
+    def test_the_batch_forecast_fields_are_said_in_the_domains_words(self):
+        # a field the domain describes (mode, actions, where the actions came from, the version an update replaces) is not rendered as "value"
+        lines = vcr_platform.shape({"kind": "forecast_trajectories"})["data"]["keys"]
+        said = {line.split(":", 1)[0]: line for line in lines}
+        for field, word in (("predictionMode", "factual_forecast"), ("actions", "conditional forecast"), ("actionSource", "logged_replay"),
+                            ("actionHistoryId", "later history"), ("priorPredictionId", "earlier prediction")):
+            self.assertIn(word, said[field], field)
+        self.assertTrue(said["historyId"].startswith("historyId: id of a stored record"))
+        self.assertIn("observed outcomes", {line.split(":", 1)[0]: line for line in vcr_platform.shape({"kind": "compare_forecasts"})["data"]["keys"]}["outcomeHistoryId"])
+
     def test_shape_renders_accrual_with_its_real_keys_units_and_gate(self):
         answer = vcr_platform.shape({"kind": "design_analytic"})
         self.assertEqual(answer["status"], "success")
@@ -331,6 +361,49 @@ class VcrToolDefinitionTests(unittest.TestCase):
     def test_the_literature_population_says_where_a_pasted_table_goes(self):
         notes = vcr_platform.shape({"kind": "literature_population"})["data"]["notes"]
         self.assertTrue(any("generate_population" in note for note in notes))
+
+    def test_the_shape_of_a_generic_design_names_the_kinds_that_answer_dose_finding_single_arm_looks_composites_and_networks(self):
+        # Live 2026-11-04: the model shaped a generic design kind and then wrote its own simulation of what design_dose / design_bayesian compute.
+        # Live 2026-11-07: having shaped design_analytic for a sample size, the model projected six listed patients itself; the pointer also names
+        # the disease-progression kind, the batch forecast and the lab's two actions.
+        others = ("design_dose", "design_bayesian", "design_confirmatory", "design_win_ratio", "network_meta", "generate_progression", "forecast_trajectories")
+        for kind in ("design_analytic", "design_simulation", "design_grid"):
+            notes = " ".join(vcr_platform.shape({"action": "shape", "kind": kind})["data"]["notes"])
+            for other in others + ("Alzheimer ADAS-cog", "action compare", "action search"):
+                self.assertIn(other, notes, (kind, other))
+        self.assertTrue(all(kind in vcr_platform.JOB_KINDS for kind in others))
+        self.assertTrue({"compare", "search"} <= set(vcr_platform.LAB_ACTIONS))
+        # A kind that is not a generic design carries no pointer.
+        notes = " ".join(vcr_platform.shape({"action": "shape", "kind": "design_dose"}).get("data", {}).get("notes", []))
+        self.assertNotIn("instead of writing your own simulation", notes)
+
+    def test_a_finished_type_one_simulation_is_said_in_the_platforms_verdict(self):
+        # Live D8 (2026-11-07): a null run at 2.53% +/- 0.11% was headed "仿真支持“不超过 2.5%”" in the reply; the gateway now hands the verdict.
+        said = {"verdict": "inconclusive", "text": "I 类错误无法确定是否不超过 2.5%（模拟 2.53% ± 0.11%）"}
+        answer = vcr_platform._job_answer({"state": "succeeded", "jobId": "job_1", "typeOneError": said, "result": {"kind": "trial_scenario"}}, "status")
+        self.assertTrue(any("data.typeOneError.text" in line and "never conclude it from the estimate" in line for line in answer["next_actions"]))
+        plain = vcr_platform._job_answer({"state": "succeeded", "jobId": "job_1", "result": {"kind": "trial_scenario"}}, "status")
+        self.assertFalse(any("typeOneError" in line for line in plain["next_actions"]))
+        # Live D6: a "95% interval 81.8-85.8%" of the model's own for a power of 83.8% (MCSE 0.37%).
+        self.assertTrue(any("Monte Carlo SE its measure carries" in line and "no interval" in line for line in plain["next_actions"]))
+
+    def test_the_disease_progression_and_forecast_shapes_say_which_is_which(self):
+        # Live 2026-11-07: three drug hypotheses on Alzheimer patients were simulated in the model's own script, and six listed patients were given
+        # projections with prediction intervals of the model's own when the deployment had no forecast service.
+        progression = " ".join(vcr_platform.shape({"kind": "generate_progression"})["data"]["notes"])
+        for fragment in ("action compare", '"patients.progression"', "differ only in treatment", "forecast_trajectories"):
+            self.assertIn(fragment, progression)
+        for kind in ("generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"):
+            notes = " ".join(vcr_platform.shape({"kind": kind})["data"].get("notes", []))
+            self.assertIn("forecast_trajectories", notes, kind)
+            self.assertIn("generate_progression", notes, kind)
+        forecast = " ".join(vcr_platform.shape({"kind": "forecast_trajectories"})["data"]["notes"])
+        for fragment in ("vcr_read what longitudinal", "With none listed, no individual forecast can be computed here", "never project a patient yourself"):
+            self.assertIn(fragment, forecast)
+        for kind in ("evaluate_forecast", "compare_forecasts", "benchmark_trial_effect"):
+            self.assertNotIn("never project a patient", " ".join(vcr_platform.shape({"kind": kind})["data"]["notes"]), kind)
+        # A kind that is neither carries none of it.
+        self.assertNotIn("forecast_trajectories", " ".join(vcr_platform.shape({"kind": "design_dose"})["data"].get("notes", [])))
 
     def test_every_row_of_shape_says_what_it_asks_of_a_person_and_no_object_does(self):
         # C2: the role is read off the schema by the platform (research_fact: required, no default, not a choice of words; defaultable: the
@@ -386,7 +459,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
     def test_the_kinds_the_platform_builds_say_what_a_run_states_and_where_the_rest_comes_from(self):
         pool = vcr_platform.shape({"kind": "pool_evidence"})["data"]
         self.assertTrue(pool["builtByPlatform"])
-        self.assertEqual(pool["runStates"], ["parameter", "endpointKey", "calibres", "armRole", "target", "method"])
+        self.assertEqual(pool["runStates"], ["parameter", "endpointKey", "calibres", "armRole", "target", "method", "tauPrior"])
         self.assertTrue(any("evidence_pool" in note for note in pool["notes"]))
         self.assertNotIn("examples", pool)
         match = vcr_platform.shape({"kind": "match_criteria"})["data"]
@@ -438,7 +511,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
 
     def test_evidence_pool_names_a_parameter_and_never_takes_numbers(self):
         properties = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["evidence_pool"]["inputSchema"]["properties"]
-        self.assertEqual(set(properties), {"action", "parameter", "endpointKey", "calibres", "method", "jobId"})
+        self.assertEqual(set(properties), {"action", "parameter", "endpointKey", "calibres", "method", "tauPrior", "jobId"})
         self.assertNotIn("studies", properties)
 
     def test_the_response_cap_is_four_mebibytes(self):
@@ -597,6 +670,26 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertIn("1 written, 1 reminder(s)", saved["summary"])
         self.assertNotIn("refused", saved["summary"])
 
+    def test_numbers_that_do_not_agree_are_advice_on_a_saved_item_and_say_what_to_do_with_the_value(self):
+        # E2: the item is saved as read; the answer names the numbers and does not tell the run to rewrite it or to wait for anyone.
+        _Gateway.answers["write"] = (200, {"data": {"what": "evidence_item", "ok": True, "ids": ["evd_1"], "issues": [
+            {"index": 0, "field": "value", "code": "vcr_evidence_values_inconsistent", "message": "风险比：估计值 0.62、区间 0.48–0.95 对不上。"}]}})
+        result = self.server.call_tool("vcr_write", {"what": "evidence_item", "items": [{"registryId": "NCT01234567"}]})
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("1 written, 1 reminder(s)", result["summary"])
+        self.assertNotIn("refused", result["summary"])
+        self.assertEqual(result["warnings"], ["item 0, value: 风险比：估计值 0.62、区间 0.48–0.95 对不上。"])
+        joined = " ".join(result["next_actions"])
+        self.assertIn("The value is kept as read either way", joined)
+        self.assertNotIn("Correct the refused items", joined)
+        # The second, independent reading of the same passage that read another number is the same kind of advice.
+        _Gateway.answers["write"] = (200, {"data": {"what": "assumption", "ok": True, "ids": ["asm_1"], "issues": [
+            {"index": 0, "field": "evidenceIds", "code": "vcr_evidence_second_read_differs", "message": "风险比：同一段原文读了两次，结果不一致。"}]}})
+        second = self.server.call_tool("vcr_write", {"what": "assumption", "items": [{"key": "control_hr"}]})
+        self.assertIn("1 written, 1 reminder(s)", second["summary"])
+        self.assertNotIn("refused", second["summary"])
+        self.assertIn("The value is kept as read either way", " ".join(second["next_actions"]))
+
     def test_a_matching_write_hands_over_the_link_to_the_matching_page(self):
         entry = {"studyId": "std_conv", "tab": "matching", "label": "在“匹配”页查看", "url": "https://evimed.example/app/virtual-research/std_conv/matching"}
         _Gateway.answers["write"] = (200, {"data": {"what": "fact", "ok": True, "ids": ["f1"], "issues": [], "resultEntry": entry}})
@@ -716,6 +809,38 @@ class VcrReadWriteTests(_GatewayCase):
         result = self.server.call_tool("vcr_read", {"what": "results"})
         self.assertEqual(result["error"]["code"], "vcr_response_too_large")
 
+    def test_a_grid_s_null_check_read_through_results_or_status_is_said_in_the_platforms_verdict(self):
+        # Live D8, phase 3 (2026-11-07): "能不能确认一类错误不超过 2.5%？" was answered from vcr_read results, whose grid null check of 2.44% +/- 0.11%
+        # carried no verdict, as "能确认不超过 2.5%". The verdict rides each cell, and both answers say to use it.
+        cell = {"designIndex": 2, "truthIndex": 1, "measures": [{"name": "type_one_error", "value": 0.02435, "mcse": 0.0011}],
+                "typeOneError": {"verdict": "inconclusive", "text": "I 类错误无法确定是否不超过 2.5%（模拟 2.44% ± 0.11%）"}}
+        grid = {"id": "res_g", "kind": "design_grid", "diagnostics": {"cells": [cell]}}
+        _Gateway.answers["read"] = (200, {"data": {"what": "results", "results": [grid]}})
+        read = self.server.call_tool("vcr_read", {"what": "results"})
+        self.assertEqual(read["status"], "success")
+        self.assertTrue(any("typeOneError.text" in line and "grid" in line and "never conclude it from the estimate" in line for line in read["next_actions"]))
+        _Gateway.answers["read"] = (200, {"data": {"what": "results", "results": [{"id": "res_p", "kind": "trial_scenario", "measures": [{"name": "power", "value": 0.8}]}]}})
+        self.assertFalse(any("typeOneError" in line for line in self.server.call_tool("vcr_read", {"what": "results"})["next_actions"]))
+        status = vcr_platform._job_answer({"state": "succeeded", "jobId": "job_g", "result": grid}, "status")
+        self.assertTrue(any("typeOneError.text" in line for line in status["next_actions"]), "the grid's status answer too")
+
+
+    def test_a_progression_run_and_a_disease_comparison_say_the_platforms_differences_between_arms(self):
+        # Live D6, phase 3 (2026-11-07): three Alzheimer arms were compared by a reply that subtracted the arms' means itself.
+        run = {"id": "res_ad", "kind": "progression_simulation", "diagnostics": {"progression": {"curves": [
+            {"visit": 13, "control": {"mean": {"value": 22.41}}, "treated": {"mean": {"value": 20.63}}, "difference": {"value": -1.78, "source": "calculated"}}]}}}
+        status = vcr_platform._job_answer({"state": "succeeded", "jobId": "job_ad", "result": run}, "status")
+        self.assertTrue(any("curves[].difference" in line and "never subtract" in line for line in status["next_actions"]))
+        _Gateway.answers["read"] = (200, {"data": {"what": "results", "results": [run]}})
+        self.assertTrue(any("never subtract" in line for line in self.server.call_tool("vcr_read", {"what": "results"})["next_actions"]))
+        plain = vcr_platform._job_answer({"state": "succeeded", "jobId": "job_1", "result": {"kind": "trial_scenario"}}, "status")
+        self.assertFalse(any("never subtract" in line for line in plain["next_actions"]))
+        comparison = {"action": "compare_status", "kind": "experiment", "id": "exp_1", "status": "complete", "arms": [
+            {"name": "安慰剂", "trajectory": [{"visit": 13, "control": 22.41, "treated": 22.41}]},
+            {"name": "对症", "trajectory": [{"visit": 13, "control": 22.41, "treated": 20.63, "againstReference": -1.78}]}]}
+        lab = vcr_platform._lab_answer(comparison, "compare_status")
+        self.assertTrue(any("againstReference" in line and "never subtract" in line for line in lab["next_actions"]))
+
 
 class VcrSimulateTests(_GatewayCase):
     def test_a_start_posts_exactly_the_frozen_scenario_and_answers_the_job(self):
@@ -753,6 +878,54 @@ class VcrSimulateTests(_GatewayCase):
         answer = self.server.call_tool("trial_registry_record", {"registryId": "NCT00000001"})
         self.assertEqual(answer["data"]["clauses"], [{"number": 1, "kind": "inclusion", "text": "Age >= 18"}])
         self.assertEqual(answer["data"]["registryId"], "NCT00000001")
+
+    def test_the_lab_actions_reach_the_platform_whole_and_are_never_waited_for(self):
+        # F4: a study conversation without the native trial plugin runs a design search through this tool. The call carries the frozen
+        # manifest or an id and nothing else; the answer is the lab's own and no status loop is invited.
+        manifest = {"question": "smallest trial", "objective": {"measure": "expected_sample_size", "direction": "minimize", "truth": "alt"},
+                    "constraints": [{"measure": "type_one_error", "op": "<=", "bound": 0.025, "kind": "error_control", "truth": "null"}],
+                    "space": {"method": "design.simulate", "scenario": {}, "variables": [{"path": "analysis.alpha", "values": [0.02, 0.025]}]},
+                    "stages": {"final": {"count": 2}}, "budget": {"maxCandidates": 2, "cpuSeconds": 600}}
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "search", "kind": "campaign", "id": "cmp_1", "status": "running", "stop": None}})
+        started = self.server.call_tool("vcr_simulate", {"action": "search", "manifest": manifest})
+        self.assertEqual(started["status"], "success")
+        self.assertEqual(_Gateway.seen[0]["path"], "/internal/vcr/v1/simulate")
+        self.assertEqual(_Gateway.seen[0]["body"], {"action": "search", "manifest": manifest})
+        self.assertIn("cmp_1 is running", started["summary"])
+        self.assertTrue(any("never run a status loop" in line for line in started["next_actions"]))
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "search_status", "kind": "campaign", "id": "cmp_1", "status": "stopped",
+                                                       "stop": {"reason": "inconclusive_at_precision", "text": "x"}, "undecided": {"closest": None, "advice": ["a"]}}})
+        read = self.server.call_tool("vcr_simulate", {"action": "search_status", "campaignId": "cmp_1"})
+        self.assertEqual(_Gateway.seen[1]["body"], {"action": "search_status", "campaignId": "cmp_1"})
+        self.assertIn("stopped: inconclusive_at_precision", read["summary"])
+        self.assertTrue(any("NEW campaign" in line and "never changes" in line for line in read["next_actions"]), "an undecided stop never invites relaxing the constraint")
+        self.server.call_tool("vcr_simulate", {"action": "search_cancel", "campaignId": "cmp_1"})
+        self.assertEqual(_Gateway.seen[2]["body"], {"action": "search_cancel", "campaignId": "cmp_1"})
+        self.server.call_tool("vcr_simulate", {"action": "compare", "experiment": {"arms": []}})
+        self.server.call_tool("vcr_simulate", {"action": "compare_status", "experimentId": "exp_1"})
+        self.assertEqual([seen["body"]["action"] for seen in _Gateway.seen[3:]], ["compare", "compare_status"])
+        for bad in ({"action": "search"}, {"action": "search", "manifest": {}}, {"action": "search_status"}, {"action": "compare_status", "campaignId": "x"}):
+            with self.assertRaises(vcr_platform.VcrPlatformError):
+                vcr_platform.simulate(bad)
+
+    def test_the_lab_shapes_are_answered_by_shape_so_the_description_does_not_grow(self):
+        lab = vcr_platform.shape({})["data"]["lab"]
+        self.assertEqual(set(lab), {"search", "compare"})
+        for fragment in ("never relaxed", "analysis.alpha", "A changed manifest is a new campaign", "search_status {campaignId}"):
+            self.assertIn(fragment, lab["search"])
+        definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
+        properties = definitions["vcr_simulate"]["inputSchema"]["properties"]
+        self.assertEqual(properties["action"]["enum"][-5:], list(vcr_platform.LAB_ACTIONS))
+        for key in ("manifest", "campaignId", "experiment", "experimentId"):
+            self.assertIn(key, properties)
+        # The line names searching for a design and comparing saved ones in a person's words (live 2026-11-07); the lab's forms stay in shape.
+        for word in ("manifest", "campaign", "experiment"):
+            self.assertNotIn(word, definitions["vcr_simulate"]["description"], "the lab is in the schema and in shape, not in what rides every request")
+        for fragment in ("another conversation", "stated again", "patients.progression", "differ only in treatment"):
+            self.assertIn(fragment, lab["compare"])
+        # the tool catalogue the root conversation sees: the five actions and four keys are the whole growth (13,159 -> 13,475 bytes compact)
+        import json
+        self.assertLess(len(json.dumps(list(definitions.values()), separators=(",", ":"))), 13_600)
 
     def test_shape_answers_through_the_tool_without_asking_the_platform_and_with_the_module_off(self):
         result = self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "design_simulation"})
@@ -1072,6 +1245,11 @@ class VcrJobWaitTests(_GatewayCase):
             self.assertIn("notice", advice)
             self.assertIn("end the turn", advice)
             self.assertIn("vcr_read (what: results)", advice)
+            # Live 2026-11-04: told to answer with what it had, the model worked the sample size out itself and gave its own number
+            # beside the engine's. A job that finishes before the reply is written is read once more, not computed twice.
+            self.assertIn("give no number of your own", advice)
+            self.assertIn("look once more with status just before you answer", advice)
+            self.assertNotIn("action status", advice)
 
     def test_a_read_of_a_person_says_how_to_go_on_from_what_is_there(self):
         _Gateway.answers["read"] = [(200, {"data": {"what": "matching", "subjectKey": "P-1", "assessment": None}})]

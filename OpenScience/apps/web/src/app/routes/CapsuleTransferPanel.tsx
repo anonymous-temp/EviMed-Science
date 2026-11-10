@@ -20,7 +20,7 @@ import { labelFor } from "@/lib/statusLabel";
 import {
   downloadCapsuleExport, exportCapsule, importCapsule, listCapsuleExports, previewCapsuleExport, previewCapsuleImport,
   productErrorMessage, revokeCapsuleExport, saveCapsuleDownload,
-  type CapsuleCard, type CapsuleExportInput, type CapsuleExportPreview, type CapsuleExportSnapshot, type CapsuleRecord, type CapsuleTransferPreview,
+  type CapsuleCard, type PrivateMemorySelection, type CapsuleExportInput, type CapsuleExportPreview, type CapsuleExportSnapshot, type CapsuleRecord, type CapsuleTransferPreview,
 } from "@/lib/productClient";
 
 const SCOPE_LABELS: Record<string, string> = { workstyle: "工作方式", "+profile": "个人背景", "+knowledge": "知识与项目事实" };
@@ -80,6 +80,16 @@ function useAction() {
  * they open it without a password; the title and the summary the recipient reads
  * first can be written (the generated ones are the placeholders), and an update
  * says what changed in the sender's own words.
+ *
+ * Anatomy: scope controls, entry preview, per-person opt-in, signature, file action and share channels.
+ * Variants: new export or an update of a previous snapshot.
+ * States: waiting, empty, busy, success and recoverable failure; private selections start empty for each share.
+ * Hit area: native labelled checkboxes and shared Button targets.
+ * Keyboard: native inputs, disclosure buttons and dialog controls retain their standard keyboard behavior.
+ * Long content: entry text wraps in a measured column; preview lists remain scrollable with the drawer.
+ * Theme: shared semantic text, surface and action roles in either scheme.
+ * Responsive: controls wrap and the drawer keeps one reading column.
+ * Verification: CapsuleTransferPanel tests exercise preview selection, digest propagation and consent reset.
  */
 export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
   const [password, setPassword] = useState("");
@@ -89,6 +99,8 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
   const [outgoing, setOutgoing] = useState<CapsuleExportPreview | null>(null);
   /** The entries the sender unticked, by the ids the preview gave them. */
   const [unticked, setUnticked] = useState<string[]>([]);
+  const [includePrivateEntries, setIncludePrivateEntries] = useState<PrivateMemorySelection[]>([]);
+  useEffect(() => { setIncludePrivateEntries([]); setUnticked([]); }, [capsule?.id]);
   /** The accounts of this platform a file is to be sealed for, as typed; the title and the summary the recipient reads first. */
   const [names, setNames] = useState("");
   const [title, setTitle] = useState("");
@@ -149,23 +161,23 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
     void (async () => {
       try {
         const result = await previewCapsuleExport(capsuleId, { scopes: ["workstyle", ...(profile ? ["+profile"] : []), ...(knowledge ? ["+knowledge"] : [])],
-          ...(unticked.length ? { excludeEntryIds: unticked } : {}) });
+          ...(unticked.length ? { excludeEntryIds: unticked } : {}), ...(includePrivateEntries.length ? { includePrivateEntries } : {}) });
         if (active) setOutgoing(result ?? null);
-      } catch { /* the export itself still says why it cannot run */ }
+      } catch { if (active && includePrivateEntries.length) setIncludePrivateEntries([]); /* A changed selection needs fresh consent. */ }
     })();
     return () => { active = false; };
-  }, [capsuleId, profile, knowledge, refresh, unticked]);
+  }, [capsuleId, profile, knowledge, refresh, unticked, includePrivateEntries]);
 
   /** A file, sealed with `secret`, for the names typed, or both; an update also says in the sender's words what changed. */
-  const createExport = (secret: string, supersedes?: string, savedScopes?: string[], changelog = "") => perform(async () => {
+  const createExport = (secret: string, supersedes?: string, changelog = "") => perform(async () => {
     if (!capsuleId || (!secret && recipientNames.length === 0)) return;
     const card: CapsuleCard | undefined = changelog.trim() ? { ...signedCard, changelog: changelog.trim() } : signedCard;
-    const input: CapsuleExportInput = { scopes: savedScopes ?? scopes, ...(secret ? { password: secret } : {}), ...(recipientNames.length ? { recipientNames } : {}),
-      ...(supersedes ? { supersedes } : {}), ...(card ? { card } : {}), ...(unticked.length ? { excludeEntryIds: unticked } : {}) };
+    const input: CapsuleExportInput = { scopes, ...(secret ? { password: secret } : {}), ...(recipientNames.length ? { recipientNames } : {}),
+      ...(supersedes ? { supersedes } : {}), ...(card ? { card } : {}), ...(unticked.length ? { excludeEntryIds: unticked } : {}), ...(includePrivateEntries.length ? { includePrivateEntries } : {}) };
     const result = await exportCapsule(capsuleId, input);
     saveCapsuleDownload(result.archive, result.filename);
     if (mounted.current) {
-      setPassword(""); setUpdating(null); setRefresh(value => value + 1);
+      setPassword(""); setUpdating(null); setIncludePrivateEntries([]); setRefresh(value => value + 1);
       // How many of the names the file opens for — the count, never which: the same words a delivery uses.
       const reached = result.reached;
       setNotice(!reached ? "已下载"
@@ -238,7 +250,13 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
                 <label className="flex items-start gap-2">
                   {entry.id
                     ? <input type="checkbox" className="mt-1" checked={entry.included !== false} disabled={busy} aria-label={`分享这一条：${shown.summary}${shown.text ? `，${shown.text.slice(0, 40)}` : ""}`}
-                      onChange={event => setUnticked(current => event.target.checked ? current.filter(id => id !== entry.id) : [...current, entry.id as string])} />
+                      onChange={event => {
+                        if (entry.requiresSelection) {
+                          setIncludePrivateEntries(current => event.target.checked && entry.id && entry.sha256
+                            ? [...current.filter(item => item.id !== entry.id), { id: entry.id, sha256: entry.sha256 }]
+                            : current.filter(item => item.id !== entry.id));
+                        } else setUnticked(current => event.target.checked ? current.filter(id => id !== entry.id) : [...current, entry.id as string]);
+                      }} />
                     : null}
                   <span className="min-w-0">
                     <span className="text-text-3">{shown.summary}</span>
@@ -277,7 +295,7 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
       </p>
     </section>
 
-    {sharing && <CapsuleSharePanel capsuleId={capsuleId ?? null} card={signedCard} excludeEntryIds={unticked} />}
+    {sharing && <CapsuleSharePanel capsuleId={capsuleId ?? null} card={signedCard} scopes={scopes} excludeEntryIds={unticked} includePrivateEntries={includePrivateEntries} onShared={() => setIncludePrivateEntries([])} />}
 
     {/* Not a share between accounts, so not behind its switch: the approved methods as a folder each, for other tools. */}
     {/* The one line about whose it is: a person's way of working is theirs to take along, to another account or another tool. */}
@@ -294,7 +312,7 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
             actions={<>
               <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
               <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} aria-expanded={updating?.id === snapshot.id}
-                onClick={() => setUpdating(updating?.id === snapshot.id ? null : { id: snapshot.id, password: "", changelog: "" })}>更新</Button>
+                onClick={() => { setIncludePrivateEntries([]); setUpdating(updating?.id === snapshot.id ? null : { id: snapshot.id, password: "", changelog: "" }); }}>更新</Button>
               <Button size="sm" variant="text" destructive disabled={busy || (snapshot.status === "revoked" && !sharing)} onClick={() => setWithdrawing(snapshot)}>撤回</Button>
             </>}
             meta={updating?.id === snapshot.id ? (
@@ -309,7 +327,7 @@ export function ExportPanel({ capsule }: { capsule: CapsuleRecord | null }) {
                       onChange={event => setUpdating({ ...updating, password: event.target.value })} />
                   </div>
                   <Button disabled={busy || (!updating.password && recipientNames.length === 0)} loading={busy}
-                    onClick={() => void createExport(updating.password, snapshot.id, snapshot.scopes, updating.changelog)}>更新并下载</Button>
+                    onClick={() => void createExport(updating.password, snapshot.id, updating.changelog)}>更新并下载</Button>
                 </div>
               </div>
             ) : undefined} />)}

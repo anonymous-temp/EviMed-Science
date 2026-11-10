@@ -65,6 +65,8 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "ciHigh",
     "sampleSize",
     "events",
+    "pValue",
+    "pRelation",
     "valueSource",
     "quote",
     "locator",

@@ -71,12 +71,6 @@ inputs:
   - scoringRubric
   - scoringPolicyVersion
   - uploadedFiles
-autopilot:
-  taskTypes: []
-  costClass: high
-  unattendedInputs:
-  - drug
-  - indication
 estimatedMinutes:
 - 25
 - 60

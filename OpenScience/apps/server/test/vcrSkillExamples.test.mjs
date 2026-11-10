@@ -266,7 +266,8 @@ test("the analysis skill's external-control example is written whole, read by th
 
   // 3. the page shows it: every component beside its status, the weak ones as a premise, the applicability first
   const now = new Date("2026-11-01T12:00:00.000Z");
-  const result = { id: "res_1", version: 1, kind: "comparator", conclusion: "limited", counts: {}, measures: [], diagnostics: {}, createdAt: now.toISOString() };
+  // a weighted comparison states the estimand it computed; the page words that one (review RF2 P1-8)
+  const result = { id: "res_1", version: 1, kind: "comparator", conclusion: "limited", counts: {}, measures: [], diagnostics: { estimand: "ATT" }, createdAt: now.toISOString() };
   const comparator = { ...row, resultId: "res_1", conclusion: "limited", gapList: [], createdAt: now.toISOString() };
   const tab = presentComparatorTab({ now, study: { id: "std_example", intendedUse: "exploratory", dataTier: "T2", steps: {}, abilities: [] }, definition: null, results: [result], allResults: [result],
     stale: [], reviews: [], jobs: [], budget: null, assumptions: [], members: [], exports: [], decisions: [], roles: [], scenarios: [], comparators: [comparator], comparator,

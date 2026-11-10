@@ -261,7 +261,7 @@ test("a switched-off client bundle is a disabled row in the patch, and an unknow
     capsuleGatewayUrl: "",
     workloadTokenFile: "",
     bundleVersion: "0.1.0",
-    dshVersion: "0.2.1-rc.5",
+    dshVersion: "0.2.2-rc.1",
     limits: { deliveryAttemptLimit: 3, maxSteps: 0, maxTokens: 0, evidenceStaleMinutes: 10 },
     flags: { hosted: false, askUser: false, review: true, capsule: false, requiredEnforcement: /** @type {const} */ ("full") },
     disabledClientBundles,

@@ -4,7 +4,7 @@
   "observedIn": "synthetic replay of 2026-10-12, deepseek-flash, temperature 0: a first wording of the remembered-own-health exception wrote this as a profile in 3 of 3 samples; the extractor before it, and the wording that shipped, wrote nothing",
   "written": [],
   "whyItIsWrong": "Nothing the earlier extractor wrote here was wrong; the case holds the line the remembered-own-health exception must not cross. The researcher mentions their own allergy inside a question and asks for nothing to be remembered: that is the topic of this conversation, as with the diabetes of the own-health case.",
-  "expected": "Nothing is written from this exchange.",
+  "expected": "Keep the exact penicillin allergy and dated upcoming dental procedure; the fact remains user-reported, not an inferred diagnosis.",
   "decidable": true,
   "preChange": "held",
   "replay": {
@@ -24,6 +24,14 @@
     ]
   },
   "expect": {
-    "atMostRecords": 0
-  }
+    "requireKinds": {
+      "profile": 1
+    },
+    "requireTextContains": [
+      "青霉素",
+      "过敏"
+    ]
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }

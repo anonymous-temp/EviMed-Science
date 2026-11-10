@@ -34,8 +34,8 @@ test("the ledger of the researcher's reactions tells the funnel first, before an
   assert.ok(recorded > 0);
   const body = serverSource.slice(recorded, recorded + 900);
   const funnel = body.indexOf("packOutcomes?.onEvidence(event)");
-  const evolution = body.indexOf('event.trigger === "learning-evidence") return');
-  assert.ok(funnel > 0 && evolution > funnel, "the evolution module returns early for the loop's own evidence rows; the funnel is told before that");
+  // The one consumer that returned early (循证进化's researcher-feedback events) went with tool serving on 2026-11-09; nothing may come before the funnel.
+  assert.ok(funnel > 0 && !body.slice(0, funnel).includes("return"), "the funnel is told of every recorded reaction, before anything may leave early");
 });
 
 test("the actual app gives the funnel every reaction the ledger records", {

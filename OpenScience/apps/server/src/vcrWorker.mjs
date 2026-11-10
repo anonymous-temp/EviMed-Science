@@ -266,9 +266,9 @@ export class VcrWorker {
  * `server.mjs` composes a worker with one call and the loops' own logic stays
  * with the packages that own it.
  *
- * @param {{ jobs: any, orchestrator: any, store: any, matching?: any, frontierEvents?: any, knowledge?: any, drafts?: any, completions?: any, registryWatch?: any }} vcr
+ * @param {{ jobs: any, orchestrator: any, store: any, matching?: any, frontierEvents?: any, knowledge?: any, drafts?: any, completions?: any, experiments?: any, registryWatch?: any }} vcr
  */
-export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null, knowledge = null, drafts = null, completions = null, registryWatch = null }) {
+export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null, knowledge = null, drafts = null, completions = null, experiments = null, registryWatch = null }) {
   /**
    * The slow lane's work in this process, by job id. A batch reading is hours of model calls, so the lane's tick starts it and does not
    * wait for it: the tick that waited held the lane, and another account's batch queued behind the first whatever the lane's capacity
@@ -329,7 +329,13 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = nul
   return {
     localJobs: jobLoop("local"),
     slowJobs: jobLoop("slow"),
-    completions: completions ? () => completions.tick() : null,
+    // The completion path also repairs a lab campaign whose next unit was decided and not yet queued (a crash between the two): the
+    // campaign's own finish hook advances it otherwise, so there is no loop of its own (`vcrExperiments.mjs`).
+    completions: completions || experiments?.repair ? async () => {
+      const delivered = completions ? await completions.tick() : null;
+      const repaired = experiments?.repair ? await experiments.repair() : null;
+      return repaired ? { ...(delivered && typeof delivered === "object" ? delivered : {}), experimentsRepaired: repaired.repaired } : delivered;
+    } : null,
     /**
      * Claim what is queued, then push everything this process holds one step.
      * Jobs that ended without this loop's help are folded in too: one that ran

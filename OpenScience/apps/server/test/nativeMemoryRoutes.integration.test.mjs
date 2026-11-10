@@ -84,7 +84,7 @@ test("the list, the profile and the settings come from the engine's files in the
   assert.equal(profile.status, 200);
   const data = profile.json.data;
   assert.equal("engine" in data, false);
-  assert.deepEqual(Object.keys(data.groups).sort(), ["correction", "decision", "follow_up", "preference", "profile", "project_fact"]);
+  assert.deepEqual(Object.keys(data.groups).sort(), ["correction", "decision", "follow_up", "note", "person", "preference", "profile", "project_fact"]);
   assert.equal(data.groups.preference[0].uri, uri);
   for (const field of ["id", "scope", "scopeId", "kind", "key", "value", "summary", "origin", "status", "version", "createdAt", "updatedAt", "revisions", "nativeType", "uri", "contentHash"]) {
     assert.ok(field in data.groups.preference[0], `a record carries ${field}`);

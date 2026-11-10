@@ -437,6 +437,8 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "", 
     ],
     diagnostics: {
       tau: 12,
+      // a weighted comparison says which estimand it computed (the page states the method's own, not the object's default)
+      estimand: "ATT",
       qualityControl: { pass: true, checks: {
         atRisk: { name: "numbers at risk", reported: [287, 99, 60], reconstructed: [287, 100, 62], allowed: [14.35, 5, 3], pass: true },
         events: { name: "total events", reported: 812, reconstructed: 797, pass: true },

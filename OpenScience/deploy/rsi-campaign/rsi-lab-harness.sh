@@ -36,6 +36,11 @@
 # Only development data is read by `develop`. The confirmation files are read by the assembly of `run`, which joins the gold and the
 # records the export kept apart and builds the manifest; nothing scores them before the runner has frozen the policy and reserved the
 # quarter's error budget and the corpus.
+#
+# A module-policy round (module_campaign.mjs) is the same two commands on the same inbox: the registration is module_arms.mjs's and names its surface, the sources are its `module-arms`
+# ones, run on the operator's box. The assembly, the runner and the evaluator read the surface from those files, so nothing here does; only the files a scorer needs differ, and frontier-source
+# needs both the gold and the verdict records. `close` is not for it: every run of such a source has a priced cost, or the source is refused.
+# It ends where a patch does: a qualified round is a pull-request proposal, and the signed report is what the pull request cites. Nothing of it is imported.
 set -euo pipefail
 umask 027
 MONTH=$1; FAMILY=$2; COMMAND=$3
@@ -78,14 +83,16 @@ KEYS=(-v "$ETC/keys/evaluator.pem":/run/rsi-keys/evaluator.pem:ro)
 jsonfield() { python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print(d.get(sys.argv[2],""))' "$1" "$2" 2>/dev/null || true; }
 
 # The files this family needs depend on its scorer, which the pre-registration names.
+judged() { [ "$1" = judged-verdicts ] || [ "$1" = frontier-source ]; }
 needs() {
   if [ "$1" = close ]; then printf '%s\n' cost-closure.json; return 0; fi
   local scorer; scorer=$(jsonfield "$INBOX/$NAME/registration.json" scorer)
   local files=(registration.json development.json improvement.json)
-  [ "$scorer" = judged-verdicts ] && files+=(development.verdicts.jsonl)
+  judged "$scorer" && files+=(development.verdicts.jsonl)
   if [ "$1" = run ]; then
     files+=(confirmation.json)
-    if [ "$scorer" = judged-verdicts ]; then files+=(confirmation.verdicts.jsonl); else files+=(confirmation.gold.json); fi
+    judged "$scorer" && files+=(confirmation.verdicts.jsonl)
+    [ "$scorer" = judged-verdicts ] || files+=(confirmation.gold.json)
   fi
   printf '%s\n' "${files[@]}"
 }
@@ -97,8 +104,11 @@ await_inputs() {
   done
   [ -s "$INBOX/$NAME/registration.json" ] && mapfile -t FILES < <(needs "$1") && verify "${FILES[@]}"
 }
+# The round's money, when the operator sent it (round_spend.mjs): the report reads the file and checks its own digest, so it has no sidecar. Written as the steps' user, or the report cannot read it and says 未提供.
+round_spend() { [ ! -s "$INBOX/$NAME/round-spend.json" ] || install -o "${OWNER%%:*}" -g "${OWNER##*:}" -m 0640 "$INBOX/$NAME/round-spend.json" "$RUN/round-spend.json"; }
 # Signed report, whatever the verdict: report.md/report.json from the campaign directory, then the evaluator's signature over report.json.
 report() {
+  round_spend
   lab none "$IMAGE" evals/rsi-campaigns/harness_report.mjs "$C" "$MONTH" >> "$RUN/launcher.log" 2>&1 || true
   [ -s "$RUN/report.json" ] && "$DOCKER" run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user "$OWNER" "${KEYS[@]}" \
     -v "$STATE":/srv/rsi-lab/state "$IMAGE" evals/rsi-campaigns/evaluator.mjs report "$C/report.json" /run/rsi-keys/evaluator.pem "$C/report.signed.json" >> "$RUN/launcher.log" 2>&1 || true
@@ -107,7 +117,7 @@ report() {
 }
 verdict_args() {
   local scorer; scorer=$(jsonfield "$INBOX/$NAME/registration.json" scorer)
-  [ "$scorer" = judged-verdicts ] || return 0
+  judged "$scorer" || return 0
   printf '%s\n' --development-verdicts "$IN/development.verdicts.jsonl"
   [ "$1" = run ] && printf '%s\n' --confirmation-verdicts "$IN/confirmation.verdicts.jsonl"
   return 0

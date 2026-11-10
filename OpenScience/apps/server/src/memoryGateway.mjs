@@ -1,3 +1,5 @@
+import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
+import { historySearchText } from './memoryHistory.mjs';
 import { carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
 import { withoutResearchGoalGesture } from "./researchGoal.mjs";
 
@@ -346,9 +348,13 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   memoryContexts?: import("./geoNativeMemoryContext.mjs").GeoNativeMemoryContext | null,
  *   rememberJournal?: import("./geoNativeMemoryRemember.mjs").GeoNativeMemoryRemember | null,
  *   admission: { admit: (caller: { user: any, project: any, engineSessionId?: string | null, at?: number | null }) => Promise<import("./memoryAdmission.mjs").MemoryAdmission> },
+ *   sourceDeletion?: any,
+ *   sourceReceipt?: ((request:any)=>Promise<void>) | null,
+ *   sourceReceiptFailed?: ((request:any)=>Promise<void>) | null,
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
  *   memoryTool?: { forget: (user: any, project: any, uri: string, options?: any) => Promise<{ removed: boolean }> } | null,
  *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
+ *   historySearch?: ((request: any) => Promise<any[]>) | null,
  *   now?: () => number,
  * }} dependencies
  *   `memoryTool.forget` is the memory page's own deletion (the file, its revision, the rejection that keeps it from coming
@@ -357,7 +363,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  * @returns {((req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>) & { commitSession: MemoryGatewayCommitSession }}
  *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
-export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, now = () => Date.now() }) {
+export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, now = () => Date.now() }) {
   const enabled = config.memoryEngineEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
   const maxBodyBytes = Math.max(1_024, Number(config.memoryGatewayMaxBodyBytes) || 1_048_576);
   const ratePerMinute = Math.max(0, Number(config.memoryGatewayRatePerMinute ?? 600) || 0);
@@ -373,15 +379,36 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
   /**
    * The memory files a search or a read returned, noted in the overlay. Fire and forget: a recall never waits on, or fails by, this.
    * `ctx` is the request's: its account, and the root of the namespace it read (the account's own, or a shared GEO project's).
-   * @param {{ user: { id: string }, userRoot: string }} ctx @param {readonly unknown[]} uris
+   * @param {any} ctx @param {readonly unknown[]} uris
    */
-  function noteRecalled(ctx, uris) {
+  async function noteRecalled(ctx, uris) {
     if (!overlay?.configured) return;
     const userId = ctx.user.id;
     const root = `${ctx.userRoot}/memories`;
     const files = /** @type {string[]} */ ([...new Set(uris.filter((uri) => typeof uri === "string" && Boolean(nativeMemoryFile(/** @type {string} */ (uri), root))))]);
     if (!files.length) return;
+    if(sourceReceipt){const admitted=await ctx.admit(null);try{await sourceReceipt({user:ctx.user,project:ctx.project,sessionId:admitted.sessionId,uris:files,context:ctx.memoryContext});}catch{
+      // The recall itself succeeded and is returned. What cannot be proven is where its memories came from, so the run's learning fails
+      // closed: its record carries an unclassified source, which the distillation refuses (`methodSourceAllowsLearning`). Counted.
+      recordRecallNote("receipt_failed");
+      // When even that cannot be recorded (no hook, or it throws) a run could learn with no record of its sources: the recall is refused.
+      try{if(typeof sourceReceiptFailed!=='function')throw new Error('no hook');await sourceReceiptFailed({user:ctx.user,project:ctx.project,sessionId:admitted.sessionId,context:ctx.memoryContext});}
+      catch{throw new HttpError(503,"memory_scope_denied","The memory source receipt could not be stored.");}
+    }}
     void Promise.resolve().then(() => overlay.noteRecalled(userId, files)).then(() => recordRecallNote("noted"), () => recordRecallNote("failed"));
+  }
+
+  async function rawHistory(ctx, given) {
+    // Context mode is what opens a profile: original history never enters it.
+    const target = given.target_uri ? absolute(given.target_uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
+    if (!historySearch || config.memoryHistorySearchEnabled !== true || given.mode === 'context' || target !== `${ctx.userRoot}/memories` || !String(given.query ?? '').trim()) return [];
+    let timer;
+    try {
+      return await Promise.race([
+        Promise.resolve().then(() => historySearch({ user: ctx.user, project: ctx.project, query: String(given.query).slice(0, 2000), limit: given.limit })).catch(() => []),
+        new Promise(resolve => { timer = setTimeout(() => resolve([]), capsuleWaitMs); }),
+      ]);
+    } finally { clearTimeout(timer); }
   }
 
   /** @param {Map<string, { until: number, count: number }>} windows @param {string} key @param {number} span @param {number} limit */
@@ -416,17 +443,16 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     } catch { /* the worker registers what the gateway could not */ }
   }
 
-  /** Conversations whose project this process has already put in the overlay's ledger. @type {Set<string>} */
-  const noted = new Set();
-  /** @param {string} userId @param {string} sessionId @param {string} projectId */
-  async function noteSession(userId, sessionId, projectId) {
-    const key = `${userId}\u0000${sessionId}`;
-    if (noted.has(key) || !overlay?.configured) return;
-    try {
-      await overlay.noteSession(userId, sessionId, projectId);
-      if (noted.size > 5_000) noted.clear();
-      noted.add(key);
-    } catch { recordLedgerFailure(); }
+  /** Every native mutation revalidates its durable scope; reset may remove an earlier binding without changing project identity.
+   * @param {string} userId @param {string} sessionId @param {string} projectId */
+  async function noteSession(userId,sessionId,projectId,projectCreatedAt=undefined) {
+    if(!overlay?.configured)return;
+    try { await overlay.noteSession(userId,sessionId,projectId,projectCreatedAt); }
+    catch(error) {
+      recordLedgerFailure();
+      if(error?.code==='memory_scope_denied')throw error;
+      throw new HttpError(503,'memory_scope_denied','The native session binding cannot be verified.');
+    }
   }
 
   /**
@@ -620,6 +646,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     let answer;
     try {
       if (context?.kind === 'geo-project') await ensureRegistered(user.id, view, context);
+      else await noteSession(user.id,sessionId,project.id,context?.projectCreatedAt??project.projectCreatedAt);
       answer = await /** @type {any} */ (view).commit(user.id, sessionId, { keepRecentCount });
     } catch (error) {
       if (/** @type {any} */ (error)?.code === "memory_index_not_found") { recordGatewayCommit("nothing_pending"); return { ...nothing, outcome: "local", commit: "nothing_pending" }; }
@@ -636,7 +663,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       }
       recordGatewayCommit("accepted");
       try {
-        await overlay?.recordCommit({ userId: user.id, archiveUri: result.archive_uri, engineSession: sessionId, projectId: project.id, origin: "gateway", taskId: typeof result.task_id === "string" ? result.task_id : null });
+        await overlay?.recordCommit({ userId: user.id, archiveUri: result.archive_uri, engineSession: sessionId, projectId: project.id,...(context?.projectCreatedAt??project.projectCreatedAt?{projectCreatedAt:context?.projectCreatedAt??project.projectCreatedAt}:{}), origin: "gateway", taskId: typeof result.task_id === "string" ? result.task_id : null });
       } catch { recordLedgerFailure(); }
       return { status: 200, json: answer, outcome: "forwarded", commit: "accepted" };
     }
@@ -667,17 +694,19 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         return { status: 200, json: local, outcome: "withheld" };
       }
       await ctx.ensureRegistered();
+      if(!ctx.shared)await noteSession(ctx.user.id,sessionId,ctx.project.id,ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt);
       const created = await ctx.sessions.createSession(ctx.user.id, sessionId);
       return { status: 200, json: created, outcome: "forwarded" };
     },
     async sessionRead(ctx) {
       const sessionId = ctx.match[1];
       const admitted = await ctx.admit(sessionId);
-      if (admitted.learnReason === "memory_off" || admitted.learnReason === 'unproven_session') {
+      if (admitted.learnReason === "memory_off" || admitted.learnReason === 'unproven_session' || admitted.learnReason === 'source_deleted') {
         recordGatewayWithheld(admitted.learnReason);
         return { status: 200, json: ok({ session_id: sessionId, message_count: 0, commit_count: 0, pending_tokens: 0 }), outcome: "withheld" };
       }
       if (ctx.shared) await ctx.ensureRegistered();
+      else if(overlay?.configured)await overlay.assertSessionScope(ctx.user.id,sessionId,ctx.project.id,ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt);
       return { status: 200, json: await ctx.sessions.readSession(ctx.user.id, sessionId), outcome: "forwarded" };
     },
     async messageWrite(ctx) {
@@ -701,6 +730,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       }
       if (decision.masked) recordGatewayMasked();
       await ctx.ensureRegistered();
+      if (!ctx.shared) await noteSession(ctx.user.id, sessionId, ctx.project.id,ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt);
       // Only a person's words open a batch with the project line; an assistant message that arrives first leaves the batch without it.
       const spokenByPerson = decision.forward.role === "user";
       if (spokenByPerson) await noteProjectContext(ctx, sessionId);
@@ -715,8 +745,6 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         answer = await ctx.sessions.addMessage(ctx.user.id, sessionId, decision.forward);
       }
       recordGatewayMessage("forwarded");
-      // Which project this conversation is held in, noted once: the engine's own idle commits never pass the gateway.
-      if (!ctx.shared) await noteSession(ctx.user.id, sessionId, ctx.project.id);
       return { status: 200, json: answer, outcome: "forwarded" };
     },
     async commit(ctx) {
@@ -743,8 +771,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         if (ctx.shared) await ctx.ensureRegistered();
         const listed = await scopedListSearch(ctx.sessions, ctx, given);
         const found = ctx.shared ? await sharedProjectSearch(ctx, listed, false, given) : listed;
-        noteRecalled(ctx, (/** @type {any} */ (found).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
-        return { status: 200, json: found, outcome: "forwarded" };
+        await noteRecalled(ctx, (/** @type {any} */ (found).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
+        const history = await rawHistory(ctx, given);
+        return { status: 200, json: history.length ? { ...found, result: { .../** @type {any} */ (found.result), history } } : found, outcome: "forwarded" };
       }
       if (given.target_uri !== undefined) throw new HttpError(400, "memory_gateway_body_invalid", "Context search does not accept a target URI.");
       const { purpose: _purpose, quotas: _quotas, peer_scope: _peerScope, ...rest } = given;
@@ -757,7 +786,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         await ctx.ensureRegistered();
         answered = await sharedProjectSearch(ctx, await ctx.sessions.search(ctx.user.id, body), true, body);
       }
-      noteRecalled(ctx, [...(answered?.result?.entries ?? []), ...(answered?.result?.memories ?? [])].map((/** @type {any} */ hit) => hit?.uri));
+      await noteRecalled(ctx, [...(answered?.result?.entries ?? []), ...(answered?.result?.memories ?? [])].map((/** @type {any} */ hit) => hit?.uri));
       return { status: 200, json: answered, outcome: "forwarded" };
     },
     async read(ctx) {
@@ -771,7 +800,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (ctx.shared) await ctx.ensureRegistered();
       const text = await ctx.sessions.read(ctx.user.id, uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
       if (text === null) return { ...missing, outcome: "forwarded" };
-      noteRecalled(ctx, [absolute(uri, ctx.userRoot)]);
+      await noteRecalled(ctx, [absolute(uri, ctx.userRoot)]);
       return { status: 200, json: ok(text), outcome: "forwarded" };
     },
     async list(ctx) {
@@ -882,7 +911,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) && !isHidden(uri)).slice(0, 10).map(uri => absolute(uri, ctx.userRoot));
             if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件。")); continue; }
             forward.push({ ...message, params: { ...message.params, arguments: { uris } } });
-            afterCall.set(message.id, async (answer) => { if (!answer?.error) noteRecalled(ctx, uris.map((/** @type {string} */ uri) => absolute(uri, ctx.userRoot))); });
+            afterCall.set(message.id, async (answer) => { if (!answer?.error) await noteRecalled(ctx, uris.map((/** @type {string} */ uri) => absolute(uri, ctx.userRoot))); });
           } else if (name === "list") {
             const uri = typeof args.uri === "string" && args.uri ? absolute(args.uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
             if (isHidden(uri, true)) { local.push(toolText(message.id, "（空）")); continue; }
@@ -910,7 +939,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             }
             // The engine's list mode is answered from its structured REST rows, filtered here (`scopedListSearch`).
             const result = await scopedListSearch(ctx.sessions, ctx, args);
-            noteRecalled(ctx, (/** @type {any} */ (result).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
+            await noteRecalled(ctx, (/** @type {any} */ (result).result?.memories ?? []).map((/** @type {any} */ hit) => hit?.uri));
             const content = [ { type: "text", text: JSON.stringify(result.result) } ];
             const target = typeof args.target_uri === "string" && args.target_uri ? absolute(args.target_uri, ctx.userRoot) : `${ctx.userRoot}/memories`;
             // The capsule's half (item 9 above): for a search over the whole of the person's memories and not for one that names a
@@ -927,6 +956,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
               const text = capsuleSearchText(/** @type {any} */ (items));
               if (text) content.push({ type: "text", text });
             }
+            const original = historySearchText(await rawHistory(ctx, args));
+            if (original) content.push({ type: "text", text: original });
             local.push({ jsonrpc: "2.0", id: message.id, result: { content } });
           }
           continue;
@@ -963,7 +994,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             if (!found) return;
             recordGatewayCommit("accepted");
             try {
-              await overlay?.recordCommit({ userId: ctx.user.id, archiveUri: `${ctx.userRoot}/sessions/${found[1]}/history/archive_001`, engineSession: found[1], projectId: ctx.project.id, origin: "tool", taskId: found[2] });
+              await overlay?.recordCommit({ userId: ctx.user.id, archiveUri: `${ctx.userRoot}/sessions/${found[1]}/history/archive_001`, engineSession: found[1], projectId: ctx.project.id,...(ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt?{projectCreatedAt:ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt}:{}), origin: "tool", taskId: found[2] });
             } catch { recordLedgerFailure(); }
           });
           continue;
@@ -1011,7 +1042,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             .map((/** @type {any} */ tool) => ({ name: tool.name, ...(ctx.shared ? PROJECT_MEMORY_TOOLS : MEMORY_GATEWAY_TOOLS)[/** @type {keyof typeof MEMORY_GATEWAY_TOOLS} */ (tool.name)] }));
         }
         const after = afterCall.get(message?.id);
-        if (after) await after(message).catch(() => {});
+        if (after) await after(message).catch(error => {if(error instanceof HttpError&&error.code==="memory_scope_denied")throw error;});
       }
       const all = [...messages, ...local];
       if (!all.length) return { status: answer.status, text: answer.text, contentType: answer.contentType || "application/json", outcome: "forwarded" };
@@ -1144,7 +1175,12 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           return exclusions.slice(0, 200);
         },
       };
-      const answer = await handlers[route](ctx);
+      const deletionVersion = sourceDeletion ? await sourceDeletion.version(user.id) : null;
+      // Only the routes that write are fenced here; a read never takes the owner's fence. `mcp` is fenced where it writes: its remember and forget
+      // calls go through the engine client (every non-GET request) and the store, each of which takes the fence itself.
+      const writes = route === 'sessionCreate' || route === 'messageWrite' || route === 'commit';
+      const answer = writes ? await withNativeMemoryWrite(overlay?.database,user.id,()=>handlers[route](ctx)) : await handlers[route](ctx);
+      if (sourceDeletion && await sourceDeletion.version(user.id) !== deletionVersion) throw new HttpError(503, 'memory_gateway_source_changed', 'The source privacy state changed during this request.');
       recordGatewayRequest(route, answer.outcome);
       send(answer);
     } catch (error) {
@@ -1183,9 +1219,11 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
   const commitSession = async ({ user, project, engineSessionId, admitted = null, keepRecentCount = 0, context = null }) => {
     if (!enabled) return { status: 404, json: null, outcome: "refused", commit: /** @type {const} */ ("not_learning") };
     if (!new RegExp(`^${SESSION}$`).test(String(engineSessionId))) throw new HttpError(400, "memory_gateway_body_invalid", "A session id is required.");
-    const resolved = await resolveContext(user, project, context);
-    const decision = await scopedAdmission(user, project, engineSessionId, null, resolved, admitted);
-    return commitEngineSession({ user, project, sessionId: engineSessionId, admitted: decision, keepRecentCount, context: resolved });
+    return withNativeMemoryWrite(overlay?.database,user.id,async()=>{
+      const resolved = await resolveContext(user, project, context);
+      const decision = await scopedAdmission(user, project, engineSessionId, null, resolved, admitted);
+      return commitEngineSession({ user, project, sessionId: engineSessionId, admitted: decision, keepRecentCount, context: resolved });
+    });
   };
 
   return Object.assign(handle, { commitSession });

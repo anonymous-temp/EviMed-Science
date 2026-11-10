@@ -320,7 +320,7 @@ def calculate(arguments, execution_context=None):
             raise ResearchCalculateError("result_execution_context_unavailable", "Rendering needs an owned conversation turn.")
         payload = _render_payload(payload)
     elif set(payload) != {"jobId"} or not isinstance(payload.get("jobId"), str) or not _ID.fullmatch(payload["jobId"]):
-        raise ResearchCalculateError("result_input_invalid", "Supply the owned calculation job identifier.")
+        raise ResearchCalculateError("result_input_invalid", "status and cancel take jobId alone, the id the start answer returned (data.id); any other field, method included, is refused.")
     base, token = _gateway()
     headers = {"authorization": "Bearer " + token, "content-type": "application/json", "accept": "application/json"}
     if context:

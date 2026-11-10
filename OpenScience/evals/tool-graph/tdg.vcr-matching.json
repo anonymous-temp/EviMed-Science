@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:baa4631c72f141591cafa356643bea882fbb4265e870782d9f9cc57157e82016",
+  "version": "sha256:f9c172a2cd68faccda8c629277a6bd3e77cd5a36483fa42f924aa2319b43aaeb",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 39,
@@ -2280,7 +2280,8 @@
               "candidate_trials",
               "soa",
               "regulatory_contacts",
-              "candidates"
+              "candidates",
+              "success_rates"
             ]
           },
           "filter": {
@@ -2306,7 +2307,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; a start opens a result page. action=shape with kind gives exact fields; do not guess keys. Patients vs trials or a protocol: kind match_judge. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
+      "description": "Trial sample size, power or events; comparing designs (saved too) or searching one; dose finding; disease-progression arms (Alzheimer ADAS-cog); patient forecasts; synthetic cohort from a baseline table; external control; comparing several drugs (network meta-analysis): calculate here, not in your script. No study needed. action=shape with kind gives fields; do not guess keys. Jobs that outlive this turn resume here.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -2317,7 +2318,12 @@
               "status",
               "cancel",
               "shape",
-              "validate"
+              "validate",
+              "search",
+              "search_status",
+              "search_cancel",
+              "compare",
+              "compare_status"
             ],
             "default": "start"
           },
@@ -2359,6 +2365,19 @@
               "prognostic_adjustment_comparator",
               "generate_patients_longitudinal",
               "population_check",
+              "design_confirmatory",
+              "bias_analysis",
+              "stc_comparator",
+              "network_meta",
+              "dose_response_meta",
+              "effect_shrinkage",
+              "target_trial_emulation",
+              "design_dose",
+              "design_bayesian",
+              "design_win_ratio",
+              "borrowing_prior",
+              "train_prognostic_model",
+              "generate_progression",
               "match_judge",
               "records_import",
               "forecast_trajectories",
@@ -2424,29 +2443,90 @@
             "maxLength": 160,
             "pattern": "^[A-Za-z0-9_.:@-]+$"
           },
+          "manifest": {
+            "type": "object"
+          },
+          "campaignId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9_.:@-]+$"
+          },
+          "experiment": {
+            "type": "object"
+          },
+          "experimentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9_.:@-]+$"
+          },
           "sources": {
             "type": "array",
             "maxItems": 8,
-            "description": "A number you read in a paper and wrote into the scenario: [{field: its path in the scenario, e.g. truth.controlMedian, publication: PMID or DOI, quote: the sentence that prints it}]. The platform records the paper, and the result page names it.",
+            "description": "A number you read in a paper and wrote into the scenario: [{field: its path in the scenario, e.g. truth.controlMedian, publication: PMID or DOI, quote: the sentence that prints it}]. For a user-stated parameter, optionally use {origin:user, field:design.nTreat, value:30, quote:<original human sentence>, unit:patients, context:<its meaning>}. Bind only the stated meaning, arm and unit; equal digits elsewhere do not establish a parameter. Missing bindings stay assumptions.",
             "items": {
-              "type": "object",
-              "properties": {
-                "field": {
-                  "type": "string"
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "field": {
+                      "type": "string"
+                    },
+                    "publication": {
+                      "type": "string"
+                    },
+                    "quote": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "publication",
+                    "quote"
+                  ],
+                  "additionalProperties": false
                 },
-                "publication": {
-                  "type": "string"
-                },
-                "quote": {
-                  "type": "string"
+                {
+                  "type": "object",
+                  "properties": {
+                    "origin": {
+                      "const": "user"
+                    },
+                    "field": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "number"
+                    },
+                    "quote": {
+                      "type": "string"
+                    },
+                    "unit": {
+                      "type": "string"
+                    },
+                    "context": {
+                      "type": "string"
+                    },
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "messageSeq": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "origin",
+                    "field",
+                    "value",
+                    "quote",
+                    "unit",
+                    "context"
+                  ],
+                  "additionalProperties": false
                 }
-              },
-              "required": [
-                "field",
-                "publication",
-                "quote"
-              ],
-              "additionalProperties": false
+              ]
             }
           }
         },

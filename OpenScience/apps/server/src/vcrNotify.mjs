@@ -32,6 +32,7 @@
 import {
   VCR_CONVERSATION_STUDY_NAME, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_RESULT_KIND_TABS, VCR_TAB_LABELS_ZH, errorCodeMessage, vcrResultClass,
 } from "@evimed/domain";
+import { vcrTypeOneLevel, vcrTypeOneMeasured, vcrTypeOneVerdict } from "./vcrTypeOneVerdict.mjs";
 
 /** The seven kinds, by the key each notice is counted under. */
 export const VCR_NOTICE_KINDS = VCR_NOTIFICATION_KINDS;
@@ -93,7 +94,8 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
   const what = resultKind === "trial_scenario"
     ? (/** @type {Record<string, string>} */ ({ analytic: "方案计算", simulation: "方案模拟", assurance: "成功把握计算" })[String(stage)] ?? "方案模拟")
     : (/** @type {Record<string, string>} */ ({ population: "人群生成", patient_set: "虚拟患者生成", comparator: "对照分析", design_grid: "设计网格",
-      accrual_forecast: "入组预测", matching: "匹配评估", match_judge: "患者与试验判定", records_import: "导入病历", population_check: "人群核对" })[resultKind] ?? "计算");
+      accrual_forecast: "入组预测", matching: "匹配评估", match_judge: "患者与试验判定", records_import: "导入病历", population_check: "人群核对", design_confirmatory: "确认性设计", design_dose: "剂量探索设计", design_bayesian: "贝叶斯设计", design_win_ratio: "胜率比设计",
+      network_meta: "网络荟萃分析", dose_response_meta: "剂量反应荟萃分析", effect_shrinkage: "已发表效应的收缩", prognostic_training: "预后模型训练", progression_simulation: "疾病进展模拟" })[resultKind] ?? "计算");
   const name = clip(String(label ?? "").replace(/^[A-Z]\d*\s+/, ""), 24);
   if (state === "failed") {
     const code = typeof error?.code === "string" ? error.code : "";
@@ -117,11 +119,18 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
     const assurance = measure("assurance");
     const events = measure("required_events");
     const total = measure("required_total");
+    // The design's name and the label of its number are two words: a number or a Latin letter never runs into the next one (live D9, 「试验方案 4I 类错误」).
+    const lead = name ? `${name} ` : "";
     if (stage === "analytic" && (events || total)) {
       headline = [name, events ? `所需事件数 ${count(events.value)} 例` : null, total ? `所需样本量 ${count(total.value)} 例` : null].filter(Boolean).join(" ");
-    } else if (stage === "assurance" && assurance) headline = `${name}成功把握 ${percent(assurance.value)}`.trim();
-    else if (power) headline = `${name}功效 ${percent(power.value)}`.trim();
-    else if (typeOne) headline = `${name}I 类错误 ${percent(typeOne.value)}`.trim();
+    } else if (stage === "assurance" && assurance) headline = `${lead}成功把握 ${percent(assurance.value)}`;
+    else if (power) headline = `${lead}功效 ${percent(power.value)}`;
+    else if (typeOne) {
+      // Said from the verdict on its conservative bound, as the page and the lab say it (live D8: 2.53% ± 0.11% read 「I 类错误 2.5%」);
+      // with no level to judge against, the estimate and its error, never the estimate rounded onto the level.
+      const verdict = vcrTypeOneVerdict({ value: typeOne.value, mcse: typeOne.mcse, bound: vcrTypeOneLevel({ result }) });
+      headline = `${lead}I 类错误${verdict ? verdict.text : ` ${vcrTypeOneMeasured({ value: typeOne.value, mcse: typeOne.mcse })}`}`;
+    }
   } else if (resultKind === "population" || resultKind === "patient_set") {
     const generated = finiteNumber(result?.counts?.generatedRecords);
     const real = finiteNumber(result?.counts?.realPatients);

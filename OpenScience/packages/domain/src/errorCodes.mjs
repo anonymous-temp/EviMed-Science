@@ -1,13 +1,11 @@
 import { VCR_LONGITUDINAL_ERROR_CODES } from './vcrLongitudinal.mjs';
 import { EVOLUTION_ERROR_MESSAGES } from './evolution.mjs';
 import { READINESS_ERROR_MESSAGES_ZH } from './readinessCodes.mjs';
-import { AGENDA_MIN_EPISODE_BUDGET_CNY, MIN_RUN_BUDGET_CNY } from './agenda.mjs';
 import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
 import { SOURCE_CHANGE_ERROR_MESSAGES } from "./sourceChange.mjs";
 import { CONNECTOR_MISSING_CODES } from "./connectorCredentials.mjs";
 import { DATA_SEMANTICS_ERROR_CODES, DATA_SEMANTICS_ERROR_MESSAGE_ZH } from "./dataSemantics.mjs";
-import { TASK_TOOL_ERROR_CODES, TASK_TOOL_ERROR_MESSAGE_ZH, TASK_TOOL_RUN_FIXES } from "./taskTools.mjs";
 import { EVIDENCE_CARD_ERROR_MESSAGES_ZH } from "./evidenceCard.mjs";
 import { EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH } from "./evidenceUpkeep.mjs";
 import { GENE_EXPRESSION_ERROR_MESSAGE_ZH, GENE_EXPRESSION_LIMITATION_ERROR_CODES, GENE_EXPRESSION_LIMIT_MESSAGE_ZH, GENE_EXPRESSION_RUN_FIX_ERROR_CODES } from "./geneExpression.mjs";
@@ -268,11 +266,6 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // did not have the recorded interpretation. The two codes a malformed call earns are the run's to fix and sit
   // in the terminal set below.
   ...DATA_SEMANTICS_ERROR_CODES.filter((code) => !DATA_SEMANTICS_RUN_FIXES.includes(code)),
-  // The two tools that schedule and change a task from a conversation (schedule_task / update_task → taskToolsGateway.mjs)
-  // not answering: the feature off, a project at its task limit, an outage, an execution (which may not make tasks).
-  // The conversation tells the researcher plainly and the page's own form still works. The codes a malformed call earns
-  // are the run's to fix and sit in the terminal set below.
-  ...TASK_TOOL_ERROR_CODES.filter((code) => !TASK_TOOL_RUN_FIXES.includes(code)),
   // NCBI Gene Expression Omnibus (gene_expression_series / gene_expression_differential, 2026-10-04): an input over one of
   // the six limits, identities that do not agree, a series with no matrix or one that cannot be read, an engine that is
   // not there. Each refuses that one retrieval or computation, the report says so, and the rest goes on. The codes a
@@ -696,9 +689,6 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "clinical_score_missing_inputs",
   "clinical_score_assume_absent_invalid",
   ...DATA_SEMANTICS_RUN_FIXES,
-  // And for a task tool: an instruction, title, schedule or id the run built wrongly, a task that is not this project's, a change
-  // that changes nothing.
-  ...TASK_TOOL_RUN_FIXES,
   // The same for a gene-expression call: an accession, group, path or output directory the run built wrongly, a capture it
   // edited, a result directory that already holds a different analysis (its own results are kept).
   ...GENE_EXPRESSION_RUN_FIX_ERROR_CODES,
@@ -812,6 +802,10 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "vcr_evidence_item_incomplete",
   // A publication's number the platform could not hold against a text it read: saved as reported and unchecked, a reminder on the item.
   "vcr_evidence_reported_unverified",
+  // The numbers of an extracted value (or of a trial's values) that do not agree with each other: a note on the item, which is saved as read.
+  "vcr_evidence_values_inconsistent",
+  // A second, independent reading of the passage a value was read from found another number: a note on the card, the first value stands.
+  "vcr_evidence_second_read_differs",
   // A candidate trial written for a registry record that has no original eligibility wording (ChiCTR is a listing): saved, every criterion
   // unknown for 缺登记原文. A warning on the item the run wrote, not a refusal.
   "registry_text_missing",
@@ -1060,7 +1054,7 @@ export const CREDIT_ERROR_CODES = Object.freeze([
 /**
  * The refusals that say 「this account's allowance cannot pay for the start」: the
  * balance gate's own, on a real wallet and on a simulated one. They are the
- * codes work waits on — an autopilot episode is deferred, never failed, and a
+ * codes work waits on — a scheduled run is deferred, never failed, and a
  * programme step stays pending — so a place that waits for credits asks this
  * list rather than one literal, or the simulated refusal would be a failure there.
  */
@@ -1202,6 +1196,12 @@ export const RUNTIME_ROOM_REFUSAL_CODES = Object.freeze([...RUNTIME_ROOM_WAIT_CO
 export const RUNTIME_START_RECOVERY = Object.freeze({
   runtime_cleanup_required: 'wait',
   runtime_busy: 'wait',
+  runtime_source_kernel_mismatch: 'retry',
+  runtime_source_helper_unavailable: 'retry',
+  runtime_source_inventory_limit: 'retry',
+  runtime_source_busy: 'wait',
+  runtime_source_identity_changed: 'retry',
+  runtime_ui_response_invalid: 'retry',
   runtime_reserved_for_autopilot: 'autopilot',
   runtime_limit_exceeded: 'slots',
   runtime_capacity_full: 'room',
@@ -1230,11 +1230,11 @@ export function runtimeStartRecovery(code, status) {
 
 /**
  * Codes a person meets outside a run's verdict: a refusal before anything
- * starts, and the autopilot verification episode's own outcomes.
+ * starts.
  *
  * These never reach `run.errorCode`, but they do reach a human — a 402 at the
- * moment they press Send, a 423 while their own proactive research holds the
- * runtime, a claim card saying an independent check could not be completed —
+ * moment they press Send, a 423 while a bounded run holds the
+ * runtime —
  * and each was previously rendered as its raw English identifier or swallowed
  * entirely.
  */
@@ -1244,6 +1244,24 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   'analysis_limit_reached',
   // 2026-10-13: memory on OpenViking's native engine. The first four are what a person on the memory page can be answered
   // with; the `memory_gateway_*` ones are what the memory gateway answers a runtime's memory plugin (`memoryGateway.mjs`).
+  // Source deletion keeps original bytes, native cleanup and uncertain lineage as separate states.
+  'official_promotion_authority_changed',
+  'runtime_source_identity_changed',
+  'runtime_source_busy',
+  'runtime_source_inventory_limit',
+  'runtime_source_helper_unavailable',
+  'runtime_source_kernel_mismatch',
+  'source_deletion_unavailable',
+  'source_deletion_pending',
+  'source_deletion_identity_changed',
+  'source_deletion_limit',
+  'memory_source_cleanup_busy',
+  'memory_source_cleanup_unavailable',
+  'memory_source_body_changed',
+  'memory_source_deleted',
+  'memory_source_lineage_unverified',
+  'memory_gateway_source_changed',
+  'runtime_ui_response_invalid',
   'memory_engine_unavailable',
   'memory_engine_unsupported',
   'memory_content_refused',
@@ -1293,16 +1311,6 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   'project_limit_reached',
   'default_project_protected',
   'illegal_state_transition',
-  'verification_run_failed',
-  'verification_result_missing',
-  'verification_result_unreadable',
-  'verification_result_schema_invalid',
-  'verification_verdict_invalid',
-  'verification_verdict_missing',
-  // A re-check that was cancelled together with its agenda, and the floor an
-  // agenda's per-episode cap is held to (`AGENDA_MIN_EPISODE_BUDGET_CNY`).
-  'verification_canceled_by_stop',
-  'autopilot_episode_budget_too_small',
 ])
 
 /**
@@ -1329,6 +1337,9 @@ const sourceIntakeErrorCodes = Object.freeze([
   'source_parser_input_too_large',
   'source_parser_checksum_failed',
   'source_parser_auth_failed',
+  'source_parser_scope_denied',
+  'source_parser_route_missing',
+  'source_parser_document_unreadable',
   'source_parser_quota_exhausted',
   'source_parser_rate_limited',
   'source_parser_unavailable',
@@ -1378,43 +1389,6 @@ const sourceIntakeErrorCodes = Object.freeze([
   'openlist_storage_missing',
   'openlist_credential_rejected',
   'openlist_permission_denied',
-])
-
-/**
- * Codes the scheduled research's material routes answer with
- * (`AutopilotService.addMaterials`): shown on a question's page where the
- * researcher adds a document to it. A source that is not this question's
- * project's, and one that is not there, answer the same way on purpose. Private
- * for the same reason as the intake list.
- */
-const autopilotMaterialErrorCodes = Object.freeze([
-  'autopilot_material_not_found',
-  'autopilot_materials_full',
-  // 2026-10-08: the task page's own reads and stops of one execution (`POST …/episodes/:id/cancel`). A task or an execution that is
-  // not there for this account; the page says so and goes back to its list.
-  'autopilot_agenda_not_found',
-  'autopilot_episode_not_found',
-  'autopilot_cancellation_failed',
-  // 2026-10-25: the deployment's scheduler is off. The page's own code, so it is not the conversation tool's sentence that sends the
-  // researcher to the very page they are on; saved tasks and their results stay readable.
-  'autopilot_scheduling_disabled',
-])
-
-/**
- * The two refusals a scheduled task's own spending caps raise before an episode
- * starts (`AutopilotService.assertAffordable`): what this task has spent in the
- * last 24 hours or 7 days has reached the 每日上限 or 每周上限 written on the
- * task. They are not the account's ceiling and must not read as one — on
- * 2026-10-04 a task with ¥3 a day was refused in the account's words because
- * the researcher's own other research that day had cost ¥16, and the task had
- * spent nothing. Shown on the page where the researcher presses 立即运行 or
- * sends a follow-up, and on an episode that was refused at dispatch because the
- * budget was spent in between; the weekly one is named first when both are
- * spent, since it frees later.
- */
-export const AUTOPILOT_BUDGET_ERROR_CODES = Object.freeze([
-  'autopilot_daily_budget_spent',
-  'autopilot_weekly_budget_spent',
 ])
 
 /**
@@ -1615,6 +1589,8 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
   'vcr_assumption_role_missing',
   'vcr_evidence_item_incomplete',
   'vcr_evidence_reported_unverified',
+  'vcr_evidence_values_inconsistent',
+  'vcr_evidence_second_read_differs',
   'registry_text_missing',
   'vcr_report_section_invalid',
 ])
@@ -1712,6 +1688,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'patient_matching_waiting_for_round',
   'patient_matching_worker_unavailable',
   'vcr_protocol_source_mismatch',
+  'vcr_campaign_invalid', 'vcr_completion_covered', 'vcr_experiment_cancel_failed', 'vcr_experiment_enqueue_failed', 'vcr_experiment_invalid', 'vcr_experiment_not_found', 'vcr_experiment_repair_failed', 'vcr_plan_replicates',
   'vcr_task_context_deleted', 'vcr_completion_canceled', 'vcr_completion_disclosed', 'vcr_completion_notice_failed', 'vcr_completion_observed', 'vcr_completion_exhausted', 'vcr_finish_hooks_exhausted', 'vcr_completion_origin_invalid', 'vcr_completion_origin_unavailable', 'vcr_completion_unavailable', 'vcr_invocation_unavailable', 'vcr_job_advance_failed', 'vcr_model_version_changed', 'vcr_patient_context_invalid', 'vcr_object_reference_invalid',
   'vcr_backup_status_unavailable', 'vcr_backup_unhealthy', 'vcr_backup_references_missing', 'vcr_subject_table_unreadable',
   'vcr_table_meaning_not_proposed', 'vcr_table_meaning_failed', 'vcr_table_meaning_not_recorded',
@@ -1854,12 +1831,18 @@ export const VCR_PROTOCOL_ISSUE_CODES = Object.freeze([
  * result's reason.
  */
 export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
-  'constraint_unsatisfiable', 'cpu_budget_exhausted', 'design_effect_null', 'grid_cell_failed', 'handler_error',
+  'constraint_unsatisfiable', 'cpu_budget_exhausted', 'design_effect_null', 'design_not_computable', 'effect_against_direction', 'grid_cell_failed', 'handler_error',
   'input_format_unsupported', 'input_hash_mismatch', 'input_out_of_range', 'input_parse_failed', 'input_source_not_reconstructed',
   'input_too_large',
   'job_invalid', 'mechanistic_engine_unknown', 'mechanistic_field_missing', 'missing_covariate',
-  'model_card_field_missing', 'model_risk_unknown', 'performance_measure_unsupported', 'replicates_all_failed',
+  'model_card_field_missing', 'model_risk_unknown', 'non_inferiority_effect_beyond_margin', 'performance_measure_unsupported', 'replicates_all_failed',
   'required_field_missing', 'twin_label_inconsistent', 'uncertainty_and_variability_conflated',
+  // evidence synthesis beyond a pairwise pool (algorithm round C5, C6)
+  'dose_response_not_computable', 'dose_response_method_unavailable', 'network_not_connected', 'network_not_computable',
+  // imputation of missing covariates (algorithm round C7)
+  'imputation_not_possible',
+  // target-trial emulation (algorithm round C3, C4)
+  'too_many_person_periods',
 ])
 
 export const GEO_ROUTE_ERROR_CODES = Object.freeze([
@@ -2204,8 +2187,6 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...recoverableEvidenceSourceErrorCodes,
   ...terminalEvidenceSourceErrorCodes,
   ...sourceIntakeErrorCodes,
-  ...autopilotMaterialErrorCodes,
-  ...AUTOPILOT_BUDGET_ERROR_CODES,
   ...libraryErrorCodes,
   ...capsuleTransferErrorCodes,
   ...GEO_ROUTE_ERROR_CODES,
@@ -2572,6 +2553,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_task_context_deleted: '这段对话的研究资料已删除，请新开对话继续研究。',
   vcr_completion_canceled: '已按你的停止请求结束自动续接，计算结果仍可查看。',
   vcr_completion_disclosed: '计算结果已保存，可在原对话中查看。',
+  vcr_campaign_invalid: '这次设计搜索的设置不完整或前后不一致，没有开始。',
+  vcr_experiment_invalid: '这项实验的设置不完整或前后不一致，没有开始。',
+  vcr_experiment_not_found: '没有找到这项实验。',
   vcr_completion_notice_failed: '结果通知暂未送达，请稍后查看原对话。',
   vcr_completion_observed: '计算结果已在原对话读取。',
   vcr_completion_exhausted: '计算结果已保存，请在原对话中查看。',
@@ -2591,6 +2575,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   registry_text_missing: '这条登记记录没有入排条件原文（ChiCTR 经证据接口只有清单）；条件已保存，评估时一律按未知算，原因是缺登记原文，不会判成满足或不满足。',
   vcr_evidence_item_incomplete: '这条抽取值还缺合并要用的项（置信区间或样本量）；已保存，论文里有就补进同一条，论文没有报告就另写一条“未报告”。',
   vcr_evidence_reported_unverified: '这条文献数值已保存，但引文没能对上平台读到的原文，所以标为“未核对”；它仍可作为假设卡的依据，取回原文后再写同一条就会核对。',
+  vcr_evidence_values_inconsistent: '这条抽取值的几个数彼此对不上（区间、p 值、事件数或各组人数）；已按读到的保存、照常使用，请回到原文核对是不是抄错了。',
+  vcr_evidence_second_read_differs: '同一段原文被独立读了两次，两次读到的数不一样；已按第一次读到的保存、照常使用，请回到原文核对是哪一个。',
   vcr_model_assessment_incomplete: '这条模型评估记录还有没填的项（关注的问题、使用情境、评级及理由、技术标准等）；已保存，文件里会写「未填写」，补上后再写一个版本。',
   vcr_report_section_invalid: '这份文件的文字只写规定的几节，表格与登记项由平台写；这次提交的文字没有保存，换成允许的节再写。',
   // The trial registry channel.
@@ -2789,6 +2775,15 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   constraint_unsatisfiable: '人群的约束条件在重抽 200 轮后仍无法同时满足；放宽或改写约束。',
   cpu_budget_exhausted: '这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。',
   design_effect_null: '这个情景没有效应，解析法给不出样本量；方案的 I 类错误请用同一情景的模拟来测。',
+  design_not_computable: '这个设计在这些设定下算不出来；换一组设定（样本量、效应、期中分析的时点）再试，其余结果不受影响。',
+  effect_against_direction: '要为它定样本量的效应，必须是有利的一边：风险比和率比要小于 1，均数差和率差要落在你写的“哪个方向更好”那一侧；改一下效应的正负号或方向再算，其余结果不受影响。',
+  non_inferiority_effect_beyond_margin: '预期效应比非劣效界值还差，样本越多检验越不可能通过，所以不存在能达到目标把握度的样本量；把预期效应改到界值好的一侧再算。已定样本量下的把握度可以用模拟来看。',
+  dose_response_method_unavailable: '剂量反应方法所需的程序包在这个引擎里没能加载，和你的研究无关；稍后再试，其余结果不受影响。',
+  dose_response_not_computable: '这些研究的剂量水平太少，或水平之间太接近，拟合不出所选的剂量反应模型；改用线性模型，或补上研究的水平和病例数再试，其余结果不受影响。',
+  network_not_connected: '这些研究连不成一张网：有的治疗与其余治疗之间没有任何研究相连，无法比较；补上连接它们的研究，或把不相连的治疗分开分析，其余结果不受影响。',
+  network_not_computable: '这张网络在这些数据下算不出来；检查每项研究的结局数据和治疗名称是否写全、是否一致，其余结果不受影响。',
+  imputation_not_possible: '有缺失值的协变量观察到的值太少、类别太多或类别没有写清，插补不出来；换一个更完整的协变量，或去掉这个协变量，其余设置不受影响。',
+  too_many_person_periods: '这份人-期数据展开成随访表之后太大，超过了计算引擎的内存；缩短随访期数、让试验从更少的期开始，或者用更少的人。',
   grid_cell_failed: '方案网格里有一个格子没有算出来；其余格子照常给出。',
   handler_error: '统计引擎在这项计算里遇到了意外错误，没有给出任何数字。',
   input_format_unsupported: '数据文件的格式不受支持：请用 CSV、TSV、JSON 或 Excel（.xlsx）；Parquet 请先转成 CSV。',
@@ -3030,20 +3025,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   project_limit_reached: '这个账户的项目数已达上限。每个项目都有独立的存储空间和研究运行时，上限用来保证服务器资源够用。可以先导出并删除不再需要的项目，再新建。',
   default_project_protected: '默认项目不能归档或删除。可以改名，或把不再需要的内容移到别的项目。',
 
-  // ——— The autopilot's independent-check episode ———
-  //
-  // "The check could not be completed" is not "the claim was refuted", and the
-  // two must never read alike: one is our infrastructure, the other is a
-  // finding about the user's own adopted conclusion.
-  verification_run_failed: '独立复核这一次没能跑完，因此还没有复核结论。这不代表原来的结论被推翻。',
-  verification_result_missing: '独立复核跑完了但没有写出结论文件，因此这次没有复核结果。原结论未被推翻。',
-  verification_result_unreadable: '独立复核的结论文件读不出来，因此这次没有复核结果。原结论未被推翻。',
-  verification_result_schema_invalid: '独立复核的结论文件格式与约定不符，这次不采信它。原结论未被推翻。',
-  verification_verdict_invalid: '独立复核给出的结论不在允许的取值范围内，这次不采信它。原结论未被推翻。',
-  verification_verdict_missing: '独立复核没有给出结论。原结论未被推翻。',
-  verification_canceled_by_stop: '任务被停止时，这条结论的独立复核还在进行，已随任务一起取消，所以没有复核结果。原结论未被推翻。'
-    + '重新启用任务不会补做这次复核；下一次研究会重新检查新的结论。',
-
   // ——— Knowledge-base intake: what a source card and an upload refusal say ———
   // The in-house parser's refusals reach a researcher on the source card, and
   // three of them (413, 415, 422) are final on the first answer, so each says
@@ -3061,6 +3042,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   source_parser_input_too_large: '文件超过可解析的大小上限，拆分后再上传即可。',
   source_parser_checksum_failed: '文件在传给解析服务的途中发生了变化，校验没有通过；重新分析一次即可。',
   source_parser_auth_failed: '文档解析服务没有接受本平台的密钥，需要管理员配置解析服务密钥；纯文本类资料不受影响。',
+  source_parser_scope_denied: '文档解析服务的密钥没有解析权限，需要管理员换一把有权限的密钥；PDF 和 Office 文件在服务恢复前由平台自行读出文字。',
+  source_parser_route_missing: '文档解析服务的接口地址已经变了，需要管理员更新配置；PDF 和 Office 文件在服务恢复前由平台自行读出文字。',
+  source_parser_document_unreadable: '解析服务读不出这份文件里的文字：文件可能已加密、已损坏，或者文字层无法使用（扫描件请上传清晰的图片版）。',
   source_parser_quota_exhausted: '文档解析服务的可用额度已经用完，需要管理员补充额度后再重新分析。',
   source_parser_rate_limited: '文档解析服务这会儿请求太多，稍后再重新分析。',
   source_parser_unavailable: '文档解析服务暂时连不上，稍后再重新分析。',
@@ -3105,21 +3089,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   library_unavailable: '个人资料库暂时不可用，稍后再试。',
   library_payload_invalid: '资料库请求的内容不完整，刷新页面后再试。',
   library_source_invalid: '没有找到这份资料，刷新知识库后再试。',
-  autopilot_material_not_found: '找不到这份资料，或它不属于这个研究问题所在的项目。先把文件加入这个项目的知识库，再关联到问题。',
-  autopilot_materials_full: '这个研究问题已关联了足够多的资料。先移除不再需要的，再添加新的。',
-  autopilot_agenda_not_found: '找不到这个定时任务。它可能已被删除，回到任务列表刷新后再看。',
-  autopilot_episode_not_found: '找不到这次执行。它可能已被清理，刷新任务页后再看。',
-  autopilot_cancellation_failed: '任务计划已暂停或删除，但部分运行尚未停止。请重试停止。',
-  autopilot_scheduling_disabled: '定时执行暂不可用，已保存的任务和历史结果仍可查看。',
-  autopilot_daily_budget_spent:
-    '这个任务近 24 小时的花费已达它自己设定的“每日上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
-    + '等预算随时间释放，或在“编辑任务”里调高每日上限即可。',
-  autopilot_weekly_budget_spent:
-    '这个任务近 7 天的花费已达它自己设定的“每周上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
-    + '等预算随时间释放，或在“编辑任务”里调高每周上限即可。',
-  autopilot_episode_budget_too_small:
-    `“单次上限”不能低于 ${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)} 灵豆：一次模型调用要先预留约 1 灵豆才能发出，预算低于 ${MIN_RUN_BUDGET_CNY.toFixed(2)} 灵豆的研究一开始就会被拒绝。`
-    + '在“编辑任务”里调高单次上限即可，每日、每周上限也不能低于它。',
   library_item_not_found: '这份资料不在个人资料库里。',
   library_full: '个人资料库已满。先移出不再需要的资料，再加入新的。',
   library_source_removed: '这份资料在各个项目里都已删除，它的资料理解结果也随之删除，没有可以发布到记忆胶囊的内容；资料库里的正文副本仍然可以阅读和检索。',
@@ -3156,6 +3125,23 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   method_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
   // ——— 记忆：原生引擎 (nativeMemoryStore.mjs, memoryGateway.mjs) ———
+  official_promotion_authority_changed: '这一做法的确认依据已变化，暂未启用。',
+  runtime_source_identity_changed: '来源对话已变化，暂未清除，请刷新后重试。',
+  runtime_source_busy: '研究环境仍在使用或清理中，请稍后重试。',
+  runtime_source_inventory_limit: '内容较多，暂时无法确认清除范围。',
+  runtime_source_helper_unavailable: '暂时无法清除来源对话，请稍后重试。',
+  runtime_source_kernel_mismatch: '当前研究环境版本暂不支持这项清除操作。',
+  source_deletion_unavailable: '当前研究环境尚不支持清除来源对话。',
+  source_deletion_pending: '来源对话仍在清除，稍后再导出。',
+  source_deletion_identity_changed: '来源对话已变化，清除尚未完成。',
+  source_deletion_limit: '这段对话的关联内容较多，清除尚未完成。',
+  memory_source_cleanup_busy: '记忆正在更新，请稍后重试。',
+  memory_source_cleanup_unavailable: '记忆清除暂时无法完成，待服务恢复后会继续。',
+  memory_source_body_changed: '这份记忆刚有更新，请刷新后重试。',
+  memory_source_deleted: '该版本的来源对话已删除，无法恢复。',
+  memory_source_lineage_unverified: '相关记忆的清除尚未完成，暂时无法使用。',
+  memory_gateway_source_changed: '相关记忆正在更新，请重试。',
+  runtime_ui_response_invalid: '对话暂时无法读取，请稍后重试。',
   memory_engine_unavailable: '记忆服务暂时不可用，稍后再来看；对话照常进行，不受影响。',
   memory_engine_unsupported: '这项操作在当前的记忆方式下不可用。',
   memory_content_refused: '这条含有密钥、证件号、手机号、卡号或邮箱这类信息，没有记下。可以只记住不含这些信息的部分。',
@@ -3263,7 +3249,6 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^quote_/, '引文核对这次没能完成；这只是一次查找，已写的报告不受影响。'],
   [/^evimed_evidence_/, '专有证据接口这次没能给出结果。'],
   [/^invalid_assessment/, '这次评估请求的格式不符合要求。'],
-  [/^verification_/, '独立复核这次没能给出结论。原来的结论未被推翻。'],
   // The specific family comes first: matching is in order, and an evidence
   // defect is not an engine failure — telling a reader to retry it would send
   // them to the wrong place.
@@ -3278,7 +3263,6 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^kb_browse_/, '知识库目录这次没能打开；运行会改用资料库检索或直接读取知识库里的文件继续。'],
   [/^clinical_score_/, '这次临床评分没有算出：输入有缺项、单位不对或超出该评分的适用人群；请按提示补充后再算，其余结论不受影响。'],
   [/^semantics_/, DATA_SEMANTICS_ERROR_MESSAGE_ZH],
-  [/^task_(?:tools_|limit_reached$|revision_conflict$|instruction_invalid$|title_invalid$|schedule_|materials_invalid$|id_invalid$|not_found$|update_empty$|paused_invalid$)/, TASK_TOOL_ERROR_MESSAGE_ZH],
   [/^frontier_(?:disabled$|search_)/, '前沿动态检索这次没能完成；回答会改用文献、指南和监管来源继续。'],
   // The engine protocol's per-field issues (`VCR_PROTOCOL_ISSUE_CODES`), last so
   // no earlier family can take one of them. Three families, because each is
@@ -3407,6 +3391,23 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   analysis_limit_reached: 'capped',
   default_project_protected: 'capped',
   // Memory on the native engine (2026-10-13): what the page or the gateway refused before asking the engine, and the engine not answering.
+  official_promotion_authority_changed: 'capped',
+  runtime_source_identity_changed: 'capped',
+  runtime_source_busy: 'capped',
+  runtime_source_inventory_limit: 'capped',
+  runtime_source_helper_unavailable: 'upstream',
+  runtime_source_kernel_mismatch: 'upstream',
+  source_deletion_unavailable: 'upstream',
+  source_deletion_pending: 'capped',
+  source_deletion_identity_changed: 'capped',
+  source_deletion_limit: 'capped',
+  memory_source_cleanup_busy: 'capped',
+  memory_source_cleanup_unavailable: 'upstream',
+  memory_source_body_changed: 'capped',
+  memory_source_deleted: 'capped',
+  memory_source_lineage_unverified: 'capped',
+  memory_gateway_source_changed: 'capped',
+  runtime_ui_response_invalid: 'upstream',
   memory_engine_unavailable: 'upstream',
   memory_engine_unsupported: 'capped',
   memory_content_refused: 'capped',
@@ -3448,17 +3449,6 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   capsule_unavailable: 'upstream',
   review_unavailable: 'upstream',
   subagent_failed: 'upstream',
-  // The autopilot's independent check could not be completed. Ours, not the
-  // user's, and emphatically not a verdict about their adopted claim.
-  verification_run_failed: 'stopped',
-  verification_result_missing: 'stopped',
-  verification_result_unreadable: 'stopped',
-  verification_result_schema_invalid: 'stopped',
-  verification_verdict_invalid: 'stopped',
-  verification_verdict_missing: 'stopped',
-  verification_canceled_by_stop: 'stopped',
-  // A floor on a setting, raised by editing the task: a ceiling's sibling, not a verdict on any run.
-  autopilot_episode_budget_too_small: 'capped',
   illegal_state_transition: 'stopped',
   // Prefixed like a ceiling, but nothing was refused: the run went ahead and
   // the usage is recorded late. Calling it `capped` would tell a reader to wait
@@ -3521,12 +3511,6 @@ export function errorCodeOutcome(code) {
   // library and a publication already running are ceilings, and everything
   // else names a document that is not there to act on.
   if (text === 'library_full' || text === 'library_publish_busy') return 'capped'
-  // A question's material is a list the researcher keeps: a full list is a
-  // ceiling, and a source that is not there is nothing to act on.
-  if (text === 'autopilot_materials_full') return 'capped'
-  // A task's own spending cap is a ceiling like the account's, and frees the same way.
-  if (AUTOPILOT_BUDGET_ERROR_CODES.includes(text)) return 'capped'
-  if (autopilotMaterialErrorCodes.includes(text)) return 'upstream'
   if (libraryErrorCodes.includes(text)) return 'upstream'
   // Sharing a capsule refuses for what the pack holds or who it is for —
   // nothing to share yet, an account that is not here, a missing password —
@@ -3567,7 +3551,6 @@ export function errorCodeOutcome(code) {
   if (VCR_WRITE_ISSUE_CODES.includes(text) || VCR_MODULE_ERROR_CODES.includes(text) || VCR_PROTOCOL_ISSUE_CODES.includes(text)
     || VCR_ENGINE_ISSUE_CODES.includes(text)) return 'upstream'
   if (CREDIT_ERROR_CODES.includes(text) || /^credits_/.test(text) || /^usage_/.test(text)) return 'capped'
-  if (/^verification_/.test(text)) return 'stopped'
   if (/^(specialist|meta)_/.test(text)) return 'gated'
   if (/^runtime_/.test(text)) return 'stopped'
   if (text === 'superseded_by_dispatch') return 'stopped'
@@ -3636,7 +3619,6 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
   const claim = (audience, codes) => { for (const code of codes) if (!table.has(code)) table.set(code, audience) }
   const keys = (/** @type {object} */ record) => Object.keys(record)
   const memoryGateway = CONTROL_PLANE_ERROR_CODES.filter((code) => code.startsWith('memory_gateway_'))
-  const verification = CONTROL_PLANE_ERROR_CODES.filter((code) => code.startsWith('verification_'))
 
   // The deployment's own wiring: a run that stops on one of these says nothing about anyone's work, and nobody who reads
   // it can mend it. Cut out of the runtime group they sit in.
@@ -3657,11 +3639,11 @@ const ERROR_CODE_AUDIENCE_TABLE = (() => {
     ...RUNTIME_ERROR_CODES, ...RUN_VERDICT_ERROR_CODES, ...SOCKET_TOOL_ERROR_CODES,
     ...repairableEvidencePackageErrorCodes, ...recoverableEvidenceSourceErrorCodes, ...terminalEvidenceSourceErrorCodes,
     ...VCR_GATEWAY_ERROR_CODES, ...VCR_WRITE_ISSUE_CODES, ...VCR_PROTOCOL_ISSUE_CODES, ...VCR_ENGINE_ISSUE_CODES,
-    ...MANAGED_BROWSER_ERROR_CODES, ...memoryGateway, ...verification,
+    ...MANAGED_BROWSER_ERROR_CODES, ...memoryGateway,
   ])
   claim('person', [
     ...keys(EVIMED_SEARCH_MESSAGES), ...keys(EVIMED_ACCOUNT_MESSAGES),
-    ...CREDIT_ERROR_CODES, ...ANALYSIS_ERROR_CODES, ...sourceIntakeErrorCodes, ...autopilotMaterialErrorCodes, ...AUTOPILOT_BUDGET_ERROR_CODES,
+    ...CREDIT_ERROR_CODES, ...ANALYSIS_ERROR_CODES, ...sourceIntakeErrorCodes,
     ...libraryErrorCodes, ...capsuleTransferErrorCodes, ...CAPSULE_SHARE_ERROR_CODES, ...EXTENSION_ERROR_CODES,
     ...GEO_ROUTE_ERROR_CODES, ...GEO_MEDIA_MARKET_ERROR_CODES, ...VCR_ROUTE_ERROR_CODES, ...VCR_MODULE_ERROR_CODES,
     ...EVIMED_CREDITS_ROUTE_ERROR_CODES, ...EVIDENCE_PUBLIC_ERROR_CODES, ...EVIDENCE_FLYWHEEL_ERROR_CODES,

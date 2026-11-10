@@ -22,6 +22,21 @@ import { TRANSCRIPT_DIR_NAME, transcriptPath } from "../src/runTranscripts.mjs";
 const ROOT = "ses_root";
 const CHILD = "ses_child";
 
+test('distillation excerpts exclude other root turns even when the saved raw history contains them', () => {
+  const saved = { header: { runId: 'current', completeness: 'complete', sessions: [{ sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 }] }, messages: [
+    { sessionId: ROOT, role: 'user', source: 'user', sourceRequestId: 'old', seq: 1, turnStartSeq: 0, parts: [{ type: 'text', text: 'Previous private task' }] },
+    { sessionId: ROOT, role: 'assistant', seq: 2, turnStartSeq: 0, parts: [{ type: 'text', text: 'Previous answer must not teach this run' }] },
+    { sessionId: ROOT, role: 'user', source: 'user', sourceRequestId: 'now', seq: 11, turnStartSeq: 10, parts: [{ type: 'text', text: 'Summarize this new task' }] },
+    { sessionId: ROOT, role: 'assistant', seq: 12, turnStartSeq: 10, parts: [{ type: 'text', text: 'Current answer' }] },
+  ] };
+  const input = buildDistillationInput({ run: { id: 'current', sessionId: ROOT, kernelRequestIds: ['now'] }, trigger: 'edit_diff', transcript: saved });
+  assert.ok(!JSON.stringify(input).includes('Previous'));
+  assert.ok(JSON.stringify(input.transcriptExcerpts).includes('Current answer'));
+  const legacy = buildDistillationInput({ run: { id: 'legacy', sessionId: ROOT }, trigger: 'edit_diff', transcript: saved });
+  assert.deepEqual(legacy.transcriptExcerpts, []);
+  assert.equal(saved.messages.length, 4);
+});
+
 /** @param {number} seq @param {string} text @param {Record<string, any>} [extra] */
 const user = (seq, text, extra = {}) => ({ sessionId: ROOT, role: "user", source: "user", seq, turn: 1, turnStartSeq: 1, sourceRequestId: "req_1", parts: [{ type: "text", text }], ...extra });
 /** @param {number} seq @param {string} text @param {string} [sessionId] */
@@ -46,7 +61,7 @@ function delegatedRun() {
   messages.push(call(130, "evimed_submit_deliverable", CHILD), call(131, "evimed_package_check", CHILD), call(132, "evimed_revise_deliverable", CHILD),
     call(133, "evimed_render_report", CHILD), call(134, "present", CHILD), said(135, "已提交，锚点与回执已更新。", CHILD));
   return {
-    transcript: { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null }, { sessionId: CHILD, parentSessionId: ROOT }] }, messages },
+    transcript: { header: { completeness: "complete", runChildSessionIds: [CHILD], sessions: [{ sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 }, { sessionId: CHILD, parentSessionId: ROOT, seedEndSeq: -1, runTurnOwnership: { schema: "child-run-turns/1", runId: "run_1", turnStartSeqs: [1] } }] }, messages },
     run: { id: "run_1", sessionId: ROOT, kernelRequestIds: ["req_1"], status: "succeeded", effectiveAgentId: "clinical-evidence-synthesis", artifacts: ["report/weekly.md"] },
   };
 }
@@ -76,7 +91,7 @@ test("the first request and the intervention survive a long delegated run, and n
 test("REVIEWFIX 9 the excerpts of a research goal's run show the person's sentence, without the gesture that started it, and no other run's message is touched", () => {
   const goal = "评估心衰队列的再入院风险";
   const messages = [user(2, researchGoalPrompt(goal)), said(3, "我先看已有资料。"), user(4, "只看近五年的", { sourceRequestId: "req_2" }), said(5, "好的。")];
-  const transcript = { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null }] }, messages };
+  const transcript = { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 }] }, messages };
   const started = { id: "run_g", sessionId: ROOT, kernelRequestIds: ["req_1"], status: "succeeded", effectiveRouteReason: "research-goal" };
   const input = buildDistillationInput({ run: started, trigger: "correction", transcript });
   const shown = input.transcriptExcerpts.flatMap((excerpt) => excerpt.messages).filter((message) => message.role === "user").map((message) => message.parts[0].text);
@@ -117,7 +132,7 @@ test("a follow-up and a corrected result are interventions with no place in the 
 
 test("a routine carries each member's digest and no raw lines, and a lesson with nothing to anchor on reads none", () => {
   const { transcript, run } = delegatedRun();
-  const peer = { runId: "run_0", transcript: { ...transcript, header: { completeness: "complete" } }, run: { ...run, id: "run_0", kernelRequestIds: ["req_1"] },
+  const peer = { runId: "run_0", transcript: { ...transcript, header: { completeness: "complete", sessions: transcript.header.sessions.map(row => ({ ...row, ...(row.runTurnOwnership ? { runTurnOwnership: { ...row.runTurnOwnership, runId: "run_0" } } : {}) })), runChildSessionIds: [CHILD] } }, run: { ...run, id: "run_0", kernelRequestIds: ["req_1"] },
     shapes: { "report/weekly.md": { format: "md", labels: ["Summary", "Findings"] } } };
   const input = buildDistillationInput({ run, trigger: "routine", transcript, peerRuns: [peer] });
   assert.deepEqual(input.transcriptExcerpts, []);
@@ -295,7 +310,7 @@ async function projectWith(root) {
   await mkdir(path.join(project.workspaceDir, "report"), { recursive: true });
   await writeFile(path.join(project.workspaceDir, "report/weekly.md"), "# 周报\n## 总览\n## 下周计划\n");
   const { transcript, run } = delegatedRun();
-  const header = { schemaVersion: 1, runId: run.id, capturedAt: "2026-10-23T00:00:00.000Z", completeness: "complete", sessions: transcript.header.sessions, missing: [] };
+  const header = { schemaVersion: 1, runId: run.id, capturedAt: "2026-10-23T00:00:00.000Z", completeness: "complete", runChildSessionIds: [CHILD], sessions: transcript.header.sessions, missing: [] };
   await writeFile(transcriptPath(project, run.id), `${[JSON.stringify(header), ...transcript.messages.map((message) => JSON.stringify(message))].join("\n")}\n`);
   return { project, run };
 }
@@ -323,7 +338,7 @@ test("the related methods are the nearest to what the lesson is about, the files
   assert.ok(queries[0].includes("每节不要超过三行，数字都带单位") && queries[0].includes("帮我把本周随访数据整理成周报"), "what the person said and first asked");
   assert.ok(queries[0].includes("总览") && queries[0].includes("md"), "and the shape of what was left");
   assert.deepEqual(dispatched[0].input.trajectory.artifacts[0].shape?.labels, ["周报", "总览", "下周计划"], "the digest says what kind of thing the run left");
-  assert.equal(dispatched[0].input.extractorVersion, "9");
+  assert.equal(dispatched[0].input.extractorVersion, "10");
 
   await make({ similarity: { nearest: async () => { throw new Error("embedder down"); } } }).execute({ project, run, job: lesson });
   assert.deepEqual(dispatched[1].input.relatedMethods.map((entry) => entry.id), library.slice(0, 8).map((entry) => entry.id), "the most recently written, as before");
@@ -337,7 +352,10 @@ test("a routine's peer is digested from its own ledger record, and the lesson's 
   t.after(() => rm(root, { recursive: true, force: true }));
   const { project, run } = await projectWith(root);
   const peerRun = { ...run, id: "run_0", outputFiles: ["report/weekly.md"], artifacts: [] };
-  await writeFile(transcriptPath(project, "run_0"), await (await import("node:fs/promises")).readFile(transcriptPath(project, run.id)));
+  const originalLines = (await (await import("node:fs/promises")).readFile(transcriptPath(project, run.id), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  originalLines[0].runId = 'run_0';
+  for (const session of originalLines[0].sessions) if (session.runTurnOwnership) session.runTurnOwnership.runId = 'run_0';
+  await writeFile(transcriptPath(project, "run_0"), originalLines.map(row => JSON.stringify(row)).join('\n') + '\n');
   /** @type {any[]} */ const dispatched = [];
   const asked = [];
   const distillation = new MethodDistillationRuns({
@@ -360,10 +378,13 @@ test("the tool order the distillation is shown is the run's executed trace when 
   t.after(() => rm(root, { recursive: true, force: true }));
   const { project, run } = await projectWith(root);
   const { persistToolTraces } = await import("../src/toolExecutionEdges.mjs");
-  const completed = (/** @type {string} */ tool, /** @type {number} */ turn) => ({ role: "tool", turn, parts: [{ type: "tool", tool, status: "completed", input: {}, output: "ok" }] });
-  await persistToolTraces({ project, run, sessions: [{ sessionId: ROOT, capability: null, transcript: { messages: [completed("web_search", 0), completed("evimed_plan", 0), completed("bash", 1)] } }] });
+  const completed = (/** @type {string} */ tool, /** @type {number} */ turn) => ({ role: "tool", turn, turnStartSeq: 1, seq: turn + 3, parts: [{ type: "tool", tool, status: "completed", input: {}, output: "ok" }] });
+  await persistToolTraces({ project, run, sessions: [{ sessionId: ROOT, capability: null, transcript: { messages: [user(2, "Current analysis"), completed("web_search", 0), completed("evimed_plan", 0), completed("bash", 1)] } }] });
   // A peer with its own transcript and no trace of its own: the transcript's calls, as before.
-  await writeFile(transcriptPath(project, "run_0"), await (await import("node:fs/promises")).readFile(transcriptPath(project, run.id)));
+  const originalLines = (await (await import("node:fs/promises")).readFile(transcriptPath(project, run.id), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  originalLines[0].runId = 'run_0';
+  for (const session of originalLines[0].sessions) if (session.runTurnOwnership) session.runTurnOwnership.runId = 'run_0';
+  await writeFile(transcriptPath(project, "run_0"), originalLines.map(row => JSON.stringify(row)).join('\n') + '\n');
   /** @type {any[]} */ const dispatched = [];
   const distillation = new MethodDistillationRuns({
     learning: { async listMethods() { return { items: [] }; } },
@@ -379,7 +400,7 @@ test("the tool order the distillation is shown is the run's executed trace when 
 test("a script lesson is shown the program that recurred, with how often and the sources of its occurrences; no other lesson carries one", async (t) => {
   const { transcript, run } = delegatedRun();
   const scripts = { hash: "a".repeat(32), runs: 3, conversations: 2, exemplars: [{ runId: "run_1", at: "2026-10-25T00:00:00.000Z", source: "print(1)" }, { runId: "run_2", source: "x".repeat(20_000) }] };
-  const plain = { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null }] }, messages: [user(2, "把本周的导出清理一下")] };
+  const plain = { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 }] }, messages: [user(2, "把本周的导出清理一下")] };
   const input = buildDistillationInput({ run, trigger: "script", transcript: plain, scripts });
   assert.equal(input.trigger, "script");
   assert.equal(input.signal, "run", "nobody corrected a program that recurred");
@@ -397,11 +418,11 @@ test("a script lesson is shown the program that recurred, with how often and the
   /** @type {any[]} */ const dispatched = [];
   const make = (/** @type {any[]} */ exemplars) => new MethodDistillationRuns({
     learning: { async listMethods() { return { items: [] }; } },
-    scriptUses: { exemplars: async () => exemplars },
+    scriptUses: { lesson: async () => ({ runs: 3, conversations: 2, exemplars }) },
     dispatch: async (request) => { dispatched.push(request); return { runId: "lr_1", sessionId: "ls_1", dispatchId: request.dispatchId }; },
     readResult: async () => ({ status: "running" }),
   });
-  const payload = { runId: stored.id, trigger: "script", scope: "conversation", scriptHash: "a".repeat(32), runs: 3, conversations: 2, dispatchKey: "a".repeat(32) };
+  const payload = { runId: stored.id, trigger: "script", scriptEvidenceGeneration: "scoped-v1", scope: "conversation", scriptHash: "a".repeat(32), runs: 3, conversations: 2, dispatchKey: "a".repeat(32) };
   await make(scripts.exemplars).execute({ project, run: stored, job: { userId: "u1", projectId: "p", payload } });
   assert.equal(dispatched[0].input.scripts.exemplars.length, 2);
   assert.match(dispatched[0].question, /Distil at most one reusable method/);
@@ -411,4 +432,39 @@ test("a script lesson is shown the program that recurred, with how often and the
   const second = { ...payload, scriptHash: "b".repeat(32), dispatchKey: "b".repeat(32) };
   await make(scripts.exemplars).execute({ project, run: stored, job: { userId: "u1", projectId: "p", payload: second } });
   assert.notEqual(dispatched[0].dispatchId, dispatched.at(-1).dispatchId);
+});
+
+test('distillation exposes excluded child work and unavailable turn identity as incomplete learning evidence', () => {
+  const run = { id: 'current', sessionId: ROOT, kernelRequestIds: ['now'] };
+  const transcript = { header: { runId: run.id, completeness: 'complete', runChildSessionIds: [CHILD], sessions: [
+    { sessionId: ROOT, parentSessionId: null, seedEndSeq: -1 }, { sessionId: CHILD, parentSessionId: ROOT, seedEndSeq: -1 },
+  ] }, messages: [{ ...user(11, 'Current task'), sourceRequestId: 'now', turnStartSeq: 10 }, { ...call(2, 'child_tool', CHILD), turnStartSeq: 0 }] };
+  const input = buildDistillationInput({ run, trigger: 'routine', transcript, peerRuns: [{ runId: run.id, run, transcript }] });
+  assert.equal(input.transcriptCompleteness, 'partial');
+  assert.equal(input.trajectory.runScope.partial, true);
+  assert.deepEqual(input.trajectory.runScope.unverifiedChildSessionIds, [CHILD]);
+  assert.equal(input.peerRuns[0].transcriptCompleteness, 'partial');
+  const unknown = buildDistillationInput({ run: { ...run, kernelRequestIds: [] }, trigger: 'routine', transcript });
+  assert.equal(unknown.transcriptCompleteness, 'unavailable');
+  assert.equal(unknown.trajectory.runScope.available, false);
+});
+
+test('a queued script lesson rechecks proven recurrence rather than trusting old payload counts', async () => {
+  let dispatched = 0;
+  const distiller = new MethodDistillationRuns({ learning: { listMethods: async () => ({ items: [] }) },
+    scriptUses: { lesson: async () => ({ runs: 1, conversations: 1, exemplars: [{ runId: 'r', source: 'print(1)' }] }) },
+    dispatch: async () => { dispatched++; return { runId: 'generated', sessionId: 'generated' }; }, readResult: async () => ({ status: 'running' }) });
+  await assert.rejects(() => distiller.execute({ project: { id: 'p', userId: 'u', rootDir: '/nonexistent', metaDir: '/nonexistent' },
+    run: { id: 'r' }, job: { userId: 'u', projectId: 'p', payload: { trigger: 'script', scriptEvidenceGeneration: 'scoped-v1', scriptHash: 'a'.repeat(32), runs: 50, conversations: 20 } } }), { code: 'distillation_run_unavailable' });
+  assert.equal(dispatched, 0);
+});
+
+test('pre-generation script jobs cannot adopt newer proven occurrences of the same hash', async () => {
+  let dispatched = 0;
+  const distiller = new MethodDistillationRuns({ learning: { listMethods: async () => ({ items: [] }) },
+    scriptUses: { lesson: async () => ({ runs: 3, conversations: 2, exemplars: [{ runId: 'new', source: 'print(1)' }] }) },
+    dispatch: async () => { dispatched++; return { runId: 'generated', sessionId: 'generated' }; }, readResult: async () => ({ status: 'running' }) });
+  await assert.rejects(() => distiller.execute({ project: { id: 'p', userId: 'u', rootDir: '/nonexistent', metaDir: '/nonexistent' },
+    run: { id: 'old' }, job: { userId: 'u', projectId: 'p', payload: { trigger: 'script', runId: 'old', scriptHash: 'a'.repeat(32), runs: 3, conversations: 2 } } }), { code: 'distillation_run_unavailable' });
+  assert.equal(dispatched, 0);
 });

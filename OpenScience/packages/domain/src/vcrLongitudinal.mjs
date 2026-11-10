@@ -247,9 +247,9 @@ export function validateForecast(input, context = {}) {
     'forecast.trial_benchmark': ['benchmarkId'],
   }
 /** @type {Record<string, string[]>} */ const optional = {
-    'forecast.trajectories': ['scenario', 'samples', 'modelVersion'],
+    'forecast.trajectories': ['scenario', 'samples', 'modelVersion', 'predictionMode', 'actions', 'actionSource', 'actionHistoryId', 'priorPredictionId'],
     'forecast.evaluate': ['windowDays', 'eventCodes', 'followupCode', 'bootstrap', 'split', 'trainingOverlap', 'riskSet', 'groupBy'],
-    'forecast.compare': ['bootstrap', 'mode'], 'forecast.trial_benchmark': ['bootstrap'],
+    'forecast.compare': ['bootstrap', 'mode', 'outcomeHistoryId'], 'forecast.trial_benchmark': ['bootstrap'],
   }
 
 export const VCR_LONGITUDINAL_SCHEMAS = Object.freeze(Object.fromEntries(Object.keys(required).map(method => [method,{required:required[method],optional:optional[method]}])))

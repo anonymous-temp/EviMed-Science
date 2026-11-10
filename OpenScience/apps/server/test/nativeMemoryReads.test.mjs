@@ -34,7 +34,7 @@ function engine({ count = 20, delay = 5 } = {}) {
   const overlay = {
     configured: true,
     files: async () => new Map(),
-    revisionsOfMany: async () => new Map(),
+    revisionsOfMany: async () => new Map(), attributionCommits: async () => new Map(),
     sources: async () => [],
     reject: async () => {}, unreject: async () => {}, addRevision: async () => {}, upsertFile: async () => {}, setSources: async () => {}, syncOrigins: async () => {}, originsOf: async () => new Map(),
   };
@@ -89,7 +89,7 @@ test("a write forgets the account's bodies, so the page reads back what it just 
   assert.equal(Buffer.byteLength("- 偏好 Z"), Buffer.byteLength("- 偏好 0"), "the same size, the same modTime");
   const read = (await store.files("u1")).find((file) => file.uri === uri);
   assert.equal(read?.body, "- 偏好 Z");
-  assert.equal(calls.read, 3 + 3, "every body was read again after the write (and the one the write made)");
+  assert.equal(calls.read, 7, "3 initial reads, 1 compare-and-swap read inside the write (under the lease), 3 by update's getRecord after the cache was invalidated");
 });
 
 test("a read that was under way when a write happened is not shared with the readers after it", async () => {

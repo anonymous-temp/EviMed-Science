@@ -34,7 +34,10 @@ export const ENGINE_BACKED_INTEGRATION_TESTS = Object.freeze([
   "vcrIntake.integration.test.mjs",
   "vcrKnowledgeEngine.integration.test.mjs",
   "vcrModelScience.integration.test.mjs",
+  "vcrTrainedModel.integration.test.mjs",
   "resultReplayLifecycle.integration.test.mjs",
+  "vcrExperiments.integration.test.mjs",
+  "vcrDiseaseLab.integration.test.mjs",
 ]);
 
 /** Auth's legacy schema-reset test must run in a different database. */

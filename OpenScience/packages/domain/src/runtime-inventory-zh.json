@@ -317,11 +317,16 @@
     "bundles": {
       "@deepseek-ai/dsh-base": "The kernel itself: sessions, storage, the model connection, sandbox, tools. Its rows are accounted for one by one under plumbing.rows, so a row a kernel update adds is a decision made here.",
       "@deepseek-ai/dsh-web-app": "The kernel's web application: its host process and the conversation page. Rows accounted for one by one under plumbing.rows.",
-      "@evimed/dsh-socket": "The platform's own composition for the kernel (the evimed-universal preset and its plugins). Its rows are listed under the items they serve, or under plumbing.rows."
+      "@evimed/dsh-socket": "The platform's own composition for the kernel (the evimed-universal preset and its plugins). Its rows are listed under the items they serve, or under plumbing.rows.",
+      "@evimed/virtual-trial": "The optional trial-design professional bundle is preinstalled but disabled. Project selection and the existing extension catalogue own its activation and version, rather than the fixed conversation inventory.",
+      "@evimed/virtual-cohort": "The optional cohort professional bundle is preinstalled but disabled. Project selection and the existing extension catalogue own its activation and version, rather than the fixed conversation inventory.",
+      "@evimed/virtual-patient": "The optional virtual-patient professional bundle is preinstalled but disabled. Project selection and the existing extension catalogue own its activation and version, rather than the fixed conversation inventory.",
+      "@evimed/synthetic-control": "The optional comparator professional bundle is preinstalled but disabled. Project selection and the existing extension catalogue own its activation and version, rather than the fixed conversation inventory.",
+      "@evimed/virtual-research-suite": "The optional suite discovers selected professional bundles without installing or activating siblings. The existing extension catalogue owns its project selection and version; it is disabled in the base composition."
     },
     "rows": [
       {
-        "reason": "The model connection and the turn loop: calls to the model through the gateway, retries and time limits, the system prompt, the tool catalogue, the context meter and the spill of large results. Nothing for a person to open or switch.",
+        "reason": "The model connection and the turn loop: calls to the model through the gateway, retries and time limits, the system prompt, the tool catalogue and the executor that runs a tool call, the context meter and the spill of large results. Nothing for a person to open or switch.",
         "ids": [
           "llm",
           "deepseek-llm-api-extensions",
@@ -333,6 +338,7 @@
           "agent-loop",
           "system-prompt",
           "tools",
+          "tool-executor-native",
           "timeout-policy",
           "repeat-tool-reminder",
           "token-meter",
@@ -361,6 +367,13 @@
         "ids": [
           "goal",
           "goal-round-driver"
+        ]
+      },
+      {
+        "reason": "The kernel's automation tasks (the owner's 定时任务): the store of tasks on the project's volume, the delivery of a due task into a conversation, and their page. A person meets them as 定时任务 in the sidebar, which opens that page; the control plane only starts a stopped runtime when a task falls due.",
+        "ids": [
+          "schedule",
+          "ui-schedule"
         ]
       },
       {
@@ -437,7 +450,7 @@
         ]
       },
       {
-        "reason": "The kernel's conversation page — composer, message list, side panels, theme, locale, shortcuts and settings panels — drawn inside the frame the web app hosts. Nothing separate to switch; the product's own pages are the web app's.",
+        "reason": "The kernel's conversation page — composer, message list, side panels, context menus, file actions and drag, quoting a passage of a message, the links to a delivered file, theme, locale, shortcuts and settings panels — drawn inside the frame the web app hosts. Nothing separate to switch; the product's own pages are the web app's.",
         "ids": [
           "entry-customization",
           "file-upload",
@@ -462,9 +475,7 @@
           "ui-permission",
           "ui-plan",
           "ui-reference",
-          "ui-schedule",
           "ui-secret-mask",
-          "ui-deepseek-model-label-1017",
           "ui-renderer",
           "ui-session",
           "ui-settings",
@@ -490,6 +501,11 @@
           "ui-trajectory",
           "ui-user-questions",
           "ui-workflow-run",
+          "ui-file-actions",
+          "ui-context-menu",
+          "ui-file-drag",
+          "message-quotes",
+          "deliverable-file-references",
           "ui-workspace"
         ]
       },
@@ -509,6 +525,7 @@
           "evimed-seam-probe",
           "evimed-evidence-store",
           "evimed-engine-context",
+          "evimed-research-adapter",
           "preset-evimed-universal"
         ]
       }
@@ -529,6 +546,12 @@
           "evimed-screening",
           "evimed-review",
           "evimed-duplicate-lines"
+        ]
+      },
+      {
+        "reason": "The tools that make, list, change and delete a scheduled task from a conversation. The tasks themselves are the sidebar's 定时任务; an unattended turn may pause or delete a task and nothing else, which the run policy holds.",
+        "ids": [
+          "tool-schedule"
         ]
       },
       {
@@ -587,10 +610,6 @@
     "personal": {
       "listed": true,
       "how": "The person's own skills (我的技能), read from the skill library."
-    },
-    "platform-learned": {
-      "listed": false,
-      "reason": "What the platform itself built and tested (循证进化's tools and methods): the platform's, not the account's own, whose home is the 做法 of the memory page."
     }
   }
 }

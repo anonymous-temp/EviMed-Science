@@ -82,7 +82,6 @@ test("links go to the web app's own routes, and there are none without a public 
   assert.equal(runLink(config, "run_1"), "https://science.example.com/app/runs?run=run_1");
   assert.equal(runFileLink(config, "run_1", "deliverables/报告/report 1.md"),
     "https://science.example.com/app/runs/run_1/files/deliverables/%E6%8A%A5%E5%91%8A/report%201.md");
-  assert.equal(noticeLink(config, { source: { type: "digest", id: "d 1" } }), "https://science.example.com/app/autopilot?digest=d%201");
   assert.equal(noticeLink(config, { source: null }), "https://science.example.com/app/inbox");
   assert.equal(runLink({ publicUrl: "" }, "run_1"), null);
   assert.equal(runLink({ publicUrl: "science.example.com" }, "run_1"), null);

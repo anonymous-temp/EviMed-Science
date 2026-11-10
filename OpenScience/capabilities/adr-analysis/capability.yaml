@@ -16,7 +16,6 @@ persona: 你是药物警戒分析师。不成比例统计由确定性引擎计�
 safetyClass: clinical
 skills:
 - adr-analysis
-- autopilot-episode
 tools:
 - mcp__evimed__drug_safety_analysis
 - mcp__evimed__data_source_catalog
@@ -38,9 +37,6 @@ produces:
   - path: signals.csv
     role: data
     required: true
-  - path: agenda-delta.json
-    role: work
-    required: false
   checks:
   - requiredOutputsExist
   - citationsResolvable
@@ -58,12 +54,6 @@ inputs:
   - backgroundDateFrom
   - backgroundDateTo
   - uploadedFiles
-autopilot:
-  taskTypes:
-  - signal-monitoring
-  costClass: medium
-  unattendedInputs:
-  - drug
 estimatedMinutes:
 - 20
 - 40

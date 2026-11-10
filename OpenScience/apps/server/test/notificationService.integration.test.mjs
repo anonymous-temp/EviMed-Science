@@ -3,9 +3,6 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
-import { AutopilotService } from "../src/autopilotService.mjs";
-import { ProductDocuments } from "../src/productStore.mjs";
-import { ProductJobs } from "../src/productJobs.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 const options = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
@@ -26,32 +23,6 @@ after(async () => {
   if (!database) return;
   await database.query("DELETE FROM evimed_control.users WHERE id=ANY($1::text[])", [[owner, other]]);
   await database.close();
-});
-
-test("a real proactive digest persists one actionable inbox item under its owner", options, async (t) => {
-  const digestOwner = `digest_${randomUUID()}`;
-  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Digest owner','development')", [digestOwner]);
-  t.after(() => database.query("DELETE FROM evimed_control.users WHERE id=$1", [digestOwner]));
-  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Digest',1048576)", [digestOwner]);
-  const autopilot = new AutopilotService({ documents: new ProductDocuments(database),
-    jobs: new ProductJobs(database), notifications: service });
-  const agenda = await autopilot.create(digestOwner, { projectId: "default", title: "Digest integration",
-    topics: ["research updates"], taskTypes: ["literature-sentinel"], dailyBudgetCny: 2,
-    weeklyBudgetCny: 10, maxEpisodeCny: 1.5, scheduleHour: 1, timeZone: "UTC" });
-  // A briefing that found something is announced once; one that found nothing is recorded and not announced (2026-10-07: the
-  // inbox carried a daily 「0 条重点发现，0 条待验证线索」).
-  const input = { digestId: "digest-inbox-contract", date: "2026-09-06", episodeIds: ["episode-contract"], costCny: 0,
-    claims: [{ id: "claim-contract", statement: "A lead worth reading", type: "synthesized", tier: "unverified", what_would_change: "A new trial" }] };
-  const digest = await autopilot.createDigest(digestOwner, agenda.id, input);
-  await autopilot.createDigest(digestOwner, agenda.id, input);
-  const quiet = await autopilot.createDigest(digestOwner, agenda.id, { digestId: "digest-inbox-quiet", date: "2026-09-07", episodeIds: ["episode-quiet"], costCny: 0, claims: [] });
-  assert.equal((await service.list(digestOwner)).items.some(item => item.source?.id === quiet.id), false);
-  const notices = (await service.list(digestOwner)).items.filter(item => item.source?.id === digest.id);
-  assert.equal(notices.length, 1);
-  assert.deepEqual(notices[0].source, { type: "digest", id: digest.id });
-  assert.deepEqual(notices[0].actions.map(action => action.id), ["open"]);
-  assert.equal(notices[0].projectId, "default");
-  assert.equal((await service.list(other)).items.some(item => item.source?.id === digest.id), false);
 });
 
 test("inbox ordering puts reviews and questions before informational notices", options, async () => {
@@ -357,4 +328,19 @@ test("a notice for an account that no longer exists is refused by name and write
   assert.equal((await service.health()).unknownRecipients, before + 2);
   // The account that exists is unaffected.
   assert.ok((await service.create(owner, { noticeType: "notify", title: "Still delivered", body: "Here." })).id);
+});
+
+test("an open 循证进化 decision card is closed at the next start, readable, and nothing else is touched", options, async () => {
+  const card = await service.create(owner, { noticeType: "review", title: "Keep or retire", body: "A decision about a tool.",
+    actions: [{ id: "keep", label: "Keep" }, { id: "retire", label: "Retire" }], source: { type: "system", id: "evolution-decision-abc" } });
+  const question = await service.create(owner, { noticeType: "question", title: "Pick one", body: "Still open.",
+    actions: [{ id: "a", label: "A" }], source: { type: "system", id: "other-decision" } });
+  const next = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 2_000 });
+  try { await new NotificationService(next).list(owner); } finally { await next.close(); }
+  const rows = (await database.query("SELECT id,resolved_at,resolution,title,body FROM evimed_inbox.notifications WHERE id=ANY($1::text[])", [[card.id, question.id]])).rows;
+  const closed = rows.find((row) => row.id === card.id), open = rows.find((row) => row.id === question.id);
+  assert.ok(closed.resolved_at);
+  assert.deepEqual(closed.resolution, { actionId: "retired", source: "retired" });
+  assert.deepEqual([closed.title, closed.body], ["Keep or retire", "A decision about a tool."]);
+  assert.equal(open.resolved_at, null);
 });

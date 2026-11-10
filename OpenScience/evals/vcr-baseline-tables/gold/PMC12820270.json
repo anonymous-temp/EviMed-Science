@@ -1,0 +1,9 @@
+{"pmcid": "PMC12820270", "page": 5, "table": "Table 1", "caption": "Descriptive characteristics of the subjects.", "columns": ["CONT", "Tr", "SUP", "TR + SUP"], "keys": ["CONT", "Tr", "SUP", "TR + SUP"], "note": "a small ruled grid with a spanning header (Groups); the caption is below the table; Tr and TR + SUP share letters","rows":[
+["Age (year)", "29.07 ± 3.21", "28.72 ± 3.15", "30.38 ± 2.45", "29.56 ± 3.07"],
+["Weight (kg)", "59.76 ± 2.38", "58.51 ± 3.14", "56.62 ± 3.90", "56.23 ± 4.01"],
+["Height (cm)", "173.33 ± 3.37", "173.36 ± 3.45", "172.64 ± 4.30", "171.87 ± 3.94"],
+["BMI (kg/m2)", "19.89 ± 0.84", "19.47 ± 0.89", "18.98 ± 0.84", "19.03 ± 1.22"],
+["HR (beat/min)", "75.60 ± 4.61", "75.70 ± 4.67", "74.57 ± 3.25", "73.93 ± 4.55"],
+["SBP (mmHg)", "9.99 ± 1.07", "9.60 ± 0.69", "10.29 ± 1.24", "9.85 ± 0.94"],
+["DBP (mmHg)", "7.14 ± 1.13", "8.05 ± 0.73", "8.48 ± 1.42", "7.87 ± 0.85"]
+]}

@@ -365,7 +365,8 @@ test("a finished job writes an execution and an immutable result filed under the
   for (const [subject, hr] of [["scn_a", 0.6], ["scn_b", 0.7]]) {
     queued.push((await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", cpuSecondsLimit: 60,
       scenario: { ...scenario, truth: { hazardRatio: hr, controlMedian: 6 } }, idempotencyKey: `vcr:${study.id}:${subject}`,
-      detail: { subjectId: subject, resultKind: "trial_scenario", node: `trial_scenario:${subject}@1` } })).job);
+      // (scn_a was started in a conversation: which of its numbers are in the person's own messages is frozen with it and filed on its result)
+      detail: { subjectId: subject, resultKind: "trial_scenario", node: `trial_scenario:${subject}@1`, ...(subject === "scn_a" ? { personStated: { schema: 1, readable: true, paths: ["truth.hazardRatio"] } } : {}) } })).job);
   }
   const claimed = await jobs.claim({ limit: 4 });
   assert.equal(claimed.length, 2);
@@ -387,6 +388,8 @@ test("a finished job writes an execution and an immutable result filed under the
   const current = await store.results(study.id, "trial_scenario");
   assert.deepEqual(current.map((result) => result.subjectId).sort(), ["scn_a", "scn_b"], "two designs, two current results: neither supersedes the other");
   assert.equal(current.every((result) => result.version === 1), true);
+  assert.deepEqual(current.find((result) => result.subjectId === "scn_a").diagnostics.personStated, { schema: 1, readable: true, paths: ["truth.hazardRatio"] });
+  assert.equal(current.find((result) => result.subjectId === "scn_b").diagnostics.personStated, undefined, "a job that recorded none files none: it reads as it read");
 
   // A recomputation of one design supersedes its own result and only that one: the old numbers stay.
   const again = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", cpuSecondsLimit: 60,

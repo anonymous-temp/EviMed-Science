@@ -73,8 +73,6 @@ const MCP_NARRATION = Object.freeze({
   // One item read by its id (a conversation opened from the feed) is a reading, not a search: it has no count.
   frontier_search: (args, result) => (typeof args?.id === 'string' && args.id ? '读取前沿动态中的这条消息' : withCount(`查前沿动态${frontierSubject(args)}`, result?.data ?? result)),
   // A task made or changed from a conversation: what the researcher asked for, in their own words, and for a change what it was.
-  schedule_task: (args) => `安排定时任务：「${excerpt(args?.title ?? args?.instruction)}」`,
-  update_task: (args) => (args?.paused === true ? '暂停定时任务' : args?.paused === false ? '重新启用定时任务' : '修改定时任务'),
   clinical_score: (args) => (args?.action === 'list' ? `查找临床评分${args?.filter ? `：${excerpt(args.filter)}` : ''}`
     : args?.action === 'describe' ? `查看临床评分的定义：${excerpt(args?.id)}` : `计算临床评分：${excerpt(args?.id)}`),
   dataset_semantics: (args) => (args?.action === 'check' ? '检查数据（漂移、重复、关联、分母、时间泄漏）'

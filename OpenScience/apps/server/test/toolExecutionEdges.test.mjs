@@ -256,7 +256,10 @@ test("a stored trace is read back for its run, and a missing, foreign, old-schem
     const project = { id: "p1", rootDir, metaDir: nodePath.join(rootDir, ".openscience") };
     await mkdir(project.metaDir, { recursive: true });
     assert.deepEqual(await readToolTraces(project, "run_1"), [], "no file");
-    const written = await persistToolTraces({ project, run: { id: "run_1" }, sessions: [session("adr-analysis", [call("search", {}, "ok"), call("fetch", {}, "ok")])] });
+    const current = session("adr-analysis", [call("search", {}, "ok"), call("fetch", {}, "ok")]);
+    current.transcript.messages = current.transcript.messages.map((m, i) => ({ ...m, seq: i + 2, turnStartSeq: 0 }));
+    current.transcript.messages.unshift({ role: 'user', source: 'user', sourceRequestId: 'current', seq: 1, turnStartSeq: 0, parts: [] });
+    const written = await persistToolTraces({ project, run: { id: "run_1", sessionId: current.sessionId, kernelRequestIds: ['current'] }, sessions: [current] });
     assert.equal(written.steps, 2);
     const read = await readToolTraces(project, "run_1");
     assert.deepEqual(read.map((trace) => [trace.capability, trace.steps.map((step) => step.tool)]), [["adr-analysis", ["search", "fetch"]]]);
@@ -271,4 +274,65 @@ test("a stored trace is read back for its run, and a missing, foreign, old-schem
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
+});
+
+test('persistent evidence uses only current turns and the actual ordinary agent scope', async () => {
+  const { persistExecutedToolEdges, persistToolTraces, readToolTraces } = await import('../src/toolExecutionEdges.mjs');
+  const fs = await import('node:fs/promises'), nodePath = await import('node:path'), os = await import('node:os');
+  const rootDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'tool-current-run-'));
+  try {
+    const project = { id: 'p', rootDir, metaDir: nodePath.join(rootDir, '.openscience') };
+    const run = { id: 'current', sessionId: 'root', kernelRequestIds: ['now'], effectiveAgentId: 'open-domain-answer' };
+    const messages = [
+      { role: 'user', source: 'user', sourceRequestId: 'old', seq: 1, turnStartSeq: 0, parts: [{ type: 'text', text: 'Old task' }] },
+      { role: 'assistant', seq: 2, turnStartSeq: 0, parts: [call('old_tool', {}, 'old')] },
+      { role: 'user', source: 'user', sourceRequestId: 'now', seq: 11, turnStartSeq: 10, parts: [{ type: 'text', text: 'New task' }] },
+      { role: 'assistant', seq: 12, turnStartSeq: 10, parts: [call('search', {}, { doi: '10.1001/JAMA.2020.1234' }), call('fetch', { doi: '10.1001/JAMA.2020.1234' }, 'preserved')] },
+    ];
+    const sessions = [{ sessionId: 'root', parentSessionId: null, capability: null, transcript: { sessionId: 'root', messages } }];
+    const edges = await persistExecutedToolEdges({ project, run, sessions });
+    assert.equal(edges.edges, 1, 'ordinary work is filed under its actual agent scope');
+    await persistToolTraces({ project, run, sessions });
+    assert.deepEqual((await readToolTraces(project, run.id)).flatMap(trace => trace.steps.map(step => step.tool)), ['search', 'fetch']);
+  } finally { await fs.rm(rootDir, { recursive: true, force: true }); }
+});
+
+test('an empty trace distinguishes missing run identity from an observed run with no completed tools', async () => {
+  const { persistExecutedToolEdges, persistToolTraces, tracePath, toolEdgePath, readToolTraces } = await import('../src/toolExecutionEdges.mjs');
+  const fs = await import('node:fs/promises'), nodePath = await import('node:path'), os = await import('node:os');
+  const rootDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'tool-scope-attempt-'));
+  try {
+    const project = { id: 'p', rootDir, metaDir: nodePath.join(rootDir, '.openscience') };
+    const sessions = [{ sessionId: 'root', parentSessionId: null, transcript: { sessionId: 'root', messages: [
+      { role: 'user', source: 'user', sourceRequestId: 'now', seq: 1, turnStartSeq: 0, parts: [] },
+    ] } }];
+    for (const [id, known] of [['known', true], ['legacy', false]]) {
+      const run = { id, sessionId: 'root', ...(known ? { kernelRequestIds: ['now'] } : {}) };
+      await persistToolTraces({ project, run, sessions }); await persistExecutedToolEdges({ project, run, sessions });
+      const trace = JSON.parse(await fs.readFile(tracePath(project, id), 'utf8'));
+      const edges = JSON.parse(await fs.readFile(`${toolEdgePath(project, id)}.attempt.json`, 'utf8'));
+      assert.equal(trace.scope.available, known); assert.equal(edges.scope.available, known);
+      assert.equal(edges.scopedCalls, 0); assert.equal(edges.observedCalls, 0);
+      assert.deepEqual(await readToolTraces(project, id), []);
+    }
+  } finally { await fs.rm(rootDir, { recursive: true, force: true }); }
+});
+
+test('readback refuses a foreign session or out-of-scope turn before exposing trace steps', async () => {
+  const { persistToolTraces, tracePath, readToolTraces } = await import('../src/toolExecutionEdges.mjs');
+  const fs = await import('node:fs/promises'), nodePath = await import('node:path'), os = await import('node:os');
+  const rootDir = await fs.mkdtemp(nodePath.join(os.tmpdir(), 'tool-trace-read-scope-'));
+  try {
+    const project = { id: 'p', rootDir, metaDir: nodePath.join(rootDir, '.openscience') };
+    const run = { id: 'current', sessionId: 'root', kernelRequestIds: ['now'] };
+    await persistToolTraces({ project, run, sessions: [{ sessionId: 'root', parentSessionId: null, transcript: { sessionId: 'root', messages: [
+      { role: 'user', source: 'user', sourceRequestId: 'now', seq: 11, turnStartSeq: 10, parts: [] },
+      { role: 'assistant', seq: 12, turnStartSeq: 10, parts: [call('read', {}, 'done')] },
+    ] } }] });
+    const file = tracePath(project, run.id), saved = JSON.parse(await fs.readFile(file, 'utf8'));
+    saved.traces[0].steps.push({ turn: 0, turnStartSeq: 0, tool: 'old_tool' });
+    saved.traces.push({ runId: run.id, sessionId: 'foreign', steps: [{ turn: 0, turnStartSeq: 10, tool: 'foreign_tool' }] });
+    await fs.writeFile(file, JSON.stringify(saved));
+    assert.deepEqual((await readToolTraces(project, run.id)).flatMap(row => row.steps.map(step => step.tool)), ['read']);
+  } finally { await fs.rm(rootDir, { recursive: true, force: true }); }
 });

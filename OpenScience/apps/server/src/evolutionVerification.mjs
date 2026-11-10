@@ -6,9 +6,7 @@ import {verifyCodeSkill} from './codeSkillVerification.mjs';
  * What is not here: a rule for hard-coded answers. The one that was (`candidate_expected_value_embedded`)
  * looked at the names of assignment targets, and a name cannot decide whether code computes or recites:
  * a lookup table of answers passed it and an honest `expected_value_treat` was refused. That question is
- * answered where the answers are, by behaviour: `evolutionCandidateEvaluator.mjs` runs the candidate on
- * inputs it derives from the hidden cases (`evals/paper-gold/behavioural.mjs`), and reports a hidden value
- * found as a literal in the source as a notice. */
+ * answered where the answers are, by behaviour, which no evaluator does any more. */
 export const EVOLUTION_STATIC_CHECK = String.raw`
 import ast,json,pathlib
 issues=[]

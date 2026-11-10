@@ -332,22 +332,30 @@ const WATCHED_TURN_MS = 120_000;
  * background work — a lesson, a document being read — leave no item, not even
  * one recorded quietly: those used to arrive already read and folded under
  * 「自动运行 N 条（评测与主动科研，不计入未读）」, a backstage count in the
- * reader's inbox (plan 2026-09-23 §5.8). An autopilot episode, or the
- * verification of one of its claims, reports through its digest, which is an
- * ordinary notice (`AutopilotService.createDigest`).
+ * reader's inbox (plan 2026-09-23 §5.8).
  *
  * @param {Record<string, any>} run
- * @param {{ internalProject?: boolean, automated?: boolean, autopilotOwned?: boolean }} [origin]
+ * @param {{ internalProject?: boolean, automated?: boolean }} [origin]
  *   `internalProject` — the run is in one of the account's own background
- *   projects (`isInternalProject`); `automated` — a harness or autopilot
- *   dispatched it (`automatedRun`); `autopilotOwned` — an autopilot episode
- *   owns it.
+ *   projects (`isInternalProject`); `automated` — a harness
+ *   dispatched it (`automatedRun`).
  */
-export function runFinishedReachesInbox(run, { internalProject = false, automated = false, autopilotOwned = false } = {}) {
-  if (internalProject || autopilotOwned) return false;
+export function runFinishedReachesInbox(run, { internalProject = false, automated = false } = {}) {
+  if (internalProject) return false;
   if (isGoalContinuation(run)) return goalContinuationNotifies(run);
+  // Nobody watched it finish, however short it was, and the person asked for it. Their own stop is the one thing not told back.
+  if (isScheduledRun(run)) return !(run?.status === "canceled" && run?.canceledBy !== "platform");
   if (automated) return false;
   return runFinishedNotifies(run);
+}
+
+/** The route of a turn a scheduled task delivered (`agentRuns.adoptRuntimeTurns`). */
+export const SCHEDULE_ROUTE = "schedule";
+
+/** @param {Record<string, any> | null | undefined} run @returns {boolean} */
+export function isScheduledRun(run) {
+  const reason = String(run?.effectiveRouteReason ?? "");
+  return reason === SCHEDULE_ROUTE || reason.endsWith(`:${SCHEDULE_ROUTE}`);
 }
 
 /**

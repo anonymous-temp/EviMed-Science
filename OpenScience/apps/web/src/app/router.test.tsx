@@ -64,11 +64,15 @@ describe("every address people already have still arrives", () => {
     // land on the files it sat beside.
     ["/notebooks", "/app/files"],
     ["/memory", "/app/memory"],
-    ["/agents", "/app/capabilities"],
+    ["/agents", "/app/home"],
     ["/settings", "/app/account?tab=appearance"],
     ["/app/sources", "/app/files?tab=sources"],
     ["/app/notebooks", "/app/files"],
     ["/app/capsules", "/app/memory/overview"],
+    // 科研工具 and the plugin market were retired on 2026-11-08: their addresses land on the assistant and on what is added.
+    ["/app/capabilities", "/app/home"],
+    ["/app/extensions", "/app/extensions/installed"],
+    ["/app/extensions/installed", "/app/extensions/installed"],
     // 「记忆地图」 was a tab of its own until 2026-10-27: it is part of 总览 now, and an old address goes there with what it can carry over.
     ["/app/memory/map", "/app/memory/overview"],
     ["/app/memory/map?view=graph", "/app/memory/overview?explore=graph"],

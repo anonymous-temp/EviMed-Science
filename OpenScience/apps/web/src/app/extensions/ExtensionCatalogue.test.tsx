@@ -7,7 +7,7 @@ import { ExtensionsPage } from "./ExtensionsPage";
 
 const skills = vi.hoisted(() => ({ listPlatformSkills: vi.fn(), projectPlatformSkills: vi.fn(), saveProjectPlatformSkills: vi.fn(), listPersonalSkills: vi.fn(), projectSkills: vi.fn(), pendingPersonalSkillTransfers: vi.fn(), readPlatformSkill: vi.fn() }));
 const plugins = vi.hoisted(() => ({ inventory: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), projectExtensions: vi.fn(), projectBuiltinPlugins: vi.fn(), saveProjectBuiltinPlugins: vi.fn(), saveProjectExtensions: vi.fn(), extensionInstallation: vi.fn(), extensionHistory: vi.fn(), extensionConnections: vi.fn() }));
-const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), saveWebPlugin: vi.fn(), listWebResearchAgents: vi.fn() }));
+const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), saveWebPlugin: vi.fn() }));
 vi.mock("@/lib/skillLibraryClient", async original => ({ ...(await original<object>()), ...skills }));
 vi.mock("@/lib/extensionsClient", async original => ({ ...(await original<object>()), ...plugins }));
 vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), ...api }));
@@ -16,7 +16,7 @@ const skill = { id: "curated:plot", name: "plot", title: "科学绘图", use: "�
 const activation = { phase: "effective", savedRevision: 3, effectiveRevision: 3, error: null };
 const project = { id: "policy", revision: 3, payload: { disabled: [] }, items: [{ ...skill, enabled: true, effective: true }], activation };
 const empty = { items: [], nextCursor: null };
-function open(url = "/app/extensions/discover") {
+function open(url = "/app/extensions/installed") {
   return render(<MemoryRouter initialEntries={[url]}><Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /></Routes></MemoryRouter>);
 }
 beforeEach(() => {
@@ -33,13 +33,14 @@ beforeEach(() => {
   plugins.projectExtensions.mockResolvedValue({ revision: 0, selections: [], effectiveGeneration: null });
   plugins.projectBuiltinPlugins.mockResolvedValue({ revision: 3, payload: { disabled: [] }, items: [], activation });
   api.listWebPlugins.mockResolvedValue([]);
-  api.listWebResearchAgents.mockResolvedValue([{ id: "peer-review", title: "审稿工具" }]);
 });
-it("opens discovery with publisher-visible cards, without a creation-first empty library", async () => {
-  open();
-  expect(await screen.findByRole("tab", { name: /发现/ })).toHaveAttribute("aria-selected", "true");
+it("opens on what is added, with the publisher visible and no catalogue to browse", async () => {
+  open("/app/extensions/discover");
   expect(await screen.findByText("K-Dense")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "科学绘图" })).toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: /发现/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "已添加" })).not.toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "技能与插件" })).toBeInTheDocument();
   expect(screen.queryByText(/还没有自己的技能/)).not.toBeInTheDocument();
 });
 
@@ -66,38 +67,18 @@ it("draws the GitHub link as the quiet text action beside it, not as a smaller l
   expect(link).toHaveAttribute("target", "_blank");
 });
 
-it("reads 发现 a page at a time: a section shows its first twelve cards and 显示更多, and a search starts it again", async () => {
-  const many = Array.from({ length: 30 }, (_, index) => ({ ...skill, id: `curated:own-${index}`, title: `自研方法 ${index + 1}`, provenance: { ...source, kind: "first-party" } }));
-  skills.listPlatformSkills.mockResolvedValue({ groups: [skill.group], items: many });
-  open();
-  const own = await screen.findByRole("region", { name: "EviMed Science" });
-  const cards = () => within(own).getAllByRole("listitem");
-  await waitFor(() => expect(cards()).toHaveLength(12));
-  // The section's count is the whole section's, not the window's.
-  expect(within(own).getByText("31 项")).toBeInTheDocument();
-  await userEvent.click(within(own).getByRole("button", { name: "显示更多 · 还有 19 个" }));
-  expect(cards()).toHaveLength(31);
-  expect(within(own).queryByRole("button", { name: /显示更多/ })).not.toBeInTheDocument();
-  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "自研");
-  await waitFor(() => expect(cards()).toHaveLength(12));
-  expect(within(own).getByRole("button", { name: "显示更多 · 还有 18 个" })).toBeInTheDocument();
-});
-
-it("keeps source filtering when switching between discovery and added", async () => {
+it("keeps source filtering from an old discovery address", async () => {
   skills.listPlatformSkills.mockResolvedValue({ groups: [skill.group], items: [skill,
     { ...skill, id: "curated:authored", title: "自研分析", provenance: { ...source, kind: "first-party" } },
   ] });
   open("/app/extensions/discover?origin=first-party");
-  expect(await screen.findByRole("button", { name: "自研分析" })).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "科学绘图" })).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole("tab", { name: "已添加" }));
   expect(await screen.findByRole("switch", { name: /自研分析/ })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "科学绘图" })).not.toBeInTheDocument();
 });
 
 it.each(["全部类型", "清除筛选"])("clears a legacy plugin route's implicit type with %s", async label => {
   open("/app/extensions/plugins");
-  await screen.findByText("暂无可添加的扩展");
+  await screen.findByText("没有找到匹配项");
   if (label === "全部类型") {
     await userEvent.click(screen.getByRole("button", { name: "类型：插件" }));
     await userEvent.click(screen.getByRole("menuitemradio", { name: label }));

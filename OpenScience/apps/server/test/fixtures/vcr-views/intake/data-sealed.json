@@ -11,6 +11,9 @@
   "selectedId": null,
   "precedents": [],
   "precedentSources": null,
+  "networkMeta": [],
+  "doseResponses": [],
+  "effectShrinkages": [],
   "precedentNote": null,
   "snapshots": [
     {

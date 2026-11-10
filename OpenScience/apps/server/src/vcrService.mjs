@@ -1,4 +1,5 @@
 import { vcrContractsRead } from './vcrWriteContracts.mjs';
+import { vcrSuccessRatesRead } from './vcrEvidenceSynthesis.mjs';
 import { followupHistoryCsv, presentFollowupHistory } from './vcrFollowupHistory.mjs';
 import { resolveVcrReplyStudy } from './vcrReplyContext.mjs';
 /**
@@ -44,7 +45,7 @@ import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mj
 import {
   clinicalFactView, VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_MODEL_INTERFACES, VCR_ROUTE_MIN_TIER,
   VCR_JOB_METHODS, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrAssessmentIssues,
-  vcrModelCardIssues, vcrModelInterfaceOf, vcrResultClass, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds, segmentCriteria,
+  VCR_TRAINED_MODEL_LABEL_ZH, validateScenario, vcrModelCardIssues, vcrModelInterfaceOf, vcrResultClass, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds, segmentCriteria,
 } from "@evimed/domain";
 
 import { vcrScenarioHash } from "./vcrJobs.mjs";
@@ -52,6 +53,8 @@ import { HttpError } from "./security.mjs";
 import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode, vcrStudyNameFrom } from "./vcrStore.mjs";
 import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
+import { vcrTypeOneLevel, vcrWithTypeOneVerdicts } from "./vcrTypeOneVerdict.mjs";
+import { vcrProgressionWithDifferences } from "./vcrProgression.mjs";
 
 /** The people of a table screened by rules, a page at a time: the same 25 the judged page shows, at most 100. */
 const RULE_PAGE = Object.freeze({ default: 25, most: 100 });
@@ -81,7 +84,7 @@ export const VCR_READ_WHATS = Object.freeze([
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
   "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
   "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
-  "candidates",
+  "candidates", "success_rates",
 ]);
 
 /**
@@ -291,7 +294,7 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
       retirement: "当引擎的 patients.time_to_event 方法版本变更时退役并重新发布。",
     }),
     applicability: Object.freeze({ population: "不限，但只作情景推演", region: "不限", endpoints: Object.freeze(["time_to_event"]) }),
-    validation: Object.freeze({ codeVerification: "对照 simsurv 的已知真值", seedReproducible: true }),
+    validation: Object.freeze({ codeVerification: "同参数对照 simsurv 的生存率与风险比，并对照解析真值（指数与 Weibull 分布）", seedReproducible: true }),
     evidence: Object.freeze(["code_verification", "seed_reproducible"]),
   }),
   // The trajectory model (2026-10-07, plan 5.2): a linear mixed model of a continuous outcome over a visit schedule. Its inputs are
@@ -304,10 +307,11 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
       provider: "EviMed 虚拟临床研究",
       interface: "vcr-engine patients.longitudinal",
       inputs: Object.freeze(["两组人数", "随访时间表", "基线水平与对照组的变化速度", "处理效应（每个时间单位变化速度的差）",
-        "个体间的差异（截距与斜率的标准差及相关）", "残差标准差", "每次随访前退出的概率", "协变量效应（取自已存人群）", "目标队列规则", "同队列的配对模拟标识"]),
+        "平均轨迹的形状（直线、逐渐趋平或二次曲线）", "个体间的差异（截距与斜率的标准差及相关）", "残差标准差", "每次随访前退出的概率",
+        "与结局有关的退出（看上一次或这一次的值）", "救援用药（每次随访前开始的概率及对结局的平移）", "协变量效应（取自已存人群）", "目标队列规则", "同队列的配对模拟标识"]),
       outputs: "按给定参数生成访视记录与分组汇总；配对情景使用保存的队列和随机流对应合成人群成员。未生成的反事实轨迹不展示，模拟不代表真实个体的临床预测。",
       missingData: "输入缺项不插补：缺哪一项就报哪一项，不用默认值顶替。退出的人退出后的随访记为缺失。",
-      knownLimits: Object.freeze(["线性轨迹，随机截距与随机斜率", "退出为完全随机缺失，不模拟与结局有关的退出", "不含任何真实人群的协变量结构", "不可用于个体层面的预测", "不承载疗效或安全性证据"]),
+      knownLimits: Object.freeze(["平均轨迹是直线、逐渐趋平或二次曲线三种之一，个体偏离为随机截距与随机斜率", "不设退出模型时，退出为完全随机缺失；与结局有关的退出只按设定的一种机制模拟", "不含任何真实人群的协变量结构", "不可用于个体层面的预测", "不承载疗效或安全性证据"]),
       retirement: "当引擎的 patients.longitudinal 方法版本变更时退役并重新发布。",
     }),
     applicability: Object.freeze({ population: "不限，但只作情景推演", region: "不限", endpoints: Object.freeze(["continuous"]) }),
@@ -480,7 +484,9 @@ export class VcrService {
     this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, erasure: null, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null),
       // The run ledger's record of one run (`{ startedAt, progress }`) and the study's conversation (`{ sessionId, exists }`, created for the owner
       // when a study has none): both are the control plane's, attached by the composition root (R3, 2026-10-14).
-      runLedger: /** @type {any} */ (null), conversations: /** @type {any} */ (null) };
+      runLedger: /** @type {any} */ (null), conversations: /** @type {any} */ (null),
+      // the virtual lab's experiments and campaigns (`vcrExperiments.mjs`), read by the lab's routes
+      experiments: /** @type {any} */ (null) };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -1067,6 +1073,14 @@ export class VcrService {
     };
     // The saved comparison a link names (`?object=`): the comparison tab's headline follows it, and the newest stays without one.
     if (tab === "comparator" && typeof query.object === "string") bundle.askedComparator = query.object;
+    // and the trial tab's (a saved design's id, or the key a computed design is filed under): the first sentence and the premises follow it
+    if (tab === "trial" && typeof query.object === "string") bundle.askedObject = query.object;
+    // A grid the link names is the grid the page draws: a study keeps one grid per set of sizes, follow-up and truths, and only the newest
+    // is read otherwise (live 2026-11-07: the reply cited a 30-month grid's power while the page drew a later null check).
+    if (tab === "trial" && typeof query.object === "string" && query.object !== grid?.id && typeof this.store.designGrid === "function") {
+      const asked = await this.store.designGrid(study.id, query.object).catch(() => null);
+      if (asked) bundle.grid = asked;
+    }
     // What the study's data intake waits on a person for: said on the overview, where the study is read, and not only inside 数据接入.
     if (tab === 'overview') {
       bundle.intakeNeeds = intakeNeedsOf(await this.packages.dataPlane?.intakeRows?.(study).catch(() => null));
@@ -1233,11 +1247,13 @@ export class VcrService {
     if (!evidenceStore) {
       return { available: false, code: "vcr_evidence_unavailable", message: "证据参数化在本部署尚未接入；假设卡仍可手工登记。", precedents: [], items: [] };
     }
-    const [precedents, items] = await Promise.all([
+    const [precedents, items, secondReads] = await Promise.all([
       evidenceStore.listPrecedents({ userId: study.userId, studyId: study.id, limit: 100 }).catch(() => []),
       evidenceStore.listEvidenceItems({ userId: study.userId, studyId: study.id, limit: 1000 }).catch(() => []),
+      // Where a second reading of a value's passage read another number (E1): the disagreements only, for the cards that cite those values.
+      evidenceStore.secondReads?.({ userId: study.userId, studyId: study.id, outcome: "differ" }).catch(() => []) ?? [],
     ]);
-    return { available: true, precedents, items };
+    return { available: true, precedents, items, secondReads };
   }
 
   /**
@@ -1465,6 +1481,12 @@ export class VcrService {
       if (!study) throw failure(400, "vcr_model_invalid", "A fitted baseline belongs to a study.");
       Object.assign(card, await this.fittedModelCard(user, study, String(input.card.fitResultId)));
     }
+    if (object(input.card).trainedResultId) {
+      if (!study) throw failure(400, "vcr_model_invalid", "A trained model belongs to a study.");
+      Object.assign(card, await this.trainedModelCard(user, study, String(input.card.trainedResultId)));
+      // A model trained on the person's own table says so wherever it is read, and it carries no claim the data cannot make
+      if (!sources.includes(VCR_TRAINED_MODEL_LABEL_ZH)) sources.push(VCR_TRAINED_MODEL_LABEL_ZH);
+    }
     const applicability = { ...object(input.applicability), sources };
     const parameterEndpoint = object(object(object(card.executionSpec).scenario).endpoint).type ?? null;
     if (parameterEndpoint && input.endpointType && input.endpointType !== parameterEndpoint) throw failure(400, "vcr_model_invalid", "The declared endpoint disagrees with the source reference profile.");
@@ -1535,17 +1557,77 @@ export class VcrService {
       knownLimits: [result.diagnostics.uncertainty, "A population baseline fit is not target-population clinical validation."].filter(Boolean) };
   }
 
+  /**
+   * Register only an actual engine training of a prognostic model on the person's own table (review RF2 P1-3). The model is the equation
+   * the engine saved (`diagnostics.model.equation`), read here from the verified result: nothing the caller sends is the model. It is
+   * labelled for what it is, trained on the person's data and never validated outside it, and it is the shape `model.prognostic_apply`
+   * takes, so applying it runs the same job a published equation does.
+   * @param {{id:string}} user @param {any} study @param {string} resultId
+   */
+  async trainedModelCard(user, study, resultId) {
+    await this.requireStudy(user, study.id);
+    const result = await this.store.result(study.id, resultId);
+    const execution = result?.executionId ? await this.store.one(`SELECT method,receipt,output_hash FROM ${VCR_SCHEMA}.executions WHERE id=$1 AND study_id=$2`, [result.executionId, study.id]) : null;
+    const model = object(object(result?.diagnostics).model);
+    const equation = object(model.equation);
+    if (!result || result.kind !== "prognostic_training" || execution?.method !== "model.prognostic_train" || !vcrExecutionReceiptVerified(execution)
+      || result.conclusion === "not_estimable" || !Object.keys(equation).length || model.externallyValidated !== false) {
+      throw failure(400, "vcr_model_invalid", "Select a verified, estimated prognostic model trained in this study.");
+    }
+    const frozen = { model: equation, endpoint: model.endpoint, sourceCondition: model.sourceCondition };
+    const issues = validateScenario("model.prognostic_apply", { inputId: "binding_preview", idColumn: "USUBJID", inputUnits: model.inputUnits, ...frozen });
+    const trainedOn = object(model.trainedOn);
+    return { trainedResultId: resultId, type: "trained_prognostic_equation", interfaceShape: "baseline_to_outcome", executionProfile: "model.prognostic_apply",
+      trainedSource: { kind: "trained_result", resultId, resultVersion: result.version, executionId: result.executionId, rows: trainedOn.rows ?? null, events: trainedOn.events ?? null, label: VCR_TRAINED_MODEL_LABEL_ZH },
+      trainedLabel: VCR_TRAINED_MODEL_LABEL_ZH, equation: frozen,
+      executionSpec: issues.length ? null : { method: "model.prognostic_apply", scenario: frozen, scenarioHash: vcrScenarioHash(frozen), sourceParameters: [] },
+      registrationState: issues.length ? "incomplete_specification" : "trained_on_own_data",
+      specificationMissing: issues.map((issue) => `${issue.code}: ${issue.field}`),
+      inputs: list(equation.terms).map((/** @type {any} */ term) => `${term.column} (${model.inputUnits?.[term.column] ?? term.unit})`),
+      outputs: "所声明条件下的预后值（风险、概率或结局的预测）；不是治疗效应。",
+      knownLimits: [VCR_TRAINED_MODEL_LABEL_ZH, "只在你自己的这张表里做过交叉验证；换一个人群，区分度、校准和可迁移性都没有查过。", "没有估计系数的不确定性。"] };
+  }
+
+  /**
+   * The scenario parts a bound trained model fixes, so the run applying it never copies a coefficient: its equation, its endpoint, its source
+   * condition and the units of its inputs. `null` for a model that is not a trained one.
+   * @param {{id:string}} user @param {string} modelId
+   */
+  async trainedModelEquation(user, modelId) {
+    const model = (await this.store.models(String(user.id))).find(row => row.id === modelId);
+    if (!model?.studyId || !object(model.card).trainedResultId) return null;
+    const prepared = await this.trainedModelCard(user, await this.requireStudy(user, model.studyId), String(model.card.trainedResultId));
+    const spec = object(prepared.executionSpec);
+    const result = await this.store.result(model.studyId, String(model.card.trainedResultId));
+    return spec.scenario ? { ...structuredClone(spec.scenario), inputUnits: structuredClone(object(object(result?.diagnostics).model).inputUnits) } : null;
+  }
+
+  /**
+   * The scenario of an application of a bound model: for a model trained on the person's own table, the equation, endpoint, source
+   * condition and input units are the model's own, so a call that states none of them gets exactly those and never retypes a coefficient.
+   * A call that states them is left as it is (`modelExecution` then refuses one that differs from the bound model).
+   * @param {{id:string}} user @param {string | null | undefined} modelId @param {string} kind @param {Record<string, any>} scenario
+   * @returns {Promise<Record<string, any>>}
+   */
+  async modelScenario(user, modelId, kind, scenario) {
+    if (kind !== "apply_prognostic_model" || !modelId || scenario.model !== undefined) return scenario;
+    const fixed = await this.trainedModelEquation(user, modelId);
+    return fixed ? { ...fixed, ...scenario } : scenario;
+  }
+
   /** Bind an actual computation to one immutable source-based model version.
    * @param {{id:string}} user @param {any} study @param {string} modelId @param {string} kind @param {any} scenario
    */
   async modelExecution(user, study, modelId, kind, scenario) {
     const model = (await this.store.models(String(user.id))).find(row => row.id === modelId);
     if (!model) throw failure(404, "not_found", "Model not found.");
-    if (!model.studyId || (!object(model.card).fitResultId && (!this.packages.modelSources || !object(model.card).literatureSource))) throw failure(400, "vcr_model_invalid", "This model has no source-bound executable configuration.");
+    if (!model.studyId || (!object(model.card).fitResultId && !object(model.card).trainedResultId && (!this.packages.modelSources || !object(model.card).literatureSource))) throw failure(400, "vcr_model_invalid", "This model has no source-bound executable configuration.");
     const sourceStudy = await this.requireStudy(user, model.studyId);
     const prepared = object(model.card).fitResultId
       ? await this.fittedModelCard(user, sourceStudy, String(model.card.fitResultId))
-      : await this.packages.modelSources.prepare(user, sourceStudy, model.card);
+      : object(model.card).trainedResultId
+        ? await this.trainedModelCard(user, sourceStudy, String(model.card.trainedResultId))
+        : await this.packages.modelSources.prepare(user, sourceStudy, model.card);
     const spec = object(prepared.executionSpec);
     if (!spec.method || VCR_JOB_METHODS[kind] !== spec.method) throw failure(400, "vcr_model_invalid", "This model version has no supported configuration for that method.");
     const expected = object(spec.scenario);
@@ -1553,7 +1635,7 @@ export class VcrService {
       if (vcrScenarioHash({ model: scenario.model, endpoint: scenario.endpoint, sourceCondition: scenario.sourceCondition }) !== spec.scenarioHash) {
         throw failure(400, "vcr_model_invalid", "The published equation or its target endpoint changed; register a new source-bound version.");
       }
-      return { id: model.id, version: model.version, source: prepared.literatureSource, scenarioHash: spec.scenarioHash };
+      return { id: model.id, version: model.version, source: prepared.literatureSource ?? prepared.trainedSource, scenarioHash: spec.scenarioHash };
     }
     if (prepared.fitSource && vcrScenarioHash(object(scenario.truth).controlDistribution) !== vcrScenarioHash(object(expected.truth).controlDistribution)) {
       throw failure(400, "vcr_model_invalid", "The fitted baseline distribution changed; fit or select another model version.");
@@ -1675,9 +1757,17 @@ export class VcrService {
     const current = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
     const modelAnalysis = isModelDocumentKind(String(options.kind ?? ""))
       ? buildModelAnalysis({ inputs: await readModelAnalysisInputs(store, study), results, versions: await store.modelPlanVersions(study.id) }) : null;
+    // the execution of the comparison the newest comparator design names, so the export says what its control is made of by the method that ran
+    const comparison = comparator?.resultId ? results.find((/** @type {any} */ row) => row.id === comparator.resultId) : null;
+    const executions = comparison?.executionId && typeof store.rows === "function"
+      ? new Map((await store.rows(`SELECT id, method FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 AND id = $2`, [study.id, comparison.executionId]))
+        .map((/** @type {any} */ row) => [String(row.id), { id: String(row.id), method: String(row.method) }])) : null;
     const report = vcrReportModel({ study, definition, assumptions, results, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current, exports }) })), staleMarks: stale, population, comparator,
-      scenarios, models, seal: vcrSealState(study), modelAnalysis, schedule, contacts });
-    return this.packages.longitudinal ? {...report,longitudinal:await this.packages.longitudinal.view(study,{all:true},store)} : report;
+      scenarios, models, seal: vcrSealState(study), modelAnalysis, schedule, contacts, executions });
+    // the virtual lab's experiments and campaigns, each result beside its own design and each under its premises (absent when the study has none)
+    const lab = await /** @type {any} */ (this.packages).experiments?.reportBlock?.(study, store) ?? [];
+    const withLab = lab.length ? { ...report, lab } : report;
+    return this.packages.longitudinal ? {...withLab,longitudinal:await this.packages.longitudinal.view(study,{all:true},store)} : withLab;
   }
 
   /**
@@ -1711,13 +1801,41 @@ export class VcrService {
     }
     this.counters.reads += 1;
     if (what === 'contracts') return vcrContractsRead(filter.kind ?? null);
+    // Published base rates of development, two sources side by side: reference data, no study and no patient behind it.
+    if (what === 'success_rates') return vcrSuccessRatesRead(filter);
     if (what === 'data_intake') return { available: false, code: 'vcr_invocation_unavailable', message: 'Original upload intake requires the verified current conversation.' };
     if (!study.id && !['trial_registry_record','models','library','candidates'].includes(what)
       && !(what === 'matching' && ['contract', 'terminology'].includes(filter.kind))) return { available:true,empty:true,study:null,scope:'conversation' };
     const payload = await this.#runtimeRead(study, what, filter, signal, ownerView, listMax);
     // This one projection has already verified the entire generated lineage; synthetic counts are not patient disclosure cells.
     if (what === "generated_records") return stripPlaneAddresses(payload);
-    return this.forModel(payload, { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what), projection:what, ownerView });
+    const shown = this.forModel(payload, { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what), projection:what, ownerView });
+    return what === "results" ? this.#resultsAnswer(study, shown) : shown;
+  }
+
+  /**
+   * The results a run reads, each simulated type I error said as its verdict on the conservative bound, against the level its own job
+   * stated (live D8, 2026-11-07, phase 3: the follow-up 「能不能确认一类错误不超过 2.5%？」 was answered from this read, which carried
+   * 2.44% ± 0.11% and no verdict, as 「能确认不超过 2.5%」), and each progression run with the difference between its arms at every visit
+   * (live D6: a reply subtracted the means itself). A level that cannot be read leaves the number as it is.
+   * @param {any} study @param {any} shown
+   */
+  async #resultsAnswer(study, shown) {
+    const results = (Array.isArray(shown?.results) ? shown.results : []).map((/** @type {any} */ result) => vcrProgressionWithDifferences(result));
+    if (!Array.isArray(shown?.results)) return shown;
+    const holds = (/** @type {any} */ result) => [result?.measures, ...(Array.isArray(result?.diagnostics?.cells) ? result.diagnostics.cells.map((/** @type {any} */ cell) => cell?.measures) : [])]
+      .some((measures) => Array.isArray(measures) && measures.some((/** @type {any} */ measure) => measure?.name === "type_one_error"));
+    const asked = results.filter(holds).map((/** @type {any} */ result) => String(result.id));
+    if (!asked.length) return { ...shown, results };
+    /** @type {Map<string, Record<string, any>>} */
+    const scenarios = new Map();
+    if (typeof this.store.rows === "function") {
+      const rows = await this.store.rows(`SELECT r.id, j.scenario FROM ${VCR_SCHEMA}.results r JOIN ${VCR_SCHEMA}.executions e ON e.id = r.execution_id
+        JOIN ${VCR_SCHEMA}.jobs j ON j.id = e.job_id WHERE r.study_id = $1 AND r.id = ANY($2::text[])`, [study.id, asked]).catch(() => []);
+      for (const row of rows) scenarios.set(String(row.id), row.scenario && typeof row.scenario === "object" ? row.scenario : {});
+    }
+    return { ...shown, results: results.map((/** @type {any} */ result) => asked.includes(String(result.id))
+      ? vcrWithTypeOneVerdicts(result, vcrTypeOneLevel({ scenario: scenarios.get(String(result.id)) ?? null, result })) : result) };
   }
 
   /** @param {any} study @param {string} what @param {Record<string, any>} filter @param {AbortSignal} [signal] @param {boolean} [ownerView] */
@@ -1799,7 +1917,12 @@ export class VcrService {
         return { results: results.slice(0, limit).map((result) => this.#resultView(result, stale)), more: results.length > limit };
       }
       case "report_model": return { model: await this.reportModel(study, { kind: filter.kind ? String(filter.kind) : null }) };
-      case "jobs": return { jobs: await this.store.jobs(study.id, limit) };
+      case "jobs": {
+        // by state when the call asks (`filter.status`): the newest of that state, not the state's share of the newest `limit`
+        const status = typeof filter.status === "string" ? filter.status : null;
+        const rows = await this.store.jobs(study.id, status ? Math.max(limit, 200) : limit);
+        return { jobs: status ? rows.filter((job) => job.state === status).slice(0, limit) : rows };
+      }
       case "generated_records": {
         if (!filter.id) throw failure(400, "vcr_read_filter_invalid", "Specify the saved result id.");
         if (!this.packages.records?.modelRead) return { available: false, code: "vcr_records_unavailable" };

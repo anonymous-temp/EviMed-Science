@@ -145,9 +145,10 @@ const shortDigest = (value) => createHash("sha256").update(value, "utf8").digest
 /**
  * The version of what DECIDE answers. 2 added the direction of the two directed relations (`WIDER` for `subset`, `REPLACES`
  * for `supersedes`); a group decided under 1 has no direction to record, so it is read again once, and its dispatch id
- * names the version so that an answer stored before it is not adopted in place of a new one.
+ * names the version so that an answer stored before it is not adopted in place of a new one. Version 3 invalidates old
+ * whole-group stamps that an incremental pass wrote while merge/abstraction work remained deferred.
  */
-export const DECIDE_VERSION = 2;
+export const DECIDE_VERSION = 3;
 
 /**
  * The identity of a group of methods as the pass reads it: the sha256 of its sorted `id@digest`. The same members at the
@@ -291,25 +292,6 @@ export function groupPairs(pairs, limits = {}) {
 }
 
 /**
- * What the relation pass is told about the platform's own tools, and only when there is something to tell:
- * the tools a group's methods are declared for (`capabilityIds`, a closed list), bounded, and nothing of a
- * tool's papers or data requirements. Whether a description is "about" the same thing as a method is a language
- * judgement, so it is not made here by shared words; the pass reads the descriptions and decides.
- * With none (the module off, or no tool for these capabilities) the brief carries no `platformTools` key, and is
- * byte for byte the one the pass was given before the module existed.
- * @param {any[]} tools @param {readonly any[]} members @returns {{platformTools: any} | {}}
- */
-export function relevantPlatformTools(tools, members) {
-  const capabilities = new Set(members.flatMap((member) => [member.payload?.capabilityId, ...(member.payload?.capabilityIds ?? [])].filter(Boolean)));
-  const relevant = tools.filter((tool) => tool.capabilityIds?.some((/** @type {string} */ id) => capabilities.has(id)))
-    .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  if (!relevant.length) return {};
-  return { platformTools: { items: relevant.slice(0, 30).map((tool) => ({ id: tool.id, digest: tool.digest ?? tool.artifactDigest, revision: tool.revision,
-    capabilityIds: (tool.capabilityIds ?? []).slice(0, 30), name: String(tool.name ?? "").slice(0, 160), description: String(tool.description ?? "").slice(0, 1000) })),
-  omitted: Math.max(0, relevant.length - 30), irrelevant: tools.length - relevant.length, selectionBasis: "declared-capability" } };
-}
-
-/**
  * Whether a merged (canonical) method has cleared the harm test on its own runs, which is what lets the originals it replaces go (owner ruling of
  * 2026-10-10, review L-1): it is in force, and the sequential test over the runs that invoked the body it holds now (`methodHarmTest`, the detector that
  * retires an inferred method) has read clear. Being approved at birth is not that, a run that merely had it mounted is not that, and neither is a verdict
@@ -343,7 +325,7 @@ export class MethodConsolidation {
    * audit line (plan 2026-09-23 §5.8).
    *
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any,
-   *          contextProvenance?: any, jobs?: any, judgeService?: any, screenBaseline?: any, platformTools?: () => Promise<any[]>,
+   *          contextProvenance?: any, jobs?: any, judgeService?: any, screenBaseline?: any,
    *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date,
    *          unusedAfterLoads?: number, onRetirement?: ((code: string) => void) | null,
    *          similarity?: {pairs: (methods: readonly any[]) => Promise<any[]>, nearest: (text: string, methods: readonly any[], options?: any) => Promise<any[]>, methodText: (method: any) => string} | null,
@@ -355,7 +337,7 @@ export class MethodConsolidation {
   constructor({
     dispatch, readResult, learning, jobs = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    describe = null, platformTools = async () => [], judgeService = null, screenBaseline = null,
+    describe = null, judgeService = null, screenBaseline = null,
     unusedAfterLoads = undefined, onRetirement = null, similarity = null, onNoop = null, onRelation = null, replay = null, contextProvenance = null,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
@@ -369,7 +351,6 @@ export class MethodConsolidation {
     this.readResult = readResult;
     this.learning = learning;
     this.jobs = jobs;
-    this.platformTools = platformTools;
     // Optional, and optional on purpose: a consolidation pass that cannot write
     // an audit line still has to finish, because the line is a record of what
     // happened and not a step in it.
@@ -506,7 +487,7 @@ export class MethodConsolidation {
     if (!comparable) said("too_few_methods");
 
     // First, and again at the end: approval asks no model, and it used to come only after every model step, so a pass that was deferred (a busy
-    // runtime, the learning budget), timed out or threw ended before it, and each amended method, which goes back to `candidate`, stayed out of
+    // runtime, the learning budget), timed out or threw ended before it, and each amended method, which used to go back to `candidate`, stayed out of
     // the library until some later pass got that far (review L-14). The steps below can change what is approvable (a conflict recorded, a
     // counterpart retired), which is what the second look is for; this one is best effort, and the second is where a real failure surfaces.
     const early = await this.approveCandidates(job, methods, { strict: false });
@@ -700,11 +681,11 @@ export class MethodConsolidation {
    * @param {any} job @param {readonly any[]} members
    * @param {{buildAllowed?: boolean, buildTypes?: readonly string[] | null}} [options]
    * @returns {Promise<{status: "skipped_unchanged" | "decide_failed" | "decided", relations: number, relationTypes: Record<string, number>, builds: number,
-   *   blockedUnproven: boolean, decidedNothing: boolean, refusals: any[]}>}
+   *   blockedUnproven: boolean, decidedNothing: boolean, deferredBuilds: number, refusals: any[]}>}
    */
   async #processGroup(job, members, { buildAllowed = true, buildTypes = null } = {}) {
     if (this.contextProvenance) for (const member of members) if (!await this.#get(job,member.id)) throw new HttpError(409,'geo_learning_target_unverified','A method left this learning scope.');
-    const empty = { relations: 0, relationTypes: {}, builds: 0, blockedUnproven: false, decidedNothing: false, refusals: [] };
+    const empty = { relations: 0, relationTypes: {}, builds: 0, blockedUnproven: false, decidedNothing: false, deferredBuilds: 0, refusals: [] };
     const key = groupKey(members);
     const policy=await this.contextProvenance?.policyForJob(job);
     // Before DECIDE, only this job's original group is eligible. Cross-job
@@ -713,7 +694,9 @@ export class MethodConsolidation {
     if(replay) {
       // A resumed worker may see the result's exact successor heads. Adopt its
       // committed group before asking DECIDE or BUILD to read it again.
-      await this.#stamp(job,members,key);
+      // A compound receipt proves the assignments that reached BUILD, not the
+      // assignments an incremental pass left for the full-library pass.
+      if (!buildTypes) await this.#stamp(job,members,key);
       return {status:'decided',...empty,builds:replay.applied?1:0,refusals:replay.refusals??[]};
     }
     if (groupDecided(members, key)) return { status: "skipped_unchanged", ...empty };
@@ -726,8 +709,10 @@ export class MethodConsolidation {
     // `supersedes` builds nothing (the replaced method is stopped by the library's own rules once it is unused), so a group that
     // holds only that is recorded and not sent to the builder.
     // An assignment that names a method the group does not hold, or a `subset` that names no wider one, has nothing the builder could act on.
-    const buildable = assignments.filter(({ entry, skills, wider }) => skills && entry.RELATION_TYPE !== "supersedes"
-      && (entry.RELATION_TYPE !== "subset" || wider) && (!buildTypes || buildTypes.includes(entry.RELATION_TYPE)));
+    const allBuildable = assignments.filter(({ entry, skills, wider }) => skills && entry.RELATION_TYPE !== "supersedes"
+      && (entry.RELATION_TYPE !== "subset" || wider));
+    const buildable = allBuildable.filter(({ entry }) => !buildTypes || buildTypes.includes(entry.RELATION_TYPE));
+    const deferredBuilds = allBuildable.length - buildable.length;
     const decidedNothing = assignments.length === 0;
     // A merge nobody has proven blocks the build of this group, and nothing else: DECIDE and the relations above have run.
     const blockedUnproven = buildable.length > 0 && members.some(unprovenMerge);
@@ -749,8 +734,9 @@ export class MethodConsolidation {
     }
     if (limited) this.#noop("build_limit");
     if (buildFailed) this.#noop("build_failed");
-    if (!blockedUnproven && !limited && !buildFailed) await this.#stamp(job, members, key);
-    return { status: "decided", relations, relationTypes, builds, blockedUnproven, decidedNothing, refusals };
+    if (deferredBuilds) this.#noop('build_deferred', deferredBuilds);
+    if (!blockedUnproven && !limited && !buildFailed && !deferredBuilds) await this.#stamp(job, members, key);
+    return { status: "decided", relations, relationTypes, builds, blockedUnproven, decidedNothing, deferredBuilds, refusals };
   }
 
   /** Mark every member of a group as read at its current bodies. A stamp is a convenience: one that cannot be written means the
@@ -822,10 +808,11 @@ export class MethodConsolidation {
     if (done.status === "decide_failed") noop.push("decide_failed");
     if (done.blockedUnproven) noop.push("blocked_unproven");
     if (done.decidedNothing) noop.push("decided_nothing");
+    if (done.deferredBuilds) noop.push('build_deferred');
     if (done.refusals.length) noop.push("merge_refused");
-    for (const reason of noop) this.#noop(reason);
+    for (const reason of noop) if (reason !== 'build_deferred') this.#noop(reason);
     return { action: "integrate", methodId, neighbours: group.length - 1, relations: done.relations, relationTypes: done.relationTypes, builds: done.builds,
-      refusals: done.refusals, noop };
+      deferredBuilds: done.deferredBuilds, refusals: done.refusals, noop };
   }
 
   /** The methods most like this one, at most `METHOD_SIMILARITY_TOP_K` of them (the hourly shortlist's own bound, so a changed method is
@@ -1032,7 +1019,6 @@ export class MethodConsolidation {
         schemaVersion: 1,
         action: "decide",
         relationTypes: [...METHOD_RELATION_TYPES],
-        ...relevantPlatformTools(await this.platformTools(), members),
         methods: members.map((member) => ({
           id: member.id,
           name: member.payload?.frontmatter?.name,

@@ -77,7 +77,7 @@ function PathProbe() {
   return <div><span data-testid="path">{location.pathname}</span><span data-testid="search">{location.search}</span><span data-testid="state">{JSON.stringify(location.state ?? null)}</span>
     <button onClick={() => navigate("/app/chat/session-b")}>Open B</button>
     <button onClick={() => navigate("/app/files")}>Knowledge</button>
-    <button onClick={() => navigate("/app/autopilot/agenda-one")}>Task</button>
+    <button onClick={() => navigate("/app/active-research")}>Task</button>
     <button onClick={() => navigate("/app/chat")}>Bare chat</button>
     <button onClick={() => navigate("/app/home")}>Home</button>
     <button onClick={() => { mocks.projectId = "geo-project"; useProjectStore.setState({ currentId: "geo-project" }); navigate("/app/geo/geo_1/chat/session-geo"); }}>GEO project</button>
@@ -118,7 +118,6 @@ function mount(state: unknown = null, path = "/app/chat", prepared = false) {
     <Route path="/app/account/simulated/:page" element={<div>simulated wallet</div>} />
     <Route path="/app/files" element={<div>knowledge base</div>} />
     <Route path="/app/autopilot" element={<div>scheduled tasks</div>} />
-    <Route path="/app/autopilot/:taskId" element={<TaskPaneProbe />} />
     <Route path="/app/active-research" element={<TaskPaneProbe />} />
     <Route path="/app/geo/:geoId/chat/:sessionId?" element={<TaskPaneProbe />} />
     <Route path="/app/runs/:runId/files/*" element={<div>run file reader</div>} />
@@ -1085,7 +1084,7 @@ describe("native frame identity and readiness", () => {
     mocks.profile.uiOrigin = "";
     mocks.me.mockRejectedValueOnce(new Error("offline"));
     taskPane.sessionId = "session-exec";
-    const { container } = mount(null, "/app/autopilot/agenda-one");
+    const { container } = mount(null, "/app/active-research");
     const alert = await screen.findByRole("alert");
     expect(alert.closest("[data-task-frame]")).toHaveStyle({ left: "300px", top: "60px", width: "700px", height: "500px" });
     mocks.me.mockImplementation(async () => { mocks.profile.uiOrigin = "https://host.example:8443"; return {}; });
@@ -2215,7 +2214,7 @@ describe("循证 GEO in the conversation", () => {
 });
 
 describe("a scheduled task's card in the conversation", () => {
-  // `schedule_task` and `update_task` draw a card whose 「打开」 asks the shell for the `autopilot` destination, carrying the task's id.
+  // The kernel's `schedule_create` and `schedule_edit` draw a card whose 「打开」 asks the shell for the `autopilot` destination.
   async function openConversationWithCard() {
     const view = mount(null, "/app/chat/session-a");
     await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
@@ -2227,16 +2226,9 @@ describe("a scheduled task's card in the conversation", () => {
     return { view, frame };
   }
 
-  it("opens that task's page, and the list when the frame names no task or one that is not an id", async () => {
+  it("opens the scheduled-tasks page", async () => {
     const { view, frame } = await openConversationWithCard();
-    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 4, destination: "autopilot", taskId: "agenda-0123abcd-0000-4000-8000-000000000001" });
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/autopilot\/agenda-0123abcd-0000-4000-8000-000000000001$/));
-    await userEvent.click(screen.getByText("Back"));
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a"));
-    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 5, destination: "autopilot", taskId: "../../account" });
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/autopilot$/));
-    await userEvent.click(screen.getByText("Back"));
-    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 6, destination: "autopilot" });
+    emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 4, destination: "autopilot" });
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/autopilot$/));
     view.unmount();
   });
@@ -2408,7 +2400,7 @@ describe("the frame over a task's pane", () => {
   it("places the one resident frame over the pane, and opens the execution's conversation without writing it into the address", async () => {
     const { container, frame, post } = await openedChat();
     await userEvent.click(screen.getByText("Task"));
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/autopilot/agenda-one"));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/active-research"));
     // The same document, in the same place in the tree, at the pane's rectangle; the host takes no room and no clicks of its own.
     expect(container.querySelector("iframe")).toBe(frame);
     expect(container.querySelector("[data-session-surface]")).toHaveAttribute("data-session-surface", "task");
@@ -2425,7 +2417,7 @@ describe("the frame over a task's pane", () => {
     expect(request.intent).toEqual({ kind: "open", sessionId: "session-exec" });
     emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, requestId: request.requestId, ok: true, sessionId: "session-exec" });
     await act(async () => { await Promise.resolve(); });
-    expect(screen.getByTestId("path")).toHaveTextContent("/app/autopilot/agenda-one");
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/active-research");
     expect(screen.getByTestId("state")).toHaveTextContent("null");
   });
 
@@ -2485,14 +2477,14 @@ describe("the frame over a task's pane", () => {
 
   it("is not shown at all while the page asks for no conversation: an execution still running in a bounded runtime", async () => {
     taskPane.sessionId = null;
-    const { container } = mount(null, "/app/autopilot/agenda-one");
+    const { container } = mount(null, "/app/active-research");
     await waitFor(() => expect(screen.getByTestId("task-pane")).toBeInTheDocument());
     expect(container.querySelector("[data-session-surface]")).toHaveAttribute("data-session-surface", "hidden");
     expect(container.querySelector("iframe")).toBeNull(); expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it("opens the frame when the page first asks for it, on a task page that was the first page of the visit", async () => {
-    const { container } = mount(null, "/app/autopilot/agenda-one");
+    const { container } = mount(null, "/app/active-research");
     await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
     const frame = container.querySelector("iframe")!;
     const post = vi.spyOn(frame.contentWindow!, "postMessage");

@@ -26,7 +26,6 @@ export type ResultImpact = ProductRecord<{
   affected?: ResultImpactAffected | null;
   historicalResultPreserved: boolean;
   recomputed: boolean;
-  continuation: { status: "awaiting_user" | "preparing" | "scheduled" | "unavailable"; agendaId?: string; episodeId?: string };
 }>;
 
 const impactPath = (projectId: string) => `/projects/${encodeURIComponent(projectId)}/result-impacts`;
@@ -34,11 +33,6 @@ export function listResultImpacts(projectId: string, versionId: string, cursor?:
   const query = new URLSearchParams({ versionId });
   if (cursor) query.set("cursor", cursor);
   return productRequest<ProductPage<ResultImpact>>(`${impactPath(projectId)}?${query}`);
-}
-export function continueResultImpact(projectId: string, impact: ResultImpact, agendaId: string) {
-  return productRequest<ResultImpact>(`${impactPath(projectId)}/${encodeURIComponent(impact.id)}/continue`, "POST", {
-    agendaId, expectedRevision: impact.revision,
-  });
 }
 export interface ResultSourceCheck {
   versionId: string; digest: string;

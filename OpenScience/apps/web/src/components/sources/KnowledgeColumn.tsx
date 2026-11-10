@@ -1,42 +1,5 @@
-import { Link } from "react-router";
-import { cn } from "@/lib/cn";
-import { listPath, stateForView, type KnowledgeListState, type KnowledgeView } from "@/lib/knowledgeNav";
-import { buttonClasses } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import type { ProjectChoice, ProjectGroups } from "./useProjectGroups";
-
-const VIEWS: ReadonlyArray<{ id: KnowledgeView; label: string }> = [
-  { id: "documents", label: "资料" },
-  { id: "pages", label: "知识页" },
-  { id: "graph", label: "图谱" },
-  { id: "outputs", label: "对话产出" },
-];
-
-/**
- * The four views of the knowledge base, as links at the head of the list column — 资料 · 知识页 · 图谱 · 对话产出 — and not as a tab list: the
- * page is a master-detail page, and which of the four it shows is part of its address, so each is a link to it. 资料 is every document of the
- * account; the other three are a project's, and in them the column lists the projects. The pages and the graph are offered where the
- * deployment compiles them (or a project has compiled files already); the delivered files are offered always, and say so when a project has none.
- */
-export function KnowledgeViews({ view, state, pagesOffered }: { view: KnowledgeView; state: KnowledgeListState; pagesOffered: boolean }) {
-  // The pages and the graph are one offer: where either is open, both are, so the two read as a pair wherever the deployment compiles nothing.
-  const compiled = pagesOffered || view === "pages" || view === "graph";
-  const shown = VIEWS.filter((entry) => compiled || (entry.id !== "pages" && entry.id !== "graph"));
-  return (
-    <nav aria-label="知识库的内容" data-knowledge-views="" className="flex shrink-0 flex-wrap items-center gap-1">
-      {shown.map((entry) => (
-        <Link
-          key={entry.id}
-          to={listPath(stateForView(state, entry.id))}
-          aria-current={entry.id === view ? "page" : undefined}
-          className={buttonClasses({ variant: "text", size: "sm", className: cn("px-2 first:pl-0", entry.id === view ? "text-text underline underline-offset-4 hover:text-text" : "") })}
-        >
-          {entry.label}
-        </Link>
-      ))}
-    </nav>
-  );
-}
 
 /**
  * The projects, as the column of the three project views: a project is chosen, and the pane shows its pages, graph or delivered files. The

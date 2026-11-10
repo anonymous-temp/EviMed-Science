@@ -184,6 +184,7 @@ function requests(target, ids) {
     "GET /studies/:id/:tab": async () => ["GET", `${S}/overview`, undefined],
     "GET /studies/:id/runs": async () => ["GET", `${S}/runs`, undefined],
     "GET /studies/:id/longitudinal": async () => ["GET", `${S}/longitudinal`, undefined],
+    "GET /studies/:id/longitudinal/:prediction/subjects": async () => ["GET", `${S}/longitudinal/vlf_missing/subjects`, undefined],
     "GET /studies/:id/followup-history": async () => ["GET", `${S}/followup-history`, undefined],
     "POST /studies/:id/longitudinal/histories": async () => ["POST", `${S}/longitudinal/histories`, {}],
     "POST /studies/:id/longitudinal/predictions": async () => ["POST", `${S}/longitudinal/predictions`, {}],
@@ -213,6 +214,9 @@ function requests(target, ids) {
     "POST /studies/:id/method-configurations": async () => ["POST", `${S}/method-configurations`, { method: "profile.snapshot", name: "Profile", scenario: {} }],
     "POST /studies/:id/jobs": async () => ["POST", `${S}/jobs`, { kind: "design_simulation", scenario: {} }],
     "POST /studies/:id/jobs/:job/cancel": async () => ["POST", `${S}/jobs/job_none/cancel`, {}],
+    "GET /studies/:id/experiments": async () => ["GET", `${S}/experiments`, undefined],
+    "GET /studies/:id/experiments/:experiment": async () => ["GET", `${S}/experiments/cmp_none`, undefined],
+    "POST /studies/:id/experiments/:experiment/cancel": async () => ["POST", `${S}/experiments/cmp_none/cancel`, {}],
     "POST /studies/:id/budget": async () => ["POST", `${S}/budget`, { cpuSeconds: 600 }],
     "POST /studies/:id/assumptions": async () => ["POST", `${S}/assumptions`, { key: "dropout_rate", name: "脱落率", pointValue: 0.15, sourceKind: "expert_set" }],
     // The lead's edit of a record the run wrote: an allowed role reaches the store, which answers 404 for a record this study does not have.

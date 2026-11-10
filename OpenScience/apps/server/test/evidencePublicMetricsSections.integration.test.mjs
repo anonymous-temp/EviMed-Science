@@ -1,7 +1,6 @@
-// The monthly page's two optional sections and the author fields (flywheel review 2026-10-06), against a real PostgreSQL and over HTTP:
-// the question bank's month (per-class accuracy and the share of cited answers that cited an EviMed page) and the prediction registry's
-// calibration appear under the three figures only where their readers are composed and have something to say; absent, failing or empty
-// readers leave the page as it was; and a doctor's or a company's people appear on the author pages, nothing for an account that set none.
+// The monthly page's optional section and the author fields (flywheel review 2026-10-06), against a real PostgreSQL and over HTTP:
+// the question bank's month (per-class accuracy and the share of cited answers that cited an EviMed page) appears under the three figures only where its reader is composed
+// and has something to say; an absent, failing or empty reader leaves the page as it was; and a doctor's or a company's people appear on the author pages, nothing for an account that set none.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { after, before, beforeEach, test } from "node:test";
@@ -33,12 +32,6 @@ const bankMonth = (/** @type {string} */ month, /** @type {any} */ extra = {}) =
   engines: {}, ...extra,
 });
 const EMPTY_MONTH = (/** @type {string} */ month) => ({ month, available: false, classes: [], overall: { answers: 0 } });
-const CALIBRATION_WAITING = { available: false, scored: 7 };
-const CALIBRATION = {
-  available: true, scored: 41,
-  probability: { n: 30, brierMean: 0.181, bins: [{ from: 0.6, to: 0.7, n: 12, meanPredicted: 0.65, observedRate: 0.5833333 }, { from: 0.7, to: 0.8, n: 18, meanPredicted: 0.74, observedRate: 0.7222222 }] },
-  estimate: { n: 11, meanAbsoluteError: 0.126, coverage: { n: 11, rate: 0.8181818 } },
-};
 
 /** @type {any} */ let isolated, db, zones;
 before(async () => {
@@ -64,58 +57,44 @@ async function serve(t, settings = {}) {
   return { text, reports, routes };
 }
 
-test("the question bank's month and the calibration table appear under the three figures, with the numbers the readers gave", options, async (t) => {
-  const { text } = await serve(t, { questionBank: async ({ month }) => (month === "2026-10" ? bankMonth(month) : EMPTY_MONTH(month)), predictionCalibration: async () => CALIBRATION });
+test("the question bank's month appears under the three figures, with the numbers its reader gave, and the page promises no scored predictions", options, async (t) => {
+  const { text } = await serve(t, { questionBank: async ({ month }) => (month === "2026-10" ? bankMonth(month) : EMPTY_MONTH(month)) });
   const page = await text("/evidence/metrics");
   assert.equal(page.status, 200);
   assert.ok(page.body.indexOf("引文核对通过率") < page.body.indexOf("AI 助手回答常见用药问题：2026-10"), "under the three figures");
-  assert.ok(page.body.indexOf("AI 助手回答常见用药问题") < page.body.indexOf("预测的校准"));
   // The per-class accuracy: counts, a rate where something was decided, and the plain words where nothing was.
   assert.match(page.body, /<tr><td>用法用量<\/td><td class="num">10<\/td><td class="num">8<\/td><td class="num">6<\/td><td class="num">75%<\/td><\/tr>/);
   assert.match(page.body, /<tr><td>相互作用<\/td><td class="num">5<\/td><td class="num">0<\/td><td class="num">0<\/td><td class="num">没有可判定的陈述<\/td><\/tr>/, "never 0 for nothing decided");
   assert.match(page.body, /<tr><td>合计<\/td><td class="num">15<\/td>/);
   assert.ok(page.body.includes("<strong>25%</strong> 引用了 EviMed 的页面（4 条中的 1 条）"), "the share of cited answers that cited an EviMed page");
   assert.ok(page.body.includes("本月问到的助手：豆包。") && page.body.includes("本月还没有问到：Kimi"), "which assistants the rates cover");
-  // The calibration: the bins, the Brier score and the estimates.
-  assert.match(page.body, /<td>60%–70%<\/td><td class="num">12<\/td><td class="num">65%<\/td><td class="num">58.3%<\/td>/);
-  assert.ok(page.body.includes("Brier 分数平均为 0.181（30 条") && page.body.includes("平均绝对误差为 0.126（11 条）") && page.body.includes("占 81.8%（11 条）"));
-  assert.equal(page.body.includes("满 30 条后公开整体校准"), false, "no waiting sentence once the calibration is available");
+  assert.equal(/预测|评分|校准/.test(page.body), false, "nothing online scores a prediction, so the page says nothing about one");
   // The API carries the same, additively.
   const api = JSON.parse((await text("/evidence/api/v1/metrics")).body).data;
   assert.equal(api.questionBank.month, "2026-10");
   assert.equal(api.questionBank.overall.eviMedCitedShare, 0.25);
   assert.deepEqual(api.questionBank.coverage, { doubao: { state: "done" }, kimi: { state: "skipped" } });
-  assert.equal(api.predictionCalibration.available, true);
-  assert.equal(api.predictionCalibration.probability.bins.length, 2);
+  assert.equal("predictionCalibration" in api, false);
   assert.ok(Array.isArray(api.months));
 });
 
-test("before enough predictions are scored the page says how many and when the calibration is published, and draws no curve", options, async (t) => {
-  const { text } = await serve(t, { predictionCalibration: async () => CALIBRATION_WAITING });
-  const page = await text("/evidence/metrics");
-  assert.ok(page.body.includes("已评分 7 条，满 30 条后公开整体校准。"));
-  assert.equal(page.body.includes("<th>预测的成功概率</th>"), false);
-  assert.equal(page.body.includes("AI 助手回答常见用药问题"), false, "no question bank reader, no bank section");
-  assert.deepEqual(JSON.parse((await text("/evidence/api/v1/metrics")).body).data.predictionCalibration, { available: false, scored: 7, minScored: 30 });
-});
 
 test("absent readers, readers with nothing to say and readers that fail leave the page as it was; a failure is counted and reported, and the bank falls back one month", options, async (t) => {
   const none = await serve(t);
   const bare = (await none.text("/evidence/metrics")).body;
-  assert.equal(bare.includes("AI 助手回答常见用药问题") || bare.includes("预测的校准"), false, "absent readers: no section");
+  assert.equal(bare.includes("AI 助手回答常见用药问题"), false, "absent reader: no section");
   assert.deepEqual(Object.keys(JSON.parse((await none.text("/evidence/api/v1/metrics")).body).data), ["months"]);
 
-  const quiet = await serve(t, { questionBank: async ({ month }) => EMPTY_MONTH(month), predictionCalibration: async () => null });
+  const quiet = await serve(t, { questionBank: async ({ month }) => EMPTY_MONTH(month) });
   const quietPage = (await quiet.text("/evidence/metrics")).body;
-  assert.equal(quietPage.includes("AI 助手回答常见用药问题") || quietPage.includes("预测的校准"), false, "a month with no answers, and a registry that is not composed: no section");
+  assert.equal(quietPage.includes("AI 助手回答常见用药问题"), false, "a month with no answers: no section");
 
-  const broken = await serve(t, { questionBank: async () => { throw new Error("geo schema missing"); }, predictionCalibration: async () => { throw new Error("evolution down"); } });
+  const broken = await serve(t, { questionBank: async () => { throw new Error("geo schema missing"); } });
   const brokenPage = await broken.text("/evidence/metrics");
   assert.equal(brokenPage.status, 200, "a failed section never fails the page");
   assert.ok(brokenPage.body.includes("按月公开的数") && brokenPage.body.includes("引文核对通过率"), "the three figures are still there");
-  assert.equal(brokenPage.body.includes("预测的校准"), false);
   assert.ok(broken.reports.includes("evidence_public_section_failed"), "traceable, not swallowed");
-  assert.equal(/** @type {any} */ (broken.routes).stats().metrics.sectionFailures, 2);
+  assert.equal(/** @type {any} */ (broken.routes).stats().metrics.sectionFailures, 1);
 
   // The current month has no answers yet: the page shows last month's.
   const previous = await serve(t, { questionBank: async ({ month }) => (month === "2026-09" ? bankMonth(month) : EMPTY_MONTH(month)) });
@@ -125,7 +104,7 @@ test("absent readers, readers with nothing to say and readers that fail leave th
 test("a section's answer is remembered for ten minutes and shared by the views that arrive while it is being read", options, async () => {
   let clock = NOW.getTime();
   let asked = 0;
-  const metrics = createEvidencePublicMetrics({ database: db, now: () => new Date(clock), questionBank: async ({ month }) => { asked += 1; return bankMonth(month); }, predictionCalibration: async () => CALIBRATION });
+  const metrics = createEvidencePublicMetrics({ database: db, now: () => new Date(clock), questionBank: async ({ month }) => { asked += 1; return bankMonth(month); } });
   await Promise.all([metrics.questionBank(), metrics.questionBank(), metrics.questionBank()]);
   await metrics.questionBank();
   assert.equal(asked, 1, "concurrent and later views share one read");

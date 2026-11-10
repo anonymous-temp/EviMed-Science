@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, METHOD_INDUCTION_MIN_TRAJECTORIES } from "@evimed/domain";
-import { VERIFICATION_ROUTE_REASON } from "../src/autopilotService.mjs";
+import { AUTOPILOT_VERIFICATION_ROUTE_REASON as VERIFICATION_ROUTE_REASON } from "@evimed/domain";
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
   CONVERSATION_SCOPE, LEARNING_REFUSAL_REASONS, LearningTriggers, ROUTINE_PERIOD_DAYS, adoptedLessonFor, correctionLessonFor, deliveredSomething, learningRefusal, learningScopeOf,
@@ -189,10 +189,10 @@ test("an ordinary conversation is learned from by what the researcher corrected;
   assert.deepEqual(learningTriggersFor({ run: failed, runs: [failed] }), []);
 });
 
-test("researcher-owned GEO and proactive work may teach while internal evaluations may not", () => {
+test("researcher-owned module work may teach while internal evaluations may not", () => {
   for (const [effectiveAgentId, effectiveRouteReason] of [
     ["geo-content", "geo:content"],
-    ["clinical-evidence-synthesis", "autopilot:literature-sentinel"],
+    ["clinical-evidence-synthesis", "vcr:evidence"],
   ]) {
     const subject = run({ automated: true, effectiveAgentId, effectiveRouteReason, corrections: 1 });
     assert.deepEqual(triggers(learningTriggersFor({ run: subject, runs: [subject], project: projectOf("research") })), ["correction"]);
@@ -205,7 +205,7 @@ test("researcher-owned GEO and proactive work may teach while internal evaluatio
 // 2026-10-14: the independent re-check of a scheduled execution's claim (`autopilot-verify`, and the programme's `autopilot-verify:evidence`) carries no
 // `automated` and no `autopilot:` prefix, so it read as the researcher's own turn; 14 of them stood in the owner's ledger beside 5 executions. The owner's
 // ruling of 2026-09-29 keeps the *execution* (researcher-owned proactive work); the platform's re-check of it is not the researcher's work.
-test("a verification run is not a lesson, whichever reason it carries, while the execution it checks still is", () => {
+test("a verification run is not a lesson, whichever reason it carries", () => {
   for (const effectiveRouteReason of [VERIFICATION_ROUTE_REASON, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON]) {
     for (const extra of [{}, { automated: true }, { automated: false }]) {
       const verification = run({ effectiveAgentId: "open-domain-answer", effectiveRouteReason, outputFiles: ["verification.json"], corrections: 1, ...extra });
@@ -213,8 +213,6 @@ test("a verification run is not a lesson, whichever reason it carries, while the
       assert.equal(learningRefusal({ run: verification, runs: [verification] }), "not_researcher_work");
     }
   }
-  const episode = run({ effectiveAgentId: "open-domain-answer", effectiveRouteReason: "autopilot:routine", outputFiles: ["briefs/今日.md"], corrections: 1 });
-  assert.deepEqual(triggers(learningTriggersFor({ run: episode, runs: [episode], project: projectOf("research") })), ["correction"]);
 });
 
 // ---------------------------------------------------------------------------------------------------- the queue
@@ -315,15 +313,15 @@ test("a routine induction reads each run of the family by its digest, never by r
   assert.ok(!DISTILLATION_TRIGGERS.includes("delivered"), "the trigger is deleted, not only unused");
   assert.ok(DISTILLATION_TRIGGERS.includes("routine"));
   const transcript = (text) => ({
-    header: { completeness: "complete" },
+    header: { completeness: "complete", sessions: [{ sessionId: "s", parentSessionId: null, seedEndSeq: -1 }] },
     messages: [{ sessionId: "s", seq: 1, role: "user", source: "user", turnStartSeq: 1, parts: [{ type: "text", text }] }],
   });
   const input = buildDistillationInput({
-    run: { id: "run_3", effectiveAgentId: "clinical-evidence-synthesis" },
+    run: { id: "run_3", sessionId: "s", nativeTurn: { startSeq: 1 }, effectiveAgentId: "clinical-evidence-synthesis" },
     trigger: "routine",
     transcript: transcript("第三次综述"),
     peerRuns: [
-      { runId: "run_1", transcript: transcript("第一次综述") },
+      { runId: "run_1", run: { id: "run_1", sessionId: "s", nativeTurn: { startSeq: 1 } }, transcript: transcript("第一次综述") },
       { runId: "run_2", transcript: null },
     ],
   });
@@ -479,7 +477,7 @@ test("what a run delivered is a file, or an answer: the ledger's history holds m
 });
 
 test("an adoption is a lesson about the run whose way was kept, queued at once with the person's words as its evidence; nothing else is", () => {
-  const original = run({ id: "run_orig" });
+  const original = run({ id: "run_orig", nativeTurn: { startSeq: 1 } });
   const lesson = adoptedLessonFor({ run: original, runs: [original], project: { id: "p1" }, event: adoptEvent() });
   assert.equal(lesson?.trigger, "adopted");
   assert.ok(DISTILLATION_TRIGGERS.includes("adopted"));
@@ -488,7 +486,7 @@ test("an adoption is a lesson about the run whose way was kept, queued at once w
   assert.equal(lesson?.payload.dispatchKey, "feedback:learning-evidence:adopt");
   assert.equal(lessonSignal({ trigger: "adopted", feedback: lesson?.payload.feedback }), "researcher", "their own choice, in their own words");
   // The distillation is handed the run's trajectory with the adoption as an intervention carrying its verdict, and a closing excerpt.
-  const transcript = { header: { completeness: "complete" }, messages: [
+  const transcript = { header: { completeness: "complete", sessions: [{ sessionId: "session_1", parentSessionId: null, seedEndSeq: -1 }] }, messages: [
     { sessionId: "session_1", role: "user", source: "user", seq: 1, turnStartSeq: 1, parts: [{ type: "text", text: "写本周周报" }] },
     { sessionId: "session_1", role: "assistant", source: "user", seq: 2, turnStartSeq: 1, parts: [{ type: "text", text: "结论：本周完成两项。" }] },
   ] };

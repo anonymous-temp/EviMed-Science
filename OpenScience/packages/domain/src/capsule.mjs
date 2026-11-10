@@ -39,6 +39,8 @@ export const CAPSULE_LAYERS = Object.freeze(['sources', 'knowledge', 'profile', 
  */
 export const CAPSULE_FACT_KINDS = Object.freeze([
   'profile',
+  'person',
+  'note',
   'preference',
   'behavior',
   'project_fact',
@@ -55,7 +57,7 @@ export const CAPSULE_FACT_KINDS = Object.freeze([
 ])
 
 /** How a fact came to be known; it decides how much weight it carries. */
-export const CAPSULE_FACT_ORIGINS = Object.freeze(['explicit', 'inferred', 'system'])
+export const CAPSULE_FACT_ORIGINS = Object.freeze(['explicit', 'inferred', 'system', 'manual', 'engine', 'unknown', 'imported', 'mixed', 'assistant', 'document', 'opinion'])
 
 /** A fact's lifecycle. Retired facts are kept: "was true once" is a fact too. */
 export const CAPSULE_FACT_STATES = Object.freeze(['candidate', 'approved', 'retired'])

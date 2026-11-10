@@ -9,7 +9,6 @@ import { SourceService, projectSourceManifestRecord } from "../src/sourceService
 import { SourceIngestionWorker } from "../src/sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "../src/sourceUnderstandingRuns.mjs";
 import { createSourceMaterials } from "../src/sourceMaterials.mjs";
-import { evolutionOpportunitySource } from "../src/evolutionGrowth.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) { const url = new URL(databaseUrl); assert.ok(["localhost", "127.0.0.1", "::1"].includes(url.hostname)); assert.match(url.pathname, /evimed_test/); }
@@ -99,7 +98,7 @@ test("real PostgreSQL recovery freezes complete input, reuses one dispatch, publ
 test("D-E18: a source published with nothing missing records no evolution signal, and one with something missing records the omission", options, async t => {
   // Two things were wrong in the line that records the signal. It read the revision off the finished job (`withSourceLease` hands the job
   // back; the publication is its `result`), so it never recorded anything. And what it would have recorded for a clean publication was
-  // `availability`, which the growth loop reads as 「new data」: once five accounts had parsed a document it became an opportunity for the
+  // `availability`, which the growth loop (deleted since) read as 「new data」: once five accounts had parsed a document it became an opportunity for the
   // sources module - a success counted as a lead.
   const recorded = [];
   const evolutionSignals = { record: async input => { recorded.push(input); return null; } };
@@ -120,8 +119,8 @@ test("D-E18: a source published with nothing missing records no evolution signal
   assert.equal(recorded.length, 1, "the omission is recorded, once");
   assert.deepEqual(recorded[0], { userId: cut.userId, projectId: "default", eventId: `source:${cut.source.id}:${published.revision}`, moduleId: "sources",
     kind: "source-omission", capability: "source-understanding", operation: "extract", dataShape: "text", version: published.revision });
-  // What the growth loop makes of it: a repair lead, never new data.
-  assert.deepEqual(recorded.map(input => evolutionOpportunitySource(input.kind)), ["repair"]);
+  // A lost unit is a failure kind and never `availability`, which was read as new data (the growth loop that read it left with the online engine).
+  assert.notEqual(recorded[0].kind, "availability");
 });
 
 test("an understanding comes with the pages of the text its anchors point into, and with none when the parse had none", options, async t => {

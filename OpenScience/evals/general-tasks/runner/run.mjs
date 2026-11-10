@@ -119,9 +119,9 @@ async function startHarness({ args, treeOs, treeDir, dataDir, profile, arm, dbUr
   const base = `http://127.0.0.1:${args.port}`;
   const armA = arm === 'A';
   const env = {
-    OPEN_SCIENCE_EVOLUTION_ENABLED: 'false', OPEN_SCIENCE_LEARNING_ENABLED: 'false', OPEN_SCIENCE_LOOPX_ENABLED: 'false', OPEN_SCIENCE_JEV_ENABLED: 'false',
+    OPEN_SCIENCE_LEARNING_ENABLED: 'false', OPEN_SCIENCE_LOOPX_ENABLED: 'false', OPEN_SCIENCE_JEV_ENABLED: 'false',
     OPEN_SCIENCE_RUN_TITLES_ENABLED: 'false', OPEN_SCIENCE_MAX_PROJECTS_PER_USER: '500',
-    OPEN_SCIENCE_AUTOPILOT_ENABLED: 'true', OPEN_SCIENCE_SOURCE_INGESTION_ENABLED: 'true',
+    OPEN_SCIENCE_SOURCE_INGESTION_ENABLED: 'true',
     OPEN_SCIENCE_WEB_SEARCH_BAILIAN_ENABLED: 'true', OPEN_SCIENCE_DASHSCOPE_API_KEY_FILE: path.join(SECRETS, 'dashscope.api-key'),
     OPEN_SCIENCE_DEV_AUTH: 'false',
     ...(armA ? { OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS: ARM_A_PLUGINS.join(',') } : {}),

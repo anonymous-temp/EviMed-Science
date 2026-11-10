@@ -69,7 +69,7 @@ const PARSE_TIMEOUT_MS = 300_000;
 /** The task states after which a compile will not change. */
 export const COMPILE_TERMINAL_STATES = Object.freeze(["completed", "failed", "cancelled"]);
 
-/** @param {string} text */
+/** @param {string | Buffer} text */
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
 /** A tag list as a record: `["src=…","sha=…"]` → `{ src, sha }`. Tags that are not `k=v` are left out. @param {unknown} tags */
@@ -139,6 +139,52 @@ export class OpenVikingResources {
     if (!value.startsWith("viking://") || [...value].some((char) => char.charCodeAt(0) < 32) || value.split("/").some((part) => part === "." || part === "..")) return false;
     const { project, library } = this.roots(userId, projectId);
     return [project, library].some((root) => value === root || value.startsWith(`${root}/`));
+  }
+
+  /** Private, non-compiled history resource roots. These are never source ids,
+   * library entries, knowledge inputs or arbitrary filesystem addresses. */
+  historyAddress(uri, { file = false } = {}) {
+    const root = /^viking:\/\/user\/(?:u|gp)-[a-f0-9]{24}\/resources\/history\/[a-f0-9]{24}(?:\/[a-f0-9]{24})?$/;
+    const leaf = /^viking:\/\/user\/(?:u|gp)-[a-f0-9]{24}\/resources\/history\/[a-f0-9]{24}\/[a-f0-9]{24}\/[a-f0-9]{24}\/[a-f0-9]{24}-[0-9]{1,3}\.md$/;
+    if (!(file ? leaf : root).test(uri)) throw new HttpError(403, 'memory_history_scope_denied', 'The history resource address is invalid.');
+    return uri;
+  }
+
+  async writeHistory(userId, uri, content) {
+    this.historyAddress(uri, { file: true });
+    return this.client.request({ method: 'POST', path: '/api/v1/content/write', userId, timeoutMs: WRITE_TIMEOUT_MS,
+      body: { uri, content, mode: 'replace', wait: true, processing_mode: 'vectors_only', tags: ['private=history'], tag_mode: 'replace' } });
+  }
+
+  async readHistory(userId, uri) {
+    this.historyAddress(uri, { file: true });
+    const text = await this.read(userId, uri);
+    return typeof text === 'string' ? text : null;
+  }
+
+  /** Vector and literal keyword recall over this one proven root. Model text
+   * never chooses a namespace. The ledger hydrates only registered exact URIs. */
+  async searchHistory(userId, root, query, { limit = 40 } = {}) {
+    this.historyAddress(root);
+    const bound = Math.max(1, Math.min(40, Number(limit) || 40));
+    const pattern = String(query).split(/\s+/).filter(Boolean).slice(0, 8).map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const results = await Promise.allSettled([
+      this.client.request({ method: 'POST', path: '/api/v1/search/find', userId, timeoutMs: READ_TIMEOUT_MS,
+        body: { query: String(query), target_uri: root, limit: bound } }),
+      this.grep(userId, root, pattern, { limit: bound, caseInsensitive: true }),
+    ]);
+    if (results.every(result => result.status === 'rejected')) throw /** @type {PromiseRejectedResult} */ (results[0]).reason;
+    const found = new Map();
+    const semantic = results[0].status === 'fulfilled' ? results[0].value?.result : null;
+    const vector = Array.isArray(semantic?.resources) ? semantic.resources : [];
+    const words = results[1].status === 'fulfilled' ? results[1].value.matches : [];
+    // Reciprocal-rank fusion keeps either channel's first candidate near the
+    // front; keyword matches are not buried by a full vector candidate page.
+    for (const channel of [vector, words]) for (const [rank, hit] of channel.entries()) {
+      if (typeof hit?.uri !== 'string' || !hit.uri.startsWith(`${root}/`)) continue;
+      found.set(hit.uri, (found.get(hit.uri) ?? 0) + 1 / (60 + rank));
+    }
+    return [...found].sort((a, b) => b[1] - a[1]).slice(0, bound * 2).map(([uri, score]) => ({ uri, score }));
   }
 
   // -------------------------------------------------------------------------------------------------------------------
@@ -313,28 +359,30 @@ export class OpenVikingResources {
 
   /**
    * Write one page of a compiled tree back — a person's edit, or their blocks put back after a compile — as a checked write:
-   * one `batch-write` operation that names the hash of the bytes the caller last read (`expectedSha256`), so a page the
-   * engine's own Compile changed since is not overwritten. Unlike a source it is written in the engine's default mode, so
-   * the page's summary and vector follow its new text; `wait` (the default) answers once that is done, which is also what
-   * keeps the next write to the same directory from finding it busy. A page whose bytes are no longer the ones named
-   * answers `knowledge_page_engine_changed` (409) and is not written; a directory still being processed answers the
-   * client's `memory_index_conflict` (retryable). Before v0.5.1 the route had no precondition and the caller had to make
-   * sure no compile was writing the same target.
+   * the page is downloaded first and written only if its bytes still hash to `expectedSha256`, the digest of the bytes the caller
+   * last read, so a page the engine's own Compile changed since is not overwritten. Unlike a source it is written in the engine's
+   * default mode, so the page's summary and vector follow its new text; `wait` (the default) answers once that is done, which is
+   * also what keeps the next write to the same directory from finding it busy. A page whose bytes are no longer the ones named (or
+   * that is gone) answers `knowledge_page_engine_changed` (409) and is not written; a directory still being processed answers the
+   * client's `memory_index_conflict` (retryable). The comparison is this side's since v0.5.3: v0.5.1 and v0.5.2 checked it inside
+   * the engine's file locks with `expected_sha256` on the `batch-write` operation, and v0.5.3 removed the key (its operation model
+   * forbids unknown keys, so sending it is a 4xx). The read and the write are two requests: a change that lands between them is
+   * not seen, which the page worker's round discipline (a save is queued while a compile runs) keeps from happening.
    * @param {string} userId @param {string} uri @param {string} content
    * @param {{ expectedSha256: string, wait?: boolean }} options `expectedSha256`: the hex digest of the file as last read
    */
   async writePage(userId, uri, content, { expectedSha256, wait = true }) {
     if (!/^[a-f0-9]{64}$/.test(String(expectedSha256 ?? ""))) throw new HttpError(500, "knowledge_write_back_invalid", "A write-back always names the hash of the page it replaces.");
+    const changed = () => new HttpError(409, "knowledge_page_engine_changed", "The page in the engine is not the one this write was made against.");
+    const held = await this.download(userId, uri);
+    if (!held || sha256(held) !== expectedSha256) throw changed();
     const parent = String(uri).slice(0, String(uri).lastIndexOf("/"));
     try {
       await this.client.request({ method: "POST", path: "/api/v1/content/batch-write", userId, timeoutMs: WRITE_TIMEOUT_MS,
-        body: { root_uri: parent, wait: Boolean(wait), operations: [{ uri, content: String(content ?? ""), mode: "replace", expected_sha256: expectedSha256 }] } });
+        body: { root_uri: parent, wait: Boolean(wait), operations: [{ uri, content: String(content ?? ""), mode: "replace" }] } });
     } catch (error) {
-      // 409 is two refusals: the directory is still being processed (`path_busy`, retryable), and the page is not the
-      // one that was read ("Content revision changed", or no longer there).
-      if (/** @type {any} */ (error)?.code === "memory_index_conflict" && /** @type {any} */ (error)?.upstreamDetails?.conflict_type !== "path_busy") {
-        throw new HttpError(409, "knowledge_page_engine_changed", "The page in the engine is not the one this write was made against.");
-      }
+      // 409 is two refusals: the directory is still being processed (`path_busy`, retryable), and anything else the engine refuses.
+      if (/** @type {any} */ (error)?.code === "memory_index_conflict" && /** @type {any} */ (error)?.upstreamDetails?.conflict_type !== "path_busy") throw changed();
       throw error;
     }
     return { uri, bytes: Buffer.byteLength(String(content ?? "")) };
@@ -563,6 +611,8 @@ export function memoryConsolidationTask(task) {
   const uris = (/** @type {unknown} */ list) => (Array.isArray(list) ? list.map(String).filter((uri) => uri.startsWith("viking://")).slice(0, 2_000) : []);
   return {
     taskId: task.task_id,
+    /** The directory it consolidates (`resource_id`): which memory type, for a pass that walks them. */
+    target: typeof task.resource_id === "string" ? task.resource_id.slice(0, 600) : null,
     status: String(task.status ?? ""),
     terminal: COMPILE_TERMINAL_STATES.includes(String(task.status ?? "")),
     error: typeof task.error === "string" && task.error ? task.error.slice(0, 500) : null,

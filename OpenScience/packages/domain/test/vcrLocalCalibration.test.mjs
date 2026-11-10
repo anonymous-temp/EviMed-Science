@@ -21,15 +21,15 @@ test("D3: the calibration block names the outcome the table holds, by the family
     ["scenario_field_missing@scenario.calibration.statusColumn", "scenario_field_missing@scenario.calibration.timeColumn", "scenario_field_unknown@scenario.calibration.outcomeColumn"]);
 });
 
-test("D3: the slope's floors are the domain's, the method is 1.1.0, and a 1.0.0 job cannot ask for what 1.1.0 added", () => {
+test("D3: the slope's floors are the domain's, the current method preserves 1.1 calibration and a 1.0 job cannot ask for it", () => {
   assert.deepEqual({ ...VCR_LOCAL_CALIBRATION_MIN }, { slopeEvents: 10, slopeNonEvents: 10, slopePairs: 10 });
-  assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)["model.prognostic_apply"].version, "1.1.0");
+  assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)["model.prognostic_apply"].version, "1.2.0");
   const job = (/** @type {string} */ version, /** @type {Record<string, any>} */ sc) => ({ jobId: "job_1", studyId: "std_1", kind: "apply_prognostic_model", method: "model.prognostic_apply", methodVersion: version,
     protocolVersion: 1, seed: 1, cpuSecondsLimit: 60, scenario: sc, inputs: [{ kind: "snapshot", id: "snp_1" }] });
   const codes = (/** @type {any} */ j) => validateEngineJob(j).map((issue) => `${issue.code}@${issue.field}`);
   assert.ok(!codes(job("1.0.0", scenario())).includes("method_version_mismatch@methodVersion"), "a 1.0.0 equation replays");
   assert.ok(codes(job("1.0.0", scenario({ calibration: { outcomeColumn: "response" } }))).includes("method_version_mismatch@methodVersion"));
-  assert.ok(!codes(job("1.1.0", scenario({ calibration: { outcomeColumn: "response" } }))).includes("method_version_mismatch@methodVersion"));
+  for (const version of ["1.1.0", "1.2.0"]) assert.ok(!codes(job(version, scenario({ calibration: { outcomeColumn: "response" } }))).includes("method_version_mismatch@methodVersion"));
 });
 
 test("D3: the limit a calibrated run states is a closed word of its own, and the old sentence still maps to the old word", () => {

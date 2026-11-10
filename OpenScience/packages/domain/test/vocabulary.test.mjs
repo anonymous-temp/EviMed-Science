@@ -464,94 +464,9 @@ test("off-peak is passed through, and an unknown model is unpriced rather than g
   assert.ok(storage.cost > 0, "storage has no peak window; a disk does not cost less at night");
 
   assert.equal(spendingPermission({ balance: 0, dailyLimit: 10, spentToday: 0 }).interactive, false);
-  assert.equal(spendingPermission({ balance: 5, dailyLimit: 10, spentToday: 0 }).autopilot, false, "unattended work stops while money remains");
-  assert.equal(spendingPermission({ balance: 500, dailyLimit: 10, spentToday: 0 }).autopilot, true);
+  assert.equal(spendingPermission({ balance: 5, dailyLimit: 10, spentToday: 0 }).interactive, true, "a person who is watching works to zero");
   assert.equal(estimateCost({ samples: [] , estimatedMinutes: [10, 30] }).basis, "manifest");
   assert.equal(estimateCost({ samples: [1, 2, 3, 4, 5, 6] }).basis, "history");
-});
-
-test("a claim cannot grade itself, and only a reproduced or refuter-tested direct claim leads a digest", async () => {
-  const { digestPlacement, tierRaiseAllowed, validateAgendaClaim, directionVerdict,
-    REFUTATION_VERDICTS, STOPPING_RULES } = await import("../index.mjs");
-  const selfGraded = validateAgendaClaim({ statement: "x", type: "synthesized", tier: "reproduced", sources: ["a"], provenance: {}, what_would_change: "y" });
-  assert.ok(selfGraded.issues.some((issue) => issue.code === "agenda_claim_self_graded"));
-
-  const unfalsifiable = validateAgendaClaim({ statement: "x", type: "derived", tier: "unverified", sources: ["a"], provenance: {} });
-  assert.ok(unfalsifiable.issues.some((issue) => issue.code === "agenda_claim_unfalsifiable"));
-
-  const invented = validateAgendaClaim({ statement: "x", type: "direct", tier: "unverified", sources: ["a"], provenance: {}, effect: { measure: "composite-benefit-index" } });
-  assert.ok(invented.issues.some((issue) => issue.code === "agenda_effect_measure_unknown"));
-
-  const valid = validateAgendaClaim({ id: "claim-one", statement: "x", type: "synthesized", tier: "unverified",
-    sources: ["doi:10.1000/example"], provenance: { episodeId: "episode-one", artifact: "report.md" },
-    confidence: "moderate", what_would_change: "A larger trial" });
-  assert.equal(valid.ok, true);
-
-  assert.equal(digestPlacement({ tier: "reproduced", type: "derived" }).headline, true);
-  assert.equal(digestPlacement({ tier: "gated", type: "direct", refutation: "stands" }).headline, true);
-  assert.equal(digestPlacement({ tier: "gated", type: "synthesized", refutation: "stands" }).headline, false);
-  assert.equal(digestPlacement({ tier: "unverified", type: "direct" }).headline, false);
-
-  assert.equal(tierRaiseAllowed({ from: "unverified", to: "gated", gatePassed: true }).ok, true);
-  assert.equal(tierRaiseAllowed({ from: "unverified", to: "gated", gatePassed: true, refutation: "refuted" }).ok, false);
-  assert.equal(tierRaiseAllowed({ from: "unverified", to: "reproduced", reproductionMatched: true }).ok, false);
-  assert.equal(tierRaiseAllowed({ from: "gated", to: "reproduced", reproductionMatched: true }).ok, true);
-
-  // An independent refuter outranks the tier. A claim carrying both a
-  // `reproduced` tier and a `refuted` verdict is a ledger that lost a write,
-  // and the reading that keeps it out of the headlines is the safe one.
-  for (const tier of ["reproduced", "gated", "unverified"]) {
-    assert.equal(digestPlacement({ tier, type: "direct", refutation: "refuted" }).headline, false,
-      `a refuted claim must never lead a digest, whatever its tier says (${tier})`);
-    assert.equal(digestPlacement({ tier, type: "direct", refutation: "weakened" }).headline, false,
-      `a weakened claim must never lead a digest, whatever its tier says (${tier})`);
-  }
-  assert.match(digestPlacement({ tier: "gated", type: "direct", refutation: "refuted" }).reason, /推翻/);
-  assert.match(digestPlacement({ tier: "gated", type: "direct", refutation: "weakened" }).reason, /部分支持/);
-  // `stands` is the only verdict the headline rule admits, and it is one of the three.
-  assert.deepEqual([...REFUTATION_VERDICTS].sort(), ["refuted", "stands", "weakened"]);
-  assert.deepEqual(REFUTATION_VERDICTS.filter((verdict) => digestPlacement({ tier: "gated", type: "direct", refutation: verdict }).headline),
-    ["stands"]);
-
-  // Verification is a second run with a second bill, so it is capped like every
-  // other unattended spend.
-  assert.ok(Number.isSafeInteger(STOPPING_RULES.verificationsPerEpisode));
-  assert.ok(STOPPING_RULES.verificationsPerEpisode >= 1 && STOPPING_RULES.verificationsPerEpisode <= 10,
-    "an uncapped second opinion is an uncapped bill");
-
-  assert.equal(directionVerdict({ episodesWithoutGatedClaim: 0, consecutiveFailures: 0, daysSinceDigestOpened: 8, userRejected: false }).action, "pause-thread");
-  assert.equal(directionVerdict({ episodesWithoutGatedClaim: 3, consecutiveFailures: 0, daysSinceDigestOpened: 0, userRejected: false }).action, "halve");
-  assert.equal(directionVerdict({ episodesWithoutGatedClaim: 0, consecutiveFailures: 0, daysSinceDigestOpened: 0, userRejected: false }).action, "run");
-  assert.equal(directionVerdict({ episodesWithoutGatedClaim: 0, consecutiveFailures: 0, daysSinceDigestOpened: 0, userRejected: true }).action, "park");
-});
-
-test("a researcher's digest decisions score the direction, and one rejection outweighs one adoption but not three", async () => {
-  const { userSignalScore, USER_SIGNALS } = await import("../index.mjs");
-  assert.deepEqual(userSignalScore(undefined), { score: 0, decided: 0, rejected: false });
-  assert.deepEqual(userSignalScore([{ action: "adopt" }]), { score: USER_SIGNALS.adopt, decided: 1, rejected: false });
-  assert.equal(userSignalScore([{ action: "adopt" }, { action: "reject" }]).rejected, true);
-  assert.equal(userSignalScore([{ action: "adopt" }, { action: "adopt" }, { action: "adopt" }, { action: "reject" }]).rejected, false);
-  // a question asks for more of the direction: the strongest positive signal
-  assert.equal(userSignalScore([{ action: "question" }, { action: "reject" }]).rejected, false);
-  // unknown actions are not signals, and a list of them is not a decision
-  assert.deepEqual(userSignalScore([{ action: "opened" }, {}]), { score: 0, decided: 0, rejected: false });
-});
-
-test("withdrawing a verdict undoes exactly that claim's latest adopt or reject, and nothing when there is none", async () => {
-  // 2026-09-16 review, U17: 驳回 was one click with no way back.
-  const { userSignalScore, standingVerdict } = await import("../index.mjs");
-  const reject = { action: "reject", claimId: "c1" };
-  assert.equal(userSignalScore([reject]).rejected, true);
-  assert.deepEqual(userSignalScore([reject, { action: "withdraw", claimId: "c1" }]), { score: 0, decided: 0, rejected: false });
-  // Another claim's withdrawal undoes nothing here.
-  assert.equal(userSignalScore([reject, { action: "withdraw", claimId: "c2" }]).rejected, true);
-  // Latest first: adopt then reject, withdraw once, the adoption stands.
-  const sequence = [{ action: "adopt", claimId: "c1", at: "1" }, { action: "reject", claimId: "c1", at: "2" }, { action: "withdraw", claimId: "c1" }];
-  assert.deepEqual(userSignalScore(sequence), { score: 0.6, decided: 1, rejected: false });
-  assert.equal(standingVerdict(sequence, "c1").at, "1");
-  assert.equal(standingVerdict([...sequence, { action: "withdraw", claimId: "c1" }], "c1"), null);
-  // A question is not a verdict and is never withdrawn by this.
-  assert.deepEqual(userSignalScore([{ action: "question", claimId: "c1" }, { action: "withdraw", claimId: "c1" }]), { score: 1, decided: 1, rejected: false });
 });
 
 test("triage picks a depth for a reason it can state, and indexing is complete by construction", async () => {

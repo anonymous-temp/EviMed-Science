@@ -21,7 +21,7 @@
  *     figure is "not measured" and nothing is guessed;
  *   - LoopX's skill folders are written into the image from a pinned wheel: `--loopx-root <skills dir>`, restricted to the
  *     folders `packages/contracts/loopx/workflow-skills.json` keeps;
- *   - an account's own skills and the ones the platform learned are per account and are reported, never counted.
+ *   - an account's own skills are per account and are reported, never counted.
  * The kernel's limit and the fixed frame around the lines are the installed kernel's: `--closure <node_modules>` reads
  * `dsh-tool-skill`'s default limit from it and checks that its frame text is the one measured here (a changed frame is
  * named, not silently mis-measured).
@@ -187,7 +187,6 @@ export function presetRoots(options = {}) {
       return options.loopxRoot ? { ...row, dir: options.loopxRoot, only: loopx.kept } : { ...row, why: `installed at image build from the pinned wheel (${loopx.kept.length} kept); pass --loopx-root` };
     }
     if (entry.id === "personal") return { ...row, why: "the account's own skills; per account" };
-    if (entry.id === "platform-learned") return { ...row, why: "what the platform learned for the account; per account" };
     return { ...row, dir: path.join(root, "runtime/skills", entry.id) };
   });
 }

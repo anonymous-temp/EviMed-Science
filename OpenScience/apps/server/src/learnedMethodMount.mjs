@@ -67,7 +67,7 @@ export function methodFamily(capabilityId) {
  *  - A runtime reserved for a GEO run (its bounded dispatch id is `geo-…`)
  *    carries GEO methods only: the same method was in every geo-content
  *    writing run, where a rule for auditing clinical claim verdicts was noise.
- *  - Everything else — a conversation, a research run, an autopilot episode,
+ *  - Everything else — a conversation, a research run, a scheduled run,
  *    an evaluation cell — carries research methods.
  * @param {{ projectId: string, boundedRunId?: string | null }} scope
  * @returns {"geo" | "research" | null}

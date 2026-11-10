@@ -1,0 +1,1 @@
+{"id":"post-trial","intent":"native_chain","prompt":"这是独立的合成核对任务。请通过 virtual_trial 的 describe 查询 design.analytic；用 start 提交双臂1:1优效生存设计：对照中位生存12个月、HR 0.7、均匀入组12个月、末例入组后随访24个月、年脱落率0、单侧alpha 0.025、power 0.9、种子12345、重复数1。通过 read 等待成功并用 report 展示该任务的真实配置、版本与结果。"}

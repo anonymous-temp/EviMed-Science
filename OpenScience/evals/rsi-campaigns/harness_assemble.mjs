@@ -22,25 +22,30 @@
  * assembly, each checked against the digest the export recorded; a confirmation source that already carries gold or records is
  * refused as not sealed. The development choice reads the development source alone (`--preview` and `--development-only` take
  * no confirmation file at all).
+ *
+ * A round whose `surface` is a module's (module_campaign.mjs, 2026-11-04) is assembled here too, with that consumer's kit: its sources are module_arms.mjs's, its target names
+ * the consumer's dependency closure and the incumbent production reported, and a judged scorer of its table joins both the gold and the verdict records.
  */
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
-import { rsiCampaignIssues } from '../../packages/domain/src/rsiCampaign.mjs';
+import { RSI_CAMPAIGN_SURFACES, rsiCampaignIssues } from '../../packages/domain/src/rsiCampaign.mjs';
 import { canonicalRsiJson, rsiDigest } from '../../apps/server/src/rsiCampaignBundle.mjs';
 import { RSI_QUARTER_ALPHA } from './campaign_runner.mjs';
 import { beijingMonthEnd } from './frontier_assemble.mjs';
 import { inSkillSlice, skillSlice } from './skill_campaign.mjs';
-import { harnessScorer } from './harness_scorers.mjs';
-import { HARNESS_COST_IDENTITY, HARNESS_SELECTION, HARNESS_SURFACE, TOOL_PATCH_SURFACE, chooseHarnessCandidate, harnessArmsIssues, harnessCampaignConsumerIdentity, harnessDevelopmentIssue, harnessDevelopmentResult, harnessImprovementIssue, harnessJudgeRegistrationIssue, harnessModels, registrationSurface } from './harness_campaign.mjs';
+import { HARNESS_KIT, HARNESS_SELECTION, HARNESS_SURFACE, TOOL_PATCH_SURFACE, chooseHarnessCandidate, harnessArmsIssues, harnessCampaignConsumerIdentity, harnessDevelopmentIssue, harnessDevelopmentResult, harnessImprovementIssue, harnessJudgeRegistrationIssue, harnessModels, registrationSurface } from './harness_campaign.mjs';
 import { toolPatchCampaignConsumerIdentity } from './tool_patch_campaign.mjs';
+import { MODULE_KIT, isModuleSurface, moduleCampaignConsumerIdentity, moduleConfirmationSealed, moduleDirectional, moduleTarget } from './module_campaign.mjs';
 
 const sha = (value) => createHash('sha256').update(value).digest('hex');
 const PROCEDURE = Object.freeze({ id: 'rsi-paired-group-v5', digest_codec: 'rfc8785-sha256-v1', test_alpha_fraction: 0.5, minimum_slice_groups: 25 });
 const round6 = (value) => Math.round(value * 1e6) / 1e6;
 const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+/** The kit of the consumer a round registers for; anything but a module's surface is the harness consumer's to accept or refuse. @param {any} round */
+const kitOf = (round) => (isModuleSurface(registrationSurface(round)) ? MODULE_KIT : HARNESS_KIT);
 
 /** The digest register_round.py gives a pre-registration: the canonical JSON without `digest` and `registeredAt`. @param {any} round */
 export function roundRegistrationDigest(round) {
@@ -52,9 +57,9 @@ export function roundRegistrationDigest(round) {
 function checkRound(round) {
   if (round?.schema !== 'rsi-round-registration/1') throw new Error('campaign_registration_invalid');
   if (roundRegistrationDigest(round) !== round.digest) throw new Error('campaign_registration_digest_mismatch');
-  const scorer = harnessScorer({ scorer: round.scorer });
+  const kit = kitOf(round), scorer = kit.scorer(round);
   if (!scorer) throw new Error('campaign_scorer_not_qualified');
-  if (![HARNESS_SURFACE, TOOL_PATCH_SURFACE].includes(registrationSurface(round))) throw new Error('campaign_surface_invalid');
+  if (!kit.surfaces.includes(registrationSurface(round))) throw new Error('campaign_surface_invalid');
   const slice = round.failureSlice;
   if (round.failureSliceKey !== scorer.slice.registration || !Array.isArray(slice) || !slice.length || !slice.every(scorer.slice.valid)) throw new Error('campaign_registration_invalid');
   const alpha = round.alpha?.perCampaign;
@@ -92,6 +97,7 @@ function namedRegistration(round, development, improvement) {
     image: development.image, rows: { development: [...round.rows.development], confirmation: [...round.rows.confirmation] }, repeats: { ...round.repeats },
     alpha: { ...round.alpha }, ...(round.judge ? { judge: structuredClone(round.judge) } : {}),
     ...(registrationSurface(round) === HARNESS_SURFACE ? {} : { surface: registrationSurface(round) }),
+    ...(round.confirmationDraw ? { confirmationDraw: structuredClone(round.confirmationDraw) } : {}),
     roundRegistration: { round: round.round, digest: round.digest }, improvement,
   };
 }
@@ -129,7 +135,8 @@ function prepareSources({ scorer, development, confirmation, confirmationGold, d
     if (typeof developmentVerdicts !== 'string' || (conf && typeof confirmationVerdicts !== 'string')) throw new Error('campaign_judge_verdicts_missing');
     dev = attachVerdicts(dev, developmentVerdicts);
     if (conf) conf = attachVerdicts(conf, confirmationVerdicts);
-  } else if (conf) {
+  }
+  if (conf && (!scorer.judged || scorer.joinsGold)) {
     if (!confirmationGold) { if (conf.rows.some((row) => Object.hasOwn(row, 'gold'))) throw new Error('harness_confirmation_not_sealed'); throw new Error('harness_confirmation_gold_missing'); }
     conf = attachGold(conf, confirmationGold);
   }
@@ -144,17 +151,17 @@ export async function buildHarnessCampaign({ development: devExport, confirmatio
   const scorer = checkRound(round);
   if (typeof pilotRationale !== 'string' || !pilotRationale.trim()) throw new Error('campaign_pilot_rationale_missing');
   const { development, confirmation } = prepareSources({ scorer, development: devExport, confirmation: confExport, confirmationGold, developmentVerdicts, confirmationVerdicts });
-  const named = namedRegistration(round, development, improvement);
+  const named = namedRegistration(round, development, improvement), kit = kitOf(round);
   if (scorer.judged) { const refused = harnessJudgeRegistrationIssue(named.judge, named.margin); if (refused) throw new Error(refused); }
   for (const source of [development, confirmation]) {
-    const issues = harnessArmsIssues(source, named);
+    const issues = harnessArmsIssues(source, named, kit);
     if (issues.length) throw new Error(issues[0]);
   }
   // Everything the runner will refuse on the development side is refused here, before a manifest exists.
-  const refusedOnDevelopment = harnessDevelopmentIssue(named, development);
+  const refusedOnDevelopment = harnessDevelopmentIssue(named, development, kit);
   if (refusedOnDevelopment) throw new Error(refusedOnDevelopment);
-  const surface = registrationSurface(round);
-  const identity = await (surface === TOOL_PATCH_SURFACE ? toolPatchCampaignConsumerIdentity : harnessCampaignConsumerIdentity)(named);
+  const surface = registrationSurface(round), moduleRound = isModuleSurface(surface);
+  const identity = await (moduleRound ? moduleCampaignConsumerIdentity : surface === TOOL_PATCH_SURFACE ? toolPatchCampaignConsumerIdentity : harnessCampaignConsumerIdentity)(named);
   const slice = skillSlice(named, scorer);
   const alpha = round.alpha.perCampaign;
   const deadline = beijingMonthEnd(month);
@@ -163,25 +170,26 @@ export async function buildHarnessCampaign({ development: devExport, confirmatio
     mode: 'paired-t', deterministicConsumer: false, G_target: confirmation.rows.length,
     groups: confirmation.rows.map((row) => ({ id: `row-${row.id}`, family: round.family, failure_slice: inSkillSlice(slice, scorer, row) })),
     families: { [round.family]: { repeats: confirmation.repeats, forms: { answer: 1 }, score_type: 'bounded-continuous', margin: round.margin, pilot_rationale: pilotRationale } },
-    claims: { 'targeted-repair': alpha }, cost_identity: HARNESS_COST_IDENTITY, expires_at: deadline,
+    claims: { 'targeted-repair': alpha }, cost_identity: kit.costIdentity, expires_at: deadline,
   };
   const registration = { ...named, statistics,
     candidates: Object.entries(development.arms).filter(([id, arm]) => arm.harness).map(([arm, entry]) => ({ arm, digest: entry.harness.digest, chars: entry.harness.chars, alwaysOnChars: entry.harness.alwaysOnChars, title: entry.harness.title ?? null })) };
   const baselineRevision = `${round.family}-harness-baseline-${development.image.id}`.slice(0, 160);
-  const target = { surface, dependencyDigest: identity.implementationSha256, baselineRevision };
+  const target = moduleRound ? moduleTarget(surface, development) : { surface, dependencyDigest: identity.implementationSha256, baselineRevision };
   const sources = { [`development-${month}`]: development, [`confirmation-${month}`]: confirmation };
   const manifest = {
-    schemaVersion: 2, id: `${idPrefix}${surface}-${round.family}-${month}`, surface, candidateKind: surface, claim: 'targeted-repair', automated: true,
+    schemaVersion: 2, id: `${idPrefix}${surface}-${round.family}-${month}`, surface, candidateKind: RSI_CAMPAIGN_SURFACES[surface].kind, claim: 'targeted-repair', automated: true,
     createdAt: now, deadline, budget: { campaignCny: 1000, monthCny: 30000 },
     models: harnessModels(registration),
     target, registration: { digest: rsiDigest(registration), procedure: PROCEDURE.id, claim: 'targeted-repair' },
     data: { classification: 'public', sources: [
       { id: `development-${month}`, digest: rsiDigest(development), role: 'development', exposure: 'exposed' },
-      { id: `confirmation-${month}`, digest: rsiDigest(confirmation), role: 'confirmation', exposure: 'sealed' }] },
+      // A module round on the repo's cases says so: the improver reads them with their gold.
+      { id: `confirmation-${month}`, digest: rsiDigest(confirmation), role: 'confirmation', exposure: moduleRound && !moduleConfirmationSealed(registration) ? 'exposed' : 'sealed' }] },
   };
   const issues = rsiCampaignIssues(manifest);
   if (issues.length) throw new Error(issues[0]);
-  const choice = chooseHarnessCandidate(development, registration);
+  const choice = chooseHarnessCandidate(development, registration, kit);
   const sum = (source, arm) => round6(source.runs.filter((run) => run.arm === arm).reduce((total, run) => total + (run.cost ?? 0), 0));
   const minimum = PROCEDURE.minimum_slice_groups, sliceGroups = statistics.groups.filter((g) => g.failure_slice).length;
   const supply = {
@@ -192,7 +200,7 @@ export async function buildHarnessCampaign({ development: devExport, confirmatio
     developmentChoice: { frozen: choice.frozen, reason: choice.reason, candidates: choice.candidates, controls: choice.controls, noiseFloor: choice.noiseFloor },
     judge: scorer.judged ? judgeSupply(registration.judge, development, confirmation) : null,
     image: development.image, alpha: { allocated: alpha, testAlpha: alpha * PROCEDURE.test_alpha_fraction }, minimumGroups: minimum,
-    directional: confirmation.rows.length < minimum || sliceGroups < minimum,
+    directional: moduleRound ? moduleDirectional(registration) !== null : confirmation.rows.length < minimum || sliceGroups < minimum,
   };
   return { status: 'assembled', manifest, inputs: { registration, target, sources }, supply };
 }
@@ -212,15 +220,15 @@ export function developmentOnly({ development: devExport, registration: round, d
   const scorer = checkRound(round);
   if (devExport?.role !== 'development') throw new Error('harness_confirmation_scored_before_opening');
   const { development } = prepareSources({ scorer, development: devExport, developmentVerdicts });
-  const registration = namedRegistration(round, development, improvement);
+  const registration = namedRegistration(round, development, improvement), kit = kitOf(round);
   if (scorer.judged) { const refused = harnessJudgeRegistrationIssue(registration.judge, registration.margin); if (refused) throw new Error(refused); }
-  const issues = harnessArmsIssues(development, registration);
+  const issues = harnessArmsIssues(development, registration, kit);
   if (issues.length) throw new Error(issues[0]);
   // The preview and `--development-only` apply what `run` applies to the development side: the control arm, K, the registered rows and
   // repeats, the choice rule. A preview that says eligible has met every refusal the runner has for a development source.
-  const refusedOnDevelopment = harnessDevelopmentIssue(registration, development);
+  const refusedOnDevelopment = harnessDevelopmentIssue(registration, development, kit);
   if (refusedOnDevelopment) throw new Error(refusedOnDevelopment);
-  const choice = chooseHarnessCandidate(development, registration), slice = skillSlice(registration, scorer);
+  const choice = chooseHarnessCandidate(development, registration, kit), slice = skillSlice(registration, scorer);
   const sum = (arm) => round6(development.runs.filter((run) => run.arm === arm).reduce((total, run) => total + (run.cost ?? 0), 0));
   return { status: 'development-only', campaignId: `${registrationSurface(round)}-${round.family}-${month}`, registration, developmentDigest: rsiDigest(development),
     supply: { development: { rows: development.rows.length, sliceRows: development.rows.filter((row) => inSkillSlice(slice, scorer, row)).length, arms: Object.keys(development.arms), runs: development.runs.length,

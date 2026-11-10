@@ -10,7 +10,7 @@ import { WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "@/lib/apiCli
 vi.mock("@/lib/evimedSearchTopicsClient", () => ({ readEvimedSearchTopics: vi.fn() }));
 const readTopics = vi.mocked(readEvimedSearchTopics);
 const initialProject = useProjectStore.getState().currentId;
-const handlers = { onDraftChange: vi.fn(), onCategoryChange: vi.fn(), onSubmit: vi.fn(), onClear: vi.fn(), onCompositionChange: vi.fn() };
+const handlers = { onDraftChange: vi.fn(), onSubmit: vi.fn(), onClear: vi.fn(), onCompositionChange: vi.fn() };
 
 function feed(category: EvimedSearchCategory = "literature", query = "检索主题", isExample = false): EvimedSearchTopics {
   return { schemaVersion: 1, category, topics: [{ id: `${category}-one`, query, description: "可查看相关资料" }], count: 1, total: 1,

@@ -18,7 +18,8 @@
       "allowExpansion": true,
       "minExecutions": 200,
       "minDays": 2,
-      "maxErrors": 0
+      "maxErrors": 0,
+      "volumeBound": { "max": 1.1, "min": 0.5, "minPicks": 50 }
     }
   }
 }

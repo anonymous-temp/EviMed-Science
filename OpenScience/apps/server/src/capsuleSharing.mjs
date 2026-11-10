@@ -93,12 +93,12 @@ export class CapsuleSharing {
    * Deliver a pack to named accounts of this deployment: it is exported sealed for their keys, each gets one inbox notice, and the
    * sender gets the count — never a reason, never a name back. With nobody reachable nothing is exported at all.
    * @param {string} userId @param {string} capsuleId
-   * @param {{ recipients?: unknown, scopes?: unknown, card?: unknown, excludeEntryIds?: unknown }} input
+   * @param {{ recipients?: unknown, scopes?: unknown, card?: unknown, excludeEntryIds?: unknown, includePrivateEntries?: unknown }} input
    * @param {{ accountCreatedAt?: string | null, projectId?: string | null }} [context]
    * @returns {Promise<{ delivered: number, notDelivered: number, snapshot: any | null }>}
    */
   async deliver(userId, capsuleId, input, context = {}) {
-    const allowed = ["recipients", "scopes", "card", "excludeEntryIds"];
+    const allowed = ["recipients", "scopes", "card", "excludeEntryIds", "includePrivateEntries"];
     if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some((key) => !allowed.includes(key))) {
       throw new HttpError(400, "capsule_payload_invalid", "The delivery has unsupported fields.");
     }
@@ -121,7 +121,7 @@ export class CapsuleSharing {
     // A newer snapshot of what some of them already took in is that pack's next version: they upgrade in place and read the
     // changelog, instead of holding a second capsule beside the first.
     const supersedes = await this.#previousSnapshot(userId, capsuleId, recipients);
-    const result = await this.transfers.export(userId, capsuleId, { scopes: input.scopes, card: input.card, recipients, excludeEntryIds: input.excludeEntryIds,
+    const result = await this.transfers.export(userId, capsuleId, { scopes: input.scopes, card: input.card, recipients, excludeEntryIds: input.excludeEntryIds, includePrivateEntries: input.includePrivateEntries,
       ...(supersedes ? { supersedes } : {}) }, { ...context, channel: "delivery" });
     const snapshot = result.snapshot;
     /** @type {string[]} */
@@ -223,8 +223,9 @@ export class CapsuleSharing {
     }
     let preview = null;
     try {
-      const { archive } = await this.transfers.snapshotArchive(row.owner_id, row.snapshot_id);
+      const { archive,record } = await this.transfers.snapshotArchive(row.owner_id, row.snapshot_id);
       preview = await this.transfers.preview(userId, { archive }, context);
+      await this.transfers.assertSnapshotActive(row.owner_id,row.snapshot_id,record.revision);
     } catch (error) {
       // The snapshot was revoked under it: the delivery is closed as withdrawn rather than left looking open.
       if (/** @type {any} */ (error)?.code !== "capsule_snapshot_revoked") throw error;
@@ -281,11 +282,11 @@ export class CapsuleSharing {
   /**
    * A share link for a new snapshot of the author's own capsule, sealed under a password only the platform holds. The token is in
    * this answer and nowhere else.
-   * @param {string} userId @param {string} capsuleId @param {{ scopes?: unknown, card?: unknown, ttlDays?: number, maxUses?: number, excludeEntryIds?: unknown }} input
+   * @param {string} userId @param {string} capsuleId @param {{ scopes?: unknown, card?: unknown, ttlDays?: number, maxUses?: number, excludeEntryIds?: unknown, includePrivateEntries?: unknown }} input
    * @param {{ accountCreatedAt?: string | null, projectId?: string | null }} [context]
    */
   async createLink(userId, capsuleId, input, context = {}) {
-    const allowed = ["scopes", "card", "ttlDays", "maxUses", "excludeEntryIds"];
+    const allowed = ["scopes", "card", "ttlDays", "maxUses", "excludeEntryIds", "includePrivateEntries"];
     if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some((key) => !allowed.includes(key))) {
       throw new HttpError(400, "capsule_payload_invalid", "The link request has unsupported fields.");
     }
@@ -293,7 +294,7 @@ export class CapsuleSharing {
     const secret = randomBytes(24).toString("base64url");
     // Whoever opens a link is not known yet: it continues the newest snapshot anybody took in.
     const supersedes = await this.#previousSnapshot(userId, capsuleId, null);
-    const result = await this.transfers.export(userId, capsuleId, { password: secret, scopes: input.scopes, card: input.card, excludeEntryIds: input.excludeEntryIds,
+    const result = await this.transfers.export(userId, capsuleId, { password: secret, scopes: input.scopes, card: input.card, excludeEntryIds: input.excludeEntryIds, includePrivateEntries: input.includePrivateEntries,
       ...(supersedes ? { supersedes } : {}) }, { ...context, channel: "link" });
     const made = await this.links.create(userId, {
       capsuleId, snapshotId: result.snapshot.id, manifestSha256: result.snapshot.manifestSha256, archiveSha256: result.snapshot.archiveSha256, secret,
@@ -314,8 +315,11 @@ export class CapsuleSharing {
 
   /** @param {string} userId @param {Awaited<ReturnType<CapsuleShareLinks['redeem']>>} redeemed @param {any} context */
   async #linkPreview(userId, redeemed, context) {
-    const { archive } = await this.#linkArchive(redeemed);
-    return this.transfers.preview(userId, { archive, password: redeemed.secret }, context);
+    const { archive,record } = await this.#linkArchive(redeemed);
+    const preview=await this.transfers.preview(userId, { archive, password: redeemed.secret }, context);
+    try { await this.transfers.assertSnapshotActive(redeemed.link.ownerId,redeemed.link.snapshotId,record.revision); }
+    catch(error) { if(error.code!=='capsule_snapshot_revoked')throw error; recordShareRefused('link_revoked'); throw new HttpError(410,'capsule_share_link_revoked','This share link can no longer be used.'); }
+    return preview;
   }
 
   /** @param {Awaited<ReturnType<CapsuleShareLinks['redeem']>>} redeemed */

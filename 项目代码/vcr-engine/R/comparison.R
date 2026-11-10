@@ -39,7 +39,7 @@ vcr_comparison_frame <- function(job, sc, tabs, what, covs) {
   X <- as.matrix(subj[, covs, drop = FALSE])
   if (!is.numeric(X)) vcr_abort("input_shape_invalid", "scenario.covariates", "Covariates are numeric (code categories as indicators).")
   miss <- which(colSums(is.na(X)) > 0L)
-  if (length(miss)) vcr_abort("missing_covariate", "scenario.covariates", sprintf("Covariate '%s' has missing values; weights are not estimated on incomplete rows.", covs[miss[1]]))
+  if (length(miss)) vcr_abort("missing_covariate", "scenario.covariates", sprintf("Covariate '%s' has missing values; weights are not estimated on incomplete rows (state `imputation` to impute them).", covs[miss[1]]))
   if (sum(treat == 1L) < 2L || sum(treat == 0L) < 2L) vcr_abort("input_shape_invalid", "scenario.treatmentColumn", "Both groups need at least two people.")
   list(subj = subj, cohort = cohort, keep = cohort$keep, tc = tc, treat = treat, X = X)
 }

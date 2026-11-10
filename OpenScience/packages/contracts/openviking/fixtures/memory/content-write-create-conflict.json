@@ -1,6 +1,6 @@
 {
   "note": "mode create on an existing URI (an alias of replace from v0.5.1: no 409).",
-  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.1.1",
+  "recordedFrom": "ghcr.io/volcengine/openviking:v0.5.3",
   "request": {
     "method": "POST",
     "path": "/api/v1/content/write",

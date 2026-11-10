@@ -1,5 +1,6 @@
 import {withSessionPromptAdmission} from './runtimePromptAdmission.mjs';
 import { handleManagedBrowserRequest } from './managedBrowserRoutes.mjs';
+import { EVIMED_PRESET } from "./dshProfilePatch.mjs";
 import { MODEL_REASONING_EFFORTS } from "./modelReasoningPolicy.mjs";
 import { CHAT_PRESENTATION } from "./dshProfilePatch.mjs";
 /** The native browser application on an isolated origin, with immutable per-frame project bindings. */
@@ -7,13 +8,13 @@ import { createServer } from "node:http";
 import path from "node:path";
 import { SEAMS } from "@evimed/harness-port";
 
-import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, isRuntimeUiSettingsRead, RUNTIME_UI_ANSWERED_HOST_ROUTES, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_SETTINGS_READ, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiSettingsAnswer, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, isRuntimeUiSettingsRead, RUNTIME_UI_ANSWERED_HOST_ROUTES, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_SETTINGS_READ, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, RUNTIME_UI_READ_ROUTES, runtimeUiReadRouteRefusal, runtimeUiScheduleRefusal, runtimeUiSettingsAnswer, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { assertNoSymlinkPath, HttpError, mimeFor, openScopedFileNoFollow, readBody, readStableFileHandle } from "./security.mjs";
 import { RUNTIME_UI_FRAME_COOKIE, parseRuntimeUiFramePath, runtimeUiCookie, runtimeUiOrigins, validateRuntimeUiFrame } from "./runtimeUiFrames.mjs";
 import { runtimeUiBootstrapSource } from "./runtimeUiDocument.mjs";
-import { IMMUTABLE_UI_CACHE, ROOT_PLUGIN_RUNTIME_ASSET, SHARED_UI_ASSET_PREFIX, isImmutableRuntimeUiAsset } from "./runtimeManager.mjs";
+import { IMMUTABLE_UI_CACHE, PLUGIN_CHUNK_ASSET, ROOT_PLUGIN_RUNTIME_ASSET, SHARED_UI_ASSET_PREFIX, isImmutableRuntimeUiAsset } from "./runtimeManager.mjs";
 
 /**
  * The methods that make the deployment spend money.
@@ -86,7 +87,8 @@ async function authorizeMethod(config, project, method, boundWorkspace = false, 
  * @param {string | null} method @param {unknown} payload @param {string} workspaceRoot @param {any} project
  */
 async function assertWorkspacePath(method, payload, workspaceRoot, project) {
-  const refusal = runtimeUiWorkspacePathRefusal(method, payload, workspaceRoot);
+  const refusal = runtimeUiWorkspacePathRefusal(method, payload, workspaceRoot)
+    ?? runtimeUiScheduleRefusal(method, payload, workspaceRoot, EVIMED_PRESET);
   if (refusal) throw new HttpError(403, "runtime_ui_method_denied", `${method} refused: ${refusal}.`);
   if (!WORKSPACE_PATH_METHODS.has(method)) return;
   const args = /** @type {any} */ (payload).args;
@@ -277,7 +279,7 @@ function assertNativeModelSelection(config, payload) {
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
  * @param {{ config: Record<string, any>, store: any, runtimeManager: any, onGoalBarAction?: ((project: any, sessionId: string, op: "pause" | "start") => Promise<void>) | null, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, recordPromptAttendance?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindVcrReference?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   recordUploadSuccess?: ((project:any,upload:any)=>Promise<any>)|null,
- *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
+ *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, sourceDeletion?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   resolveDelegatedFrame?:((user:any,delegation:any,options?:{recheck?:any})=>Promise<{project:any,principal:any}>)|null,
  *   createDelegatedPolicy?:((identity:any)=>Promise<any>)|null,
  *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string, text?: string) => Promise<any>, noteStopRequest?: (project: any, target: { sessionId?: string | null, runId?: string | null }) => Promise<string | null> } | null,
@@ -286,7 +288,7 @@ function assertNativeModelSelection(config, payload) {
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
 export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBarAction = null, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindVcrReference = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
-  agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
+  agentRuns = null, managedBrowser = null, sourceDeletion = null, authorizeOpenSession = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
   // The original bytes of a native upload are kept for the study's data intake beside the kernel's own copy. A failed
   // copy (the project's capacity, the ledger) is that copy's failure: the upload the kernel already stored stands.
   /** @param {any} project @param {any} upload */
@@ -647,6 +649,10 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
   async function serveSharedAsset(req, res, suffix) {
     const asset = /^\/assets\/[A-Za-z0-9._-]+$/.test(suffix)
       || /^\/plugins\/\?\?[A-Za-z0-9@/._,-]{1,8192}&rev=[A-Za-z0-9._-]{6,64}$/.test(suffix)
+      // A plugin's lazy chunk, imported by its own client (`client.pdf.js` and `client.excel.js` of the document preview): one
+      // file of one package at a revision. Without it the PDF and Office viewers crashed their tab with 「Runtime bundle
+      // unavailable」 and a document opened to a blank pane (2026-11-05).
+      || PLUGIN_CHUNK_ASSET.test(suffix)
       || ROOT_PLUGIN_RUNTIME_ASSET.test(suffix);
     if (!asset || suffix.includes("..") || !["GET", "HEAD"].includes(String(req.method).toUpperCase())) {
       throw new HttpError(404, "runtime_ui_asset_not_found", "No such application file.");
@@ -804,6 +810,23 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
         await scoped.authorize(method, scopedCall.payload);
       }
     }
+    // The owner's ordinary carrier observes the same durable source fence as a delegated carrier.
+    let sourceCall = scopedCall;
+    if (sourceDeletion && method && req.method === 'POST' && method !== RUNTIME_UI_UPLOAD_METHOD) {
+      if (!sourceCall) {
+        const raw = req.__openScienceProxyBody ?? await readBody(req, config.maxJsonBytes);
+        req.__openScienceProxyBody = raw;
+        try { sourceCall = JSON.parse(raw.toString('utf8')); } catch { throw new HttpError(400, 'runtime_ui_prompt_invalid', 'A native RPC is required.'); }
+        if (sourceCall?.type !== 'client-request' || sourceCall.method !== method || typeof sourceCall.rpcId !== 'string') throw new HttpError(400, 'runtime_ui_prompt_invalid', 'A native RPC is required.');
+      }
+      await sourceDeletion.authorize(project, method, sourceCall.payload);
+    }
+    const sourceUploadSession = sourceDeletion && method === RUNTIME_UI_UPLOAD_METHOD ? runtimeUrl.searchParams.get('sessionId') : null;
+    const assertSourceAvailable = async () => {
+      if (sourceCall) await sourceDeletion?.authorize(project, method, sourceCall.payload);
+      if (sourceUploadSession) await sourceDeletion.assertAvailable(project, sourceUploadSession);
+    };
+    await assertSourceAvailable();
     if (scoped && !method && (!['GET', 'HEAD'].includes(req.method)
       || !['/', '/__evimed_bootstrap.js'].includes(pathname) && !isImmutableRuntimeUiAsset(frame.suffix))) { sendDenied(res, pathname); return; }
     const nativeBody = limit => {
@@ -816,6 +839,11 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
     let admissionSignal=null;
     let modelBody = null;
     let loopxBody = null;
+    if (method && RUNTIME_UI_READ_ROUTES.includes(method)) {
+      // The changed-files card's two reads: GET, their own query, and a session of this project's runtime.
+      if (runtimeUiReadRouteRefusal(method, req.method, runtimeUrl.searchParams) !== null) { sendDenied(res, method); return; }
+      await authorizePromptSession(project, { args: { request: { sessionId: runtimeUrl.searchParams.get("sessionId") } } });
+    }
     if (method === "loopx.goalbar") {
       if (req.method !== "POST" || config.loopxEnabled === false) { sendDenied(res, method); return; }
       const raw = await nativeBody(Math.min(Number(config.maxJsonBytes), 16384));
@@ -860,7 +888,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
       req.__openScienceProxyBody = raw;
       try { workspaceBody = JSON.parse(raw.toString("utf8")); } catch { /* Remains a denied workspace mutation. */ }
     }
-    if (method && WORKSPACE_PATH_METHODS.has(method) && req.method === "POST") {
+    if (method && (WORKSPACE_PATH_METHODS.has(method) || method === "schedule/create" || method === "schedule/edit") && req.method === "POST") {
       // The path is in the body, so the body is read here and handed on with
       // the request, as the prompt's is. A call this cannot parse carries no
       // path this can check, and is refused rather than forwarded.
@@ -890,7 +918,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
       }
     };
     if (pathname === "/__evimed_bootstrap.js" && ["GET", "HEAD"].includes(req.method)) {
-      const { installRuntimeUiTransport } = await import("@evimed/harness-port/runtime-ui-transport");
+      const { installRuntimeUiTransport, installRuntimeUiPolyfills } = await import("@evimed/harness-port/runtime-ui-transport");
       await revalidate();
       // `operator` releases the rows a researcher's page hides (the assembled
       // system prompt, injected context) to an operator diagnosing a run — the
@@ -904,7 +932,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
         managedBrowser: !scoped && config.managedBrowserEnabled ? { provider: "managed", available: managedBrowser?.enabled === true } : null,
         operator: !scoped && Array.isArray(config.operatorUsers) && config.operatorUsers.includes(String(user?.id ?? "")),
         off: Array.isArray(config.runtimeUiFrameOff) ? config.runtimeUiFrameOff : [],
-      }, installRuntimeUiTransport);
+      }, installRuntimeUiTransport, installRuntimeUiPolyfills);
       res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Content-Length": String(Buffer.byteLength(source)), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
       res.end(req.method === "HEAD" ? undefined : source);
       return;
@@ -969,11 +997,13 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
         originalUpload = { name, sessionId, bytes };
       }
     }
-    const forward = () => runtimeManager.proxy(req, res, project, frame.suffix, {
+    const forward = async () => {
+      await assertSourceAvailable();
+      return runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       admissionSignal,
       uiBasePath: frame.prefix,
-      revalidate,
+      revalidate: async () => { await revalidate(); await assertSourceAvailable(); },
       ...(scoped?.nativeInputs && nativeInputRequest ? {
         beforeForward: () => scoped.beforeInputForward(nativeInputRequest),
         observeResponse: response => scoped.observeHttpInput(nativeInputRequest, promptBody?.rpcId ?? scopedCall?.rpcId, response),
@@ -1002,9 +1032,27 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
         const value = answer?.ok === true ? answer.value : null;
         if (typeof value?.receiptId !== 'string' || !value.receiptId || typeof value.file?.attachmentId !== 'string'
           || value.file.bytes !== originalUpload.bytes.length || typeof value.file.name !== 'string') return;
+        await assertSourceAvailable();
         await keepUploadOriginal(project, { ...originalUpload, name: originalUpload.name ?? value.file.name });
       } } : {}),
+      ...(sourceUploadSession ? { beforeForward: async () => {
+        await assertSourceAvailable();
+        if (recordUploadAttempt) await recordUploadAttempt(project);
+      } } : {}),
+      ...(sourceDeletion && sourceCall ? { transformResponse: async response => {
+        let body = scoped ? await scoped.httpResponse(sourceCall, response)
+          : loopxBody?.payload.op === 'read' ? await goalBarReadOnceSessionOpens(project, loopxBody.payload, response.body) : response.body;
+        let answer;
+        try { answer = JSON.parse(body.toString('utf8')); } catch { throw new HttpError(502, 'runtime_ui_response_invalid', 'The native response is unavailable.'); }
+        if (answer?.result?.ok) {
+          const projected = await sourceDeletion.projectValue(project, method, sourceCall.payload, answer.result.value);
+          if (!projected.forward) throw new HttpError(404, 'runtime_session_not_found', 'Conversation not found.');
+          body = Buffer.from(JSON.stringify({ ...answer, result: { ...answer.result, value: projected.value } }));
+        } else await sourceDeletion.authorize(project, method, sourceCall.payload);
+        return body;
+      } } : {}),
     });
+    };
     const forwardPrompt = async () => {
       await authorizePromptSession(project, promptBody?.payload);
       const preparing = await resolveFrame(snapshot, null);
@@ -1127,6 +1175,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
           }
           if (scopedCarrier) await scopedCarrier.authorize(endpoint, payload, context);
+          await sourceDeletion?.authorize(project, endpoint, payload);
           await authorizeMethod(config, project, endpoint, false, usageLedger, runtimeManager, balanceGate, payload);
           await assertWorkspacePath(endpoint, payload, runtimeManager.runtimeWorkspaceRoot(project), project);
           observeFileOpen(project, endpoint, payload);
@@ -1169,7 +1218,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
           }
         };
         await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate: recheck, authorize, observe, prepare,
-          ...(!initial.scoped && recordUploadSuccess ? { projectItem: async (endpoint, payload, value) => {
+          ...(!initial.scoped && (recordUploadSuccess || sourceDeletion) ? { projectItem: async (endpoint, payload, value) => {
             // The upstream file-upload service returns {receiptId,file:{attachmentId,name,bytes}} only after storing the bytes.
             // This Remote fallback carries the original base64 in args.request, under the authenticated agent scope.
             if (endpoint === 'fileUploads/upload' && typeof value?.receiptId === 'string' && value.receiptId
@@ -1184,7 +1233,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
                 }
               }
             }
-            return { forward: true, value };
+            return sourceDeletion ? sourceDeletion.projectValue(project, endpoint, payload, value) : { forward: true, value };
           } } : {}),
           ...(initial.scoped ? {
             withAuthority: operation => initial.scoped.withAuthority(operation),
@@ -1196,10 +1245,17 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
               promptDisposition: payload => initial.scoped.inputDisposition(payload?.args?.request),
               afterInputAdmission: (payload, error) => initial.scoped.afterInputAdmission(payload?.args?.request, error),
             } : {}),
-            projectItem: (endpoint, payload, value, context) => scopedCarrier.projectItem(endpoint, payload, value, context),
+            projectItem: async (endpoint, payload, value, context) => {
+              const projected = await scopedCarrier.projectItem(endpoint, payload, value, context);
+              return projected.forward && sourceDeletion ? sourceDeletion.projectValue(project, endpoint, payload, projected.value) : projected;
+            },
             onStreamClosed: (endpoint, streamId) => scopedCarrier.onStreamClosed(endpoint, streamId),
             onProjectionDiscarded: (endpoint, streamId) => scopedCarrier.onStreamClosed(endpoint, streamId),
           } : {}),
+          beforeSend: async (endpoint, payload) => {
+            await sourceDeletion?.authorize(project, endpoint, payload);
+            if (initial.scoped?.nativeInputs) await initial.scoped.beforeInputForward(endpoint === 'session/prompt' ? payload?.args?.request : initial.scoped.operationRequest(payload));
+          },
         });
       } catch (error) {
         destroyUpgrade(socket, error?.status ?? 502, error?.code ?? "runtime_ui_upgrade_failed");

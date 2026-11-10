@@ -74,11 +74,12 @@ function runAt(runs, at) {
  *     runsOf: (project: any, sessionId: string) => Promise<any[]>,
  *     parentOf?: (sessionId: string, running: readonly { id: string, sessionId: string }[]) => string | null,
  *   } | null,
+ *   sourceDeleted?: ((project:any, sessionId:string|null, engineSessionId?:string|null)=>Promise<boolean>) | null,
  *   internalAgent?: ((agentId: string) => Promise<boolean>) | null,
  *   clinicalContext?: ((userId: string, projectId: string, runs: { sessionId: string, runId: string }[]) => Promise<boolean>) | null,
  * }} dependencies
  */
-export function createMemoryAdmission({ config, memorySettings, engineReady = null, conversations = null, internalAgent = null, clinicalContext = null }) {
+export function createMemoryAdmission({ config, memorySettings, engineReady = null, conversations = null, sourceDeleted = null, internalAgent = null, clinicalContext = null }) {
   /**
    * @param {{ user: any, project: any, engineSessionId?: string | null, at?: number | null }} caller `engineSessionId` is the
    *   engine's session (`dsh-<conversation>`) when the request names one; without it the answer is the project's running
@@ -99,6 +100,7 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
     const named = engineSessionId ? platformSessionOf(engineSessionId) : null;
     // Which conversation this is: the one the request names, or the only one running in the project.
     const sessionId = named ?? (running.length === 1 ? running[0].sessionId : null);
+    if ((sessionId || engineSessionId) && sourceDeleted && await sourceDeleted(project, sessionId, engineSessionId)) return neither("source_deleted", sessionId);
     const pause = await memoryPausedFor(memorySettings, userId, projectId, sessionId);
     // With several running and none named, a trial among them protects the person: nothing is read or written.
     let trial = pause.trial;

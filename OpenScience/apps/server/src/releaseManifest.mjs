@@ -13,6 +13,9 @@ const prereleaseVersionPattern = versionPattern;
 const releaseIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const revisionPattern = /^[a-f0-9]{40,64}$/;
 
+// Leave bounded room for separately shipped bundles; the file-size limit is independent.
+export const MAX_RELEASE_MANIFEST_INPUTS = 128;
+
 /** @returns {Error & Record<string, any>} An Error carrying the extra fields its
  *  callers read; a bare Error type rejects every one of them. */
 function failure(code, message = code) {
@@ -159,7 +162,7 @@ export function validateReleaseManifest(input) {
     assertDigest(record.digest);
   }
 
-  if (!Array.isArray(manifest.inputs) || manifest.inputs.length === 0 || manifest.inputs.length > 96) {
+  if (!Array.isArray(manifest.inputs) || manifest.inputs.length === 0 || manifest.inputs.length > MAX_RELEASE_MANIFEST_INPUTS) {
     throw failure("release_manifest_inputs_invalid");
   }
   const inputPaths = new Set();

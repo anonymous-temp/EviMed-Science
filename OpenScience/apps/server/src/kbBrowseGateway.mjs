@@ -210,12 +210,12 @@ export function kbBrowseGatewayProviderUrl(config) {
 /**
  * @param {any} config
  * @param {any} runtimeManager
- * @param {{ resources: any, sources?: any, library?: any, titleOf?: (source: any) => unknown, evaluationIsolation?: any, budgetMs?: number, sourceScope?: any, compiledScope?: any, contextFor?: any }} dependencies
+ * @param {{ resources: any, sources?: any, library?: any, titleOf?: (source: any) => unknown, budgetMs?: number, sourceScope?: any, compiledScope?: any, contextFor?: any }} dependencies
  *   `resources`: the `OpenVikingResources` of this deployment; `sources`: the source service (`get(userId, id)`) and
  *   `titleOf`: the title a source record is shown by; `library`: the account library (`searchScope(userId, projectId)`, the entries that apply to the project), or null;
  *   `budgetMs`: twenty seconds everywhere but in a test that would otherwise wait them out
  */
-export function createKbBrowseGatewayHandler(config, runtimeManager, { resources: rawResources, sources = null, library = null, titleOf = () => null, evaluationIsolation = null, budgetMs = answerBudgetMs, sourceScope = null, compiledScope = null, contextFor = null }) {
+export function createKbBrowseGatewayHandler(config, runtimeManager, { resources: rawResources, sources = null, library = null, titleOf = () => null, budgetMs = answerBudgetMs, sourceScope = null, compiledScope = null, contextFor = null }) {
   const windows = new Map();
   const dependenciesResources = rawResources;
 
@@ -532,9 +532,8 @@ export function createKbBrowseGatewayHandler(config, runtimeManager, { resources
           timer.unref?.();
         }),
       ]).finally(() => clearTimeout(timer));
-      const projected = evaluationIsolation ? await evaluationIsolation.filter(identity, "knowledge-base", data) : data;
       if (scoped) await scoped.current();
-      sendJson(res, 200, { data: projected });
+      sendJson(res, 200, { data });
     } catch (error) {
       // An engine that refuses or does not answer (`memory_index_*`) is this deployment's state, never the run's
       // mistake, and its own words — a path, an upstream status — stay here.

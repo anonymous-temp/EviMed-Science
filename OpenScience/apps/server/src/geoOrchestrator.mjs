@@ -86,7 +86,7 @@ const INSIGHT_STEPS = Object.freeze(["evidence", "journey", "questions"]);
 const FINISHED = new Set(["done", "minimal"]);
 const TERMINAL_RUN = new Set(["succeeded", "failed", "canceled", "cancelled"]);
 /** Dispatch refusals that will not clear by waiting a minute. */
-const TERMINAL_DISPATCH = new Set(["geo_unavailable", "geo_project_not_found", "project_not_found", "autopilot_capability_unavailable"]);
+const TERMINAL_DISPATCH = new Set(["geo_unavailable", "geo_project_not_found", "project_not_found"]);
 
 /** The platform's numbers for the schedules (plan §3.8, §6; geo-skills' monitor constants). */
 export const GEO_SCHEDULE = Object.freeze({
@@ -1601,10 +1601,6 @@ export class GeoOrchestrator {
           supplements: policy.policy.supplements.filter((item) => item.capabilityId === spec.capabilityId).map((item) => item.text) };
         if (!await this.#update(project.id, spec.key, { detail: { policyContext,
           policyRevisionId: policyContext.supplements.length ? policyContext.revisionId : null } }, ["claimed"])) return { busy: true };
-      }
-      if (policyContext.supplements.length && this.policies.revisionUsable && !await this.policies.revisionUsable('geo', policyContext.revisionId)) {
-        await this.#update(project.id, spec.key, { state: 'pending', detail: { policyContext: null, policyRevisionId: null } }, ['claimed']);
-        return { deferred: 'policy_basis_changed' };
       }
       const brief = policyContext.supplements.length ? `${spec.brief}\n\nPlatform strategy supplements (${policyContext.revisionId}):\n${policyContext.supplements.join("\n")}` : spec.brief;
       const out = await this.dispatching.run(project.id, () => /** @type {NonNullable<GeoOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({

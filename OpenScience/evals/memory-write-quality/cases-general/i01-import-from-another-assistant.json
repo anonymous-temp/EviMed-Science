@@ -2,9 +2,9 @@
   "id": "i01-import-from-another-assistant",
   "class": "keep-imported-memory-export",
   "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
-  "expected": "The lines of a memory export the person pasted and asked to import are kept as theirs: the role and research focus as profile, the two habits as preferences (owner decision 3, 2026-10-25).",
+  "expected": "Requested imported role and habits are eligible in the applicable profile and preference types, retaining their import origin. Importing them does not independently confirm their truth.",
   "decidable": true,
-  "judge": "Is each of the four imported lines written as the person's own, and none of them attributed to a document or to the other assistant?",
+  "judge": "Are the four useful imported lines preserved with import attribution and without promoting the earlier assistant or document into independent factual confirmation?",
   "replay": {
     "synthetic": true,
     "projectId": "default",

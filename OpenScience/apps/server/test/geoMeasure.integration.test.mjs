@@ -23,6 +23,9 @@ import { coverageKeyOf, roundCoverages } from "../src/geoCoverage.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { GEO_TABLES_FOR_TESTS, fakeModel, judgeCallParts, seedGeoProject, startFakeProbe, testClock } from "./helpers/geoMeasureFixtures.mjs";
 
+// The child's script imports `./apps/server/src/...`: `pnpm test:server` runs from apps/server, and a child that cannot start left its test waiting on a lock and the file alive.
+const REPOSITORY_ROOT = new URL("../../../", import.meta.url).pathname;
+
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
   const parsed = new URL(databaseUrl);
@@ -205,6 +208,28 @@ test("legacy and exhausted confirmation leases never submit again; accepted refe
   assert.equal((await store.heldJobsToPoll({ now: new Date(now.getTime()+1000), engines: ["deepseek"], limit: 10 })).some(job => job.id === "legacy_accepted"), true);
 });
 
+test("the database refuses a pre-authorization worker's lease of a confirmation job and admits the current worker's", options, async () => {
+  await reset();
+  await seed("geo_fence", { engines: ["deepseek"] });
+  await database.query(`INSERT INTO evimed_geo.rounds (id,user_id,geo_project_id,kind,set_version,engines,planned,status,surface) VALUES
+    ('gr_fence','user_geo_fence','geo_fence','confirm',1,ARRAY['deepseek'],1,'running','{"confirmationAuthorization":{"generation":"1"}}'::jsonb),
+    ('gr_plain','user_geo_fence','geo_fence','weekly',1,ARRAY['deepseek'],1,'running','{}'::jsonb)`);
+  for (const [id, round] of [["gj_fence", "gr_fence"], ["gj_plain", "gr_plain"]]) await database.query(`INSERT INTO evimed_geo.probe_jobs (id,user_id,round_id,geo_project_id,question_id,engine,repeat_index,status,attempts)
+    VALUES ($1,'user_geo_fence',$2,'geo_fence','geo_fence_q1','deepseek',0,'queued',0)`, [id, round]);
+  // What a worker of the previous version writes: the lease without the attempt it took in lease_fence.
+  const oldLease = id => database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',lease_owner='old',attempts=attempts+1,lease_until=now()+interval '1 minute' WHERE id=$1`, [id]);
+  await assert.rejects(oldLease("gj_fence"), /geo_confirmation_worker_outdated/);
+  assert.deepEqual((await rows(`SELECT status,attempts FROM evimed_geo.probe_jobs WHERE id='gj_fence'`))[0], { status: "queued", attempts: 0 });
+  await oldLease("gj_plain");
+  assert.equal((await rows(`SELECT status FROM evimed_geo.probe_jobs WHERE id='gj_plain'`))[0].status, "leased", "only confirmation jobs are fenced");
+  await database.query(`DELETE FROM evimed_geo.probe_jobs WHERE id='gj_plain'`);
+  const now = new Date("2026-09-25T15:00:00Z");
+  const job = await store.leaseNextJob({ now, owner: "current", leaseUntil: new Date(now.getTime() + 60000), engines: ["deepseek"], paused: [], nightOpen: true,
+    nightMinAsks: 100, weekStart: new Date("2026-09-21T00:00:00Z"), weeklyCap: 0 });
+  assert.equal(job?.id, "gj_fence");
+  assert.deepEqual((await rows(`SELECT attempts,lease_fence FROM evimed_geo.probe_jobs WHERE id='gj_fence'`))[0], { attempts: 1, lease_fence: 1 });
+});
+
 for (const attempt of [1,2,3]) test(`a different process crashing after dispatch on attempt ${attempt} cannot cause a resubmit`, options, async () => {
   await reset();
   await seed("geo_crash", { engines: ["deepseek"] });
@@ -220,7 +245,7 @@ for (const attempt of [1,2,3]) test(`a different process crashing after dispatch
     const now=new Date('2026-09-25T15:00:00Z'); const job=await store.leaseNextJob({now,owner:'crashed-worker',leaseUntil:new Date(now.getTime()-1),engines:['deepseek'],paused:[],nightOpen:true,nightMinAsks:100,weekStart:new Date('2026-09-21T00:00:00Z'),weeklyCap:0});
     if(job?.attempts!==Number(process.env.TEST_ATTEMPT)) process.exit(2); await db.query("UPDATE evimed_geo.probe_jobs SET lease_until=clock_timestamp()+interval '1 minute' WHERE id=$1",[job.id]);
     if(!await store.markConfirmationDispatch(job)) process.exit(3); await db.query('INSERT INTO evimed_geo.test_confirm_sends(job_id) VALUES ($1)',[job.id]); process.exit(0);`;
-  const child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: process.cwd(), env: { ...process.env, TEST_URL: isolatedUrl, TEST_ATTEMPT: String(attempt) }, stdio: "ignore" });
+  const child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: REPOSITORY_ROOT, env: { ...process.env, TEST_URL: isolatedUrl, TEST_ATTEMPT: String(attempt) }, stdio: "ignore" });
   const [exit] = await once(child, "exit");
   assert.equal(exit, 0);
   await database.query(`UPDATE evimed_geo.probe_jobs SET lease_until=$1 WHERE id='gj_crash'`,[new Date(now.getTime()-1000)]);
@@ -241,7 +266,7 @@ for (const attempt of [1,2,3]) test(`confirmation crash after unknown snapshot o
     const round=await oneConfirmation(h,id);
     const jobs=await rows(`SELECT id FROM evimed_geo.probe_jobs WHERE round_id=$1 ORDER BY repeat_index`,[round.roundId]);
     const expired=new Date(h.clock.now().getTime()-1000);
-    await database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',attempts=$2,lease_until=$3,dispatch_started_at=CASE WHEN id=$4 THEN now() ELSE NULL END WHERE round_id=$1`,[round.roundId,attempt,expired,jobs[0].id]);
+    await database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',lease_fence=$2,attempts=$2,lease_until=$3,dispatch_started_at=CASE WHEN id=$4 THEN now() ELSE NULL END WHERE round_id=$1`,[round.roundId,attempt,expired,jobs[0].id]);
     await database.query(`UPDATE evimed_geo.probe_jobs SET external_ref='accepted-retained' WHERE id=$1`,[jobs[1].id]);
     await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,probe_job_id,engine,question_id,status,warnings)
       VALUES ($1,$2,$3,$4,$5,'deepseek',$6,'failed','["delivery_unknown_no_automatic_retry"]'::jsonb)`,[`${id}_unknown`,`user_${id}`,id,round.roundId,jobs[1].id,`${id}_q1`]);
@@ -259,7 +284,7 @@ for (const attempt of [1,2,3]) test(`a concurrent dispatch commit on attempt ${a
   const h=await harness(); const blocker=new pg.Client({connectionString:isolatedUrl}); await blocker.connect();
   try {
     const round=await oneConfirmation(h,id); const [job]=await rows(`SELECT id FROM evimed_geo.probe_jobs WHERE round_id=$1`,[round.roundId]);
-    await database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',attempts=$2,lease_until=$3 WHERE id=$1`,[job.id,attempt,new Date(h.clock.now().getTime()-1000)]);
+    await database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',lease_fence=$2,attempts=$2,lease_until=$3 WHERE id=$1`,[job.id,attempt,new Date(h.clock.now().getTime()-1000)]);
     await blocker.query("BEGIN"); await blocker.query(`UPDATE evimed_geo.probe_jobs SET dispatch_started_at=now() WHERE id=$1`,[job.id]);
     const recovery=store.recoverExpiredLeases(h.clock.now());
     let waiting=false;
@@ -288,7 +313,7 @@ test("a rolled-back dispatch marker permits only an unsent lease to recover", op
   const h=await harness(); const blocker=new pg.Client({connectionString:isolatedUrl}); await blocker.connect();
   try {
     const round=await oneConfirmation(h,id); const [job]=await rows(`SELECT id FROM evimed_geo.probe_jobs WHERE round_id=$1`,[round.roundId]);
-    await database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',attempts=1,lease_until=$2 WHERE id=$1`,[job.id,new Date(h.clock.now().getTime()-1000)]);
+    await database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',lease_fence=1,attempts=1,lease_until=$2 WHERE id=$1`,[job.id,new Date(h.clock.now().getTime()-1000)]);
     await blocker.query("BEGIN"); await blocker.query(`UPDATE evimed_geo.probe_jobs SET dispatch_started_at=now() WHERE id=$1`,[job.id]);
     const recovery=store.recoverExpiredLeases(h.clock.now());
     let waiting=false; for(let i=0;i<100&&!waiting;i+=1){waiting=Boolean((await rows(`SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%UPDATE evimed_geo.probe_jobs%'`)).length);if(!waiting)await new Promise(resolve=>setTimeout(resolve,10));}
@@ -377,7 +402,7 @@ test("another process saving a question set wins before a waiting confirmation c
       const pid=(await db.query('SELECT pg_backend_pid() AS pid')).rows[0].pid; process.stdout.write(String(pid)+'\\n');
       await store.writeQuestionSet('user_geo_race','geo_race',{groups:[{name:'new',questions:[{text:'New?',isMeasured:true}]}],contract:{samplingMode:'recurring',engines:['deepseek'],repeats:7}});
       await db.close();`;
-    child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: process.cwd(), env: { ...process.env, TEST_URL: isolatedUrl }, stdio: ["ignore", "pipe", "pipe"] });
+    child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: REPOSITORY_ROOT, env: { ...process.env, TEST_URL: isolatedUrl }, stdio: ["ignore", "pipe", "pipe"] });
     const childExit = once(child, "exit");
     const [chunk] = await once(child.stdout, "data");
     const pid = Number(String(chunk).trim());
@@ -422,7 +447,7 @@ for (const action of ["lock", "project"]) test(`another process changing ${actio
       await new Promise(resolve=>process.stdin.once('data',resolve));
       if(process.env.TEST_ACTION==='lock') await store.lockQuestionSet('geo_cross',1,3);
       else await store.updateProject('user_geo_cross','geo_cross',{coverageDays:180}); await db.close();`;
-    child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: process.cwd(), env: { ...process.env, TEST_URL: isolatedUrl, TEST_ACTION: action }, stdio: ["pipe", "pipe", "pipe"] });
+    child = spawn(process.execPath, ["--input-type=module", "-e", code], { cwd: REPOSITORY_ROOT, env: { ...process.env, TEST_URL: isolatedUrl, TEST_ACTION: action }, stdio: ["pipe", "pipe", "pipe"] });
     const childExit = once(child, "exit");
     const [chunk] = await once(child.stdout, "data");
     const pid = Number(String(chunk).trim());
@@ -2431,7 +2456,7 @@ for (const answerStatus of ["valid", "refusal"]) test(`a saved ${answerStatus} c
   try {
     const round=await oneConfirmation(h,id);
     const [job]=await rows(`SELECT id FROM evimed_geo.probe_jobs WHERE round_id=$1`,[round.roundId]);
-    await database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',attempts=3,lease_until=$2 WHERE id=$1`, [job.id,new Date(h.clock.now().getTime()-1000)]);
+    await database.query(`UPDATE evimed_geo.probe_jobs SET status='leased',lease_fence=3,attempts=3,lease_until=$2 WHERE id=$1`, [job.id,new Date(h.clock.now().getTime()-1000)]);
     await database.query(`INSERT INTO evimed_geo.snapshots (id,user_id,geo_project_id,round_id,probe_job_id,engine,question_id,asked_at,status,answer_text)
       VALUES ($1,$2,$3,$4,$5,'deepseek',$6,$7,$8,'preserved')`, [`${id}_saved`,`user_${id}`,id,round.roundId,job.id,`${id}_q1`,h.clock.now().toISOString(),answerStatus]);
     await store.recoverExpiredLeases(h.clock.now());

@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { PenLine } from "lucide-react";
 import { VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCE_LABELS_ZH } from "@evimed/domain";
 import type { VcrPremise } from "@/lib/vcrClient";
@@ -16,9 +17,21 @@ import { DRAFT_PREFIX } from "./vcrActionWords";
  * draft into the conversation's own composer, prefilled with the premise's name (`premiseDraft`), which the researcher completes
  * and sends. Pressing it sends nothing.
  *
+ * A premise with no number behind it (a model used beyond what it was validated for, key `use:*`) is a row whose value is one plain
+ * sentence, in this same block and under the same five-row limit: no badge, no second panel. It has nothing to type a new value
+ * into, so it carries no change draft.
+ *
+ * The same holds for every other sentence row (`binding:*`, `origin:*`, `campaign:*`, `lab:*`, `trajectory:*` and the Alzheimer card's
+ * statements about the model itself): a platform rule or a fact about the model is no value the person gave, assumed or left at a default,
+ * so it carries no source tag and no change draft (`premiseCarriesValue`).
+ *
  * A default is the quiet fact the block is for (a dropout of 0 nobody wrote), so 默认 is the one source drawn in the attention tone.
  */
 export const premiseDraft = (premise: Pick<VcrPremise, "label" | "value">): string => `改“${premise.label}”（现在是 ${premise.value}）为：`;
+
+/** Rows that are one plain sentence about a rule or a model, not a named setting: no source tag, nothing to type a new value into. */
+const SENTENCE_ROW = /^(use|binding|origin|campaign|lab|trajectory):|^progression:ad:(parameters|regulatory|scope|curves)$/;
+export const premiseCarriesValue = (key: string): boolean => !SENTENCE_ROW.test(key);
 
 const TONES: Record<VcrPremise["source"], TagTone> = { literature: "neutral", assumed: "neutral", default: "warn", given: "neutral" };
 
@@ -27,8 +40,8 @@ function PremiseRow({ premise, onChange }: { premise: VcrPremise; onChange: ((pr
     <li data-vcr-premise={premise.key} data-vcr-premise-source={premise.source} className="grid grid-cols-[minmax(7rem,12rem)_1fr_auto_auto] items-center gap-x-3 gap-y-1 border-b border-faint py-2 last:border-b-0 max-sm:grid-cols-[1fr_auto]">
       <span className="text-caption text-text-3 max-sm:col-span-2">{premise.label}</span>
       <span className="min-w-0 text-ui text-text max-sm:col-start-1">{premise.value}</span>
-      <Tag tone={TONES[premise.source]}>{VCR_PREMISE_SOURCE_LABELS_ZH[premise.source]}</Tag>
-      {onChange
+      {premiseCarriesValue(premise.key) ? <Tag tone={TONES[premise.source]}>{VCR_PREMISE_SOURCE_LABELS_ZH[premise.source]}</Tag> : <span />}
+      {onChange && premiseCarriesValue(premise.key)
         ? (
           <Button size="sm" variant="text" actionKind="draft" data-vcr-premise-change={premise.key} onClick={() => onChange(premise)} aria-label={`${DRAFT_PREFIX}调整：${premise.label}`}>
             <PenLine size={16} aria-hidden="true" />{`${DRAFT_PREFIX}调整`}
@@ -46,14 +59,15 @@ export function VcrPremises({ premises, onChange = null }: {
   /** Puts the premise's draft in the conversation's composer; absent where the reader may not change it. */
   onChange?: ((premise: VcrPremise) => void) | null;
 }) {
+  const titleId = useId();
   const all = premises ?? [];
   if (all.length === 0) return null;
   const decisive = all.filter((premise) => premise.decisive).slice(0, VCR_PREMISES_DECISIVE_MAX);
   const open = new Set(decisive.map((premise) => premise.key));
   const rest = all.filter((premise) => !open.has(premise.key));
   return (
-    <section data-vcr-premises="" aria-labelledby="vcr-premises-title" className="flex flex-col gap-1">
-      <h3 id="vcr-premises-title" className="text-ui font-semibold text-text">这个结论的前提</h3>
+    <section data-vcr-premises="" aria-labelledby={titleId} className="flex flex-col gap-1">
+      <h3 id={titleId} className="text-ui font-semibold text-text">这个结论的前提</h3>
       {decisive.length > 0 && <ul data-vcr-premises-open="">{decisive.map((premise) => <PremiseRow key={premise.key} premise={premise} onChange={onChange} />)}</ul>}
       {rest.length > 0 && (
         <Disclosure summary={decisive.length > 0 ? `其余 ${rest.length} 条前提` : `全部 ${rest.length} 条前提`} defaultOpen={decisive.length === 0}>

@@ -1,0 +1,3327 @@
+{
+ "network": {
+  "id": "res_network",
+  "version": 1,
+  "label": "response",
+  "title": "网络荟萃分析：response",
+  "question": "这几种治疗互相比起来怎么样？证据前后一致吗？谁排在前面？",
+  "measure": "比值比（OR）",
+  "direction": "数值越大越好",
+  "model": "随机效应（研究之间允许有差异）",
+  "modelKey": "random",
+  "counts": {
+   "studies": {
+    "value": 4,
+    "text": null,
+    "unit": "项",
+    "source": "aggregate",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": null,
+    "reason": null,
+    "stale": false,
+    "detail": null
+   },
+   "treatments": {
+    "value": 3,
+    "text": null,
+    "unit": "种",
+    "source": "aggregate",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": null,
+    "reason": null,
+    "stale": false,
+    "detail": null
+   },
+   "designs": 4,
+   "multiArmStudies": 1
+  },
+  "reference": "A",
+  "ranking": [
+   {
+    "rank": 1,
+    "treatment": "C",
+    "studies": 3,
+    "score": {
+     "value": 96.09670667,
+     "text": null,
+     "unit": "%",
+     "source": "aggregate",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "versusReference": {
+     "value": {
+      "value": 2.75086619,
+      "text": null,
+      "unit": null,
+      "source": "aggregate",
+      "interval": {
+       "kind": "confidence",
+       "low": 1.45,
+       "high": 5.21,
+       "level": 95
+      },
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 2,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "excludesNull": true
+    },
+    "isReference": false
+   },
+   {
+    "rank": 2,
+    "treatment": "B",
+    "studies": 3,
+    "score": {
+     "value": 53.3743259,
+     "text": null,
+     "unit": "%",
+     "source": "aggregate",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "versusReference": {
+     "value": {
+      "value": 1.95548982,
+      "text": null,
+      "unit": null,
+      "source": "aggregate",
+      "interval": {
+       "kind": "confidence",
+       "low": 1.12,
+       "high": 3.43,
+       "level": 95
+      },
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 2,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "excludesNull": true
+    },
+    "isReference": false
+   },
+   {
+    "rank": 3,
+    "treatment": "A",
+    "studies": 3,
+    "score": {
+     "value": 0.52896744,
+     "text": null,
+     "unit": "%",
+     "source": "aggregate",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "versusReference": null,
+    "isReference": true
+   }
+  ],
+  "league": {
+   "treatments": [
+    "C",
+    "B",
+    "A"
+   ],
+   "meaning": "每格是“行”这种治疗比“列”这种治疗的效应",
+   "rows": [
+    {
+     "treatment": "C",
+     "cells": [
+      null,
+      {
+       "value": {
+        "value": 1.40674023,
+        "text": null,
+        "unit": null,
+        "source": "aggregate",
+        "interval": {
+         "kind": "confidence",
+         "low": 0.88,
+         "high": 2.25,
+         "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 2,
+        "reason": null,
+        "stale": false,
+        "detail": null
+       },
+       "directStudies": 2,
+       "excludesNull": false
+      },
+      {
+       "value": {
+        "value": 2.75086619,
+        "text": null,
+        "unit": null,
+        "source": "aggregate",
+        "interval": {
+         "kind": "confidence",
+         "low": 1.45,
+         "high": 5.21,
+         "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 2,
+        "reason": null,
+        "stale": false,
+        "detail": null
+       },
+       "directStudies": 2,
+       "excludesNull": true
+      }
+     ]
+    },
+    {
+     "treatment": "B",
+     "cells": [
+      {
+       "value": {
+        "value": 0.7108633,
+        "text": null,
+        "unit": null,
+        "source": "aggregate",
+        "interval": {
+         "kind": "confidence",
+         "low": 0.445,
+         "high": 1.137,
+         "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 3,
+        "reason": null,
+        "stale": false,
+        "detail": null
+       },
+       "directStudies": 2,
+       "excludesNull": false
+      },
+      null,
+      {
+       "value": {
+        "value": 1.95548982,
+        "text": null,
+        "unit": null,
+        "source": "aggregate",
+        "interval": {
+         "kind": "confidence",
+         "low": 1.12,
+         "high": 3.43,
+         "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 2,
+        "reason": null,
+        "stale": false,
+        "detail": null
+       },
+       "directStudies": 2,
+       "excludesNull": true
+      }
+     ]
+    },
+    {
+     "treatment": "A",
+     "cells": [
+      {
+       "value": {
+        "value": 0.36352186,
+        "text": null,
+        "unit": null,
+        "source": "aggregate",
+        "interval": {
+         "kind": "confidence",
+         "low": 0.192,
+         "high": 0.689,
+         "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 3,
+        "reason": null,
+        "stale": false,
+        "detail": null
+       },
+       "directStudies": 2,
+       "excludesNull": true
+      },
+      {
+       "value": {
+        "value": 0.51138083,
+        "text": null,
+        "unit": null,
+        "source": "aggregate",
+        "interval": {
+         "kind": "confidence",
+         "low": 0.292,
+         "high": 0.897,
+         "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 3,
+        "reason": null,
+        "stale": false,
+        "detail": null
+       },
+       "directStudies": 2,
+       "excludesNull": true
+      },
+      null
+     ]
+    }
+   ]
+  },
+  "consistency": {
+   "sentence": "没有发现不同比较组合之间不一致的证据（Q = 2.95，自由度 3，P = 0.4）；研究少的时候这个检验把握不大，不等于证明一致。",
+   "betweenDesigns": {
+    "q": 2.9455250041421728,
+    "df": 3,
+    "p": {
+     "value": 0.40010063,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   "withinDesigns": null,
+   "basis": "按共同效应模型拆分总的 Q：同一比较组合内部的差异，和不同组合之间的差异"
+  },
+  "heterogeneity": {
+   "sentence": "研究之间的差异：I² = 0%，τ² = 0（总体 Q 检验 P = 0.4）。",
+   "tau2": {
+    "value": 0,
+    "text": null,
+    "unit": null,
+    "source": "aggregate",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": null,
+    "reason": null,
+    "stale": false,
+    "detail": null
+   },
+   "i2": {
+    "value": 0,
+    "text": null,
+    "unit": "%",
+    "source": "aggregate",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": 1,
+    "reason": null,
+    "stale": false,
+    "detail": null
+   }
+  },
+  "scoreNote": "排序得分是一种治疗好过其他每一种的平均概率，按点估计和精度算出，不是“最好”的概率；研究少的治疗排名靠的证据很薄。",
+  "premises": [
+   {
+    "key": "transitivity",
+    "label": "间接比较成立的前提",
+    "value": "各研究的人群和设计足够相似，没有哪种效应修饰因素只偏向某一种治疗",
+    "source": "assumed",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "direction",
+    "label": "排序的方向",
+    "value": "数值越大越好（排序得分按此计算）",
+    "source": "given",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "model",
+    "label": "研究之间差异的处理",
+    "value": "随机效应（研究之间允许有差异）；τ² = 0",
+    "source": "default",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "continuity",
+    "label": "零事件研究的校正",
+    "value": "0.5：S4",
+    "source": "default",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "measure",
+    "label": "比较的量",
+    "value": "比值比（OR），在对数尺度上合并",
+    "source": "given",
+    "decisive": false,
+    "reason": null
+   }
+  ]
+ },
+ "network-chain": {
+  "id": "res_network-chain",
+  "version": 1,
+  "label": null,
+  "title": "网络荟萃分析",
+  "question": "这几种治疗互相比起来怎么样？证据前后一致吗？谁排在前面？",
+  "measure": "比值（如风险比）",
+  "direction": "数值越小越好",
+  "model": "随机效应（研究之间允许有差异）",
+  "modelKey": "random",
+  "counts": {
+   "studies": {
+    "value": 2,
+    "text": null,
+    "unit": "项",
+    "source": "aggregate",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": null,
+    "reason": null,
+    "stale": false,
+    "detail": null
+   },
+   "treatments": {
+    "value": 3,
+    "text": null,
+    "unit": "种",
+    "source": "aggregate",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": null,
+    "reason": null,
+    "stale": false,
+    "detail": null
+   },
+   "designs": 2,
+   "multiArmStudies": 0
+  },
+  "reference": "B",
+  "ranking": [
+   {
+    "rank": 1,
+    "treatment": "C",
+    "studies": 1,
+    "score": {
+     "value": 88.94573091,
+     "text": null,
+     "unit": "%",
+     "source": "aggregate",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "versusReference": {
+     "value": {
+      "value": 0.86070798,
+      "text": null,
+      "unit": null,
+      "source": "aggregate",
+      "interval": {
+       "kind": "confidence",
+       "low": 0.605,
+       "high": 1.225,
+       "level": 95
+      },
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 3,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "excludesNull": false
+    },
+    "isReference": false
+   },
+   {
+    "rank": 2,
+    "treatment": "B",
+    "studies": 2,
+    "score": {
+     "value": 59.80593578,
+     "text": null,
+     "unit": "%",
+     "source": "aggregate",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "versusReference": null,
+    "isReference": true
+   },
+   {
+    "rank": 3,
+    "treatment": "A",
+    "studies": 1,
+    "score": {
+     "value": 1.24833331,
+     "text": null,
+     "unit": "%",
+     "source": "aggregate",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "versusReference": {
+     "value": {
+      "value": 1.34985881,
+      "text": null,
+      "unit": null,
+      "source": "aggregate",
+      "interval": {
+       "kind": "confidence",
+       "low": 1.067,
+       "high": 1.708,
+       "level": 95
+      },
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 3,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "excludesNull": true
+    },
+    "isReference": false
+   }
+  ],
+  "league": {
+   "treatments": [
+    "C",
+    "B",
+    "A"
+   ],
+   "meaning": "每格是“行”这种治疗比“列”这种治疗的效应",
+   "rows": [
+    {
+     "treatment": "C",
+     "cells": [
+      null,
+      {
+       "value": {
+        "value": 0.86070798,
+        "text": null,
+        "unit": null,
+        "source": "aggregate",
+        "interval": {
+         "kind": "confidence",
+         "low": 0.605,
+         "high": 1.225,
+         "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 3,
+        "reason": null,
+        "stale": false,
+        "detail": null
+       },
+       "directStudies": 1,
+       "excludesNull": false
+      },
+      {
+       "value": {
+        "value": 0.63762815,
+        "text": null,
+        "unit": null,
+        "source": "aggregate",
+        "interval": {
+         "kind": "confidence",
+         "low": 0.417,
+         "high": 0.974,
+         "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 3,
+        "reason": null,
+        "stale": false,
+        "detail": null
+       },
+       "directStudies": 0,
+       "excludesNull": true
+      }
+     ]
+    },
+    {
+     "treatment": "B",
+     "cells": [
+      {
+       "value": {
+        "value": 1.16183424,
+        "text": null,
+        "unit": null,
+        "source": "aggregate",
+        "interval": {
+         "kind": "confidence",
+         "low": 0.816,
+         "high": 1.653,
+         "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 3,
+        "reason": null,
+        "stale": false,
+        "detail": null
+       },
+       "directStudies": 1,
+       "excludesNull": false
+      },
+      null,
+      {
+       "value": {
+        "value": 0.74081822,
+        "text": null,
+        "unit": null,
+        "source": "aggregate",
+        "interval": {
+         "kind": "confidence",
+         "low": 0.586,
+         "high": 0.937,
+         "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 3,
+        "reason": null,
+        "stale": false,
+        "detail": null
+       },
+       "directStudies": 1,
+       "excludesNull": true
+      }
+     ]
+    },
+    {
+     "treatment": "A",
+     "cells": [
+      {
+       "value": {
+        "value": 1.56831219,
+        "text": null,
+        "unit": null,
+        "source": "aggregate",
+        "interval": {
+         "kind": "confidence",
+         "low": 1.03,
+         "high": 2.4,
+         "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 2,
+        "reason": null,
+        "stale": false,
+        "detail": null
+       },
+       "directStudies": 0,
+       "excludesNull": true
+      },
+      {
+       "value": {
+        "value": 1.34985881,
+        "text": null,
+        "unit": null,
+        "source": "aggregate",
+        "interval": {
+         "kind": "confidence",
+         "low": 1.067,
+         "high": 1.708,
+         "level": 95
+        },
+        "mcse": null,
+        "review": "ai_set",
+        "precision": 3,
+        "reason": null,
+        "stale": false,
+        "detail": null
+       },
+       "directStudies": 1,
+       "excludesNull": true
+      },
+      null
+     ]
+    }
+   ]
+  },
+  "consistency": {
+   "sentence": "这张网络里没有环：每一对治疗只有一条证据通路，无法检验直接证据和间接证据是否一致。",
+   "betweenDesigns": null,
+   "withinDesigns": null,
+   "basis": "按共同效应模型拆分总的 Q：同一比较组合内部的差异，和不同组合之间的差异"
+  },
+  "heterogeneity": {
+   "sentence": "研究之间的差异：I² = 0%，τ² = 0。",
+   "tau2": {
+    "value": 0,
+    "text": null,
+    "unit": null,
+    "source": "aggregate",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": null,
+    "reason": null,
+    "stale": false,
+    "detail": null
+   },
+   "i2": {
+    "value": 0,
+    "text": null,
+    "unit": "%",
+    "source": "aggregate",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": 1,
+    "reason": null,
+    "stale": false,
+    "detail": null
+   }
+  },
+  "scoreNote": "排序得分是一种治疗好过其他每一种的平均概率，按点估计和精度算出，不是“最好”的概率；研究少的治疗排名靠的证据很薄。",
+  "premises": [
+   {
+    "key": "transitivity",
+    "label": "间接比较成立的前提",
+    "value": "各研究的人群和设计足够相似，没有哪种效应修饰因素只偏向某一种治疗",
+    "source": "assumed",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "direction",
+    "label": "排序的方向",
+    "value": "数值越小越好（排序得分按此计算）",
+    "source": "given",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "model",
+    "label": "研究之间差异的处理",
+    "value": "随机效应（研究之间允许有差异）；τ² = 0",
+    "source": "default",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "measure",
+    "label": "比较的量",
+    "value": "比值（如风险比），在对数尺度上合并",
+    "source": "given",
+    "decisive": false,
+    "reason": null
+   },
+   {
+    "key": "reference",
+    "label": "对照的治疗",
+    "value": "B（研究最多的一种；排序和联赛表不受它影响）",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   }
+  ]
+ },
+ "dose-linear": {
+  "id": "res_dose-linear",
+  "version": 1,
+  "label": "alcohol and colorectal cancer",
+  "title": "剂量反应：alcohol and colorectal cancer",
+  "question": "从多大剂量开始有效？随着剂量增加，是一直上升还是趋于平缓？",
+  "ratioWord": "相对危险度",
+  "doseUnit": "g/day",
+  "referenceDose": 0,
+  "modelKind": "linear",
+  "counts": {
+   "studies": {
+    "value": 8,
+    "text": null,
+    "unit": "项",
+    "source": "aggregate",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": null,
+    "reason": null,
+    "stale": false,
+    "detail": null
+   },
+   "levels": 48
+  },
+  "headline": "剂量每增加 12 g/day，相对危险度变为 1.08（95%区间 1.05 到 1.12）。",
+  "firstDose": {
+   "dose": 0.30452260539759346,
+   "sentence": "从大约 0.305 g/day 起，相对于 0 g/day，相对危险度的区间不再包含 1；这是对拟合曲线逐点的读法，不是数据确定下来的起效剂量。"
+  },
+  "predictions": [
+   {
+    "dose": 0,
+    "isReference": true,
+    "value": {
+     "value": 1,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": {
+      "kind": "confidence",
+      "low": 1,
+      "high": 1,
+      "level": 95
+     },
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "dose": 12.12,
+    "isReference": false,
+    "value": {
+     "value": 1.08114748,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": {
+      "kind": "confidence",
+      "low": 1.047,
+      "high": 1.1164,
+      "level": 95
+     },
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 4,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "dose": 24.24,
+    "isReference": false,
+    "value": {
+     "value": 1.16887987,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": {
+      "kind": "confidence",
+      "low": 1.096,
+      "high": 1.246,
+      "level": 95
+     },
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 3,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "dose": 36.36,
+    "isReference": false,
+    "value": {
+     "value": 1.26373153,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": {
+      "kind": "confidence",
+      "low": 1.148,
+      "high": 1.392,
+      "level": 95
+     },
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 3,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "dose": 48.48,
+    "isReference": false,
+    "value": {
+     "value": 1.36628016,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": {
+      "kind": "confidence",
+      "low": 1.202,
+      "high": 1.554,
+      "level": 95
+     },
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 3,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "dose": 60.6,
+    "isReference": false,
+    "value": {
+     "value": 1.47715035,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": {
+      "kind": "confidence",
+      "low": 1.258,
+      "high": 1.734,
+      "level": 95
+     },
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 3,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   }
+  ],
+  "curve": [
+   {
+    "dose": 0,
+    "ratio": 1,
+    "lower": 1,
+    "upper": 1
+   },
+   {
+    "dose": 1.5226130269879672,
+    "ratio": 1.0098500746761074,
+    "lower": 1.0057836859171476,
+    "upper": 1.0139329038663154
+   },
+   {
+    "dose": 3.0452260539759344,
+    "ratio": 1.0197971733233397,
+    "lower": 1.0116008228570834,
+    "upper": 1.028059933542779
+   },
+   {
+    "dose": 4.567839080963902,
+    "ratio": 1.0298422516350578,
+    "lower": 1.017451604290017,
+    "upper": 1.0423837937656413
+   },
+   {
+    "dose": 6.090452107951869,
+    "ratio": 1.0399862747182738,
+    "lower": 1.0233362248051285,
+    "upper": 1.0569072269559832
+   },
+   {
+    "dose": 7.613065134939837,
+    "ratio": 1.0502302171863755,
+    "lower": 1.029254880117041,
+    "upper": 1.071633013744775
+   },
+   {
+    "dose": 9.135678161927803,
+    "ratio": 1.060575063252766,
+    "lower": 1.0352077670723294,
+    "upper": 1.0865639735052508
+   },
+   {
+    "dose": 10.65829118891577,
+    "ratio": 1.071021806825423,
+    "lower": 1.0411950836560675,
+    "upper": 1.1017029648927013
+   },
+   {
+    "dose": 12.180904215903738,
+    "ratio": 1.0815714516023929,
+    "lower": 1.0472170289984124,
+    "upper": 1.1170528863917861
+   },
+   {
+    "dose": 13.703517242891706,
+    "ratio": 1.0922250111682223,
+    "lower": 1.0532738033812277,
+    "upper": 1.1326166768714732
+   },
+   {
+    "dose": 15.226130269879674,
+    "ratio": 1.1029835090913416,
+    "lower": 1.0593656082447442,
+    "upper": 1.148397316147709
+   },
+   {
+    "dose": 16.74874329686764,
+    "ratio": 1.1138479790224063,
+    "lower": 1.06549264619426,
+    "upper": 1.1643978255539298
+   },
+   {
+    "dose": 18.271356323855606,
+    "ratio": 1.1248194647936083,
+    "lower": 1.071655121006878,
+    "upper": 1.1806212685195194
+   },
+   {
+    "dose": 19.793969350843575,
+    "ratio": 1.1358990205189645,
+    "lower": 1.0778532376382846,
+    "upper": 1.1970707511563294
+   },
+   {
+    "dose": 21.31658237783154,
+    "ratio": 1.1470877106955937,
+    "lower": 1.0840872022295651,
+    "upper": 1.2137494228533685
+   },
+   {
+    "dose": 22.83919540481951,
+    "ratio": 1.1583866103059903,
+    "lower": 1.0903572221140603,
+    "upper": 1.2306604768797804
+   },
+   {
+    "dose": 24.361808431807475,
+    "ratio": 1.1697968049213072,
+    "lower": 1.0966635058242615,
+    "upper": 1.2478071509962205
+   },
+   {
+    "dose": 25.884421458795444,
+    "ratio": 1.181319390805654,
+    "lower": 1.1030062630987472,
+    "upper": 1.265192728074752
+   },
+   {
+    "dose": 27.407034485783413,
+    "ratio": 1.1929554750214233,
+    "lower": 1.109385704889157,
+    "upper": 1.2828205367273788
+   },
+   {
+    "dose": 28.92964751277138,
+    "ratio": 1.2047061755356556,
+    "lower": 1.1158020433672093,
+    "upper": 1.3006939519433367
+   },
+   {
+    "dose": 30.147737934361754,
+    "ratio": 1.2141900179831195,
+    "lower": 1.1209618231273701,
+    "upper": 1.3151718188375219
+   },
+   {
+    "dose": 31.67035096134972,
+    "ratio": 1.2261498803312374,
+    "lower": 1.127445114237452,
+    "upper": 1.3334959813570724
+   },
+   {
+    "dose": 33.19296398833769,
+    "ratio": 1.2382275482166003,
+    "lower": 1.1339659026670241,
+    "upper": 1.3520754526714387
+   },
+   {
+    "dose": 34.71557701532566,
+    "ratio": 1.2504241820325472,
+    "lower": 1.140524405288805,
+    "upper": 1.3709137899735149
+   },
+   {
+    "dose": 36.23819004231362,
+    "ratio": 1.2627409536023784,
+    "lower": 1.147120840229837,
+    "upper": 1.390014600018222
+   },
+   {
+    "dose": 37.76080306930159,
+    "ratio": 1.2751790462919408,
+    "lower": 1.1537554268787409,
+    "upper": 1.409381539813051
+   },
+   {
+    "dose": 39.28341609628956,
+    "ratio": 1.2877396551233238,
+    "lower": 1.1604283858930122,
+    "upper": 1.4290183173182258
+   },
+   {
+    "dose": 40.806029123277526,
+    "ratio": 1.3004239868896734,
+    "lower": 1.16713993920636,
+    "upper": 1.4489286921566247
+   },
+   {
+    "dose": 42.32864215026549,
+    "ratio": 1.313233260271138,
+    "lower": 1.1738903100360882,
+    "upper": 1.469116476333589
+   },
+   {
+    "dose": 43.85125517725346,
+    "ratio": 1.3261687059519567,
+    "lower": 1.1806797228905201,
+    "upper": 1.489585534966765
+   },
+   {
+    "dose": 45.373868204241425,
+    "ratio": 1.3392315667387003,
+    "lower": 1.1875084035764638,
+    "upper": 1.5103397870261113
+   },
+   {
+    "dose": 46.896481231229394,
+    "ratio": 1.3524230976796767,
+    "lower": 1.1943765792067236,
+    "upper": 1.5313832060842174
+   },
+   {
+    "dose": 48.41909425821736,
+    "ratio": 1.365744566185514,
+    "lower": 1.2012844782076524,
+    "upper": 1.552719821077079
+   },
+   {
+    "dose": 49.941707285205325,
+    "ratio": 1.3791972521509293,
+    "lower": 1.2082323303267501,
+    "upper": 1.5743537170754685
+   },
+   {
+    "dose": 51.464320312193294,
+    "ratio": 1.3927824480776982,
+    "lower": 1.2152203666403034,
+    "upper": 1.5962890360670574
+   },
+   {
+    "dose": 52.98693333918126,
+    "ratio": 1.4065014591988352,
+    "lower": 1.222248819561072,
+    "upper": 1.6185299777494333
+   },
+   {
+    "dose": 54.50954636616923,
+    "ratio": 1.4203556036039977,
+    "lower": 1.2293179228460176,
+    "upper": 1.6410808003341657
+   },
+   {
+    "dose": 56.032159393157194,
+    "ratio": 1.4343462123661248,
+    "lower": 1.2364279116040793,
+    "upper": 1.6639458213620777
+   },
+   {
+    "dose": 57.55477242014516,
+    "ratio": 1.448474629669323,
+    "lower": 1.243579022303992,
+    "upper": 1.6871294185298729
+   },
+   {
+    "dose": 59.07738544713313,
+    "ratio": 1.4627422129380128,
+    "lower": 1.2507714927821518,
+    "upper": 1.7106360305282824
+   },
+   {
+    "dose": 60.5999984741211,
+    "ratio": 1.4771503329673468,
+    "lower": 1.2580055622505257,
+    "upper": 1.7344701578918886
+   }
+  ],
+  "tests": {
+   "overall": {
+    "p": {
+     "value": 0.00000192,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "sentence": "剂量与效应有关的总体检验 P = 0.00000192"
+   },
+   "nonlinearity": null
+  },
+  "heterogeneity": {
+   "i2": {
+    "value": 0,
+    "text": null,
+    "unit": "%",
+    "source": "aggregate",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": 1,
+    "reason": null,
+    "stale": false,
+    "detail": null
+   },
+   "sentence": "研究之间的差异：I² = 0%（Q 检验 P = 0.687）。"
+  },
+  "excluded": [],
+  "note": "这是研究之间的剂量反应关系，说的是人群，不是对某一个人的预测。",
+  "premises": [
+   {
+    "key": "model",
+    "label": "剂量和效应的关系",
+    "value": "一条直线（对数比值随剂量线性变化）",
+    "source": "given",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "reference",
+    "label": "比较的参照剂量",
+    "value": "0 g/day",
+    "source": "default",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "covariance",
+    "label": "同一研究里各水平的相关性",
+    "value": "用各水平的病例数和人数还原（Greenland–Longnecker 的方法）",
+    "source": "given",
+    "decisive": false,
+    "reason": null
+   },
+   {
+    "key": "stage",
+    "label": "合并方式",
+    "value": "两步法：先各研究分别拟合，再合并；限制性最大似然",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   }
+  ]
+ },
+ "dose-spline": {
+  "id": "res_dose-spline",
+  "version": 1,
+  "label": "alcohol and colorectal cancer",
+  "title": "剂量反应：alcohol and colorectal cancer",
+  "question": "从多大剂量开始有效？随着剂量增加，是一直上升还是趋于平缓？",
+  "ratioWord": "相对危险度",
+  "doseUnit": "g/day",
+  "referenceDose": 0,
+  "modelKind": "spline",
+  "counts": {
+   "studies": {
+    "value": 8,
+    "text": null,
+    "unit": "项",
+    "source": "aggregate",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": null,
+    "reason": null,
+    "stale": false,
+    "detail": null
+   },
+   "levels": 48
+  },
+  "headline": "没有发现偏离直线的证据（非线性检验 P = 0.0785），但研究少时这个检验把握不大。",
+  "firstDose": {
+   "dose": 30.147737934361754,
+   "sentence": "从大约 30.1 g/day 起，相对于 0 g/day，相对危险度的区间不再包含 1；这是对拟合曲线逐点的读法，不是数据确定下来的起效剂量。"
+  },
+  "predictions": [
+   {
+    "dose": 0,
+    "isReference": true,
+    "value": {
+     "value": 1,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": {
+      "kind": "confidence",
+      "low": 1,
+      "high": 1,
+      "level": 95
+     },
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "dose": 12,
+    "isReference": false,
+    "value": {
+     "value": 0.94726644,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": {
+      "kind": "confidence",
+      "low": 0.837,
+      "high": 1.072,
+      "level": 95
+     },
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 3,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "dose": 24,
+    "isReference": false,
+    "value": {
+     "value": 1.06713945,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": {
+      "kind": "confidence",
+      "low": 0.942,
+      "high": 1.209,
+      "level": 95
+     },
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 3,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "dose": 36,
+    "isReference": false,
+    "value": {
+     "value": 1.21733894,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": {
+      "kind": "confidence",
+      "low": 1.07,
+      "high": 1.385,
+      "level": 95
+     },
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 3,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "dose": 48,
+    "isReference": false,
+    "value": {
+     "value": 1.3700328,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": {
+      "kind": "confidence",
+      "low": 1.204,
+      "high": 1.559,
+      "level": 95
+     },
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 3,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   },
+   {
+    "dose": 60,
+    "isReference": false,
+    "value": {
+     "value": 1.53221989,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": {
+      "kind": "confidence",
+      "low": 1.251,
+      "high": 1.877,
+      "level": 95
+     },
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 3,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   }
+  ],
+  "curve": [
+   {
+    "dose": 0,
+    "ratio": 1,
+    "lower": 1,
+    "upper": 1
+   },
+   {
+    "dose": 1.5226130269879672,
+    "ratio": 0.9854245519052836,
+    "lower": 0.9618897863641171,
+    "upper": 1.0095351476475078
+   },
+   {
+    "dose": 3.0452260539759344,
+    "ratio": 0.9718296315210827,
+    "lower": 0.9268044941998234,
+    "upper": 1.019042137379596
+   },
+   {
+    "dose": 4.567839080963902,
+    "ratio": 0.9599390397025858,
+    "lower": 0.8960276897242097,
+    "upper": 1.0284090218559516
+   },
+   {
+    "dose": 6.090452107951869,
+    "ratio": 0.950445701594017,
+    "lower": 0.8706584736714377,
+    "upper": 1.0375446389090577
+   },
+   {
+    "dose": 7.613065134939837,
+    "ratio": 0.9440271533144077,
+    "lower": 0.8516683462528838,
+    "upper": 1.0464017714359035
+   },
+   {
+    "dose": 9.135678161927803,
+    "ratio": 0.9413649977049229,
+    "lower": 0.8399550001358314,
+    "upper": 1.0550184935629705
+   },
+   {
+    "dose": 10.65829118891577,
+    "ratio": 0.9428373469288331,
+    "lower": 0.8357609613765569,
+    "upper": 1.0636321913141895
+   },
+   {
+    "dose": 12.180904215903738,
+    "ratio": 0.9480697932643067,
+    "lower": 0.8378955909019148,
+    "upper": 1.072730710914368
+   },
+   {
+    "dose": 13.703517242891706,
+    "ratio": 0.9566082849407902,
+    "lower": 0.8450604218255765,
+    "upper": 1.0828804511285464
+   },
+   {
+    "dose": 15.226130269879674,
+    "ratio": 0.9680187204390417,
+    "lower": 0.8560165422143794,
+    "upper": 1.0946753910811269
+   },
+   {
+    "dose": 16.74874329686764,
+    "ratio": 0.9818715102559198,
+    "lower": 0.8695686821275055,
+    "upper": 1.108677994581776
+   },
+   {
+    "dose": 18.271356323855606,
+    "ratio": 0.9977284130143834,
+    "lower": 0.884607029512649,
+    "upper": 1.1253154823838825
+   },
+   {
+    "dose": 19.793969350843575,
+    "ratio": 1.0151314765047401,
+    "lower": 0.9001988621591301,
+    "upper": 1.1447380772277977
+   },
+   {
+    "dose": 21.31658237783154,
+    "ratio": 1.0335940858926576,
+    "lower": 0.9156884847563358,
+    "upper": 1.1666814120487243
+   },
+   {
+    "dose": 22.83919540481951,
+    "ratio": 1.0525942627851772,
+    "lower": 0.930743780415555,
+    "upper": 1.1903970838823068
+   },
+   {
+    "dose": 24.361808431807475,
+    "ratio": 1.071671079927894,
+    "lower": 0.9453798458566152,
+    "upper": 1.2148332848297327
+   },
+   {
+    "dose": 25.884421458795444,
+    "ratio": 1.0907329478302423,
+    "lower": 0.9599663975441745,
+    "upper": 1.2393125077356721
+   },
+   {
+    "dose": 27.407034485783413,
+    "ratio": 1.1097832911686247,
+    "lower": 0.9748313188344886,
+    "upper": 1.2634175057379076
+   },
+   {
+    "dose": 28.92964751277138,
+    "ratio": 1.1288264584238858,
+    "lower": 0.9901908179579141,
+    "upper": 1.2868723382688165
+   },
+   {
+    "dose": 30.147737934361754,
+    "ratio": 1.144059343469341,
+    "lower": 1.0029217300482274,
+    "upper": 1.3050587520090524
+   },
+   {
+    "dose": 31.67035096134972,
+    "ratio": 1.1631035383644086,
+    "lower": 1.0194388703172395,
+    "upper": 1.327014184317718
+   },
+   {
+    "dose": 33.19296398833769,
+    "ratio": 1.1821577300111694,
+    "lower": 1.0366245950262736,
+    "upper": 1.3481224595001442
+   },
+   {
+    "dose": 34.71557701532566,
+    "ratio": 1.2012298639468555,
+    "lower": 1.054421455223641,
+    "upper": 1.3684785897416445
+   },
+   {
+    "dose": 36.23819004231362,
+    "ratio": 1.2203288538613193,
+    "lower": 1.0727159627768503,
+    "upper": 1.3882542660328339
+   },
+   {
+    "dose": 37.76080306930159,
+    "ratio": 1.2394645907078343,
+    "lower": 1.0913387482889654,
+    "upper": 1.4076953411827031
+   },
+   {
+    "dose": 39.28341609628956,
+    "ratio": 1.25864795222747,
+    "lower": 1.1100646351730543,
+    "upper": 1.4271193022912891
+   },
+   {
+    "dose": 40.806029123277526,
+    "ratio": 1.277890813100236,
+    "lower": 1.1286154857895927,
+    "upper": 1.4469099093244433
+   },
+   {
+    "dose": 42.32864215026549,
+    "ratio": 1.2972060559417269,
+    "lower": 1.1466692666615288,
+    "upper": 1.4675055837775401
+   },
+   {
+    "dose": 43.85125517725346,
+    "ratio": 1.3166075833694877,
+    "lower": 1.163878561206176,
+    "upper": 1.4893783478489286
+   },
+   {
+    "dose": 45.373868204241425,
+    "ratio": 1.3361103313690192,
+    "lower": 1.1798997317681936,
+    "upper": 1.5130021386781312
+   },
+   {
+    "dose": 46.896481231229394,
+    "ratio": 1.3557302841952796,
+    "lower": 1.1944296823504053,
+    "upper": 1.5388135698933556
+   },
+   {
+    "dose": 48.41909425821736,
+    "ratio": 1.3754844910517678,
+    "lower": 1.207242153715434,
+    "upper": 1.5671732297461713
+   },
+   {
+    "dose": 49.941707285205325,
+    "ratio": 1.3953910847961286,
+    "lower": 1.2182131205876154,
+    "upper": 1.5983379645339137
+   },
+   {
+    "dose": 51.464320312193294,
+    "ratio": 1.4154693029285907,
+    "lower": 1.227327923001693,
+    "upper": 1.6324515314807082
+   },
+   {
+    "dose": 52.98693333918126,
+    "ratio": 1.4357395111277327,
+    "lower": 1.234669986064822,
+    "upper": 1.6695537812361443
+   },
+   {
+    "dose": 54.50954636616923,
+    "ratio": 1.4562232296071393,
+    "lower": 1.2403975717756903,
+    "upper": 1.709601939490839
+   },
+   {
+    "dose": 56.032159393157194,
+    "ratio": 1.4769431625766374,
+    "lower": 1.2447171688554723,
+    "upper": 1.7524953941847359
+   },
+   {
+    "dose": 57.55477242014516,
+    "ratio": 1.497923231103191,
+    "lower": 1.2478600607727617,
+    "upper": 1.7980974604549187
+   },
+   {
+    "dose": 59.07738544713313,
+    "ratio": 1.5191883038930762,
+    "lower": 1.2500638848959653,
+    "upper": 1.8462521240485208
+   },
+   {
+    "dose": 60.5999984741211,
+    "ratio": 1.5407545748938356,
+    "lower": 1.2515237935518368,
+    "upper": 1.8968274293204306
+   }
+  ],
+  "tests": {
+   "overall": {
+    "p": {
+     "value": 0.00000305,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "sentence": "剂量与效应有关的总体检验 P = 0.00000305"
+   },
+   "nonlinearity": {
+    "p": {
+     "value": 0.07845148,
+     "text": null,
+     "unit": null,
+     "source": "aggregate",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": null,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    }
+   }
+  },
+  "heterogeneity": {
+   "i2": {
+    "value": 0,
+    "text": null,
+    "unit": "%",
+    "source": "aggregate",
+    "interval": null,
+    "mcse": null,
+    "review": "ai_set",
+    "precision": 1,
+    "reason": null,
+    "stale": false,
+    "detail": null
+   },
+   "sentence": "研究之间的差异：I² = 0%（Q 检验 P = 0.486）。"
+  },
+  "excluded": [],
+  "note": "这是研究之间的剂量反应关系，说的是人群，不是对某一个人的预测。",
+  "premises": [
+   {
+    "key": "model",
+    "label": "剂量和效应的关系",
+    "value": "限制性立方样条，节点在剂量 0、8.87、22.8、58.4",
+    "source": "given",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "reference",
+    "label": "比较的参照剂量",
+    "value": "0 g/day",
+    "source": "given",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "covariance",
+    "label": "同一研究里各水平的相关性",
+    "value": "用各水平的病例数和人数还原（Greenland–Longnecker 的方法）",
+    "source": "given",
+    "decisive": false,
+    "reason": null
+   },
+   {
+    "key": "stage",
+    "label": "合并方式",
+    "value": "两步法：先各研究分别拟合，再合并；限制性最大似然",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   }
+  ]
+ },
+ "shrinkage": {
+  "id": "res_shrinkage",
+  "version": 1,
+  "label": "phase 2 hazard ratio",
+  "title": "已发表效应的对照：phase 2 hazard ratio",
+  "question": "这个已发表的效应，放到 Cochrane 里同类试验的总体中看，会打几折？再做一次还能不能成功？",
+  "scaleWord": "比值",
+  "rows": [
+   {
+    "id": "phase2",
+    "stated": {
+     "value": {
+      "value": 0.66,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "z": {
+      "value": -2.18692339,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "p": {
+      "value": 0.02874812,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     }
+    },
+    "shrunken": {
+     "value": {
+      "value": 0.76139602,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": {
+       "kind": "credible",
+       "low": 0.528,
+       "high": 1.043,
+       "level": 95
+      },
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 3,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "factor": {
+      "value": 65.60566181,
+      "text": null,
+      "unit": "%",
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 1,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     }
+    },
+    "exaggeration": {
+     "median": {
+      "value": 1.57999073,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "quartiles": {
+      "low": {
+       "value": 1.05270114,
+       "text": null,
+       "unit": null,
+       "source": "calculated",
+       "interval": null,
+       "mcse": null,
+       "review": "ai_set",
+       "precision": null,
+       "reason": null,
+       "stale": false,
+       "detail": null
+      },
+      "high": {
+       "value": 2.90774775,
+       "text": null,
+       "unit": null,
+       "source": "calculated",
+       "interval": null,
+       "mcse": null,
+       "review": "ai_set",
+       "precision": null,
+       "reason": null,
+       "stale": false,
+       "detail": null
+      }
+     },
+     "estimateLarger": {
+      "value": 78.30563316,
+      "text": null,
+      "unit": "%",
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 1,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     }
+    },
+    "correctSign": {
+     "value": 94.96938821,
+     "text": null,
+     "unit": "%",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "replication": {
+     "value": 34.72518007,
+     "text": null,
+     "unit": "%",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "futureSuccess": {
+     "se": 0.12,
+     "value": {
+      "value": 55.63351055,
+      "text": null,
+      "unit": "%",
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 1,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     }
+    },
+    "degenerate": false,
+    "sentence": "你写的值是 0.66（z = -2.19）；Cochrane 里同类试验的总体读下来，真实的比值更可能是 0.761，保留了估计中约 66% 的效应；估计比真实效应大的倍数，中位约 1.6；方向正确的概率约 95%；同样精度的试验再做一次，仍然显著（P < 0.05）且方向一致的概率约 35%；新试验的标准误是 0.12 时，这个概率约 56%。"
+   },
+   {
+    "id": "other",
+    "stated": {
+     "value": {
+      "value": 0.95122942,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "z": {
+      "value": -0.25,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "p": {
+      "value": 0.80258735,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     }
+    },
+    "shrunken": {
+     "value": {
+      "value": 0.97405702,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": {
+       "kind": "credible",
+       "low": 0.719,
+       "high": 1.296,
+       "level": 95
+      },
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 3,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "factor": {
+      "value": 52.57086685,
+      "text": null,
+      "unit": "%",
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 1,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     }
+    },
+    "exaggeration": {
+     "median": {
+      "value": 0.54414804,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "quartiles": {
+      "low": {
+       "value": 0.30924952,
+       "text": null,
+       "unit": null,
+       "source": "calculated",
+       "interval": null,
+       "mcse": null,
+       "review": "ai_set",
+       "precision": null,
+       "reason": null,
+       "stale": false,
+       "detail": null
+      },
+      "high": {
+       "value": 1.16591969,
+       "text": null,
+       "unit": null,
+       "source": "calculated",
+       "interval": null,
+       "mcse": null,
+       "review": "ai_set",
+       "precision": null,
+       "reason": null,
+       "stale": false,
+       "detail": null
+      }
+     },
+     "estimateLarger": {
+      "value": 28.94025374,
+      "text": null,
+      "unit": "%",
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": 1,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     }
+    },
+    "correctSign": {
+     "value": 56.97998024,
+     "text": null,
+     "unit": "%",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "replication": {
+     "value": 6.97617692,
+     "text": null,
+     "unit": "%",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "futureSuccess": null,
+    "degenerate": false,
+    "sentence": "你写的值是 0.951（z = -0.25）；Cochrane 里同类试验的总体读下来，真实的比值更可能是 0.974，保留了估计中约 53% 的效应；估计比真实效应大的倍数，中位约 0.54；方向正确的概率约 57%；同样精度的试验再做一次，仍然显著（P < 0.05）且方向一致的概率约 7%。"
+   }
+  ],
+  "population": "the primary efficacy results of 23,551 randomized trials of the Cochrane Database of Systematic Reviews",
+  "note": "这是一条对照线：你写的值保持原样，设计和假设卡不会改用它。它描述的是总体中“这样的 z 统计量”的试验，不是这一种药；机制很强的药，它可能收缩得过多。",
+  "premises": [
+   {
+    "key": "population",
+    "label": "拿来对照的总体",
+    "value": "Cochrane 数据库里 23,551 项随机对照试验的主要疗效结果（van Zwet 等，2023）：各种干预、各种样本量，不是某一种药",
+    "source": "literature",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "scale",
+    "label": "估计的尺度",
+    "value": "比值取对数后（零效应在 0）",
+    "source": "given",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "replication",
+    "label": "“重复”指什么",
+    "value": "用同样精度、同样的真实效应再做一次，双侧 P < 0.05 且方向与原来一致",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   }
+  ]
+ },
+ "shrinkage-null": {
+  "id": "res_shrinkage-null",
+  "version": 1,
+  "label": null,
+  "title": "已发表效应的对照",
+  "question": "这个已发表的效应，放到 Cochrane 里同类试验的总体中看，会打几折？再做一次还能不能成功？",
+  "scaleWord": "差值",
+  "rows": [
+   {
+    "id": "value1",
+    "stated": {
+     "value": {
+      "value": 0,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "z": {
+      "value": 0,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     },
+     "p": {
+      "value": 1,
+      "text": null,
+      "unit": null,
+      "source": "calculated",
+      "interval": null,
+      "mcse": null,
+      "review": "ai_set",
+      "precision": null,
+      "reason": null,
+      "stale": false,
+      "detail": null
+     }
+    },
+    "shrunken": null,
+    "exaggeration": null,
+    "correctSign": {
+     "value": 50,
+     "text": null,
+     "unit": "%",
+     "source": "calculated",
+     "interval": null,
+     "mcse": null,
+     "review": "ai_set",
+     "precision": 1,
+     "reason": null,
+     "stale": false,
+     "detail": null
+    },
+    "replication": null,
+    "futureSuccess": null,
+    "degenerate": true,
+    "sentence": "估计恰为 0，没有方向可言：只能说方向对错各一半。"
+   }
+  ],
+  "population": "the primary efficacy results of 23,551 randomized trials of the Cochrane Database of Systematic Reviews",
+  "note": "这是一条对照线：你写的值保持原样，设计和假设卡不会改用它。它描述的是总体中“这样的 z 统计量”的试验，不是这一种药；机制很强的药，它可能收缩得过多。",
+  "premises": [
+   {
+    "key": "population",
+    "label": "拿来对照的总体",
+    "value": "Cochrane 数据库里 23,551 项随机对照试验的主要疗效结果（van Zwet 等，2023）：各种干预、各种样本量，不是某一种药",
+    "source": "literature",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "scale",
+    "label": "估计的尺度",
+    "value": "差值（零效应在 0）",
+    "source": "given",
+    "decisive": true,
+    "reason": null
+   },
+   {
+    "key": "replication",
+    "label": "“重复”指什么",
+    "value": "用同样精度、同样的真实效应再做一次，双侧 P < 0.05 且方向与原来一致",
+    "source": "default",
+    "decisive": false,
+    "reason": null
+   }
+  ]
+ },
+ "successRates": {
+  "title": "历史上这一阶段的通过率",
+  "note": "这是过去的研发项目通过这个阶段的比例，不是这个试验成功的概率。两个来源统计的方法不同，所以并排列出，不要合并。",
+  "sources": [
+   {
+    "id": "bio_2011_2020",
+    "label": "BIO / Informa / QLS（2011–2020）",
+    "citation": "Biotechnology Innovation Organization, Informa Pharma Intelligence, QLS Advisors. Clinical Development Success Rates and Contributing Factors 2011-2020. February 2021",
+    "data": "2011 年 1 月至 2020 年 11 月，1,779 家公司 9,704 个研发项目的 12,728 次阶段转换（Biomedtracker），限企业发起、面向 FDA 注册的项目",
+    "method": "按阶段统计：某阶段通过的项目数，除以通过和终止的项目数之和；获批可能性是各阶段通过率的乘积",
+    "endpoint": "三期统计到提交上市申请；“获批可能性”一栏统计到获得 FDA 批准"
+   },
+   {
+    "id": "wong_2019",
+    "label": "Wong / Siah / Lo（2019）",
+    "citation": "Wong CH, Siah KW, Lo AW. Estimation of clinical trial success rates and related parameters. Biostatistics 2019;20(2):273-286. doi:10.1093/biostatistics/kxx069; corrigendum Biostatistics 2019;20(2):366",
+    "data": "2000 年 1 月至 2015 年 10 月，18.6 万项试验、21,143 个化合物（Trialtrove 与 Pharmaprojects），限企业发起",
+    "method": "按路径统计：用试验记录还原每个研发项目走过的阶段并补全缺失的步骤，某阶段的通过率是从该阶段开始并继续往下走的路径所占的比例",
+    "endpoint": "三期统计到获批（含申报）；一期、二期既给出进入下一期的比例，也给出到获批的比例"
+   }
+  ],
+  "phases": [
+   {
+    "id": "phase1",
+    "label": "一期"
+   },
+   {
+    "id": "phase2",
+    "label": "二期"
+   },
+   {
+    "id": "phase3",
+    "label": "三期"
+   }
+  ],
+  "areas": [
+   {
+    "id": "all",
+    "label": "全部适应症",
+    "wongGroup": "全部适应症",
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "52%",
+        "n": 4414
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "7.9%",
+        "n": 12728
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "66.4%",
+        "n": 41040
+       },
+       "toApproval": {
+        "text": "13.8%",
+        "n": null
+       }
+      }
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "28.9%",
+        "n": 4933
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "15.1%",
+        "n": 8314
+       }
+      },
+      "wong": {
+       "toNext": null,
+       "toApproval": {
+        "text": "35.1%",
+        "n": 21180
+       }
+      }
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "57.8%",
+        "n": 1928
+       },
+       "toApproval": {
+        "text": "52.4%",
+        "n": 3381
+       }
+      },
+      "wong": {
+       "toNext": null,
+       "toApproval": {
+        "text": "59%",
+        "n": 7532
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "oncology",
+    "label": "肿瘤",
+    "wongGroup": "肿瘤",
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "48.8%",
+        "n": 1628
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "5.3%",
+        "n": 4179
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "57.6%",
+        "n": 17368
+       },
+       "toApproval": {
+        "text": "3.4%",
+        "n": null
+       }
+      }
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "24.6%",
+        "n": 1732
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "10.8%",
+        "n": 2551
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "32.7%",
+        "n": 6533
+       },
+       "toApproval": {
+        "text": "6.7%",
+        "n": 6533
+       }
+      }
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "47.7%",
+        "n": 495
+       },
+       "toApproval": {
+        "text": "43.9%",
+        "n": 819
+       }
+      },
+      "wong": {
+       "toNext": null,
+       "toApproval": {
+        "text": "35.5%",
+        "n": 1236
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "hematology",
+    "label": "血液",
+    "wongGroup": null,
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "69.6%",
+        "n": 92
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "23.9%",
+        "n": 352
+       }
+      },
+      "wong": null
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "48.1%",
+        "n": 106
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "34.4%",
+        "n": 260
+       }
+      },
+      "wong": null
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "76.8%",
+        "n": 82
+       },
+       "toApproval": {
+        "text": "71.5%",
+        "n": 154
+       }
+      },
+      "wong": null
+     }
+    }
+   },
+   {
+    "id": "cardiovascular",
+    "label": "心血管",
+    "wongGroup": "心血管",
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "50%",
+        "n": 214
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "4.8%",
+        "n": 651
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "73.3%",
+        "n": 2810
+       },
+       "toApproval": {
+        "text": "25.5%",
+        "n": null
+       }
+      }
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "21%",
+        "n": 252
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "9.6%",
+        "n": 437
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "65.7%",
+        "n": 1858
+       },
+       "toApproval": {
+        "text": "32.3%",
+        "n": 1858
+       }
+      }
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "55.2%",
+        "n": 105
+       },
+       "toApproval": {
+        "text": "45.6%",
+        "n": 185
+       }
+      },
+      "wong": {
+       "toNext": null,
+       "toApproval": {
+        "text": "62.2%",
+        "n": 964
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "neurology",
+    "label": "神经",
+    "wongGroup": "中枢神经（含精神）",
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "47.7%",
+        "n": 516
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "5.9%",
+        "n": 1411
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "73.2%",
+        "n": 4924
+       },
+       "toApproval": {
+        "text": "15%",
+        "n": null
+       }
+      }
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "26.8%",
+        "n": 504
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "12.3%",
+        "n": 895
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "51.9%",
+        "n": 3037
+       },
+       "toApproval": {
+        "text": "19.5%",
+        "n": 3037
+       }
+      }
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "53.1%",
+        "n": 226
+       },
+       "toApproval": {
+        "text": "46%",
+        "n": 391
+       }
+      },
+      "wong": {
+       "toNext": null,
+       "toApproval": {
+        "text": "51.1%",
+        "n": 1156
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "psychiatry",
+    "label": "精神",
+    "wongGroup": "中枢神经（含精神）",
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "52.7%",
+        "n": 150
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "7.3%",
+        "n": 442
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "73.2%",
+        "n": 4924
+       },
+       "toApproval": {
+        "text": "15%",
+        "n": null
+       }
+      }
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "26.8%",
+        "n": 164
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "13.8%",
+        "n": 292
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "51.9%",
+        "n": 3037
+       },
+       "toApproval": {
+        "text": "19.5%",
+        "n": 3037
+       }
+      }
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "56.3%",
+        "n": 71
+       },
+       "toApproval": {
+        "text": "51.4%",
+        "n": 128
+       }
+      },
+      "wong": {
+       "toNext": null,
+       "toApproval": {
+        "text": "51.1%",
+        "n": 1156
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "infectious_disease",
+    "label": "感染",
+    "wongGroup": "感染",
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "57.8%",
+        "n": 403
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "13.2%",
+        "n": 1170
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "70.1%",
+        "n": 3963
+       },
+       "toApproval": {
+        "text": "25.2%",
+        "n": null
+       }
+      }
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "38.4%",
+        "n": 414
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "22.8%",
+        "n": 767
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "58.3%",
+        "n": 2314
+       },
+       "toApproval": {
+        "text": "35.1%",
+        "n": 2314
+       }
+      }
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "64%",
+        "n": 197
+       },
+       "toApproval": {
+        "text": "59.4%",
+        "n": 353
+       }
+      },
+      "wong": {
+       "toNext": null,
+       "toApproval": {
+        "text": "75.3%",
+        "n": 1078
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "metabolic",
+    "label": "代谢",
+    "wongGroup": "代谢与内分泌",
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "61.8%",
+        "n": 136
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "15.5%",
+        "n": 399
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "76.2%",
+        "n": 3589
+       },
+       "toApproval": {
+        "text": "19.6%",
+        "n": null
+       }
+      }
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "45%",
+        "n": 149
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "25%",
+        "n": 263
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "59.7%",
+        "n": 2357
+       },
+       "toApproval": {
+        "text": "24.1%",
+        "n": 2357
+       }
+      }
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "63.6%",
+        "n": 66
+       },
+       "toApproval": {
+        "text": "55.7%",
+        "n": 114
+       }
+      },
+      "wong": {
+       "toNext": null,
+       "toApproval": {
+        "text": "51.6%",
+        "n": 1101
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "endocrine",
+    "label": "内分泌",
+    "wongGroup": "代谢与内分泌",
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "43.3%",
+        "n": 319
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "6.6%",
+        "n": 887
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "76.2%",
+        "n": 3589
+       },
+       "toApproval": {
+        "text": "19.6%",
+        "n": null
+       }
+      }
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "26.6%",
+        "n": 293
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "15.2%",
+        "n": 568
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "59.7%",
+        "n": 2357
+       },
+       "toApproval": {
+        "text": "24.1%",
+        "n": 2357
+       }
+      }
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "66.2%",
+        "n": 151
+       },
+       "toApproval": {
+        "text": "57.1%",
+        "n": 275
+       }
+      },
+      "wong": {
+       "toNext": null,
+       "toApproval": {
+        "text": "51.6%",
+        "n": 1101
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "autoimmune",
+    "label": "自身免疫",
+    "wongGroup": "自身免疫与炎症",
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "55.2%",
+        "n": 413
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "10.7%",
+        "n": 1305
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "69.8%",
+        "n": 5086
+       },
+       "toApproval": {
+        "text": "15.1%",
+        "n": null
+       }
+      }
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "31.4%",
+        "n": 471
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "19.3%",
+        "n": 892
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "45.7%",
+        "n": 2910
+       },
+       "toApproval": {
+        "text": "21.2%",
+        "n": 2910
+       }
+      }
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "65.3%",
+        "n": 219
+       },
+       "toApproval": {
+        "text": "61.4%",
+        "n": 421
+       }
+      },
+      "wong": {
+       "toNext": null,
+       "toApproval": {
+        "text": "63.7%",
+        "n": 969
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "respiratory",
+    "label": "呼吸",
+    "wongGroup": null,
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "55.9%",
+        "n": 179
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "7.5%",
+        "n": 501
+       }
+      },
+      "wong": null
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "21.9%",
+        "n": 215
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "13.5%",
+        "n": 322
+       }
+      },
+      "wong": null
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "64.5%",
+        "n": 62
+       },
+       "toApproval": {
+        "text": "61.6%",
+        "n": 107
+       }
+      },
+      "wong": null
+     }
+    }
+   },
+   {
+    "id": "gastroenterology",
+    "label": "消化（不含炎症性肠病）",
+    "wongGroup": null,
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "46.7%",
+        "n": 45
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "8.3%",
+        "n": 186
+       }
+      },
+      "wong": null
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "34.2%",
+        "n": 73
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "17.8%",
+        "n": 141
+       }
+      },
+      "wong": null
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "57.1%",
+        "n": 35
+       },
+       "toApproval": {
+        "text": "51.9%",
+        "n": 68
+       }
+      },
+      "wong": null
+     }
+    }
+   },
+   {
+    "id": "urology",
+    "label": "泌尿",
+    "wongGroup": "泌尿生殖",
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "40.9%",
+        "n": 22
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "3.6%",
+        "n": 88
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "68.7%",
+        "n": 757
+       },
+       "toApproval": {
+        "text": "21.6%",
+        "n": null
+       }
+      }
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "15%",
+        "n": 40
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "8.8%",
+        "n": 66
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "57.1%",
+        "n": 475
+       },
+       "toApproval": {
+        "text": "29.7%",
+        "n": 475
+       }
+      }
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "69.2%",
+        "n": 13
+       },
+       "toApproval": {
+        "text": "58.6%",
+        "n": 26
+       }
+      },
+      "wong": {
+       "toNext": null,
+       "toApproval": {
+        "text": "66.5%",
+        "n": 212
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "ophthalmology",
+    "label": "眼科",
+    "wongGroup": "眼科",
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "71.6%",
+        "n": 88
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "11.9%",
+        "n": 415
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "87.1%",
+        "n": 674
+       },
+       "toApproval": {
+        "text": "32.6%",
+        "n": null
+       }
+      }
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "35.5%",
+        "n": 200
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "16.6%",
+        "n": 327
+       }
+      },
+      "wong": {
+       "toNext": {
+        "text": "60.7%",
+        "n": 461
+       },
+       "toApproval": {
+        "text": "33.6%",
+        "n": 461
+       }
+      }
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "51.2%",
+        "n": 82
+       },
+       "toApproval": {
+        "text": "46.7%",
+        "n": 127
+       }
+      },
+      "wong": {
+       "toNext": null,
+       "toApproval": {
+        "text": "74.9%",
+        "n": 207
+       }
+      }
+     }
+    }
+   },
+   {
+    "id": "allergy",
+    "label": "过敏",
+    "wongGroup": null,
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "56.4%",
+        "n": 55
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "10.3%",
+        "n": 201
+       }
+      },
+      "wong": null
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "28.3%",
+        "n": 92
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "18.3%",
+        "n": 146
+       }
+      },
+      "wong": null
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "64.7%",
+        "n": 34
+       },
+       "toApproval": {
+        "text": "64.7%",
+        "n": 54
+       }
+      },
+      "wong": null
+     }
+    }
+   },
+   {
+    "id": "other",
+    "label": "其他（皮肤、肾、产科、非自身免疫的风湿、耳鼻喉口腔、骨科）",
+    "wongGroup": null,
+    "phases": {
+     "phase1": {
+      "bio": {
+       "toNext": {
+        "text": "63.6%",
+        "n": 154
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "13%",
+        "n": 541
+       }
+      },
+      "wong": null
+     },
+     "phase2": {
+      "bio": {
+       "toNext": {
+        "text": "38.6%",
+        "n": 228
+       },
+       "toFiling": null,
+       "toApproval": {
+        "text": "20.5%",
+        "n": 387
+       }
+      },
+      "wong": null
+     },
+     "phase3": {
+      "bio": {
+       "toNext": null,
+       "toFiling": {
+        "text": "60%",
+        "n": 90
+       },
+       "toApproval": {
+        "text": "53%",
+        "n": 159
+       }
+      },
+      "wong": null
+     }
+    }
+   }
+  ]
+ }
+}

@@ -66,9 +66,12 @@ export async function signedIn(overrides = {}) {
   const dataDir = await mkdtemp(path.join("/tmp", "evimed-kb-app-"));
   const documentParserFetch = async (/** @type {any} */ _url, /** @type {any} */ init) => {
     const name = init.body.get("filename");
-    const { title, content, pages } = parsedDocument(name);
+    const document = fixture.documents.find((/** @type {any} */ entry) => entry.name === name);
+    // As engine A answers: the pages inline under `[Page N]` lines, the title in `metadata`.
+    const content = document.pages.map((/** @type {string} */ page, /** @type {number} */ index) => `[Page ${index + 1}]\n${page}`).join("\n");
     return new Response(JSON.stringify({ code: 200, message: "success", uuid: "U", timestamp: 1, elapsed_ms: 1,
-      data: { title, content, pages } }), { status: 200 });
+      data: { content, format: "pdf", media_type: "application/pdf", metadata: { title: document.title },
+        parse_info: { parser: "native-pdf", parser_version: "13", page_count: document.pages.length, ocr_pages: [], warnings: [] } } }), { status: 200 });
   };
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
     bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl,

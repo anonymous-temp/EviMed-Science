@@ -368,7 +368,7 @@ test("an archive that carries anything but the declared text entries is refused 
   const entry = { id: randomUUID(), version: 1, factKind: "method_preference", layer: "methods", content: entries[0].payload.content, path: "", origin: "explicit" };
   entry.path = `methods/${entry.id}/SKILL.md`;
   entry.sha256 = (await import("node:crypto")).createHash("sha256").update(entry.content).digest("hex");
-  const files = renderCapsuleTransferFiles(snapshotId, [entry]);
+  const files = renderCapsuleTransferFiles(snapshotId, [entry], 1);
   /** @param {{ path: string, mime: string, content: string }[]} extra */
   const archive = async (extra) => {
     const container = await packCapsule({ capsuleId: snapshotId, version: 1, createdAt: new Date().toISOString(),
@@ -705,4 +705,12 @@ test("a run that used an uncorroborated guest capsule still learns for its own a
   // learned in a marked run, and takes one learned in a run whose pack another account had vouched for.
   const marked = await guestMarkedRuns(database, alice, [guestA.id, guestB.id, vouchedA.id, vouchedB.id]);
   assert.deepEqual([...marked].sort(), [guestA.id, guestB.id].sort(), "only the runs that used an uncorroborated pack are marked");
+});
+
+
+test("delivery and link preserve explicit private selections through their own whitelist", options, async () => {
+  const { capsule } = await authored("Share selection wiring");
+  const includePrivateEntries = [{ id: "native:nm_aaaaaaaaaaaaaaaaaaaaaaaa", sha256: "a".repeat(64) }];
+  await assert.rejects(sharing.deliver(author, capsule.id, { recipients: [alice], scopes: ["workstyle"], includePrivateEntries }), { code: "capsule_private_selection_changed" });
+  await assert.rejects(sharing.createLink(author, capsule.id, { scopes: ["workstyle"], includePrivateEntries }), { code: "capsule_private_selection_changed" });
 });

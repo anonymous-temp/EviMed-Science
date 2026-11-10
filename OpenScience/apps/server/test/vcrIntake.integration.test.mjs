@@ -446,6 +446,70 @@ test("AC-32 outcome fields are sealed at freeze under a confirmatory use, withhe
   assert.equal(again.planFrozenAt, frozenPlan.planFrozenAt);
 });
 
+/** A registry with one row per person and period: 30 people, six periods at most, a treatment that may start, an event that ends the record. */
+function personPeriodCsv() {
+  const rows = ["PATIENT_NO,PERIOD,TREATED,EVENT,ELIGIBLE,AGE"];
+  for (let n = 1; n <= 30; n += 1) {
+    for (let period = 1; period <= 6; period += 1) {
+      const treated = period >= 2 + (n % 3) && n % 2 === 0 ? 1 : 0;
+      const event = (n * 7 + period * 3) % 23 === 0 ? 1 : 0;
+      rows.push(`P-${100 + n},${period},${treated},${event},1,${40 + (n % 30)}`);
+      if (event) break;
+    }
+  }
+  return `${rows.join("\n")}\n`;
+}
+const personPeriodMap = (/** @type {boolean} */ flagged) => [
+  { table: "registry.csv", column: "PATIENT_NO", role: "subject_key", identifier: true },
+  { table: "registry.csv", column: "PERIOD", role: "visit_date" },
+  { table: "registry.csv", column: "TREATED", role: "measurement", parameter: "treatment" },
+  { table: "registry.csv", column: "EVENT", role: "measurement", parameter: "outcome", ...(flagged ? { outcome: true } : {}) },
+  { table: "registry.csv", column: "ELIGIBLE", role: "measurement", parameter: "eligible" },
+  { table: "registry.csv", column: "AGE", role: "measurement", parameter: "age" },
+];
+async function seedRegistry(/** @type {any} */ study, /** @type {boolean} */ flagged) {
+  const source = await vcr.dataPlane.registerSource({ userId: OWNER, studyId: study.id, name: "每期一行的登记库", ownerParty: "合作方医院", allowedUses: ["vcr"], valueSource: "observed" });
+  await upload(study, source.id, "registry.csv", personPeriodCsv());
+  const proposed = await vcr.dataPlane.proposeFieldMap({ actor: OWNER, studyId: study.id, sourceId: source.id, columns: personPeriodMap(flagged) });
+  assert.deepEqual([proposed.entryIssues, proposed.mapIssues], [[], []]);
+  await vcr.dataPlane.confirmFieldMap({ actor: OWNER, studyId: study.id, sourceId: source.id, hash: proposed.hash });
+  return (await vcr.dataPlane.freezeSnapshot({ userId: OWNER, studyId: study.id, sourceId: source.id })).snapshot;
+}
+
+test("AC-32 a person-period table mapped as the notes say (the outcome marked outcome: true) is sealed until the plan is frozen, and the first read is recorded (review RF2 P1-7)", options, async () => {
+  const study = await seedStudy({ intendedUse: "specified_analysis" });
+  const snapshot = await seedRegistry(study, true);
+  assert.deepEqual(snapshot.sealedFields, ["EVENT"], "the outcome column of the person-period file is sealed the moment the snapshot exists");
+  const ask = () => vcr.dataPlane.resolveSnapshotInputs({ studyId: study.id, snapshotId: snapshot.id, principal: OWNER, purpose: "vcr", jobKind: "target_trial_emulation" });
+  // Before the plan is frozen the longitudinal table holds the outcome and is not handed to the engine; the refusal is the seal's, and nothing was read.
+  await assert.rejects(ask, (error) => error.status === 403 && [VCR_DATA_PLANE_CODES.snapshotWithheld, "vcr_field_sealed"].includes(error.code));
+  assert.equal((await vcr.store.studyById(study.id)).outcomeSeal.outcomeFirstReadAt, undefined, "a refused read is not a read");
+  // The plan is frozen: the table is handed over and the first read of the outcome is recorded, after the plan.
+  const frozenPlan = await vcr.seal.freezePlan({ studyId: study.id, plan: { estimand: { variable: "event" }, endpoint: { type: "binary" }, analysis: { method: "comparator.target_trial" }, intendedUse: "specified_analysis" }, actor: OWNER });
+  assert.ok(frozenPlan.planFrozenAt);
+  const read = await ask();
+  assert.ok(read.inputs.some((input) => input.shape === "longitudinal"));
+  assert.deepEqual(read.outcomeFieldsRead, ["EVENT"]);
+  const state = await vcr.seal.sealState(study.id);
+  assert.ok(state.outcomeFirstReadAt && Date.parse(state.outcomeFirstReadAt) > Date.parse(state.planFrozenAt), "the access is on the record, after the plan");
+  assert.equal(state.ordered, true);
+});
+
+test("a target trial's named outcome parameter is sealed whether or not the map flagged it: refused before the plan is frozen, the first read recorded after (review finding 3)", options, async () => {
+  const study = await seedStudy({ intendedUse: "specified_analysis" });
+  const snapshot = await seedRegistry(study, false);
+  assert.deepEqual(snapshot.sealedFields, [], "the unflagged map seals nothing when the snapshot is frozen");
+  const ask = (/** @type {Record<string, any>} */ extra = {}) => vcr.dataPlane.resolveSnapshotInputs({ studyId: study.id, snapshotId: snapshot.id, principal: OWNER, purpose: "vcr", jobKind: "target_trial_emulation", ...extra });
+  // the job names the parameter it takes as its outcome: its source column is sealed by that, and the refusal is the seal's
+  await assert.rejects(() => ask({ outcomeParameter: "outcome" }), (error) => error.status === 403 && [VCR_DATA_PLANE_CODES.snapshotWithheld, "vcr_field_sealed"].includes(error.code));
+  assert.equal((await vcr.store.studyById(study.id)).outcomeSeal.outcomeFirstReadAt, undefined, "a refused read is not a read");
+  await vcr.seal.freezePlan({ studyId: study.id, plan: { estimand: { variable: "event" }, endpoint: { type: "binary" }, analysis: { method: "comparator.target_trial" }, intendedUse: "specified_analysis" }, actor: OWNER });
+  const read = await ask({ outcomeParameter: "outcome" });
+  assert.deepEqual(read.outcomeFieldsRead, ["EVENT"], "the read of the outcome is on the record");
+  const state = await vcr.seal.sealState(study.id);
+  assert.ok(state.outcomeFirstReadAt && Date.parse(state.outcomeFirstReadAt) > Date.parse(state.planFrozenAt), "after the plan");
+});
+
 test("AC-32 the first outcome read is the first, whatever the interleaving: the seal is written under a lock", options, async () => {
   const study = await seedStudy({ intendedUse: "specified_analysis" });
   await vcr.seal.freezePlan({ studyId: study.id, plan: { endpoint: { type: "time_to_event" }, intendedUse: "specified_analysis" }, actor: OWNER });

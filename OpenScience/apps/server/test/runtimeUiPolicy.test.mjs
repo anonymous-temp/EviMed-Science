@@ -42,7 +42,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, beforeDataCleanup = null, shared = null } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, beforeDataCleanup = null, shared = null, sourceDeletion = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const peers = new Set(), clients = new Set();
   let upstream, wss, ui;
@@ -118,7 +118,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     return { project, principal };
   } : null;
   if (shared) { manager.subagentCatalogue = async () => shared.children ?? []; manager.runtimeGeneration = () => 'generation'; }
-  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, recordPromptAttendance, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt, recordUploadSuccess, noteFileRead,
+  ui = createRuntimeUiServer({ config, store, runtimeManager: manager, sourceDeletion, authorizePrompt, preparePrompt, recordPromptActor, recordPromptAttendance, agentRuns, audit, managedBrowser, balanceGate, recordUploadAttempt, recordUploadSuccess, noteFileRead,
     resolveDelegatedFrame,
     createDelegatedPolicy: shared ? async identity => new GeoNativeFramePolicy({ ...identity, config, runtimeManager: manager,
       authority: { withFrame: async (actor, claims, operation) => {
@@ -1194,7 +1194,7 @@ test("a scoped settings response rechecks membership, runtime generation and fra
 test("the chat's presentation reaches the page through the one settings read, and the rest of the kernel's document does not", { timeout: 5000 }, async (t) => {
   // A hosted conversation drew the web client's default work details (`detailed`: every step flat while the turn runs)
   // because the page's only settings read was denied with the namespace (2026-10-28). The kernel's answer is the recorded
-  // one (packages/contracts/dsh/fixtures, a live 0.2.1-rc.5 with the profile's `ui-chat` values in its patch): 21 views,
+  // one (packages/contracts/dsh/fixtures, a live 0.2.2-rc.1 with the profile's `ui-chat` values in its patch): 21 views,
   // among them the model provider, the web tools' endpoints, the sandbox and the permission table.
   const recorded = await readFile(new URL("../../../packages/contracts/dsh/fixtures/settings-describe.json", import.meta.url), "utf8");
   const views = JSON.parse(recorded).result.value.namespaces;
@@ -1207,11 +1207,14 @@ test("the chat's presentation reaches the page through the one settings read, an
   const answer = JSON.parse(text);
   assert.deepEqual(answer, {
     type: "server-response", rpcId: "r1",
-    result: { ok: true, value: { writable: false, hasDocument: false, namespaces: [views.find((view) => view.ns === "ui-chat")] } },
+    result: { ok: true, value: { writable: false, hasDocument: false, namespaces: views.filter((view) => ["ui-chat", "ui-settings"].includes(view.ns)) } },
   });
+  // `ui-settings` is the developer-tools boolean the page reads for the trajectory tab: absent, the page reads false.
+  assert.deepEqual(answer.result.value.namespaces.find((/** @type {any} */ view) => view.ns === "ui-settings").value, { enabled: true });
   // What the chat adopts is `value`, and it is the profile's.
+  const chatView = answer.result.value.namespaces.find((/** @type {any} */ view) => view.ns === "ui-chat");
   assert.deepEqual(
-    { transcriptView: answer.result.value.namespaces[0].value.transcriptView, linkOpening: answer.result.value.namespaces[0].value.linkOpening },
+    { transcriptView: chatView.value.transcriptView, linkOpening: chatView.value.linkOpening },
     CHAT_PRESENTATION,
   );
   for (const leaked of ["llm-deepseek", "bash-sandbox", "permission", "api.deepseek.com", "DEEPSEEK_API_KEY"]) {
@@ -1219,7 +1222,7 @@ test("the chat's presentation reaches the page through the one settings read, an
   }
   assert.deepEqual(seen, [{ path: "/api/settings/describe", call: settingsRead("r1") }], "the kernel got the page's call as it was sent");
   assert.ok(isDeniedRuntimeUiMethod(RUNTIME_UI_SETTINGS_READ), "the namespace stays denied: this is an exception on one transport, not an opening");
-  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat"]);
+  assert.deepEqual(RUNTIME_UI_READABLE_SETTINGS, ["ui-chat", "ui-settings"]);
 });
 
 test("anything but the exact settings read is refused before the kernel, and every settings write stays refused", { timeout: 5000 }, async (t) => {
@@ -1422,6 +1425,57 @@ test("a workspace-file read is held to the workspace on both transports, and the
   assert.equal((await c.next()).type, "end");
   assert.equal(arrived.length, inside.length, "nothing outside the workspace reached the runtime");
   assert.equal(f.received.filter((frame) => frame.type === "open").length, inside.length);
+});
+
+test("a scheduled task from the page is forwarded, and one that would open its conversations outside this project is refused, on both transports", { timeout: 5000 }, async (t) => {
+  // The kernel's automation tasks are the product's scheduled tasks (2026-11-04), so `schedule/*` reaches the runtime. `target.create`
+  // names where a task's conversations open; the proxy holds it to this workspace and this composition (`runtimeUiScheduleRefusal`).
+  const f = await fixture(t);
+  const c = f.connect({ Origin: SHELL_ORIGIN });
+  assert.equal(await c.opened, 101);
+  const arrived = [];
+  f.manager.proxy = async (req, res) => { arrived.push([new URL(req.url, "http://ui.local").pathname, req.__openScienceProxyBody?.toString("utf8") ?? null]); res.writeHead(200); res.end("{}"); };
+  const root = f.manager.runtimeWorkspaceRoot(await f.store.requireProject(f.user, "default"));
+  const call = (endpoint, args) => fetch(`${f.base}/api/${endpoint}`, {
+    method: "POST", headers: { Cookie: f.cookie, Origin: UI_ORIGIN, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: "r1", method: endpoint, payload: { args } }),
+  });
+  const task = (target) => ({ request: { title: "t", prompt: "p", timing: { kind: "rrule", rrule: "FREQ=DAILY" }, ...(target ? { target } : {}) } });
+  const inside = [
+    ["schedule/list", { request: { limit: 500 } }],
+    ["schedule/create", task()],
+    ["schedule/create", task({ kind: "new", create: {} })],
+    ["schedule/create", task({ kind: "new_once", create: { cwd: root, agentPreset: "evimed-universal" } })],
+    ["schedule/create", task({ kind: "new", create: { cwd: "analysis" } })],
+    ["schedule/edit", { request: { id: "sch_1", action: "update", patch: { active: false } } }],
+    ["schedule/edit", { request: { id: "sch_1", action: "delete" } }],
+  ];
+  for (const [index, [endpoint, args]] of inside.entries()) {
+    assert.equal((await call(endpoint, args)).status, 200, `${endpoint} ${JSON.stringify(args)} is forwarded`);
+    c.send(open(`in${index}`, endpoint, args));
+    assert.deepEqual((await c.next()).value, { reached: endpoint });
+  }
+  assert.equal(arrived.length, inside.length);
+  assert.ok(arrived.filter(([pathname]) => /schedule\/(create|edit)$/.test(pathname)).every(([, body]) => body && body.includes("request")), "the body read for the check is the body forwarded");
+  const outside = [
+    ["schedule/create", task({ kind: "new", create: { cwd: "/etc" } })],
+    ["schedule/create", task({ kind: "new", create: { cwd: `${root}/../other` } })],
+    ["schedule/create", task({ kind: "new_once", create: { agentPreset: "default" } })],
+    ["schedule/create", task({ kind: "new", create: { cwd: root, agentPreset: "other" } })],
+    ["schedule/edit", { request: { id: "sch_1", action: "update", patch: { target: { kind: "new", create: { cwd: "/" } } } } }],
+    ["schedule/edit", { request: { id: "sch_1", action: "update", patch: { target: { kind: "new", create: { agentPreset: "default" } } } } }],
+    ["schedule/create", {}],
+    ["schedule/edit", { request: "not an object" }],
+  ];
+  for (const [index, [endpoint, args]] of outside.entries()) {
+    const response = await call(endpoint, args);
+    assert.equal(response.status, 403, `${endpoint} ${JSON.stringify(args)}`);
+    assert.equal((await response.json()).error?.code, "runtime_ui_method_denied", endpoint);
+    c.send(open(`out${index}`, endpoint, args));
+    assert.equal((await c.next()).error?.code, "runtime_ui_method_denied", endpoint);
+    assert.equal((await c.next()).type, "end");
+  }
+  assert.equal(arrived.length, inside.length, "nothing that names a destination outside the project reached the runtime");
 });
 
 test("a file opened in the kernel's own file panel is noted as opened, on both transports, with a workspace-relative path; a listing, a stat, an embedded asset and a refused path are not", { timeout: 5000 }, async (t) => {
@@ -2614,4 +2668,72 @@ test('native Remote file-upload fallback retains only upstream-confirmed origina
     value: { receiptId: 'native-receipt', file: { attachmentId: 'native-attachment', name: 'cases.csv', bytes: bytes.length } } }));
   await c.next();
   assert.equal(successes.length, 1); assert.deepEqual(successes[0].bytes, bytes); assert.equal(successes[0].sessionId, 's1');
+});
+
+test('a shared native frame reads the skill catalogue and the GoalBar of its own conversation, projected, and nothing of another', { timeout: 10000 }, async t => {
+  const shared = { allowed: true, inputs: [], locked: false };
+  const f = await fixture(t, {}, {}, { shared });
+  const reached = [];
+  f.manager.proxy = RuntimeManager.prototype.proxy.bind(f.manager);
+  f.upstream.on('request', (req, res) => {
+    const parts = []; req.on('data', part => parts.push(part));
+    req.on('end', () => {
+      const body = JSON.parse(Buffer.concat(parts).toString()); reached.push(body.method);
+      const value = body.method === 'skills/list' ? { skills: [{ name: 'literature', description: 'd', path: '/home/owner/skills/literature/SKILL.md' }, { name: 'personal-owner-only', path: '/x' }] }
+        : { v: 'loopx_goalbar_response_v2', op: body.payload.op, sessionId: body.payload.sessionId, result: { kind: 'absent' } };
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ type: 'server-response', rpcId: body.rpcId, result: { ok: true, value } }));
+    });
+  });
+  const rpc = (method, payload) => fetch(`${f.base}/api/${method}`, { method: 'POST', headers: { cookie: f.cookie, Origin: UI_ORIGIN, 'content-type': 'application/json' },
+    body: JSON.stringify({ type: 'client-request', rpcId: `rpc-${reached.length}`, method, payload }) });
+  const skills = await rpc('skills/list', { args: { request: { sessionId: 'shared-root' } } });
+  assert.equal(skills.status, 200);
+  assert.deepEqual((await skills.json()).result.value, { skills: [{ name: 'literature', description: 'd' }] });
+  assert.equal((await rpc('skills/list', { args: { request: { sessionId: 'private-owner' } } })).status, 403);
+  const bar = (op, sessionId) => ({ v: 'loopx_goalbar_request_v2', op, sessionId, ...(op === 'start' ? { expected: { goalId: 'g', loopxAgentId: 'a' } } : {}) });
+  const read = await rpc('loopx.goalbar', bar('read', 'shared-root'));
+  assert.equal(read.status, 200); assert.equal((await read.json()).result.value.result.kind, 'absent');
+  assert.equal((await rpc('loopx.goalbar', bar('read', 'private-owner'))).status, 403);
+  assert.equal((await rpc('loopx.goalbar', bar('start', 'shared-root'))).status, 403);
+  assert.deepEqual(reached, ['skills/list', 'loopx.goalbar']);
+  shared.allowed = false;
+  assert.equal((await rpc('skills/list', { args: { request: { sessionId: 'shared-root' } } })).status, 403);
+});
+
+test('ordinary native HTTP and mux fence deleted identities and recheck in-flight output', { timeout: 10000 }, async t => {
+  const deleted = new Set();
+  const sourceDeletion = {
+    async authorize(_project, _method, payload) { if (deleted.has(payload?.args?.sessionId)) throw new HttpError(404, 'runtime_session_not_found', 'Conversation not found.'); },
+    async projectValue(project, method, payload, value) {
+      await this.authorize(project,method,payload);
+      return {forward:true,value:Array.isArray(value)?value.filter(row=>!deleted.has(row.sessionId)):value};
+    },
+  };
+  const f=await fixture(t, {}, {}, {sourceDeletion});
+  f.manager.proxy=RuntimeManager.prototype.proxy.bind(f.manager);
+  f.upstream.on('request',(req,res)=>{ const chunks=[];req.on('data',part=>chunks.push(part));req.on('end',()=>{
+    const call=JSON.parse(Buffer.concat(chunks).toString());
+    if(call.method==='session/list') deleted.add('gone');
+    res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({type:'server-response',rpcId:call.rpcId,result:{ok:true,value:[{sessionId:'gone',title:'private'},{sessionId:'keep'}]}}));
+  });});
+  const rpc=(method,args)=>fetch(`${f.base}/api/${method}`,{method:'POST',headers:{cookie:f.cookie,Origin:UI_ORIGIN,'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:'r',method,payload:{args}})});
+  const list=await (await rpc('session/list',{_request:{}})).json();
+  assert.deepEqual(list.result.value,[{sessionId:'keep'}]);
+  assert.equal((await rpc('session/page',{sessionId:'gone'})).status,404);
+  const c=f.connect();assert.equal(await c.opened,101);
+  c.send(open('deleted-read','session/page',{sessionId:'gone'}));
+  assert.equal((await c.next()).type,'error');
+  assert.equal(f.received.some(frame=>frame.streamId==='deleted-read'),false);
+});
+
+test('raw native upload repeats its source fence after runtime startup even without an upload receipt observer', {timeout:10000}, async t=>{
+  let deleted=false;
+  const sourceDeletion={authorize:async()=>{},projectValue:async(_p,_m,_a,value)=>({forward:true,value}),assertAvailable:async()=>{if(deleted)throw new HttpError(404,'runtime_session_not_found','Conversation not found.');}};
+  const f=await fixture(t,{}, {}, {sourceDeletion});
+  f.manager.proxy=RuntimeManager.prototype.proxy.bind(f.manager);
+  const start=f.manager.start;f.manager.start=async project=>{deleted=true;return start(project);};
+  let reached=0;f.upstream.on('request',(req,res)=>{reached++;req.resume();res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}');});
+  const response=await fetch(`${f.base}/api/session/uploadFileBinary?sessionId=a&name=test.txt`,{method:'POST',headers:{cookie:f.cookie,Origin:UI_ORIGIN,'content-type':'application/octet-stream'},body:'source bytes'});
+  assert.equal(response.status,404);assert.equal(reached,0);
 });

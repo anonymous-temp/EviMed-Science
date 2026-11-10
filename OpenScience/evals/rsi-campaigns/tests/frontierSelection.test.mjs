@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { frontierMixCandidate } from '../../../apps/server/src/frontierPipeline.mjs';
+import { frontierMixCandidate } from '../../../apps/server/src/frontierSelection.mjs';
 import { replayFrontierPool, sweepFrontierThresholds } from '../frontier_selection.mjs';
 import { frontierMixSelect } from '../../../packages/domain/src/frontierMix.mjs';
 import { loadFrontierGold, historicalFrontierReport, frontierGoldStatus } from '../frontier_gold.mjs';
@@ -95,3 +95,28 @@ test('outside, duplicate and unknown labels cannot establish protection', () => 
    assert.equal(result.protectionPassed, false);
  }
 });
+
+test('the online witness counts a day as the offline replay does: safety alerts on both sides of the ratio, what the mix picked taken back', async () => {
+  const { frontierDayVolume } = await import('../../../apps/server/src/frontierSelection.mjs');
+  const { frontierRow, frontierDayPool } = await import('../profiles/benign_fixture.mjs');
+  const { replayFrontierPool } = await import('../frontier_selection.mjs');
+  const { RSI_FRONTIER_VOLUME_BOUND } = await import('../../../packages/domain/src/rsiCampaign.mjs');
+  const DAY = '2026-10-20', news = { genre: 'news', source_type: 'news', source_source_type: 'news', evidence_type: null, publication_types: null };
+  const rows = [
+    ...Array.from({ length: 20 }, (_, i) => frontierRow(`safety-${i}`, DAY, { genre: 'safety', safety_alert: true, selected: true, selected_rule: 'safety-bypass', score_total: 35, source_type: 'regulator', source_source_type: 'regulator', evidence_type: 'safety-notice' })),
+    // News has no group ceiling, so the line alone decides these rows.
+    ...Array.from({ length: 40 }, (_, i) => frontierRow(`high-${i}`, DAY, { ...news, score_total: 85 })),
+    ...Array.from({ length: 6 }, (_, i) => frontierRow(`middle-${i}`, DAY, { ...news, score_total: 75 })),
+    ...Array.from({ length: 4 }, (_, i) => frontierRow(`low-${i}`, DAY, { ...news, score_total: 50 })),
+  ];
+  const pool = frontierDayPool(DAY, rows);
+  const offline = { incumbent: replayFrontierPool(pool, 80).selectedVolume, candidate: replayFrontierPool(pool, 72).selectedVolume };
+  assert.deepEqual(offline, { incumbent: 60, candidate: 66 }, 'the reviewer\'s day: 40 to 46 picks with 20 safety alerts');
+  assert.ok(offline.candidate / offline.incumbent <= RSI_FRONTIER_VOLUME_BOUND.max, 'inside the bound offline, and it must not be stopped online for what offline allowed');
+  const input = { candidates: rows.map(frontierMixCandidate), events: pool.events, congressActive: pool.congressActive, preprintPlaces: pool.preprintPlaces, preprintMinScore: pool.preprintMinScore, genreFloors: pool.genreFloors, threshold: 80 };
+  assert.deepEqual({ incumbent: frontierDayVolume(input, 80), candidate: frontierDayVolume(input, 72) }, offline);
+  // The serving side reads the day after its own rounds have selected from it: the same figure, whatever those rounds picked.
+  const afterRounds = { ...input, candidates: input.candidates.map((row) => (row.id.startsWith('high-') ? { ...row, selected: true, rule: 'threshold' } : row)) };
+  assert.deepEqual({ incumbent: frontierDayVolume(afterRounds, 80), candidate: frontierDayVolume(afterRounds, 72) }, offline);
+});
+

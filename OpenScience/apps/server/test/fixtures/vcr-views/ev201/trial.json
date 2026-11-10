@@ -742,8 +742,9 @@
         }
       },
       "meets": {
-        "typeOneError": "ok",
-        "power": null
+        "typeOneError": "undecided",
+        "power": null,
+        "typeOneErrorText": "无法确定是否不超过 2.5%（模拟 2.47% ± 0.11%）"
       }
     },
     {
@@ -1095,8 +1096,9 @@
         }
       },
       "meets": {
-        "typeOneError": "borderline",
-        "power": null
+        "typeOneError": "undecided",
+        "power": null,
+        "typeOneErrorText": "无法确定是否不超过 2.5%（模拟 2.51% ± 0.11%）"
       }
     },
     {
@@ -1581,6 +1583,1093 @@
       "probabilityByMonth": []
     }
   ],
+  "successRates": {
+    "title": "历史上这一阶段的通过率",
+    "note": "这是过去的研发项目通过这个阶段的比例，不是这个试验成功的概率。两个来源统计的方法不同，所以并排列出，不要合并。",
+    "sources": [
+      {
+        "id": "bio_2011_2020",
+        "label": "BIO / Informa / QLS（2011–2020）",
+        "citation": "Biotechnology Innovation Organization, Informa Pharma Intelligence, QLS Advisors. Clinical Development Success Rates and Contributing Factors 2011-2020. February 2021",
+        "data": "2011 年 1 月至 2020 年 11 月，1,779 家公司 9,704 个研发项目的 12,728 次阶段转换（Biomedtracker），限企业发起、面向 FDA 注册的项目",
+        "method": "按阶段统计：某阶段通过的项目数，除以通过和终止的项目数之和；获批可能性是各阶段通过率的乘积",
+        "endpoint": "三期统计到提交上市申请；“获批可能性”一栏统计到获得 FDA 批准"
+      },
+      {
+        "id": "wong_2019",
+        "label": "Wong / Siah / Lo（2019）",
+        "citation": "Wong CH, Siah KW, Lo AW. Estimation of clinical trial success rates and related parameters. Biostatistics 2019;20(2):273-286. doi:10.1093/biostatistics/kxx069; corrigendum Biostatistics 2019;20(2):366",
+        "data": "2000 年 1 月至 2015 年 10 月，18.6 万项试验、21,143 个化合物（Trialtrove 与 Pharmaprojects），限企业发起",
+        "method": "按路径统计：用试验记录还原每个研发项目走过的阶段并补全缺失的步骤，某阶段的通过率是从该阶段开始并继续往下走的路径所占的比例",
+        "endpoint": "三期统计到获批（含申报）；一期、二期既给出进入下一期的比例，也给出到获批的比例"
+      }
+    ],
+    "phases": [
+      {
+        "id": "phase1",
+        "label": "一期"
+      },
+      {
+        "id": "phase2",
+        "label": "二期"
+      },
+      {
+        "id": "phase3",
+        "label": "三期"
+      }
+    ],
+    "areas": [
+      {
+        "id": "all",
+        "label": "全部适应症",
+        "wongGroup": "全部适应症",
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "52%",
+                "n": 4414
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "7.9%",
+                "n": 12728
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "66.4%",
+                "n": 41040
+              },
+              "toApproval": {
+                "text": "13.8%",
+                "n": null
+              }
+            }
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "28.9%",
+                "n": 4933
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "15.1%",
+                "n": 8314
+              }
+            },
+            "wong": {
+              "toNext": null,
+              "toApproval": {
+                "text": "35.1%",
+                "n": 21180
+              }
+            }
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "57.8%",
+                "n": 1928
+              },
+              "toApproval": {
+                "text": "52.4%",
+                "n": 3381
+              }
+            },
+            "wong": {
+              "toNext": null,
+              "toApproval": {
+                "text": "59%",
+                "n": 7532
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "oncology",
+        "label": "肿瘤",
+        "wongGroup": "肿瘤",
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "48.8%",
+                "n": 1628
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "5.3%",
+                "n": 4179
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "57.6%",
+                "n": 17368
+              },
+              "toApproval": {
+                "text": "3.4%",
+                "n": null
+              }
+            }
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "24.6%",
+                "n": 1732
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "10.8%",
+                "n": 2551
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "32.7%",
+                "n": 6533
+              },
+              "toApproval": {
+                "text": "6.7%",
+                "n": 6533
+              }
+            }
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "47.7%",
+                "n": 495
+              },
+              "toApproval": {
+                "text": "43.9%",
+                "n": 819
+              }
+            },
+            "wong": {
+              "toNext": null,
+              "toApproval": {
+                "text": "35.5%",
+                "n": 1236
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "hematology",
+        "label": "血液",
+        "wongGroup": null,
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "69.6%",
+                "n": 92
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "23.9%",
+                "n": 352
+              }
+            },
+            "wong": null
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "48.1%",
+                "n": 106
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "34.4%",
+                "n": 260
+              }
+            },
+            "wong": null
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "76.8%",
+                "n": 82
+              },
+              "toApproval": {
+                "text": "71.5%",
+                "n": 154
+              }
+            },
+            "wong": null
+          }
+        }
+      },
+      {
+        "id": "cardiovascular",
+        "label": "心血管",
+        "wongGroup": "心血管",
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "50%",
+                "n": 214
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "4.8%",
+                "n": 651
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "73.3%",
+                "n": 2810
+              },
+              "toApproval": {
+                "text": "25.5%",
+                "n": null
+              }
+            }
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "21%",
+                "n": 252
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "9.6%",
+                "n": 437
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "65.7%",
+                "n": 1858
+              },
+              "toApproval": {
+                "text": "32.3%",
+                "n": 1858
+              }
+            }
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "55.2%",
+                "n": 105
+              },
+              "toApproval": {
+                "text": "45.6%",
+                "n": 185
+              }
+            },
+            "wong": {
+              "toNext": null,
+              "toApproval": {
+                "text": "62.2%",
+                "n": 964
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "neurology",
+        "label": "神经",
+        "wongGroup": "中枢神经（含精神）",
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "47.7%",
+                "n": 516
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "5.9%",
+                "n": 1411
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "73.2%",
+                "n": 4924
+              },
+              "toApproval": {
+                "text": "15%",
+                "n": null
+              }
+            }
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "26.8%",
+                "n": 504
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "12.3%",
+                "n": 895
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "51.9%",
+                "n": 3037
+              },
+              "toApproval": {
+                "text": "19.5%",
+                "n": 3037
+              }
+            }
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "53.1%",
+                "n": 226
+              },
+              "toApproval": {
+                "text": "46%",
+                "n": 391
+              }
+            },
+            "wong": {
+              "toNext": null,
+              "toApproval": {
+                "text": "51.1%",
+                "n": 1156
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "psychiatry",
+        "label": "精神",
+        "wongGroup": "中枢神经（含精神）",
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "52.7%",
+                "n": 150
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "7.3%",
+                "n": 442
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "73.2%",
+                "n": 4924
+              },
+              "toApproval": {
+                "text": "15%",
+                "n": null
+              }
+            }
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "26.8%",
+                "n": 164
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "13.8%",
+                "n": 292
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "51.9%",
+                "n": 3037
+              },
+              "toApproval": {
+                "text": "19.5%",
+                "n": 3037
+              }
+            }
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "56.3%",
+                "n": 71
+              },
+              "toApproval": {
+                "text": "51.4%",
+                "n": 128
+              }
+            },
+            "wong": {
+              "toNext": null,
+              "toApproval": {
+                "text": "51.1%",
+                "n": 1156
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "infectious_disease",
+        "label": "感染",
+        "wongGroup": "感染",
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "57.8%",
+                "n": 403
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "13.2%",
+                "n": 1170
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "70.1%",
+                "n": 3963
+              },
+              "toApproval": {
+                "text": "25.2%",
+                "n": null
+              }
+            }
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "38.4%",
+                "n": 414
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "22.8%",
+                "n": 767
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "58.3%",
+                "n": 2314
+              },
+              "toApproval": {
+                "text": "35.1%",
+                "n": 2314
+              }
+            }
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "64%",
+                "n": 197
+              },
+              "toApproval": {
+                "text": "59.4%",
+                "n": 353
+              }
+            },
+            "wong": {
+              "toNext": null,
+              "toApproval": {
+                "text": "75.3%",
+                "n": 1078
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "metabolic",
+        "label": "代谢",
+        "wongGroup": "代谢与内分泌",
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "61.8%",
+                "n": 136
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "15.5%",
+                "n": 399
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "76.2%",
+                "n": 3589
+              },
+              "toApproval": {
+                "text": "19.6%",
+                "n": null
+              }
+            }
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "45%",
+                "n": 149
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "25%",
+                "n": 263
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "59.7%",
+                "n": 2357
+              },
+              "toApproval": {
+                "text": "24.1%",
+                "n": 2357
+              }
+            }
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "63.6%",
+                "n": 66
+              },
+              "toApproval": {
+                "text": "55.7%",
+                "n": 114
+              }
+            },
+            "wong": {
+              "toNext": null,
+              "toApproval": {
+                "text": "51.6%",
+                "n": 1101
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "endocrine",
+        "label": "内分泌",
+        "wongGroup": "代谢与内分泌",
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "43.3%",
+                "n": 319
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "6.6%",
+                "n": 887
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "76.2%",
+                "n": 3589
+              },
+              "toApproval": {
+                "text": "19.6%",
+                "n": null
+              }
+            }
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "26.6%",
+                "n": 293
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "15.2%",
+                "n": 568
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "59.7%",
+                "n": 2357
+              },
+              "toApproval": {
+                "text": "24.1%",
+                "n": 2357
+              }
+            }
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "66.2%",
+                "n": 151
+              },
+              "toApproval": {
+                "text": "57.1%",
+                "n": 275
+              }
+            },
+            "wong": {
+              "toNext": null,
+              "toApproval": {
+                "text": "51.6%",
+                "n": 1101
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "autoimmune",
+        "label": "自身免疫",
+        "wongGroup": "自身免疫与炎症",
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "55.2%",
+                "n": 413
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "10.7%",
+                "n": 1305
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "69.8%",
+                "n": 5086
+              },
+              "toApproval": {
+                "text": "15.1%",
+                "n": null
+              }
+            }
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "31.4%",
+                "n": 471
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "19.3%",
+                "n": 892
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "45.7%",
+                "n": 2910
+              },
+              "toApproval": {
+                "text": "21.2%",
+                "n": 2910
+              }
+            }
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "65.3%",
+                "n": 219
+              },
+              "toApproval": {
+                "text": "61.4%",
+                "n": 421
+              }
+            },
+            "wong": {
+              "toNext": null,
+              "toApproval": {
+                "text": "63.7%",
+                "n": 969
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "respiratory",
+        "label": "呼吸",
+        "wongGroup": null,
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "55.9%",
+                "n": 179
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "7.5%",
+                "n": 501
+              }
+            },
+            "wong": null
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "21.9%",
+                "n": 215
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "13.5%",
+                "n": 322
+              }
+            },
+            "wong": null
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "64.5%",
+                "n": 62
+              },
+              "toApproval": {
+                "text": "61.6%",
+                "n": 107
+              }
+            },
+            "wong": null
+          }
+        }
+      },
+      {
+        "id": "gastroenterology",
+        "label": "消化（不含炎症性肠病）",
+        "wongGroup": null,
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "46.7%",
+                "n": 45
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "8.3%",
+                "n": 186
+              }
+            },
+            "wong": null
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "34.2%",
+                "n": 73
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "17.8%",
+                "n": 141
+              }
+            },
+            "wong": null
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "57.1%",
+                "n": 35
+              },
+              "toApproval": {
+                "text": "51.9%",
+                "n": 68
+              }
+            },
+            "wong": null
+          }
+        }
+      },
+      {
+        "id": "urology",
+        "label": "泌尿",
+        "wongGroup": "泌尿生殖",
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "40.9%",
+                "n": 22
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "3.6%",
+                "n": 88
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "68.7%",
+                "n": 757
+              },
+              "toApproval": {
+                "text": "21.6%",
+                "n": null
+              }
+            }
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "15%",
+                "n": 40
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "8.8%",
+                "n": 66
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "57.1%",
+                "n": 475
+              },
+              "toApproval": {
+                "text": "29.7%",
+                "n": 475
+              }
+            }
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "69.2%",
+                "n": 13
+              },
+              "toApproval": {
+                "text": "58.6%",
+                "n": 26
+              }
+            },
+            "wong": {
+              "toNext": null,
+              "toApproval": {
+                "text": "66.5%",
+                "n": 212
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "ophthalmology",
+        "label": "眼科",
+        "wongGroup": "眼科",
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "71.6%",
+                "n": 88
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "11.9%",
+                "n": 415
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "87.1%",
+                "n": 674
+              },
+              "toApproval": {
+                "text": "32.6%",
+                "n": null
+              }
+            }
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "35.5%",
+                "n": 200
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "16.6%",
+                "n": 327
+              }
+            },
+            "wong": {
+              "toNext": {
+                "text": "60.7%",
+                "n": 461
+              },
+              "toApproval": {
+                "text": "33.6%",
+                "n": 461
+              }
+            }
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "51.2%",
+                "n": 82
+              },
+              "toApproval": {
+                "text": "46.7%",
+                "n": 127
+              }
+            },
+            "wong": {
+              "toNext": null,
+              "toApproval": {
+                "text": "74.9%",
+                "n": 207
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "allergy",
+        "label": "过敏",
+        "wongGroup": null,
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "56.4%",
+                "n": 55
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "10.3%",
+                "n": 201
+              }
+            },
+            "wong": null
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "28.3%",
+                "n": 92
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "18.3%",
+                "n": 146
+              }
+            },
+            "wong": null
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "64.7%",
+                "n": 34
+              },
+              "toApproval": {
+                "text": "64.7%",
+                "n": 54
+              }
+            },
+            "wong": null
+          }
+        }
+      },
+      {
+        "id": "other",
+        "label": "其他（皮肤、肾、产科、非自身免疫的风湿、耳鼻喉口腔、骨科）",
+        "wongGroup": null,
+        "phases": {
+          "phase1": {
+            "bio": {
+              "toNext": {
+                "text": "63.6%",
+                "n": 154
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "13%",
+                "n": 541
+              }
+            },
+            "wong": null
+          },
+          "phase2": {
+            "bio": {
+              "toNext": {
+                "text": "38.6%",
+                "n": 228
+              },
+              "toFiling": null,
+              "toApproval": {
+                "text": "20.5%",
+                "n": 387
+              }
+            },
+            "wong": null
+          },
+          "phase3": {
+            "bio": {
+              "toNext": null,
+              "toFiling": {
+                "text": "60%",
+                "n": 90
+              },
+              "toApproval": {
+                "text": "53%",
+                "n": 159
+              }
+            },
+            "wong": null
+          }
+        }
+      }
+    ]
+  },
+  "confirmatoryDesigns": [],
+  "doseDesigns": [],
+  "bayesianDesigns": [],
+  "winRatioDesigns": [],
   "milestones": [
     {
       "design": "A",

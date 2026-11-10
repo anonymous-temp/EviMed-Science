@@ -19,6 +19,19 @@ test('fixed published predictions bind residual-aware SD or binary benchmark, wi
   const cox={...predicted,diagnostics:{...predicted.diagnostics,endpoint:{type:'time_to_event',horizon:12,timeUnit:'months'}}};
   assert.throws(()=>vcrModelDesignBinding(cox,{...configuration,endpoint:cox.diagnostics.endpoint}),{code:'vcr_model_not_applicable'});
 });
+test('a verified supplied-equation result remains usable without being relabeled as published evidence',()=>{
+  const prediction={id:'res_unknown',version:1,executionId:'exe_unknown',diagnostics:{modelScope:'prognostic_equation_source_unknown',absoluteRiskAvailable:true,endpoint:{type:'binary',horizon:12,timeUnit:'months'}},measures:[{name:'predicted_population_mean',value:0.3}]};
+  const scenario={design:{kind:'two_arm_fixed'},endpoint:{type:'binary',horizon:12,timeUnit:'months'},truth:{treatmentRate:0.5}};
+  const bound=vcrModelDesignBinding(prediction,scenario);
+  assert.deepEqual(bound.scenario.truth,{treatmentRate:0.5,controlRate:0.3});
+  assert.equal(bound.provenance.sourceKind,'prognostic_equation_source_unknown');
+  assert.match(bound.provenance.uncertainty,/unverified source/);
+  assert.doesNotMatch(bound.provenance.uncertainty,/published/);
+  assert.equal(bound.provenance.causalEffectIdentified,false);
+  assert.equal(bound.provenance.clinicallyValidated,false);
+  assert.throws(()=>vcrModelDesignBinding({...prediction,diagnostics:{...prediction.diagnostics,absoluteRiskAvailable:false}},scenario),{code:'vcr_model_not_applicable'});
+  assert.throws(()=>vcrModelDesignBinding({...prediction,diagnostics:{...prediction.diagnostics,modelScope:'unknown_unsupported_model'}},scenario),{code:'vcr_model_not_applicable'});
+});
 test('orchestrated saved-model design binds only actually used assumption cards and exposes all three baseline scenarios in a grid',()=>{
   const context={study:{id:'std',dataTier:'T0'},definition:{endpointType:'time_to_event'},assumptions:[{id:'a',key:'control_median',version:1,pointValue:999,unit:'months'}],modelResult:result};
   const configuration={...base,modelResultId:result.id,modelResultVersion:2,modelParameterQuantile:'p50'};

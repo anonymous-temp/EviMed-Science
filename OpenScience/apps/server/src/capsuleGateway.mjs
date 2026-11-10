@@ -86,7 +86,7 @@ export function createNativeCapsuleSearch({ service, subscriptions = null, conte
  * With the memory engine on, a conversation's own entrance is the engine's plugin, whose `search` also covers the capsule's half
  * (`createNativeCapsuleSearch`, `memoryGateway.mjs`), and the capsule's recall and note tools are not registered for it
  * (`packages/socket/plugins/capsule.mjs`, `memoryEnabled`); the recall and note actions here are for a deployment without the engine.
- * @param {{ runtimeManager: any, store: any, service: any, evaluationIsolation?: any, nativeRoutes?: any,
+ * @param {{ runtimeManager: any, store: any, service: any, nativeRoutes?: any,
  *   recallLimit?: number, recallMaxLimit?: number,
  *   subscriptions?: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> } | null,
  *   clinicalContext?: ((identity:any,runs:any[])=>Promise<boolean>) | null,
@@ -101,7 +101,7 @@ export function createNativeCapsuleSearch({ service, subscriptions = null, conte
  *   `resident.forSession` answers the block a conversation is to be handed at its first step, or null when it holds it already (or is not to have one);
  *   `resident.attached` notes that it has been handed. `contextPolicies` says whether the workload's project is a shared GEO project, whose
  *   recall reads only the entries `contextItems` admits and whose notes are refused (`contextOnly`). */
-export function createCapsuleGatewayHandler({ runtimeManager, store, service, sessions = null, nativeRoutes = null, evaluationIsolation = null, subscriptions = null, clinicalContext = null,
+export function createCapsuleGatewayHandler({ runtimeManager, store, service, sessions = null, nativeRoutes = null, subscriptions = null, clinicalContext = null,
   resident = null, recallLimit = 5, recallMaxLimit = 8, contextPolicies = null, contextItems = null }) {
   const maxLimit = Math.max(1, Math.min(30, Math.trunc(Number(recallMaxLimit)) || 8));
   const defaultLimit = Math.max(1, Math.min(maxLimit, Math.trunc(Number(recallLimit)) || 5));
@@ -145,7 +145,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
       if (action === "native-route") {
         if (!nativeRoutes) { sendJson(res, 200, { routes: [] }); return; }
         const answer = await nativeRoutes.read(project, body);
-        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "native-route", answer) : answer);
+        sendJson(res, 200, answer);
         return;
       }
       if (action === "session") {
@@ -159,7 +159,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
         // conversation not to start (the memory is an enhancement, and the next step asks again).
         const block = resident ? await resident.forSession(currentUser, project, body.sessionId).catch(() => null) : null;
         const context = [...(block?.text ? [block.text] : []), ...notes].join("\n\n");
-        const answer = evaluationIsolation ? await evaluationIsolation.filter(identity, "session-memory", { context }) : { context };
+        const answer = { context };
         // What the plugin is to acknowledge once the step has entered; absent when there is no block, so a step with none acknowledges nothing.
         sendJson(res, 200, block?.text ? { ...answer, resident: { digest: block.digest } } : answer);
         return;
@@ -192,7 +192,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
       // memory and reads none of it: the pack reaches the conversation as its
       // first-step context (`memorySessions.mjs`), and that is all it reads
       // (build spec §9.4-5; the recall half landed on 2026-09-29).
-      const writesNothing = await evaluationIsolation?.isEvaluation(identity) || states.some((state) => Boolean(state.trialCapsuleId));
+      const writesNothing = states.some((state) => Boolean(state.trialCapsuleId));
       const trialConversation = running.length === 1 && Boolean(states[0]?.trialCapsuleId);
       const pause = sessions?.paused
         ? await sessions.paused(currentUser.id, identity.projectId, running.length === 1 ? running[0].sessionId : null)
@@ -232,8 +232,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
           await sessions.recordRecall(project, running[0].id, recalled.items).catch(() => null);
         }
         // Reference context of the evidence zones this project follows. A failure to read costs the recall this part only.
-        // An evaluation run is frozen at a date and kept from what the platform has written since: no zone card reaches it.
-        const reference = subscriptions && body.scope !== "conversation" && typeof body.query === "string" && !(await evaluationIsolation?.isEvaluation(identity))
+        const reference = subscriptions && body.scope !== "conversation" && typeof body.query === "string"
           ? await subscriptions.recall(currentUser.id, identity.projectId, body.query).catch(() => []) : [];
         /** @type {any} */
         const found = reference.length
@@ -242,7 +241,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, se
         // is not mistaken for a tool that failed. A recall the researcher paused already carries its own notice, and says so.
         const answer = !pause?.recall && found.items.length === 0 && !found.notice ? { ...found, notice: NOTHING_ABOVE_THE_FLOOR } : found;
         recordRecallTool(pause?.recall ? "paused" : answer.items.length ? "hit" : "empty", answer.items.length);
-        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "capsule-memory", answer) : answer);
+        sendJson(res, 200, answer);
       } else if (shared) {
         sendJson(res,200,{entry:null,reviewRequired:false,takesEffect:false,contextOnly:true,status:"not_kept",
           notice:"请通过本项目的记忆入口记录需要保留的内容。"});

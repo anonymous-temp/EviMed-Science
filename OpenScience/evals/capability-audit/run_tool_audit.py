@@ -12,7 +12,7 @@ import re
 import sys
 import time
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import public_mr_fixture as public_mr
@@ -119,12 +119,6 @@ TASK_FIXTURES = {
     # `semantics_disabled`, with no recorded dataset it answers an empty list, and either certifies the route
     # and the token.
     "dataset_semantics": {"action": "read"},
-    # Non-mutating refusal probes. The past date cannot create a scheduled task,
-    # and the fixture id cannot name a generated agenda. Successful task creation
-    # and edits are exercised in evals/task-conversation against real DSH instead.
-    "schedule_task": {"instruction": "Release audit: do not create a task.",
-                      "schedule": {"kind": "once", "date": "2000-01-01", "time": "00:00", "timeZone": "UTC"}},
-    "update_task": {"taskId": "agenda-release-audit-probe", "paused": True},
     # `op: providers` asks the probe which front-ends this deployment can reach
     # and is the only operation with no side effect: `ask` would drive real
     # browser sessions against five consumer products. The tool was declared,
@@ -518,60 +512,11 @@ def captured_series_directory(response_root):
     return directory if isinstance(directory, str) and directory else None
 
 
-def owned_task_probes(server, response_root):
-    """Exercise one future task in an explicitly selected audit project and pause it immediately.
-
-    Refusal fixtures prove input validation, not successful scheduling. The
-    opt-in lifecycle retains both replies, including a failed first pause even
-    if the cleanup retry succeeds. Never ask about an invented task id.
-    """
-    future = datetime.now(timezone.utc) + timedelta(days=7)
-    arguments = {"title": "Release audit task",
-                 "instruction": "Release audit fixture: summarize evidence availability.",
-                 "schedule": {"kind": "once", "date": future.strftime("%Y-%m-%d"),
-                              "time": "00:00", "timeZone": "UTC"}}
-    started = time.monotonic()
-    scheduled = server.call_tool("schedule_task", arguments)
-    scheduled_ms = round((time.monotonic() - started) * 1000)
-    data = scheduled.get("data") if isinstance(scheduled.get("data"), dict) else {}
-    task_id = data.get("taskId")
-    update = {"status": "error", "summary": "The scheduling probe did not return an owned task to pause.",
-              "error": {"code": "audit_task_not_created"}}
-    attempts = []
-    started = time.monotonic()
-    if scheduled.get("status") == "success" and isinstance(task_id, str) and re.fullmatch(r"agenda-[A-Za-z0-9-]{1,160}", task_id):
-        def pause():
-            try:
-                return server.call_tool("update_task", {"taskId": task_id, "paused": True})
-            except Exception as error:
-                return {"status": "error", "summary": "The task pause raised %s." % type(error).__name__,
-                        "error": {"code": "audit_task_pause_failed"}}
-        update = pause()
-        attempts.append(update)
-        updated = update.get("data") if isinstance(update.get("data"), dict) else {}
-        if update.get("status") != "success" or updated.get("taskId") != task_id or updated.get("state") != "paused":
-            # Preserve the original failure; retry only to avoid leaving the
-            # audit's own future task enabled, never to certify a failed probe.
-            attempts.append(pause())
-            update = {**update, "status": "error", "summary": "The owned task did not confirm its paused state.",
-                      "error": {"code": "audit_task_pause_unconfirmed"}}
-    update_ms = round((time.monotonic() - started) * 1000)
-    (response_root / "task-lifecycle.json").write_text(json.dumps({
-        "arguments": arguments, "schedule": scheduled, "pauseAttempts": attempts,
-    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return {"schedule_task": (scheduled, scheduled_ms), "update_task": (update, update_ms)}
-
-
-def run_task_probes(server, workspace, *, exercise_owned_tasks=False):
+def run_task_probes(server, workspace):
     results = []
     response_root = workspace / ".evimed-audit" / "tool-responses"
     response_root.mkdir(parents=True, exist_ok=True)
     disabled = server.disabled_tools()
-    task_results = {}
-    if exercise_owned_tasks:
-        if not {"schedule_task", "update_task"} <= (set(TASK_FIXTURES) - disabled):
-            raise ValueError("owned task probes require both scheduling tools to be offered")
-        task_results = owned_task_probes(server, response_root)
     for tool, arguments in TASK_FIXTURES.items():
         if tool in disabled:
             continue
@@ -597,11 +542,8 @@ def run_task_probes(server, workspace, *, exercise_owned_tasks=False):
                 continue
             arguments = {**arguments, "captureDir": capture}
         started = time.monotonic()
-        if tool in task_results:
-            result, elapsed = task_results[tool]
-        else:
-            result = server.call_tool(tool, arguments)
-            elapsed = round((time.monotonic() - started) * 1000)
+        result = server.call_tool(tool, arguments)
+        elapsed = round((time.monotonic() - started) * 1000)
         response_path = response_root / (tool + ".json")
         response_path.write_text(
             json.dumps(result, ensure_ascii=False, indent=2, default=str) + "\n",
@@ -649,9 +591,6 @@ def main():
                         help="an operator's own bound on how old a harvested job may be; by default none: a receipt counts "
                              "for as long as the source it records is the source in this tree")
     parser.add_argument("--output-dir", type=Path, default=RESULTS)
-    parser.add_argument("--exercise-owned-tasks", action="store_true",
-                        help="in the selected audit project, create a task seven days ahead and immediately pause it; "
-                             "without this flag scheduling probes only exercise refusal and do not certify successful writes")
     parser.add_argument(
         "--record-incomplete", action="store_true",
         help="write the document and its evidence to the new --output-dir even when some tools are uncertified",
@@ -691,7 +630,7 @@ def main():
     if disabled:
         print("deliberately not offered by this deployment: " + ", ".join(sorted(disabled)))
     roots = workspace_roots(args.receipt_workspace, probe_workspace=workspace)
-    results = run_task_probes(server, workspace, exercise_owned_tasks=args.exercise_owned_tasks)
+    results = run_task_probes(server, workspace)
     for tool in SPECIALISTS:
         if tool in disabled:
             continue

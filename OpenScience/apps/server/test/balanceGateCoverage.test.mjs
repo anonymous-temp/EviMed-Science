@@ -16,15 +16,13 @@ import { isChargeableResearchRun, isResearcherOwnedWork } from "@evimed/domain";
 
 const SRC = path.resolve(import.meta.dirname, "../src");
 /** What a function that dispatches a researcher's run must contain before it does. */
-const GATE = /assertBalanceForStart\(|checkAutopilotBalance\(/;
+const GATE = /assertBalanceForStart\(/;
 /** Where a dispatch site's enclosing function (or route) begins. */
 const ANCHOR = /^[ \t]*(?:async function (\w+)|(\w+): async \(|if \(pathname === "\/api\/agent-runs\/dispatch")/gm;
 
 /** The researcher's own work: each asks the allowance before it dispatches. */
 const RESEARCHER_OWNED = [
   "if",                 // POST /api/agent-runs/dispatch — the page's own question
-  "dispatchVerification", // autopilot: an independent check of a proactive claim
-  "dispatchEpisode",    // autopilot: one budgeted episode
   "dispatchVcrRun",     // 虚拟临床研究 programme step
   "dispatchGeoRun",     // 循证 GEO programme step
   "dispatchChannelRun", // a question that arrived through a messaging channel
@@ -34,7 +32,6 @@ const RESEARCHER_OWNED = [
 const PLATFORM_INTERNAL = {
   "learningRuntime.mjs": "the learning loop distils and relates methods in an internal project",
   "sourceUnderstandingRuntime.mjs": "reading a document into the knowledge base is the platform's cost",
-  "evolutionRuns.mjs": "literature-driven tool development and protected paper evaluation use the platform's own budget",
 };
 
 test("every researcher-owned dispatch asks the allowance first, and the platform's own background jobs ask nobody", async () => {
@@ -50,7 +47,8 @@ test("every researcher-owned dispatch asks the allowance first, and the platform
       sites.push({ file: name, holder, before: text.slice(anchor.index, match.index) });
     }
   }
-  assert.ok(sites.length >= 8, `${sites.length} dispatch sites found; the scan did not walk`);
+  // Seven since 2026-11-09 (the scheduler and 循证进化's runs no longer dispatch): five in server.mjs and the two internal jobs.
+  assert.ok(sites.length >= 7, `${sites.length} dispatch sites found; the scan did not walk`);
 
   const inServer = sites.filter((site) => site.file === "server.mjs");
   assert.deepEqual(inServer.map((site) => site.holder).sort(), [...RESEARCHER_OWNED].sort(),
@@ -72,7 +70,8 @@ test("a run nobody is watching asks for its P90, and a person's run for its P50"
   const server = await readFile(path.join(SRC, "server.mjs"), "utf8");
   const sites = [...server.matchAll(/assertBalanceForStart\(([^)]*)\)/g)].map((match) => match[1]);
   const unattended = sites.filter((call) => /unattended: true/.test(call));
-  // Two programme steps, the autopilot's episode and verification (one shared check), and a research goal's turn.
+  // Two programme steps, a research goal's turn, and starting a stopped
+  // runtime for a scheduled task (`ScheduleWakes`, whose delivered turn then spends through the model gateway's own check).
   assert.equal(unattended.length, 4, `${unattended.length} unattended gates: ${sites.join(" | ")}`);
   for (const holder of UNATTENDED) {
     const start = server.indexOf(`async function ${holder}`);
@@ -94,8 +93,8 @@ test("a turn typed into the kernel's own window is asked at the one method that 
   assert.match(ui, /payload\?\.args\?\.request\?\.mode !== "steer"\) await balanceGate\(project, payload\)/);
 });
 
-test("what is gated is what is charged: programme and proactive steps are the researcher's, the platform's own jobs are not", () => {
-  for (const reason of ["geo:evidence", "autopilot:literature-sentinel", "vcr:evidence"]) {
+test("what is gated is what is charged: programme steps are the researcher's, the platform's own jobs are not", () => {
+  for (const reason of ["geo:evidence", "vcr:evidence"]) {
     assert.equal(isResearcherOwnedWork({ automated: true, effectiveAgentId: "geo-insight", effectiveRouteReason: reason }), true, reason);
   }
   assert.equal(isResearcherOwnedWork({ automated: false, effectiveAgentId: "open-domain-answer" }), true);

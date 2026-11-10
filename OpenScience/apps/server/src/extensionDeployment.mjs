@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { canonicalJson, canonicalExtensionCoordinate, EXTENSION_EXECUTION_CLASSES, EXTENSION_SUPPORTED_DSH_VERSION, validateExtensionProofIdentity, extensionProofAdapterRevision } from '@evimed/domain';
+import { canonicalJson, canonicalExtensionCoordinate, EXTENSION_EXECUTION_CLASSES, EXTENSION_SUPPORTED_DSH_VERSION, validateExtensionProofIdentity, extensionProofAdapterRevision, researchNativeReceiptDigest, researchNativeArtifactDigest } from '@evimed/domain';
 import { extensionRequestObject, extensionArray, extensionIdentifier } from './extensionAccess.mjs';
 import { extensionToolArtifactDigest } from './extensionToolController.mjs';
 import { HttpError } from './security.mjs';
@@ -12,7 +12,7 @@ const digest = value => 'sha256:' + createHash('sha256').update(value).digest('h
 const sha = value => createHash('sha256').update(value).digest('hex');
 const DIGEST = /^sha256:[a-f0-9]{64}$/u,
   HEX = /^[a-f0-9]{64}$/u;
-const ADAPTER_SOURCES = Object.freeze(['apps/server/src/extensionDeployment.mjs', 'apps/server/src/extensionHostedIntegration.mjs', 'apps/server/src/extensionGateway.mjs', 'apps/server/src/server.mjs', 'apps/server/src/extensionRoutes.mjs', 'apps/server/src/runtimeControllerClient.mjs', 'apps/server/src/runtimeControllerServer.mjs', 'apps/server/src/runtimeControllerIndex.mjs', 'apps/server/src/dshRuntimeAdapter.mjs', 'apps/server/src/extensionAccountExport.mjs', 'apps/server/src/extensionActorBindings.mjs', 'apps/server/src/extensionControllerComposition.mjs', 'apps/server/src/extensionOperationService.mjs', 'apps/server/src/extensionOperationWorker.mjs', 'apps/server/src/extensionOperationGrants.mjs', 'apps/server/src/extensionResourceResolver.mjs', 'apps/server/src/extensionDocumentResources.mjs', 'apps/server/src/extensionInvocationLookup.mjs', 'apps/server/src/extensionQualification.mjs', 'apps/server/src/extensionToolController.mjs', 'apps/server/src/extensionGenerationService.mjs', 'apps/server/src/extensionGenerationWorker.mjs', 'apps/server/src/extensionPreparationWorker.mjs', 'apps/server/src/productJobs.mjs', 'apps/server/src/productPersistence.mjs', 'apps/server/src/heavyWorkAdmission.mjs', 'apps/server/src/productStore.mjs', 'apps/server/src/controlPlaneDatabase.mjs', 'apps/server/src/config.mjs', 'apps/server/src/pinnedVersions.mjs', 'packages/domain/index.mjs', 'packages/harness-port/index.mjs', 'apps/server/src/publicSourceGateway.mjs', 'packages/domain/src/extensions.mjs', 'packages/socket/extensions/cowork/bridge.mjs', 'packages/harness-port/src/pluginProbe.mjs', 'packages/harness-port/seam-manifest.json', 'scripts/runtime/extensions/cowork/runner.mjs', 'scripts/runtime/extensions/cowork/policy.mjs', 'scripts/runtime/extensions/cowork/image-inventory.mjs', 'deps-version.json']);
+const ADAPTER_SOURCES = Object.freeze(['apps/server/src/extensionDeployment.mjs', 'apps/server/src/extensionHostedIntegration.mjs', 'apps/server/src/extensionGateway.mjs', 'apps/server/src/server.mjs', 'apps/server/src/extensionRoutes.mjs', 'apps/server/src/runtimeControllerClient.mjs', 'apps/server/src/runtimeControllerServer.mjs', 'apps/server/src/runtimeControllerIndex.mjs', 'apps/server/src/dshRuntimeAdapter.mjs', 'apps/server/src/extensionAccountExport.mjs', 'apps/server/src/extensionActorBindings.mjs', 'apps/server/src/extensionControllerComposition.mjs', 'apps/server/src/controllerNativePreparation.mjs', 'apps/server/src/extensionOperationService.mjs', 'apps/server/src/extensionOperationWorker.mjs', 'apps/server/src/extensionOperationGrants.mjs', 'apps/server/src/extensionResourceResolver.mjs', 'apps/server/src/extensionDocumentResources.mjs', 'apps/server/src/extensionInvocationLookup.mjs', 'apps/server/src/extensionQualification.mjs', 'apps/server/src/extensionToolController.mjs', 'apps/server/src/extensionGenerationService.mjs', 'apps/server/src/extensionGenerationWorker.mjs', 'apps/server/src/extensionPreparationWorker.mjs', 'apps/server/src/productJobs.mjs', 'apps/server/src/productPersistence.mjs', 'apps/server/src/heavyWorkAdmission.mjs', 'apps/server/src/productStore.mjs', 'apps/server/src/controlPlaneDatabase.mjs', 'apps/server/src/config.mjs', 'apps/server/src/pinnedVersions.mjs', 'packages/domain/index.mjs', 'packages/harness-port/index.mjs', 'apps/server/src/publicSourceGateway.mjs', 'packages/domain/src/extensions.mjs', 'packages/domain/src/researchNativeBundles.mjs', 'packages/socket/extensions/cowork/bridge.mjs', 'packages/harness-port/src/pluginProbe.mjs', 'packages/harness-port/seam-manifest.json', 'scripts/runtime/extensions/cowork/runner.mjs', 'scripts/runtime/extensions/cowork/policy.mjs', 'scripts/runtime/extensions/cowork/image-inventory.mjs', 'deps-version.json']);
 const PERMISSION_SOURCES = Object.freeze(['apps/server/src/runtimeManager.mjs', 'apps/server/src/runtimeUiServer.mjs', 'apps/server/src/runtimeUiDocument.mjs', 'apps/server/src/managedBrowserRoutes.mjs', 'apps/server/src/managedBrowserService.mjs', 'apps/server/src/managedBrowserDns.mjs', 'apps/server/src/webRenderEgress.mjs', 'apps/server/src/edgeProxy.mjs', 'apps/server/src/dshProfilePatch.mjs', 'apps/server/src/extensionAccess.mjs', 'apps/server/src/extensionConnections.mjs', 'apps/server/src/vcrStore.mjs', 'apps/server/src/vcrDataStore.mjs', 'apps/server/src/vcrPersistence.mjs', 'packages/domain/src/vcrVocabulary.mjs', 'apps/server/src/pluginService.mjs', 'apps/server/src/security.mjs', 'apps/server/src/runtimeGatewayEntry.mjs', 'apps/server/src/modelGateway.mjs', 'packages/socket/presets/evimed-universal/agent.cordis.yml', 'apps/server/src/store.mjs', 'apps/server/src/sourceRoutes.mjs', 'apps/server/src/connectorCredentials.mjs', 'apps/server/src/vcrRoutes.mjs', 'apps/server/src/vcrStoreBase.mjs', 'apps/server/src/vcrMembers.mjs', 'apps/server/src/vcrAccess.mjs']);
 const PERSONAL_SOURCES = Object.freeze([
   'apps/server/src/inventoryRoutes.mjs',
@@ -110,7 +110,7 @@ export function loadExtensionDeployment(config) {
     const manifest = JSON.parse(new TextDecoder('utf-8', {
       fatal: true
     }).decode(bytes.subarray(0, read)));
-    extensionRequestObject(manifest, ['schemaVersion', 'generatedAt', 'dshVersion', 'policy', 'catalogue', 'admittedArtifacts', 'admittedDescriptors', 'surfaces']);
+    extensionRequestObject(manifest, ['schemaVersion', 'generatedAt', 'dshVersion', 'policy', 'catalogue', 'admittedArtifacts', 'admittedDescriptors', 'admittedNativeBundles', 'surfaces'], ['schemaVersion', 'generatedAt', 'dshVersion', 'policy', 'catalogue', 'admittedArtifacts', 'admittedDescriptors', 'surfaces']);
     if (manifest.schemaVersion !== 1 || manifest.dshVersion !== EXTENSION_SUPPORTED_DSH_VERSION || typeof manifest.generatedAt !== 'string' || !Number.isFinite(Date.parse(manifest.generatedAt))) throw failure();
     extensionRequestObject(manifest.policy, ['adapterRevision', 'permissionProfileRevision']);
     if (![manifest.policy.adapterRevision, manifest.policy.permissionProfileRevision].every(value => typeof value === 'string' && DIGEST.test(value))) throw failure();
@@ -124,9 +124,11 @@ export function loadExtensionDeployment(config) {
     // and the descriptor/artifact/catalogue bonds below.
     const policyState = canonicalJson(policy) === canonicalJson(manifest.policy) ? 'current' : 'stale';
     for (const key of ['catalogue', 'admittedArtifacts', 'admittedDescriptors', 'surfaces']) extensionArray(manifest[key], 128);
+    extensionArray(manifest.admittedNativeBundles ?? [], 5);
     const catalogue = new Map(),
       artifacts = new Map(),
       descriptors = new Map(),
+      nativeBundles = new Map(),
       surfaces = new Map(),
       coordinates = new Set();
     for (const row of manifest.catalogue) {
@@ -158,25 +160,45 @@ export function loadExtensionDeployment(config) {
       })) || row.artifactDigest !== extensionToolArtifactDigest(row)) throw failure();
       descriptors.set(row.id, freeze(row));
     }
+    // A native bundle whose receipt no longer matches what this build admits (its tools grew, review eng P1-4) is left out alone and
+    // named in `staleNativeBundles`: it is not admitted until the operator admits it again, and nothing else in the file is touched.
+    // A row that is malformed, or that names no managed-native catalogue entry, is still a broken allow-list and refuses the file.
+    /** @type {Map<string, string>} */
+    const stale = new Map();
+    for (const row of manifest.admittedNativeBundles ?? []) {
+      extensionRequestObject(row, ['id', 'coordinate', 'integrity', 'closureDigest', 'row', 'tools', 'receiptDigest', 'artifactDigest', 'adapterRevision', 'suiteRevision']);
+      const entry = catalogue.get(row.id);
+      const receipt = { schemaVersion: 1, id: row.id, coordinate: row.coordinate, integrity: row.integrity, closureDigest: row.closureDigest, row: row.row, tools: row.tools };
+      if (nativeBundles.has(row.id) || stale.has(row.id) || !entry || entry.executionClass !== 'managed-native' || Object.keys(entry.settingsSchema).length !== 0 ||
+          canonicalExtensionCoordinate(entry.coordinate) !== canonicalExtensionCoordinate(row.coordinate) || entry.integrity !== row.integrity ||
+          ![row.receiptDigest, row.artifactDigest, row.adapterRevision, row.suiteRevision].every(value => DIGEST.test(value))) throw failure();
+      let matches = false;
+      try { matches = researchNativeReceiptDigest(receipt, digest) === row.receiptDigest && researchNativeArtifactDigest(row, digest) === row.artifactDigest; } catch { matches = false; }
+      if (!matches) { stale.set(row.id, 'receipt_mismatch'); continue; }
+      nativeBundles.set(row.id, freeze(row));
+    }
+    for (const id of stale.keys()) catalogue.delete(id);
     for (const row of manifest.admittedArtifacts) {
       extensionRequestObject(row, ['id', 'coordinate', 'integrity', 'artifactDigest', 'adapterRevision', 'suiteRevision']);
       extensionIdentifier(row.id);
+      if (stale.has(row.id)) continue;
       const entry = catalogue.get(row.id),
-        descriptor = descriptors.get(row.id);
-      if (artifacts.has(row.id) || !entry || !descriptor || canonicalExtensionCoordinate(row.coordinate) !== canonicalExtensionCoordinate(entry.coordinate) || row.integrity !== entry.integrity || row.artifactDigest !== descriptor.artifactDigest || row.adapterRevision !== descriptor.adapterDigest || !DIGEST.test(row.suiteRevision)) throw failure();
-      artifacts.set(row.id, freeze(row));
+        descriptor = descriptors.get(row.id) ?? nativeBundles.get(row.id);
+      if (artifacts.has(row.id) || !entry || !descriptor || canonicalExtensionCoordinate(row.coordinate) !== canonicalExtensionCoordinate(entry.coordinate) || row.integrity !== entry.integrity || row.artifactDigest !== descriptor.artifactDigest || row.adapterRevision !== (descriptor.adapterDigest ?? descriptor.adapterRevision) || (nativeBundles.has(row.id) && row.suiteRevision !== descriptor.suiteRevision) || !DIGEST.test(row.suiteRevision)) throw failure();
+      artifacts.set(row.id, freeze(nativeBundles.has(row.id) ? { ...row, receiptDigest: descriptor.receiptDigest } : row));
     }
-    if (artifacts.size !== descriptors.size) throw failure();
+    if (artifacts.size !== descriptors.size + nativeBundles.size) throw failure();
     for (const row of manifest.surfaces) {
       extensionRequestObject(row, ['id', 'client', 'browser', 'externalActions', 'descriptorDigest']);
       if (surfaces.has(row.id) || !artifacts.has(row.id) || ![row.client, row.browser, row.externalActions].every(x => typeof x === 'boolean') || !DIGEST.test(row.descriptorDigest)) throw failure();
+      if (nativeBundles.has(row.id)) throw failure();
       const {
         id,
         ...surface
       } = row;
       surfaces.set(id, freeze(surface));
     }
-    if (surfaces.size !== artifacts.size) throw failure();
+    if (surfaces.size !== descriptors.size) throw failure();
     return Object.freeze({
       status: 'configured',
       errorCode: null,
@@ -184,6 +206,8 @@ export function loadExtensionDeployment(config) {
       catalogue: Object.freeze([...catalogue.values()]),
       admittedArtifacts: Object.freeze([...artifacts.values()]),
       admittedDescriptors: Object.freeze([...descriptors.values()]),
+      admittedNativeBundles: Object.freeze([...nativeBundles.values()]),
+      staleNativeBundles: Object.freeze([...stale].map(([id, reason]) => Object.freeze({ id, reason }))),
       generatedAt: manifest.generatedAt,
       surfaces: immutableMap([...surfaces]),
       qualificationRoot: path.join(parent, 'extension-qualification'),

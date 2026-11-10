@@ -51,7 +51,7 @@ export function vcrBenchmarkBasis({ method = null, route = null, diagnostics = n
   const stored = object(diagnostics).benchmarkBasis
   if (/** @type {readonly string[]} */ (VCR_BENCHMARK_ONLY_BASES).includes(stored)) return /** @type {'literature_curve' | 'unanchored_maic' | 'model_prediction'} */ (stored)
   if (method === 'model.prognostic_apply' || route === 'model_comparator') return 'model_prediction'
-  if ((method === 'comparator.maic' || method === 'comparator.maic_time_to_event') && object(diagnostics).anchored === false) return 'unanchored_maic'
+  if ((method === 'comparator.maic' || method === 'comparator.maic_time_to_event' || method === 'comparator.stc') && object(diagnostics).anchored === false) return 'unanchored_maic'
   if (method === 'evidence.reconstruct_km' && (route === null || route === 'literature_control')
     && !(measures ?? []).some((measure) => object(measure).name === 'rmst_difference')) return 'literature_curve'
   return null
@@ -88,6 +88,55 @@ export function vcrResultLimits({ conclusion = null, method = null, route = null
     : vcrBalanceVerdictOf((Array.isArray(found.balance) ? found.balance : []).map(object))
   const balance = vcrBalanceSentence(verdict)
   if (balance) limits.push({ key: 'balance', text: balance })
+  // A propensity trimming removed the people with no comparable counterpart: the estimate is about the people who were kept (EU HTA guideline 6.2).
+  // (whether anyone was removed is its own fact: the head counts of a group of one to nine people are not stated)
+  const trimBlock = object(found.trim)
+  const trimmed = typeof trimBlock.trimmedAnyone === 'boolean' ? trimBlock.trimmedAnyone : Number(trimBlock.removedTotal) > 0
+  if (trimmed) limits.push({ key: 'trim', text: '结论只适用于修剪后留下的人：没有可比对象的人已被去掉，他们的情况不在这个结果里。' })
+  // Missing covariates that were imputed (algorithm round C7): what the pooled answer rests on beyond the data, when it is thinner than asked.
+  const imputation = object(found.imputation)
+  if (imputation.performed === true) {
+    const completed = Number(imputation.completed)
+    const requested = Number(imputation.requested)
+    const share = Number(imputation.shareIncomplete)
+    if (imputation.stoppedBy) limits.push({ key: 'imputations_stopped_early', text: `计算时间用完，只合并了 ${completed} 份补齐数据（计划 ${requested} 份），区间比计划的粗。` })
+    if (Number.isFinite(share) && Number.isFinite(requested) && requested < Math.ceil(share * 100)) {
+      limits.push({ key: 'few_imputations', text: `补齐的份数（${requested}）少于有缺失的人所占的百分比（${Math.ceil(share * 100)}），份数偏少，合并后的区间可能不稳。` })
+    }
+    const dropped = Array.isArray(imputation.droppedImputations) ? imputation.droppedImputations.length : 0
+    if (dropped > 0) limits.push({ key: 'imputations_not_estimable', text: `有 ${dropped} 份补齐数据上的分析算不出结果，合并时没有用它们。` })
+  }
+  // A target-trial emulation (algorithm round C3, C4): an interval from fewer resamples than planned, and weights that a few people carry.
+  const trialLimits = Array.isArray(found.limitedBy) ? found.limitedBy : []
+  if (Object.keys(object(found.targetTrial)).length) {
+    if (trialLimits.includes('bootstrap_stopped_early')) {
+      limits.push({ key: 'bootstrap_stopped_early', text: `计算时间用完，区间只来自对人重抽样的 ${Number(found.bootstrapReplicates)} 次，比计划的粗。` })
+    }
+    if (trialLimits.includes('weights_not_stable')) {
+      limits.push({ key: 'weights_not_stable', text: '补回删失的权重平均值离 1 太远，或有极大的权重：少数人撑起了结果，读的时候要谨慎。' })
+    }
+    const tt = object(found.targetTrial)
+    // an arm that had no event at all: its risk is bounded above, not measured, and the resampling interval of the difference is not drawn
+    if (trialLimits.includes('arm_without_events')) {
+      const arms = (Array.isArray(tt.armsWithoutEvents) ? tt.armsWithoutEvents : []).flatMap((entry) => (Array.isArray(object(entry).arms) ? object(entry).arms : []).map(String))
+      const who = arms.includes('treated') && arms.includes('control') ? '两组' : arms.includes('treated') ? '试验组' : '对照组'
+      limits.push({ key: 'arm_without_events', text: `${who}一例事件也没有：它的风险只有上限，没有区间；风险差和风险比的区间没有给出，读它们要当作方向，不是精确的数。` })
+    }
+    if (trialLimits.includes('per_protocol_beyond_protocol_follow_up')) {
+      limits.push({ key: 'per_protocol_beyond_protocol_follow_up', text: '按方案的结果没有给出：有一组里没有人在方案上待到所问的那一期，那里的按方案风险只会是模型外推出来的；意向治疗的结果照常给出。' })
+    }
+    if (trialLimits.includes('horizon_inside_grace_period')) {
+      limits.push({ key: 'horizon_inside_grace_period', text: '随访终点还在宽限期之内：试验组里没有人因为没开始治疗而被删失，它的风险是不加干预的自然进程，不是“宽限期内开始治疗”的风险。' })
+    }
+    if (trialLimits.includes('treated_before_time_zero')) {
+      limits.push({ key: 'treated_before_time_zero', text: '有人在时间零点之前已经用过药、之后没再用：他们被当作“始终没有开始”，但其实不是新开始用药的人，两组的可比性会打折扣。' })
+    }
+  }
+  // a fitted survival model's median that lies past the longest follow-up is read off the curve, not off anyone (review stats2 finding 7)
+  if (trialLimits.includes('median_beyond_follow_up')) {
+    const times = Number(object(found.model).medianTimesLongestFollowUp)
+    limits.push({ key: 'median_beyond_follow_up', text: `拟合出的生存中位时间${Number.isFinite(times) ? `是最长随访的 ${Number(times.toPrecision(3))} 倍` : '超出了最长随访'}：随访里没有人观察到它，这个数是曲线外推出来的，不同的曲线形状会给出很不一样的值。` })
+  }
   const labels = /** @type {Record<string, string>} */ (VCR_APPLICABILITY_LIMIT_LABELS_ZH)
   for (const entry of (Array.isArray(found.applicabilityLimits) ? found.applicabilityLimits : []).map(object)) {
     const sentence = labels[String(entry.code)] ?? text(entry.reason)

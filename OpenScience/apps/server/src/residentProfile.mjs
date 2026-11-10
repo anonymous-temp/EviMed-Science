@@ -1,3 +1,4 @@
+import { sourceReceiptState } from './memorySourceReceipts.mjs';
 import { contextPolicyIdentity, sameContextPolicy } from "./geoContextItems.mjs";
 import { createHash } from "node:crypto";
 import { PROJECT_CARD_SLOT_LABELS_ZH, SOCKET_TOOL_NAMES } from "@evimed/domain";
@@ -57,7 +58,7 @@ const CATCH_ALL_PROJECT_ID = "default";
  * the card's own order and words, cut at a whole line when the next would pass `maxChars`. Null when the card says nothing.
  * @param {string} projectId @param {readonly { slot?: string, label?: string | null, text?: string, updatedAt?: string | null }[]} rows
  * @param {{ maxChars?: number }} [options]
- * @returns {{ id: string, memoryType: string, kind: string, scope: string, origin: string, content: string, updatedAt: string | null } | null}
+ * @returns {{ id: string, memoryType: string, kind: string, scope: string, origin: string, content: string, updatedAt: string | null,originalSources:any[],attribution:any,sourcePrivacy:any } | null}
  */
 export function projectCardMemo(projectId, rows, { maxChars = PROJECT_CARD_MAX_CHARS } = {}) {
   /** @type {string[]} */
@@ -79,7 +80,11 @@ export function projectCardMemo(projectId, rows, { maxChars = PROJECT_CARD_MAX_C
     if (kept !== line) break;
   }
   if (!lines.length) return null;
-  return { id: `card:${projectId}`, memoryType: "project_card", kind: "project_fact", scope: "project", origin: "explicit", content: lines.join("\n"), updatedAt };
+  const originalSources=rows.flatMap(row=>/** @type {any} */(row).originalSources??[]);
+  const receipt=sourceReceiptState(originalSources,{trusted:true});
+  const origins=[...new Set(originalSources.flatMap(source=>source.attribution?.origins??[source.origin??'unknown']))];
+  return { id: `card:${projectId}`, memoryType: 'project_card',kind:'project_fact',scope:'project',origin:origins.length===1?origins[0]:origins.length?'mixed':'unknown',
+    content:lines.join('\n'),updatedAt,originalSources:receipt.originalSources,attribution:{schemaVersion:1,origins:origins.length?origins:['unknown'],confirmed:false},sourcePrivacy:receipt.sourcePrivacy };
 }
 
 /**
@@ -172,7 +177,7 @@ export function nativeSessionResident({ residentProfiles, activeRuns, startedByP
       if (running.some((run) => run.dispatchId)) return null;
       const block = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId, attended: !running.some(startedByPlatform) });
       if (!block.due || !block.text || !block.digest) return null;
-      return { text: block.text, digest: block.digest, memories: block.memories.map((/** @type {any} */ memo) => ({ id: memo.id, kind: memo.kind, scope: memo.scope })) };
+      return { text: block.text, digest: block.digest, memories: block.memories.map((/** @type {any} */ memo) => ({ id: memo.id, kind: memo.kind, scope: memo.scope,originalSources:memo.originalSources,sourcePrivacy:memo.sourcePrivacy,attribution:memo.attribution })) };
     },
     /** @param {any} user @param {any} project @param {string} sessionId @param {{ digest: string, memories: { id: string, kind?: string, scope?: string }[] }} receipt */
     attached(user, project, sessionId, receipt) {

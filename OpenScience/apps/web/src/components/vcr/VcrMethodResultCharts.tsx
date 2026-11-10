@@ -107,5 +107,15 @@ function QualityResult({ raw }: { raw: unknown }) {
     ...(disclosure.available === false ? [] : [{ label: "复制率（相对留出集）", value: disclosure.replicationRatio }, { label: "最近邻落在训练集的比例", value: disclosure.nearestNeighbourInTrainShare }, { label: "成员推断 AUC", value: disclosure.membershipAuc }, { label: "到最近训练记录的距离（中位）", value: disclosure.dcrMedian ?? disclosure.medianDcr }]),
     { label: "入排通过率的相对差", value: object(object(quality.utility).feasibility).jointPassRateRelativeDifference },
   ].flatMap((row, index) => number(row.value) === null ? [] : [{ key: String(index), label: row.label, value: number(row.value)! }]);
-  return candidates.length ? <Section title="人群质量指标" level="sub"><DataTable label="本次人群质量指标" columns={[{ key: "label", header: "指标", rowHeader: true, cell: row => row.label }, { key: "value", header: "结果", cell: row => <VcrNumber label={row.label} value={{ value: row.value, source: "calculated" }} /> }]} rows={candidates} rowKey={row => row.key} /></Section> : null;
+  const hasRedBand = Object.values(object(quality.bands)).some(band => band === "red");
+  const bands = object(quality.bands);
+  const unavailable = global.available === false || bands.sPMSE === "unknown" || bands.propensityAuc === "unknown";
+  const rows = number(global.n), columns = number(global.designColumns);
+  if (!candidates.length && !unavailable && !hasRedBand) return null;
+  return <Section title="人群质量指标" level="sub">
+    <p>计算完成不代表质量结论，请结合各项指标及其限制判断。</p>
+    {hasRedBand && <p>部分质量指标超出提示范围。</p>}
+    {unavailable && <p>部分区分真假记录的质量指标未计算：{global.available === false ? `设计规模或数据条件不满足${rows !== null && columns !== null ? `（${rows} 行、${columns} 列）` : ""}` : "原因未记录"}。</p>}
+    {candidates.length > 0 && <DataTable label="本次人群质量指标" columns={[{ key: "label", header: "指标", rowHeader: true, cell: row => row.label }, { key: "value", header: "结果", cell: row => <VcrNumber label={row.label} value={{ value: row.value, source: "calculated" }} /> }]} rows={candidates} rowKey={row => row.key} />}
+  </Section>;
 }

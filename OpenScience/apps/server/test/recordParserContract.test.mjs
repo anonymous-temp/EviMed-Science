@@ -45,11 +45,11 @@ test("the contract sample is one well-formed PDF page whose text layer carries t
   entries.forEach((entry, index) => assert.ok(source.slice(Number(entry.slice(0, 10))).startsWith(`${index + 1} 0 obj\n`)));
 });
 
-test("without a key only the answers that need none are recorded, verbatim", async (t) => {
+test("without a key only the health answer is recorded, verbatim", async (t) => {
   const { baseUrl, seen } = await fakeParser(t);
   const outDir = await scratch(t);
   const recorded = await recordParserContract({ baseUrl, outDir, now: () => new Date("2026-09-20T00:00:00.000Z") });
-  assert.deepEqual(recorded, [{ name: "health.json", status: 200 }, { name: "extract-missing-file.json", status: 401 }]);
+  assert.deepEqual(recorded, [{ name: "health.json", status: 200 }]);
   assert.ok(seen.every((request) => request.authorization === null));
   const provenance = JSON.parse(await readFile(path.join(outDir, "provenance.json"), "utf8"));
   assert.equal(provenance.observedAt, "2026-09-20T00:00:00.000Z");
@@ -62,11 +62,13 @@ test("with a key the authenticated samples are recorded, and the key is written 
   const outDir = await scratch(t);
   const recorded = await recordParserContract({ baseUrl, token: KEY, outDir });
   assert.deepEqual(recorded.map((row) => row.name), [
-    "health.json", "extract-missing-file.json", "extract-success.json", "parse-success.json",
-    "extract-unsupported-format.json", "extract-checksum-failed.json", "extract-unauthorized.json",
+    "health.json", "engine-a-pdf-success.json", "engine-b-success.json", "error-invalid-api-key.json",
   ]);
-  assert.equal(recorded.find((row) => row.name === "extract-unauthorized.json").status, 401, "the refusal sample uses a key the service never issued");
-  assert.equal(seen.filter((request) => request.authorization === `Bearer ${KEY}`).length, 4);
+  assert.equal(recorded.find((row) => row.name === "error-invalid-api-key.json").status, 401, "the refusal sample uses a key the service never issued");
+  assert.equal(seen.filter((request) => request.authorization === `Bearer ${KEY}`).length, 2);
+  const provenance = JSON.parse(await readFile(path.join(outDir, "provenance.json"), "utf8"));
+  assert.equal(provenance.fixtures["engine-a-pdf-success.json"].documented, false, "a recording replaces the documented answer");
+  assert.equal(JSON.stringify(provenance).includes(baseUrl), false, "the service's address is not written to the repository");
   for (const name of await readdir(outDir)) {
     assert.equal((await readFile(path.join(outDir, name), "utf8")).includes(KEY), false, `${name} contains the key`);
   }

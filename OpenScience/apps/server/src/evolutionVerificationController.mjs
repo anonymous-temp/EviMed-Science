@@ -58,7 +58,6 @@ export function createEvolutionVerificationController(config,hooks={}){
       catch(error){classify(error);throw error;}
     },
     async executeCandidate(body,{signal=undefined}={}){
-      if(config.evolutionEnabled!==true)throw new HttpError(503,'product_state_unavailable','Evolution verification is disabled.');
       const request=verificationRequest(body);await tools.reconcileEvolutionAttempts?.();
       /** @type {string} */
       let image;
@@ -66,7 +65,7 @@ export function createEvolutionVerificationController(config,hooks={}){
       catch(error){
         if(error?.code!=='ENOENT')throw error;
         // The prepared set is keyed by the runtime image's identity, so every release that changes the image leaves
-        // each published tool with dependencies unprepared — and only the build path ever prepared. Prepare once here:
+        // each program with dependencies unprepared — and only the build path ever prepared. Prepare once here:
         // the allowlist and exact digests already bound what can be fetched, and concurrent callers join one acquisition.
         // An acquisition that cannot be done now is a named, retryable refusal, never a raw ENOENT.
         try{await preparer.prepare(request.dependencyIds,{signal});image=await preparer.selectedImage(request.dependencyIds);}

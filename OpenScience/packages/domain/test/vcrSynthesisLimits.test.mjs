@@ -9,6 +9,7 @@ import {
   VCR_SCENARIO_SCHEMAS,
   VCR_SYNTHPOP_COPIES,
   VCR_SYNTHPOP_COST,
+  vcrSynthpopCalibrationSeconds,
   validateScenario,
   vcrScenarioHelp,
   vcrSynthpopBudgetSeconds,
@@ -32,7 +33,8 @@ test("the copies the scenario takes are the copies the engine makes: five to fif
 
 test("the help says what a synthesis can finish, with the sizes the model itself allows", () => {
   const notes = /** @type {any} */ (vcrScenarioHelp()).methods["population.synthpop"].notes.join("\n");
-  assert.equal(notes, vcrSynthpopHelpNotes().join("\n"));
+  // (1.1.0 adds the notes on the report after the size notes; the size notes are unchanged and come first)
+  assert.ok(notes.startsWith(vcrSynthpopHelpNotes().join("\n")));
   assert.match(notes, /cpuSecondsLimit/);
   assert.match(notes, /fails with no table and no copy kept/);
   assert.match(notes, /does not sample rows and does not drop columns/);
@@ -135,3 +137,15 @@ test("the constants the refusal rests on are the measured ones: the margin is th
   assert.ok(VCR_SYNTHPOP_COST.margin >= 1 / 0.75 && VCR_SYNTHPOP_COST.margin < 1.4);
   assert.match(VCR_SYNTHPOP_COST.basis, /0\.75 and 1\.18/);
 });
+
+test("the permuted-arm calibration costs a synthesis a replicate, within the measured law and never under it", () => {
+  // the nine measured shapes (rows, columns, seconds for one copy): the law is above every one and within a factor of 1.34 of it
+  const measured = [[500, 8, 0.119], [500, 16, 0.259], [500, 32, 0.727], [2000, 8, 0.3785], [2000, 16, 1.008], [2000, 32, 3.132], [6000, 8, 1.384], [6000, 16, 3.987], [6000, 32, 11.8635]];
+  for (const [rows, columns, seconds] of measured) {
+    const ratio = vcrSynthpopCalibrationSeconds({ rows, columns, replicates: 1 }) / seconds;
+    assert.ok(ratio > 0.95 && ratio < 1.34, `${rows} x ${columns}: ${ratio}`);
+  }
+  assert.ok(Math.abs(vcrSynthpopCalibrationSeconds({ rows: 2000, columns: 16, replicates: 100, copies: 2 }) - 2 * 100 * vcrSynthpopCalibrationSeconds({ rows: 2000, columns: 16, replicates: 1 })) < 1e-9);
+  assert.ok(vcrSynthpopCalibrationSeconds({ rows: 6000, columns: 32, replicates: 100 }) > vcrSynthpopBudgetSeconds(600), "a big table's hundred replicates do not fit the default budget: the loop keeps those that finished");
+});
+

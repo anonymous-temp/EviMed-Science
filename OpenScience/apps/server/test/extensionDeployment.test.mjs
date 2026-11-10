@@ -38,7 +38,7 @@ function fixtureManifest() {
   descriptor.artifactDigest = extensionToolArtifactDigest(descriptor);
   return {
     schemaVersion: 1,
-    dshVersion: '0.2.1-rc.5',
+    dshVersion: '0.2.2-rc.1',
     generatedAt: '2026-10-02T00:00:00.000Z',
     policy,
     catalogue: [{
@@ -135,7 +135,7 @@ test('valid fixed deployment binds immutable catalogue and artifact identities t
     const proof = deploymentProofIdentity(loaded, loaded.catalogue[0], image);
     assert.equal(proof.packageIntegrity, manifest.catalogue[0].integrity);
     assert.equal(proof.runtimeImageDigest, image);
-    assert.equal(proof.dshVersion, '0.2.1-rc.5');
+    assert.equal(proof.dshVersion, '0.2.2-rc.1');
     assert.equal(proof.adapterRevision,extensionProofAdapterRevision(manifest.admittedArtifacts[0].adapterRevision,identity.adapterRevision,sha));
     assert.notEqual(proof.adapterRevision,extensionProofAdapterRevision(manifest.admittedArtifacts[0].adapterRevision,'sha256:'+'0'.repeat(64),sha));
     assert.notEqual(proof.adapterRevision,manifest.admittedArtifacts[0].adapterRevision);
@@ -283,5 +283,43 @@ test('changes to the owner-only project and real study role boundaries re-label 
     changed = '';
     assert.equal(currentExtensionSourcePolicy().permissionProfileRevision, before.permissionProfileRevision);
     assert.equal(loadExtensionDeployment({ dataDir: f.root }).policyState, 'current');
+  } finally { await f.close(); }
+});
+
+test('native admission binds the fixed bundle, tools, row and receipt digest', async () => {
+  const { researchNativeReceiptDigest, researchNativeArtifactDigest, RESEARCH_NATIVE_BUNDLES } = await import('@evimed/domain');
+  const digest = value => 'sha256:' + sha(value);
+  const f = await fixture();
+  try {
+    const manifest = fixtureManifest();
+    const id = 'virtual-trial', spec = RESEARCH_NATIVE_BUNDLES[id];
+    const receipt = { schemaVersion: 1, id, coordinate: { kind: 'npm', name: spec.name, version: '0.1.0' }, integrity: digest('package'), closureDigest: digest('closure'), row: spec.row, tools: [...spec.tools] };
+    const bundle = { ...receipt, receiptDigest: researchNativeReceiptDigest(receipt, digest), adapterRevision: digest('adapter'), suiteRevision: digest('suite') };
+    delete bundle.schemaVersion;
+    bundle.artifactDigest = researchNativeArtifactDigest(bundle, digest);
+    manifest.catalogue.push({ id, title: 'Trial', coordinate: receipt.coordinate, executionClass: 'managed-native', integrity: receipt.integrity, settingsSchema: {} });
+    manifest.admittedNativeBundles = [bundle];
+    manifest.admittedArtifacts.push({ id, coordinate: receipt.coordinate, integrity: receipt.integrity, artifactDigest: bundle.artifactDigest, adapterRevision: bundle.adapterRevision, suiteRevision: bundle.suiteRevision });
+    await f.write(manifest);
+    assert.equal(loadExtensionDeployment({ dataDir: f.root }).status, 'configured');
+    // a row that names no managed-native entry is a broken allow-list: the file is refused
+    const unknown = structuredClone(manifest);
+    unknown.admittedNativeBundles[0].id = 'unknown';
+    await f.write(unknown);
+    assert.equal(loadExtensionDeployment({ dataDir: f.root }).status, 'unavailable');
+    // a receipt this build no longer admits (forged, or written before the bundle's tools grew) leaves that bundle out alone, named,
+    // and every other admitted extension stays (review eng P1-4)
+    for (const mutate of [b => { b.tools[0] = 'forged'; }, b => { b.row = 'other'; }, b => { b.receiptDigest = digest('forged'); }, b => { b.artifactDigest = digest('forged'); },
+      b => { b.tools = b.tools.filter(tool => !['virtual_trial_search', 'virtual_trial_compare'].includes(tool)); }]) {
+      const invalid = structuredClone(manifest);
+      mutate(invalid.admittedNativeBundles[0]);
+      await f.write(invalid);
+      const loaded = loadExtensionDeployment({ dataDir: f.root });
+      assert.equal(loaded.status, 'configured');
+      assert.deepEqual(loaded.admittedNativeBundles, []);
+      assert.deepEqual(loaded.staleNativeBundles, [{ id, reason: 'receipt_mismatch' }]);
+      assert.ok(!loaded.catalogue.some(row => row.id === id) && !loaded.admittedArtifacts.some(row => row.id === id), 'the stale bundle is not admitted anywhere');
+      assert.deepEqual(loaded.admittedDescriptors.map(row => row.id), ['cowork-portable'], 'the isolated tool stays admitted');
+    }
   } finally { await f.close(); }
 });

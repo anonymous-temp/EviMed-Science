@@ -1,5 +1,6 @@
 // The production side of the monthly RSI snapshot: the push script and its systemd unit. The script runs with `docker` and
-// `rsync` replaced by recorders, against directories of its own.
+// `rsync` replaced by recorders, against directories of its own. Beside the frontier snapshot it pushes the signals export (2026-11-04), which is
+// only the frontier push's guest.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -12,14 +13,15 @@ import { gunzipSync } from 'node:zlib'
 const deploy = new URL('../../../deploy/rsi-campaign/production/', import.meta.url)
 const SCRIPT = new URL('rsi-frontier-push.sh', deploy).pathname
 
-/** @param {string} dockerBody the fake `docker`'s shell body; it is handed the export script on stdin */
+/** @param {string} dockerBody the fake `docker`'s shell body; the export script it is handed on stdin is in `$IN` */
 async function host(dockerBody) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'rsi-push-'))
   const dirs = { bin: path.join(root, 'bin'), lib: path.join(root, 'lib'), conf: path.join(root, 'conf'), out: path.join(root, 'out'), log: path.join(root, 'calls.log') }
   for (const dir of [dirs.bin, dirs.lib, dirs.conf]) await mkdir(dir)
   await writeFile(path.join(dirs.lib, 'rsi-frontier-export.mjs'), '// the export\n')
+  await writeFile(path.join(dirs.lib, 'rsi-signals-export.mjs'), '// the signals export\n')
   await writeFile(path.join(dirs.conf, 'lab-host'), 'lab.example\n')
-  await writeFile(path.join(dirs.bin, 'docker'), `#!/usr/bin/env bash\necho "docker $*" >> "${dirs.log}"\ncat > /dev/null\n${dockerBody}\n`)
+  await writeFile(path.join(dirs.bin, 'docker'), `#!/usr/bin/env bash\necho "docker $*" >> "${dirs.log}"\nIN=$(cat)\n${dockerBody}\n`)
   await writeFile(path.join(dirs.bin, 'rsync'), `#!/usr/bin/env bash\necho "rsync \${@: -2}" >> "${dirs.log}"\n`)
   await chmod(path.join(dirs.bin, 'docker'), 0o755); await chmod(path.join(dirs.bin, 'rsync'), 0o755)
   const run = (/** @type {string} */ month = '2026-10') => spawnSync('bash', [SCRIPT, month], { encoding: 'utf8',
@@ -29,22 +31,73 @@ async function host(dockerBody) {
 }
 
 test('the export is niced and heap-capped inside the container, compressed as it streams, and pushed data first and checksum last', async () => {
-  const h = await host(`echo '{"days":[1,2,3]}'`)
+  const h = await host(`case "$IN" in *signals*) echo '{"signals":[]}';; *) echo '{"days":[1,2,3]}';; esac`)
   try {
     const result = h.run()
     assert.equal(result.status, 0, result.stderr)
     const calls = await h.calls()
     assert.match(calls[0], /^docker exec -i \S+ nice -n 10 node --max-old-space-size=512 --input-type=module - --from 2026-08-01 --to 2026-09-30$/)
-    assert.deepEqual(await h.listing(), ['frontier-2026-10.json.gz', 'frontier-2026-10.json.gz.sha256'], 'no temporary file is left')
+    assert.deepEqual(await h.listing(), ['frontier-2026-10.json.gz', 'frontier-2026-10.json.gz.sha256', 'signals-2026-10.json.gz', 'signals-2026-10.json.gz.sha256'], 'no temporary file is left')
     const archive = await readFile(path.join(h.out, 'frontier-2026-10.json.gz'))
     assert.equal(gunzipSync(archive).toString(), '{"days":[1,2,3]}\n')
     assert.equal((await readFile(path.join(h.out, 'frontier-2026-10.json.gz.sha256'), 'utf8')).split(' ')[0], createHash('sha256').update(archive).digest('hex'))
-    assert.deepEqual(calls.slice(1), [`rsync ${h.out}/frontier-2026-10.json.gz rsi-inbox@lab.example:frontier-2026-10.json.gz`,
+    assert.deepEqual(calls.slice(1, 3), [`rsync ${h.out}/frontier-2026-10.json.gz rsi-inbox@lab.example:frontier-2026-10.json.gz`,
       `rsync ${h.out}/frontier-2026-10.json.gz.sha256 rsi-inbox@lab.example:frontier-2026-10.json.gz.sha256`])
-    // Run again: the export is there, nothing is exported twice and the push is repeated.
+    // Beside it, after it and the same way: the signals export of the same two months, in the same container under the same limits.
+    assert.equal(calls[3], calls[0], 'the same container, limits and window')
+    const signals = await readFile(path.join(h.out, 'signals-2026-10.json.gz'))
+    assert.equal(gunzipSync(signals).toString(), '{"signals":[]}\n', 'the signals script is what ran')
+    assert.equal((await readFile(path.join(h.out, 'signals-2026-10.json.gz.sha256'), 'utf8')).split(' ')[0], createHash('sha256').update(signals).digest('hex'))
+    assert.deepEqual(calls.slice(4), [`rsync ${h.out}/signals-2026-10.json.gz rsi-inbox@lab.example:signals-2026-10.json.gz`,
+      `rsync ${h.out}/signals-2026-10.json.gz.sha256 rsi-inbox@lab.example:signals-2026-10.json.gz.sha256`])
+    assert.match(result.stdout, /pushed frontier-2026-10\.json\.gz[^\n]*\n[^\n]*pushed signals-2026-10\.json\.gz/)
+    // Run again: the exports are there, nothing is exported twice and the pushes are repeated.
     assert.equal(h.run().status, 0)
-    assert.equal((await h.calls()).filter(line => line.startsWith('docker')).length, 1)
+    const again = await h.calls()
+    assert.equal(again.filter(line => line.startsWith('docker')).length, 2)
+    assert.equal(again.filter(line => line.startsWith('rsync')).length, 8)
   } finally { await h.cleanup() }
+})
+
+test('the signals export is the frontier push\'s guest: when it fails the frontier snapshot is already pushed, the script still succeeds, and the retry pushes it', async () => {
+  const h = await host(`case "$IN" in *signals*) echo '{"signals":[1,'; exit 9;; *) echo '{"days":[]}';; esac`)
+  try {
+    const failed = h.run()
+    assert.equal(failed.status, 0, failed.stderr)
+    assert.match(failed.stderr, /signals export not pushed \(signals-2026-10\.json\.gz\); the frontier push is done and unaffected/)
+    assert.deepEqual(await h.listing(), ['frontier-2026-10.json.gz', 'frontier-2026-10.json.gz.sha256'], 'no partial signals archive, no checksum')
+    const calls = await h.calls()
+    assert.deepEqual(calls.filter(line => line.startsWith('rsync')), [`rsync ${h.out}/frontier-2026-10.json.gz rsi-inbox@lab.example:frontier-2026-10.json.gz`,
+      `rsync ${h.out}/frontier-2026-10.json.gz.sha256 rsi-inbox@lab.example:frontier-2026-10.json.gz.sha256`], 'nothing of the signals went to the lab')
+    assert.match(failed.stdout, /pushed frontier-2026-10\.json\.gz/)
+    // Mended: the retry exports only the signals again.
+    await writeFile(path.join(h.bin, 'docker'), `#!/usr/bin/env bash\necho "docker $*" >> "${h.log}"\ncat > /dev/null\necho '{"signals":[]}'\n`)
+    assert.equal(h.run().status, 0)
+    assert.deepEqual(await h.listing(), ['frontier-2026-10.json.gz', 'frontier-2026-10.json.gz.sha256', 'signals-2026-10.json.gz', 'signals-2026-10.json.gz.sha256'])
+    assert.equal((await h.calls()).filter(line => line.startsWith('docker')).length, 3, 'the frontier export once and the signals export twice: the finished frontier snapshot was not made again')
+  } finally { await h.cleanup() }
+})
+
+test('a host that has no signals export installed yet, or whose lab refuses the push, still pushes the frontier snapshot and exits 0', async () => {
+  const missing = await host(`echo '{"days":[1]}'`)
+  try {
+    await rm(path.join(missing.lib, 'rsi-signals-export.mjs'))
+    const result = missing.run()
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stderr, /signals export not pushed/)
+    assert.deepEqual(await missing.listing(), ['frontier-2026-10.json.gz', 'frontier-2026-10.json.gz.sha256'])
+    assert.equal((await missing.calls()).filter(line => line.startsWith('docker')).length, 1, 'nothing was run for it')
+  } finally { await missing.cleanup() }
+  // The lab takes the frontier files and refuses the signals ones: the exports stay, for the next try.
+  const refusing = await host(`echo '{"days":[1]}'`)
+  try {
+    await writeFile(path.join(refusing.bin, 'rsync'), `#!/usr/bin/env bash\necho "rsync \${@: -2}" >> "${refusing.log}"\ncase "\${@: -1}" in *signals*) exit 23;; esac\n`)
+    const result = refusing.run()
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stderr, /signals export not pushed/)
+    assert.ok((await refusing.listing()).includes('signals-2026-10.json.gz.sha256'), 'a finished export is kept so a retry only pushes')
+    assert.equal((await refusing.calls()).filter(line => line.startsWith('docker')).length, 2)
+  } finally { await refusing.cleanup() }
 })
 
 test('a failed export leaves nothing on the host, not even a partial archive or an uncompressed copy, and pushes nothing', async () => {
@@ -60,7 +113,7 @@ test('a failed export leaves nothing on the host, not even a partial archive or 
     // The retry finds a clean directory.
     await writeFile(path.join(h.bin, 'docker'), `#!/usr/bin/env bash\ncat > /dev/null\necho '{"ok":true}'\n`)
     assert.equal(h.run().status, 0)
-    assert.deepEqual(await h.listing(), ['frontier-2026-10.json.gz', 'frontier-2026-10.json.gz.sha256'])
+    assert.deepEqual(await h.listing(), ['frontier-2026-10.json.gz', 'frontier-2026-10.json.gz.sha256', 'signals-2026-10.json.gz', 'signals-2026-10.json.gz.sha256'], 'the retry pushes both')
   } finally { await h.cleanup() }
 })
 

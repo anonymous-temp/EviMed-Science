@@ -1,0 +1,75 @@
+{
+  "core": {
+    "schemaVersion": 2,
+    "models": {
+      "answer": "deepseek-v4-flash",
+      "judge": "deepseek-v4-pro"
+    },
+    "thinking": "disabled",
+    "kbScope": "pooled",
+    "temperature": {
+      "answer": 0.7,
+      "judge": 0
+    },
+    "retrieval": {
+      "engine": "bm25",
+      "topK": 5,
+      "maxToolCalls": 6
+    },
+    "browse": {
+      "maxToolCalls": 12
+    },
+    "prompts": {
+      "answerSystemSha256": "47ec74bd7e6c318042530c84e02be487abc2e909e6faf532cf9af51da15e0a24",
+      "answerSystemBrowseSha256": "d6d87ed21b32481a267bb9deb96f3102317492b4e579e953afc19213f76a40a5",
+      "decompositionSentence": "When a question spans several documents, first split it into sub-questions, search for each one separately, and then combine what you found into one answer.",
+      "judgeSystemSha256": "86679b886b48ce19dda39d5e4568c2bdbf6650cd9351d5e55f5aa726d6f7af58"
+    },
+    "thresholds": {
+      "minRepsPerCell": 3,
+      "synthesis": {
+        "bVsAprimeCiLowerAbove": 0,
+        "bVsAprimeMeanAtLeast": 0.05,
+        "bVsAMeanAbove": 0
+      },
+      "single": {
+        "meanAtLeast": -0.05,
+        "ciLowerAtLeast": -0.1
+      },
+      "citation": {
+        "verifiedRateDropAtMost": 0.03
+      },
+      "judgeSanity": {
+        "referenceMeanAtLeast": 0.9,
+        "emptyMeanAtMost": 0.1
+      }
+    },
+    "bootstrap": {
+      "iterations": 10000,
+      "seed": 20261012
+    },
+    "arms": {
+      "A": "kb_search only",
+      "Aprime": "kb_search + decomposition guidance",
+      "C": "upstream knowledge pages + kb_search",
+      "G": "browse only: list, grep, read; no kb_search"
+    }
+  },
+  "plan": {
+    "reps": 3,
+    "arms": [
+      "A",
+      "G"
+    ],
+    "topics": [
+      "af-doac-warfarin",
+      "sglt2-hf-ckd",
+      "aspirin-primary-prevention"
+    ],
+    "questionsPerTopic": null,
+    "budgetCny": 15,
+    "totalCapCny": 25,
+    "concurrency": 4
+  },
+  "startedAt": "2026-11-05T02:08:43.171Z"
+}

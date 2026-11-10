@@ -385,16 +385,16 @@ test("a lesson that carries no word of the researcher's is a run's, and writes a
 
 test("the researcher's own corrections and edits open the input, before the transcript", () => {
   const transcript = {
-    header: { completeness: "complete" },
+    header: { completeness: "complete", sessions: [{ sessionId: "root", parentSessionId: null, seedEndSeq: -1 }] },
     messages: [
-      { sessionId: "root", seq: 1, role: "user", parts: [{ type: "text", text: "<evimed-brief>请做一个 Meta 分析</evimed-brief>" }] },
-      { sessionId: "root", seq: 2, role: "assistant", parts: [{ type: "text", text: "好的。" }] },
-      { sessionId: "root", seq: 3, role: "user", parts: [{ type: "text", text: "<evimed-correction>先报 GRADE 等级，再报效应量</evimed-correction>" }] },
-      { sessionId: "root", seq: 4, role: "user", parts: [{ type: "text", text: "<evimed-correction>我的手机号 13800138000，发我</evimed-correction>" }] },
+      { sessionId: "root", seq: 1, turnStartSeq: 0, source: "user", sourceRequestId: "current", role: "user", parts: [{ type: "text", text: "<evimed-brief>请做一个 Meta 分析</evimed-brief>" }] },
+      { sessionId: "root", seq: 2, turnStartSeq: 0, role: "assistant", parts: [{ type: "text", text: "好的。" }] },
+      { sessionId: "root", seq: 3, turnStartSeq: 0, source: "user", sourceRequestId: "current", role: "user", parts: [{ type: "text", text: "<evimed-correction>先报 GRADE 等级，再报效应量</evimed-correction>" }] },
+      { sessionId: "root", seq: 4, turnStartSeq: 0, source: "user", sourceRequestId: "current", role: "user", parts: [{ type: "text", text: "<evimed-correction>我的手机号 13800138000，发我</evimed-correction>" }] },
     ],
   };
   const input = buildDistillationInput({
-    run: { id: "run_1", effectiveAgentId: "meta-analysis" }, trigger: "correction", transcript,
+    run: { id: "run_1", sessionId: "root", kernelRequestIds: ["current"], effectiveAgentId: "meta-analysis" }, trigger: "correction", transcript,
   });
   const keys = Object.keys(input);
   assert.ok(keys.indexOf("corrections") < keys.indexOf("transcriptExcerpts"));
@@ -434,8 +434,8 @@ async function projectWithTranscripts(root, id, runIds, userId = "u1") {
   const project = { id, userId, rootDir, metaDir: path.join(rootDir, ".openscience"), workspaceDir: path.join(rootDir, "workspace") };
   await mkdir(path.join(project.metaDir, TRANSCRIPT_DIR_NAME), { recursive: true });
   for (const runId of runIds) {
-    const header = { schemaVersion: 1, runId, capturedAt: "2026-09-28T00:00:00.000Z", completeness: "complete", sessions: [], missing: [] };
-    const message = { sessionId: `s_${runId}`, seq: 1, role: "user", source: "user", parts: [{ type: "text", text: `${id} 的第 ${runId} 次综述` }] };
+    const header = { schemaVersion: 1, runId, capturedAt: "2026-09-28T00:00:00.000Z", completeness: "complete", sessions: [{ sessionId: `s_${runId}`, parentSessionId: null, seedEndSeq: -1 }], missing: [] };
+    const message = { sessionId: `s_${runId}`, seq: 1, turnStartSeq: 0, sourceRequestId: `req_${runId}`, role: "user", source: "user", parts: [{ type: "text", text: `${id} 的第 ${runId} 次综述` }] };
     await writeFile(transcriptPath(project, runId), `${JSON.stringify(header)}\n${JSON.stringify(message)}\n`);
   }
   return project;
@@ -455,6 +455,7 @@ test("a routine's peer is read from whichever of the researcher's projects it ra
     learning: { ...fakeLearning(), async listMethods() { return { items: [] }; } },
     dispatch: async (request) => { dispatched.push(request); return { runId: "lr_1", sessionId: "ls_1", dispatchId: request.dispatchId }; },
     readResult: async () => ({ status: "running" }),
+    resolveRun: async (_project, runId) => ({ id: runId, sessionId: `s_${runId}`, kernelRequestIds: [`req_${runId}`] }),
     resolveProject: async (userId, projectId) => {
       resolved.push(`${userId}/${projectId}`);
       if (projectId === "aspirin") return aspirin;
@@ -512,7 +513,7 @@ test("a message typed into the running turn is the researcher's correction; noth
   const typed = (/** @type {number} */ seq, /** @type {number} */ turnStartSeq, /** @type {string} */ text, extra = {}) =>
     ({ sessionId: "root", seq, turnStartSeq, role: "user", source: "user", sourceRequestId: `req_${seq}`, parts: [{ type: "text", text }], ...extra });
   const transcript = {
-    header: { completeness: "complete" },
+    header: { completeness: "complete", sessions: [{ sessionId: "root", parentSessionId: null, seedEndSeq: -1 }] },
     messages: [
       // An earlier run's turn in the same conversation, with its own steer.
       typed(0, 0, "上一个问题"),

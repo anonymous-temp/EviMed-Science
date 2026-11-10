@@ -1064,6 +1064,7 @@ async function planProject(ctx, project, candidates, blocked, counts, choices, c
     plans.push({
       userId: project.userId, geoProjectId: project.id, articleId: article.id, mediaType: pick.media.mediaType, resourceId: pick.media.resourceId,
       priceCny: pick.media.priceCny, reserveCny: reserve,
+      domainFreshRequired: extraByKey.has(mediaKey(pick.media.mediaType, pick.media.resourceId)),
       detail: { score: pick.score, domain: pick.media.domain, layer: article.layer, recentOrders: recent.length, ...(pick.preferred ? { preferred: true } : {}) },
     });
   }
@@ -1310,7 +1311,8 @@ async function withdrawStalePlans(ctx, project, candidatesByKey, counts, choices
     const plannedArticle = articles.get(order.id);
     const articleIssues = articleProblems(plannedArticle);
     const reason = articleIssues[0] ?? (choices.skippedArticleIds.has(String(order.articleId)) ? "action_skipped" : null)
-      ?? (!media ? "outlet_withdrawn" : media.priceCny !== order.priceCny ? "price_changed" : null);
+      ?? (!media ? "outlet_withdrawn" : media.priceCny !== order.priceCny ? "price_changed"
+        : order.domainFreshRequired && !supplementalDomainFresh(media, ctx.now().getTime()) ? "domain_check_stale" : null);
     if (!reason) continue;
     if (await transition(ctx, order, "cancelled", { detail: { reason: `plan_withdrawn:${reason}` } })) counts.withdrawn += 1;
   }
@@ -1379,6 +1381,8 @@ async function placeOrder(ctx, project, order, state) {
   if (articleProblems(article).length) return withdraw("article_not_placeable");
   const media = state.candidatesByKey.get(mediaKey(order.mediaType, order.resourceId));
   if (!media || media.priceCny !== order.priceCny) return withdraw("outlet_changed");
+  // A plan admitted on a supplemental row's domain check needs a current one when it is sent, not only when it was made.
+  if (order.domainFreshRequired && !supplementalDomainFresh(media, ctx.now().getTime())) return withdraw("domain_check_stale");
   if (!currentDomainProof(media)) return "domain_proof_invalid";
   if (state.blocked.has(mediaKey(order.mediaType, order.resourceId))) return withdraw("outlet_unknown_order");
   const sources = await sourcesByDomain(ctx, project.id, mediaSourceDomains(media));

@@ -18,3 +18,12 @@ Before production release, verify the worker inventory and versions on every
 host, confirm the old fleet is stopped, deploy the matching server and worker,
 then verify both the running version and the queue outcomes. This document is a
 rollout gate, not evidence that deployment or production validation occurred.
+
+## Database fence
+
+The first start of a worker of this version installs a trigger on `evimed_geo.probe_jobs`: a lease (queued to leased) of a job in a
+confirmation round is refused with `geo_confirmation_worker_outdated` unless the leasing statement also wrote the attempt it took into
+`lease_fence`, which only this version does. An older worker that is still running therefore cannot submit a confirmation ask once the
+new version has started; it fails loudly on its next lease instead of overlapping silently. This does not replace the rollout gate above:
+the fence covers the lease, not an older worker's other statements, and a lease taken before the trigger existed is handled by the
+legacy rules. Confirm the old fleet is stopped before the new version starts.

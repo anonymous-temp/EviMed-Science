@@ -27,7 +27,6 @@ test('managed research belongs to its researcher, but platform self-measurement 
   assert.equal(isResearcherOwnedWork(null), false)
   assert.equal(isResearcherOwnedWork({ automated: true }), false)
   assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'geo:content' }), true)
-  assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'autopilot:literature-sentinel' }), true)
   assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'vcr:review-repair' }), true)
   assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'vcr:analysis', effectiveAgentId: 'method-relations' }), false)
   assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'platform-learning' }), false)

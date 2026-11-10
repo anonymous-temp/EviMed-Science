@@ -9,7 +9,8 @@ import {rsiCampaignIssues,rsiCompatibilityIssues} from '../../packages/domain/sr
 import {evaluateStatistics} from './campaign_runner.mjs';
 import {computeRsiDependencyClosure} from '../../apps/server/src/rsiDependencyClosure.mjs';
 import {createCampaignSigner} from './signing.mjs';
-import {UNBOUND_BASELINE_PREFIX} from './frontier_assemble.mjs';
+import {UNBOUND_BASELINE_PREFIX,UNBOUND_CONSUMER_PREFIX} from './frontier_assemble.mjs';
+import {rsiClosureSettings} from '../../apps/server/src/rsiClosureSettings.mjs';
 const fail=reason=>{throw new Error(reason);};
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 export async function consumerClosure(root, paths) {
@@ -33,11 +34,13 @@ export function authenticateEvaluation(envelope, profile, now) {
   return p;
  }catch{fail('campaign_evaluator_authority_untrusted');}
 }
-export async function finalizeCampaign({completed,manifest,inputs,files,evidenceEnvelope,profile,currentTarget,root,closurePaths,bundleId,expiresAt,now=new Date().toISOString(),publisher,evaluator,incidentTransport,purpose='production',statisticsPython='python3',closureSettings={},closurePins={},closureRegistry,statisticsModulePath,loadSigners}) {
+export async function finalizeCampaign({completed,manifest,inputs,files,evidenceEnvelope,profile,currentTarget,root,closurePaths,bundleId,expiresAt,now=new Date().toISOString(),publisher,evaluator,incidentTransport,purpose='production',statisticsPython='python3',closureSettings={},closurePins={},closureRegistry,statisticsModulePath,statisticsTimeoutMs,loadSigners}) {
  const incident=async()=>{if(manifest.data.classification==='authorized-incident'){if(!incidentTransport)fail('campaign_incident_authority_unavailable');await incidentTransport.assertIncidentCurrent(manifest.data.authorization);}};
  await incident();
  // The export carried no incumbent (an older export script): the month was measured against no policy production serves, so no bundle of it can be imported.
  if(String(manifest?.target?.baselineRevision).startsWith(UNBOUND_BASELINE_PREFIX))fail('campaign_export_incumbent_missing');
+ // Production's selection consumer was not this lab's when the month was built: measured and reported, and no bundle of it could be imported.
+ if(String(manifest?.target?.baselineRevision).startsWith(UNBOUND_CONSUMER_PREFIX))fail('campaign_export_consumer_changed');
  if(rsiCampaignIssues(manifest).length||completed.status!=='completed'||rsiCompatibilityIssues(manifest.target,currentTarget).length)fail('campaign_finalization_input_invalid');
  const state=completed.checkpoint,binding=rsiDigest({manifest,inputs});
  if(completed.binding!==binding||state.binding!==binding||completed.reportDigest!==rsiDigest(state)||state.campaignId!==manifest.id||rsiDigest(inputs.registration)!==manifest.registration.digest)fail('campaign_checkpoint_changed');
@@ -74,7 +77,9 @@ export async function finalizeCampaign({completed,manifest,inputs,files,evidence
  if(purpose!=='production'||q.testOnly===true||q.evidenceScope!=='population-task-family')fail('campaign_evidence_scope_not_release_eligible');
  if(rsiDigest(statistics.registration)!==rsiDigest(inputs.registration.statistics)||statistics.receipt.confirmation_exposed!==false||statistics.receipt.look!==1||!Object.hasOwn(statistics.registration.claims,manifest.claim)||manifest.registration.procedure!==statistics.registration.procedure.id)fail('campaign_statistics_binding_changed');
  // The evaluator's own attested digest is re-checked by the statistics; it is never filled in here.
- const evaluated=await evaluateStatistics({...statistics,receipt:{...statistics.receipt,now:now.replace(/Z$/,'+00:00')}},{pythonExecutable:statisticsPython,modulePath:statisticsModulePath});
+ const evaluated=await evaluateStatistics({...statistics,receipt:{...statistics.receipt,now:now.replace(/Z$/,'+00:00')}},{pythonExecutable:statisticsPython,modulePath:statisticsModulePath,...(statisticsTimeoutMs?{timeoutMs:statisticsTimeoutMs}:{})});
+ // A busy host, not a disagreement about the evidence: the step is not marked done and the month's next start signs it.
+ if(evaluated.reason==='campaign_statistics_timeout')fail('campaign_statistics_timeout');
  if(evaluated.registration_digest!==rsiDigest(statistics.registration))fail('campaign_statistics_digest_mismatch');
  if(evaluated.decision!=='qualified'||evaluated.evidenceScope!=='population-task-family')fail('campaign_statistics_not_qualified');
  if(loadSigners)({publisher,evaluator}=await loadSigners());
@@ -91,9 +96,10 @@ export async function finalizeCampaign({completed,manifest,inputs,files,evidence
  await incident();
  return {...await signRsiCampaignBundle({manifest:published,files,keyId:publisher.keyId,signer:publisher.sign}),evaluatorReceipt};
 }
-export async function finalizeCli(configPath) {
+/** `ownerMount` is the directory the owner's records must sit under; only a test passes another (the command line never does). */
+export async function finalizeCli(configPath,{ownerMount='/run/rsi-lab/'}={}) {
  const c=await readRsiDeploymentRecord(configPath);
- if(!configPath?.startsWith('/run/rsi-lab/')||c.profileRef&&!c.profileRef.startsWith('/run/rsi-lab/'))fail('campaign_owner_mount_required');
+ if(!configPath?.startsWith(ownerMount)||c.profileRef&&!c.profileRef.startsWith(ownerMount))fail('campaign_owner_mount_required');
  // Explicit owner configuration only; no environment-selected credential chain or executable adapters.
  if(c.purpose!=='production'||[c.publisher,c.evaluator].some(signer=>signer?.provider!=='file'&&!signer?.credentialRef))fail('campaign_signer_unavailable');
  const input=JSON.parse(await readFile(c.inputPath,'utf8'));
@@ -105,7 +111,7 @@ export async function finalizeCli(configPath) {
  // A lab without a production channel declares `currentTarget: "manifest"`: the bundle carries the campaign's target and the
  // production importer makes the compare-and-swap against what it serves at import time.
  const currentTarget=c.currentTarget==='manifest'?input.manifest?.target:c.currentTarget;
- const envelope=await finalizeCampaign({...input,profile,currentTarget,root:c.consumerRoot,closurePaths:c.closurePaths,loadSigners,incidentTransport,statisticsPython:c.statisticsPython??'python3',closureSettings:c.closureSettings??{},closurePins:c.closurePins??{},statisticsModulePath:c.statisticsModulePath});
+ const envelope=await finalizeCampaign({...input,profile,currentTarget,root:c.consumerRoot,closurePaths:c.closurePaths,loadSigners,incidentTransport,statisticsPython:c.statisticsPython??'python3',closureSettings:{...rsiClosureSettings(input.manifest.surface),...(c.closureSettings??{})},closurePins:c.closurePins??{},statisticsModulePath:c.statisticsModulePath});
  await writeFile(c.outputPath,`${JSON.stringify(envelope)}\n`,{flag:'wx',mode:0o600});
  return {status:'signed',bundleDigest:rsiDigest(envelope)};
 }

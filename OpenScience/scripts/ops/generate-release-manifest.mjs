@@ -54,6 +54,13 @@ const inputPaths = [
   "packages/contracts/healthflux/candidates.json",
   "packages/design-tokens",
   "packages/harness-port",
+  // Independently installed research bundles and the shared runtime ship as measured native closures.
+  "packages/research-plugin-runtime",
+  "packages/virtual-trial",
+  "packages/virtual-cohort",
+  "packages/virtual-patient",
+  "packages/synthetic-control",
+  "packages/virtual-research-suite",
   // The independent search-topics bundle the runtime image COPYs whole into /opt/evimed/search-topics and installs as a host plugin.
   "packages/search-topics",
   "deploy/runtime-dsh",

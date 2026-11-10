@@ -44,7 +44,7 @@ DEFAULT_TIMEOUT_SECONDS = 20
 # (method, constraint, background) were never kinds, so a recall asking for one answered 400. `apps/server/test/agentMemoryMcp.test.mjs`
 # holds this tuple equal to the domain's, in order.
 FACT_KINDS = (
-    "profile", "preference", "behavior", "project_fact", "analysis", "decision", "correction", "follow_up",
+    "profile", "person", "note", "preference", "behavior", "project_fact", "analysis", "decision", "correction", "follow_up",
     "stance", "expertise", "method_preference", "writing_style", "tooling", "tension",
 )
 

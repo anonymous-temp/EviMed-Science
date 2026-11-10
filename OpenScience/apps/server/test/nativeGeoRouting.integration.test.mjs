@@ -73,7 +73,7 @@ for (const learning of ['disabled','paused','enabled']) test(`native GEO selecti
   // The selection is bound inside the prompt's admission transaction, which commits just after the prompt is forwarded; the
   // response can reach this test first under load. Wait for the bound row (what the runtime's first read, a model turn later, sees).
   const boundSelection=async(referenceId)=>{for(let i=0;i<100;i+=1){const row=await app.geo.service.planContexts.documents.get(user.id,'geo-plan-context',referenceId);if(row?.payload.state==='bound')return row;await new Promise(resolve=>setTimeout(resolve,50));}assert.fail('the selection was never bound');};
-  const send=async(request)=>{const response=await fetch(`${ui}${prefix}api/session/prompt`,{method:'POST',headers:{cookie,origin:UI_ORIGIN,'content-type':'application/json'},body:JSON.stringify({type:'client-request',method:'session/prompt',payload:{args:{request}}})});assert.equal(response.status,200,await response.text());if(request.geoPlanContext)await boundSelection(request.geoPlanContext.referenceId);return forwarded.at(-1);};
+  const send=async(request)=>{const response=await fetch(`${ui}${prefix}api/session/prompt`,{method:'POST',headers:{cookie,origin:UI_ORIGIN,'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:'rpc_native_geo',method:'session/prompt',payload:{args:{request}}})});assert.equal(response.status,200,await response.text());if(request.geoPlanContext)await boundSelection(request.geoPlanContext.referenceId);return forwarded.at(-1);};
   const prompt=(requestId,text,selected=null)=>({requestId,sessionId,mode:'queue',content:[{type:'text',text}],...(selected?{geoPlanContext:{referenceId:selected.referenceId}}:{})});
   const selected=await stage('strategy');const original='Please produce the selected implementation strategy.';
   const wire=await send(prompt('strategy',original,selected));
@@ -140,7 +140,7 @@ for (const learning of ['disabled','paused','enabled']) test(`native GEO selecti
   app.geo.service.planContexts.routingInputForRequest=async()=>{throw new Error('Synthetic route storage failure');};
   const refusing=await stage('route-failure');
   const beforeFailure=forwarded.length;
-  const response=await fetch(`${ui}${prefix}api/session/prompt`,{method:'POST',headers:{cookie,origin:UI_ORIGIN,'content-type':'application/json'},body:JSON.stringify({type:'client-request',method:'session/prompt',payload:{args:{request:prompt('route-failure','Please preserve this route.',refusing)}}})});
+  const response=await fetch(`${ui}${prefix}api/session/prompt`,{method:'POST',headers:{cookie,origin:UI_ORIGIN,'content-type':'application/json'},body:JSON.stringify({type:'client-request',rpcId:'rpc_native_geo',method:'session/prompt',payload:{args:{request:prompt('route-failure','Please preserve this route.',refusing)}}})});
   assert.equal(response.status,503);assert.match(await response.text(),/geo_plan_context_unavailable/);
   assert.equal(forwarded.length,beforeFailure,'a failed qualified route is never forwarded');
   await send(prompt('ordinary-failure','An ordinary sticky request can still be forwarded.'));

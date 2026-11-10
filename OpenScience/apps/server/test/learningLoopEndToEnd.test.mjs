@@ -243,7 +243,7 @@ test("a rejected deliverable is evidence against, and amending the body starts t
     frontmatter: document.payload.frontmatter,
     body: `${BODY}\n\nAlways name the edition of the label you quoted.`,
   });
-  assert.equal(amended.payload.status, "candidate");
+  assert.equal(amended.payload.status, "approved", "eligible revisions stay available while the new digest starts a fresh measurement");
   assert.deepEqual(amended.payload.learning.counts,
     { eligible: 0, loaded: 0, invoked: 0, succeeded: 0, read: 0 });
   assert.deepEqual(amended.payload.learning.observations, []);

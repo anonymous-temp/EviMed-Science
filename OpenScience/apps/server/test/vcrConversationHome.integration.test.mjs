@@ -198,6 +198,21 @@ test('the home lists a conversation\'s study in a field of its own, only once it
   assert.deepEqual(home.draftProjectIds, []);
 });
 
+test('a study that holds only a result no object owns is listed on the tab that shows it (live 2026-11-04: a 3+3 against BOIN comparison was not on the home)', options, async () => {
+  const user = { id: 'home_resultonly' };
+  const result = (/** @type {string} */ studyId, /** @type {string} */ kind) => vcr.store.recordResult({ studyId, userId: user.id, kind, subjectId: `${kind}:one`, conclusion: 'estimable', measures: [], diagnostics: {} });
+  const dose = await vcr.store.taskContext(origin('ro_dose', user.id));
+  await result(dose.id, 'design_dose');
+  const network = await vcr.store.taskContext(origin('ro_network', user.id));
+  await result(network.id, 'network_meta');
+  const empty = await vcr.store.taskContext(origin('ro_empty', user.id));
+  const listed = new Map((await vcr.service.listStudies(user)).conversationStudies.map((/** @type {any} */ row) => [row.id, row]));
+  assert.deepEqual(listed.get(dose.id)?.tabs, ['trial'], 'a dose-finding comparison is a trial-page result');
+  assert.deepEqual(listed.get(network.id)?.tabs, ['data'], 'a network meta-analysis is read on the data page');
+  assert.ok(!listed.has(empty.id), 'a study that holds nothing is still not listed');
+  assert.deepEqual(await vcr.store.heldTabs(dose.id), ['trial']);
+});
+
 test('the home lists the newest fifty, and says when the list could not be read instead of drawing an empty one', options, async () => {
   const user = { id: 'home_many' };
   /** @type {string[]} */ const ids = [];
@@ -306,6 +321,56 @@ test('a conversation computes a design or a population with nothing written firs
   // A scenario the engine would refuse is refused here, by what is wrong with it.
   await assert.rejects(vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'design_grid', scenario: {} }), { code: 'vcr_job_scenario_invalid' });
   assert.equal(await vcrConversationSubject({ store: vcr.store, study: { ...study, scope: 'study' }, userId: study.userId, kind: 'design_simulation', scenario: design }), null);
+});
+
+test('a complete scenario-only patient generation files its own object and retains previous settings without inheriting a cohort', options, async () => {
+  const study = await vcr.store.taskContext({ userId: 'selfpatients', projectId: 'default', rootSessionId: 'selfpatients_root', runId: 'r', callId: 'c', programme: false }, { create: true });
+  const scenario = { design: { nTreat: 40, nControl: 40 }, endpoint: { type: 'binary' }, truth: { controlRate: 0.3, treatmentRate: 0.45 } };
+  const first = await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'generate_patients_binary', scenario });
+  assert.ok(first);
+  assert.equal(await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'generate_patients_binary', scenario }), first);
+  const changed = { ...scenario, truth: { ...scenario.truth, treatmentRate: 0.4 } };
+  const second = await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'generate_patients_binary', scenario: changed });
+  assert.notEqual(second, first);
+  const rows = await vcr.store.patientSets(study.id);
+  assert.deepEqual(rows.find(row => row.id === first).scenario, scenario);
+  assert.deepEqual(rows.find(row => row.id === second).scenario, changed);
+  assert.ok(rows.every(row => !row.populationId && !row.modelId));
+  assert.equal(await vcrConversationSubject({ store: vcr.store, study: { ...study, scope: 'study' }, userId: study.userId, kind: 'generate_patients_binary', scenario }), null);
+  assert.equal(await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'apply_prognostic_model', scenario }), null);
+  const count = rows.length;
+  await assert.rejects(vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'generate_patients_binary', scenario: { ...scenario, truth: { controlRate: 2 } } }), { code: 'vcr_job_scenario_invalid' });
+  assert.equal((await vcr.store.patientSets(study.id)).length, count);
+});
+
+test('a name collision cannot silently attach a scenario-only generation to an existing selected population', options, async () => {
+  const study = await vcr.store.taskContext({ userId: 'selfpatients-bound', projectId: 'default', rootSessionId: 'selfpatients_bound', runId: 'r', callId: 'c', programme: false }, { create: true });
+  const scenario = { design: { nTreat: 40, nControl: 40 }, endpoint: { type: 'binary' }, truth: { controlRate: 0.3, treatmentRate: 0.45 } };
+  const population = await vcr.store.savePopulation({ studyId: study.id, userId: study.userId, kind: 'scenario', name: 'Selected population', definition: {} });
+  const held = await vcr.store.savePatientSet({ studyId: study.id, userId: study.userId, name: '虚拟患者集 2', scenario, populationId: population.id });
+  const created = await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'generate_patients_binary', scenario });
+  assert.notEqual(created, held.id);
+  const rows = await vcr.store.patientSets(study.id);
+  assert.equal(rows.find(row => row.id === created).populationId, null);
+  assert.equal(rows.find(row => row.id === held.id).populationId, population.id);
+  const explicit = await resolveJobSubject({ store: vcr.store, study, kind: 'generate_patients_binary', subjectId: held.id, scenario });
+  assert.equal(explicit.row.populationId, population.id);
+});
+
+test('changing a generated cohort scenario or removing a bound preserves the exact previous configuration', options, async () => {
+  const study = await vcr.store.taskContext({ userId: 'selfcohort-version', projectId: 'default', rootSessionId: 'selfcohort_version', runId: 'r', callId: 'c', programme: false }, { create: true });
+  const firstScenario = { n: 200, population: { variables: [{ name: 'age', family: 'normal', mean: 60, sd: 9, min: 18 }] } };
+  const first = await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'generate_population', scenario: firstScenario });
+  const changed = { n: 200, population: { variables: [{ name: 'age', family: 'normal', mean: 65, sd: 9 }] } };
+  const second = await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'generate_population', scenario: changed });
+  assert.notEqual(second, first);
+  const thirdScenario = { ...changed, n: 300 };
+  const third = await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'generate_population', subjectId: second, scenario: thirdScenario });
+  assert.notEqual(third, second);
+  const rows = await vcr.store.populations(study.id);
+  assert.deepEqual(rows.find(row => row.id === first).definition, firstScenario);
+  assert.deepEqual(rows.find(row => row.id === second).definition, changed);
+  assert.deepEqual(rows.find(row => row.id === third).definition, thirdScenario);
 });
 
 test("a stand-alone E-value of a stated estimate and limit runs in a conversation with nothing written first, and never under another comparison the study holds", options, async () => {

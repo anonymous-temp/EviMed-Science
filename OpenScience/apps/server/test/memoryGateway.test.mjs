@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import test from "node:test";
 
 import { EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, PLATFORM_CONTEXT_TAGS, carriesPlatformContext, evidenceProgrammeRouteReason } from "@evimed/domain";
-import { VERIFICATION_ROUTE_REASON } from "../src/autopilotService.mjs";
+import { AUTOPILOT_VERIFICATION_ROUTE_REASON as VERIFICATION_ROUTE_REASON } from "@evimed/domain";
 import { createNativeCapsuleSearch } from "../src/capsuleGateway.mjs";
 import { createMemoryAdmission, isPlatformStartedRun } from "../src/memoryAdmission.mjs";
 import {
@@ -32,7 +32,7 @@ function fixedAdmission(answer = {}) {
   return { asked, admit: async (caller) => { asked.push(caller.engineSessionId ?? null); return { ...base, ...(typeof answer === "function" ? answer(caller) : answer) }; } };
 }
 
-async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, timeoutMs = 4_000, project = {} } = {}) {
+async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, timeoutMs = 4_000, project = {} } = {}) {
   resetNativeMemoryMetrics();
   const stub = await startOpenVikingStub(t, stubOptions);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
@@ -42,7 +42,7 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
     config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); } },
     store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER, ...project }) },
-    sessions, admission, overlay, memoryTool, capsuleSearch,
+    sessions, admission, overlay, memoryTool, capsuleSearch, historySearch, sourceDeletion, sourceReceipt, sourceReceiptFailed,
   });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   server.listen(0, "127.0.0.1");
@@ -110,7 +110,7 @@ test("a caller with no token, a role, or a route outside the table is refused by
 test("health answers liveness and version only, and status is the caller's own space without asking the engine", async (t) => {
   const { stub, call } = await fixture(t);
   const health = await call("GET", "/health");
-  assert.deepEqual(health.json, { status: "ok", healthy: true, version: "v0.5.1.1" });
+  assert.deepEqual(health.json, { status: "ok", healthy: true, version: "v0.5.3" });
   assert.equal(stub.requests.at(-1).user, "", "health carries no identity: a request that names a user registers it");
   const before = stub.requests.length;
   const status = await call("GET", "/api/v1/system/status");
@@ -135,17 +135,19 @@ test("only the person's and the assistant's own text reaches the engine: platfor
   await post({ role: "assistant", parts: [{ type: "tool", tool_name: "mcp__evimed__kb_search", tool_input: { query: "y" } }] });
   // 5. a mid-run correction keeps the words and loses the wrapper
   await post({ role: "user", content: "<evimed-correction>不对，主要终点是大出血，不是死亡</evimed-correction>" });
-  // 6. identifier shapes are masked at the door
-  await post({ role: "user", content: "我的手机号是 13800138000，以后周报周四发。" });
+  // 6. useful contacts stay; government IDs and assigned secrets are still masked at the door.
+  await post({ role: "user", content: "我的手机号是 13800138000，邮箱 contact@example.org，以后周报周四发。" });
+  await post({ role: "user", content: "身份证 110101199001011237，password: secret123" });
   const forwarded = stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).map((request) => request.body);
   assert.deepEqual(forwarded, [
     { role: "user", parts: [{ type: "text", text: "以后回答先给结论再给依据。" }], created_at: "2026-10-13T01:00:00.000Z" },
     { role: "user", parts: [{ type: "text", text: "不对，主要终点是大出血，不是死亡" }] },
-    { role: "user", parts: [{ type: "text", text: "我的手机号是 [已省略]，以后周报周四发。" }] },
+    { role: "user", parts: [{ type: "text", text: "我的手机号是 13800138000，邮箱 contact@example.org，以后周报周四发。" }] },
+    { role: "user", parts: [{ type: "text", text: "身份证 [已省略]，password: [已省略]" }] },
   ]);
   const counters = nativeMemoryCounters();
   assert.deepEqual({ forwarded: counters.messages.forwarded, platform: counters.messages.platform_context, noText: counters.messages.no_text, masked: counters.masked.messages },
-    { forwarded: 3, platform: 2, noText: 1, masked: 1 });
+    { forwarded: 4, platform: 2, noText: 1, masked: 1 });
   const invalid = await post({ role: "system", content: "x" });
   assert.equal(invalid.status, 400);
   assert.equal(invalid.json.error.code, "memory_gateway_body_invalid");
@@ -169,7 +171,7 @@ test("a captured revision selection cannot teach the memory engine platform inst
 
 test("a commit the engine accepts is written to the ledger with its archive and task; nothing pending is said as such", async (t) => {
   const recorded = [];
-  const overlay = { configured: true, account: async () => ({ registeredAt: "2026-10-13T00:00:00.000Z" }), noteRegistered: async () => {},
+  const overlay = { configured: true, account: async () => ({ registeredAt: "2026-10-13T00:00:00.000Z" }), noteRegistered: async () => {}, noteSession:async()=>{},
     recordCommit: async (commit) => { recorded.push(commit); }, sensitiveUris: async () => [] };
   const { stub, call } = await fixture(t, { overlay });
   await call("POST", "/api/v1/sessions", { session_id: SESSION });
@@ -350,11 +352,11 @@ test("remember passes the same door as a captured message and its commit enters 
   const overlay = { configured: true, account: async () => ({ registeredAt: "x" }), noteRegistered: async () => {}, recordCommit: async (commit) => { recorded.push(commit); }, sensitiveUris: async () => [] };
   const { stub, mcp } = await fixture(t, { overlay });
   const answer = await mcp({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "remember", arguments: { messages: [
-    { role: "user", content: "记住：图纸尺寸单位一律用毫米，联系电话 13900139000。" },
+    { role: "user", content: "记住：图纸尺寸单位一律用毫米，联系电话 13900139000，邮箱 drawings@example.org，身份证 110101199001011237。" },
     { role: "user", content: "<evimed-brief>平台简报</evimed-brief>" },
   ] } } });
   assert.match(answer.messages[0].result.content[0].text, /Submitted 1 message/);
-  assert.deepEqual(stub.sent("POST", "/mcp").at(-1).body.params.arguments.messages, [{ role: "user", content: "记住：图纸尺寸单位一律用毫米，联系电话 [已省略]。" }]);
+  assert.deepEqual(stub.sent("POST", "/mcp").at(-1).body.params.arguments.messages, [{ role: "user", content: "记住：图纸尺寸单位一律用毫米，联系电话 13900139000，邮箱 drawings@example.org，身份证 [已省略]。" }]);
   assert.equal(recorded.length, 1);
   assert.equal(recorded[0].origin, "tool");
   assert.match(recorded[0].archiveUri, new RegExp(`^${ROOT}/sessions/mcp-store-[0-9]+/history/archive_001$`));
@@ -848,4 +850,157 @@ test("a search of the engine over-fetches when other projects' files are hidden,
   wide.sessions.search = async (_user, body) => { wideAsked.push(body.limit); return { result: { memories: [], resources: [], skills: [], total: 0 } }; };
   await wide.call("POST", "/api/v1/search/search", { query: "项目简介", limit: 20 });
   assert.deepEqual(wideAsked, [80]);
+});
+
+for (const [content, safe] of [
+  ["密码是甲乙丙", "密码是[已省略]"],
+  ["password: !", "password: [已省略]"],
+  ["验证码是：123456", "验证码是：[已省略]"],
+  ["验证码: A1B2C3", "验证码: [已省略]"],
+]) {
+  test(`captured structured secret is redacted before the engine receives it: ${safe}`, async (t) => {
+    for (const role of ["user", "assistant"]) {
+      assert.deepEqual(filterCapturedMessage({ role, content }), {
+        forward: { role, parts: [{ type: "text", text: safe }] }, masked: true,
+      });
+    }
+    const { stub, call } = await fixture(t);
+    await call("POST", "/api/v1/sessions", { session_id: SESSION });
+    const response = await call("POST", `/api/v1/sessions/${SESSION}/messages`, { role: "user", content });
+    assert.equal(response.status, 200);
+    assert.deepEqual(stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).map((request) => request.body), [
+      { role: "user", parts: [{ type: "text", text: safe }] },
+    ]);
+  });
+}
+
+for (const [content, safe] of [
+  ["password: ab;cD9!", "password: [已省略]"],
+  ["password: ab,cD9!", "password: [已省略]"],
+  ["password: 'ab;c D9!'", "password: [已省略]"],
+  ['password: "ab,c D9!"', "password: [已省略]"],
+  ["密码是“甲;乙 丙!”", "密码是[已省略]"],
+  ["password: ab;cD9!, then run it", "password: [已省略], then run it"],
+  ["password: ab,cD9!; then run it", "password: [已省略]; then run it"],
+  ["password: !, then run it", "password: [已省略], then run it"],
+]) {
+  test(`captured punctuation-bearing secret reaches the engine fully redacted: ${content}`, async (t) => {
+    for (const role of ["user", "assistant"]) {
+      assert.deepEqual(filterCapturedMessage({ role, content }), {
+        forward: { role, parts: [{ type: "text", text: safe }] }, masked: true,
+      });
+    }
+    const { stub, call } = await fixture(t);
+    await call("POST", "/api/v1/sessions", { session_id: SESSION });
+    const response = await call("POST", `/api/v1/sessions/${SESSION}/messages`, { role: "user", content });
+    assert.equal(response.status, 200);
+    assert.deepEqual(stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).map((request) => request.body), [
+      { role: "user", parts: [{ type: "text", text: safe }] },
+    ]);
+  });
+}
+
+test("secret grammar leaves useful medical values and contacts unchanged", () => {
+  for (const content of [
+    "HbA1c 8.2%, metformin 500 mg; review on 2026-12-01",
+    "eGFR 38 mL/min/1.73m²，电话 13800138000，邮箱 anna@example.com",
+  ]) {
+    assert.deepEqual(filterCapturedMessage({ role: "user", content }), {
+      forward: { role: "user", parts: [{ type: "text", text: content }] }, masked: false,
+    });
+  }
+});
+
+for (const [content, safe] of [
+  [String.raw`password: "ab\" cD9!"`, "password: [已省略]"],
+  [String.raw`password: 'ab\' cD9!'`, "password: [已省略]"],
+  ['password: "ab cD9!', "password: [已省略]"],
+  ['password: "ab\ncD9!"', "password: [已省略]"],
+  [String.raw`password: "ab\" cD9!", then proceed`, "password: [已省略], then proceed"],
+]) {
+  test(`captured quoted secret has no suffix at the engine: ${JSON.stringify(content)}`, async (t) => {
+    assert.deepEqual(filterCapturedMessage({ role: "user", content }), {
+      forward: { role: "user", parts: [{ type: "text", text: safe }] }, masked: true,
+    });
+    const { stub, call } = await fixture(t);
+    await call("POST", "/api/v1/sessions", { session_id: SESSION });
+    assert.equal((await call("POST", `/api/v1/sessions/${SESSION}/messages`, { role: "user", content })).status, 200);
+    assert.deepEqual(stub.sent("POST", `/api/v1/sessions/${SESSION}/messages`).map((request) => request.body), [
+      { role: "user", parts: [{ type: "text", text: safe }] },
+    ]);
+  });
+}
+
+
+test('the existing REST/MCP search appends original excerpts after current memory and capsule notes, never context/profile', async t => {
+  const asked = [];
+  const historySearch = async request => { asked.push(request); return [{ conversationTitle: 'Original study', conversationUrl: '/app/chat/session_a', messages: [{ sourceRole: 'assistant', date: null, text: 'Assistant suggested a crossover design.', contextOnly: true, confirmed: false }] }]; };
+  const { stub, call, mcp } = await fixture(t, { config: { memoryHistorySearchEnabled: true }, historySearch,
+    capsuleSearch: async () => [{ source: 'capsule', content: 'Current capsule preference' }] });
+  stub.seedMemory(OV_USER, 'preferences/current.md', 'Current distilled preference', { type: 'preferences' });
+  const rpc = await mcp({ jsonrpc: '2.0', id: 81, method: 'tools/call', params: { name: 'search', arguments: { query: 'preference', limit: 4 } } });
+  const blocks = rpc.messages[0].result.content;
+  assert.equal(blocks.length, 3); assert.match(blocks[0].text, /Current distilled/); assert.match(blocks[1].text, /Current capsule/); assert.match(blocks[2].text, /Original study/);
+  assert.match(blocks[2].text, /assistant.*unknown/); assert.equal(asked[0].user.id, USER); assert.equal(asked[0].project.id, 'p1');
+  const rest = await call('POST', '/api/v1/search/search', { query: 'preference' }); assert.equal(rest.json.result.history.length, 1);
+  await call('POST', '/api/v1/search/search', { query: 'preference', mode: 'context' });
+  await call('POST', '/api/v1/search/search', { query: 'preference', target_uri: `${ROOT}/memories/preferences` });
+  assert.equal(asked.length, 2);
+});
+
+test('history search failure, feature off and recall refusal preserve existing memory results without raw material', async t => {
+  for (const settings of [{ memoryHistorySearchEnabled: false }, { memoryHistorySearchEnabled: true }]) {
+    const { call } = await fixture(t, { config: settings, historySearch: async () => { throw new Error('history unavailable'); } });
+    const answer = await call('POST', '/api/v1/search/search', { query: 'anything' }); assert.equal(answer.status, 200); assert.equal(answer.json.result.history, undefined);
+  }
+  let asked = false;
+  const { call } = await fixture(t, { config: { memoryHistorySearchEnabled: true }, admission: fixedAdmission({ recall: false }), historySearch: async () => { asked = true; return []; } });
+  await call('POST', '/api/v1/search/search', { query: 'anything' }); assert.equal(asked, false);
+});
+
+
+test('a source deletion during a native read refuses its buffered response before text can escape', async t => {
+  let checks=0;
+  const {call}=await fixture(t,{sourceDeletion:{version:async()=>String(++checks)}});
+  const response=await call('POST','/api/v1/search/search',{query:'source detail',limit:5});
+  assert.equal(response.status,503);assert.equal(response.json.error.code,'memory_gateway_source_changed');
+  assert.doesNotMatch(response.text,/memories|rendered|source detail/);
+});
+
+test('native admission rejects deleted originals and source-bound replay sessions before reading or learning',async()=>{
+  const asked=[];
+  const admission=createMemoryAdmission({config:{memoryEnabled:true},memorySettings:memoryDouble(),sourceDeleted:async(_project,id,engine)=>{asked.push([id,engine]);return true;}});
+  for(const engineSessionId of ['dsh-source','evimed-replay-source']){
+    const result=await admission.admit({user:{id:USER},project:{id:'p1'},engineSessionId});
+    assert.deepEqual([result.learn,result.recall,result.learnReason],[false,false,'source_deleted']);
+  }
+  assert.deepEqual(asked,[['source','dsh-source'],[null,'evimed-replay-source']]);
+});
+
+test('native content is not disclosed until its trusted source receipt is stored',async t=>{
+  let entered,release,settled=false;const ready=new Promise(resolve=>entered=resolve),gate=new Promise(resolve=>release=resolve);
+  const overlay={configured:true,sensitiveUris:async()=>[],noteRecalled:async()=>{}};
+  const {call,stub}=await fixture(t,{overlay,sourceReceipt:async()=>{entered();await gate;}});
+  const uri=stub.seedMemory(OV_USER,'notes/source.md','Private source context.',{type:'notes'});
+  const reading=call('GET',`/api/v1/content/read?uri=${encodeURIComponent(uri)}`).then(result=>{settled=true;return result;});
+  await ready;assert.equal(settled,false);release();const result=await reading;assert.equal(result.status,200);assert.match(result.text,/Private source context/);
+});
+
+test('a source receipt that cannot be stored degrades: the recall is returned, the run is told to learn nothing from it and the failure is counted',async t=>{
+  /** @type {any[]} */ const failed=[];
+  const {call,mcp,stub}=await fixture(t,{overlay:{configured:true,sensitiveUris:async()=>[],noteRecalled:async()=>{}},sourceReceipt:async()=>{throw Error('receipt unavailable');},sourceReceiptFailed:async request=>{failed.push(request.sessionId);}});
+  const uri=stub.seedMemory(OV_USER,'notes/receipt.md','RECEIPT_CANARY',{type:'notes'});
+  const rest=await call('GET',`/api/v1/content/read?uri=${encodeURIComponent(uri)}`),rpc=await mcp({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'read',arguments:{uris:[uri]}}});
+  for(const result of [rest,rpc]){assert.equal(result.status,200);assert.match(result.text,/RECEIPT_CANARY/);}
+  assert.equal(failed.length,2,'the failure hook ran once per recall');
+  assert.equal(nativeMemoryCounters().recallNotes.receipt_failed,2);
+});
+
+test('when the failure itself cannot be recorded on the run the recall is refused, so a run never learns with no record of its sources',async t=>{
+  for(const hook of [null,async()=>{throw Error('ledger unavailable');}]){
+    const {call,stub}=await fixture(t,{overlay:{configured:true,sensitiveUris:async()=>[],noteRecalled:async()=>{}},sourceReceipt:async()=>{throw Error('receipt unavailable');},sourceReceiptFailed:hook});
+    const uri=stub.seedMemory(OV_USER,'notes/receipt2.md','RECEIPT_CANARY_2',{type:'notes'});
+    const rest=await call('GET',`/api/v1/content/read?uri=${encodeURIComponent(uri)}`);
+    assert.equal(rest.status,503);assert.doesNotMatch(rest.text,/RECEIPT_CANARY_2/);
+  }
 });

@@ -49,11 +49,11 @@ function scriptedService({ pages = [{ items: [pageItem()], nextCursor: null, mod
   };
 }
 
-async function withGateway(t, { config = {}, service = scriptedService(), budgetMs, report, topics, zones, evaluationIsolation } = {}) {
+async function withGateway(t, { config = {}, service = scriptedService(), budgetMs, report, topics, zones } = {}) {
   const failures = [];
   const handler = createFrontierGatewayHandler({ frontierEnabled: true, ...config }, runtimeManager,
     { service, ...(budgetMs ? { budgetMs } : {}), ...(report ? { report } : {}), ...(topics ? { topics } : {}),
-      ...(zones ? { zones } : {}), ...(evaluationIsolation ? { evaluationIsolation } : {}) });
+      ...(zones ? { zones } : {}) });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -394,16 +394,6 @@ test("reading an item answers like the search when the module is off, the accoun
   assert.deepEqual(reported, ["ECONNREFUSED"]);
 });
 
-test("an evaluation run is frozen like its searches: what its filter takes out of the item is not read", async (t) => {
-  const evaluationIsolation = { async isEvaluation() { return true; }, async filter(_identity, gateway, value) {
-    assert.equal(gateway, "frontier-knowledge-plugin");
-    return { ...value, item: undefined };
-  } };
-  const { call } = await withGateway(t, { service: itemService(), evaluationIsolation });
-  const answer = await call({ id: "k7q2m9x4t1b8" });
-  assert.equal(answer.status, 200);
-  assert.equal(answer.body.data.item, undefined, "the tool reads this as an item that is not there");
-});
 
 // A zone of 证据专区 (ez-api-read 2026-10-29): the id or slug is resolved for the account the token names, and only what the
 // resolver returns reaches the page's list, as a filter on the zone's members.

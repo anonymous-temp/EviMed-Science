@@ -1,8 +1,8 @@
 // The opt-in RSI layer as the composed app wires it: inert without its deployment file, never able to hold the other
 // workers at start, and never able to fail a person's project or account deletion.
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
@@ -21,7 +21,7 @@ after(async () => { await isolated?.drop(); });
 async function withApp(overrides, operation) {
   const dataDir = await mkdtemp(path.join(tmpdir(), "evimed-rsi-wiring-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
-    stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url, evolutionEnabled: true, operatorUsers: [], rsiOnlineConfigFile: "", ...overrides });
+    stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url, operatorUsers: [], rsiOnlineConfigFile: "", ...overrides });
   const said = /** @type {string[]} */ ([]);
   const write = process.stderr.write.bind(process.stderr);
   process.stderr.write = /** @type {any} */ ((chunk) => { said.push(String(chunk)); return true; });
@@ -29,12 +29,31 @@ async function withApp(overrides, operation) {
   finally { process.stderr.write = write; await app.close(); await rm(dataDir, { recursive: true, force: true }); }
 }
 
-test("without the deployment file the RSI layer is inert even with evolution on: no serving adapter, importer or policy hook", options, () => withApp({}, async (app, said) => {
-  assert.ok(app.evolution, "evolution serving is composed");
+test("without the deployment file the RSI layer is inert: no serving adapter, importer or policy hook", options, () => withApp({}, async (app, said) => {
+  assert.ok(app.evolutionLedger, "the signal store is composed with the product ledger");
   await app.listen(0, "127.0.0.1");
   assert.deepEqual(app.rsi.status(), { runtime: true, configured: false, importer: false, servingAdapters: false, frontierSelection: false });
   assert.deepEqual(said.filter((line) => line.startsWith("rsi:")), []);
 }));
+
+test("a directory deployment file composes the import layer alone: importer, serving adapters and the poll, no cloud client, no agreement, nothing said", options, async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "evimed-rsi-directory-"));
+  try {
+    const key = () => generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" });
+    await mkdir(path.join(dir, "bundles"));
+    await writeFile(path.join(dir, "publisher.json"), JSON.stringify({ keyId: "publisher", publicKey: key(), surfaces: ["frontier-selection"], kinds: ["policy"] }), { mode: 0o600 });
+    await writeFile(path.join(dir, "evaluators.json"), JSON.stringify({ schemaVersion: 1, version: 1, evaluators: [{ keyId: "evaluator", publicKey: key(), surfaces: ["frontier-selection"], procedureDigests: ["a".repeat(64)], consumerDigests: ["b".repeat(64)] }] }), { mode: 0o600 });
+    const rsiOnlineConfigFile = path.join(dir, "online.json");
+    await writeFile(rsiOnlineConfigFile, JSON.stringify({ schemaVersion: 1, transport: { kind: "directory", role: "production", path: path.join(dir, "bundles") }, trustedKeyRefs: [path.join(dir, "publisher.json")], evaluatorRegistryRef: path.join(dir, "evaluators.json") }), { mode: 0o600 });
+    await withApp({ rsiOnlineConfigFile }, async (app, said) => {
+      await app.listen(0, "127.0.0.1");
+      assert.deepEqual(said.filter((line) => line.startsWith("rsi:")), []);
+      assert.deepEqual(app.rsi.status(), { runtime: true, configured: true, importer: true, servingAdapters: true, frontierSelection: true });
+      const polls = await app.store.database.query("SELECT kind FROM evimed_product.jobs WHERE user_id=$1 AND idempotency_key='rsi-bundle-poll:bootstrap'", [PLATFORM_PUBLISHER_USER_ID]);
+      assert.deepEqual(polls.rows, [{ kind: "rsi-bundle-poll" }]);
+    });
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
 
 test("an RSI start-up failure is said and the other workers start; a failing RSI hook never fails a deletion and leaves a durable retry", options, () => withApp({
   rsiOnlineRuntimeFactory: async () => { throw new Error("rsi start-up failed"); },

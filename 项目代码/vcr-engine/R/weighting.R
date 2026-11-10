@@ -171,6 +171,120 @@ vcr_propensity_weights <- function(X, treat, estimand = "ATT") {
   list(weights = w, propensity = ps, model = fit, estimand = estimand)
 }
 
+# --- propensity trimming (algorithm round C14, 2026-11-03) ---------------------------------------------------------------------------
+#
+# Hidden knowledge:
+#
+# - **Trimming changes who the estimate is about, and the result says so.** The EU HTA guideline (6.2) calls the balanced population that
+#   is left "ultimately the target population": a person with no comparable counterpart is not adjusted for, he is removed, and the
+#   hazard ratio or difference is the effect among the people who were kept. So the rule returns the people it removed, per arm, and
+#   their baseline next to the kept people's (`vcr_trim_restatement`); a result that trimmed nobody says that too.
+# - **The score is fitted on everyone, the weights on the people who are left.** Who is trimmed is a function of the score, so the
+#   score is fitted on the whole sample; the weights are then refitted on the kept sample, as the trimming literature does
+#   (Stuermer 2010; Crump 2009 sect. 5), because a score fitted with the removed people in it is not the score of the population the
+#   estimate is about. Inside a bootstrap resample the whole of this is redone, so the interval carries the uncertainty of who is trimmed.
+# - **Crump's rule needs no number from the person.** Optimal trimming of Crump, Hotz, Imbens & Mitnik (2009) keeps the people whose
+#   score lies in [alpha, 1 - alpha], where 1 / (alpha (1 - alpha)) = 2 E[1 / (e (1 - e)) | alpha <= e <= 1 - alpha]. In a sample: sort
+#   g = 1 / (e (1 - e)) from the smallest and keep the largest set whose biggest member is at most twice the set's mean (the set is
+#   everyone when the largest g of all already is). The rule of thumb [0.1, 0.9] is its answer for a uniform-ish score. No regulator
+#   gives a numeric bound, so a fixed bound is the person's own and is shown as a premise.
+
+#' The score bounds of a trimming rule and who they keep. `trim` is `list(rule = "fixed", lower, upper?)` or `list(rule = "crump")`.
+#' @return list(rule, lower, upper, keep) - `keep` is a logical vector over the people
+vcr_ps_trim <- function(ps, treat, trim) {
+  rule <- as.character(trim$rule %||% "")
+  if (identical(rule, "fixed")) {
+    lo <- vcr_scalar(trim$lower, NULL)
+    if (is.null(lo)) vcr_abort("scenario_field_missing", "scenario.trim.lower", "A fixed trimming rule states the score below which a person is removed.")
+    hi <- vcr_scalar(trim$upper, 1 - lo)
+    if (!(lo > 0 && lo < 0.5 && hi > 0.5 && hi < 1)) vcr_abort("scenario_value_invalid", "scenario.trim", "The lower bound is between 0 and 0.5 and the upper one between 0.5 and 1.")
+  } else if (identical(rule, "crump")) {
+    lo <- vcr_crump_alpha(ps); hi <- 1 - lo
+    # the set is {g <= lambda}: compared on g, so a person exactly on the bound is not lost to rounding of 1 - alpha
+    g <- 1 / (ps * (1 - ps))
+    return(list(rule = rule, lower = lo, upper = hi, keep = if (lo > 0) g <= (1 / (lo * (1 - lo))) * (1 + 1e-12) else rep(TRUE, length(ps))))
+  } else vcr_abort("scenario_value_invalid", "scenario.trim.rule", "The trimming rule is fixed or crump.")
+  list(rule = rule, lower = lo, upper = hi, keep = ps >= lo & ps <= hi)
+}
+
+#' Crump's alpha (see the section header): 0 when nobody is trimmed.
+vcr_crump_alpha <- function(ps) {
+  g <- 1 / (ps * (1 - ps))
+  if (!all(is.finite(g))) return(min(ps[is.finite(g)]))
+  s <- sort(g)
+  ok <- which(s <= 2 * cumsum(s) / seq_along(s))
+  lambda <- s[max(ok)]
+  if (lambda >= max(s)) return(0)
+  # g <= lambda is the same set as alpha <= e <= 1 - alpha, with 1 / (alpha (1 - alpha)) = lambda
+  0.5 - sqrt(0.25 - 1 / lambda)
+}
+
+#' The weights of a trimmed comparison: the score on everyone, the trimming, the weights refitted on the people who are kept (zero for the
+#' others). NULL weights and a rule name when too few people remain in a group to weight at all.
+#' @return list(allWeights, keep, propensity (kept people, refitted), trim)
+vcr_trimmed_weights <- function(X, treat, estimand, trim) {
+  full <- vcr_propensity_weights(X, treat, estimand)
+  cut <- vcr_ps_trim(full$propensity, treat, trim)
+  keep <- cut$keep
+  if (sum(treat[keep] == 1L) < 2L || sum(treat[keep] == 0L) < 2L) {
+    return(list(allWeights = NULL, keep = keep, trim = cut, rule = "trimmed_population_too_small",
+                detail = sprintf("after the trimming %d trial and %d control people remain; both groups need at least two", sum(treat[keep] == 1L), sum(treat[keep] == 0L))))
+  }
+  refit <- vcr_propensity_weights(X[keep, , drop = FALSE], treat[keep], estimand)
+  w <- numeric(length(treat)); w[keep] <- refit$weights
+  list(allWeights = w, keep = keep, propensity = refit$propensity, fullPropensity = full$propensity, trim = cut, rule = NULL)
+}
+
+#' Who the trimming removed and who it left, per arm and per covariate: the target population restated. A continuous covariate is
+#' reported by its mean and a 0/1 one by its proportion (`binary`); a group with nobody in it has no value.
+#'
+#' The small-cell rule is the engine's own here, as in `vcr_record_privacy`: this restatement is read by a page that is shown to a
+#' member who may not read patient-level rows, so a removed group of one to `min_cell - 1` people is never described. `n = kept +
+#' removed`, so a small one of the three hides the other two and the share with it (stating the rest is a subtraction); the totals go
+#' when any arm's cells did, and the baseline of a removed (or kept) group of that size is not given (a mean of three people is
+#' three people's values). The means are named `keptMean` / `removedMean` so that no reader takes them for head counts.
+vcr_trim_restatement <- function(X, treat, keep, cut, covariates = colnames(X), min_cell = vcr_limit("minCellSize", 10)) {
+  X <- as.matrix(X)
+  small <- function(k) k >= 1L && k < min_cell
+  arm_row <- function(a, name) {
+    n <- sum(treat == a); k <- sum(keep & treat == a); r <- sum(!keep & treat == a)
+    held <- small(n) || small(k) || small(r)
+    cells <- list(arm = name, n = if (small(n)) NULL else n, kept = if (held) NULL else k, removed = if (held) NULL else r,
+                  removedShare = if (held || n == 0L) NULL else r / n)
+    if (held) cells$suppressed <- c(if (small(n)) "n", "kept", "removed", "removedShare")
+    cells
+  }
+  arms <- list(arm_row(1L, "treated"), arm_row(0L, "control"))
+  any_held <- any(vapply(arms, function(a) !is.null(a$suppressed), logical(1)))
+  # a group of nobody has no mean, and a group of one to `min_cell - 1` people has none to show
+  mean_of <- function(v, idx) { k <- sum(idx); if (k == 0L || small(k)) NA_real_ else mean(v[idx]) }
+  rows <- do.call(rbind, lapply(c(1L, 0L), function(a) {
+    do.call(rbind, lapply(seq_len(ncol(X)), function(j) {
+      v <- X[, j]
+      data.frame(covariate = covariates[j], arm = if (a == 1L) "treated" else "control", binary = all(v %in% c(0, 1)),
+                 keptMean = mean_of(v, keep & treat == a), removedMean = mean_of(v, !keep & treat == a),
+                 stringsAsFactors = FALSE)
+    }))
+  }))
+  list(rule = cut$rule, lower = cut$lower, upper = cut$upper, arms = arms, baseline = rows,
+       removedTotal = if (any_held) NULL else sum(!keep), keptTotal = if (any_held) NULL else sum(keep),
+       # whether anyone was removed is said apart from how many: the page words the target population from it
+       trimmedAnyone = any(!keep),
+       targetPopulation = if (any(!keep)) "trimmed_population" else "full_population",
+       note = "the estimate is about the people who were kept: a person with no comparable counterpart is removed, not adjusted for (EU HTA guideline, 6.2)")
+}
+
+#' The two measures that say how many people the trimming removed, one per arm, for the arms whose count may be stated: an arm whose
+#' removed group is of one to `min_cell - 1` people has none (`vcr_trim_restatement`).
+vcr_trim_measures <- function(trim_info) {
+  out <- list()
+  for (side in list(list("trimmed_treated", 1L), list("trimmed_control", 2L))) {
+    shown <- trim_info$arms[[side[[2L]]]]$removed
+    if (!is.null(shown)) out[[length(out) + 1L]] <- vcr_measure(side[[1L]], shown, unit = "例", source = "calculated")
+  }
+  out
+}
+
 #' Kish effective sample size. Reported beside, never instead of, the real
 #' patient count (plan 3.5).
 vcr_ess <- function(w) {
@@ -337,7 +451,8 @@ vcr_weight_diagnostics <- function(w, treat) {
 #' said 20 draws used to get 20 draws and a 95% interval from twenty points
 #' (EB-5). The number used is echoed in the result.
 vcr_bootstrap_replicates <- function(requested = NULL) {
-  floor_ <- as.integer(vcr_limit("bootstrapMin", 2000L))
+  # an imputed comparison (R/imputation.R) shares the floor among its imputations and states the share in its result; nothing else lowers it
+  floor_ <- as.integer(.vcr_ctx$bootstrap_floor %||% vcr_limit("bootstrapMin", 2000L))
   as.integer(max(floor_, requested %||% floor_))
 }
 
@@ -350,9 +465,13 @@ vcr_bootstrap_replicates <- function(requested = NULL) {
 #'
 #' The draws run in batches so a cancel or a spent CPU budget stops the loop
 #' between batches with what has finished (`interrupted` says which).
+#'
+#' `components` names the entries of the estimate vector (the measure each one is the estimate of). An imputed comparison installs
+#' `.vcr_ctx$boot_sink` to read their bootstrap standard deviations (the within-imputation variances of Rubin's rules); a call that
+#' names none is read by nobody.
 vcr_bootstrap_pipeline <- function(n_rows, estimate_fn, replicates = 2000L,
                                    seed = 1L, strata = NULL, cores = 1L,
-                                   level = 0.95, batch_size = 200L) {
+                                   level = 0.95, batch_size = 200L, components = NULL) {
   bank <- vcr_stream_bank(seed)
   rows <- list(); done <- 0L; interrupted <- NULL
   while (done < replicates) {
@@ -381,6 +500,11 @@ vcr_bootstrap_pipeline <- function(n_rows, estimate_fn, replicates = 2000L,
     as.numeric(stats::quantile(col, c(a, 1 - a), names = FALSE, type = 7))
   }, numeric(2)))
   prim <- is.finite(est[, 1])
+  if (is.function(.vcr_ctx$boot_sink) && length(components)) {
+    k <- min(width, length(components))
+    .vcr_ctx$boot_sink(list(components = components[seq_len(k)], replicates = done,
+                            sd = vapply(seq_len(k), function(j) { col <- est[is.finite(est[, j]), j]; if (length(col) >= 2L) stats::sd(col) else NA_real_ }, numeric(1))))
+  }
   list(
     estimates = est[, 1],
     estimatesMatrix = est,

@@ -8,7 +8,7 @@
 //       that produced no source.
 //   open_science_research_db_refusals_total{reason}    why: a request refused, or a limit that bit
 //       truncated | cells_withheld | columns_dropped   a limit that cut a snapshot that was still imported
-//       busy | network_denied | tls_failed | login_failed | too_privileged | unreachable | materials_full | selection_invalid | failed
+//       busy | network_denied | tls_failed | login_failed | too_privileged | unreachable | selection_invalid | failed
 //                                                      an operation (an import or a table listing) that gave nothing
 //
 // Module-level like `geneExpressionMetrics.mjs`: one process, one table, read by `/api/ops/metrics`. Every series exists
@@ -17,7 +17,7 @@
 export const RESEARCH_DB_IMPORT_OUTCOMES = Object.freeze(['complete', 'partial', 'replayed', 'refused'])
 export const RESEARCH_DB_REFUSAL_REASONS = Object.freeze([
   'truncated', 'cells_withheld', 'columns_dropped',
-  'busy', 'network_denied', 'tls_failed', 'login_failed', 'too_privileged', 'unreachable', 'materials_full', 'selection_invalid', 'failed',
+  'busy', 'network_denied', 'tls_failed', 'login_failed', 'too_privileged', 'unreachable', 'selection_invalid', 'failed',
 ])
 
 /** The refusal reason of an error code a route answered with; anything this table does not name is `failed`.
@@ -29,7 +29,6 @@ const REASON_OF_CODE = Object.freeze({
   research_db_login_failed: 'login_failed',
   research_db_login_too_privileged: 'too_privileged',
   research_db_unreachable: 'unreachable',
-  autopilot_materials_full: 'materials_full',
   research_db_selection_invalid: 'selection_invalid',
 })
 
@@ -73,7 +72,7 @@ export function researchDbMetricFamilies() {
     },
     {
       name: 'open_science_research_db_refusals_total',
-      help: 'Research-database operations refused, and limits that bit, by reason: truncated, cells_withheld and columns_dropped are limits that cut an import that was still made; busy, network_denied, tls_failed, login_failed, too_privileged, unreachable, materials_full, selection_invalid and failed gave nothing.',
+      help: 'Research-database operations refused, and limits that bit, by reason: truncated, cells_withheld and columns_dropped are limits that cut an import that was still made; busy, network_denied, tls_failed, login_failed, too_privileged, unreachable, selection_invalid and failed gave nothing.',
       type: 'counter',
       series: [...refusals].map(([reason, value]) => ({ value, labels: { reason } })),
     },

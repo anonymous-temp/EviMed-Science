@@ -1,0 +1,18 @@
+{
+  "id": "m04-anonymous-case-with-quantities",
+  "class": "anonymous-person-clinical-coverage",
+  "observedIn": "Synthetic development counterexample added on 2026-11-05 after the frozen candidate replay; no real person or confirmation question is used.",
+  "expected": "Preserve this unnamed child's stated age, weight and allergy under a source-local person label. Do not assign these attributes to the account owner or invent a diagnosis.",
+  "decidable": true,
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "messages": [
+      { "id": "u1", "role": "user", "text": "有位没有姓名标识的6岁孩子，体重18.2 kg，对花生过敏。先帮我把病例要点按原话列出来。" },
+      { "id": "a1", "role": "assistant", "text": "原话要点：6岁孩子；体重18.2 kg；对花生过敏。" }
+    ]
+  },
+  "expect": { "requireKinds": { "person": 1 }, "requireTextContains": ["6岁", "18.2 kg", "花生"], "noRecordOfKinds": ["profile"] },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
+}

@@ -484,6 +484,45 @@ function QualityCard({ quality }: { quality: VcrQualityReport }) {
           </section>
         ))}
       </div>
+      {quality.rule && <p data-vcr-quality-rule="" className="mt-3 text-caption text-text-3">{quality.rule}</p>}
+      {quality.atRisk && <AtRiskTable atRisk={quality.atRisk} />}
     </ChartCard>
+  );
+}
+
+/**
+ * 「哪些人最容易被认出来」: by the share of each level among the real records whose risk is above the bound, against its share among all of them. A level held by
+ * fewer than ten at-risk people is not in the table, a group too small to describe is not described, and no person's row is ever here.
+ */
+function AtRiskTable({ atRisk }: { atRisk: NonNullable<VcrQualityReport["atRisk"]> }) {
+  const bound = atRisk.bound == null ? "" : numberText(atRisk.bound, 2);
+  if (!atRisk.described) {
+    return <p data-vcr-quality-atrisk="" className="mt-3 text-caption text-text">{`被认出来的风险高于 ${bound} 的真实记录不足 10 条，太少了，不描述他们是哪一类人（描述了就等于指认到了个人）。`}</p>;
+  }
+  if (atRisk.rows.length === 0) {
+    return <p data-vcr-quality-atrisk="" className="mt-3 text-caption text-text">{`被认出来的风险高于 ${bound} 的真实记录有 ${numberText(atRisk.size, 0)} 条，但没有哪一类在其中达到 10 人，所以不逐类显示。`}</p>;
+  }
+  return (
+    <div data-vcr-quality-atrisk="" className="mt-3 flex flex-col gap-2">
+      <BlockHeading className="text-caption text-text-3">{`哪些人最容易被认出来（风险高于 ${bound} 的 ${numberText(atRisk.size, 0)} 条真实记录）`}</BlockHeading>
+      <table className="w-full text-caption">
+        <thead>
+          <tr className="text-text-3">
+            <th scope="col" className="py-1 pr-2 text-left font-normal">特征</th>
+            <th scope="col" className="px-2 py-1 text-right font-normal">在高风险记录里占</th>
+            <th scope="col" className="py-1 pl-2 text-right font-normal">在全部记录里占</th>
+          </tr>
+        </thead>
+        <tbody>
+          {atRisk.rows.map((row) => (
+            <tr key={`${row.variable}:${row.level}`} data-vcr-quality-atrisk-row={`${row.variable}:${row.level}`}>
+              <th scope="row" className="py-1 pr-2 text-left font-normal text-text">{`${row.variable} = ${row.level}`}</th>
+              <td className="px-2 py-1 text-right tabular-nums">{`${numberText(row.atRiskShare, 0)}%（${numberText(row.atRisk, 0)} 人）`}</td>
+              <td className="py-1 pl-2 text-right tabular-nums">{`${numberText(row.allShare, 0)}%`}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

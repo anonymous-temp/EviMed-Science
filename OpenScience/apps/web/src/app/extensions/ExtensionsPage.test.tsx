@@ -2,7 +2,6 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider, MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
-import { CAPABILITY_DISPLAY } from "@evimed/domain";
 import { UnsavedRouteGuard } from "@/app/layout/UnsavedRouteGuard";
 import { WebApiError, getWebProjectId, setWebProjectId } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
@@ -19,26 +18,15 @@ afterAll(() => { globalThis.Request = NativeRequest; });
 const skills = vi.hoisted(() => ({ listPlatformSkills: vi.fn(), projectPlatformSkills: vi.fn(), listPersonalSkills: vi.fn(), pendingPersonalSkillTransfers: vi.fn(),
   getPersonalSkill: vi.fn(), personalSkillHistory: vi.fn(), personalSkillDefaults: vi.fn(), projectSkills: vi.fn(), personalSkillSupply: vi.fn(), createPersonalSkill: vi.fn(), saveProjectSkills: vi.fn() }));
 const extensions = vi.hoisted(() => ({ inventory: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), projectExtensions: vi.fn(), projectBuiltinPlugins: vi.fn() }));
-const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), listWebResearchAgents: vi.fn(), putWebResearchSession: vi.fn(), fetchWebMe: vi.fn() }));
+const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), fetchWebMe: vi.fn() }));
 vi.mock("@/lib/skillLibraryClient", async original => ({ ...(await original<object>()), ...skills }));
 vi.mock("@/lib/extensionsClient", async original => ({ ...(await original<object>()), ...extensions }));
 vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), ...api }));
 const mine = { id: "skill:mine", revision: 1, payload: { title: "我的检索方案", description: "自己写的", instructions: "Use sources.", nativeName: "personal-x", digest: "sha256:x", resources: [], prepared: true }, createdAt: "", updatedAt: "", deletedAt: null };
 function Where() { return <p data-testid="where">{useLocation().pathname}</p>; }
 function open(path: string) { return render(<MemoryRouter initialEntries={[path]}><UnsavedRouteGuard /><Where /><Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /></Routes></MemoryRouter>); }
-/** The same page with the conversation route beside it: a tool row opens a conversation, and that is where it lands. */
-function openWithChat(path: string) {
-  return render(<MemoryRouter initialEntries={[path]}><UnsavedRouteGuard /><Where /><Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /><Route path="/app/chat" element={<p>对话</p>} /></Routes></MemoryRouter>);
-}
 const row = (name: string, group: string, extra: object = {}) => ({ id: `curated:${name}`, name, title: `${group}技能 ${name}`, use: `${name} 的一句话用途`, group, source: "platform", canCopy: true, requirement: { required: false, reason: null }, ...extra });
 const platformList = { groups: ["科研分析", "长任务", "循证 GEO"], geoGroup: "循证 GEO", loopxGroup: "长任务", items: [row("a", "科研分析"), row("b", "科研分析")] };
-// The curated tools the catalogue lists, as `GET /api/agents` returns them, and the module-only one it leaves out (`display.listed: false`).
-const toolRecord = (id: string) => ({ id, version: "1.0.0", title: id, category: "", description: "", skill: id, estimatedMinutes: [20, 40] as [number, number],
-  starterPrompts: [], requiredInputs: [], optionalInputs: [], requiredTools: [], optionalTools: [], dataSources: [], outputs: [], completionChecks: [], runtimeAgent: `evimed-${id}` });
-const TOOL_IDS = ["statistical-analysis", "meta-analysis", "research-topic-selection", "peer-review"];
-const HIDDEN_TOOL_IDS = ["dataset-research-scoping", "evidence-appraisal", "gene-expression-analysis", "manuscript-support", "geo-insight", "vcr-protocol"];
-const toolCatalogue = [...TOOL_IDS, ...HIDDEN_TOOL_IDS].map(toolRecord);
-const toolTitle = (id: string) => CAPABILITY_DISPLAY[id].title;
 const inventoryItem = (id: string, title: string, use: string, extra: object = {}) => ({ id, title, use, icon: "Wrench", state: "on", control: { kind: "none" }, opens: { kind: "drawer" }, does: `${title}做什么`, how: `${title}怎么用`, ...extra });
 beforeEach(() => {
   vi.resetAllMocks();
@@ -60,8 +48,6 @@ beforeEach(() => {
   window.sessionStorage.clear();
   api.fetchWebMe.mockImplementation(async ({ projectId }: { projectId: string }) => ({ user: { id: "owner" }, project: { id: projectId } }));
   api.listWebPlugins.mockResolvedValue([]);
-  api.listWebResearchAgents.mockResolvedValue([]);
-  api.putWebResearchSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
 });
 
 const openCreate = async () => {
@@ -221,55 +207,13 @@ it("an empty native purpose is refused in place before saving, then clears as it
   expect(within(drawer).queryByText("请写出什么时候使用这个技能")).not.toBeInTheDocument();
 });
 
-it("lists the curated research tools as a 科研工具 group of skills, and leaves a module-only one out", async () => {
-  skills.listPlatformSkills.mockResolvedValue(platformList);
-  api.listWebResearchAgents.mockResolvedValue(toolCatalogue);
-  open(`/app/extensions/discover?group=${encodeURIComponent("科研工具")}`);
-  for (const id of TOOL_IDS) expect(await screen.findByRole("button", { name: toolTitle(id) })).toBeInTheDocument();
-  for (const id of HIDDEN_TOOL_IDS) expect(screen.queryByRole("button", { name: toolTitle(id) })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "科研分析技能 a" })).not.toBeInTheDocument();
-});
-
-it("a tool row opens a new conversation bound to that tool, as its 科研工具 card does", async () => {
-  api.listWebResearchAgents.mockResolvedValue(toolCatalogue);
-  openWithChat("/app/extensions/installed");
-  await userEvent.click(await screen.findByRole("button", { name: toolTitle("statistical-analysis") }));
-  await waitFor(() => expect(api.putWebResearchSession).toHaveBeenCalledWith(
-    expect.stringMatching(/^web-/), { mode: "specialist", agentId: "statistical-analysis", agentVersion: "1.0.0" }));
-  await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/chat"));
-});
-
-it("a tool whose binding was refused says so and opens nothing: no conversation without the tool", async () => {
-  api.listWebResearchAgents.mockResolvedValue(toolCatalogue);
-  api.putWebResearchSession.mockRejectedValueOnce(new WebApiError("unavailable", { status: 503 }));
-  openWithChat("/app/extensions/installed");
-  await userEvent.click(await screen.findByRole("button", { name: toolTitle("statistical-analysis") }));
-  await waitFor(() => expect(useToastStore.getState().toasts.some(toast => toast.tone === "error" && toast.message.includes(toolTitle("statistical-analysis")))).toBe(true));
-  expect(screen.getByTestId("where")).toHaveTextContent("/app/extensions/installed");
-  expect(screen.queryByText("对话")).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: toolTitle("statistical-analysis") }));
-  await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/chat"));
-});
-
-it("a catalogue of tools that cannot be read says so with a way to try again, and the skills still show", async () => {
-  skills.listPlatformSkills.mockResolvedValue(platformList);
-  api.listWebResearchAgents.mockRejectedValueOnce(new WebApiError("down", { status: 503 })).mockResolvedValue(toolCatalogue);
-  open("/app/extensions/discover");
-  const retry = await screen.findByRole("button", { name: "重试科研工具" });
-  expect(screen.getByRole("button", { name: "科研分析技能 a" })).toBeInTheDocument();
-  await userEvent.click(retry);
-  expect(await screen.findByRole("button", { name: toolTitle("peer-review") })).toBeInTheDocument();
-});
-
 it("the long task's entry skill is listed under its own group with the long task's mark, and no switch", async () => {
   skills.listPlatformSkills.mockResolvedValue({ ...platformList, items: [...platformList.items,
     row("loopx", "长任务", { id: "loopx:loopx", title: "长任务", canCopy: false, requirement: { required: true, reason: "long-task-engine" } })] });
-  open(`/app/extensions/discover?group=${encodeURIComponent("长任务")}`);
-  const card = await screen.findByRole("listitem", { name: "长任务" });
-  expect(card.querySelector("svg.lucide-repeat")).not.toBeNull();
-  expect(screen.queryByRole("button", { name: "科研分析技能 a" })).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole("tab", { name: "已添加" }));
+  open(`/app/extensions/installed?group=${encodeURIComponent("长任务")}`);
   const added = (await screen.findByRole("button", { name: "长任务" })).closest("li")!;
+  expect(added.querySelector("svg.lucide-repeat")).not.toBeNull();
+  expect(screen.queryByRole("button", { name: "科研分析技能 a" })).not.toBeInTheDocument();
   expect(within(added).queryByRole("switch")).not.toBeInTheDocument();
   expect(within(added).queryByRole("button", { name: /应用/ })).not.toBeInTheDocument();
 });
@@ -277,10 +221,10 @@ it("the long task's entry skill is listed under its own group with the long task
 it("the 循证 GEO method pack's index is its own group with the module's radar, and its retired name still finds it without being shown", async () => {
   skills.listPlatformSkills.mockResolvedValue({ ...platformList, items: [...platformList.items,
     row("geo-x", "循证 GEO", { id: "geo-private:geo-x", title: "证据缺口分析", canCopy: false, requirement: { required: true, reason: "private-workflow" } })] });
-  open("/app/extensions/discover");
+  open("/app/extensions/installed");
   await screen.findByRole("button", { name: "科研分析技能 a" });
-  await userEvent.type(screen.getByRole("searchbox", { name: "搜索插件与技能" }), "循证传播");
-  const pack = await screen.findByRole("listitem", { name: "证据缺口分析" });
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索技能与插件" }), "循证传播");
+  const pack = (await screen.findByRole("button", { name: "证据缺口分析" })).closest("li")!;
   expect(pack.querySelector("svg.lucide-radar")).not.toBeNull();
   expect(screen.queryByRole("button", { name: "科研分析技能 a" })).not.toBeInTheDocument();
   expect(screen.queryByText(/循证传播/)).not.toBeInTheDocument();
@@ -306,10 +250,10 @@ it("memory is a link to its own page, not a drawer; the long task and the basics
   expect(await screen.findByRole("dialog", { name: "基础能力" })).toBeInTheDocument();
 });
 
-it("an address with no such tab goes to discovery", async () => {
+it("an address with no such tab, and the retired discovery address, go to what is added", async () => {
   skills.listPlatformSkills.mockResolvedValue(platformList);
   open("/app/extensions/nothing");
-  await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/extensions/discover"));
+  await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/extensions/installed"));
   expect(await screen.findByRole("button", { name: "科研分析技能 a" })).toBeInTheDocument();
 });
 
@@ -367,7 +311,7 @@ it("browser Back keeps a dirty personal edit on cancel and restores the catalogu
   expect(screen.getByLabelText("名称")).toHaveValue("我的检索方案 draft");
   await act(() => router.navigate(-1));
   await userEvent.click(screen.getByRole("button", { name: "放弃修改并离开" }));
-  expect(await screen.findByRole("heading", { name: "插件与技能" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "技能与插件" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "添加技能" })).toBeInTheDocument();
   expect(screen.queryByLabelText("名称")).not.toBeInTheDocument();
 });
@@ -412,7 +356,7 @@ it("retains the original project and draft when access proof fails after discard
 async function openDataRoute(path: string) {
   const router = createMemoryRouter([{ path: "/app/extensions/:tab/:itemId?", element: <><UnsavedRouteGuard /><ExtensionsPage /></> }], { initialEntries: [path] });
   render(<RouterProvider router={router} />);
-  await screen.findByRole("heading", { name: "插件与技能" });
+  await screen.findByRole("heading", { name: "技能与插件" });
   return router;
 }
 async function startCreate() {
@@ -421,12 +365,12 @@ async function startCreate() {
 }
 
 it("closes a draft that was discarded to leave: the list of the other tab shows, not the form with a spent guard", async () => {
-  const router = await openDataRoute("/app/extensions/discover");
+  const router = await openDataRoute("/app/extensions/installed");
   await startCreate();
   await userEvent.type(screen.getByLabelText("名称"), "Draft to drop");
-  await act(() => router.navigate("/app/extensions/installed"));
+  await act(() => router.navigate("/app/extensions/installed?type=skills"));
   await userEvent.click(screen.getByRole("button", { name: "放弃修改并离开" }));
-  expect(await screen.findByRole("heading", { name: "插件与技能" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "技能与插件" })).toBeInTheDocument();
   expect(screen.queryByLabelText("名称")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "添加技能" })).toBeInTheDocument();
   expect(router.state.location.pathname).toBe("/app/extensions/installed");
@@ -434,27 +378,28 @@ it("closes a draft that was discarded to leave: the list of the other tab shows,
 });
 
 it("keeps a draft that was kept guarded: Cancel stays on the form, and the next way out asks again", async () => {
-  const router = await openDataRoute("/app/extensions/discover");
+  const router = await openDataRoute("/app/extensions/installed");
   await startCreate();
   await userEvent.type(screen.getByLabelText("名称"), "Draft to keep");
-  await act(() => router.navigate("/app/extensions/installed"));
+  await act(() => router.navigate("/app/extensions/installed?type=skills"));
   await userEvent.click(screen.getByRole("button", { name: "取消" }));
   expect(screen.getByLabelText("名称")).toHaveValue("Draft to keep");
-  expect(router.state.location.pathname).toBe("/app/extensions/discover");
-  await act(() => router.navigate("/app/extensions/installed"));
+  expect(router.state.location.pathname).toBe("/app/extensions/installed");
+  expect(router.state.location.search).toBe("?compose=create");
+  await act(() => router.navigate("/app/extensions/installed?type=skills"));
   expect(screen.getByRole("alertdialog")).toBeInTheDocument();
 });
 
 it("lets the page's own address (the sidebar link from /discover) bring the person back to the list, asking first when a draft is open", async () => {
-  const router = await openDataRoute("/app/extensions/discover");
+  const router = await openDataRoute("/app/extensions/installed");
   await startCreate();
-  await act(() => router.navigate("/app/extensions/discover"));
+  await act(() => router.navigate("/app/extensions/installed"));
   // No draft: nothing to ask, and the list is back.
   expect(await screen.findByRole("button", { name: "添加技能" })).toBeInTheDocument();
   expect(screen.queryByLabelText("名称")).not.toBeInTheDocument();
   await startCreate();
   await userEvent.type(screen.getByLabelText("名称"), "Draft");
-  await act(() => router.navigate("/app/extensions/discover"));
+  await act(() => router.navigate("/app/extensions/installed"));
   expect(screen.getByRole("alertdialog")).toBeInTheDocument();
   expect(screen.getByLabelText("名称")).toHaveValue("Draft");
   await userEvent.click(screen.getByRole("button", { name: "放弃修改并离开" }));
@@ -463,7 +408,7 @@ it("lets the page's own address (the sidebar link from /discover) bring the pers
 });
 
 it("asks only once when 返回技能列表 is confirmed: the local dialog is the decision, the address change is not asked again", async () => {
-  const router = await openDataRoute("/app/extensions/discover");
+  const router = await openDataRoute("/app/extensions/installed");
   await startCreate();
   await userEvent.type(screen.getByLabelText("名称"), "Draft");
   await userEvent.click(screen.getByRole("button", { name: "返回技能列表" }));
@@ -482,7 +427,7 @@ it("opens the form from its address, without taking focus from the page it was l
 });
 
 it("moves focus into the form when 创建技能 opens it, and back to 添加技能 when the list returns", async () => {
-  await openDataRoute("/app/extensions/discover");
+  await openDataRoute("/app/extensions/installed");
   await startCreate();
   expect(await screen.findByRole("region", { name: "新建技能" })).toHaveFocus();
   await userEvent.click(screen.getByRole("button", { name: "返回技能列表" }));

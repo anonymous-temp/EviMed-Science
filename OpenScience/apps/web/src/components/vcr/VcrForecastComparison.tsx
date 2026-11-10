@@ -66,7 +66,12 @@ export function VcrForecastComparison({ studyId, selected, records, canRun, canM
     if (!other) return;
     setBusy(true); setError(false); setMessage('正在比较相同受试者的预测。');
     try {
-      const job = await queueVcrJob(studyId, { kind: 'compare_forecasts', scenario: { predictionId: selected.id, otherPredictionId: other.id, mode: mode || inferredMode } });
+      // An update (a later origin) is also read against what was observed afterwards, when a later history holds it.
+      const chosen = mode || inferredMode;
+      const latest = Math.max(Date.parse(selected.summary.origin ?? ''), Date.parse(other.summary.origin ?? ''));
+      const outcome = chosen === 'update' ? records.filter(r => r.kind === 'history' && Date.parse(r.summary.origin ?? '') > latest)
+        .sort((a, b) => Date.parse(b.summary.origin ?? '') - Date.parse(a.summary.origin ?? ''))[0] : undefined;
+      const job = await queueVcrJob(studyId, { kind: 'compare_forecasts', scenario: { predictionId: selected.id, otherPredictionId: other.id, mode: chosen, ...(outcome ? { outcomeHistoryId: outcome.id } : {}) } });
       setJobId(job.id);
     } catch (cause) { setBusy(false); setError(true); setMessage(webErrorMessage(cause, { fallback: '比较未能开始，请重试。' })); }
   }

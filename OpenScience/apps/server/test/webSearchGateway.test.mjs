@@ -302,8 +302,8 @@ function fakeLedger({ refuse = null } = {}) {
 const caller = { userId: "alice", projectId: "paper1", runId: null, dailyLimit: 0, weeklyLimit: 0 };
 const identifying = { assertActiveModelGatewayToken: () => caller };
 
-async function metered(config, fetchImpl, usageLedger, { attributeRun = async () => "run-7", runPurpose = null, runScope = null } = {}) {
-  const handler = createWebSearchGatewayHandler(config, identifying, { fetchImpl, usageLedger, attributeRun, runPurpose, runScope });
+async function metered(config, fetchImpl, usageLedger, { attributeRun = async () => "run-7", runPurpose = null } = {}) {
+  const handler = createWebSearchGatewayHandler(config, identifying, { fetchImpl, usageLedger, attributeRun, runPurpose });
   const res = response();
   await handler(request({ query: "司美格鲁肽 说明书" }), res);
   return res;
@@ -339,35 +339,6 @@ test("a Bailian search is reserved against the researcher's caps and settled on 
   assert.equal(settle.actualCost, 0.002448);
   assert.equal(settle.priced, true);
   assert.equal(settle.providerRequestId, "req-dashscope-1");
-});
-
-test("a search made by a scheduled execution in the researcher's runtime is booked under its episode and held to its limit, and never runs uncapped", async () => {
-  const answer = async (url) => (String(url).startsWith("https://dashscope.aliyuncs.com/")
-    ? searxngResponse({ request_id: "req-1", output: { search_info: { search_results: [{ title: "公告", url: "https://www.nmpa.gov.cn/y.html", site_name: "国家药监局" }] } },
-      usage: { input_tokens: 100, output_tokens: 8, plugins: { search: { count: 1, strategy: "turbo" } } } })
-    : searxngResponse({ results: [{ url: "https://example.org/a", title: "A", engine: "bing" }] }));
-  const ledger = fakeLedger();
-  const asked = [];
-  const res = await metered({ ...withBailian, userRunSpendLimit: 5 }, answer, ledger, {
-    runScope: async (request) => { asked.push(request); return { usageRunId: "episode-one", runLimit: 2.5 }; } });
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(asked, [{ userId: "alice", projectId: "paper1", runId: "run-7" }]);
-  assert.equal(ledger.calls[0][1].runId, "episode-one");
-  assert.equal(ledger.calls[0][1].runLimit, 2.5, "the episode's limit, not the account's per-run default");
-
-  // An ordinary run keeps the account's rule; a scope that cannot be read makes the search unavailable, not uncapped.
-  const ordinary = fakeLedger();
-  await metered({ ...withBailian, userRunSpendLimit: 5 }, answer, ordinary, { runScope: async () => null });
-  assert.equal(ordinary.calls[0][1].runId, "run-7");
-  assert.equal(ordinary.calls[0][1].runLimit, 5);
-  const unreadable = fakeLedger();
-  let sent = 0;
-  const alone = await metered({ webSearchTimeoutMs: 5_000, webSearchBailianEnabled: true, dashscopeApiKey: "sk-test-key-not-real" },
-    async (...args) => { sent += 1; return answer(...args); }, unreadable, { runScope: async () => { throw new Error("unreadable"); } });
-  assert.equal(alone.statusCode, 503);
-  assert.equal(alone.json().code, "web_search_unavailable");
-  assert.deepEqual(unreadable.calls, [], "nothing reserved");
-  assert.equal(sent, 0, "nothing sent");
 });
 
 test("a Bailian call with no count, a refusal, a failure after it left, and a spent budget each close the right way", async () => {
@@ -448,20 +419,6 @@ test("the node's SearXNG is searched first, and this host's answers when the nod
   assert.deepEqual(res.json().data.results.map((row) => row.url), ["https://example.org/local"], "no node configured, the edge URL is ignored");
 });
 
-test("trusted evolution run purpose reserves paid search against its own budget", async () => {
-  const ledger = fakeLedger();
-  let identity;
-  const res = await metered({ ...withBailian, evolutionDailyBudgetCny: 7, userDailySpendLimit: 1, userWeeklySpendLimit: 2, userRunSpendLimit: 0.01 }, async url => String(url).startsWith("https://dashscope.aliyuncs.com/")
-    ? searxngResponse({ output: { search_info: { search_results: [] } }, usage: { input_tokens: 10, output_tokens: 1 } })
-    : searxngResponse({ results: [] }), ledger, { runPurpose: async input => { identity = input; return "evolution"; } });
-  assert.equal(res.statusCode, 200);
-  assert.deepEqual(identity, { userId: "alice", projectId: "paper1", runId: "run-7" });
-  const reserve = ledger.calls.find(([kind]) => kind === "reserve")[1];
-  assert.equal(reserve.purpose, "evolution");
-  assert.equal(reserve.dailyLimit, 7);
-  assert.equal(reserve.weeklyLimit, 0);
-  assert.equal(reserve.runLimit, 0);
-});
 
 test("a run ledger that cannot be read does not cost the search its paid engine: the call is booked as web-search", async () => {
   const ledger = fakeLedger();

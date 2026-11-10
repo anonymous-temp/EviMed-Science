@@ -85,13 +85,6 @@ test("every script that starts a run is marked automated, or named here with the
 });
 
 test("the marked drivers carry it on the call that starts the run, not only somewhere in the file", async () => {
-  // A file that mentions the header in a comment or in one helper and dispatches through another is not marked. The dispatch route's
-  // own statements are held by `learningBackgroundWork.test.mjs`; the drivers below build their request through a helper, so the
-  // helper's header is read here: it must be the one the server honours.
-  for (const driver of ["scripts/ops/evolution-acceptance.mjs", "scripts/ops/evolution-upload-acceptance.mjs", "scripts/ops/evolution-natural-tool-acceptance.mjs", "scripts/ops/evolution-boundary-acceptance.mjs"]) {
-    const text = await readFile(path.join(openScience, driver), "utf8");
-    assert.match(text, /["']x-evimed-automated["']\s*:\s*["']1["']/, `${driver} sends the header the server reads as automated`);
-  }
   const server = await readFile(path.join(openScience, "apps/server/src/server.mjs"), "utf8");
   assert.match(server, /export const AUTOMATED_REQUEST_HEADER = "x-evimed-automated";/);
   assert.match(server, /const automated = body\.automated === true \|\| automatedRequest\(req\);/);

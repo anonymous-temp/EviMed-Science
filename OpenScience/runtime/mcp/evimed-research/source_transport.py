@@ -249,7 +249,6 @@ GATEWAY_FORBIDDEN_REQUEST_CODES = frozenset({
     "public_source_gateway_url_forbidden", "public_source_api_path_forbidden", "public_source_api_request_forbidden",
     "public_source_gateway_credential_profile_forbidden", "public_source_gateway_credential_profile_required",
     "public_source_gateway_graphql_forbidden", "public_source_pdf_host_forbidden",
-    "evaluation_source_excluded", "evaluation_opaque_source_excluded",
 })
 # What the gateway holds back about a project's pace, neither about the request nor about a source (`projectGatewayLimit.mjs`):
 # the project asked for more in a minute, or at once, than it may. Not the source rate limiting anyone (the source was not

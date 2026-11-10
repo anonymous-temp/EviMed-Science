@@ -12,10 +12,7 @@ import { EvimedSearchHome } from "@/components/search/EvimedSearchHome";
 import { EvimedSearchTransition } from "@/components/search/EvimedSearchTransition";
 import { EvimedSearchResults, EvimedSearchSkeleton } from "@/components/search/EvimedSearchResults";
 import { useEvimedSearchState } from "@/lib/useEvimedSearchState";
-import {
-  EVIMED_SEARCH_CATEGORIES,
-  type EvimedSearchCategory, type EvimedSearchFailure,
-} from "@/lib/evimedSearchClient";
+import { type EvimedSearchCategory, type EvimedSearchFailure } from "@/lib/evimedSearchClient";
 
 function SearchError({ error, currentPath, onRetry, onSearch }: {
   error: EvimedSearchFailure; currentPath: string; onRetry(): void; onSearch(): void;
@@ -60,7 +57,7 @@ export function EvimedSearchPage() {
   const [searchMode, setSearchMode] = useState<"browse" | "submit" | "edit">("browse");
   const {
     rootRef, category, params, query, page, detailRef, language, sort, scholarly,
-    draft, setDraft, composing, result, state, readerState, busy, update, submit, clearSearch, editSearch, switchCategory,
+    draft, setDraft, composing, result, state, readerState, busy, update, submit, clearSearch, editSearch,
     retrySearch, retryCurrent, retryDetail, backTo, currentPath, filters, facets, facetsBusy, retryFacets, resetFilters,
     selectedItems, selectItems, clearSelection, updateCollected,
   } = useEvimedSearchState();
@@ -81,7 +78,7 @@ export function EvimedSearchPage() {
   if (detailRef) return <div ref={rootRef} className="h-full min-h-0"><DetailReader category={category} state={readerState} backTo={backTo}
     currentPath={currentPath} onSearch={retrySearch} onRetry={retryDetail} onCollectedChange={updateCollected} /></div>;
   if (!query) return <div ref={rootRef} className="h-full min-h-0"><PageShell title="医学检索" headerVisibility="sr-only" width="page" contentClassName="xl:pt-8 2xl:pt-16">
-    <EvimedSearchHome category={category} draft={draft} onDraftChange={setDraft} onCategoryChange={switchCategory}
+    <EvimedSearchHome category={category} draft={draft} onDraftChange={setDraft}
       onSubmit={submitSearch} onClear={clearSearch} onCompositionChange={value => { composing.current = value; }} focusQuery={searchMode === "edit"} />
   </PageShell></div>;
   const sortOptions = [
@@ -99,7 +96,6 @@ export function EvimedSearchPage() {
       actions={<Link to={`/app/search/${category}`} className={buttonClasses({ variant: "text", size: "sm" })}><ArrowLeft size={16} aria-hidden="true" />检索首页</Link>}
       toolbar={{
       label: "检索条件",
-      views: { label: "检索类别", items: EVIMED_SEARCH_CATEGORIES, value: category, onChange: switchCategory, panelId: "evimed-search-results" },
       search: { label: "检索关键词", placeholder: category === "drugs" ? "药品名称" : "输入关键词", value: draft, maxLength: 200,
         onChange: setDraft, onClear: clearSearch, onSubmit: submitSearch,
         inputProps: { onCompositionStart: () => { composing.current = true; }, onCompositionEnd: () => { composing.current = false; } } },

@@ -28,6 +28,13 @@ lives in one place (``sourceMaterialsLocate.mjs``) and is tested without Python.
   here, and is reported with none. Merged ranges and the sheet state (visible or
   hidden) are reported. At most ``maxCellsPerSheet`` cells of a sheet are listed;
   ``totalCells`` says how many it has.
+- Word (``.docx``) and slides (``.pptx``): the text itself, into ``text.txt`` with
+  ``result.json`` carrying the counts (``outcome: "text"``). This is the local
+  reading the control plane falls back to when the parsing service cannot answer
+  (``documentLocalReader.mjs``); a Word file has no page source, so it carries no
+  page markers, and a slide deck carries ``[Slide N]`` lines as the service writes
+  them. Nothing here recognises a picture's words: a scanned page is a page with
+  no text, never a guess.
 
 Hidden knowledge: a ``.xlsx`` is a zip and its XML is untrusted, so before
 openpyxl sees it the member count and the declared unpacked size are bounded,
@@ -53,7 +60,7 @@ from pathlib import Path
 import vcr_record_extract as record
 
 NAME = "evimed-source-material-extract"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 PROTOCOL = 1
 
 # A page with fewer significant characters than this has no text layer: a page
@@ -268,6 +275,86 @@ def read_xlsx_sheets(data: bytes, max_sheets: int, max_cells_per_sheet: int) -> 
 
 
 # ---------------------------------------------------------------------------
+# Slides
+# ---------------------------------------------------------------------------
+
+A_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+
+
+def _slide_parts(archive: zipfile.ZipFile) -> list[str]:
+    """The slide parts in presentation order: what ``sldIdLst`` names, else the numeric file order."""
+    names = {member.filename for member in archive.infolist()}
+    try:
+        presentation = record._parse_xml(archive.read("ppt/presentation.xml"))
+        rels = record._parse_xml(archive.read("ppt/_rels/presentation.xml.rels"))
+        targets = {str(item.get("Id")): str(item.get("Target", "")) for item in rels}
+        ordered: list[str] = []
+        for node in presentation.iter():
+            if record._local(node.tag) == "sldId":
+                target = targets.get(str(node.get(R_NS + "id")), "")
+                part = target.lstrip("/") if target.startswith("/") else "ppt/" + target
+                if part in names:
+                    ordered.append(part)
+        if ordered:
+            return ordered
+    except (KeyError, record.Refusal):
+        pass
+    found = [name for name in names if re.fullmatch(r"ppt/slides/slide\d+\.xml", name)]
+    return sorted(found, key=lambda name: int(re.findall(r"\d+", name)[-1]))
+
+
+def read_pptx_text(data: bytes, max_slides: int, max_chars: int) -> dict:
+    """Every slide's text, one paragraph per line under a ``[Slide N]`` line."""
+    if data[:4] != b"PK\x03\x04":
+        raise Refusal("not_pptx")
+    _check_package_generic(data, "ppt/presentation.xml")
+    archive = zipfile.ZipFile(io.BytesIO(data))
+    with archive:
+        parts = _slide_parts(archive)
+        if not parts:
+            raise Refusal("corrupt", "no slides")
+        if len(parts) > max_slides:
+            raise Refusal("too_many_pages", str(len(parts)))
+        blocks: list[str] = []
+        for number, part in enumerate(parts, start=1):
+            info = archive.getinfo(part)
+            if info.file_size > record.DEFAULT_MAX_XML_BYTES:
+                raise Refusal("too_large", "slide part")
+            try:
+                root = record._parse_xml(archive.read(info))
+            except record.Refusal as refusal:
+                raise Refusal(refusal.reason, refusal.detail) from refusal
+            lines = []
+            for paragraph in root.iter(A_NS + "p"):
+                line = "".join(node.text or "" for node in paragraph.iter(A_NS + "t"))
+                if line.strip():
+                    lines.append(line)
+            blocks.append("[Slide %d]\n%s" % (number, "\n".join(lines)))
+    text = record.clean_text("\n\n".join(blocks))
+    truncated = len(text) > max_chars
+    return {"pages": len(parts), "text": text[:max_chars] if truncated else text, "truncated": truncated}
+
+
+def _check_package_generic(data: bytes, required_part: str) -> None:
+    """The package checks ``_check_package`` makes for a workbook, for any Office zip."""
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile as error:
+        raise Refusal("corrupt", "zip") from error
+    with archive:
+        members = archive.infolist()
+        if len(members) > MAX_ZIP_MEMBERS:
+            raise Refusal("corrupt", "members")
+        if sum(member.file_size for member in members) > MAX_ZIP_UNPACKED_BYTES:
+            raise Refusal("corrupt", "unpacked size")
+        if any(member.flag_bits & 0x1 for member in members):
+            raise Refusal("encrypted")
+        if required_part not in {member.filename for member in members}:
+            raise Refusal("corrupt", "no main part")
+
+
+# ---------------------------------------------------------------------------
 # The container's entry
 # ---------------------------------------------------------------------------
 
@@ -291,6 +378,19 @@ def run(request: dict, input_dir: Path, output_dir: Path) -> dict:
         texts = got.pop("texts")
         (output_dir / "pages.json").write_text(json.dumps(texts, ensure_ascii=False), encoding="utf-8")
         return {"protocol": PROTOCOL, "outcome": "pages", "extractor": _extractor(), "format": "pdf", **got}
+    if form == "docx":
+        try:
+            got = record.extract_docx(data, int(limits.get("maxChars", 16 * 1024 * 1024)))
+        except record.Refusal as refusal:
+            raise Refusal(refusal.reason, refusal.detail) from refusal
+        text = got.pop("text")
+        (output_dir / "text.txt").write_text(text, encoding="utf-8")
+        return {"protocol": PROTOCOL, "outcome": "text", "extractor": _extractor(), "format": "docx", "chars": len(text), **got}
+    if form == "pptx":
+        got = read_pptx_text(data, int(limits.get("maxPages", 1000)), int(limits.get("maxChars", 16 * 1024 * 1024)))
+        text = got.pop("text")
+        (output_dir / "text.txt").write_text(text, encoding="utf-8")
+        return {"protocol": PROTOCOL, "outcome": "text", "extractor": _extractor(), "format": "pptx", "chars": len(text), **got}
     if form in ("xlsx", "xlsm"):
         got = read_xlsx_sheets(data, int(limits.get("maxSheets", 40)), int(limits.get("maxCellsPerSheet", 1000)))
         return {"protocol": PROTOCOL, "outcome": "cells", "extractor": _extractor(), "format": form, **got}

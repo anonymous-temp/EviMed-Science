@@ -9,7 +9,8 @@ import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { VCR_EXPORT_KINDS as ALL_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS } from "@evimed/domain";
+import { VCR_EXPORT_KINDS as ALL_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_JOB_METHODS, VCR_ENGINE_METHODS } from "@evimed/domain";
+import { projectResearchInvocation } from '@evimed/research-plugin-runtime/hosted-protocol';
 
 /** The documents a run writes. A result record is the platform's own, from one result (D7): no run is sent out for it and none fills it. */
 const VCR_EXPORT_KINDS = ALL_EXPORT_KINDS.filter((kind) => kind !== "result_record");
@@ -136,6 +137,28 @@ test("a gateway path's metric label folds anything that is not an operation", ()
   assert.equal(vcrGatewayRoutePattern("/internal/vcr/v1/whatever"), "/internal/vcr/v1/:operation");
 });
 
+test('each native domain can discover its real method schema without opening a task or running an engine job', async () => {
+  const base = fixture();
+  let opened = 0;
+  base.vcr.store.taskContext = async () => { opened++; throw new Error('Shape must not create a task'); };
+  const handler = createVcrGatewayHandler(config, runtimeManager, { vcr: base.vcr,
+    resolveInvocation: async () => ({ userId: 'u1', projectId: 'prj_1', rootSessionId: 'root', sessionId: 'root', runId: 'run', callId: 'call' }) });
+  for (const [prefix, method] of [['virtual_trial', 'design.analytic'], ['virtual_cohort', 'population.scenario'], ['virtual_patient', 'patients.binary'], ['synthetic_control', 'comparator.evalue']]) {
+    const body = projectResearchInvocation(`${prefix}_describe`, { method }, { jobMethods: VCR_JOB_METHODS, methods: VCR_ENGINE_METHODS }).body;
+    const res = response();
+    await handler(request('/internal/vcr/v1/simulate', body, { authorization: 'Bearer token', 'x-evimed-execution-context': '{}' }), res);
+    assert.equal(res.status, 200, res.body);
+    assert.equal(res.json().data.method, method);
+    assert.equal(res.json().data.version, VCR_ENGINE_METHODS[method].version);
+    assert.ok(res.json().data.scenarioSchema);
+    const malformed = response();
+    await handler(request('/internal/vcr/v1/simulate', { ...body, scenario: {} }), malformed);
+    assert.equal(malformed.status, 400);
+  }
+  assert.equal(opened, 0);
+  assert.equal(base.calls.some(row => row[0] === 'enqueue'), false);
+});
+
 test("the token names the account and the study; there is no id parameter", async () => {
   const { calls, handler } = fixture();
   const res = response();
@@ -194,6 +217,29 @@ test("read and write vocabularies are closed, and the filter fields are too", as
     await handler(request(`/internal/vcr/v1/${operation}`, body), res);
     assert.equal(res.json().code, code, `${operation} ${JSON.stringify(body)}`);
   }
+});
+
+test("a job's row calls its state `state` and the filter that picks jobs by it `status`: the near-miss is read as the word it means, and the answer says so (live check 2026-11-04)", async () => {
+  const { calls, handler } = fixture();
+  const ask = async (body) => { const res = response(); await handler(request("/internal/vcr/v1/read", body), res); return res; };
+  const state = await ask({ what: "jobs", filter: { state: "running", limit: 5 } });
+  assert.equal(state.status, 200, JSON.stringify(state.json()));
+  assert.deepEqual(calls.at(-1), ["read", "jobs", { status: "running", limit: 5 }], "the service reads the word it means");
+  assert.deepEqual(state.json().data.filterRead, [{ from: "state", as: "status" }]);
+  assert.match(state.json().data.note, /state 已按 status 读/);
+  // the word itself is not a near-miss: nothing is said
+  const plain = await ask({ what: "jobs", filter: { status: "succeeded" } });
+  assert.equal(plain.status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "jobs", { status: "succeeded" }]);
+  assert.equal(plain.json().data.filterRead, undefined);
+  // a job state is one of the closed list; an unknown one is refused in words, and so is the filter on a read that has no states
+  for (const bad of [{ what: "jobs", filter: { status: "finished" } }, { what: "jobs", filter: { state: "done" } }, { what: "results", filter: { state: "running" } }]) {
+    const res = await ask(bad);
+    assert.deepEqual([res.status, res.json().code], [400, "vcr_read_filter_invalid"], JSON.stringify(bad));
+  }
+  // both written: the call's own `status` stands and `state` stays an unknown key
+  const both = await ask({ what: "jobs", filter: { state: "running", status: "queued" } });
+  assert.deepEqual([both.status, both.json().code], [400, "vcr_read_filter_invalid"]);
 });
 
 test("the registry search keys belong to what: candidates, are checked in words, and reach the service bounded (M1)", async () => {
@@ -774,6 +820,119 @@ test("a conversation's judgment is written item by item: a shape problem is one 
   assert.deepEqual(refused.json().data.issues.map((entry) => entry.code), ["vcr_write_refused"]);
 });
 
+test("a network, a dose-response and a shrinkage start through the gateway, filed under the label the call gave them; a pooled reference for the spread is a table, never typed numbers", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_n", state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_n", state: "canceled" }, canceled: true }; },
+  };
+  const { handler } = fixture({ jobs });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }), res); return res; };
+  const network = { label: "response", measure: "log_ratio", direction: "lower_better", studies: [
+    { studyId: "H1", contrasts: [{ treatment: "B", comparator: "A", effect: -0.3, se: 0.12 }] }, { studyId: "H2", contrasts: [{ treatment: "C", comparator: "B", effect: -0.15, se: 0.18 }] }] };
+  for (const [kind, scenario, subject] of /** @type {Array<[string, any, RegExp]>} */ ([
+    ["network_meta", network, /^nm:response:[0-9a-f]{10}$/],
+    ["effect_shrinkage", { label: "phase 2", scale: "log", values: [{ estimate: -0.4, se: 0.19 }] }, /^es:phase 2:[0-9a-f]{10}$/],
+    ["dose_response_meta", { studies: [{ studyId: "K1", type: "ir", rows: [{ dose: 0, effect: 0 }, { dose: 10, effect: 0.1, se: 0.1 }] }], model: { kind: "linear" } }, /^dr:default:[0-9a-f]{10}$/],
+  ])) {
+    const res = await start({ kind, scenario });
+    assert.equal(res.status, 200, `${kind}: ${res.body}`);
+    assert.equal(queued.at(-1).kind, kind);
+    assert.match(queued.at(-1).detail.subjectId, subject, `${kind} is filed under what it is about`);
+  }
+  // the pooled reference: a table kind reaches the pooling; a prior typed in is refused, and a number is never the run's
+  /** @type {any[]} */
+  const pooledCalls = [];
+  const pooling = fixture({ evidence: { async poolParameter(/** @type {any} */ input) { pooledCalls.push(input); return { status: "queued", jobs: [{ jobId: "job_p", status: "queued" }], refused: [] }; } } });
+  const call = async (/** @type {any} */ tauPrior) => { const res = response(); await pooling.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "pool_evidence", scenario: { parameter: "median_time", endpointKey: "pfs", tauPrior } }), res); return res; };
+  const pooled = await call({ kind: "turner_2015_generic" });
+  assert.equal(pooled.status, 200, pooled.body);
+  assert.deepEqual(pooledCalls.at(-1).tauPrior, { kind: "turner_2015_generic" });
+  const typed = await call({ kind: "log_normal", meanLog: -3, sdLog: 1 });
+  assert.equal(typed.status, 400, typed.body);
+  assert.match(typed.body, /先验来自文献里的表/);
+  assert.equal(pooledCalls.length, 1, "a prior typed in never reaches the pooling");
+});
+
+test("a design started in a conversation freezes which of its numbers the person typed; a conversation whose messages cannot be read freezes that, and a job outside a conversation freezes nothing (2026-11-04)", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_s", state: "queued", progress: {}, checkpoint: input.detail }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_s", state: "canceled" }, canceled: true }; },
+  };
+  const made = fixture({ jobs });
+  made.vcr.store.taskContext = async (/** @type {any} */ origin) => ({ id: "std_task", userId: "u1", projectId: "prj_1", scope: "conversation", purpose: "task", conversationSessionId: origin.rootSessionId });
+  /** @type {string[]} */
+  const asked = [];
+  const handlerWith = (/** @type {() => Promise<import("../src/vcrPersonStated.mjs").HumanParameterMessage[] | null>} */ read) => createVcrGatewayHandler(config, runtimeManager, { vcr: made.vcr,
+    resolveInvocation: async () => ({ userId: "u1", projectId: "prj_1", runId: "run_1", rootSessionId: "sess_1", callId: "call_1" }),
+    readPersonMessages: async (_study, sessionId) => { asked.push(sessionId); return read(); } });
+  const start = async (/** @type {any} */ handler, /** @type {Record<string, any>} */ body) => {
+    const res = response();
+    await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
+    assert.equal(res.status, 200, res.body);
+    assert.deepEqual(res.json().data.parameterProvenance, queued.at(-1).detail.personStated);
+    return queued.at(-1).detail.personStated;
+  };
+  const winRatio = { design: { nTreat: 250, followup: 24, dropoutAnnual: 0.05 }, truth: { death: { controlRisk: 0.15, hazardRatio: 0.75 }, score: { shift: 4, sd: 20 }, correlation: 0.3 } };
+  // the person said 24 months, 5% and a hazard ratio of 0.75; the model chose the rest
+  const said = await start(handlerWith(async () => [{sessionId:"sess_1",messageSeq:10,text:"心衰试验，随访 24 个月，年脱落率 5%，死亡风险比 0.75，三层比较要多少人？"}]), { kind: "design_win_ratio", scenario: winRatio, sources:[{origin:"user",field:"design.followup",value:24,quote:"随访 24 个月",unit:"month",context:"follow-up duration"}] });
+  assert.deepEqual(asked.at(-1), "sess_1", "the conversation the call came from");
+  assert.equal(said.schema,2);
+  assert.deepEqual(said.paths,["design.followup"],"only the explicitly bound parameter is human-provided");
+  const originalKey = queued.at(-1).idempotencyKey;
+  const originalRecord = structuredClone(said);
+  await start(handlerWith(async () => [{sessionId:"sess_1",messageSeq:20,text:"仍随访 24 个月，这是另一次参数确认"}]), {
+    kind:"design_win_ratio",scenario:winRatio,sources:[{origin:"user",field:"design.followup",value:24,quote:"仍随访 24 个月",unit:"month",context:"follow-up duration reaffirmed"}],
+  });
+  assert.notEqual(queued.at(-1).idempotencyKey,originalKey,"changed original source cannot reuse an older result's provenance");
+  assert.deepEqual(said,originalRecord,"earlier evidence remains immutable after follow-up");
+  // a conversation that cannot be read, or has no message of the person's: the strong word is never given on no evidence
+  for (const read of [async () => null, async () => [], async () => { throw new Error("ledger unreadable"); }]) {
+    assert.deepEqual(await start(handlerWith(/** @type {any} */ (read)), { kind: "design_win_ratio", scenario: winRatio }), { schema: 2, readable: false, paths: [], bindings: [] });
+  }
+  // a kind that is not a design is not asked, and a job started outside a conversation has no record (it reads as it read)
+  const network = { label: "response", measure: "log_ratio", direction: "lower_better", studies: [{ studyId: "H1", contrasts: [{ treatment: "B", comparator: "A", effect: -0.3, se: 0.12 }] }] };
+  const res = response();
+  await handlerWith(async () => [{sessionId:"sess_1",messageSeq:10,text:"effect -0.3"}])(request("/internal/vcr/v1/simulate", { action: "start", kind: "network_meta", scenario: network }, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
+  assert.equal(queued.at(-1).detail.personStated, undefined, "a network meta-analysis is not a design");
+  const outside = fixture({ jobs });
+  const plain = response();
+  await outside.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_win_ratio", scenario: winRatio }), plain);
+  assert.deepEqual(queued.at(-1).detail.personStated,{schema:2,readable:false,paths:[],bindings:[]}, "new designs without evidence remain assumed");
+});
+
+test("a dose-finding design and a Bayesian design start through the gateway, filed under what they are about", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_d", state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_d", state: "canceled" }, canceled: true }; },
+  };
+  const { handler } = fixture({ jobs });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }), res); return res; };
+  const curve = [0.05, 0.1, 0.2, 0.3, 0.45, 0.6];
+  const first = await start({ kind: "design_dose", scenario: { design: { kind: "boin", compare: ["three_plus_three"] }, truth: { toxicity: curve } } });
+  assert.equal(first.status, 200, first.body);
+  assert.equal(queued.at(-1).kind, "design_dose");
+  assert.match(queued.at(-1).detail.subjectId, /^dose:boin\+three_plus_three:[0-9a-f]{10}$/);
+  const again = await start({ kind: "design_dose", scenario: { design: { kind: "three_plus_three", compare: ["boin"] }, truth: { toxicity: curve } } });
+  assert.equal(again.status, 200, again.body);
+  assert.equal(queued.at(-1).detail.subjectId, queued.at(-2).detail.subjectId, "the same two designs on the same curve are one question, whichever is asked about");
+  const bayes = await start({ kind: "design_bayesian", scenario: { design: { kind: "bop2", maxN: 40, lookEvery: 10 }, truth: { nullRate: 0.1, alternativeRate: 0.3 } } });
+  assert.equal(bayes.status, 200, bayes.body);
+  assert.match(queued.at(-1).detail.subjectId, /^bayes:bop2:[0-9a-f]{10}$/);
+  const winRatio = { design: { nTreat: 250, followup: 24 }, truth: { death: { controlRisk: 0.15, hazardRatio: 0.75 }, score: { shift: 4, sd: 20 } } };
+  const wr = await start({ kind: "design_win_ratio", scenario: winRatio });
+  assert.equal(wr.status, 200, wr.body);
+  assert.equal(queued.at(-1).kind, "design_win_ratio");
+  assert.match(queued.at(-1).detail.subjectId, /^wr:[0-9a-f]{10}$/);
+  await start({ kind: "design_win_ratio", scenario: { ...winRatio, design: { nTreat: 300, followup: 24 } } });
+  assert.notEqual(queued.at(-1).detail.subjectId, queued.at(-2).detail.subjectId, "another size is another question");
+});
+
 test("the comparator-effect kinds start through the gateway; a time-to-event MAIC names its comparator by a reconstruction result, never by rows", async () => {
   /** @type {any[]} */
   const queued = [];
@@ -946,6 +1105,67 @@ test("a stage in flight is the answer only to the scenario the running job froze
   assert.ok(other.calls.some((call) => call[0] === "enqueue" && call[1] === "design_simulation"));
 });
 
+test("status returns the producing job's frozen inputs and source checks through the model boundary", async () => {
+  const frozen = { id: 'job_1', state: 'running', kind: 'design_analytic', method: 'design.analytic', methodVersion: '1.4.0',
+    seed: 2468, replicates: 5000, cpuSecondsLimit: 600,
+    checkpoint: { bound: [{ key: 'effect', version: 2, path: 'truth.hazardRatio', value: 0.7 }],
+      sourceAssertions: [{ field: 'truth.hazardRatio', publication: 'PMID 123', quote: 'hazard ratio 0.7' }],
+      sourceReport: [{ field: 'truth.hazardRatio', state: 'carried', message: 'Quote checked.' }],
+      personStated: { schema: 2, readable: false, paths: [], bindings: [] } } };
+  const configuration = { scenario: { truth: { hazardRatio: 0.7 } }, inputRefs: [{ kind: 'snapshot', id: 'snapshot@2' }], unavailableInputs: 1, scenarioHash: 'frozen-hash' };
+  // The real job summary intentionally has no scenario or engine input paths.
+  const { handler } = fixture({ jobs: { async get() { return frozen; }, async configuration() { return configuration; } } });
+  const status = response();
+  await handler(request('/internal/vcr/v1/simulate', { action: 'status', jobId: 'job_1' }), status);
+  assert.equal(status.status, 200);
+  assert.deepEqual(status.json().data.request, { job: { method: frozen.method, methodVersion: frozen.methodVersion, kind: frozen.kind, scenarioHash: configuration.scenarioHash,
+    seed: 2468, replicates: 5000, cpuSecondsLimit: 600, scenario: configuration.scenario, inputs: configuration.inputRefs }, configurationAvailable: true, configurationStatus: 'available', unavailableInputReferences: 1,
+    sources: frozen.checkpoint.sourceAssertions, sourceChecks: frozen.checkpoint.sourceReport, bound: frozen.checkpoint.bound, parameterProvenance: frozen.checkpoint.personStated });
+});
+
+test('a missing reusable configuration is explicit and does not withhold the job state', async () => {
+  const { handler } = fixture({ jobs: { async get() { return { id: 'job_1', method: 'design.analytic', state: 'running', seed: 42, progress: { done: 1 } }; }, async configuration() { throw new Error('unavailable'); } } });
+  const status = response();
+  await handler(request('/internal/vcr/v1/simulate', { action: 'status', jobId: 'job_1' }), status);
+  assert.equal(status.status, 200);
+  assert.equal(status.json().data.state, 'running');
+  assert.equal(status.json().data.request.configurationAvailable, false);
+  assert.equal(status.json().data.request.configurationStatus, 'unavailable');
+  assert.equal(status.json().data.request.job.scenario, null);
+  assert.equal(status.json().data.request.job.seed, 42);
+});
+
+test('model-facing reproduction withholds matching rosters and nested record-selection rules', async () => {
+  const identifier = 'SYNTHETIC_RESTRICTED_SUBJECT';
+  const rule = { op: 'compare', column: 'USUBJID', comparator: 'eq', value: identifier };
+  for (const [method, scenario] of [
+    ['matching.extract', { subjects: [identifier], prefiltered: { selected: [identifier] } }],
+    ['matching.evaluate', { criteria: [{ patient: identifier }] }],
+    ['cohort.build', { rules: [{ name: 'Selected', rule }] }],
+    ['comparator.stc', { model: { cohortRules: [{ rule }] } }],
+    ['population.synthpop', { constraints: [rule] }],
+    ['population.check', { criteria: [rule] }],
+  ]) {
+    let projected = 0, configurationReads = 0;
+    const base = fixture();
+    const boundary = base.vcr.service.forModel;
+    base.vcr.service.forModel = async value => { projected++; return boundary(value); };
+    base.vcr.jobs = { async get() { return { id: 'job_1', method, state: 'running', seed: 42, scenarioHash: 'frozen' }; },
+      async configuration() { configurationReads++; return { scenario, inputRefs: [], unavailableInputs: 0 }; } };
+    const handler = createVcrGatewayHandler(config, runtimeManager, { vcr: base.vcr });
+    const status = response();
+    await handler(request('/internal/vcr/v1/simulate', { action: 'status', jobId: 'job_1' }), status);
+    assert.equal(status.status, 200, method);
+    assert.equal(status.json().data.state, 'running');
+    assert.equal(status.json().data.request.configurationStatus, 'withheld');
+    assert.equal(status.json().data.request.job.scenario, null);
+    assert.equal(status.json().data.request.job.seed, 42);
+    assert.doesNotMatch(status.body, new RegExp(identifier));
+    assert.equal(projected, 1);
+    if (method.startsWith('matching.')) assert.equal(configurationReads, 0);
+  }
+});
+
 test("simulate is start / status / cancel, and a job over budget says so plainly", async () => {
   const { calls, handler, vcr } = fixture({ store: { ...fixture().vcr.store, async trialScenarios() { return [DESIGN_A]; } } });
   void vcr;
@@ -1013,8 +1233,9 @@ test("a design's computation names the trial scenario it is for: its result is f
   const analytic = await start({ kind: "design_analytic", subjectId: "scn_b", scenario: { design: { kind: "two_arm_fixed", allocation: 0.5 } } });
   assert.equal(analytic.status, 200, analytic.body);
   assert.deepEqual(analytic.json().data.subject, { kind: "trial_scenario", id: "scn_b", version: 2, name: "B 1:1 固定设计" });
-  assert.deepEqual(queued[0].detail, { subjectId: "scn_b", origin: "runtime", resultKind: "trial_scenario", node: "trial_scenario:scn_b@2", step: "trial",
-    stage: "analytic", supersedes: ["scn_b0"] }, "the subject, where the result lands, the stage it is, and the earlier version of the same design it replaces");
+  assert.match(queued[0].detail.sourceIdentity,/^[a-f0-9]{64}$/);
+  assert.deepEqual({...queued[0].detail, sourceIdentity:undefined}, { sourceIdentity:undefined, subjectId: "scn_b", origin: "runtime", resultKind: "trial_scenario", node: "trial_scenario:scn_b@2", step: "trial",
+    stage: "analytic", supersedes: ["scn_b0"], personStated:{schema:2,readable:false,paths:[],bindings:[]} }, "the subject, where the result lands, the stage it is, and the earlier version of the same design it replaces");
   assert.match(queued[0].idempotencyKey, /design_analytic:scn_b:/, "the same scenario asked for another design is another job");
   assert.deepEqual(noted[0].slice(0, 1), ["std_1"]);
   assert.equal(noted[0][1].node, "trial_scenario:scn_b@2");
@@ -1518,10 +1739,10 @@ test("a defect in the metadata no verdict reads costs that metadata, never the q
 });
 test('native model calculations require the exact immutable string model version',async()=>{
  const base=fixture();const seen=[];
- base.vcr.service.modelExecution=async(_user,_study,id,kind,scenario)=>{seen.push({id,kind,scenario});return{id,version:'1.0.0'};};
+ base.vcr.service.modelScenario=async(_user,_id,_kind,scenario)=>scenario;base.vcr.service.modelExecution=async(_user,_study,id,kind,scenario)=>{seen.push({id,kind,scenario});return{id,version:'1.0.0'};};
  base.vcr.store.trialScenarios=async()=>[DESIGN_A];
  const handler=createVcrGatewayHandler(config,runtimeManager,{vcr:base.vcr});
- const body={action:'start',kind:'design_simulation',scenario:{design:{kind:'two_arm_fixed'}},modelId:'mdl_source',modelVersion:'1.0.0'};
+ const body=projectResearchInvocation('virtual_trial_start',{method:'design.simulate',scenario:{design:{kind:'two_arm_fixed'}},modelId:'mdl_source',modelVersion:'1.0.0'}, {jobMethods:VCR_JOB_METHODS,methods:VCR_ENGINE_METHODS}).body;
  const success=response();await handler(request('/internal/vcr/v1/simulate',body),success);assert.equal(success.status,200);assert.equal(seen.length,1);
  const stale=response();await handler(request('/internal/vcr/v1/simulate',{...body,modelVersion:'1.0.1'}),stale);assert.equal(stale.status,409);assert.equal(stale.json().code,'vcr_model_version_changed');
  const invalid=response();await handler(request('/internal/vcr/v1/simulate',{...body,modelVersion:1}),invalid);assert.equal(invalid.status,400);
@@ -1954,4 +2175,172 @@ test("a changed read remains a retryable 409 at the gateway", async () => {
   assert.equal(res.status, 409);
   assert.equal(res.json().code, "vcr_read_changed");
   assert.match(res.json().error, /retry the list/);
+});
+
+test("a write of several cards waits once for the second readings, and answers inside the gateway's budget with every card saved (review RF2 P1-6)", async () => {
+  const evidenceRow = (/** @type {string} */ id) => ({ id, parameter: "hazard_ratio", arm_role: "contrast", value: 0.62, ci_low: 0.48, ci_high: 0.95, value_source: "extracted", detail: {}, locator: { verification: "verified" } });
+  /** @type {any[]} */ const saved = [];
+  const evidenceStore = {
+    async citableEvidenceIds(/** @type {any} */ call) { return call.ids ?? ["ev1", "ev2", "ev3"]; },
+    async citableItemsById(/** @type {any} */ call) { return (call.ids ?? ["ev1", "ev2", "ev3"]).map(evidenceRow); },
+    async saveAssumption(/** @type {any} */ call) { saved.push(call); return { id: `a${saved.length}`, key: call.key, version: 1 }; },
+  };
+  /** @type {number[]} */ const waits = [];
+  // a second reading that is slow: it waits as long as it is allowed to, the documented worst case
+  const evidence = { async valueNotes(/** @type {any} */ call) {
+    waits.push(call.wait);
+    const limit = call.wait === true ? 5000 : Number(call.wait) || 0;
+    if (limit > 0) await new Promise((resolve) => setTimeout(resolve, limit));
+    return [];
+  } };
+  const { vcr } = fixture({ evidence, evidenceStore });
+  vcr.store.assumptions = async () => saved.map((call, at) => ({ id: `a${at + 1}`, key: call.key, version: 1, evidenceIds: [`ev${at + 1}`] }));
+  const budgetMs = 1200;
+  const handler = createVcrGatewayHandler(config, runtimeManager, { vcr, budgetMs });
+  const items = [1, 2, 3].map((n) => ({ key: `control_hr_${n}`, name: `对照风险比 ${n}`, parameter: "hazard_ratio", sourceKind: "external_evidence", evidenceIds: [`ev${n}`], effectRole: "realistic_expectation" }));
+  const res = response();
+  const started = Date.now();
+  await handler(request("/internal/vcr/v1/write", { what: "assumption", items }), res);
+  const took = Date.now() - started;
+  assert.equal(res.status, 200, res.body);
+  assert.equal(saved.length, 3, "every card is saved");
+  assert.ok(took < budgetMs, `the answer came in ${took} ms, inside the ${budgetMs} ms budget (three cards waited one after another would be three times the limit)`);
+  assert.equal(waits.length, 3);
+  assert.ok(waits[0] > 0 && waits[0] <= budgetMs / 2, "the first card may wait up to half the budget");
+  assert.ok(waits[1] < waits[0] && waits[2] <= waits[1], "and what it waited is gone from the next ones");
+});
+
+test('in-flight dedupe requires identical frozen human and publication sources, not just identical numbers', async () => {
+  const frozen = {design:{kind:'two_arm_fixed',nTreat:150,nControl:150},endpoint:{type:'time_to_event'},truth:{hazardRatio:0.7,controlMedian:12},
+    analysis:{method:'logrank',alpha:0.025,sided:1},accrual:{kind:'uniform',duration:12,followup:12}};
+  const held = {id:'scn_source',version:1,label:'设计',design:'two_arm_fixed',endpointType:'time_to_event',configuration:frozen};
+  let running = null;
+  let queued = 0;
+  let original = {sessionId:'sess_1',messageSeq:10,text:'随访12个月'};
+  const made = fixture({store:{...fixture().vcr.store,async trialScenarios(){return [held];}},
+    orchestrator:{async inFlightStage(){return running;},async noteRuntimeJob(){}},
+    jobs:{async enqueue(input){queued++; running={id:`job_${queued}`,state:'running',scenario:input.scenario,checkpoint:structuredClone(input.detail)};return {job:running};}},
+  });
+  made.vcr.store.taskContext = async () => ({id:'std_1',userId:'u1',projectId:'prj_1',purpose:'task',scope:'conversation',conversationSessionId:'sess_1'});
+  const handler = createVcrGatewayHandler(config,runtimeManager,{vcr:made.vcr,
+    resolveInvocation:async()=>({userId:'u1',projectId:'prj_1',runId:'run_1',rootSessionId:'sess_1',callId:'call_1'}),
+    readPersonMessages:async()=>[original]});
+  const ask = async sources => {
+    const res=response();
+    await handler(request('/internal/vcr/v1/simulate',{action:'start',kind:'design_simulation',subjectId:'scn_source',scenario:frozen,sources},
+      {authorization:'Bearer token','x-evimed-execution-context':'{}'}),res);
+    assert.equal(res.status,200,res.body);return res.json().data;
+  };
+  const humanSource=[{origin:'user',field:'accrual.followup',value:12,quote:'随访12个月',unit:'month',context:'follow-up duration'}];
+  assert.equal((await ask(humanSource)).jobId,'job_1');
+  assert.equal((await ask(humanSource)).alreadyRunning,true);
+  original={...original,messageSeq:20,text:'确认仍随访12个月'};
+  assert.equal((await ask(humanSource)).jobId,'job_2','new original source is not the earlier in-flight job');
+  const paper=id=>[{field:'truth.controlMedian',publication:`PMID ${id}`,quote:'Median survival 12 months'}];
+  assert.equal((await ask(paper('123'))).jobId,'job_3');
+  assert.equal((await ask(paper('123'))).alreadyRunning,true);
+  assert.equal((await ask(paper('456'))).jobId,'job_4','new publication cannot borrow a previous job even with identical values');
+  assert.equal(queued,4);
+});
+
+// ---------------------------------------------------------------------------
+// The virtual lab (plan T09, T10): the trial plugin's search and compare reach the experiments package as simulate actions; the
+// call's shape is checked before any study is opened, and the answer carries the entry to the trial page.
+// ---------------------------------------------------------------------------
+
+test("the run that started a campaign reading it after it stopped is its notice; a running read or another run's read is not (F4)", async () => {
+  const { call, made } = conversationCalls("https://evimed.example");
+  /** @type {any[]} */ const updates = [];
+  made.vcr.store.query = async (/** @type {string} */ sql, /** @type {any[]} */ values) => { updates.push([sql.includes("originTerminalObservation"), values]); return { rowCount: 1 }; };
+  let stop = /** @type {any} */ (null);
+  made.vcr.experiments = { async view(/** @type {any} */ _study, /** @type {string} */ id) { return { id, kind: "campaign", status: stop ? "stopped" : "running", stop }; } };
+  await call("simulate", { action: "search_status", campaignId: "cmp_1" });
+  assert.equal(updates.length, 0, "a campaign still running is not observed");
+  stop = { reason: "inconclusive_at_precision" };
+  assert.equal((await call("simulate", { action: "search_status", campaignId: "cmp_1" })).status, 200);
+  assert.equal(updates.length, 1);
+  const [marked, values] = updates[0];
+  assert.equal(marked, true);
+  assert.equal(values[0], "cmp_1");
+  assert.deepEqual(JSON.parse(values[3]), { runId: "run_1", rootSessionId: values[2], callId: JSON.parse(values[3]).callId, state: "succeeded", resultKey: "campaign" });
+  assert.equal(values[4], "std_task", "the update names the study and the origin's run: another run's read does not match it");
+});
+
+test("the lab's actions reach the experiments package with the study and the origin; a malformed call is refused by shape", async () => {
+  const { call, made } = conversationCalls("https://evimed.example");
+  /** @type {any[]} */ const asked = [];
+  made.vcr.experiments = {
+    async startCampaign(/** @type {any} */ study, /** @type {any} */ manifest, /** @type {any} */ who) { asked.push(["search", study.id, manifest.question, who.origin?.runId]); return { id: "cmp_1", kind: "campaign", created: true }; },
+    async startExperiment(/** @type {any} */ study, /** @type {any} */ experiment) { asked.push(["compare", study.id, experiment.arms.length]); return { id: "exp_1", kind: "experiment" }; },
+    async view(/** @type {any} */ _study, /** @type {string} */ id) { asked.push(["view", id]); return { id }; },
+    async cancel(/** @type {any} */ _study, /** @type {string} */ id) { asked.push(["cancel", id]); return { id, status: "stopped" }; },
+  };
+  const started = await call("simulate", { action: "search", manifest: { question: "最小样本量" } });
+  assert.equal(started.status, 200);
+  assert.equal(started.json().data.id, "cmp_1");
+  assert.deepEqual(started.json().data.resultEntry, { studyId: "std_task", tab: "trial", label: "在“试验”页查看", url: "https://evimed.example/app/virtual-research/std_task/trial" });
+  assert.equal((await call("simulate", { action: "search_status", campaignId: "cmp_1" })).status, 200);
+  assert.equal((await call("simulate", { action: "search_cancel", campaignId: "cmp_1" })).status, 200);
+  assert.equal((await call("simulate", { action: "compare", experiment: { arms: [{}, {}] } })).status, 200);
+  assert.equal((await call("simulate", { action: "compare_status", experimentId: "exp_1" })).status, 200);
+  assert.deepEqual(asked, [["search", "std_task", "最小样本量", "run_1"], ["view", "cmp_1"], ["cancel", "cmp_1"], ["compare", "std_task", 2], ["view", "exp_1"]]);
+  for (const body of [{ action: "search", manifest: [] }, { action: "search", manifest: {}, kind: "design_simulation" }, { action: "search_status", campaignId: "../x" },
+    { action: "compare" }, { action: "compare_status", experimentId: 7 }]) {
+    const refused = await call("simulate", body);
+    assert.equal(refused.status, 400, JSON.stringify(body));
+  }
+  assert.equal(asked.length, 5, "a refused call reaches nothing");
+});
+
+test("a lab answer passes the small-cell boundary: a compared people count is hidden by its name, the run's own manifest stays (review eng P0-1)", async () => {
+  const { call, made } = conversationCalls("https://evimed.example");
+  made.vcr.experiments = {
+    async view(/** @type {any} */ _study, /** @type {string} */ id) {
+      return id.startsWith("exp_")
+        ? { id, kind: "experiment", comparison: [{ measure: "cohort_size", arms: [{ name: "A", value: { name: "cohort_size", value: 3 } }, { name: "B", value: { name: "cohort_size", value: 41 } }],
+          contrasts: [{ arm: "B", against: "A", difference: { name: "cohort_size", value: 38 } }] }], arms: [{ name: "A", counts: { realPatients: 3 } }] }
+        : { id, kind: "campaign", stages: { final: { count: 3, replicates: "floor" } }, budget: { declared: { maxCandidates: 4, cpuSeconds: 60 }, used: { units: 2 } } };
+    },
+  };
+  const read = (await call("simulate", { action: "compare_status", experimentId: "exp_1" })).json().data;
+  assert.equal(read.comparison[0].arms[0].value.value, null, "a cohort of three is not a number a model reads");
+  assert.equal(read.arms[0].counts.realPatients, null);
+  const campaign = (await call("simulate", { action: "search_status", campaignId: "cmp_1" })).json().data;
+  assert.deepEqual(campaign.stages, { final: { count: 3, replicates: "floor" } }, "the number of finalists is the run's own setting, not people");
+  assert.deepEqual(campaign.budget.declared, { maxCandidates: 4, cpuSeconds: 60 });
+  assert.equal(campaign.resultEntry.tab, "trial");
+});
+
+test("a stored trial scenario may not carry a design search's precision block (review eng P1-1)", async () => {
+  const { calls, handler } = fixture();
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", { what: "trial_scenario", items: [
+    { label: "A", design: "two_arm_fixed", endpointType: "continuous", configuration: { evaluation: { version: 1, screeningReplicates: 200 } } },
+    { label: "B", design: "two_arm_fixed", endpointType: "continuous", configuration: { design: { kind: "two_arm_fixed" } } }] }), res);
+  const data = res.json().data;
+  assert.deepEqual(data.issues.map((/** @type {any} */ issue) => [issue.index, issue.field]), [[0, "configuration.evaluation"]]);
+  assert.equal(calls.filter((call) => call[0] === "scenario").length, 1, "the other design is written");
+});
+
+test("live D8: a finished type I simulation is handed over with its verdict on the conservative bound, in the page's words", async () => {
+  const done = { id: "job_1", state: "succeeded", kind: "design_simulation", method: "design.simulate", methodVersion: "1.9.0", progress: {}, cpuSecondsUsed: 27, error: null };
+  /** @param {Record<string, any>} measure @param {Record<string, any>} scenario */
+  const statusOf = async (measure, scenario) => {
+    const base = fixture();
+    const { handler } = fixture({
+      jobs: { ...base.vcr.jobs, async get() { return done; }, async configuration() { return { scenario, inputRefs: [], scenarioHash: "h" }; } },
+      store: { ...base.vcr.store, async one() { return { id: "exe_1" }; },
+        async resultForExecution(_study, executionId) { return executionId === "exe_1" ? { id: "res_1", version: 1, kind: "trial_scenario", executionId: "exe_1", conclusion: "estimable", measures: [measure], diagnostics: {} } : null; } },
+    });
+    const res = response();
+    await handler(request("/internal/vcr/v1/simulate", { action: "status", jobId: "job_1" }), res);
+    assert.equal(res.status, 200);
+    return res.json().data;
+  };
+  const atLevel = await statusOf({ name: "type_one_error", value: 0.0253, mcse: 0.0011, simulated: true }, { truth: { hazardRatio: 1 }, analysis: { alpha: 0.025, sided: 1 } });
+  assert.deepEqual(atLevel.typeOneError, { verdict: "inconclusive", text: "I 类错误无法确定是否不超过 2.5%（模拟 2.53% ± 0.11%）" });
+  const clear = await statusOf({ name: "type_one_error", value: 0.0228, mcse: 0.00105, simulated: true }, { analysis: { alpha: 0.025 } });
+  assert.equal(clear.typeOneError.verdict, "pass");
+  const power = await statusOf({ name: "power", value: 0.838, mcse: 0.0037, simulated: true }, { analysis: { alpha: 0.025 } });
+  assert.equal("typeOneError" in power, false, "a result with no type I error carries no verdict");
 });

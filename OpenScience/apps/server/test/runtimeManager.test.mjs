@@ -4840,21 +4840,6 @@ test("automatic plugin, personal and extension replacements cannot tear down war
   }
 });
 
-test("platform skill refresh keeps its warm runtime when maintenance denies replacement", async () => {
-  const manager = new RuntimeManager({ runtimeMode: 'kernel' }, {
-    runtimeCreationMutation: async () => { throw Object.assign(new Error('Draining'), { code: 'maintenance_active' }); },
-  });
-  const warm = fakeRuntime(project.id);
-  manager.runtimes.set(manager.key(project), warm);
-  manager.platformSkillSupply = {};
-  manager.selectPlatformSkills = async () => ({ generation: { reference: { generationHash: 'new-generation' } }, degraded: false });
-  manager.idleVerdict = async () => 'idle';
-  manager.stopIdleRuntime = async () => assert.fail('must not stop before maintenance admission');
-  await assert.rejects(manager.setPlatformSkillScope(project, 'synthetic-capability'), { code: 'maintenance_active' });
-  assert.equal(manager.runtimes.get(manager.key(project)), warm);
-  assert.equal(manager.platformSkillOverrides.size, 0);
-});
-
 test("a cold automatic replacement starts without scheduling its own newly registered start for shutdown", async () => {
   const manager = new RuntimeManager({ runtimeMode: 'kernel' });
   manager.startKernel = async () => fakeRuntime(project.id);
@@ -4865,22 +4850,6 @@ test("a cold automatic replacement starts without scheduling its own newly regis
   assert.equal(manager.runtimes.get(manager.key(project)), runtime);
 });
 
-
-test("a platform skill idle-guard no-op never announces a newly created runtime", async () => {
-  let starts = 0;
-  const manager = new RuntimeManager({ runtimeMode: 'kernel' }, { onRuntimeStart: () => { starts += 1; } });
-  const warm = fakeRuntime(project.id);
-  manager.runtimes.set(manager.key(project), warm);
-  manager.platformSkillSupply = {};
-  manager.selectPlatformSkills = async () => ({ generation: { reference: { generationHash: 'new-generation' } }, degraded: false });
-  manager.idleVerdict = async () => 'idle';
-  manager.stopIdleRuntime = async () => false;
-  manager.noteRoomFound = () => assert.fail('no room was acquired by an idle-guard no-op');
-  assert.deepEqual(await manager.setPlatformSkillScope(project, 'synthetic-capability'), { adopted: false, pending: true });
-  assert.equal(starts, 0);
-  assert.equal(manager.runtimes.get(manager.key(project)), warm);
-  assert.equal(manager.starts.size, 0);
-});
 
 test('native invocation reads the current turn without walking thousands of older messages',async()=>{
  const manager=new RuntimeManager({});manager.runtimes.set(`${project.userId}:${project.id}`,{});let pages=0;

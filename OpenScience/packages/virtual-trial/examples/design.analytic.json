@@ -1,0 +1,23 @@
+{
+  "method": "design.analytic",
+  "scenario": {
+    "design": {
+      "kind": "two_arm_fixed"
+    },
+    "endpoint": {
+      "type": "time_to_event"
+    },
+    "truth": {
+      "hazardRatio": 0.7,
+      "controlMedian": 12
+    },
+    "accrual": {
+      "duration": 12,
+      "followup": 24
+    },
+    "analysis": {
+      "alpha": 0.025,
+      "power": 0.9
+    }
+  }
+}

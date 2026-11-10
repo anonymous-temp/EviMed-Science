@@ -22,7 +22,7 @@ export const BUNDLE_NAME = '@evimed/dsh-socket'
 export function apply() {}
 
 /** The plugin row ids this bundle owns. The `--dump-config` snapshot test walks it. */
-export const HOST_PLUGIN_IDS = Object.freeze(['evimed-runtime-ui', 'evimed-skill-catalogue', 'evimed-plugin-probe', 'evimed-seam-probe', 'evimed-evidence-store', 'evimed-web', 'evimed-engine-context', 'evimed-loopx-bootstrap', 'evimed-memory-bridge'])
+export const HOST_PLUGIN_IDS = Object.freeze(['evimed-runtime-ui', 'evimed-skill-catalogue', 'evimed-plugin-probe', 'evimed-seam-probe', 'evimed-evidence-store', 'evimed-web', 'evimed-engine-context', 'evimed-research-adapter', 'evimed-loopx-bootstrap', 'evimed-memory-bridge'])
 export const AGENT_PLUGIN_IDS = Object.freeze(['evimed-guidance', 'evimed-run-policy', 'evimed-evidence', 'evimed-capsule', 'evimed-screening', 'evimed-review', 'evimed-citation-bridge', 'evimed-compaction', 'evimed-duplicate-lines', 'skill-filesystem'])
 /** Infrastructure providers stay mounted while optional policy plugins are ablated; project choices control individual skill invocation. */
 export const REQUIRED_AGENT_PLUGIN_IDS = Object.freeze(['skill-filesystem'])
@@ -49,6 +49,7 @@ export const PLUGIN_SPECIFIERS = Object.freeze({
   'evimed-duplicate-lines': './plugins/duplicate-lines.mjs',
   'evimed-review': './plugins/review.mjs',
   'evimed-citation-bridge': './plugins/citation-bridge.mjs',
+  'evimed-research-adapter': './plugins/research-adapter.mjs',
   'evimed-compaction': './plugins/compaction.mjs',
   'skill-filesystem': './plugins/project-skills.mjs',
 })

@@ -30,7 +30,7 @@
  * The reviewed-package file is one JSON object:
  *   { "catalogue": { id, title, coordinate, executionClass, integrity, settingsSchema },
  *     "descriptor": { ... }, "artifact": { ... }, "surface": { ... } }
- * where the last three are required for an `isolated-tool` and absent otherwise.
+ * where the last three are required for an `isolated-tool`. A `managed-native` instead supplies `nativeBundle` and `artifact`.
  * After a write the command prints the owner and mode to give the file (the
  * loader refuses a file a package could have written).
  */
@@ -67,7 +67,7 @@ export function readManifest(dataDir) {
 /** A new, empty file's content, stamped with the source policy of the code that is deployed now. */
 export function emptyManifest() {
   return { schemaVersion: 1, generatedAt: new Date().toISOString(), dshVersion: EXTENSION_SUPPORTED_DSH_VERSION, policy: currentExtensionSourcePolicy(),
-    catalogue: [], admittedArtifacts: [], admittedDescriptors: [], surfaces: [] };
+    catalogue: [], admittedArtifacts: [], admittedDescriptors: [], admittedNativeBundles: [], surfaces: [] };
 }
 
 /**
@@ -84,7 +84,10 @@ export function loaderAccepts(manifest) {
     const target = path.join(scratch, ".openscience", FILE);
     fs.writeFileSync(target, `${canonicalJson(manifest)}\n`, { mode: 0o400 });
     const deployment = loadExtensionDeployment({ dataDir: scratch });
-    return { ok: deployment.status === "configured", catalogue: deployment.catalogue.length };
+    // The platform leaves a native bundle whose receipt it no longer admits out alone and keeps the rest; an operator writing the
+    // file means every row to count, so a file with such a row is not written.
+    const stale = (deployment.staleNativeBundles ?? []).map((/** @type {any} */ row) => row.id);
+    return { ok: deployment.status === "configured" && !stale.length, catalogue: deployment.catalogue.length, ...(stale.length ? { stale } : {}) };
   } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
 }
 
@@ -92,7 +95,7 @@ export function loaderAccepts(manifest) {
 export function listing(manifest) {
   return manifest.catalogue.map((/** @type {any} */ row) => ({
     id: row.id, title: row.title, executionClass: row.executionClass,
-    admitted: row.executionClass !== "isolated-tool" || (manifest.admittedDescriptors.some((/** @type {any} */ d) => d.id === row.id)
+    admitted: row.executionClass === "managed-native" ? ((manifest.admittedNativeBundles ?? []).some((/** @type {any} */ d) => d.id === row.id) && manifest.admittedArtifacts.some((/** @type {any} */ a) => a.id === row.id)) : row.executionClass !== "isolated-tool" || (manifest.admittedDescriptors.some((/** @type {any} */ d) => d.id === row.id)
       && manifest.admittedArtifacts.some((/** @type {any} */ a) => a.id === row.id) && manifest.surfaces.some((/** @type {any} */ s) => s.id === row.id)),
   }));
 }
@@ -107,16 +110,23 @@ export function withPackage(manifest, reviewed, { restamp = false } = {}) {
   const id = reviewed.catalogue.id;
   if (manifest.catalogue.some((/** @type {any} */ row) => row.id === id)) refuse(`${id} is already listed. Remove it first if its review has changed.`);
   const isolated = reviewed.catalogue.executionClass === "isolated-tool";
-  for (const part of ["descriptor", "artifact", "surface"]) {
-    if (isolated && !reviewed[part]) refuse(`An isolated tool needs its "${part}" from the acceptance run.`);
-    if (!isolated && reviewed[part]) refuse(`Only an isolated tool carries a "${part}"; ${id} is ${reviewed.catalogue.executionClass}.`);
+  const native = reviewed.catalogue.executionClass === "managed-native";
+  for (const part of ["descriptor", "artifact", "surface", "nativeBundle"]) {
+    const required = isolated ? part !== "nativeBundle" : native && ["nativeBundle", "artifact"].includes(part);
+    if (required && !reviewed[part]) refuse(`A ${reviewed.catalogue.executionClass} needs its "${part}".`);
+    if (!required && reviewed[part]) refuse(`${id} cannot carry a "${part}" as ${reviewed.catalogue.executionClass}.`);
   }
   const next = structuredClone(manifest);
+  next.admittedNativeBundles ??= [];
   next.catalogue.push(reviewed.catalogue);
   if (isolated) {
     next.admittedDescriptors.push({ id, ...reviewed.descriptor });
     next.admittedArtifacts.push({ id, ...reviewed.artifact });
     next.surfaces.push({ id, ...reviewed.surface });
+  }
+  if (native) {
+    next.admittedNativeBundles.push({ id, ...reviewed.nativeBundle });
+    next.admittedArtifacts.push({ id, ...reviewed.artifact });
   }
   next.generatedAt = new Date().toISOString();
   if (restamp) next.policy = currentExtensionSourcePolicy();
@@ -127,7 +137,8 @@ export function withPackage(manifest, reviewed, { restamp = false } = {}) {
 export function withoutPackage(manifest, id) {
   if (!manifest.catalogue.some((/** @type {any} */ row) => row.id === id)) refuse(`${id} is not listed.`);
   const next = structuredClone(manifest);
-  for (const key of ["catalogue", "admittedArtifacts", "admittedDescriptors", "surfaces"]) next[key] = next[key].filter((/** @type {any} */ row) => row.id !== id);
+  next.admittedNativeBundles ??= [];
+  for (const key of ["catalogue", "admittedArtifacts", "admittedDescriptors", "admittedNativeBundles", "surfaces"]) next[key] = next[key].filter((/** @type {any} */ row) => row.id !== id);
   next.generatedAt = new Date().toISOString();
   return next;
 }

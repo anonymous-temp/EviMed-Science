@@ -121,6 +121,8 @@ import { VcrRegistryPageStore, createRegistryPageCounters, createRegistryPages }
 import { createRegistryWatch, createRegistryWatchCounters } from "./vcrRegistryWatch.mjs";
 import { VcrMatchResults } from "./vcrMatchResults.mjs";
 import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, languageCriteriaByKey, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
+import { createSecondReader } from "./vcrEvidenceSecondRead.mjs";
+import { KbEmbedder } from "./kbEmbedding.mjs";
 
 /**
  * The data-plane seam the service reads through: the page's tab, the one-line
@@ -1131,9 +1133,10 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   dataSemantics?: (() => any) | null,
  *   webReader?: { read: (url: string, options?: any) => Promise<{ text: string }> } | null,
  *   documentParser?: { configured: boolean, parseBytes: Function } | null,
+ *   embedder?: { configured?: boolean, modelKey?: string, embedDocuments: (texts: string[]) => Promise<number[][]> } | null,
  * }} input `dataSemantics`: the dataset-semantics service, as a function (it is built after this module); where it is off, the codes of a table stay unread.
  */
-export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null, usageLedger = null, dataSemantics = null, documentParser = null, webReader = null }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null, usageLedger = null, dataSemantics = null, documentParser = null, webReader = null, embedder = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
   // The shared entity vocabulary tags a study with what it is about (`entityVocabulary.mjs`).
@@ -1231,6 +1234,15 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     summaryCloudAllowed: dataPlane ? (/** @type {{ studyId: string, subjectKey?: string | null }} */ entry) => dataPlane.subjectCloudAllowed(entry) : null,
     retrieval: { retrieveMax: config.vcrCandidateRetrieveMax, deadlineMs: config.vcrCandidateRetrieveDeadlineMs, concurrency: config.vcrCandidateRetrieveConcurrency },
   });
+  // A number read out of a preserved text is read a second time, blind to the first reading, and the two are compared in code (E1).
+  evidence.attachSecondReader(createSecondReader({ config, usageLedger, fetchImpl: call }));
+  // The precedents a search finds are ranked by their words and by their meaning, through the knowledge base's embedder (same key, same pin) where
+  // the deployment has one; without it they are ranked by their words and the answer says so (E5).
+  const precedentEmbedder = embedder ?? new KbEmbedder({
+    apiKey: config.dashscopeApiKey, model: config.kbEmbeddingModel, dimension: config.kbEmbeddingDimension,
+    apiBase: config.kbEmbeddingApiBase, timeoutMs: config.kbEmbeddingTimeoutMs,
+  }, { fetchImpl: call });
+  if (precedentEmbedder.configured !== false) evidence.attachEmbedder(precedentEmbedder);
   jobs.baselineVerifier = input => evidence.verifyBaselineTable(input);
   // A number a paper reports is held against the text the platform itself read of that paper (a capture in the project's workspace).
   if (projectStore) {
@@ -1557,6 +1569,11 @@ export function vcrMetricFamilies(enabled, snapshot) {
     add("card_candidates_total", "Evidence items a run wrote as candidates it found through an evidence card (flywheel F23): written, and the ones that passed the quote and number check.", "counter",
       [{ labels: { outcome: "written" }, value: Number(snapshot.evidence.cardCandidates ?? 0) },
         { labels: { outcome: "verified" }, value: Number(snapshot.evidence.cardCandidatesVerified ?? 0) }]);
+    add("evidence_checks_total", "What the checks and rankings of the evidence pipeline said since this process started, by check and outcome: the numbers of a value that do not agree with each other (consistency, by what disagreed), the second independent reading of a value's passage (second_read: agree, differ, inconclusive, failed, timeout, nothing_to_read), and how a precedent search was ranked (precedent_ranking: hybrid, embedding, lexical and why). Advice: values are kept as read.", "counter",
+      Object.entries(snapshot.evidence.valueChecks ?? {}).map(([key, value]) => {
+        const [check, outcome] = key.split(":");
+        return { labels: { check, outcome: outcome ?? "" }, value: Number(value) };
+      }));
   }
   if (snapshot.predictions) {
     add("predictions_total", "Predictions of a registered trial's primary endpoint filed with the registry from a study's trial scenario (flywheel F25): filed, asked again, refused, and filings the registry did not take.", "counter",

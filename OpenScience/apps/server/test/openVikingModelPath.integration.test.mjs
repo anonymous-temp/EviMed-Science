@@ -46,7 +46,7 @@ async function application(t, { budget }) {
     modelGatewaySigningSecret: randomBytes(32).toString("hex"), evimedWorkloadSigningSecret: randomBytes(32).toString("hex"),
     requireDurableUsageLedger: true, operatorMetricsToken: operatorToken,
     openVikingModelKey: serviceKey, openVikingModelDailyBudgetCny: budget, openVikingEngine: engineStub,
-    evolutionEnabled: false, learningEnabled: false,
+    learningEnabled: false,
   });
   const address = await app.listen(0, "127.0.0.1");
   const base = `http://127.0.0.1:${address.port}`;
@@ -107,7 +107,8 @@ test("the engine's calls are booked to the platform account's own project, by pu
   assert.equal(ready.modelPath.configured, true);
   assert.equal(ready.modelPath.budgetCny, 50);
   const spent = booked.reduce((sum, row) => sum + Number(row.actual_cost), 0);
-  assert.ok(Math.abs(ready.modelPath.spentCny - spent) < 0.0002, `readiness says ${ready.modelPath.spentCny} is committed, the ledger says ${spent}`);
+  const committed = Object.values(ready.modelPath.spentCny).reduce((sum, value) => sum + Number(value), 0);
+  assert.ok(Math.abs(committed - spent) < 0.0002, `readiness says ${committed} is committed, the ledger says ${spent}`);
   assert.deepEqual(ready.modelPath.admitted, { "memory-extraction": 1, knowledge: 1 });
   assert.deepEqual(ready.modelPath.refused, { "memory-extraction": 0, knowledge: 0 });
   assert.ok(!JSON.stringify(ready).includes(serviceKey), "readiness printed the service key");
@@ -116,7 +117,7 @@ test("the engine's calls are booked to the platform account's own project, by pu
   assert.match(metrics, /open_science_openviking_model_requests_total\{purpose="memory-extraction",outcome="admitted"\} 1/);
   assert.match(metrics, /open_science_openviking_model_requests_total\{purpose="knowledge",outcome="admitted"\} 1/);
   assert.match(metrics, /open_science_openviking_model_budget_cny\{kind="budget"\} 50/);
-  assert.match(metrics, /open_science_openviking_model_budget_cny\{kind="committed"\} 0\.\d+/);
+  assert.match(metrics, /open_science_openviking_model_budget_cny\{kind="committed",purpose="memory-extraction"\} 0\.\d+/);
   assert.match(metrics, /open_science_openviking_engine_fact\{fact="version",code="ok"\} 1/);
 });
 

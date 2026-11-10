@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { forgetStudies } from "@/components/vcr/useStudy";
 import { fixture, installVcrServer, STUDY_ID } from "@/components/vcr/__fixtures__/serverFixtures";
 import { compositionFacts, precedes } from "@/test/compositionFixtures";
@@ -9,8 +9,7 @@ import { drawStudy } from "./studyPageHarness";
 
 /**
  * The 虚拟临床研究 pages, composed (R19, plan §3 S10; audit D §4 S9): the real study page (T3 the module page) at each of its tabs
- * and in its conversation view, the real list (T2, a list with a preview beside it: its header and its toolbar are its column's, not
- * the shell's) and the libraries beside it (T1), rendered from the server's own fixtures and read in document order with the same
+ * and in its conversation view, the full-width records list and compatible libraries (T1), rendered from the server's own fixtures and read in document order with the same
  * assertions every page of the framework answers to (`expectComposed`, `compositionFacts`):
  *
  *  - the header holds one primary action; the page-level toolbar comes before the body; no tag is a control;
@@ -92,39 +91,20 @@ describe("T3 — a study, at each of its tabs", () => {
   });
 });
 
-describe("T2 — the list of studies, with a preview beside it", () => {
-  /** The page's own width as `MasterDetail` measures it (jsdom has no layout). */
-  let rect: { mockRestore(): void };
-  beforeEach(() => {
-    rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
-      return { width: this.hasAttribute("data-master-detail") ? 1100 : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
-    });
-  });
-  afterEach(() => rect.mockRestore());
-
-  it("has the filters and the search in the one toolbar over the list, in the list's column; no view switch, no tab list, no step rail", async () => {
-    const { container } = drawStudy("/app/virtual-research");
+describe("T1 — the records list and compatible libraries", () => {
+  it("has one full-width records surface with the shared header and toolbar", async () => {
+    const { container } = drawStudy("/app/virtual-research?area=records");
     const rows = await screen.findByRole("list", { name: "研究" });
-    const facts = compositionFacts(container);
-    const column = screen.getByRole("region", { name: "研究列表" });
-    expect(container.querySelector("[data-master-detail]")).toHaveAttribute("data-master-detail", "split");
-    expect(facts.tablists).toHaveLength(0);
-    expect(facts.stepRails).toHaveLength(0);
-    expect(facts.clickableTags).toEqual([]);
+    const facts = expectComposed(container, { toolbar: true, tablists: 0, stepRail: false });
+    expect(container.querySelector("[data-master-detail]")).toBeNull();
     expect(facts.toolbars).toHaveLength(1);
     expect(facts.toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索研究" }));
-    expect(column).toContainElement(facts.toolbars[0]);
     expect(precedes(facts.toolbars[0], rows)).toBe(true);
-    // The new-study pane is four equal examples, none of them the page's primary (F5, 2026-11-01); after choosing a study, the list header owns it.
-    expect(column).toContainElement(facts.header);
-    expect(precedes(facts.header!, facts.toolbars[0])).toBe(true);
-    expect(facts.headerPrimaryActions).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "让 AI 匹配患者和试验" })).not.toHaveClass("bg-accent");
-    expect(container.querySelectorAll(".bg-accent")).toHaveLength(0);
+    expect(facts.headerPrimaryActions).toHaveLength(1);
+    expect(screen.queryByRole("region", { name: "研究预览" })).toBeNull();
     await userEvent.click(screen.getByRole("link", { name: /EV-201 二线/ }));
-    expect(screen.getByRole("button", { name: "新研究" })).toHaveClass("bg-accent");
-    expect(screen.queryByRole("button", { name: "让 AI 匹配患者和试验" })).toBeNull();
-    expect(container.querySelectorAll(".bg-accent")).toHaveLength(1);
+    expect(screen.queryByRole("list", { name: "研究" })).toBeNull();
+    expect(screen.getByRole("region", { name: "研究预览" })).toBeInTheDocument();
   });
 
   it("is a page of its own for a library at its old address: the shell's band over a body, with its one toolbar", async () => {

@@ -243,6 +243,12 @@
           - id: present
             name: '@deepseek-ai/dsh-tool-present'
 
+          # The kernel's scheduled tasks: "every weekday at nine, ..." said in the conversation. The tool refuses a delegated child by
+          # itself and captures this session's directory and preset for a task that opens conversations; the run policy keeps an
+          # unattended execution from making or widening one. It stays inert if the Host's `schedule` row is off.
+          - id: tool-schedule
+            name: '@deepseek-ai/dsh-tool-schedule'
+
           # The kernel's own sub-agent for general work: several independent pieces in
           # parallel, or a side task whose reading the root will not need again. One
           # level deep. From 0.2.1 every child is a managed activation: the call returns
@@ -309,7 +315,6 @@
                 - !!js (process.env.EVIMED_LOOPX_ENABLED !== '0' && ((process.env.EVIMED_LOOPX_ROOT || '/opt/evimed/loopx') + '/skills')) || '/opt/evimed/loopx-disabled'
                 # Exact selected personal revisions, mounted read-only outside the workspace.
                 - !!js process.env.EVIMED_PERSONAL_SKILLS_DIR || '/opt/evimed/personal-skills'
-                - !!js process.env.EVIMED_PLATFORM_SKILLS_DIR || '/opt/evimed/platform-skills'
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
 

@@ -38,7 +38,7 @@ test("the store reads both places as corrections: the page's kind, the type, and
     async tree() { return [...files].map(([uri, body]) => ({ uri, isDir: false, size: Buffer.byteLength(body), modTime: "2026-10-23T01:00:00Z", tags: [] })); },
     async read(_user, uri) { return files.get(uri) ?? null; },
   };
-  const overlay = { configured: true, files: async () => new Map(), revisionsOfMany: async () => new Map(), sources: async () => [] };
+  const overlay = { configured: true, files: async () => new Map(), revisionsOfMany: async () => new Map(), sources: async () => [], attributionCommits: async () => new Map() };
   const store = new NativeMemoryStore({ sessions: /** @type {any} */ (sessions), overlay: /** @type {any} */ (overlay) });
   const records = await store.records("u1");
   const byType = (type) => records.filter((record) => record.nativeType === type).map((record) => record.key).sort();

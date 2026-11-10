@@ -204,6 +204,11 @@ export class ControlPlaneDatabase {
     if (!Number.isSafeInteger(connectionTimeoutMillis) || connectionTimeoutMillis < 100 || connectionTimeoutMillis > 120_000) {
       throw configurationError("database_timeout_invalid", "The PostgreSQL connection timeout is invalid.");
     }
+    const idleInTransactionMs = Number(config.databaseIdleInTransactionMs ?? 0);
+    if (!Number.isSafeInteger(idleInTransactionMs) || idleInTransactionMs < 0 || idleInTransactionMs > 3_600_000
+      || (idleInTransactionMs > 0 && idleInTransactionMs < 1000)) {
+      throw configurationError("database_idle_in_transaction_invalid", "The PostgreSQL idle-in-transaction bound is invalid.");
+    }
     this.pool = pool ?? new Pool({
       connectionString: config.databaseUrl,
       max,
@@ -211,6 +216,10 @@ export class ControlPlaneDatabase {
       idleTimeoutMillis: 30_000,
       allowExitOnIdle: true,
       application_name: "evimed-science-control-plane",
+      // A startup parameter of every connection: PostgreSQL itself ends a session that holds a transaction open and does
+      // nothing for this long, releasing its locks. Nothing in the application waits that long between two statements of
+      // one transaction; a wait on the engine or another service belongs outside the transaction.
+      ...(idleInTransactionMs > 0 ? { idle_in_transaction_session_timeout: idleInTransactionMs } : {}),
     });
     this.ownsPool = !pool;
     this.ready = null;
@@ -314,7 +323,7 @@ export class ControlPlaneDatabase {
       const enclosing = this.atomicTransactions.getStore();
       const run = async () => {
         const name = `evimed_scoped_${++this.savepointSequence}`;
-        const atomic = { scope: scoped, open: true, serial: Promise.resolve() };
+        const atomic = { scope: scoped, parent: enclosing ?? null, open: true, serial: Promise.resolve() };
         // A module that bounds its own statements (`SET LOCAL statement_timeout`, a `lock_timeout`) does so for "its"
         // transaction, and here that is a savepoint: PostgreSQL keeps a SET LOCAL made after a savepoint through RELEASE
         // SAVEPOINT, so the enclosing transaction went on under the nested one's bound. 2026-10-29: a runtime start (which
@@ -324,11 +333,21 @@ export class ControlPlaneDatabase {
           "SELECT current_setting('statement_timeout') AS statement_timeout, current_setting('lock_timeout') AS lock_timeout",
         ))?.rows?.[0];
         await scoped.client.query(`SAVEPOINT ${name}`);
+        const discardObservers = () => {
+          if (!scoped.outcome) return;
+          scoped.outcome.commitHooks = scoped.outcome.commitHooks.filter(observer => {
+            for (let owner = observer.atomic; owner; owner = owner.parent) if (owner === atomic) return false;
+            return true;
+          });
+        };
         try {
           const result = await this.atomicTransactions.run(atomic, () => operation(scoped.client));
           atomic.open = false;
           await atomic.serial;
-          if (rollbackOnly) await scoped.client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+          if (rollbackOnly) {
+            await scoped.client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+            discardObservers();
+          }
           await scoped.client.query(`RELEASE SAVEPOINT ${name}`);
           if (typeof bounds?.statement_timeout === "string" && typeof bounds?.lock_timeout === "string") {
             await scoped.client.query("SELECT set_config('statement_timeout', $1, true), set_config('lock_timeout', $2, true)",
@@ -336,6 +355,7 @@ export class ControlPlaneDatabase {
           }
           return result;
         } catch (error) {
+          discardObservers();
           atomic.open = false;
           await atomic.serial;
           await scoped.client.query(`ROLLBACK TO SAVEPOINT ${name}`).catch(() => {});
@@ -348,8 +368,8 @@ export class ControlPlaneDatabase {
       return this.enqueueScoped(scoped, enclosing ?? scoped, run);
     }
     await this.migrate();
-    /** @type {{ hooks: Array<(error: unknown) => unknown>, settled: boolean }} */
-    const outcome = { hooks: [], settled: false };
+    /** @type {{ hooks: Array<(error: unknown) => unknown>, commitHooks: Array<{hook:()=>unknown,atomic:any}>, settled: boolean }} */
+    const outcome = { hooks: [], commitHooks: [], settled: false };
     let committed = false, failure = null, result;
     try {
       result = await this.withClient(async (client) => {
@@ -377,9 +397,25 @@ export class ControlPlaneDatabase {
         // A hook records its own failure; the transaction's outcome stands.
         try { await this.withoutTransactionClient(() => hook(failure?.error ?? null)); } catch { /* recorded by the hook */ }
       }
+    } else {
+      for (const observer of outcome.commitHooks) {
+        try { await this.withoutTransactionClient(observer.hook); } catch { /* an observer never reverses a committed transaction */ }
+      }
     }
     if (failure) throw failure.error;
     return result;
+  }
+
+  /** Register an observer of committed state. Savepoint rollback drops that
+   * savepoint's observers; outer rollback drops all. Runs after client release,
+   * outside the owned scope. @param {()=>unknown} hook */
+  afterCommit(hook) {
+    let scoped;
+    try { scoped = this.transactionScope(); } catch { return false; }
+    const outcome = scoped?.outcome;
+    if (!outcome || outcome.settled) return false;
+    outcome.commitHooks.push({ hook, atomic: this.atomicTransactions.getStore() ?? null });
+    return true;
   }
 
   /** Run `hook(error)` once the outermost transaction of the caller's scope

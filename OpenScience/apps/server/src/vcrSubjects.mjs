@@ -27,7 +27,7 @@ import { lineageNode, VCR_JOB_METHODS, validateScenario, canonicalScenarioJson, 
 import { HttpError } from "./security.mjs";
 import { VCR_SUBJECT_KINDS, vcrJobObjectKind } from "./vcrJobs.mjs";
 import { VCR_OBJECT_NODE_KINDS } from "./vcrStore.mjs";
-import { vcrModelApplicabilityIssues, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
+import { vcrModelExecutionIssues, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
 import { vcrCohortInputIssue } from "./vcrSnapshotBinding.mjs";
 
 /** @param {unknown} value @returns {Record<string, any>} */
@@ -97,7 +97,7 @@ export function vcrJobStage(kind, objectKind) {
   }
   if (objectKind === "comparator") {
     return /** @type {Record<string, string>} */ ({ rmst: "rmst", maic_time_to_event_comparator: "maic",
-      negative_control_comparator: "negative_control", tipping_point: "tipping_point" })[kind] ?? "primary";
+      negative_control_comparator: "negative_control", tipping_point: "tipping_point", bias_analysis: "bias_analysis" })[kind] ?? "primary";
   }
   return null;
 }
@@ -118,27 +118,73 @@ export function vcrDesignShare(design) {
 }
 
 /**
+ * Whether a scenario and a design differ in how the sample is decided. A scenario that fixes both arm sizes and a design that solves them for
+ * a power are different designs, not two versions of one: the scenario that states the sizes is the design's own only when the sizes
+ * it states are the ones the design solved (`row.solvedPatients`, read from the design's result), so a simulation at the solved size
+ * stays the design's next stage and a simulation at another size is another design (found live 2026-11-07: 250 per arm was filed as
+ * a version of the design solved to 367 per arm, whose page then read 734 patients beside a power of 76%).
+ * @param {Record<string, any>} jobScenario @param {Record<string, any>} row `configuration`, and `solvedPatients` when its result is read
+ * @returns {boolean}
+ */
+export function vcrSizingDiffers(jobScenario, row) {
+  const scenario = object(jobScenario);
+  const own = object(row.configuration);
+  const fixed = (/** @type {Record<string, any>} */ design) => finite(design.nTreat) !== null && finite(design.nControl) !== null;
+  const solved = (/** @type {Record<string, any>} */ whole) => !fixed(object(whole.design)) && finite(object(whole.analysis).power) !== null;
+  const theirs = object(scenario.design);
+  if (fixed(theirs) && solved(own)) {
+    const total = Number(theirs.nTreat) + Number(theirs.nControl);
+    const known = finite(row.solvedPatients);
+    return known === null || known !== total;
+  }
+  // The other way round is no difference: a design that holds fixed sizes beside a power is sized by the closed form on its own object.
+  return false;
+}
+
+/**
+ * The trial scenarios of a study with the size each one solved, read from its result, so a fit can tell a fixed-size scenario from the
+ * design's own solved size.
+ * @param {any} store @param {string} studyId @param {string} objectKind @param {ReadonlyArray<Record<string, any>>} current
+ */
+async function withSolvedSizes(store, studyId, objectKind, current) {
+  if (objectKind !== "trial_scenario" || typeof store?.result !== "function") return current;
+  return Promise.all(current.map(async (row) => {
+    if (!row.resultId) return row;
+    const result = await store.result(studyId, String(row.resultId));
+    const measure = list(object(result).measures).map(object).find((item) => item.name === "required_patients" || item.name === "required_total");
+    return finite(measure?.value) === null ? row : { ...row, solvedPatients: Number(measure?.value) };
+  }));
+}
+
+/**
  * How a job's frozen scenario reads against one trial scenario: the design kind, the endpoint and the allocation share must
- * agree where both say one, and the count of agreeing numbers in the design and the truth breaks a tie. A number both state and
+ * agree where both say one, and the count of agreeing numbers in the design, the truth, the hypothesis, the analysis and the accrual breaks a tie. A number both state and
  * that differs is counted too (`disagreeing`): it does not unfit a design here (the backfill reads old results against the design
  * as it is now), but a scenario a conversation sends is not about a design it contradicts.
+ * With `sizing`, a scenario that fixes the arm sizes does not fit a design solved for a power (`vcrSizingDiffers`); the backfill reads
+ * old results against designs whose results it does not know yet and leaves it off.
  * @param {Record<string, any>} jobScenario @param {{ design: string, endpointType: string, configuration: Record<string, any> }} row
+ * @param {{ sizing?: boolean }} [options]
  * @returns {{ fits: boolean, agreeing: number, disagreeing: number }}
  */
-export function vcrTrialScenarioFit(jobScenario, row) {
+export function vcrTrialScenarioFit(jobScenario, row, { sizing = false } = {}) {
   const scenario = object(jobScenario);
   const design = object(scenario.design);
   const kind = typeof design.kind === "string" ? design.kind : null;
   if (kind !== null && kind !== row.design) return { fits: false, agreeing: 0, disagreeing: 0 };
   const endpoint = typeof object(scenario.endpoint).type === "string" ? object(scenario.endpoint).type : null;
   if (endpoint !== null && endpoint !== row.endpointType) return { fits: false, agreeing: 0, disagreeing: 0 };
+  if (sizing && vcrSizingDiffers(scenario, row)) return { fits: false, agreeing: 0, disagreeing: 0 };
   const own = object(row.configuration);
   const share = vcrDesignShare(design);
   const ownShare = vcrDesignShare(object(own.design));
   if (share !== null && ownShare !== null && Math.abs(share - ownShare) > 0.005) return { fits: false, agreeing: 0, disagreeing: 0 };
   let agreeing = 0;
   let disagreeing = 0;
-  for (const part of ["design", "truth"]) {
+  // The hypothesis, the analysis and the accrual are numbers the design is made of just as the arms and the truth are: a non-inferiority margin of
+  // 12 points is not the design that holds a margin of 10 (found live 2026-11-04: the second sample size was filed under the first design,
+  // whose page went on reading a margin of 10 beside a headline computed for 12).
+  for (const part of ["design", "truth", "hypothesis", "analysis", "accrual"]) {
     const ours = object(own[part]);
     const theirs = object(scenario[part]);
     for (const [key, value] of Object.entries(theirs)) {
@@ -157,17 +203,23 @@ export function vcrTrialScenarioFit(jobScenario, row) {
  * they fit equally well (the caller treats that as ambiguous). With `sameNumbers`, a design whose stated numbers the scenario
  * contradicts is not one it fits.
  * @param {Record<string, any>} jobScenario @param {ReadonlyArray<Record<string, any>>} rows the current row of each design
- * @param {{ sameNumbers?: boolean }} [options]
+ * @param {{ sameNumbers?: boolean, sizing?: boolean }} [options]
  */
-export function vcrMatchTrialScenarios(jobScenario, rows, { sameNumbers = false } = {}) {
-  const scored = rows.map((row) => ({ row, ...vcrTrialScenarioFit(jobScenario, /** @type {any} */ (row)) }))
+export function vcrMatchTrialScenarios(jobScenario, rows, { sameNumbers = false, sizing = false } = {}) {
+  const scored = rows.map((row) => ({ row, ...vcrTrialScenarioFit(jobScenario, /** @type {any} */ (row), { sizing }) }))
     .filter((entry) => entry.fits && !(sameNumbers && entry.disagreeing > 0));
   const best = Math.max(0, ...scored.map((entry) => entry.agreeing));
   return scored.filter((entry) => entry.agreeing === best).map((entry) => entry.row);
 }
 
-/** The scenario an object of a self-filed kind holds. @param {string} objectKind @param {Record<string, any>} row @returns {Record<string, any> | null} */
+/** The scenario an object of a self-filed kind holds. A grid holds its base scenario, its designs and its truths, the way
+ * `prepareVcrMethodConfiguration` wrote them from the scenario it was made from. @param {string} objectKind @param {Record<string, any>} row
+ * @returns {Record<string, any> | null} */
 function configurationOf(objectKind, row) {
+  if (objectKind === "design_grid") {
+    const dimensions = object(row.dimensions);
+    return { ...object(dimensions.base), designs: list(dimensions.designs), truths: list(row.truthScenarios) };
+  }
   return objectKind === "trial_scenario" || objectKind === "comparator" ? object(row.configuration) : objectKind === "population" ? object(row.definition) : null;
 }
 
@@ -187,6 +239,27 @@ export function vcrContradiction(held, asked, at = "") {
     else if (canonicalScenarioJson(mine) !== canonicalScenarioJson(value)) return path;
   }
   return null;
+}
+
+/**
+ * The first value a grid scenario states differently from a grid: the base scenario as `vcrContradiction` reads it, and the designs and the
+ * truths entry by entry (another count of them is another grid; a key only one entry states, such as a label the scenario's normalisation
+ * left out, is no disagreement). Null when there is none.
+ * @param {Record<string, any>} held @param {Record<string, any>} asked
+ * @returns {string | null}
+ */
+function gridContradiction(held, asked) {
+  for (const key of ["designs", "truths"]) {
+    if (!Array.isArray(asked[key]) || !Array.isArray(held[key])) continue;
+    if (asked[key].length !== held[key].length) return key;
+    for (const [at, entry] of asked[key].entries()) {
+      const inner = vcrContradiction(object(held[key][at]), object(entry), `${key}[${at}]`);
+      if (inner) return inner;
+    }
+  }
+  const { designs: _heldDesigns, truths: _heldTruths, ...heldBase } = held;
+  const { designs: _askedDesigns, truths: _askedTruths, ...askedBase } = asked;
+  return vcrContradiction(heldBase, askedBase);
 }
 
 /**
@@ -273,9 +346,28 @@ function holdings(objectKind, current) {
  * @param {string} objectKind @param {string} kind @param {Record<string, any>} scenario @param {ReadonlyArray<Record<string, any>>} current
  * @param {boolean} sameNumbers */
 function fittingObjects(objectKind, kind, scenario, current, sameNumbers) {
-  return objectKind === "trial_scenario" ? vcrMatchTrialScenarios(scenario, current, { sameNumbers })
-    : objectKind === "population" ? current.filter((entry) => POPULATION_KIND_OF_JOB[kind] === undefined || entry.kind === POPULATION_KIND_OF_JOB[kind])
+  return objectKind === "trial_scenario" ? vcrMatchTrialScenarios(scenario, current, { sameNumbers, sizing: true })
+    // A grid's sizes, follow-up and truths are what it is, as a design's numbers are (live 2026-11-07: a 30-month grid, a 240-month grid
+    // and a null check were filed as three versions of one grid, and the first two results were superseded off the page).
+    : objectKind === "design_grid" ? current.filter((entry) => !sameNumbers || !gridContradiction(/** @type {Record<string, any>} */ (configurationOf(objectKind, entry)), scenario))
+    : objectKind === "population" ? current.filter((entry) => (POPULATION_KIND_OF_JOB[kind] === undefined || entry.kind === POPULATION_KIND_OF_JOB[kind])
+      && (!sameNumbers || !['generate_population', 'literature_population'].includes(kind) || canonicalScenarioJson(entry.definition) === canonicalScenarioJson(scenario)))
       : current;
+}
+
+/** @param {Record<string, any>} row */
+const row0 = (row) => `${row.id}（${[row.label, row.name, row.route].find((word) => typeof word === "string" && word) ?? `v${row.version}`}）`;
+
+/**
+ * The method that made a comparison's primary result, from the record of its stages: null for a comparison with no result yet (nothing is
+ * replaced by a first one) and for a result that kept no record of its stages.
+ * @param {any} store @param {string} studyId @param {Record<string, any>} row
+ * @returns {Promise<string | null>}
+ */
+async function comparisonPrimaryMethod(store, studyId, row) {
+  const result = row.resultId ? await store.result(studyId, String(row.resultId)) : null;
+  const primary = list(object(object(result).diagnostics).stages).map(object).find((entry) => entry.stage === "primary");
+  return typeof primary?.method === "string" ? primary.method : null;
 }
 
 /**
@@ -310,7 +402,16 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
     }
   } else {
     // Said without an id: the one object that fits what the scenario states is the one it is about.
-    const fitting = fittingObjects(objectKind, kind, scenario, current, study.scope === "conversation");
+    const fitting = fittingObjects(objectKind, kind, scenario, await withSolvedSizes(store, study.id, objectKind, current), study.scope === "conversation");
+    // A computation that is a comparison of its own is never taken for the one comparison the study holds when that was made by another
+    // method: its primary result would be replaced, and the page would read the first method's sentences beside the second's numbers.
+    if (fitting.length === 1 && VCR_OWN_COMPARISON_KINDS.has(kind) && objectKind === "comparator") {
+      const held = await comparisonPrimaryMethod(store, study.id, fitting[0]);
+      if (held && held !== /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind]) {
+        throw new VcrSubjectError("vcr_simulate_subject_required",
+          `这项计算本身就是一种对照，不能算进用别的方法算过的对照设计里（${row0(fitting[0])}）：把它自己的设定写成一个对照设计，再把那个设计的 id 作为 subjectId 传进来。${holdings(objectKind, current)}`);
+      }
+    }
     if (fitting.length !== 1) {
       throw new VcrSubjectError("vcr_simulate_subject_required",
         `这项计算要说明它算的是本研究的哪一个${OBJECT_WORDS_ZH[objectKind]}：把它的 id 作为 subjectId 传进来。`
@@ -330,8 +431,17 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
   };
 }
 
+/**
+ * The computations that are a comparison of their own: what they state is the scenario they send (an estimate and its limit, an
+ * external control's published history, a person-period table and a strategy, a simulated comparison against a published arm). Each is
+ * one object per scenario, found by the scenario and made when no object holds it, and none is ever filed under another method's
+ * comparison, whose primary result it would replace (review RF2 P0-3, P1-4).
+ */
+export const VCR_OWN_COMPARISON_KINDS = new Set(["evalue", "bias_analysis", "stc_comparator", "target_trial_emulation", "borrowing_prior"]);
+
 /** The computations a conversation may start with nothing written first: what they compute is all in the scenario they send. */
-const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "design_grid", "generate_population", "literature_population", "evalue"]);
+const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "design_grid", "generate_population", "literature_population", ...VCR_OWN_COMPARISON_KINDS]);
+const VCR_SELF_FILED_PATIENT_KINDS = new Set(['generate_patients', 'generate_patients_continuous', 'generate_patients_binary', 'generate_patients_longitudinal']);
 
 /**
  * A conversation's research has no form to fill in. A design or a population the run computes with no object to file it under gets one,
@@ -343,7 +453,19 @@ const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "d
  * @returns {Promise<string | null>} the id to compute under, when one was made (or, for an E-value, the one that is the same)
  */
 export async function vcrConversationSubject({ store, study, userId, kind, subjectId = null, scenario = {} }) {
-  if (study.scope !== "conversation" || !VCR_SELF_FILED_KINDS.has(kind)) return null;
+  if (study.scope !== "conversation") return null;
+  if (VCR_SELF_FILED_PATIENT_KINDS.has(kind)) {
+    // A complete scenario-only generation needs no preparatory form. Reuse
+    // only an identical unbound scenario; never inherit somebody's selected
+    // real cohort or model while making a new synthetic patient set.
+    if (subjectId || !Object.keys(scenario).length) return null;
+    const held = list(await store.patientSets(study.id, 200));
+    const same = held.find(row => !row.populationId && !row.modelId && canonicalScenarioJson(row.scenario) === canonicalScenarioJson(scenario));
+    if (same) return String(same.id);
+    return (await prepareVcrMethodConfiguration({ store, study, userId,
+      method: VCR_JOB_METHODS[kind], name: `${OBJECT_WORDS_ZH.patient_set} ${held.length + 1}`, scenario })).subjectId;
+  }
+  if (!VCR_SELF_FILED_KINDS.has(kind)) return null;
   const objectKind = /** @type {string} */ (vcrJobObjectKind(kind));
   const rows = await objectRows(store, study.id, objectKind);
   if (subjectId) {
@@ -351,24 +473,39 @@ export async function vcrConversationSubject({ store, study, userId, kind, subje
     // the object, written like the browser's method configurations (`prepareVcrMethodConfiguration`: the scenario is the configuration, as it
     // is for an object made from a scenario), so that the result is filed under what was computed. A scenario that restates the object or only
     // adds to it, and none at all (the stage is built from the object), are the object.
-    const named = rows.find((entry) => entry.id === subjectId);
+    // Only the newest grid is a current row; a grid named by id may be an earlier one.
+    const named = rows.find((entry) => entry.id === subjectId) ?? (objectKind === "design_grid" && typeof store.methodConfigurationObject === "function"
+      ? await store.methodConfigurationObject(store, study.id, objectKind, subjectId, {}, "", null) : undefined);
     const own = named ? configurationOf(objectKind, named) : null;
-    if (!named || !own || !Object.keys(scenario).length || !vcrContradiction(own, scenario)) return null;
-    // An E-value is one estimate and not a line of versions: another estimate is another object (below).
-    if (kind !== "evalue") {
+    if (!named || !own || !Object.keys(scenario).length) return null;
+    const changed = objectKind === 'population' && ['generate_population', 'literature_population'].includes(kind)
+      ? canonicalScenarioJson(own) !== canonicalScenarioJson(scenario) : objectKind === 'design_grid' ? gridContradiction(own, scenario) : vcrContradiction(own, scenario);
+    // A fixed-size scenario sent under a design solved for a power (or the other way round) is another design, never its next version.
+    if (objectKind === 'trial_scenario' && vcrSizingDiffers(scenario, (await withSolvedSizes(store, study.id, objectKind, [named]))[0])) {
+      return (await prepareVcrMethodConfiguration({ store, study, userId, method: /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind],
+        name: `${OBJECT_WORDS_ZH[objectKind]} ${vcrCurrentObjects(objectKind, rows).length + 1}`, scenario })).subjectId;
+    }
+    if (!changed) return null;
+    // An E-value, a bias analysis of a stated estimate, a simulated comparison, a target-trial emulation or a borrowed control is one
+    // scenario and not a line of versions: another scenario is another object (below).
+    if (!VCR_OWN_COMPARISON_KINDS.has(kind)) {
       const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
       return (await prepareVcrMethodConfiguration({ store, study, userId, method, subjectId, name: String(named.label || named.name || ""), scenario })).subjectId;
     }
   }
   const current = vcrCurrentObjects(objectKind, rows);
   // An E-value of a stated estimate and limit is an object of its own: it is never filed under another comparison the study holds, whose
-  // result it would replace. The same estimate asked twice is the one object.
-  if (kind === "evalue") {
+  // result it would replace. The same estimate asked twice is the one object. So is a bias analysis of an estimate the call states; one that
+  // names a comparison (and states no estimate) is a stage of that comparison and is not made here. A simulated treatment comparison, a
+  // target-trial emulation and a borrowed external control are the same: the same scenario again is the next version of the one object, and a
+  // changed one is another object, never the weighting or the E-value the study already holds.
+  if (VCR_OWN_COMPARISON_KINDS.has(kind)) {
     const same = current.find((entry) => canonicalScenarioJson(entry.configuration) === canonicalScenarioJson(scenario));
     if (same) return String(same.id);
-  } else if (fittingObjects(objectKind, kind, scenario, current, true).length) return null;
+  } else if (fittingObjects(objectKind, kind, scenario, await withSolvedSizes(store, study.id, objectKind, current), true).length) return null;
   const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
-  const name = `${OBJECT_WORDS_ZH[objectKind]} ${current.length + 1}`;
+  // A study reads only its newest grid, whose version counts every grid it has: the next one is named by the version it will have.
+  const name = `${OBJECT_WORDS_ZH[objectKind]} ${objectKind === "design_grid" ? Number(rows[0]?.version ?? 0) + 1 : current.length + 1}`;
   return (await prepareVcrMethodConfiguration({ store, study, userId, method, name, scenario })).subjectId;
 }
 
@@ -406,7 +543,7 @@ export async function prepareVcrSubjectPopulation({ store, study, kind, subject,
   if (!population) throw new VcrSubjectError("vcr_model_not_applicable", "The exact selected population is unavailable.");
   if (sourceModel) {
     const model = list(await store.models(String(study.userId))).find(entry => entry.id === sourceModel.id && entry.version === sourceModel.version);
-    if (!model || vcrModelApplicabilityIssues(model, { endpointType: object(scenario.endpoint).type, variables: vcrPopulationVariables(population) }).length) {
+    if (!model || vcrModelExecutionIssues(model, { endpointType: object(scenario.endpoint).type, variables: vcrPopulationVariables(population) }).length) {
       throw new VcrSubjectError("vcr_model_not_applicable", "The source model does not cover this endpoint and selected population.");
     }
   }
@@ -573,7 +710,8 @@ export async function prepareVcrMethodConfiguration({ store, study, userId, meth
   }
   return store.transaction(async (/** @type {any} */ client) => {
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-vcr-method-configuration:${study.id}`]);
-  const previous = await store.methodConfigurationObject(client, study.id, objectKind, subjectId, scenario, name, model);
+  let previous = await store.methodConfigurationObject(client, study.id, objectKind, subjectId, scenario, name, model);
+  if (!subjectId && objectKind === 'patient_set' && !model && previous?.populationId) previous = null;
   if (subjectId && !previous) throw new VcrSubjectError("vcr_simulate_subject_unknown", "The configuration is not an object of this study for this method.");
   if (previous && objectKind === "population" && POPULATION_KIND_OF_JOB[kind] && previous.kind !== POPULATION_KIND_OF_JOB[kind]) {
     throw new VcrSubjectError("vcr_simulate_subject_unknown", "The population kind does not match this method.");
@@ -604,7 +742,7 @@ export async function prepareVcrMethodConfiguration({ store, study, userId, meth
     design: object(scenario.design).kind ?? object(object(object(schema.fields).design).fields).kind?.default, endpointType: object(scenario.endpoint).type,
     configuration: scenario, assumptionIds: previous?.assumptionIds ?? [], comparatorId: previous?.comparatorId ?? null }, { client });
   else if (objectKind === "comparator") saved = await store.saveComparatorDesign({ ...base, route: previous?.route ?? (method === "design.procova" || method === "comparator.prognostic_adjustment" ? "prognostic_adjustment"
-      : method === "comparator.map_prior" ? "hybrid_control" : ["comparator.maic", "comparator.evalue", "comparator.maic_time_to_event"].includes(method) ? "literature_control" : "external_control"),
+      : method === "comparator.map_prior" || method === "comparator.borrowing" ? "hybrid_control" : ["comparator.maic", "comparator.evalue", "comparator.bias_analysis", "comparator.stc", "comparator.maic_time_to_event"].includes(method) ? "literature_control" : "external_control"),
     estimand: scenario.estimand ?? object(object(schema.fields).estimand).default ?? null, configuration: scenario, targetTrial: previous?.targetTrial ?? {} }, { client });
   else saved = await store.saveDesignGrid({ ...base, dimensions: { base: Object.fromEntries(Object.entries(scenario).filter(([key]) => key !== "designs" && key !== "truths")), designs: scenario.designs ?? [] }, truthScenarios: scenario.truths ?? [], cells: [] }, { client });
   return { subjectId: String(saved.id), objectKind, version: Number(saved.version) };

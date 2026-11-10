@@ -8,9 +8,11 @@
  *   node evaluator.mjs receipt <manifest.json> <inputs.json> <request.json> <checkpoint.json> <key.pem> <out.json>
  *   node evaluator.mjs report  <report.json> <key.pem> <out.json>
  *   node evaluator.mjs evidence <manifest.json> <inputs.json> <checkpoint.json> <qualification-report.json> <key.pem> <out.json>
+ *   node evaluator.mjs qualification <qualification-report.json> [claim]
  *
  * `evidence` is for a qualified campaign only: the finalizer's signed input (`rsi-finalizer-evidence-v1`), naming the
  * candidate file, the consumer's dependency closure, the day-group proof and the procedure qualification it rests on.
+ * `receipt` reads which surface it signs from the manifest: the lab does not have to know.
  */
 import { createHash, createPrivateKey, createPublicKey, sign } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -21,6 +23,7 @@ import { chooseFrontierCandidate, evaluateFrontierDays, frontierCampaignConsumer
 import { chooseSkillCandidate, skillCampaignConsumerIdentity, skillObservationCosts, skillObservations } from './skill_campaign.mjs';
 import { HARNESS_COST_IDENTITY, chooseHarnessCandidate, harnessCampaignConsumerIdentity, harnessDevelopmentResult, harnessObservationCosts, harnessObservations } from './harness_campaign.mjs';
 import { toolPatchCampaignConsumerIdentity } from './tool_patch_campaign.mjs';
+import { MODULE_COST_IDENTITY, chooseModuleCandidate, isModuleSurface, moduleCampaignConsumerIdentity, moduleConfirmation } from './module_campaign.mjs';
 
 /** The cost identity of a campaign whose arms ran on production: settled CNY per run from the usage ledger, exported with the runs. */
 export const SKILL_COST_IDENTITY = 'production-usage-ledger-settled-cny';
@@ -46,7 +49,7 @@ export function signEnvelope(payload, key) {
  * @param {{manifest:any, inputs:any, request:any, checkpoint:any, now?:string}} input
  */
 export async function evaluatorReceiptPayload({ manifest, inputs, request, checkpoint, now = new Date().toISOString() }) {
-  if (!['frontier-selection', 'capability-skill', 'harness-patch', 'tool-patch'].includes(manifest.surface)) fail('campaign_consumer_not_qualified');
+  if (!['frontier-selection', 'capability-skill', 'harness-patch', 'tool-patch'].includes(manifest.surface) && !isModuleSurface(manifest.surface)) fail('campaign_consumer_not_qualified');
   const binding = rsiDigest({ manifest, inputs });
   if (request.binding !== binding || checkpoint.binding !== binding) fail('campaign_evaluator_binding_changed');
   const registration = inputs.registration, statistics = registration.statistics;
@@ -55,7 +58,7 @@ export async function evaluatorReceiptPayload({ manifest, inputs, request, check
   for (const source of [development, confirmation]) if (rsiDigest(inputs.sources[source.id]) !== source.digest) fail('campaign_source_changed');
   if (request.corpusDigest !== confirmation.digest || request.registrationDigest !== rsiDigest(statistics ?? null)) fail('campaign_evaluator_binding_changed');
   if (manifest.surface === 'capability-skill') return skillReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation });
-  if (manifest.surface === 'harness-patch' || manifest.surface === 'tool-patch') return harnessReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation });
+  if (manifest.surface === 'harness-patch' || manifest.surface === 'tool-patch' || isModuleSurface(manifest.surface)) return harnessReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation });
   const identity = await frontierCampaignConsumerIdentity();
   if (statistics?.consumer_id !== identity.implementationSha256 || statistics?.corpus_digest !== confirmation.digest) fail('campaign_evaluation_consumer_or_corpus_changed');
   // The freeze followed the registered rule on the development source alone.
@@ -138,28 +141,38 @@ async function skillReceiptPayload({ manifest, inputs, request, checkpoint, now,
 }
 
 /**
+ * What the harness-patch receipt reads of the consumer it signs for: the harness consumer's own functions, or its module-policy kit (module_campaign.mjs), whose costs are the
+ * operator box's tokens at the reference price list instead of a lane's ledger.
+ * @param {string} surface
+ */
+function harnessReceiptKit(surface) {
+  if (isModuleSurface(surface)) return { identity: moduleCampaignConsumerIdentity, choose: chooseModuleCandidate, confirm: moduleConfirmation, costIdentity: MODULE_COST_IDENTITY, receiptId: 'operator-box-reference-price',
+    normalization: 'CNY per run: the provider-reported tokens of each call priced by the reference price list the source names, recomputed from the calls in the source. A judge call (Claude, operator subscription) is not metered in CNY.' };
+  return { identity: surface === 'tool-patch' ? toolPatchCampaignConsumerIdentity : harnessCampaignConsumerIdentity, choose: chooseHarnessCandidate, costIdentity: HARNESS_COST_IDENTITY, receiptId: 'lane-usage-ledger',
+    confirm: (source, registration, frozen) => { const measured = harnessObservations(source, registration, frozen); return { result: { observations: measured.observations, scores: measured.scores ?? null }, reason: measured.reason }; },
+    normalization: 'Settled CNY per run: the sum of actual_cost over the lane stack evimed_usage.model_requests rows with status settled and the run id, read once at export; the lab never queries the lane. Judge calls (Claude, operator subscription) are not metered in CNY.' };
+}
+
+/**
  * The harness-patch receipt: the development choice (A/A noise floor included) and the confirmation recomputed from the recorded
  * runs and verdict records (twice: the scoring is deterministic code over them), and the costs attested from the same records —
- * every run's settled CNY as the lane stack's usage ledger gave it at export. A run without a settled cost leaves the costs
+ * every run's settled CNY as the source gave it at export. A run without a settled cost leaves the costs
  * incomplete, and an incomplete cost is never signed as complete. Judge calls are not CNY-metered and are not costs here.
  */
 async function harnessReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation }) {
-  const registration = inputs.registration, statistics = registration.statistics;
-  const identity = manifest.surface === 'tool-patch' ? await toolPatchCampaignConsumerIdentity(registration) : await harnessCampaignConsumerIdentity(registration);
+  const registration = inputs.registration, statistics = registration.statistics, kit = harnessReceiptKit(manifest.surface);
+  const identity = await kit.identity(registration);
   if (statistics?.consumer_id !== identity.implementationSha256 || statistics?.corpus_digest !== confirmation.digest) fail('campaign_evaluation_consumer_or_corpus_changed');
-  const choice = chooseHarnessCandidate(inputs.sources[development.id], registration);
+  const choice = kit.choose(inputs.sources[development.id], registration);
   const frozen = checkpoint.frozenPolicy;
   if (!choice.frozen || !frozen || choice.frozen.arm !== frozen.arm || choice.frozen.harnessDigest !== frozen.harnessDigest || choice.frozen.imageDigest !== frozen.imageDigest
     || rsiDigest(frozen) !== request.frozenPolicyDigest || rsiDigest(harnessDevelopmentResult(choice)) !== frozen.developmentResultDigest) fail('campaign_evaluator_development_differs');
   if (!(Date.parse(checkpoint.frozenAt) < Date.parse(request.confirmationOpenedAt))) fail('campaign_evaluator_chronology_invalid');
-  const runs = [0, 1].map(() => {
-    const measured = harnessObservations(inputs.sources[confirmation.id], registration, frozen);
-    return { result: { observations: measured.observations, scores: measured.scores ?? null }, reason: measured.reason };
-  });
+  const runs = [0, 1].map(() => kit.confirm(inputs.sources[confirmation.id], registration, frozen));
   if (runs[0].reason || rsiDigest(runs[0].result) !== rsiDigest(runs[1].result)) fail('campaign_evaluator_nondeterministic');
   if (rsiDigest(runs[0].result) !== request.confirmationResultDigest) fail('campaign_evaluator_recomputation_differs');
   if (request.look !== 1) fail('campaign_evaluator_repeated_look');
-  if (statistics.cost_identity !== HARNESS_COST_IDENTITY || statistics.deterministicConsumer !== false) fail('campaign_cost_identity_unsupported');
+  if (statistics.cost_identity !== kit.costIdentity || statistics.deterministicConsumer !== false) fail('campaign_cost_identity_unsupported');
   const recorded = harnessObservationCosts(inputs.sources[confirmation.id], frozen);
   if (!recorded) fail('campaign_cost_measurement_missing');
   const observations = runs[0].result.observations;
@@ -168,8 +181,7 @@ async function harnessReceiptPayload({ manifest, inputs, request, checkpoint, no
   return {
     type: 'rsi-evaluator-receipt-v1', ...request, issuedAt: now, expiresAt,
     observationDigest: rsiDigest(observations),
-    costProvenance: { type: 'measured-normalized-cny', receiptId: `lane-usage-ledger:${rsiDigest(recorded).slice(0, 16)}`, complete: true,
-      normalization: 'Settled CNY per run: the sum of actual_cost over the lane stack evimed_usage.model_requests rows with status settled and the run id, read once at export; the lab never queries the lane. Judge calls (Claude, operator subscription) are not metered in CNY.' },
+    costProvenance: { type: 'measured-normalized-cny', receiptId: `${kit.receiptId}:${rsiDigest(recorded).slice(0, 16)}`, complete: true, normalization: kit.normalization },
     costs,
     receipt: {
       deterministic_qualification: null,
@@ -193,8 +205,10 @@ export function procedureQualification(report, { claim, procedure, consumerDiges
 
 /** The digests the finalizer profile pins: the registered procedure and this tree's qualification for a claim. */
 export async function qualificationDigests(report, { claim, rootDir }) {
+  const surface = 'frontier-selection';
   const { computeRsiDependencyClosure } = await import('../../apps/server/src/rsiDependencyClosure.mjs');
-  const closure = await computeRsiDependencyClosure({ rootDir, surface: 'frontier-selection', settings: { model: 'deepseek-flash', provider: 'deepseek' } });
+  const { rsiClosureSettings } = await import('../../apps/server/src/rsiClosureSettings.mjs');
+  const closure = await computeRsiDependencyClosure({ rootDir, surface, settings: rsiClosureSettings(surface) });
   if (!closure.qualified) fail('campaign_consumer_changed');
   const q = procedureQualification(report, { claim, procedure: report.development.procedure, consumerDigest: closure.dependencyDigest });
   return { procedureDigest: q.procedureDigest, qualificationDigest: rsiDigest(q), consumerDigest: closure.dependencyDigest, expiresAt: q.expiresAt };
@@ -203,8 +217,11 @@ export async function qualificationDigests(report, { claim, rootDir }) {
 /** The finalizer's signed input for a qualified campaign. @param {{manifest:any, inputs:any, checkpoint:any, report:any, rootDir:string, now?:string}} input */
 export async function finalizerEvidencePayload({ manifest, inputs, checkpoint, report, rootDir, now = new Date().toISOString() }) {
   if (checkpoint.evaluation?.decision !== 'qualified') fail('campaign_statistics_not_qualified');
+  // Only the frontier month imports: a qualified patch or module round is a pull-request proposal, and its signed report is the evidence.
+  if (manifest.surface !== 'frontier-selection') fail('campaign_consumer_not_qualified');
   const { computeRsiDependencyClosure } = await import('../../apps/server/src/rsiDependencyClosure.mjs');
-  const closure = await computeRsiDependencyClosure({ rootDir, surface: manifest.surface, settings: { model: 'deepseek-flash', provider: 'deepseek' } });
+  const { rsiClosureSettings } = await import('../../apps/server/src/rsiClosureSettings.mjs');
+  const closure = await computeRsiDependencyClosure({ rootDir, surface: manifest.surface, settings: rsiClosureSettings(manifest.surface) });
   if (!closure.qualified) fail('campaign_consumer_changed');
   const files = [{ path: 'policy.json', content: canonicalRsiJson({ selectionThreshold: checkpoint.frozenPolicy.threshold }) }];
   const candidateDigest = rsiDigest(files), confirmation = manifest.data.sources.find((row) => row.role === 'confirmation');
@@ -239,12 +256,12 @@ async function main() {
   } else if (command === 'evidence') {
     const [manifestPath, inputsPath, checkpointPath, reportPath, keyPath, outPath] = paths;
     const { key, publicKeySha256 } = evaluatorKey(await readFile(keyPath, 'utf8'));
-    const stored = await json(checkpointPath);
-    const payload = await finalizerEvidencePayload({ manifest: await json(manifestPath), inputs: await json(inputsPath), checkpoint: stored.checkpoint ?? stored,
-      report: await json(reportPath), rootDir: resolve(new URL('../..', import.meta.url).pathname) });
+    const stored = await json(checkpointPath), manifest = await json(manifestPath), inputs = await json(inputsPath), checkpoint = stored.checkpoint ?? stored;
+    const payload = await finalizerEvidencePayload({ manifest, inputs, checkpoint, report: await json(reportPath), rootDir: resolve(new URL('../..', import.meta.url).pathname) });
     const { files, ...signed } = payload;
     const envelope = { payload: signed, signature: sign(null, Buffer.from(`evimed-rsi-evaluation-input-v1\n${canonicalRsiJson(signed)}`), key).toString('base64') };
-    await writeFile(outPath, `${JSON.stringify({ evidenceEnvelope: envelope, files })}\n`, { mode: 0o640 });
+    // All a finalize run reads, so nothing has to be put together between the two steps. A bundle's expiry only bounds how long it may take to earn promotion: the month, not the evidence's week.
+    await writeFile(outPath, `${JSON.stringify({ evidenceEnvelope: envelope, files, completed: stored, manifest, inputs, bundleId: `${checkpoint.campaignId}-bundle`, expiresAt: manifest.deadline })}\n`, { mode: 0o640 });
     console.log(JSON.stringify({ status: 'signed', type: signed.type, publicKeySha256, candidateDigest: signed.candidateDigest }));
   } else if (command === 'qualification') {
     const [reportPath, claim = 'superiority'] = paths;

@@ -32,8 +32,9 @@ let source;
 async function actualSource() {
   if (source) return source;
   const runtimeFiles = [];
-  for (const name of (await fs.readdir(path.join(engine, 'R'))).filter(name => /\.(?:R|json)$/.test(name))) {
-    runtimeFiles.push({ path: `R/${name}`, bytes: await fs.readFile(path.join(engine, 'R', name)) });
+  // R/ and its subdirectories (R/models/ holds a model's parameter file), as the importer and the engine's health digest read them
+  for (const name of (await fs.readdir(path.join(engine, 'R'), { recursive: true })).filter(name => /\.(?:R|json)$/.test(name)).sort()) {
+    runtimeFiles.push({ path: `R/${name.split(path.sep).join('/')}`, bytes: await fs.readFile(path.join(engine, 'R', name)) });
   }
   const caseFiles = [];
   for (const name of (await fs.readdir(path.join(engine, 'tests/numeric'))).filter(name => /\.R$/.test(name))) {
@@ -72,7 +73,7 @@ test('a whole source-bound run qualifies only methods with executed explicit num
   assert.ok(evidence.methods.length >= 27, 'the 24 methods of the first release and the robustness methods');
   assert.ok(evidence.methods.every(entry => entry.numericTests.caseIds.length >= 1 && entry.numericTests.referenceCases.length >= 1));
   const analytic = evidence.methods.find(entry => entry.method === 'design.analytic');
-  assert.deepEqual(analytic.numericTests.caseIds, ['N01b', 'N06b', 'N06c', 'N06f', 'N53a', 'N53c', 'N53e']);
+  assert.deepEqual(analytic.numericTests.caseIds, ['N01b', 'N06b', 'N06c', 'N06f', 'N53a', 'N53c', 'N53e', 'N64a', 'N64f', 'N64g']);
   assert.match(analytic.numericTests.referenceCases[0].reference, /rpact::getDesignGroupSequential/);
   assert.match(analytic.numericTests.referenceCases[0].reference, /d_rp < 1e-4 && d_g4 < 1e-4/);
   assert.equal(analytic.version, VCR_ENGINE_METHODS['design.analytic'].version);

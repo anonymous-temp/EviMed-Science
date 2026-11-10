@@ -306,7 +306,6 @@ export function quantityTokens(value) {
  * @property {{ version: number, data: Record<string, any> }} [value]
  * @property {Array<{ id: string, text: string, node?: string | null }>} careFlags
  * @property {{ text: string, pool?: string | null, journeyStage?: string | null }} question
- * @property {"geo" | "evolution"} [purpose]
  * @property {string} [missionId]
  * @property {{ statement: string, note: string, statementIdentity?: string, claim?: string }} [reviewFeedback]
  * @property {string} answer   the stored answer text
@@ -807,7 +806,7 @@ export class GeoJudge {
       const body = await this.callModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
         userId: input.owner.userId,
         projectId: input.owner.projectId,
-        purpose: input.purpose ?? "geo",
+        purpose: "geo",
         runId: input.missionId,
         // The module's daily budget governs, read by purpose from the ledger;
         // a researcher's personal caps must not stop measurement, nor

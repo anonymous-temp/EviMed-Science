@@ -5,6 +5,7 @@ import {RuntimePromptStops} from './runtimePromptStops.mjs';
 import { ProductDocuments } from './productStore.mjs';
 import { HttpError,safeId } from './security.mjs';
 import { VCR_MATCH_BATCH_JOBS } from '@evimed/domain';
+import { presentCampaign, VCR_CAMPAIGN_STOP_TEXT_ZH } from './vcrExperiments.mjs';
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 /** Agent-run resource IDs are at most 64 characters. Keep the full digest as
  * the dispatch fingerprint while reserving room for the PostgreSQL int retry. */
@@ -65,9 +66,40 @@ export class VcrConversationCompletions {
     }
     return rows.length;
   }
+  /**
+   * A design-search campaign that stopped (any stop reason) is one completion, whatever its units were: the units carry no conversation
+   * origin, so the campaign's own origin (the run that started it) is the only thing that can wake the conversation, once. The row's id
+   * is the hash of the conversation and the campaign, so a restart, a second tick or a retention prune followed by a reconcile never
+   * records a second one while the campaign's marker stands. A cancelled campaign is settled like a cancelled job: no turn, no notice.
+   */
+  async reconcileCampaigns() {
+    if (!(await this.store.one("SELECT to_regclass('evimed_vcr.experiments') AS relation"))?.relation) return 0;
+    const rows=await this.store.rows(`SELECT e.*,s.project_id FROM evimed_vcr.experiments e
+      JOIN evimed_vcr.studies s ON s.id=e.study_id AND s.deleted_at IS NULL
+      WHERE e.kind='campaign' AND e.status='stopped' AND e.origin->>'runId' IS NOT NULL AND e.origin->>'rootSessionId' IS NOT NULL
+      AND COALESCE(e.state->>'completionRecorded','false')<>'true' ORDER BY e.updated_at,e.id LIMIT $1`,[this.config.vcrCompletionReconcileBatch ?? 50]);
+    for(const row of rows){
+      const origin=row.origin,reason=String(row.state?.stop?.reason ?? 'unknown');
+      const invalid=!origin.callId;
+      if(invalid) this.report('vcr_completion_origin_invalid');
+      const view=presentCampaign(row);
+      const shown=view.candidates.find(c=>c.key===view.best) ?? view.candidates.find(c=>c.key===view.undecided?.closest?.key) ?? null;
+      const state=reason==='user_cancellation'?'canceled':reason==='persistent_model_failure'?'failed':'succeeded';
+      const fingerprint=hash([row.user_id,row.project_id,origin.rootSessionId,row.id,'campaign']);
+      await this.store.query(`INSERT INTO evimed_vcr.conversation_completions
+        (id,study_id,job_id,user_id,project_id,root_session_id,result_key,dispatch_id,fingerprint,payload,state,last_error)
+        VALUES ($1,$2,NULL,$3,$4,$5,'campaign',$6,$7,$8::jsonb,$9,$10) ON CONFLICT DO NOTHING`,
+      [`vcc_${fingerprint}`,row.study_id,row.user_id,row.project_id,origin.rootSessionId,vcrCompletionDispatchId(fingerprint),fingerprint,
+        JSON.stringify({completedAt:row.state?.stop?.at ?? row.updated_at,state,campaignId:row.id,stopReason:reason,resultId:null,resultVersion:null,partial:false,error:null,
+          best:shown?{index:shown.index+1,set:shown.set,objective:(v=>v?{value:v.value,mcse:v.mcse ?? null,unit:v.unit ?? null}:null)(shown.objective.final ?? shown.objective.screening),source:view.best?'feasible':'undecided'}:null,
+          runId:origin.runId,callId:origin.callId ?? null}),invalid?'unavailable':'pending',invalid?'vcr_completion_origin_invalid':null]);
+      await this.store.query(`UPDATE evimed_vcr.experiments SET state=state || '{"completionRecorded":true}'::jsonb WHERE id=$1`,[row.id]);
+    }
+    return rows.length;
+  }
   async reconcile() {
     await this.jobs?.reconcileFinishHooks();
-    const replayCount=await this.reconcileReplays();
+    const replayCount=await this.reconcileReplays()+await this.reconcileCampaigns();
     const rows = await this.store.rows(`WITH candidates AS (SELECT j.*, s.project_id, e.id AS execution_id, r.id AS result_id, r.version AS result_version,
       r.diagnostics->>'partial' AS partial,r.conclusion AS conclusion,r.diagnostics->'issues'->0->>'message' AS stop_message,row_number() OVER (PARTITION BY j.user_id ORDER BY j.finished_at,j.id) AS account_order FROM evimed_vcr.jobs j
       JOIN evimed_vcr.studies s ON s.id=j.study_id AND s.deleted_at IS NULL
@@ -101,7 +133,10 @@ export class VcrConversationCompletions {
   async observation(row) {
     if(this.readAcknowledgment) return this.readAcknowledgment(row);
     if(!this.store.one) return null;
-    const source=row.payload.replayId
+    const source=row.payload.campaignId
+      ? await this.store.one(`SELECT state->'originTerminalObservation' AS observation,CASE WHEN $2='canceled' THEN 'canceled' ELSE 'stopped' END AS state
+          FROM evimed_vcr.experiments WHERE id=$1 AND user_id=$3`,[row.payload.campaignId,row.payload.state,row.user_id])
+      : row.payload.replayId
       ? await this.store.one(`SELECT d.payload->'terminalObservation' AS observation,COALESCE(j.status,d.payload->>'state') AS state
           FROM evimed_product.documents d LEFT JOIN evimed_product.jobs j ON j.id=d.payload->>'jobId' AND j.user_id=d.user_id
           WHERE d.id=$1 AND d.project_id=$2 AND COALESCE(d.payload->>'requestedBy',d.user_id)=$3 AND d.kind='result-replay' AND d.deleted_at IS NULL`,[row.payload.replayId,row.project_id,row.user_id])
@@ -128,9 +163,13 @@ export class VcrConversationCompletions {
     if(original?.status==='canceled') return 'vcr_completion_canceled';
     const reserved=final && dispatchId ? runs?.find(run=>run.dispatchId===dispatchId) : null;
     if(reserved && reserved.status!=='running') return 'vcr_completion_canceled';
-    if(final && this.readCurrentInput && (!input || !original || !(
-      input.requestId && original.kernelRequestIds?.includes(input.requestId)
-      || Number.isSafeInteger(input.turnStartSeq) && input.turnStartSeq===original.nativeTurn?.startSeq
+    // The newest kernel input is the turn this continuation answers when it is the original turn's input or the prompt of an earlier
+    // platform continuation of the same conversation (a dispatch id of ours): that is the platform's own wake, never a person typing.
+    // Without it the second job of a run, finishing after the first one's continuation, was disclosed in the inbox and never woken (live D5).
+    const turns=original ? [original,...(runs ?? []).filter(run=>run.sessionId===row.root_session_id && run.automated && String(run.dispatchId ?? '').startsWith('vcr-completion-'))] : [];
+    if(final && this.readCurrentInput && (!input || !original || !turns.some(turn=>
+      input.requestId && turn.kernelRequestIds?.includes(input.requestId)
+      || Number.isSafeInteger(input.turnStartSeq) && input.turnStartSeq===turn.nativeTurn?.startSeq
     ))) return 'vcr_completion_disclosed';
     // A result unobserved at the end of a turn is disclosed without charging
     // for a second answer. A timestamp chooses disclosure, never consumption.
@@ -194,7 +233,10 @@ export class VcrConversationCompletions {
       FROM selected WHERE c.id=selected.id RETURNING c.*`,
     [this.config.vcrCompletionBatch ?? 5,Number(this.config.vcrCompletionLeaseMs ?? 300000)/1000]);
     this.counters.attempted+=rows.length;
+    const covered=new Set();
     for (const row of rows) {
+      if(covered.has(row.id)) continue;
+      const siblings=[];
       try {
         const generation=Number(row.dispatch_generation ?? 0);
         // This former 79-character producer format could never pass the ledger
@@ -218,9 +260,20 @@ export class VcrConversationCompletions {
         if(disposition) {await this.settleDisposition(row,disposition);continue;}
         const state = await this.inbox(owned.project,row.root_session_id);
         if (!state || state.running !== false || state.queued !== 0) { await this.mark(row,'pending','vcr_conversation_busy'); continue; }
+        // Jobs of one conversation that finished together are one continuation: it reads every unobserved result, never one turn per job.
+        for(const other of rows) {
+          if(other===row || covered.has(other.id) || other.user_id!==row.user_id || other.root_session_id!==row.root_session_id) continue;
+          if(await this.disposition(other,owned.project)===null) siblings.push(other);
+        }
         const label=outcome.state==='succeeded' && outcome.partial ? '计算没有做完' : {succeeded:'计算已完成',failed:'计算未完成',canceled:'计算已取消'}[outcome.state] ?? '计算状态有更新';
-        const text = `${label}${outcome.partial ? '，保留了部分结果' : ''}${outcome.stopped ? `：${String(outcome.stopped).replace(/[。.]$/u,'')}` : ''}。请继续原来的任务，读取实际结果再解释${outcome.partial ? '，说明做完了多少、没做完什么' : ''}。`;
-        const systemSupplement = `Platform computation notice. Original job=${outcome.replayId ?? row.job_id}; tool=${outcome.replayId ? "research_calculate" : "vcr_simulate"}; state=${outcome.state}; result=${outcome.resultId ?? 'none'}; version=${outcome.resultVersion ?? 'none'}; partial=${outcome.partial === true}; error=${outcome.error?.code ?? 'none'}. This is an automated continuation of the original user request. Use the recorded result; do not treat a failure, cancellation or partial result as success. Nobody is attending this turn.${outcome.state === "canceled" ? " The computation was canceled. Do not restart it or queue replacement calculations without a new user request." : ""}`;
+        const campaignText=outcome.campaignId ? `设计搜索已结束：${VCR_CAMPAIGN_STOP_TEXT_ZH[outcome.stopReason] ?? '已停止。'}${outcome.best ? `${outcome.best.source==='feasible'?'最优':'最接近'}的方案是第 ${outcome.best.index} 个。` : ''}` : null;
+        const text = campaignText ? `${campaignText}请继续原来的任务，读取实际结果再解释。` : `${label}${outcome.partial ? '，保留了部分结果' : ''}${outcome.stopped ? `：${String(outcome.stopped).replace(/[。.]$/u,'')}` : ''}。请继续原来的任务，读取实际结果再解释${outcome.partial ? '，说明做完了多少、没做完什么' : ''}。`;
+        const systemSupplement = outcome.campaignId
+          ? `Platform design-search notice. Campaign=${outcome.campaignId}; tool=vcr_simulate action=search_status; stop=${outcome.stopReason}; best=${JSON.stringify(outcome.best)}. This is an automated continuation of the original user request. Read the campaign with search_status before you explain it and use only its numbers; the frozen constraints never change, and a design undecided on a constraint is neither passed nor failed. Do not start another campaign without a new user request. Nobody is attending this turn.`
+          : `Platform computation notice. Original job=${outcome.replayId ?? row.job_id}; tool=${outcome.replayId ? "research_calculate" : "vcr_simulate"}; state=${outcome.state}; result=${outcome.resultId ?? 'none'}; version=${outcome.resultVersion ?? 'none'}; partial=${outcome.partial === true}; error=${outcome.error?.code ?? 'none'}. This is an automated continuation of the original user request. Use the recorded result; do not treat a failure, cancellation or partial result as success. Nobody is attending this turn.${outcome.state === "canceled" ? " The computation was canceled. Do not restart it or queue replacement calculations without a new user request." : ""}`;
+        const alsoText=siblings.map(other=>other.payload.campaignId
+          ? ` Also finished in this conversation: campaign=${other.payload.campaignId}; tool=vcr_simulate action=search_status; stop=${other.payload.stopReason}.`
+          : ` Also finished in this conversation: job=${other.payload.replayId ?? other.job_id}; state=${other.payload.state}; result=${other.payload.resultId ?? 'none'}; version=${other.payload.resultVersion ?? 'none'}; error=${other.payload.error?.code ?? 'none'}.`).join('');
         const assertCurrent=async ({runs=null,final=false,signal=null}={}) => {
           const current=await this.resolve(row);signal?.throwIfAborted();
           if(!current?.session) throw Object.assign(new Error('Original conversation unavailable'),{code:'research_session_not_found',definitivelyRejected:true});
@@ -230,7 +283,7 @@ export class VcrConversationCompletions {
           if(code) throw Object.assign(new Error(code),{code,definitivelyRejected:true});
         };
         const dispatched = await this.dispatch(owned.user,owned.project,row.root_session_id,dispatchId,text,{ nativeContinuation:true,
-          dispatchFingerprint:row.fingerprint,systemSupplement,originRunId:outcome.runId,
+          dispatchFingerprint:row.fingerprint,systemSupplement:systemSupplement+alsoText,originRunId:outcome.runId,
           beforePrompt:({signal=null}={})=>assertCurrent({final:true,signal}),beforeReserve:assertCurrent });
         const run = dispatched?.run ?? dispatched;
         if (run?.dispatchStatus === 'rejected') {
@@ -242,6 +295,7 @@ export class VcrConversationCompletions {
           await this.mark(row,'pending','runtime_prompt_rejected');continue;
         }
         await this.mark(row,'delivered');
+        for(const other of siblings) {covered.add(other.id);await this.mark(other,'delivered','vcr_completion_covered');}
       } catch (error) {
         // Dispatch identity is stable across a lost response or process restart.
         // An unknown acceptance stays pending and uses AgentRuns' existing identity.
@@ -260,7 +314,7 @@ export class VcrConversationCompletions {
     this.lastTickAt=now;
     const reconciled=await this.reconcile();this.counters.reconciled+=reconciled;
     const retention=Math.max(this.ageSeconds()*1000,Number(this.config.vcrCompletionRetentionMs ?? 604800000));
-    const pruned=await this.store.query(`DELETE FROM evimed_vcr.conversation_completions WHERE id IN (SELECT id FROM evimed_vcr.conversation_completions WHERE state<>'pending' AND updated_at<now()-make_interval(secs=>$1) ORDER BY updated_at LIMIT $2)`,[retention/1000,this.config.vcrCompletionReconcileBatch ?? 50]);
+    const pruned=await this.store.query(`DELETE FROM evimed_vcr.conversation_completions WHERE id IN (SELECT id FROM evimed_vcr.conversation_completions WHERE state<>'pending' AND COALESCE(last_error,'') NOT LIKE 'vcr_completion_notice_failed:%' AND updated_at<now()-make_interval(secs=>$1) ORDER BY updated_at LIMIT $2)`,[retention/1000,this.config.vcrCompletionReconcileBatch ?? 50]);
     this.counters.pruned+=Number(pruned?.rowCount ?? 0);
     return {reconciled,...await this.deliver()};
   }

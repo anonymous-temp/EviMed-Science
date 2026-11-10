@@ -27,7 +27,7 @@
  * @module agentMemoryBoard
  */
 
-import { cleanMethodDisplay } from "@evimed/domain";
+import { cleanMethodDisplay, privateByDefault } from "@evimed/domain";
 
 import { bodyVersionOf, effectiveStatusReason, methodStepsOf } from "./learningService.mjs";
 import { filterCapturedMessage } from "./memoryGateway.mjs";
@@ -181,8 +181,8 @@ export async function memoryBoard({ memorySettings, nativeMemory = null, learnin
   }
   const settings = await memorySettings.settings(user.id);
   if (!nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
-  const all = (await nativeMemory.listRecords(user.id, { statuses: ["active", "pending", "superseded", "archived"], pageSize: 100 }))
-    .filter((/** @type {any} */ record) => record.kind !== "run_summary" && (!projectId || (record.scope === "project" && record.scopeId === projectId)));
+  const all = (await nativeMemory.listRecords(user.id, { statuses: ["active", "pending", "superseded", "archived"], pageSize: 100, allowRecord: (record) => !privateByDefault(record) }))
+    .filter((/** @type {any} */ record) => !privateByDefault(record) && record.kind !== "run_summary" && (!projectId || (record.scope === "project" && record.scopeId === projectId)));
   const row = (/** @type {any} */ record) => recordRow(record);
 
   // What waits for the person: the notes and episodes an outside agent proposed (`/note`, `/episodes`), which are capsule candidates.
@@ -191,7 +191,7 @@ export async function memoryBoard({ memorySettings, nativeMemory = null, learnin
   if (capsules?.documents) {
     const notes = await capsules.documents.list(user.id, "fact", { limit: 50, filter: { status: "candidate" } });
     for (const note of notes.items ?? []) {
-      if (note.payload?.transfer || (projectId && note.projectId !== projectId)) continue;
+      if (privateByDefault(note) || note.payload?.transfer || (projectId && note.projectId !== projectId)) continue;
       const admission = await nativeMemory.overlay.admission(user.id, note.id, note.revision);
       if (admission?.state === "completed") continue;
       pending.push({ ...(admission ? { admission: { state: admission.state, taskId: admission.taskId, recordIds: admission.recordIds } } : {}), type: "note", id: note.id, capsuleId: note.payload.capsuleId, kind: note.payload.factKind, summary: note.payload.content,
@@ -211,7 +211,7 @@ export async function memoryBoard({ memorySettings, nativeMemory = null, learnin
   // 「最近变化」: what changed by itself, newest first, each with the act that
   // takes it back.
   const since = new Date(nowMs - BOARD_RECENT_DAYS * DAY_MS).toISOString();
-  const recordChanges = (await nativeMemory.changes(user.id, { since, limit: 20 })).filter((/** @type {any} */ change) => !projectId || all.some((record) => record.id === change.id)).map((/** @type {any} */ change) => ({
+  const recordChanges = (await nativeMemory.changes(user.id, { since, limit: 20 })).filter((/** @type {any} */ change) => !privateByDefault(change) && (!projectId || all.some((record) => record.id === change.id))).map((/** @type {any} */ change) => ({
     type: "record", recordId: change.id, kind: change.kind, change: change.change, summary: change.summary, at: change.changedAt,
     undo: { action: "undo", path: `records/${encodeURIComponent(change.id)}/undo`, expectedVersion: change.version },
   }));
@@ -296,6 +296,15 @@ async function nativeRecordAction(native, user, recordId, action, body) {
 export async function recordAction({ nativeMemory = null }, user, recordId, action, body) {
   if (!NATIVE_RECORD_ID.test(recordId)) throw new HttpError(404, "memory_not_found", "No such memory.");
   if (!nativeMemory?.configured) throw new HttpError(503, "memory_engine_unavailable", "The memory service is unavailable.");
+  // Resolve the target itself rather than relying on a bounded page. Undo may name a file the engine no longer holds.
+  const existing = await nativeMemory.getRecord(user.id, recordId).catch((error) => {
+    if (error?.code !== "memory_not_found") throw error;
+    return null;
+  });
+  const historical = !existing && nativeMemory.forgotten ? (await nativeMemory.forgotten(user.id)).find((record) => record.id === recordId) : null;
+  if (privateByDefault(existing ?? historical) || (!existing && !historical)) {
+    throw new HttpError(404, "memory_not_found", "No such memory.");
+  }
   return nativeRecordAction(nativeMemory, user, recordId, action, body);
 }
 
@@ -362,7 +371,7 @@ export async function noteAction({ capsules, memorySettings = null, nativeMemory
   if (!capsules?.documents) throw new HttpError(503, "product_state_unavailable", "Research memory is unavailable.");
   const input = bodyOf(body, ["expectedRevision"]);
   const note = await capsules.documents.get(user.id, "fact", noteId);
-  if (!note || note.payload?.status !== "candidate" || note.payload?.transfer) throw new HttpError(404, "note_not_found", "No such proposed note.");
+  if (!note || privateByDefault(note) || note.payload?.status !== "candidate" || note.payload?.transfer) throw new HttpError(404, "note_not_found", "No such proposed note.");
   if (!["confirm", "reject"].includes(action)) throw new HttpError(404, "not_found", "No such note action.");
   const revision = positive(input.expectedRevision, "expectedRevision");
   if (note.revision !== revision) throw new HttpError(409, "product_revision_conflict", "This candidate changed since it was read.");

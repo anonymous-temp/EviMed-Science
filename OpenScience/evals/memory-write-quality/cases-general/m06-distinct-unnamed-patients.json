@@ -1,0 +1,24 @@
+{
+  "id": "m06-distinct-unnamed-patients",
+  "class": "uncertain-person-identity-stays-separate",
+  "observedIn": "Synthetic development counterexample added on 2026-11-05 after the frozen candidate replay; no real person or confirmation question is used.",
+  "expected": "Two explicitly different unnamed patients share an age and description. Keep separate person files and retain each stated weight and allergy; neither patient is the account owner.",
+  "decidable": true,
+  "replay": {
+    "synthetic": true,
+    "projectId": "default",
+    "seed": {
+      "messages": [
+        { "id": "u1", "role": "user", "text": "有位58岁男性，体重68.4 kg，对青霉素过敏。帮我按原话列病例要点。" },
+        { "id": "a1", "role": "assistant", "text": "病例原话要点：58岁男性；体重68.4 kg；对青霉素过敏。" }
+      ]
+    },
+    "messages": [
+      { "id": "u1", "role": "user", "text": "另外一位58岁男性，不是刚才那位：体重71.2 kg，对碘过敏。也帮我按原话列要点。" },
+      { "id": "a1", "role": "assistant", "text": "这是另一位患者，原话要点：58岁男性；体重71.2 kg；对碘过敏。" }
+    ]
+  },
+  "expect": { "seedKeeps": ["青霉素"], "requireKinds": { "person": 2 }, "requireTextContains": ["68.4 kg", "71.2 kg", "青霉素", "碘"], "noRecordOfKinds": ["profile"] },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
+}

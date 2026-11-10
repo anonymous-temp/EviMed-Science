@@ -287,6 +287,32 @@ test('the supplemental outlet reaches the actual send with its exact article ver
   } finally {await w.close();}
 });
 
+test('a supplemental plan keeps its fresh-check requirement: it is withdrawn, not sent, once the proof is old; an ordinary plan has none',options,async()=>{
+  const w=await world(fixture,{configured:false});
+  try {
+    const p=await w.project({articles:[{},{}]}),preferred=p.articleIds[0],ordinary=p.articleIds[1];
+    await open().query(`INSERT INTO evimed_geo.media(resource_id,media_type,domain,domain_verified,available,price_cny)
+      SELECT 'a' || lpad(n::text,5,'0'),'website','bulk' || n || '.example.org',true,true,100 FROM generate_series(1,5001) n`);
+    await open().query(`INSERT INTO evimed_geo.media(resource_id,media_type,domain,domain_verified,available,price_cny,flags)
+      VALUES('zz-preferred','website','zz-preferred.example.org',true,true,100,'{"domainCheck":"ok","domainCheckedAt":"2026-09-24T00:00:00.000Z"}')`);
+    await syntheticDomainProof('zz-preferred','example.org','zz-preferred.example.org');
+    await w.fixture.seed.source({geoProjectId:p.id,domain:'zz-preferred.example.org',layer:'coverage',icpMatches:true,newsIndexed:true,medicalVertical:true});
+    const deps={...w.deps,placementChoices:async()=>({skippedArticleIds:new Set(),preferredByArticle:new Map([[preferred,['zz-preferred.example.org']]])})};
+    await tickOrders(deps);
+    const rows=await w.fixture.store.listOrders({geoProjectId:p.id,articleIds:p.articleIds,limit:10});
+    const supplemental=rows.find(row=>row.articleId===preferred),plain=rows.find(row=>row.articleId===ordinary);
+    assert.equal(supplemental.resourceId,'zz-preferred');assert.equal(supplemental.domainFreshRequired,true);
+    assert.equal(plain.domainFreshRequired,false,'a ranked-catalogue plan has no extra requirement');
+    // The proof ages while the plan waits (a later send, a restart): the requirement still holds and the plan is withdrawn.
+    await open().query(`UPDATE evimed_geo.media SET flags=flags || '{"domainCheckedAt":"2026-08-01T00:00:00.000Z"}'::jsonb WHERE resource_id='zz-preferred'`);
+    const after=await tickOrders({...w.deps,placementChoices:async()=>({skippedArticleIds:new Set(),preferredByArticle:new Map()})});
+    assert.ok(after.withdrawn>=1);
+    const later=await w.fixture.store.listOrders({geoProjectId:p.id,articleIds:p.articleIds,limit:10});
+    assert.equal(later.find(row=>row.id===supplemental.id).state,'cancelled');
+    assert.equal(later.find(row=>row.id===plain.id).state,'planned');
+  } finally {await w.close();}
+});
+
 test('preferred lookup overflow fails closed without creating an order',options,async()=>{
   const w=await world(fixture,{configured:false});
   try {

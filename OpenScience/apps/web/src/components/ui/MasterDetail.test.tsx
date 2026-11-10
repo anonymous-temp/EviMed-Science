@@ -42,11 +42,11 @@ describe("MasterDetail", () => {
 
   it("swaps the record for the list instead where the record needs the whole width (a conversation)", () => {
     width = 700;
-    const { container, rerender } = render(<MasterDetail narrow="swap" list={list} detail={detail} selected={false} listLabel="任务列表" detailLabel="任务" modeAttribute="data-autopilot-layout" />);
-    expect(container.querySelector("[data-autopilot-layout]")).toHaveAttribute("data-autopilot-layout", "single");
+    const { container, rerender } = render(<MasterDetail narrow="swap" list={list} detail={detail} selected={false} listLabel="任务列表" detailLabel="任务" modeAttribute="data-split-layout" />);
+    expect(container.querySelector("[data-split-layout]")).toHaveAttribute("data-split-layout", "single");
     expect(screen.getByRole("region", { name: "任务列表" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "任务" })).toBeNull();
-    rerender(<MasterDetail narrow="swap" list={list} detail={detail} selected listLabel="任务列表" detailLabel="任务" modeAttribute="data-autopilot-layout" />);
+    rerender(<MasterDetail narrow="swap" list={list} detail={detail} selected listLabel="任务列表" detailLabel="任务" modeAttribute="data-split-layout" />);
     expect(screen.queryByRole("region", { name: "任务列表" })).toBeNull();
     expect(screen.getByRole("region", { name: "任务" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();

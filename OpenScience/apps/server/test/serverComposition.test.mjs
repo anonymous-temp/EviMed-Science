@@ -11,7 +11,7 @@
 //
 // What makes this file possible offline is that `createWebApiApp` already takes
 // an injected `databasePool`: with a fake pool the composition root builds its
-// real `CapsuleService`, `UsageLedger`, `NotificationService`, `AutopilotService`
+// real `CapsuleService`, `UsageLedger`, `NotificationService`
 // and `MaintenanceService` over a real `ControlPlaneDatabase`, and `listen()`
 // runs the real startup sequence. No production path is conditional on being
 // under test.
@@ -24,18 +24,15 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { carriesPlatformContext } from "@evimed/domain";
-import { splitEpisodeBudget, verificationIdFor, verificationWorkspacePath } from "../src/autopilotService.mjs";
-import { episodePlacementCounts } from "../src/autopilotEpisodeScope.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
 import { CapsuleTransferService } from "../src/capsuleTransferService.mjs";
 import { DISTILL_TRIGGER, FeedbackEvents, deliverableSubjectId } from "../src/feedbackEvents.mjs";
 import { DISTILLATION_TRIGGERS, buildDistillationInput } from "../src/methodDistillationRuns.mjs";
-import { buildRuntimeLaunchPlan } from "../src/runtimeManager.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { FrontierWorker } from "../src/frontierWorker.mjs";
 import { FRONTIER_PROJECT_ID } from "../src/internalProjects.mjs";
@@ -63,14 +60,6 @@ const RECURRING_SWEEPS = [
     intervalMs: 30_000,
     // `listen()` runs it once directly and once through `startRecurringWork`.
     startupRuns: 2,
-  },
-  {
-    key: "autopilotSchedule",
-    name: "autopilot agenda scheduling",
-    intervalMs: 60_000,
-    startupRuns: 1,
-    // The scheduling pass itself: the stop-work recovery also reads agendas (queued notices, stopped tasks) with the same opening.
-    statement: /SELECT user_id,id FROM evimed_product\.documents WHERE kind='agenda' AND deleted_at IS NULL AND payload->>'status'='active'/,
   },
   {
     key: "notificationDefaults",
@@ -179,6 +168,11 @@ class FakePool extends EventEmitter {
     const sql = oneLine(text);
     this.statements.push(sql);
     this.calls.push({ sql, values: Array.isArray(values) ? values : [] });
+    // The source-deletion ledger's scope of a project (an agent-run listing asks it for the conversations a person deleted).
+    if (sql.startsWith('SELECT u.created_at::text AS account,p.created_at::text AS project FROM evimed_control.users u JOIN evimed_control.projects p ON p.user_id=u.id')) {
+      const owned = values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1]);
+      return { rows: owned ? [{ account: ACCOUNT_CREATED_AT, project: PROJECT_CREATED_AT }] : [], rowCount: owned ? 1 : 0 };
+    }
     if (sql.startsWith('SELECT u.id AS "ownerId",u.created_at::text AS "ownerCreatedAt", p.id AS "projectId",p.created_at::text AS "projectCreatedAt" FROM evimed_control.users u JOIN evimed_control.projects p ON p.user_id=u.id')) {
       const owned = values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1]);
       return { rows: owned ? [{ ownerId: USER_ID, ownerCreatedAt: ACCOUNT_CREATED_AT, projectId: values[1], projectCreatedAt: PROJECT_CREATED_AT }] : [], rowCount: owned ? 1 : 0 };
@@ -196,15 +190,6 @@ class FakePool extends EventEmitter {
     }
     if (/^SELECT \* FROM evimed_product\.documents WHERE user_id=\$1 AND kind=\$2 AND \(deleted_at/.test(sql)) {
       const rows = [...this.documents.values()].filter((row) => row.kind === values[1]);
-      return { rows, rowCount: rows.length };
-    }
-    // The projected list of one agenda's episodes that its own spend is asked about (`AutopilotService.ownRunIds`):
-    // only the fields named, and only the rows the payload filter (`$8`) matches.
-    if (/^SELECT user_id,kind,id,project_id,jsonb_build_object\(.*\) AS payload,revision,created_at,updated_at,deleted_at FROM evimed_product\.documents WHERE user_id=\$1 AND kind=\$2 AND \(deleted_at/.test(sql)) {
-      const filter = JSON.parse(values[7]);
-      const rows = [...this.documents.values()].filter((row) => row.kind === values[1]
-        && Object.entries(filter).every(([key, value]) => row.payload[key] === value))
-        .map((row) => ({ ...row, payload: { agendaId: row.payload.agendaId } }));
       return { rows, rowCount: rows.length };
     }
     // Everything below is what the feedback loop needs and nothing else needs:
@@ -375,12 +360,12 @@ class FakePool extends EventEmitter {
     if (/^SELECT 1 FROM evimed_control\.projects WHERE user_id = \$1 AND id = \$2 FOR UPDATE/.test(sql)) {
       return values[0] === USER_ID && values[1] === PROJECT_ID ? { rows: [{ "?column?": 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
-    if (/^SELECT p\.id, p\.name, p\.active_workspace, p\.quota_bytes, p\.archived_at, u\.created_at::text AS account_created_at FROM evimed_control\.projects p JOIN evimed_control\.users u ON u\.id=p\.user_id WHERE p\.user_id = \$1 AND p\.id = \$2/.test(sql)
+    if (/^SELECT p\.id, p\.name, p\.active_workspace, p\.quota_bytes, p\.archived_at, u\.created_at::text AS account_created_at, p\.created_at::text AS project_created_at FROM evimed_control\.projects p JOIN evimed_control\.users u ON u\.id=p\.user_id WHERE p\.user_id = \$1 AND p\.id = \$2/.test(sql)
       || /^SELECT id, name, active_workspace, quota_bytes(?:, archived_at)? FROM evimed_control\.projects/.test(sql)) {
       // The frontier feed's internal project, which its worker finds under
       // the operator account before its first batch.
       return values[0] === USER_ID && [PROJECT_ID, FRONTIER_PROJECT_ID].includes(values[1])
-        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null, created_at: PROJECT_CREATED_AT, account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
+        ? { rows: [{ id: values[1], name: "Composed project", active_workspace: "", quota_bytes: 1_000_000_000, archived_at: null, created_at: PROJECT_CREATED_AT, project_created_at: PROJECT_CREATED_AT, account_created_at: ACCOUNT_CREATED_AT }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
     if (/^SELECT request_id,requested_at,expires_at(?:,durable_hold)? FROM evimed_product\.maintenance_lease/.test(sql)) {
@@ -550,7 +535,7 @@ async function composedApp(t, overrides = {}, { beforeListen = null } = {}) {
    *  when a second claimer appeared on the product job queue (the memory-index
    *  drain, 2026-09-16): the set of armed intervals changed, the order they are
    *  fired in changed with it, and capsule cleanup started being credited to
-   *  the autopilot's timer. The race was always there; one more timer made it
+   *  another timer. The race was always there; one more timer made it
    *  reproducible. */
   const settle = async () => {
     let previous = JSON.stringify(evidence());
@@ -678,9 +663,7 @@ test("the reranker and the index strictness reach both recall paths", async (t) 
 });
 
 test("startup arms every recurring sweep, and each timer really drives its own sweep", async (t) => {
-  // The production composition: agenda scheduling is armed only where scheduled tasks are on (OPEN_SCIENCE_AUTOPILOT_ENABLED,
-  // true in every hosted deployment), and the test below holds that it is not armed where they are off.
-  const fixture = await composedApp(t, { autopilotEnabled: true });
+  const fixture = await composedApp(t, {});
   const startup = fixture.evidence();
 
   for (const sweep of RECURRING_SWEEPS) {
@@ -710,17 +693,8 @@ test("startup arms the retry of unconfirmed container removals, and its timer dr
   assert.equal(passes >= 1, true, "no timer at the retry cadence runs the manager's pass");
 });
 
-test("with scheduled tasks off, startup never runs agenda scheduling and arms no timer that drives it", async (t) => {
-  const fixture = await composedApp(t, { autopilotEnabled: false });
-  const scheduling = RECURRING_SWEEPS.find((sweep) => sweep.key === "autopilotSchedule");
-  assert.ok(scheduling);
-  assert.equal(fixture.evidence()[scheduling.key] ?? 0, 0, "a deployment with scheduled tasks off still scheduled agendas at startup");
-  assert.equal(((await fixture.drivers()).get(scheduling.key) ?? []).length, 0, "a timer drives agenda scheduling although scheduled tasks are off");
-});
-
 for (const managedBrowserEnabled of [false, true]) test(`a maintenance pause clears every recurring timer and reopening re-arms them (managed browser=${managedBrowserEnabled})`, async (t) => {
   const fixture = await composedApp(t, {
-    autopilotEnabled: true,
     managedBrowserEnabled,
     managedBrowserCdpUrl: "http://127.0.0.1:9222",
     edgeProxyUrl: "https://proxy.example.org",
@@ -804,578 +778,6 @@ test("close() leaves no interval running", async (t) => {
   );
 });
 
-test("the composed autopilot worker asks the queue for verification work and can run it", async (t) => {
-  // Proactive research is off outside production, so the composition under test
-  // is the production one: `autopilotEnabled` is the only thing this fixture
-  // changes, and everything it observes is what a hosted deployment builds.
-  const fixture = await composedApp(t, { autopilotEnabled: true });
-
-  assert.ok(fixture.app.autopilotWorker, "a production composition builds the autopilot worker");
-  assert.deepEqual(fixture.app.autopilotWorker.kinds, ["episode", "verify"],
-    "a worker that never claims `verify` leaves every second opinion queued forever");
-
-  // Not "a function is present": the closure the composition root built reaches
-  // the real account store, which is what a placeholder would not.
-  await assert.rejects(() => fixture.app.autopilotWorker.dispatchVerification({
-    userId: "nobody-composed", projectId: PROJECT_ID, agendaId: "agenda-one", episodeId: "episode-one",
-    verificationId: "episode-one-v0", claimId: "claim-one", statement: "A finding",
-    sources: ["doi:10.1000/one"], budgetCny: 1,
-  }), { code: "autopilot_account_unavailable" });
-
-  // And the seam that lets a digest decision become memory: the service holds
-  // the same CapsuleService the runtime manager mounts methods from.
-  assert.ok(fixture.app.capsuleService instanceof CapsuleService);
-  assert.equal(fixture.app.autopilotService.capsules, fixture.app.capsuleService,
-    "autopilot must promote decisions through the composition root's capsule service");
-  assert.equal(fixture.app.autopilotService.notifications, fixture.app.notificationService,
-    "a refuted adoption raises its question through the composed inbox");
-
-  // The claim actually reached the queue, asking for both kinds. The kinds ride
-  // as a bound parameter, so this reads the parameter rather than the SQL text.
-  const claimed = await waitFor(async () => fixture.pool.calls.some((call) =>
-    /^WITH exhausted AS \( SELECT id FROM evimed_product\.jobs/.test(call.sql)
-    && Array.isArray(call.values[0]) && call.values[0].includes("verify")));
-  assert.ok(claimed, "the composed worker never asked the job queue for verification work");
-  // Two workers claim from this queue now — the memory-index worker drains the
-  // rows a `builtin` deployment will never index (2026-09-16, M5) — so the
-  // autopilot's claim is selected by the kinds it asks for rather than by being
-  // the only one on the table.
-  const claim = fixture.pool.calls.find((call) => /^WITH exhausted AS \( SELECT id FROM evimed_product\.jobs/.test(call.sql)
-    && Array.isArray(call.values[0]) && call.values[0].includes("verify"));
-  assert.deepEqual(claim.values[0], ["episode", "verify"]);
-
-  const drain = fixture.pool.calls.find((call) => /^WITH exhausted AS \( SELECT id FROM evimed_product\.jobs/.test(call.sql)
-    && Array.isArray(call.values[0]) && call.values[0].includes("memory-index"));
-  assert.deepEqual(drain?.values[0], ["memory-index"],
-    "with no index provider composed, nothing else would ever claim these and they accumulate forever (`memory-record-index` is a retired kind: start deletes its rows)");
-});
-
-// ---------------------------------------------------------------------------
-// The return half of the verification loop.
-//
-// The outbound half -- worker kinds, the dispatch closure, the capsule seam --
-// was composed and covered while the fold that reads a verdict back was keyed
-// on `run.effectiveRouteReason`, a field `AgentRunStore.dispatch` overwrites
-// with "session-binding" for every specialist-mode session. Everything was
-// tested and nothing ever ran. Both tests below therefore drive the composed
-// closures with the run shape production actually records.
-// ---------------------------------------------------------------------------
-
-const EPISODE_ID = `episode-${"a1b2c3d4".repeat(4)}`;
-const VERIFICATION_ID = verificationIdFor(EPISODE_ID, 0);
-const REPORT = "reports/evidence.md";
-const REPORT_BODY = "REPORT-BODY-NO-VERIFIER-MAY-SEE";
-
-/** The agenda, episode and digest one queued verification points at. */
-function verificationFixtureRows(episodeStart = false) {
-  const claim = {
-    id: "claim-one", statement: "SGLT2 抑制剂降低心衰再入院 12%。", type: "direct", tier: "gated",
-    sources: ["doi:10.1000/one"], effect: { measure: "risk-ratio", value: "0.74" },
-    provenance: { episodeId: EPISODE_ID, artifact: REPORT },
-    verification: { status: "queued", id: VERIFICATION_ID },
-  };
-  return [
-    // `maxEpisodeCny === dailyBudgetCny` is the configuration the product
-    // ships: an episode is allowed to spend the whole night's allowance.
-    documentRow("agenda", "agenda-verify", { title: "心衰证据追踪", topics: ["heart failure"], taskTypes: ["literature-sentinel"],
-      dailyBudgetCny: 8, weeklyBudgetCny: 80, maxEpisodeCny: 8, enabled: true, status: "active", outcomes: [] }),
-    documentRow("episode", EPISODE_ID, { agendaId: "agenda-verify", status: episodeStart ? "queued" : "merged", runId: episodeStart ? null : "run-episode",
-      digestId: episodeStart ? null : "digest-verify", budgetCny: 6, verificationBudgetCny: 0.67, claims: [claim] }),
-    documentRow("digest", "digest-verify", { agendaId: "agenda-verify", date: "2026-09-06", costCny: 3,
-      headlines: [], leads: [claim], decisions: [] }),
-    // The episode is recent: the agenda's own spend looks back a week, and an episode older than that has none inside it.
-  ].map(row => ({ ...row, project_id: PROJECT_ID, ...(row.kind === "episode" ? { created_at: new Date() } : {}) }));
-}
-
-test("a verification runs in a workspace that does not contain the report it is checking", async (t) => {
-  const fixture = await composedApp(t, { autopilotEnabled: true,
-    modelGatewaySigningSecret: randomBytes(32).toString("hex") });
-  for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
-
-  const user = await fixture.app.store.userById(USER_ID);
-  assert.equal(user.accountCreatedAt, ACCOUNT_CREATED_AT, "the current-user fixture preserves the database account epoch");
-  const project = await fixture.app.store.requireProject(user, PROJECT_ID);
-  // The episode's own report, where the episode wrote it.
-  await mkdir(path.join(project.workspaceDir, "reports"), { recursive: true });
-  await writeFile(path.join(project.workspaceDir, REPORT), REPORT_BODY, "utf8");
-
-  // The three seams below the unit under test, recorded rather than run: what
-  // is being proved is which project the composed closure hands them.
-  /** @type {any[]} */ const reserved = [];
-  /** @type {any[]} */ const dispatched = [];
-  /** @type {any[]} */ const prompts = [];
-  fixture.app.runtimeManager.reserveBoundedRuntimeSession = async (scoped, scope) => {
-    reserved.push({ project: scoped, scope });
-    return { id: "session-verify", kernel: "dsh" };
-  };
-  fixture.app.runtimeManager.dispatchPrompt = async (scoped, sessionId, request) => {
-    prompts.push({ project: scoped, sessionId, request });
-    return { accepted: true };
-  };
-  fixture.app.agentRuns.dispatch = async (scoped, input, sendPrompt) => {
-    dispatched.push({ project: scoped, input });
-    await sendPrompt({ sessionId: input.sessionId }, { id: "run-verify", kernelRequestIds: [] });
-    return { id: "run-verify", status: "running" };
-  };
-
-  const result = await fixture.app.autopilotWorker.dispatchVerification({
-    userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID,
-    digestId: "digest-verify", verificationId: VERIFICATION_ID, claimId: "claim-one",
-    statement: "SGLT2 抑制剂降低心衰再入院 12%。", sources: ["doi:10.1000/one"],
-    effect: { measure: "risk-ratio", value: "0.74" }, artifact: REPORT, budgetCny: 0.67,
-  });
-  assert.equal(result.runId, "run-verify");
-
-  // One workspace, and it is not the episode's. That is what the composed
-  // closure hands its three seams; what a container is given is the launch
-  // plan's business and is asserted below, because these three could be right
-  // while the plan mounted something else entirely -- and were.
-  const scratch = path.join(project.baseDir, verificationWorkspacePath(VERIFICATION_ID));
-  for (const seen of [reserved[0].project, dispatched[0].project, prompts[0].project]) {
-    assert.equal(seen.workspaceDir, scratch, "the verification must not run in the workspace it is checking");
-  }
-  assert.equal(await readFile(path.join(project.workspaceDir, REPORT), "utf8"), REPORT_BODY,
-    "the episode's report is still where it was");
-  await assert.rejects(() => readFile(path.join(scratch, REPORT), "utf8"), { code: "ENOENT" },
-    "the report must not be reachable from the verification workspace");
-  // What the container is actually given, read off a real launch plan instead of
-  // off the argument the closure passed. The three assertions above were true
-  // for the whole time the plan mounted the episode's own runtime root beside
-  // this workspace, so only the plan can answer what a verifier can open.
-  //
-  // Volume-backed, as the shipped stack is (`deploy/web/docker-compose.yml` sets
-  // OPEN_SCIENCE_RUNTIME_DATA_VOLUME): with a bind mount the control socket for
-  // a project this deep passes the 108-byte `sun_path` limit and no plan builds.
-  const planConfig = { ...fixture.app.config, runtimeSandboxMode: "docker",
-    runtimeDataVolume: "evimed-composition-data" };
-  const subpath = (target) => path.relative(planConfig.dataDir, target).split(path.sep).join("/");
-  const plan = buildRuntimeLaunchPlan(planConfig, reserved[0].project, 49152);
-  const mounts = new Map(plan.args
-    .filter((arg) => typeof arg === "string" && arg.startsWith("type=volume,"))
-    .map((arg) => [arg.match(/,dst=([^,]+)/)?.[1], arg]));
-  assert.equal(
-    mounts.get("/workspace"),
-    `type=volume,src=evimed-composition-data,dst=/workspace,volume-subpath=${subpath(scratch)}`,
-    "the container's /workspace must be the verification's own scratch directory",
-  );
-  const mountedSubpaths = [...mounts.values()].map((mount) => mount.slice(mount.indexOf("volume-subpath=") + 15));
-  assert.equal(mountedSubpaths.includes(subpath(project.workspaceDir)), false,
-    "no mount may name the workspace the episode wrote its report into");
-
-  // `/runtime` is NOT scoped to the verification, and this is the fact that
-  // decides it may not be: the privileged controller rebuilds the project from
-  // {userId, projectId, activeWorkspace} alone and derives `<rootDir>/runtime`
-  // itself, while the control plane writes this run's DSH profile and
-  // credentials into the root ITS plan names. Scoping one side alone gives the
-  // container a profile nobody wrote for it. So the verifier does share the
-  // episode's DSH home -- `verificationRunProject` says so in full -- and this
-  // expectation moves only together with the controller protocol.
-  const runtimeRoot = path.join(project.runtimeDir, "container-runtime");
-  assert.equal(
-    mounts.get("/runtime"),
-    `type=volume,src=evimed-composition-data,dst=/runtime,volume-subpath=${subpath(runtimeRoot)}`,
-    "the two launch-plan builders must name the same runtime root",
-  );
-  assert.equal(plan.dshHomeDir, path.join(runtimeRoot, "dsh-home"),
-    "the profile the control plane writes must sit inside the runtime root the container mounts");
-
-  // And the prompt: the claim and its sources, delimited as data, with no path
-  // into the report and nothing of the report in it.
-  const text = String(prompts[0].request.text);
-  assert.equal(text.includes(REPORT), false, "the artifact path reached the verifier's prompt");
-  assert.equal(text.includes(REPORT_BODY), false);
-  assert.match(text, /<evimed-claim id="claim-one">/);
-  assert.match(text, /<evimed-claim-source index="1">doi:10\.1000\/one<\/evimed-claim-source>/);
-  assert.match(text, /data written by the run you are checking/);
-  assert.equal(dispatched[0].input.dispatchId, VERIFICATION_ID);
-  assert.equal(reserved[0].scope.runId, VERIFICATION_ID);
-  // The scope it is signed with: the account's day and week (no cap here, so a figure no run reaches) and the share the
-  // episode held back for it. The agenda's own ¥8 a day and ¥80 a week are not in it: the gateway would compare them with
-  // everything the account spent.
-  assert.deepEqual(reserved[0].scope, { runId: VERIFICATION_ID, dailyLimit: 1_000_000, weeklyLimit: 1_000_000, runLimit: 0.67, reason: "scheduled-task" });
-});
-
-test("a verification that could not be dispatched leaves no scratch directory behind", async (t) => {
-  const fixture = await composedApp(t, { autopilotEnabled: true,
-    modelGatewaySigningSecret: randomBytes(32).toString("hex") });
-  for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
-
-  const user = await fixture.app.store.userById(USER_ID);
-  const project = await fixture.app.store.requireProject(user, PROJECT_ID);
-  const scratch = path.join(project.baseDir, verificationWorkspacePath(VERIFICATION_ID));
-
-  // The failure a nightly agenda really hits -- the project's runtime is busy
-  // with something else -- taken at the point where the scratch directory
-  // already exists and no completion fold will ever be called for it.
-  let existedWhenDispatchFailed = false;
-  fixture.app.runtimeManager.reserveBoundedRuntimeSession = async () => {
-    existedWhenDispatchFailed = (await stat(scratch)).isDirectory();
-    throw Object.assign(new Error("The project runtime is already in use."), { status: 409, code: "runtime_busy" });
-  };
-
-  await assert.rejects(() => fixture.app.autopilotWorker.dispatchVerification({
-    userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID,
-    digestId: "digest-verify", verificationId: VERIFICATION_ID, claimId: "claim-one",
-    statement: "SGLT2 抑制剂降低心衰再入院 12%。", sources: ["doi:10.1000/one"],
-    effect: { measure: "risk-ratio", value: "0.74" }, artifact: REPORT, budgetCny: 0.67,
-  }), { code: "runtime_busy" }, "the dispatch failure is the one that must travel");
-
-  assert.equal(existedWhenDispatchFailed, true, "the directory the sweep has to remove was never created");
-  await assert.rejects(() => stat(scratch), { code: "ENOENT" },
-    "a dispatch that failed must not leave its scratch directory in the tree the quota walks");
-});
-
-test("a finished verification is folded into its claim, identified by the id the dispatch layer cannot rewrite", async (t) => {
-  const fixture = await composedApp(t, { autopilotEnabled: true });
-  for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
-
-  const user = await fixture.app.store.userById(USER_ID);
-  const project = await fixture.app.store.requireProject(user, PROJECT_ID);
-  const scratch = path.join(project.baseDir, verificationWorkspacePath(VERIFICATION_ID));
-  await mkdir(scratch, { recursive: true });
-  await writeFile(path.join(scratch, "verification.json"), JSON.stringify({
-    schemaVersion: 1, verdict: "stands", numbersReproduced: true,
-    recomputed: { measure: "risk-ratio", value: "0.74" }, checkedSources: ["doi:10.1000/one"],
-    reason: "两项来源均支持该效应量。",
-  }), "utf8");
-
-  // The run shape production records. `effectiveRouteReason` is "session-binding"
-  // because `AgentRunStore.dispatch` substitutes it for every specialist-mode
-  // session -- which is exactly why the fold may not be keyed on it.
-  await fixture.app.agentRuns.onRunFinished(project, {
-    id: "run-verify", dispatchId: VERIFICATION_ID, sessionId: "session-verify", status: "succeeded",
-    artifacts: ["verification.json"], effectiveRouteReason: "session-binding", effectiveAgentId: "open-domain-answer",
-  });
-
-  const claim = fixture.pool.documents.get(`episode:${EPISODE_ID}`).payload.claims[0];
-  assert.equal(claim.verification.status, "recorded", "the verdict never reached the claim");
-  assert.equal(claim.verification.runId, "run-verify");
-  assert.equal(claim.refutation, "stands");
-  assert.equal(claim.tier, "reproduced", "a checked reproduction is what the top tier is for");
-  const digest = fixture.pool.documents.get("digest:digest-verify").payload;
-  assert.deepEqual(digest.headlines.map((item) => item.id), ["claim-one"],
-    "a reproduced claim leads the digest it was published in");
-  assert.deepEqual(digest.leads, []);
-
-  // And the scratch is gone -- after the verdict was taken out of it, which the
-  // assertions above are the evidence of. It lived under the project's
-  // workspace root, which is the tree `assertProjectCapacity` and the runtime
-  // quota monitor both walk, and nothing used to remove it: a nightly agenda
-  // grew the researcher's own quota by one directory per verification forever.
-  await assert.rejects(() => stat(scratch), { code: "ENOENT" },
-    "a folded verification must not leave its scratch directory behind");
-});
-
-test("a deployment whose controller cannot carry the scratch workspace folds the same verdict without the top tier", async (t) => {
-  // Same run, same verification.json, same everything — except that this
-  // deployment reaches its runtime through the privileged controller, whose
-  // start payload carries only {userId, projectId, activeWorkspace}. The
-  // scratch workspace the control plane scoped never reaches the container, so
-  // the verifier read the report it was checking. The composition root is what
-  // knows that, and this asserts it actually tells the fold: with the flag not
-  // reaching `recordVerification`, the claim below reads "reproduced" and this
-  // whole deployment ships self-graded headlines.
-  const fixture = await composedApp(t, { autopilotEnabled: true, runtimeControllerMode: "socket" });
-  for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
-
-  const user = await fixture.app.store.userById(USER_ID);
-  const project = await fixture.app.store.requireProject(user, PROJECT_ID);
-  const scratch = path.join(project.baseDir, verificationWorkspacePath(VERIFICATION_ID));
-  await mkdir(scratch, { recursive: true });
-  await writeFile(path.join(scratch, "verification.json"), JSON.stringify({
-    schemaVersion: 1, verdict: "stands", numbersReproduced: true,
-    recomputed: { measure: "risk-ratio", value: "0.74" }, checkedSources: ["doi:10.1000/one"],
-    reason: "两项来源均支持该效应量。",
-  }), "utf8");
-
-  await fixture.app.agentRuns.onRunFinished(project, {
-    id: "run-verify", dispatchId: VERIFICATION_ID, sessionId: "session-verify", status: "succeeded",
-    artifacts: ["verification.json"], effectiveRouteReason: "session-binding", effectiveAgentId: "open-domain-answer",
-  });
-
-  const claim = fixture.pool.documents.get(`episode:${EPISODE_ID}`).payload.claims[0];
-  assert.equal(claim.verification.status, "recorded", "the verdict is still folded; only the promotion is refused");
-  assert.equal(claim.refutation, "stands");
-  assert.equal(claim.verification.isolationEnforced, false, "the composition root must tell the fold what its deployment can enforce");
-  assert.equal(claim.tier, "gated", "an unenforced separation may hold a claim and may not raise it");
-  assert.equal(fixture.pool.documents.get("digest:digest-verify").payload.headlines[0].tier, "gated");
-});
-
-test("a verification whose scratch cannot be removed still folds, and the sweep never follows a link out of the project", async (t) => {
-  const fixture = await composedApp(t, { autopilotEnabled: true });
-  for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
-
-  const user = await fixture.app.store.userById(USER_ID);
-  const project = await fixture.app.store.requireProject(user, PROJECT_ID);
-
-  // The scratch root, replaced by a link to a directory outside the project --
-  // the shape a compromised run leaves behind to have the control plane read,
-  // and then delete, something that was never its own. The verdict on the far
-  // side is well-formed, so nothing but the link decides the outcome.
-  const outside = await mkdtemp(path.join(tmpdir(), "evimed-outside-"));
-  t.after(() => rm(outside, { recursive: true, force: true }));
-  await mkdir(path.join(outside, VERIFICATION_ID), { recursive: true });
-  await writeFile(path.join(outside, VERIFICATION_ID, "verification.json"), JSON.stringify({
-    schemaVersion: 1, verdict: "stands", numbersReproduced: true,
-    recomputed: { measure: "risk-ratio", value: "0.74" }, checkedSources: ["doi:10.1000/one"],
-    reason: "项目之外的目录里的结论。",
-  }), "utf8");
-  const link = path.join(project.baseDir, ".evimed-verification");
-  await symlink(outside, link, "dir");
-
-  // The fold runs to completion: recording a verification is what the episode
-  // paid for, and neither the read nor the removal is allowed to take it down.
-  await fixture.app.agentRuns.onRunFinished(project, {
-    id: "run-verify", dispatchId: VERIFICATION_ID, sessionId: "session-verify", status: "succeeded",
-    artifacts: ["verification.json"], effectiveRouteReason: "session-binding", effectiveAgentId: "open-domain-answer",
-  });
-
-  const claim = fixture.pool.documents.get(`episode:${EPISODE_ID}`).payload.claims[0];
-  assert.equal(claim.verification.status, "unavailable", "the fold must still have recorded the verification");
-  assert.equal(claim.verification.code, "verification_result_unreadable",
-    "a verdict reached through a link out of the project is not a verdict");
-  assert.equal(claim.tier, "gated", "and the claim keeps the tier its own episode's gate gave it");
-
-  // Nothing outside the project was read through, and nothing outside it was
-  // deleted: the link is still a link, and the tree it points at is intact.
-  assert.equal((await lstat(link)).isSymbolicLink(), true, "the sweep must refuse the link, not resolve it");
-  assert.deepEqual((await readdir(outside)).sort(), [VERIFICATION_ID],
-    "the sweep must not delete a directory outside the project");
-  assert.equal(
-    JSON.parse(await readFile(path.join(outside, VERIFICATION_ID, "verification.json"), "utf8")).verdict,
-    "stands",
-    "and must not delete the file inside it either",
-  );
-});
-
-test("an episode that spent everything it was given still leaves its own verifications affordable", async (t) => {
-  // The starvation this splits the budget to prevent: verification spends into
-  // the same rolling 24h window of the TASK's own spend that the episode just
-  // spent into, and the shipped configuration lets one episode have the whole
-  // night. Dispatched at the full nightly budget, an episode that used it
-  // refuses every re-check of its own claims -- the task's budget is spent, and
-  // that refusal is terminal, so the claim would sit at `gated` forever with a
-  // verification nobody could ever run. (The agenda's caps are compared with the
-  // agenda's own runs' spend, found by its episodes' ids: `daySpendCny` is what
-  // those runs settled in the window, never the account's other research.)
-  const fixture = await composedApp(t, { autopilotEnabled: true,
-    modelGatewaySigningSecret: randomBytes(32).toString("hex") });
-  for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
-  fixture.app.runtimeManager.reserveBoundedRuntimeSession = async () => ({ id: "session-verify", kernel: "dsh" });
-  fixture.app.runtimeManager.dispatchPrompt = async () => ({ accepted: true });
-  fixture.app.agentRuns.dispatch = async (scoped, input, sendPrompt) => {
-    await sendPrompt({ sessionId: input.sessionId }, { id: "run-verify", kernelRequestIds: [] });
-    return { id: "run-verify", status: "running" };
-  };
-
-  const night = 8;
-  const split = splitEpisodeBudget(night);
-  const request = {
-    userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID,
-    digestId: "digest-verify", verificationId: VERIFICATION_ID, claimId: "claim-one",
-    statement: "SGLT2 抑制剂降低心衰再入院 12%。", sources: ["doi:10.1000/one"],
-    artifact: REPORT, budgetCny: split.verificationCny,
-  };
-
-  // The episode spent every cent it was dispatched with.
-  fixture.pool.daySpendCny = split.episodeCny;
-  assert.equal((await fixture.app.autopilotWorker.dispatchVerification(request)).runId, "run-verify",
-    "an episode that used its whole budget must not have eaten its own second opinion");
-
-  // And the assertion is not vacuous: at the budget the episode used to be
-  // dispatched with, the same call is refused -- as the task's budget, which is
-  // what is spent, not as the account's.
-  fixture.pool.daySpendCny = night;
-  await assert.rejects(() => fixture.app.autopilotWorker.dispatchVerification(request), { status: 402, code: "autopilot_daily_budget_spent" });
-});
-
-// An episode's run is signed with the account's day and week and its own limit
-// (2026-10-04). The agenda's daily and weekly caps used to be signed in as the
-// gateway's day and week, which the gateway compares with everything the account
-// spent: a researcher's other research refused their scheduled research's every
-// model call. What the task has left of its own caps bounds the run instead.
-test("an episode is signed with the account's day and week and a run limit of what it and its task may spend, never the task's own caps", async (t) => {
-  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
-  // A dispatch binds its run to the episode, so each dispatch below starts from the queued episode again.
-  const seed = () => { for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row); };
-  seed();
-  const { app } = fixture;
-  app.residentProfiles.forDispatch = noProfile;
-  /** @type {any[]} */ const reserved = [];
-  /** @type {any[]} */ const prompts = [];
-  app.runtimeManager.reserveBoundedRuntimeSession = async (/** @type {any} */ _project, /** @type {any} */ scope) => {
-    reserved.push(scope);
-    return { id: "session-episode", kernel: "dsh" };
-  };
-  app.runtimeManager.dispatchPrompt = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ request) => {
-    prompts.push(request);
-    return { accepted: true };
-  };
-  app.researchSessions.put = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ binding) => binding;
-  app.agentRuns.dispatch = async (/** @type {any} */ _project, /** @type {any} */ input, /** @type {any} */ sendPrompt) => {
-    await sendPrompt({ sessionId: input.sessionId }, { id: "run-episode", kernelRequestIds: [] });
-    return { id: "run-episode", status: "running" };
-  };
-  const episode = {
-    userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID, dispatchId: EPISODE_ID,
-    taskType: "literature-sentinel", budgetCny: 6, prompt: "Run the literature-sentinel proactive research episode.",
-    assertDispatchAllowed: async () => {},
-  };
-
-  // The agenda is ¥8 a day and ¥80 a week with a ¥6 episode; its own runs spent ¥3 today. The account's other research is not in
-  // that figure and cannot be: the pool answers the task's own spend, and the account has no cap here.
-  fixture.pool.daySpendCny = 3;
-  assert.equal((await app.autopilotWorker.dispatchEpisode(episode)).runId, "run-episode");
-  assert.deepEqual(reserved[0], { runId: EPISODE_ID, dailyLimit: 1_000_000, weeklyLimit: 1_000_000, runLimit: 5, reason: "scheduled-task" },
-    "the account has no cap, so a figure no run reaches; the run's limit is what the task has left (¥8 less ¥3), the smaller of that and the episode's ¥6");
-  // The scope rides in the run context the socket injects, not in the message the researcher sees (2026-10-08).
-  assert.doesNotMatch(String(prompts[0].text), /evimed-budget-scope|evimed-autopilot-episode/, "the conversation's first message carries neither");
-  const marker = String(prompts[0].system).match(/<evimed-budget-scope>([^<.]+)\./)?.[1];
-  const signed = JSON.parse(Buffer.from(String(marker), "base64url").toString("utf8"));
-  assert.deepEqual([signed.runId, signed.dailyLimit, signed.weeklyLimit, signed.runLimit], [EPISODE_ID, 1_000_000, 1_000_000, 5], "and the same scope is what the gateway is signed with");
-  assert.match(String(prompts[0].system), new RegExp(`<evimed-autopilot-episode>${EPISODE_ID}</evimed-autopilot-episode>`), "with the episode tag the gateway checks it against");
-
-  // Room beyond the episode's own budget: the episode's budget is the limit.
-  reserved.length = 0;
-  seed();
-  fixture.pool.daySpendCny = 0;
-  await app.autopilotWorker.dispatchEpisode(episode);
-  assert.equal(reserved[0].runLimit, 6);
-
-  // The task's own cap spent: the dispatch is refused as the task's, before a runtime is reserved.
-  reserved.length = 0;
-  seed();
-  fixture.pool.daySpendCny = 8;
-  await assert.rejects(() => app.autopilotWorker.dispatchEpisode(episode), { status: 402, code: "autopilot_daily_budget_spent" });
-  assert.equal(reserved.length, 0);
-});
-
-// A scheduled execution shows the researcher their own words and runs where the researcher already is (R13: E-18 server half, E-20).
-function executionHarness(app, { sessionId = "session-episode" } = {}) {
-  /** @type {any[]} */ const reserved = [];
-  /** @type {any[]} */ const prompts = [];
-  /** @type {any[]} */ const dispatches = [];
-  app.residentProfiles.forDispatch = noProfile;
-  app.runtimeManager.reserveBoundedRuntimeSession = async (/** @type {any} */ _project, /** @type {any} */ scope) => {
-    reserved.push(scope);
-    return { id: sessionId, kernel: "dsh" };
-  };
-  app.runtimeManager.dispatchPrompt = async (/** @type {any} */ _project, /** @type {string} */ session, /** @type {any} */ request) => {
-    prompts.push({ session, ...request });
-    return { accepted: true };
-  };
-  app.researchSessions.put = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ binding) => binding;
-  app.agentRuns.dispatch = async (/** @type {any} */ _project, /** @type {any} */ input, /** @type {any} */ sendPrompt) => {
-    dispatches.push(input);
-    await sendPrompt({ sessionId: input.sessionId }, { id: "run-episode", kernelRequestIds: [] });
-    return { id: "run-episode", status: "running" };
-  };
-  return { reserved, prompts, dispatches };
-}
-
-const INSTRUCTION = "每周检索 SGLT2 抑制剂心衰再入院的新证据，只看随机对照试验。";
-const BRIEF = `Run the literature-sentinel proactive research episode for agenda "心衰证据追踪".\nEpisode ID: ${EPISODE_ID}.\nResearcher's original instruction (preserve its scope):\n${INSTRUCTION}\nMaximum episode budget: CNY 6.00.`;
-const episodeRequest = (/** @type {Record<string, any>} */ extra = {}) => ({
-  userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID, dispatchId: EPISODE_ID,
-  taskType: "literature-sentinel", budgetCny: 6, prompt: BRIEF, assertDispatchAllowed: async () => {}, ...extra,
-});
-function seedEpisode(/** @type {any} */ fixture, /** @type {Record<string, any>} */ payload = {}) {
-  for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
-  const row = fixture.pool.documents.get(`episode:${EPISODE_ID}`);
-  row.payload = { ...row.payload, trigger: "manual", instruction: INSTRUCTION, prompt: BRIEF, ...payload };
-}
-
-test("a bounded execution opens with the researcher's own instruction; the brief, the episode tag and the signed scope are the run's context", async (t) => {
-  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
-  seedEpisode(fixture);
-  const { reserved, prompts, dispatches } = executionHarness(fixture.app);
-  const placed = episodePlacementCounts();
-
-  assert.equal((await fixture.app.autopilotWorker.dispatchEpisode(episodeRequest())).runId, "run-episode");
-  assert.equal(episodePlacementCounts().bounded - placed.bounded, 1, "counted by where it ran");
-  assert.equal(reserved.length, 1, "no runtime was open: one is reserved for the execution, as before");
-  assert.equal(prompts[0].text, INSTRUCTION, "the first message is what the researcher wrote, and nothing else");
-  assert.equal(prompts[0].allowBounded, true);
-  assert.equal(dispatches[0].question, INSTRUCTION, "the run is listed and titled by their words");
-  assert.equal(dispatches[0].brief, BRIEF, "and the delivery gate and the run's brief read the whole of what the platform asked");
-  assert.match(String(prompts[0].system), /<evimed-budget-scope>/, "the signed scope is in the run context");
-  assert.ok(String(prompts[0].system).includes(`<evimed-autopilot-brief>\n${BRIEF}\n</evimed-autopilot-brief>`), "and so is the whole brief, in the per-session context a remote runtime receives");
-  const stored = fixture.pool.documents.get(`episode:${EPISODE_ID}`).payload;
-  assert.equal(stored.interactive, false);
-  assert.equal(stored.runLimitCny, 6);
-  assert.equal(stored.status, "running");
-  assert.equal(stored.runId, "run-episode");
-  const agenda = fixture.pool.documents.get("agenda:agenda-verify").payload;
-  assert.match(agenda.sessionId, /^session_/, "the task owns the conversation across executions");
-  assert.equal(stored.sessionId, agenda.sessionId);
-  assert.equal(prompts[0].session, agenda.sessionId);
-  assert.equal(dispatches[0].sessionId, agenda.sessionId);
-});
-
-test("a follow-up execution opens with the note the researcher wrote, and an execution made before the split still opens as it did", async (t) => {
-  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
-  seedEpisode(fixture, { trigger: "follow-up", followUpNote: "再看一下老年人亚组。", replyToEpisodeId: null });
-  const { prompts } = executionHarness(fixture.app);
-  await fixture.app.autopilotWorker.dispatchEpisode(episodeRequest());
-  assert.equal(prompts[0].text, "再看一下老年人亚组。");
-
-  seedEpisode(fixture, { instruction: undefined });
-  await fixture.app.autopilotWorker.dispatchEpisode(episodeRequest());
-  assert.equal(prompts[1].text, BRIEF, "an execution with no recorded instruction shows its brief, which is what it always showed");
-});
-
-test("with the runtime open for the researcher, an execution runs in it: no reserved runtime, no marker, the cap recorded before the prompt exists", async (t) => {
-  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
-  seedEpisode(fixture);
-  const { app } = fixture;
-  const { reserved, prompts, dispatches } = executionHarness(app);
-  const placed = episodePlacementCounts();
-  const project = await app.store.requireProject(await app.store.userById(USER_ID), PROJECT_ID);
-  // The researcher's conversation page is open: the project's runtime is up, and nothing has reserved it. A stand-in the app's own
-  // shutdown must not meet: it is taken away again before the test ends.
-  app.runtimeManager.runtimes.set(app.runtimeManager.key(project), { workspaceDir: project.workspaceDir });
-  /** @type {any} */ let outcome;
-  try { outcome = await app.autopilotWorker.dispatchEpisode(episodeRequest()); }
-  finally { app.runtimeManager.runtimes.delete(app.runtimeManager.key(project)); }
-  assert.equal(outcome.runId, "run-episode");
-  assert.match(outcome.sessionId, /^session_/, "a session of its own, opened in the researcher's runtime");
-  assert.equal(episodePlacementCounts().interactive - placed.interactive, 1, "counted by where it ran");
-  assert.equal(reserved.length, 0, "nothing is reserved, so nothing waits for the runtime to go idle");
-  assert.equal(prompts[0].allowBounded, false, "the project's conversation is not locked out while it runs");
-  assert.equal(prompts[0].text, INSTRUCTION);
-  assert.doesNotMatch(`${prompts[0].text}\n${prompts[0].system}`, /evimed-budget-scope|evimed-autopilot-episode/,
-    "the gateway refuses a marker in an interactive runtime, and one left in the history would cap what the researcher says next");
-  assert.ok(String(prompts[0].system).includes(`<evimed-autopilot-brief>\n${BRIEF}\n</evimed-autopilot-brief>`), "the brief is in the run context all the same");
-  assert.equal(dispatches[0].sessionId, outcome.sessionId);
-  assert.equal(dispatches[0].effectiveRouteReason, "autopilot:literature-sentinel", "the route reason is what the gateway's cap lookup recognises it by");
-  const stored = fixture.pool.documents.get(`episode:${EPISODE_ID}`).payload;
-  assert.equal(stored.interactive, true, "the page can tell it may open the live conversation");
-  assert.equal(stored.runLimitCny, 6, "the cap the gateway holds the execution to");
-  assert.equal(stored.sessionId, outcome.sessionId);
-});
-
-test("an open runtime that is busy with the researcher's own run makes the execution wait minutes, not the runtime's idle window", async (t) => {
-  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
-  seedEpisode(fixture);
-  const { app } = fixture;
-  const { reserved, prompts } = executionHarness(app);
-  const placed = episodePlacementCounts();
-  const project = await app.store.requireProject(await app.store.userById(USER_ID), PROJECT_ID);
-  app.runtimeManager.runtimes.set(app.runtimeManager.key(project), { workspaceDir: project.workspaceDir });
-  app.agentRuns.activeRuns = async () => [{ id: "run-chat", sessionId: "session-chat" }];
-
-  try {
-    await assert.rejects(() => app.autopilotWorker.dispatchEpisode(episodeRequest()), (/** @type {any} */ error) => {
-      assert.equal(error.code, "runtime_busy");
-      assert.equal(error.retryAfterMs, 120_000);
-      return true;
-    });
-  } finally { app.runtimeManager.runtimes.delete(app.runtimeManager.key(project)); }
-  assert.equal(episodePlacementCounts().waiting - placed.waiting, 1, "the wait is counted");
-  assert.equal(reserved.length + prompts.length, 0, "nothing was reserved or sent");
-  assert.equal(fixture.pool.documents.get(`episode:${EPISODE_ID}`).payload.status, "queued", "the execution keeps its place");
-});
-
 // ---------------------------------------------------------------------------
 // The feedback loop, composed.
 //
@@ -1402,7 +804,7 @@ test("the composed feedback ledger queues the distillation exactly one worker cl
   // lesson unqueueable forever. Nothing failed in either worker's own tests,
   // because a claim race between two objects is not visible from inside one of
   // them. Counting the claimers is.
-  const workers = [app.pluginApplyWorker, app.memoryIndexWorker, app.sourceWorker, app.autopilotWorker, app.learningWorker]
+  const workers = [app.pluginApplyWorker, app.memoryIndexWorker, app.sourceWorker, app.learningWorker]
     .filter(Boolean);
   // Every worker declares the kinds it claims, so this is countable at all.
   // Four of the five used to pass an array literal straight into `claim`, which
@@ -1726,13 +1128,13 @@ test("循证 GEO is composed when on, its slot's worker runs with the recurring 
   assert.equal(worker.closed, 1, "close() closes the GEO worker");
 });
 
-// A GEO run is dispatched the way an autopilot episode is — a bounded runtime,
+// A GEO run is dispatched in a bounded runtime,
 // a session bound to the capability, `automated` so the inbox stays quiet —
 // but in the GEO project itself, so it shows under that project; a project
 // whose runtime the researcher has open takes it in that runtime instead; a
 // run already running refuses with `runtime_busy`, which the orchestrator
 // retries next tick.
-test("a GEO run is dispatched like an episode, inside the GEO project, bound to its capability and automated", async (t) => {
+test("a GEO run is dispatched inside the GEO project, bound to its capability and automated", async (t) => {
   const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID],
     modelGatewaySigningSecret: randomBytes(32).toString("hex") });
   const { app } = fixture;
@@ -1829,25 +1231,23 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
   assert.equal(reserved.length, reservedBefore); assert.equal(prompts.length, promptsBefore);
 });
 
-// The 2026-09-26 audit (M-8): a GEO run and an autopilot episode are handed
+// The 2026-09-26 audit (M-8): a GEO run is handed
 // memories at dispatch, exactly as a chat run is, and only the chat paths
 // wrote what was handed into the run ledger. `memory.md` and the usage
 // counter proved the hand-over happened; the ledger — the one record a support
 // question or the 「依据」 panel reads — said nothing. Since review M6 what a
 // dispatch hands over is the researcher's standing profile.
-test("a GEO run and an autopilot episode record what they recalled in the run ledger, as a chat run does", async (t) => {
-  const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID], autopilotEnabled: true,
+test("a GEO run records what it recalled in the run ledger, as a chat run does", async (t) => {
+  const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID],
     modelGatewaySigningSecret: randomBytes(32).toString("hex") });
   const { app } = fixture;
   await app.geo.worker.close();
-  for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
   const recalled = [{ id: "record:pref-1", content: "结论先行，再列证据。", memoryType: "structured", kind: "preference", scope: "user",
     updatedAt: "2026-09-25T00:00:00Z" }];
   app.residentProfiles.forDispatch = profileOf(recalled);
   app.researchSessions.put = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ binding) => binding;
   app.runtimeManager.reserveBoundedRuntimeSession = async () => ({ id: "session-recall", kernel: "dsh" });
   app.runtimeManager.dispatchPrompt = async () => ({ accepted: true });
-  app.autopilotService.markEpisodeDispatched = async () => ({});
   /** @type {{ runId: string, patch: any }[]} */
   const learned = [];
   app.agentRuns.recordLearning = async (/** @type {any} */ _project, /** @type {string} */ runId, /** @type {any} */ patch) => {
@@ -1863,15 +1263,9 @@ test("a GEO run and an autopilot episode record what they recalled in the run le
 
   await app.geo.orchestrator.dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
     dispatchId: "geo-insight-recall", reason: "geo:evidence", brief: "「循证 GEO」自动运行 · 第 1 步（证据）" });
-  await app.autopilotWorker.dispatchEpisode({ userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify",
-    episodeId: EPISODE_ID, dispatchId: "episode-recall", taskType: "literature-sentinel", budgetCny: 2,
-    prompt: "追踪心衰领域的新证据。" });
 
   const expected = [{ id: "record:pref-1", type: "structured", kind: "preference", scope: "user", updatedAt: "2026-09-25T00:00:00Z" }];
-  assert.deepEqual(learned, [
-    { runId: "run-recall-1", patch: { recalledMemories: expected } },
-    { runId: "run-recall-2", patch: { recalledMemories: expected } },
-  ]);
+  assert.deepEqual(learned, [{ runId: "run-recall-1", patch: { recalledMemories: expected } }]);
 
   // Nothing recalled, nothing written: an empty list is not a recall.
   app.residentProfiles.forDispatch = noProfile;
@@ -1899,181 +1293,6 @@ test("循证 GEO off, or on for operators this account is not, is invisible: no 
   const hidden = await fetch(`${base}/api/geo/projects`, { headers });
   assert.equal(hidden.status, 404);
   assert.equal((await hidden.json()).code, "geo_not_enabled");
-});
-
-test("proactive episodes and verifiers check balance and renewed permission before reserving a runtime", async t => {
-  const { EvimedCreditsService } = await import("../src/evimedCreditsService.mjs");
-  const original = EvimedCreditsService.prototype.assertBalanceForStart;
-  t.after(() => { EvimedCreditsService.prototype.assertBalanceForStart = original; });
-  const fixture = await composedApp(t, { autopilotEnabled: true, evimedCreditsEnabled: true,
-    evimedCreditsUrl: "", evimedCreditsBalanceUrl: "", modelGatewaySigningSecret: randomBytes(32).toString("hex") });
-  const { app } = fixture;
-  for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
-  let balance, reserved = 0, permissions = 0;
-  const checked = [];
-  EvimedCreditsService.prototype.assertBalanceForStart = async function (_userId, capabilityId) {
-    checked.push(capabilityId);
-    if (balance instanceof Error) throw balance;
-    return balance;
-  };
-  app.runtimeManager.reserveBoundedRuntimeSession = async () => {
-    reserved += 1;
-    throw Object.assign(new Error("Runtime reservation probe"), { code: "reservation_probe" });
-  };
-  const common = { userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID,
-    budgetCny: 0.67, assertDispatchAllowed: async () => { permissions += 1; } };
-  const episode = { ...common, dispatchId: "balance-episode", taskType: "literature-sentinel", prompt: "Track the prior result." };
-  const verification = { ...common, digestId: "digest-verify", verificationId: VERIFICATION_ID, claimId: "claim-one",
-    statement: "A preserved finding.", sources: ["doi:10.1000/one"], effect: { measure: "risk-ratio", value: "0.74" }, artifact: REPORT };
-  for (const [method, input] of [["dispatchEpisode", episode], ["dispatchVerification", verification]]) {
-    balance = Object.assign(new Error("No balance"), { code: "credits_exhausted", status: 402 });
-    await assert.rejects(app.autopilotWorker[method](input), { code: "credits_exhausted" });
-    assert.equal(reserved, 0, "known insufficient balance cannot reserve any runtime");
-  }
-  assert.equal(checked.length, 2);
-  for (const [method, input] of [["dispatchEpisode", episode], ["dispatchVerification", verification]]) {
-    const before = reserved;
-    balance = { allowed: true, reason: "unavailable" };
-    await assert.rejects(app.autopilotWorker[method]({ ...input, assertDispatchAllowed: async () => {
-      throw Object.assign(new Error("Paused while checking balance"), { code: "autopilot_paused" });
-    } }), { code: "autopilot_paused" });
-    assert.equal(reserved, before, "a pause during the balance check cannot reserve a runtime");
-    await assert.rejects(app.autopilotWorker[method](input), { code: "reservation_probe" });
-  }
-  assert.equal(reserved, 2, "unknown balance retains the existing admission policy");
-  assert.ok(permissions >= 2);
-});
-
-test("a pause after proactive admission rejects an unsent turn and releases only its own runtime", async t => {
-  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
-  const { app } = fixture;
-  let prompts = 0, released = 0, activeScope = EPISODE_ID;
-  app.residentProfiles.forDispatch = noProfile;
-  app.runtimeManager.reserveBoundedRuntimeSession = async () => ({ id: "session-unsent", kernel: "dsh" });
-  app.runtimeManager.boundedRuntimeScope = () => ({ runId: activeScope });
-  app.runtimeManager.boundedRuntimeCleanupTarget = () => ({ runId: activeScope, generation: "generation-one" });
-  app.runtimeManager.endBoundedRuntime = async (_project, id) => { assert.equal(id, EPISODE_ID); released += 1; };
-  app.runtimeManager.dispatchPrompt = async () => { prompts += 1; return { accepted: true }; };
-  app.agentRuns.dispatch = async (_project, input, sendPrompt) => {
-    await sendPrompt({ sessionId: input.sessionId }, { id: "run-unsent", kernelRequestIds: [] });
-    return { id: "run-unsent", status: "running" };
-  };
-  for (const stage of [2, 3]) {
-    for (const row of verificationFixtureRows(true)) {
-      if (row.id === EPISODE_ID) { row.payload.status = "queued"; delete row.payload.runId; delete row.payload.sessionId; }
-      fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
-    }
-    let checks = 0;
-    await assert.rejects(app.autopilotWorker.dispatchEpisode({ userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify",
-      episodeId: EPISODE_ID, dispatchId: EPISODE_ID, taskType: "literature-sentinel", budgetCny: 2, prompt: "Read prior research.",
-      assertDispatchAllowed: async () => { if (++checks === stage) throw Object.assign(new Error("Paused"), { code: "autopilot_paused" }); },
-    }), error => error.code === "autopilot_paused" && error.definitivelyRejected === true);
-    assert.equal(prompts, 0);
-    assert.equal((await app.autopilotService.getEpisode(USER_ID, EPISODE_ID)).payload.status, "canceled");
-    activeScope = "another-workflow";
-  }
-  assert.equal(released, 1, "the second rejection must not release a newer workflow's runtime");
-});
-
-for (const lossStage of [2, 3]) test(`the next proactive owner reclaims a proven-unsent generation after lease loss at stage ${lossStage}`, async t => {
-  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
-  const { app } = fixture;
-  await app.autopilotWorker.close();
-  for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
-  let reservations = 0, prompts = 0, closes = 0, target = null;
-  // The composition pool covers product rows; use the real file-backed
-  // research-session store for this full dispatch-ledger exercise.
-  app.researchSessions.stateStore = null;
-  app.runtimeManager.sessionMessages = async () => [];
-  app.residentProfiles.forDispatch = noProfile;
-  app.runtimeManager.reserveBoundedRuntimeSession = async () => {
-    reservations += 1;
-    target = { runId: EPISODE_ID, generation: `generation-${reservations}` };
-    return { id: `session-attempt-${reservations}`, kernel: "dsh" };
-  };
-  app.runtimeManager.boundedRuntimeCleanupTarget = () => target;
-  app.runtimeManager.endBoundedRuntime = async (_project, logical, generation) => {
-    assert.equal(logical, EPISODE_ID); assert.equal(generation, "generation-1");
-    if (target?.generation !== generation) return false;
-    closes += 1; target = null; return true;
-  };
-  app.runtimeManager.dispatchPrompt = async () => { prompts += 1; return { accepted: true }; };
-  const input = { userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID,
-    dispatchId: EPISODE_ID, taskType: "literature-sentinel", budgetCny: 2, prompt: "Read prior research." };
-  let checks = 0;
-  await assert.rejects(app.autopilotWorker.dispatchEpisode({ ...input, assertDispatchAllowed: async () => {
-    if (++checks === lossStage) throw Object.assign(new Error("Lease lost before prompt"), { code: "product_job_lease_lost" });
-  } }), error => error.code === "product_job_lease_lost" && error.definitivelyRejected === true);
-  assert.equal(prompts, 0); assert.equal(closes, 0, "the expired owner has no cleanup authority");
-  const project = await app.store.requireProject(await app.store.userById(USER_ID), PROJECT_ID);
-  const old = (await app.agentRuns.list(project))[0];
-  assert.equal(old.dispatchStatus, "rejected"); assert.equal(old.errorCode, "product_job_lease_lost");
-  assert.equal((await app.autopilotService.getEpisode(USER_ID, EPISODE_ID)).payload.status, "queued");
-  const sent = await app.autopilotWorker.dispatchEpisode({ ...input, dispatchId: `${EPISODE_ID}-a2`, assertDispatchAllowed: async () => {} });
-  assert.notEqual(sent.runId, old.id); assert.equal(prompts, 1); assert.equal(closes, 1); assert.equal(reservations, 2);
-  const latest = (await app.agentRuns.list(project)).find(run => run.id === sent.runId);
-  assert.equal(latest.dispatchId, `${EPISODE_ID}-a2`);
-  assert.equal(latest.effectiveRouteReason, "autopilot:literature-sentinel");
-  // An accepted execution is replayed before another balance check or runtime reservation.
-  app.autopilotService.recordBalanceCheck = async () => { throw new Error("No second balance request"); };
-  assert.deepEqual(await app.autopilotWorker.dispatchEpisode({ ...input, dispatchId: `${EPISODE_ID}-a3` }), sent);
-  assert.equal(prompts, 1); assert.equal(reservations, 2);
-});
-
-for (const lossStage of [2, 3]) test(`verifier takeover at stage ${lossStage} keeps logical cost and cleans only its attempt workspaces`, async t => {
-  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
-  const { app } = fixture;
-  await app.autopilotWorker.close();
-  for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
-  app.researchSessions.stateStore = null;
-  app.runtimeManager.sessionMessages = async () => [];
-  let target = null, reservations = 0, prompts = 0;
-  const closed = [];
-  app.runtimeManager.reserveBoundedRuntimeSession = async (_project, scope) => {
-    reservations += 1; target = { runId: scope.runId, generation: `verify-generation-${reservations}` };
-    return { id: `verify-session-${reservations}`, kernel: "dsh" };
-  };
-  app.runtimeManager.boundedRuntimeCleanupTarget = () => target;
-  app.runtimeManager.endBoundedRuntime = async (_project, logical, generation) => {
-    assert.equal(logical, VERIFICATION_ID);
-    if (target?.generation !== generation) return false;
-    closed.push(generation); target = null; return true;
-  };
-  app.runtimeManager.dispatchPrompt = async () => { prompts += 1; return { accepted: true }; };
-  const usageKeys = [];
-  app.usageLedger.summaryRun = async (_user, id) => { usageKeys.push(id); return { actualCost: id === VERIFICATION_ID ? 0.45 : 0 }; };
-  const input = { userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID,
-    digestId: "digest-verify", verificationId: VERIFICATION_ID, claimId: "claim-one", statement: "A preserved finding.",
-    sources: ["doi:10.1000/one"], effect: { measure: "risk-ratio", value: "0.74" }, artifact: REPORT, budgetCny: 0.67 };
-  let checks = 0;
-  await assert.rejects(app.autopilotWorker.dispatchVerification({ ...input, assertDispatchAllowed: async () => {
-    if (++checks === lossStage) throw Object.assign(new Error("Lease lost before prompt"), { code: "product_job_lease_lost" });
-  } }), { code: "product_job_lease_lost" });
-  assert.equal(prompts, 0); assert.deepEqual(closed, []);
-  let episode = await app.autopilotService.getEpisode(USER_ID, EPISODE_ID);
-  assert.equal(episode.payload.claims[0].verification.status, "queued");
-  assert.equal(episode.payload.unsentAttempts.length, 1);
-  const project = await app.store.requireProject(await app.store.userById(USER_ID), PROJECT_ID);
-  const prior = path.join(project.baseDir, verificationWorkspacePath(VERIFICATION_ID));
-  const attemptId = `${VERIFICATION_ID}-a2`;
-  const scratch = path.join(project.baseDir, verificationWorkspacePath(attemptId));
-  const other = path.join(project.baseDir, verificationWorkspacePath(`${EPISODE_ID}-v2`));
-  await mkdir(other, { recursive: true });
-  const sent = await app.autopilotWorker.dispatchVerification({ ...input, dispatchId: attemptId, assertDispatchAllowed: async () => {} });
-  assert.equal(prompts, 1); assert.deepEqual(closed, ["verify-generation-1"]);
-  await assert.rejects(stat(prior), { code: "ENOENT" });
-  await writeFile(path.join(scratch, "verification.json"), JSON.stringify({ schemaVersion: 1, verdict: "stands", numbersReproduced: true,
-    recomputed: { measure: "risk-ratio", value: "0.74" }, checkedSources: ["doi:10.1000/one"], reason: "The source supports the effect." }));
-  await app.agentRuns.finishInternal({ ...project, workspaceDir: scratch }, sent.runId, { status: "succeeded", artifacts: ["verification.json"] });
-  episode = await app.autopilotService.getEpisode(USER_ID, EPISODE_ID);
-  assert.equal(episode.payload.claims[0].verification.id, VERIFICATION_ID);
-  assert.equal(episode.payload.claims[0].verification.runId, sent.runId);
-  assert.equal(episode.payload.claims[0].verification.status, "recorded");
-  assert.equal(episode.payload.claims[0].tier, "reproduced");
-  assert.ok(usageKeys.includes(VERIFICATION_ID)); assert.equal(usageKeys.includes(attemptId), false);
-  assert.deepEqual(closed, ["verify-generation-1", "verify-generation-2"]);
-  await assert.rejects(stat(scratch), { code: "ENOENT" });
-  assert.ok((await stat(other)).isDirectory());
 });
 
 // Research-allowance billing (2026-10-04). Billing is a module of the platform,

@@ -183,7 +183,7 @@ describe("Sidebar navigation", () => {
   it("lists the workbench destinations in order and navigates to each", async () => {
     renderSidebar();
 
-    const order = ["新对话", "科研工具", "主动科研", "知识库", "记忆胶囊", "定时任务"];
+    const order = ["新对话", "主动科研", "知识库", "记忆胶囊", "定时任务"];
     const buttons = order.map((label) => screen.getByRole("link", { name: label }));
     for (let i = 1; i < buttons.length; i += 1) {
       expect(
@@ -194,20 +194,51 @@ describe("Sidebar navigation", () => {
     await userEvent.click(screen.getByRole("link", { name: "知识库" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/files");
 
-    await userEvent.click(screen.getByRole("link", { name: "科研工具" }));
-    expect(screen.getByTestId("location")).toHaveTextContent("/app/capabilities");
-
     await userEvent.click(screen.getByRole("link", { name: "设置" }));
     expect(screen.getByTestId("location")).toHaveTextContent("/app/account");
   });
-  it("places one extensions entry immediately after tasks in the primary navigation", () => {
-    renderSidebar();
-    const nav = screen.getByRole("navigation", { name: "工作台" });
-    const links = within(nav).getAllByRole("link");
-    expect(links[links.findIndex(link => link.textContent === "定时任务") + 1]).toHaveAccessibleName("插件与技能");
-    expect(screen.getAllByRole("link", { name: "插件与技能" })).toHaveLength(1);
-    // Discovery is the default; existing item URLs remain supported.
-    expect(screen.getByRole("link", { name: "插件与技能" })).toHaveAttribute("href", "/app/extensions/discover");
+  it("has no 科研工具 or 插件与技能 row; skills and plugins are reached from the settings gear", () => {
+    renderSidebar("/app/extensions/installed");
+    expect(screen.queryByRole("link", { name: "科研工具" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "插件与技能" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "设置" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("heading", { name: "自动化" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "研究" })).toBeInTheDocument();
+  });
+
+  it("shows a module's nested directory only while that module is current", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, evimedSearch: true, memoryMap: true, knowledgePages: true } });
+    const view = renderSidebar("/app/frontier?view=hot");
+    const nav = await screen.findByRole("navigation", { name: "前沿动态视图" });
+    expect(within(nav).getByRole("link", { name: "热榜" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("navigation", { name: "医学检索类别" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "记忆胶囊的内容" })).not.toBeInTheDocument();
+    view.unmount();
+    renderSidebar("/app/search/drugs");
+    expect(await screen.findByRole("navigation", { name: "医学检索类别" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "前沿动态视图" })).not.toBeInTheDocument();
+  });
+
+  it("shows the knowledge and memory directories on their pages, with the offers from /api/me", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { memoryMap: true, knowledgePages: true } });
+    const view = renderSidebar("/app/files");
+    const nav = await screen.findByRole("navigation", { name: "知识库的内容" });
+    await waitFor(() => expect(within(nav).getAllByRole("link")).toHaveLength(4));
+    view.unmount();
+    renderSidebar("/app/memory/overview");
+    const memory = await screen.findByRole("navigation", { name: "记忆胶囊的内容" });
+    expect(within(memory).getByRole("link", { name: "总览" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("keeps the VCR directory off other pages even when the last conversation was a study's", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true, geo: true, frontier: true } });
+    projectModule.current = "vcr";
+    const view = renderSidebar("/app/memory?tab=self");
+    await screen.findByRole("link", { name: "虚拟临床研究" });
+    expect(screen.queryByRole("navigation", { name: "虚拟临床研究工作区" })).not.toBeInTheDocument();
+    view.unmount();
+    renderSidebar("/app/chat/ses_1");
+    expect(await screen.findByRole("navigation", { name: "虚拟临床研究工作区" })).toBeInTheDocument();
   });
 
   // 运维 left 设置 for a page of its own (R19): the footer holds its entry for an operator, beside the gear, and for nobody else.
@@ -254,14 +285,14 @@ describe("Sidebar navigation", () => {
     expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
-  it("puts 主动科研 directly below 科研工具 and 循证 GEO below it when the account is offered it", async () => {
+  it("puts 主动科研 below 前沿动态 and 循证 GEO below it when the account is offered it", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, geo: true } });
     renderSidebar();
     const row = await screen.findByRole("link", { name: "循证 GEO" });
     expect(row).toHaveAttribute("href", "/app/geo");
     await screen.findByRole("link", { name: "前沿动态" });
     const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
-    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "主动科研", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 7)).toEqual(["新对话", "前沿动态", "主动科研", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo");
     expect(row).toHaveAttribute("aria-current", "page");
@@ -282,7 +313,7 @@ describe("Sidebar navigation", () => {
     const row = await screen.findByRole("link", { name: "虚拟临床研究" });
     expect(row).toHaveAttribute("href", "/app/virtual-research");
     const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
-    expect(rows.slice(0, 9)).toEqual(["新对话", "前沿动态", "科研工具", "主动科研", "虚拟临床研究", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "主动科研", "虚拟临床研究", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research");
     expect(row).toHaveAttribute("aria-current", "page");
@@ -343,22 +374,22 @@ describe("Sidebar navigation", () => {
   });
 
   // One board offered and the other not: the one that is there keeps its place
-  // under 科研工具 rather than inheriting the missing one's.
-  it("puts 虚拟临床研究 under 科研工具 with no 循证 GEO beside it", async () => {
+  // under 主动科研 rather than inheriting the missing one's.
+  it("puts 虚拟临床研究 under 主动科研 with no 循证 GEO beside it", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true } });
     renderSidebar();
     await screen.findByRole("link", { name: "虚拟临床研究" });
     const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
-    expect(rows.slice(0, 7)).toEqual(["新对话", "科研工具", "主动科研", "虚拟临床研究", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 6)).toEqual(["新对话", "主动科研", "虚拟临床研究", "知识库", "记忆胶囊", "定时任务"]);
     expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
-  it("puts 循证 GEO below 科研工具 without the frontier feed too", async () => {
+  it("puts 循证 GEO below 主动科研 without the frontier feed too", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
     renderSidebar();
     await screen.findByRole("link", { name: "循证 GEO" });
     const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
-    expect(rows.slice(0, 7)).toEqual(["新对话", "科研工具", "主动科研", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 6)).toEqual(["新对话", "主动科研", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
   });
 
   // The people icon on a study in 「最近」: the project list is told which
@@ -461,8 +492,8 @@ describe("Sidebar navigation", () => {
   // px icon button, the collapse button's twin. They were 32 px, one-offs
   // the release walk counted as kinds of control on every page.
   it("draws the destinations as 36 px navigation items and the bell as the sidebar's icon button", async () => {
-    renderSidebar("/app/capabilities");
-    const current = screen.getByRole("link", { name: "科研工具" });
+    renderSidebar("/app/autopilot");
+    const current = screen.getByRole("link", { name: "定时任务" });
     expect(current).toHaveAttribute("aria-current", "page");
     expect(current).toHaveClass("h-control", "rounded", "px-2", "gap-2", "text-ui", "bg-accent-soft");
     const other = screen.getByRole("link", { name: "知识库" });
@@ -510,21 +541,20 @@ describe("Sidebar chrome", () => {
   it("has no quick-jump palette: the five destinations are the navigation", async () => {
     // Removed 2026-09-22 (「快速跳转有必要吗，就这几个板块」).
     renderSidebar();
-    await screen.findByRole("link", { name: "科研工具" });
+    await screen.findByRole("link", { name: "主动科研" });
     expect(screen.queryByRole("button", { name: /快速跳转/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/Ctrl K|⌘K/)).not.toBeInTheDocument();
   });
 });
 
-it("groups destinations without changing their order or dropping tools and extensions", () => {
+it("groups destinations without changing their order or dropping the tools that remain", () => {
   renderSidebar();
   const nav = screen.getByRole("navigation", { name: "工作台" });
   expect(within(nav).getAllByRole("heading").map((heading) => heading.textContent)).toEqual([
-    "工作台", "研究", "资料与记忆", "自动化与扩展",
+    "工作台", "研究", "资料与记忆", "自动化",
   ]);
   const destinations = within(nav).getAllByRole("link").map((link) => link.getAttribute("href"));
-  expect(destinations.indexOf("/app/capabilities")).toBeLessThan(destinations.indexOf("/app/files"));
-  expect(destinations.indexOf("/app/autopilot")).toBeLessThan(destinations.indexOf("/app/extensions/discover"));
-  expect(within(nav).getByRole("link", { name: "科研工具" })).toBeVisible();
-  expect(within(nav).getByRole("link", { name: "插件与技能" })).toBeVisible();
+  expect(destinations.indexOf("/app/active-research")).toBeLessThan(destinations.indexOf("/app/files"));
+  expect(destinations.indexOf("/app/files")).toBeLessThan(destinations.indexOf("/app/autopilot"));
+  expect(destinations.some((href) => href?.startsWith("/app/capabilities") || href?.startsWith("/app/extensions"))).toBe(false);
 });

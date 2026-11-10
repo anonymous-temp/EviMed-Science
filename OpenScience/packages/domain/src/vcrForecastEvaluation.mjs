@@ -1,6 +1,7 @@
 /** Forecast evaluation: one patient is one sampling unit. Distributions describe
  * future observations, not additional trial participants or a treatment effect. */
 import { longitudinalMean as mean, longitudinalVariance as variance, longitudinalQuantile as quantile, longitudinalSubjects } from './vcrLongitudinal.mjs'
+import { VCR_MIN_CELL_SIZE } from './vcrVocabulary.mjs'
 
 /** Reproducible bootstrap, isolated from model sampling. @param {number} seed */
 export function forecastRandom(seed) {
@@ -314,8 +315,11 @@ export function compareForecasts(first, second, options = {}) {
       meanDifference: mean(values), lower: quantile(boot,.025), upper: quantile(boot,.975),
       intervalMeaning: 'between_subject_sampling', modelUncertainty: 'not_estimated' }
   })
+  // the action schedule a conditional forecast or a replay was made on is a factor too (stats P2-14); a record that kept none had none
+  const schedule = (/** @type {any} */ p) => JSON.stringify(Array.isArray(p.actionSchedule) ? p.actionSchedule : [])
   const changedFactors = [first.historyId !== second.historyId && 'history',first.origin !== second.origin && 'origin',
-    JSON.stringify(first.model) !== JSON.stringify(second.model) && 'model',JSON.stringify(first.scenario) !== JSON.stringify(second.scenario) && 'scenario'].filter(Boolean)
+    JSON.stringify(first.model) !== JSON.stringify(second.model) && 'model',JSON.stringify(first.scenario) !== JSON.stringify(second.scenario) && 'scenario',
+    schedule(first) !== schedule(second) && 'actions'].filter(Boolean)
   return { available: groups.some((/** @type {any} */ g) => g.subjects > 0), code:shared.length ? null : 'shared_target_missing', groups, mode,
     endpoint:first.endpoint, origins:[first.origin,second.origin], histories:[first.historyId,second.historyId],models:[first.model ?? null,second.model ?? null],
     changedFactors, attribution:changedFactors.length > 1 ? 'multiple_factors_changed' : 'descriptive_comparison',
@@ -324,6 +328,58 @@ export function compareForecasts(first, second, options = {}) {
     interpretation: mode === 'scenario' ? 'paired_model_scenario_contrast' : `paired_forecast_${mode}`, causalEffectIdentified: false,
     dataClass: first.dataClass === 'synthetic' && second.dataClass === 'synthetic' ? 'synthetic' : 'patient',
     scenarios: [first.scenario ?? null,second.scenario ?? null] }
+}
+
+/** An earlier prediction, the one made after new observations arrived, and what was observed afterwards, for the people and target dates
+ * all three share. The newer version is scored only where the observation happened after ITS origin (`pairForecastOutcomes` demands
+ * it), so an observation the newer version could already see is never counted as a test of it. Absolute error for a value, squared
+ * error (Brier) for a probability; point estimates over the same people, no significance test.
+ *
+ * Real people's outcomes under the small-cell floor are withheld here, at the source, because every reader (the page, the export, a run)
+ * reads this block and none of its keys is a head count a boundary would recognise (review eng P0-3): a date observed for fewer than
+ * `minCell` people keeps its identity and loses its means, errors and counts; and the split of the people by which version came closer
+ * (newer, older, tied: the parts of `observed`) is withheld when one part is a handful of people. A synthetic comparison is shown whole.
+ * @param {any} older @param {any} newer @param {any} outcomes @param {{ seed?: number, windowDays?: number, minCell?: number }} [options] */
+export function compareVersionsToObserved(older, newer, outcomes, options = {}) {
+  const base = compareForecasts(older, newer, { mode: 'update', bootstrap: 0, seed: options.seed })
+  if (!base.available) return { available: false, code: base.code ?? 'paired_inputs_differ', mode: 'update' }
+  if (Date.parse(newer.origin) <= Date.parse(older.origin)) return { available: false, code: 'newer_origin_not_later', mode: 'update' }
+  const probability = ['risk', 'survival_probability'].includes(older.endpoint.type)
+  const events = outcomes.evaluationEvents ?? outcomes.events ?? []
+  const pairOld = pairForecastOutcomes(older, events, options).paired
+  const pairNew = pairForecastOutcomes(newer, events, options).paired
+  const key = (/** @type {any} */ row, /** @type {number} */ horizon) => `${row.subjectKey}\0${horizon}`
+  const oldBy = new Map(pairOld.map((/** @type {any} */ r) => [key(r, r.horizonDays), r]))
+  const newBy = new Map(pairNew.map((/** @type {any} */ r) => [key(r, r.horizonDays), r]))
+  const error = (/** @type {number} */ predicted, /** @type {number} */ actual) => probability ? (predicted - actual) ** 2 : Math.abs(predicted - actual)
+  const minCell = Number.isInteger(options.minCell) && Number(options.minCell) >= 2 ? Number(options.minCell) : VCR_MIN_CELL_SIZE
+  let anyObserved = false
+  const groups = base.groups.map((/** @type {any} */ group) => {
+    const rows = []
+    for (const row of older.rows.filter((/** @type {any} */ r) => r.horizonDays === group.horizonDays)) {
+      const was = oldBy.get(key(row, group.horizonDays)), now = newBy.get(key(row, group.secondHorizonDays))
+      if (was && now && was.actual === now.actual) rows.push({ older: was.point, newer: now.point, actual: was.actual })
+    }
+    /** @type {Record<string, any>} */
+    const shown = { horizonDays: group.horizonDays, secondHorizonDays: group.secondHorizonDays, targetAt: group.targetAt, pairedPredictions: group.subjects,
+      observed: rows.length, observedMean: mean(rows.map(r => r.actual)), olderMean: mean(rows.map(r => r.older)), newerMean: mean(rows.map(r => r.newer)),
+      olderError: mean(rows.map(r => error(r.older, r.actual))), newerError: mean(rows.map(r => error(r.newer, r.actual))),
+      newerCloser: rows.filter(r => error(r.newer, r.actual) < error(r.older, r.actual)).length,
+      olderCloser: rows.filter(r => error(r.older, r.actual) < error(r.newer, r.actual)).length,
+      errorMetric: probability ? 'brier' : 'mae' }
+    if (rows.length > 0) anyObserved = true
+    if (base.dataClass === 'synthetic') return shown
+    const small = (/** @type {number} */ count) => count >= 1 && count < minCell
+    const hide = (/** @type {string[]} */ keys) => { for (const name of keys) shown[name] = null; shown.suppressed = [...new Set([...(shown.suppressed ?? []), ...keys])] }
+    if (small(shown.pairedPredictions)) hide(['pairedPredictions'])
+    if (small(rows.length)) hide(['observed', 'observedMean', 'olderMean', 'newerMean', 'olderError', 'newerError', 'newerCloser', 'olderCloser'])
+    else if (small(shown.newerCloser) || small(shown.olderCloser) || small(rows.length - shown.newerCloser - shown.olderCloser)) hide(['newerCloser', 'olderCloser'])
+    return shown
+  })
+  return { available: anyObserved, code: anyObserved ? null : 'no_observed_outcomes',
+    mode: 'update', endpoint: older.endpoint, origins: [older.origin, newer.origin], groups, changedFactors: base.changedFactors,
+    interpretation: 'older_vs_newer_vs_observed', causalEffectIdentified: false,
+    notes: base.notes, dataClass: base.dataClass }
 }
 
 /** Design assumptions retain their model origin and dispersion meaning. A risk

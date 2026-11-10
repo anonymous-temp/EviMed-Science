@@ -49,7 +49,7 @@ export async function productRequest<T>(path: string, method = "GET", body?: unk
 }
 
 /**
- * What Sources, Capsules, Autopilot, Memory and Duplicates say when an action
+ * What Sources, Capsules, Memory and Duplicates say when an action
  * is refused.
  *
  * One line of dictionary lookup replaced a table that answered
@@ -59,9 +59,9 @@ export async function productRequest<T>(path: string, method = "GET", body?: unk
  *
  * Two of the old special cases were deleted rather than kept:
  *   - `product_state_unavailable` answered 「科研记忆服务暂时不可用」, but
- *     `sourceRoutes`, `autopilotRoutes` and `pluginRoutes` raise the same code,
+ *     `sourceRoutes` and `pluginRoutes` raise the same code,
  *     so the Sources page named the memory service when source storage was
- *     down. It is a 503 and the shared 503 sentence is true of all four.
+ *     down. It is a 503 and the shared 503 sentence is true of all three.
  *   - The 401 case is now the shared one, word for word.
  */
 export function productErrorMessage(error: unknown): string {
@@ -100,9 +100,10 @@ export interface CapsuleCard { title?: string; author?: string; summary?: string
  * sender unticks it by and whether it is `included`; `excluded` says, one plain sentence per reason, what the rules keep out of the
  * pack (the assistant's notes nobody confirmed, what a document yielded, what is marked sensitive, what was shared with the person).
  */
+export interface PrivateMemorySelection { id: string; sha256: string }
 export interface CapsuleExportPreview {
   scopes: string[]; empty: boolean; tooMany: boolean; card: CapsuleCard | null;
-  entries: Array<{ id?: string; included?: boolean; factKind: string; layer: string; origin: string; content: string }>;
+  entries: Array<{ id?: string; included?: boolean; requiresSelection?: boolean; sha256?: string; factKind: string; layer: string; origin: string; content: string }>;
   excluded?: Array<{ reason: string; count: number; text: string }>;
 }
 /** The automatic scan a shared pack passes before it can take effect (capsuleScan.mjs). */
@@ -130,14 +131,14 @@ export function listCapsuleExports(id: string, cursor?: string | null) {
  * delivery names them, opened by them without a password), or both. `reached` says how many of the names the file was sealed for.
  * `excludeEntryIds` are the entries the sender unticked in the preview.
  */
-export interface CapsuleExportInput { password?: string; recipientNames?: string[]; scopes: string[]; supersedes?: string; card?: CapsuleCard; excludeEntryIds?: string[] }
+export interface CapsuleExportInput { password?: string; recipientNames?: string[]; scopes: string[]; supersedes?: string; card?: CapsuleCard; excludeEntryIds?: string[]; includePrivateEntries?: PrivateMemorySelection[] }
 export function exportCapsule(id: string, input: CapsuleExportInput) {
   return productRequest<{ archive: string; filename: string; snapshot: CapsuleExportSnapshot; reached?: { requested: number; sealed: number } }>(`/capsules/${encodeURIComponent(id)}/exports`, "POST", input);
 }
 export function revokeCapsuleExport(id: string, snapshot: CapsuleExportSnapshot) {
   return productRequest<CapsuleExportSnapshot>(`/capsules/${encodeURIComponent(id)}/exports/${encodeURIComponent(snapshot.id)}`, "DELETE", { expectedRevision: snapshot.revision });
 }
-export function previewCapsuleExport(id: string, input: { scopes: string[]; excludeEntryIds?: string[] }) {
+export function previewCapsuleExport(id: string, input: { scopes: string[]; excludeEntryIds?: string[]; includePrivateEntries?: PrivateMemorySelection[] }) {
   return productRequest<CapsuleExportPreview>(`/capsules/${encodeURIComponent(id)}/exports/preview`, "POST", input);
 }
 export function previewCapsuleImport(input: { archive: string; password?: string }) {

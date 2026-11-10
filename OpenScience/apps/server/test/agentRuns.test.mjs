@@ -569,7 +569,7 @@ test("open-domain clinical evidence questions record and dispatch the selected s
     );
     assert.match(
       routedContext,
-      /clinical-evidence-synthesis、autopilot-episode、deep-research、biomedical-database-search、citation-integrity、manuscript-humanize/,
+      /clinical-evidence-synthesis、deep-research、biomedical-database-search、citation-integrity、manuscript-humanize/,
       "the exact completion-gate skill set must reach this dispatched session",
     );
     const routedIndex = JSON.parse(await readFile(

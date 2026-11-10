@@ -121,22 +121,6 @@ test('a note is never asked: its type is where it was written', async () => {
   assert.equal(saved.docType, 'note-memo');
 });
 
-test('evolution decision calls disable thinking and reject actions outside the supplied options', async () => {
-  const { createEvolutionDecisionModel, evolutionOptionId } = await import('../src/evolutionComposition.mjs');
-  let request;
-  const model = createEvolutionDecisionModel({ config: { evolutionDailyBudgetCny: 10 }, usageLedger: {}, owner: async () => 'operator' }, async (_dependencies, input) => {
-    request = input; return { choices: [{ message: { content: '{"option":"keep"}' } }] };
-  });
-  assert.deepEqual(await model('Choose an existing option.', { options: [{ id: 'keep' }] }), { option: 'keep' });
-  assert.deepEqual(request.body.thinking, { type: 'disabled' });
-  assert.equal(request.purpose, 'evolution');
-  assert.equal(request.userId, 'operator');
-  assert.equal(request.limits.daily, 10);
-  assert.equal(evolutionOptionId([{ id: 'keep' }], 'keep'), 'keep');
-  for (const invalid of ['delete-everything', null, { id: 'keep' }]) assert.throws(() => evolutionOptionId([{ id: 'keep' }], invalid), { code: 'evolution_refresh_unavailable' });
-});
-
-
 test('J6 disabled and uncalibrated decisions restore the original Flash path', async () => {
   for (const code of ['judge_disabled', 'judge_unconfigured', 'judge_uncalibrated', 'judge_calibration_mismatch']) {
     let flash = 0;

@@ -395,6 +395,38 @@ export class VcrEvidenceStore extends VcrStoreBase {
   }
 
   // -------------------------------------------------------------------------
+  // The second reading of an extracted value (algorithm round E1)
+  // -------------------------------------------------------------------------
+
+  /**
+   * File what a second, independent reading of the passage a value was read from found. One row per value (a repeated filing is dropped),
+   * beside the append-only item rather than in it. A reading that failed is not filed.
+   * @param {{ userId: string, studyId: string, evidenceId: string, outcome: "agree" | "differ" | "inconclusive", reading: Record<string, unknown>, model?: string }} input
+   * @returns {Promise<boolean>} whether a row was written
+   */
+  async saveSecondRead({ userId, studyId, evidenceId, outcome, reading, model = "" }) {
+    const done = await this.query(
+      `INSERT INTO ${VCR_SCHEMA}.evidence_second_reads (id, study_id, user_id, evidence_id, outcome, reading, model)
+       SELECT $1, $2, $3, i.id, $5, $6::jsonb, $7 FROM ${VCR_SCHEMA}.evidence_items i
+        WHERE i.id = $4 AND i.user_id = $3 AND i.study_id = $2
+       ON CONFLICT (evidence_id) DO NOTHING`,
+      [vcrId("secondRead"), studyId, userId, evidenceId, outcome, jsonb(reading), String(model).slice(0, 120)]);
+    return (done.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * The second readings filed for a study, or for some of its values.
+   * @param {{ userId: string, studyId: string, ids?: readonly string[] | null, outcome?: string | null }} query
+   */
+  async secondReads({ userId, studyId, ids = null, outcome = null }) {
+    return this.rows(
+      `SELECT * FROM ${VCR_SCHEMA}.evidence_second_reads
+        WHERE user_id = $1 AND study_id = $2 AND ($3::text[] IS NULL OR evidence_id = ANY($3::text[])) AND ($4::text IS NULL OR outcome = $4)
+        ORDER BY created_at ASC, id LIMIT 2000`,
+      [userId, studyId, ids ? [...new Set(ids.map(String))] : null, outcome]);
+  }
+
+  // -------------------------------------------------------------------------
   // Assumption cards
   // -------------------------------------------------------------------------
 

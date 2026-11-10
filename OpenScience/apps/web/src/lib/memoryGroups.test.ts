@@ -28,7 +28,7 @@ describe("where a fact belongs", () => {
     expect(selfSection("method_preference")).toBe("habit");
     expect(selfSection("correction")).toBe("correction");
     expect(selfSection("something_new")).toBe("other");
-    expect(SELF_SECTIONS.map((section) => section.key)).toEqual(["background", "preference", "habit", "correction", "other"]);
+    expect(SELF_SECTIONS.map((section) => section.key)).toEqual(["background", "preference", "habit", "correction", "people", "other"]);
   });
 
   it("titles a drawer by the kind, in words a researcher uses", () => {
@@ -37,4 +37,9 @@ describe("where a fact belongs", () => {
     expect(kindTitle("writing_style")).toBe("写作习惯");
     expect(kindTitle("something_new")).toBe("记忆");
   });
+});
+
+it("labels people and ordinary notes separately from identity", () => {
+ expect(selfSection("person")).toBe("people"); expect(selfSection("note")).toBe("other");
+ expect(kindTitle("person")).toBe("人物"); expect(kindTitle("note")).toBe("其他记忆");
 });

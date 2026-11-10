@@ -27,10 +27,9 @@ const KnowledgePage = lazy(() => import("./routes/KnowledgePage").then((m) => ({
 const KnowledgeOpenPage = lazy(() => import("./routes/KnowledgeOpenPage").then((m) => ({ default: m.KnowledgeOpenPage })));
 const GalleryPage = lazy(() => import("./routes/GalleryPage").then((m) => ({ default: m.GalleryPage })));
 const ActiveResearchPage = lazy(() => import("./routes/ActiveResearchPage").then((m) => ({ default: m.ActiveResearchPage })));
-const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({ default: m.AutopilotPage })));
+const ScheduledTasksPage = lazy(() => import("./routes/ScheduledTasksPage").then((m) => ({ default: m.ScheduledTasksPage })));
 const VcrCalculationWorkbenchPage = lazy(() => import("./routes/VcrCalculationWorkbenchPage").then((m) => ({ default: m.VcrCalculationWorkbenchPage })));
 const VcrMethodWorkbenchPage = lazy(() => import("./routes/VcrMethodWorkbenchPage").then((m) => ({ default: m.VcrMethodWorkbenchPage })));
-const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
 const MemoryOverviewPage = lazy(() => import("./routes/MemoryOverviewPage").then((m) => ({ default: m.MemoryOverviewPage })));
@@ -140,10 +139,8 @@ export const routes: RouteObject[] = [
         { path: "files/open", element: <KnowledgeOpenPage /> },
         // One route for the list and a document in its pane, so choosing another document does not remount the list.
         { path: "files/:sourceId?", element: <KnowledgePage /> },
-        // 「定时任务」: the list at `/app/autopilot`, one task and its conversation at `/app/autopilot/:taskId`. One route, with or
-        // without the id, so opening a task from the list is not a remount (the kernel's frame is placed over the task's pane
-        // by `SessionFrameHost`). `?task=` and `?digest=` are the old addresses and are resolved by the page.
-        { path: "autopilot/:taskId?", element: <AutopilotPage /> },
+        // 「定时任务」 are the kernel's own automation tasks (owner, 2026-11-04): this address opens their page in the project's frame.
+        { path: "autopilot", element: <ScheduledTasksPage /> },
         { path: "active-research", element: <ActiveResearchPage /> },
         { path: "memory", element: <MemoryHubPage /> },
         // 「记忆地图」 was a tab until 2026-10-27, and is part of 总览 now: an old address goes there with what it can carry over.
@@ -154,7 +151,8 @@ export const routes: RouteObject[] = [
         { path: "memory/shared/:token", element: <SharedCapsulePage /> },
         { path: "memory/delivered/:deliveryId", element: <SharedCapsulePage /> },
         { path: "inbox", element: <InboxPage /> },
-        { path: "capabilities", element: <CapabilitiesPage /> },
+        // 科研工具 was retired on 2026-11-08: its bare address lands on the assistant; the two VCR deep links below stay.
+        { path: "capabilities", element: <Navigate to="/app/home" replace /> },
         { path: "capabilities/methods/:methodId", element: <VcrMethodWorkbenchPage /> },
         { path: "capabilities/calculations/:studyId/:tab?", element: <VcrCalculationWorkbenchPage /> },
         { path: "account", element: <AccountPage /> },
@@ -165,7 +163,7 @@ export const routes: RouteObject[] = [
         // sentence, not a 404. 模拟会员 and 模拟退款 had nothing behind them and
         // were removed (2026-10-07): their addresses are not found.
         { path: "account/simulated/:page", element: <SimulatedWalletPage /> },
-        { path: "extensions", element: <Navigate to="/app/extensions/discover" replace /> },
+        { path: "extensions", element: <Navigate to="/app/extensions/installed" replace /> },
         // 插件与技能: one element for both tabs and the open item (`skills/:skillId`, `plugins/:extensionId`), so switching tabs keeps what was read.
         { path: "extensions/:tab/:itemId?", element: <ExtensionsPage /> },
         // Seven destinations, six of them above (2026-09-15 walk, C8). The rows
@@ -207,7 +205,7 @@ export const routes: RouteObject[] = [
   { path: "/sources", element: <Navigate to="/app/files?tab=sources" replace /> },
   { path: "/notebooks", element: <Navigate to="/app/files" replace /> },
   { path: "/memory", element: <Navigate to="/app/memory" replace /> },
-  { path: "/agents", element: <Navigate to="/app/capabilities" replace /> },
+  { path: "/agents", element: <Navigate to="/app/home" replace /> },
   { path: "/settings", element: <Navigate to="/app/account?tab=appearance" replace /> },
   { path: "*", element: <NotFound />, errorElement: <RouteError /> },
 ];

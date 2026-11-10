@@ -106,12 +106,12 @@ test("the lessons are queued from the terminal hook by themselves", () => {
 test("background work in an internal project never reaches the inbox as a person's research", () => {
   // 2026-09-21: 20 of the acceptance account's 24 unread items were lessons,
   // sources and their failures — 「9月21日完成 8 项研究：从已完成运行中提炼可复用方法」.
-  // Since 2026-09-24 evaluations and autopilot runs leave no item either, not
+  // Since 2026-09-24 evaluations and scheduled runs leave no item either, not
   // even a quiet one (plan 2026-09-23 §5.8); the rule itself is
   // `runFinishedReachesInbox`, tested in runFinishedNotice.test.mjs, and this
   // asserts the hook hands it every one of its inputs from where they live.
   const hook = /onRunFinished: async \(project, run\) => \{[\s\S]*?\n    \},/.exec(serverSource)[0];
-  assert.match(hook, /if \(notificationService && runFinishedReachesInbox\(run, \{\s*internalProject: internalFor\(project\.userId, project\.id\),\s*automated: automatedRun\(run\), autopilotOwned: autopilotOwned === true,\s*\}\)\) \{/);
+  assert.match(hook, /if \(notificationService && runFinishedReachesInbox\(run, \{\s*internalProject: internalFor\(project\.userId, project\.id\),\s*automated: automatedRun\(run\),\s*\}\)\) \{/);
   assert.doesNotMatch(hook, /silent/, "nothing is recorded quietly any more");
 });
 
@@ -394,8 +394,8 @@ test("a new turn of a conversation is read once as the answer to the run before 
   assert.match(call, /methodsOpened: methodFeedback \? async \(project, run\) => \[\s*\.\.\.\(await methodFeedback\.usedBy\(project, run\)\)\.methods\.map/);
   assert.match(call, /\.\.\.await officialOpenedBy\(project\.userId, run\),/, "and the platform's official methods it opened, so a reaction can be about one of them");
   assert.match(call, /report: \(reason\) => learningMetrics\.observeEvidenceFailure\(reason\)/);
-  // The loop's own evidence is not a researcher-feedback signal of the evolution module.
-  assert.match(serverSource, /event\.trigger === "learning-evidence"\) return;/);
+  // The loop's own evidence is no researcher-feedback signal of the evolution module: since 2026-11-09 no reaction is handed to it at all.
+  assert.doesNotMatch(serverSource, /type: "researcher-feedback"/);
 });
 
 test("the gates that turn a finished run away before the loop is asked are counted too, by their reason", () => {

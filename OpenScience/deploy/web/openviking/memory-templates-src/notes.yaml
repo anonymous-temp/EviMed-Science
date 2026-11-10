@@ -1,0 +1,38 @@
+memory_type: notes
+description: |
+  __LANGUAGE__
+  Open notes: keep useful information that does not fit another type. This fallback has no closed
+  topic or subtype list. Future usefulness decides, including unfamiliar domains and unusual context.
+  One file per coherent subject. Use the user's terms and keep the source and scope explicit.
+  Distinguish user statements, user beliefs, assistant suggestions and document claims. A useful
+  unconfirmed suggestion is not an adopted decision; a sourced claim is not an established fact.
+  Date changing context, separate current state from dated history, and preserve exact names,
+  numbers, units and dates when useful. Do not turn a hypothetical example into a real event.
+  Keep a recurring person in PEOPLE rather than scattering their history across notes.
+
+  __NEVER_KEEP__
+
+  __DECIDE__
+directory: "viking://user/{{ user_space }}/memories/notes"
+filename_template: "{{ topic|lower }}.md"
+enabled: true
+embedding_template: |-
+  {{ topic }}
+
+  {{ content }}
+overview_template: |-
+  # Notes Overview
+  {% for item in items %}
+  - [{{ item.file_content.topic|default(item.file_name, true) }}](./{{ item.file_name }})
+  {% endfor %}
+fields:
+  - name: topic
+    type: string
+    description: An open subject label in the user's language; reuse an existing file for the same subject.
+    merge_op: immutable
+  - name: content
+    type: string
+    description: |
+      Useful self-contained Markdown, with source, uncertainty, scope and dates explicit. Preserve
+      dated prior states when updating current state. Choose headings freely for the information.
+    merge_op: patch

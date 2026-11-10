@@ -1,6 +1,5 @@
 import { Checkbox } from "@/components/ui/Checkbox";
 import { batchPageState, runBatch, toggleBatch, type BatchSelection } from "@/lib/batchSelection";
-import { EvolutionDecisionCard } from '@/components/evolution/EvolutionDecisionCard';
 import { frontierNoticeHref, shareNoticeHref, geoSignalHref } from "@evimed/domain";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { workStateLabel } from "@evimed/domain";
@@ -38,8 +37,6 @@ import { usePageScroll } from "@/lib/pageScroll";
 import { toast } from "@/lib/toast";
 import { useOperator } from "@/lib/useOperator";
 import { cn } from "@/lib/cn";
-import { taskPath } from "@/lib/taskLocation";
-import { scopedConversationPath } from "@/lib/runtimeUiNavigation";
 
 type Filter = "all" | "unread";
 
@@ -543,16 +540,9 @@ function InboxGroupRow({ group, name, busy, onOpen, onRead }: { group: InboxGrou
 /** Where an item's action goes when it is navigation rather than a decision. */
 function actionHref(item: InboxItem, action: InboxAction): string | null {
   if (action.id !== "open" || !item.source) return null;
-  if (item.source.type === "system" && /^autopilot-task:[A-Za-z0-9_-]{1,160}$/.test(item.source.id)) {
-    const path = taskPath(item.source.id.slice("autopilot-task:".length));
-    return item.projectId ? scopedConversationPath(path, item.projectId) : path;
-  }
-  // A digest is either an autopilot briefing or the frontier daily of a day;
-  // the daily names itself `frontier-daily:<YYYY-MM-DD>`, the key it is pushed
-  // under, and opens on that issue.
+  // The frontier daily of a day names itself `frontier-daily:<YYYY-MM-DD>`, the key it is pushed under, and opens on that issue.
   const frontierHref = frontierNoticeHref(item.source);
   if (frontierHref) return frontierHref;
-  if (item.source.type === "digest") return `/app/autopilot?digest=${encodeURIComponent(item.source.id)}`;
   // A notice names a run, and a run is read in the conversation it happened in.
   // Only the ledger knows which conversation that is, so this stays the run's
   // own address and `RunRedirect` resolves it (router.tsx).
@@ -592,8 +582,7 @@ function InboxRow({ item, selection, operator, busy, open, onToggle, onRead, onR
   const openAction = item.actions.find((action) => actionHref(item, action) != null);
   const href = openAction ? actionHref(item, openAction) : null;
   // A decision disappears once made; the way to what the notice names does not.
-  const evolutionDecision = item.source?.type === 'system' && item.source.id.startsWith('evolution-decision-');
-  const decisions = resolved || evolutionDecision ? [] : item.actions.filter((action) => actionHref(item, action) == null);
+  const decisions = resolved ? [] : item.actions.filter((action) => actionHref(item, action) == null);
   const waiting = !resolved && (unread || decisions.length > 0) ? WAITING[item.noticeType] : undefined;
   const decided = resolved && item.resolution != null && item.resolution.actionId !== "open";
   const body = splitNoticeBody(item.body);
@@ -614,7 +603,7 @@ function InboxRow({ item, selection, operator, busy, open, onToggle, onRead, onR
       expanded={href || !hasBody ? undefined : open}
       unread={unread}
       muted={!unread}
-      meta={hasBody ? <><InboxBody body={item.body} open={!href && open} operator={operator} />{operator && open && item.source?.type === 'system' && item.source.id.startsWith('evolution-decision-') && <EvolutionDecisionCard id={item.source.id} />}</> : undefined}
+      meta={hasBody ? <><InboxBody body={item.body} open={!href && open} operator={operator} /></> : undefined}
       trailing={(
         <>
           {waiting && <Tag>{waiting}</Tag>}

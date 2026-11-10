@@ -58,7 +58,7 @@ import { VCR_MATCH_BATCH_JOBS } from './vcrMatchBatch.mjs'
 
 // The schemas live in their own module (they are the file most likely to be
 // edited); the protocol's callers find them here, beside the validators.
-export { VCR_DESIGN_SUPPORT, VCR_SCENARIO_SCHEMAS, vcrIsNullScenario } from './vcrScenarioSchemas.mjs'
+export { VCR_CONFIRMATORY_SUPPORT, VCR_DESIGN_SUPPORT, VCR_SCENARIO_SCHEMAS, vcrIsNullScenario } from './vcrScenarioSchemas.mjs'
 
 /** @template T @param {readonly T[]} list @returns {readonly T[]} */
 const frozen = (list) => Object.freeze([...list])
@@ -99,48 +99,104 @@ const SIMULATE_RELEASES = Object.freeze([Object.freeze({
  * itself, and `intendedUseCeilingFor` reads it.
  */
 export const VCR_ENGINE_METHODS = Object.freeze({
-  'model.survival_fit': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['independent base-R likelihood optimization', 'flexsurv distribution and delta-method output oracle', 'closed-form censored exponential likelihood']), modelTier: 'literature' },
-  'model.prognostic_apply': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: 'literature' },
-  'profile.snapshot': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['profile_dataset.py']), modelTier: null },
+  // 1.1.0 (algorithm round C13): the `spline` family, a Royston-Parmar model of the log cumulative hazard written in R, with the median, the restricted mean and the
+  // survival beyond the data, and how far beyond the data each lies. flexsurv is the check in CI and is never called from the engine.
+  'model.survival_fit': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['independent base-R likelihood optimization', 'flexsurv distribution and delta-method output oracle', 'closed-form censored exponential likelihood', 'flexsurv::flexsurvspline (the spline family: knots, log likelihood, AIC, coefficients, the survival, median and restricted mean beyond the data, and their delta-method errors from the package\'s own covariance)']), modelTier: 'literature' },
+  // A prognostic model trained on the person's own historical table, cross-fitted (algorithm round P3): Cox, logistic or linear, a forest beside it for comparison, out-of-fold discrimination and
+  // calibration, the correlation with the outcome and the PROCOVA savings under the discounts. The equation is the shape model.prognostic_apply takes. `ranger` and `survival` are the runtime; the checks are closed forms and known-truth simulations.
+  'model.prognostic_train': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['coxph, glm and lm refits on the held-out folds by hand', 'design.procova for the sample-size ratios', 'a known-truth simulation of the out-of-fold discrimination, calibration and correlation']), modelTier: 'data' },
+  // A population-level disease-progression simulator from a published model family (algorithm round P4): linear, exponential, logistic or Emax progression, treatment as the clock slowed, power by simulation with its error. No disease is built in.
+  // 1.1.0 (plan T06, 2026-11-07): the `beta_logit` family, the CAMD/C-Path ADAS-cog 11 drug-disease-trial model of mild and moderate Alzheimer disease executed with the posterior its authors released in
+  // adsim 3.0 (a parameter file in the engine); a stated symptomatic and/or disease-modifying effect, placebo, dropout and three kinds of uncertainty. The four other families are unchanged.
+  'patients.progression': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen(['the moments of the outcome at every visit in closed form', 'the closed-form power of the same test (noncentral t with Welch degrees of freedom)',
+    'EMA qualification opinion 2013 Table 7: the covariate model (ApoE4 alleles, sex, age by genotype)', 'EMA qualification opinion 2013 Table 9: the expected ADAS-cog 11 intercept by baseline MMSE in a new study',
+    'EMA qualification opinion 2013 Table 11: the expected one-year change by baseline MMSE, sex and ApoE4 in a new study', 'EMA qualification opinion 2013 Table 8 medians of dropout, under a stated covariate reading',
+    'adsim 3.0 training manual: three printed numbers (Listings 2.6, 2.8 and 4.6)', 'closed forms of the beta observation, the Bateman placebo integral and the symptomatic and disease-modifying terms']), modelTier: 'scenario' },
+  'model.prognostic_apply': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: null },
+  'profile.snapshot': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['every printed figure recomputed from its definition (means, spreads, type-7 quantiles, counts)']), modelTier: null },
   'cohort.build': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
-  'population.scenario': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['simstudy semantics']), modelTier: 'scenario' },
+  'population.scenario': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['truncated-normal moments and a Gauss-Hermite integral of the copula correlation']), modelTier: 'scenario' },
   'population.literature': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'literature' },
-  'population.synthpop': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['synthpop']), modelTier: 'data' },
-  'population.quality': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'data' },
+  // 1.1.0 (algorithm round P1, P2): the m copies combined by the rules for synthetic data, Cox / log-rank / restricted-mean analyses, the false-positive rate of an
+  // analysis on the generator's copies when the arm labels are permuted, and per-record privacy (distance, membership risk, attribute inference).
+  'population.synthpop': { version: '1.4.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0']), endpoints: frozen([]), crossChecks: frozen(['the training table it was fitted to: marginals, correlations and logistic coefficients', 'synthpop summary of a fit to m copies (the combining rules of Raab, Nowok and Dibben)']), modelTier: 'data' },
+  'population.quality': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen([]), crossChecks: frozen(['synthpop summary of a fit to m copies (the combining rules)', 'survRM2 restricted mean difference', 'closed-form false-positive rate of an uncorrected analysis']), modelTier: 'data' },
   // A generated population held against a second baseline table (remediation plan D2): margins only, no model, so no tier.
   'population.check': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['base-R recomputation of the standardized differences']), modelTier: null },
   'patients.continuous': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen([]), modelTier: 'scenario' },
   'patients.binary': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary']), crossChecks: frozen([]), modelTier: 'scenario' },
-  'patients.time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['simsurv']), modelTier: 'scenario' },
-  'evidence.pool': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['metafor', 'meta engine']), modelTier: 'literature' },
-  'evidence.reconstruct_km': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['IPDfromKM']), modelTier: 'literature' },
-  'comparator.entropy_balance': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'cobalt']), modelTier: 'data' },
-  'comparator.propensity_weight': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt']), modelTier: 'data' },
+  'patients.time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['simsurv (exponential and Weibull event times at the same parameters)', 'regression on the output table']), modelTier: 'scenario' },
+  // 1.1.0 (algorithm round E7): an informative prior for the between-study heterogeneity (Turner et al. 2015, Bartos et al. 2023, or a stated one),
+  // with the Bayesian pooling as the headline and a prediction interval for two studies.
+  'evidence.pool': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['metafor', 'bayesmeta (a stated log-normal, inverse-gamma and half-normal prior for the heterogeneity: the pooled effect\'s mean and credible interval and the median heterogeneity, with two and four studies)']), modelTier: 'literature' },
+  'evidence.reconstruct_km': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['IPDfromKM (the same digitized curve, risk table and event total: medians and hazard ratio)', 'Cox on the original rows']), modelTier: 'literature' },
+  // 1.4.0 (algorithm round C7): `imputation`, the comparison run on completed tables and read by Rubin's rules (also on propensity_weight 1.5.0,
+  // weighted_cox 1.5.0 and aipw 1.4.0).
+  'comparator.entropy_balance': { version: '1.4.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'cobalt', 'mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin\'s rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice\'s)', 'known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not']), modelTier: 'data' },
+  // 1.4.0 (algorithm round C14): propensity trimming (a fixed bound or Crump's rule) that restates the population the estimate is about.
+  'comparator.propensity_weight': { version: '1.5.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0', '1.4.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'closed-form Crump et al. (2009) trimming bound on a uniform score', 'the estimate recomputed by hand on the kept people', 'mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin\'s rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice\'s)', 'known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not']), modelTier: 'data' },
   'comparator.rmst': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survRM2']), modelTier: 'data' },
   'comparator.maic': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['NICE DSU TSD 18']), modelTier: 'data' },
   'comparator.evalue': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EValue']), modelTier: 'scenario' },
   'comparator.map_prior': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['RBesT']), modelTier: 'literature' },
-  'design.analytic': { version: '1.3.0', compatibleVersions: frozen(['1.2.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), legacyReleases: ANALYTIC_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
-  'design.simulate': { version: '1.3.0', compatibleVersions: frozen(['1.2.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score']), modelTier: 'scenario' },
-  'design.grid': { version: '1.3.0', compatibleVersions: frozen(['1.2.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
-  'design.assurance': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(["O'Hagan 2005", 'independent Monte Carlo of the sequential design under the design prior']), modelTier: 'scenario' },
-  'design.procova': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['EMA 2022 qualification opinion']), modelTier: 'scenario' },
-  'accrual.poisson_gamma': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Anisimov & Fedorov 2007']), modelTier: 'scenario' },
+  'design.analytic': { version: '1.4.0', compatibleVersions: frozen(['1.2.0', '1.3.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), legacyReleases: ANALYTIC_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
+  'design.simulate': { version: '1.5.0', compatibleVersions: frozen(['1.2.0', '1.3.0', '1.4.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score', 'simtrial (wlr with mb): the modestly weighted statistic of the same patients to 1e-9, and its rejection probability against the package\'s own generator and test', 'gsDesign2 (gs_power_combo): the power of a group-sequential MaxCombo design with its spending, against the simulation with boundaries found under the null']), modelTier: 'scenario' },
+  // The confirmatory designs (algorithm round T2-T6, 2026-11-03): rpact does the arithmetic (R/rpact_adapter.R is the one file that calls it), so
+  // the checks are the packages and closed forms that are not rpact: gsDesign, mvtnorm, a negative-binomial sample size and a simulation in plain R.
+  // 1.1.0 (T3-T5 completed): the promising zone of the re-estimation, and the event-time selection and enrichment designs.
+  'design.confirmatory': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['gsDesign::gsDesign (test.type 3 and 4): efficacy and futility boundaries and the inflation over the fixed design', 'known-truth simulation of the group-sequential statistic, of the conditional-power rule and of the promising-zone rule in plain R', 'mvtnorm: the probability that an arm is selected at the interim (continuous, and event time with the correlation of log-rank statistics that share a control)', 'patient-level survival simulation in plain R: the probability that an arm, or the biomarker subset, is kept at the event-time interim', 'closed-form negative-binomial sample size (Zhu & Lakkis 2014)', 'the engine\'s own group-sequential recursion (the efficacy boundaries and the non-adaptive limit)']), modelTier: 'scenario' },
+  // Dose-finding designs (algorithm round T7, T15, 2026-11-03): the 3+3 rule, BOIN (local boundaries and a non-informative prior only), the keyboard
+  // design and the continual reassessment method, simulated on one toxicity curve with the same random numbers, and the exact probability of choosing
+  // the right dose among two or three randomised ones. Written in R (the packages are 80 to 100 times slower per trial); the packages are the checks.
+  'design.dose': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['BOIN (get.boundary, select.mtd, get.oc): the decision tables, the final dose of 300 random trials and the operating characteristics', 'Keyboard (get.boundary.kb, get.oc.kb): the decision tables and the operating characteristics', 'dfcrm (crm, getprior, crmsim): the Bayes estimate of the parameter to 3e-8, the skeleton and the operating characteristics', 'exact enumeration of the 3+3 rule as a Markov chain over the patients treated at each dose', 'brute-force enumeration of every outcome of a randomised selection']), modelTier: 'scenario' },
+  // Bayesian designs without MCMC (algorithm round T8, T10, 2026-11-03): the Bayesian optimal phase II design, predictive-probability monitoring and the calibration
+  // of a posterior-probability success threshold under a conjugate prior. Every number is exact (a dynamic programme over the responses, closed forms, Gauss-Legendre).
+  'design.bayesian': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['BOP2FE (get_boundary_binary): the futility and success boundaries; get_oc_binary: a simulated check of the operating characteristics', 'RBesT (oc2S, pmixdiff): the type I error and power of a probability threshold between two beta-binomial arms, and the probability that a difference exceeds a margin', "Simon's two-stage design (1989: 1/10, 5/29, expected size 15.0 at 0.1 and 0.3)", 'brute-force enumeration of every path of a small phase II trial', 'a simulation in plain R of the predictive-probability rule and of a normal threshold']), modelTier: 'scenario' },
+  // Hierarchical composite endpoints compared by win ratio (algorithm round T9, 2026-11-03): death, then recurrent events, then a score, compared pair by pair
+  // (the win ratio, the win difference, the win odds and the share of ties), tested by the Finkelstein-Schoenfeld permutation test and sized by simulation. Written
+  // in R: winratiosim takes 0.4 s a trial and hce compares on one ordinal scale with no censoring; hce is the check.
+  'design.win_ratio': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['hce (calcWO): the wins, losses, ties and win odds of the same uncensored patients on the single scale of ranks it takes', 'exact win, loss and tie probabilities of independent levels (exponential deaths, negative-binomial counts, a normal score with a threshold) against the simulated proportions', 'a pair-by-pair loop in plain R, written apart from the engine, on patients who drop out (the three levels, to the last pair)', 'the permutation variance of the Finkelstein-Schoenfeld statistic from relabelling the arms in plain R']), modelTier: 'scenario' },
+  'design.grid': { version: '1.5.0', compatibleVersions: frozen(['1.2.0', '1.3.0', '1.4.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
+  'design.assurance': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['numerical integration of power over the design prior (the O\'Hagan 2005 definition)', 'independent Monte Carlo of the sequential design under the design prior']), modelTier: 'scenario' },
+  'design.procova': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['closed-form sample size under the EMA 2022 opinion\'s correlation and variance discounts']), modelTier: 'scenario' },
+  'accrual.poisson_gamma': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['independent gamma, Poisson and binomial constructions of the Anisimov & Fedorov 2007 model']), modelTier: 'scenario' },
   'matching.evaluate': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Kleene truth table']), modelTier: null },
   // The comparator-effect methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the
   // methods above changed.
-  'comparator.weighted_cox': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards']), modelTier: 'data' },
+  'comparator.weighted_cox': { version: '1.5.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0', '1.4.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards', 'mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin\'s rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice\'s)', 'known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not']), modelTier: 'data' },
   'comparator.maic_time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['maicplus 0.1.2 vignette (Apache-2.0)', 'NICE DSU TSD 18', 'simulated target-population hazard ratio']), modelTier: 'data' },
-  'comparator.aipw': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary']), crossChecks: frozen(['closed-form AIPW (Bang & Robins 2005) on WeightIt weights', 'simulation with a known ATT: double robustness']), modelTier: 'data' },
+  // 1.3.0 (algorithm round C8, C14): a time-to-event outcome (the restricted mean survival time or the survival at tau, by Kaplan-Meier pseudo-observations)
+  // and propensity trimming.
+  'comparator.aipw': { version: '1.4.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form AIPW (Bang & Robins 2005) on WeightIt weights', 'simulation with a known ATT: double robustness', 'survRM2::rmst2 (the Kaplan-Meier restricted mean of each arm, which the pseudo-observations average to)', 'exact leave-one-out jackknife pseudo-observations', 'simulation with a known restricted-mean ATT (exponential times): double robustness', 'mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin\'s rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice\'s)', 'known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not']), modelTier: 'data' },
   'comparator.covariate_sets': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['comparator.entropy_balance', 'comparator.propensity_weight', 'comparator.aipw']), modelTier: 'data' },
   // --- robustness methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the methods above changed. ---
-  'comparator.negative_control': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EmpiricalCalibration 3.1.4 (sccs example)', 'Lipsitch 2010', 'Schuemie 2014']), modelTier: 'data' },
-  'comparator.tipping_point': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['stats::fisher.test and stats::binom.test', 'closed-form worst case (censoring as event)', 'Jackson et al. 2014']), modelTier: 'data' },
+  'comparator.negative_control': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EmpiricalCalibration 3.1.4 (sccs example)', 'metafor::rma maximum-likelihood fit of the empirical null', 'known-truth simulation of a common systematic bias']), modelTier: 'data' },
+  'comparator.tipping_point': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['stats::fisher.test and stats::binom.test', 'closed-form worst case (censoring as event)', 'survival::coxph with Breslow ties']), modelTier: 'data' },
   'comparator.prognostic_adjustment': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['FDA 2023 covariate-adjustment guidance, Table 1', 'M-estimation sandwich by numerical Jacobians', 'survival::coxph and survfit(newdata)']), modelTier: 'data' },
   // --- end robustness methods ---
   // --- longitudinal virtual patients (2026-10-07, plan 5.2): a linear mixed model of a continuous trajectory ---
-  'patients.longitudinal': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen(['nlme::lme on the output table', 'closed-form model-implied mean and variance']), modelTier: 'scenario' },
+  'patients.longitudinal': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous']), crossChecks: frozen(['nlme::lme on the output table', 'closed-form model-implied mean and variance', 'output hashes recorded from the previous release\'s code (a scenario that states none of the new keys replays byte for byte)', 'a mixed model and a plain comparison of the people still in, against the known effect under completely random, random and not random dropout', 'the treatment-policy and hypothetical effects of a rescue medication, from the potential outcomes of every generated person']), modelTier: 'scenario' },
   // --- end longitudinal ---
+  // Quantitative bias analysis of an estimate (algorithm round C1, C2, 2026-11-03): the tipping bias, the shifted null, the tipping confounder
+  // (tipr-style closed forms) and a probabilistic analysis. The input is an estimate and its interval, stated or taken from a saved comparison;
+  // no patient rows are read. Kept apart from comparator.tipping_point, which is about missing outcomes.
+  'comparator.bias_analysis': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['tipr (the tipping confounder: binary and normal confounders, ratio and difference measures)', 'closed-form shifted-null and tipping bias', 'known-truth simulation of a confounded study: the probabilistic adjustment recovers the truth', 'published worked example (Fox, MacLehose & Lash, probabilistic bias analysis)']), modelTier: 'scenario' },
+  // The G-computation form of the simulated treatment comparison (algorithm round C9, 2026-11-03): the IPD outcome model averaged over the aggregate
+  // trial's covariate distribution (the engine's Gaussian copula), anchored and unanchored, with the IPD bootstrapped.
+  'comparator.stc': { version: '1.0.0', endpoints: frozen(['continuous', 'binary']), crossChecks: frozen(['known-truth simulation of two trials with different covariate means: the marginal effect in the aggregate trial\'s population', 'comparator.maic on the same case (the identity link without a modifier, where the two estimate the same number)', 'stats::glm predictions averaged by hand over the same covariate sample']), modelTier: 'data' },
+  // Target-trial emulation from a person-period table (algorithm round C3, C4, 2026-11-03): a sequence of trials (intention to treat and per
+  // protocol with stabilised inverse-probability weights, a pooled logistic outcome model, the standardised risk difference) and clone-censor-weight
+  // (a grace period). Written in R; TrialEmulation is the cross-check of the sequence in CI and is never called from the engine.
+  // Dynamic borrowing of an external control arm (algorithm round C10, C11, C12, 2026-11-03): the power prior with a fixed discount, the self-adapting
+  // mixture (SAM) prior and the elastic prior, for a rate or a mean, in closed form: the posterior, the prior effective sample size, and the type I
+  // error and power over drifts of the true control value. Written in R from the papers' formulas; the packages are the checks.
+  'comparator.borrowing': { version: '1.0.0', endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['SAMprior (SAM_weight, and the exact operating characteristics eval_oc_bin_2arm and eval_oc_cont_2arm: type I error, power, bias and mean weight, binary and normal)', 'RBesT (postmix, pmixdiff, ess): the updated mixture, the probability that the treatment is better and the prior effective sample size', 'the power prior integrated numerically from its definition (the historical likelihood raised to the discount): mean, interval and probability', 'closed-form power-prior operating characteristics for a mean', 'the elastic function\'s two constants from the paper\'s equation and the congruence measure\'s exact law against a simulation']), modelTier: 'literature' },
+  'comparator.target_trial': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['TrialEmulation (its trial_example: the expanded person-trial-periods row for row, the intention-to-treat and per-protocol outcome-model coefficients and the standardised risks)', 'known-truth simulation with immortal time: the naive comparison is biased and clone-censor-weight recovers the truth, integrated exactly']), modelTier: 'data' },
+  // Evidence synthesis beyond a pairwise pool (algorithm round C5, C6, E8, 2026-11-03). The network and the shrinkage are written in R; the dose-response
+  // is dosresmeta's (the runtime library carries it), with the spline basis written here.
+  'evidence.network': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['netmeta (Senn2013 in contrast form with a three-arm study, and smokingcessation in arm form with multi-arm studies: effects, standard errors, tau-squared, Q and its split between designs, P-scores)', 'closed-form pairwise DerSimonian-Laird pooling of a network of two treatments']), modelTier: 'literature' },
+  'evidence.dose_response': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['the package\'s own article (Crippa & Orsini 2016): the linear and the four-knot spline fit of the colorectal-cancer data, the test of non-linearity and the table of ratios', 'a hand Greenland-Longnecker generalized-least-squares slope on counts whose variances are exact']), modelTier: 'literature' },
+  'evidence.shrinkage': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['van Zwet et al. (2023), Tables 2 and 3: the quantities of the Cochrane reference population by P value, integrated over the strata', 'a numerical integral of the mixture distribution given the data']), modelTier: 'literature' },
 })
 
 export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
@@ -188,6 +244,27 @@ export const VCR_JOB_METHODS = Object.freeze({
   // --- end robustness methods ---
   generate_patients_longitudinal: 'patients.longitudinal',
   population_check: 'population.check',
+  // the confirmatory designs (2026-11-03)
+  design_confirmatory: 'design.confirmatory',
+  // quantitative bias analysis and the G-computation simulated treatment comparison (2026-11-03)
+  bias_analysis: 'comparator.bias_analysis',
+  stc_comparator: 'comparator.stc',
+  // network and dose-response meta-analysis, and the empirical shrinkage of a published effect (2026-11-03)
+  network_meta: 'evidence.network',
+  dose_response_meta: 'evidence.dose_response',
+  effect_shrinkage: 'evidence.shrinkage',
+  // target-trial emulation from a person-period table (2026-11-03)
+  target_trial_emulation: 'comparator.target_trial',
+  // dose-finding designs and Bayesian designs without MCMC (2026-11-03)
+  design_dose: 'design.dose',
+  design_bayesian: 'design.bayesian',
+  // hierarchical composite endpoints compared by win ratio (2026-11-03)
+  design_win_ratio: 'design.win_ratio',
+  // dynamic borrowing of an external control arm (2026-11-03)
+  borrowing_prior: 'comparator.borrowing',
+  // a prognostic model trained on the person's own table, and a population-level disease-progression simulator (2026-11-03)
+  train_prognostic_model: 'model.prognostic_train',
+  generate_progression: 'patients.progression',
   // The batch reading of patient records (D4): run by the control plane on its slow local lane, never by the R engine.
   ...VCR_MATCH_BATCH_JOBS,
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).
@@ -196,10 +273,10 @@ export const VCR_JOB_METHODS = Object.freeze({
 
 /** Job kinds that read patient-level rows, and so need a snapshot grant (plan §8.1). */
 export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
-  'fit_survival_model', 'apply_prognostic_model',
+  'fit_survival_model', 'apply_prognostic_model', 'train_prognostic_model',
   'profile_snapshot', 'build_cohort', 'synthesize_population', 'population_quality',
   'weight_comparator', 'propensity_weight_comparator', 'rmst', 'match_criteria', 'weighted_cox_comparator',
-  'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator',
+  'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator', 'stc_comparator', 'target_trial_emulation',
   // robustness methods
   'prognostic_adjustment_comparator',
 ])
@@ -218,10 +295,13 @@ export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
 export const VCR_INDIVIDUAL_INPUT_SOURCES = Object.freeze({
   'model.survival_fit': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),
   'model.prognostic_apply': frozen([...VCR_REAL_PATIENT_SOURCES, 'synthetic']),
+  'model.prognostic_train': VCR_REAL_PATIENT_SOURCES,
   'population.synthpop': VCR_REAL_PATIENT_SOURCES,
   'comparator.entropy_balance': VCR_REAL_PATIENT_SOURCES,
   'comparator.propensity_weight': VCR_REAL_PATIENT_SOURCES,
   'comparator.maic': VCR_REAL_PATIENT_SOURCES,
+  'comparator.stc': VCR_REAL_PATIENT_SOURCES,
+  'comparator.target_trial': VCR_REAL_PATIENT_SOURCES,
   'comparator.weighted_cox': VCR_REAL_PATIENT_SOURCES,
   'comparator.aipw': VCR_REAL_PATIENT_SOURCES,
   'comparator.covariate_sets': VCR_REAL_PATIENT_SOURCES,
@@ -739,6 +819,86 @@ function usesNonProportionalHazards(scenario) {
 }
 
 /**
+ * Does a simulation scenario ask for what design.simulate and design.grid 1.5.0 added: the modestly weighted test (algorithm round T12) or a
+ * MaxCombo analysis of a group-sequential design (T14)? Mirrored by `.vcrp_uses_weighted_beyond_1_4_0` in protocol.R.
+ * @param {any} scenario
+ */
+function usesWeightedBeyond1_4_0(scenario) {
+  if (scenario?.analysis?.method === 'modestly_weighted') return true
+  if (scenario?.analysis?.method !== 'maxcombo') return false
+  const kinds = [scenario?.design?.kind, ...(Array.isArray(scenario?.designs) ? scenario.designs.map((/** @type {any} */ design) => design?.kind) : [])]
+  return kinds.includes('group_sequential')
+}
+
+/**
+ * Does a longitudinal scenario ask for what patients.longitudinal 1.2.0 added: a curved trajectory, a dropout that depends on the outcome or a
+ * rescue medication (algorithm round T11)? Mirrored by `.vcrp_uses_longitudinal_beyond_1_1_0` in protocol.R.
+ * @param {any} scenario
+ */
+function usesLongitudinalBeyond1_1_0(scenario) {
+  return scenario?.trajectory !== undefined || scenario?.dropoutModel !== undefined || scenario?.rescue !== undefined
+}
+
+/**
+ * Does a confirmatory scenario ask for what design.confirmatory 1.1.0 added: a promising zone, an event-time multi-arm or enrichment
+ * design, or the direction of a mean or risk difference (`hypothesis`)? Mirrored by `.vcrp_uses_confirmatory_beyond_1_0_0` in protocol.R.
+ * @param {any} scenario
+ */
+function usesConfirmatoryBeyond1_0_0(scenario) {
+  const design = scenario?.design
+  if (design === null || typeof design !== 'object') return false
+  return design.promisingZone !== undefined || scenario?.hypothesis !== undefined
+    || ((design.kind === 'multi_arm_selection' || design.kind === 'enrichment') && scenario?.endpoint?.type === 'time_to_event')
+}
+
+/**
+ * Does a confirmatory scenario ask for what design.confirmatory 1.2.0 added: the accrual, the time unit and the control median of an event-time
+ * multi-arm selection or enrichment, which turn its events into people (the people of the other event-time kinds are an output, not a key)?
+ * Mirrored by `.vcrp_uses_confirmatory_beyond_1_1_0` in protocol.R.
+ * @param {any} scenario
+ */
+function usesConfirmatoryBeyond1_1_0(scenario) {
+  const design = scenario?.design
+  if (design === null || typeof design !== 'object') return false
+  return (design.kind === 'multi_arm_selection' || design.kind === 'enrichment') && scenario?.endpoint?.type === 'time_to_event'
+    && (scenario?.accrual !== undefined || scenario?.timeUnit !== undefined || scenario?.truth?.controlMedian !== undefined)
+}
+
+/**
+ * Does a synthesis or a quality scenario ask for what population.synthpop and population.quality 1.1.0 added: a Cox, log-rank or restricted-mean analysis,
+ * the permuted-arm calibration or the privacy measures (algorithm round P1, P2)? Mirrored by `.vcrp_uses_quality_beyond_1_0_0` in protocol.R.
+ * @param {any} scenario
+ */
+function usesQualityBeyond1_0_0(scenario) {
+  if (scenario === null || typeof scenario !== 'object') return false
+  return scenario.inference !== undefined || scenario.privacy !== undefined
+    || (Array.isArray(scenario.analyses) && scenario.analyses.some((/** @type {any} */ a) => ['cox', 'logrank', 'rmst'].includes(a?.kind)))
+}
+
+/** The comparators that read `scenario.trim` (propensity trimming, algorithm round C14). Mirrored by `.vcrp_legacy_design_version` in protocol.R. */
+const TRIMMING_SINCE = Object.freeze({ 'comparator.propensity_weight': '1.4.0', 'comparator.weighted_cox': '1.4.0', 'comparator.aipw': '1.3.0' })
+
+/** The comparators that read `scenario.imputation` (algorithm round C7), and the release that began to. Mirrored in protocol.R. */
+const IMPUTATION_SINCE = Object.freeze({ 'comparator.entropy_balance': '1.4.0', 'comparator.propensity_weight': '1.5.0', 'comparator.weighted_cox': '1.5.0', 'comparator.aipw': '1.4.0' })
+
+/** Does a design scenario state a hypothesis (1.4.0, T1)? Mirrored by `.vcrp_uses_hypothesis` in protocol.R. @param {any} scenario */
+function usesHypothesis(scenario) {
+  return scenario !== null && typeof scenario === 'object' && scenario.hypothesis !== undefined
+}
+
+/** @param {string} version @param {string} from */
+function versionAtLeast(version, from) {
+  const a = String(version).split('.').map(Number)
+  const b = from.split('.').map(Number)
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const x = a[i] ?? 0
+    const y = b[i] ?? 0
+    if (x !== y) return x > y
+  }
+  return true
+}
+
+/**
  * Replay prior supported designs under their recorded version; never label new designs as old. Two kinds of record: the oldest
  * (`legacyVersion`) is by design, and a later release (`legacyReleases`) is by design and endpoint.
  * @param {any} job
@@ -746,12 +906,41 @@ function usesNonProportionalHazards(scenario) {
 function legacyDesignVersionMatches(job) {
   const spec = /** @type {any} */ (VCR_ENGINE_METHODS)[job.method]
   if (!spec) return false
+  // a campaign's precision block is the current release's: no older label carries it (mirrored in protocol.R)
+  if (job.scenario?.evaluation !== undefined) return false
+  // the oldest releases did not have the hypothesis either (a design is never labelled with a version that did not have it)
+  if (['design.analytic', 'design.simulate', 'design.grid'].includes(job.method) && usesHypothesis(job.scenario) && !versionAtLeast(job.methodVersion, '1.4.0')) return false
   if ((spec.compatibleVersions ?? []).includes(job.methodVersion)) {
-    // a design is never labelled with a version that did not have it: 1.3.0 added the hazard ratio that changes over time and MaxCombo
-    if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesNonProportionalHazards(job.scenario)) return false
+    // a design is never labelled with a version that did not have it: 1.3.0 added the hazard ratio that changes over time and MaxCombo,
+    // and 1.4.0 the hypothesis (this function is not asked about a job at the current version)
+    if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesNonProportionalHazards(job.scenario) && !versionAtLeast(job.methodVersion, '1.3.0')) return false
+    // and patients.longitudinal 1.2.0 the curved trajectory, the dropout that depends on the outcome and the rescue medication
+    if (job.method === 'patients.longitudinal' && usesLongitudinalBeyond1_1_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.2.0')) return false
+    // and 1.5.0 the modestly weighted test
+    if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesWeightedBeyond1_4_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.5.0')) return false
+    // and model.survival_fit 1.1.0 the spline family
+    if (job.method === 'model.survival_fit' && (job.scenario?.distribution === 'spline' || job.scenario?.knots !== undefined)) return false
     // and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
-    if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined) return false
-    return !job.method.startsWith('patients.') || (!job.scenario?.pairing && !job.scenario?.cohortRules)
+    if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined && !versionAtLeast(job.methodVersion, '1.1.0')) return false
+    // and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs, and 1.2.0 the accrual of those two
+    if (job.method === 'design.confirmatory' && usesConfirmatoryBeyond1_0_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.1.0')) return false
+    if (job.method === 'design.confirmatory' && usesConfirmatoryBeyond1_1_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.2.0')) return false
+    if (job.method === 'population.synthpop' && job.scenario?.imputationRules !== undefined && !versionAtLeast(job.methodVersion, '1.3.0')) return false
+    // and population.synthpop / population.quality 1.1.0 the survival analyses, the permuted-arm calibration and the privacy measures
+    if ((job.method === 'population.synthpop' || job.method === 'population.quality') && usesQualityBeyond1_0_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.1.0')) return false
+    // and evidence.pool 1.1.0 the informative prior for the heterogeneity
+    if (job.method === 'evidence.pool' && job.scenario?.tauPrior !== undefined) return false
+    // and patients.progression 1.1.0 the beta_logit family and its analysis of covariance
+    if (job.method === 'patients.progression' && (job.scenario?.model?.family === 'beta_logit' || job.scenario?.analysis?.kind === 'ancova') && !versionAtLeast(job.methodVersion, '1.1.0')) return false
+    // and the weighting comparators 1.4.0 (AIPW 1.3.0) the propensity trimming, and AIPW 1.3.0 the time-to-event outcome
+    const trimSince = /** @type {Record<string, string>} */ (TRIMMING_SINCE)[job.method]
+    if (trimSince && job.scenario?.trim !== undefined && !versionAtLeast(job.methodVersion, trimSince)) return false
+    if (job.method === 'comparator.aipw' && job.scenario?.endpoint?.type === 'time_to_event' && !versionAtLeast(job.methodVersion, '1.3.0')) return false
+    // and the four weighting comparators one release later the imputation of missing covariates
+    const imputationSince = /** @type {Record<string, string>} */ (IMPUTATION_SINCE)[job.method]
+    if (imputationSince && job.scenario?.imputation !== undefined && !versionAtLeast(job.methodVersion, imputationSince)) return false
+    // (pairing and cohort rules are 1.1.0's: only the 1.0.0 label of a virtual-patient method cannot carry them)
+    return !job.method.startsWith('patients.') || job.methodVersion !== '1.0.0' || (!job.scenario?.pairing && !job.scenario?.cohortRules)
   }
   const base = job.scenario?.design?.kind
   const kinds = job.method === 'design.grid' && Array.isArray(job.scenario?.designs)

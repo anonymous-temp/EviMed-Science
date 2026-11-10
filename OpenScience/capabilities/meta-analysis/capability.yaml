@@ -17,7 +17,6 @@ persona: 你是系统综述与 Meta 分析研究者。全部统计由确定性�
 safetyClass: clinical
 skills:
 - meta-analysis
-- autopilot-episode
 tools:
 - mcp__evimed__meta_analysis
 produces:
@@ -29,9 +28,6 @@ produces:
   - path: meta-analysis-run.json
     role: work
     required: true
-  - path: agenda-delta.json
-    role: work
-    required: false
   checks:
   - requiredOutputsExist
   - citationsResolvable
@@ -47,12 +43,6 @@ inputs:
   - analysisType
   - uploadedFiles
   - ipdData
-autopilot:
-  taskTypes:
-  - evidence-update
-  costClass: high
-  unattendedInputs:
-  - topic
 estimatedMinutes:
 - 30
 - 180

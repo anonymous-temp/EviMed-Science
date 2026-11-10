@@ -7,7 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { DocumentParserClient, normalizeDoi } from "../src/documentParserClient.mjs";
 
-const REVISION = "evimed-extract@0.5.0";
+const REVISION = "evimed-extract@1.0.0";
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const PDF = Buffer.from("%PDF-1.4\n% a synthetic document\n");
 
@@ -152,7 +152,7 @@ test("a file neither reader takes is read by the engine's parsers when the calle
   assert.equal(seen.length, 0, "the parsing API is never sent what the engine reads");
 });
 
-test("a document the parser must read fails with a stated reason when no parser is configured", async () => {
+test("a document the parser must read fails with a stated reason when no parser is configured and nothing else can read it", async () => {
   await assert.rejects(new DocumentParserClient().parseBytes({ bytes: PDF, filename: "指南.pdf" }),
     (error) => error.code === "source_parser_unconfigured" && error.status === 503);
 });
@@ -164,35 +164,42 @@ test("bytes that do not hash to their registered digest are refused before uploa
   assert.equal(seen.length, 0);
 });
 
-test("the extract endpoint gets the bytes, their checksum, the name and the format, and its answer becomes protocol v1", async (t) => {
+test("engine A gets the bytes, their checksum, the name, the format and the metadata request, and its answer becomes protocol v1", async (t) => {
   const { baseUrl, seen } = await withParser(t, [{
     status: 200,
     headers: { "x-quota-unit": "credit", "x-quota-cost": "1", "x-quota-remaining": "99" },
     body: envelope(200, {
-      title: " 利伐沙班在老年房颤患者中的安全性 ",
-      authors: "张三",
-      abstract: "本研究评估了……",
-      keywords: ["房颤", "抗凝", 7],
-      publication_date: "2024-01",
-      source: "中华心血管病杂志",
-      doi: "https://doi.org/10.1234/ABC.2024.001.",
-      content: "第一页正文\n\n第二页正文",
+      content: "[Page 1]\n第一页正文\n\n[Page 2]\n第二页正文",
+      format: "pdf", media_type: "application/pdf",
+      parse_info: { parser: "native-pdf", parser_version: "13", page_count: 2, ocr_pages: [2], warnings: [{ code: "pdf_page_ocr", message: "该页已执行 OCR", source_number: 2 }] },
+      metadata: {
+        title: " 利伐沙班在老年房颤患者中的安全性 ",
+        authors: "张三",
+        abstract: "本研究评估了……",
+        keywords: ["房颤", "抗凝", 7],
+        publication_date: "2024-01",
+        source: "中华心血管病杂志",
+        doi: "https://doi.org/10.1234/ABC.2024.001.",
+      },
+      metadata_status: "succeeded", metadata_error: null,
     }),
   }]);
   const parser = client(baseUrl, { token: "sk-test-only" });
   const result = await parser.parseBytes({ bytes: PDF, filename: "房颤指南.PDF", mediaType: "application/pdf" });
   assert.equal(seen.length, 1);
   const [request] = seen;
-  assert.equal(request.url, "/api/v1/extract/text/file");
+  assert.equal(request.method, "POST");
+  assert.equal(request.url, "/api/v1/parse/engine-a/file");
   assert.equal(request.headers.authorization, "Bearer sk-test-only");
   const file = request.form.get("file");
   assert.deepEqual(Buffer.from(await file.arrayBuffer()), PDF);
   assert.equal(request.form.get("checksum"), sha(PDF));
   assert.equal(request.form.get("filename"), "房颤指南.PDF");
   assert.equal(request.form.get("format"), "pdf");
+  assert.equal(request.form.get("extract_metadata"), "true", "metadata is asked for, as it always was");
 
   assert.equal(result.protocolVersion, 1);
-  assert.equal(result.text, "第一页正文\n\n第二页正文");
+  assert.equal(result.text, "第一页正文\n\n第二页正文", "the text is the document's: the service's page lines are not part of it");
   assert.equal(result.summary, "本研究评估了……", "the abstract is the summary when there is one");
   assert.deepEqual(result.metadata, {
     title: "利伐沙班在老年房颤患者中的安全性",
@@ -204,46 +211,58 @@ test("the extract endpoint gets the bytes, their checksum, the name and the form
     doi: "10.1234/ABC.2024.001",
   });
   assert.deepEqual(result.extractor, {
-    name: "evimed-extract", version: REVISION, parser: "api", endpoint: "extract",
+    name: "evimed-extract", version: REVISION, parser: "api", endpoint: "engine-a",
     requestId: "C78339AE-7D25-4948-8826-2641556A5A06", quota: { unit: "credit", cost: 1, remaining: 99 },
+    parseInfo: { parser: "native-pdf", parserVersion: "13", pageCount: 2, ocrPages: 1, warnings: [{ code: "pdf_page_ocr", page: 2 }] },
+    metadataStatus: "succeeded",
   });
-  assert.deepEqual(result.units, [{ id: "document", unitType: "segment", status: "extracted", itemIds: [] }]);
+  assert.deepEqual(result.units.map((unit) => [unit.id, unit.unitType, unit.status]), [["page-1", "page", "extracted"], ["page-2", "page", "extracted"]]);
   assert.deepEqual([result.facts, result.methods], [[], []]);
-  assert.equal("pageMap" in result, false, "no pages sent, no page map invented");
 });
 
-test("pages light up the page map, converted from the service's code points to our UTF-16 units", async (t) => {
-  // 𠀀 is outside the BMP: one code point, two UTF-16 units. Every offset after
-  // it moves by one in our units.
-  const content = "𠀀页一正文页二正文";
-  const { baseUrl } = await withParser(t, [{
-    status: 200,
-    body: envelope(200, { content, pages: [
-      { index: 1, start: 0, end: 5, status: "ok" },
-      { index: 2, start: 5, end: 5, status: "ocr_failed" },
-      { index: 3, start: 5, end: 9, status: "ok" },
-    ] }),
-  }]);
+test("the page map is built from engine A's [Page N] lines, in UTF-16 offsets, and an empty page is empty", async (t) => {
+  // 𠀀 is outside the BMP: two UTF-16 units. JavaScript's offsets are the ones kept.
+  const content = "[Page 1]\n𠀀页一正文\n\n[Page 2]\n\n[Page 3]\n页三正文";
+  const { baseUrl } = await withParser(t, [{ status: 200, body: envelope(200, { content, format: "pdf", media_type: "application/pdf",
+    parse_info: { parser: "native-pdf", parser_version: "13", page_count: 3, ocr_pages: [], warnings: [] } }) }]);
   const result = await client(baseUrl).parseBytes({ bytes: PDF, filename: "scan.pdf" });
-  assert.deepEqual(result.pageMap, [
-    { page: 1, start: 0, end: 6, status: "ok" },
-    { page: 2, start: 6, end: 6, status: "ocr_failed" },
-    { page: 3, start: 6, end: 10, status: "ok" },
-  ]);
-  assert.equal(content.slice(6, 10), "页二正文");
-  assert.deepEqual(result.units.map((unit) => [unit.id, unit.unitType, unit.status]), [
-    ["page-1", "page", "extracted"], ["page-2", "page", "failed"], ["page-3", "page", "extracted"],
-  ]);
+  assert.deepEqual(result.pageMap.map((entry) => [entry.page, entry.status]), [[1, "ok"], [2, "empty"], [3, "ok"]]);
+  for (const entry of result.pageMap) assert.equal(result.text.slice(entry.start, entry.end).includes("[Page"), false, "a page's span holds its own text, not a marker");
+  assert.equal(result.text.slice(result.pageMap[0].start, result.pageMap[0].end).trim(), "𠀀页一正文");
+  assert.equal(result.text.slice(result.pageMap[2].start, result.pageMap[2].end), "页三正文");
+  assert.deepEqual(result.units.map((unit) => [unit.id, unit.status]), [["page-1", "extracted"], ["page-2", "no_content"], ["page-3", "extracted"]]);
 });
 
-test("a page map that does not fit its text is dropped and the document is kept", async (t) => {
-  const { baseUrl } = await withParser(t, [{
-    status: 200, body: envelope(200, { content: "短文", pages: [{ index: 1, start: 0, end: 40, status: "ok" }] }),
-  }]);
+test("a page the service says OCR found nothing on is empty even when its span holds a stray character", async (t) => {
+  const { baseUrl } = await withParser(t, [{ status: 200, body: envelope(200, { content: "[Page 1]\n正文\n\n[Page 2]\n·",
+    parse_info: { parser: "native-pdf", parser_version: "13", page_count: 2, ocr_pages: [2], warnings: [{ code: "pdf_ocr_empty_page", message: "m", source_number: 2 }] } }) }]);
   const result = await client(baseUrl).parseBytes({ bytes: PDF, filename: "a.pdf" });
-  assert.equal(result.text, "短文");
+  assert.deepEqual(result.pageMap.map((entry) => entry.status), ["ok", "empty"]);
+});
+
+test("markers that go backwards are no page map, and the document is kept", async (t) => {
+  const { baseUrl } = await withParser(t, [{ status: 200, body: envelope(200, { content: "[Page 2]\n甲\n[Page 1]\n乙" }) }]);
+  const result = await client(baseUrl).parseBytes({ bytes: PDF, filename: "a.pdf" });
+  assert.equal(result.text, "[Page 2]\n甲\n[Page 1]\n乙");
   assert.equal("pageMap" in result, false);
-  assert.equal(result.extractor.pageMapDropped, "pages_out_of_range");
+  assert.equal(result.extractor.pageMapDropped, "pages_inconsistent");
+});
+
+test("engine B is selected by one setting, uses its own route, and has no page markers to map", async (t) => {
+  const { baseUrl, seen } = await withParser(t, [{ status: 200, body: envelope(200, { content: "引擎 B 正文", format: null, media_type: null }) }]);
+  const result = await client(baseUrl, { engine: "engine-b" }).parseBytes({ bytes: PDF, filename: "a.pdf" });
+  assert.equal(seen[0].url, "/api/v1/parse/engine-b/file");
+  assert.equal(result.extractor.endpoint, "engine-b");
+  assert.equal("pageMap" in result, false);
+  assert.equal("parseInfo" in result.extractor, false);
+  assert.throws(() => new DocumentParserClient({ engine: "engine-c" }), /engine/);
+  assert.equal(new DocumentParserClient().engine, "engine-a", "engine A is the default");
+});
+
+test("an unlimited key's quota header is read as unlimited, not as a number", async (t) => {
+  const { baseUrl } = await withParser(t, [{ status: 200, headers: { "x-quota-cost": "1", "x-quota-remaining": "unlimited" }, body: envelope(200, { content: "x" }) }]);
+  const result = await client(baseUrl).parseBytes({ bytes: PDF, filename: "a.pdf" });
+  assert.deepEqual(result.extractor.quota, { unit: "credit", cost: 1, unlimited: true });
 });
 
 test("an outage is retried with backoff, and a named Retry-After is honoured", async (t) => {
@@ -284,36 +303,88 @@ test("a 500 is retried once and then named", async (t) => {
   assert.equal(seen.length, 2);
 });
 
-test("a metadata failure that survives its retries falls back once to the text-only endpoint", async (t) => {
-  const upstream = { status: 502, body: envelope(502, { error_code: "upstream_error" }) };
-  const { baseUrl, seen } = await withParser(t, [upstream, upstream, upstream,
-    { status: 200, headers: { "x-quota-cost": "1" }, body: envelope(200, { content: "仍然拿到了正文" }) }]);
-  const result = await client(baseUrl).parseBytes({ bytes: PDF, filename: "a.pdf" });
-  assert.deepEqual(seen.map((request) => request.url), [
-    "/api/v1/extract/text/file", "/api/v1/extract/text/file", "/api/v1/extract/text/file", "/api/v1/parse/file",
-  ]);
+test("a key without the extract scope is answered 403 on the metadata request, asked again once for the text alone, and then not asked for metadata for a while", async (t) => {
+  const denied = { status: 403, body: envelope(403, { error_code: "insufficient_scope" }) };
+  const { baseUrl, seen } = await withParser(t, [denied, { status: 200, body: envelope(200, { content: "仍然拿到了正文" }) },
+    { status: 200, body: envelope(200, { content: "第二份" }) }]);
+  let clock = 1_000_000;
+  const parser = client(baseUrl, { now: () => clock });
+  const result = await parser.parseBytes({ bytes: PDF, filename: "a.pdf" });
+  assert.deepEqual(seen.map((request) => request.form.get("extract_metadata")), ["true", "false"]);
   assert.equal(result.text, "仍然拿到了正文");
-  assert.equal(result.extractor.endpoint, "parse");
   assert.equal("metadata" in result, false);
-  assert.equal(result.summary, "仍然拿到了正文");
+  assert.equal(parser.status().metadata, "scope_denied");
+  await parser.parseBytes({ bytes: Buffer.concat([PDF, Buffer.from("2")]), filename: "b.pdf" });
+  assert.equal(seen[2].form.get("extract_metadata"), "false", "no second 403 is paid for");
+  clock += 11 * 60_000;
+  assert.equal(parser.status().metadata, "available");
+});
+
+test("a 403 on the plain parse is the key lacking the parse scope, final, and says so in the status", async (t) => {
+  const { baseUrl, seen } = await withParser(t, [{ status: 403, body: envelope(403, { error_code: "insufficient_scope" }) },
+    { status: 403, body: envelope(403, { error_code: "insufficient_scope" }) }]);
+  const parser = client(baseUrl);
+  await assert.rejects(parser.parseBytes({ bytes: PDF, filename: "a.pdf" }), (error) => error.code === "source_parser_scope_denied" && error.status === 502);
+  assert.equal(seen.length, 2, "the metadata request, then the plain one");
+  assert.equal(parser.status().auth, "scope_denied");
+});
+
+test("a failed metadata analysis is a 200 with the whole text, and the document arrives without metadata", async (t) => {
+  const { baseUrl, seen } = await withParser(t, [{ status: 200, body: envelope(200, { content: "正文", metadata: null, metadata_status: "failed", metadata_error: "metadata_timeout" }) }]);
+  const result = await client(baseUrl).parseBytes({ bytes: PDF, filename: "a.pdf" });
+  assert.equal(result.text, "正文");
+  assert.equal("metadata" in result, false);
+  assert.equal(result.extractor.metadataStatus, "failed");
+  assert.equal(seen.length, 1, "no second parse for a failed analysis");
+});
+
+test("an empty-content 422 is a document with no text, kept as such, and never read again locally", async (t) => {
+  const { baseUrl } = await withParser(t, [{ status: 422, body: envelope(422, { error_code: "empty_content" }) }]);
+  let asked = 0;
+  const parser = client(baseUrl, { localReader: { read: async () => { asked += 1; return { text: "invented" }; } } });
+  const result = await parser.parseBytes({ bytes: PDF, filename: "scan.pdf" });
+  assert.equal(result.text, "");
+  assert.equal(result.units[0].status, "no_content");
+  assert.equal(result.extractor.empty, true);
+  assert.equal(asked, 0);
 });
 
 for (const [status, errorCode, code, mapped] of [
-  [413, "payload_too_large", "source_parser_payload_too_large", 413],
+  [413, "document_too_complex", "source_parser_payload_too_large", 413],
   [415, "unsupported_format", "source_format_unsupported", 415],
+  [415, "format_mismatch", "source_format_unsupported", 415],
   [422, "checksum_failed", "source_parser_checksum_failed", 422],
+  [422, "corrupt_document", "source_parser_document_unreadable", 422],
+  [422, "encrypted_document", "source_parser_document_unreadable", 422],
+  [422, "parse_failed", "source_parser_document_unreadable", 422],
   [401, "invalid_api_key", "source_parser_auth_failed", 502],
-  [403, "insufficient_scope", "source_parser_auth_failed", 502],
+  [403, "insufficient_scope", "source_parser_scope_denied", 502],
+  [404, "", "source_parser_route_missing", 502],
   [400, "missing_format", "source_parser_rejected", 502],
+  [504, "parser_timeout", "source_parser_timeout", 503],
 ]) {
-  test(`HTTP ${status} is final on the first answer, as ${code}`, async (t) => {
-    const { baseUrl, seen } = await withParser(t, [{ status, body: envelope(status, { error_code: errorCode }) }]);
+  test(`HTTP ${status} ${errorCode || "(no code)"} is final on its first answer, as ${code}`, async (t) => {
+    // Two answers are scripted: a 403 is asked again once, for the text alone (the metadata scope), and nothing else is.
+    const answer = { status, body: envelope(status, errorCode ? { error_code: errorCode } : null) };
+    const { baseUrl, seen } = await withParser(t, [answer, answer]);
     const parser = client(baseUrl);
     await assert.rejects(parser.parseBytes({ bytes: PDF, filename: "a.pdf" }), (error) => error.code === code && error.status === mapped);
-    assert.equal(seen.length, 1);
+    assert.equal(seen.length, status === 403 ? 2 : 1);
     assert.deepEqual(parser.waits, []);
   });
 }
+
+test("429 quota_exhausted is final, 429 rate_limited and 503 are waited out on the service's own Retry-After, and 502 is retried like an outage", async (t) => {
+  const { baseUrl, seen } = await withParser(t, [
+    { status: 502, body: envelope(502, { error_code: "download_failed" }) },
+    { status: 429, headers: { "retry-after": "3" }, body: envelope(429, { error_code: "rate_limited" }) },
+    { status: 200, body: envelope(200, { content: "好了" }) },
+  ]);
+  const parser = client(baseUrl);
+  assert.equal((await parser.parseBytes({ bytes: PDF, filename: "a.pdf" })).text, "好了");
+  assert.deepEqual(parser.waits, [1000, 3000]);
+  assert.equal(seen.length, 3);
+});
 
 test("the whole parse is bounded by the client timeout, retries included", async (t) => {
   const { baseUrl } = await withParser(t, [{ hang: true }]);
@@ -383,15 +454,16 @@ test("health reads the service's own answer, and sends it no credential", async 
   const parser = client(baseUrl, { token: "sk-never-sent" });
   // `credential` says what a parse sends, `file` or `none` -- never whether the
   // service accepted anything: this service answers without a key.
-  assert.deepEqual(await parser.health(), { configured: true, status: "healthy", credential: "file", revision: REVISION, environment: "test" });
+  assert.deepEqual(await parser.health(), { configured: true, status: "healthy", credential: "file", revision: REVISION, engine: "engine-a", environment: "test" });
   await assert.rejects(parser.health(), { code: "source_parser_draining" });
   assert.equal(seen.every((request) => request.headers.authorization === undefined), true);
   assert.deepEqual(await new DocumentParserClient().health(), { configured: false });
 });
 
-test("without a key file a parse sends no Authorization header and still gets its text", async (t) => {
-  // The parser team's service answers without a key (measured 2026-09-22);
-  // an empty key file must not stop a document from being parsed.
+test("without a key file a parse sends no Authorization header, and the service's answer is read as it comes", async (t) => {
+  // Since 2026-10-27 the service wants a key; an empty key file sends none, so
+  // what happens next is the service's to say (here it answers, as a server that
+  // has authentication off would).
   const { baseUrl, seen } = await withParser(t, [
     { status: 200, body: envelope(200, { content: "EviMed parser probe: aspirin 100 mg daily.\n" }) },
   ]);
@@ -448,4 +520,127 @@ test("the total parse deadline covers an injected transport's hanging streamed b
   finally { clearInterval(keepAlive); }
   assert.ok(Date.now() - started < 1500);
   assert.equal(canceled, true);
+});
+
+
+/** A local reader whose answers are scripted and whose calls are recorded. */
+function localReader(answer) {
+  const calls = [];
+  return { calls, read: async (input) => { calls.push(input); if (answer instanceof Error) throw answer; return answer; } };
+}
+const LOCAL_PAGES = { text: "[Page 1]\n本地读出的第一页\n\n[Page 2]\n第二页", version: "1.1.0",
+  pageMap: [{ page: 1, start: 9, end: 19, status: "ok" }, { page: 2, start: 31, end: 34, status: "ok" }] };
+
+for (const [label, answers, expectedCode] of [
+  ["a 404 (the API has moved again)", [{ status: 404, body: envelope(404, null) }], "source_parser_route_missing"],
+  ["a 401 (the key is refused)", [{ status: 401, body: envelope(401, { error_code: "invalid_api_key" }) }], "source_parser_auth_failed"],
+  ["a spent quota", [{ status: 429, body: envelope(429, { error_code: "quota_exhausted" }) }], "source_parser_quota_exhausted"],
+  ["a 504", [{ status: 504, body: envelope(504, { error_code: "parser_timeout" }) }], "source_parser_timeout"],
+  ["a 500 that stays", [{ status: 500, body: envelope(500, null) }, { status: 500, body: envelope(500, null) }], "source_parser_internal_error"],
+  ["a 503 that stays", [{ status: 503, body: envelope(503, null) }, { status: 503, body: envelope(503, null) }, { status: 503, body: envelope(503, null) }], "source_parser_unavailable"],
+  ["an answer that is not the envelope", [{ status: 200, body: "<html>proxy error</html>" }], "source_parser_response_invalid"],
+]) {
+  test(`a PDF is read from its original bytes when the service answers with ${label}, and the extractor says so`, async (t) => {
+    const { baseUrl } = await withParser(t, answers);
+    const reader = localReader(LOCAL_PAGES);
+    const parser = client(baseUrl, { localReader: reader });
+    const result = await parser.parseBytes({ bytes: PDF, filename: "指南.pdf" });
+    assert.equal(result.text, LOCAL_PAGES.text);
+    assert.deepEqual(result.extractor, { name: "evimed-local-reader", version: "1.1.0", parser: "local-fallback", fallbackFor: expectedCode });
+    assert.deepEqual(result.pageMap, LOCAL_PAGES.pageMap);
+    assert.deepEqual([reader.calls.length, reader.calls[0].name, reader.calls[0].format, reader.calls[0].sha256], [1, "指南.pdf", "pdf", sha(PDF)]);
+    assert.deepEqual(parser.counters().filter((row) => row.outcome === "local_fallback"), [{ outcome: "local_fallback", code: expectedCode, value: 1 }]);
+  });
+}
+
+test("a connection that never answers is cut at the timeout and the PDF is read locally; the local read is not under that clock", async (t) => {
+  const { baseUrl } = await withParser(t, [{ hang: true }]);
+  const parser = new DocumentParserClient({ baseUrl, timeoutMs: 1000, localReader: localReader(LOCAL_PAGES) });
+  const result = await parser.parseBytes({ bytes: PDF, filename: "a.pdf" });
+  assert.equal(result.extractor.fallbackFor, "source_parser_timeout");
+});
+
+test("with no parser configured a PDF, Word, slides and a workbook are read locally and the rest are not", async () => {
+  const reader = localReader({ text: "本地正文", version: "1.1.0" });
+  const parser = new DocumentParserClient({ localReader: reader });
+  for (const filename of ["a.pdf", "b.docx", "c.pptx", "d.xlsx", "e.xlsm"]) {
+    const result = await parser.parseBytes({ bytes: Buffer.from(`PK-${filename}`), filename });
+    assert.equal(result.extractor.parser, "local-fallback", filename);
+    assert.equal(result.extractor.fallbackFor, "source_parser_unconfigured");
+  }
+  // Legacy Office and images are the service's alone: nothing in the intake image reads them safely.
+  for (const filename of ["a.doc", "b.ppt", "c.xls", "d.png", "e.epub"]) {
+    await assert.rejects(parser.parseBytes({ bytes: Buffer.from(`PK-${filename}`), filename }), { code: "source_parser_unconfigured" }, filename);
+  }
+  assert.deepEqual(reader.calls.map((call) => call.format), ["pdf", "docx", "pptx", "xlsx", "xlsm"]);
+});
+
+test("a scan has no text layer locally: no text is invented, and the file stays a kept original", async (t) => {
+  const { baseUrl } = await withParser(t, [{ status: 404, body: envelope(404, null) }]);
+  const result = await client(baseUrl, { localReader: localReader({ text: "", version: "1.1.0" }) }).parseBytes({ bytes: PDF, filename: "scan.pdf" });
+  assert.equal(result.text, "");
+  assert.equal(result.units[0].status, "no_content");
+  assert.equal(result.summary, "The source contains no extractable text.");
+  assert.equal("pageMap" in result, false);
+});
+
+test("pages the container did not get to are failed units, so a long PDF read in part says so", async (t) => {
+  const { baseUrl } = await withParser(t, [{ status: 404, body: envelope(404, null) }]);
+  const reader = localReader({ ...LOCAL_PAGES, partial: { read: 2, of: 5 } });
+  const result = await client(baseUrl, { localReader: reader }).parseBytes({ bytes: PDF, filename: "long.pdf" });
+  assert.deepEqual(result.units.map((unit) => [unit.id, unit.status]), [["page-1", "extracted"], ["page-2", "extracted"], ["page-3", "failed"], ["page-4", "failed"], ["page-5", "failed"]]);
+});
+
+test("a file the service refused as such (415, 422) is not read again locally", async (t) => {
+  const reader = localReader({ text: "should not be asked", version: "1.1.0" });
+  for (const [status, errorCode, code] of [[415, "format_mismatch", "source_format_unsupported"], [422, "encrypted_document", "source_parser_document_unreadable"], [413, "document_too_complex", "source_parser_payload_too_large"]]) {
+    const { baseUrl } = await withParser(t, [{ status, body: envelope(status, { error_code: errorCode }) }]);
+    await assert.rejects(client(baseUrl, { localReader: reader }).parseBytes({ bytes: PDF, filename: "a.pdf" }), { code });
+  }
+  assert.equal(reader.calls.length, 0);
+});
+
+test("when the local read fails too, the service's own failure is the one reported, and the failure is counted", async (t) => {
+  const { baseUrl } = await withParser(t, [{ status: 401, body: envelope(401, { error_code: "invalid_api_key" }) }]);
+  const parser = client(baseUrl, { localReader: localReader(Object.assign(new Error("x"), { code: "document_local_read_refused" })) });
+  await assert.rejects(parser.parseBytes({ bytes: PDF, filename: "a.pdf" }), { code: "source_parser_auth_failed" });
+  assert.deepEqual(parser.counters().map((row) => `${row.outcome}:${row.code}`).sort(), ["failed:source_parser_auth_failed", "local_failed:document_local_read_refused"]);
+});
+
+test("a cancelled parse is not read locally", async (t) => {
+  const { baseUrl } = await withParser(t, [{ hang: true }]);
+  const controller = new AbortController();
+  const reader = localReader(LOCAL_PAGES);
+  const pending = client(baseUrl, { localReader: reader }).parseBytes({ bytes: PDF, filename: "a.pdf", signal: controller.signal });
+  setTimeout(() => controller.abort(), 20);
+  await assert.rejects(pending, { code: "source_parser_canceled" });
+  assert.equal(reader.calls.length, 0);
+});
+
+test("the probe tells a refused key and a moved route apart from a good pair without sending a document", async (t) => {
+  const { baseUrl, seen } = await withParser(t, [
+    { status: 401, body: envelope(401, { error_code: "invalid_api_key" }) },
+    { status: 404, body: envelope(404, null) },
+    { status: 400, body: envelope(400, { error_code: "missing_file" }) },
+  ]);
+  let clock = 0;
+  const parser = client(baseUrl, { token: "sk-probe", now: () => clock });
+  assert.deepEqual(await parser.probe(), { auth: "rejected", route: "ok" });
+  assert.deepEqual(await parser.probe(), { auth: "rejected", route: "ok" }, "cached: a monitor polling readiness does not hammer the service");
+  assert.equal(seen.length, 1);
+  clock += 6 * 60_000;
+  assert.deepEqual(await parser.probe(), { auth: "unknown", route: "missing" });
+  clock += 6 * 60_000;
+  assert.deepEqual(await parser.probe(), { auth: "ok", route: "ok" });
+  assert.equal(seen.every((request) => request.form.get("file") === null && request.headers.authorization === "Bearer sk-probe"), true);
+  assert.deepEqual(parser.status(), { configured: true, engine: "engine-a", credential: "file", auth: "ok", route: "ok", metadata: "available", localReader: false, lastFailure: null });
+});
+
+test("a real parse's 401 shows in the status at once, and a later success clears it", async (t) => {
+  const { baseUrl } = await withParser(t, [{ status: 401, body: envelope(401, { error_code: "invalid_api_key" }) }, { status: 200, body: envelope(200, { content: "好" }) }]);
+  const parser = client(baseUrl);
+  await assert.rejects(parser.parseBytes({ bytes: PDF, filename: "a.pdf" }), { code: "source_parser_auth_failed" });
+  assert.deepEqual([parser.status().auth, parser.status().lastFailure], ["rejected", "source_parser_auth_failed"]);
+  await parser.parseBytes({ bytes: PDF, filename: "b.pdf" });
+  assert.deepEqual([parser.status().auth, parser.status().lastFailure], ["ok", null]);
 });

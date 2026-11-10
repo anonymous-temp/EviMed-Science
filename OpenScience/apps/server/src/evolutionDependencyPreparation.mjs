@@ -54,7 +54,7 @@ export function createEvolutionDependencyPreparer(config,{tools,imageId}){
       return files;
     },
     async prepare(requests,{signal=undefined}={}){
-      if(config.evolutionEnabled!==true)throw refused();await tools.reconcileEvolutionAttempts?.();const selected=await entries(requests),base=await imageId();
+      await tools.reconcileEvolutionAttempts?.();const selected=await entries(requests),base=await imageId();
       if(!selected.length)return{imageId:base,dependencies:[]};
       const identity=sha(canonicalJson({base,selected}));
       try{return{imageId:await selectedImage(requests),dependencies:selected.map(({id,version,digest})=>({id,version,digest}))};}catch(error){if(error.code!=='ENOENT')throw error;}

@@ -8,8 +8,10 @@ import { HttpError } from "./security.mjs";
 
 /**
  * The document parser boundary: a byte-exact local read for everything that is
- * text, the team's own parsing API for PDF, Office and images, and — for a file
- * neither takes — the engine's own parsers, when the caller hands one in.
+ * text, the parser team's own parsing API for PDF, Office and images, a local
+ * reading of PDF, Word, slides and workbooks for when that API cannot answer,
+ * and — for a file none of these takes — the engine's own parsers, when the
+ * caller hands one in.
  *
  * Where a file is read is `sourceReadRoute`'s answer (`@evimed/domain`): its
  * name, corrected by its bytes where the name cannot know. No file is refused
@@ -18,44 +20,56 @@ import { HttpError } from "./security.mjs";
  * kept as an original with no text and every other caller (a pasted link, a
  * public page's file) reports as it is.
  *
- * Hidden knowledge, from the service's own source (`server.py`) and the one
- * deployment we can reach:
+ * What is true of the service now (API v1.0.0, 2026-10-27; its address and key
+ * come from the environment and are written nowhere in this repository):
  *
- * - The envelope is `{code, message, uuid, timestamp, elapsed_ms, data}` and
- *   the HTTP status equals `code`. Errors carry `data.error_code` on the
- *   current branch, but the deployed test build answered a request with no file
- *   with `data: null` and no code at all (recorded 2026-09-19), so every
- *   decision here is keyed on the HTTP status first and the error code second.
- * - No key is needed. Measured 2026-09-22 against the configured server: both
- *   `/api/v1/parse/file` and `/api/v1/extract/text/file` answer 200 with the
- *   full text for a PDF and a .docx sent with no `Authorization` header. A
- *   Bearer header is sent only when the deployment's key file holds one (the
- *   service's API.md describes keys; this deployment of it does not ask).
- *   Earlier on 2026-09-19 the same server answered HTTP 500 with `'AttributeError'
- *   object has no attribute 'message'` — their bug, so a 500 is retried once and
- *   then named, not retried like an outage.
- * - On `develop`, `DocumentMetadataExtractor.__init__` names an undefined
- *   `chat_client`, so every metadata extraction would fail upstream and answer
- *   502 `upstream_error`. The text itself does not need that model call, so a
- *   502 that survives its retries falls back once to `/api/v1/parse/file` and
- *   the document still arrives, without metadata (principle 19).
- * - Metadata (title, authors, DOI …) is written by a language model over the
+ * - There are two engines, each its own route: `/api/v1/parse/engine-a/file` and
+ *   `/api/v1/parse/engine-b/file`. They are not a primary and a standby — the
+ *   service never switches between them — so which one a deployment uses is one
+ *   setting (`OPEN_SCIENCE_DOCUMENT_PARSER_ENGINE`, default `engine-a`). Engine A
+ *   writes `[Page N]` lines into a PDF's text, which is where the page map comes
+ *   from, and a `parse_info` block; engine B sends neither. The routes the client
+ *   used before 2026-10-27 (`/extract/text/file`, `/parse/file`) answer 404.
+ * - Every business route needs `Authorization: Bearer sk-…`. A key carries scopes:
+ *   `parse` for the text, `extract` for the optional metadata (`extract_metadata`
+ *   = true), and one is enough — a key with `parse` alone is answered 403
+ *   `insufficient_scope` on the metadata request, so that answer falls back once
+ *   to the plain parse and the document arrives without metadata. `/health` is
+ *   the one route that takes no key and answers 200 whatever the key is, so
+ *   health alone says nothing about whether this deployment can parse: the
+ *   credential and the route are probed separately (`probe`, see `status`).
+ * - The envelope is `{code, message, uuid, timestamp, elapsed_ms, data}` and the
+ *   HTTP status equals `code`; a failure carries `data.error_code`. Every decision
+ *   here is keyed on the HTTP status first and the error code second, because an
+ *   older build answered without the code. Quota arrives in `X-Quota-Cost` and
+ *   `X-Quota-Remaining` (a number, or the string `unlimited`).
+ * - The metadata (title, authors, DOI …) is written by a language model over the
  *   first and last 8,000 characters. It is a label, never evidence: the text is
- *   what quotations are checked against, and a DOI is re-checked against
- *   Crossref before anything shows it as the document's own.
+ *   what quotations are checked against, and a DOI is re-checked against Crossref
+ *   before anything shows it as the document's own. A failed analysis is still a
+ *   200 with the whole text and `metadata_status: "failed"`.
+ *
+ * When the service cannot give a PDF, Word, slides or workbook (not configured,
+ * 401, 403, 404, quota, rate limit, 5xx, timeout, an unusable answer) the same
+ * text is read from the original bytes in the runtime controller's disposable
+ * intake container (`documentLocalReader.mjs`), the extractor says so
+ * (`evimed-local-reader`, parser `local-fallback`), and the remaining failure is
+ * the service's own if that read fails too. A scan has no text layer there and
+ * yields no text, never a guess; a file the service refused as such (415, 422)
+ * is not read again locally, because the same bytes would be refused.
  *
  * The result keeps protocol v1 — `{protocolVersion, extractor, units, summary,
  * facts, methods, text, pageMap?, metadata?}` — so nothing downstream changes
  * when the parser does.
  */
 
-const EXTRACT_PATH = "/api/v1/extract/text/file";
-const PARSE_PATH = "/api/v1/parse/file";
+const ENGINES = Object.freeze({ "engine-a": "/api/v1/parse/engine-a/file", "engine-b": "/api/v1/parse/engine-b/file" });
+export const DOCUMENT_PARSER_ENGINES = Object.freeze(Object.keys(ENGINES));
 const HEALTH_PATH = "/health";
 /** The service refuses larger uploads with 413 (`MAX_FILE_SIZE`, 100 MB);
  *  refusing here saves sending 100 MB to be told so. */
 const API_MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
-/** Attempts per endpoint for a status worth retrying, and for a 500. */
+/** Attempts per request for a status worth retrying, and for a 500. */
 const MAX_ATTEMPTS = 3;
 const MAX_ATTEMPTS_INTERNAL_ERROR = 2;
 /** The wait between attempts when the service names none, and the most a
@@ -63,25 +77,44 @@ const MAX_ATTEMPTS_INTERNAL_ERROR = 2;
  *  coming back inside this parse. */
 const RETRY_DELAYS_MS = Object.freeze([1_000, 4_000]);
 const MAX_RETRY_AFTER_MS = 30_000;
+/** How long a key that lacks the `extract` scope is not asked for metadata again, and how long a probe answer stands. */
+const METADATA_DENIED_MS = 600_000;
+const PROBE_TTL_MS = 300_000;
 const SUMMARY_FALLBACK = "The source contains no extractable text.";
+/** The formats the intake container reads locally when the service cannot. */
+const LOCAL_FORMATS = Object.freeze(["pdf", "docx", "pptx", "xlsx", "xlsm"]);
+/** The failures after which the same bytes are read locally: the service could not answer, which is not a verdict on the file. */
+const FALLBACK_CODES = Object.freeze(new Set([
+  "source_parser_unconfigured", "source_parser_auth_failed", "source_parser_scope_denied", "source_parser_route_missing",
+  "source_parser_quota_exhausted", "source_parser_rate_limited", "source_parser_internal_error", "source_parser_upstream_error",
+  "source_parser_unavailable", "source_parser_timeout", "source_parser_response_invalid",
+]));
+const PAGE_MARKER = /^\[Page (\d+)\][ \t]*$/gm;
 
 /** @param {number} status @param {string} code @param {string} message */
 function parserError(status, code, message) {
   return new HttpError(status, code, message);
 }
 
-/** How one HTTP answer is treated. Status first: the deployed build does not
- *  always say `error_code`, and the status is what it always says.
+/** How one HTTP answer is treated. Status first: an older build did not always
+ *  say `error_code`, and the status is what it always says.
  * @param {number} status @param {string} errorCode */
 function classifyFailure(status, errorCode) {
-  if (status === 413) return { status: 413, code: "source_parser_payload_too_large", retry: false, message: "The document exceeds the parser's upload limit." };
+  if (status === 401) return { status: 502, code: "source_parser_auth_failed", retry: false, message: "The document parser refused this deployment's credential." };
+  if (status === 403) return { status: 502, code: "source_parser_scope_denied", retry: false, message: "The document parser's credential lacks the scope this request needs." };
+  if (status === 404) return { status: 502, code: "source_parser_route_missing", retry: false, message: "The document parser has no such route; its API has moved." };
+  if (status === 413) return { status: 413, code: "source_parser_payload_too_large", retry: false, message: "The document exceeds the parser's limits." };
   if (status === 415) return { status: 415, code: "source_format_unsupported", retry: false, message: "The parser does not support this document format." };
+  if (status === 422 && ["corrupt_document", "encrypted_document", "parse_failed"].includes(errorCode)) {
+    return { status: 422, code: "source_parser_document_unreadable", retry: false, message: "The parser could not read text out of this document." };
+  }
   if (status === 422) return { status: 422, code: "source_parser_checksum_failed", retry: false, message: "The parser could not verify the uploaded bytes." };
-  if (status === 401 || status === 403) return { status: 502, code: "source_parser_auth_failed", retry: false, message: "The document parser refused this deployment's credential." };
   if (status === 429 && errorCode === "quota_exhausted") return { status: 503, code: "source_parser_quota_exhausted", retry: false, message: "The document parser's quota is exhausted." };
   if (status === 429) return { status: 503, code: "source_parser_rate_limited", retry: true, message: "The document parser is rate limiting requests." };
   if (status === 500) return { status: 502, code: "source_parser_internal_error", retry: true, attempts: MAX_ATTEMPTS_INTERNAL_ERROR, message: "The document parser failed internally." };
   if (status === 503) return { status: 503, code: "source_parser_unavailable", retry: true, message: "The document parser is unavailable." };
+  // The parse outran the service's own limit: the same bytes would again.
+  if (status === 504) return { status: 503, code: "source_parser_timeout", retry: false, message: "The document parser timed out on this document." };
   if (status >= 500) return { status: 502, code: "source_parser_upstream_error", retry: true, message: "The document parser's upstream failed." };
   return { status: 502, code: "source_parser_rejected", retry: false, message: `The document parser rejected the request with HTTP ${status}.` };
 }
@@ -178,64 +211,43 @@ function mapMetadata(data) {
 }
 
 /**
- * The parser's `pages` as a page map in UTF-16 offsets of `text`.
- *
- * Nothing sends `pages` yet; it was asked for (plan §2.4) and this is what makes
- * jump-to-page light up the day it arrives. Until it does, the page of a parsed
- * table's rows is computed here from the original bytes instead
- * (`sourceMaterials.mjs`), as a per-unit ledger — never as a page map, which
- * would put a page on every character of the text. The service is Python, where a
- * string offset counts code points while ours count UTF-16 units, so offsets
- * are converted unless the answer says they are UTF-16 already. The two agree
- * on any text without characters outside the BMP, which is nearly all of it.
- * An unusable map is dropped with its reason; the document is kept.
- * @param {unknown} pages @param {string} text @param {unknown} unit
- * @returns {{ pageMap?: { page: number, start: number, end: number, status: string }[], dropped?: string }}
+ * The page map of a PDF text that carries engine A's `[Page N]` lines, and the
+ * text with those lines taken out, in UTF-16 offsets — which is what JavaScript
+ * counts, so no conversion is needed. The markers are the service's way of saying
+ * where a page starts, not part of the document: left in, they came back in search
+ * snippets and broke a quotation that crossed a page (2026-11-05). A page's span is
+ * its own text and nothing else. A page with nothing on it, or that the service said OCR
+ * found nothing on (`pdf_ocr_empty_page`), is `empty`. Markers that are not
+ * strictly increasing are no page map: it is dropped with its reason and the
+ * document is kept. No marker at all (engine B, a Word file, a plain text) is no
+ * map and no reason. `parse_info.page_count` is not used to invent pages the text
+ * does not mark.
+ * @param {string} text @param {unknown} warnings parse_info.warnings
+ * @returns {{ text: string, pageMap?: { page: number, start: number, end: number, status: string }[], dropped?: string }}
  */
-function mapPages(pages, text, unit) {
-  if (pages == null) return {};
-  if (!Array.isArray(pages) || pages.length === 0) return { dropped: "pages_invalid" };
-  const utf16 = ["utf16", "utf-16", "utf16_code_unit"].includes(String(unit ?? "").toLowerCase());
-  /** @type {number[]} */
-  const offsets = [];
-  for (const entry of pages) {
-    if (!entry || typeof entry !== "object") return { dropped: "pages_invalid" };
-    const { start, end } = /** @type {Record<string, unknown>} */ (entry);
-    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) return { dropped: "pages_invalid" };
-    offsets.push(/** @type {number} */ (start), /** @type {number} */ (end));
-  }
-  /** @type {Map<number, number>} */
-  const converted = new Map();
-  if (utf16) {
-    for (const offset of offsets) converted.set(offset, offset);
-  } else {
-    const wanted = new Set(offsets);
-    let codePoints = 0;
-    let units = 0;
-    for (const character of text) {
-      if (wanted.has(codePoints)) converted.set(codePoints, units);
-      codePoints += 1;
-      units += character.length;
-    }
-    if (wanted.has(codePoints)) converted.set(codePoints, units);
-  }
+function pagesFromMarkers(text, warnings) {
+  const markers = [...text.matchAll(PAGE_MARKER)];
+  if (!markers.length) return { text };
+  const emptyByWarning = new Set(Array.isArray(warnings)
+    ? warnings.filter((entry) => entry?.code === "pdf_ocr_empty_page" && Number.isSafeInteger(entry.source_number)).map((entry) => entry.source_number)
+    : []);
   const pageMap = [];
-  for (const entry of /** @type {Record<string, unknown>[]} */ (pages)) {
-    const start = converted.get(/** @type {number} */ (entry.start));
-    const end = converted.get(/** @type {number} */ (entry.end));
-    const page = entry.index ?? entry.page;
-    if (start === undefined || end === undefined || !Number.isSafeInteger(page)) return { dropped: "pages_out_of_range" };
-    pageMap.push({ page: /** @type {number} */ (page), start, end, status: String(entry.status ?? "") });
-  }
-  let previousEnd = 0;
   let previousPage = 0;
-  for (const entry of pageMap) {
-    if (entry.page <= previousPage || entry.start < previousEnd || entry.end < entry.start
-      || !["ok", "empty", "ocr_failed"].includes(entry.status)) return { dropped: "pages_inconsistent" };
-    previousEnd = entry.end;
-    previousPage = entry.page;
+  let stripped = text.slice(0, markers[0].index ?? 0);
+  for (let index = 0; index < markers.length; index += 1) {
+    const marker = markers[index];
+    const page = Number(marker[1]);
+    if (!Number.isSafeInteger(page) || page <= previousPage) return { text, dropped: "pages_inconsistent" };
+    previousPage = page;
+    const bodyStart = (marker.index ?? 0) + marker[0].length + (text[(marker.index ?? 0) + marker[0].length] === "\n" ? 1 : 0);
+    const bodyEnd = index + 1 < markers.length ? (markers[index + 1].index ?? text.length) : text.length;
+    if (bodyEnd < bodyStart) return { text, dropped: "pages_inconsistent" };
+    const body = text.slice(bodyStart, bodyEnd);
+    const start = stripped.length;
+    stripped += body;
+    pageMap.push({ page, start, end: stripped.length, status: !body.trim() || emptyByWarning.has(page) ? "empty" : "ok" });
   }
-  return { pageMap };
+  return { text: stripped, pageMap };
 }
 
 /** What a parse covered: a unit per page when pages arrived, one unit for the
@@ -269,15 +281,20 @@ function decodeText(bytes) {
   return new TextDecoder("utf-8").decode(bytes);
 }
 
+
+/** A sleeping that a signal can end. */
+const defaultSleep = (/** @type {number} */ ms, /** @type {AbortSignal} */ signal) => delay(ms, undefined, { signal });
+
 export class DocumentParserClient {
   /**
-   * @param {{baseUrl?:string,token?:string,revision?:string,fetchImpl?:typeof fetch,timeoutMs?:number,
+   * @param {{baseUrl?:string,token?:string,engine?:string,revision?:string,fetchImpl?:typeof fetch,timeoutMs?:number,
    *   maxResponseBytes?:number,maxTextBytes?:number,maxUploadBytes?:number,chunkChars?:number,
-   *   sleep?:(ms:number,signal:AbortSignal)=>Promise<unknown>}} config
+   *   sleep?:(ms:number,signal:AbortSignal)=>Promise<unknown>,now?:()=>number,
+   *   localReader?:{read:Function}|null,report?:(code:string,fields?:Record<string,unknown>)=>void}} config
    */
-  constructor({ baseUrl = "", token = "", revision = "evimed-extract@0.5.0", fetchImpl = globalThis.fetch, timeoutMs = 300_000,
+  constructor({ baseUrl = "", token = "", engine = "engine-a", revision = "evimed-extract@1.0.0", fetchImpl = globalThis.fetch, timeoutMs = 300_000,
     maxResponseBytes = 64 * 1024 * 1024, maxTextBytes = 16 * 1024 * 1024, maxUploadBytes = API_MAX_UPLOAD_BYTES,
-    chunkChars = 8_000, sleep = (ms, signal) => delay(ms, undefined, { signal }) } = {}) {
+    chunkChars = 8_000, sleep = defaultSleep, now = Date.now, localReader = null, report = () => {} } = {}) {
     this.baseUrl = String(baseUrl).trim().replace(/\/+$/, "");
     if (this.baseUrl) {
       let parsed;
@@ -290,8 +307,10 @@ export class DocumentParserClient {
       || timeoutMs < 1000 || maxResponseBytes < 1024 || maxTextBytes < 1024 || maxUploadBytes < 1024 || chunkChars < 256) {
       throw new TypeError("Document parser limits are invalid.");
     }
+    if (!Object.hasOwn(ENGINES, String(engine))) throw new TypeError("Document parser engine is invalid.");
     const label = String(revision ?? "").trim();
     if (!label || label.length > 80 || /[\s\0]/.test(label)) throw new TypeError("Document parser revision is invalid.");
+    this.engine = String(engine);
     this.token = String(token ?? "");
     this.revision = label;
     this.fetch = fetchImpl;
@@ -301,9 +320,39 @@ export class DocumentParserClient {
     this.maxUploadBytes = Math.min(maxUploadBytes, API_MAX_UPLOAD_BYTES);
     this.chunkChars = chunkChars;
     this.sleep = sleep;
+    this.now = now;
+    /** The intake container's reader for PDF, Word, slides and workbooks; null where there is no controller. */
+    this.localReader = localReader;
+    this.report = report;
+    /** @type {Map<string, number>} outcome|code -> count, for the operator's counter */
+    this.counts = new Map();
+    /** What the service last showed about this deployment's credential and route. */
+    this.observed = { auth: "unknown", route: "unknown", at: 0, lastFailure: /** @type {string | null} */ (null) };
+    this.metadataDeniedUntil = 0;
+    /** @type {{ at: number, result: { auth: string, route: string } } | null} */
+    this.probed = null;
   }
 
   get configured() { return Boolean(this.baseUrl); }
+
+  /** Attach the local reader once the intake controller exists. @param {{read:Function}|null} reader */
+  useLocalReader(reader) { this.localReader = reader; }
+
+  /** @param {string} outcome @param {string} [code] */
+  #count(outcome, code = "") {
+    const key = `${outcome}|${code}`;
+    this.counts.set(key, (this.counts.get(key) ?? 0) + 1);
+  }
+
+  /** What an HTTP answer shows of the credential and the route; a 5xx shows neither. @param {number} status */
+  #observe(status) {
+    if (status >= 500) return;
+    this.observed.at = this.now();
+    if (status === 401) { this.observed.auth = "rejected"; this.observed.route = "ok"; }
+    else if (status === 404) this.observed.route = "missing";
+    else if (status === 403) this.observed.route = "ok";
+    else { this.observed.auth = "ok"; this.observed.route = "ok"; }
+  }
 
   /**
    * Parse a file the ingestion worker already resolved inside the project. Its
@@ -343,7 +392,8 @@ export class DocumentParserClient {
 
   /**
    * Parse bytes that never became a file — the entry point for a caller that
-   * holds a download in memory (contract X2). `engine` as for `parse`.
+   * holds a download in memory (contract X2), and the one path the knowledge base
+   * and the public-page reader share. `engine` as for `parse`.
    * `textOnly` asks for the text and not the bibliographic metadata a model writes over its first and last pages: what a patient's record is read with.
    * @param {{bytes:Uint8Array,filename:string,mediaType?:string,sha256?:string,signal?:AbortSignal,textOnly?:boolean,
    *   engine?:((file:{name:string,bytes:Buffer,signal?:AbortSignal})=>Promise<{text?:string}>)|null}} input
@@ -367,29 +417,62 @@ export class DocumentParserClient {
       route = "engine";
     }
     if (route === "engine") return this.#engineText({ bytes, name, engine, signal: callerSignal });
-    if (!this.baseUrl) throw parserError(503, "source_parser_unconfigured", "Document parsing is not configured for this deployment.");
     if (bytes.byteLength > this.maxUploadBytes) throw parserError(413, "source_parser_payload_too_large", "The document exceeds the parser's upload limit.");
     const request = { bytes, filename: name, format: sourceFileFormat(name), mediaType: String(mediaType || "application/octet-stream"), sha256: digest };
+    /** @type {any} */
+    let failure;
+    try {
+      return await this.#remote(request, callerSignal);
+    } catch (error) {
+      if (callerSignal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
+      failure = error;
+    }
+    this.#count("failed", failure?.code ?? "unknown");
+    this.observed.lastFailure = String(failure?.code ?? "unknown");
+    // The service could not give this document: read it from its own bytes where that is possible. The failure that
+    // stands if that fails too is the service's, which is the one an operator can act on.
+    if (this.localReader && LOCAL_FORMATS.includes(request.format) && FALLBACK_CODES.has(failure?.code)) {
+      try {
+        const local = await this.localReader.read({ bytes, name, sha256: digest, format: request.format, signal: callerSignal });
+        this.#count("local_fallback", failure.code);
+        try { this.report("document_parser_local_fallback", { code: failure.code, format: request.format }); } catch { /* a report never fails a parse */ }
+        return this.#localResult(local, failure.code);
+      } catch (localError) {
+        if (callerSignal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
+        this.#count("local_failed", /** @type {any} */ (localError)?.code ?? "unknown");
+      }
+    }
+    throw failure;
+  }
+
+  /** One request to the configured engine, with its retries and the one metadata fallback.
+   * @param {any} request @param {AbortSignal | undefined} callerSignal */
+  async #remote(request, callerSignal) {
+    if (!this.baseUrl) throw parserError(503, "source_parser_unconfigured", "Document parsing is not configured for this deployment.");
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     timer.unref?.();
     const signal = callerSignal ? AbortSignal.any([callerSignal, controller.signal]) : controller.signal;
     try {
       let answer;
-      let endpoint = textOnly ? "parse" : "extract";
+      let metadataAsked = !textOnly && this.now() >= this.metadataDeniedUntil;
       try {
-        answer = await this.#withRetries(textOnly ? PARSE_PATH : EXTRACT_PATH, request, signal);
+        answer = await this.#withRetries(request, metadataAsked, signal);
       } catch (error) {
-        if (textOnly) throw error;
-        // The metadata model failing is not the text failing: fall back once to
-        // the text-only endpoint rather than lose the document (see the header).
-        if (error?.code !== "source_parser_upstream_error") throw error;
-        answer = await this.#withRetries(PARSE_PATH, request, signal);
-        endpoint = "parse";
+        // A key without the `extract` scope is answered 403 on the metadata request. The text does not need it: ask
+        // once more for the text alone, and leave metadata alone for a while.
+        if (!metadataAsked || /** @type {any} */ (error)?.code !== "source_parser_scope_denied") throw error;
+        this.metadataDeniedUntil = this.now() + METADATA_DENIED_MS;
+        this.#count("metadata_scope_denied");
+        metadataAsked = false;
+        answer = await this.#withRetries(request, false, signal);
       }
-      return this.#apiResult(answer, endpoint);
+      const result = this.#apiResult(answer, metadataAsked);
+      this.#count(answer.empty ? "api_empty" : "api");
+      this.observed.lastFailure = null;
+      return result;
     } catch (error) {
-      if (callerSignal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
+      if (callerSignal?.aborted) throw error;
       if (controller.signal.aborted && !(error instanceof HttpError && error.status < 500)) {
         throw parserError(503, "source_parser_timeout", "Document parsing timed out.");
       }
@@ -397,8 +480,8 @@ export class DocumentParserClient {
     } finally { clearTimeout(timer); }
   }
 
-  /** @param {any} request @param {string} endpointPath @param {AbortSignal} signal */
-  async #withRetries(endpointPath, request, signal) {
+  /** @param {any} request @param {boolean} metadata @param {AbortSignal} signal */
+  async #withRetries(request, metadata, signal) {
     let failure = null;
     for (let attempt = 1; ; attempt += 1) {
       let response;
@@ -408,7 +491,8 @@ export class DocumentParserClient {
         form.append("checksum", request.sha256);
         form.append("filename", request.filename);
         form.append("format", request.format);
-        response = await abortable(() => this.fetch(`${this.baseUrl}${endpointPath}`, {
+        form.append("extract_metadata", metadata ? "true" : "false");
+        response = await abortable(() => this.fetch(`${this.baseUrl}${ENGINES[this.engine]}`, {
           method: "POST",
           headers: { accept: "application/json", ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) },
           body: form,
@@ -424,6 +508,8 @@ export class DocumentParserClient {
         const body = await boundedBody(response, this.maxResponseBytes, signal);
         let envelope = null;
         try { envelope = JSON.parse(body.toString("utf8")); } catch { envelope = null; }
+        this.#observe(response.status);
+        const errorCode = String(envelope?.data?.error_code ?? "");
         if (response.ok) {
           if (!envelope || typeof envelope !== "object" || !envelope.data || typeof envelope.data !== "object"
             || typeof envelope.data.content !== "string") {
@@ -431,7 +517,12 @@ export class DocumentParserClient {
           }
           return { envelope, headers: response.headers };
         }
-        failure = classifyFailure(response.status, String(envelope?.data?.error_code ?? ""));
+        // Read, and nothing in it: a document, not a failure. It is kept as an original with no text.
+        if (response.status === 422 && errorCode === "empty_content") {
+          return { envelope: { ...(envelope ?? {}), data: { content: "" } }, headers: response.headers, empty: true };
+        }
+        failure = classifyFailure(response.status, errorCode);
+        if (failure.code === "source_parser_scope_denied" && !metadata) this.observed.auth = "scope_denied";
         wait = retryAfterMs(response.headers);
       }
       const attempts = failure.attempts ?? MAX_ATTEMPTS;
@@ -441,24 +532,36 @@ export class DocumentParserClient {
     }
   }
 
-  /** @param {{envelope:any,headers:Headers}} answer @param {string} endpoint */
-  #apiResult({ envelope, headers }, endpoint) {
+  /** @param {{envelope:any,headers:Headers,empty?:boolean}} answer @param {boolean} metadataAsked */
+  #apiResult({ envelope, headers, empty = false }, metadataAsked) {
     const data = envelope.data;
-    const text = data.content;
-    if (text.length > this.maxTextBytes) throw parserError(502, "source_parser_response_too_large", "Parser full text exceeded its limit.");
-    const metadata = endpoint === "extract" ? mapMetadata(data) : undefined;
-    const { pageMap, dropped } = mapPages(data.pages, text, data.offset_unit ?? data.offsetUnit);
+    if (data.content.length > this.maxTextBytes) throw parserError(502, "source_parser_response_too_large", "Parser full text exceeded its limit.");
+    // A failed analysis is a 200 with the whole text and `metadata: null`: the document arrives without metadata.
+    const metadata = metadataAsked && data.metadata && typeof data.metadata === "object" ? mapMetadata(data.metadata) : undefined;
+    const info = data.parse_info && typeof data.parse_info === "object" ? data.parse_info : null;
+    const { text, pageMap, dropped } = pagesFromMarkers(data.content, info?.warnings);
     const cost = Number(headers.get("x-quota-cost"));
-    const remaining = Number(headers.get("x-quota-remaining"));
-    // The quota headers and the request id are for operations: what a parse
-    // cost, what is left, and the handle the parser team needs to find it.
+    const remainingHeader = headers.get("x-quota-remaining");
+    const remaining = Number(remainingHeader);
+    // The quota headers, the diagnosis and the request id are for operations: what a parse cost, what is left, what the
+    // service said about the pages, and the handle the parser team needs to find the request.
     const extractor = {
-      name: "evimed-extract", version: this.revision, parser: "api", endpoint,
+      name: "evimed-extract", version: this.revision, parser: "api", endpoint: this.engine,
       ...(typeof envelope.uuid === "string" && envelope.uuid.length <= 80 ? { requestId: envelope.uuid } : {}),
       ...(headers.get("x-quota-cost") != null && Number.isFinite(cost) ? { quota: {
         unit: String(headers.get("x-quota-unit") ?? "credit").slice(0, 32), cost,
-        ...(Number.isFinite(remaining) ? { remaining } : {}),
+        ...(remainingHeader === "unlimited" ? { unlimited: true } : Number.isFinite(remaining) ? { remaining } : {}),
       } } : {}),
+      ...(info ? { parseInfo: {
+        ...(typeof info.parser === "string" ? { parser: info.parser.slice(0, 40) } : {}),
+        ...(typeof info.parser_version === "string" ? { parserVersion: info.parser_version.slice(0, 20) } : {}),
+        ...(Number.isSafeInteger(info.page_count) ? { pageCount: info.page_count } : {}),
+        ...(Array.isArray(info.ocr_pages) ? { ocrPages: info.ocr_pages.length } : {}),
+        ...(Array.isArray(info.warnings) ? { warnings: info.warnings.slice(0, 20)
+          .filter((entry) => typeof entry?.code === "string").map((entry) => ({ code: entry.code.slice(0, 60), page: Number.isSafeInteger(entry.source_number) ? entry.source_number : null })) } : {}),
+      } } : {}),
+      ...(typeof data.metadata_status === "string" ? { metadataStatus: data.metadata_status.slice(0, 20) } : {}),
+      ...(empty ? { empty: true } : {}),
       ...(dropped ? { pageMapDropped: dropped } : {}),
     };
     const abstract = typeof metadata?.abstract === "string" ? metadata.abstract : "";
@@ -475,7 +578,33 @@ export class DocumentParserClient {
     };
   }
 
-  /** @param {string} text the file's own text, decoded @param {Record<string, string>} [extractor] */
+  /**
+   * What the intake container read from the original bytes, as the same protocol-v1 result.
+   * @param {{ text: string, pageMap?: any[], version?: string, partial?: { read: number, of: number } }} read @param {string} reason
+   */
+  #localResult(read, reason) {
+    const text = String(read.text ?? "");
+    if (text.length > this.maxTextBytes) throw parserError(502, "source_parser_response_too_large", "Parser full text exceeded its limit.");
+    const units = apiUnits(text, read.pageMap);
+    // Pages the container did not get to are failed units, so the source says it was read in part.
+    if (read.partial && read.pageMap) {
+      for (let page = read.partial.read + 1; page <= Math.min(read.partial.of, read.partial.read + 1000); page += 1) {
+        units.push({ id: `page-${page}`, unitType: "page", status: "failed", itemIds: [] });
+      }
+    }
+    return {
+      protocolVersion: 1,
+      extractor: { name: "evimed-local-reader", version: String(read.version ?? "1.1.0").slice(0, 40), parser: "local-fallback", fallbackFor: reason },
+      units,
+      summary: leadingSummary(text),
+      facts: [],
+      methods: [],
+      text,
+      ...(read.pageMap?.length ? { pageMap: read.pageMap } : {}),
+    };
+  }
+
+  /** @param {string} text @param {Record<string, string>} [extractor] the file's own text, decoded */
   #localText(text, extractor = { name: "plain-text", version: "1.0.0", parser: "local" }) {
     const units = [];
     for (let offset = 0, index = 1; offset < text.length; offset += this.chunkChars, index += 1) {
@@ -513,9 +642,12 @@ export class DocumentParserClient {
     return this.#localText(text, { ...ENGINE_EXTRACTOR });
   }
 
-  /** The service's own liveness answer. No credential: `/health` is the one
-   *  route that does not take one, and sending it there would only widen where
-   *  the key travels. */
+  /**
+   * The service's own liveness answer. No credential: `/health` is the one
+   * route that does not take one, and sending it there would only widen where
+   * the key travels. It says nothing about the key or the route (it answers 200
+   * whatever they are), which is what `probe` is for.
+   */
   async health() {
     if (!this.baseUrl) return { configured: false };
     const controller = new AbortController();
@@ -531,11 +663,72 @@ export class DocumentParserClient {
         throw parserError(503, status === "draining" ? "source_parser_draining" : "source_parser_unavailable",
           "Document parser health check failed.");
       }
-      return { configured: true, status, credential: this.token ? "file" : "none", revision: this.revision,
+      return { configured: true, status, credential: this.token ? "file" : "none", revision: this.revision, engine: this.engine,
         ...(typeof envelope.data.environment === "string" ? { environment: envelope.data.environment.slice(0, 40) } : {}) };
     } catch (error) {
       if (error instanceof HttpError) throw error;
       throw parserError(503, "source_parser_unavailable", "Document parser is unavailable.");
     } finally { clearTimeout(timer); }
+  }
+
+  /**
+   * Whether this deployment's key and route are usable, asked without a document
+   * and without a charge: the engine's route is called with the credential and
+   * no file. The service authenticates before it reads the request, so a bad key
+   * is a 401 and a moved route a 404, and a good pair is refused for the missing
+   * file (400) — a parameter failure, which is never charged. The scope is only
+   * checked when a document is parsed, so a missing scope shows from the first
+   * parse (`observed.auth`) and not here. Cached for a few minutes.
+   */
+  async probe() {
+    if (!this.baseUrl) return { auth: "unknown", route: "unknown" };
+    if (this.probed && this.now() - this.probed.at < PROBE_TTL_MS) return this.probed.result;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.min(this.timeoutMs, 5000));
+    timer.unref?.();
+    /** @type {{ auth: string, route: string }} */
+    let result = { auth: "unknown", route: "unknown" };
+    try {
+      const form = new FormData();
+      form.append("extract_metadata", "false");
+      const response = await this.fetch(`${this.baseUrl}${ENGINES[this.engine]}`, {
+        method: "POST", headers: { accept: "application/json", ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) },
+        body: form, redirect: "error", signal: controller.signal,
+      });
+      void response.body?.cancel().catch(() => {});
+      if (response.status === 401) result = { auth: "rejected", route: "ok" };
+      else if (response.status === 404) result = { auth: "unknown", route: "missing" };
+      else if (response.status < 500) result = { auth: "ok", route: "ok" };
+      if (response.status < 500) this.#observe(response.status);
+      this.probed = { at: this.now(), result };
+    } catch { /* unreachable is /health's to say */ } finally { clearTimeout(timer); }
+    return result;
+  }
+
+  /**
+   * What an operator reads: the engine, what the service last showed of the
+   * credential and the route (from a probe or from a real parse, whichever is
+   * newer), whether metadata is being skipped for a missing scope, and the counts.
+   * It never throws and holds no secret.
+   */
+  status() {
+    return {
+      configured: this.configured,
+      engine: this.engine,
+      credential: this.token ? "file" : "none",
+      auth: this.observed.auth,
+      route: this.observed.route,
+      metadata: this.now() < this.metadataDeniedUntil ? "scope_denied" : "available",
+      localReader: Boolean(this.localReader),
+      lastFailure: this.observed.lastFailure,
+    };
+  }
+
+  /** The counts as `{ outcome, code, value }` rows for a counter. */
+  counters() {
+    return [...this.counts].map(([key, value]) => {
+      const [outcome, code] = key.split("|");
+      return { outcome, code: code || "none", value };
+    });
   }
 }

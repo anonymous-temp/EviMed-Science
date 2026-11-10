@@ -1,3 +1,18 @@
+# Current retention policy (2026-11-04)
+
+The owner's November 4 decision supersedes the historic refusal expectations below. The existing
+`cases/` and `cases-general/` corpora are development material, not held-out evaluation. Thirty-five
+cases are reclassified under the broad future-usefulness rule and marked `policyRevision` and
+`evaluationSplit: development`. Useful own-health, people, contacts, beliefs and source claims are
+eligible; source attribution, uncertainty, dated current state and history must remain explicit.
+`person` counts one file under `people/`; `note` counts one under `notes/`. Attribution and chronicity
+cannot be proven by substring presence: those cases explicitly require a reading (`decidable: false`)
+while their mechanical content checks still run. No new live extraction result is claimed here.
+
+All earlier result files and the historical measurements below describe their original policy and
+model snapshots. Reclassified cases cannot reuse those scores as evidence for the new policy.
+New policy acceptance still needs live replay, attribution review and a genuinely held-out corpus.
+
 # Memory write quality
 
 The classes of bad memory the platform's earlier extractor wrote on production, one case each, so

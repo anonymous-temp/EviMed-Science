@@ -154,8 +154,8 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // evidence content copies. This digest is calculated from the resolved recipe;
 // independent merge review and complete production image acceptance remain pending.
 // The hosted extension adapters and measured source closure now ship in the Web image.
-// 2026-10-07: three added lines — 循证进化's module loops read evals/frontier-editing,
-// evals/autopilot-next-action and evals/geo-judge-cards cases.json at run time and the
+// 2026-10-07: three added lines — 循证进化's module loops read evals/frontier-editing
+// and evals/geo-judge-cards cases.json at run time and the
 // image did not carry them (deploy.test.mjs now derives every literal evals/ read).
 // 2026-10-07 (R10): one added line — the 插件与技能 page reads the community skills' text
 // (dsh-ppt, deep-structural-analysis) from the control plane's own copy, as it does the others.
@@ -175,8 +175,13 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // 2026-10-31 (merge of the Gitee main e9c9f96f6): two added COPY lines in the build stage's manifest layer — packages/design-tokens/package.json
 // and packages/search-topics/package.json, so the frozen-lockfile install sees every workspace package the lockfile names (the server and the web app
 // link the first, only the server the second). Stages, commands, secrets and build arguments are unchanged.
-// 2026-11-05: reviewed matching workspace dependency manifests and canonical calculator build.
-export const WEB_DOCKERFILE_SHA256 = "sha256:09941566cb796d15a41b04d72385b17f69f465232a41e187241492583736cbcb";
+// 2026-11-05 (platform scheduler retired, main): the autopilot-next-action eval case COPY line and its mention in the comment above it were
+// removed. 2026-11-05 (VCR research plugins, branch): six manifest COPY lines in the build stage (research-plugin-runtime and the five research
+// bundles) and one COPY of packages/research-plugin-runtime into the final stage. 2026-11-07: the two merged; this digest is the merged recipe's.
+// 2026-11-09: main merged into the online cut of 循证进化 (branch), whose final stage dropped the COPY lines for evals/paper-gold and the four case files the deleted
+// module loops read at run time. Stages, commands, secrets and build arguments are unchanged.
+// 2026-11-10: main merged into the patient-matching delivery: its three manifest COPY lines and the worker build join the research-plugin lines.
+export const WEB_DOCKERFILE_SHA256 = "sha256:5454ab76d8ec28a9f9c3b77db46b6650ec86c18aba5dc3165e3acf394fc4b412";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

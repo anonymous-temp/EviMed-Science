@@ -254,7 +254,7 @@ const cardRows = [
 test("the card is one memo: a line per slot in the card's own words and order, newest change as its date, cut at a whole line within its budget", () => {
   const memo = projectCardMemo("proj_1", cardRows);
   assert.equal(memo.id, "card:proj_1");
-  assert.deepEqual([memo.memoryType, memo.kind, memo.scope, memo.origin], ["project_card", "project_fact", "project", "explicit"]);
+  assert.deepEqual([memo.memoryType, memo.kind, memo.scope, memo.origin], ["project_card", "project_fact", "project", "unknown"]);
   assert.equal(memo.content, "领域：心血管流行病学\n目标：比较 SGLT2 抑制剂与 DPP-4 抑制剂的心衰住院风险\n约束：周五前出初稿；引用用 AMA 格式");
   assert.equal(memo.updatedAt, "2026-10-21T00:00:00Z");
   assert.equal(projectCardMemo("p", []), null);
@@ -366,3 +366,15 @@ test("a dispatch does not wait on a card the engine is slow to give: past the de
   assert.equal(cardOutcome("read"), 1);
 });
 
+
+test("other people cannot become the owner's opening profile", () => {
+ const rendered = renderResidentProfile({capsuleFacts:[fact({factKind:"person",content:"Patient A allergy"}),fact({factKind:"note",content:"Ordinary separate note"}),fact({factKind:"profile",content:"Owner profession"})]});
+ assert.ok(!rendered.profile.includes("Patient A")); assert.ok(!rendered.profile.includes("Ordinary separate")); assert.ok(rendered.profile.includes("Owner profession"));
+});
+
+test('a resident project memo preserves original source attribution and privacy instead of asserting explicit human facts',()=>{
+  const original={id:'native-a',origin:'engine',attribution:{schemaVersion:1,origins:['engine'],confirmed:false},sourcePrivacy:{schemaVersion:1,classification:'private',reasons:['person-context']},contentDigest:'a'.repeat(64)};
+  const memo=projectCardMemo('project-a',[{slot:'constraints',text:'Assistant suggested checking constraints.',originalSources:[original]}]);
+  assert.equal(memo.origin,'engine');assert.equal(memo.attribution.confirmed,false);assert.equal(memo.sourcePrivacy.classification,'private');assert.equal(memo.originalSources[0].id,'native-a');
+  assert.match(renderMemoryContext([memo]),/origin="engine-derived"/);
+});

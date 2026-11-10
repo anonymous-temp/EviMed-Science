@@ -18,6 +18,9 @@
  * measured and reported but not publishable — `finalize.mjs` refuses to build a bundle for it (`campaign_export_incumbent_missing`) and the report
  * says so. An incumbent that is present but malformed, or for another threshold than the export states, is refused (`campaign_export_incumbent_invalid`).
  *
+ * The same holds for the consumer: the export carries production's dependency digest of this surface (`consumerDigest`) and `plan` compares it with this lab's before anything is spent. A month
+ * whose digest differs is measured as ever, its baseline is `unbound-consumer:<releaseId>`, the report says so, and `finalize.mjs` refuses it (`campaign_export_consumer_changed`).
+ *
  * Labelling happens in two phases (`frontier_labels.mjs label --phase`): development first, then — only when `decide` finds a candidate from
  * the development labels alone — confirmation. A month whose development finds none never labels its confirmation month.
  *
@@ -40,7 +43,8 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { rsiDigest } from '../../apps/server/src/rsiCampaignBundle.mjs';
 import { computeRsiDependencyClosure } from '../../apps/server/src/rsiDependencyClosure.mjs';
-import { RSI_FRONTIER_JURY, rsiCampaignIssues, rsiOfflineRoleIssue } from '../../packages/domain/src/rsiCampaign.mjs';
+import { rsiClosureSettings } from '../../apps/server/src/rsiClosureSettings.mjs';
+import { RSI_FRONTIER_VOLUME_BOUND, RSI_FRONTIER_JURY, rsiCampaignIssues, rsiOfflineRoleIssue } from '../../packages/domain/src/rsiCampaign.mjs';
 import { RSI_QUARTER_ALPHA, frontierJuryIdentity } from './campaign_runner.mjs';
 import { FRONTIER_LABELS_SCHEMA } from './frontier_labels.mjs';
 import { FRONTIER_DAYS_SCHEMA, chooseFrontierCandidate, evaluateFrontierDays, frontierCampaignConsumerIdentity, frontierLabelPlan } from './frontier_campaign.mjs';
@@ -50,7 +54,8 @@ export const FRONTIER_CAMPAIGN_REGISTRATION = Object.freeze({
   thresholds: Object.freeze([58, 60, 62, 64, 66, 68, 70, 72, 75, 78]),
   pickWeight: 3,
   minLabelled: 20,
-  maxVolumeRatio: 1.1,
+  maxVolumeRatio: RSI_FRONTIER_VOLUME_BOUND.max,
+  minVolumeRatio: RSI_FRONTIER_VOLUME_BOUND.min,
   campaignsPerQuarter: 3,
   procedure: Object.freeze({ id: 'rsi-paired-group-v5', digest_codec: 'rfc8785-sha256-v1', test_alpha_fraction: 0.5, minimum_slice_groups: 25 }),
   pilotRationale: 'Unit is the day: frontierMixSelect shares one day\'s size, group shares, language target and event picks across sources, so days are the independent units. Endpoint: weighted accuracy over a labelled set fixed from replays alone (rows at or above the lowest registered threshold, safety alerts, and every row any registered threshold selects); a pick weighs 3 because a missed pick costs a reader more than an extra adequate item. Labels: a two-pass jury of a model family other than the DeepSeek screener (the model the registration\'s labelling names), calibrated on the 2026-10-25 human anchor; disagreement abstains.',
@@ -109,6 +114,8 @@ export function campaignRegistration(baselineThreshold) {
 const INCUMBENT_REVISION = /^(?:default:[a-f0-9]{64}|evolution-module-policy-frontier:[1-9][0-9]{0,8})$/;
 /** The baseline a campaign of an export without an incumbent carries: no policy identity production would accept, so no bundle can be imported against it (`finalize.mjs` refuses it by this prefix). */
 export const UNBOUND_BASELINE_PREFIX = 'unbound:';
+/** The baseline a campaign carries when production's selection consumer is not this lab's (or its export does not say): the same refusal, by its own name (`finalize.mjs`). */
+export const UNBOUND_CONSUMER_PREFIX = 'unbound-consumer:';
 /** @param {string|null|undefined} releaseId */
 export function unboundBaselineRevision(releaseId) {
   const named = String(releaseId ?? '').replace(/[^A-Za-z0-9_.:-]/g, '-').slice(0, 150);
@@ -122,7 +129,17 @@ export function exportIncumbent(value) {
   return { revisionId: incumbent.revisionId, threshold: incumbent.threshold };
 }
 
-export async function planCampaign({ exportPath, month, windows = null, idPrefix = '', rehearsalPickWeight = null }) {
+/**
+ * The early answer: is the consumer production serves the one this lab measures? Asked of the export's own digest (`consumerDigest`, the serving layer's `currentTarget`) before anything is
+ * spent, so a release that moved it is said on the 1st and not as a refusal at import. An export that does not say counts as moved: nothing would be left to compare a bundle with.
+ * @param {any} value the export @param {string} rootDir the tree this lab measures with
+ */
+async function consumerFacts(value, rootDir) {
+  const closure = await computeRsiDependencyClosure({ rootDir, surface: 'frontier-selection', settings: rsiClosureSettings('frontier-selection') });
+  const lab = closure.qualified ? closure.dependencyDigest : null, production = value.consumerDigest ?? null;
+  return { production, lab, bound: lab !== null && production === lab };
+}
+export async function planCampaign({ exportPath, month, windows = null, idPrefix = '', rehearsalPickWeight = null, rootDir = resolve(new URL('../..', import.meta.url).pathname) }) {
   if (!/^\d{4}-\d{2}$/.test(month ?? '') || !/^(?:[a-z][a-z0-9-]{0,30}-)?$/.test(idPrefix)) throw new Error('campaign_plan_arguments_invalid');
   // A rehearsal may exercise the whole chain with another pick weight; a real campaign always takes the registered one.
   if (rehearsalPickWeight !== null && (!idPrefix.startsWith('rehearsal-') || !(rehearsalPickWeight >= 1 && rehearsalPickWeight <= 10))) throw new Error('campaign_plan_arguments_invalid');
@@ -138,7 +155,7 @@ export async function planCampaign({ exportPath, month, windows = null, idPrefix
   const developmentIds = [...new Set(plan.days.filter((day) => developmentDays.has(day.day)).flatMap((day) => day.ids))].sort();
   const taken = new Set(developmentIds);
   const confirmationIds = [...new Set(plan.days.filter((day) => confirmationDays.has(day.day)).flatMap((day) => day.ids))].filter((id) => !taken.has(id)).sort();
-  return { month, windows, idPrefix, rehearsalPickWeight, development, confirmation, exportSha256, settings: value.settings, releaseId: value.releaseId, incumbent, registration,
+  return { month, windows, idPrefix, rehearsalPickWeight, development, confirmation, exportSha256, settings: value.settings, releaseId: value.releaseId, incumbent, consumer: await consumerFacts(value, rootDir), registration,
     devDays: devDays.map((day) => day.day), confirmDays: confirmDays.map((day) => day.day), ids: plan.ids, idsByRole: { development: developmentIds, confirmation: confirmationIds },
     perDay: plan.days.map((day) => ({ day: day.day, labelSet: day.ids.length })), drift: await replayDrift(value) };
 }
@@ -195,7 +212,7 @@ function labelsIssue(labels, plan) {
  */
 function registrationOf(plan, registered = FRONTIER_CAMPAIGN_REGISTRATION) {
   const r = { ...registered, ...(plan.rehearsalPickWeight ? { pickWeight: plan.rehearsalPickWeight } : {}) }, base = plan.registration;
-  return { r, base, selection: { baselineThreshold: base.baselineThreshold, thresholds: base.thresholds, minLabelled: r.minLabelled, maxVolumeRatio: r.maxVolumeRatio } };
+  return { r, base, selection: { baselineThreshold: base.baselineThreshold, thresholds: base.thresholds, minLabelled: r.minLabelled, maxVolumeRatio: r.maxVolumeRatio, minVolumeRatio: r.minVolumeRatio } };
 }
 /** One role's source: its days and the labels the plan asked for on them. @param {any[]} days @param {any} plan @param {Map<string, string|null>} labelById @param {any} registered */
 function daysSource(days, plan, labelById, registered) {
@@ -308,9 +325,10 @@ export async function buildCampaign({ exportPath, plan, labels, calibration, now
   };
   const registration = { ...selection, selection: { objective: 'weighted-accuracy-difference', tieBreak: 'nearest-baseline' },
     statistics, labelling: { ...jury, calibrationDigest: rsiDigest({ qualification: calibration.qualification, calibration: calibration.calibration }) } };
-  const closure = await computeRsiDependencyClosure({ rootDir, surface: 'frontier-selection', settings: { model: 'deepseek-flash', provider: 'deepseek' } });
+  const closure = await computeRsiDependencyClosure({ rootDir, surface: 'frontier-selection', settings: rsiClosureSettings('frontier-selection') });
+  const consumer = await consumerFacts(value, rootDir);
   const target = { surface: 'frontier-selection', dependencyDigest: closure.qualified ? closure.dependencyDigest : identity.implementationSha256,
-    baselineRevision: plan.incumbent?.revisionId ?? unboundBaselineRevision(value.releaseId) };
+    baselineRevision: !plan.incumbent ? unboundBaselineRevision(value.releaseId) : consumer.bound ? plan.incumbent.revisionId : unboundBaselineRevision(value.releaseId).replace(UNBOUND_BASELINE_PREFIX, UNBOUND_CONSUMER_PREFIX) };
   const sources = { [`development-${plan.development}`]: development, [`confirmation-${plan.confirmation}`]: confirmation };
   const manifest = {
     schemaVersion: 2, id: `${plan.idPrefix ?? ''}frontier-selection-${plan.month}`, surface: 'frontier-selection', candidateKind: 'policy', claim: 'superiority', automated: true,
@@ -326,7 +344,7 @@ export async function buildCampaign({ exportPath, plan, labels, calibration, now
   // Supply and power, read before confirmation from development alone.
   const { evaluation: devEvaluation, choice, differences } = developmentReading(development, selection);
   const supply = {
-    exportSha256, releaseId: value.releaseId, settings: value.settings, incumbent: plan.incumbent ?? null, drift: plan.drift,
+    exportSha256, releaseId: value.releaseId, settings: value.settings, incumbent: plan.incumbent ?? null, consumer, drift: plan.drift,
     development: developmentFacts(development, devDays, devEvaluation, plan.development),
     confirmation: { month: plan.confirmation, days: confirmDays.length, measuredDays: measuredDays.length, labelled: confirmation.labels.filter((l) => l.worth).length, abstained: confirmation.labels.filter((l) => !l.worth).length },
     replayFidelity: devEvaluation.eligible ? devEvaluation.days.reduce((sum, day) => sum + day.replayFidelity, 0) / Math.max(1, devEvaluation.days.length) : null,
@@ -355,7 +373,7 @@ async function main() {
     await writeFile(`${values.out}.tmp`, `${JSON.stringify(plan)}\n`);
     await rename(`${values.out}.tmp`, values.out);
     console.log(JSON.stringify({ status: 'planned', month: plan.month, devDays: plan.devDays.length, confirmDays: plan.confirmDays.length, toLabel: plan.ids.length,
-      byPhase: { development: plan.idsByRole.development.length, confirmation: plan.idsByRole.confirmation.length }, incumbent: plan.incumbent?.revisionId ?? null, drift: plan.drift }));
+      byPhase: { development: plan.idsByRole.development.length, confirmation: plan.idsByRole.confirmation.length }, incumbent: plan.incumbent?.revisionId ?? null, consumerBound: plan.consumer.bound, drift: plan.drift }));
   } else if (command === 'decide') {
     const result = await decideDevelopment({ exportPath: values.export, plan: await json(values.plan), labels: await json(oneLabels()), calibration: await json(values.calibration) });
     await writeFile(values.out, `${JSON.stringify(result, null, 1)}\n`);

@@ -660,7 +660,7 @@ export class CapsuleService {
 
   /**
    * Something the assistant wrote down because the researcher asked it to
-   * (「记住…」), or a decision the researcher made on an autopilot digest.
+   * (「记住…」).
    *
    * It is an entry of the researcher's one capsule, labelled with the project it
    * was written in (`entryProject`): the project's conversations read it and no
@@ -808,7 +808,7 @@ export class CapsuleService {
           const page = await this.documents.list(userId, "fact", { limit: 50, projectId: label, filter: { capsuleId: capsule.id, status: "approved", factKind } });
           for (const entry of page.items) {
             facts.push({ id: entry.id, capsuleId: capsule.id, factKind, content: String(entry.payload.content ?? ""), updatedAt: entry.updatedAt ?? null,
-              origin: String(entry.payload.origin ?? "") });
+              origin: String(entry.payload.origin ?? ""),sourcePrivacy:entry.payload.sourcePrivacy,attribution:entry.payload.attribution });
           }
         }
       }
@@ -898,7 +898,7 @@ export class CapsuleService {
       for (const entry of entries) matches.push({
         id: entry.id, capsuleId: capsule.id, capsuleTitle: capsule.payload.title, mode: selection.mode,
         factKind: entry.payload.factKind, layer: entry.payload.layer, content: entry.payload.content,
-        origin: entry.payload.origin, provenance: entry.payload.provenance, revision: entry.revision, contextOnly: true,
+        origin: entry.payload.origin,sourcePrivacy:entry.payload.sourcePrivacy,attribution:entry.payload.attribution,originalSources:entry.payload.originalSources, provenance: entry.payload.provenance, revision: entry.revision, contextOnly: true,
         ...labelled(capsule, entry.payload),
       });
     }
@@ -929,7 +929,7 @@ export class CapsuleService {
               || !await authorizeEntry(selection,row) || !await this.inForce(userId,capsule.id)) continue;
             snapshots.set(row.id,{row,selection});
             items.push({id:row.id,capsuleId:capsule.id,capsuleTitle:capsule.payload.title,mode:selection.mode,
-              factKind:row.payload.factKind,layer:row.payload.layer,content:row.payload.content,origin:row.payload.origin,
+              factKind:row.payload.factKind,layer:row.payload.layer,content:row.payload.content,origin:row.payload.origin,sourcePrivacy:row.payload.sourcePrivacy,attribution:row.payload.attribution,originalSources:row.payload.originalSources,
               provenance:row.payload.provenance,revision:row.revision,contextOnly:true,...labelled(capsule,row.payload)});
           }
         }
@@ -991,7 +991,7 @@ export class CapsuleService {
       items.push({
         id: match.row.id, capsuleId: capsule.id, capsuleTitle: capsule.payload.title, mode: match.selection.mode,
         factKind: payload.factKind, layer: payload.layer, content: payload.content,
-        origin: payload.origin, provenance: payload.provenance, revision: match.row.revision, contextOnly: true,
+        origin: payload.origin,sourcePrivacy:payload.sourcePrivacy,attribution:payload.attribution,originalSources:payload.originalSources, provenance: payload.provenance, revision: match.row.revision, contextOnly: true,
         ...labelled(capsule, payload),
       });
       if (items.length === limit) break;

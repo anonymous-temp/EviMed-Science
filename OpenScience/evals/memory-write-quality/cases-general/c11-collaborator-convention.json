@@ -2,7 +2,7 @@
   "id": "c11-collaborator-convention",
   "class": "work-order-collaborator-convention",
   "observedIn": "written for the memory-capsule rectification on 2026-10-23 (research G §6, C11); every name, number and identifier is invented",
-  "expected": "The convention a collaborator sets is kept without contact detail: the report's first page is the abstract, because the supervisor reads it first; the supervisor's phone number is not.",
+  "expected": "Keep the supervisor's abstract-first convention. The user asked not to put the phone in the report, not to forget the contact; no hard phone ban applies.",
   "decidable": true,
   "replay": {
     "synthetic": true,
@@ -23,12 +23,8 @@
   "expect": {
     "requireTextContains": [
       "摘要"
-    ],
-    "noTextContains": [
-      "13800138000"
-    ],
-    "identifierShapes": [
-      "mobile"
     ]
-  }
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }

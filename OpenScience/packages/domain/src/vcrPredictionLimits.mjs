@@ -3,6 +3,7 @@ export const VCR_PREDICTION_LIMIT_LABELS_ZH = Object.freeze({
   transportability_not_established: '模型在目标人群中的可迁移性和校准尚未建立。',
   calibration_measured_locally: '校准是用这张表里观察到的结局算的；换一个人群，可迁移性仍未建立。',
   predictions_not_observed_controls: '预测值不能视为已观察到的对照结局，也不增加独立样本量。',
+  trained_on_own_data: '这个方程是用你自己的历史数据训练的，没有在别的人群验证过。',
   unknown: '另有适用范围或方法局限需要核对，请查看保留的来源说明。',
 });
 const LEGACY = new Map([

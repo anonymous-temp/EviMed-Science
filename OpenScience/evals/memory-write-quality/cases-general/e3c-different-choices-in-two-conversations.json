@@ -2,7 +2,7 @@
   "id": "e3c-different-choices-in-two-conversations",
   "class": "refuse-no-repetition",
   "observedIn": "written for the memory-capsule next round on 2026-10-25 (the evals package; B-landscape I-3, I-6, I-10 and the owner decisions of that day); every name, number and identifier is invented",
-  "expected": "Nothing is kept: two conversations with two different choices (a pivot table, then a line chart instead of a table) repeat nothing, so nothing is promoted to a preference.",
+  "expected": "Different choices do not prove a standing preference. Useful dated task context may be notes without a forced global choice.",
   "decidable": true,
   "replay": {
     "synthetic": true,
@@ -35,10 +35,10 @@
     ]
   },
   "expect": {
-    "noTextContains": [
-      "透视表",
-      "折线图"
-    ],
-    "atMostRecords": 0
-  }
+    "noRecordOfKinds": [
+      "preference"
+    ]
+  },
+  "evaluationSplit": "development",
+  "policyRevision": "2026-11-04"
 }

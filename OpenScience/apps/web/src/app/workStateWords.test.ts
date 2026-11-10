@@ -16,8 +16,8 @@ import { shellSources, sourceStrings, walk } from "../test/sourceStrings";
  */
 const SRC = fileURLToPath(new URL("..", import.meta.url));
 const OWNED = [
-  "app/routes/AutopilotPage.tsx", "app/routes/ActiveResearchPage.tsx", "app/routes/InboxPage.tsx", "app/routes/RunFilePage.tsx",
-  "components/autopilot", "components/inbox", "components/runs", "components/sources", "components/memory", "components/frontier", "components/search",
+  "app/routes/ActiveResearchPage.tsx", "app/routes/InboxPage.tsx", "app/routes/RunFilePage.tsx",
+  "components/activeResearch", "components/inbox", "components/runs", "components/sources", "components/memory", "components/frontier", "components/search",
   "components/settings", "lib/runPresentation.ts", "lib/runProgress.ts", "lib/statusLabel.ts",
 ];
 const RETIRED = /研究进行中|执行中|运行中|工作中/;

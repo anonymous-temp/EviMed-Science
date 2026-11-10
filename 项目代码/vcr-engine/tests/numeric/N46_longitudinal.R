@@ -25,7 +25,7 @@ vcr_case("N46a", c("AC-02", "AC-09", "AC-11"), function() {
   # SDs, their correlation and the residual SD. (2) The model's closed-form mean and SD at each visit (written here, not read
   # from the result) match the sample within four Monte-Carlo errors, per arm and visit; the result's own `expected` block
   # equals the closed form.
-  if (!requireNamespace("nlme", quietly = TRUE)) return(list(pass = TRUE, detail = "skipped: nlme (R's recommended package) is not installed"))
+  if (!requireNamespace("nlme", quietly = TRUE)) return(list(pass = FALSE, detail = "error: nlme (R's recommended package, the cross-check of the mixed model) is not installed (the run must not skip silently)"))
   sc <- .n46_scenario()
   dir <- tempfile("n46a"); dir.create(dir); on.exit(unlink(dir, recursive = TRUE), add = TRUE)
   r <- .n46_run(sc, 4601L, "a", dir)

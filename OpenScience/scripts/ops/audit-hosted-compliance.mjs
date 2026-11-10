@@ -444,7 +444,7 @@ export function controllerLaunchPlanIsScoped(source, managerSource = "") {
   const allowed = compact.match(/constallowed=url\.pathname===["']\/v1\/runtime\/start["']\?(\[[^\]]*\])/);
   let fields;
   try { fields = JSON.parse((allowed?.[1] ?? "null").replace(/'/g, '"')); } catch { return false; }
-  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "platformSkillGeneration", "personalSkillGeneration", "extensionGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile", "contextGeneration", "attendancePublicKey", "patientMatchingGeneration"].sort();
+  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration", "memoryGatewayUrl", "geoSkills", "modelGatewayProfile", "contextGeneration", "attendancePublicKey", "patientMatchingGeneration"].sort();
   // Match the entire reviewed resolver: a profile cannot carry an arbitrary URL,
   // escape the gate namespace, or silently fall back when unconfigured.
   const managerCode = String(managerSource).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/\s+/g, "");
@@ -484,15 +484,14 @@ if(url.protocol!=="http:"||!url.port||url.username||url.password||url.search||ur
     && launch.includes("constmatching=payload.patientMatchingGeneration?awaitverifyPatientMatchingGeneration(config,project,payload.patientMatchingGeneration):null;")
     && launch.includes("if(matching&&inspectRuntimeImage(config).imageId!==matching.runtimeImageDigest)throwcontrollerFailure(409,'patient_matching_release_invalid'")
     && launch.includes("constextension=payload.extensionGeneration?awaitverifyGeneration(project,payload.extensionGeneration):null;")
-    && launch.includes("constplatform=payload.platformSkillGeneration?awaitverifyPlatformSkillGeneration(config,payload.platformSkillGeneration):null;")
     && launch.includes("constpersonal=payload.personalSkillGeneration?awaitverifyPersonalSkillGeneration(config,project,payload.personalSkillGeneration):null;")
     && launch.includes("canonicalJson(extension.projection.personal.reference)!==canonicalJson(payload.personalSkillGeneration??null)")
     && launch.includes("inspectRuntimeImage(config).imageId!==extension.identity.baseRuntimeImageDigest")
-    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{modelGatewayProfile:payload.modelGatewayProfile??\"\",contextGeneration,capsuleGatewayUrl,revisionGatewayUrl,publicSourceGatewayUrl,memoryGatewayUrl,attendancePublicKey,geoSkills,pluginConfig,platformSkillGeneration:platform?.reference??null,disabledPlatformSkills:personal?.platformSkills?.disabled??[],disabledClientBundles:personal?.platformSkills?.disabledPlugins??[],patientMatchingGeneration:matching,personalSkillGeneration:personal?.reference??null,personalSkillImageId:personal?.identity.baseRuntimeImageDigest??null,extensionGeneration:extension?.reference??null,extensionImageId:extension?.identity.baseRuntimeImageDigest??null});")
+    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{modelGatewayProfile:payload.modelGatewayProfile??\"\",contextGeneration,capsuleGatewayUrl,revisionGatewayUrl,publicSourceGatewayUrl,memoryGatewayUrl,attendancePublicKey,geoSkills,pluginConfig,disabledPlatformSkills:personal?.platformSkills?.disabled??[],disabledClientBundles:personal?.platformSkills?.disabledPlugins??[],patientMatchingGeneration:matching,personalSkillGeneration:personal?.reference??null,personalSkillImageId:personal?.identity.baseRuntimeImageDigest??null,extensionGeneration:extension?.reference??null,extensionImageId:extension?.identity.baseRuntimeImageDigest??null});")
     && launch.includes("constcontextGeneration=payload.contextGeneration?awaitverifyContextGeneration(config,project,payload.contextGeneration):null;")
     && (launch.match(/buildRuntimeLaunchPlan\(/g) ?? []).length === 1
     && launch.includes("spawn(plan.command,plan.args,{")
-    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:modelGatewayProfile|port|password|capsuleGatewayUrl|revisionGatewayUrl|publicSourceGatewayUrl|memoryGatewayUrl|attendancePublicKey|geoSkills|pluginConfig|platformSkillGeneration|personalSkillGeneration|extensionGeneration|contextGeneration|patientMatchingGeneration)\b/g, ""));
+    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:modelGatewayProfile|port|password|capsuleGatewayUrl|revisionGatewayUrl|publicSourceGatewayUrl|memoryGatewayUrl|attendancePublicKey|geoSkills|pluginConfig|personalSkillGeneration|extensionGeneration|contextGeneration|patientMatchingGeneration)\b/g, ""));
 }
 
 async function checkRuntimeContainerTopology() {

@@ -35,14 +35,16 @@
 
 import { createHash } from "node:crypto";
 
-import { identifierShapesIn } from "@evimed/domain";
+import { methodSourceIdentifierShapesIn, scopeRunTranscript } from "@evimed/domain";
 
 import { CONVERSATION_SCOPE, learningScopeOf } from "./learningTriggers.mjs";
 import { readRunTranscript } from "./runTranscripts.mjs";
+import { methodSourceAllowsLearning } from './runLearningScope.mjs';
 
 /** The three runs of two conversations, within ninety days, that make a script recur; the weight of a script worth proposing; what one run may contribute. */
 export const SCRIPT_RUNS = 3;
 export const SCRIPT_CONVERSATIONS = 2;
+export const SCRIPT_EVIDENCE_GENERATION = 'scoped-v1';
 export const SCRIPT_WINDOW_DAYS = 90;
 export const SCRIPT_MIN_STATEMENTS = 5;
 export const SCRIPT_LIMITS = Object.freeze({ snippetsPerRun: 12, snippetChars: 16_000, exemplars: 3, occurrences: 6 });
@@ -108,12 +110,12 @@ export function pythonSnippetsOf(transcript) {
 }
 
 /**
- * Whether a program carries a credential or an identifier by shape (`identifierShapesIn`): such a snippet is dropped before anything is stored.
+ * Whether a program carries a credential or an identifier by shape (`methodSourceIdentifierShapesIn`): such a snippet is dropped before anything is stored.
  * Not by word: a keyword pattern (`token`, `secret`, `password`) refused every script that merely named one of them, and a program is code, whose
  * words are not a sentence to read for what it is about (2026-10-25).
  * @param {string} source
  */
-export const sensitiveSource = (source) => identifierShapesIn(source).length > 0;
+export const sensitiveSource = (source) => methodSourceIdentifierShapesIn(source).length > 0;
 
 /**
  * The program Python runs to normalise a batch of snippets (stdin `{snippets: [{id, source}]}`, stdout's last line `{results: [...]}`).
@@ -259,7 +261,20 @@ CREATE TABLE IF NOT EXISTS evimed_learning.script_uses (
  FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS script_uses_window_idx ON evimed_learning.script_uses(user_id, script_hash, occurred_at DESC);
+ALTER TABLE evimed_learning.script_uses ADD COLUMN IF NOT EXISTS scope_proof jsonb;
 `;
+// Legacy whole-session occurrences stay exportable, but are not evidence of a run.
+const PROVEN_SCOPE_SQL = `scope_proof->>'schema'='run-turn-scope/1' AND scope_proof->>'available'='true'
+  AND jsonb_typeof(scope_proof->'available')='boolean' AND jsonb_typeof(scope_proof->'runId')='string'
+  AND jsonb_typeof(scope_proof->'rootSessionId')='string'
+  AND scope_proof->>'runId'=run_id AND scope_proof->>'rootSessionId'=session_id
+  AND CASE WHEN jsonb_typeof(scope_proof->'rootTurnStarts')='array' THEN
+    jsonb_array_length(scope_proof->'rootTurnStarts') BETWEEN 1 AND 4096
+    AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(scope_proof->'rootTurnStarts') AS starts(value)
+      WHERE CASE WHEN jsonb_typeof(starts.value)='number' THEN
+        starts.value::numeric < 0 OR starts.value::numeric > 9007199254740991 OR starts.value::numeric <> trunc(starts.value::numeric)
+        ELSE true END)
+    ELSE false END`;
 const migrations = new WeakMap();
 
 /** The table of script occurrences, created by this module's own idempotent migration (a feature of the learning loop owns its tables, as the share links do). @param {any} database */
@@ -284,17 +299,22 @@ export class ScriptUses {
 
   /**
    * One run's occurrences. Recording the same script of the same run again records it once.
-   * @param {string} userId @param {{ runId: string, sessionId: string, projectId: string | null, scope: string, at: Date, scripts: readonly { hash: string, source: string }[] }} run
+   * @param {string} userId @param {{ runId: string, sessionId: string, projectId: string | null, scope: string, at: Date, scripts: readonly { hash: string, source: string }[], scopeProof?:any }} run
    * @returns {Promise<number>} how many were new
    */
-  async record(userId, { runId, sessionId, projectId, scope, at, scripts }) {
-    if (!scripts.length) return 0;
+  async record(userId, { runId, sessionId, projectId, scope, at, scripts, scopeProof }) {
+    if (!scripts.length || scopeProof?.schema !== 'run-turn-scope/1' || scopeProof.available !== true
+      || scopeProof.runId !== runId || scopeProof.rootSessionId !== sessionId
+      || !Array.isArray(scopeProof.rootTurnStarts) || !scopeProof.rootTurnStarts.length || scopeProof.rootTurnStarts.length > 4096
+      || !scopeProof.rootTurnStarts.every((/** @type {unknown} */ seq) => Number.isSafeInteger(seq) && Number(seq) >= 0)) return 0;
     await migrateScriptUses(this.database);
     let added = 0;
     for (const script of scripts) {
-      const inserted = await this.database.query(`INSERT INTO evimed_learning.script_uses(user_id,script_hash,run_id,session_id,project_id,scope,occurred_at,source)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (user_id,script_hash,run_id) DO NOTHING`,
-      [userId, script.hash, runId, sessionId, projectId, scope, at.toISOString(), script.source.slice(0, SCRIPT_LIMITS.snippetChars)]);
+      const inserted = await this.database.query(`INSERT INTO evimed_learning.script_uses(user_id,script_hash,run_id,session_id,project_id,scope,occurred_at,source,scope_proof)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (user_id,script_hash,run_id) DO UPDATE
+        SET session_id=EXCLUDED.session_id,project_id=EXCLUDED.project_id,scope=EXCLUDED.scope,occurred_at=EXCLUDED.occurred_at,source=EXCLUDED.source,scope_proof=EXCLUDED.scope_proof
+        WHERE script_uses.scope_proof IS NULL`,
+      [userId, script.hash, runId, sessionId, projectId, scope, at.toISOString(), script.source.slice(0, SCRIPT_LIMITS.snippetChars), scopeProof]);
       added += Number(inserted.rowCount ?? 0);
     }
     // What is older than the window counts for nothing and is not kept: a program of the person's is held for ninety days and no longer.
@@ -312,7 +332,7 @@ export class ScriptUses {
     await migrateScriptUses(this.database);
     const since = new Date(this.now().getTime() - this.windowMs).toISOString();
     const { rows } = await this.database.query(`SELECT run_id, project_id, session_id, scope, occurred_at FROM evimed_learning.script_uses
-      WHERE user_id=$1 AND script_hash=$2 AND occurred_at >= $3 ORDER BY occurred_at DESC, run_id`, [userId, hash, since]);
+      WHERE user_id=$1 AND script_hash=$2 AND occurred_at >= $3 AND ${PROVEN_SCOPE_SQL} ORDER BY occurred_at DESC, run_id`, [userId, hash, since]);
     const conversations = new Set(rows.map((/** @type {any} */ row) => `${row.project_id ?? ""}\u0000${row.session_id}`));
     return {
       runs: rows.length, conversations: conversations.size, scope: rows[0]?.scope ?? null,
@@ -328,8 +348,27 @@ export class ScriptUses {
   async exemplars(userId, hash) {
     await migrateScriptUses(this.database);
     const { rows } = await this.database.query(`SELECT run_id, occurred_at, source FROM evimed_learning.script_uses WHERE user_id=$1 AND script_hash=$2
-      ORDER BY occurred_at DESC, run_id LIMIT $3`, [userId, hash, SCRIPT_LIMITS.exemplars]);
+      AND ${PROVEN_SCOPE_SQL} AND occurred_at >= $4 ORDER BY occurred_at DESC, run_id LIMIT $3`,
+    [userId, hash, SCRIPT_LIMITS.exemplars, new Date(this.now().getTime() - this.windowMs).toISOString()]);
     return rows.map((/** @type {any} */ row) => ({ runId: row.run_id, at: new Date(row.occurred_at).toISOString(), source: String(row.source) }));
+  }
+
+  /** Qualifying counts and bounded sources from the same database snapshot.
+   * @param {string} userId @param {string} hash
+   * @returns {Promise<{runs:number,conversations:number,exemplars:{runId:string,at:string,source:string}[]}>} */
+  async lesson(userId, hash) {
+    await migrateScriptUses(this.database);
+    const { rows } = await this.database.query(`WITH qualifying AS (
+      SELECT run_id,session_id,project_id,occurred_at,source FROM evimed_learning.script_uses
+      WHERE user_id=$1 AND script_hash=$2 AND occurred_at >= $3 AND ${PROVEN_SCOPE_SQL}
+    ) SELECT count(*) AS runs,count(DISTINCT jsonb_build_array(project_id,session_id)) AS conversations,
+      (SELECT coalesce(jsonb_agg(jsonb_build_object('runId',e.run_id,'at',e.occurred_at,'source',e.source)
+        ORDER BY e.occurred_at DESC,e.run_id),'[]'::jsonb)
+       FROM (SELECT * FROM qualifying ORDER BY occurred_at DESC,run_id LIMIT $4) e) AS exemplars
+      FROM qualifying`, [userId, hash, new Date(this.now().getTime() - this.windowMs).toISOString(), SCRIPT_LIMITS.exemplars]);
+    const row = rows[0];
+    return { runs: Number(row?.runs) || 0, conversations: Number(row?.conversations) || 0,
+      exemplars: (row?.exemplars ?? []).map((/** @type {any} */ entry) => ({ runId: entry.runId, at: new Date(entry.at).toISOString(), source: entry.source })) };
   }
 
   /** Forget every occurrence an account has (a memory reset: what the researcher asked to forget teaches nothing). @param {string} userId @returns {Promise<number>} */
@@ -352,9 +391,10 @@ export function scriptLessonFor({ hash, run, recurrence }) {
   const scope = recurrence.scope ?? CONVERSATION_SCOPE;
   return {
     trigger: "script",
-    idempotencyKey: `distill:script:${hash}`,
+    idempotencyKey: `distill:script:${SCRIPT_EVIDENCE_GENERATION}:${hash}`,
     payload: {
       runId: run.id, trigger: "script", scope, capabilityId: scope === CONVERSATION_SCOPE ? null : scope, scriptHash: hash,
+      scriptEvidenceGeneration: SCRIPT_EVIDENCE_GENERATION,
       // Two scripts that complete their count in one run are two lessons, and neither adopts the other's bounded run (`distillationDispatchId`).
       dispatchKey: hash,
       runs: recurrence.runs, conversations: recurrence.conversations,
@@ -396,10 +436,11 @@ export class ScriptLessons {
   async afterSettle(project, run) {
     const none = { recorded: 0, queued: /** @type {string[]} */ ([]) };
     try {
-      if (!this.execute) return none;
+      if (!this.execute || !methodSourceAllowsLearning(run)) return none;
       const transcript = await this.readTranscript(project, run.id).catch(() => null);
       if (!transcript) { this.#count("no_transcript"); return none; }
-      const found = pythonSnippetsOf(transcript).slice(0, SCRIPT_LIMITS.snippetsPerRun);
+      const scoped = scopeRunTranscript(transcript, run);
+      const found = pythonSnippetsOf(scoped).slice(0, SCRIPT_LIMITS.snippetsPerRun);
       this.#count("snippets", found.length);
       const sources = found.filter((source) => {
         if (source.length > SCRIPT_LIMITS.snippetChars) return false;
@@ -427,7 +468,7 @@ export class ScriptLessons {
       if (!scripts.size) return none;
       const recorded = await this.uses.record(project.userId, {
         runId: run.id, sessionId: String(run.sessionId ?? run.id), projectId: project.id ?? null, scope: learningScopeOf(run),
-        at: new Date(Date.parse(String(run.finishedAt ?? "")) || this.now().getTime()), scripts: [...scripts.values()],
+        at: new Date(Date.parse(String(run.finishedAt ?? "")) || this.now().getTime()), scripts: [...scripts.values()], scopeProof: scoped.runScope,
       });
       this.#count("recorded", recorded);
       const queue = this.queue?.();

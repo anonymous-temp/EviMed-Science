@@ -1,0 +1,13 @@
+{"pmcid": "PMC12735205", "page": 6, "table": "Table 1", "caption": "The demographic and lifestyle characteristics of participants.", "columns": ["Intervention Group (n = 31)", "Intensive Intervention Group (n = 30)", "Control Group (n = 32)", "Total (n = 93)", "p-Value"], "keys": ["Intervention", "Intensive Intervention", "Control", "Total", "p-Value"], "note": "centred cells; two rows of a category share one p-value cell, recorded on the first row; horizontal rules between variables; the section rows (Gender, Education status, Physical activity level, Number of main meals per day) carry no values","rows":[
+["Age (years)", "46.68 ± 10.4", "45.9 ± 11.3", "48.8 ± 11.3", "47.10 ± 10.88", "0.592"],
+["Female", "20 (64.5)", "17 (56.7)", "16 (50)", "54 (57)", "0.508"],
+["Male", "11 (35.5)", "13 (43.3)", "16 (50)", "39 (43)", ""],
+["Lower secondary education and below", "12 (38.7)", "9 (30)", "16 (50)", "37 (39.8)", "0.271"],
+["Upper secondary education and above", "19 (61.3)", "21 (70)", "16 (50)", "56 (60.2)", ""],
+["Smoking", "10 (33.3)", "10 (34.5)", "9 (28.1)", "29 (31.9)", "0.849"],
+["Alcohol usage", "7 (22.6)", "5 (16.6)", "7 (21.9)", "19 (20.4)", "0.637"],
+["Sedentary", "22 (71.9)", "26 (86.7)", "27 (84.4)", "75 (80.7)", "0.152"],
+["Active", "9 (28.1)", "4 (13.3)", "5 (15.6)", "18 (19.4)", ""],
+["≤2", "22 (71)", "17 (56.6)", "21 (65.6)", "60 (64.5)", "0.5"],
+["3", "9 (29)", "13 (43.3)", "11 (34.4)", "33 (35.5)", ""]
+]}

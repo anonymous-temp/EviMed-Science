@@ -53,6 +53,7 @@ import { TrialTab } from "@/components/vcr/tabs/TrialTab";
 import { MatchingTab } from "@/components/vcr/tabs/MatchingTab";
 import { DataTab } from "@/components/vcr/tabs/DataTab";
 import { landingTab, resolveVcrTab, VCR_HOME_PATH, vcrStepPath, vcrTabPath } from "@/components/vcr/vcrTabs";
+import { vcrWorkspaceAreaPath } from "@/lib/vcrWorkspaceNavigation";
 
 /**
  * What a tab is given: the study, the id its routes are addressed by, and how to read the study again after a change that moves the
@@ -126,7 +127,7 @@ export function VcrStudyPage() {
         <EmptyState
           icon={UsersRound}
           title="这个研究不存在或已删除。"
-          action={<Button variant="secondary" onClick={() => navigate(VCR_HOME_PATH)}>回到研究列表</Button>}
+          action={<Button variant="secondary" onClick={() => navigate(vcrWorkspaceAreaPath("records"))}>回到研究列表</Button>}
         />
       </PageShell>
     );

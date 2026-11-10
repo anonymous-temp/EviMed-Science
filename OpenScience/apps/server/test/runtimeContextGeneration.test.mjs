@@ -117,19 +117,6 @@ test('materialized shared capsules exclude foreign bytes and a source withdrawal
  allowed=false;await assert.rejects(f.manager.assertContextPolicyGeneration(f.project),{code:'runtime_context_unverified'});
 });
 
-import { createHash } from 'node:crypto';
-import { canonicalJson } from '@evimed/domain';
-import { platformSkillGenerationRoot, verifyPlatformSkillGeneration } from '../src/platformSkillSupply.mjs';
-test('shared launches retain separately verified published platform skills and state their personal-byte restriction',async t=>{
- const f=await managerFixture(t),text='---\nname: Published method\ndescription: Public method\n---\nPublished platform body\n',sha=value=>createHash('sha256').update(value).digest('hex');
- const nativeName='platform-'+'a'.repeat(24),manifest={schemaVersion:1,pins:[{nativeName,digest:`sha256:${sha(text)}`,files:[{path:'SKILL.md',digest:`sha256:${sha(text)}`}]}]};
- const reference={schemaVersion:1,generationHash:sha(canonicalJson(manifest))},root=platformSkillGenerationRoot(f.manager.config,reference);
- await fs.mkdir(path.join(root,'skills',nativeName),{recursive:true});await fs.writeFile(path.join(root,'skills',nativeName,'SKILL.md'),text,{mode:0o444});await fs.writeFile(path.join(root,'manifest.json'),canonicalJson(manifest)+'\n',{mode:0o444});
- const generation=await verifyPlatformSkillGeneration(f.manager.config,reference);f.manager.platformSkillSupply={prepareForRuntime:async()=>generation};
- await launch(f);const receipt=await f.manager.launchedContextReceipt(f.project);assert.deepEqual(receipt.platformSkillReference,reference);
- assert.ok(f.plan().args.includes(`type=bind,src=${root}/skills,dst=/opt/evimed/platform-skills,readonly`));assert.equal(receipt.restrictions.personalExtensions,'excluded-until-shared-byte-authorization');
-});
-
 // Since 2026-10-28 an ordinary plan mounts the project's own view of the library (the entries that apply to it), never the account's
 // master folder; a shared plan mounts neither.
 test('shared provider and common plans exclude a populated owner library while ordinary plans mount the project view',async t=>{

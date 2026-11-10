@@ -13,7 +13,7 @@
  * adds is the mapping and a per-runtime rate limit, because an address on the
  * internet can be called by anything that learns it:
  *
- *   /runtime-gateway/<model|sources|search|capsules|revisions|geo-probe|kb|frontier|review|geo|vcr|semantics|tasks|memory>/…
+ *   /runtime-gateway/<model|sources|search|capsules|revisions|geo-probe|kb|frontier|review|geo|vcr|semantics|memory>/…
  *       → the same request at /internal/<name>/…, handled by the same gateway
  *   /runtime-gateway/specialist/<adapter>[/…]
  *       → relayed to that specialist adapter's configured URL, token included
@@ -32,7 +32,6 @@ import {
   memoryGatewayProviderUrl,
   publicSourceGatewayProviderUrl,
   revisionGatewayProviderUrl,
-  taskToolsGatewayProviderUrl,
   webSearchGatewayProviderUrl,
 } from "./runtimeManager.mjs";
 import { HttpError, sendError } from "./security.mjs";
@@ -52,7 +51,7 @@ export const RUNTIME_GATEWAY_PREFIX = "/runtime-gateway/";
  * runtime, and a credential endpoint reachable from the internet with a token
  * the run can print is what the 2026-09-20 security review found here.
  */
-export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb", "frontier", "review", "geo", "tooluniverse", "vcr", "extensions", "results", "semantics", "evolution", "tasks", "memory"]);
+export const RUNTIME_GATEWAY_NAMES = Object.freeze(["model", "sources", "search", "capsules", "revisions", "geo-probe", "kb", "frontier", "review", "geo", "tooluniverse", "vcr", "extensions", "results", "semantics", "memory"]);
 
 export const RUNTIME_GATEWAY_SPECIALIST = "specialist";
 
@@ -80,10 +79,8 @@ export function publicRuntimeGatewayUrls(config) {
     webSearch: webSearchGatewayProviderUrl(config) ? `${base}/search/v1/query` : "",
     capsule: capsuleGatewayProviderUrl(config) ? `${base}/capsules/v1` : "",
     revision: revisionGatewayProviderUrl(config) ? `${base}/revisions/v1/authorize` : "",
-    evolution: config.evolutionEnabled ? `${base}/evolution/v1` : "",
     results: config.resultsEnabled && config.stateStore === "postgres" ? `${base}/results/v1` : "",
     semantics: dataSemanticsGatewayProviderUrl(config) ? `${base}/semantics/v1` : "",
-    tasks: taskToolsGatewayProviderUrl(config) ? `${base}/tasks/v1` : "",
     // The memory gateway's base, for an account on the native engine (the provider decides per account whether a session is given it).
     memory: memoryGatewayProviderUrl(config) ? `${base}/memory/v1` : "",
     geoProbe: String(config.geoProbeUrl ?? "").trim() ? `${base}/geo-probe/v1` : "",
@@ -239,7 +236,7 @@ export function createRuntimeGatewayEntry({ config, runtimeManager }) {
         if (!enabled) throw new HttpError(404, "runtime_gateway_not_found", "No runtime gateway at that address.");
         const resolved = resolveRuntimeGatewayPath(req.url);
         if (!resolved) throw new HttpError(404, "runtime_gateway_not_found", "No runtime gateway at that address.");
-        admit(await identify(req, resolved.kind === "internal" && (resolved.url.startsWith("/internal/extensions/") || resolved.url.startsWith("/internal/evolution/"))));
+        admit(await identify(req, resolved.kind === "internal" && resolved.url.startsWith("/internal/extensions/")));
         if (resolved.kind === "internal") {
           req.url = resolved.url;
           return false;

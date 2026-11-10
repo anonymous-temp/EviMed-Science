@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router";
-import { BellRing, Folder, Gauge, Palette, Plug, UserRound, type LucideIcon } from "lucide-react";
+import { BellRing, Folder, Gauge, Palette, Plug, Puzzle, UserRound, type LucideIcon } from "lucide-react";
 import { fetchImStatus } from "@/lib/imClient";
 import { useResearchBilling } from "@/lib/useResearchBilling";
 import { PageShell } from "@/components/layout/PageShell";
@@ -32,6 +32,9 @@ const SECTIONS: readonly Section[] = [
   { key: "projects", label: "项目", icon: Folder },
 ];
 
+/** 技能与插件 is a page of its own, not a section: its entry sits in this column and links there (2026-11-08; the sidebar has no row for it). */
+const EXTENSIONS_ENTRY = { label: "技能与插件", to: "/app/extensions/installed", icon: Puzzle };
+
 /**
  * 「设置」 (2026-09-23 plan §5.9, mockup m11): one page in the column every
  * page shares, a section column on its left — 账户 · 外观 · 通知 · 用量 · 数据源
@@ -39,7 +42,7 @@ const SECTIONS: readonly Section[] = [
  * one item per row.
  *
  * The column holds the settings and nothing else (R19, audit D C4/C7): 插件 and
- * 技能 have their own page (`/app/extensions`), reached from the sidebar, and
+ * 技能 have their own page (`/app/extensions`), reached from the last entry of this column (技能与插件; the sidebar has no row for it), and
  * 运维 left on its own route (`/app/ops`, operators only) — `?tab=ops` is its
  * old address and lands there.
  *
@@ -95,6 +98,12 @@ export function AccountPage() {
                 </li>
               );
             })}
+            <li className="shrink-0">
+              <Link to={EXTENSIONS_ENTRY.to} className={navItemClasses({ current: false, className: "whitespace-nowrap" })}>
+                <EXTENSIONS_ENTRY.icon size={16} aria-hidden="true" className="text-text-3" />
+                {EXTENSIONS_ENTRY.label}
+              </Link>
+            </li>
           </ul>
         </nav>
         <div className="min-w-0 flex-1">

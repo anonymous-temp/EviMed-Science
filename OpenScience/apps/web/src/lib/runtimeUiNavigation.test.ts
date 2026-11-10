@@ -98,3 +98,14 @@ it("scrubs legacy history without resolving or copying the old draft and referen
   expect(runtimeUiIntentFromState(clean, intent.projectId)).toBeNull();
   expect(sanitizeRuntimeUiHistoryState(clean)).toBe(clean);
 });
+
+it("may ask for the kernel's scheduled-task page, and for no other", () => {
+  const intent = { ...newRuntimeUiIntent(undefined, "session-tasks"), panel: "schedules" as const };
+  expect(runtimeUiIntentFromState({ runtimeUiIntent: prepareRuntimeUiIntent(intent) }, intent.projectId)?.panel).toBe("schedules");
+  // The history entry holds no payload, the page's name included.
+  expect(prepareRuntimeUiIntent(intent)).not.toHaveProperty("panel");
+  for (const panel of ["settings", "files", "Schedules", "", "schedules ", null, 1, {}]) {
+    const other = { ...newRuntimeUiIntent(undefined, "session-other"), panel: panel as never };
+    expect(runtimeUiIntentFromState({ runtimeUiIntent: prepareRuntimeUiIntent(other) }, other.projectId), JSON.stringify(panel)).toBeNull();
+  }
+});

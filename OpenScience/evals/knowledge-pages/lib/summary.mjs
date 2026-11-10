@@ -1,5 +1,5 @@
 // From the per-run records to the numbers the decision reads. Pure: no files, no network.
-import { PAGE_ARM_IDS, THRESHOLDS, decide } from './decide.mjs'
+import { PAGE_ARM_IDS, THRESHOLDS, decide, decideNonInferior } from './decide.mjs'
 import { ARMS } from './prompts.mjs'
 import { BOOTSTRAP_ITERATIONS, BOOTSTRAP_SEED, mean, percentile, pairedBootstrap, seededRandom } from './stats.mjs'
 
@@ -7,6 +7,8 @@ import { BOOTSTRAP_ITERATIONS, BOOTSTRAP_SEED, mean, percentile, pairedBootstrap
 export const ARM_IDS = Object.freeze(Object.keys(ARMS))
 /** The arms a new run can ask: B's pages cannot be compiled any more. */
 export const RUNNABLE_ARM_IDS = Object.freeze(ARM_IDS.filter((id) => ARMS[id].runnable))
+/** The arms a run asks when none are named: arm G is asked for by name. */
+export const DEFAULT_ARM_IDS = Object.freeze(RUNNABLE_ARM_IDS.filter((id) => id !== 'G'))
 export const KINDS = Object.freeze(['synthesis', 'single'])
 
 /** The arms of a list, once each, in the reported order. @param {Iterable<string>} arms */
@@ -24,6 +26,7 @@ export function comparisonsFor(arms) {
   const pairs = []
   for (const page of PAGE_ARM_IDS) for (const other of ['Aprime', 'A']) if (arms.includes(page) && arms.includes(other)) pairs.push([page, other])
   if (arms.includes('Aprime') && arms.includes('A')) pairs.push(['Aprime', 'A'])
+  if (arms.includes('G') && arms.includes('A')) pairs.push(['G', 'A'])
   return pairs
 }
 
@@ -253,6 +256,8 @@ export function summarize({ runs, compiles, ledger, corpus, judgeSanity = null, 
   // One verdict per arm that searches pages, by the same rule. `decision` is the name the 2026-10-12 summaries gave arm B's.
   summary.decisions = Object.fromEntries(PAGE_ARM_IDS.filter((arm) => armIds.includes(arm)).map((arm) => [arm, decide(summary, arm)]))
   if (summary.decisions.B) summary.decision = summary.decisions.B
+  // Arm G is not a page arm: it is asked whether it is as good as A (non-inferiority), under thresholds fixed on 2026-11-05.
+  if (armIds.includes('G') && armIds.includes('A')) summary.decisions.G_vs_A = decideNonInferior(summary, 'G', 'A')
   return summary
 }
 
@@ -287,7 +292,7 @@ export function renderTable(summary) {
     const c = summary.citations.overall[arm]
     lines.push(`${arm.padEnd(10)} ${String(c.answers).padStart(7)} ${f(c.answersWithMarkersRate).padStart(13)} ${String(c.markerCount).padStart(8)} ${f(c.verifiedRate).padStart(13)} ${String(c.pageCited).padStart(10)}`)
   }
-  const rateDiffs = comparisons.filter(([left]) => PAGE_ARM_IDS.includes(left)).map((pair) => {
+  const rateDiffs = comparisons.filter(([left]) => PAGE_ARM_IDS.includes(left) || left === 'G').map((pair) => {
     const d = summary.citations.diffs[comparisonName(pair)]
     return `${comparisonName(pair)} ${f(d?.mean)} [${f(d?.ciLow)}, ${f(d?.ciHigh)}]`
   })
@@ -310,7 +315,7 @@ export function renderTable(summary) {
     lines.push('')
   }
   for (const [arm, verdict] of Object.entries(summary.decisions)) {
-    lines.push(`DECISION for arm ${arm} (${ARMS[arm].label}): the thresholds are ${verdict.open ? 'met' : 'NOT met'}${verdict.inconclusive ? ' (inconclusive)' : ''}`)
+    lines.push(`DECISION for ${ARMS[arm] ? `arm ${arm} (${ARMS[arm].label})` : arm}: the thresholds are ${verdict.open ? 'met' : 'NOT met'}${verdict.inconclusive ? ' (inconclusive)' : ''}`)
     for (const reason of verdict.reasons) lines.push(`  ${reason}`)
   }
   if (!Object.keys(summary.decisions).length) lines.push('DECISION: none - this run holds no arm that searches pages')

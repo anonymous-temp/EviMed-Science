@@ -101,7 +101,6 @@ services:
       # this name itself and connects by address.
       KNOWLEDGE_PLUGIN_BROWSER_CDP_URL: ${KNOWLEDGE_PLUGIN_BROWSER_CDP_URL:-http://frontier-browser:9222}
       # 0 serves the stream without crawling (a restore drill, a paused registry).
-      EVIMED_SOURCE_REQUESTS_URL: ${OPEN_SCIENCE_PUBLIC_URL:-http://localhost:8787}/evolution/source-requests.json
       KNOWLEDGE_PLUGIN_CRAWL: ${KNOWLEDGE_PLUGIN_CRAWL:-1}
       # Contract 1.5.0, the social adapters: keys by file, caps, the GEO crawler, the media store.
       KNOWLEDGE_PLUGIN_SOCIALDATA_KEY_FILE: /run/secrets/socialdata-api-key
@@ -216,7 +215,7 @@ services:
   # container is the sandbox (no capabilities, read-only root, its own networks,
   # 1 GB). No published port.
   frontier-browser:
-    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.2.1-rc.5-uv-0.11.26}
+    image: ${OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE:-open-science-runtime:dsh-0.2.2-rc.1-uv-0.11.26}
     user: "10003:10003"
     entrypoint: ["python3", "-c"]
     command:

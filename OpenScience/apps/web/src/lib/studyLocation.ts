@@ -33,3 +33,13 @@ export function studyIdFromChatPath(pathname: string): string | null {
   try { decoded = decodeURIComponent(match[1]); } catch { return null; }
   return ADDRESSABLE_STUDY.test(decoded) ? decoded : null;
 }
+
+/** Resolve a study only from its own address, tolerating malformed browser URLs. */
+export function studyIdFromPath(pathname: string): string | null {
+  const match = /^\/app\/virtual-research\/([^/]+)(?:\/|$)/.exec(pathname);
+  if (!match) return null;
+  try {
+    const id = decodeURIComponent(match[1]);
+    return ADDRESSABLE_STUDY.test(id) ? id : null;
+  } catch { return null; }
+}

@@ -433,31 +433,10 @@ ${asked.length || missing.length ? html`<p class="muted">${asked.length ? `本�
 }
 
 /**
- * The prediction registry's calibration: predictions registered before a trial's result was public, scored against it. Before enough are scored the
- * page says how many there are and when the overall calibration will be published; it does not draw a curve from a few points.
- * @param {any} calibration the metrics module's `predictionCalibration()`
+ * @param {{ months: { month: string, data: boolean, figures: any }[], questionBank?: any }} model
+ *   `questionBank` is the optional section the deployment composed; absent, it is not on the page.
  */
-function calibrationSection(calibration) {
-  if (!calibration.available) {
-    return html`<h2>预测的校准</h2>
-<p class="muted">平台在试验结果公开之前登记预测，结果公开后按登记时间在先的预测评分。</p>
-<p>已评分 ${calibration.scored} 条，满 ${calibration.minScored} 条后公开整体校准。</p>`;
-  }
-  const { probability, estimate } = calibration;
-  return html`<h2>预测的校准</h2>
-<p class="muted">平台在试验结果公开之前登记预测，结果公开后按登记时间在先的预测评分。共评分 ${calibration.scored} 条。</p>
-${probability.bins.length ? html`<div class="table-wrap"><table>
-<thead><tr><th>预测的成功概率</th><th class="num">条数</th><th class="num">平均预测概率</th><th class="num">实际达成的比例</th></tr></thead>
-<tbody>${probability.bins.map((/** @type {any} */ bin) => html`<tr><td>${Math.round(bin.from * 100)}%–${Math.round(bin.to * 100)}%</td><td class="num">${bin.n}</td><td class="num">${percentText(bin.meanPredicted, "—")}</td><td class="num">${percentText(bin.observedRate, "—")}</td></tr>`)}</tbody></table></div>` : html`<p class="muted">已评分的预测里没有给出成功概率的。</p>`}
-${probability.brierMean === null ? "" : html`<p>概率预测的 Brier 分数平均为 ${Math.round(probability.brierMean * 1000) / 1000}（${probability.n} 条；越小越好）。</p>`}
-${estimate.n ? html`<p>估计值的平均绝对误差为 ${estimate.meanAbsoluteError === null ? "无法计算" : Math.round(estimate.meanAbsoluteError * 1000) / 1000}（${estimate.n} 条）${estimate.coverage.rate === null ? "" : `；公布的值落在预测区间内的占 ${percentText(estimate.coverage.rate, "—")}（${estimate.coverage.n} 条）`}。</p>` : ""}`;
-}
-
-/**
- * @param {{ months: { month: string, data: boolean, figures: any }[], questionBank?: any, calibration?: any }} model
- *   `questionBank` and `calibration` are the optional sections the deployment composed; absent, they are not on the page.
- */
-export function metricsPage({ months, questionBank = null, calibration = null }) {
+export function metricsPage({ months, questionBank = null }) {
   return {
     title: `按月公开的数 · ${EVIDENCE_SITE_NAME}`,
     description: "EviMed 证据中心每月公开的三个数：引文核对通过率、纠错的中位时效、质疑数及其结果。",
@@ -477,7 +456,7 @@ ${months.length ? html`<div class="table-wrap"><table>
 <td>${figures.challenges.filed ? html`提出 ${figures.challenges.filed}：维持 ${figures.challenges.upheld}，修正 ${figures.challenges.amended}，撤回 ${figures.challenges.withdrawn}，处理中 ${figures.challenges.open}${figures.challenges.upheldShare === null ? "" : html`<br><span class="muted">已判定的里维持的占 ${Math.round(figures.challenges.upheldShare * 1000) / 10}%</span>`}` : "这个月没有质疑"}</td>
 </tr>` : html`<tr><td>${month}</td><td colspan="3" class="muted">这个月没有数据。</td></tr>`)}</tbody></table></div>` : html`<p class="muted">还没有可以公开的数据。</p>`}
 ${questionBank ? questionBankSection(questionBank) : ""}
-${calibration ? calibrationSection(calibration) : ""}`,
+`,
   };
 }
 

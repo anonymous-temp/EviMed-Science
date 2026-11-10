@@ -143,11 +143,6 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   // data checks — through the control plane's ledger; offered to the two capabilities that start from a
   // researcher's own data (dataset_semantics, data_semantics.py; plan 2026-10-02 §11.3 N03)
   'dataset_semantics',
-  // A scheduled task made and changed from a conversation (N-13, 2026-10-09): the form's twin, through the control plane's own
-  // task service — the platform's default budgets, started at once, nothing to approve (task_tools.py → taskToolsGateway.mjs).
-  // The account and the project are the runtime token's; a conversation never names either.
-  'schedule_task',
-  'update_task',
 ])
 
 /** Model-visible MCP tool names. */
@@ -269,10 +264,6 @@ export const ROOT_VISIBLE_MCP_BASE_NAMES = Object.freeze([
   // medical conversation, so it is not a delegate's tool (model-chosen, never forced).
   'clinical_score',
   'vcr_read', 'vcr_write', 'vcr_simulate',
-  // "每周五帮我看看……" is said in any conversation, and "改到每周一 8 点" in a task's own
-  // conversation: a tool the root is not shown would fail exactly the sentence it exists for (model-chosen, never forced).
-  'schedule_task',
-  'update_task',
   // The evidence tools: what the evidence method names, and what a medical or
   // literature question is answered with.
   'literature_search',
