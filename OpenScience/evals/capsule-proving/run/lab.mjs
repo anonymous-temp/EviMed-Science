@@ -311,6 +311,55 @@ export async function startGatewayServer(handler) {
   };
 }
 
+/** One gateway per answer configuration; every handler receives the same engine, overlay and identities.
+ * @param {any} shared @param {Record<string, any>} config @param {{name: string, config: Record<string, any>}[]} variants
+ */
+export async function startLabGateways(shared, config, variants = []) {
+  const gateways = new Map();
+  try {
+    for (const entry of [{ name: "", config: {} }, ...variants]) {
+      const merged = { ...config, ...entry.config };
+      const handler = createMemoryGatewayHandler({ ...shared, config: merged,
+        admission: entry.name && shared.admissionFor ? shared.admissionFor(merged) : shared.admission });
+      gateways.set(entry.name, { ...await startGatewayServer(handler), handler, config: merged });
+    }
+  } catch (error) {
+    await Promise.all([...gateways.values()].map((gateway) => gateway.close()));
+    throw error;
+  }
+  return { gateways, close: async () => { await Promise.all([...gateways.values()].map((gateway) => gateway.close())); } };
+}
+
+/** Feature-detect the product method so older checkouts remain usable.
+ * @param {any} consolidation @param {string} userId @param {any} [options]
+ */
+export async function verifyLabExisting(consolidation, userId, options = {}) {
+  const method = /** @type {any} */ (NativeMemoryConsolidation.prototype).verifyExisting;
+  if (typeof method !== "function") throw Object.assign(new Error("verify_unavailable: this checkout has no existing-line verification"), { code: "verify_unavailable" });
+  return method.call(consolidation, userId, options);
+}
+
+/** Plant into both representations, retaining the original source revisions for verification.
+ * @param {any} parts @param {LabUser} user @param {string} rel @param {string} text
+ */
+export async function replaceLabFile({ sessions, overlay }, user, rel, text) {
+  if (!rel.endsWith(".md") || rel.split("/").some((segment) => !segment || segment === "." || segment === "..")) throw new Error("a memory file path under memories/ ending in .md");
+  const uri = `${sessions.memoryRoot(user.userId)}/${rel}`;
+  return withNativeMemoryWrite(overlay.database, user.userId, async () => {
+    const held = await overlay.file(user.userId, uri);
+    const before = await sessions.read(user.userId, uri);
+    const memoryType = held?.memoryType ?? rel.split("/")[0].replace(/\.md$/, "");
+    await sessions.replace(user.userId, uri, text);
+    // Consolidation reads engine bytes; product verification and page reads can read overlay.body instead.
+    // Like a product edit, refresh the cached body/hash and record the revision. Do not reject the true
+    // line as a user's deletion: this is an injected defect, and its original evidence must remain usable.
+    await overlay.addRevision({ userId: user.userId, uri, memoryType, change: "updated", actor: "platform",
+      reason: "eval_corruption", before, after: text, projectId: held?.projectId ?? null });
+    await overlay.upsertFile({ userId: user.userId, uri, memoryType, body: text });
+    return { uri, rel };
+  });
+}
+
 /** @param {string} file */
 async function secretFrom(file) {
   if (!file) return "";
@@ -330,11 +379,13 @@ async function secretFrom(file) {
  * Open the lab: the product's memory stack against the lab engine and PostgreSQL.
  * @param {{ engineUrl: string, engineKeyFile: string, account: string, databaseUrlFile: string, historySearch?: boolean, deepseekKeyFile?: string | null,
  *   now?: (() => Date) | null, runId?: string | null, commitEvery?: "session" | "turn", extractionTimeoutMs?: number, pollMs?: number,
+ *   configOverrides?: Record<string, any>, answerVariants?: {name: string, config: Record<string, any>}[], rejectionJudge?: boolean,
  *   gatewayTimeoutMs?: number, residentCardTimeoutMs?: number, engineTimeoutMs?: number, databasePoolMax?: number, report?: (line: string) => void }} options
  */
 export async function openLab({
   engineUrl, engineKeyFile, account, databaseUrlFile, historySearch = true, deepseekKeyFile = null, now = null, runId = null,
   commitEvery = "session", extractionTimeoutMs = 300_000, pollMs = 2_000, gatewayTimeoutMs = 4_000, residentCardTimeoutMs = 1_500,
+  configOverrides = {}, answerVariants = [], rejectionJudge = true,
   engineTimeoutMs = 30_000, databasePoolMax = 8, report = (line) => process.stderr.write(`${line}\n`),
 }) {
   if (typeof account !== "string" || !/^evlab-[A-Za-z0-9_-]{1,100}$/.test(account)) throw new Error("the lab engine account is evlab-<runId>");
@@ -362,6 +413,8 @@ export async function openLab({
     nativeMemoryRejectionJudgeEnabled: Boolean(deepseekKey), nativeMemoryRejectionJudgeDailyCalls: 40,
     deepseekProviderEnabled: Boolean(deepseekKey), deepseekApiKey: deepseekKey, deepseekBaseUrl: "https://api.deepseek.com",
     deepseekModel: defaultDeepSeekModel, memoryExtractionModel: defaultDeepSeekModel, memoryExtractionTimeoutMs: 30_000, production: false,
+    ...configOverrides,
+    ...(rejectionJudge ? {} : { nativeMemoryRejectionJudgeEnabled: false }),
   };
 
   const database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax, databaseConnectionTimeoutMs: 10_000 });
@@ -390,9 +443,9 @@ export async function openLab({
       // Every project of a lab account is an ordinary owned one: no shared GEO namespace exists here.
       policies: { forProject: async () => ({ kind: "owned" }), policiesForOwner: async () => [], read: () => { throw new Error("no shared namespace in the lab"); } },
     });
-    const rejectionJudge = createRejectionJudge({ config });
-    const nativeMemory = new NativeMemoryStore({ sessions, overlay, memoryContexts: contexts, rejectionJudge, ...(now ? { now } : {}), report: say });
-    const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay, nativeMemory, memoryContexts: contexts, rejectionJudge, now, report: say });
+    const productRejectionJudge = createRejectionJudge({ config: rejectionJudge ? config : { ...config, deepseekApiKey: "", nativeMemoryRejectionJudgeEnabled: false } });
+    const nativeMemory = new NativeMemoryStore({ sessions, overlay, memoryContexts: contexts, rejectionJudge: productRejectionJudge, ...(now ? { now } : {}), report: say });
+    const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay, nativeMemory, memoryContexts: contexts, rejectionJudge: productRejectionJudge, now, report: say });
     const resources = new OpenVikingResources({ client });
     const residentProfiles = new ResidentProfiles({ config, store: memorySettings, capsules: null, projectCard: (userId, projectId) => nativeMemory.residentCard(userId, projectId) });
 
@@ -498,12 +551,14 @@ export async function openLab({
         return identity;
       },
     };
-    const handler = createMemoryGatewayHandler({
-      config, runtimeManager, store, sessions, admission, overlay, memoryContexts: contexts, memoryTool: nativeMemory,
+    const gatewayGroup = await startLabGateways({
+      runtimeManager, store, sessions, admission, overlay, memoryContexts: contexts, memoryTool: nativeMemory,
+      admissionFor: (merged) => createMemoryAdmission({ config: merged, memorySettings }),
       historySearch: (request) => history.search(request),
-    });
-    const gateway = await startGatewayServer(handler);
-    server = gateway;
+    }, config, answerVariants);
+    const gateway = gatewayGroup.gateways.get("");
+    const handler = gateway.handler;
+    server = gatewayGroup;
 
     /** One REST call of the plugin's own kind through the gateway; a refusal throws. @param {string} token @param {string} method @param {string} path @param {unknown} [body] */
     const gatewayCall = async (token, method, path, body) => {
@@ -729,14 +784,19 @@ export async function openLab({
 
       /**
        * What the answering model reaches memory through, in one project of the account.
-       * @param {LabUser} user @param {{ project?: { id: string, name: string } | null, readOnly?: boolean }} [options]
+       * @param {LabUser} user @param {{ project?: { id: string, name: string } | null, variant?: string, readOnly?: boolean }} [options]
        */
-      memoryFor(user, { project = null, readOnly = true } = {}) {
+      memoryFor(user, { project = null, variant = "", readOnly = true } = {}) {
+        const selected = gatewayGroup.gateways.get(variant);
+        if (!selected) throw new Error(`unknown answer variant ${variant}`);
+        const profiles = variant ? new ResidentProfiles({ config: selected.config, store: memorySettings, capsules: null,
+          projectCard: (userId, projectId) => nativeMemory.residentCard(userId, projectId) }) : residentProfiles;
+        // Reads share the same memory. With opening-by-use enabled, reads count as use, so variants are not independent.
         const named = project && project.id !== DEFAULT_PROJECT_ID ? project : null;
         const projectId = named?.id ?? DEFAULT_PROJECT_ID;
         const ready = ensureProject(user.userId, named);
         ready.catch(() => {});
-        const memoryClient = createMemoryClient({ base: gateway.base, token: tokenFor(user.userId, projectId), readOnly, ready, timeoutMs: engineTimeoutMs * 2 });
+        const memoryClient = createMemoryClient({ base: selected.base, token: tokenFor(user.userId, projectId), readOnly, ready, timeoutMs: engineTimeoutMs * 2 });
         return {
           ...memoryClient,
           project: named,
@@ -744,7 +804,7 @@ export async function openLab({
           async residentBlock() {
             await ready;
             if (!named) return null;
-            const block = await residentProfiles.forDispatch(user.userId, { projectId, sessionId: null, attended: true });
+            const block = await profiles.forDispatch(user.userId, { projectId, sessionId: null, attended: true });
             return block.text ? block.text : null;
           },
         };
@@ -778,18 +838,11 @@ export async function openLab({
           metrics: { before: before.metrics, after: after.metrics }, ms: Date.now() - started };
       },
 
-      /**
-       * Rewrite one memory file in the engine with the call the product rewrites engine files by (`OpenVikingSessions.replace`);
-       * for planting corruptions. The overlay is not told: to the product it is what the engine holds.
-       * @param {LabUser} user @param {string} relPath under `memories/` @param {string} text
-       */
-      async replaceFile(user, relPath, text) {
-        const rel = String(relPath ?? "");
-        if (!rel.endsWith(".md") || rel.split("/").some((segment) => !segment || segment === "." || segment === "..")) throw new Error("a memory file path under memories/ ending in .md");
-        const uri = `${sessions.memoryRoot(user.userId)}/${rel}`;
-        await sessions.replace(user.userId, uri, String(text ?? ""));
-        return { uri, rel };
-      },
+      /** Verify existing lines through the product, if this checkout provides it. */
+      async verifyExisting(user, options = {}) { return verifyLabExisting(consolidation, user.userId, options); },
+
+      /** Plant a corruption into both the engine and the control-plane overlay. */
+      async replaceFile(user, relPath, text) { return replaceLabFile({ sessions, overlay }, user, String(relPath ?? ""), String(text ?? "")); },
 
       /** Erase one account: the product's own account erasure, then its control-plane row. @param {LabUser} user */
       async eraseUser(user) {
@@ -834,7 +887,7 @@ export async function openLab({
       },
 
       async close() {
-        await gateway.close();
+        await gatewayGroup.close();
         server = null;
         await database.close();
       },

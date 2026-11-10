@@ -8,17 +8,22 @@
 //     [--arm product|no-memory|keyword] [--only U01,U02] [--max-sessions N] [--concurrency N] [--no-history-search] \
 //     [--commit-every session|turn] [--plant-corruptions-after <afterSession>] [--limit-questions N] [--plugin-tgz <file>] \
 //     [--ingest-only] [--templates-dir <dir>] [--max-rounds N] [--extraction-timeout-ms N] [--gateway-timeout-ms N]
+//     [--config key=value] [--answer-variant name:key=value,...] [--maintain none|consolidate|verify|consolidate+verify]
+//     [--maintain-after n[,n...]|each] [--no-rejection-judge] [--label text]
 //
+// `--engine-url` accepts an ordered comma-separated shard list; `each` maintains at every existing checkpoint.
 // Arms `no-memory` and `keyword` never touch the engine. Step keys: `<caseId>/ingest/<sessionId>`, `<caseId>/plant/<n>`,
 // `<caseId>/snapshot/<n>`, `<caseId>/answer/<qid>`. Questions of a checkpoint are asked only while memory is exactly at that
 // checkpoint; one left unanswered by an earlier run whose ingestion has since moved on is recorded as FAIL `stale_checkpoint`.
 import { execFile } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
+import { bloatMetrics } from "./bloat.mjs";
+import { checkRestored } from "./corruptions.mjs";
 import { loadCases } from "./cases.mjs";
 import { firstLine } from "./lab.mjs";
 import { openStatus } from "./status.mjs";
@@ -28,11 +33,62 @@ const repoRoot = path.resolve(here, "../../..");
 const ARMS = new Set(["product", "no-memory", "keyword"]);
 const run = promisify(execFile);
 
+/** JSON values when possible, otherwise literal strings. Split only on the first equals sign.
+ * @param {string} text
+ */
+export function configEntry(text) {
+  const at = text.indexOf("=");
+  if (at < 1 || !/^[A-Za-z][A-Za-z0-9_]*$/.test(text.slice(0, at))) throw new Error("config needs key=value");
+  let value = text.slice(at + 1);
+  try { value = JSON.parse(value); } catch { /* literal string */ }
+  return [text.slice(0, at), value];
+}
+
+/** Split variant assignments without splitting commas inside JSON strings, arrays or objects. @param {string} text */
+function configEntries(text) {
+  const entries = []; let start = 0; let depth = 0; let quoted = false; let escaped = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text[i];
+    if (quoted) { if (escaped) escaped = false; else if (c === "\\") escaped = true; else if (c === '"') quoted = false; }
+    else if (c === '"') quoted = true;
+    else if (c === "[" || c === "{") depth += 1;
+    else if (c === "]" || c === "}") depth -= 1;
+    else if (c === "," && depth === 0) { entries.push(text.slice(start, i)); start = i + 1; }
+  }
+  entries.push(text.slice(start));
+  return Object.fromEntries(entries.map(configEntry));
+}
+
+/** Ordered, normalized shard identities; never accept credentials in recorded engine URLs. @param {string} value */
+export function engineUrlsOf(value) {
+  if (!value) return [];
+  return value.split(",").map((part) => {
+    const url = new URL(part.trim());
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error("engine URL must be HTTP(S) without credentials, query or fragment");
+    return url.href.replace(/\/$/, "");
+  });
+}
+
+/** Stable across processes and case ordering. @param {string} userKey @param {number} count */
+export function engineShard(userKey, count) {
+  if (!Number.isInteger(count) || count < 1) throw new Error("at least one engine is required");
+  return createHash("sha256").update(String(userKey)).digest().readUInt32BE(0) % count;
+}
+
+/** Older run directories stored one engine.url and no list. @param {any} previous @param {any} facts */
+export function assertResumeCompatible(previous, facts) {
+  if (!previous) return;
+  if (previous.arm !== facts.arm || previous.set !== facts.set || previous.split !== facts.split) throw new Error(`the run directory holds a ${previous.set}/${previous.split} ${previous.arm} run: use another --out`);
+  const urls = (record) => record.engine?.urls ?? record.engineUrls ?? (record.engine?.url ? engineUrlsOf(record.engine.url) : []);
+  if (JSON.stringify(urls(previous)) !== JSON.stringify(urls(facts))) throw new Error("cannot resume with a different engine URL list (including order)");
+}
+
 /** @param {string[]} argv */
 export function parseArguments(argv) {
   const options = {
     set: "", split: "", data: "", out: "", engineUrl: "", engineKeyFile: "", databaseUrlFile: "", deepseekKeyFile: "",
     arm: "product", only: "", maxSessions: 0, concurrency: 3, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
+    config: {}, answerVariants: [], maintain: "none", maintainAfter: [], rejectionJudge: true, label: "",
     limitQuestions: 0, pluginTgz: "", ingestOnly: false, templatesDir: "", maxRounds: 8, extractionTimeoutMs: 300_000, gatewayTimeoutMs: 4_000,
   };
   /** @type {Record<string, [keyof typeof options, "string" | "int"]>} */
@@ -43,11 +99,27 @@ export function parseArguments(argv) {
     "--max-sessions": ["maxSessions", "int"], "--concurrency": ["concurrency", "int"], "--commit-every": ["commitEvery", "string"],
     "--plant-corruptions-after": ["plantCorruptionsAfter", "int"], "--limit-questions": ["limitQuestions", "int"], "--plugin-tgz": ["pluginTgz", "string"],
     "--templates-dir": ["templatesDir", "string"], "--max-rounds": ["maxRounds", "int"], "--extraction-timeout-ms": ["extractionTimeoutMs", "int"],
-    "--gateway-timeout-ms": ["gatewayTimeoutMs", "int"],
+    "--gateway-timeout-ms": ["gatewayTimeoutMs", "int"], "--maintain": ["maintain", "string"], "--label": ["label", "string"],
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     if (flag === "--no-history-search") { options.historySearch = false; continue; }
+    if (flag === "--no-rejection-judge") { options.rejectionJudge = false; continue; }
+    if (["--config", "--answer-variant", "--maintain-after"].includes(flag)) {
+      const value = argv[++index];
+      if (value === undefined || value.startsWith("--")) throw new Error(`${flag} needs a value`);
+      if (flag === "--config") Object.assign(options.config, Object.fromEntries([configEntry(value)]));
+      else if (flag === "--answer-variant") {
+        const at = value.indexOf(":"); const name = value.slice(0, at);
+        if (at < 1 || !/^[A-Za-z0-9_-]{1,64}$/.test(name) || options.answerVariants.some((entry) => entry.name === name)) throw new Error("answer variant needs a unique safe name:k=v");
+        options.answerVariants.push({ name, config: configEntries(value.slice(at + 1)) });
+      } else {
+        if (value !== "each" && !/^\d+(,\d+)*$/.test(value)) throw new Error("--maintain-after is n[,n...] or each");
+        options.maintainAfter = value === "each" ? "each" : [...new Set(value.split(",").map(Number))];
+        if (Array.isArray(options.maintainAfter) && options.maintainAfter.some((n) => !Number.isSafeInteger(n))) throw new Error("--maintain-after needs safe whole numbers");
+      }
+      continue;
+    }
     if (flag === "--ingest-only") { options.ingestOnly = true; continue; }
     const spec = valued[flag];
     if (!spec) throw new Error(`unknown argument ${flag}`);
@@ -73,6 +145,11 @@ export function parseArguments(argv) {
   if (!options.ingestOnly && !options.deepseekKeyFile) throw new Error("answering needs --deepseek-key-file (or pass --ingest-only)");
   if (options.arm !== "product" && options.plantCorruptionsAfter >= 0) throw new Error("--plant-corruptions-after needs arm product");
   if (options.arm !== "product" && options.ingestOnly) throw new Error("--ingest-only has nothing to do without the engine (arm product)");
+  if (!["none", "consolidate", "verify", "consolidate+verify"].includes(options.maintain)) throw new Error("--maintain is none, consolidate, verify or consolidate+verify");
+  if (options.maintain !== "none" && options.maintainAfter.length === 0) throw new Error("--maintain needs --maintain-after");
+  if (options.arm !== "product" && (options.answerVariants.length || options.maintain !== "none")) throw new Error("answer variants and maintenance need arm product");
+  options.engineUrls = engineUrlsOf(options.engineUrl);
+  if (new Set(options.engineUrls).size !== options.engineUrls.length) throw new Error("engine URLs must be distinct");
   return options;
 }
 
@@ -130,6 +207,12 @@ async function readJson(file) {
   catch (error) { if (/** @type {any} */ (error)?.code === "ENOENT") return null; throw error; }
 }
 
+/** @param {string} file */
+async function readJsonl(file) {
+  try { return (await readFile(file, "utf8")).split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line)); }
+  catch (error) { if (error?.code === "ENOENT") return []; throw error; }
+}
+
 async function gitFacts() {
   try {
     const commit = (await run("git", ["rev-parse", "HEAD"], { cwd: repoRoot })).stdout.trim();
@@ -154,8 +237,9 @@ async function pool(items, limit, work) {
   }));
 }
 
-async function main() {
-  const options = parseArguments(process.argv.slice(2));
+/** Run the CLI; dependencies allow offline engine/model fixtures. @param {string[]} [argv] @param {any} [dependencies] */
+export async function main(argv = process.argv.slice(2), dependencies = {}) {
+  const options = parseArguments(argv);
   const out = path.resolve(options.out);
   const runId = runIdOf(out);
   await mkdir(path.join(out, "cases"), { recursive: true, mode: 0o700 });
@@ -163,7 +247,7 @@ async function main() {
   const startedAt = new Date().toISOString();
   const wallStart = Date.now();
 
-  const cases = await loadCases({ set: options.set, split: options.split, dataDir: options.data, only: options.only || null });
+  const cases = await (dependencies.loadCases ?? loadCases)({ set: options.set, split: options.split, dataDir: options.data, only: options.only || null });
   if (!cases.length) throw new Error("no cases to run");
 
   // The answering side (lane B), only when questions are asked: an ingest-only run needs none of it.
@@ -173,23 +257,30 @@ async function main() {
   if (!options.ingestOnly) {
     if (options.pluginTgz) process.env.CAPSULE_PROVING_PLUGIN_TGZ = path.resolve(options.pluginTgz);
     if (options.arm === "product" && !process.env.CAPSULE_PROVING_PLUGIN_TGZ) throw new Error("arm product answers with the plugin's profile block: pass --plugin-tgz");
-    answering = await import(pathToFileURL(path.join(here, "answerer.mjs")).href);
+    answering = dependencies.answering ?? await import(pathToFileURL(path.join(here, "answerer.mjs")).href);
     if (options.arm === "keyword") baselines = await import(pathToFileURL(path.join(here, "baselines.mjs")).href);
     const { createDeepSeekClient } = await import(pathToFileURL(path.join(here, "deepseek.mjs")).href);
-    client = createDeepSeekClient({ keyFile: path.resolve(options.deepseekKeyFile) });
+    client = dependencies.client ?? createDeepSeekClient({ keyFile: path.resolve(options.deepseekKeyFile) });
   }
 
+  const previous = await readJson(path.join(out, "run.json"));
+  assertResumeCompatible(previous, { ...options, engine: options.arm === "product" ? { urls: options.engineUrls } : null });
+  /** @type {any[]} */ const labs = [];
   /** @type {any} */ let lab = null;
   const templatesDir = path.resolve(options.templatesDir || path.join(repoRoot, "deploy/web/openviking/memory-templates"));
   const templates = await directoryDigest(templatesDir).catch(() => ({ digest: null, files: 0 }));
   if (options.arm === "product") {
     const { openLab } = await import(pathToFileURL(path.join(here, "lab.mjs")).href);
-    lab = await openLab({
-      engineUrl: options.engineUrl, engineKeyFile: path.resolve(options.engineKeyFile), account: `evlab-${runId}`, runId,
-      databaseUrlFile: path.resolve(options.databaseUrlFile), historySearch: options.historySearch,
-      deepseekKeyFile: options.deepseekKeyFile ? path.resolve(options.deepseekKeyFile) : null, commitEvery: options.commitEvery,
-      extractionTimeoutMs: options.extractionTimeoutMs, gatewayTimeoutMs: options.gatewayTimeoutMs,
-    });
+    try {
+      for (const engineUrl of options.engineUrls) labs.push(await (dependencies.openLab ?? openLab)({
+        engineUrl, engineKeyFile: path.resolve(options.engineKeyFile), account: `evlab-${runId}`, runId,
+        databaseUrlFile: path.resolve(options.databaseUrlFile), historySearch: options.historySearch,
+        deepseekKeyFile: options.deepseekKeyFile ? path.resolve(options.deepseekKeyFile) : null, commitEvery: options.commitEvery,
+        extractionTimeoutMs: options.extractionTimeoutMs, gatewayTimeoutMs: options.gatewayTimeoutMs,
+        configOverrides: options.config, answerVariants: options.answerVariants, rejectionJudge: options.rejectionJudge,
+      }));
+    } catch (error) { await Promise.all(labs.map((entry) => entry.close())); throw error; }
+    lab = labs[0];
   }
   const scrub = (/** @type {unknown} */ text) => (lab ? lab.redact(text) : String(text ?? ""));
   const errorLine = (/** @type {unknown} */ error) => (lab ? lab.errorLine(error) : firstLine(error));
@@ -202,27 +293,30 @@ async function main() {
   const facts = {
     runId, set: options.set, split: options.split, arm: options.arm, automated: true,
     commit: git.commit, dirty: git.dirty, dirtyPaths: git.dirtyPaths, runnerDigest: runnerHash.digest("hex"),
-    engine: lab ? { url: new URL(options.engineUrl).origin, version: lab.facts.engineVersion, account: lab.account, templatesDigest: templates.digest, templatesFiles: templates.files,
-      templatesDir: path.relative(repoRoot, templatesDir) || templatesDir } : null,
+    engine: lab ? { url: options.engineUrls[0], urls: options.engineUrls, version: lab.facts.engineVersion, account: lab.account, templatesDigest: templates.digest, templatesFiles: templates.files,
+      templatesDir: path.relative(repoRoot, templatesDir) || templatesDir,
+      shards: labs.map((entry, index) => ({ url: options.engineUrls[index], account: entry.account, version: entry.facts.engineVersion })) } : null,
     flags: { historySearch: options.arm === "product" ? options.historySearch : false, commitEvery: options.commitEvery, plantCorruptionsAfter: options.plantCorruptionsAfter >= 0 ? options.plantCorruptionsAfter : null,
       consolidation: "manual-only", rejectionJudge: Boolean(lab?.config.nativeMemoryRejectionJudgeEnabled), gatewayCommitsPerHour: 0,
-      gatewayTimeoutMs: options.gatewayTimeoutMs, capsuleSearch: false },
+      gatewayTimeoutMs: options.gatewayTimeoutMs, capsuleSearch: false, config: options.config, maintain: options.maintain, maintainAfter: options.maintainAfter },
+    answerVariants: options.answerVariants, label: options.label,
     model: { answer: client?.model ?? null, thinking: client?.thinking ?? null, extraction: options.arm === "product" ? "deepseek-flash (lab engine ov.conf, provider direct)" : null },
     options: { only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, limitQuestions: options.limitQuestions || null,
       ingestOnly: options.ingestOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, dataDir: path.resolve(options.data) },
     cases: cases.map((item) => item.caseId),
   };
-  const previous = await readJson(runFile);
-  if (previous && (previous.arm !== facts.arm || previous.set !== facts.set || previous.split !== facts.split)) {
-    throw new Error(`the run directory holds a ${previous.set}/${previous.split} ${previous.arm} run: use another --out`);
-  }
-  const runJson = previous ? { ...previous, resumes: [...(previous.resumes ?? []), { at: startedAt, commit: git.commit, dirty: git.dirty, runnerDigest: facts.runnerDigest, options: facts.options }] }
+  const runJson = previous ? { ...previous,
+    engine: previous.engine ? { ...previous.engine, urls: options.engineUrls, shards: facts.engine.shards } : null,
+    flags: { ...previous.flags, config: facts.flags.config, maintain: facts.flags.maintain, maintainAfter: facts.flags.maintainAfter, rejectionJudge: facts.flags.rejectionJudge },
+    answerVariants: facts.answerVariants, label: options.label || previous.label || "",
+    resumes: [...(previous.resumes ?? []), { at: startedAt, commit: git.commit, dirty: git.dirty, runnerDigest: facts.runnerDigest, options: facts.options, flags: facts.flags, answerVariants: facts.answerVariants, label: facts.label }] }
     : { runId, startedAt, ...facts, resumes: [] };
   await writeAtomic(runFile, `${JSON.stringify(runJson, null, 2)}\n`);
 
   const totals = { sessions: 0, skipped: 0, failures: 0, extraction: { prompt: 0, completion: 0 }, answers: 0, answerErrors: 0, answer: { prompt: 0, completion: 0 } };
   /** @param {any} item */
   const runCase = async (item) => {
+    const lab = labs.length ? labs[engineShard(item.userKey, labs.length)] : null;
     const caseStart = Date.now();
     const stats = { sessions: 0, skipped: 0, failures: 0, extraction: { prompt: 0, completion: 0 }, answers: 0, answerErrors: 0, answer: { prompt: 0, completion: 0 }, stopped: "" };
     const caseDir = path.join(out, "cases", item.caseId);
@@ -231,7 +325,17 @@ async function main() {
     let questions = options.ingestOnly ? [] : item.questions.filter((question) => question.afterSession <= sessions.length);
     if (options.limitQuestions) questions = questions.slice(0, options.limitQuestions);
     const plantAfter = options.plantCorruptionsAfter;
-    const checkpoints = checkpointsFor(questions, sessions.length, plantAfter);
+    const checkpoints = [...new Set([...checkpointsFor(questions, sessions.length, plantAfter),
+      ...(options.maintain !== "none" && Array.isArray(options.maintainAfter) ? options.maintainAfter.filter((n) => n <= sessions.length) : [])])].sort((a, b) => a - b);
+    const bloat = async (current = null) => {
+      const names = (await readdir(path.join(caseDir, "snapshots"))).filter((name) => /^\d+\.json$/.test(name)).sort((a, b) => Number(a.split(".")[0]) - Number(b.split(".")[0]));
+      let snapshots = await Promise.all(names.map((name) => readJson(path.join(caseDir, "snapshots", name))));
+      if (current) snapshots = [...snapshots.filter((snap) => snap.afterSession < current.afterSession), current];
+      const rows = await readJsonl(path.join(caseDir, "ingest.jsonl"));
+      const through = current?.afterSession ?? sessions.length;
+      const ids = new Set(sessions.slice(0, through).map((session) => session.sessionId));
+      return bloatMetrics({ snapshots, ingestRows: rows.filter((row) => ids.has(row.sessionId)) });
+    };
     const ingestKey = (/** @type {any} */ session) => `${item.caseId}/ingest/${session.sessionId}`;
     const fail = async (/** @type {string} */ key, /** @type {string} */ why) => { stats.failures += 1; await status.markFailed(key, scrub(why)); process.stdout.write(`${item.caseId} FAIL ${key} ${scrub(why)}\n`); };
     try {
@@ -248,6 +352,7 @@ async function main() {
       /** @type {Map<string, any>} */
       const memories = new Map();
       for (const checkpoint of checkpoints) {
+        let checkpointChanged = false;
         if (lab) {
           for (; ingested < checkpoint; ingested += 1) {
             const session = sessions[ingested];
@@ -281,21 +386,54 @@ async function main() {
                   const planted = applyCorruptions(before.files, list);
                   const changed = Object.keys(planted.files).filter((rel) => planted.files[rel] !== before.files[rel]);
                   for (const rel of changed) await lab.replaceFile(user, rel, planted.files[rel]);
+                  checkpointChanged = changed.length > 0;
                   await writeAtomic(path.join(caseDir, "corruptions-applied.json"), `${JSON.stringify({ afterSession: checkpoint, at: new Date().toISOString(), files: changed, applied: planted.applied, skipped: planted.skipped }, null, 2)}\n`);
                   await status.markDone(key, `applied=${planted.applied.length} skipped=${planted.skipped.length} files=${changed.length}`);
                 } catch (error) { await fail(key, errorLine(error)); }
               }
             }
           }
+          const maintainHere = options.maintain !== "none" && (options.maintainAfter === "each" || options.maintainAfter.includes(checkpoint));
+          if (maintainHere) {
+            let maintained = false;
+            for (const kind of options.maintain.split("+")) {
+              const key = `${item.caseId}/maintain.${kind}/${checkpoint}`;
+              if (status.isDone(key)) { maintained = true; continue; }
+              if (resumedAt > checkpoint) { await fail(key, "stale_checkpoint: ingestion has moved past maintenance"); continue; }
+              checkpointChanged = true;
+              const started = Date.now(); const startedAt = new Date(started).toISOString();
+              let before = null; let result; let error = ""; let filesChanged = [];
+              try {
+                before = await lab.snapshot(user);
+                result = kind === "consolidate" ? await lab.consolidate(user, { mode: "pass" }) : await lab.verifyExisting(user, { force: true });
+                if (["failed", "lost", "submitted"].includes(result?.outcome)) throw new Error(`maintenance_${result.outcome}`);
+              } catch (caught) { error = errorLine(caught); result = { ...(result ?? {}), error }; }
+              try {
+                const after = await lab.snapshot(user);
+                if (before) filesChanged = [...new Set([...Object.keys(before.files), ...Object.keys(after.files)])].filter((rel) => before.files[rel] !== after.files[rel]).sort();
+              } catch (caught) { error ||= errorLine(caught); result = { ...(result ?? {}), error }; }
+              await appendFile(path.join(caseDir, "maintenance.jsonl"), `${JSON.stringify({ afterSession: checkpoint, kind, startedAt, ms: Date.now() - started, result, filesChanged })}\n`, { mode: 0o600 });
+              maintained = true;
+              if (error) await fail(key, error);
+              else await status.markDone(key, `files=${filesChanged.length} ms=${Date.now() - started}`);
+            }
+            if (maintained && resumedAt <= checkpoint && plantAfter >= 0 && checkpoint >= plantAfter && status.isDone(`${item.caseId}/plant/${plantAfter}`)) {
+              const planted = await readJson(path.join(caseDir, "corruptions-applied.json"));
+              const list = (await readJson(item.meta?.corruptionsFile ?? path.join(path.resolve(options.data), options.split, item.userKey, "corruptions.json")))?.corruptions ?? [];
+              const after = await lab.snapshot(user);
+              await writeAtomic(path.join(caseDir, "corruptions-restored.json"), `${JSON.stringify({ afterSession: checkpoint, at: new Date().toISOString(), results: checkRestored(after.files, planted.applied, list) }, null, 2)}\n`);
+            }
+          }
           const snapKey = `${item.caseId}/snapshot/${checkpoint}`;
-          if (!status.isDone(snapKey)) {
+          if (!status.isDone(snapKey) || checkpointChanged) {
             if (resumedAt > checkpoint) await fail(snapKey, "stale_checkpoint: ingestion has moved past this checkpoint");
             else {
               let lastError = null;
               for (let attempt = 0; attempt < 3; attempt += 1) {
                 try {
-                  const snapshot = await lab.snapshot(user);
-                  await writeAtomic(path.join(caseDir, "snapshots", `${checkpoint}.json`), `${JSON.stringify({ afterSession: checkpoint, takenAt: new Date().toISOString(), ...snapshot }, null, 2)}\n`);
+                  const snapshot = { afterSession: checkpoint, takenAt: new Date().toISOString(), ...await lab.snapshot(user) };
+                  snapshot.bloat = await bloat(snapshot);
+                  await writeAtomic(path.join(caseDir, "snapshots", `${checkpoint}.json`), `${JSON.stringify(snapshot, null, 2)}\n`);
                   await status.markDone(snapKey, `files=${snapshot.metrics.files} chars=${snapshot.metrics.chars}`);
                   lastError = null;
                   break;
@@ -306,43 +444,46 @@ async function main() {
           }
         } else ingested = checkpoint;
         for (const question of questions.filter((entry) => entry.afterSession === checkpoint)) {
-          const key = `${item.caseId}/answer/${question.qid}`;
-          if (status.isDone(key)) continue;
-          if (lab && resumedAt > checkpoint) { await fail(key, "stale_checkpoint: ingestion has moved past this question's checkpoint"); continue; }
-          let memory = null;
-          if (lab) {
-            const projectKey = question.project?.id ?? "default";
-            if (!memories.has(projectKey)) memories.set(projectKey, lab.memoryFor(user, { project: question.project ?? null }));
-            memory = memories.get(projectKey);
-          } else if (options.arm === "keyword") memory = baselines.createTranscriptIndex(sessions.slice(0, checkpoint));
-          let record;
-          try {
-            if (Array.isArray(question.probe)) {
-              // A probe is a direct tool call, with no model: what the memory surface returns for a query (the secret red line reads it).
-              const started = Date.now();
-              const toolCalls = [];
-              if (memory && lab) for (const call of question.probe) {
-                const at = Date.now();
-                const result = await memory.callTool(call.name, call.args ?? {});
-                toolCalls.push({ round: 0, name: call.name, args: call.args ?? {}, blocks: result.blocks, isError: result.isError, ms: Date.now() - at });
-              }
-              record = { qid: question.qid, caseId: item.caseId, arm: options.arm, asOf: question.asOf, question: "", answer: "", probe: true,
-                opening: { profileBlock: null, residentBlock: null }, toolCalls, rounds: 0, model: null,
-                usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: Date.now() - started };
-            } else
-            record = await answering.answerQuestion({ question: question.text, asOf: question.asOf, arm: options.arm, memory, materials: question.materials ?? [],
-              client, maxRounds: options.maxRounds, caseId: item.caseId, qid: question.qid, project: question.project ?? null });
-          } catch (error) {
-            record = { qid: question.qid, caseId: item.caseId, arm: options.arm, asOf: question.asOf, question: question.text, answer: "", opening: { profileBlock: null, residentBlock: null },
-              toolCalls: [], rounds: 0, model: client?.model ?? null, usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: 0, error: `runner: ${errorLine(error)}` };
+          for (const variant of [null, ...options.answerVariants]) {
+            const key = `${item.caseId}/answer${variant ? `.${variant.name}` : ""}/${question.qid}`;
+            if (status.isDone(key)) continue;
+            if (lab && resumedAt > checkpoint) { await fail(key, "stale_checkpoint: ingestion has moved past this question's checkpoint"); continue; }
+            let memory = null;
+            if (lab) {
+              const projectKey = `${variant?.name ?? ""}\u0000${question.project?.id ?? "default"}`;
+              if (!memories.has(projectKey)) memories.set(projectKey, lab.memoryFor(user, { project: question.project ?? null, variant: variant?.name ?? "" }));
+              memory = memories.get(projectKey);
+            } else if (options.arm === "keyword") memory = baselines.createTranscriptIndex(sessions.slice(0, checkpoint));
+            let record;
+            try {
+              if (Array.isArray(question.probe)) {
+                // A probe is a direct tool call, with no model: what the memory surface returns for a query (the secret red line reads it).
+                const started = Date.now();
+                const toolCalls = [];
+                if (memory && lab) for (const call of question.probe) {
+                  const at = Date.now();
+                  const result = await memory.callTool(call.name, call.args ?? {});
+                  toolCalls.push({ round: 0, name: call.name, args: call.args ?? {}, blocks: result.blocks, isError: result.isError, ms: Date.now() - at });
+                }
+                record = { qid: question.qid, caseId: item.caseId, arm: options.arm, asOf: question.asOf, question: "", answer: "", probe: true,
+                  opening: { profileBlock: null, residentBlock: null }, toolCalls, rounds: 0, model: null,
+                  usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: Date.now() - started };
+              } else
+              record = await answering.answerQuestion({ question: question.text, asOf: question.asOf, arm: options.arm, memory, materials: question.materials ?? [],
+                client, maxRounds: options.maxRounds, caseId: item.caseId, qid: question.qid, project: question.project ?? null });
+            } catch (error) {
+              record = { qid: question.qid, caseId: item.caseId, arm: options.arm, asOf: question.asOf, question: question.text, answer: "", opening: { profileBlock: null, residentBlock: null },
+                toolCalls: [], rounds: 0, model: client?.model ?? null, usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: 0, error: `runner: ${errorLine(error)}` };
+            }
+            await upsertJsonl(path.join(caseDir, variant ? `answers.${variant.name}.jsonl` : "answers.jsonl"), "qid", record);
+            stats.answers += 1;
+            stats.answer.prompt += Number(record.usage?.promptTokens) || 0; stats.answer.completion += Number(record.usage?.completionTokens) || 0;
+            if (record.error) { stats.answerErrors += 1; await fail(key, String(record.error)); }
+            else await status.markDone(key, `rounds=${record.rounds} tools=${record.toolCalls?.length ?? 0} tok=${record.usage?.promptTokens ?? 0}/${record.usage?.completionTokens ?? 0} ms=${record.ms}`);
           }
-          await upsertJsonl(path.join(caseDir, "answers.jsonl"), "qid", record);
-          stats.answers += 1;
-          stats.answer.prompt += Number(record.usage?.promptTokens) || 0; stats.answer.completion += Number(record.usage?.completionTokens) || 0;
-          if (record.error) { stats.answerErrors += 1; await fail(key, String(record.error)); }
-          else await status.markDone(key, `rounds=${record.rounds} tools=${record.toolCalls?.length ?? 0} tok=${record.usage?.promptTokens ?? 0}/${record.usage?.completionTokens ?? 0} ms=${record.ms}`);
         }
       }
+      if (lab) await writeAtomic(path.join(caseDir, "bloat.json"), `${JSON.stringify(await bloat(), null, 2)}\n`);
     } catch (error) {
       stats.failures += 1;
       stats.stopped = errorLine(error);
@@ -360,26 +501,31 @@ async function main() {
   };
 
   try {
-    await pool(cases, options.concurrency, async (item) => { await runCase(item); });
+    // Cases sharing a user share memory and must not ingest/maintain while another case is answering.
+    const groups = new Map();
+    for (const item of cases) { const group = groups.get(item.userKey) ?? []; group.push(item); groups.set(item.userKey, group); }
+    await pool([...groups.values()], options.concurrency, async (group) => { for (const item of group) await runCase(item); });
   } finally {
     if (lab) {
-      const latest = await readJson(runFile);
-      if (latest?.engine) {
-        latest.engine.templatesMounted = lab.facts.templatesMounted;
-        latest.engine.memoryTypes = lab.facts.memoryTypes;
-        await writeAtomic(runFile, `${JSON.stringify(latest, null, 2)}\n`);
-      }
-      await lab.close().catch(() => {});
+      try {
+        const latest = await readJson(runFile);
+        if (latest?.engine) {
+          latest.engine.templatesMounted = lab.facts.templatesMounted;
+          latest.engine.memoryTypes = lab.facts.memoryTypes;
+          latest.engine.shards = labs.map((entry, index) => ({ url: options.engineUrls[index], account: entry.account, version: entry.facts.engineVersion, templatesMounted: entry.facts.templatesMounted, memoryTypes: entry.facts.memoryTypes }));
+          await writeAtomic(runFile, `${JSON.stringify(latest, null, 2)}\n`);
+        }
+      } finally { await Promise.all(labs.map((entry) => entry.close().catch(() => {}))); }
     }
   }
   const wall = Math.round((Date.now() - wallStart) / 1000);
   process.stdout.write(`total ${cases.length} case(s): sessions ${totals.sessions} (+${totals.skipped} done earlier), extraction ${kilo(totals.extraction.prompt)}/${kilo(totals.extraction.completion)} tok, `
     + `answers ${totals.answers} (${totals.answerErrors} errors) ${kilo(totals.answer.prompt)}/${kilo(totals.answer.completion)} tok, failures ${totals.failures}, wall ${wall}s\n`);
-  if (totals.failures) process.exitCode = 1;
+  return totals;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  main().catch((error) => {
+  main().then((totals) => { if (totals.failures) process.exitCode = 1; }).catch((error) => {
     process.stderr.write(`capsule_proving_run_failed: ${firstLine(error)}\n`);
     process.exitCode = 1;
   });
