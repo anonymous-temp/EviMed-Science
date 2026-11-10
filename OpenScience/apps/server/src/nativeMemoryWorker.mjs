@@ -784,9 +784,10 @@ export class NativeMemoryWorker {
         if (change === 'updated' && String(operation?.before ?? '') !== after) {
           await withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, async () => {});
         }
+        const settledBefore = sourceDeleted ? String(operation?.before ?? "") : (await this.overlay.file(userId, uri))?.body ?? "";
         const recorded = await this.overlay.addRevision({ ...base, uri, memoryType: file.type, change, actor: "engine", reason: "",
           before: change === "updated" ? String(operation?.before ?? "") : null, after, projectId });
-        const body = sourceDeleted?await context.sessions.read(userId,uri):await this.#afterWrite(userId, uri, file.type, { projectId, diffBefore: change === "updated" ? String(operation?.before ?? "") : "", fresh: recorded !== null, archiveUri: commit.archiveUri, memoryContext: context });
+        const body = sourceDeleted?await context.sessions.read(userId,uri):await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, diffBefore: change === "updated" ? String(operation?.before ?? "") : "", fresh: recorded !== null, archiveUri: commit.archiveUri, memoryContext: context });
         // The lines this commit brought are recorded as its own, beyond the revisions a file keeps (what the checks took out is not).
         if (body !== null) {
           // A later extraction may already have changed this shared file. Never attribute its unrelated lines to this diff.
@@ -794,7 +795,9 @@ export class NativeMemoryWorker {
           const live=new Set(memoryLines(body).map(lineFingerprint)),prior=new Set(memoryLines(operation?.before??'').map(lineFingerprint));
           if(sourceDeleted&&[...written].some(print=>!prior.has(print)&&!live.has(print)))throw new HttpError(409,'memory_source_lineage_unverified','The completed native source text was rewritten without verifiable lineage.');
           const otherLines=memoryLines(body).filter(line=>!written.has(lineFingerprint(line)));
-          await this.overlay.syncOrigins(userId, uri, { after: body, before: [change==='updated'?String(operation?.before??''):'',...otherLines].join('\n'),
+          const engineBefore = new Set(memoryLines(operation?.before ?? '').map(lineFingerprint));
+          const originBefore = sourceDeleted ? settledBefore : memoryLines(settledBefore).filter(line => engineBefore.has(lineFingerprint(line))).join('\n');
+          await this.overlay.syncOrigins(userId, uri, { after: body, before: [originBefore,...otherLines].join('\n'),
             origin: { revisionId: recorded?.id ?? null, engineSession: commit.engineSession, archiveUri: commit.archiveUri, projectId: commit.projectId ?? projectId,projectCreatedAt:commit.projectCreatedAt??null, at: changedAt } });
         }
       }
@@ -868,7 +871,7 @@ export class NativeMemoryWorker {
     // The tag of a project's file is put back: a rewrite is not known to keep it.
     const candidates = [], archiveCache = new Map();
     for (const entry of written) {
-      const body = await this.#afterWrite(userId, entry.uri, entry.type, { projectId: entry.projectId, diffBefore: entry.before, fresh: true, archiveUri: null, memoryContext: context, extraOrigins: mergeOrigins });
+      const body = await this.#afterWrite(userId, entry.uri, entry.type, { projectId: entry.projectId, diffAfter: entry.after, diffBefore: entry.before, fresh: true, archiveUri: null, memoryContext: context, extraOrigins: mergeOrigins });
       // A line the consolidation wrote anew names no conversation; a line it kept is already in the index with its own.
       if (body !== null && mergeOrigins.length) {
         const prior = new Set(memoryLines(entry.before).map(lineFingerprint));
@@ -938,7 +941,7 @@ export class NativeMemoryWorker {
           actor: 'platform', change: 'added', reason: 'consolidation_unverified', before: null, after: file.body });
         await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId, body: file.body });
         await this.overlay.inheritOrigins(userId, file.uri, new Map([...(origins.get(file.uri) ?? [])].map(([print, origin]) => [print, originalSources(origin)])));
-        await this.#afterWrite(userId, file.uri, file.type, { projectId: file.projectId, diffBefore: '', fresh: true, archiveUri: null, memoryContext: context, extraOrigins: mergeOrigins });
+        await this.#afterWrite(userId, file.uri, file.type, { projectId: file.projectId, diffAfter: file.body, diffBefore: '', fresh: true, archiveUri: null, memoryContext: context, extraOrigins: mergeOrigins });
       }
     }
     return counts;
@@ -948,10 +951,10 @@ export class NativeMemoryWorker {
    * What follows an engine write of one file: the checks, the project tag, the sources and their labels, the overlay's copy.
    * Acts on the file as it is now, not as the diff says: a later commit may already have changed it.
    * @param {string} userId @param {string} uri @param {string} type
-   * @param {{ projectId: string | null, diffBefore?: string, fresh: boolean, archiveUri: string | null, memoryContext: any, extraOrigins?: any[] }} context
+   * @param {{ projectId: string | null, diffAfter: string, diffBefore?: string, fresh: boolean, archiveUri: string | null, memoryContext: any, extraOrigins?: any[] }} context
    * @returns {Promise<string | null>} the file's text after the checks, or null when the file is gone
    */
-  async #afterWrite(userId, uri, type, { projectId, diffBefore = "", fresh, archiveUri, memoryContext, extraOrigins = [] }) {
+  async #afterWrite(userId, uri, type, { projectId, diffAfter, diffBefore = "", fresh, archiveUri, memoryContext, extraOrigins = [] }) {
     const sessions = memoryContext.sessions;
     const current = await sessions.read(userId, uri);
     if (current === null) return null;
@@ -965,8 +968,8 @@ export class NativeMemoryWorker {
       return null;
     }
     const indexed = await this.overlay.file(userId, uri);
-    const priorBody = indexed?.body == null ? '' : diffBefore;
-    const broughtLines = removalLines(current, priorBody);
+    const priorBody = diffBefore ? indexed?.body ?? '' : '';
+    const broughtLines = [...new Set([...removalLines(diffAfter, priorBody), ...removalLines(diffAfter, diffBefore)])];
     const origins = (await this.overlay.originsOf(userId, [uri])).get(uri) ?? new Map();
     const archive = archiveUri
       ? await this.verification.readRemovalSources(userId, [{ archiveUri, projectId }], memoryContext) : [];

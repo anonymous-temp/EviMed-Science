@@ -54,9 +54,11 @@ test('owned source DELETE is wired through durable state, source privacy, metada
   const kept=await app.nativeMemory.files(user.id);assert.equal(kept.length,1);assert.equal(kept[0].body,'# Profile\n- Independent B.');
   const revived='# Profile\n- Private source A.\n- Independent B.',freshArchive=`${app.nativeMemory.sessions.userRoot(user.id)}/sessions/dsh-independent_b/history/archive_001`;
   await overlay.recordCommit({userId:user.id,archiveUri:freshArchive,engineSession:'dsh-independent_b',projectId:'default',origin:'gateway',state:'completed'});
+  stub.files.set(`${freshArchive}/messages.jsonl`,JSON.stringify({role:'user',content:'Private source A.',created_at:new Date().toISOString()}));
   await app.nativeMemory.sessions.replace(user.id,uri,revived);
   await app.nativeMemoryWorker.ingest(await overlay.commit(user.id,freshArchive),{operations:{updates:[{uri,before:'# Profile\n- Independent B.',after:revived}]}});
   const independent=(await app.nativeMemory.records(user.id)).find(record=>record.value==='Private source A.');assert.ok(independent,'a later independent source may restate the same fact');
+  app.nativeMemory.rejectionJudge={same:async({candidates})=>({same:new Map(candidates.flatMap((candidate,index)=>{const matchedRemoval=candidate.removed.find(line=>line.text.toLowerCase()===candidate.text.toLowerCase());return matchedRemoval?[[index,matchedRemoval.fingerprint]]:[];})),stated:new Set()})};
   await app.nativeMemory.remove(user.id,independent.id,{keepText:true});await app.nativeMemory.undo(user.id,independent.id);
   await app.store.database.query("UPDATE evimed_source_deletion.conversations SET updated_at=clock_timestamp()-interval '2 minutes' WHERE user_id=$1",[user.id]);
   await app.sourceDeletion.drain();assert.equal(await app.nativeMemory.sessions.read(user.id,uri),revived,'source sweeps preserve independent restatement and ordinary undo');

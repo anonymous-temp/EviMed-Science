@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
+import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { nativeFileId } from '../src/nativeMemoryStore.mjs';
 import { NativeMemoryWorker } from '../src/nativeMemoryWorker.mjs';
 
@@ -130,4 +131,21 @@ test('a fresh explicit remember-tool message remains a human restatement without
   await f.commitConversation('remember', [{ role: 'user', text: fact, at: fresh }], { engineSession: 'mcp-store-restated', origin: 'tool' });
   await f.worker.processCommits({ userId: f.userId });
   assert.equal(await f.sessions.read(f.userId, uri), fact);
+});
+
+test('a stale engine before-image cannot classify an edited-out value as unchanged, and a later statement gets fresh provenance', options, async t => {
+  const f = await fixture(t);
+  const before = '- Project M-41633.\n- Independent goal.';
+  const uri = f.seed('projects/partial.md', before, { type: 'project_context' });
+  const id = nativeFileId(uri);
+  await f.store.update(f.userId, id, { value: '- Independent goal.', expectedVersion: (await f.store.getRecord(f.userId, id)).version });
+  f.stub.extract = () => ({ updates: [{ uri, memory_type: 'project_context', before, after: `${before}\n- Other work.` }] });
+  await f.commitConversation('stale', [{ role: 'user', text: 'Project M-41633.', at: old }]);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), '- Independent goal.\n- Other work.');
+  const restated = await f.commitConversation('restated', [{ role: 'user', text: 'Project M-41633.', at: fresh }]);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.match(await f.sessions.read(f.userId, uri), /M-41633/);
+  const origins = (await f.overlay.originsOf(f.userId, [uri])).get(uri);
+  assert.equal(origins.get(lineFingerprint('Project M-41633.')).archiveUri, restated.archive_uri);
 });
