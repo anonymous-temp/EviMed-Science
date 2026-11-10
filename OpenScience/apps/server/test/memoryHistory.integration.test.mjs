@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MemoryHistory, MemoryHistoryLedger } from '../src/memoryHistory.mjs';
+import { OpenVikingResources } from '../src/openVikingResources.mjs';
 import { projectNativeMemoryNamespace } from '../src/openVikingLayout.mjs';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -12,7 +13,7 @@ async function setup(t) {
   const f = await fixture(t);
   const files = new Map(); const calls = []; let failWrite = false; let failRemove = false; let duringWrite = null;
   const resources = {
-    async writeHistory(_owner, uri, content) { calls.push(['write', uri]); if (failWrite) throw new Error('write unavailable'); files.set(uri, content); if (duringWrite) await duringWrite(); },
+    async writeHistory(_owner, uri, content) { new OpenVikingResources({client:{}}).historyAddress(uri,{file:true}); calls.push(['write', uri]); if (failWrite) throw new Error('write unavailable'); files.set(uri, content); if (duringWrite) await duringWrite(); },
     async searchHistory(_owner, root, query) { calls.push(['vector+keyword', root, query]); return [...files.keys(), 'viking://user/alien/resources/history/forged.md'].map(uri => ({ uri, score: 1 })); },
     async readHistory(_owner, uri) { calls.push(['read', uri]); return files.get(uri) ?? null; },
     async removeSource(_owner, uri) { if (failRemove) throw new Error('delete unavailable'); files.delete(uri); },
@@ -268,18 +269,19 @@ test('coverage includes undiscovered completed archives beyond the bounded disco
 });
 
 
-async function gateway(t, f) {
-  const handler = createMemoryGatewayHandler({ config: { memoryEngineEnabled: true, memoryEnabled: true, memoryHistorySearchEnabled: true },
+async function gateway(t, f, { secrets = false, capsuleSearch = null } = {}) {
+  const handler = createMemoryGatewayHandler({ config: { memoryEngineEnabled: true, memoryEnabled: true, memoryHistorySearchEnabled: true, memoryHistorySecretRedactionEnabled: secrets },
+    historySecrets: f.service.secrets, capsuleSearch,
     sessions: f.sessions, overlay: f.overlay, historySearch: input => f.service.search(input),
     runtimeManager: { assertActiveEviMedWorkloadToken: async () => ({ userId: f.userId, projectId: 'default' }) },
     store: { userById: async () => ({ id: f.userId }), requireProject: async () => ({ id: 'default', userId: f.userId }) },
     admission: { admit: async () => ({ learn: true, recall: true }) } });
   const server = createServer((req,res) => { void handler(req,res); }); server.listen(0,'127.0.0.1'); await once(server,'listening');
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
-  return async (mcp = false) => {
+  return async (mcp = false, context = false) => {
     const response = await fetch(`http://127.0.0.1:${server.address().port}/internal/memory/v1/${mcp ? 'mcp' : 'api/v1/search/search'}`, {
       method: 'POST', headers: { authorization: 'Bearer history-test', 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
-      body: JSON.stringify(mcp ? { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search', arguments: { query: 'trial' } } } : { query: 'trial' }),
+      body: JSON.stringify(mcp ? { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search', arguments: { query: 'trial' } } } : { query: 'trial', ...(context ? {mode:'context'} : {}) }),
     });
     const text = await response.text(); assert.equal(response.status,200); return { text, json: response.headers.get('content-type').includes('event-stream') ? parseEventStream(text) : JSON.parse(text) };
   };
@@ -436,4 +438,74 @@ test('existing-line verification recovers a planted corruption through product r
   const fenced = await f.consolidation.verifyExisting(f.userId, { limit: 10 });
   assert.equal(fenced.unverifiable, 1);
   assert.equal(calls, 1);
+});
+
+test('secret redaction settles the native commit, indexes exact masked spans and stores fingerprints only', options, async t => {
+  const f=await setup(t), password='paper crane amber 93', code='673921';
+  f.service.config.memoryHistorySecretRedactionEnabled=true;
+  let judged=0;
+  f.service.secrets.judge={identify:async({messages})=>{
+    judged++;return messages.some(m=>m.text.includes(password))?[password,code]:[];
+  }};
+  const record=await f.commitConversation('secrets',[
+    {role:'user',text:`我用${password}登录邮箱；登录时输入${code}。普通编号673922，电话13812345678，邮箱a@example.org。`},
+    {role:'assistant',text:`You supplied ${password}.`},
+    {role:'user',text:`Again ${password}; keep my invoice 673922.`},
+  ],{projectId:'default'});
+  f.worker.history=f.service;f.worker.memoryContexts={forUri:async()=>f.context,assertKnown:async()=>{}};
+  await f.worker.processCommits({userId:f.userId});
+  assert.equal((await f.overlay.commit(f.userId,record.archive_uri)).state,'completed');
+  const hits=(await search(f)).filter(hit=>hit.sessionId===record.session.slice(4));
+  assert.ok(hits.length);const text=JSON.stringify(hits);
+  assert.ok(!text.includes(password)&&!text.includes(code));assert.match(text,/已省略/);assert.match(text,/673922|13812345678|a@example.org/);
+  assert.ok(![...f.files.values()].some(bytes=>bytes.includes(password)||bytes.includes(code)));
+  const rows=(await f.database.query('SELECT * FROM evimed_memory.history_secrets WHERE owner_id=$1',[f.userId])).rows;
+  assert.equal(rows.length,2);assert.ok(!JSON.stringify(rows).includes(password));assert.ok(rows.every(row=>row.fingerprint.length===64&&row.count===1));
+  assert.equal(judged,2,'one review for each ordinary archive');
+});
+
+test('enabling secrets hides old history immediately; bounded backfill retires old chunks and retries failed judgement', options, async t => {
+  const f=await setup(t),password='evening violet 82';
+  const record=await f.commitConversation('legacy-secret',[{role:'user',text:`My mailbox credential is ${password}. Invoice 558234 remains.`}],{projectId:'default'});
+  const c={...f.commit,archiveUri:record.archive_uri,engineSession:record.session};
+  await f.worker.processCommits({userId:f.userId});
+  await f.service.ingestArchive(c,f.context);assert.ok(JSON.stringify(await search(f)).includes(password));
+  await f.database.query("UPDATE evimed_memory.history_archives SET commit_created_at='2026-01-02' WHERE owner_id=$1",[f.userId]);
+  f.service.config.memoryHistorySecretRedactionEnabled=true;
+  f.service.contexts.forUri=async()=>f.context;
+  f.service.secrets.judge={identify:async()=>{throw new Error('model unavailable');}};
+  assert.deepEqual(await search(f),[]);
+  await f.service.backfill();assert.deepEqual(await search(f),[]);
+  const row=(await f.database.query('SELECT state FROM evimed_memory.history_archives WHERE archive_uri=$1',[record.archive_uri])).rows[0];assert.equal(row.state,'unavailable');
+  assert.equal((await f.overlay.commit(f.userId,record.archive_uri)).state,'completed');
+  f.service.secrets.judge={identify:async({messages})=>messages.some(m=>m.text.includes(password))?[password]:[]};
+  await f.database.query("UPDATE evimed_memory.history_archives SET next_attempt_at=clock_timestamp()-interval '1 second' WHERE owner_id=$1",[f.userId]);
+  await f.service.backfill();await f.service.drainDeletes();
+  const text=JSON.stringify(await search(f));assert.ok(!text.includes(password));assert.match(text,/已省略/);assert.match(text,/558234/);
+  assert.ok(![...f.files.values()].some(bytes=>bytes.includes(password)));
+});
+
+test('switch off preserves original history bytes and never calls the semantic judge', options, async t => {
+  const f=await setup(t);let calls=0;f.service.secrets.judge={identify:async()=>{calls++;throw new Error('must not run');}};
+  await f.service.ingestArchive(f.commit,f.context);const before=[...f.files.values()];
+  f.service.config.memoryHistorySecretRedactionEnabled=false;
+  await f.service.ingestArchive(f.commit,f.context);assert.deepEqual([...f.files.values()],before);assert.equal(calls,0);
+  assert.equal((await search(f))[0].messages[0].text,'I prefer trial tables.');
+});
+
+
+test('gateway filters listed secrets in memory JSON, capsule prose, raw history and context searches', options, async t => {
+  const f=await setup(t),password='amber river 72';
+  f.service.config.memoryHistorySecretRedactionEnabled=true;
+  f.service.secrets.judge={identify:async({messages})=>messages.some(m=>m.text.includes(password))?[password]:[]};
+  const record=await f.commitConversation('gateway-secret',[{role:'user',text:`My mailbox password is ${password}; retain trial tables.`}],{projectId:'default'});
+  await f.service.ingestArchive({...f.commit,archiveUri:record.archive_uri,engineSession:record.session},f.context);
+  f.seed('notes/legacy.md',`trial memory ${password}`);
+  const capsuleSearch=async()=>[{factKind:'note',capsuleTitle:'Shared capsule',content:`capsule value ${password}`}];
+  const call=await gateway(t,f,{secrets:true,capsuleSearch});
+  const mcp=(await call(true)).text;assert.ok(!mcp.includes(password));assert.match(mcp,/已省略/);assert.match(mcp,/capsule value/);assert.match(mcp,/Original conversation/);
+  const rest=(await call(false)).text;assert.ok(!rest.includes(password));assert.match(rest,/已省略/);
+  const context=(await call(false,true)).text;assert.ok(!context.includes(password));assert.match(context,/已省略/);
+  f.service.secrets.filterValue=async()=>{throw new Error('database unavailable');};
+  await assert.rejects(call(true),/200/,'privacy failure never returns an unfiltered result');
 });

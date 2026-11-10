@@ -359,6 +359,8 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     // chooses how the capsule's facts are ranked and has no say over where an account's memory lives.
     memoryEngineEnabled: overrides.memoryEngineEnabled ?? engineConfigured,
     // Raw history is appended only to an explicit memory search, never a profile.
+    memoryHistorySecretRedactionEnabled: overrides.memoryHistorySecretRedactionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_ENABLED", false),
+    memoryHistorySecretRedactionDailyCalls: boundedInteger(overrides.memoryHistorySecretRedactionDailyCalls ?? process.env.OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS, 120, 0, 10_000, "OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS"),
     memoryHistorySearchEnabled: overrides.memoryHistorySearchEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED", true),
     memorySearchHintEnabled: overrides.memorySearchHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SEARCH_HINT_ENABLED", false),
     memoryOpeningIndexEnabled: overrides.memoryOpeningIndexEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_INDEX_ENABLED", false),

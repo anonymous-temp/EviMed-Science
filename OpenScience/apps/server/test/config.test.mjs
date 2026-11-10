@@ -1140,3 +1140,15 @@ test("social credential paths stay in web and the runtime receives no social sec
     assert.equal(Object.hasOwn(other.environment ?? {}, "OPEN_SCIENCE_GEO_SOCIAL_API_KEY_FILE"), false, otherName);
   }
 });
+
+
+test('history semantic secret redaction defaults off with a bounded daily cap and explicit experiment overrides', () => {
+  const name='OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_ENABLED',saved=process.env[name];
+  try {
+    delete process.env[name];
+    const off=loadConfig({rootDir:repoRoot});assert.equal(off.memoryHistorySecretRedactionEnabled,false);assert.equal(off.memoryHistorySecretRedactionDailyCalls,120);
+    process.env[name]='true';assert.equal(loadConfig({rootDir:repoRoot}).memoryHistorySecretRedactionEnabled,true);
+    assert.equal(loadConfig({rootDir:repoRoot,memoryHistorySecretRedactionEnabled:false}).memoryHistorySecretRedactionEnabled,false);
+    assert.equal(loadConfig({rootDir:repoRoot,memoryHistorySecretRedactionDailyCalls:3}).memoryHistorySecretRedactionDailyCalls,3);
+  } finally { if(saved===undefined)delete process.env[name];else process.env[name]=saved; }
+});

@@ -1242,6 +1242,7 @@ export {
   platformIdentifiersIn,
   runBookkeepingIn,
   identifierShapesIn,
+  IDENTIFIER_MASK,
   maskIdentifiers,
   projectContextLine,
   stripPlatformTags,
