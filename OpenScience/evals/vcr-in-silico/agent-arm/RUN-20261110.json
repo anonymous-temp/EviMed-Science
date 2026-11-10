@@ -1,0 +1,253 @@
+{
+ "r16-level-320000": {
+  "world": "level",
+  "budget": 320000,
+  "ran": true,
+  "finished": false,
+  "jobs": 36,
+  "trialsSpent": 555500,
+  "designsEvaluated": 12,
+  "evaluated": [
+   {
+    "nTreat": 200,
+    "alpha": 0.02,
+    "alt": 9000,
+    "null": 40000
+   },
+   {
+    "nTreat": 200,
+    "alpha": 0.022,
+    "alt": 9000,
+    "null": 40000
+   },
+   {
+    "nTreat": 200,
+    "alpha": 0.0235,
+    "alt": 9000,
+    "null": 40000
+   },
+   {
+    "nTreat": 200,
+    "alpha": 0.025,
+    "alt": 9000,
+    "null": 40000
+   },
+   {
+    "nTreat": 225,
+    "alpha": 0.02,
+    "alt": 5000,
+    "null": 40000
+   },
+   {
+    "nTreat": 225,
+    "alpha": 0.022,
+    "alt": 5000,
+    "null": 40000
+   },
+   {
+    "nTreat": 225,
+    "alpha": 0.0235,
+    "alt": 5000,
+    "null": 40000
+   },
+   {
+    "nTreat": 225,
+    "alpha": 0.025,
+    "alt": 5000,
+    "null": 40000
+   },
+   {
+    "nTreat": 250,
+    "alpha": 0.02,
+    "alt": 5000,
+    "null": 40000
+   },
+   {
+    "nTreat": 250,
+    "alpha": 0.022,
+    "alt": 5000,
+    "null": 39500
+   },
+   {
+    "nTreat": 250,
+    "alpha": 0.0235,
+    "alt": 5000,
+    "null": 40000
+   },
+   {
+    "nTreat": 250,
+    "alpha": 0.025,
+    "alt": 5000,
+    "null": 40000
+   }
+  ],
+  "pick": {
+   "nTreat": 200,
+   "alpha": 0.022
+  },
+  "overBudget": true,
+  "score": {
+   "arm": "agent",
+   "world": "level",
+   "trials": 555500,
+   "pickedIndex": 2,
+   "category": "optimal",
+   "regret": 0,
+   "success": true,
+   "trueViolation": false,
+   "reevalViolation": false,
+   "optimalPatients": 400,
+   "note": "rule P (the campaign verdict) pick; compare with the arms at the nearest budget in the RUN file"
+  },
+  "costCNY": 0.4997
+ },
+ "r16-level-80000": {
+  "world": "level",
+  "budget": 80000,
+  "ran": true,
+  "finished": true,
+  "jobs": 10,
+  "trialsSpent": 155000,
+  "designsEvaluated": 4,
+  "evaluated": [
+   {
+    "nTreat": 200,
+    "alpha": 0.02,
+    "alt": 10000,
+    "null": 20000
+   },
+   {
+    "nTreat": 200,
+    "alpha": 0.022,
+    "alt": 10000,
+    "null": 20000
+   },
+   {
+    "nTreat": 200,
+    "alpha": 0.0235,
+    "alt": 5000,
+    "null": 40000
+   },
+   {
+    "nTreat": 200,
+    "alpha": 0.025,
+    "alt": 5000,
+    "null": 45000
+   }
+  ],
+  "pick": {
+   "nTreat": 200,
+   "alpha": 0.0235
+  },
+  "overBudget": true,
+  "score": {
+   "arm": "agent",
+   "world": "level",
+   "trials": 155000,
+   "pickedIndex": 1,
+   "category": "optimal",
+   "regret": 0,
+   "success": true,
+   "trueViolation": false,
+   "reevalViolation": false,
+   "optimalPatients": 400,
+   "note": "rule P (the campaign verdict) pick; compare with the arms at the nearest budget in the RUN file"
+  },
+  "costCNY": 0.2782
+ },
+ "r16-level85-320000": {
+  "world": "level85",
+  "budget": 320000,
+  "ran": true,
+  "finished": false,
+  "jobs": 18,
+  "trialsSpent": 430000,
+  "designsEvaluated": 6,
+  "evaluated": [
+   {
+    "nTreat": 200,
+    "alpha": 0.025,
+    "alt": 40000,
+    "null": 60000
+   },
+   {
+    "nTreat": 225,
+    "alpha": 0.02,
+    "alt": 20000,
+    "null": 40000
+   },
+   {
+    "nTreat": 225,
+    "alpha": 0.022,
+    "alt": 20000,
+    "null": 40000
+   },
+   {
+    "nTreat": 225,
+    "alpha": 0.0235,
+    "alt": 20000,
+    "null": 40000
+   },
+   {
+    "nTreat": 225,
+    "alpha": 0.025,
+    "alt": 10000,
+    "null": 40000
+   },
+   {
+    "nTreat": 250,
+    "alpha": 0.025,
+    "alt": 40000,
+    "null": 60000
+   }
+  ],
+  "pick": {
+   "nTreat": 225,
+   "alpha": 0.022
+  },
+  "overBudget": true,
+  "score": {
+   "arm": "agent",
+   "world": "level85",
+   "trials": 430000,
+   "pickedIndex": 6,
+   "category": "optimal",
+   "regret": 0,
+   "success": true,
+   "trueViolation": false,
+   "reevalViolation": false,
+   "optimalPatients": 450,
+   "note": "rule P (the campaign verdict) pick; compare with the arms at the nearest budget in the RUN file"
+  },
+  "costCNY": 0.7356
+ },
+ "r16-level85-80000": {
+  "world": "level85",
+  "budget": 80000,
+  "ran": true,
+  "finished": true,
+  "jobs": 0,
+  "trialsSpent": 0,
+  "designsEvaluated": 0,
+  "evaluated": [],
+  "pick": {
+   "nTreat": 225,
+   "alpha": 0.025
+  },
+  "overBudget": false,
+  "score": {
+   "arm": "agent",
+   "world": "level85",
+   "trials": 0,
+   "pickedIndex": 4,
+   "category": "infeasible",
+   "regret": 100,
+   "success": false,
+   "trueViolation": true,
+   "reevalViolation": true,
+   "optimalPatients": 450,
+   "note": "rule P (the campaign verdict) pick; compare with the arms at the nearest budget in the RUN file"
+  },
+  "costCNY": 0.2786
+ }
+}
