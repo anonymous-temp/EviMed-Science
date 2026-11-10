@@ -366,7 +366,8 @@
    "id": "O10",
    "text": "一个关于风险比 0.62（95% 置信区间下限 0.45，上限 0.85）的观察性研究结论，想知道要多强的未测混杂才能抵消它，请算 E 值，这是 HR，事件不罕见。",
    "methods": [
-    "evalue"
+    "evalue",
+    "comparator_evalue"
    ],
    "fixed": [
     {
@@ -497,7 +498,8 @@
    "id": "O15",
    "text": "把三项已发表研究合并起来看看：研究 1 log HR −0.30（标准误 0.12），研究 2 log HR −0.18（标准误 0.10），研究 3 log HR −0.40（标准误 0.20）。给我合并的效应和异质性。",
    "methods": [
-    "pool_evidence"
+    "pool_evidence",
+    "meta_dl"
    ],
    "fixed": [
     {
@@ -669,5 +671,6 @@
     "decisionContext"
    ]
   }
- ]
+ ],
+ "gradingNote": "2026-11-10 grader bug fix (frozen keys otherwise unchanged): research_calculate calls count by their `method`; research_question writes are read from `data` as well as `items`; O10 also accepts comparator.evalue and O15 meta.dl (the same engine, the other route). Numbers carried in a workspace file (research_calculate inputPath) are still not seen."
 }

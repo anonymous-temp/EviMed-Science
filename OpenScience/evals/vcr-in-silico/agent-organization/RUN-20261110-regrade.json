@@ -1,0 +1,545 @@
+{
+ "summary": {
+  "samples": 19,
+  "ran": 19,
+  "excluded": [],
+  "methodOk": 18,
+  "fixedOk": 10,
+  "sampleOk": 10,
+  "fixedItemsFound": 50,
+  "fixedItems": 76,
+  "perRequest": {
+   "O01": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 1
+   },
+   "O02": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 0
+   },
+   "O03": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 1
+   },
+   "O04": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 1
+   },
+   "O05": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 1
+   },
+   "O06": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 0
+   },
+   "O07": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 1
+   },
+   "O08": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 0
+   },
+   "O09": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 0
+   },
+   "O10": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 0
+   },
+   "O11": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 0
+   },
+   "O12": {
+    "n": 1,
+    "methodOk": 0,
+    "sampleOk": 0
+   },
+   "O13": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 1
+   },
+   "O14": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 0
+   },
+   "O15": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 0
+   },
+   "O16": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 1
+   },
+   "O18": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 1
+   },
+   "O19": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 1
+   },
+   "O20": {
+    "n": 1,
+    "methodOk": 1,
+    "sampleOk": 1
+   }
+  },
+  "costCNY": 3.4603
+ },
+ "samples": {
+  "r37a-O01-s1": {
+   "id": "O01",
+   "methodOk": true,
+   "fixedFound": 6,
+   "fixedN": 6,
+   "fixedOk": true,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": true,
+   "kindsCalled": [
+    "design_analytic",
+    "design_simulation"
+   ],
+   "missingFixed": [],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.0639
+  },
+  "r37a-O02-s1": {
+   "id": "O02",
+   "methodOk": true,
+   "fixedFound": 5,
+   "fixedN": 6,
+   "fixedOk": false,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": false,
+   "kindsCalled": [
+    "design_analytic",
+    "design_simulation"
+   ],
+   "missingFixed": [
+    "treatment median"
+   ],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.0698
+  },
+  "r37a-O03-s1": {
+   "id": "O03",
+   "methodOk": true,
+   "fixedFound": 2,
+   "fixedN": 2,
+   "fixedOk": true,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": true,
+   "kindsCalled": [
+    "design_simulation",
+    "read_jobs"
+   ],
+   "missingFixed": [],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.1386
+  },
+  "r37a-O04-s1": {
+   "id": "O04",
+   "methodOk": true,
+   "fixedFound": 7,
+   "fixedN": 7,
+   "fixedOk": true,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": true,
+   "kindsCalled": [
+    "design_analytic",
+    "design_simulation",
+    "read_jobs"
+   ],
+   "missingFixed": [],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": false,
+   "costCNY": 0.1252
+  },
+  "r37a-O05-s1": {
+   "id": "O05",
+   "methodOk": true,
+   "fixedFound": 8,
+   "fixedN": 8,
+   "fixedOk": true,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": true,
+   "kindsCalled": [
+    "design_analytic",
+    "design_grid",
+    "read_jobs",
+    "read_results"
+   ],
+   "missingFixed": [],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": false,
+   "costCNY": 0.3301
+  },
+  "r37a-O06-s1": {
+   "id": "O06",
+   "methodOk": true,
+   "fixedFound": 4,
+   "fixedN": 5,
+   "fixedOk": false,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": false,
+   "kindsCalled": [
+    "design_analytic",
+    "read_results"
+   ],
+   "missingFixed": [
+    "mean change"
+   ],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.0423
+  },
+  "r37a-O07-s1": {
+   "id": "O07",
+   "methodOk": true,
+   "fixedFound": 4,
+   "fixedN": 4,
+   "fixedOk": true,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": true,
+   "kindsCalled": [
+    "design_analytic",
+    "design_simulation"
+   ],
+   "missingFixed": [],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.0789
+  },
+  "r37a-O08-s1": {
+   "id": "O08",
+   "methodOk": true,
+   "fixedFound": 1,
+   "fixedN": 6,
+   "fixedOk": false,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": false,
+   "kindsCalled": [
+    "accrual_forecast",
+    "assurance",
+    "design_analytic",
+    "design_simulate",
+    "design_simulation"
+   ],
+   "missingFixed": [
+    "n per arm",
+    "HR",
+    "accrual 12",
+    "follow-up 24",
+    "control median"
+   ],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.1608
+  },
+  "r37a-O09-s1": {
+   "id": "O09",
+   "methodOk": true,
+   "fixedFound": 2,
+   "fixedN": 3,
+   "fixedOk": false,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": false,
+   "kindsCalled": [
+    "accrual_forecast",
+    "read_jobs",
+    "read_results"
+   ],
+   "missingFixed": [
+    "sites"
+   ],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.2608
+  },
+  "r37a-O10-s1": {
+   "id": "O10",
+   "methodOk": true,
+   "fixedFound": 0,
+   "fixedN": 2,
+   "fixedOk": false,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": false,
+   "kindsCalled": [
+    "comparator_evalue"
+   ],
+   "missingFixed": [
+    "risk ratio",
+    "limit 0.85"
+   ],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.3217
+  },
+  "r37a-O11-s1": {
+   "id": "O11",
+   "methodOk": true,
+   "fixedFound": 0,
+   "fixedN": 3,
+   "fixedOk": false,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": false,
+   "kindsCalled": [
+    "design_analytic",
+    "design_simulation",
+    "generate_progression",
+    "read_results"
+   ],
+   "missingFixed": [
+    "n per arm",
+    "weeks",
+    "slowing"
+   ],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.3079
+  },
+  "r37a-O12-s1": {
+   "id": "O12",
+   "methodOk": false,
+   "fixedFound": 0,
+   "fixedN": 4,
+   "fixedOk": false,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": false,
+   "kindsCalled": [
+    "design_grid",
+    "design_simulate",
+    "generate_progression",
+    "read_study"
+   ],
+   "missingFixed": [
+    "n per arm",
+    "weeks",
+    "points",
+    "at week"
+   ],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.3414
+  },
+  "r37a-O13-s1": {
+   "id": "O13",
+   "methodOk": true,
+   "fixedFound": 2,
+   "fixedN": 2,
+   "fixedOk": true,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": true,
+   "kindsCalled": [
+    "pk_interaction"
+   ],
+   "missingFixed": [],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.0823
+  },
+  "r37a-O14-s1": {
+   "id": "O14",
+   "methodOk": true,
+   "fixedFound": 0,
+   "fixedN": 3,
+   "fixedOk": false,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": false,
+   "kindsCalled": [
+    "definition",
+    "forecast_trajectories",
+    "generate_patients_longitudinal",
+    "generate_progression",
+    "read_data_intake",
+    "read_longitudinal",
+    "read_study"
+   ],
+   "missingFixed": [
+    "P5 age",
+    "P3 MMSE",
+    "horizon 24"
+   ],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.3826
+  },
+  "r37a-O15-s1": {
+   "id": "O15",
+   "methodOk": true,
+   "fixedFound": 0,
+   "fixedN": 6,
+   "fixedOk": false,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": false,
+   "kindsCalled": [
+    "meta_dl"
+   ],
+   "missingFixed": [
+    "study1",
+    "se1",
+    "study2",
+    "se2",
+    "study3",
+    "se3"
+   ],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.0704
+  },
+  "r37a-O16-s1": {
+   "id": "O16",
+   "methodOk": true,
+   "fixedFound": 4,
+   "fixedN": 4,
+   "fixedOk": true,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": true,
+   "kindsCalled": [
+    "design_analytic",
+    "read_results"
+   ],
+   "missingFixed": [],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": false,
+   "costCNY": 0.1062
+  },
+  "r37a-O18-s1": {
+   "id": "O18",
+   "methodOk": true,
+   "fixedFound": 5,
+   "fixedN": 5,
+   "fixedOk": true,
+   "questionFound": 0,
+   "questionN": 0,
+   "questionOk": true,
+   "sampleOk": true,
+   "kindsCalled": [
+    "design_analytic",
+    "design_grid"
+   ],
+   "missingFixed": [],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.1986
+  },
+  "r37a-O19-s1": {
+   "id": "O19",
+   "methodOk": true,
+   "fixedFound": 0,
+   "fixedN": 0,
+   "fixedOk": true,
+   "questionFound": 5,
+   "questionN": 5,
+   "questionOk": true,
+   "sampleOk": true,
+   "kindsCalled": [
+    "definition",
+    "read_contracts",
+    "read_research_question",
+    "read_study",
+    "research_question",
+    "task_context"
+   ],
+   "missingFixed": [],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.2112
+  },
+  "r37a-O20-s1": {
+   "id": "O20",
+   "methodOk": true,
+   "fixedFound": 0,
+   "fixedN": 0,
+   "fixedOk": true,
+   "questionFound": 5,
+   "questionN": 5,
+   "questionOk": true,
+   "sampleOk": true,
+   "kindsCalled": [
+    "read_contracts",
+    "read_research_question",
+    "research_question"
+   ],
+   "missingFixed": [],
+   "missingQuestion": [],
+   "ran": true,
+   "finished": true,
+   "costCNY": 0.1676
+  }
+ }
+}

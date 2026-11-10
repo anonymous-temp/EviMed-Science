@@ -12,7 +12,7 @@ import argparse, glob, json, os, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REQUESTS = os.path.join(HERE, "requests.json")
-MODEL_TOOLS = ("vcr_simulate", "vcr_write", "vcr_read", "virtual_trial_search")
+MODEL_TOOLS = ("vcr_simulate", "vcr_write", "vcr_read", "virtual_trial_search", "research_calculate")
 
 
 def short(name):
@@ -75,6 +75,9 @@ def call_kinds(c):
         kinds.add(norm(a.get("what")))
     if c["name"] == "vcr_read" and a.get("what"):
         kinds.add("read_" + norm(a.get("what")))
+    # grader bug fix 2026-11-10 (as F2's): the platform's other calculation route, research_calculate, names the engine method in `method`
+    if c["name"] == "research_calculate" and isinstance(a.get("method"), str):
+        kinds.add(norm(a["method"]))
     # a lab/search/compare call names its method inside the payload
     for key in ("method", "design"):
         v = a.get(key)
@@ -87,12 +90,15 @@ def written_question_fields(calls):
     got = set()
     for c in calls:
         if c["name"] == "vcr_write" and norm(c["args"].get("what")) == "research_question":
-            for it in c["args"].get("items") or []:
+            # grader bug fix 2026-11-10: a write is `items` or one `data` object (the calls of the conversations used `data`)
+            one = c["args"].get("data")
+            for it in (c["args"].get("items") or []) + ([{"data": one}] if isinstance(one, dict) else []):
                 if isinstance(it, dict):
                     got |= {k for k, v in it.items() if v not in (None, "", [], {})}
-                    for k, v in (it.get("data") or {}).items() if isinstance(it.get("data"), dict) else []:
-                        if v not in (None, "", [], {}):
-                            got.add(k)
+                    if isinstance(it.get("data"), dict):
+                        for k, v in it["data"].items():
+                            if v not in (None, "", [], {}):
+                                got.add(k)
     return got
 
 
