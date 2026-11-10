@@ -108,7 +108,14 @@ export class NativeMemoryObservations {
         const words = observationWords(body);
         if (!words) { recordObservationPromotion("empty"); continue; }
         const origins = (await this.overlay.originsOf(userId, [file.uri])).get(file.uri) ?? new Map();
-        await this.keepRepeatedChoice(userId, words, [...origins.values()].flatMap(originalSources));
+        await this.keepRepeatedChoice(userId, words, [
+          ...[...origins.values()].flatMap(originalSources),
+          // The first origin of an unchanged note is not its only demonstration. A later conversation
+          // can choose it again after removal even when extraction kept the very same line.
+          ...revisions.filter(revision => revision.actor === 'engine' && !revision.undoneAt && revision.archiveUri)
+            .map(revision => ({ archiveUri: revision.archiveUri, engineSession: revision.engineSession,
+              projectId: revision.sourceProjectId ?? revision.projectId, projectCreatedAt: revision.sourceProjectCreatedAt })),
+        ]);
         // The note is spent once the engine has the words (a failed extraction is replayed from its archive, as any commit's is).
         await withMemorySummaryInvalidation(this.sessions, this.overlay, userId, file.uri, () => this.sessions.remove(userId, file.uri));
         await this.overlay.addRevision({ userId, uri: file.uri, memoryType: "observations", change: "deleted", actor: "platform", reason: "promoted to a preference",

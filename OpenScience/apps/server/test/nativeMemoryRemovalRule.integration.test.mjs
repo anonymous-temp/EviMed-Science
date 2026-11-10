@@ -3,6 +3,7 @@ import test from 'node:test';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
 import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { nativeFileId } from '../src/nativeMemoryStore.mjs';
+import { NativeMemoryObservations } from '../src/nativeMemoryObservations.mjs';
 import { NativeMemoryWorker } from '../src/nativeMemoryWorker.mjs';
 
 const { fixture, options } = nativeIntegration();
@@ -148,4 +149,27 @@ test('a stale engine before-image cannot classify an edited-out value as unchang
   assert.match(await f.sessions.read(f.userId, uri), /M-41633/);
   const origins = (await f.overlay.originsOf(f.userId, [uri])).get(uri);
   assert.equal(origins.get(lineFingerprint('Project M-41633.')).archiveUri, restated.archive_uri);
+});
+
+
+test('an unchanged observation can be promoted from a later demonstration after removal', options, async t => {
+  const f = await fixture(t), fact = 'Project M-41633.';
+  const first = await f.commitConversation('first-choice', [{ role: 'user', text: fact, at: old }]);
+  const later = await f.commitConversation('later-choice', [{ role: 'user', text: fact, at: fresh }]);
+  await f.worker.processCommits({ userId: f.userId });
+  const note = f.seed('observations/project.md', fact, { type: 'observations' });
+  await f.overlay.upsertFile({ userId: f.userId, uri: note, memoryType: 'observations', body: fact });
+  await f.overlay.syncOrigins(f.userId, note, { after: fact, origin: { archiveUri: first.archive_uri, engineSession: first.session } });
+  for (const [commit, change] of [[first, 'added'], [later, 'updated']]) {
+    await f.overlay.addRevision({ userId: f.userId, uri: note, memoryType: 'observations', actor: 'engine', change,
+      after: fact, engineSession: commit.session, archiveUri: commit.archive_uri });
+  }
+  await f.overlay.reject(f.userId, 'project_context', `${f.root}/projects/old.md`, [fact]);
+  const uri = `${f.root}/preferences/new-choice.md`;
+  f.stub.extract = () => ({ adds: [{ uri, memory_type: 'preferences', after: fact }] });
+  const promoter = new NativeMemoryObservations({ overlay: f.overlay, sessions: f.sessions,
+    keepRepeatedChoice: (userId, choice, origins) => f.store.keepRepeatedChoice(userId, choice, origins) });
+  assert.equal((await promoter.promote(f.userId)).promoted, 1);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), fact);
 });

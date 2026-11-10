@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { lineRefusal } from '../src/nativeMemoryWorker.mjs';
 import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { removalLines, removalRefusals } from '../src/nativeMemoryRejections.mjs';
 
@@ -43,4 +44,10 @@ test('a message timestamp grounds its provenance date when relearning, without l
   assert.equal((await removalRefusals({ userId: 'u', overlay: guard, candidates: [{ text, sources: [source('My project is M-41633.')] }] })).size, 0);
   assert.equal((await removalRefusals({ userId: 'u', overlay: guard, candidates: [{ text, sources: [source('My project is M-41633.', '2026-11-10T09:00:00.000Z')] }] })).size, 1);
   assert.equal((await removalRefusals({ userId: 'u', overlay: guard, candidates: [{ text, sources: [source('My project is M-41634.')] }] })).size, 1);
+});
+
+
+test('removal refusals preserve the existing never-kept precedence for secret-shaped body lines', () => {
+  const text = 'ID 110101199001011237';
+  assert.equal(lineRefusal(text, new Map([[lineFingerprint(text), 'rejected_reworded']])), 'identifier_shape');
 });

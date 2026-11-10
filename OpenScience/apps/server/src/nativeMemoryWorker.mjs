@@ -82,8 +82,9 @@ const statementOf = (/** @type {string} */ line) => line.trim().replace(/^(?:[-*
  */
 export function lineRefusal(line, rejected) {
   const text = statementOf(line);
-  if (rejected instanceof Map && rejected.has(lineFingerprint(removalText(line)))) return /** @type {any} */ (rejected.get(lineFingerprint(removalText(line))));
-  if (!text || isLabelLine(line) || /^#{1,6}\s/.test(line.trim())) return null;
+  if (!text || isLabelLine(line) || /^#{1,6}\s/.test(line.trim())) {
+    return rejected instanceof Map ? /** @type {any} */ (rejected.get(lineFingerprint(removalText(line))) ?? null) : null;
+  }
   if (identifierShapesIn(text).length) return "identifier_shape";
   if (carriesPlatformContext(text) || platformIdentifiersIn(text).length) return "platform_text";
   const print = lineFingerprint(text);

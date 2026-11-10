@@ -154,7 +154,7 @@ export class NativeMemoryVerification {
    * Explicit page revisions are the person's own dated statements too.
    * @param {string} userId @param {any[]} origins @param {any} [context] @param {Map<any,any>} [cache] */
   async readRemovalSources(userId, origins, context = null, cache = new Map()) {
-    const archives = await this.overlay.removalOrigins(userId, [...new Set(origins.map(origin => origin.archiveUri).filter(Boolean))]);
+    const archives = await this.overlay.removalOrigins(userId, [...new Set(origins.map(origin => origin.archiveUri).filter(uri => { const archive = parseArchiveUri(uri); return archive && !archive.rest && archive.archiveUri === uri; }))]);
     const sources = await this.readSources(userId, archives, context, cache);
     for (const origin of origins.filter(source => !source.archiveUri && source.revisionId)) {
       const revision = await this.overlay.revision(userId, origin.revisionId);
