@@ -3213,6 +3213,11 @@ export function loadConfig(overrides = {}) {
     // ran at all.
     learningConsolidationIntervalMs: Number(overrides.learningConsolidationIntervalMs
       ?? process.env.OPEN_SCIENCE_LEARNING_CONSOLIDATION_INTERVAL_MS ?? 3_600_000),
+    // Report-only: when on, the hourly pass also counts the method library's broken links
+    // (`methodLibraryLinkIssues`) and returns them as `linkIssues`. Off by default, and never a
+    // reason to block a pass or change a method.
+    linkCheckEnabled: overrides.linkCheckEnabled
+      ?? boolEnv("OPEN_SCIENCE_LINK_CHECK_ENABLED", false),
     // How many answered runs may carry a learned method's card without one of them opening the method before it is stopped, with the
     // count written on it as the reason (owner ruling of 2026-10-12, live audit §4: eight cards in a run on average, one run in fifty
     // opening any). The card costs prompt room in every research run, and the harm test cannot see a method nobody opens. Restoring a
