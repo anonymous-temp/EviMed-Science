@@ -7375,7 +7375,7 @@ export class RuntimeManager {
     try { await this.startAdmitted(project, { replaceRuntime: async () => { if (this.runtimes.has(key)) await this.stop(project); } }); return { joined: true }; }
     finally { this.patientMatchingGenerationOverrides.delete(key); }
   }
-  /** The kernel's web host answers before an enabled bundle has registered its route: on DSH 0.2.2-rc.1 the status route is 404 for
+  /** The kernel's web host answers before an enabled bundle has registered its route: on the pinned kernel the status route is 404 for
    * about 0.2 s after the first HTTP answer, and the one immediate call of the first production install (2026-11-10) landed there and
    * rolled the plugin back. Only a 404 from the same runtime generation is waited out, for at most `waitMs`.
    * @param {any} runtime @param {any} project @param {string} generation @param {number} [waitMs] */
