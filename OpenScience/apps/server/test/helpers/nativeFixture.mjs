@@ -21,9 +21,9 @@ import { migrateMemorySettings } from "../../src/memorySettingsPersistence.mjs";
 import { resetNativeMemoryMetrics } from "../../src/nativeMemoryMetrics.mjs";
 import { startOpenVikingStub } from "./openVikingStub.mjs";
 
-/** @param {{ config?: Record<string, any> }} [settings] */
-export function nativeIntegration({ config: settings = {} } = {}) {
-  const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
+/** @param {{ config?: Record<string, any>, databaseUrl?: string }} [settings] */
+export function nativeIntegration({ config: settings = {}, databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "" } = {}) {
+  const url = databaseUrl;
   if (url) { const parsed = new URL(url); assert.ok(["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)); assert.match(parsed.pathname, /evimed_test/); }
   const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
   const config = { memoryEngineEnabled: true, memoryContextLimit: 8, memoryContextMaxChars: 20_000, nativeMemoryReplayAttempts: 3, ...settings };
