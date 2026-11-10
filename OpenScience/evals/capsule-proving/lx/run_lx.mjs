@@ -74,9 +74,17 @@ function ipc(h, action, args = {}) {
   });
 }
 const kebab = (text, fallback) => (String(text ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || fallback);
+/**
+ * A method as the product's validator wants it (`validateMethodSkill`: metadata block, the seven SkillPyramid sections). The rule
+ * text of the data goes verbatim into `## Workflow`; the other sections are neutral one-liners that add no rule of their own.
+ */
 export function skillOf({ name, whenToUse, body }) {
   const line = s => String(s ?? '').replace(/\s+/g, ' ').trim().replace(/"/g, '\\"');
-  return `---\nname: ${kebab(name, 'method')}\ndescription: "${line(whenToUse).slice(0, 300)}"\nwhenToUse: "${line(whenToUse).slice(0, 300)}"\n---\n${String(body).trim()}\n`;
+  const when = line(whenToUse).slice(0, 300);
+  return ['---', `name: ${kebab(name, 'method')}`, `description: "${when}"`, `whenToUse: "${when}"`, 'metadata:', '  evimed_schema: "method-skill/1"', '  role: "functional"',
+    `  applies_when: "${when}"`, '  not_when: "与上述情形无关的请求。"', '---',
+    '## Purpose', '', String(whenToUse ?? '').trim(), '', '## When to Use', '', String(whenToUse ?? '').trim(), '', '## Inputs', '', '用户在请求里给出的材料。', '',
+    '## Workflow', '', String(body ?? '').trim(), '', '## Verification', '', '交付前对照上面的步骤核对一遍。', '', '## Constraints', '', '无额外约束。', '', '## Output', '', '按用户要求的形式交付。', ''].join('\n');
 }
 
 /** The runner's side of a learning settlement: the product worker claims every queued learning job; nothing is written for it. */
@@ -291,9 +299,17 @@ async function l5Unit(ctx, item, gold) {
   const projectId = `lx-${kebab(item.id, 'item')}-${u.p.attempt}`;
   const seed = await u.step('seed', async () => {
     const r = await api.call('POST', '/api/methods', { skill: skillOf(item.method) });
+    if (r.status === 422) return { refused: true, status: r.status, error: r.json?.error ?? r.raw.slice(0, 400) };
     if (r.status !== 201) throw new Error(`seed method: ${r.status} ${r.raw.slice(0, 200)}`);
     return { id: r.json.data.id, status: r.json.data.status, name: r.json.data.name };
   });
+  if (seed.refused) {
+    // The product would not write this method at all: it is stopped at the door, before any run could load it.
+    const verdict = { id: item.id, class: gold.class, shouldStop: gold.shouldStop, stopped: true, stoppedAfterTask: 0, refusedAtCreation: seed.error, finalStatus: 'refused',
+      correct: gold.shouldStop === true, falseStop: gold.shouldStop !== true, missedStop: false, counts: {}, verdicts: [], mounts: [], lessons: [], snapshots: [], attempt: u.p.attempt };
+    await atomic(`${u.dir}/verdict.json`, verdict);
+    return verdict;
+  }
   const snapshots = [], verdicts = [], mounts = [];
   for (const [t, task] of item.tasks.entries()) {
     const name = `conv-task${t + 1}`;
