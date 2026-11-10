@@ -25,7 +25,7 @@ import {
 } from '../inputsLearning.mjs';
 
 /**
- * @typedef {{ role: 'user'|'assistant', text: string, at?: string }} Message
+ * @typedef {{ role: 'user'|'assistant', text: string, at?: string, liveTurn?: 'forget' }} Message
  * @typedef {{ afterMessage: number, kind: 'document'|'web'|'tool'|'paste', title: string, text: string }} Attachment
  * @typedef {{ id: string, name: string }} Project
  * @typedef {{ sessionId: string, at: string, project: Project|null, messages: Message[], attachments?: Attachment[] }} Session

@@ -132,8 +132,9 @@ export function caseIssues(item) {
     ids.add(session?.sessionId);
     if (!isoOk(session?.at)) issues.push(`${where}: session ${session?.sessionId} has no ISO time`);
     if (!Array.isArray(session?.messages) || !session.messages.length) issues.push(`${where}: session ${session?.sessionId} has no messages`);
-    for (const message of session?.messages ?? []) {
+    for (const [index, message] of (session?.messages ?? []).entries()) {
       if (!ROLES.has(message?.role)) { issues.push(`${where}: session ${session?.sessionId} has a message whose role is not user/assistant`); break; }
+      if (message.liveTurn !== undefined && (message.liveTurn !== "forget" || message.role !== "user" || session.messages[index + 1]?.role !== "assistant")) issues.push(`${where}: session ${session.sessionId} has an invalid liveTurn`);
     }
   });
   const qids = new Set();
@@ -163,14 +164,13 @@ async function isDirectory(directory) {
  * way from `<dataDir>/sealed/` (by symmetry; this code never opens it unless asked to).
  * @type {SetLoader}
  */
-async function loadSyntheticUsers({ split, dataDir, set, only }) {
+async function loadSyntheticUsers({ split, dataDir, set }) {
   if (!/^[a-z][a-z0-9-]{0,31}$/.test(split)) throw new Error(`unknown split ${split}`);
   const root = path.join(dataDir, split);
   if (!await isDirectory(root)) throw new Error(`no ${split} directory under the data directory`);
   const names = (await readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory() && /^[A-Za-z0-9_-]{1,64}$/.test(entry.name)).map((entry) => entry.name).sort();
   const cases = [];
   for (const name of names) {
-    if (only?.length && !only.includes(name)) continue;
     const file = path.join(root, name, "input.json");
     let text;
     try { text = await readFile(file, "utf8"); }
