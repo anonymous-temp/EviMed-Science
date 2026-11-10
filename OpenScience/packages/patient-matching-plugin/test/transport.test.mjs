@@ -42,6 +42,9 @@ test('credentials fail closed on insecure mode or symlink and never reach networ
 test('deployment configuration rejects insecure remote endpoints, model injection and unbounded transport', () => {
   const config = { endpoint: 'https://matching.example/internal/port', tokenFile: '/deployment/host.token' }
   validateTransportConfig(config)
+  // The hosted runtime reaches its control plane by service name on the deployment's own network; a dotted name or an address needs HTTPS.
+  assert.equal(validateTransportConfig({ ...config, endpoint: 'http://open-science-web:8787/internal/patient-matching/v1/port' }).endpoint, 'http://open-science-web:8787/internal/patient-matching/v1/port')
+  for (const endpoint of ['http://10.0.0.5/port', 'http://open-science-web.example/port', 'http://-bad/port']) assert.throws(() => validateTransportConfig({ ...config, endpoint }), /HTTPS|Invalid/)
   for (const extra of [{ endpoint: 'http://matching.example/port' }, { endpoint: 'https://credential@example/port' }, { endpoint: 'https://example/port?token=bad' }, { tokenFile: 'relative' }, { model: 'injected' }, { timeoutMs: 9999999 }, { maxResponseBytes: 9999999999 }]) assert.throws(() => validateTransportConfig({ ...config, ...extra }))
 })
 test('host HTTP failure and oversized response do not expose credential or partial JSON', async () => {

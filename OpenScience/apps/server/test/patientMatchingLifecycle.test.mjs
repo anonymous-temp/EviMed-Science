@@ -101,7 +101,9 @@ test('install, idle disable, uninstall and historical immutable identities survi
   assert.ok(await f.service.resolveTool(project, 'match_assess'), 'in-flight generation remains valid until idle');
   f.busy(false); assert.equal((await f.worker.runClaimed(f.queued.at(-1))).phase, 'disabled');
   assert.equal(await f.service.resolveTool(project, 'match_assess'), null); assert.equal(await f.service.selectForRuntime(project), null);
-  assert.deepEqual(await verifyPatientMatchingGeneration(f.service.config, project, manifest.reference), manifest);
+  // The state keeps a pointer (no file list, so two of them stay far under a product record's 256 KiB); the files are on disk.
+  const { files, ...pointer } = await verifyPatientMatchingGeneration(f.service.config, project, manifest.reference);
+  assert.deepEqual(pointer, manifest); assert.equal(manifest.files, undefined); assert.ok(files.length > 0);
   await f.reconcile('uninstall'); assert.equal((await f.worker.runClaimed(f.queued.at(-1))).phase, 'uninstalled');
   await assert.rejects(f.service.reconcile({ id: 'other' }, project.id, { action: 'enable', expectedRevision: 0 }));
 });

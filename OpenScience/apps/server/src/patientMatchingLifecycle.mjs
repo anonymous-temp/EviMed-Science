@@ -12,6 +12,12 @@ import { patientMatchingCatalogue, preparePatientMatchingGeneration, verifyPatie
 
 export const PATIENT_MATCHING_LIFECYCLE_JOB = 'patient-matching-lifecycle-apply';
 const KIND = 'patient-matching-lifecycle';
+/** What the project's state keeps of a generation: everything but its file list. A full manifest names every file of the bundle
+ * (about 136 KB for 804 files), and the state carried two of them on success (`effective` and `lastGood`), past the 256 KiB a
+ * product record may be (2026-11-10, the first production install that loaded). The files stay in the generation's own manifest
+ * on disk and in its generation record; whoever mounts or restores a generation reads that, verified.
+ * @param {any} manifest */
+const statePointer = manifest => { if (!manifest) return null; const { files: _files, ...pointer } = manifest; return pointer; };
 const stateId = project => `patient-matching:state:${project.id}`;
 const unavailable = () => new HttpError(503, 'patient_matching_unavailable', 'Patient matching is temporarily unavailable.');
 const same = (a, b) => canonicalJson(a ?? null) === canonicalJson(b ?? null);
@@ -92,8 +98,7 @@ export class PatientMatchingLifecycleService {
     try {
       const entry = this.catalogue.get(manifest.release.releaseId), { artifactPath: _path, ...release } = entry ?? {};
       if (!entry || !same(release, manifest.release) || !same(await this.scope(project), manifest.scope) || await this.workerImageIdentity() !== entry.workerImageDigest) return null;
-      await verifyPatientMatchingGeneration(this.config, project, manifest.reference);
-      return manifest;
+      return await verifyPatientMatchingGeneration(this.config, project, manifest.reference);
     } catch { return null; }
   }
   /** Used only by the first-party gateway after workload authentication. The body cannot supply a descriptor.
@@ -185,7 +190,7 @@ export class PatientMatchingLifecycleWorker {
             try {
               const admitted = this.service.catalogue.get(restore.release.releaseId), { artifactPath: _path, ...release } = admitted ?? {};
               if (!admitted || !same(release, restore.release) || await this.service.workerImageIdentity() !== admitted.workerImageDigest || (await this.runtime.inspectRuntimeImage())?.imageId !== restore.runtimeImageDigest) throw unavailable();
-              await verifyPatientMatchingGeneration(this.service.config, project, restore.reference);
+              restore = await verifyPatientMatchingGeneration(this.service.config, project, restore.reference);
             }
             catch { restore = null; }
           }
@@ -202,8 +207,8 @@ export class PatientMatchingLifecycleWorker {
         }
         if (!proof || proof.runtimeGeneration !== this.runtime.runtimeGeneration(project) || !same(proof.reference, candidate?.reference)) throw unavailable();
         return this.jobs.finishWithLease(job.userId, job.id, job.leaseToken, { phase, reference: candidate?.reference ?? null, failure }, async transactionClient => {
-          await guard(); await this.service.documents.put(project.userId, KIND, state.id, { ...state.payload, phase, effective: candidate,
-            lastGood: phase === 'effective' ? previous ?? candidate : state.payload.lastGood, runtimeGeneration: proof.runtimeGeneration, failure },
+          await guard(); await this.service.documents.put(project.userId, KIND, state.id, { ...state.payload, phase, effective: statePointer(candidate),
+            lastGood: phase === 'effective' ? previous ?? statePointer(candidate) : state.payload.lastGood, runtimeGeneration: proof.runtimeGeneration, failure },
           { expectedRevision: state.revision, projectId: project.id, transactionClient });
         });
       }));

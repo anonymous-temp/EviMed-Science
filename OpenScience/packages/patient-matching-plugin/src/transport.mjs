@@ -7,7 +7,10 @@ export function validateTransportConfig(config) {
   if (!config || typeof config !== 'object' || Object.keys(config).some(key => !['endpoint', 'tokenFile', 'timeoutMs', 'maxResponseBytes'].includes(key))) throw new TypeError('Invalid deployment transport configuration')
   const endpoint = new URL(config.endpoint)
   if (endpoint.username || endpoint.password || endpoint.hash || endpoint.search || !['http:', 'https:'].includes(endpoint.protocol)) throw new TypeError('Invalid host endpoint')
-  if (endpoint.protocol === 'http:' && !['127.0.0.1', '[::1]', 'localhost'].includes(endpoint.hostname)) throw new TypeError('Remote host endpoint requires HTTPS')
+  // Plain HTTP stays on the machine or the deployment's own container network: loopback, or a single-label service name (no dot, not
+  // an address), which no public name is. The hosted runtime reaches its control plane as `http://open-science-web:8787` like every
+  // other gateway (2026-11-10: the first production install refused that endpoint and the bundle never loaded).
+  if (endpoint.protocol === 'http:' && !['127.0.0.1', '[::1]', 'localhost'].includes(endpoint.hostname) && !/^[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(endpoint.hostname)) throw new TypeError('Remote host endpoint requires HTTPS')
   if (typeof config.tokenFile !== 'string' || !isAbsolute(config.tokenFile)) throw new TypeError('An absolute deployment token file is required')
   const timeoutMs = config.timeoutMs ?? 30000, maxResponseBytes = config.maxResponseBytes ?? 8 * 1024 * 1024
   if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 120000 || !Number.isInteger(maxResponseBytes) || maxResponseBytes < 1024 || maxResponseBytes > 32 * 1024 * 1024) throw new TypeError('Invalid transport limits')
