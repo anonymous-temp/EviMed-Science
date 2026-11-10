@@ -698,3 +698,52 @@ violated a constraint in truth in 0% of the picks of ours2 at every budget in al
 OCBA from about 160k" (D5) is withdrawn: it matches grid, and trails OCBA and halving. The tuning disclosure above applies to the cap, which this addendum did not re-choose;
 the worlds are the ones it was chosen on, so the table is in-sample for the worlds. The recomputation check of the runner now reads ours2's looks at the same split
 confidence; ours2's own verdict and that recomputation agree in 1,000 of 1,000 runs per world.
+
+
+# Addendum D6 (2026-11-10): the screening share allocated by an OCBA-CO-style rule, and a held-out world
+
+Protocol addendum D6 (`BENCHMARK-PROTOCOL.md`) was committed before the first search ran on the held-out world; everything above and in X1 stays as it was.
+Data: `results/search-benchmark-matched-20261110-d6.json`, tables `…-d6-tables.md`, one SVG per world `…-<world>-d6.svg` (the held-out one included), 200 seeds
+(1..200), seven arms, five budgets, four worlds (14,000 searches per world and arm set; 1,000 `ours3` runs per world; 67 s). **The earlier six arms on the three first worlds
+reproduce the X1 result cell by cell (180 of 180 aggregate cells identical)**; the runner's rule-P recomputation of `ours3`'s own verdict disagreed in 0 of 1,000 runs in each of the four worlds.
+
+**What `ours3` is.** `ours2` with `budget.screening = 'ocba'`: the same campaign, the same final verdict (fresh final run at or above the floor, each look at 99.17% confidence,
+frozen alpha, `inconclusive_at_precision`), but the fifth of the budget that screening takes is spent by an OCBA-CO-style rule (Chen et al. 2000; Lee et al. 2012) over the
+power cell **and** the type I error cell, instead of equally over the power cell alone. The paper's theorem could not be retrieved, so this is the structure of OCBA-CO written
+for an exact objective (designs worse than the best screened-feasible one need nothing; the rest by (sigma / distance to the bound)^2), not a transcription. It is opt-in
+and **not the product default** (the short form does not offer it and the hosted default is unchanged): whether to turn it on is the controller's decision.
+A real engine check: a type I error screening unit of 400 replicates with the screening block runs on `design.simulate` and is labelled screening precision.
+
+**Rule P (the platform's verdict), probability of correct selection at 40k / 80k / 160k / 320k / 640k trials (200 seeds):**
+
+| World | ours2 | ours3 | grid | halving | OCBA |
+|---|---|---|---|---|---|
+| level (in-sample) | 2.5 / 15.0 / 73.0 / 94.0 / 95.5% | 13.5 / 38.5 / 79.0 / 97.0 / 95.5% | 5.5 / 21.5 / 48.0 / 89.0 / 99.0% | 22.0 / 54.5 / 86.0 / 97.0 / 100% | 27.5 / 59.0 / 86.0 / 99.5 / 100% |
+| level85 (in-sample) | 0.5 / 4.5 / 44.5 / 72.0 / 83.0% | 2.0 / 19.5 / 49.0 / 70.5 / 81.5% | 3.5 / 7.5 / 27.0 / 65.5 / 90.5% | 14.0 / 32.0 / 61.5 / 85.5 / 98.0% | 5.5 / 22.0 / 55.0 / 91.5 / 100% |
+| survival (in-sample) | 0.0 / 1.0 / 2.0 / 1.5 / 1.5% | 0.0 / 1.0 / 0.5 / 1.5 / 0.0% | 1.0 / 2.0 / 3.5 / 2.0 / 1.0% | 1.0 / 1.5 / 2.0 / 2.5 / 2.0% | 1.0 / 1.0 / 4.0 / 2.5 / 5.0% |
+| **heldout (not tuned on)** | 0.0 / 9.5 / 64.5 / 91.5 / 97.5% | 6.5 / 47.0 / 71.0 / 95.5 / 94.0% | 1.5 / 2.5 / 13.0 / 40.0 / 74.0% | 6.0 / 21.5 / 47.0 / 69.5 / 83.0% | 2.0 / 6.0 / 18.5 / 35.0 / 66.5% |
+
+Rule S, correct selection, `ours3` against `ours2`: level 77.0 / 94.0 / 99.0 / 100 / 100 against 64.5 / 94.0 / 99.5 / 100 / 100; level85 40.0 / 74.0 / 96.0 / 97.0 / 96.0 against 4.5 / 53.5 / 80.0 / 88.0 / 91.0
+(with the share of picks that were truly infeasible at 70 / 15 / 11 / 11 / 9% for `ours2` and 14 / 4 / 2 / 3 / 4% for `ours3`); heldout 12.0 / 43.0 / 60.5 / 73.0 / 75.0 against 0.0 / 9.0 / 51.0 / 63.0 / 62.5.
+
+**Read plainly.**
+- Where the screening change helps: at small budgets, where screening decides which design gets the first 25,000-trial final evaluation. In the held-out world `ours3` is above `ours2`
+  by 6.5 / 37.5 / 6.5 / 4.0 points up to 320k (the Newcombe interval of the difference is above 0 at 40k and 80k only; equal at 160k to 640k) and 3.5 points below it at 640k (94.0 against 97.5%, equal by that interval); it is above every other arm at 80k (47.0%, halving 21.5%),
+  at 160k (71.0%, halving 47.0%), at 320k (95.5%, halving 69.5%) and at 640k (94.0%, halving 83.0%), with the Newcombe interval of the difference above 0 in each of those cells against halving
+  (equal at 40k), against grid, OCBA and random at every budget. In the level world it is above `ours2` at 40k and 80k by that interval (13.5 / 38.5% against 2.5 / 15.0%; 79.0% against 73.0% at 160k is equal), equal after, and still
+  below halving and OCBA at 40k and 80k and below grid at 640k (95.5% against 99.0%). In level85 it is above `ours2` at 80k and equal elsewhere on rule P, and below halving at every budget.
+  In the survival world (one truly feasible design out of 15) nothing separates any arm from chance on rule P and `ours3` is not different from `ours2`.
+- Where it does not: the price of a valid error control with re-runs (X1) is untouched and still shows at 640k, where `ours3` is 3.5 points below grid in level and 9 points below it in level85
+  (81.5 against 90.5%) and 16 to 19 points below halving and OCBA there. Screening cannot buy that back; the final looks at 99.17% decide it.
+- The picked design violated a constraint in truth in 0% of the picks of `ours3` under rule P in every world and budget but one: survival at 160k, where it picked in 2 of 200 seeds and one of the two picks was truly infeasible (survival has one truly feasible design and is below chance resolution for every arm).
+- **The held-out result needs a caution.** One held-out world of 27 designs is one world. It has the feature the new screening reads (cheap designs that are powered and fail only the type I
+  error), which is also what makes the level worlds' cheap designs expensive for `ours2`; I chose the world after seeing that mechanism in the in-sample worlds, though before any run on it,
+  and its truth is a closed form and not calibrated against the engine. A world with no such trap would show less of the gain. The three first worlds are in-sample for the design of `ours3`
+  (the disclosure in protocol addendum D6: one design change was made on their development seeds), as they were for the re-run cap (S16).
+- Baselines' rule P reads their single-look data at 97.5%; `ours2`/`ours3` read each look at 99.17%. At equal budget that is less certifying power by design (S3), so the rule-P columns
+  are not a like-for-like contest of allocation alone; rule S (same pick for every arm) is.
+- No error-control rule was loosened: `test/vcrBudgetedSearchErrorControl.test.mjs` passes unchanged and its OCBA-screening twin (`vcrScreeningOcba.test.mjs`, a design exactly on its type I bound,
+  1,500 campaigns) certifies at no more than 2.5% plus two standard errors. A screened type I error whose one-sided 97.5% Clopper–Pearson lower bound is above 2.5% now eliminates a design at
+  screening in an OCBA campaign, as a screened power whose upper bound is below 80% always did; this can drop a design that is truly feasible (a false elimination, at most 2.5% per look), which
+  costs the search a candidate and never certifies one.
+- Not done: the agent arm (slot unchanged), a default for the hosted short form, the engine calibration of the held-out world.
