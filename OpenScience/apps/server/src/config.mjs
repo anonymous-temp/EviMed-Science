@@ -363,6 +363,7 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     memoryHistorySecretRedactionDailyCalls: boundedInteger(overrides.memoryHistorySecretRedactionDailyCalls ?? process.env.OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS, 120, 0, 10_000, "OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS"),
     memoryHistorySearchEnabled: overrides.memoryHistorySearchEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED", true),
     memorySearchHintEnabled: overrides.memorySearchHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SEARCH_HINT_ENABLED", false),
+    memorySafetyNotesEnabled: overrides.memorySafetyNotesEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED", false),
     memoryOpeningIndexEnabled: overrides.memoryOpeningIndexEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_INDEX_ENABLED", false),
     memoryOpeningByUseEnabled: overrides.memoryOpeningByUseEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_BY_USE_ENABLED", false),
     // Zero uses the pinned plugin's current effective opening size, including its profile and listing cuts.

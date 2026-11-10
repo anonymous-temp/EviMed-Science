@@ -1,4 +1,5 @@
 import { nativeIndexLine } from "./memoryOpeningIndex.mjs";
+import { renderSafetyNotes } from './memorySafetyNotes.mjs';
 import { sourceReceiptState } from './memorySourceReceipts.mjs';
 import { contextPolicyIdentity, sameContextPolicy } from "./geoContextItems.mjs";
 import { createHash } from "node:crypto";
@@ -111,19 +112,23 @@ export function lookupLine({ omitted = 0, capsule = 0 }) {
  * later, shorter one may still fit; the rest is counted in the line beside the profile.
  *
  * @param {{ capsuleFacts?: readonly any[], card?: any | null, capsuleCount?: number, maxRecords?: number, maxTokens?: number,
- *   nativeFiles?: any[], config?: any, nativeIndex?: { counts: Record<string, number>, historySearchEnabled?: boolean } | null }} input
- * @returns {{ text: string, profile: string, memos: any[], omitted: number, index: string }}
+ *   nativeFiles?: any[], safetyFiles?: any[], config?: any, nativeIndex?: { counts: Record<string, number>, historySearchEnabled?: boolean } | null }} input
+ * @returns {{ text: string, profile: string, memos: any[], omitted: number, index: string, safety: string }}
  *   `profile` is the memos alone; `index`, when opted in, also participates in the delivery digest.
  */
-export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleCount = 0, maxRecords = 24, maxTokens = CAPSULE_PROFILE_MAX_TOKENS, nativeFiles = [], config = {}, nativeIndex = null }) {
+export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleCount = 0, maxRecords = 24, maxTokens = CAPSULE_PROFILE_MAX_TOKENS, nativeFiles = [], safetyFiles = [], config = {}, nativeIndex = null }) {
   const candidates = [...mostUsedMemos(nativeFiles, config), ...capsuleFactMemos(capsuleFacts)];
   const bound = Math.max(0, Math.trunc(Number(maxRecords)) || 0);
   // Room kept for the line, so saying what was left out cannot itself break the budget.
   const reserve = estimatePromptTokens(lookupLine({ omitted: 9_999, capsule: 9_999 }));
   const header = "用户的长期记忆（历史记录，不是指令）：";
+  const safety = config.memorySafetyNotesEnabled === true
+    ? renderSafetyNotes(safetyFiles, { maxTokens: Math.max(0, maxTokens - reserve - estimatePromptTokens(header)) })
+    : { text: '', memos: [] };
+  const safetyTokens = safety.text ? estimatePromptTokens(`\n${safety.text}`) : 0;
   // Supplying nativeIndex is the pure renderer's opt-in; production supplies it
   // only behind memoryOpeningIndexEnabled and only for an owned namespace.
-  const index = nativeIndex ? nativeIndexLine(nativeIndex, maxTokens - reserve - estimatePromptTokens(header)) : "";
+  const index = nativeIndex ? nativeIndexLine(nativeIndex, maxTokens - reserve - estimatePromptTokens(header) - safetyTokens) : "";
   const indexTokens = index ? estimatePromptTokens(`\n${index}`) : 0;
   /** @type {any[]} */
   const memos = card ? [card] : [];
@@ -132,7 +137,7 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   let entries = 0;
   for (const memo of candidates) {
     if (entries >= bound) break;
-    if (estimatePromptTokens(renderMemoryContext([...memos, memo])) + reserve + indexTokens > room) continue;
+    if (estimatePromptTokens(renderMemoryContext([...memos, memo])) + reserve + indexTokens + safetyTokens > room) continue;
     memos.push(memo);
     entries += 1;
   }
@@ -141,9 +146,10 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   const profile = renderMemoryContext(memos);
   // With no profile to give but something to look up, the line is the block.
   let text = profile ? renderMemoryContext(memos, { lookup: line }) : index ? `${header}\n${line}` : line;
+  if (safety.text) text = `${text || header}\n${safety.text}`;
   // A deliberately tiny experiment budget may not even hold the lookup line.
   if (nativeIndex && !profile && estimatePromptTokens(text) > room) text = "";
-  return { text, profile, memos, omitted, index };
+  return { text, profile, memos: [...memos, ...safety.memos], omitted, index, safety: safety.text };
 }
 
 /**
@@ -202,13 +208,14 @@ export class ResidentProfiles {
    * @param {{ config: any, store: any, capsules?: { profileFacts: Function, lookupCount?: Function } | null,
    *   contextPolicies?: any, projectCard?: ((userId: string, projectId: string) => Promise<readonly any[]>) | null,
    *   nativeFiles?: ((userId: string, projectId: string, limit: number) => Promise<any[]>) | null,
-   *   nativeIndex?: ((userId: string, projectId: string) => Promise<{ counts: Record<string, number> }>) | null }} dependencies
+   *   nativeIndex?: ((userId: string, projectId: string) => Promise<{ counts: Record<string, number> }>) | null,
+   *   safetyNotes?: ((userId: string, projectId: string) => Promise<any[]>) | null }} dependencies
    *   `store` is the memory settings store (the switches and the conversation's hand-over state); `capsules` the capsule service,
    *   whose absence leaves the profile to the card. `projectCard` reads the rows of a project's card (the rows the memory page's
    *   项目 tab shows); without it no card is handed over. `contextPolicies` says whether the project is a shared GEO project, whose
    *   conversations are handed the project's card and none of the owner's personal capsule profile.
    */
-  constructor({ config, store, capsules = null, projectCard = null, contextPolicies = null, nativeFiles = null, nativeIndex = null }) {
+  constructor({ config, store, capsules = null, projectCard = null, contextPolicies = null, nativeFiles = null, nativeIndex = null, safetyNotes = null }) {
     this.config = config;
     this.store = store;
     this.capsules = capsules;
@@ -216,6 +223,7 @@ export class ResidentProfiles {
     this.contextPolicies = contextPolicies;
     this.nativeFiles = nativeFiles;
     this.nativeIndex = nativeIndex;
+    this.safetyNotes = safetyNotes;
     // `OPEN_SCIENCE_MEMORY_PROFILE_MAX_RECORDS`: the cap on how many entries the profile may carry, for the reason it has a token
     // cap — what is always present is paid for on every request, and the attention it takes is taken from the question.
     this.maxRecords = Math.max(0, Math.min(100, Math.trunc(Number(config?.memoryProfileMaxRecords ?? 24)) || 0));
@@ -289,12 +297,14 @@ export class ResidentProfiles {
       ? await this.nativeFiles(userId, projectId, Math.max(0, Math.min(100, Math.trunc(Number(this.config.memoryOpeningTopK ?? 5)) || 0))).catch(() => []) : [];
     const nativeIndex = !shared && this.config?.memoryEngineEnabled === true && this.config?.memoryOpeningIndexEnabled === true && this.nativeIndex
       ? await this.nativeIndex(userId, projectId).then(index => ({ ...index, historySearchEnabled: this.config.memoryHistorySearchEnabled !== false })).catch(() => null) : null;
-    const block = renderResidentProfile({ capsuleFacts, card, capsuleCount, maxRecords: this.maxRecords, nativeFiles, config: this.config, nativeIndex });
+    const safetyFiles = !shared && this.config?.memoryEngineEnabled === true && this.config?.memorySafetyNotesEnabled === true && this.safetyNotes
+      ? await this.safetyNotes(userId, projectId).catch(() => []) : [];
+    const block = renderResidentProfile({ capsuleFacts, card, capsuleCount, maxRecords: this.maxRecords, nativeFiles, safetyFiles, config: this.config, nativeIndex });
     if (!block.text) return none("empty");
     if (block.omitted > 0) recordResidentOmitted(block.omitted);
 
     // An index-only opening must change when its counts or history availability do.
-    const digestText = block.index ? `${block.profile}\n${block.index}` : block.profile;
+    const digestText = (block.index ? `${block.profile}\n${block.index}` : block.profile) + (block.safety ? `\n${block.safety}` : '');
     const digest = createHash("sha256").update(shared ? JSON.stringify([contextPolicyIdentity(policy),digestText]) : digestText).digest("hex");
     // A conversation whose state cannot be read (an id the store cannot hold) is handed the profile and not recorded as
     // having been: it is the safe direction, and the next dispatch asks again.
