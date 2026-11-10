@@ -55,7 +55,9 @@ export class PatientMatchingLifecycleService {
   /** Owner/project incarnation is authoritative even when a previously authorized actor is removed.
    * @param {any} project @param {any} client */
   async scope(project, client) {
-    const owner = await this.plugins.scope(project.userId, project, client);
+    // Outside a transaction (a runtime's start, the gateway's tool proof) the pool answers the one read; the first production tool
+    // call (2026-11-10) passed none, and the read threw on `client.query`.
+    const owner = await this.plugins.scope(project.userId, project, client ?? this.database);
     return { ownerId: project.userId, projectId: project.id, ownerAccountCreatedAt: owner.accountCreatedAt, projectCreatedAt: owner.projectCreatedAt };
   }
   /** @param {any} user @param {string} projectId @param {any} input */

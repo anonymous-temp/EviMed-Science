@@ -71,7 +71,7 @@ async function serviceFixture(t) {
   const { config, entry } = await fixture(t);
   const rows = new Map(), queued = [], events = [];
   const client = { query: async () => ({ rows: [{ acquired: true }] }) };
-  const database = { transaction: async operation => operation(client), withTransactionClient: async (_client, operation) => operation() };
+  const database = { query: client.query, transaction: async operation => operation(client), withTransactionClient: async (_client, operation) => operation() };
   let active = null, epoch = 'runtime-0', busy = false, rejectNext = false;
   const runtime = {
     runtimeGeneration: () => epoch, currentPatientMatchingGeneration: () => active, inspectRuntimeImage: async () => ({ imageId: image }), pluginRuntimeBusy: async () => busy,
@@ -79,7 +79,7 @@ async function serviceFixture(t) {
     probePatientMatchingGeneration: async (_project, candidate) => { events.push(['probe', candidate?.release.releaseId ?? null]); if (rejectNext) { rejectNext = false; throw Object.assign(new Error('probe'), { code: 'synthetic_probe_failed' }); } return { runtimeGeneration: epoch, reference: candidate?.reference ?? null }; },
   };
   const service = new PatientMatchingLifecycleService(database, { config, catalogue: [entry], access: async (user, id) => { if (user.id !== project.userId || id !== project.id) throw Object.assign(new Error('forbidden'), { status: 403 }); return project; }, runtime,
-    workerImageIdentity: async () => image, plugins: { scope: async () => ({ accountCreatedAt: scope.ownerAccountCreatedAt, projectCreatedAt: scope.projectCreatedAt }), hasPendingPrompts: async () => false }, ledgerBusy: async () => false });
+    workerImageIdentity: async () => image, plugins: { scope: async (_owner, _project, queryable) => { if (typeof queryable?.query !== 'function') throw new TypeError('PluginService.scope reads through a client'); return { accountCreatedAt: scope.ownerAccountCreatedAt, projectCreatedAt: scope.projectCreatedAt }; }, hasPendingPrompts: async () => false }, ledgerBusy: async () => false });
   service.documents = { get: async (_owner, _kind, id) => rows.get(id) ?? null,
     put: async (_owner, _kind, id, payload, { expectedRevision }) => { const revision = rows.get(id)?.revision ?? 0; assert.equal(revision, expectedRevision); const row = { id, revision: revision + 1, payload: structuredClone(payload) }; rows.set(id, row); return row; } };
   service.jobs = { enqueue: async (_owner, kind, payload, options) => { const job = { kind, payload, id: String(queued.length), userId: project.userId, projectId: options.projectId, leaseToken: 'lease' }; queued.push(job); return job; },

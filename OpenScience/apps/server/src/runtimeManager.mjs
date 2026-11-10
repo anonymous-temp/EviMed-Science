@@ -2249,7 +2249,10 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     nativeResearchPlugins: plan.extensionGeneration?.projection?.plugins?.filter(plugin => plugin.executionClass === "managed-native") ?? [],
     extensionProjectionFile: plan.extensionGeneration?.reference ? "/opt/evimed/extensions/projection.json" : "",
     extensionGatewayUrl: plan.extensionGeneration?.reference ? extensionGatewayEndpointUrl(config) : "",
-    ...(plan.patientMatchingGeneration ? { patientMatching: { entrypoint: `${PATIENT_MATCHING_RUNTIME_ROOT}/package/index.mjs`, endpoint: new URL("/internal/patient-matching/v1/port", plan.modelGatewayUrl ?? modelGatewayProviderUrl(config)).href, tokenFile: workloadTokenPath } } : {}),
+    // The matching port authenticates like every runtime gateway (`assertActiveModelGatewayToken`), so the bundle reads the
+    // model-gateway token; the MCP workload token is another credential and was refused 401 (2026-11-10, first production turn).
+    ...(plan.patientMatchingGeneration ? { patientMatching: { entrypoint: `${PATIENT_MATCHING_RUNTIME_ROOT}/package/index.mjs`, endpoint: new URL("/internal/patient-matching/v1/port", plan.modelGatewayUrl ?? modelGatewayProviderUrl(config)).href,
+      tokenFile: plan.sandboxMode === "docker" ? `${runtimeDshHome}/${modelGatewayTokenFileName}` : path.join(plan.dshHomeDir, modelGatewayTokenFileName) } } : {}),
     personalSkillsDir: plan.personalSkillsRuntimeDir ?? PERSONAL_SKILLS_RUNTIME_DIR,
     disabledPlatformSkills: plan.personalSkillGeneration?.platformSkills?.disabled ?? [],
     capsuleGatewayUrl,
