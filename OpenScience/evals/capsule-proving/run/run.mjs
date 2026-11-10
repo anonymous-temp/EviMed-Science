@@ -91,7 +91,7 @@ export function parseArguments(argv) {
   const options = {
     answerModel: "", answerBase: "", answerKeyFile: "", stockEngine: false, answersOnly: false, retrievalOnly: false, variantsOnly: false,
     set: "", split: "", data: "", out: "", engineUrl: "", engineKeyFile: "", databaseUrlFile: "", deepseekKeyFile: "",
-    arm: "product", only: "", maxSessions: 0, concurrency: 3, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
+    arm: "product", only: "", maxSessions: 0, concurrency: 3, databasePoolMax: 2, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
     config: {}, answerVariants: [], maintain: "none", maintainAfter: [], rejectionJudge: true, label: "", thinking: "enabled", reasoningEffort: "high",
     limitQuestions: 0, pluginTgz: "", ingestOnly: false, templatesDir: "", maxRounds: 8, extractionTimeoutMs: 300_000, gatewayTimeoutMs: 4_000,
   };
@@ -101,7 +101,7 @@ export function parseArguments(argv) {
     "--set": ["set", "string"], "--split": ["split", "string"], "--data": ["data", "string"], "--out": ["out", "string"],
     "--engine-url": ["engineUrl", "string"], "--engine-key-file": ["engineKeyFile", "string"], "--database-url-file": ["databaseUrlFile", "string"],
     "--deepseek-key-file": ["deepseekKeyFile", "string"], "--arm": ["arm", "string"], "--only": ["only", "string"],
-    "--max-sessions": ["maxSessions", "int"], "--concurrency": ["concurrency", "int"], "--commit-every": ["commitEvery", "string"],
+    "--database-pool-max": ["databasePoolMax", "int"], "--max-sessions": ["maxSessions", "int"], "--concurrency": ["concurrency", "int"], "--commit-every": ["commitEvery", "string"],
     "--plant-corruptions-after": ["plantCorruptionsAfter", "int"], "--limit-questions": ["limitQuestions", "int"], "--plugin-tgz": ["pluginTgz", "string"],
     "--templates-dir": ["templatesDir", "string"], "--max-rounds": ["maxRounds", "int"], "--extraction-timeout-ms": ["extractionTimeoutMs", "int"],
     "--gateway-timeout-ms": ["gatewayTimeoutMs", "int"], "--maintain": ["maintain", "string"], "--label": ["label", "string"], "--thinking": ["thinking", "string"], "--reasoning-effort": ["reasoningEffort", "string"],
@@ -146,6 +146,7 @@ export function parseArguments(argv) {
   }
   if (!ARMS.has(options.arm)) throw new Error("--arm is product, no-memory or keyword");
   if (!["session", "turn"].includes(options.commitEvery)) throw new Error("--commit-every is session or turn");
+  if (options.databasePoolMax < 1 || options.databasePoolMax > 8) throw new Error("--database-pool-max is 1 to 8 per engine");
   if (options.concurrency < 1 || options.concurrency > 16) throw new Error("--concurrency is 1 to 16");
   if (options.maxRounds < 1 || options.maxRounds > 32) throw new Error("--max-rounds is 1 to 32");
   if (options.arm === "product" && (!options.engineUrl || !options.engineKeyFile || !options.databaseUrlFile)) {
@@ -313,7 +314,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     const { openLab } = await import(pathToFileURL(path.join(here, "lab.mjs")).href);
     try {
       for (const engineUrl of options.engineUrls) labs.push(await (dependencies.openLab ?? openLab)({
-        stockEngine: options.stockEngine, engineUrl, engineKeyFile: path.resolve(options.engineKeyFile), account: `evlab-${runId}`, runId,
+        databasePoolMax: options.databasePoolMax, stockEngine: options.stockEngine, engineUrl, engineKeyFile: path.resolve(options.engineKeyFile), account: `evlab-${runId}`, runId,
         databaseUrlFile: path.resolve(options.databaseUrlFile), historySearch: options.historySearch,
         deepseekKeyFile: options.deepseekKeyFile ? path.resolve(options.deepseekKeyFile) : null, commitEvery: options.commitEvery,
         extractionTimeoutMs: options.extractionTimeoutMs, gatewayTimeoutMs: options.gatewayTimeoutMs,
@@ -342,7 +343,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     answerVariants: options.answerVariants.map((variant) => ({ ...variant, model: { answer: clients.get(variant.name)?.model ?? null, thinking: clients.get(variant.name)?.thinking ?? null, answerJudgeSameFamily: /^qwen/.test(clients.get(variant.name)?.model ?? "") }, flags: { config: { ...options.config, ...variant.config } } })), label: options.label,
     answerOptions: baseAnswer,
     model: { answer: client?.model ?? null, thinking: client?.thinking ?? null, extraction: options.arm === "product" ? "deepseek-flash (lab engine ov.conf, provider direct)" : null },
-    options: { only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, limitQuestions: options.limitQuestions || null,
+    options: { only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, databasePoolMax: options.databasePoolMax, limitQuestions: options.limitQuestions || null,
       ingestOnly: options.ingestOnly, answersOnly: options.answersOnly, retrievalOnly: options.retrievalOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, dataDir: path.resolve(options.data) },
     cases: cases.map((item) => item.caseId),
   };

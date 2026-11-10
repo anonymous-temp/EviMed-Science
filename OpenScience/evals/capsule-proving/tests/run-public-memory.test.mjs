@@ -85,3 +85,11 @@ test('public scorer retains absent answers in denominator and preserves native o
     }
   } finally { await rm(dir,{recursive:true,force:true}); }
 });
+
+test('runner bounds database pools independently from ingestion concurrency', () => {
+  const args=['--set','scenarios','--split','dev','--data','/data','--out','/out','--engine-url','http://localhost:1',
+    '--engine-key-file','/key','--database-url-file','/db','--ingest-only','--concurrency','8'];
+  assert.equal(parseArguments(args).databasePoolMax,2);
+  assert.equal(parseArguments([...args,'--database-pool-max','1']).concurrency,8);
+  assert.throws(()=>parseArguments([...args,'--database-pool-max','0']),/pool-max/);
+});
