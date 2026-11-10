@@ -103,7 +103,7 @@ Re-judging saved records costs no model time on the agent side: `python3 judges/
 
 * **B / C**: the tree as it is. The harness composes the control plane (kernel mode, local auth, real launch plan and bootstrap,
   real gateways, real ledger) with a host-process runtime in place of the container; the kernel is the pinned DSH with the seeded
-  profile (the socket of the tree under test). Evolution, learning, LoopX, Jev judge sites and run titles are off in every arm
+  profile (the socket of the tree under test). Evolution, LoopX, Jev judge sites and run titles are off; learning defaults off and honors an inherited `OPEN_SCIENCE_LEARNING_ENABLED` value
   (LoopX needs image paths the host harness does not have; the others act on runs after the fact); memory extraction, source ingestion and the Bailian web search are on.
 * **A, the native control**: `OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS` names all seven switchable first-party socket plugins
   (guidance, run-policy, evidence, capsule, screening, compaction, duplicate-lines), the citation tools are off (`EVIMED_CITE_ENABLED=0`
@@ -127,3 +127,49 @@ Re-judging saved records costs no model time on the agent side: `python3 judges/
   holds for every web task: results show what the platform does where fetching is possible.
 * The model judge is one DeepSeek flash call per case; run it twice (`--redo`) when a score decides something.
 * Link and Node.js LTS checks read the public internet from the host running the judges; offline they report `unjudged`.
+
+
+## Learned-method comparison (L3)
+
+`evals/capsule-proving/l3/run_l3.mjs --arm A|B|E|D|F --tree <OpenScience> --out <directory>`
+uses the frozen split and the same cell driver and deterministic judges. `l3/lab.sh smoke|probe|full` is the lab-host launcher;
+run it with `setsid nohup bash .../lab.sh full > /srv/evimed/runs/l3-driver.log 2>&1 < /dev/null &`.
+It runs one slot serially (PORT=48854, PG_PORT=55684, bridge=19364 by default; the existing product runtime ceiling is one), logs timestamped milestones and a resume
+command in `/srv/evimed/runs/l3-STATUS`, and skips durable records on resume. Do not change the frozen cases or reuse an
+output/account across treatments. For rsynced lab trees, set `EVAL_TREE_COMMIT` to the source commit; the manifest also hashes the harness source bytes. The optional `probe` runs E with G23 learning and M01 exam to verify actual correction distillation; it is separate from the official run. The five committed `l3/arms/*.env` files are the treatment definitions. L3 A disables
+methods only; it is **not** the general baseline's native arm A. C (missing official pyramid), G (missing engine experiences)
+and C+frame are named stubs that refuse startup.
+
+Each full arm runs the nine learning cases in order, then twenty exam cases twice, in one account and separate projects.
+The existing case follow-ups are used verbatim; no corrections, accepted outcomes, candidate methods or approvals are
+invented. G07 includes G06 as setup, scored only as G07. Only normal variants count, so 40 exam records per arm. Exam
+requests are automated and the learning worker is paused: no exam-to-library leakage between repetitions. The library
+snapshot and job ledger are kept before exams. Methods may remain empty if the natural learning signals teach nothing.
+
+Learning is deferred during the cases to keep one kernel slot. Afterwards the product `LearningWorker.reconcile`/worker
+runs naturally queued distillations and approvals, and `ProductJobs.enqueue` requests a `consolidate` action `sleep` in the
+product's internal learning project. Delayed evidence settlement jobs are brought forward through `ProductJobs.bringForward`;
+this accelerates the laboratory clock only. No model or admission rule is bypassed. E/D allow integration and sleep;
+F's worker excludes every consolidation job, including those automatically queued after distillation. All arms disable
+cross-account official promotion, isolating the official library across treatments. Each arm has its own database.
+
+Harness options: `--wait-memory-tools` (opt-in on general-task runner, default **on** in L3; L3 can use
+`--no-wait-memory-tools`), and `--seed-methods <JSON file>` (general runner; a case can also supply `seed_methods`). The seed
+is an array of complete SKILL.md strings or `{methods: [{skill: "..."}]}`, posted as that account to `POST /api/methods`
+before dispatch. It is not used in the learned-arm experiment. Each record preserves `_selection.json`, per-turn
+`methodsLoaded`/`methodsInvoked` (read with the product observation functions even when learning is off), the ordered tool chain, usage, wall time, and the first model request's actual memory tools.
+The eval observer reads the kernel's actual `tools.definitions()` registry; it registers no tool and injects no instructions.
+Production readiness currently probes `session/list`, not memory tools; this wait is an explicit experimental intervention.
+The engine check finishes before the harness listens. A failed memory-tool wait is infrastructure, never a task pass.
+
+L3 initializes the product's own similarity ranker in the host-provider adapter even when learning is off. The product
+currently creates it only with learning on; without this explicit harness-only correction, B's official methods never mount.
+No product source is changed. The sealed seed's memory plugin comes from the digest-pinned product installer on a fresh build.
+Host library paths, sandbox launcher and tool environment are staged from the tree, rather than relying on a host symlink.
+`EVAL_HOST_TOOL_BIN` can point at the lab's pinned LibreOffice Kit launchers. `EVAL_PG_BIN` avoids repurposing HOME.
+
+`l3-summary.json` counts every exam repetition, reports pass rate and Wilson 95% interval, exam tokens/time, methods/tool
+chains, cross-task method reuse (distinct exam IDs, not repetitions), and the EvoDS composite. Terms are declared in that file: result = deterministic checks pass AND the Qwen general-task rubric judge is satisfied; subtask = fraction of
+decidable required checks passing; context share = max model-request JSON bytes/4 divided by 1M; turn share = agent model
+requests/100. The last three are operational proxies, not paper-exact instrumentation. Unknown/infra outcomes never pass.
+Intervals are descriptive because repetitions share an account. Learning costs are preserved separately in the phase snapshot and account usage ledger; engine calls the product cannot bill remain outside exam usage. L3 runs the unchanged general-task semantic rubrics with Qwen 3.8 Max after exams; missing semantic verdicts remain unjudged. The general judge adds optional `--api-base` and `--phase` arguments, keeping its original defaults.

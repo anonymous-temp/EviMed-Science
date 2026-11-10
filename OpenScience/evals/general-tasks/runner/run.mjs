@@ -5,7 +5,7 @@
 //
 //   node evals/general-tasks/runner/run.mjs --tree <OpenScience checkout> --arm B|A|C --out <dir>
 //        [--cases G01,G05 | --set all|general|medical] [--repeat 1] [--timeout-min 15] [--port 48841] [--pg-port 55657]
-//        [--variant normal,classifier-timeout,web-search-off,web-off] [--data-dir DIR] [--seed-from <sealed seed dir>] [--redo] [--no-judge] [--keep-data]
+//        [--variant normal,classifier-timeout,web-search-off,web-off] [--data-dir DIR] [--seed-from <sealed seed dir>] [--redo] [--no-judge] [--keep-data] [--wait-memory-tools] [--seed-methods FILE]
 //
 // Arms: B and C run the tree as it is (B = the tree before the course correction, C = the corrected tree: the arm is a label);
 // A is the native control: the seven switchable first-party socket plugins off (OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS),
@@ -36,7 +36,7 @@ const PROFILES = {
 
 function parseArgs(argv) {
   const out = { repeat: 1, timeoutMin: 15, port: 48841, pgPort: 55657, set: 'all' };
-  const flags = new Set(['redo', 'no-judge', 'keep-data', 'help']);
+  const flags = new Set(['redo', 'no-judge', 'keep-data', 'help', 'wait-memory-tools']);
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (!arg.startsWith('--')) throw new Error(`unexpected argument ${arg}`);
@@ -78,9 +78,9 @@ export function buildPlan(cases, { ids, set, arm, variants = null }) {
 
 const recordName = (unit, rep) => `${unit.id}${unit.variant.id === 'normal' ? '' : `--${unit.variant.id}`}-r${rep}`;
 
-async function ensurePostgres(port) {
+export async function ensurePostgres(port) {
   if (await listening(port)) return { started: false };
-  const bin = (await fs.readFile(path.join(os.homedir(), '.cache/evimed-pg/BIN'), 'utf8')).trim();
+  const bin = process.env.EVAL_PG_BIN ?? (await fs.readFile(path.join(os.homedir(), '.cache/evimed-pg/BIN'), 'utf8')).trim();
   const dir = `/tmp/eval-pg-${port}`;
   if (!fsSync.existsSync(`${dir}/data/PG_VERSION`)) {
     await fs.mkdir(dir, { recursive: true });
@@ -95,8 +95,8 @@ async function ensurePostgres(port) {
   return { started: true, pid: child.pid, bin };
 }
 
-async function ensureDatabase(port, name) {
-  const bin = (await fs.readFile(path.join(os.homedir(), '.cache/evimed-pg/BIN'), 'utf8')).trim();
+export async function ensureDatabase(port, name) {
+  const bin = process.env.EVAL_PG_BIN ?? (await fs.readFile(path.join(os.homedir(), '.cache/evimed-pg/BIN'), 'utf8')).trim();
   const exists = spawnSync(`${bin}/psql`, ['-h', '127.0.0.1', '-p', String(port), '-U', 'coder', '-d', 'postgres', '-Atc', `select 1 from pg_database where datname='${name}'`], { encoding: 'utf8' });
   if (exists.stdout.trim() === '1') return;
   const made = spawnSync(`${bin}/createdb`, ['-h', '127.0.0.1', '-p', String(port), '-U', 'coder', name], { encoding: 'utf8' });
@@ -115,11 +115,11 @@ function kernelPidsUnder(dir) {
   return pids;
 }
 
-async function startHarness({ args, treeOs, treeDir, dataDir, profile, arm, dbUrl }) {
+export async function startHarness({ args, treeOs, treeDir, dataDir, profile, arm, dbUrl }) {
   const base = `http://127.0.0.1:${args.port}`;
   const armA = arm === 'A';
   const env = {
-    OPEN_SCIENCE_LEARNING_ENABLED: 'false', OPEN_SCIENCE_LOOPX_ENABLED: 'false', OPEN_SCIENCE_JEV_ENABLED: 'false',
+    OPEN_SCIENCE_LEARNING_ENABLED: process.env.OPEN_SCIENCE_LEARNING_ENABLED ?? 'false', OPEN_SCIENCE_LOOPX_ENABLED: 'false', OPEN_SCIENCE_JEV_ENABLED: 'false',
     OPEN_SCIENCE_RUN_TITLES_ENABLED: 'false', OPEN_SCIENCE_MAX_PROJECTS_PER_USER: '500',
     OPEN_SCIENCE_SOURCE_INGESTION_ENABLED: 'true',
     OPEN_SCIENCE_WEB_SEARCH_BAILIAN_ENABLED: 'true', OPEN_SCIENCE_DASHSCOPE_API_KEY_FILE: path.join(SECRETS, 'dashscope.api-key'),
@@ -131,22 +131,23 @@ async function startHarness({ args, treeOs, treeDir, dataDir, profile, arm, dbUr
   await fs.mkdir(dataDir, { recursive: true });
   const logFile = fsSync.openSync(`${dataDir}/harness.log`, 'a');
   const child = spawn('node', [path.join(HERE, 'harness.mjs')], {
-    cwd: dataDir, detached: true, stdio: ['ignore', logFile, logFile],
+    cwd: dataDir, detached: true, stdio: ['ignore', logFile, logFile, 'ipc'],
     env: { ...process.env, OS: treeOs, TREE_DIR: treeDir, LIVE_DIR: L, LIVE_DATA: dataDir, LIVE_PORT: String(args.port), LIVE_DATABASE_URL: dbUrl,
-      LIVE_ENV: JSON.stringify(env), LIVE_OVERRIDES: JSON.stringify(overrides), TMPDIR: '/tmp/eval-t',
+      LIVE_ENV: JSON.stringify(env), LIVE_OVERRIDES: JSON.stringify(overrides), TMPDIR: process.env.TMPDIR ?? '/tmp/eval-t',
       EVAL_DEEPSEEK_KEY_FILE: path.join(SECRETS, 'deepseek.api-key'), ...(profile === 'classifier-timeout' ? { EVAL_FAULT: 'classifier-timeout' } : {}),
-      ...(armA ? { EVAL_PERSONA: NEUTRAL_PERSONA, EVAL_KERNEL_ENV: JSON.stringify({ EVIMED_CITE_ENABLED: '0' }) } : {}) },
+      ...(armA ? { EVAL_PERSONA: NEUTRAL_PERSONA, EVAL_KERNEL_ENV: JSON.stringify({ ...JSON.parse(process.env.EVAL_KERNEL_ENV || '{}'), EVIMED_CITE_ENABLED: '0' }) } : {}) },
   });
   child.unref();
-  for (let i = 0; i < 120; i += 1) {
-    if (await listening(args.port)) { await sleep(1500); return { pid: child.pid, dataDir, base, profile }; }
+  for (let i = 0; i < 600; i += 1) {
+    if (await listening(args.port)) { await sleep(1500); return { pid: child.pid, child, dataDir, base, profile }; }
     if (child.exitCode !== null) break;
     await sleep(1000);
   }
+  await stopHarness({ pid: child.pid, dataDir });
   throw new Error(`harness did not listen; see ${dataDir}/harness.log`);
 }
 
-async function stopHarness(h) {
+export async function stopHarness(h) {
   if (!h) return;
   try { process.kill(h.pid, 'SIGTERM'); } catch { /* gone */ }
   for (let i = 0; i < 20; i += 1) { if (!fsSync.existsSync(`/proc/${h.pid}`)) break; await sleep(1000); }
@@ -158,14 +159,14 @@ async function stopHarness(h) {
   await sleep(500);
 }
 
-function judge(args, outDir, name) {
+export function judge(args, outDir, name) {
   const script = path.join(SUITE, 'judges', 'judge_case.py');
   const r = spawnSync('python3', [script, '--cases', path.join(SUITE, 'cases.json'), '--record', `${outDir}/records/${name}.json`, '--out', `${outDir}/judged/${name}.json`, '--fixtures', path.join(SUITE, 'fixtures')],
     { encoding: 'utf8', timeout: 600_000 });
   if (r.status !== 0) log(`  judge failed for ${name}: ${(r.stderr || r.stdout).slice(-400)}`);
 }
 
-function summarize(outDir) {
+export function summarize(outDir) {
   const r = spawnSync('python3', [path.join(SUITE, 'judges', 'summarize.py'), '--run', outDir], { encoding: 'utf8', timeout: 120_000 });
   if (r.status !== 0) log(`  summary failed: ${(r.stderr || r.stdout).slice(-300)}`);
 }
@@ -173,7 +174,7 @@ function summarize(outDir) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help || !args.tree || !args.arm || !args.out) {
-    console.log('usage: run.mjs --tree <OpenScience checkout> --arm A|B|C --out <dir> [--cases G01,G05 | --set all|general|medical] [--repeat 1] [--timeout-min 15] [--port 48841] [--pg-port 55657] [--variant ID[,ID]] [--data-dir DIR] [--seed-from DIR] [--redo] [--no-judge] [--keep-data]');
+    console.log('usage: run.mjs --tree <OpenScience checkout> --arm A|B|C --out <dir> [--cases G01,G05 | --set all|general|medical] [--repeat 1] [--timeout-min 15] [--port 48841] [--pg-port 55657] [--variant ID[,ID]] [--data-dir DIR] [--seed-from DIR] [--redo] [--no-judge] [--keep-data] [--wait-memory-tools] [--seed-methods FILE]');
     process.exit(args.help ? 0 : 2);
   }
   const arm = String(args.arm).toUpperCase();
@@ -225,7 +226,7 @@ async function main() {
         }
         // The cell's conversation: the first case's turns, then the continuing cases' turns after them.
         const turns = unit.cases.flatMap((c) => c.turns);
-        const spec = { id: unit.id, family: unit.cases[0].family, inputs: unit.cases[0].inputs ?? [], turns, manual_trigger: unit.cases.find((c) => c.manual_trigger)?.manual_trigger };
+        const spec = { id: unit.id, family: unit.cases[0].family, inputs: unit.cases[0].inputs ?? [], turns, manual_trigger: unit.cases.find((c) => c.manual_trigger)?.manual_trigger, seed_methods: unit.cases[0].seed_methods };
         const timeoutMin = Math.max(args.timeoutMin, ...unit.cases.map((c) => c.timeout_min ?? 0));
         log(`run ${name} (${turns.length} turn(s), timeout ${timeoutMin} min/turn)`);
         const t0 = Date.now();
@@ -234,7 +235,7 @@ async function main() {
         await fs.mkdir(cellDir, { recursive: true });
         let record;
         try {
-          record = await runCell({ api: new Api(harness.base), spec, fixtureRoot: path.join(SUITE, 'fixtures'), dataDir, outDir: cellDir, timeoutMs: timeoutMin * 60_000, log });
+          record = await runCell({ api: new Api(harness.base), spec, seedMethods: args.seedMethods, waitMemoryTools: args.waitMemoryTools, fixtureRoot: path.join(SUITE, 'fixtures'), dataDir, outDir: cellDir, timeoutMs: timeoutMin * 60_000, log });
         } catch (error) {
           record = { schema: 1, cell: unit.id, error: String(error?.stack ?? error).slice(0, 2000), turns: [], infra: true };
           log(`  cell failed: ${String(error?.message ?? error)}`);

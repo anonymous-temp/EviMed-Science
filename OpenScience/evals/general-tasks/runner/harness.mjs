@@ -102,6 +102,7 @@ const { createWebApiApp } = await import(`${OS}/apps/server/src/server.mjs`);
 
 /** Container paths the image bakes in, and where their sources are in the merged tree. Mounts are added per plan. */
 const IMAGE_PATHS = [
+  ['/usr/local/lib/evimed', `${TREE}/lib/evimed`],
   ['/opt/evimed/socket', SOCK],
   ['/opt/evimed/mcp/evimed-research', `${OS}/runtime/mcp/evimed-research`],
   ['/opt/evimed/capabilities', `${OS}/deploy/runtime-dsh/capabilities`],
@@ -161,7 +162,7 @@ class HostKernelProvider extends rm.DockerRuntimeProvider {
     const result = await super.bootstrap(project, plan, options);
     const patchFile = path.join(plan.dshHomeDir, 'control-plane-patch.yml');
     const text = await fs.readFile(patchFile, 'utf8');
-    await fs.writeFile(patchFile, plan.hostMap.text(text), { mode: 0o600 });
+    await fs.writeFile(patchFile, plan.hostMap.text(text) + `\n- insert:\n    - id: eval-memory-observer\n      name: ${JSON.stringify(`${SOCK}/eval-memory-observer.mjs`)}\n`, { mode: 0o600 });
     return result;
   }
   async launch(project, plan, { port }) {
@@ -174,9 +175,11 @@ class HostKernelProvider extends rm.DockerRuntimeProvider {
     if (PERSONA) { const files = await applyPersona(dshHome, PERSONA); log('persona replaced in', files.length, 'preset files'); }
     const kernelPort = await freePort();
     const env = {
-      PATH: process.env.PATH, LANG: 'C.UTF-8', TZ: 'UTC',
+      PATH: (process.env.PATH ?? '').split(':').filter(part => !part.endsWith('/judge-bin')).join(':'), LANG: 'C.UTF-8', TZ: 'UTC',
+      BASH_ENV: `${TREE}/lib/evimed/evimed-tool-env.sh`,
       ...Object.fromEntries(Object.entries(plan.hostEnv).filter(([key]) => !['PATH', 'DSH_HOME_SEED'].includes(key)).map(([key, value]) => [key, map.text(value)])),
       HOME: map.one('/runtime/home'), DSH_HOME: dshHome,
+      EVAL_MEMORY_TOOLS_FILE: `${path.dirname(project.workspaceDir)}/eval-memory-tools.json`,
       NARB_DISABLE_NATIVE_CACHE: '1', DSH_TELEMETRY_DISABLED: '1', DSH_PERMISSION_MODE: plan.hostEnv.DSH_PERMISSION_MODE ?? 'workspace-write',
     };
     // Arm A: extra environment for the kernel process (the citation tools follow the project's plugin settings, not a switch).
@@ -233,16 +236,35 @@ const overrides = {
   runtimeContainerBin: fakeDocker, runtimeControllerMode: 'direct', devAuth: true, stateStore: 'postgres',
   ...(process.env.LIVE_OVERRIDES ? JSON.parse(process.env.LIVE_OVERRIDES) : {}),
 };
+const { createMethodSimilarity } = await import(`${OS}/apps/server/src/methodSimilarity.mjs`);
+const { KbEmbedder } = await import(`${OS}/apps/server/src/kbEmbedding.mjs`);
 const app = createWebApiApp(overrides, {
   runtimeManagerFactory: (config, hooks) => {
     const manager = new rm.RuntimeManager(config, hooks);
     manager.provider = new HostKernelProvider(manager);
+    // The product currently creates this ranker only with learning on. L3 B must still rank official methods.
+    if (process.env.EVAL_METHOD_RANKER === '1') {
+      const embedder = new KbEmbedder({ apiKey: config.dashscopeApiKey, model: config.kbEmbeddingModel, dimension: config.kbEmbeddingDimension,
+        apiBase: config.kbEmbeddingApiBase, timeoutMs: config.kbEmbeddingTimeoutMs });
+      manager.methodSimilarity = createMethodSimilarity({ embed: embedder.configured ? texts => embedder.embedDocuments(texts) : null });
+    }
     return manager;
   },
 });
+await app.openVikingEngine?.check();
+if (app.learningWorker && process.env.EVAL_DEFER_LEARNING === '1') app.learningWorker.enabled = false;
+if (app.learningWorker && process.env.EVAL_ADD_ONLY === '1') app.learningWorker.kinds = app.learningWorker.kinds.filter(kind => kind !== 'consolidate');
 const address = await app.listen(PORT, '127.0.0.1');
 log('listening', `http://127.0.0.1:${address.port}`);
 // An optional test-only hook (LIVE_HOOK=<module>): seeds what an import would have written, through the app's own stores.
 if (process.env.LIVE_HOOK) { const { hook } = await import(process.env.LIVE_HOOK); await hook(app, log); }
+process.on('message', async message => {
+  if (!message?.evalControl) return;
+  try {
+    const { control } = await import('./learning-control.mjs');
+    const value = await control(app, message.action, message.args);
+    process.send?.({ id: message.id, value });
+  } catch (error) { process.send?.({ id: message.id, error: String(error?.message ?? error) }); }
+});
 const stop = async () => { log('stopping'); setTimeout(() => process.exit(0), 8000).unref(); try { await app.close(); } finally { process.exit(0); } };
 process.on('SIGTERM', stop); process.on('SIGINT', stop);
