@@ -23,7 +23,10 @@ A sub-skill is a part of the work that a later task would do on its own, so that
 loaded for it. Its `role` is where it sits: `atomic` — one operation done as a unit (inspect a container before taking
 from it); `functional` — a short sequence that reaches one sub-goal and may reuse atomic methods; `abstract` — the plan of
 a kind of task, its sub-goals in order and the decision points between them, naming the functional and atomic methods that
-fill it. `buildsOn` names what it reuses, on file or new in this frame. Name a new sub-skill only where no method on file
+fill it. `buildsOn` names what it builds on, on file or new in this frame, and only from the levels below it: an atomic
+method is one operation and builds on nothing; a functional method builds on atomic ones; an abstract method on functional
+and atomic ones. A method on file at the same level or above that the lesson also uses is a reuse of the lesson, listed in
+`reuses`, and not something the new method builds on. Name a new sub-skill only where no method on file
 already says it; a lesson that is a method on file done again reuses it, and an empty `newSkills` with a `reason` is a
 common frame. List `amend` only for a method on file that this lesson contradicts or extends, never to restate it; a lesson
 that merely repeats a method strengthens it and changes nothing. At most five new sub-skills; fewer is usual.
@@ -39,9 +42,10 @@ of work done more completely: a missing check, a missing step or a wrong order i
 or the one method on file to amend. Write only that, as one candidate under the `method-candidate` contract:
 
 - a new sub-skill is a `create` whose `name` is the focus's name and whose `metadata.role` is its role. Pin in `depends_on`
-  every method it builds on that `relatedMethods` holds — the reused ones and the new ones of this frame already written,
-  which are there with their digests — and put a reuse reference beside the passage that uses each. An abstract method's
-  workflow is its sub-goals and decision points, each naming the method that carries it out; it does not repeat their steps.
+  the methods its `buildsOn` names that `relatedMethods` holds (on file, or new in this frame and already written, each with
+  its digest), never one at its own level or above, and put a reuse reference beside the passage that uses each. An abstract
+  method's workflow is its sub-goals and decision points, each naming the method that carries it out; it does not repeat
+  their steps.
 - an amendment is an `amend` of the focus's method that adds what the lesson contradicts or extends and keeps the rest.
 - written out, a sub-skill may turn out to be on file after all, or too thin to state without inventing what the run did
   not show: then `no_change`, with that reason.

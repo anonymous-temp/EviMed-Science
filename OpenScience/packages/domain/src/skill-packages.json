@@ -792,12 +792,12 @@
       "origin": "capability",
       "version": "1.7.0",
       "source": {"kind":"release"},
-      "digest": "sha256:3268e81643c0ba62083b46bd1f06e03e3829104ff3210ede97cb11493e7030b9",
+      "digest": "sha256:8897284f66093a34fa3d0ad7e911c1143faa9ba940270edd575b93dfbe2c56c0",
       "digestAlgorithm": "release-directory-v1",
       "references": [
         {"path":"capability.yaml","sha256":"70ad72400112128f6f27eb48e3b61cf1d4f7a0cf0736bc575f3e798a60722314"},
         {"path":"variants/camp.md","sha256":"b5898d245fe4b7c28a4c182f1898545c7473137a887a52bcb741e6f3d02750e1"},
-        {"path":"variants/two-stage.md","sha256":"c248e40b8d17a153f0d6448d57ee2decbac4bbd44e906b1615af2e603af79bb4"}
+        {"path":"variants/two-stage.md","sha256":"a8f82b3df17ffc1673c218c15f235572725b6ee47c459ef8d803fe0b541a4b81"}
       ],
       "operations": [
         {
