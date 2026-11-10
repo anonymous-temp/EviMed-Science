@@ -15,7 +15,7 @@ const extractions = new Map();
 const modules = new WeakMap();
 let moduleId = 0;
 
-// Pure text mirrors of @deepseek-ai/dsh-tool-skill/lib/index.js (DSH 0.2.2-rc.1):
+// Pure text mirrors of the pinned kernel's @deepseek-ai/dsh-tool-skill/lib/index.js (deps-version.json):
 // renderCatalogMessage, renderCatalogEntries, catalogDescription, and apply's skill definition.
 // No kernel imports: the lab host intentionally has no kernel installation.
 export const SKILL_TOOL = {
@@ -154,7 +154,9 @@ export async function buildSkillCatalog({ pluginTgz = process.env.CAPSULE_PROVIN
   return { text: renderCatalogMessage(entries), entries, skills };
 }
 
-/** Rebuild the same persona and guidance as evals/remembered-format/texts.mjs. */
+/** Rebuild the same persona and guidance as evals/remembered-format/texts.mjs.
+ * @param {{ model?: string, config?: Record<string, any> }} [options]
+ */
 export function buildSystemPrompt({ model = "deepseek-flash", config = {} } = {}) {
   const manifests = readdirSync(path.join(root, "capabilities")).flatMap((id) => {
     try { return [parse(readFileSync(path.join(root, "capabilities", id, "capability.yaml"), "utf8"), quiet)]; }

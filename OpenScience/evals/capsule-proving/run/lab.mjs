@@ -793,7 +793,9 @@ export async function openLab({
 
       /**
        * Every memory file of the account, by path under `memories/` (`run_native_eval`'s filter), and its size.
-       * @param {LabUser} user @returns {Promise<{ files: Record<string, string>, metrics: { files: number, chars: number } }>}
+       * @param {LabUser} user
+       * @returns {Promise<{ files: Record<string, string>, metrics: { files: number, chars: number },
+       *   openingUsage: Record<string, {usedCount: number, lastUsedAt: string|null}>, openingListing?: Record<string, string[]> }>}
        */
       async snapshot(user) {
         const root = sessions.memoryRoot(user.userId);
