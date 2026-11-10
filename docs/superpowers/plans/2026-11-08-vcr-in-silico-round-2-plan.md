@@ -524,3 +524,45 @@ Engineering facts are from the code at `34bd1869c`. Scientific sources were read
 ## J. Execution record
 
 Work branch `codex/vcr-in-silico-r2-20261108` (from `github/main` `aacd5eee5`); hotfix branch `codex/vcr-review-hotfix-20261109` (from the live tree `fdbfb6552`, the M0 commits cherry-picked with `-x`). Entries are added as tasks close.
+
+Executed 2026-11-09/10 by Sonnet executor streams (briefs, handoffs and the three independent reviews kept outside the repository), reviewed and integrated by the controller. Nothing deployed. Paid model spend: CNY 26.3 in total (R10 baseline 3.94, live acceptance 19.6, the small re-measure 2.80), about 1.3 over the owner's 15–25 estimate.
+
+| Task | Outcome |
+|---|---|
+| R01 | Done. One rule, `strictestDataClass`, for every derivation; small-cell suppression applies to real outcomes beside synthetic forecasts. Comparisons the live release wrote before the fix are repaired at start, and read as patient-class with the observed block withheld until then. |
+| R02 | Done. Union lineage on every multi-input artifact (comparisons, continued predictions, trial evaluations, forecast designs, effect priors, individualized forecasts); every read path (list, view, report, export, publication, gateway, result reads) rechecks it as the requesting person through one shared check. |
+| R03 | Done. Candidate admission links a job only when its conditional update matched, and cancels a raced job; comparison arms are recorded as they are enqueued; an interrupted start resumes idempotently within the completion age or settles canceled; the study's stop reaches comparisons. |
+| R04 | Done. A comparison with a conversation origin yields one aggregate completion; a job queued from a member's granted conversation wakes that conversation. |
+| R05 | Done. Unknown coupling uses the Cauchy–Schwarz worst case `sa + sb`; a missing MCSE leaves the improvement unassessed; independence only for two known, different seeds. The reviewer's case is certified on the worst-case bound (correct: the review's fix direction allows it). |
+| R06 | Done, campaigns and comparisons. |
+| R07 | Done in `useVcrLoad`; the trajectory, lab and patient tables never draw another key's rows. |
+| R08 | Branch `codex/vcr-review-hotfix-20261109`: the live tree `fdbfb6552` plus the M0 commits, the CI fixes, and the five review fixes that touch hotfix code (comparison stop/resume, repair of rows already written, reader-judged lineage, the prediction's own class, the patient table). CI green at `ab6658177`; not deployed (owner). |
+| R10 | Code done: the short `action=search` form compiled by code, `shape kind=search`, the pointer, refusals that say why, the root line naming classes in a person's words, `shape` without a kind as an index. Live: explicit search requests started a campaign 2/8 at the baseline and 1/8 at `89d4311b7` (9 of 12 opened the form; most sends were refused, which `2d98513f2` addresses); single-design questions 0/8 both times. **The ≥80% target is not met**, and the last two fixes were not re-measured within the budget. |
+| R11 | Redesigned after the engineering review: continuing a study elsewhere is the owner's grant (or a member's holding every ability used), and it binds the conversation, so no `studyId` argument exists; one row per person; revocable from the study page; a revoked conversation is told so. Live: continuation passed. |
+| R12 | Done; live passed (the rate reads as given, the duration as derived from it). |
+| R14 | Done; the real renderer's .docx and .pdf are read back in tests. The live harness has no document conversion, so the export was not seen live. |
+| R15 | Done on the public data with pinned hashes: PhysioNet B 3,748/4,000 stays, regression MAE 11.184 bpm vs persistence 12.600; C 3,758/4,000, 10.941 vs 12.378; ACTG175 RMST difference 85.83 days. |
+| R16 | Four agent-arm conversations: optimal pick 3/4, one infeasible pick, every measurable run overspent the stated trial budget 1.4–1.7×. |
+| R17 | Done on an isolated engine: one vs two workers at ~0.9 load, interactive p95 50.2 s vs 22.3 s, throughput equal, peak PSS 211 vs 377 MB, all output hashes equal. The engine has one worker thread and no concurrency setting: two needs a worker-count change or two containers. Recommendation: stay at one until two cores can be reserved for the engine. |
+| R18 | Done: 144/144 packed-install cases (each bundle alone, together, uninstalled; standalone and hosted copies) on DSH 0.2.2-rc.1, plus a CI pack-time test. |
+| R19 | Done: three numeric shards with a partition proof and a merged evidence report; CI green. |
+| R20 | Read-only on production: no `extensions-deployment.json` in the data volume, so no native bundle was admitted and none needs re-admission. `audit:capabilities` is red on the live tree as well (the recorded probe predates round 1's tools); it is regenerated only on a deployed commit inside a throwaway account's runtime (`run_tool_probe.sh`), a release step not run here (no deploy, no production writes). |
+| R21 | Done: the 11-07 plan's §17 now carries the review's status wording. |
+| R22 | Done; live: built over three turns inside a study, shown on the page at version 3. |
+| R23 | Done: people records (covariates, η, α) by hash in the data plane, both modes, reachable from the conversation. |
+| R24 | Done everywhere a simulated number is named; no programme PoS. |
+| R25 | Done; harmful draws are kept (the review's S2). |
+| R26 | Done, with the review's small-sample and per-trial-truth fixes. Finding: with a retrieved share below 1, no estimator on the collected data recovers the treatment-policy truth; the page says so. |
+| R27 | Done: eight post-2011 placebo arms; mean bias −1.51 points at 76–78 weeks (all four negative), +0.74 at 24 weeks; 8/8 inside the predictive interval, which is a weak test. |
+| R28 | Done: Conrado 2014 side by side (spread 1.63 and 0.91 points); the ICH M15 credibility record. Delor 2013 is a CDR-SB model and Samtani 2012's inputs are paywalled. |
+| R29–R31 | Done: tier A from the posterior (doses beyond the evidence run as extrapolation); tier B aducanumab end to end (lecanemab PK only: its PD is unpublished, so its chain is refused by name); tier C binds a verified pooling on the points scale only. |
+| R32–R33 | Done: `forecast.individualize` and two local providers inside the deployment. Frozen evaluation: pbcseq does not beat last value; JM aids and ACTG175 beat both baselines; the claim sentence follows it. |
+| R34 | Done: scenarios, worst-case power, regret, Pareto, near-optimal set, no single optimum. |
+| R35 | Done: EVPI, EVPPI by GAM, EVSI, flip thresholds; `voi` agrees to 1e-8; Strong 2014's overall EVPI is not reproducible from its Table 1 as read (two partial EVPIs are). |
+| R36 | Done. Before: the campaign was no better than grid or OCBA at a matched budget and stopped at ~125k–185k trials whatever its budget. The sequential allocation spends the budget; after the statistical review split the confidence across its looks (a valid error control with re-runs), it matches grid and trails OCBA and successive halving, the valid control costing up to 17 points of correct selection (level85 at 320k: 72% against 89%). Stated plainly in the RUN file. |
+| R37 | Organization (19/20 graded, one sample): intended method 18/19, method and numbers 10/19. Next experiment: the engine ranks the planted input first 8/8 offline; live, VOI was opened 0/3 before the wording fix and 2/2 after. |
+| R38 | Done: midazolam with rifampicin (Asaumi 2018), ketoconazole (6/6 clinical ratios within 2-fold, GMFE 1.41) and clarithromycin assembled from cited values (GMFE 1.38, its own exposure over-predicted 2.3–2.9×, stated). Itraconazole not built: no complete open parameter set. |
+| R39 | Eleven scenarios: five passed, three partial, three first answered in the model's own code (VOI, PBPK, estimand). PBPK and VOI now reach the engine; **the estimand question still does not**, and the robust-scenario question was not re-run. |
+| R40 | Done: this record, TECHNICAL_DESIGN, PRD, PROGRESS, DESIGN.md (new page parts). |
+
+**Open after this round:** conversational reach (R10's target; the estimand question); the re-measure after the last fixes (about CNY 3–5); itraconazole; a second engine worker; regenerating `audit:capabilities` at release; T11/T12 (the owner's data).
