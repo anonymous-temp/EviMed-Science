@@ -93,7 +93,20 @@ ITEMS=(
   "evolving alfworld seen pyramid pyramid" "evolving alfworld unseen pyramid pyramid"
   "evolving scienceworld seen pyramid pyramid" "evolving scienceworld unseen pyramid pyramid"
 )
-if [ "$ORDER" = arm-major ]; then
+if [ "$ORDER" = pairs-first ]; then
+  # Pyramid and flat side by side, fold by fold (so their comparison is readable first), then the other arms in the brief's order.
+  ITEMS=()
+  for ef in "alfworld seen" "alfworld unseen" "scienceworld seen" "scienceworld unseen"; do
+    ITEMS+=("pyramid $ef pyramid pyramid" "flat $ef pyramid flat")
+  done
+  for spec in "from-scratch from-scratch pyramid" "no-abstract pyramid pyramid abstract" "no-atomic pyramid pyramid atomic" "add-only add-only pyramid" \
+              "evolving pyramid pyramid"; do
+    read -r arm variant mode roles <<< "$spec"
+    for ef in "alfworld seen" "alfworld unseen" "scienceworld seen" "scienceworld unseen"; do
+      ITEMS+=("$arm $ef $variant $mode${roles:+ $roles}")
+    done
+  done
+elif [ "$ORDER" = arm-major ]; then
   # One arm after another, every fold of it, in the order of the brief: pyramid, flat, from-scratch, no-abstract, no-atomic, add-only, evolving.
   ITEMS=()
   for spec in "pyramid pyramid pyramid" "flat pyramid flat" "from-scratch from-scratch pyramid" "no-abstract pyramid pyramid abstract" \
