@@ -1081,6 +1081,7 @@ services:
       OPEN_SCIENCE_METHOD_MOUNT_MIN_SIMILARITY:
       OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED:
       OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED:
+      OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED:
       OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-key
       OPEN_SCIENCE_EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
       # The remaining public-source credentials the server resolves. Without

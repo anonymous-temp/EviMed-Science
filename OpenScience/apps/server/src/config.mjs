@@ -3294,6 +3294,14 @@ export function loadConfig(overrides = {}) {
     // A learned method's card carries up to two quotations it rests on, two situations it is not for, and whether it was used after its last
     // change and not corrected (plan 2026-11-04 item 11), off by default; SKILL.md and the digest never change. Off, the card is two lines.
     methodCardEvidenceEnabled: overrides.methodCardEvidenceEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED", false),
+    // The training camp's lesson (plan 2026-11-04 §5.3), off by default: the distillation reads a `camp` lesson — any finished run with an outcome
+    // a checker decided in code, a failure as much as a success, through excerpts of its decisive and closing steps. Only a camp driver raises
+    // one, in lab accounts; NEVER set this for a deployment that serves real accounts. `learningRefusal` is not loosened either way.
+    learningCampEnabled: overrides.learningCampEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_CAMP_ENABLED", false),
+    // Two-stage distillation (plan 2026-11-04 §5.2, SkillPyramid's two-stage creation), off by default: a lesson is first framed (which methods on
+    // file it reuses, which sub-skills are new, under the `method-frame` contract) and then each new sub-skill is written as its own method that
+    // pins what it builds on. Off, a lesson is the one step it was and the skill text is byte-identical.
+    methodTwoStageDistillationEnabled: overrides.methodTwoStageDistillationEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED", false),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),
     // The context window the kernel is told it has.
