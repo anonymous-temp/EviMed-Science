@@ -106,6 +106,30 @@ test("the lab variant says the never-kept block once, in the profile, and is nev
   assert.match(refused.stderr, /never over the deployed templates/);
 });
 
+test("the decide block has three lab wordings; only the deployed one is rendered by default and a lab one never over what is deployed", async () => {
+  const { DECIDE_VARIANTS } = await import("../../../deploy/web/openviking/memory-templates-src/build.mjs");
+  assert.deepEqual(Object.keys(DECIDE_VARIANTS), ["current", "purpose", "purpose-verify"]);
+  assert.equal(DECIDE_VARIANTS.current, MEMORY_DECIDE_TEXT);
+  const full = renderMemoryTemplates();
+  assert.deepEqual(renderMemoryTemplates({ decide: "current" }), full, "the default is the deployed wording, byte for byte");
+  const purpose = renderMemoryTemplates({ decide: "purpose" });
+  const verify = renderMemoryTemplates({ decide: "purpose-verify" });
+  assert.deepEqual(Object.keys(purpose).sort(), Object.keys(full).sort());
+  for (const [name, text] of Object.entries(purpose)) {
+    assert.ok(text.includes(indent(MEMORY_NEVER_KEPT_TEXT)), `${name}: the hard boundaries are not part of the comparison`);
+    assert.ok(text.includes(indent(DECIDE_VARIANTS.purpose)) && !text.includes(indent(MEMORY_DECIDE_TEXT)), `${name} carries the purpose wording alone`);
+    assert.ok(verify[name].includes(indent(DECIDE_VARIANTS["purpose-verify"])), `${name} carries the purpose wording and the two checks`);
+    assert.ok(verify[name].length > text.length);
+  }
+  // The purpose wording names what memory is for and gives no examples of what to keep; the checks are added, never substituted.
+  assert.ok(DECIDE_VARIANTS["purpose-verify"].startsWith(DECIDE_VARIANTS.purpose));
+  assert.throws(() => renderMemoryTemplates({ decide: /** @type {any} */ ("unknown") }), /unknown decide variant/);
+  const build = path.join(root, "deploy/web/openviking/memory-templates-src/build.mjs");
+  const refused = spawnSync(process.execPath, [build, "--decide", "purpose"], { encoding: "utf8" });
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stderr, /never over the deployed templates/);
+});
+
 test("a rule given for one project is that project's card, said in the card's template and in the three that could take it instead (M8)", async () => {
   const directory = path.join(root, "deploy/web/openviking/memory-templates");
   const text = async (name) => readFile(path.join(directory, `${name}.yaml`), "utf8");

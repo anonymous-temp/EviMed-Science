@@ -70,6 +70,7 @@ import {
   cleanMethodDisplay,
   isUnprovenMerge,
   methodHarmTest,
+  methodLibraryLinkIssues,
   parseSkillFrontmatter,
   preservedSectionsIntact,
   storedEvidenceQuotes,
@@ -332,13 +333,15 @@ export class MethodConsolidation {
    *          onNoop?: ((reason: string, count?: number) => void) | null, onRelation?: ((type: string, count?: number) => void) | null,
    *          replay?: { run: (request: { job: any }) => Promise<any> } | null,
    *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>,
-   *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null}} dependencies
+   *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null,
+   *          linkCheckEnabled?: boolean}} dependencies
    */
   constructor({
     dispatch, readResult, learning, jobs = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     describe = null, judgeService = null, screenBaseline = null,
     unusedAfterLoads = undefined, onRetirement = null, similarity = null, onNoop = null, onRelation = null, replay = null, contextProvenance = null,
+    linkCheckEnabled = false,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
@@ -377,6 +380,9 @@ export class MethodConsolidation {
     // Optional: the replay of a changed method against the runs the person accepted. Without it the job ends saying it was not run, and the change stands
     // on its own runs' counters as it did before.
     this.replay = replay;
+    // Report-only (`OPEN_SCIENCE_LINK_CHECK_ENABLED`): the pass returns the library's broken-link counts
+    // and never acts on them. Off by default, and off means the result carries no `linkIssues` key.
+    this.linkCheckEnabled = Boolean(linkCheckEnabled);
   }
 
   /**
@@ -595,8 +601,25 @@ export class MethodConsolidation {
     // `validateMethodGraph` derives it, written back where it differs. It was computed and returned as `graphIssues` and
     // never stored, so every method read level 0 (the page reads `learning.level`, the mount ignores it).
     const final = await this.#library(job);
-    const graph = validateMethodGraph(final.map((document) => methodRecordFrom(document)));
+    // `methodRecordFrom` is the graph's shape; the body and front matter ride beside it so the report-only check can
+    // read reuse references and an abstract method's `derived_from`. `validateMethodGraph` ignores the extra keys.
+    const records = final.map((document) => {
+      const payload = document.payload ?? {};
+      return {
+        ...methodRecordFrom(document),
+        ...(typeof payload.body === "string" ? { body: payload.body } : {}),
+        ...(payload.frontmatter && typeof payload.frontmatter === "object" ? { frontmatter: payload.frontmatter } : {}),
+      };
+    });
+    const graph = validateMethodGraph(records);
     const levels = await this.#writeLevels(job, final, graph.levels);
+    // Report-only and behind its own switch: the broken links are counted and returned, never acted on. A check that
+    // somehow failed says so as one unreadable count rather than failing the pass.
+    let linkIssues = null;
+    if (this.linkCheckEnabled) {
+      try { linkIssues = methodLibraryLinkIssues(records).counts; }
+      catch { linkIssues = { unreadable: 1 }; }
+    }
 
     return {
       action: "sleep",
@@ -623,6 +646,7 @@ export class MethodConsolidation {
       stopped,
       levels,
       graphIssues: graph.issues.map((issue) => issue.code),
+      ...(linkIssues ? { linkIssues } : {}),
       described,
       noop,
     };

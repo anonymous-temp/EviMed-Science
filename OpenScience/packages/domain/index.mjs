@@ -57,6 +57,8 @@ export {
 export { okfLinkPath, okfMarkdownLinks, splitOkfFrontmatter } from './src/okfMarkdown.mjs'
 // knowledgeGraphs — pages and their links, entities and their relations, as { nodes, links }
 export { knowledgeGraphToGraph, wikiPagesToGraph } from './src/knowledgeGraphs.mjs'
+// linkChecks — report-only broken links in the method library and in compiled knowledge pages
+export { knowledgeLinkIssues, methodLibraryLinkIssues } from './src/linkChecks.mjs'
 // knowledgeQuotations — the after-the-fact ✓ / ⚠ of a compiled page's quotations: a label, never a condition
 export { KNOWLEDGE_QUOTATION_STATUSES, checkPageQuotations, knowledgeSourceIdOfUri } from './src/knowledgeQuotations.mjs'
 

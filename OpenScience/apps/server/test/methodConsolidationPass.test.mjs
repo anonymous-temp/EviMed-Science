@@ -49,9 +49,9 @@ function embedder(options = {}) {
 
 /**
  * A ledger and a consolidation over it. `decide(input)` and `build(input)` answer the two model steps by what they were asked.
- * @param {{decide?: (input: any) => any, build?: (input: any) => any, similarity?: any, audit?: any, unusedAfterLoads?: number, now?: () => Date, jobs?: any, replay?: any}} [options]
+ * @param {{decide?: (input: any) => any, build?: (input: any) => any, similarity?: any, audit?: any, unusedAfterLoads?: number, now?: () => Date, jobs?: any, replay?: any, linkCheckEnabled?: boolean}} [options]
  */
-function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisions: [] }), similarity = undefined, audit = null, unusedAfterLoads = undefined, now = () => NOW, jobs = null, replay = null } = {}) {
+function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisions: [] }), similarity = undefined, audit = null, unusedAfterLoads = undefined, now = () => NOW, jobs = null, replay = null, linkCheckEnabled = false } = {}) {
   const documents = productDocumentsDouble();
   const learning = new LearningService({ documents, now });
   /** @type {any[]} */
@@ -73,6 +73,7 @@ function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisi
       return { status: "succeeded", output: input.action === "build" ? build(input) : decide(input) };
     },
     similarity: sim, audit, jobs, replay,
+    linkCheckEnabled,
     onNoop: (reason, count) => noops.push([reason, count ?? 1]),
     onRelation: (type, count) => relations.push([type, count ?? 1]),
     onRetirement: (code) => stops.push(code),
@@ -529,6 +530,45 @@ test("levels come from the dependency graph and are written back where they diff
   assert.equal((await h.learning.getMethod("u1", base.id)).payload.learning.level, 0);
   const again = await h.sleep("job_2");
   assert.equal(again.levels.written, 0, "an unchanged level is not rewritten");
+});
+
+test("the broken-link check is report-only: absent when off, counted when on, and no method is changed", async () => {
+  /** @param {ReturnType<typeof harness>} h */
+  const library = async (h) => {
+    const base = await h.make("base-step", "axis-a");
+    const dependent = await h.learning.createCandidate("u1", {
+      projectId: "p1",
+      frontmatter: { ...frontmatter("uses-base", "axis-b"), metadata: { ...frontmatter("uses-base", "axis-b").metadata, depends_on: `base-step@${base.payload.contentDigest}` } },
+      body: `${sections()}\n\n[reuse method: base-step | when: always | provides: the base step]`,
+      dependencies: [{ name: "base-step", digest: base.payload.contentDigest }],
+      provenance: { origin: "inferred", runId: "run_1" },
+    });
+    return { base, dependent };
+  };
+
+  const off = harness({ similarity: null });
+  const offLibrary = await library(off);
+  const before = await off.learning.getMethod("u1", offLibrary.dependent.id);
+  const offResult = await off.sleep();
+  assert.equal(Object.hasOwn(offResult, "linkIssues"), false, "the switch is off, so the pass returns no link counts");
+
+  const on = harness({ similarity: null, linkCheckEnabled: true });
+  const onLibrary = await library(on);
+  const onResult = await on.sleep();
+  assert.deepEqual(onResult.linkIssues, {
+    dangling_dependency: 0, moved_digest: 0, dependency_not_in_effect: 0, cycle: 0, duplicate_name: 0, unparsable_digest: 0,
+    reuse_reference_undeclared: 0, reuse_reference_missing: 0, derived_from_missing: 0, relation_target_missing: 0,
+    merged_from_missing: 0, pending_retirement_missing: 0, unreadable: 0,
+  }, "the declared reuse reference is clean, and the report is counts only");
+
+  const afterOff = await off.learning.getMethod("u1", offLibrary.dependent.id);
+  const afterOn = await on.learning.getMethod("u1", onLibrary.dependent.id);
+  for (const [label, after] of [["off", afterOff], ["on", afterOn]]) {
+    assert.deepEqual(after.payload.dependencies, before.payload.dependencies, `${label}: dependencies unchanged`);
+    assert.equal(after.payload.body, before.payload.body, `${label}: body unchanged`);
+    assert.equal(after.payload.status, before.payload.status, `${label}: status unchanged`);
+    assert.equal(after.payload.contentDigest, before.payload.contentDigest, `${label}: content digest unchanged`);
+  }
 });
 
 test("the incremental pass records every relation and builds shared_part and subset, but never a merge, and never under an unproven merge", async () => {
