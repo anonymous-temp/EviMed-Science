@@ -6,6 +6,12 @@
  *   node build_library.mjs build  --env alfworld --variant pyramid|from-scratch|add-only --train-dir <run_c1 training out> \
  *        --pool <c1 training pool> --out <dir> [--gate every-success|product] [--sleep-every 10] [--embed-key-file F] [--key-file F] [--dry-run]
  *   node build_library.mjs evolve --env alfworld --dir <a copy of a pyramid variant dir> --episodes <trajectory files in task order...>
+ *   node build_library.mjs build  --lessons camp ...   # the training camp: every finished episode is a lesson, two-stage distillation
+ *
+ * `--lessons camp` (F3, 2026-11-10) is the training camp of plan §5.3 with the product's two lab switches on: `OPEN_SCIENCE_LEARNING_CAMP_ENABLED`
+ * (every finished training episode, success or failure, is a `camp` lesson raised by `campLessonFor` with the game's outcome and its
+ * decisive steps) and `OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED` (a frame, then one method per new sub-skill). The variants are
+ * the same three; the default (`--lessons routine`) is F2's protocol, unchanged.
  *
  * What a training episode teaches, following the product (no new trigger): a successful episode is a clean run of the environment's
  * scope, and a lesson about it is the product's `routine` induction across it and two earlier clean runs (`routine` reads this run's
@@ -68,7 +74,12 @@ export async function learnFrom(loop, episodes, { gate, sleepEvery, prefix, earl
   for (const record of episodes) {
     tally.episodes += 1;
     if (record.error) tally.errors += 1;
-    if (record.success === true) {
+    if (loop.policy.camp === true) {
+      // The camp: every finished episode is a lesson, a failure as much as a success.
+      tally[record.success === true ? "successes" : "failures"] += 1;
+      const summary = await loop.campLesson({ record, stepId: `${prefix}camp:${record.taskId}` });
+      if (summary.state !== "skipped") tally.distilled += 1;
+    } else if (record.success === true) {
       tally.successes += 1;
       const lesson = await loop.lessonFor(record, earlier);
       if (lesson.productGate) tally.productGate += 1;
@@ -96,6 +107,9 @@ async function build(options) {
   if (!VARIANTS[/** @type {keyof typeof VARIANTS} */ (variant)]) throw new Error(`Unknown variant ${variant}`);
   const gate = String(options.gate ?? "every-success");
   if (!LESSON_GATES.includes(gate)) throw new Error(`Unknown gate ${gate}`);
+  const lessons = String(options.lessons ?? "routine");
+  if (!["routine", "camp"].includes(lessons)) throw new Error(`Unknown lessons ${lessons}`);
+  const camp = lessons === "camp" ? { camp: true, twoStage: options["one-stage"] ? false : true } : {};
   const sleepEvery = Number(options["sleep-every"] ?? 10);
   const out = String(options.out);
   const pool = JSON.parse(await readFile(String(options.pool), "utf8"));
@@ -116,16 +130,19 @@ async function build(options) {
   const embedder = options["embed-key-file"] ? await embedderFrom(String(options["embed-key-file"])) : null;
   const dir = path.join(out, `${env}-${variant}`);
   await mkdir(out, { recursive: true });
-  const loop = await OfflineLoop.open({ dir, env, variant, policy: { ...VARIANTS[/** @type {keyof typeof VARIANTS} */ (variant)], approve: "immediate", officialInLoop: false },
+  const loop = await OfflineLoop.open({ dir, env, variant, policy: { ...VARIANTS[/** @type {keyof typeof VARIANTS} */ (variant)], approve: "immediate", officialInLoop: false, ...camp },
     model: learningModel({ dryRun: Boolean(options["dry-run"]), keyFile: options["key-file"] ?? undefined }),
     embed: embedder?.embed ?? null, embedModel: embedder?.model ?? null, cacheDir: path.join(out, "cache") });
   const started = Date.now();
   const tally = await learnFrom(loop, episodes, { gate, sleepEvery, prefix: "" });
   if (loop.policy.consolidate !== "none") await loop.consolidate({ stepId: "sleep:final" });
   const exported = await loop.exportTo(path.join(out, `${env}-${variant}.json`));
-  const summary = { env, variant, gate, sleepEvery, tally, stats: exported.stats, seconds: Math.round((Date.now() - started) / 1000) };
+  const summary = { env, variant, lessons, gate, sleepEvery, tally, stats: exported.stats, seconds: Math.round((Date.now() - started) / 1000) };
   await writeFile(path.join(out, `${env}-${variant}.summary.json`), `${JSON.stringify(summary, null, 2)}\n`);
-  await globalStatus(`c1 library ${env}-${variant} built: ${exported.stats.methods} methods (${JSON.stringify(exported.stats.byRole)}), lessons ${tally.distilled}/${tally.successes} successes, product gate would fire ${tally.productGate}, model calls ${exported.stats.modelUsage?.calls ?? 0}`);
+  const live = exported.stats.methods - (exported.stats.byStatus?.retired ?? 0);
+  await globalStatus(lessons === "camp"
+    ? `c1 camp library ${path.basename(out)}/${env}-${variant} built: ${live} live methods (${JSON.stringify(exported.stats.byRole)}), levels ${JSON.stringify(exported.stats.byLevel)}, relations ${JSON.stringify(exported.stats.relationsByType)}, lessons ${tally.distilled} (${tally.successes} successes, ${tally.failures} failures), details ${JSON.stringify(exported.stats.camp?.details ?? {})}, model calls ${exported.stats.modelUsage?.calls ?? 0}, ${summary.seconds}s`
+    : `c1 library ${env}-${variant} built: ${exported.stats.methods} methods (${JSON.stringify(exported.stats.byRole)}), lessons ${tally.distilled}/${tally.successes} successes, product gate would fire ${tally.productGate}, model calls ${exported.stats.modelUsage?.calls ?? 0}`);
   process.stdout.write(`${JSON.stringify(summary)}\n`);
 }
 

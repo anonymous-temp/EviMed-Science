@@ -79,6 +79,53 @@ export function episodeAsRun(record, { finishedAt }) {
   return { run, transcript: { header, messages } };
 }
 
+/**
+ * ALFWorld's commands that change the game's state (its PDDL actions), by verb: the game credits nothing until the task is won, so these are
+ * where an episode's sub-goals were reached — when the game accepted them ("Nothing happens." is its refusal).
+ */
+const ALFWORLD_STATE_CHANGES = new Set(["take", "put", "open", "close", "heat", "cool", "clean", "use", "slice", "toggle"]);
+
+/**
+ * The decisive steps of an episode, by the transcript `seq` `episodeAsRun` gives them: each step where the game's score rose above every
+ * earlier score (a sub-goal ScienceWorld credits), the step that won the task, and — ALFWorld's score moving only at the win — each
+ * state-changing command the game accepted. What the camp driver hands `campLessonFor` as its anchors; the game's grammar and its checker
+ * decide, not a reading of the text.
+ * @param {any} record a run_c1 trajectory record @returns {{ seq: number, kind: string, step: number, score: number }[]}
+ */
+export function decisiveAnchors(record) {
+  /** @type {{ seq: number, kind: string, step: number, score: number }[]} */
+  const anchors = [];
+  let seq = 1;
+  let best = 0;
+  for (const step of Array.isArray(record.steps) ? record.steps : []) {
+    const text = String(step?.reply?.text ?? "").trim();
+    const acted = typeof step?.action === "string" && step.action;
+    if (!text && !acted) continue;
+    const score = Number(step?.score);
+    const changed = record.env === "alfworld" && acted && ALFWORLD_STATE_CHANGES.has(toolNameOf(step.action))
+      && !/^nothing happens/i.test(String(step.observation ?? "").trim());
+    if (step?.success === true || changed || (Number.isFinite(score) && score > best)) anchors.push({ seq, kind: "decisive", step: Number(step.step), score: Number.isFinite(score) ? score : 0 });
+    if (Number.isFinite(score) && score > best) best = score;
+    seq += 1;
+  }
+  return anchors;
+}
+
+/**
+ * The checker's verdict on an episode, as a camp lesson carries it: the game decided success and score in code; the verdict says so in a
+ * sentence, with the score scale of the environment. @param {any} record
+ */
+export function episodeOutcome(record) {
+  const steps = Array.isArray(record.steps) ? record.steps.length : 0;
+  const score = Number(record.score);
+  const success = record.success === true;
+  const scale = record.env === "scienceworld" ? " (ScienceWorld scores 0 to 100; -100 means the task was failed outright)" : " (ALFWorld scores 1 when the task is won, 0 otherwise)";
+  const verdict = success
+    ? `The game's checker found the task completed after ${steps} steps; final score ${Number.isFinite(score) ? score : "n/a"}${scale}.`
+    : `The game's checker did not find the task completed; the episode ended after ${steps} of at most ${record.stepCap ?? "?"} steps with final score ${Number.isFinite(score) ? score : "n/a"}${scale}.`;
+  return { success, score: Number.isFinite(score) ? score : null, verdict };
+}
+
 /** Write the transcript where `readRunTranscript(project, runId)` reads it. @param {any} project @param {{header: any, messages: any[]}} transcript */
 export async function storeTranscript(project, transcript) {
   await mkdir(path.join(project.metaDir, TRANSCRIPT_DIR_NAME), { recursive: true });

@@ -32,26 +32,35 @@ const YAML = createRequire(path.resolve(here, "../../../apps/server/package.json
 
 const sha256 = (/** @type {string} */ text) => createHash("sha256").update(text, "utf8").digest("hex");
 
-/** @type {Map<string, Promise<{ system: string, outputs: { path: string, required: boolean }[], checks: string[], version: string }>>} */
+/** @type {Map<string, Promise<{ system: string, contracts: Map<string, { outputs: { path: string, required: boolean }[], checks: string[] }>, outputs: { path: string, required: boolean }[], checks: string[], version: string }>>} */
 const loaded = new Map();
 
-/** A learning capability as the run is given it: persona and SKILL.md, the outputs its contract expects. @param {string} capabilityId */
+/**
+ * A learning capability as the run is given it: persona and SKILL.md, and the outputs each of its contracts expects (`produces`, by
+ * `contractKind`; the first is the default). SKILL.md is the file as it stands: a switched-on section reaches the step in the product's
+ * own dispatch question (`distillationSkillVariants`), so it reaches this adapter the same way.
+ * @param {string} capabilityId
+ */
 export function learningCapability(capabilityId) {
   if (!loaded.has(capabilityId)) {
     loaded.set(capabilityId, (async () => {
       const directory = path.join(CAPABILITIES, capabilityId);
       const manifest = YAML.parse(await readFile(path.join(directory, "capability.yaml"), "utf8"));
       const skill = await readFile(path.join(directory, "SKILL.md"), "utf8");
-      const produced = manifest.produces?.[0] ?? {};
-      return {
-        system: `${String(manifest.persona ?? "").trim()}\n\n${skill}`,
+      const contracts = new Map((manifest.produces ?? []).map((/** @type {any} */ produced) => [String(produced.contractKind), {
         outputs: (produced.outputs ?? []).map((/** @type {any} */ output) => ({ path: String(output.path), required: output.required === true })),
         checks: Array.isArray(produced.checks) ? produced.checks.map(String) : [],
-        version: String(manifest.version ?? ""),
-      };
+      }]));
+      const first = [...contracts.values()][0] ?? { outputs: [], checks: [] };
+      return { system: `${String(manifest.persona ?? "").trim()}\n\n${skill}`, contracts, outputs: first.outputs, checks: first.checks, version: String(manifest.version ?? "") };
     })());
   }
   return /** @type {Promise<any>} */ (loaded.get(capabilityId));
+}
+
+/** The outputs and checks of the contract a step submits. @param {any} capability @param {string} contractKind */
+function contractOf(capability, contractKind) {
+  return capability.contracts.get(String(contractKind)) ?? { outputs: capability.outputs, checks: capability.checks };
 }
 
 /** The user message of a step: the product's question as the runtime sends it, the frozen input, and the transport note. */
@@ -109,7 +118,8 @@ export function createModelSteps({ model, cacheDir = null, callsLog = null, labe
   /** One step: the model asked, the package gated, repaired until it passes or the attempts are spent. @param {any} request */
   async function run(request) {
     const capability = await learningCapability(request.capabilityId);
-    const user = stepMessage(request, capability.outputs);
+    const contract = contractOf(capability, request.contractKind);
+    const user = stepMessage(request, contract.outputs);
     const key = sha256(JSON.stringify({ capabilityId: request.capabilityId, version: capability.version, system: capability.system, user }));
     const cached = cacheDir ? await readFile(path.join(cacheDir, `${key}.json`), "utf8").then(JSON.parse).catch(() => null) : null;
     if (cached) {
@@ -132,7 +142,7 @@ export function createModelSteps({ model, cacheDir = null, callsLog = null, labe
       usage.cachedTokens += tokens.cachedTokens;
       const files = filesOfReply(text);
       const verdict = files
-        ? runGate({ contractKind: request.contractKind, files: new Map(Object.entries(files)), expectedOutputs: capability.outputs, checks: capability.checks })
+        ? runGate({ contractKind: request.contractKind, files: new Map(Object.entries(files)), expectedOutputs: contract.outputs, checks: contract.checks })
         : { ok: false, issues: [{ code: "reply_unreadable", message: "The reply was not one JSON object of file names to file contents.", severity: "required" }] };
       const required = (verdict.issues ?? []).filter((/** @type {any} */ issue) => issue.severity === "required");
       await log({ capability: request.capabilityId, action: request.input?.action ?? request.input?.trigger ?? null, dispatchId: request.dispatchId, key, attempt,
@@ -189,7 +199,9 @@ const renderSkill = (frontmatter, body) => `---\n${YAML.stringify(frontmatter).t
 /** The frozen input a step message carries. @param {any[]} messages */
 function inputOf(messages) {
   const text = String(messages.find((message) => message.role === "user")?.content ?? "");
-  const match = text.match(/```json\n([\s\S]*?)\n```/);
+  // The frozen input follows the question, which may carry a JSON example of its own (a switched-on skill section).
+  const after = text.slice(Math.max(0, text.indexOf("The frozen input `")));
+  const match = after.match(/```json\n([\s\S]*?)\n```/);
   return match ? JSON.parse(match[1]) : {};
 }
 
@@ -206,12 +218,27 @@ export function fakeLearningModel() {
       const input = inputOf(messages);
       /** @type {Record<string, string>} */
       let files;
-      if (system.includes("name: method-distillation")) {
+      if (system.includes("name: method-distillation") && input.stage === "frame") {
+        // Two-stage, step one: an atomic and an abstract sub-skill per distinct request, unless the library already has them.
+        const tag = sha256(String(input.trajectory?.requests?.[0]?.text ?? "a game task")).slice(0, 8);
+        const onFile = (input.relatedMethods ?? []).filter((/** @type {any} */ method) => method.status !== "retired");
+        const known = onFile.some((/** @type {any} */ method) => method.frontmatter?.name === `fake-atomic-${tag}`);
+        const frame = { schemaVersion: 1,
+          reuses: onFile.slice(0, 1).map((/** @type {any} */ method) => ({ methodId: method.id, digest: method.digest, why: "The same kind of task." })),
+          newSkills: known ? [] : [{ name: `fake-atomic-${tag}`, role: "atomic", summary: "One operation of this task." },
+            { name: `fake-abstract-${tag}`, role: "abstract", summary: "The plan of this kind of task.", buildsOn: [`fake-atomic-${tag}`] }],
+          amend: [], ...(known ? { reason: "Already on file." } : {}) };
+        files = { "method-frame.json": JSON.stringify(frame) };
+      } else if (system.includes("name: method-distillation")) {
         const request = String(input.trajectory?.requests?.[0]?.text ?? "a game task");
-        const name = `fake-${sha256(request).slice(0, 8)}`;
+        const focus = input.stage === "detail" && input.focus?.kind === "new" ? input.focus : null;
+        const name = focus ? String(focus.name) : `fake-${sha256(request).slice(0, 8)}`;
         const quote = request.replace(/\s+/g, " ").trim().slice(0, 80);
+        const pins = focus ? (input.relatedMethods ?? []).filter((/** @type {any} */ method) => (focus.buildsOn ?? []).includes(method.frontmatter?.name))
+          .map((/** @type {any} */ method) => `${method.frontmatter.name}@${method.digest}`) : [];
         const frontmatter = { name, description: `Plays one kind of text-game task (${name}).`, whenToUse: "When the same kind of game task comes up.",
-          metadata: { role: "functional", applies_when: "A game task of this kind.", not_when: "Another kind of task.", derived_from: `run:${input.runId}`, evimed_schema: METHOD_SKILL_SCHEMA } };
+          metadata: { role: focus ? String(focus.role) : "functional", applies_when: "A game task of this kind.", not_when: "Another kind of task.",
+            ...(pins.length ? { depends_on: pins.join(", ") } : {}), derived_from: `run:${input.runId}`, evimed_schema: METHOD_SKILL_SCHEMA } };
         const scenarios = [1, 2, 3].map((n) => ({ id: `t${n}`, runId: input.runId, situation: "The same task.", expected: "The task is done." }));
         files = {
           "SKILL.md": renderSkill(frontmatter, FAKE_BODY("Do the task in the observed order.", `1. ${(input.trajectory?.tools ?? []).join(", then ") || "act"}.`)),

@@ -46,20 +46,23 @@ export function persistentDocuments(saved = null) {
       const row = rows.get(keyOf(userId, kind, id));
       return row && (includeDeleted || !row.deletedAt) ? publicRow(row) : null;
     },
-    async list(/** @type {string} */ userId, /** @type {string} */ kind, { limit = 50, projectId = undefined, filter = {}, deleted = false, fields = null } = /** @type {any} */ ({})) {
+    async list(/** @type {string} */ userId, /** @type {string} */ kind, { limit = 50, projectId = undefined, filter = {}, deleted = false, fields = null, cursor = null } = /** @type {any} */ ({})) {
       productInteger(limit, 1, 100);
-      const items = [...rows.values()]
+      // A cursor is the offset of the next page (ours; the helper has none): the product's reads take the first page, as they do in PostgreSQL.
+      const offset = Number.isSafeInteger(Number(cursor)) && Number(cursor) > 0 ? Number(cursor) : 0;
+      const matching = [...rows.values()]
         .filter((row) => row.userId === userId && row.kind === kind && Boolean(row.deletedAt) === deleted)
         .filter((row) => projectId === undefined || (row.projectId ?? null) === (projectId ?? null))
         .filter((row) => contains(row.payload, filter))
-        .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id))
-        .slice(0, limit)
+        .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
+      const items = matching
+        .slice(offset, offset + limit)
         .map(publicRow)
         .map((row) => (fields ? { ...row, payload: Object.fromEntries(Object.entries(/** @type {Record<string, any>} */ (fields)).map(([key, size]) => {
           const value = row.payload?.[key] ?? null;
           return [key, size === true || typeof value !== "string" ? value : value.slice(0, size)];
         })) } : row));
-      return { items, nextCursor: null };
+      return { items, nextCursor: offset + limit < matching.length ? String(offset + limit) : null };
     },
     async search(/** @type {string} */ userId, /** @type {string} */ kind, /** @type {string} */ query, { limit = 20, filter = {}, any = { field: "", values: [] } } = /** @type {any} */ ({})) {
       return [...rows.values()]
