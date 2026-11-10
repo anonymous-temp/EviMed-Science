@@ -28,6 +28,13 @@ already says it; a lesson that is a method on file done again reuses it, and an 
 common frame. List `amend` only for a method on file that this lesson contradicts or extends, never to restate it; a lesson
 that merely repeats a method strengthens it and changes nothing. At most five new sub-skills; fewer is usual.
 
+A method keeps the scope it was written for, and a level holds as many methods as there are kinds of work. An abstract
+method is the plan of one kind of task; a lesson about another kind — one whose goal is reached through other sub-goals —
+gets a plan of its own that reuses the functional and atomic methods the two kinds share, rather than an amendment that
+widens the plan on file into one plan for several kinds. In the same way, a step that only some tasks need is a method of
+its own that the plans needing it build on, not a branch added to a method every task loads. "Extends" means the same kind
+of work done more completely: a missing check, a missing step or a wrong order in what the method is already for.
+
 **Step two, `stage: "detail"`.** The input then carries the accepted `frame` and a `focus`: the one sub-skill to write now,
 or the one method on file to amend. Write only that, as one candidate under the `method-candidate` contract:
 
