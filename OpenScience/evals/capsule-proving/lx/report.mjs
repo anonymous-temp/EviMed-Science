@@ -40,6 +40,15 @@ for (const [exp, arms] of Object.entries({ l1: ['tc-on', 'tc-off'], l10: ['tc-on
       say('|---|---|---|---|---|---|---|---|');
       for (const { v } of done) say(`| ${v.id} | ${v.class} | ${v.shouldStop} | ${v.stopped}${v.stopped ? ` (${v.stoppedAfterTask})` : ''} | ${v.finalStatus} | ${v.verdicts.join(',')} | clean=${v.counts.appliedClean ?? 0} corr=${v.counts.appliedCorrected ?? 0} read=${v.counts.read ?? 0} carried=${v.counts.carried ?? 0} | ${v.mounts.map(m => `${m.selected ? 'S' : '-'}${m.opened ? 'O' : '-'}${m.status === 'succeeded' ? '' : `(${m.status})`}`).join(' ')} |`);
       for (const { v } of done) if (v.lessons.length) say(`- ${v.id} lessons: ${JSON.stringify(v.lessons)}`);
+      // Whether the seeded rule text is still in the method at the end (verbatim lines of the seed's body found in the final body).
+      const items = read('/srv/evimed/data/memdata-data/l5-dev/inputs.json')?.items ?? [];
+      for (const { id, v } of done) {
+        const seed = items.find(i => i.id === id)?.method?.body ?? '';
+        const state = read(`${dir}/units/${id}/state-final.json`);
+        const body = state?.methods?.find(m => m.payload?.frontmatter?.name === items.find(i => i.id === id)?.method?.name)?.payload?.body ?? '';
+        const lines = seed.split('\n').map(l => l.trim()).filter(l => l.length > 8);
+        if (body && lines.length) say(`- ${id}: seed rule lines still verbatim in the final body ${lines.filter(l => body.includes(l)).length}/${lines.length}; final status ${v.finalStatus}`);
+      }
     } else {
       say('| person | corrections per session | first-time-right | frozen compliance | probe leaks / positive checks | methods (status) |');
       say('|---|---|---|---|---|---|');
