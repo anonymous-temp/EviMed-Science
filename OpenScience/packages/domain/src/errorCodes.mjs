@@ -1444,6 +1444,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_study_not_found',
   'vcr_study_paused',
   'vcr_study_not_granted',
+  'vcr_study_handoff_revoked',
   'vcr_continuation_not_found',
   'vcr_effect_prior_unavailable',
   'vcr_effect_prior_version_changed',
@@ -2344,6 +2345,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // vcr_ code says and is wrong here. Each says what happened and what to do.
   vcr_study_paused: '这个研究已暂停，继续之后再让 AI 做。',
   vcr_study_not_granted: '这项研究没有交给这个对话；请研究者在研究页选择“在新对话中继续”。',
+  vcr_study_handoff_revoked: '研究的所有者已把这项研究收回，这个对话不再接着它做；请告诉用户。',
   vcr_continuation_not_found: '这项研究没有交给这个对话。',
   vcr_effect_prior_unavailable: '这个研究里没有这项汇总结果，或它已不可读（来源被撤回）。',
   vcr_effect_prior_version_changed: '所选汇总结果已更新到另一个版本：请使用当前版本。',

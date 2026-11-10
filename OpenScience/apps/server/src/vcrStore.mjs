@@ -837,6 +837,18 @@ export class VcrStore extends VcrStoreBase {
       WHERE c.session_id = $1 AND c.granted_by = $2 AND c.revoked_at IS NULL ORDER BY c.granted_at DESC, c.id DESC LIMIT 1`, [String(sessionId), String(grantedBy)]));
   }
 
+  /**
+   * The newest handoff to this conversation by this person that was taken back, when none of theirs stands now: the conversation had a study
+   * and its owner took it back (live R39 L1, 2026-11-09: the next call silently opened a same-named study). Null otherwise.
+   * @param {string} sessionId @param {string} grantedBy
+   */
+  async revokedStudyGrant(sessionId, grantedBy) {
+    return studyConversationFromRow(await this.one(`SELECT c.* FROM ${VCR_SCHEMA}.study_conversations c
+      WHERE c.session_id = $1 AND c.granted_by = $2 AND c.revoked_at IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.study_conversations l WHERE l.session_id = c.session_id AND l.granted_by = c.granted_by AND l.revoked_at IS NULL)
+      ORDER BY c.revoked_at DESC, c.id DESC LIMIT 1`, [String(sessionId), String(grantedBy)]));
+  }
+
   /** Whether the conversation already belongs to somebody else: a study of another person is bound to it, or another person handed a study to it. @param {string} sessionId @param {string} userId */
   async sessionClaimedByOther(sessionId, userId) {
     return Boolean(await this.one(`SELECT 1 AS taken WHERE EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.studies WHERE conversation_session_id = $1 AND user_id <> $2)

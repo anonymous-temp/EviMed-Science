@@ -18,7 +18,7 @@ const execFile = promisify(execFileCallback);
 const mcpDir = fileURLToPath(new URL("../../../runtime/mcp/evimed-research/", import.meta.url));
 const OLD = { id: "std_old", userId: "u1", projectId: "prj_1", scope: "conversation", purpose: "task", name: "Earlier", conversationSessionId: "sess_old" };
 
-async function controlPlane(/** @type {any} */ t, /** @type {{ granted: boolean }} */ state) {
+async function controlPlane(/** @type {any} */ t, /** @type {{ granted: boolean, revoked?: boolean }} */ state) {
   const pending = { input: null, tool: "vcr_read" };
   /** @type {any[]} */
   const reached = [];
@@ -26,6 +26,7 @@ async function controlPlane(/** @type {any} */ t, /** @type {{ granted: boolean 
     service: { allows: () => true, counters: { reads: 0, writes: 0, writeIssues: 0 }, forModel: async (/** @type {any} */ payload) => payload,
       requireStudy: async () => OLD, runtimeRead: async (/** @type {any} */ study, /** @type {string} */ what) => { reached.push(["read", study.id, what]); return { what, studyId: study.id }; } },
     store: { studyByControlProject: async () => null, studyByRuntimeDispatch: async () => null, taskContext: async () => ({ id: "std_own", userId: "u1", projectId: "prj_1", scope: "conversation", conversationSessionId: "root" }),
+      revokedStudyGrant: async (/** @type {string} */ sessionId) => state.revoked && sessionId === "root" ? { studyId: "std_old", sessionId, grantedBy: "u1", revokedAt: "2026-11-10T00:00:00Z" } : null,
       boundStudyGrant: async (/** @type {string} */ sessionId, /** @type {string} */ person) => state.granted && sessionId === "root" && person === "u1" ? { studyId: "std_old", sessionId, grantedBy: "u1" } : null,
       query: async () => ({ rows: [] }) },
     jobs: { enqueue: async (/** @type {any} */ input) => { reached.push(["enqueue", input.studyId]); return { job: { id: "job_1", state: "queued", progress: {} }, created: true }; },
@@ -84,4 +85,15 @@ test("without a grant the same call works in the conversation's own study, and a
   assert.equal(named.status, "error", JSON.stringify(named).slice(0, 300));
   assert.match(JSON.stringify(named), /studyId/);
   assert.equal(reached.filter(([, id]) => id === "std_old").length, 0);
+});
+
+test("a conversation whose handoff was taken back is told so in a named code, and the work is not mistaken for the old study", async (t) => {
+  // live R39 L1 (2026-11-09): after the owner revoked, the next call opened a second study with the same name and said nothing about it
+  const { callTool } = await controlPlane(t, { granted: false, revoked: true });
+  const read = await callTool("vcr_read", { what: "study" });
+  assert.equal(read.status, "success", JSON.stringify(read).slice(0, 400));
+  assert.equal(read.data.handoffRevoked.code, "vcr_study_handoff_revoked");
+  assert.match(read.data.handoffRevoked.message, /收回/);
+  const never = await controlPlane(t, { granted: false });
+  assert.equal((await never.callTool("vcr_read", { what: "study" })).data.handoffRevoked, undefined, "no word of it where nothing was handed over");
 });

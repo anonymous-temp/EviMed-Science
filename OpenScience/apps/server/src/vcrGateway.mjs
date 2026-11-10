@@ -2814,6 +2814,9 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           }
         }
       }
+      // A handoff its owner took back says so in every answer of this conversation from then on, in a named code and one sentence: the model
+      // tells the person, instead of the work going on in a study the person did not choose (live R39 L1, 2026-11-09).
+      const revokedHandoff = origin && !origin.programme && !handedStudy && await vcr.store.revokedStudyGrant?.(String(origin.rootSessionId), String(origin.userId));
       let study = handedStudy ?? programmeStudy ?? await vcr.store.studyByControlProject(String(identity.userId),String(identity.projectId));
       if (origin && !programmeStudy && !handedStudy && study && !study.conversationSessionId && resolveStudyConversation) {
         const legacy=await resolveStudyConversation(study,{create:false});
@@ -3060,7 +3063,9 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           timer.unref?.();
         }),
       ]).finally(() => clearTimeout(timer));
-      sendJson(res, 200, { data: result });
+      sendJson(res, 200, { data: revokedHandoff && result && typeof result === "object" && !Array.isArray(result)
+        ? { ...result, handoffRevoked: { code: "vcr_study_handoff_revoked", message: "研究的所有者已把这项研究收回，这个对话不再接着它做。这里新做的内容存在这个对话自己的研究里；请告诉用户这一点，不要当作还在原来的研究里。" } }
+        : result });
     } catch (caught) {
       let error = caught;
       // The service speaks in HttpErrors. The ones about the call's own shape
