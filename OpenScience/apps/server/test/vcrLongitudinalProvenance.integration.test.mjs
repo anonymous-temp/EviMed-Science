@@ -119,3 +119,64 @@ test('R02 follow-up: after the outcome source is withdrawn no read path serves a
     assert.ok(!JSON.stringify(shown).includes(comparison.id),`${path} no longer carries any summary of it`);
   }
 });
+
+// Review eng round 2, P1-2: a comparison the live release wrote before the rule (synthetic class, unsuppressed observed block, lineage
+// without the outcome history) is read as patient-class with the block withheld, and the startup repair settles it, idempotently.
+/** Make a freshly computed comparison look like the live release's: no marker, the exemption, the real outcome unsuppressed, no outcome lineage. */
+async function ageIntoLegacy(/** @type {any} */ comparison) {
+  const { runForecastCalculation } = await import('../src/vcrForecastCalculation.mjs');
+  const row = await vcr.longitudinal.artifacts.record(study.id,comparison.id);
+  const read = (/** @type {string} */ id) => vcr.longitudinal.artifacts.read(study,id,'owner');
+  const [first,second] = await Promise.all(row.summary.predictionIds.map(read));
+  const job = await vcr.store.one(`SELECT j.scenario FROM evimed_vcr.results r JOIN evimed_vcr.executions e ON e.id=r.execution_id JOIN evimed_vcr.jobs j ON j.id=e.job_id
+    WHERE r.diagnostics->'longitudinal'->>'id'=$1`,[comparison.id]);
+  const outcomes = await read(job.scenario.outcomeHistoryId);
+  // what the live release stored: the same block with the exemption applied, so nothing in it was suppressed
+  const computed = await runForecastCalculation('forecast.compare_observed',[first.content,second.content,outcomes.content,{seed:1}],{timeoutMs:60000});
+  const raw = {...computed,dataClass:'synthetic',groups:computed.groups.map((/** @type {any} */ g) => ({...g,observed:1,observedMean:Number(SECRET_VALUE),olderMean:7,newerMean:7,olderError:2.12345,newerError:2.12345,suppressed:[]}))};
+  const { outcomeHistoryId: _marker, ...kept } = row.summary;
+  const legacy = {...kept,observed:raw,dataClass:'synthetic'};
+  const own = first.row;
+  await vcr.store.query(`UPDATE evimed_vcr.longitudinal_artifacts SET summary=$2::jsonb, snapshot_ids=$3::jsonb, source_ids=$4::jsonb, bindings=$5::jsonb WHERE id=$1`,
+    [comparison.id,JSON.stringify(legacy),JSON.stringify(own.snapshot_ids),JSON.stringify(own.source_ids),JSON.stringify(own.bindings ?? [])]);
+  await vcr.store.query(`UPDATE evimed_vcr.results SET diagnostics=jsonb_set(diagnostics,'{longitudinal,summary}',$2::jsonb) WHERE diagnostics->'longitudinal'->>'id'=$1`,[comparison.id,JSON.stringify(legacy)]);
+  return {raw,outcomes};
+}
+
+test('P1-2 a legacy comparison is read as patient-class with its observed block withheld, before any repair',options,async () => {
+  const {comparison} = await runMixedComparison();
+  const {raw} = await ageIntoLegacy(comparison);
+  assert.equal(raw.groups[0].observedMean !== null,true,'the aged row really holds an unsuppressed real value (the premise of the finding)');
+  const secret = String(raw.groups[0].observedMean);
+  const page = presentLongitudinal(await vcr.longitudinal.view(study,{all:true}),{page:true,minCell:5});
+  const model = await vcr.service.runtimeRead(study,'longitudinal');
+  for (const shown of [page,model]) {
+    const text = JSON.stringify(shown);
+    assert.ok(!text.includes(secret),'the real observed value is not served from a legacy row');
+    const mine = [...(shown.records ?? []),...(shown.related ?? [])].find((/** @type {any} */ r) => r.id === comparison.id);
+    if (mine) { assert.equal(mine.summary.dataClass,'patient'); assert.equal(mine.summary.observed,null); }
+  }
+});
+
+test('P1-2 the repair adds the outcome history to the lineage, recomputes the observed block with suppression, and is idempotent',options,async () => {
+  const {comparison,outcomeSource} = await runMixedComparison();
+  await ageIntoLegacy(comparison);
+  assert.equal((await vcr.longitudinal.artifacts.record(study.id,comparison.id)).source_ids.includes(outcomeSource.id),false);
+  const first = await vcr.longitudinal.repairComparisons();
+  assert.ok(first.repaired >= 1 && first.recomputed >= 1,JSON.stringify(first));
+  const row = await vcr.longitudinal.artifacts.record(study.id,comparison.id);
+  assert.ok(row.source_ids.includes(outcomeSource.id),'F02: the outcome source is in the lineage');
+  assert.equal(row.summary.dataClass,'patient','F01: the strictest class');
+  assert.equal(row.summary.observed.groups[0].observed,null,'F01: the real cell of one person is withheld again');
+  assert.equal(row.summary.observed.groups[0].observedMean,null);
+  const stored = await vcr.jobs.resultOf(study.id,(await vcr.store.one(`SELECT j.id FROM evimed_vcr.results r JOIN evimed_vcr.executions e ON e.id=r.execution_id JOIN evimed_vcr.jobs j ON j.id=e.job_id WHERE r.diagnostics->'longitudinal'->>'id'=$1`,[comparison.id])).id);
+  assert.equal(stored.diagnostics.longitudinal.summary.dataClass,'patient','the job\'s stored result carries the repaired summary');
+  // withdrawing the outcome grant now denies it
+  await vcr.store.query("UPDATE evimed_vcr.sources SET status='withdrawn' WHERE id=$1",[outcomeSource.id]);
+  await assert.rejects(() => vcr.longitudinal.artifacts.read(study,comparison.id,'owner'),error => error.status === 403);
+  // a second run finds nothing to do, and the rows a new write produced are left as they are
+  const before = JSON.stringify((await vcr.store.rows("SELECT id,summary,snapshot_ids,source_ids,bindings FROM evimed_vcr.longitudinal_artifacts WHERE kind='comparison' ORDER BY id")));
+  const second = await vcr.longitudinal.repairComparisons();
+  assert.equal(second.repaired,0,JSON.stringify(second));
+  assert.equal(JSON.stringify((await vcr.store.rows("SELECT id,summary,snapshot_ids,source_ids,bindings FROM evimed_vcr.longitudinal_artifacts WHERE kind='comparison' ORDER BY id"))),before);
+});

@@ -383,7 +383,9 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
           ...(Number.isInteger(Number(config.vcrMinCellSize)) && Number(config.vcrMinCellSize) >= 2 ? {minCell:Number(config.vcrMinCellSize)} : {})}],{timeoutMs:job.cpuSecondsLimit*1000,isCanceled}) : null;
       // the page, the model's reads and the report take the synthetic exemption from the OUTER class, so it is the strictest of
       // both forecasts and the outcome history, never the forecasts' alone
-      const comparison = {...computed,predictionIds:[first.row.id,second.row.id],...(observed ? {observed,dataClass:strictestDataClass(computed,observed)} : {}),...accuracyOf([first,second])};
+      // `outcomeHistoryId` marks a comparison whose lineage and class were taken from the outcome history it names; a stored comparison with
+      // an observed block and no marker predates that rule and is read as patient-class (`presentLongitudinal`) until the repair settles it
+      const comparison = {...computed,predictionIds:[first.row.id,second.row.id],...(observed ? {observed,outcomeHistoryId:outcomes?.row.id,dataClass:strictestDataClass(computed,observed)} : {}),...accuracyOf([first,second])};
       saved = longitudinalArtifactView(await artifacts.save(study,'comparison',comparison,comparison,
         lineageOf([first.row,second.row,...(outcomes ? [outcomes.row] : [])],first.row.id)));
     } else if (job.method === 'forecast.trial_benchmark') {
@@ -402,7 +404,64 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
     result.manifest.outputHash = createHash('sha256').update(vcrResultOutputPayload(result)).digest('hex');
     return result;
   }
-  return {artifacts,providers,freezeHistory,importPrediction,prepare,execute,
+  /**
+   * The startup repair of comparisons written before the outcome history joined a comparison's class and lineage (F01/F02, review eng
+   * round 2 P1-2). For each comparison whose job names an outcome history: the history's snapshots, sources and bindings are added to the
+   * row's lineage (so withdrawing the outcome grant reaches it), the class becomes the strictest of both forecasts and the history, and when
+   * that is patient while the row said synthetic its observed block is computed again with the small-cell rule it never had (and, if that
+   * cannot be done, withheld). Idempotent: a settled row (lineage already holds the history's, class already the strictest, marker set) is
+   * left alone, so it is safe to run at every start and on the production database; it reads and writes rows, never bytes.
+   * @param {{ report?: (code: string) => void }} [options]
+   * @returns {Promise<{ examined: number, repaired: number, recomputed: number, withheld: number }>}
+   */
+  async function repairComparisons({report = () => {}} = {}) {
+    await store.ready?.();
+    const rows = await store.rows(`SELECT a.*, (SELECT j.scenario->>'outcomeHistoryId' FROM evimed_vcr.results r
+        JOIN evimed_vcr.executions e ON e.id = r.execution_id JOIN evimed_vcr.jobs j ON j.id = e.job_id
+        WHERE r.study_id = a.study_id AND r.diagnostics->'longitudinal'->>'id' = a.id ORDER BY r.created_at DESC LIMIT 1) AS outcome_history_id
+      FROM evimed_vcr.longitudinal_artifacts a WHERE a.kind = 'comparison' ORDER BY a.created_at`);
+    const counts = {examined:rows.length,repaired:0,recomputed:0,withheld:0};
+    for (const row of rows) {
+      try {
+        if (!row.outcome_history_id && row.summary?.observed == null) continue;
+        const outcomeRow = row.outcome_history_id ? await store.one('SELECT * FROM evimed_vcr.longitudinal_artifacts WHERE study_id=$1 AND id=$2',[row.study_id,row.outcome_history_id]) : null;
+        const contentOf = async (/** @type {any} */ held) => JSON.parse((await fs.readFile(dataPlane.resolve(held.location))).toString('utf8'));
+        const predictions = [];
+        for (const id of row.summary?.predictionIds ?? []) { const held = await store.one('SELECT * FROM evimed_vcr.longitudinal_artifacts WHERE study_id=$1 AND id=$2',[row.study_id,id]); if (held) predictions.push({row:held,content:await contentOf(held)}); }
+        const outcomes = outcomeRow ? {row:outcomeRow,content:await contentOf(outcomeRow)} : null;
+        const known = new Set((row.bindings ?? []).map((/** @type {any} */ binding) => JSON.stringify(binding)));
+        const lineage = {snapshotIds:[...new Set([...row.snapshot_ids,...(outcomeRow?.snapshot_ids ?? [])])],sourceIds:[...new Set([...row.source_ids,...(outcomeRow?.source_ids ?? [])])],
+          bindings:[...(row.bindings ?? []),...(outcomeRow?.bindings ?? []).filter((/** @type {any} */ binding) => !known.has(JSON.stringify(binding)))]};
+        const lineageSettled = lineage.snapshotIds.length === row.snapshot_ids.length && lineage.sourceIds.length === row.source_ids.length && lineage.bindings.length === (row.bindings ?? []).length;
+        const strictest = predictions.length && outcomes ? strictestDataClass(...predictions.map(held => held.content),outcomes.content) : 'patient';
+        if (lineageSettled && row.summary?.dataClass === strictest && (row.summary?.observed == null || row.summary.outcomeHistoryId !== undefined)) continue;
+        let summary = {...row.summary,dataClass:strictest};
+        if (row.summary?.observed != null) {
+          summary.outcomeHistoryId = outcomeRow?.id ?? null;
+          if (predictions.length === 2 && outcomes) {
+            try {
+              const observed = await runForecastCalculation('forecast.compare_observed',[predictions[0].content,predictions[1].content,outcomes.content,{seed:Number(row.summary.seed ?? 1),
+                dataClass:strictestDataClass(predictions[0].content,predictions[1].content),
+                ...(Number.isInteger(Number(config.vcrMinCellSize)) && Number(config.vcrMinCellSize) >= 2 ? {minCell:Number(config.vcrMinCellSize)} : {})}],{timeoutMs:60_000});
+              summary = {...summary,observed,dataClass:strictestDataClass(summary,observed)};
+              counts.recomputed += 1;
+            } catch { summary = {...summary,observed:null,observedWithheld:'recomputation_failed'}; counts.withheld += 1; }
+          } else { summary = {...summary,observed:null,observedWithheld:'inputs_missing'}; counts.withheld += 1; }
+        }
+        await store.transaction(async (/** @type {any} */ client) => {
+          await client.query(`UPDATE evimed_vcr.longitudinal_artifacts SET snapshot_ids=$2::jsonb, source_ids=$3::jsonb, bindings=$4::jsonb, summary=$5::jsonb WHERE id=$1`,
+            [row.id,JSON.stringify(lineage.snapshotIds),JSON.stringify(lineage.sourceIds),JSON.stringify(lineage.bindings),JSON.stringify(summary)]);
+          // the job's stored result carries a copy of the artifact's view: the same summary is what its page and reads show
+          await client.query(`UPDATE evimed_vcr.results SET diagnostics = jsonb_set(jsonb_set(diagnostics,'{longitudinal,summary}',$3::jsonb),'{longitudinal,snapshotIds}',$4::jsonb)
+            WHERE study_id=$1 AND diagnostics->'longitudinal'->>'id'=$2`,[row.study_id,row.id,JSON.stringify(summary),JSON.stringify(lineage.snapshotIds)]);
+        });
+        counts.repaired += 1;
+        report('vcr_comparison_lineage_repaired');
+      } catch (error) { report(String(/** @type {any} */ (error)?.code ?? 'vcr_comparison_repair_failed')); }
+    }
+    return counts;
+  }
+  return {artifacts,providers,freezeHistory,importPrediction,prepare,execute,repairComparisons,
     /** Translate saved model outputs into the existing analytic design engine.
      * Each job retains the prediction references and the variance semantics.
      * @param {any} study @param {any} input @param {string} actor */

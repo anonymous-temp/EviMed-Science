@@ -12,8 +12,18 @@ import { suppressForModel } from '@evimed/domain';
 /** The summary keys only the page projection restores. */
 const PAGE_LEDGER_KEYS = Object.freeze(['accounting','accountingReasons']);
 
+/** A comparison with an observed block that carries no `outcomeHistoryId` was written before the outcome history joined its class and
+ * lineage (F01/F02): its stored class may be a synthetic exemption its real outcomes never had, and its lineage does not hold the
+ * history's. Until the startup repair (`repairComparisons`) settles the row it is read as patient-class with the observed block
+ * withheld, so a stored class weaker than the strictest of its lineage is never what a reader is served.
+ * @param {any} record */
+function unsettledComparison(record) {
+  return record?.kind === 'comparison' && record.summary?.observed != null && record.summary.outcomeHistoryId === undefined;
+}
+
 /** @param {any} record @param {any} options */
 function artifact(record,options) {
+  if (unsettledComparison(record)) record = {...record,summary:{...record.summary,observed:null,observedWithheld:'lineage_unsettled',dataClass:'patient'}};
   const shown = suppressForModel(record,options);
   if (!record?.summary || !String(record.id).startsWith('vlf_')) return shown;
   if (record.summary.dataClass === 'synthetic') return {...shown,summary:structuredClone(record.summary)};

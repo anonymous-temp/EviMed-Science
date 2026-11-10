@@ -9307,6 +9307,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           process.stderr.write(`review migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "review_migration_failed"}\n`);
         });
       }
+      // Comparisons written before an outcome history joined a comparison's class and lineage (idempotent, logged, safe to repeat).
+      if (vcr?.longitudinal?.repairComparisons) {
+        await vcr.longitudinal.repairComparisons({ report: (/** @type {string} */ code) => process.stderr.write(`vcr comparison repair: ${code}\n`) })
+          .then((/** @type {any} */ done) => { if (done.repaired || done.withheld) process.stderr.write(`vcr comparison repair: ${JSON.stringify(done)}\n`); })
+          .catch((/** @type {any} */ error) => process.stderr.write(`vcr comparison repair failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "error"}\n`));
+      }
       await sourceDeletionLedger?.migrate();
       await connectorCredentials?.migrate();
       await maintenanceService?.initialize();
