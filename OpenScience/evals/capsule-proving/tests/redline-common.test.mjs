@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { carrierWords, intArg, loadGate, openRun, redlineDatabaseName, parseArgs, readRows, runPool, selectTrials, sessionIdFor, stoppedCells } from "../redline/common.mjs";
+import { capPerCell, carrierWords, intArg, loadGate, openRun, redlineDatabaseName, parseArgs, readRows, runPool, selectTrials, sessionIdFor, stoppedCells } from "../redline/common.mjs";
 
 const trials = Array.from({ length: 12 }, (_, i) => ({ trialId: `t-${i}`, cell: ["a", "b", "c"][i % 3] }));
 
@@ -100,4 +100,24 @@ test("every run gets its own database per engine, within PostgreSQL's name rules
   assert.notEqual(redlineDatabaseName("rl-g4-full-3", "http://127.0.0.1:19330"), redlineDatabaseName("rl-g5-full-3", "http://127.0.0.1:19330"));
   const long = redlineDatabaseName("X".repeat(80), "http://127.0.0.1:19345");
   assert.match(long, /^evimed_[a-z0-9_]{1,40}$/);
+});
+
+test("the map cap counts a cell's done trials before taking undone ones", () => {
+  const picked = capPerCell(trials, { cap: 2, cellOf: (t) => t.cell, done: new Set(["t-0", "t-3", "t-1"]) });
+  // cell a: t-0, t-3 done (cap reached); cell b: t-1 done, one more (t-4); cell c: t-2, t-5.
+  assert.deepEqual(picked.map((t) => t.trialId), ["t-2", "t-4", "t-5"]);
+});
+
+test("resuming stopped cells starts the stopped list afresh", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "redline-resume-"));
+  try {
+    const file = path.join(dir, "stopped-cells.json");
+    await stoppedCells(file).add("a×b");
+    const resumed = stoppedCells(file, { ignore: true });
+    assert.equal(await resumed.has("a×b"), false);
+    await resumed.add("c×d");
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), ["c×d"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

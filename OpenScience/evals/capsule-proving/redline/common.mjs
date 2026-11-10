@@ -59,6 +59,25 @@ export function selectTrials(trials, { shard = 0, shards = 1, only = null, perCe
 }
 
 /**
+ * At most `cap` trials per cell, counting the cell's trials already done: the undone trials kept, in order.
+ * @template T @param {T[]} trials @param {{ cap: number, cellOf: (trial: T) => string, done: Set<string>, idOf?: (trial: T) => string }} options
+ */
+export function capPerCell(trials, { cap, cellOf, done, idOf = (trial) => /** @type {any} */ (trial).trialId }) {
+  /** @type {Map<string, number>} */
+  const count = new Map();
+  for (const trial of trials) if (done.has(idOf(trial))) count.set(cellOf(trial), (count.get(cellOf(trial)) ?? 0) + 1);
+  const out = [];
+  for (const trial of trials) {
+    if (done.has(idOf(trial))) continue;
+    const cell = cellOf(trial);
+    if ((count.get(cell) ?? 0) >= cap) continue;
+    count.set(cell, (count.get(cell) ?? 0) + 1);
+    out.push(trial);
+  }
+  return out;
+}
+
+/**
  * Run `worker` over `items` with at most `concurrency` at once; a stop flag ends the queue early. `gate(lane)` is awaited before a
  * lane takes its next item (the host-load throttle).
  * @template T @param {T[]} items @param {number} concurrency @param {(item: T) => Promise<void>} worker
@@ -157,9 +176,10 @@ export async function openRun({ runDir, meta }) {
  * @param {string} file @param {{ ignore?: boolean }} [options]
  */
 export function stoppedCells(file, { ignore = false } = {}) {
-  const read = async () => (ignore ? [] : JSON.parse(await readFile(file, "utf8").catch(() => "[]")));
+  // Resuming the stopped cells starts the file afresh (a cell over its red-line budget is stopped again by the runner).
   /** @type {Promise<void>} */
-  let chain = Promise.resolve();
+  let chain = ignore ? writeFile(file, "[]\n", { mode: 0o600 }).catch(() => {}) : Promise.resolve();
+  const read = async () => { await chain.catch(() => {}); return JSON.parse(await readFile(file, "utf8").catch(() => "[]")); };
   return {
     /** @param {string} cell */
     async has(cell) { return (await read()).includes(cell); },

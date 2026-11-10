@@ -28,7 +28,7 @@ import { pathToFileURL } from "node:url";
 
 import { G5_PROBES, G5_READERS } from "../synthetic/trialPlans.mjs";
 import { CROSS_ACCOUNT_READERS, g5Verdict, summarizeG5 } from "./classify.mjs";
-import { carrierWords, gitState, intArg, loadGate, milestone, openRun, redlineDatabaseName, parseArgs, runPool, selectTrials, stoppedCells as openStoppedCells } from "./common.mjs";
+import { carrierWords, capPerCell, gitState, intArg, loadGate, milestone, openRun, readRows, redlineDatabaseName, parseArgs, runPool, selectTrials, stoppedCells as openStoppedCells } from "./common.mjs";
 import { exportPaths, holds, searchBlockKind, servedMemoryFiles } from "./scan.mjs";
 import { openStack } from "./stack.mjs";
 
@@ -232,8 +232,21 @@ async function main() {
   const cellOf = (/** @type {any} */ trial) => `${trial.reader}×${trial.concurrent ? "concurrent" : "sequential"}`;
   const only = typeof args.only === "string" ? new Set(args.only.split(",")) : null;
   const selected = selectTrials(plan.trials, { shard, shards, only, perCell: options.perCell, cellOf, done: runner.status.done, limit: options.limit });
+  // The map mode: at most this many trials of each cell (G5: of each reader position), counting those already done.
+  if (intArg(args["cap-per-cell"], 0) > 0) {
+    const all = selectTrials(plan.trials, { shard, shards, only, cellOf });
+    selected.splice(0, selected.length, ...capPerCell(all, { cap: intArg(args["cap-per-cell"], 0), cellOf: (/** @type {any} */ trial) => trial.reader, done: runner.status.done }));
+  }
   for (const trial of selected) if (!G5_READERS.includes(trial.reader)) throw new Error(`unknown reader ${trial.trialId}`);
   const stoppedCells = openStoppedCells(path.join(runDir, "stopped-cells.json"), { ignore: Boolean(args["resume-stopped"]) });
+  // A cell stops at its `--stop-after`-th red line (default the first), counting the red lines its rows already hold.
+  const stopAfter = Math.max(1, intArg(args["stop-after"], 1));
+  const isRed = (row) => Boolean(row.verdict?.redLine);
+  /** @type {Map<string, number>} */
+  const redCount = new Map();
+  for (const row of await readRows(runner.rowsFile)) if (isRed(row)) redCount.set(cellOf(row), (redCount.get(cellOf(row)) ?? 0) + 1);
+  for (const [cell, n] of redCount) if (n >= stopAfter) await stoppedCells.add(cell);
+  const noteRed = async (/** @type {any} */ row) => { redCount.set(cellOf(row), (redCount.get(cellOf(row)) ?? 0) + 1); if ((redCount.get(cellOf(row)) ?? 0) >= stopAfter) await stoppedCells.add(cellOf(row)); };
 
   const account = `evlab-${runId}`.slice(0, 106);
   const stack = await openStack({ engineUrl, engineKeyFile: String(args["engine-key-file"] ?? "/srv/evimed/ovlab/root.key"),
@@ -253,8 +266,8 @@ async function main() {
       process.stderr.write(`${new Date().toISOString()} ${trial.trialId} ${cellOf(trial)} ${row.error ? `ERROR ${row.error}` : `planted=${row.planted} red=${Boolean(row.verdict?.redLine)} leaks=${(row.verdict?.leaks ?? []).join(",")} miss=${Boolean(row.verdict?.functionalMiss)}`} ${row.ms}ms\n`);
       if (row.verdict?.redLine) {
         red += 1;
-        await stoppedCells.add(cellOf(trial));
-        await milestone(`g5 ${runId} RED LINE ${trial.trialId} ${cellOf(trial)}: ${row.verdict.leaks.join(",")} — cell stopped`);
+        await noteRed(row);
+        await milestone(`g5 ${runId} RED LINE ${trial.trialId} ${cellOf(trial)}: ${row.verdict.leaks.join(",")} ${(redCount.get(cellOf(trial)) ?? 0) >= stopAfter ? " — cell stopped" : ` — red line ${redCount.get(cellOf(trial))}/${stopAfter} of the cell`}`);
       }
       if (finished % 25 === 0) await milestone(`g5 ${runId} shard ${shard}: ${finished}/${selected.length} done, ${red} red lines, ${failed} errors`);
     }, { gate: loadGate({ maxLoad: Number(args["max-load"] ?? 16), keep: intArg(args["keep-lanes"], 2) }) });

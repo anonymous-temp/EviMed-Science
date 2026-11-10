@@ -26,7 +26,7 @@ import { pathToFileURL } from "node:url";
 
 import { G4_DELETE_VIA, G4_PLANT_VIA } from "../synthetic/trialPlans.mjs";
 import { classifyFindings, summarizeG4 } from "./classify.mjs";
-import { carrierWords, gitState, intArg, loadGate, milestone, openRun, redlineDatabaseName, parseArgs, runPool, selectTrials, sessionIdFor, stoppedCells as openStoppedCells } from "./common.mjs";
+import { carrierWords, capPerCell, gitState, intArg, loadGate, milestone, openRun, readRows, redlineDatabaseName, parseArgs, runPool, selectTrials, sessionIdFor, stoppedCells as openStoppedCells } from "./common.mjs";
 import { capsulePreview, databaseColumnsWith, engineFilesWith, exportPaths, holds, markerLinePrints, modelSurfaces, pageSurfaces, servedMemoryFiles,
   staleOrigins, vectorHits } from "./scan.mjs";
 import { openStack } from "./stack.mjs";
@@ -254,12 +254,25 @@ async function main() {
     plan: { schema: plan.schema, seed: plan.seed, count: plan.count }, options } });
   if (args["summary-only"]) { const summary = await runner.writeSummary(summarizeG4); process.stdout.write(`${JSON.stringify(summary.totals)}\n`); return; }
 
-  const stoppedCells = openStoppedCells(path.join(runDir, "stopped-cells.json"), { ignore: Boolean(args["resume-stopped"]) });
   const cellOf = (/** @type {any} */ trial) => `${trial.plantVia}×${trial.deleteVia}`;
+  const stoppedCells = openStoppedCells(path.join(runDir, "stopped-cells.json"), { ignore: Boolean(args["resume-stopped"]) });
+  // A cell stops at its `--stop-after`-th red line (default the first), counting the red lines its rows already hold.
+  const stopAfter = Math.max(1, intArg(args["stop-after"], 1));
+  const isRed = (row) => Boolean((row.reappeared && row.deleted) || row.unfinishedDelete);
+  /** @type {Map<string, number>} */
+  const redCount = new Map();
+  for (const row of await readRows(runner.rowsFile)) if (isRed(row)) redCount.set(cellOf(row), (redCount.get(cellOf(row)) ?? 0) + 1);
+  for (const [cell, n] of redCount) if (n >= stopAfter) await stoppedCells.add(cell);
+  const noteRed = async (/** @type {any} */ row) => { redCount.set(cellOf(row), (redCount.get(cellOf(row)) ?? 0) + 1); if ((redCount.get(cellOf(row)) ?? 0) >= stopAfter) await stoppedCells.add(cellOf(row)); };
   const only = typeof args.only === "string" ? new Set(args.only.split(",")) : null;
   const cells = typeof args.cells === "string" ? new Set(args.cells.split(",")) : null;
   const selected = selectTrials(plan.trials.filter((/** @type {any} */ trial) => !cells || cells.has(cellOf(trial))),
     { shard, shards, only, perCell: options.perCell, cellOf, done: runner.status.done, limit: options.limit });
+  // The map mode: at most this many trials of each cell (G5: of each reader position), counting those already done.
+  if (intArg(args["cap-per-cell"], 0) > 0) {
+    const all = selectTrials(plan.trials.filter((/** @type {any} */ trial) => !cells || cells.has(cellOf(trial))), { shard, shards, only, cellOf });
+    selected.splice(0, selected.length, ...capPerCell(all, { cap: intArg(args["cap-per-cell"], 0), cellOf, done: runner.status.done }));
+  }
   for (const trial of selected) if (!G4_PLANT_VIA.includes(trial.plantVia) || !G4_DELETE_VIA.includes(trial.deleteVia)) throw new Error(`unknown trial shape ${trial.trialId}`);
 
   const account = `evlab-${runId}`.slice(0, 106);
@@ -283,13 +296,13 @@ async function main() {
       // Only a finished deletion can be a reappearance. A deletion the product accepted and never finished, while the marker still
       // reaches an answer, is reported with the red lines as an unfinished delete (and stops its cell too).
       if (row.unfinishedDelete) {
-        await stoppedCells.add(cellOf(trial));
-        await milestone(`g4 ${runId} RED LINE (unfinished delete) ${trial.trialId} ${cellOf(trial)}: accepted, never completed (${(row.deletion?.outcomes ?? []).slice(-1)[0] ?? ""}), still reachable via ${Object.entries(row.places).filter(([, value]) => /** @type {any} */ (value).class === "redline").map(([place]) => place).join(",")} — cell stopped`);
+        await noteRed(row);
+        await milestone(`g4 ${runId} RED LINE (unfinished delete) ${trial.trialId} ${cellOf(trial)}: accepted, never completed (${(row.deletion?.outcomes ?? []).slice(-1)[0] ?? ""}), still reachable via ${Object.entries(row.places).filter(([, value]) => /** @type {any} */ (value).class === "redline").map(([place]) => place).join(",")} ${(redCount.get(cellOf(trial)) ?? 0) >= stopAfter ? " — cell stopped" : ` — red line ${redCount.get(cellOf(trial))}/${stopAfter} of the cell`}`);
       }
       if (row.reappeared && row.deleted) {
         reappeared += 1;
-        await stoppedCells.add(cellOf(trial));
-        await milestone(`g4 ${runId} RED LINE ${trial.trialId} ${cellOf(trial)}: ${Object.entries(row.places).filter(([, value]) => /** @type {any} */ (value).class === "redline").map(([place]) => place).join(",")} — cell stopped`);
+        await noteRed(row);
+        await milestone(`g4 ${runId} RED LINE ${trial.trialId} ${cellOf(trial)}: ${Object.entries(row.places).filter(([, value]) => /** @type {any} */ (value).class === "redline").map(([place]) => place).join(",")} ${(redCount.get(cellOf(trial)) ?? 0) >= stopAfter ? " — cell stopped" : ` — red line ${redCount.get(cellOf(trial))}/${stopAfter} of the cell`}`);
       }
       if (finished % 25 === 0) await milestone(`g4 ${runId} shard ${shard}: ${finished}/${selected.length} done, ${reappeared} red lines, ${failed} errors`);
     }, { gate: loadGate({ maxLoad: Number(args["max-load"] ?? 16), keep: intArg(args["keep-lanes"], 2) }) });
