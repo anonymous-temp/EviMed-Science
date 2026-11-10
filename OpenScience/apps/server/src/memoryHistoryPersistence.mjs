@@ -9,6 +9,8 @@ import { compact } from './nativeMemoryRejections.mjs';
 const migrations = new WeakMap();
 const sql = `
 CREATE SCHEMA IF NOT EXISTS evimed_memory;
+-- A session URI with an empty-text hash owes resolution to original messages
+-- when that conversation archives. It never acts as a wildcard during recall.
 CREATE TABLE IF NOT EXISTS evimed_memory.history_message_rejections (
   owner_id text NOT NULL, owner_created_at text NOT NULL, namespace_id text NOT NULL,
   memory_type text NOT NULL, fingerprint text NOT NULL, archive_uri text NOT NULL, message_hash text NOT NULL,
@@ -174,10 +176,18 @@ export class MemoryHistoryLedger {
     for (const message of messages) await this.database.query(`INSERT INTO evimed_memory.history_message_rejections
       (owner_id,owner_created_at,namespace_id,memory_type,fingerprint,archive_uri,message_hash)
       VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
-      [context.ownerId,context.ownerCreatedAt,context.namespaceId,memoryType,fingerprint,message.archiveUri,lineFingerprint(message.text)]);
+      [context.ownerId,context.ownerCreatedAt,context.namespaceId,memoryType,fingerprint,message.archiveUri,message.messageHash??lineFingerprint(message.text)]);
+  }
+  async boundRejections(context, sessionUri) {
+    await this.migrate();
+    return (await this.database.query(`SELECT DISTINCT r.memory_type,r.fingerprint,r.text FROM evimed_memory.history_message_rejections h
+      JOIN evimed_memory.native_rejections r ON r.user_id=h.owner_id AND r.memory_type=h.memory_type AND r.fingerprint=h.fingerprint
+      WHERE h.owner_id=$1 AND h.owner_created_at=$2 AND h.namespace_id=$3 AND h.archive_uri=$4 AND r.text IS NOT NULL`,
+      [context.ownerId,context.ownerCreatedAt,context.namespaceId,sessionUri])).rows;
   }
   async registerWriteMessages(context, archiveUri, texts) {
     await this.migrate();
+    await this.overlay.linkSourceCopies(context.ownerId,archiveUri);
     await this.database.query(`INSERT INTO evimed_memory.history_write_messages(owner_id,owner_created_at,namespace_id,archive_uri,message_hash)
       SELECT $1,$2,$3,$4,unnest($5::text[]) ON CONFLICT DO NOTHING`,
       [context.ownerId,context.ownerCreatedAt,context.namespaceId,archiveUri,texts.length ? texts.map(lineFingerprint) : ['']]);

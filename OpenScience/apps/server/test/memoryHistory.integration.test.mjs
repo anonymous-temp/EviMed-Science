@@ -623,3 +623,127 @@ test('deletion also retires a no-op remember archive that repeated a conversatio
   assert.equal(await f.sessions.read(f.userId,`${tool.archive_uri}/messages.jsonl`),null);
   assert.ok(await f.sessions.read(f.userId,`${source.archive_uri}/messages.jsonl`),'the original conversation remains');
 });
+
+for(const action of ['forget','edit','delete']) for(const hard of [true,false]) for(const linked of [true,false]) {
+  test(`remember-only ${action}, ${hard?'hard tokens':'semantic'}, ${linked?'bound conversation':'legacy lookup'} fences original words and undo lifts it`,options,async t=>{
+    const f=await setup(t);
+    await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Remember fixture',1048576)",[f.userId]);
+    const removed=hard?'The cabinet code is Q-83194.':'Prefers study comparisons in adjacent columns.';
+    const original=hard?'Please remember: my cabinet uses Q-83194.':'Please remember: I like studies compared side by side.';
+    const archive=await f.commitConversation('person',[{role:'user',text:original},{role:'assistant',text:'An independent neighbour.'}],{projectId:'default'});
+    await f.service.ingestArchive({...f.commit,archiveUri:archive.archive_uri,engineSession:archive.session},f.context);
+    // Only the one-shot tool extraction writes a memory; the conversation's extraction writes none.
+    const tool=await f.commitConversation('tool',[{role:'user',text:removed}],{projectId:'default',origin:'tool',engineSession:'mcp-store-rememberonly'});
+    if(linked) await f.overlay.recordCommit({userId:f.userId,archiveUri:tool.archive_uri,engineSession:tool.session,projectId:'default',origin:'tool',sourceSession:archive.session});
+    const uri=f.seed('notes/rememberonly.md',removed,{type:'notes'});
+    await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'notes',body:removed});
+    await f.overlay.syncOrigins(f.userId,uri,{after:removed,origin:{engineSession:tool.session,archiveUri:tool.archive_uri,projectId:'default'}});
+    if(linked) assert.ok((await f.overlay.originsOf(f.userId,[uri])).get(uri).get(lineFingerprint(removed)).sources.some(source=>source.archiveUri===archive.archive_uri));
+    f.store.history=f.service;
+    f.store.memoryContexts={forUri:async()=>f.context,all:async()=>[f.context],assertUri:()=>{},assertKnown:async()=>{}};
+    f.store.rejectionJudge={same:async request=>({same:new Map(request.candidates.flatMap((candidate,index)=>[removed,original].includes(candidate.text)?[[index,lineFingerprint(removed)]]:[])),stated:new Set()})};
+    if(action==='edit') await f.store.update(f.userId,nativeFileId(uri),{value:'A new unrelated memory.',expectedVersion:(await f.store.getRecord(f.userId,nativeFileId(uri))).version});
+    else await f.store.forgetFile(f.userId,(await f.store.files(f.userId)).find(row=>row.uri===uri),{keepText:action==='forget'});
+    const call=await gateway(t,f);
+    for(const mcp of [false,true]) assert.ok(!(await call(mcp)).text.includes(original));
+    const fences=(await f.database.query('SELECT * FROM evimed_memory.history_message_rejections WHERE owner_id=$1',[f.userId])).rows;
+    assert.ok(fences.some(row=>row.archive_uri===archive.archive_uri&&row.message_hash===lineFingerprint(original)));
+    if(action==='delete') await f.overlay.unreject(f.userId,'notes',[removed]);else await f.store.undo(f.userId,nativeFileId(uri));
+    for(const mcp of [false,true]) assert.ok((await call(mcp)).text.includes(original));
+  });
+}
+
+test('remember binds a conversation archived later and repairs a lost copy edge without crossing a project incarnation',options,async t=>{
+  const f=await setup(t);
+  await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Later source',1048576)",[f.userId]);
+  const tool=await f.commitConversation('earlytool',[{role:'user',text:'Cabinet T-28464.'}],{origin:'scan',engineSession:'mcp-store-early'});
+  await f.overlay.recordCommit({userId:f.userId,archiveUri:tool.archive_uri,engineSession:tool.session,projectId:'default',origin:'tool',sourceSession:'dsh-later'});
+  const uri=f.seed('notes/later.md','Cabinet T-28464.',{type:'notes'});
+  await f.overlay.syncOrigins(f.userId,uri,{after:'Cabinet T-28464.',origin:{engineSession:tool.session,archiveUri:tool.archive_uri,projectId:'default'}});
+  const source=await f.commitConversation('later',[{role:'user',text:'Please remember my cabinet T-28464.'}],{projectId:'default',engineSession:'dsh-later'});
+  const origins=async()=>[...((await f.overlay.originsOf(f.userId,[uri])).get(uri).values())][0].sources??[];
+  assert.ok((await origins()).some(origin=>origin.archiveUri===source.archive_uri));
+  const snapshot=await origins();assert.doesNotThrow(()=>JSON.stringify(snapshot),'inherited origins can be persisted by merge and undo');
+  await f.database.query('DELETE FROM evimed_memory.native_source_copies WHERE user_id=$1',[f.userId]);
+  await f.ledger.registerWriteMessages(f.context,tool.archive_uri,['Cabinet T-28464.']);
+  assert.ok((await origins()).some(origin=>origin.archiveUri===source.archive_uri),'archive ingestion repairs a crash between commit and edge registration');
+  await f.database.query("UPDATE evimed_control.projects SET created_at=created_at+interval '1 second' WHERE user_id=$1 AND id='default'",[f.userId]);
+  const reused=source.archive_uri.replace('archive_001','archive_002');
+  await f.overlay.recordCommit({userId:f.userId,archiveUri:reused,engineSession:'dsh-later',projectId:'default',origin:'gateway'});
+  assert.ok(!(await origins()).some(origin=>origin.archiveUri===reused),'a reused session in a new project incarnation does not inherit the old binding');
+});
+
+for(const hard of [true,false]) test(`forget before the calling conversation archives still fences its later words (${hard?'hard tokens':'semantic'})`,options,async t=>{
+  const f=await setup(t);
+  await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Pending conversation',1048576)",[f.userId]);
+  const removed=hard?'Cabinet D-54183.':'Prefers study comparisons in adjacent columns.';
+  const original=hard?'Please remember my cabinet is D-54183.':'Please remember that I like studies compared side by side.';
+  const tool=await f.commitConversation('unarchivedtool',[{role:'user',text:removed}],{projectId:'default',origin:'tool',engineSession:'mcp-store-unarchived'});
+  await f.overlay.recordCommit({userId:f.userId,archiveUri:tool.archive_uri,engineSession:tool.session,projectId:'default',origin:'tool',sourceSession:'dsh-delayed'});
+  const uri=f.seed('notes/unarchived.md',removed,{type:'notes'});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'notes',body:removed});
+  await f.overlay.syncOrigins(f.userId,uri,{after:removed,origin:{engineSession:tool.session,archiveUri:tool.archive_uri,projectId:'default'}});
+  f.store.history=f.service;
+  const judge={same:async request=>({same:new Map(request.candidates.flatMap((candidate,index)=>[removed,original].includes(candidate.text)?[[index,lineFingerprint(removed)]]:[])),stated:new Set()})};
+  f.store.rejectionJudge=judge;f.service.rejectionJudge=judge;
+  await f.store.forgetFile(f.userId,(await f.store.files(f.userId)).find(row=>row.uri===uri),{keepText:true});
+  assert.equal((await f.ledger.boundRejections(f.context,`${f.context.userRoot}/sessions/dsh-delayed`)).length,1);
+  const source=await f.commitConversation('delayed',[{role:'user',text:original}],{projectId:'default',engineSession:'dsh-delayed'});
+  const commit={...f.commit,archiveUri:source.archive_uri,engineSession:source.session};
+  await f.service.ingestArchive(commit,f.context);
+  assert.equal(await f.ledger.rejected(f.context,[original],source.archive_uri),true);
+  assert.ok(!(await search(f)).some(hit=>hit.sessionId==='delayed'));
+  await f.store.undo(f.userId,nativeFileId(uri));
+  assert.equal(await f.ledger.rejected(f.context,[original],source.archive_uri),false);
+  await f.service.ingestArchive(commit,f.context);
+  assert.ok((await search(f)).some(hit=>hit.sessionId==='delayed'));
+});
+
+test('legacy lookup judges redacted text but fences the complete original message hash',options,async t=>{
+  const f=await setup(t),password='amber river 72';
+  f.service.config.memoryHistorySecretRedactionEnabled=true;
+  f.service.secrets.judge={identify:async({messages})=>messages.some(message=>message.text.includes(password))?[password]:[]};
+  const original=`Please remember that studies should appear in adjacent columns. My mailbox password is ${password}.`;
+  const removed='Prefers studies compared in adjacent columns.';
+  const source=await f.commitConversation('redactedsource',[{role:'user',text:original}],{projectId:'default'});
+  await f.service.ingestArchive({...f.commit,archiveUri:source.archive_uri,engineSession:source.session},f.context);
+  const tool=await f.commitConversation('redactedtool',[{role:'user',text:removed}],{projectId:'default',engineSession:'mcp-store-redacted'});
+  const uri=f.seed('notes/redacted-remember.md',removed,{type:'notes'});
+  await f.overlay.upsertFile({userId:f.userId,uri,memoryType:'notes',body:removed});
+  await f.overlay.syncOrigins(f.userId,uri,{after:removed,origin:{engineSession:tool.session,archiveUri:tool.archive_uri,projectId:'default'}});
+  f.store.history=f.service;
+  f.store.rejectionJudge={same:async request=>{
+    assert.ok(!JSON.stringify(request).includes(password),'history lookup never sends a redacted credential to the removal judge');
+    return {same:new Map(request.candidates.flatMap((candidate,index)=>candidate.text.includes('studies')?[[index,lineFingerprint(removed)]]:[])),stated:new Set()};
+  }};
+  await f.store.forgetFile(f.userId,(await f.store.files(f.userId)).find(row=>row.uri===uri),{keepText:true});
+  const fences=(await f.database.query('SELECT message_hash FROM evimed_memory.history_message_rejections WHERE owner_id=$1 AND archive_uri=$2',[f.userId,source.archive_uri])).rows;
+  assert.ok(fences.some(row=>row.message_hash===lineFingerprint(original)));
+  assert.ok(!(await search(f)).some(hit=>hit.sessionId==='session_redactedsource'));
+  await f.store.undo(f.userId,nativeFileId(uri));
+  const restored=JSON.stringify(await search(f));assert.match(restored,/studies should appear/);assert.ok(!restored.includes(password));
+});
+
+test('a retried remember extraction retains the calling conversation and its deletion fence',options,async t=>{
+  const f=await setup(t),text='Cabinet R-48271.',original='Please remember my cabinet R-48271.';
+  await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Replay conversation',1048576)",[f.userId]);
+  const source=await f.commitConversation('replaycaller',[{role:'user',text:original}],{projectId:'default'});
+  await f.service.ingestArchive({...f.commit,archiveUri:source.archive_uri,engineSession:source.session},f.context);
+  const uri=`${f.root}/notes/replayed-remember.md`;
+  f.stub.extract=({session})=>session.startsWith('mcp-store-')?'fail':{adds:[{uri,memory_type:'notes',after:text}]};
+  const tool=await f.commitConversation('retrytool',[{role:'user',text}],{projectId:'default',origin:'tool',engineSession:'mcp-store-retrytool'});
+  await f.overlay.recordCommit({userId:f.userId,archiveUri:tool.archive_uri,engineSession:tool.session,projectId:'default',origin:'tool',sourceSession:source.session});
+  await f.worker.processCommits({userId:f.userId});f.advance(3_600_000);
+  await f.worker.processCommits({userId:f.userId});await f.worker.processCommits({userId:f.userId});
+  const replay=(await f.overlay.commitsOf(f.userId)).find(commit=>commit.origin==='replay');
+  assert.equal(replay.sourceSession,source.session);
+  const origins=(await f.overlay.originsOf(f.userId,[uri])).get(uri).get(lineFingerprint(text));
+  assert.ok(origins.sources.some(origin=>origin.archiveUri===source.archive_uri));
+  await f.database.query("UPDATE evimed_memory.native_commits SET origin='scan' WHERE user_id=$1 AND archive_uri=$2",[f.userId,replay.archiveUri]);
+  await f.database.query('DELETE FROM evimed_memory.native_source_copies WHERE user_id=$1 AND copy_archive_uri=$2',[f.userId,replay.archiveUri]);
+  await f.overlay.linkSourceCopies(f.userId,replay.archiveUri);
+  assert.ok((await f.overlay.originsOf(f.userId,[uri])).get(uri).get(lineFingerprint(text)).sources.some(origin=>origin.archiveUri===source.archive_uri));
+  f.store.history=f.service;
+  await f.store.forgetFile(f.userId,(await f.store.files(f.userId)).find(file=>file.uri===uri),{keepText:true});
+  assert.ok(!(await search(f)).some(hit=>hit.sessionId==='session_replaycaller'));
+});

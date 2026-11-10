@@ -108,9 +108,10 @@ export function historySearchText(hits, { semanticSecrets = false } = {}) {
  * outbox: completion follows this method, so any failed write is retried.
  */
 export class MemoryHistory {
-  constructor({ config, ledger, contexts, resolveSource, eligible, admitMessage, usageLedger = null, secretJudge = null, resourcesFor = context => new OpenVikingResources({ client: context.sessions.client }) }) {
+  constructor({ config, ledger, contexts, resolveSource, eligible, admitMessage, usageLedger = null, secretJudge = null, rejectionJudge = null, resourcesFor = context => new OpenVikingResources({ client: context.sessions.client }) }) {
     this.config = config; this.ledger = ledger; this.contexts = contexts;
     this.resolveSource = resolveSource; this.eligible = eligible; this.admitMessage = admitMessage; this.resourcesFor = resourcesFor;
+    this.rejectionJudge = rejectionJudge;
     this.secrets = new MemoryHistorySecrets({ ledger, judge: secretJudge ?? createHistorySecretJudge({ config, usageLedger }) });
     this.lastBackfill = { at: null, discovered: 0, processed: 0, failed: 0, coverage: null };
   }
@@ -143,7 +144,8 @@ export class MemoryHistory {
     if (rows.length>100) throw Object.assign(new Error('Source copy indexing is still pending.'),{code:'memory_source_cleanup_busy'});
   }
 
-  /** Resolve only the removed line's snapshotted origins before syncOrigins drops them.
+  /** Resolve the removed line's origins before syncOrigins drops them; legacy
+   * remember writes without conversation provenance search the owner's history.
    * Persist message hashes activated by the rejection: undo lifts the fence, and a repeated forget reinstates it. */
   async rejectRemoved(context, file, removed, judge) {
     if (!removed.length) return;
@@ -159,6 +161,12 @@ export class MemoryHistory {
       for (const archiveUri of archives) {
         const archive = parseArchiveUri(archiveUri);
         if (!archive || archive.userRoot !== context.userRoot || archive.rest) throw new Error('memory_history_privacy_unavailable');
+        const binding=await this.ledger.overlay.commit(context.ownerId,archiveUri);
+        if (platformSessionOf(binding?.sourceSession)) {
+          // The conversation may not have archived its current turn yet. Keep a
+          // session-bound obligation so its later archive fences the actual words.
+          await this.ledger.rejectMessages(context,type,fingerprint,[{archiveUri:`${context.userRoot}/sessions/${binding.sourceSession}`,text:''}]);
+        }
         const raw = await context.sessions.read(context.ownerId,`${archiveUri}/messages.jsonl`);
         if (raw === null) continue; // An absent archive has no original words to return.
         if (Buffer.byteLength(raw)>MAX_ARCHIVE_BYTES) throw new MemoryHistoryLimitError('archive_bytes');
@@ -169,17 +177,32 @@ export class MemoryHistory {
         }
       }
       const tokens = hardTokens(normalisedStatement(text));
-      let matched;
-      if (tokens.length) matched = messages.filter(message=>tokens.every(token=>sourceHasToken(token,message)));
-      else if (messages.length) {
-        // One semantic call per removed line, with all its origin messages offered.
-        if (!judge?.same) throw new Error('memory_history_privacy_unavailable');
-        const verdict = await judge.same({userId:context.ownerId,originMessages:true,
-          candidates:messages.map(message=>({text:message.text,removed:[{fingerprint,text}]}))});
-        matched = messages.filter((_message,index)=>verdict?.same.has(index));
-      } else matched = [];
+      const hasConversation = archives.some(uri=>parseArchiveUri(uri)?.session.startsWith('dsh-'));
+      if (!hasConversation && context.kind !== 'geo-project' && this.enabled) {
+        // Internal source lookup uses the same product history search and all its
+        // account/incarnation/source proofs. Rejected text is inspected only to
+        // locate the original message; it is never returned to a caller.
+        const hits=await this.search({user:{id:context.ownerId},project:{id:'default',userId:context.ownerId},query:text,limit:8},
+          {includeOrigins:true,forRemoval:true});
+        const discovered=hits.flatMap(hit=>(hit.originalMessages??[]).filter(message=>message.sourceRole==='user')
+          .map(message=>({archiveUri:hit.origin.archiveUri,text:message.text,messageHash:message.messageHash,created_at:message.date})));
+        const copies=discovered.filter(message=>messages.some(source=>lineFingerprint(source.text)===lineFingerprint(message.text)));
+        messages.push(...(copies.length?copies:discovered));
+      }
+      const unique=[...new Map(messages.map(message=>[JSON.stringify([message.archiveUri,message.messageHash??lineFingerprint(message.text)]),message])).values()];
+      const matched=await this.matchRemoved(context,text,unique,judge,tokens);
       await this.ledger.rejectMessages(context,type,fingerprint,matched);
     }
+  }
+
+  async matchRemoved(context,text,messages,judge,tokens=hardTokens(normalisedStatement(text))) {
+    if(tokens.length)return messages.filter(message=>tokens.every(token=>sourceHasToken(token,message)));
+    if(!messages.length)return [];
+    if(!judge?.same)throw new Error('memory_history_privacy_unavailable');
+    const fingerprint=lineFingerprint(text);
+    const verdict=await judge.same({userId:context.ownerId,originMessages:true,
+      candidates:messages.map(message=>({text:message.text,removed:[{fingerprint,text}]}))});
+    return messages.filter((_message,index)=>verdict?.same.has(index));
   }
 
   /** One-shot write sessions are source copies, never conversations to retain.
@@ -211,6 +234,15 @@ export class MemoryHistory {
         const texts = raw.split('\n').filter(entry=>entry.trim()).map(entry=>JSON.parse(entry))
           .filter(message=>message.role==='user').map(message=>messageText(message,this.secretRedaction)).filter(Boolean);
         await this.ledger.registerWriteMessages(context,commit.archiveUri,texts);
+        if (sourceArchive.session.startsWith('dsh-') && raw !== null) {
+          const owed=await this.ledger.boundRejections(context,`${context.userRoot}/sessions/${sourceArchive.session}`);
+          if(owed.length) {
+            const messages=raw.split('\n').filter(entry=>entry.trim()).map(entry=>JSON.parse(entry)).filter(message=>message.role==='user')
+              .map(message=>({archiveUri:commit.archiveUri,text:messageText(message,this.secretRedaction),created_at:message.created_at})).filter(message=>message.text);
+            for(const rejection of owed) await this.ledger.rejectMessages(context,rejection.memory_type,rejection.fingerprint,
+              await this.matchRemoved(context,rejection.text,messages,this.rejectionJudge));
+          }
+        }
       }
     }
     if (!this.enabled || !this.ledger || !context?.ownerCreatedAt) return;
@@ -338,7 +370,7 @@ export class MemoryHistory {
   async coverage(ownerId) { return this.ledger.archiveCoverage(ownerId); }
   status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill } }; }
 
-  async search({ user, project, query, limit = 5 }, { includeOrigins = false } = {}) {
+  async search({ user, project, query, limit = 5 }, { includeOrigins = false, forRemoval = false } = {}) {
     if (!this.enabled || !query?.trim()) return [];
     const context = await this.contexts.forProject(project);
     if (context.ownerId !== user.id || context.kind === 'geo-project') return [];
@@ -397,7 +429,7 @@ export class MemoryHistory {
           .some(chunk=>chunk.messages.some(part=>part.text.includes(redact(message.text))));
       });
       if (!proven) continue;
-      if (await this.ledger.rejected(context,originalTexts,meta.archive_uri)) continue;
+      if (!forRemoval && await this.ledger.rejected(context,originalTexts,meta.archive_uri)) continue;
       let title = historyTitle(verified.conversationTitle,'Conversation',this.secretRedaction);
       let projectTitle = historyTitle(verified.projectTitle ?? verified.project?.name,'Project',this.secretRedaction);
       if (await this.ledger.rejected(context,[title])) title='Conversation';
@@ -405,6 +437,10 @@ export class MemoryHistory {
       if (!await this.ledger.lookup(user.id,context.ownerCreatedAt,context.namespaceId,verified.projectId,verified.projectCreatedAt,candidate.uri)) continue;
       hits.push({ conversationTitle: redact(title), conversationUrl: verified.conversationUrl, projectId: verified.projectId, projectTitle: redact(projectTitle), scope: 'project',
         sessionId: meta.session_id, messages: this.secretRedaction ? messages.map(message=>({...message,text:redact(message.text)})) : messages, contextOnly: true, confirmed: false, privateByDefault: privateByDefault({ nativeType: 'people' }),
+        ...(forRemoval ? {originalMessages:original.map(message=>{
+          const text=messageText(message,this.secretRedaction)??'';
+          return {sourceRole:message.role,date:message.created_at,text:redact(text),messageHash:lineFingerprint(text)};
+        }).filter(message=>message.text)} : {}),
         ...(includeOrigins ? { origin: { archiveUri: meta.archive_uri, engineSession: `dsh-${meta.session_id}`,
           projectId: verified.projectId, projectCreatedAt: verified.projectCreatedAt, addedAt: meta.minimum_date } } : {}) });
       if (hits.length >= asked) break;

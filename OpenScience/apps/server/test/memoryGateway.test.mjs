@@ -362,7 +362,7 @@ test("tool arguments are held to the caller's own memories: pinned targets, no r
 test("remember passes the same door as a captured message and its commit enters the ledger", async (t) => {
   const recorded = [];
   const overlay = { configured: true, account: async () => ({ registeredAt: "x" }), noteRegistered: async () => {}, recordCommit: async (commit) => { recorded.push(commit); }, sensitiveUris: async () => [] };
-  const { stub, mcp } = await fixture(t, { overlay });
+  const { stub, mcp } = await fixture(t, { overlay, admission: fixedAdmission({sessionId: "conversation_source"}) });
   const answer = await mcp({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "remember", arguments: { messages: [
     { role: "user", content: "记住：图纸尺寸单位一律用毫米，联系电话 13900139000，邮箱 drawings@example.org，身份证 110101199001011237。" },
     { role: "user", content: "<evimed-brief>平台简报</evimed-brief>" },
@@ -371,6 +371,7 @@ test("remember passes the same door as a captured message and its commit enters 
   assert.deepEqual(stub.sent("POST", "/mcp").at(-1).body.params.arguments.messages, [{ role: "user", content: "记住：图纸尺寸单位一律用毫米，联系电话 13900139000，邮箱 drawings@example.org，身份证 [已省略]。" }]);
   assert.equal(recorded.length, 1);
   assert.equal(recorded[0].origin, "tool");
+  assert.equal(recorded[0].sourceSession, "dsh-conversation_source");
   assert.match(recorded[0].archiveUri, new RegExp(`^${ROOT}/sessions/mcp-store-[0-9]+/history/archive_001$`));
   const nothing = await mcp({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "remember", arguments: { messages: [{ role: "user", content: "<evimed-brief>x</evimed-brief>" }] } } });
   assert.match(nothing.messages[0].result.content[0].text, /没有可以记下/);

@@ -710,7 +710,7 @@ export class NativeMemoryWorker {
       if (!archive || archive.userRoot !== context.userRoot || archive.session !== session || archive.rest || archive.archiveUri !== result.archive_uri) {
         throw new HttpError(403, 'memory_scope_denied', 'The replay archive does not match its original namespace.');
       }
-      await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: session, projectId: commit.projectId,projectCreatedAt:commit.projectCreatedAt??null, origin: "replay",
+      await this.overlay.recordCommit({ userId, archiveUri: result.archive_uri, engineSession: session, sourceSession: commit.sourceSession ?? null, projectId: commit.projectId,projectCreatedAt:commit.projectCreatedAt??null, origin: "replay",
         taskId: typeof result.task_id === "string" ? result.task_id : null, pendingText: commit.pendingText, attempts: commit.attempts + 1 });
       await this.overlay.markReplayed(userId, commit.archiveUri, result.archive_uri);
       recordNativeCommit("replayed");

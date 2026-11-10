@@ -1066,7 +1066,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             if (!found) return;
             recordGatewayCommit("accepted");
             try {
-              await overlay?.recordCommit({ userId: ctx.user.id, archiveUri: `${ctx.userRoot}/sessions/${found[1]}/history/archive_001`, engineSession: found[1], projectId: ctx.project.id,...(ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt?{projectCreatedAt:ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt}:{}), origin: "tool", taskId: found[2] });
+              await overlay?.recordCommit({ userId: ctx.user.id, archiveUri: `${ctx.userRoot}/sessions/${found[1]}/history/archive_001`, engineSession: found[1], sourceSession: admitted.sessionId ? `dsh-${admitted.sessionId}` : null, projectId: ctx.project.id,...(ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt?{projectCreatedAt:ctx.memoryContext?.projectCreatedAt??ctx.project.projectCreatedAt}:{}), origin: "tool", taskId: found[2] });
             } catch { recordLedgerFailure(); }
           });
           continue;
