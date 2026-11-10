@@ -39,22 +39,22 @@ function memoryLedger() {
       return { event, created: true };
     },
     async learningEvidenceOf(_userId, runId) { return rows.filter((row) => row.runId === runId); },
-    async cleanSettledRuns(_userId, { scope, from, to }) {
+    async cleanSettledRuns(_userId, { scope, from, to, toolchainEnabled = false }) {
       // The SQL's definition (`FeedbackEvents.cleanSettledRuns`): a shape-bearing event in the window, the run kept, never corrected.
       return rows.filter((row) => row.detail.scope === scope && Date.parse(row.occurredAt) >= from.getTime() && Date.parse(row.occurredAt) < to.getTime()
-        && ["silent", "follow-up", "used"].includes(row.detail.evidence) && row.detail.shape
+        && ["silent", "follow-up", "used"].includes(row.detail.evidence) && (row.detail.shape || (toolchainEnabled && row.detail.toolchain))
         && learningRunOutcome(rows.filter((other) => other.runId === row.runId).map((other) => other.detail)) === "clean")
-        .map((row) => ({ runId: row.runId, projectId: row.projectId, at: row.occurredAt, shape: row.detail.shape }));
+        .map((row) => ({ runId: row.runId, projectId: row.projectId, at: row.occurredAt, shape: row.detail.shape, toolchain: row.detail.toolchain }));
     },
   };
 }
 
 /**
  * @param {{ runs?: any[], answer?: string | null | (() => Promise<string | null>) | ((request: any) => Promise<string | null>), refusal?: string | null, ledger?: ReturnType<typeof memoryLedger>, opened?: any[], shapes?: any,
- *   failures?: string[], scripts?: any, judge?: boolean, examples?: any, observed?: string[] }} [options]
+ *   failures?: string[], scripts?: any, judge?: boolean, examples?: any, observed?: string[], toolchainEnabled?: boolean, readTraces?: any }} [options]
  */
 function setup({ runs = [finished()], answer = null, refusal = null, ledger = memoryLedger(), opened = methods, shapes = { "report/weekly.md": { format: "md", labels: ["summary", "findings"] } }, failures = [], scripts = null,
-  judge: withJudge = true, examples = null, observed = [] } = {}) {
+  judge: withJudge = true, examples = null, observed = [], toolchainEnabled = false, readTraces } = {}) {
   /** @type {any[]} */ const enqueued = [];
   /** @type {string[]} */ const brought = [];
   /** @type {any[]} */ const lessons = [];
@@ -69,6 +69,7 @@ function setup({ runs = [finished()], answer = null, refusal = null, ledger = me
   };
   const judge = { available: true, read: async (request, owner) => { asked.push({ request, owner }); return typeof answer === "function" ? answer(request) : answer; } };
   const evidence = new LearningEvidence({
+    toolchainEnabled, readTraces,
     feedback: ledger, jobs, agentRuns: { list: async () => runs }, triggers: () => triggers, judge: withJudge ? /** @type {any} */ (judge) : null, scripts, examples,
     methodsOpened: async () => opened, resolveProject: async () => project, readShapes: async () => shapes, report: (reason) => failures.push(reason),
     observe: (outcome) => observed.push(outcome), now: () => new Date(NOW),
@@ -101,6 +102,27 @@ test("a judge's answer is worth what code can check of it: the quotation is in t
   assert.ok(LEARNING_EVIDENCE_FAILURES.includes("quote_not_found"));
   assert.equal(unsafeToKeep("我的手机号 13800138000"), true);
   assert.equal(unsafeToKeep("每节只要三行"), false);
+});
+
+test("accepted ordinary answers settle with separate toolchain evidence and learn one routine", async () => {
+  const runs = [];
+  const state = setup({ runs, answer: JSON.stringify({ verdict: "accept" }), toolchainEnabled: true,
+    readTraces: async () => [{ steps: [{ tool: "web_search" }, { tool: "web_read" }] }] });
+  for (let i = 0; i < 3; i++) {
+    const run = finished({ id: `chain_${i}`, sessionId: `session_${i}`, artifacts: [], outputFiles: [], unverifiedArtifacts: [],
+      question: "Compare weekly warehouse inventory discrepancies" });
+    runs.push(run);
+    await state.evidence.afterRun(project, run);
+    const reaction = await state.evidence.onNewTurn(project, { sessionId: run.sessionId, text: "Looks good, thank you", requestId: `accept_${i}` });
+    assert.equal(reaction.verdict, "accept");
+    await state.evidence.settle({ job: { userId: project.userId, projectId: project.id, payload: { runId: run.id } } });
+  }
+  assert.equal(state.enqueued.length, 3, "each file-free answer gets a settling job");
+  const followUps = state.ledger.rows.filter(row => row.detail.evidence === "follow-up");
+  assert.equal(followUps.length, 3);
+  assert.ok(followUps.every(row => row.detail.toolchain && !row.detail.shape));
+  assert.equal(state.lessons.length, 1);
+  assert.equal(state.lessons[0].payload.shapeKind, "toolchain");
 });
 
 test("the judge calls the model gateway for purpose learning with thinking off, and a failure is null, never a throw", async () => {

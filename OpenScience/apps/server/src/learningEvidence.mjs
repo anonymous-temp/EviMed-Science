@@ -55,7 +55,7 @@
 
 import {
   LEARNING_CORRECTION_VERDICTS, LEARNING_EVIDENCE_VERDICTS, LEARNING_FOLLOW_UP_WINDOW_MS, LEARNING_RULE_VERDICTS, LEARNING_STEER_VERDICTS,
-  isLearningCorrection, methodSourceIdentifierShapesIn, isResearcherOwnedWork, learningRunOutcome,
+  METHOD_SIMILARITY_PAIR_FLOOR, toolchainFingerprint, toolchainsMatch, isLearningCorrection, methodSourceIdentifierShapesIn, isResearcherOwnedWork, learningRunOutcome,
 } from "@evimed/domain";
 import { followUpAnchors, renderFollowUpAnchors } from "@evimed/domain/follow-up-examples";
 import { readArtifactShapes } from "./artifactShapes.mjs";
@@ -63,6 +63,8 @@ import { CONVERSATION_SCOPE, deliveredSomething, leftFiles, learningScopeOf, rou
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { endedBeforeReset } from "./memorySettings.mjs";
+import { readToolTraces } from "./toolExecutionEdges.mjs";
+import { createMethodSimilarity } from "./methodSimilarity.mjs";
 
 /** The job kind that settles one run, and the key it is queued under. */
 export const SETTLE_JOB_KIND = "learning-evidence";
@@ -289,12 +291,15 @@ export class LearningEvidence {
    *   methodsOpened?: ((project: any, run: any) => Promise<{ id: string, digest: string, title: string, whenToUse: string }[]>) | null,
    *   resolveProject?: ((userId: string, projectId: string) => Promise<any>) | null,
    *   contextProvenance?: any,
+   *   toolchainEnabled?: boolean, toolchainMinSimilarity?: number, readTraces?: typeof readToolTraces,
+   *   similarity?: ReturnType<typeof createMethodSimilarity>,
    *   readShapes?: typeof readArtifactShapes, report?: (reason: string) => void, observe?: (outcome: string) => void, periodDays?: number, now?: () => Date }} dependencies
    *   `contextProvenance` names a shared GEO project's policy and observes what a person actually typed into a run of it
    *   (`geoContextProvenance.mjs`): such a project learns only from attributed human input, inside the project.
    */
   constructor({ feedback, jobs, agentRuns, triggers, judge = null, scripts = null, examples = null, methodsOpened = null, resolveProject = null, readShapes = readArtifactShapes,
-    report = () => {}, observe = () => {}, periodDays = 90, now = () => new Date(), contextProvenance = null }) {
+    report = () => {}, observe = () => {}, periodDays = 90, now = () => new Date(), contextProvenance = null,
+    toolchainEnabled = false, toolchainMinSimilarity = 0.8, readTraces = readToolTraces, similarity = createMethodSimilarity() }) {
     if (!feedback || !jobs || !agentRuns || !triggers) throw new TypeError("Learning evidence needs the feedback ledger, the job queue, the run ledger and the triggers.");
     this.contextProvenance = contextProvenance;
     this.feedback = feedback;
@@ -307,6 +312,10 @@ export class LearningEvidence {
     this.methodsOpened = methodsOpened;
     this.resolveProject = resolveProject;
     this.readShapes = readShapes;
+    this.toolchainEnabled = toolchainEnabled;
+    this.toolchainMinSimilarity = toolchainMinSimilarity;
+    this.readTraces = readTraces;
+    this.similarity = similarity;
     this.report = report;
     this.observe = observe;
     this.periodMs = routinePeriodMs(periodDays);
@@ -359,6 +368,55 @@ export class LearningEvidence {
     return files.map((file) => /** @type {Record<string, any>} */ (read)[file]).filter(Boolean);
   }
 
+  /** The shape evidence of uncorrected work; files always take precedence. @param {any} project @param {any} run */
+  async #workShape(project, run) {
+    const shape = await this.#shapeOf(project, run);
+    if (shape.length || !this.toolchainEnabled || leftFiles(run)) return leftFiles(run) ? { shape } : {};
+    const toolchain = toolchainFingerprint(await this.readTraces(project, run.id).catch(() => []));
+    return toolchain ? { toolchain } : {};
+  }
+
+  /** Shared work compares attributed human input, as its follow-up judge does. @param {any} project @param {any} run */
+  async #requestOf(project, run) {
+    if ((await this.contextProvenance?.policyFor(project))?.kind === "geo-project") {
+      return String((await this.contextProvenance.observeRun(project, run))?.humanText ?? "").trim();
+    }
+    return String(run.question ?? "").trim();
+  }
+
+  /**
+   * Read requests from the owned run ledgers, never from session-wide history or a new stored text field.
+   * Missing requests cannot establish similarity. Batch within the similarity service's embedding limit.
+   * @param {any} project @param {any} run @param {any[]} family
+   */
+  async #withRequestSimilarity(project, run, family) {
+    const eligible = family.filter(member => member.runId !== run.id && !member.shape?.length
+      && toolchainsMatch(member.toolchain, run.toolchain, { minSimilarity: this.toolchainMinSimilarity }));
+    const projects = new Map([[project.id, project]]);
+    const ledgers = new Map();
+    const documents = [];
+    for (const member of eligible) {
+      const projectId = member.projectId ?? project.id;
+      if (!projects.has(projectId)) projects.set(projectId, this.resolveProject ? await this.resolveProject(project.userId, projectId).catch(() => null) : null);
+      const peerProject = projects.get(projectId);
+      if (!peerProject || peerProject.userId !== project.userId) continue;
+      if (!ledgers.has(projectId)) ledgers.set(projectId, await this.agentRuns.list(peerProject).catch(() => []));
+      const peer = ledgers.get(projectId).find((/** @type {any} */ item) => item.id === member.runId);
+      if (!peer || leftFiles(peer) || await this.#triggers.refusalFor(peerProject, peer, { runs: ledgers.get(projectId) })) continue;
+      const question = await this.#requestOf(peerProject, peer);
+      if (!question) continue;
+      documents.push({ id: `${projectId}:${member.runId}`, payload: { frontmatter: { description: question } }, member });
+    }
+    const scores = new Map();
+    const question = await this.#requestOf(project, run);
+    if (question) for (let start = 0; start < documents.length; start += 199) {
+      const hits = await this.similarity.nearest(question, documents.slice(start, start + 199),
+        { limit: 199, minScore: METHOD_SIMILARITY_PAIR_FLOOR });
+      for (const hit of hits) if (hit.score >= METHOD_SIMILARITY_PAIR_FLOOR) scores.set(hit.method.member, hit.score);
+    }
+    return family.map(member => ({ ...member, requestSimilarity: scores.get(member) ?? 0 }));
+  }
+
   /** The learned methods a run opened, as the judge is shown them. @param {any} project @param {any} run */
   async #opened(project, run) {
     return this.methodsOpened ? this.methodsOpened(project, run).catch(() => []) : [];
@@ -380,7 +438,7 @@ export class LearningEvidence {
       if (judging) this.#background(work); else await work;
     }
     if (observation) await this.#consumedFollowUp(project,run,observation).catch(()=>this.#failed('record_failed'));
-    if (run.status !== "succeeded" || !leftFiles(run)) return { settle: null };
+    if (run.status !== "succeeded" || (!leftFiles(run) && !this.toolchainEnabled)) return { settle: null };
     const finished = Date.parse(String(run.finishedAt ?? ""));
     const due = new Date((Number.isFinite(finished) ? finished : this.now().getTime()) + LEARNING_FOLLOW_UP_WINDOW_MS);
     try {
@@ -422,7 +480,7 @@ export class LearningEvidence {
     const corrected = LEARNING_CORRECTION_VERDICTS.includes(verdict.verdict);
     const {event}=await this.feedback.recordLearningEvidence(project.userId,{runId:previous.id,projectId:project.id,key:`consumed:${run.id}`,
       detail:{evidence:'follow-up',...verdict,sessionId:run.sessionId,at:this.now().toISOString(),scope:learningScopeOf(previous),endedAt:previous.finishedAt,
-        ...(!corrected && leftFiles(previous) ? { shape: await this.#shapeOf(project, previous) } : {}),
+        ...(!corrected ? await this.#workShape(project, previous) : {}),
         sourceProjectId:project.id,sourceRunIds:[previous.id,run.id],inputReceiptRefs:[...new Set([...earlier.inputReceiptRefs,...observation.inputReceiptRefs])]}});
     if (isLearningCorrection(event.detail)) await this.#triggers.afterCorrection(project,{event,runId:previous.id});
     else if (verdict.verdict === "adopt") await this.#triggers.afterAdoption(project,{event,runId:previous.id});
@@ -538,7 +596,7 @@ export class LearningEvidence {
       const detail = {
         evidence: "follow-up", ...verdict, sessionId: sessionId, at, scope: learningScopeOf(previous), endedAt: previous.finishedAt,
         // What a run that was not corrected left is what a routine compares; a corrected one is not in any family.
-        ...(!corrected && leftFiles(previous) ? { shape: await this.#shapeOf(project, previous) } : {}),
+        ...(!corrected ? await this.#workShape(project, previous) : {}),
       };
       const { event } = await this.feedback.recordLearningEvidence(project.userId, { runId: previous.id, projectId: project.id, key: requestId || `${sessionId}:${at}`, detail });
       /** @type {string[]} */
@@ -646,11 +704,13 @@ export class LearningEvidence {
     let settling = events.find((/** @type {any} */ event) => event.detail?.evidence === "silent" || event.detail?.evidence === "follow-up");
     let shape = Array.isArray(settling?.detail?.shape) ? settling.detail.shape : [];
     if (!shape.length) shape = await this.#shapeOf(project, run);
+    const toolchain = this.toolchainEnabled && !shape.length && !leftFiles(run)
+      ? settling?.detail?.toolchain ?? toolchainFingerprint(await this.readTraces(project, run.id).catch(() => [])) : null;
     let settled = settling?.detail?.evidence ?? null;
-    if (!settling) {
+    if (!settling || (toolchain && !settling.detail?.toolchain)) {
       const at = this.now().toISOString();
       const recorded = await this.feedback.recordLearningEvidence(project.userId, {
-        runId: run.id, projectId: project.id, key: "settled", detail: { evidence: "silent", sessionId: run.sessionId ?? null, at, scope, endedAt: run.finishedAt, ...(shape.length ? { shape } : {}) },
+        runId: run.id, projectId: project.id, key: settling ? "toolchain" : "settled", detail: { evidence: "silent", sessionId: run.sessionId ?? null, at, scope, endedAt: run.finishedAt, ...(shape.length ? { shape } : {}), ...(toolchain ? { toolchain } : {}) },
       }).catch(() => null);
       // A store that would not take the row is the job's failure, retried by the worker: a run settled in silence is evidence, and losing it to a blip is losing it.
       if (!recorded) { this.#failed("record_failed"); throw Object.assign(new Error("The silence of a settled run could not be recorded."), { code: "learning_evidence_record_failed" }); }
@@ -662,13 +722,13 @@ export class LearningEvidence {
     // A run the researcher kept may have run a program it has run before: counted toward a script lesson. Never a failure of the settling.
     // A shared GEO project's runs feed no script lesson: the recurrence a code skill is counted over is the account's, across projects.
     if ((await this.contextProvenance?.policyFor(project))?.kind !== 'geo-project') await this.scripts?.afterSettle(project, run).catch(() => null);
-    if (!shape.length) return { settled, routine: false, outcome };
+    if (!shape.length && !toolchain) return { settled, routine: false, outcome };
     // The clean runs of this scope in this run's period: the family a routine is counted over.
     const period = Math.floor(Date.parse(String(run.finishedAt ?? run.startedAt ?? "")) / this.periodMs);
     if (!Number.isFinite(period)) return { settled, routine: false, outcome };
     const resetAt = await this.#triggers.resetInstantOf?.(project.userId);
     const policy = await this.contextProvenance?.policyFor(project);
-    let family = (await this.feedback.cleanSettledRuns(project.userId, { scope,
+    let family = (await this.feedback.cleanSettledRuns(project.userId, { scope, ...(this.toolchainEnabled ? { toolchainEnabled: true } : {}),
       ...(policy?.kind === 'geo-project' ? {projectId:policy.controlProjectId} : {}), from: new Date(period * this.periodMs), to: new Date((period + 1) * this.periodMs) }))
       // A run that ended before the account reset its memory is no peer of a routine, however recently it was settled (review M-11).
       .filter((member) => {
@@ -683,7 +743,9 @@ export class LearningEvidence {
       family = allowed;
     }
     const guest = guestInfluence || await this.#triggers.guestInfluenced?.(project, run).catch(() => false) === true;
-    const lesson = routineLessonFor({ run, scope, shape, family, guestInfluence: guest });
+    if (toolchain) family = await this.#withRequestSimilarity(project, { ...run, toolchain }, family);
+    const lesson = routineLessonFor({ run, scope, shape, family, guestInfluence: guest, toolchain,
+      toolchainEnabled: this.toolchainEnabled, minSimilarity: this.toolchainMinSimilarity });
     const queued = lesson ? await this.#triggers.queue(project, run, lesson) : false;
     return { settled, routine: queued, outcome };
   }

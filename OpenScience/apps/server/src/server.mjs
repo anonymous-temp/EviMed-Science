@@ -4929,6 +4929,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (feedbackEvents) {
       learningEvidence = new LearningEvidence({
       contextProvenance,
+        toolchainEnabled: config.learningToolchainRoutineEnabled,
+        toolchainMinSimilarity: config.learningToolchainMinSimilarity,
+        similarity: methodSimilarity,
         feedback: feedbackEvents, jobs: productJobs, agentRuns, triggers: () => learningTriggers,
         judge: new FollowUpJudge(config, { usageLedger, fetchImpl: overrides.followUpFetch ?? globalThis.fetch }),
         // The few examples a reading is shown beside the judge's fixed contrasts, chosen by the meaning of the message with the methods' own

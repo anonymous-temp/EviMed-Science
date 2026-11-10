@@ -41,6 +41,7 @@
  */
 
 import { cleanArtifactShapes } from './artifactShape.mjs'
+import { cleanToolchainFingerprint } from './toolchainShape.mjs'
 
 /** The ledger's trigger and subject type for one of these events. */
 export const LEARNING_EVIDENCE_TRIGGER = 'learning-evidence'
@@ -82,7 +83,7 @@ const text = (value, max) => (typeof value === 'string' ? value.trim().slice(0, 
  * @param {unknown} value
  * @returns {{ evidence: string, verdict: string, rule: string | null, quote: string | null, concerns: { id: string, digest: string }[],
  *   sourceProjectId?: string, sourceRunIds?: string[], inputReceiptRefs?: string[],
- *   sessionId: string | null, at: string, scope?: string, endedAt?: string, shape?: import('./artifactShape.mjs').ArtifactShape[] } | null}
+ *   sessionId: string | null, at: string, scope?: string, endedAt?: string, shape?: import('./artifactShape.mjs').ArtifactShape[], toolchain?: import('./toolchainShape.mjs').ToolchainFingerprint } | null}
  */
 export function cleanLearningEvidence(value) {
   const record = /** @type {any} */ (value)
@@ -107,6 +108,7 @@ export function cleanLearningEvidence(value) {
   }
   const scope = text(record.scope, limits.scope)
   const shape = cleanArtifactShapes(record.shape)
+  const toolchain = !shape.length ? cleanToolchainFingerprint(record.toolchain) : null
   const endedAt = Number.isFinite(Date.parse(String(record.endedAt ?? ''))) ? new Date(String(record.endedAt)).toISOString() : null
   // These are pointers only. A consumer must independently verify canonical
   // run/input/launch receipts; a caller supplying them grants no authority.
@@ -129,8 +131,10 @@ export function cleanLearningEvidence(value) {
     ...(scope ? { scope } : {}),
     ...(endedAt ? { endedAt } : {}),
     ...(shape.length ? { shape } : {}),
+    ...(toolchain ? { toolchain } : {}),
   }
   const size = () => new TextEncoder().encode(JSON.stringify(detail)).length
+  if (size() > limits.bytes) delete detail.toolchain
   if (size() > limits.bytes) delete detail.shape
   if (size() > limits.bytes) detail.rule = null
   while (size() > limits.bytes && detail.quote && detail.quote.length > 16) detail.quote = detail.quote.slice(0, Math.floor(detail.quote.length * 0.8))

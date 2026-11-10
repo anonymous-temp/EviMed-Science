@@ -14,6 +14,7 @@
 // unit run and never be opened by the product-state run at all.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { toolchainFingerprint } from "@evimed/domain";
 import { DISTILLATION_TRIGGERS } from "../src/methodDistillationRuns.mjs";
 import {
   DISTILL_TRIGGER,
@@ -90,6 +91,20 @@ class DatabaseDouble {
 
   async transaction(operation) { return operation(this); }
 }
+
+test("a toolchain remains separate from artifact formats through the feedback ledger and an idempotent replay", async () => {
+  const feedback = new FeedbackEvents({ database: new DatabaseDouble() });
+  const toolchain = toolchainFingerprint([{ steps: [{ tool: "web_search" }, { tool: "web_read" }] }]);
+  const input = { runId: "run_toolchain", projectId: "project_1", key: "settled",
+    detail: { evidence: "silent", scope: "conversation", at: "2026-11-10T10:00:00Z", toolchain } };
+  const first = await feedback.recordLearningEvidence("owner", input);
+  assert.equal(first.created, true);
+  assert.deepEqual(first.event.detail.toolchain, toolchain);
+  assert.equal(first.event.detail.shape, undefined);
+  const second = await feedback.recordLearningEvidence("owner", input);
+  assert.equal(second.created, false);
+  assert.deepEqual(second.event.detail.toolchain, toolchain);
+});
 
 /** `ProductJobs`'s enqueue/claim/finish/fail contract, in memory. */
 class JobsDouble {

@@ -11,6 +11,7 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FeedbackEvents } from "../src/feedbackEvents.mjs";
 import { learningRunOutcome } from "@evimed/domain";
+import { toolchainFingerprint } from "../src/toolExecutionEdges.mjs";
 import { LearningEvidence, settleKeyFor } from "../src/learningEvidence.mjs";
 import { LearningTriggers } from "../src/learningTriggers.mjs";
 import { LearningWorker } from "../src/learningWorker.mjs";
@@ -56,6 +57,30 @@ const at = (/** @type {number} */ minutes) => new Date(Date.UTC(2026, 9, 23, 10,
 const shape = [{ format: "docx", labels: ["summary", "findings", "next steps"] }];
 /** @param {string} runId @param {Record<string, any>} detail @param {string} [key] */
 const record = (runId, detail, key = "k", userId = owner) => feedback.recordLearningEvidence(userId, { runId, key, projectId: userId === owner ? PROJECT : null, detail: { at: at(0), scope: "conversation", sessionId: "ses_1", ...detail } });
+
+test("toolchain evidence is a separate, opt-in SQL family and keeps clean, scope, project and owner boundaries", options, async () => {
+  const scope = `chain_${randomUUID().slice(0, 8)}`;
+  const toolchain = toolchainFingerprint([{ steps: [{ tool: "web_search" }, { tool: "web_read" }] }]);
+  const base = { scope, toolchain, at: at(0) };
+  await record("tc_clean", { ...base, evidence: "follow-up", verdict: "accept" });
+  await record("tc_clean", { ...base, evidence: "silent", at: at(1) }, "again");
+  await record("tc_unknown", { ...base, evidence: "silent" });
+  await record("tc_corrected", { ...base, evidence: "follow-up", verdict: "accept" });
+  await record("tc_corrected", { ...base, evidence: "result-corrected", quote: "Change this", at: at(2) }, "correction");
+  await record("tc_other_scope", { ...base, scope: `${scope}_other`, evidence: "follow-up", verdict: "accept" });
+  await record("tc_other_owner", { ...base, evidence: "follow-up", verdict: "accept" }, "k", stranger);
+  const window = { scope, from: new Date("2026-10-23"), to: new Date("2026-10-24") };
+  assert.deepEqual(await feedback.cleanSettledRuns(owner, window), []);
+  const peers = await feedback.cleanSettledRuns(owner, { ...window, toolchainEnabled: true });
+  assert.deepEqual(peers.map(peer => peer.runId), ["tc_clean"]);
+  assert.deepEqual(peers[0].shape, []);
+  assert.deepEqual(peers[0].toolchain, toolchain);
+  const stored = (await feedback.learningEvidenceOf(owner, "tc_clean"))[0];
+  assert.deepEqual(stored.detail.toolchain, toolchain);
+  assert.equal(stored.detail.shape, undefined, "no truncated artifact format field");
+  assert.deepEqual(await feedback.cleanSettledRuns(owner, { ...window, toolchainEnabled: true, projectId: "other_project" }), []);
+  assert.deepEqual((await feedback.cleanSettledRuns(stranger, { ...window, toolchainEnabled: true })).map(peer => peer.runId), ["tc_other_owner"]);
+});
 
 test("a table written before learning evidence existed takes the trigger, the subject type and the job kind after the migration, and again harmlessly", options, async () => {
   const oldTriggers = FEEDBACK_EVENT_TRIGGERS.filter((word) => word !== "learning-evidence");
