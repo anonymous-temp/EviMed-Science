@@ -9,7 +9,8 @@ const endpoint = {code:'HbA1c',type:'continuous',unit:'%'}
 const event = (subjectKey,value,occurredAt = origin,extra = {}) => ({subjectKey,value,originalValue:String(value),occurredAt,availableAt:occurredAt,
   recordedAt:occurredAt,code:'HbA1c',unit:'%',valueSource:'observed',assertion:'affirmed',experiencer:'patient',source:{inputNamespace:'one'},...extra})
 /** @param {any[]} rows @param {Record<string,any>} [extra] */
-const prediction = (rows,extra = {}) => ({historyId:'history_a',origin,endpoint,horizonsDays:[30],rows,...extra})
+// a saved prediction always names its class (the strictest of what it was made from); these are made on synthetic histories
+const prediction = (rows,extra = {}) => ({historyId:'history_a',origin,endpoint,horizonsDays:[30],rows,dataClass:'synthetic',...extra})
 
 test('mapping retains missingness, original units, semantic state and source address',() => {
   const mapped = eventsFromMappedTable({header:['USUBJID','test','value','unit','at','known'],rows:[['a','HbA1c','','%','2025-01-01','2025-01-02']]},
@@ -242,4 +243,15 @@ test('site validation uses frozen input membership and carries missing sites ins
   assert.equal(result.subgroups[1].groups[0].metrics.mae.value,2)
   assert.equal(result.subgroups[2].groups[0].missingOutcomes,1)
   assert.equal(result.independence.providerTraining,'unknown')
+})
+
+test('an evaluation takes the prediction\'s own class too: a patient-class prediction on a synthetic history is patient (review eng round 2, P2-3)',()=>{
+  const history = {asOf:origin,dataClass:'synthetic',events:[event('a',6)]}
+  const outcomes = {dataClass:'synthetic',events:[event('a',8,'2026-01-31T00:00:00.000Z',{valueSource:'synthetic'})]}
+  const rows = [{subjectKey:'a',horizonDays:30,point:7}]
+  assert.equal(evaluateForecast(prediction(rows),history,outcomes,{bootstrap:0}).dataClass,'synthetic')
+  const real = evaluateForecast(prediction(rows,{dataClass:'patient'}),history,outcomes,{bootstrap:0})
+  assert.equal(real.dataClass,'patient')
+  assert.equal(real.validationClass,'longitudinal_outcomes')
+  assert.equal(evaluateForecast(prediction(rows,{dataClass:undefined}),history,outcomes,{bootstrap:0}).dataClass,'patient','a prediction that declares nothing is not synthetic')
 })

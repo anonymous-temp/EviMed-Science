@@ -186,7 +186,7 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
           // All components share the explicitly selected history. Each endpoint
           // remains independently addressable, evaluable and usable for design.
           const saved = await importPrediction(study,{...header,...part,historyId:input.historyId},actor,provenance);
-          components.push({index,id:saved.id,endpoint:saved.summary.endpoint,accepted:saved.summary.accepted,invalidRows:saved.summary.invalidRows});
+          components.push({index,id:saved.id,endpoint:saved.summary.endpoint,accepted:saved.summary.accepted,invalidRows:saved.summary.invalidRows,dataClass:saved.summary.dataClass});
         } catch (error) {
           if (!(error instanceof HttpError) || !['vcr_forecast_unavailable','vcr_prediction_rows_missing'].includes(error.code)) throw error;
           issues.push({index,code:error.code});
@@ -194,7 +194,7 @@ export function createVcrLongitudinal({store,dataStore,dataPlane,matchStore,acce
       }
       const content = {schema:1,contract:'endpoint_prediction_set',historyId:history.row.id,input,components,issues};
       return longitudinalArtifactView(await artifacts.save(study,'prediction_set',content,
-        {historyId:history.row.id,origin:history.content.asOf,dataClass:history.content.dataClass,components,issues,
+        {historyId:history.row.id,origin:history.content.asOf,dataClass:strictestDataClass(history.content,...components),components,issues,
           requestedComponents:predictions.length,acceptedComponents:components.length,invalidComponents:issues.length,
           accepted:components.reduce((n,c) => n+c.accepted,0),invalidRows:components.reduce((n,c) => n+c.invalidRows,0),
           interpretation:'marginal_endpoints_not_joint_event_paths'},
