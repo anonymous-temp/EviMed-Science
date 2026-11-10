@@ -1,6 +1,7 @@
 """C1 combined summary: every arm and fold with intervals, and the comparison with the SkillPyramid paper's numbers and order.
 
     python summarize.py --runs /srv/evimed/runs --out /srv/evimed/runs/c1-summary.json
+    python summarize.py --dirs c1-noskill-1,c1-arm2-* --out /srv/evimed/runs/c1-summary-2.json   # the camp libraries' arms (F3)
 
 Reads every `<runs>/c1-*/episodes.jsonl` (the runner's per-episode rows; smoke and training directories are skipped), keeps the last row
 per (env, fold, arm, task), and reports ALFWorld success rate with a Wilson 95% interval and ScienceWorld mean score with a bootstrap 95%
@@ -56,10 +57,12 @@ def value_of(env, row):
     return 100.0 * bool(row["success"]) if env == "alfworld" else max(0.0, float(row["score"]))
 
 
-def load(runs):
+def load(runs, dirs=None):
+    """`dirs`: directory name patterns to read (the arms of one round and the no-skill baseline); absent, every c1 run directory."""
     rows = {}
     sources = {}
-    for path in sorted(Path(runs).glob("c1-*/episodes.jsonl")):
+    paths = sorted({p for pattern in (dirs or ["c1-*"]) for p in Path(runs).glob(f"{pattern}/episodes.jsonl")})
+    for path in paths:
         if any(part in path.parent.name for part in ("smoke", "train", "infra", "lib")):
             continue
         for line in path.read_text().splitlines():
@@ -77,8 +80,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runs", default="/srv/evimed/runs")
     parser.add_argument("--out", default="/srv/evimed/runs/c1-summary.json")
+    parser.add_argument("--dirs", help="comma list of run directory patterns to read (default: every c1-* directory)")
     args = parser.parse_args()
-    rows, sources = load(args.runs)
+    rows, sources = load(args.runs, [d for d in (args.dirs or "").split(",") if d] or None)
     arms = sorted({key[2] for key in rows})
     cells = []
     by = {}
@@ -147,7 +151,9 @@ def main():
     for env in ("alfworld", "scienceworld"):
         ours = {arm: round(sum(value_of(env, r) for r in m.values()) / len(m), 1) for (e, arm), m in pooled.items() if e == env}
         shared = [arm for arm in ("no-skill", "flat", "pyramid", "from-scratch", "no-atomic", "no-abstract") if arm in ours]
+        # Every arm we ran, ranked, beside the paper's ranking of the arms it has (add-only and evolving have no paper number).
         order[env] = {"ours": sorted(shared, key=lambda arm: -ours[arm]), "paper": sorted(shared, key=lambda arm: -PAPER[env][arm]),
+                      "oursAll": sorted(ours, key=lambda arm: -ours[arm]),
                       "oursValues": {arm: ours[arm] for arm in ours}, "paperValues": {arm: PAPER[env][arm] for arm in shared}}
     summary = {"schema": "c1-summary/1", "threshold": THRESHOLD, "paper": PAPER,
                "note": "Our pyramid/flat/no-atomic/no-abstract/from-scratch/add-only arms use libraries frozen after training; the paper's "

@@ -36,6 +36,8 @@ const JSON_SHAPED = new Set([
   // reported about a package that has no citations to cover.
   "method-candidate",
   "method-relations",
+  // A two-stage distillation's frame: the methods a lesson reuses and the sub-skills it names, no prose and no citation.
+  "method-frame",
 ]);
 
 /** Kinds that measure something else entirely, and say so in their own metrics. */

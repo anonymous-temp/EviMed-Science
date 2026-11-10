@@ -111,7 +111,8 @@
       "id": "method-distillation",
       "safetyClass": "general",
       "contractKinds": [
-        "method-candidate"
+        "method-candidate",
+        "method-frame"
       ]
     },
     {

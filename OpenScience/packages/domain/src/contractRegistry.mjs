@@ -28,7 +28,7 @@ import { statConsistencyFindings } from './statConsistency.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
 import { validateSourceUnderstanding, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTANDING_INPUT_FILE } from './sourceUnderstanding.mjs'
 import { SKILL_AUTHORING_LIMITS } from './constants.mjs'
-import { METHOD_DISPLAY_LIMITS, METHOD_OPERATIONS, cleanMethodDisplay, isMethodDigest, parseSkillFrontmatter, validateMethodSkill } from './methodSkill.mjs'
+import { METHOD_DISPLAY_LIMITS, METHOD_OPERATIONS, METHOD_ROLES, cleanMethodDisplay, isMethodDigest, parseSkillFrontmatter, validateMethodSkill } from './methodSkill.mjs'
 import { METHOD_RELATION_TYPES } from './methodGraph.mjs'
 
 const NATIVE_DATA_CONTRACTS = new Set(['statistical-analysis-package', 'dataset-scoping-package', 'gene-expression-analysis-package'])
@@ -101,6 +101,7 @@ export const GATE_CHECK_IDS = Object.freeze([
   'source-understanding-schema',
   'method-candidate-schema',
   'method-relations-schema',
+  'method-frame-schema',
   'method-skill-rules',
   // appraisalContract.mjs — eleven, every one advisory.
   'appraisal-json-parse',
@@ -926,6 +927,7 @@ const VALIDATORS = Object.freeze({
   'hypothesis-set': (input) => validateJsonShaped(input, { file: 'hypothesis-set.json', check: checkHypothesisSet }),
   'method-candidate': validateMethodCandidatePackage,
   'method-relations': validateMethodRelationsPackage,
+  'method-frame': validateMethodFramePackage,
 })
 
 /** Every kind must have a validator; the test that walks CONTRACT_KINDS holds that line. */
@@ -1430,6 +1432,93 @@ function validateMethodRelationsPackage(input) {
     }
     for (const rewrite of methodRelationsRewrites(report)) {
       issues.push(...methodSkillIssues(rewrite.source, rewrite.at, rewrite.name ? { directoryName: rewrite.name } : {}))
+    }
+  }
+  const required = issues.filter((entry) => entry.severity === 'required')
+  return { ok: !required.length, contractKind: input.contractKind, issues, metrics: {}, errorCode: required.length ? 'deliverable_rejected' : null }
+}
+
+/** The file a two-stage distillation's first step delivers, and how much one frame may name: each new sub-skill is one more model step. */
+const METHOD_FRAME_FILE = 'method-frame.json'
+const METHOD_FRAME_MAX_NEW_SKILLS = 5
+const METHOD_FRAME_MAX_REUSES = 8
+const METHOD_FRAME_LINE_CHARS = 300
+
+/**
+ * `method-frame.json`: which methods on file a lesson reuses, which sub-skills are new (name, role, one line each) and which method on file
+ * it contradicts or extends. Shape only: what the lesson is about is the next step's to write, and the control plane reads the names it
+ * points at in its own ledger, never on this file's word.
+ * @param {any} value @returns {string[]}
+ */
+function checkMethodFrame(value) {
+  /** @type {string[]} */
+  const errors = []
+  if (!isRecord(value)) return ['must be an object.']
+  if (value.schemaVersion !== 1) errors.push('schemaVersion must be 1.')
+  /** @param {string} field @param {number} max */
+  const list = (field, max) => {
+    if (value[field] == null) return []
+    if (!Array.isArray(value[field])) { errors.push(`${field} must be an array.`); return [] }
+    if (value[field].length > max) errors.push(`${field} lists ${value[field].length} entries; at most ${max}.`)
+    return value[field]
+  }
+  /** @param {unknown} text @param {string} at */
+  const line = (text, at) => {
+    if (!nonEmptyText(text)) errors.push(`${at} must be one line saying it.`)
+    else if (String(text).length > METHOD_FRAME_LINE_CHARS) errors.push(`${at} is longer than ${METHOD_FRAME_LINE_CHARS} characters; one line.`)
+  }
+  for (const [index, entry] of list('reuses', METHOD_FRAME_MAX_REUSES).entries()) {
+    if (!isRecord(entry) || !nonEmptyText(entry.methodId) || !pinsRevision(entry.digest)) {
+      errors.push(`reuses[${index}] names a method on file by methodId and pins its digest as sha256:<64 hex>.`)
+      continue
+    }
+    line(entry.why, `reuses[${index}].why`)
+  }
+  const names = new Set()
+  const fresh = list('newSkills', METHOD_FRAME_MAX_NEW_SKILLS)
+  for (const [index, entry] of fresh.entries()) {
+    if (!isRecord(entry)) { errors.push(`newSkills[${index}] must be an object.`); continue }
+    const name = String(entry.name ?? '')
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || name.length > 64) {
+      errors.push(`newSkills[${index}].name must be lower-case kebab-case of at most 64 characters; got ${JSON.stringify(entry.name ?? null)}.`)
+    } else if (names.has(name)) errors.push(`newSkills names ${name} twice.`)
+    names.add(name)
+    if (!METHOD_ROLES.includes(String(entry.role))) errors.push(`newSkills[${index}].role must be one of ${METHOD_ROLES.join(', ')}.`)
+    line(entry.summary, `newSkills[${index}].summary`)
+    if (entry.buildsOn != null && (!Array.isArray(entry.buildsOn) || !entry.buildsOn.every((/** @type {unknown} */ item) => nonEmptyText(item)))) {
+      errors.push(`newSkills[${index}].buildsOn, when given, lists the names it builds on.`)
+    }
+  }
+  const amends = list('amend', 2)
+  for (const [index, entry] of amends.entries()) {
+    if (!isRecord(entry) || !nonEmptyText(entry.methodId) || !pinsRevision(entry.digest)) {
+      errors.push(`amend[${index}] names the method on file by methodId and pins its digest as sha256:<64 hex>.`)
+      continue
+    }
+    line(entry.why, `amend[${index}].why`)
+  }
+  if (!fresh.length && !amends.length && !nonEmptyText(value.reason)) {
+    errors.push('A frame with no new sub-skill and nothing to amend must say why in reason; it is a real answer, and an unexplained one reads as a run that gave up.')
+  }
+  if (value.status != null) errors.push('a frame carries no status: what takes effect is decided by the method ledger.')
+  return errors
+}
+
+/**
+ * `method-frame`: the first step of a two-stage distillation, one frame for one lesson.
+ * @param {GateInput} input @returns {GateVerdict}
+ */
+function validateMethodFramePackage(input) {
+  /** @type {GateIssue[]} */
+  const issues = requiredOutputIssues(input)
+  const frame = json(input, METHOD_FRAME_FILE)
+  if (frame === undefined) {
+    issues.push(issue('deliverable_rejected', `${METHOD_FRAME_FILE} is not valid JSON.`, { path: METHOD_FRAME_FILE, check: 'method-frame-schema' }))
+  } else if (frame === null) {
+    issues.push(issue('required_output_missing', `${METHOD_FRAME_FILE} is missing.`, { path: METHOD_FRAME_FILE, check: 'required-output' }))
+  } else {
+    for (const message of checkMethodFrame(frame)) {
+      issues.push(issue('deliverable_rejected', `${METHOD_FRAME_FILE}: ${message}`, { path: METHOD_FRAME_FILE, check: 'method-frame-schema' }))
     }
   }
   const required = issues.filter((entry) => entry.severity === 'required')
