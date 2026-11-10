@@ -408,6 +408,26 @@ async function secretFrom(file) {
  * @typedef {{ sessionId: string, at: string, project?: { id: string, name: string } | null, messages: { role: string, text: string, at?: string }[], attachments?: any[] }} LabSession
  */
 
+/** Run the product's per-user settlement work without its account scheduler or consolidation.
+ * A completed engine task can still owe summary cleanup and overlay/history ingestion. Never advance past it.
+ * @param {{worker: any, overlay: any, userId: string, deadline: number, waitTask: Function}} input
+ */
+export async function settleLabCommits({ worker, overlay, userId, deadline, waitTask }) {
+  let settled = 0;
+  let rounds = 0;
+  for (; rounds < 8; rounds += 1) {
+    await worker.drainSummaryInvalidations(userId);
+    settled += await worker.processCommits({ userId, limit: 50 });
+    const open = await overlay.openCommits({ userId, limit: 50 });
+    const running = open.filter((commit) => commit.state === "pending" && commit.taskId);
+    if (!open.length || Date.now() >= deadline || (!running.length && !open.some((commit) => commit.state === "failed"))) break;
+    for (const commit of running) await waitTask(userId, /** @type {string} */ (commit.taskId), deadline);
+  }
+  const left = await overlay.openCommits({ userId, limit: 50 });
+  if (left.length) throw Object.assign(new Error(`Product commits remain unsettled: ${left.length}`), { code: "lab_unsettled_commits" });
+  return { settled, rounds: rounds + 1, open: 0 };
+}
+
 /**
  * Open the lab: the product's memory stack against the lab engine and PostgreSQL.
  * @param {{ engineUrl: string, engineKeyFile: string, account: string, databaseUrlFile: string, historySearch?: boolean, deepseekKeyFile?: string | null,
@@ -622,19 +642,7 @@ export async function openLab({
      * repeated choice, a replay), waited for in bounded rounds.
      * @param {string} userId @param {number} deadline
      */
-    const settle = async (userId, deadline) => {
-      let settled = 0;
-      let rounds = 0;
-      for (; rounds < 8; rounds += 1) {
-        settled += await worker.processCommits({ userId, limit: 50 });
-        const open = await overlay.openCommits({ userId, limit: 50 });
-        const running = open.filter((commit) => commit.state === "pending" && commit.taskId);
-        if (!open.length || Date.now() >= deadline || (!running.length && !open.some((commit) => commit.state === "failed"))) break;
-        for (const commit of running) await waitTask(userId, /** @type {string} */ (commit.taskId), deadline);
-      }
-      const left = await overlay.openCommits({ userId, limit: 50 });
-      return { settled, rounds: rounds + 1, open: left.length };
-    };
+    const settle = (userId, deadline) => settleLabCommits({ worker, overlay, userId, deadline, waitTask });
 
     /** The messages of the session's archives that came from the conversation (the project line is the gateway's own). @param {string} userId @param {any[]} commits @param {string | null} line */
     const archivedMessages = async (userId, commits, line) => {
