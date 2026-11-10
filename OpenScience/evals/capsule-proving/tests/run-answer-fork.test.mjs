@@ -52,3 +52,13 @@ test('live fact proof includes readable facts and excludes the derived index',as
   assert.deepEqual(visibleForkFiles({files:{'profile.md':'person','preferences/tea.md':'mint','evimed/index.md':'derived','observations/x.md':'not a fact'}}),
     {'profile.md':'person','preferences/tea.md':'mint'});
 });
+
+test('fork preserves a final-checkpoint error as a finished attempt instead of retrying it',async t=>{
+  const f=await fixture(t),before=await readFile(join(f.dir,'answers.jsonl'),'utf8');
+  await writeFile(join(f.dir,'answers.jsonl'),before+JSON.stringify({qid:'last',question:'Last?',asOf:'2026-01-02',arm:'product',answer:'',error:'max_rounds'})+'\n');
+  const r=await prepareAnswerFork(f);
+  assert.deepEqual(r.cases[0].preservedErrors,['last']);
+  const answers=(await readFile(join(f.out,'cases','u','answers.jsonl'),'utf8')).trim().split('\n').map(JSON.parse);
+  assert.equal(answers.at(-1).error,'max_rounds');
+  assert.match(await readFile(join(f.out,'STATUS'),'utf8'),/DONE u\/answer\/last source-record-frozen: error retained/);
+});

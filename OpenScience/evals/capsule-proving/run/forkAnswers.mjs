@@ -46,11 +46,11 @@ export async function prepareAnswerFork({ source, out, cases, sourceCases, sourc
     if (ingest.length !== count || count && (ingest.at(-1).commit?.status !== 'completed' || ingest.at(-1).settle?.open !== 0)) throw new Error(`fork_ingestion_unsettled:${c.caseId}`);
     const finalSnapshot = await readFile(path.join(dir, 'snapshots', `${count}.json`));
     const answers = await lines(path.join(dir, 'answers.jsonl'));
-    const accepted = answers.filter(a => c.questions.some(q => q.qid === a.qid && q.text === a.question && q.asOf === a.asOf) && a.arm === 'product' && (done.has(`${c.caseId}/answer/${a.qid}`) || a.error && c.questions.some(q => q.qid === a.qid && q.afterSession < count)));
+    const accepted = answers.filter(a => c.questions.some(q => q.qid === a.qid && q.text === a.question && q.asOf === a.asOf) && a.arm === 'product');
     if (new Set(accepted.map(a => a.qid)).size !== accepted.length) throw new Error(`fork_duplicate_answer:${c.caseId}`);
     for (const q of c.questions) if (q.afterSession < count && !accepted.some(a => a.qid === q.qid)) throw new Error(`fork_past_answer_missing:${c.caseId}:${q.qid}`);
     frozen.push({ c, dir, answers: accepted, snapshotSha256: hash(finalSnapshot), ingestSha256: hash(JSON.stringify(ingest)),
-      answersSha256: hash(JSON.stringify(accepted)), pastErrors: accepted.filter(a => a.error).map(a => a.qid) });
+      answersSha256: hash(JSON.stringify(accepted)), preservedErrors: accepted.filter(a => a.error).map(a => a.qid) });
   }
   await mkdir(out, { recursive: true, mode: 0o700 });
   const keys = new Set();
@@ -66,11 +66,13 @@ export async function prepareAnswerFork({ source, out, cases, sourceCases, sourc
     for (const a of f.answers) if (!a.error) keys.add(`${f.c.caseId}/answer/${a.qid}`);
     await writeFile(path.join(dest, 'answers.jsonl'), f.answers.map(a => JSON.stringify(a)+'\n').join(''), { mode: 0o600 });
   }
-  await writeFile(path.join(out, 'STATUS'), status.filter(line => keys.has(/^\S+ DONE (\S+)/.exec(line)?.[1])).join('\n')+'\n', { mode: 0o600 });
+  const imported = frozen.flatMap(f => f.answers.filter(a => a.error || !done.has(`${f.c.caseId}/answer/${a.qid}`)).map(a =>
+    `${new Date().toISOString()} DONE ${f.c.caseId}/answer/${a.qid} source-record-frozen${a.error ? ': error retained for scoring; never retried' : ''}`));
+  await writeFile(path.join(out, 'STATUS'), [...status.filter(line => keys.has(/^\S+ DONE (\S+)/.exec(line)?.[1])), ...imported].join('\n')+'\n', { mode: 0o600 });
   const receipt = { ...identity, at: new Date().toISOString(), sourceRunnerDigest: sourceRun.runnerDigest ?? null,
-    sourceCommit: sourceRun.commit ?? null, readOnly: true, rule: 'Copy the first source prefix, retain past errors, ask only pending questions at the final checkpoint. No new ingestion or source-file writes.',
+    sourceCommit: sourceRun.commit ?? null, readOnly: true, rule: 'Copy the first source prefix, retain every recorded error without retry, ask only pending questions at the final checkpoint. No new ingestion or source-file writes.',
     cases: frozen.map(f => ({ caseId: f.c.caseId, sessions: f.c.sessions.length, copiedAnswers: f.answers.length,
-      snapshotSha256: f.snapshotSha256, ingestSha256: f.ingestSha256, answersSha256: f.answersSha256, pastErrors: f.pastErrors })) };
+      snapshotSha256: f.snapshotSha256, ingestSha256: f.ingestSha256, answersSha256: f.answersSha256, preservedErrors: f.preservedErrors })) };
   await writeFile(held, JSON.stringify(receipt,null,2)+'\n', { mode: 0o600 });
   return receipt;
 }
