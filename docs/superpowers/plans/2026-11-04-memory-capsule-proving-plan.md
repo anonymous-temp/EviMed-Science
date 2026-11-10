@@ -309,7 +309,7 @@
 | WildChat（1M 版，ODC-BY） | 真实语言里的纠正 | 抽样标注；中文 119,302 段，多轮占 55.1% |
 | STATE-Bench 学习赛道 | 客服任务 | 不跑 |
 
-**医学：** 没找到医学专用的做法学习榜。用 MultiSessionCollab 的 MedQA、EvoClawBench 的医疗文档任务、SAB 的生信部分，以及能力评测（`clinical-review-quality`、`drug-evidence-quality`）。
+**医学：** 没找到医学专用的做法学习榜。用 MultiSessionCollab 的 MedQA、EvoClawBench 的 Healthcare 族（11-10 核对：没有医疗文档任务，只有 5 个行政类任务——转诊分诊、药房补货、试验入组、保险预授权、检验结果随访，代码判分）、SAB 的生信部分，以及能力评测（`clinical-review-quality`、`drug-evidence-quality`）。
 
 ### 5.7 能不能用榜单验收
 
@@ -428,10 +428,11 @@
 | M7 | 医学编造（病例摘要、药物评价、证据表） | 8 / 24 | 同上 |
 | M10 | 用药安全（过敏只说过一次） | 15 / 45 | Kimi + `medsets.mjs` |
 | M11 | 不污染 | 10 / 30 | Kimi + `pairedsets.mjs` |
+| LongMemEval-S | `longmemeval-cleaned` 500 题（11-05 冻结的划分；数据 11-10 下载，指纹核对一致） | 120 / 380 | 公开 |
 | MedMemoryBench | HF 版 1,939 题（中英共用一个划分） | 120 / 1,819 | 公开 |
 | MedLoCoMo | 600 题样本（只在本地，不外传） | 120 / 480 | 公开，源自 MIMIC，无许可证 |
-| C1 | ALFWorld 见过 140、没见过 134；ScienceWorld 已锁 | — | 公开 |
-| C2 | DABench 257，DA-Code 500（抽 100），SAB 102（抽 30） | — | 公开 |
+| C1 | ALFWorld 见过 140、没见过 134（全量）；ScienceWorld 见过（dev）60、没见过（test）60，覆盖 29 类任务 | `pools/c-samples-20261110.json` | 公开 |
+| C2 | DABench 257（全量），DA-Code 抽 100（6 类分层），SAB 抽 30（4 个领域分层） | `pools/c-samples-20261110.json` | 公开；DA-Code 的任务数据 1.25 GB 在跑实验的机器上用 `--large` 拉 |
 | C3 | 动态解锁 / 随机抽样各一半：我们的工具图 + 通用图 100 题，Toucan 图 50 题 | 不分 | `synthetic/toolverse/` |
 | L1 | 每一环一个模拟用户脚本 | 7 / 21 | Kimi + `learnsets.mjs` |
 | L2 | 隐藏规则模拟用户 | 4 人 / 12 人 | 同上 |
@@ -441,7 +442,8 @@
 | L6 | WildChat 中文后续消息 1,000 条，已按判断器的六类标注 | 不分 | 公开 + Claude 标注 |
 | L7 | SkillLearnBench（20 族、100 个变体） | — | 公开 |
 | L8 | 信息缺口题，三臂（无记忆 / 有记忆 / 记忆加做法） | 40 / 160 | `synthetic/toolverse/` |
-| L9 | 长任务：ResearchClawBench 10 + 我们自己的综述类 10 | 20 | `pools/l9-long-tasks-20261109.json` |
+| L9 | 长任务：ResearchClawBench 10（运行所需数据和相关论文已锁定并下载，答案所在的 `target_study/` 不下载）+ 我们自己的综述类 10 | 20 | `pools/l9-long-tasks-20261109.json` |
+| 低优先和待定 | PrecisionMemBench（89 题）、CIMemories（10 个画像，CC BY-NC，只在本地）、WebShop（代码和 12,087 个目标；商品数据在 Google Drive，部署时再拉）、EvoClawBench（100 个任务、502 个子问题） | 已锁定并下载 | 公开 |
 | L10 | 工具链族（4 个同链请求 + 2 个相似但不同链） | 3 / 8 | Kimi + `learnsets.mjs` |
 
 **备数据时发现的问题（已处理或要在跑实验时处理）：**
@@ -451,7 +453,7 @@
 3. Kimi 套餐 5 小时额度：8–12 路并发约 5 小时后用完。生成器遇到额度用完会等待，不再空耗重试；当天改由 Codex 接着写（`SYNTH_GENERATOR=codex`），试点用户的骨架和对话第一次就过了全部检查，之后零失败。并发队列第二轮曾接手正在别的路上跑的用户（M06、M09、U15 各组装两次）；逐用户核对骨架、日程和对话，66 人全部一致，队列已加"正在处理"锁。
 4. ToolVerse 式出题的前提在我们手里的工具图上不成立：我们的 21 个工具、33 个通用工具、Toucan 的 150 个工具，解锁深度最多 2 层，动态解锁和随机抽样的平均深度是 1.24 对 1.16，只在覆盖面上占优（Toucan 图 67 对 57 个工具）。C3 的结果要据此解读；要测更深的链，得专门挑工具子集。
 5. 真实 WildChat 后续消息里纠正 148、接受 49、拒绝 14，没有一条偏好或"以后都这样"。所以 L6 只能测这几类和 adopt 的误报，adopt 的召回仍以手工集为准。两遍盲标一致性 κ = 0.54，18% 的条目标为模糊，要人工复核。
-6. 和计划不符的公开集事实：ACEBench 找到了；PERSIST 没有公开数据；MedLoCoMo 是 101 名患者；ResearchClawBench 有 57 个任务目录（README 说 40）；SkillsBench 的"v4"不是标签（按 main 提交锁定，87 题）；SkillLearnBench 的 20 是 20 族、100 个变体；GAIA 需要登录授权；`general-tasks` 是 29 个用例，不是 28 个。
+6. 和计划不符的公开集事实：ACEBench 找到了；PERSIST 没有公开数据；MedLoCoMo 是 101 名患者；ResearchClawBench 有 57 个任务目录（README 说 40）；SkillsBench 的"v4"不是标签（按 main 提交锁定，87 题）；SkillLearnBench 的 20 是 20 族、100 个变体；GAIA 需要登录授权；`general-tasks` 是 29 个用例，不是 28 个；EvoClawBench 没有医疗文档任务（见第 5.6 节）；CIMemories 每个画像 49 个情境（论文写 45）。
 7. M3 没有英文名和缩写（说明书库里没有），英文同义词由 RABBITS 探针承担。
 8. 跑实验时运行器要补：M7 的引文回查；G9 附件要以"材料"身份呈现，不能当成用户的话；M11 的无历史对照；商品名探针按 `bridged` 计分；G9 的短锚点要靠判分兜底。
 
@@ -535,7 +537,7 @@
 - SkillsBench、SkillLearnBench、τ²-Bench 的提交细节和接 DSH 的工作量。
 - 引擎会话归档能否直接检索；每人记忆偏好能否经批次开头一行生效。
 - MemSecBench 的数据是否公开。（MIST 未发布；WildChat 中文比例已查实，见第 6.1 节，2026-11-09。）
-- MedMemoryBench 论文基线用的是中文版还是英文版；LoCoMo_refined 删掉 158 题的原因；SkillsBench 仓库里自生成 skills 的模式是否可直接运行。
+- MedMemoryBench 论文基线的语言：论文正文没写；噪声会话只有中文版、仓库默认配置是 zh，所以按中文版跑（推断，11-10）。LoCoMo_refined 删掉 158 题的原因；SkillsBench 仓库里自生成 skills 的模式是否可直接运行。
 - 各榜多为厂商或作者自报。Mem0、Redis、OpenViking 的数字都是自家报告。
 
 ## 12. 资料

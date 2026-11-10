@@ -92,6 +92,14 @@ written; no gold). `pools/tools/` holds the pin, count and sampler scripts.
   case schema, with a blind 150-case second pass, κ 0.54) live beside the data and are run with `evals/follow-up-judge/run.mjs
   --cases … --split-file …`. Real traffic holds corrections, accepts and rejections but no preference or adopt, so the
   hand-built `evals/follow-up-judge/cases.json` stays the measure of `adopt`; people label the ambiguous 18% next.
+- C1, C2 — `pools/c-samples-20261110.json` (`pools/tools/c_samples.py`, seeded, stratified): ALFWorld valid_seen 140 and
+  valid_unseen 134 whole, ScienceWorld 60 seen (dev fold) and 60 unseen (test fold) over its 29 task types, DABench 257
+  whole, DA-Code 100 over its six categories, ScienceAgentBench 30 over its four domains.
+- `researchclawbench-data` pins the data and related-work PDFs of the ten L9 tasks (527 MB fetched; a 78 MB paper and the
+  answer-key `target_study/` are large-only); `evoclawbench` (anonymous branch, 100 tasks, 502 sub-problems; its medical part
+  is the five-task Healthcare family, not documents), `precisionmembench`, `cimemories` (CC BY-NC, local only) and `webshop`
+  (code and goal files; the product data from Google Drive is not pinned) are pinned beside them. MedMemoryBench's paper does
+  not name its baseline language; noise sessions exist only in zh and the repository defaults to zh, so the zh split is run.
 - L9 — `pools/l9-long-tasks-20261109.json`: ten ResearchClawBench tasks (most rubric items, then most data files) and ten
   of our own long review briefs (meta-analysis, clinical review, hospital drug evaluation; three each and one more, seeded).
 

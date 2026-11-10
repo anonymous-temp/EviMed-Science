@@ -1,0 +1,221 @@
+{
+  "schema": "capsule-proving-intake-learning-addendum/1",
+  "date": "20261110",
+  "modelCallsInCode": 0,
+  "sourceManifestSha256": "922bfce1671a035b831618ecf9e1ce462838f64ac34d473bac8cab3327ca58a2",
+  "sets": {
+    "researchclawbench-data": {
+      "pin": "fa82414b2ead64ea3a4df2c0688512198c42ba59",
+      "repository": "https://huggingface.co/datasets/InternScience/ResearchClawBench",
+      "license": "mit",
+      "access": "public",
+      "filesPinned": 425,
+      "filesFetched": 389,
+      "filesLargeOnly": 36,
+      "totalBytesPinned": 720061657,
+      "bytesFetched": 527487694,
+      "counts": {
+        "tasks": 10,
+        "perTask": {
+          "Astronomy_004": {
+            "dataBytes": 33838246,
+            "relatedWorkBytes": 23541036,
+            "fetchedBytes": 57379282,
+            "dataFiles": 1,
+            "relatedWorkFiles": 5
+          },
+          "Chemistry_004": {
+            "dataBytes": 0,
+            "relatedWorkBytes": 24712431,
+            "fetchedBytes": 24712432,
+            "dataFiles": 0,
+            "note": "data/ holds only a 1-byte .gitkeep; the task is computational"
+          },
+          "Earth_004": {
+            "dataBytes": 179385939,
+            "relatedWorkBytes": 20227030,
+            "fetchedBytes": 199612969,
+            "dataFiles": 64
+          },
+          "Energy_001": {
+            "dataBytes": 128033,
+            "relatedWorkBytes": 8178600,
+            "fetchedBytes": 8306633,
+            "dataFiles": 6
+          },
+          "Energy_004": {
+            "dataBytes": 75789724,
+            "relatedWorkBytes": 13122222,
+            "fetchedBytes": 88911946,
+            "dataFiles": 14
+          },
+          "Information_004": {
+            "dataBytes": 15721796,
+            "relatedWorkBytes": 112441503,
+            "fetchedBytes": 49823252,
+            "dataFiles": 201,
+            "note": "related_work/paper_001.pdf (78,340,047 bytes) is large-only"
+          },
+          "Information_007": {
+            "dataBytes": 61902311,
+            "relatedWorkBytes": 8295374,
+            "fetchedBytes": 70197685,
+            "dataFiles": 46
+          },
+          "Life_000": {
+            "dataBytes": 236946,
+            "relatedWorkBytes": 16972893,
+            "fetchedBytes": 17209839,
+            "dataFiles": 7
+          },
+          "Life_006": {
+            "dataBytes": 3166805,
+            "relatedWorkBytes": 3868456,
+            "fetchedBytes": 7035261,
+            "dataFiles": 7
+          },
+          "Material_004": {
+            "dataBytes": 873163,
+            "relatedWorkBytes": 3425232,
+            "fetchedBytes": 4298395,
+            "dataFiles": 4
+          }
+        },
+        "dataBytesAll": 371042964,
+        "relatedWorkBytesAll": 234784777,
+        "targetStudyBytesAllLargeOnly": 114270314,
+        "inputsNeededToRun": "data/ + related_work/ (README: rcb-clear removes the duplicated data/ and related_work/ inputs of a run); target_study/ is the answer key and is pinned large-only, never given to the agent"
+      }
+    },
+    "evoclawbench": {
+      "pin": "d9ec3e1a8873a1dbd142102abc00568765d21088",
+      "repository": "https://github.com/pzy2000/EvoClawBench",
+      "license": "MIT (LICENSE: Anonymous Authors)",
+      "access": "public",
+      "filesPinned": 971,
+      "filesFetched": 971,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 23762152,
+      "bytesFetched": 23762152,
+      "counts": {
+        "paper": "arXiv 2607.09711, 100 tasks / 502 sub-problems",
+        "taskFilesInData": 101,
+        "taskFilesNote": "tasks/task_*.md = task_00_sanity + 100 tasks; sub_problems sum to 502 as the paper says",
+        "generatedTaskFamilies": 79,
+        "casesInGeneratedTasks": 395,
+        "healthcareTasks": [
+          "task_32_appointment_referral_triage",
+          "task_33_pharmacy_inventory_reorder",
+          "task_34_clinical_trial_eligibility",
+          "task_35_insurance_prior_auth_review",
+          "task_36_lab_result_followup_queue"
+        ],
+        "healthcareSubProblems": 25,
+        "documentTasksOutsideHealthcare": [
+          "task_07_doc_extraction",
+          "task_12_docx_generation",
+          "task_25_loan_document_checklist",
+          "task_28_discovery_document_tagging"
+        ]
+      },
+      "note": "There is no \"medical document\" task group: the nearest is the five-task Healthcare family (admin routing and eligibility over JSON/CSV/HTML/text fixtures, 5 cases each, graded by code on a channel-coded JSON report), not clinical notes or documents. Anonymous branch pinned (the paper names it); main is a later 129 MB working tree."
+    },
+    "precisionmembench": {
+      "pin": "61a712a1754e7d27b6dee42da32a2c214b003ece",
+      "repository": "https://github.com/tenurehq/precisionmembench",
+      "license": "MIT",
+      "access": "public",
+      "filesPinned": 145,
+      "filesFetched": 145,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 4746919,
+      "bytesFetched": 4746919,
+      "counts": {
+        "singleTurnCases": 77,
+        "sessionCases": 2,
+        "sessionTurnsAsserted": "11 + 1",
+        "scoredCasesPerReadme": 89,
+        "seedBeliefs": 35
+      }
+    },
+    "precisionmembench-hf": {
+      "pin": "bf1a508a14fd38e4d316ff8932e8b9c4dea2a394",
+      "repository": "https://huggingface.co/datasets/tenurehq/precisionmembench",
+      "license": "mit",
+      "access": "public",
+      "filesPinned": 36,
+      "filesFetched": 36,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 1787101,
+      "bytesFetched": 1787101,
+      "note": "Leaderboard and per-system results only (19 systems); the cases are in the GitHub repository."
+    },
+    "cimemories": {
+      "pin": "e39806e92ec66db120c0f3b73c9cb105e7ff5314",
+      "repository": "https://github.com/facebookresearch/CIMemories",
+      "license": "CC BY-NC 4.0 (the LICENSE file reads \"Attribution-NonCommercial 4.0 International\"; the GitHub API reports it as other)",
+      "access": "public",
+      "filesPinned": 13,
+      "filesFetched": 13,
+      "filesLargeOnly": 0,
+      "totalBytesPinned": 4158319,
+      "bytesFetched": 4158319,
+      "counts": {
+        "profiles": 10,
+        "meanAttributes": 146.7,
+        "contextsPerProfile": 49
+      },
+      "note": "Paper reports 45 contexts per profile on average; the released file has 49 for every profile."
+    },
+    "cimemories-hf": {
+      "pin": "7a2bde79f747d011b23095e6bb035c6f64127d9f",
+      "repository": "https://huggingface.co/datasets/facebook/CIMemories",
+      "license": "cc-by-nc-4.0",
+      "access": "public",
+      "filesPinned": 5,
+      "filesFetched": 4,
+      "filesLargeOnly": 1,
+      "totalBytesPinned": 1748077055,
+      "bytesFetched": 532702,
+      "note": "cimemories_raw.json equals data_openai_gpt-oss-120b.json (524,959 bytes). test.csv (1.7 GB) is large-only."
+    },
+    "webshop": {
+      "pin": "64fa2a5c15c7daa698b9ac93f5bb5437b634c9bd",
+      "repository": "https://github.com/princeton-nlp/WebShop",
+      "license": "MIT",
+      "access": "public",
+      "filesPinned": 85,
+      "filesFetched": 84,
+      "filesLargeOnly": 1,
+      "totalBytesPinned": 56570559,
+      "bytesFetched": 39933847,
+      "counts": {
+        "humanGoals": 12087,
+        "goalQueryPredict": 11724,
+        "itemsHumanIns": 10136,
+        "readmeInstructions": 12087,
+        "readmeProducts": 1180000
+      },
+      "note": "Product files come from Google Drive via gdown and are not pinned. chromedriver is large-only and never executed."
+    }
+  },
+  "medmemorybench": {
+    "question": "Which language did the paper baselines use?",
+    "paper": "arXiv 2605.11814",
+    "answer": "The paper never states it. Evidence points to Chinese (inferred, not stated).",
+    "evidence": [
+      "Paper text (pdftotext of arxiv.org/pdf/2605.11814): the words Chinese, English, bilingual and language do not occur outside the reference list; Section 6.1 only says \"All baselines employ GPT-5.1 as the backbone model, with Claude-4-Sonnet serving as the judge model.\"",
+      "Table 2 reports a second (Mixed, noise) column for every method; Section 4.2 builds the noise from \"General health knowledge consultations\" and \"Proxy consultations for family members\".",
+      "HF card (Cyan27/MedMemoryBench README, data layout note): \"noise_sessions.parquet is only available for the Chinese (zh) split as the standalone noise session data was generated exclusively in Chinese.\"",
+      "GitHub repo configs/dataset_config/medmemorybench.yaml: language \"zh\", root_dir data/MedMemoryBench (Chinese); the English data is a second root_dir (README: data/MedMemoryBench_EN)."
+    ],
+    "consequence": "Run the zh split to compare with Table 2 (the 1,939 queries are the same in both). Ask the authors if the exact language matters."
+  },
+  "discrepancies": [
+    "ResearchClawBench: data + related_work of the ten tasks is 606 MB, just over the 600 MB bar; the 78 MB paper_001.pdf of Information_004 was made large-only so 527 MB was fetched.",
+    "EvoClawBench has no medical-document group (see the entry note); the plan should say Healthcare family (5 tasks, 25 sub-problems, 25 cases) instead.",
+    "CIMemories: 49 contexts per profile in the file against 45 in the paper; GitHub reports the license as other but the LICENSE file is CC BY-NC 4.0.",
+    "PrecisionMemBench: the HF dataset is only a leaderboard; the 89 cases live in the GitHub repository.",
+    "WebShop: the 1.18 M-product data is not in the repository (Google Drive, not pinned)."
+  ]
+}
