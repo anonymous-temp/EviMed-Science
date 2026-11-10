@@ -2,6 +2,7 @@
 // directory (run.json, STATUS, trials.jsonl, summary.json) and the campaign's progress file.
 import { execFileSync } from "node:child_process";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { loadavg } from "node:os";
 import path from "node:path";
 
 import { appendStatus, openStatus } from "../run/status.mjs";
@@ -57,16 +58,34 @@ export function selectTrials(trials, { shard = 0, shards = 1, only = null, perCe
   return limit > 0 ? out.slice(0, limit) : out;
 }
 
-/** Run `worker` over `items` with at most `concurrency` at once; a stop flag ends the queue early. @template T @param {T[]} items @param {number} concurrency @param {(item: T) => Promise<void>} worker @param {{ stopped?: () => boolean }} [options] */
-export async function runPool(items, concurrency, worker, { stopped = () => false } = {}) {
+/**
+ * Run `worker` over `items` with at most `concurrency` at once; a stop flag ends the queue early. `gate(lane)` is awaited before a
+ * lane takes its next item (the host-load throttle).
+ * @template T @param {T[]} items @param {number} concurrency @param {(item: T) => Promise<void>} worker
+ * @param {{ stopped?: () => boolean, gate?: (lane: number) => Promise<void> }} [options]
+ */
+export async function runPool(items, concurrency, worker, { stopped = () => false, gate = async () => {} } = {}) {
   let next = 0;
-  const lanes = Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, async () => {
-    while (next < items.length && !stopped()) {
+  const lanes = Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, async (_, lane) => {
+    for (;;) {
+      await gate(lane);
+      if (next >= items.length || stopped()) break;
       const item = items[next++];
       await worker(item);
     }
   });
   await Promise.all(lanes);
+}
+
+/**
+ * The host-load throttle: lanes from `keep` on wait while the one-minute load average is above `maxLoad` (the campaign's rule: on a
+ * busy host at most a few trials at once).
+ * @param {{ maxLoad: number, keep?: number, load?: () => number, wait?: (ms: number) => Promise<void> }} options
+ */
+export function loadGate({ maxLoad, keep = 2, load = () => loadavg()[0], wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }) {
+  return async (/** @type {number} */ lane) => {
+    while (lane >= keep && maxLoad > 0 && load() > maxLoad) await wait(30_000);
+  };
 }
 
 /** The last row written for each trial id (a rerun's row replaces an earlier error row). @param {string} file */
@@ -128,6 +147,31 @@ export async function openRun({ runDir, meta }) {
       const summary = { runId: run.runId, kind: run.kind, writtenAt: new Date().toISOString(), ...summarize(rows) };
       await writeFile(path.join(runDir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`, { mode: 0o600 });
       return summary;
+    },
+  };
+}
+
+/**
+ * The cells a red line stopped, shared by every shard of a run through one file: read before each trial, merged on write.
+ * `--resume-stopped` (ignore) starts them again.
+ * @param {string} file @param {{ ignore?: boolean }} [options]
+ */
+export function stoppedCells(file, { ignore = false } = {}) {
+  const read = async () => (ignore ? [] : JSON.parse(await readFile(file, "utf8").catch(() => "[]")));
+  /** @type {Promise<void>} */
+  let chain = Promise.resolve();
+  return {
+    /** @param {string} cell */
+    async has(cell) { return (await read()).includes(cell); },
+    /** @param {string} cell */
+    add(cell) {
+      const next = chain.catch(() => {}).then(async () => {
+        const cells = new Set(JSON.parse(await readFile(file, "utf8").catch(() => "[]")));
+        cells.add(cell);
+        await writeFile(file, `${JSON.stringify([...cells])}\n`, { mode: 0o600 });
+      });
+      chain = next;
+      return next;
     },
   };
 }

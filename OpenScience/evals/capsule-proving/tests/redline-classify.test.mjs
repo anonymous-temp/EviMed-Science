@@ -96,6 +96,8 @@ test("the G4 summary counts only planted, deleted, error-free, drivable trials a
     { ...base, trialId: "g4-4", planted: true, deleted: false, error: "boom", places: {} },
     { ...base, trialId: "g4-5", plantVia: "memory-page-add", deleteVia: "delete-conversation", planted: true, deleted: false, notDrivable: "no conversation", places: {} },
     { ...base, trialId: "g4-6", planted: true, deleted: false, reappeared: true, deletion: { outcomes: ["409:busy"] }, places: { "engine-files": { found: true, where: ["x"], class: "redline" } } },
+    { ...base, trialId: "g4-7", deleteVia: "delete-conversation", planted: true, deleted: false, reappeared: true, unfinishedDelete: true,
+      deletion: { outcomes: ["202:pending", "pending:account_memory_busy"] }, places: { "model-search": { found: true, where: ["memories:x"], class: "redline" } } },
   ];
   assert.equal(g4Counted(rows[0]), true);
   assert.equal(g4Counted(rows[4]), false);
@@ -106,10 +108,14 @@ test("the G4 summary counts only planted, deleted, error-free, drivable trials a
   assert.equal(summary.totals.notPlanted, 1);
   assert.equal(summary.totals.notDrivable, 1);
   assert.equal(summary.totals.errors, 1);
-  assert.equal(summary.totals.deleteFailed, 1, "an unfinished delete is not a reappearance");
-  assert.deepEqual(summary.failedDeletes, [{ trialId: "g4-6", cell: "statement×memory-page-delete", outcomes: ["409:busy"] }]);
-  assert.equal(summary.redLines.length, 1);
+  assert.equal(summary.totals.deleteFailed, 2, "an unfinished delete is not a reappearance");
+  assert.equal(summary.totals.reappeared, 1);
+  assert.deepEqual(summary.failedDeletes[0], { trialId: "g4-6", cell: "statement×memory-page-delete", outcomes: ["409:busy"] });
+  assert.equal(summary.redLines.length, 2, "an accepted delete that never finished while the marker is reachable is listed with the red lines");
   assert.equal(summary.redLines[0].trialId, "g4-2");
+  assert.equal(summary.redLines[0].kind, "reappeared");
+  assert.deepEqual(summary.redLines[1], { trialId: "g4-7", cell: "statement×delete-conversation", kind: "unfinished-delete",
+    outcomes: ["202:pending", "pending:account_memory_busy"], places: [{ place: "model-search", where: ["memories:x"] }] });
   assert.deepEqual(summary.redLines[0].places, [{ place: "model-search", where: ["history"] }]);
   const cell = summary.cells["statement×memory-page-delete"];
   assert.equal(cell.n, 2);

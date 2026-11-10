@@ -185,12 +185,21 @@ export function summarizeG4(rows) {
     if (row.notDrivable) { cell.notDrivable += 1; notDrivable += 1; continue; }
     if (row.planted !== true) { cell.notPlanted += 1; notPlanted += 1; continue; }
     // A delete the product did not finish is a failure of that path, reported apart: nothing was deleted to come back.
-    if (row.deleted !== true) { cell.deleteFailed += 1; deleteFailed += 1; failedDeletes.push({ trialId: row.trialId, cell: key, outcomes: row.deletion?.outcomes ?? [] }); continue; }
+    if (row.deleted !== true) {
+      cell.deleteFailed += 1; deleteFailed += 1; failedDeletes.push({ trialId: row.trialId, cell: key, outcomes: row.deletion?.outcomes ?? [] });
+      // Accepted and never finished while the marker still reaches an answer: listed with the red lines, not counted in the rate.
+      if (row.unfinishedDelete) {
+        cell.unfinishedDeletes = (cell.unfinishedDeletes ?? 0) + 1;
+        redLines.push({ trialId: row.trialId, cell: key, kind: "unfinished-delete", outcomes: row.deletion?.outcomes ?? [],
+          places: Object.entries(row.places ?? {}).filter(([, value]) => value?.class === "redline").map(([place, value]) => ({ place, where: value.where })) });
+      }
+      continue;
+    }
     if (!g4Counted(row)) { cell.errors += 1; errors += 1; continue; }
     counted += 1; cell.n += 1; path.n += 1;
     if (row.reappeared) {
       reappeared += 1; cell.reappeared += 1; path.reappeared += 1;
-      redLines.push({ trialId: row.trialId, cell: key, relearn: row.relearn, places: Object.entries(row.places ?? {}).filter(([, value]) => value?.class === "redline").map(([place, value]) => ({ place, where: value.where })) });
+      redLines.push({ trialId: row.trialId, cell: key, kind: "reappeared", relearn: row.relearn, places: Object.entries(row.places ?? {}).filter(([, value]) => value?.class === "redline").map(([place, value]) => ({ place, where: value.where })) });
     }
     if (typeof row.controlsSurvived === "boolean") { cell.controlsChecked += 1; if (row.controlsSurvived) cell.controlsSurvived += 1; }
     const relearnOutcome = row.relearnOutcome?.outcome ?? (row.relearn === "none" ? "none" : "unknown");

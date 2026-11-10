@@ -16,9 +16,11 @@
 //    kernel's token resolves to; a retired owner (an account being deleted) is refused as the product refuses it;
 //  - a conversation is a research session and an agent run in the product's own ledgers (`researchSessions.put`,
 //    `agentRuns.start`), its messages go through the product's memory gateway, the run is closed and the conversation is
-//    committed through the attended-turn commit (`nativeTurnCommit.commit`); no kernel exists, so the kernel transcript's
+//    committed at once through the attended-turn commit function (`nativeTurnCommit.commit`, the gateway's `commitSession`; the
+//    product's debounced scheduler is switched off so a turn is committed exactly once); no kernel exists, so the kernel transcript's
 //    capture and purge (`captureConversationSource` / `purgeConversationSource`) answer from this module's own record of the
 //    conversation — the memory side of a conversation deletion is entirely the product's;
+//  - the sign-in rate limit per address is lifted (every throwaway account signs in from loopback);
 //  - the mock runtime has no kernel plugin service, so its `evimedPlugins/status` 404 is read as "not busy" (source cleanup asks it);
 //  - the capsule index is `builtin` (no `openVikingEngine` readiness gate), consolidation is off, model gateway calls use a
 //    30 s engine deadline where production gives 4 s.
@@ -117,8 +119,13 @@ export async function openStack({ engineUrl, engineKeyFile, databaseUrlFile, dat
       memoryEngineEnabled: true, memoryIndexProvider: "builtin", memoryHistorySearchEnabled: true,
       memoryGatewayTimeoutMs: 30_000, memoryGatewayCommitsPerHour: 0,
       nativeMemoryConsolidationEnabled: false, learningEnabled: false,
+      // The attended-turn commit is called by the runner the moment a turn ends (`converse`), through the same function the product's
+      // `NativeTurnCommit` calls after its 8 s debounce; the debounced second commit of the same turn would race a deletion.
+      nativeMemoryTurnCommitEnabled: false,
       ...(deepseekKey ? { deepseekApiKey: deepseekKey } : { nativeMemoryRejectionJudgeEnabled: false }),
       geoEnabled: true, geoAudience: "all",
+      // Thousands of throwaway accounts sign in from one loopback address; production's 20 per 5 minutes per address would refuse them.
+      authRateLimitMaxRequests: 1_000_000,
       ...configOverrides,
     });
   } catch (error) {
@@ -187,6 +194,19 @@ export async function openStack({ engineUrl, engineKeyFile, databaseUrlFile, dat
     try { return await originalPluginBusy(project, options); }
     catch (error) { if (/** @type {any} */ (error)?.code === "runtime_wire_protocol_mismatch") return false; throw error; }
   };
+
+  // The source-deletion worker records only a closed reason (`account_memory_busy`, …); the runner keeps the first line of what the
+  // product's own cleanup step threw, per account, so a cleanup that never finishes says why. The steps themselves are unchanged.
+  /** @type {Map<string, string>} */
+  const cleanupErrors = new Map();
+  for (const step of ["removeHistory", "removeDerived"]) {
+    const original = app.sourceDeletion?.[step];
+    if (typeof original !== "function") continue;
+    app.sourceDeletion[step] = async (/** @type {any} */ project, /** @type {any} */ row) => {
+      try { return await original(project, row); }
+      catch (error) { cleanupErrors.set(String(project?.userId), `${step}: ${errorLine(error)}`); throw error; }
+    };
+  }
 
   const geoStore = new GeoStore({ database });
   await geoStore.ready();
@@ -345,7 +365,8 @@ export async function openStack({ engineUrl, engineKeyFile, databaseUrlFile, dat
         if (!rows.some((/** @type {any} */ row) => row.cleanup === "pending") || Date.now() >= deadline) break;
         await sleep(pollMs);
       }
-      return rows.map((/** @type {any} */ row) => ({ cleanup: String(row.cleanup), reason: row.reason ?? null }));
+      const thrown = cleanupErrors.get(userId) ?? null;
+      return rows.map((/** @type {any} */ row) => ({ cleanup: String(row.cleanup), reason: row.reason ?? null, ...(row.cleanup === "pending" && thrown ? { thrown } : {}) }));
     },
 
     /** Engine users listed under the run's account (admin listing; never a call as the user, which could register it again). */

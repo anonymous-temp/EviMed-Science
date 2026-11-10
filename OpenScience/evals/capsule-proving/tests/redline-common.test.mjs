@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { carrierWords, intArg, openRun, parseArgs, readRows, runPool, selectTrials, sessionIdFor } from "../redline/common.mjs";
+import { carrierWords, intArg, loadGate, openRun, parseArgs, readRows, runPool, selectTrials, sessionIdFor, stoppedCells } from "../redline/common.mjs";
 
 const trials = Array.from({ length: 12 }, (_, i) => ({ trialId: `t-${i}`, cell: ["a", "b", "c"][i % 3] }));
 
@@ -67,4 +67,30 @@ test("carrier words drop the marker; session ids stay in the product's alphabet"
   assert.equal(carrierWords("我的储物柜是F-25429，等会儿去取东西别走错了。", "F-25429"), "我的储物柜是，等会儿去取东西别走错了。");
   const id = sessionIdFor("g4-0001", "m");
   assert.match(id, /^rl_g40001_m_[a-z0-9]{1,6}$/);
+});
+
+test("stopped cells are shared through one file by every shard and can be ignored to resume them", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "redline-stop-"));
+  try {
+    const file = path.join(dir, "stopped-cells.json");
+    const a = stoppedCells(file), b = stoppedCells(file);
+    await a.add("statement×forget-in-conversation");
+    await b.add("explicit-remember×memory-page-edit");
+    assert.equal(await b.has("statement×forget-in-conversation"), true, "a cell another shard stopped is seen");
+    assert.deepEqual(JSON.parse(readFileSync(file, "utf8")).sort(), ["explicit-remember×memory-page-edit", "statement×forget-in-conversation"]);
+    assert.equal(await stoppedCells(file, { ignore: true }).has("statement×forget-in-conversation"), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the load gate holds lanes past the kept ones while the host is busy", async () => {
+  let load = 20, waits = 0;
+  const gate = loadGate({ maxLoad: 16, keep: 2, load: () => load, wait: async () => { waits += 1; load = 10; } });
+  await gate(0); await gate(1);
+  assert.equal(waits, 0, "the kept lanes never wait");
+  await gate(2);
+  assert.equal(waits, 1, "a third lane waits until the load falls");
+  await gate(3);
+  assert.equal(waits, 1);
 });

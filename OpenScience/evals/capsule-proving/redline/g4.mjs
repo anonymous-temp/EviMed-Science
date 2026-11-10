@@ -21,12 +21,12 @@
 // conversation, and the model's `remember` tool called with the person's words, as the tool description tells a model to),
 // `memory-page-add` (POST /api/memory/remember, the page's 「记住这一条」).
 import path from "node:path";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 import { G4_DELETE_VIA, G4_PLANT_VIA } from "../synthetic/trialPlans.mjs";
 import { classifyFindings, summarizeG4 } from "./classify.mjs";
-import { carrierWords, gitState, intArg, milestone, openRun, parseArgs, runPool, selectTrials, sessionIdFor } from "./common.mjs";
+import { carrierWords, gitState, intArg, loadGate, milestone, openRun, parseArgs, runPool, selectTrials, sessionIdFor, stoppedCells as openStoppedCells } from "./common.mjs";
 import { capsulePreview, databaseColumnsWith, engineFilesWith, exportPaths, markerLinePrints, modelSurfaces, pageSurfaces, servedMemoryFiles,
   staleOrigins, vectorHits } from "./scan.mjs";
 import { openStack } from "./stack.mjs";
@@ -103,9 +103,9 @@ async function deleteMarker(stack, user, trial, plant, served) {
     case "delete-conversation": {
       if (!plant.markerSession) return { notDrivable: "a memory added on the memory page has no source conversation: the product's conversation deletion (DELETE /api/projects/:p/conversations/:id/source → NativeMemoryStore.removeConversationSource) removes only lines whose origin names a deleted dsh- conversation, so there is no conversation of this marker to delete" };
       const answer = await stack.http(user, "DELETE", `/api/projects/default/conversations/${encodeURIComponent(plant.markerSession)}/source`);
-      const rows = answer.status === 200 || answer.status === 202 ? await stack.drainSourceDeletion(user.id) : [];
+      const rows = answer.status === 200 || answer.status === 202 ? await stack.drainSourceDeletion(user.id, { timeoutMs: 90_000 }) : [];
       return { deleted: (answer.status === 200 || answer.status === 202) && rows.length > 0 && rows.every((row) => row.cleanup === "complete"), surface: "DELETE /api/projects/:p/conversations/:id/source + drain",
-        outcomes: [`${answer.status}:${answer.json?.error?.code ?? answer.json?.data?.cleanup ?? ""}`, ...rows.map((row) => `${row.cleanup}:${row.reason ?? ""}`)] };
+        outcomes: [`${answer.status}:${answer.json?.error?.code ?? answer.json?.data?.cleanup ?? ""}`, ...rows.map((row) => `${row.cleanup}:${row.reason ?? ""}${row.thrown ? ` (${row.thrown})` : ""}`)] };
     }
     case "memory-reset": {
       const answer = await stack.http(user, "POST", "/api/memory/reset", { confirm: "reset" });
@@ -187,6 +187,12 @@ export async function runG4Trial(stack, trial) {
   const row = { trialId: trial.trialId, plantVia: trial.plantVia, deleteVia: trial.deleteVia, relearn: trial.relearn, marker: trial.marker,
     planted: false, deleted: false, places: {}, reappeared: false, controlsSurvived: null, ms: 0, error: null };
   try {
+    if (trial.plantVia === "memory-page-add" && trial.deleteVia === "delete-conversation") {
+      // Decided by the plant path alone, so nothing is planted for it.
+      row.notDrivable = (await deleteMarker(stack, null, trial, { markerSession: null }, {})).notDrivable;
+      row.ms = Date.now() - started;
+      return row;
+    }
     const user = await stack.newUser(trial.trialId);
     row.userId = user.id;
     const markerSession = sessionIdFor(trial.trialId, "m");
@@ -214,6 +220,8 @@ export async function runG4Trial(stack, trial) {
     const verdict = classifyFindings(scan.findings, trial);
     row.places = verdict.places;
     row.reappeared = verdict.reappeared;
+    // Accepted by the product (it answered 2xx and holds the request) but not finished, and the marker still reaches an answer.
+    row.unfinishedDelete = !row.deleted && verdict.reappeared && /^20[02]:/.test(String(deletion.outcomes?.[0] ?? ""));
     row.scan = { accountHeld: scan.accountHeld, engineHeld: scan.engineHeld, engineFiles: scan.engineFiles, refused: scan.refused, exportStatus: scan.exportStatus ?? null, capsuleStatus: scan.capsuleStatus ?? null };
     const after = scan.engineHeld ? await servedMemoryFiles(stack.sessions, user.id).catch(() => ({})) : {};
     const controlsNow = trial.controls.map((/** @type {any} */ control) => filesWith(after, control.marker).length > 0);
@@ -245,9 +253,7 @@ async function main() {
     plan: { schema: plan.schema, seed: plan.seed, count: plan.count }, options } });
   if (args["summary-only"]) { const summary = await runner.writeSummary(summarizeG4); process.stdout.write(`${JSON.stringify(summary.totals)}\n`); return; }
 
-  const stoppedFile = path.join(runDir, "stopped-cells.json");
-  /** @type {Set<string>} */
-  const stoppedCells = new Set(args["resume-stopped"] ? [] : JSON.parse(await readFile(stoppedFile, "utf8").catch(() => "[]")));
+  const stoppedCells = openStoppedCells(path.join(runDir, "stopped-cells.json"), { ignore: Boolean(args["resume-stopped"]) });
   const cellOf = (/** @type {any} */ trial) => `${trial.plantVia}×${trial.deleteVia}`;
   const only = typeof args.only === "string" ? new Set(args.only.split(",")) : null;
   const cells = typeof args.cells === "string" ? new Set(args.cells.split(",")) : null;
@@ -264,7 +270,7 @@ async function main() {
   let finished = 0, reappeared = 0, failed = 0;
   try {
     await runPool(selected, options.concurrency, async (trial) => {
-      if (stoppedCells.has(cellOf(trial))) { await runner.fail(trial.trialId, `cell-stopped ${cellOf(trial)}`); return; }
+      if (await stoppedCells.has(cellOf(trial))) { await runner.fail(trial.trialId, `cell-stopped ${cellOf(trial)}`); return; }
       const row = await runG4Trial(stack, trial);
       await runner.writeRow(row);
       finished += 1;
@@ -273,15 +279,19 @@ async function main() {
         await runner.status.markDone(trial.trialId, `${cellOf(trial)} planted=${row.planted} deleted=${row.deleted} reappeared=${row.reappeared}${row.notDrivable ? " not-drivable" : ""} ms=${row.ms}`);
       }
       process.stderr.write(`${new Date().toISOString()} ${trial.trialId} ${cellOf(trial)} ${row.error ? `ERROR ${row.error}` : `planted=${row.planted} deleted=${row.deleted} reappeared=${row.reappeared}`} ${row.ms}ms\n`);
-      // Only a finished deletion can be a reappearance; a delete the product did not finish is reported as such.
+      // Only a finished deletion can be a reappearance. A deletion the product accepted and never finished, while the marker still
+      // reaches an answer, is reported with the red lines as an unfinished delete (and stops its cell too).
+      if (row.unfinishedDelete) {
+        await stoppedCells.add(cellOf(trial));
+        await milestone(`g4 ${runId} RED LINE (unfinished delete) ${trial.trialId} ${cellOf(trial)}: accepted, never completed (${(row.deletion?.outcomes ?? []).slice(-1)[0] ?? ""}), still reachable via ${Object.entries(row.places).filter(([, value]) => /** @type {any} */ (value).class === "redline").map(([place]) => place).join(",")} — cell stopped`);
+      }
       if (row.reappeared && row.deleted) {
         reappeared += 1;
-        stoppedCells.add(cellOf(trial));
-        await writeFile(stoppedFile, `${JSON.stringify([...stoppedCells])}\n`, { mode: 0o600 });
+        await stoppedCells.add(cellOf(trial));
         await milestone(`g4 ${runId} RED LINE ${trial.trialId} ${cellOf(trial)}: ${Object.entries(row.places).filter(([, value]) => /** @type {any} */ (value).class === "redline").map(([place]) => place).join(",")} — cell stopped`);
       }
       if (finished % 25 === 0) await milestone(`g4 ${runId} shard ${shard}: ${finished}/${selected.length} done, ${reappeared} red lines, ${failed} errors`);
-    });
+    }, { gate: loadGate({ maxLoad: Number(args["max-load"] ?? 16), keep: intArg(args["keep-lanes"], 2) }) });
   } finally {
     const summary = await runner.writeSummary(summarizeG4);
     await milestone(`g4 ${runId} shard ${shard}: finished pass, ${finished} trials this pass; run totals ${JSON.stringify(summary.totals)}`);
