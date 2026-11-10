@@ -92,7 +92,7 @@ test('retrieval uses session links and line origins, deduplicates gold IDs, isol
   assert.equal(r.memory.evidence.filter(e => e.method === 'date-proxy').length, 1);
   const abstain = limit => measureRetrieval({ blocks: [], goldIds: [], mapping, limit });
   const report = retrievalReport([{ questionType: 'multi-session', results: [r, result(20)] }, { questionType: 'abstention', results: [abstain(8), abstain(20)] }]);
-  assert.equal(report.limits[0].answerable, 1); assert.equal(report.limits[0].microRecall, 0.5);
+  assert.equal(report.limits[0].withGoldSessions, 1); assert.equal(report.limits[0].microRecall, 0.5);
   assert.equal(measureRetrieval({ blocks: [], goldIds: ['sourceA'], mapping, limit: 8, isError: true }).history.hit, false);
   assert.ok(summaryText(report).includes('recall@8/20=50.0%/50.0%'));
   const item = { userKey: 'u', sessions: sessions };

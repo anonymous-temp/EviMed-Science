@@ -75,7 +75,7 @@ function aggregate(rows, limit) {
   const eligible = all.filter(r => r.goldSessions > 0), n = eligible.length;
   const total = eligible.reduce((s, r) => s + r.goldSessions, 0);
   const matched = eligible.reduce((s, r) => s + (r.isError ? 0 : r.history.matched), 0);
-  return { limit, questions: all.length, answerable: n, abstention: all.length - n, errors: all.filter(r => r.isError).length,
+  return { limit, questions: all.length, withGoldSessions: n, withoutGoldSessions: all.length - n, abstentionQuestions: rows.filter(r => r.questionType === 'abstention').length, errors: all.filter(r => r.isError).length,
     goldSessions: total, matchedSessions: matched, microRecall: total ? matched / total : null,
     macroRecall: n ? eligible.reduce((s, r) => s + (r.history.recall ?? 0), 0) / n : null,
     historyHitRate: n ? eligible.filter(r => r.history.hit).length / n : null,
@@ -86,15 +86,18 @@ function aggregate(rows, limit) {
 }
 export function retrievalReport(rows, identity = {}) {
   return { schema: 'longmemeval-retrieval/1', ...identity, completed: rows.length, limits: [8, 20].map(k => aggregate(rows, k)),
+    answerableOnly: [8, 20].map(k => aggregate(rows.filter(r => r.questionType !== 'abstention'), k)),
+    productHistoryExcerptCap: 8,
     byType: Object.fromEntries([...new Set(rows.map(r => r.questionType))].sort().map(type => [type, [8, 20].map(k => aggregate(rows.filter(r => r.questionType === type), k))])),
     notes: ['Search uses the original question and product gateway; no answer model or ingestion.',
       'Recall is over unique gold answer_session_ids, not answer strings. Repeated source IDs remain one logical session.',
       'Memory origin matches use exact returned-line fingerprints. Date-only matches are proxies, not proof of answer content.',
-      'Source-session presence does not prove that an excerpt contains the answer. Abstentions have no retrieval target and are excluded from recall; errors count as misses.'], rows };
+      'Source-session presence does not prove that an excerpt contains the answer. Source-session metrics retain abstention references; answerableOnly excludes _abs questions. Cases with no gold session IDs are excluded from recall; errors count as misses.',
+      'The product history search caps requested limits at 8 excerpts. Limit 20 is a gateway request, not a true history top-20 measurement.'], rows };
 }
 export function summaryText(report) {
   const pct = v => v === null ? 'n/a' : `${(v * 100).toFixed(1)}%`;
   const line = (type, rows) => `${type}: n=${rows[0].questions} history recall@8/20=${rows.map(r => pct(r.microRecall)).join('/')} memory any@8/20=${rows.map(r => pct(r.memoryHitRate)).join('/')} origins@8/20=${rows.map(r => pct(r.memoryOriginHitRate)).join('/')}`;
   return ['LongMemEval-S product retrieval (no answer model)', line('ALL', report.limits),
-    ...Object.entries(report.byType).map(([type, rows]) => line(type, rows)), 'Date matches are proxies; gold-session recall is not answer-content recall.'].join('\n');
+    ...Object.entries(report.byType).map(([type, rows]) => line(type, rows)), 'History is capped at 8 excerpts even for limit=20; date matches are proxies, not answer-content recall.'].join('\n');
 }

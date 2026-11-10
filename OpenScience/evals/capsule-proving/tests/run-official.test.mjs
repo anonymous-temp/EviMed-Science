@@ -21,6 +21,8 @@ test('official templates cover every upstream type, abstention overrides type, i
   assert.equal(officialYes('No.'), false);
   assert.equal(rubricFacts('official', 'qwen3.8-max').answerJudgeSameFamily, true);
   assert.equal(parseArgs(['--run', 'r', '--data', 'd', '--rubric', 'official']).rubric, 'official');
+  assert.equal(parseArgs(['--run', 'r', '--data', 'd', '--judge-batch-size', '1']).judgeBatchSize, 1);
+  assert.throws(() => parseArgs(['--run', 'r', '--data', 'd', '--judge-batch-size', '13']), /judge_batch_invalid/);
 });
 
 test('official judge uses individual verbatim user prompts and hash-bound checkpoints; pending stays unknown', async () => {

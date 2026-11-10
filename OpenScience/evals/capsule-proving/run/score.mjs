@@ -462,7 +462,7 @@ async function goldCacheKey(data, run, { sources, pools }) {
     dependencies: await Promise.all(['../inputs.mjs', '../inputsLearning.mjs', '../normalize.mjs', '../offlineJudge.mjs', '../sources.json', '../pools'].map(f => metadataTree(path.join(HERE, f)))) }));
 }
 
-async function adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl, judgeConcurrency, retryDelayMs }) {
+async function adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl, judgeConcurrency, judgeBatchSize, retryDelayMs }) {
   let results = await optional(() => jsonl(path.join(out, 'judge-results.jsonl')), []);
   const packetIds = new Set(packets.map(p => p.id));
   results = results.filter(r => packetIds.has(r.id));
@@ -474,7 +474,7 @@ async function adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl
   if (!noJudge && judgeKeyFile && packets.length) {
     const key = (await readFile(judgeKeyFile, 'utf8')).trim();
     try {
-      results = await judgePackets(packets, { key, results, fetchImpl, concurrency: judgeConcurrency, retries: 3, retryDelayMs,
+      results = await judgePackets(packets, { key, results, fetchImpl, concurrency: judgeConcurrency, batchSize: judgeBatchSize, retries: 3, retryDelayMs,
         persist: rows => saveLines(path.join(out, 'judge-results.jsonl'), rows) });
     } catch (error) {
       if (/^judge_(?:checkpoint|resume)/.test(error.message)) throw error;
@@ -527,13 +527,14 @@ async function scoreRuns(options) {
 
 /** @param {object} options */
 export async function scoreRun({ run: runDir, data, control: controlDir, judgeKeyFile, noJudge = false, out,
-  fetchImpl, sources, pools, judgeConcurrency = 6, variant, runs, retryDelayMs = 250, shard = false, rubric = 'approximate' } = {}) {
+  fetchImpl, sources, pools, judgeConcurrency = 6, judgeBatchSize = 6, variant, runs, retryDelayMs = 250, shard = false, rubric = 'approximate' } = {}) {
   if (!['approximate', 'official'].includes(rubric)) throw new Error('rubric_invalid');
   if (runs && runDir) throw new Error('run_and_runs_exclusive');
-  if (runs) return scoreRuns({ runs, data, control: controlDir, judgeKeyFile, noJudge, out, fetchImpl, sources, pools, judgeConcurrency, variant, retryDelayMs, rubric });
+  if (runs) return scoreRuns({ runs, data, control: controlDir, judgeKeyFile, noJudge, out, fetchImpl, sources, pools, judgeConcurrency, judgeBatchSize, variant, retryDelayMs, rubric });
   if (variant !== undefined && !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(variant)) throw new Error('variant_invalid');
   if (!runDir || !data) throw new Error('run_and_data_required');
   if (!Number.isSafeInteger(judgeConcurrency) || judgeConcurrency < 1) throw new Error('judge_concurrency_invalid');
+  if (!Number.isSafeInteger(judgeBatchSize) || judgeBatchSize < 1 || judgeBatchSize > 12) throw new Error('judge_batch_invalid');
   runDir = path.resolve(runDir); data = path.resolve(data); out = path.resolve(out ?? path.join(runDir, `${variant ? `scores.${variant}` : 'scores'}${rubric === 'official' ? '.official' : ''}`));
   const run = await json(path.join(runDir, 'run.json'));
   if (rubric === 'official' && run.set !== 'longmemeval-s') throw new Error('official_requires_longmemeval_s');
@@ -697,7 +698,7 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
   if (!buildHit) await atomic(cacheFile, JSON.stringify({ goldKey, entries: allEntries, buildKey, rows, packets, tokens }));
   const rowIds = rows.map(r => `${r.caseId}\0${r.kind}\0${r.id}`);
   if (new Set(rowIds).size !== rowIds.length) throw new Error('duplicate_score_row');
-  const { results, judgeError } = await adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl, judgeConcurrency, retryDelayMs });
+  const { results, judgeError } = await adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl, judgeConcurrency, judgeBatchSize, retryDelayMs });
   const status = await optional(() => readFile(path.join(runDir, 'STATUS'), 'utf8'), '');
   const times = status.split('\n').filter(l => /^\S+\s+(?:DONE|FAIL)\s+/.test(l)).map(l => Date.parse(l.split(/\s+/)[0])).filter(Number.isFinite);
   tokens.prompt = tokens.extraction.prompt + tokens.answer.prompt;
@@ -718,13 +719,14 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
 }
 
 export function parseArgs(args) {
-  const options = {}, names = { '--run': 'run', '--data': 'data', '--control': 'control', '--judge-key-file': 'judgeKeyFile', '--out': 'out', '--judge-concurrency': 'judgeConcurrency', '--variant': 'variant', '--rubric': 'rubric', '--runs': 'runs' };
+  const options = {}, names = { '--run': 'run', '--data': 'data', '--control': 'control', '--judge-key-file': 'judgeKeyFile', '--out': 'out', '--judge-concurrency': 'judgeConcurrency', '--judge-batch-size': 'judgeBatchSize', '--variant': 'variant', '--rubric': 'rubric', '--runs': 'runs' };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--list-redlines') { options.listRedlines = true; continue; }
     if (args[i] === '--no-judge') { options.noJudge = true; continue; }
     const name = names[args[i]], value = args[++i];
     if (!name || !value || value.startsWith('--') || options[name] !== undefined) throw new Error('Usage: score.mjs --run DIR --data DIR [--variant NAME] [--control DIR] [--judge-key-file FILE] [--judge-concurrency N] [--no-judge] [--list-redlines] [--out DIR]; or --runs DIR1,DIR2 --data DIR --out DIR');
-    options[name] = name === 'judgeConcurrency' ? Number(value) : value;
+    options[name] = ['judgeConcurrency', 'judgeBatchSize'].includes(name) ? Number(value) : value;
+    if (name === 'judgeBatchSize' && (!Number.isSafeInteger(options[name]) || options[name] < 1 || options[name] > 12)) throw new Error('judge_batch_invalid');
     if (name === 'judgeConcurrency' && (!Number.isSafeInteger(options[name]) || options[name] < 1)) throw new Error('judge_concurrency_invalid');
   }
   if ((!options.run && !options.runs) || !options.data) throw new Error('run_and_data_required');

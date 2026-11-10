@@ -345,7 +345,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     engine: previous.engine ? { ...previous.engine, urls: options.engineUrls, shards: facts.engine.shards } : null,
     flags: { ...previous.flags, config: facts.flags.config, maintain: facts.flags.maintain, maintainAfter: facts.flags.maintainAfter, rejectionJudge: facts.flags.rejectionJudge },
     answerVariants: [...(previous.answerVariants ?? []).filter(old => !facts.answerVariants.some(v => v.name === old.name)), ...facts.answerVariants], label: options.label || previous.label || "",
-    resumes: [...(previous.resumes ?? []), { at: startedAt, commit: git.commit, dirty: git.dirty, runnerDigest: facts.runnerDigest, options: facts.options, flags: facts.flags, answerVariants: facts.answerVariants, label: facts.label }] }
+    resumes: [...(previous.resumes ?? []), { at: startedAt, commit: git.commit, dirty: git.dirty, runnerDigest: facts.runnerDigest, options: facts.options, answerOptions: facts.answerOptions, model: facts.model, flags: facts.flags, answerVariants: facts.answerVariants, label: facts.label }] }
     : { runId, startedAt, ...facts, resumes: [] };
   await writeAtomic(runFile, `${JSON.stringify(runJson, null, 2)}\n`);
 
