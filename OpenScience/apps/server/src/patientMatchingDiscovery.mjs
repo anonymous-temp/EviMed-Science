@@ -1,7 +1,7 @@
 /** Discovery composes source-specific retrieval, a separate vector generation and typed reranking into one saved order. */
 import {fuseCandidates,validatePermutation} from '@evimed/patient-matching-worker';
 import {profileIdentity,composeRanking,trialRecordText,RANKING_POLICY} from '@evimed/patient-matching-core';
-import {maskIdentifiers} from '@evimed/domain';
+import {maskOutboundIdentifiers} from '@evimed/domain';
 import {createHash} from 'node:crypto';
 import {patientMatchingRankingDocument,rankingViewId} from './patientMatchingRankingText.mjs';
 import {patientRankingText,recordIsLong} from './patientMatchingProfile.mjs';
@@ -83,7 +83,7 @@ export function createPatientMatchingDiscovery({vcr,models,index=null,jevEnabled
       jev:fit?{state:fit.status,model:fit.data?.model??null,rubric:fit.data?.rubric??null,scored:scoredIds.length,answered:fit.data?.answered??0,order:composed.jevOrder,gradedOrder:composed.gradedOrder,code:fit.data?.code??null}:{state:'skipped',scored:0,answered:0},
       indexGeneration:dense?.data?.generation??null,indexStatus:dense?.status??'unconfigured',clinicalEligibility:'not-assessed'};
     await assertCurrent(envelope);
-    const searchId=await vcr.candidateSearches.save(study,{subjectKey,request:{condition:maskIdentifiers(query),summary:{digest:profileIdentity(objective)},limit},registries:incoming.registries??[],rerank,collection:incoming.collection??null,found:ordered.length,items:ordered});
+    const searchId=await vcr.candidateSearches.save(study,{subjectKey,request:{condition:maskOutboundIdentifiers(query),summary:{digest:profileIdentity(objective)},limit},registries:incoming.registries??[],rerank,collection:incoming.collection??null,found:ordered.length,items:ordered});
     return result(ordered.length?'complete':incoming.available===false?'unsupported':'complete',{...incoming,searchId,rerank,retrieved:ordered.length,returned:Math.min(limit,ordered.length),candidates:ordered.slice(0,limit),more:ordered.length>limit,
       coverage:{registry:incoming.registries??[],dense:dense?{status:dense.status,generation:dense.data?.generation??null,code:dense.data?.code??null}:{status:'unconfigured'},requestedExact:exact.length,recoveredExact:exact.filter(id=>candidates.has(id)).length}});
   };

@@ -1,6 +1,6 @@
 /** Provider-key boundary for matching algorithms. Clinical decisions remain native Flash executions. */
 import { createHash, randomUUID } from 'node:crypto';
-import { priceUsage, REFERENCE_PRICE_LIST, maskIdentifiers } from '@evimed/domain';
+import { priceUsage, REFERENCE_PRICE_LIST, maskOutboundIdentifiers } from '@evimed/domain';
 import { JEV_FIT_INSTRUCTIONS, JEV_FIT_LEVELS, JEV_GRADED_LEVELS, expectedGradedGain, profileIdentity } from '@evimed/patient-matching-core';
 import { patientMatchingConfiguration } from './patientMatchingConfiguration.mjs';
 import { callJev } from './jevModel.mjs';
@@ -67,7 +67,7 @@ const PROFILE_INSTRUCTIONS = [
  * board that measures what the summary keeps sends exactly what discovery sends. @param {unknown[]} passages
  */
 export function profileMessages(passages) {
-  const record = maskIdentifiers(newestWindow((passages ?? []).map((text) => ({ text: String(text ?? '') })), PROFILE_INPUT_CHARS));
+  const record = maskOutboundIdentifiers(newestWindow((passages ?? []).map((text) => ({ text: String(text ?? '') })), PROFILE_INPUT_CHARS));
   return record.trim() ? [{ role: 'system', content: PROFILE_INSTRUCTIONS }, { role: 'user', content: record }] : null;
 }
 

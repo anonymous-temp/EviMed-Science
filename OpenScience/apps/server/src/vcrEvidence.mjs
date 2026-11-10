@@ -98,7 +98,7 @@ import {
   VCR_JOB_METHODS, VCR_POOLING_METHODS, VCR_VALUE_SOURCES, canonicalScenarioJson, validateEngineJob, vcrConvertTime, vcrTimeUnitOf,
 } from "@evimed/domain";
 import { quoteIsPresent } from "@evimed/domain/clinical-evidence";
-import { maskIdentifiers } from "@evimed/domain";
+import { maskOutboundIdentifiers } from "@evimed/domain";
 
 import { REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS, confidenceLevelOf } from "./trialRegistryClient.mjs";
 import {
@@ -1596,7 +1596,7 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
       const asOf = now().toISOString();
       if (asked.ok === false) return { available: false, code: "vcr_read_filter_invalid", message: asked.message };
       // What a run wrote goes to public registries and into the receipt: an identifier's shape does not, wherever it was written. A name in free text is the run's to leave out.
-      const request = { ...asked.request, ...(asked.request.condition ? { condition: maskIdentifiers(asked.request.condition) } : {}), terms: asked.request.terms.map((/** @type {string} */ term) => maskIdentifiers(term)) };
+      const request = { ...asked.request, ...(asked.request.condition ? { condition: maskOutboundIdentifiers(asked.request.condition) } : {}), terms: asked.request.terms.map((/** @type {string} */ term) => maskOutboundIdentifiers(term)) };
       if (frozen) {
         if (!trialCorpus || filter.collection !== trialCorpus.id) {
           return { available: false, code: REGISTRY_UNAVAILABLE, reason: "trial_collection_unavailable", message: "指定的冻结登记库未接入。" };

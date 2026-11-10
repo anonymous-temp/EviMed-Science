@@ -469,7 +469,7 @@ export {
   transcriptMessageText,
 } from './src/trajectoryDigest.mjs'
 export { scopeRunTranscript } from './src/runTurnScope.mjs'
-export { methodSourceIdentifierShapesIn } from './src/methodSourcePrivacy.mjs'
+export { maskOutboundIdentifiers, methodSourceIdentifierShapesIn } from './src/methodSourcePrivacy.mjs'
 
 // learningEvidence — one reaction of the researcher to a run, as the feedback ledger keeps it (steer, follow-up, result-corrected, silent, used)
 export {

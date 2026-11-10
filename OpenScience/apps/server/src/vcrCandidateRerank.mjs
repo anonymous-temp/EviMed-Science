@@ -10,7 +10,7 @@
  * Hidden knowledge:
  *
  * - **The query is what the run wrote about the patient, not the note**, with identifier shapes taken out before it leaves
- *   (`maskIdentifiers`; a name or an address in free text is the run's to leave out, and its tool description says so).
+ *   (`maskOutboundIdentifiers`; a name or an address in free text is the run's to leave out, and its tool description says so).
  * - **It reorders and drops nothing.** A batch that fails (a timeout, a refusal, an answer that does not cover its documents) leaves its
  *   trials in the slots they arrived in; the scored ones fill the other slots in score order. Every failure fails open to the order given,
  *   so a deployment with no key and one whose endpoint is down answer with the registries' order, and the answer says which.
@@ -27,7 +27,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 
-import { REFERENCE_PRICE_LIST, maskIdentifiers, priceUsage } from "@evimed/domain";
+import { REFERENCE_PRICE_LIST, maskOutboundIdentifiers, priceUsage } from "@evimed/domain";
 
 /** DashScope's native rerank path takes a different envelope from the OpenAI-compatible one (the marker `memoryRerank.mjs` also tests for). */
 const NATIVE_PATH_MARKER = "/api/v1/services/rerank";
@@ -159,7 +159,7 @@ export class VcrCandidateRerank {
     /** @type {Array<number | null>} */
     const scores = texts.map(() => null);
     if (!this.configured) return { scores, state: "unconfigured", batches: 0, failedBatches: 0, reasons: ["vcr_rerank_unconfigured"], model: this.model };
-    const masked = maskIdentifiers(query).slice(0, this.maxQueryChars);
+    const masked = maskOutboundIdentifiers(query).slice(0, this.maxQueryChars);
     // A batch is at most `batchSize` documents, and the query counted once for each of them plus the documents is at most `requestChars`: what the model allows one request.
     /** @type {number[][]} */
     const batches = [];
