@@ -18,7 +18,7 @@ class RunnerTests(unittest.TestCase):
             (root / 'tests/test.sh').write_text('uvx --with torch==2.1.2 pytest')
             (root / 'task.toml').write_text('[environment]\nstorage_mb=10240\n')
             task = {'bench': 'slb', 'path': tmp}
-            with patch('run.shutil.disk_usage') as disk:
+            with patch('run.shutil.disk_usage') as disk, patch('run.ROOT', root):
                 disk.return_value.free = 4 * 1024**3
                 self.assertIn('unchanged and unrun', run.resource_admission_issue(task))
                 disk.return_value.free = 12 * 1024**3

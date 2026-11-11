@@ -87,6 +87,9 @@ def resource_admission_issue(task):
     config = tomllib.loads((directory / 'task.toml').read_text())
     declared = config.get('environment', {}).get('storage_mb', 0) * 1024**2
     available = shutil.disk_usage(ROOT).free
+    policy = ROOT / 'resource-policy.json'
+    if policy.exists():
+        available = min(available, json.loads(policy.read_text())['storageBudgetBytes'])
     if re.search(r'--with\s+(?:torch|deepspeed)==', script) and available < declared:
         return f'Capacity unavailable before model dispatch: pinned verifier ML bootstrap, declared storage {declared} bytes, shared free {available} bytes. Official verifier is unchanged and unrun.'
     return None
