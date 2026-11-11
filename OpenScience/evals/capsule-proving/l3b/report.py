@@ -44,15 +44,17 @@ def arm_report(root, arm):
         trace.append(dict(id=r['id'], methods=associated, learned=bool(associated), approved=any(m['status']=='approved' for m in associated), mounted=0, opened=0))
     for f in sorted((out/'records').glob('exam-*.json')):
         r=read(f); s=read(out/'judged'/f.name, {})
-        judge_usage['inputTokens'] += s.get('usage',{}).get('prompt_tokens',0)
-        judge_usage['outputTokens'] += s.get('usage',{}).get('completion_tokens',0)
-        judge_usage['estimatedCostCny'] += s.get('estimatedCostCny',0)
+        memory_score=read(out/'memory-judged'/f.name, {})
+        for score in (s, memory_score):
+            judge_usage['inputTokens'] += score.get('usage',{}).get('prompt_tokens',0)
+            judge_usage['outputTokens'] += score.get('usage',{}).get('completion_tokens',0)
+            judge_usage['estimatedCostCny'] += score.get('estimatedCostCny',0)
         mounted=[]; opened=[]
         for t in r['turns']:
             obs=t.get('methodObservation') or t.get('run') or {}
             mounted.extend(obs.get('methodsLoaded',[])); opened.extend(obs.get('methodsInvoked',[]))
         row=dict(id=r['id'],rep=r['rep'],passed=s.get('passed'),behavior=s.get('behavior'),quality=s.get('quality'),
-                 profile=r.get('memory',{}).get('profileBlockPresent'), preferencePresent=s.get('preferencePresent'),
+                 profile=r.get('memory',{}).get('profileBlockPresent'), preferencePresent=memory_score.get('preferencePresent'),
                  searched=len(r.get('memory',{}).get('searchCalls',[]))>0,
                  searchSucceeded=any(not t.get('error') for t in r.get('memory',{}).get('searchCalls',[])), mounted=mounted, opened=opened)
         rows.append(row)
@@ -75,7 +77,7 @@ def arm_report(root, arm):
                 unknown=sum(r['passed'] is None for r in rows), recorded=len(rows), expected=54, missingRecords=max(0,54-len(rows)),
                 trace=trace, correctionsLearned=sum(t['learned'] for t in trace), correctionsApproved=sum(t['approved'] for t in trace),
                 correctionsMounted=sum(t['mounted']>0 for t in trace), correctionsOpened=sum(t['opened']>0 for t in trace),
-                memory=dict(profile=sum(bool(r['profile']) for r in paired), relevantPreference=sum(r['preferencePresent'] is True for r in paired), searchAttempted=sum(r['searched'] for r in paired), searchSucceeded=sum(r['searchSucceeded'] for r in paired), n=len(paired)),
+                memory=dict(profile=sum(bool(r['profile']) for r in paired), relevantPreference=sum(r['preferencePresent'] is True for r in paired), preferenceUnknown=sum(r['preferencePresent'] is None for r in paired), searchAttempted=sum(r['searched'] for r in paired), searchSucceeded=sum(r['searchSucceeded'] for r in paired), n=len(paired)),
                 usage=read(out/'account-usage.json'), judgeUsage=judge_usage, learningComplete=bool(learn), complete=(out/'complete.json').exists(), rows=rows), scores, behavior, majority
 
 def main():

@@ -26,6 +26,8 @@ class Scoring(unittest.TestCase):
         p,_=packet(item,{'arm':'D','turns':[{'reply':'Answer'}],'memory':{}})
         self.assertNotIn('arm',p)
         self.assertNotIn('learning',p)
+        self.assertNotIn('openingContext',p)
+        self.assertNotIn('exposurePreference',p)
     def test_statistics(self):
         self.assertAlmostEqual(wilson(0,10)[1],.2775327999)
         self.assertIsNone(wilson(0,0))
