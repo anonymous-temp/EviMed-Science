@@ -17,6 +17,8 @@ test("arguments: arm product needs the engine; answering needs a model key; --in
   assert.equal(options.historySearch, false);
   assert.equal(options.commitEvery, "turn");
   assert.equal(options.concurrency, 3);
+  assert.equal(options.engineTimeoutMs, 30_000);
+  assert.throws(() => parseArguments([...base, ...engine, "--ingest-only", "--engine-timeout-ms", "0"]), /must be positive/);
   assert.throws(() => parseArguments([...base, "--ingest-only"]), /needs --engine-url/);
   assert.throws(() => parseArguments([...base, ...engine]), /--deepseek-key-file/);
   assert.equal(parseArguments([...base, "--arm", "keyword", "--deepseek-key-file", "/k"]).arm, "keyword");
