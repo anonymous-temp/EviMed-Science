@@ -67,6 +67,18 @@ test('upstream ACP read events retain method identity and completion state', () 
     { type: 'tool_call', tool_call_id: 'b', kind: 'read', title: '/home/agent/.agents/skills/foo/SKILL.md', status: 'failed' }];
   assert.deepEqual(openings(events, ['foo']), ['foo']);
 });
+test('ACP generic read titles identify returned skill frontmatter, not mentions or failed reads', () => {
+  const content = text => [{ type: 'content', content: { type: 'text', text } }];
+  const yaml = content('---\nname: foo\ndescription: Example\n---\nWorkflow');
+  const json = content('---\n{"name":"bar","description":"Example"}\n---\nWorkflow');
+  const events = [
+    { type: 'tool_call', kind: 'read', tool_call_id: 'a', title: 'read', status: 'completed', content: yaml },
+    { type: 'tool_call', kind: 'read', tool_call_id: 'b', title: 'read', status: 'completed', content: json },
+    { type: 'tool_call', kind: 'read', tool_call_id: 'c', title: 'read', status: 'failed', content: yaml },
+    { type: 'agent_message', content: yaml },
+  ];
+  assert.deepEqual(openings(events, ['foo', 'bar']), ['foo', 'bar']);
+});
 test('final report includes late gateway charges and appends one idempotent ledger row', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sb-report-'));
   try {

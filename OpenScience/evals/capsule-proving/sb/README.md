@@ -176,6 +176,8 @@ Mounted means deployed skill folders. Opened means a successful read-tool call
 for a mounted `SKILL.md`, deduplicated by tool-call ID. Shell reads are not counted
 by that conservative observer. Learned-method openings on held-out tasks are
 reference-agent reuse, not product observer events.
+ACP can omit the path and title the operation only `read`; a completed read
+returning the mounted skill's frontmatter also identifies an opening.
 
 ## Comparability and submission
 

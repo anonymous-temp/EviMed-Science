@@ -30,6 +30,21 @@ export function verdict(record) {
 export function openings(events, mounted) {
   const names = new Set(mounted);
   const calls = new Map(), completed = new Set();
+  const returnedSkillName = value => {
+    if (typeof value === 'string') {
+      const header = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(value)?.[1];
+      if (!header) return null;
+      let name;
+      try { name = JSON.parse(header).name; } catch { name = /^name:\s*["']?([A-Za-z0-9_-]+)/m.exec(header)?.[1]; }
+      return names.has(name) ? name : null;
+    }
+    if (!value || typeof value !== 'object') return null;
+    for (const child of Object.values(value)) {
+      const name = returnedSkillName(child);
+      if (name) return name;
+    }
+    return null;
+  };
   const visit = obj => {
     if (!obj || typeof obj !== 'object') return;
     const tool = obj.name ?? obj.toolName ?? obj.tool_name;
@@ -44,6 +59,10 @@ export function openings(events, mounted) {
     if (obj.type === 'tool_call' && obj.kind === 'read' && key) {
       const match = /\/([^/]+)\/SKILL\.md(?:$|[\s:])/.exec(String(obj.title ?? ''));
       if (match && names.has(match[1])) calls.set(key, match[1]);
+      // BenchFlow's captured ACP title can be only "read"; the successful
+      // returned document still preserves its canonical skill frontmatter.
+      const returned = returnedSkillName(obj.content);
+      if (returned) calls.set(key, returned);
     }
     if (key && ((obj.type === 'tool_execution_end' && obj.isError === false)
       || (obj.role === 'toolResult' && obj.isError === false) || obj.status === 'completed')) completed.add(key);
