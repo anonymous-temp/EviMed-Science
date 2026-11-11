@@ -12,7 +12,9 @@ const Schema = await configSchema()
 export const Config = Schema.object({ enabled: Schema.boolean().default(false), endpoint: Schema.string().default(''), tokenFile: Schema.string().default('') })
 export async function apply(ctx, config = {}) {
   if (config.enabled !== true) return
-  const transport = createHttpHostTransport({ endpoint: config.endpoint, tokenFile: config.tokenFile })
+  // A host call may run as long as its tool (120 s): discovery on the production host (registry search and rerank) passed the
+  // transport's 30 s default three times in the first production conversation (2026-11-11) and was retried by the model.
+  const transport = createHttpHostTransport({ endpoint: config.endpoint, tokenFile: config.tokenFile, timeoutMs: 110000 })
   const handle = createMatchingHandler({ transport, ctx })
   const tools = await Promise.all(TOOL_MANIFEST.map(entry => defineTool({ name: entry.name, description: entry.description, parameters: nativeParameterFields(entry.parameters), timeoutMs: entry.name === 'match_assess' ? 600000 : 120000, concurrencySafe: false, async execute(args, call) {
     const response = await handle(entry.name, args, call)

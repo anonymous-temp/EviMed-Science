@@ -1,6 +1,6 @@
 {
   "name": "@evimed/dsh-patient-matching",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "type": "module",
   "description": "Independent native DSH professional patient matching bundle with authenticated scoped host ports.",
   "license": "MIT",

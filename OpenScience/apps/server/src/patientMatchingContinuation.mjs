@@ -31,8 +31,12 @@ export class PatientMatchingContinuation {
     const p=await this.adapter.pending(origin,taskId);if(!p.pending)return null;
     const saved={userId:origin.userId,projectId:origin.projectId,rootSessionId:origin.rootSessionId,runId:origin.runId??null,pluginGeneration:origin.pluginGeneration};
     const key=profileIdentity({taskId,cursor:p.cursor,epoch:p.continuationEpoch??0,pluginGeneration:saved.pluginGeneration});
+    // One continuation per task position: a later turn that re-assesses the same task at the same cursor (a correction, 2026-11-11
+    // on production) finds the earlier turn's job under the key with another run in its payload. That job already continues this
+    // position, so the later turn adds none and its saved decisions stand.
     return this.jobs.enqueue(origin.userId,PATIENT_MATCHING_CONTINUATION_KIND,{origin:saved,taskId,cursor:p.cursor,epoch:p.continuationEpoch??0},
-      {idempotencyKey:`matching-continue-${key.slice(7)}`,projectId:origin.projectId,maxAttempts:3});
+      {idempotencyKey:`matching-continue-${key.slice(7)}`,projectId:origin.projectId,maxAttempts:3})
+      .catch(error=>{if(error?.code==='product_job_idempotency_conflict')return null;throw error;});
   }
   start(){if(this.timer)return;this.timer=setInterval(()=>void this.tick(),this.pollMs);this.timer.unref?.();}
   async stop(){if(this.timer)clearInterval(this.timer);this.timer=null;await this.ticking;}

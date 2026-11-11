@@ -19,6 +19,7 @@ function fixture(){
 }
 test('leased same-session resume deduplicates lost acceptance, advances saved cursor and respects cancellation',options,async()=>{
   const f=fixture();f.lose();const job=await f.worker.enqueue(origin,'task-a');assert.equal((await f.worker.enqueue(origin,'task-a')).id,job.id);
+  assert.equal(await f.worker.enqueue({...origin,runId:'correction-turn'},'task-a'),null,'a later turn at the same position keeps the earlier continuation');
   await f.worker.tick();assert.equal(f.accepted(),1);await f.worker.tick();assert.equal(f.accepted(),1,'lost acceptance reuses dispatch identity');
   f.runs[0].status='completed';f.p.cursor=1;await f.worker.tick();assert.equal((await jobs.get('owner',job.id)).status,'succeeded');
   await f.worker.tick();assert.equal(f.accepted(),2);assert.equal(f.runs[1].sessionId,'root');
