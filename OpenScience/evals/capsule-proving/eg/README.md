@@ -94,7 +94,8 @@ Four users cannot establish user-population uncertainty.
 `g10.mjs --tree OS --out RUN --arm empty|seeded` runs the existing general-task
 cases and deterministic judges. Both arms retain the same memory plugin and
 flags. The seeded arm first sends the frozen seed statements in a real prior
-conversation and waits for extraction; it records what was actually retained.
+conversation with an explicit request to remember them, then waits for
+extraction; it records what was actually retained.
 Case/seed digests are verified before any model call. G06/G07 retain their
 existing shared conversation and get both cases' seed sets. All 29 seed sets
 are used, with normal variants only. Report paired pass, tools, input/output
