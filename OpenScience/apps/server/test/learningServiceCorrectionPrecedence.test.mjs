@@ -307,3 +307,17 @@ test('B3 grounding preserves line wrapping but still refuses joined or paraphras
   assert.equal(correctionCovered(answer('Write the date year first ... joined by slashes'), method, correction), false);
   assert.equal(correctionCovered(answer('Write the date year first joined by slashes'), method, correction), false);
 });
+
+
+test('B4: replay cannot revive a legacy stop through its ordinary rollback path after recovery was refused', async () => {
+  const h = harness();
+  const stopped = await legacy(h, 'stopped-replay', true);
+  const replay = new MethodReplay({ learning: h.learning,
+    feedback: { cleanSettledRuns: async () => { throw new Error('A stopped legacy body must not reach replay rollback.'); } },
+    readTrajectory: async () => null, judge: { available: true } });
+  const result = await replay.run({ job: { ...job, payload: { methodId: stopped.id, digest: stopped.payload.contentDigest,
+    previousDigest: 'sha256:previous-approved-body' } } });
+  assert.equal(result.outcome, 'not_in_force');
+  assert.equal(result.replayed, 0);
+  assert.equal((await h.learning.getMethod('u1', stopped.id)).payload.status, 'candidate');
+});

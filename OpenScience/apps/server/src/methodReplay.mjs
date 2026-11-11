@@ -329,6 +329,10 @@ export class MethodReplay {
         if (error?.code !== 'method_not_promotable') throw error;
       });
       method = await this.learning.getMethod(job.userId, methodId);
+      // A refused legacy recovery must not reach the ordinary replay's automatic rollback-to-approved path.
+      if (method.payload.status !== 'approved') {
+        return { ...base, outcome: this.#outcome('not_in_force'), replayed: 0, contradictions: 0 };
+      }
     }
     // Accepted older work cannot veto a person's newer correction. This also drains legacy correction jobs that
     // otherwise returned no_runs forever while their candidate was never mounted. System rewrites have another digest.
