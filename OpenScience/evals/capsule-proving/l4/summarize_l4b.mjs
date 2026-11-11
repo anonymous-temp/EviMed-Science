@@ -61,6 +61,7 @@ const result={schema:'p34-l4b/1',at:new Date().toISOString(),complete:runs.lengt
     'Stored-relation recall reads method heads, including retired methods and resolved relation records; judge recall is cumulative over completed decisions.',
     'Harmful merges count known planted nonduplicate pairs named together in a canonical pendingRetirements record; unlabelled pairs are not independently adjudicated.',
     'Direct model-step transport; product LearningService, ProductDocuments, relation writer, queue and PostgreSQL authority. No DSH.',
+    'This L4 composition has no native J1 judgeService; the off arm uses screenPairs fallback and both arms are measured without native SCREEN calls.',
     'L4 composes one owned library with no contextProvenance. Namespace-budget rotation is covered by a separate two-scope product test; it is not an L4 measurement.',
     'The off arm retains the legacy 100-method read window in this L4 composition; the native context reader already paginates. These gains do not isolate the six-group limit alone.',
     'Per-arm source digests are retained. Off6 controls predate queue retry-age metadata and merge review, both inactive in the unchanged off path. All on8 proofs use the final guarded policy.',
