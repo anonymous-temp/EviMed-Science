@@ -223,7 +223,7 @@ export function removalLines(after, before = '') {
  * @param {{userId:string, overlay:any, projectId?:string|null, namespaceId?:string|null, judge?:any,
  * candidates:{text:string,sources?:{role:string,text:string,created_at?:string|null}[]}[]}} input
  * @returns {Promise<Map<string,{rejected:string,via:'contained'|'judged'}>>} */
-export async function removalRefusals({ userId, overlay, projectId = null, namespaceId = null, judge = null, candidates }) {
+export async function removalRefusals({ userId, overlay, projectId = null, namespaceId = null, judge = null, candidates, ignoreTokenWhitespace = false }) {
   const removed = await overlay.removals(userId, namespaceId);
   const refused = new Map();
   for (const entry of removed) {
@@ -236,8 +236,8 @@ export async function removalRefusals({ userId, overlay, projectId = null, names
       const sources = (candidate.sources ?? []).filter(source => source.role === 'user'
         && Date.parse(source.created_at ?? '') > Date.parse(entry.rejectedAt ?? ''));
       if (tokens.length) {
-        if (tokens.every(token => tokenPresent(token, normalisedStatement(candidate.text)))
-          && !sources.some(source => tokens.every(token => sourceHasToken(token, { ...source, text: normalisedStatement(source.text) })))) {
+        if (tokens.every(token => tokenPresent(token, normalisedStatement(candidate.text), { ignoreWhitespace: ignoreTokenWhitespace }))
+          && !sources.some(source => tokens.every(token => sourceHasToken(token, { ...source, text: normalisedStatement(source.text) }, { ignoreWhitespace: ignoreTokenWhitespace })))) {
           refused.set(print, { rejected: entry.fingerprint, via: 'contained' });
         }
         continue;

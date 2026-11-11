@@ -15,13 +15,14 @@ export function hardTokens(text) {
 }
 
 /** A token must stand on its own: 12 mg is not supported by 112 mg, and a date is not a substring of another identifier.
- * @param {string} token @param {string} source */
-export function tokenPresent(token, source) {
+ * @param {string} token @param {string} source @param {{ignoreWhitespace?:boolean}} [options] */
+export function tokenPresent(token, source, { ignoreWhitespace = false } = {}) {
   const text = normalizedPassage(source);
   // Compare complete lexical shapes: a concentration is not a dose, a positive value is not its negative,
   // and ABC123 is not the identifier ABC123-4. Quoted words/names use literal containment below.
   if ([...token.matchAll(TOKEN_SHAPES)].some(match => match.index === 0 && match[0].length === token.length)) {
-    return [...text.matchAll(TOKEN_SHAPES)].some(match => match[0] === token);
+    const canonical = value => ignoreWhitespace ? value.replace(/\s+/gu, '') : value;
+    return [...text.matchAll(TOKEN_SHAPES)].some(match => canonical(match[0]) === canonical(token));
   }
   let start = text.indexOf(token);
   while (start >= 0) {
@@ -35,7 +36,7 @@ export function tokenPresent(token, source) {
 
 /** Conversation timestamps can ground their calendar date, never other numbers or identifiers.
  * A date in an excerpt is still read for meaning by the judge; this is only its literal provenance.
- * @param {string} token @param {{text:string,created_at?:string|null}} source */
+ * @param {string} token @param {{text:string,created_at?:string|null}} source @param {{ignoreWhitespace?:boolean}} [options] */
 export function sourceHasToken(token, source) {
   if (tokenPresent(token, source.text)) return true;
   const stamp = source.created_at;

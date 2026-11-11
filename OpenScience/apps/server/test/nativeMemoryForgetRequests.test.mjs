@@ -86,3 +86,13 @@ test('a prior rejection is still reviewed before it can authorize a new request 
   assert.deepEqual(result.requests[0].targets, []);
   assert.equal(result.requests[0].decision, 'uncertain');
 });
+
+test('P31 literal matching ignores token spacing only when enabled and keeps numeric/unit boundaries', async () => {
+  const { tokenPresent } = await import('../src/nativeMemoryHardTokens.mjs');
+  assert.equal(tokenPresent('2 次夜班', '值了2次夜班'), false);
+  assert.equal(tokenPresent('2 次夜班', '值了2次夜班', { ignoreWhitespace: true }), true);
+  assert.equal(tokenPresent('12 mg', 'Dose 12mg.', { ignoreWhitespace: true }), true);
+  for (const source of ['Dose 112mg.', 'Dose -12mg.', 'Dose 12mg/ml.', 'Dose 1 2mg.']) {
+    assert.equal(tokenPresent('12 mg', source, { ignoreWhitespace: true }), false);
+  }
+});

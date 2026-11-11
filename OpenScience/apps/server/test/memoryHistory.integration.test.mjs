@@ -855,3 +855,29 @@ for (const pending of [false, true]) {
     assert.ok(JSON.stringify(await search(f)).includes('badminton'));
   });
 }
+
+for (const restoreIntent of [false, true]) test(`forgetting a dated paraphrase fences the original statement and undo lifts both authorities; intent=${restoreIntent}`, options, async t => {
+  const f = await setup(t, true);
+  const { NativeMemoryWorker } = await import('../src/nativeMemoryWorker.mjs');
+  const original = '我上个月临时替同事值了2次夜班';
+  const wrapped = '用户 2026-03-28 提到上个月临时替同事值了 2 次夜班，随后要求忘掉；该条不保留。';
+  const uri = f.seed('notes/plan.md', `- ${wrapped}\n- Independent plan.`);
+  f.store.history = f.service;
+  const archive = await f.commitConversation('wrapped-history', [
+    { role: 'user', text: original, at: '2026-03-28T13:52:51.000Z' },
+    { role: 'user', text: 'Forget that detail.', at: '2026-03-28T13:52:53.000Z' },
+  ], { projectId: 'default' });
+  const worker = new NativeMemoryWorker({ ...f, config: { ...f.config, memoryForgetRequestCheckEnabled: true }, nativeMemory: f.store,
+    forgetRequestJudge: { check: async ({ candidates, conversation }) => conversation.some(row => row.text === original)
+      ? { requests: [{ message: 1, quote: 'Forget that detail.', decision: 'remove',
+        targets: candidates.flatMap((row, index) => row.text === wrapped ? [index] : []), intents: [{ message: 0, quote: original }] }], claims: [] }
+      : { requests: [], claims: [] } } });
+  await worker.processCommits({ userId: f.userId });
+  assert.equal(await f.ledger.rejected(f.context, [original], archive.archive_uri), true);
+  assert.equal(await f.sessions.read(f.userId, uri), '- Independent plan.');
+  const restoreUri = restoreIntent ? (await f.store.forgotten(f.userId)).find(row => row.uri.includes('/notes/forget-')).uri : uri;
+  await f.store.undo(f.userId, nativeFileId(restoreUri));
+  assert.ok((await f.sessions.read(f.userId, uri)).includes(wrapped));
+  assert.equal(await f.ledger.rejected(f.context, [original], archive.archive_uri), false);
+  assert.equal((await f.overlay.removals(f.userId)).length, 0);
+});

@@ -644,7 +644,7 @@ export class NativeMemoryOverlay {
     const result = await this.#query(`SELECT * FROM evimed_memory.native_revisions
       WHERE user_id=$1 AND undone_at IS NULL AND actor IN ('user', 'conversation') AND before IS NOT NULL
         AND ((change = 'deleted') OR (change = 'updated' AND after IS NOT NULL
-          AND (reason LIKE 'forgotten on the memory page%' OR reason = 'forgotten by conversation request')))
+          AND (reason LIKE 'forgotten on the memory page%' OR reason LIKE 'forgotten by conversation request%')))
       ORDER BY id DESC LIMIT $2`, [owner(userId), Math.max(1, Math.min(1_000, Math.trunc(Number(limit)) || 300))]);
     return this.protectRevisions(userId,result.rows.map(publicRevision));
   }

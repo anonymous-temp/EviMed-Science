@@ -197,7 +197,7 @@ export class MemoryHistory {
   }
 
   async matchRemoved(context,text,messages,judge,tokens=hardTokens(normalisedStatement(text))) {
-    if(tokens.length)return messages.filter(message=>tokens.every(token=>sourceHasToken(token,message)));
+    if(tokens.length)return messages.filter(message=>tokens.every(token=>sourceHasToken(token,message,{ignoreWhitespace:this.config.memoryForgetRequestCheckEnabled === true})));
     if(!messages.length)return [];
     if(!judge?.same)throw new Error('memory_history_privacy_unavailable');
     const fingerprint=lineFingerprint(text);

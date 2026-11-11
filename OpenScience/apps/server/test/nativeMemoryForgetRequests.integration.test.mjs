@@ -348,3 +348,28 @@ test('two withdrawals in one original message both apply before that message is 
   assert.equal((await f.overlay.removals(f.userId)).length, 2);
   assert.equal((await f.store.forgotten(f.userId)).length, 2);
 });
+
+test('a stored paraphrase and its original fact share removal authority and undo', options, async t => {
+  const f = await fixture(t, { config: { memoryForgetRequestCheckEnabled: true } });
+  const original = '我上个月临时替同事值了2次夜班';
+  const wrapped = '用户 2026-03-28 提到上个月临时替同事值了 2 次夜班，随后要求忘掉；该条不保留。';
+  const uri = f.seed('notes/plan.md', `- ${wrapped}\n- ${other}`);
+  const worker = withJudge(f, ({ candidates }) => ({ requests: [{ message: 1, quote: 'Forget that detail.', decision: 'remove',
+    targets: candidates.flatMap((row, index) => row.text === wrapped ? [index] : []), intents: [{ message: 0, quote: original }] }], claims: [] }));
+  await f.commitConversation('wrapped', [{ role: 'user', text: original, at: old }, { role: 'user', text: 'Forget that detail.', at: old }]);
+  await worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), `- ${other}`);
+  assert.ok((await f.overlay.removals(f.userId)).some(row => row.text === original));
+  const lateUri = `${f.root}/notes/late.md`;
+  const respaced = original.replace('2次', '2 次');
+  f.stub.extract = () => ({ adds: [{ uri: lateUri, after: respaced }] });
+  await f.commitConversation('wrapped-old-again', [{ role: 'user', text: original, at: old }]);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, lateUri), null);
+  await f.commitConversation('wrapped-fresh', [{ role: 'user', text: original, at: fresh }]);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, lateUri), respaced);
+  await f.store.undo(f.userId, nativeFileId(uri));
+  assert.equal((await f.overlay.removals(f.userId)).length, 0);
+  assert.equal((await f.store.forgotten(f.userId)).length, 0);
+});

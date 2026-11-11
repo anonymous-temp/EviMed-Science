@@ -1454,24 +1454,24 @@ export class NativeMemoryStore {
   }
 
   /** Remove exactly the judged lines through the same revision/rejection/history path as the tool. */
-  async forgetLines(userId, file, lines) {
+  async forgetLines(userId, file, lines, { act = null } = {}) {
     const prints = new Set(lines.map(lineFingerprint));
     const removed = removalLines(file.body).filter(text => prints.has(lineFingerprint(text)));
     if (!removed.length) return 0;
     const next = file.body.split('\n').filter(line => !prints.has(lineFingerprint(removalText(line)))).join('\n');
-    if (!removalLines(next).length) await this.forgetFile(userId, file, { keepText: true, actor: 'conversation', reason: 'forgotten by conversation request' });
-    else await this.#write(userId, file, next, { actor: 'conversation', reason: 'forgotten by conversation request', neutralizeRemovedPath: true });
+    if (!removalLines(next).length) await this.forgetFile(userId, file, { keepText: true, actor: 'conversation', reason: `forgotten by conversation request${actSuffix(act)}` });
+    else await this.#write(userId, file, next, { actor: 'conversation', reason: `forgotten by conversation request${actSuffix(act)}`, neutralizeRemovedPath: true });
     return removed.length;
   }
 
   /** An unstored fact can still be withdrawn. The synthetic URI has no engine file, only undoable removal authority. */
-  async recordForgetIntent(userId, context, archiveUri, lines) {
+  async recordForgetIntent(userId, context, archiveUri, lines, { act = null } = {}) {
     const uri = `${context.sessions.memoryRoot(userId)}/notes/forget-${contentHash(JSON.stringify([archiveUri, lines])).slice(0, 24)}.md`;
     const actual = await this.#fileContext(userId, uri);
     await this.overlay.reject(userId, this.#rejectionType(actual, 'notes'), uri, lines);
     await this.history?.rejectRemoved(actual, { uri, type: 'notes' }, lines, this.rejectionJudge, { archiveUri });
     await this.overlay.addRevision({ userId, uri, memoryType: 'notes', change: 'deleted', actor: 'conversation',
-      reason: 'forgotten by conversation request', before: lines.join('\n'), after: null, archiveUri });
+      reason: `forgotten by conversation request${actSuffix(act)}`, before: lines.join('\n'), after: null, archiveUri });
     this.#touch(userId);
   }
 

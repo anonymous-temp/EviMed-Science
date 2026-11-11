@@ -1020,7 +1020,7 @@ export class NativeMemoryWorker {
     if (!priorBody) candidates.push(...filenameVariants.map(text => ({ text, sources: [...archive, ...inherited] })));
     const matches = await removalRefusals({ userId, projectId, overlay: this.overlay,
       namespaceId: memoryContext.kind === 'geo-project' ? memoryContext.namespaceId : null,
-      judge: this.rejectionJudge, candidates });
+      judge: this.rejectionJudge, candidates, ignoreTokenWhitespace: this.config.memoryForgetRequestCheckEnabled === true });
     const refused = new Map([...matches].map(([print, hit]) => [print, print === hit.rejected ? 'rejected_line' : hit.via === 'judged' ? 'rejected_judged' : 'rejected_reworded']));
     // A later write may have independently adopted these words. Apply this commit's attribution only to its exact result.
     const brought = new Set(broughtLines.map(lineFingerprint));

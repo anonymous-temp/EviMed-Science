@@ -203,7 +203,7 @@ export class NativeMemoryVerification {
       candidates.push({ text, sources: await this.readRemovalSources(userId, origins.get(lineFingerprint(text)) ?? [], context) });
     }
     if ((await removalRefusals({ userId, projectId: file.projectId ?? null, overlay: this.overlay, namespaceId: context?.kind === 'geo-project' ? context.namespaceId : null,
-      judge: this.rejectionJudge, candidates })).size) return false;
+      judge: this.rejectionJudge, candidates, ignoreTokenWhitespace: this.config.memoryForgetRequestCheckEnabled === true })).size) return false;
     // A revision belongs only to sources of statements it brings, not to an earlier correction in the same file.
     const authorities = new Map([...origins].filter(([print]) => !prior.has(print)).flatMap(([, sources]) => sources)
       .map(source => [JSON.stringify([source.engineSession, source.projectId, source.projectCreatedAt]), source]));
