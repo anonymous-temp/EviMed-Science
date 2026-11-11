@@ -21,16 +21,17 @@ test('a repeated withdrawal repairs an invented extra quote without creating ano
   const judge = createForgetRequestJudge({ config: { memoryForgetRequestCheckEnabled: true, deepseekModel: 'test', deepseekApiKey: 'test-key' },
     callModel: async (_deps, request) => {
       const input = JSON.parse(request.body.messages[1].content);
+      if (++calls === 3) return { choices: [{ message: { content: JSON.stringify({ targets: input.targets.map(row => ({ request: row.request, candidate: row.candidate, decision: 'remove' })) }) } }] };
       const target = input.candidates.find(row => row.removed);
       return { choices: [{ message: { content: JSON.stringify({ requests: [{ message: 0, quote: 'Forget that project.', decision: 'remove',
-        targets: [target.candidate], intents: ++calls === 1 ? [{ message: 0, quote: fact }] : [] }], claims: [] }) } }] };
+        targets: [target.candidate], intents: calls === 1 ? [{ message: 0, quote: fact }] : [] }], claims: [] }) } }] };
     } });
   const worker = new NativeMemoryWorker({ ...f, nativeMemory: f.store, forgetRequestJudge: judge });
   const committed = await f.commitConversation('repeat', [{ role: 'user', text: 'Forget that project.' }]);
   await worker.processCommits({ userId: f.userId });
   const request = (await f.overlay.commit(f.userId, committed.archive_uri)).extraction.forgetRequests.requests[0];
   assert.equal(request.status, 'completed');
-  assert.equal(calls, 2);
+  assert.equal(calls, 3);
   assert.equal(request.removed, 0);
   assert.equal(request.alreadyRemoved, 1);
   assert.deepEqual(request.intents, []);
@@ -266,7 +267,7 @@ test('the independent whole-line review preserves a correct line selected by a m
   const judge = createForgetRequestJudge({ config: { memoryForgetRequestCheckEnabled: true, deepseekApiKey: 'test', deepseekModel: 'test' },
     callModel: async () => ({ choices: [{ message: { content: JSON.stringify(++called === 1
       ? { requests: [{ message: 0, quote: 'Correct primary school to middle school.', decision: 'remove', targets: [0], intents: [{ message: 0, quote: 'primary school' }] }], claims: [] }
-      : { targets: [{ request: 0, candidate: 0, decision: 'keep' }] }) } }] }) });
+      : { targets: [{ request: 0, candidate: 0, decision: 'keep' }, { request: 0, candidate: 1, decision: 'remove' }] }) } }] }) });
   const worker = new NativeMemoryWorker({ ...f, nativeMemory: f.store, forgetRequestJudge: judge });
   await f.commitConversation('review-veto', [{ role: 'user', text: 'Correct primary school to middle school.' }]);
   await worker.processCommits({ userId: f.userId });
@@ -292,7 +293,7 @@ test('both judgements know which document a heading belongs to, and the reviewer
       } else {
         assert.equal(input.documents[0].body, body);
         assert.equal(input.targets[0].document, input.documents[0].document);
-        result = { targets: [{ request: 0, candidate: 0, decision: 'keep' }] };
+        result = { targets: [{ request: 0, candidate: 0, decision: 'keep' }, { request: 0, candidate: 2, decision: 'remove' }] };
       }
       return { choices: [{ message: { content: JSON.stringify(result) } }] };
     } });
@@ -301,4 +302,33 @@ test('both judgements know which document a heading belongs to, and the reviewer
   await worker.processCommits({ userId: f.userId });
   assert.equal(await f.sessions.read(f.userId, uri), body);
   assert.equal(called, 2);
+});
+
+test('an absent intent cannot withdraw the newly correct fact through the rejection path', options, async t => {
+  const f = await fixture(t, { config: { memoryForgetRequestCheckEnabled: true } });
+  const correct = 'The child is in middle school, not primary school.';
+  const uri = f.seed('people/child.md', correct);
+  let calls = 0;
+  const judge = createForgetRequestJudge({ config: { memoryForgetRequestCheckEnabled: true, deepseekApiKey: 'test', deepseekModel: 'test' },
+    callModel: async (_deps, request) => {
+      const input = JSON.parse(request.body.messages[1].content);
+      let result;
+      if (++calls === 1) result = { requests: [{ message: 0, quote: correct, decision: 'remove', targets: [],
+        intents: [{ message: 0, quote: correct }] }], claims: [] };
+      else {
+        assert.equal(input.targets[0].kind, 'intent');
+        assert.equal(input.targets[0].text, correct);
+        result = { targets: input.targets.map(({ request: index, candidate }) => ({ request: index, candidate, decision: 'keep' })) };
+      }
+      return { choices: [{ message: { content: JSON.stringify(result) } }] };
+    } });
+  const worker = new NativeMemoryWorker({ ...f, nativeMemory: f.store, forgetRequestJudge: judge });
+  const committed = await f.commitConversation('intent-veto', [{ role: 'user', text: correct }]);
+  await worker.processCommits({ userId: f.userId });
+  assert.equal(calls, 2);
+  assert.equal(await f.sessions.read(f.userId, uri), correct);
+  assert.deepEqual(await f.overlay.removals(f.userId), []);
+  const request = (await f.overlay.commit(f.userId, committed.archive_uri)).extraction.forgetRequests.requests[0];
+  assert.equal(request.status, 'pending');
+  assert.deepEqual(request.intents, []);
 });

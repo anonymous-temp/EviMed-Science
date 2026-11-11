@@ -45,10 +45,11 @@ test('invalid quotes get one structured repair with unchanged validation', async
     calls++;
     assert.deepEqual(request.body.response_format, { type: 'json_object' });
     if (calls === 2) assert.match(request.body.messages.at(-1).content, /verbatim contiguous substring/);
-    return { choices: [{ message: { content: JSON.stringify(calls === 1 ? input : valid) } }] };
+    return { choices: [{ message: { content: JSON.stringify(calls === 1 ? input : calls === 2 ? valid : { targets: [{ request: 0, candidate: 0, decision: 'remove' }] }) } }] };
   } });
-  assert.deepEqual(await judge.check({ userId: 'u', candidates: removed, conversation }), valid);
-  assert.equal(calls, 2);
+  const result = await judge.check({ userId: 'u', candidates: removed, conversation });
+  assert.deepEqual(result.requests[0].targets, [0]);
+  assert.equal(calls, 3);
   calls = 0;
   const invalid = createForgetRequestJudge({ config, callModel: async () => {
     calls++;
@@ -66,9 +67,22 @@ test('the whole-line reviewer must cover exactly the offered pairs and can only 
   let called = 0;
   const judged = structuredClone(valid); judged.requests[0].intents = [{ message: 0, quote: 'Project M-41633.' }];
   const judge = createForgetRequestJudge({ config: { memoryForgetRequestCheckEnabled: true, deepseekApiKey: 'test-key', deepseekModel: 'test' },
-    callModel: async () => ({ choices: [{ message: { content: JSON.stringify(++called === 1 ? judged : { targets: [{ request: 0, candidate: 0, decision: 'keep' }] }) } }] }) });
+    callModel: async () => ({ choices: [{ message: { content: JSON.stringify(++called === 1 ? judged : { targets: [
+      { request: 0, candidate: 0, decision: 'keep' }, { request: 0, candidate: 1, decision: 'remove' },
+    ] }) } }] }) });
   const result = await judge.check({ userId: 'u', candidates, conversation });
   assert.deepEqual(result.requests[0].targets, []);
   assert.equal(result.requests[0].targetReview[0].decision, 'keep');
   assert.equal(result.requests[0].decision, 'remove', 'an absent withdrawn fact still has an exact removal intent');
+});
+
+test('a prior rejection is still reviewed before it can authorize a new request fence', async () => {
+  const proposal = { requests: [{ message: 0, quote: conversation[0].text, decision: 'remove', targets: [0], intents: [] }], claims: [] };
+  let called = 0;
+  const judge = createForgetRequestJudge({ config: { memoryForgetRequestCheckEnabled: true, deepseekApiKey: 'test-key', deepseekModel: 'test' },
+    callModel: async () => ({ choices: [{ message: { content: JSON.stringify(++called === 1 ? proposal : { targets: [{ request: 0, candidate: 0, decision: 'keep' }] }) } }] }) });
+  const result = await judge.check({ userId: 'u', candidates: [{ ...candidates[0], removed: true }], conversation });
+  assert.equal(called, 2);
+  assert.deepEqual(result.requests[0].targets, []);
+  assert.equal(result.requests[0].decision, 'uncertain');
 });
