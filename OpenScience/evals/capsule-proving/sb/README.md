@@ -182,6 +182,8 @@ diagnostics, then generate the final reports on the lab:
 /srv/evimed/sb/venv/bin/python /srv/evimed/sb/code/judge.py
 node evals/capsule-proving/sb/report.mjs /srv/evimed/sb /srv/evimed/runs /srv/evimed/results/ledger.jsonl --append
 /srv/evimed/sb/venv/bin/python /srv/evimed/sb/code/render_results.py
+# After all six summaries are complete; use a fresh output directory:
+/srv/evimed/sb/venv/bin/python /srv/evimed/sb/code/collect_results.py --out /srv/evimed/sb/public-results
 ```
 
 Mounted means deployed skill folders. Opened means a successful read-tool call
