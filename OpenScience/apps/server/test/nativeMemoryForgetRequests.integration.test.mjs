@@ -248,3 +248,31 @@ test('the independent whole-line review preserves a correct line selected by a m
   assert.equal(called, 2);
   assert.ok((await f.overlay.removals(f.userId)).some(row => row.text === 'primary school'));
 });
+
+test('both judgements know which document a heading belongs to, and the reviewer sees the complete retained facts', options, async t => {
+  const f = await fixture(t, { config: { memoryForgetRequestCheckEnabled: true } });
+  const body = '# Child\n- The child is in middle school, not primary school.';
+  const uri = f.seed('people/child.md', body);
+  let called = 0;
+  const judge = createForgetRequestJudge({ config: { memoryForgetRequestCheckEnabled: true, deepseekApiKey: 'test', deepseekModel: 'test' },
+    callModel: async (_deps, request) => {
+      const input = JSON.parse(request.body.messages[1].content);
+      assert.equal(input.documents[0].title, 'people/child.md');
+      let result;
+      if (++called === 1) {
+        assert.equal(input.candidates[0].document, input.candidates[1].document);
+        result = { requests: [{ message: 0, quote: 'Correct primary school to middle school.', decision: 'remove', targets: [0],
+          intents: [{ message: 0, quote: 'primary school' }] }], claims: [] };
+      } else {
+        assert.equal(input.documents[0].body, body);
+        assert.equal(input.targets[0].document, input.documents[0].document);
+        result = { targets: [{ request: 0, candidate: 0, decision: 'keep' }] };
+      }
+      return { choices: [{ message: { content: JSON.stringify(result) } }] };
+    } });
+  const worker = new NativeMemoryWorker({ ...f, nativeMemory: f.store, forgetRequestJudge: judge });
+  await f.commitConversation('review-heading', [{ role: 'user', text: 'Correct primary school to middle school.' }]);
+  await worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), body);
+  assert.equal(called, 2);
+});
