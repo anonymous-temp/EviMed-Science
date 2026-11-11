@@ -132,6 +132,7 @@ if not read(REPORT / "g1.json") or not read(REPORT / "g1.json").get("complete"):
     if not read(REPORT / "g1.json").get("complete"):
         status("STOP G1 scoring incomplete; later phases remain pending")
         raise SystemExit(1)
+    run(["python3", str(EG / "behavior.py"), "--selection", str(SAMPLE), "--engine", str(RUNS / "v3-synthetic-users-dev-product-1"), "--runs", ",".join(map(str, g1_dirs)), "--out", str(REPORT)])
     status("DONE G1 scored, paired and ledgered")
 
 if not read(REPORT / "g10.json") or not read(REPORT / "g10.json").get("complete"):
