@@ -7,7 +7,7 @@
 //     --engine-url http://127.0.0.1:19330 --engine-key-file <file> --database-url-file <file> --deepseek-key-file <file> \
 //     [--arm product|no-memory|keyword] [--only U01,U02] [--max-sessions N] [--concurrency N] [--no-history-search] \
 //     [--commit-every session|turn] [--plant-corruptions-after <afterSession>] [--limit-questions N] [--plugin-tgz <file>] \
-//     [--ingest-only] [--templates-dir <dir>] [--max-rounds N] [--extraction-timeout-ms N] [--gateway-timeout-ms N]
+//     [--ingest-only] [--templates-dir <dir>] [--max-rounds N] [--extraction-timeout-ms N] [--gateway-timeout-ms N] [--engine-timeout-ms N]
 //     [--config key=value] [--answer-variant name:key=value,...] [--maintain none|consolidate|verify|consolidate+verify]
 //     [--live-turns forget] [--question-category CATEGORY]
 //     [--answers-only] [--variants-only] [--retrieval-only] [--answer-model ID] [--answer-base URL] [--answer-key-file FILE]
@@ -97,7 +97,7 @@ export function parseArguments(argv) {
     set: "", split: "", data: "", out: "", engineUrl: "", engineKeyFile: "", databaseUrlFile: "", deepseekKeyFile: "",
     arm: "product", only: "", maxSessions: 0, concurrency: 3, databasePoolMax: 2, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
     config: {}, answerVariants: [], maintain: "none", maintainAfter: [], rejectionJudge: true, label: "", thinking: "enabled", reasoningEffort: "high",
-    liveTurns: "", questionCategory: "", limitQuestions: 0, pluginTgz: "", ingestOnly: false, templatesDir: "", maxRounds: 8, extractionTimeoutMs: 300_000, gatewayTimeoutMs: 4_000,
+    liveTurns: "", questionCategory: "", limitQuestions: 0, pluginTgz: "", ingestOnly: false, templatesDir: "", maxRounds: 8, extractionTimeoutMs: 300_000, gatewayTimeoutMs: 4_000, engineTimeoutMs: 30_000,
   };
   /** @type {Record<string, [keyof typeof options, "string" | "int"]>} */
   const valued = {
@@ -109,7 +109,7 @@ export function parseArguments(argv) {
     "--database-pool-max": ["databasePoolMax", "int"], "--max-sessions": ["maxSessions", "int"], "--concurrency": ["concurrency", "int"], "--commit-every": ["commitEvery", "string"],
     "--plant-corruptions-after": ["plantCorruptionsAfter", "int"], "--limit-questions": ["limitQuestions", "int"], "--plugin-tgz": ["pluginTgz", "string"],
     "--templates-dir": ["templatesDir", "string"], "--max-rounds": ["maxRounds", "int"], "--extraction-timeout-ms": ["extractionTimeoutMs", "int"],
-    "--gateway-timeout-ms": ["gatewayTimeoutMs", "int"], "--maintain": ["maintain", "string"], "--label": ["label", "string"], "--thinking": ["thinking", "string"], "--reasoning-effort": ["reasoningEffort", "string"],
+    "--gateway-timeout-ms": ["gatewayTimeoutMs", "int"], "--engine-timeout-ms": ["engineTimeoutMs", "int"], "--maintain": ["maintain", "string"], "--label": ["label", "string"], "--thinking": ["thinking", "string"], "--reasoning-effort": ["reasoningEffort", "string"],
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
@@ -157,6 +157,7 @@ export function parseArguments(argv) {
   if (options.databasePoolMax < 1 || options.databasePoolMax > 8) throw new Error("--database-pool-max is 1 to 8 per engine");
   if (options.concurrency < 1 || options.concurrency > 16) throw new Error("--concurrency is 1 to 16");
   if (options.maxRounds < 1 || options.maxRounds > 32) throw new Error("--max-rounds is 1 to 32");
+  if (options.engineTimeoutMs < 1) throw new Error("--engine-timeout-ms must be positive");
   if (options.arm === "product" && (!options.engineUrl || !options.engineKeyFile || !options.databaseUrlFile)) {
     throw new Error("arm product needs --engine-url, --engine-key-file and --database-url-file");
   }
@@ -330,7 +331,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
               databasePoolMax: options.databasePoolMax, stockEngine: options.stockEngine, engineUrl, engineKeyFile: path.resolve(options.engineKeyFile), account: `evlab-${runId}`, runId,
               databaseUrlFile: path.resolve(options.databaseUrlFile), historySearch: options.historySearch,
               deepseekKeyFile: options.deepseekKeyFile ? path.resolve(options.deepseekKeyFile) : null, commitEvery: options.commitEvery,
-              extractionTimeoutMs: options.extractionTimeoutMs, gatewayTimeoutMs: options.gatewayTimeoutMs,
+              extractionTimeoutMs: options.extractionTimeoutMs, gatewayTimeoutMs: options.gatewayTimeoutMs, engineTimeoutMs: options.engineTimeoutMs,
               configOverrides: gatewayOptions(options.config), answerVariants: options.answerVariants.map(v => ({ ...v, config: gatewayOptions(v.config) })), rejectionJudge: options.rejectionJudge,
             }));
             break;
@@ -359,17 +360,17 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
       shards: labs.map((entry, index) => ({ url: options.engineUrls[index], account: entry.account, version: entry.facts.engineVersion })) } : null,
     flags: { liveTurns: options.liveTurns, questionCategory: options.questionCategory, historySearch: options.arm === "product" ? options.historySearch : false, commitEvery: options.commitEvery, plantCorruptionsAfter: options.plantCorruptionsAfter >= 0 ? options.plantCorruptionsAfter : null,
       consolidation: "manual-only", rejectionJudge: Boolean(lab?.config.nativeMemoryRejectionJudgeEnabled), gatewayCommitsPerHour: 0,
-      gatewayTimeoutMs: options.gatewayTimeoutMs, capsuleSearch: false, config: options.config, maintain: options.maintain, maintainAfter: options.maintainAfter },
+      gatewayTimeoutMs: options.gatewayTimeoutMs, engineTimeoutMs: options.engineTimeoutMs, capsuleSearch: false, config: options.config, maintain: options.maintain, maintainAfter: options.maintainAfter },
     answerVariants: options.answerVariants.map((variant) => ({ ...variant, model: { answer: clients.get(variant.name)?.model ?? null, thinking: clients.get(variant.name)?.thinking ?? null, answerJudgeSameFamily: /^qwen/.test(clients.get(variant.name)?.model ?? "") }, flags: { config: { ...options.config, ...variant.config } } })), label: options.label,
     answerOptions: baseAnswer,
     model: { answer: client?.model ?? null, thinking: client?.thinking ?? null, extraction: options.arm === "product" ? "deepseek-flash (lab engine ov.conf, provider direct)" : null },
     options: { liveTurns: options.liveTurns, questionCategory: options.questionCategory, only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, databasePoolMax: options.databasePoolMax, limitQuestions: options.limitQuestions || null,
-      ingestOnly: options.ingestOnly, answersOnly: options.answersOnly, retrievalOnly: options.retrievalOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, dataDir: path.resolve(options.data) },
+      ingestOnly: options.ingestOnly, answersOnly: options.answersOnly, retrievalOnly: options.retrievalOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, engineTimeoutMs: options.engineTimeoutMs, dataDir: path.resolve(options.data) },
     cases: cases.map((item) => item.caseId),
   };
   const runJson = previous ? { ...previous,
     engine: previous.engine ? { ...previous.engine, urls: options.engineUrls, shards: facts.engine.shards } : null,
-    flags: { ...previous.flags, config: facts.flags.config, maintain: facts.flags.maintain, maintainAfter: facts.flags.maintainAfter, rejectionJudge: facts.flags.rejectionJudge },
+    flags: { ...previous.flags, config: facts.flags.config, maintain: facts.flags.maintain, maintainAfter: facts.flags.maintainAfter, rejectionJudge: facts.flags.rejectionJudge, engineTimeoutMs: facts.flags.engineTimeoutMs },
     answerVariants: [...(previous.answerVariants ?? []).filter(old => !facts.answerVariants.some(v => v.name === old.name)), ...facts.answerVariants], label: options.label || previous.label || "",
     resumes: [...(previous.resumes ?? []), { at: startedAt, commit: git.commit, dirty: git.dirty, runnerDigest: facts.runnerDigest, options: facts.options, answerOptions: facts.answerOptions, model: facts.model, flags: facts.flags, answerVariants: facts.answerVariants, label: facts.label }] }
     : { runId, startedAt, ...facts, resumes: [] };

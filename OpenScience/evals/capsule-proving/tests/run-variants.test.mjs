@@ -145,6 +145,22 @@ async function runnerFixture(t, { questions = true } = {}) {
   return { out, item, events, opened, dependencies, args };
 }
 
+test("engine transport timeout reaches every shard and is recorded when changed on resume", async (t) => {
+  const f = await runnerFixture(t, { questions: false });
+  await main([...f.args, "--engine-timeout-ms", "180000"], f.dependencies);
+  assert.ok(f.opened.every(options => options.engineTimeoutMs === 180_000));
+  const first = await json(path.join(f.out, "run.json"));
+  assert.equal(first.flags.engineTimeoutMs, 180_000);
+  assert.equal(first.options.engineTimeoutMs, 180_000);
+  f.opened.length = 0;
+  await main([...f.args, "--engine-timeout-ms", "240000"], f.dependencies);
+  assert.ok(f.opened.every(options => options.engineTimeoutMs === 240_000));
+  const resumed = await json(path.join(f.out, "run.json"));
+  assert.equal(resumed.flags.engineTimeoutMs, 240_000);
+  assert.equal(resumed.resumes.at(-1).options.engineTimeoutMs, 240_000);
+  assert.equal(f.events.filter(event => event.startsWith("ingest:")).length, 2);
+});
+
 test("runner orders ingest, plant, maintenance, snapshot, primary and variant; maintenance failures continue", async (t) => {
   const f = await runnerFixture(t);
   const args = [...f.args, "--answer-variant", "nohistory:memoryHistorySearchEnabled=false", "--config", "memoryOpeningByUseEnabled=true", "--maintain", "consolidate+verify", "--maintain-after", "1", "--plant-corruptions-after", "1", "--no-rejection-judge", "--label", "E1 test"];
