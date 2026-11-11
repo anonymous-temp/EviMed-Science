@@ -199,3 +199,9 @@ test("快测 C: off by default; on, a card carries its evidence, counter-example
   const offline = await selectMethodsForTask({ library: [document], options: { cardEvidence: true } });
   assert.deepEqual(offline.cards[0].lines.slice(2), ["  依据：「每节不要超过三行」", "  不适用：月报", "  已验证：最近一次修改后用过，没有被纠正"]);
 });
+
+// P26B keeps the reviewed behavior opt-in until the product-path proof is assessed.
+test("correction precedence defaults off and can be selected independently", () => {
+  assert.equal(configUnder({}).methodCorrectionPrecedenceEnabled, false);
+  assert.equal(configUnder({ OPEN_SCIENCE_METHOD_CORRECTION_PRECEDENCE_ENABLED: "true" }).methodCorrectionPrecedenceEnabled, true);
+});

@@ -161,6 +161,7 @@ export class MethodReplayJudge {
    * @param {{ usageLedger?: any, fetchImpl?: typeof fetch, callModel?: typeof callModelForControlPlane }} [options]
    */
   constructor(config, { usageLedger = null, fetchImpl = globalThis.fetch, callModel = callModelForControlPlane } = {}) {
+    this.instructions = REPLAY_INSTRUCTIONS;
     this.config = config;
     this.usageLedger = usageLedger;
     this.fetchImpl = fetchImpl;
@@ -192,7 +193,7 @@ export class MethodReplayJudge {
           max_tokens: 2_000,
           response_format: { type: "json_object" },
           messages: [
-            { role: "system", content: REPLAY_INSTRUCTIONS },
+            { role: "system", content: this.instructions },
             { role: "user", content: JSON.stringify({ method: methodText, run: runText }) },
           ],
         },
@@ -316,15 +317,22 @@ export class MethodReplay {
     const base = { action: "replay", methodId, digest };
     if (this.enabled && !(await this.enabled(job.userId).catch(() => false))) return { ...base, outcome: this.#outcome("paused"), replayed: 0, contradictions: 0 };
 
-    const method = await this.learning.getMethod(job.userId, methodId).catch((/** @type {any} */ error) => { if (error?.code === "method_not_found") return null; throw error; });
+    let method = await this.learning.getMethod(job.userId, methodId).catch((/** @type {any} */ error) => { if (error?.code === "method_not_found") return null; throw error; });
     if (!method) return { ...base, outcome: this.#outcome("method_gone"), replayed: 0, contradictions: 0 };
     // Amended again before this ran: the newer body has a job of its own.
     if (method.payload.contentDigest !== digest) return { ...base, outcome: this.#outcome("version_changed"), replayed: 0, contradictions: 0 };
     if (method.payload.status === "retired") return { ...base, outcome: this.#outcome("not_in_force"), replayed: 0, contradictions: 0 };
 
+    if (this.learning.correctionPrecedence && method.payload.status === 'candidate'
+      && !Object.hasOwn(method.payload, 'personCorrection') && methodPersonCorrection(method.payload)) {
+      await this.learning.approve(job.userId, methodId, { expectedRevision: method.revision }).catch(error => {
+        if (error?.code !== 'method_not_promotable') throw error;
+      });
+      method = await this.learning.getMethod(job.userId, methodId);
+    }
     // Accepted older work cannot veto a person's newer correction. This also drains legacy correction jobs that
     // otherwise returned no_runs forever while their candidate was never mounted. System rewrites have another digest.
-    if (methodPersonCorrection(method.payload)) {
+    if (methodPersonCorrection(method.payload, this.learning.correctionPrecedence === true)) {
       if (method.payload.status === 'candidate' && !method.payload.conflictHold) {
         await this.learning.approve(job.userId, methodId, { expectedRevision: method.revision });
       }

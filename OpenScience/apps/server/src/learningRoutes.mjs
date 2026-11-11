@@ -173,6 +173,16 @@ export function createLearningRoutes({ store, service, maxJsonBytes, summary = n
     if (parts.length === 2 && parts[1] === "sources" && method === "GET") {
       return reply({ items: await conversationSources({ resolveRun }, user.id, await service.sourceRuns(user.id, parts[0])) });
     }
+    if (parts.length === 1 && method === "PATCH" && service.correctionPrecedence) {
+      const body = await bodyOf(req, maxJsonBytes, ["expectedRevision", "skill"]);
+      const parsed = parseSkillFrontmatter(String(body.skill ?? ""));
+      if (parsed.issues.length) throw new HttpError(422, "method_payload_invalid", "The method text is invalid.");
+      const current = await service.getMethod(user.id, parts[0]);
+      return reply(methodView(await service.amendMethod(user.id, parts[0], {
+        expectedRevision: body.expectedRevision, frontmatter: parsed.frontmatter, body: parsed.body, directEdit: true,
+        ...(current.payload.files ? { files: current.payload.files } : {}),
+      })));
+    }
     if (parts.length === 0 && method === "POST") {
       // The whole SKILL.md, parsed by the parser the distillation path uses.
       // A route with its own idea of the format would be a second grammar to

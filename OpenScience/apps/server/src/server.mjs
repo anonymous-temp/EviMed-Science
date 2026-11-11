@@ -1,3 +1,4 @@
+import { MethodCorrectionJudge, correctionSources, judgeCorrection } from './methodCorrectionJudge.mjs';
 import { finished } from 'node:stream/promises';
 import { createPersonalLibraryRoutes, createPersonalLibraryWriter } from "./personalLibraryIntake.mjs";
 import {RuntimePromptStops} from './runtimePromptStops.mjs';
@@ -1469,7 +1470,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
 
   const learningService = productDocuments
-    ? new LearningService({ documents: productDocuments, jobs: productJobs, contextProvenance })
+    ? new LearningService({ documents: productDocuments, jobs: productJobs, contextProvenance, correctionPrecedence: config.methodCorrectionPrecedenceEnabled })
     : null;
   // The loop's own counters (learningMetrics.mjs): the ones nothing durable
   // records, counted as launches and runs happen; the rest are read from the
@@ -4872,7 +4873,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const officialInLoop = config.methodOfficialInLoopEnabled === true && officialPacks
       ? (/** @type {string} */ userId) => /** @type {OfficialPacks} */ (officialPacks).methodsFor(userId, { ensure: false }) : null;
     learningService.officialMethods = officialInLoop;
+    const correctionJudge = config.methodCorrectionPrecedenceEnabled ? new MethodCorrectionJudge(config, { usageLedger }) : null;
+    if (correctionJudge && feedbackEvents) learningService.verifyLegacyCorrection = async (userId, document) => {
+      const feedback = (await Promise.all((document.payload.provenance?.feedbackEventIds ?? []).slice(0, 20)
+        .map(id => feedbackEvents.get(userId, id)))).filter(Boolean);
+      return judgeCorrection(correctionJudge, correctionSources({ feedback }), document.payload,
+        { userId, projectId: document.payload.provenance?.sourceProjectId ?? LEARNING_PROJECT_ID, runId: document.payload.provenance?.runId ?? document.id });
+    };
     const distillation = new MethodDistillationRuns({
+      correctionJudge,
       contextProvenance,
       scriptUses, verifyCode: (candidate, options) => codeVerification.verify(candidate, options), onCodeSkill: (outcome) => learningMetrics.observeCodeSkill(outcome),
       dispatch: dispatchLearningRun,
