@@ -5,7 +5,7 @@ const root='/srv/evimed/runs';
 const load=file=>readFile(file,'utf8').then(JSON.parse);
 const partial=process.argv.includes('--partial'),runs=[];
 for(const size of [50,200,600])for(const arm of ['off','on']) {
-  const runId=`l4b-${size}-${arm}-${arm==='on'?7:6}`;
+  const runId=`l4b-${size}-${arm}-${arm==='on'?8:6}`;
   let report;try{report=await load(`${root}/${runId}/report.json`);}catch(error){if(partial&&error.code==='ENOENT')continue;throw error;}
   if(!partial&&report.passes.length!==20)throw new Error(`${runId} is incomplete`);
   const passes=report.passes.map(({pass,modelCalls,modelSteps,costCnyPeakUpper,lock,recall,recordedRecall,harmfulCanonicalMerges,retired,wallMs,result,embeddingTokens,embeddingCostCnyUpper})=>({
@@ -16,10 +16,13 @@ for(const size of [50,200,600])for(const arm of ['off','on']) {
     blockedUnproven:result.coverage?.blockedUnproven??null,
     callOverrun:result.coverage?.callOverrun??null,
   }));
+  const library=await load(`${root}/${runId}/library.json`);
+  const canonicalMergesCreated=library.documents.rows.filter(row=>row.kind==='method'
+    &&(row.payload.provenance?.pendingRetirements??[]).length>=2).length;
   runs.push({runId,size,arm,completedPasses:passes.length,modelCallBudget:arm==='on'?report.modelCallBudget:null,sourceDigests:report.sourceDigests,
     scope:report.scope,budgetSemantics:arm==='on'?report.budgetSemantics:'Legacy limit: at most six changed groups per pass; no provider-call allowance.' ,markers:passes.filter(pass=>[1,5,20].includes(pass.pass)),passes,
     modelCalls:passes.reduce((sum,p)=>sum+p.modelCalls,0),costCnyPeakUpper:passes.reduce((sum,p)=>sum+p.costCnyPeakUpper,0),
-    harmfulCanonicalMerges:Math.max(...passes.map(p=>p.harmfulCanonicalMerges))});
+    canonicalMergesCreated,harmfulCanonicalMerges:Math.max(...passes.map(p=>p.harmfulCanonicalMerges))});
 }
 const spend=(await readFile(`${root}/l4b-p34-spend.jsonl`,'utf8')).trim().split('\n').filter(Boolean).map(JSON.parse);
 const audit=await load(`${root}/l4b-p34-miss-audit.json`);
@@ -37,7 +40,8 @@ const result={schema:'p34-l4b/1',at:new Date().toISOString(),complete:runs.lengt
   implementation:{legacyCap:'CONSOLIDATION_LIMITS.maxGroups=6 and maxBuilds=6 bound paid work; they are not a pass-wide database lock.',
     queue:'Persistent versioned pairs, incremental incident edges, similarity/recency priority with an aging slot, shared account call allowance and rotating namespaces.',
     visibility:'GET /api/methods summary.consolidation and open_science_learning_consolidation_backlog expose unexamined and deferred-build counts.',
-    pendingRetirementMount:'One guarded condition skips an original only while an approved canonical names its exact current digest.'},
+    pendingRetirementMount:'One guarded condition skips an original only while an approved canonical names its exact current digest.',
+    mergeReview:'Independent bidirectional equivalence review before recording a merge relation; automatic folding additionally requires exactly equal applicability fields. Paraphrased scopes retain reviewed relations but separate memories.'},
   validation:{selectedTests:214,newScaleTests:25,existingServerTests:179,l4Tests:10,changedServerFileLint:'passed',
     serverTypecheck:'Not clean: 19 diagnostics in unchanged files; completed before the final retry-age metadata edit. No changed-file diagnostic in that completed check.'},
   plantedPairsPerKind:{50:8,200:16,600:16},supersededSwitchOnRuns:superseded,
@@ -58,6 +62,7 @@ const result={schema:'p34-l4b/1',at:new Date().toISOString(),complete:runs.lengt
     'Direct model-step transport; product LearningService, ProductDocuments, relation writer, queue and PostgreSQL authority. No DSH.',
     'L4 composes one owned library with no contextProvenance. Namespace-budget rotation is covered by a separate two-scope product test; it is not an L4 measurement.',
     'Source digests are retained per arm. Retry-age fairness metadata was finalized during the batch; failure/retry coverage is separately unit-tested.',
+    'All original planted duplicate pairs paraphrase their applicability fields. The conservative automatic-folding guard therefore withholds their replacement, even when the independent review records a duplicate relation. Canonical-creation counts are reported separately.',
     'Lock hold is time executing the library operation under its PostgreSQL advisory lock; final COMMIT overhead is excluded.',
     'The call allowance controls admission between bounded steps; an admitted repair can finish above it. Actual calls and overrun are reported.',
     'The queued allowance covers DECIDE/BUILD calls. The pre-existing ten-description limit and embedding requests are separate; pass receipts include all model calls.',

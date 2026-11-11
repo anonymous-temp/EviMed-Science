@@ -397,9 +397,9 @@ export class MethodConsolidation {
     this.linkCheckEnabled = Boolean(linkCheckEnabled);
     this.queueEnabled = queueEnabled === true;
     this.recallEnabled = recallEnabled === true;
-    this.decideVersion = this.recallEnabled ? DECIDE_VERSION + 2 : DECIDE_VERSION;
+    this.decideVersion = this.recallEnabled ? DECIDE_VERSION + 3 : DECIDE_VERSION;
     this.modelCalls = Math.max(1, Math.trunc(modelCalls));
-    this.pairQueue = this.queueEnabled ? new MethodConsolidationQueue(learning.documents, { now, version: this.recallEnabled ? "recall2-batch2" : "base1-batch2" }) : null;
+    this.pairQueue = this.queueEnabled ? new MethodConsolidationQueue(learning.documents, { now, version: this.recallEnabled ? "recall3-batch2" : "base1-batch2" }) : null;
     this.pyramid = pyramid === true;
     this.officialMethods = typeof officialMethods === "function" ? officialMethods : null;
   }
@@ -876,7 +876,7 @@ export class MethodConsolidation {
     if (!job.pairBudget && groupDecided(members, key, this.decideVersion)) return { status: "skipped_unchanged", ...empty };
     let decided = await this.decideGroup(job, members).catch((error) => { if (deferred(error)) throw error; return null; });
     if (!decided) return { status: "decide_failed", ...empty };
-    const mergeReview = this.recallEnabled ? await this.#reviewMerges(job, members, decided) : { decided, deferred: 0, refusals: [] };
+    const mergeReview = this.recallEnabled ? await this.#reviewMerges(job, members, decided) : { decided, deferred: 0, refusals: [], keepSeparate: [] };
     decided = mergeReview.decided;
     /** @type {Record<string, number>} */
     const relationTypes = {};
@@ -886,6 +886,7 @@ export class MethodConsolidation {
     // holds only that is recorded and not sent to the builder.
     // An assignment that names a method the group does not hold, or a `subset` that names no wider one, has nothing the builder could act on.
     const allBuildable = assignments.filter(({ entry, skills, wider }) => skills && entry.RELATION_TYPE !== "supersedes"
+      && !mergeReview.keepSeparate.includes(String(entry.ASSIGNMENT))
       && (!job.pairBudget || entry.RELATION_TYPE !== "conflicts_with")
       && (entry.RELATION_TYPE !== "subset" || wider));
     const buildable = allBuildable.filter(({ entry }) => !buildTypes || buildTypes.includes(entry.RELATION_TYPE));
@@ -921,7 +922,7 @@ export class MethodConsolidation {
    * miss a merge. An independent body comparison must also establish two-way
    * equivalence, without treating preservation of extra rules as equivalence. */
   async #reviewMerges(job, members, decided) {
-    const assignments = [], refusals = []; let waiting = 0;
+    const assignments = [], refusals = [], keepSeparate = []; let waiting = 0;
     const proposed = resolveAssignments(members, decided.assignments);
     for (const item of proposed) {
       if (item.entry.RELATION_TYPE !== "merge") { assignments.push(item.entry); continue; }
@@ -934,7 +935,8 @@ export class MethodConsolidation {
         || proposed.some(other => ["subset", "conflicts_with"].includes(other.entry.RELATION_TYPE)
           && (other.skills ?? []).filter(id => ids.has(id)).length >= 2);
       const refused = code => refusals.push({ assignment: String(item.entry.ASSIGNMENT), methodId: sources[0]?.id ?? "", code, dropped: 0, quotesDropped: 0 });
-      if (sources.length < 2 || new Set(sources.map(scope)).size !== 1 || distinct) { refused("merge_scope_or_relation"); continue; }
+      if (sources.length < 2 || distinct) { refused("merge_distinct_relation"); continue; }
+      const sameScope = new Set(sources.map(scope)).size === 1;
       if (job.pairBudget && job.pairBudget.used >= job.pairBudget.limit) { waiting++; continue; }
       const reviewed = await this.decideGroup({ ...job, pairTargets: undefined }, sources, { equivalence: true })
         .catch(error => { if (deferred(error)) throw error; return null; });
@@ -943,7 +945,13 @@ export class MethodConsolidation {
       const equivalent = verdicts.some(verdict => verdict.entry.RELATION_TYPE === "merge"
         && verdict.skills?.length === ids.size && verdict.skills.every(id => ids.has(id)))
         && verdicts.every(verdict => verdict.entry.RELATION_TYPE === "merge");
-      if (equivalent) assignments.push(item.entry);
+      if (equivalent) {
+        assignments.push(item.entry);
+        // Semantic duplicate discovery and automatic replacement have different
+        // risk. Preserve the reviewed relation for paraphrased scopes, while
+        // keeping those memories separate rather than broadening applicability.
+        if (!sameScope) { keepSeparate.push(String(item.entry.ASSIGNMENT)); refused("merge_scope_requires_separation"); }
+      }
       else {
         refused("merge_not_equivalent");
         assignments.push(...verdicts.filter(verdict => verdict.entry.RELATION_TYPE !== "merge").map(verdict => ({
@@ -951,7 +959,7 @@ export class MethodConsolidation {
         })));
       }
     }
-    return { decided: { ...decided, assignments }, deferred: waiting, refusals };
+    return { decided: { ...decided, assignments }, deferred: waiting, refusals, keepSeparate };
   }
 
   /** Mark every member of a group as read at its current bodies. A stamp is a convenience: one that cannot be written means the
@@ -1258,7 +1266,7 @@ export class MethodConsolidation {
   async decideGroup(job, members, { equivalence = false } = {}) {
     const keys = members.map((member) => `${member.id}@${member.payload?.contentDigest ?? ""}${this.recallEnabled ? "@" + methodPairFingerprint(member) : ""}`).sort();
     const result = await this.#step(job, {
-      dispatchId: `method-relations-v${DECIDE_VERSION}${this.recallEnabled ? "-recall2" : ""}${equivalence ? "-equivalence1" : ""}${job.pairTargets ? "-batch1" : ""}-${shortDigest(keys.join(" ") + (job.pairTargets ? JSON.stringify(job.pairTargets) : ""))}`,
+      dispatchId: `method-relations-v${DECIDE_VERSION}${this.recallEnabled ? "-recall3" : ""}${equivalence ? "-equivalence1" : ""}${job.pairTargets ? "-batch1" : ""}-${shortDigest(keys.join(" ") + (job.pairTargets ? JSON.stringify(job.pairTargets) : ""))}`,
       input: {
         schemaVersion: 1,
         action: "decide",

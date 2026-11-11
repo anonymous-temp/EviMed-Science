@@ -326,14 +326,15 @@ test('a transiently failed pair gets another turn despite a steady stream of new
   assert.equal(q.pending([fresh,failed])[0].id,'failed');
 });
 
-test('recall refuses a merge across different applicability before recording or building it', async () => {
+test('reviewed duplicate relations survive paraphrased scopes while automatic folding stays off', async () => {
   const h=await harness({size:2,recallEnabled:true});const pass=h.make();
   pass.readResult=async()=>({status:'succeeded',output:{assignments:[{ASSIGNMENT:'A1',SKILLS:['m0','m1'],RELATION_TYPE:'merge',REASON:'One compatible step.'}]}});
   const result=await pass.sleep({job});
-  assert.equal(h.calls.length,1);
-  assert.equal(result.relations,0);
+  assert.equal(h.calls.length,2);
+  assert.equal(result.relationTypes.merge,2);
+  assert.ok(h.calls.every(call=>call.input.action==='decide'));
   assert.equal(result.coverage.pendingBuilds,0);
-  assert.equal(result.refusals[0].code,'merge_scope_or_relation');
+  assert.equal(result.refusals[0].code,'merge_scope_requires_separation');
 });
 
 test('independent equivalence review preserves a one-sided obligation as subset instead of merge', async () => {
