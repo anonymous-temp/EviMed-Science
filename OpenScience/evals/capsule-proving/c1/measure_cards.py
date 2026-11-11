@@ -80,7 +80,7 @@ def episode_stats(folder):
             for i, step in enumerate(record["steps"]):
                 action = str(step.get("action") or "").lower().split()
                 # Closed game-command vocabulary and exact environment refusal, not prose judging.
-                if first_informative is None and action and action[0] in ("go", "take", "open", "clean", "heat", "cool", "use", "move", "put") and step.get("observation") != "Nothing happens.":
+                if first_informative is None and action and action[0] in ("go", "take", "open", "close", "clean", "heat", "cool", "use", "move", "put") and step.get("observation") != "Nothing happens.":
                     first_informative = i
                 if len(action) >= 2 and action[0] == "take" and action[1] == target and str(step.get("observation", "")).startswith("You pick up "):
                     hit = i

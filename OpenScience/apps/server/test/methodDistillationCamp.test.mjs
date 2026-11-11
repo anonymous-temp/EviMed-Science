@@ -215,6 +215,9 @@ test("a concise card's optional detail survives the normal candidate store and m
   const candidate = JSON.parse(files["method-candidate.json"]);
   candidate.files = { "scripts/detail.md": "An extended worked example, opened only after an unfamiliar failure." };
   const skill = files["SKILL.md"].replace("1. Look, then act.", "1. Look, then act. For an unfamiliar failure, open [detail](scripts/detail.md).");
+  const verdict = runGate({ contractKind: "method-candidate", files: new Map([["SKILL.md", skill], ["method-candidate.json", JSON.stringify(candidate)]]),
+    expectedOutputs: [{ path: "SKILL.md", required: true }, { path: "method-candidate.json", required: true }], checks: ["requiredOutputsExist"] });
+  assert.equal(verdict.ok, true, JSON.stringify(verdict.issues));
   await runs.applyCandidate({ userId: "u_detail", projectId: "p_detail", payload: {} }, { id: "run_camp_lost" }, { skill, candidate });
   const stored = await learning.getMethod("u_detail", learnedMethodId("check-sink-before-carrying"));
   assert.deepEqual(stored.payload.files, candidate.files);

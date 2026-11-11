@@ -31,6 +31,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default="/srv/evimed/runs")
     parser.add_argument("--cap", type=float, default=300)
+    parser.add_argument("--probe", action="store_true", help="One training-only ScienceWorld lesson before the full rebuild")
     args = parser.parse_args()
     root = Path(args.root)
     queue = root / "c1c-batch"
@@ -97,6 +98,13 @@ def main():
                 raise
         status("DONE " + label)
 
+    if args.probe:
+        run("probe-scienceworld", ["node", "build_library.mjs", "build", "--lessons", "camp", "--env", "scienceworld",
+            "--variant", "pyramid", "--train-dir", str(root / "c1-train-1"), "--pool", str(train_pool),
+            "--out", str(root / "c1c-priority-probe"), "--sleep-every", "0", "--limit", "1",
+            "--embed-key-file", embed, "--key-file", key, "--thinking", "disabled"])
+        checked_balance()
+        return
     for env in ("alfworld", "scienceworld"):
         run("build-" + env, ["node", "build_library.mjs", "build", "--lessons", "camp", "--env", env,
             "--variant", "pyramid", "--train-dir", str(root / "c1-train-1"), "--pool", str(train_pool),

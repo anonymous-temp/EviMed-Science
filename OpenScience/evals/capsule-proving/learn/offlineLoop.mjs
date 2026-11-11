@@ -184,7 +184,7 @@ export class OfflineLoop {
     const official = this.policy.officialInLoop ? async () => this.officialSet : null;
     if (official) this.learning.officialMethods = official;
     this.similarity = createMethodSimilarity({ embed: this.embed, logger: { warn: (message) => process.stderr.write(`${message}\n`) } });
-    this.steps = createModelSteps({ model: this.model, cacheDir: this.cacheDir, callsLog: path.join(this.dir, "calls.jsonl"), label: `${this.env}/${this.variant}`, maxAttempts: this.maxAttempts });
+    this.steps = createModelSteps({ model: this.model, cacheDir: this.cacheDir, callsLog: path.join(this.dir, "calls.jsonl"), label: `${this.env}/${this.variant}`, maxAttempts: this.maxAttempts, concise: this.policy.concise === true });
     const jobs = { enqueue: async (/** @type {string} */ userId, /** @type {string} */ kind, /** @type {any} */ payload, /** @type {any} */ opts = {}) => {
       this.queue.push({ userId, kind, payload, idempotencyKey: opts.idempotencyKey ?? null });
       return { id: `job-${this.queue.length}` };

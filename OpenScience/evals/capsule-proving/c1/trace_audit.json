@@ -5,39 +5,168 @@
   "milestone": "First goal-directed navigation or manipulation that produced an informative observation. A preparatory inventory or no-change command before this milestone is counted separately; search after the milestone is still task-relevant even when it follows a poor fixed order.",
   "root": "/srv/evimed/runs",
   "rows": [
-    {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-6efd149527952bfcc7ac.json", "success": false, "prefixCalls": 1, "firstRelevantStep": 2, "reason": "Inventory first matches the mounted locate-and-deliver plan; then searches desks for the CD and lamp."},
-    {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-2d58f31451c1021ce745.json", "success": false, "prefixCalls": 1, "firstRelevantStep": 2, "reason": "Inventory before searching the garbagecan; finds and takes the candle at step 4. Later failure is repeated invalid placement, not pre-action delay."},
-    {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-aab797d56b9d8322621f.json", "success": false, "prefixCalls": 2, "firstRelevantStep": 3, "reason": "Inventory and remote open fail before informative navigation. Cabinet sweep continues afterwards and delays target acquisition; it is task-directed search, not absence of action."},
-    {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-cc38494c036a74638397.json", "success": true, "prefixCalls": 0, "firstRelevantStep": 1, "reason": "Immediately goes to desk where lamp and alarmclock are found; does not follow the delivery plans' initial inventory rule."},
-    {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-c05d834f11d0eb4f1249.json", "success": true, "prefixCalls": 1, "firstRelevantStep": 2, "reason": "Inventory before visiting the desk and taking the bowl."},
-    {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-73ee1d878f910506b986.json", "success": true, "prefixCalls": 2, "firstRelevantStep": 3, "reason": "Inventory and remote open before informative drawer search; the fixed closed-container-first sweep delays reaching the desk until step 6."},
-    {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-92de517128948a4d99bc.json", "success": false, "prefixCalls": 1, "firstRelevantStep": 2, "reason": "Inventory before cabinet and drawer search. Long exhaustive search consumes later steps."},
-    {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-aab797d56b9d8322621f.json", "success": false, "prefixCalls": 1, "firstRelevantStep": 2, "reason": "Inventory before a method-matching cabinet sweep; the sweep itself is goal-directed search."},
-    {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-bd1b5592af3275cd0d27.json", "success": false, "prefixCalls": 0, "firstRelevantStep": 1, "reason": "Searches fridge immediately; later cabinet/drawer-first search postpones open counters."},
-    {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-cc38494c036a74638397.json", "success": true, "prefixCalls": 0, "firstRelevantStep": 1, "reason": "Immediately visits desk; later attempted under-lamp placement reflects a misleading state-matching method, not initial delay."},
-    {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-c05d834f11d0eb4f1249.json", "success": true, "prefixCalls": 0, "firstRelevantStep": 1, "reason": "Immediately visits desk; later moves between desk and dresser before taking the visible bowl."},
-    {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-73ee1d878f910506b986.json", "success": true, "prefixCalls": 2, "firstRelevantStep": 3, "reason": "Redundant look returns nothing, then inventory, before visiting the desk."}
+    {
+      "trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-6efd149527952bfcc7ac.json",
+      "success": false,
+      "prefixCalls": 1,
+      "firstRelevantStep": 2,
+      "reason": "Inventory first matches the mounted locate-and-deliver plan; then searches desks for the CD and lamp.",
+      "traceSha256": "42f95f9c05ddb322c6719f99df111f180608a3d0ae1b6bb233e43ba2e1086603"
+    },
+    {
+      "trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-2d58f31451c1021ce745.json",
+      "success": false,
+      "prefixCalls": 1,
+      "firstRelevantStep": 2,
+      "reason": "Inventory before searching the garbagecan; finds and takes the candle at step 4. Later failure is repeated invalid placement, not pre-action delay.",
+      "traceSha256": "ec0445f6ff2dbfa5df88bd7eb20f6e3071c9ee2680dbab567c86846aa2d124ee"
+    },
+    {
+      "trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-aab797d56b9d8322621f.json",
+      "success": false,
+      "prefixCalls": 2,
+      "firstRelevantStep": 3,
+      "reason": "Inventory and remote open fail before informative navigation. Cabinet sweep continues afterwards and delays target acquisition; it is task-directed search, not absence of action.",
+      "traceSha256": "793132044c91f46334fa650240d89bcf95c76882fd169c3f3a46132087a15d3d"
+    },
+    {
+      "trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-cc38494c036a74638397.json",
+      "success": true,
+      "prefixCalls": 0,
+      "firstRelevantStep": 1,
+      "reason": "Immediately goes to desk where lamp and alarmclock are found; does not follow the delivery plans' initial inventory rule.",
+      "traceSha256": "0e3d7ee9b5dae67b5f82a617a78b8a23dd3a855a24a6ed49562d7a8fb749a158"
+    },
+    {
+      "trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-c05d834f11d0eb4f1249.json",
+      "success": true,
+      "prefixCalls": 1,
+      "firstRelevantStep": 2,
+      "reason": "Inventory before visiting the desk and taking the bowl.",
+      "traceSha256": "e1fd3d94b5211da0443f6a5a29265e7ee072c0b77200f129b7fee877e09232b8"
+    },
+    {
+      "trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-73ee1d878f910506b986.json",
+      "success": true,
+      "prefixCalls": 2,
+      "firstRelevantStep": 3,
+      "reason": "Inventory and remote open before informative drawer search; the fixed closed-container-first sweep delays reaching the desk until step 6.",
+      "traceSha256": "2a02e20d8ae9cd7990ccd833097d70123bdce3b8ff517b3b17b5e2e07af47e60"
+    },
+    {
+      "trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-92de517128948a4d99bc.json",
+      "success": false,
+      "prefixCalls": 1,
+      "firstRelevantStep": 2,
+      "reason": "Inventory before cabinet and drawer search. Long exhaustive search consumes later steps.",
+      "traceSha256": "9a5f471064d45bac01034179513b275866eb1780cfffa06fab314ad7ad1d4ba9"
+    },
+    {
+      "trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-aab797d56b9d8322621f.json",
+      "success": false,
+      "prefixCalls": 1,
+      "firstRelevantStep": 2,
+      "reason": "Inventory before a method-matching cabinet sweep; the sweep itself is goal-directed search.",
+      "traceSha256": "fc285cd193389a2ecd2029e34210867c0f95c57ef135614d26d3530a3a9fcc27"
+    },
+    {
+      "trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-bd1b5592af3275cd0d27.json",
+      "success": false,
+      "prefixCalls": 0,
+      "firstRelevantStep": 1,
+      "reason": "Searches fridge immediately; later cabinet/drawer-first search postpones open counters.",
+      "traceSha256": "d4a2e26d3d406e45914e0f10a2a7f0498feb17a29ae62f8b79da7dcba01d47a9"
+    },
+    {
+      "trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-cc38494c036a74638397.json",
+      "success": true,
+      "prefixCalls": 0,
+      "firstRelevantStep": 1,
+      "reason": "Immediately visits desk; later attempted under-lamp placement reflects a misleading state-matching method, not initial delay.",
+      "traceSha256": "38f002e40d3e261e3aa086d1e572367df6f127b41e023fba7268218316376820"
+    },
+    {
+      "trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-c05d834f11d0eb4f1249.json",
+      "success": true,
+      "prefixCalls": 0,
+      "firstRelevantStep": 1,
+      "reason": "Immediately visits desk; later moves between desk and dresser before taking the visible bowl.",
+      "traceSha256": "646cdeaf85d76b09bb7d50540f213497820f269b7245b44a1730e4d48c0bf451"
+    },
+    {
+      "trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-73ee1d878f910506b986.json",
+      "success": true,
+      "prefixCalls": 2,
+      "firstRelevantStep": 3,
+      "reason": "Redundant look returns nothing, then inventory, before visiting the desk.",
+      "traceSha256": "1ad4a50e3e6034b5cda7fbeaeb8f06fdcb9f93671f2274c381d1b4a4db61771e"
+    }
   ],
   "summary": {
-    "pyramidFailedPrefix": [1, 1, 2], "pyramidPassedPrefix": [0, 1, 2],
-    "flatFailedPrefix": [1, 1, 0], "flatPassedPrefix": [0, 0, 2],
+    "pyramidFailedPrefix": [
+      1,
+      1,
+      2
+    ],
+    "pyramidPassedPrefix": [
+      0,
+      1,
+      2
+    ],
+    "flatFailedPrefix": [
+      1,
+      1,
+      0
+    ],
+    "flatPassedPrefix": [
+      0,
+      0,
+      2
+    ],
     "conclusion": "Only 0-2 calls precede task-directed action in these 12 traces. The all-episode first-target-pickup delay is larger, but cannot all be called irrelevant or method-caused. Initial-delay evidence alone does not explain the score drop."
   },
   "extremeExamples": {
     "selection": "Exploratory maxima of informative-action prefix by arm and success; separate from the 12-case sample above.",
     "rows": [
-      {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-b55c435301ae6f85486c.json", "success": false, "prefixCalls": 39, "reason": "Repeated remote open commands all return Nothing happens; thoughts explicitly follow closed-container-first sweep and strike-off-on-no-change rules; first informative navigation is step 40."},
-      {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-6d6ffa3432d281c70c59.json", "success": true, "prefixCalls": 27, "reason": "Opens cabinets 1-21, drawers and fridge remotely, striking them off; first informative navigation to countertop at step 28 reveals lettuce and it is taken at step 29."},
-      {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-aaea57f251d77b056cb7.json", "success": false, "prefixCalls": 39, "reason": "Inventory then remote drawer/cabinet opens, each treated as out of reach; first informative navigation at step 40 reveals a spatula."},
-      {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-95ca1c312d189c5ec647.json", "success": true, "prefixCalls": 40, "reason": "Inventory then remote cabinet/drawer opens; first informative countertop visit at step 41, then mug sighted at step 42. The episode still succeeds, so delay alone is not a failure classifier."}
+      {
+        "trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-b55c435301ae6f85486c.json",
+        "success": false,
+        "prefixCalls": 39,
+        "reason": "Repeated remote open commands all return Nothing happens; thoughts explicitly follow closed-container-first sweep and strike-off-on-no-change rules; first informative navigation is step 40.",
+        "traceSha256": "677ba47e319873e83c718238235d0ca4a89bead82e2232accb88c836eacf5bba"
+      },
+      {
+        "trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-6d6ffa3432d281c70c59.json",
+        "success": true,
+        "prefixCalls": 27,
+        "reason": "Opens cabinets 1-21, drawers and fridge remotely, striking them off; first informative navigation to countertop at step 28 reveals lettuce and it is taken at step 29.",
+        "traceSha256": "c0cb9bbb5ece5869a8518a9a6f32a9da61f85e439e68577049b400e0c0f56080"
+      },
+      {
+        "trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-aaea57f251d77b056cb7.json",
+        "success": false,
+        "prefixCalls": 39,
+        "reason": "Inventory then remote drawer/cabinet opens, each treated as out of reach; first informative navigation at step 40 reveals a spatula.",
+        "traceSha256": "369398c6c6dd03abb1ea9dee4ec2b57e9199ecbd995d25dbd1e90e8b50d798a8"
+      },
+      {
+        "trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-95ca1c312d189c5ec647.json",
+        "success": true,
+        "prefixCalls": 40,
+        "reason": "Inventory then remote cabinet/drawer opens; first informative countertop visit at step 41, then mug sighted at step 42. The episode still succeeds, so delay alone is not a failure classifier.",
+        "traceSha256": "e402860560cb127ddc8cac61c5b97a1189fcfb36c43e9c74ae7e00d3ee08e411"
+      }
     ]
   },
   "commandReplay": {
     "trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-2d58f31451c1021ce745.json",
     "procedure": "Fresh environment, replay first five recorded actions, then compare commands; no model call.",
-    "advertisedCommand": "put candle 1 in/on toilet 1", "advertisedResult": "Nothing happens.",
-    "acceptedCommand": "move candle 1 to toilet 1", "acceptedResult": "You move the candle 1 to the toilet 1.",
-    "acceptedScore": 1, "acceptedSuccess": true,
+    "advertisedCommand": "put candle 1 in/on toilet 1",
+    "advertisedResult": "Nothing happens.",
+    "acceptedCommand": "move candle 1 to toilet 1",
+    "acceptedResult": "You move the candle 1 to the toilet 1.",
+    "acceptedScore": 1,
+    "acceptedSuccess": true,
     "decision": "Keep the existing prompt unchanged for the length experiment; report the command mismatch as a confound."
   }
 }

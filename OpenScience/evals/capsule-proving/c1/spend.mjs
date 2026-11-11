@@ -30,7 +30,7 @@ async function lines(file) {
 
 export async function laneSpend(root) {
   const learning = [], episodes = [];
-  for (const library of ["c1c-pilot-long", "c1c-lib"]) {
+  for (const library of ["c1c-pilot-long", "c1c-pilot-soft-card", "c1c-priority-probe", "c1c-lib"]) {
     for (const env of ["alfworld", "scienceworld"]) learning.push(...await lines(path.join(root, library, `${env}-pyramid/calls.jsonl`)));
   }
   for (const arm of ["no-skill", "flat", "pyramid"]) episodes.push(...await lines(path.join(root, `c1c-${arm}/episodes.jsonl`)));
