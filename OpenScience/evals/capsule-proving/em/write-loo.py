@@ -58,9 +58,9 @@ def spend():
     return total
 
 def run(args, log):
-    while True:
+    while args[1].endswith('/run.mjs'):
         available = int(next(line.split()[1] for line in pathlib.Path('/proc/meminfo').read_text().splitlines() if line.startswith('MemAvailable:')))
-        if os.getloadavg()[0] <= 16 and available >= 1_000_000:
+        if os.getloadavg()[0] <= 48 and available >= 1_000_000:
             break
         note(f'WAIT host pressure: load={os.getloadavg()[0]:.1f}, available KiB={available}')
         time.sleep(60)
@@ -92,7 +92,7 @@ def main():
         ('g6', 'no-redaction', 'memoryHistorySecretRedactionEnabled', 19360),
         ('synthetic-users', 'no-pasted-check', 'memoryPastedInstructionCheckEnabled', 19360),
     ]
-    manifest = dict(scope='matched-set leave-one-out', syntheticUsers=users, capCny=CAP, rates=dict(deepseek=DEEPSEEK, qwen=QWEN),
+    manifest = dict(sourceCommit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(), scope='matched-set leave-one-out', syntheticUsers=users, capCny=CAP, rates=dict(deepseek=DEEPSEEK, qwen=QWEN),
                     engines=dict(candidate='ovem1:19360', noSafety='ovem2:19361'),
                     originalBalance=(RUNS / 'BUDGET-LAST').read_text().strip(), comparisons=comparisons)
     manifest_file = RUNS / 'em-loo-manifest.json'
