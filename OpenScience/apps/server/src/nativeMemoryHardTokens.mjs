@@ -37,8 +37,8 @@ export function tokenPresent(token, source, { ignoreWhitespace = false } = {}) {
 /** Conversation timestamps can ground their calendar date, never other numbers or identifiers.
  * A date in an excerpt is still read for meaning by the judge; this is only its literal provenance.
  * @param {string} token @param {{text:string,created_at?:string|null}} source @param {{ignoreWhitespace?:boolean}} [options] */
-export function sourceHasToken(token, source) {
-  if (tokenPresent(token, source.text)) return true;
+export function sourceHasToken(token, source, options = {}) {
+  if (tokenPresent(token, source.text, options)) return true;
   const stamp = source.created_at;
   return typeof stamp === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(token)
     && token === stamp.slice(0, 10) && Number.isFinite(Date.parse(stamp));

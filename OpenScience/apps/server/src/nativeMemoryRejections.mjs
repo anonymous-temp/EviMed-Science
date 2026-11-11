@@ -220,7 +220,7 @@ export function removalLines(after, before = '') {
  * Hard tokens are literal shapes, use the history fence's normalization, and never spend a model budget.
  * Only a person's own source message strictly AFTER each removal may authorize its content. Rejections
  * remain in place: a new statement authorizes that write, never a replay of the old conversation.
- * @param {{userId:string, overlay:any, projectId?:string|null, namespaceId?:string|null, judge?:any,
+ * @param {{userId:string, overlay:any, projectId?:string|null, namespaceId?:string|null, judge?:any, ignoreTokenWhitespace?:boolean,
  * candidates:{text:string,sources?:{role:string,text:string,created_at?:string|null}[]}[]}} input
  * @returns {Promise<Map<string,{rejected:string,via:'contained'|'judged'}>>} */
 export async function removalRefusals({ userId, overlay, projectId = null, namespaceId = null, judge = null, candidates, ignoreTokenWhitespace = false }) {

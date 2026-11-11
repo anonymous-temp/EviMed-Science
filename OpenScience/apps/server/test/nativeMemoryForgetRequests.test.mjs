@@ -88,7 +88,9 @@ test('a prior rejection is still reviewed before it can authorize a new request 
 });
 
 test('P31 literal matching ignores token spacing only when enabled and keeps numeric/unit boundaries', async () => {
-  const { tokenPresent } = await import('../src/nativeMemoryHardTokens.mjs');
+  const { tokenPresent, sourceHasToken } = await import('../src/nativeMemoryHardTokens.mjs');
+  assert.equal(sourceHasToken('2 次夜班', { text: '值了2次夜班' }, { ignoreWhitespace: true }), true);
+  assert.equal(sourceHasToken('2 次夜班', { text: '值了2次夜班' }), false);
   assert.equal(tokenPresent('2 次夜班', '值了2次夜班'), false);
   assert.equal(tokenPresent('2 次夜班', '值了2次夜班', { ignoreWhitespace: true }), true);
   assert.equal(tokenPresent('12 mg', 'Dose 12mg.', { ignoreWhitespace: true }), true);
