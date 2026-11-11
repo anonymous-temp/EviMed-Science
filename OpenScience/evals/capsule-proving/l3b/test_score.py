@@ -17,6 +17,10 @@ class Scoring(unittest.TestCase):
         self.assertTrue(formal(spec,header+'| C | A | L |\n| D | B | M |'))
         self.assertFalse(formal(spec,header+'Claims for A and B are discussed in prose.'))
         self.assertFalse(formal(spec,header+'| C | B | L |\n| D | B | M |'))
+    def test_display_equivalent_emphasis_is_not_a_format_failure(self):
+        self.assertTrue(formal({'type':'headings','expected':['A','B']},'## **A**\nx\n## B\ny'))
+        self.assertTrue(formal({'type':'prefix_lines','expected':['Audience:','Change:']},'**Audience:** Readers\nChange: Available'))
+        self.assertTrue(formal({'type':'table','expected':['Claim','Source','Limit'],'sources':['A']},'| **Claim** | Source | Limit |\n|---|---|---|\n| Text | **A** | Limited |'))
     def test_blinding(self):
         item={'exam':'Question','quality':'Correct answer','behavior':{'principle':'P'},'code':None}
         p,_=packet(item,{'arm':'D','turns':[{'reply':'Answer'}],'memory':{}})

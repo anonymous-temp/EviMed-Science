@@ -18,7 +18,7 @@ def mcnemar(a, b):
     gain=sum(not a[k] and b[k] for k in keys); loss=sum(a[k] and not b[k] for k in keys)
     n=gain+loss
     return dict(n=len(keys), gain=gain, loss=loss, difference=(gain-loss)/len(keys) if keys else None,
-                exactP=min(1, 2*sum(math.comb(n,i) for i in range(min(gain,loss)+1))/2**n) if n else 1)
+                exactP=(min(1, 2*sum(math.comb(n,i) for i in range(min(gain,loss)+1))/2**n) if n else 1) if keys else None)
 
 def rate(values):
     n=len(values); k=sum(values)
@@ -70,7 +70,7 @@ def arm_report(root, arm):
     return dict(arm=arm,paired=rate(list(scores.values())),behavior=rate(list(behavior.values())),
                 ordinaryQuality=rate([r['quality'] for r in paired if type(r['quality']) is bool]),
                 controls=rate([r['passed'] for r in controls if type(r['passed']) is bool]),
-                unknown=sum(r['passed'] is None for r in rows), recorded=len(rows), expected=54,
+                unknown=sum(r['passed'] is None for r in rows), recorded=len(rows), expected=54, missingRecords=max(0,54-len(rows)),
                 trace=trace, correctionsLearned=sum(t['learned'] for t in trace), correctionsApproved=sum(t['approved'] for t in trace),
                 correctionsMounted=sum(t['mounted']>0 for t in trace), correctionsOpened=sum(t['opened']>0 for t in trace),
                 memory=dict(profile=sum(bool(r['profile']) for r in paired), relevantPreference=sum(r['preferencePresent'] is True for r in paired), searched=sum(r['searched'] for r in paired),n=len(paired)),

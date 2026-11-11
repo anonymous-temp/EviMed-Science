@@ -34,8 +34,8 @@
   {
     "id": "U05",
     "kind": "logic",
-    "exam": "Only blue tokens are in box A. Some blue tokens are in box B. Does it follow that no tokens are in both boxes? Explain briefly. Reply here.",
-    "quality": "No: the premises give no exclusion relation between the boxes; do not assume tokens cannot have joint membership.",
+    "exam": "In a database, tag A applies only to blue-token records. Tag B applies to some blue-token records. Does it follow that no record can have both tags? Explain briefly. Reply here.",
+    "quality": "No: the premises give no exclusion relation between the tags. A blue-token record may have both tags; do not invent an exclusivity rule.",
     "generator": "Codex-direct",
     "reviewed": true
   },
