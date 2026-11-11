@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { appendLedgerRows, rowsFromSummary } from '../run/ledger.mjs';
 import { wilson } from '../c2/run_c2.mjs';
+import { isPeak, priceUsage, priceListAt } from '../../../packages/domain/src/metering.mjs';
 
 const read = file => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
 const walk = dir => fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]) : [];
@@ -51,7 +52,7 @@ export function openings(events, mounted) {
 
 export function aggregate(records, planned) {
   const counts = { n: planned, completed: records.length, pass: 0, fail: 0, error: 0, unknown: planned - records.length };
-  const totals = { prompt: 0, completion: 0, cached: 0, costCny: 0, requests: 0, missingUsage: 0 };
+  const totals = { prompt: 0, completion: 0, cached: 0, costCny: 0, costCnyPeakEquivalent: 0, requests: 0, missingUsage: 0 };
   const byCategory = {};
   let mounted = 0, opened = 0;
   for (const record of records) {
@@ -65,7 +66,15 @@ export function aggregate(records, planned) {
       totals.requests += 1; totals.prompt += request.usage?.prompt_tokens ?? 0;
       totals.completion += request.usage?.completion_tokens ?? 0;
       totals.cached += request.usage?.prompt_cache_hit_tokens ?? 0;
-      totals.costCny += request.costCny ?? 0; totals.missingUsage += request.usageMissing ? 1 : 0;
+      const at = new Date(request.at ?? '');
+      const priced = !Number.isNaN(at.getTime()) && request.usage ? priceUsage({ resourceType: 'model',
+        model: request.requestedModel ?? request.model ?? 'deepseek-flash',
+        cacheHit: request.usage.prompt_cache_hit_tokens ?? 0,
+        cacheMiss: Math.max(0, (request.usage.prompt_tokens ?? 0) - (request.usage.prompt_cache_hit_tokens ?? 0)),
+        output: request.usage.completion_tokens ?? 0, peak: isPeak(at) }, priceListAt(at)) : null;
+      totals.costCny += priced?.priced ? priced.cost : request.costCny ?? 0;
+      totals.costCnyPeakEquivalent += request.costCny ?? 0;
+      totals.missingUsage += request.usageMissing ? 1 : 0;
     }
     mounted += record.mounted?.length ?? 0; opened += record.opened?.length ?? 0;
   }
@@ -105,7 +114,8 @@ function main() {
       engine: { version: 'reference-harness', templatesDigest: 'not-applicable' },
       flags: { pins: run.pins, manifestSha256: run.manifestSha256, thinking: 'high', model: run.model,
         harness: bench === 'sb' ? 'BenchFlow 0.6.3 + Pi ACP' : 'SkillLearnBench core.eval_runner + Pi CLI',
-        productPracticeLockIsolationEnabled: true, subset: true, tasks: run.tasks, perFamily: run.perFamily ?? null } },
+        productPracticeLockIsolationEnabled: true, subset: true, tasks: run.tasks, perFamily: run.perFamily ?? null,
+        resources: run.resources ?? 'task-manifest', costBasis: 'Provider usage priced by product domain priceListAt/isPeak; proxy budget uses peak equivalent' } },
       summary: { sets: { [bench === 'sb' ? 'skillsbench' : 'skilllearnbench']: { ...summary, accuracy: summary.value,
         judged: { code: summary.scored, judge: 0, unknown: summary.unknown, error: summary.error }, byCategory: summary.byCategory } },
         tokens: summary.tokens, wallSeconds: records.reduce((s, r) => s + r.wallSeconds, 0) },

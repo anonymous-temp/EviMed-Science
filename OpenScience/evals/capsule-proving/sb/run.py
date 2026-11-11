@@ -137,18 +137,28 @@ def slb_trial(task, arm, out):
     encoded = base64.b64encode((HERE / 'pi_solve.py').read_bytes()).decode()
     AGENTS['sb-pi'] = {'name': 'Reference Pi (DeepSeek)', 'env': ['SB_GATEWAY_URL'],
         'install': install + f' && echo {encoded} | base64 -d > /opt/benchflow/pi-solve.py',
-        'run': 'python3 /opt/benchflow/pi-solve.py', 'trajectory_tee': '/logs/agent/pi.jsonl',
+        'run': 'timeout --signal=TERM --kill-after=10s 1700s python3 /opt/benchflow/pi-solve.py', 'trajectory_tee': '/logs/agent/pi.jsonl',
         'default_model': 'deepseek-flash'}
     os.environ['SB_GATEWAY_URL'] = GATEWAY
     os.environ['PI_TELEMETRY'] = '0'
     source = skills_for(task, arm)
     # An empty learned library is a measured outcome, not a reason to substitute human skills.
     has_skills = source and any(source.rglob('SKILL.md'))
-    with (out / f'{task["id"]}.log').open('a') as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
-        code, official = eval_runner.run_task(f'{task["family"]}/{task["id"]}',
-            task_root=DATA / 'skilllearnbench/tasks', agent_id='sb-pi', model='deepseek-flash',
-            skill_config=arm if has_skills else 'no_skill', skill_source_dir=source if has_skills else None,
-            trial_id=f'sb-{arm}-1', trials_dir=out / 'trials', max_steps=100)
+    original_run = eval_runner.subprocess.run
+    def limited_run(command, *positional, **kwargs):
+        if isinstance(command, (list, tuple)) and list(command[:2]) == ['docker', 'run']:
+            command = list(command[:2]) + ['--memory', '2g', '--memory-swap', '3g', '--cpus', '1'] + list(command[2:])
+        return original_run(command, *positional, **kwargs)
+    # Resource boundary only, applied equally to all arms. The pinned runner and verifier files remain unchanged.
+    eval_runner.subprocess.run = limited_run
+    try:
+        with (out / f'{task["id"]}.log').open('a') as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
+            code, official = eval_runner.run_task(f'{task["family"]}/{task["id"]}',
+                task_root=DATA / 'skilllearnbench/tasks', agent_id='sb-pi', model='deepseek-flash',
+                skill_config=arm if has_skills else 'no_skill', skill_source_dir=source if has_skills else None,
+                trial_id=f'sb-{arm}-1', trials_dir=out / 'trials', max_steps=100)
+    finally:
+        eval_runner.subprocess.run = original_run
     return {'official': official, 'referenceExit': code,
             'trialPath': str(eval_runner._trial_path(f'{task["family"]}/{task["id"]}', arm if has_skills else 'no_skill', f'sb-{arm}-1', trials_dir=out / 'trials')),
             'mounted': sorted(p.parent.name for p in source.rglob('SKILL.md')) if has_skills else []}
@@ -187,7 +197,8 @@ def run(args):
               'pins': manifest['pins'], 'adapter': 'model + our methods, not the product',
               'model': 'deepseek-flash', 'thinking': 'high', 'benchflow': '0.6.3',
               'pi': '@earendil-works/pi-coding-agent@1.5.2', 'pi-acp': '0.0.34', 'tasks': planned_ids,
-              **({'perFamily': args.per_family, 'capacityAmendment': 'Before any SkillLearnBench scoring: execute the first frozen held-out variant per family; second variants remain unused reserves. Default is one after the 6.3-minute smoke and shared lab load above 50.'} if args.bench == 'slb' else {})}
+              **({'perFamily': args.per_family, 'resources': {'cpus': 1, 'memoryBytes': 2147483648, 'memoryAndSwapBytes': 3221225472, 'agentTimeoutSeconds': 1700},
+                  'capacityAmendment': 'Before any SkillLearnBench scoring: execute the first frozen held-out variant per family; second variants remain unused reserves. Default is one after the 6.3-minute smoke and shared lab load above 50.'} if args.bench == 'slb' else {})}
     if (out / 'run.json').exists() and json.loads((out / 'run.json').read_text()) != config:
         raise ValueError('Resume config mismatch')
     put(out / 'run.json', config)

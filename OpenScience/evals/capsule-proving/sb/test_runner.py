@@ -10,6 +10,18 @@ from gateway import cost
 
 
 class RunnerTests(unittest.TestCase):
+    def test_pin_verification_rejects_wrong_revision_or_an_empty_pin(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            task_path = root / 'skillsbench/tasks/one'
+            task_path.mkdir(parents=True)
+            manifest = {'pins': prepare.PINS, 'tasks': [{'bench': 'sb', 'id': 'one', 'path': str(task_path)}], 'practice': []}
+            source = root / 'sources.json'
+            for revision in ['wrong', prepare.PINS['sb']]:
+                source.write_text(json.dumps({'learning': {'skillsbench': {'revision': revision, 'files': []}}}))
+                with self.assertRaises(ValueError):
+                    prepare.verify(manifest, source)
+
     def test_capacity_subset_is_identical_across_arms_and_excludes_practice(self):
         manifest = {'tasks': [{'bench': 'slb', 'family': family, 'id': family + variant}
                               for family in ['a', 'b'] for variant in ['-3', '-2']],

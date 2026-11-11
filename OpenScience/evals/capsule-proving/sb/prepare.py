@@ -98,10 +98,14 @@ def verify(manifest, sources):
     checks = []
     for task in manifest['tasks'] + manifest['practice']:
         name = 'skillsbench' if task['bench'] == 'sb' else 'skilllearnbench'
+        if entries[name]['revision'] != manifest['pins'][task['bench']]:
+            raise ValueError(f'Source revision does not match the benchmark pin: {name}')
         root = pathlib.Path(task['path'])
         base = root.parents[1] if task['bench'] == 'sb' else root.parents[2]
         prefix = root.relative_to(base).as_posix() + '/'
         files = [f for f in entries[name]['files'] if f['path'].startswith(prefix)]
+        if not files:
+            raise ValueError(f'No pinned files for selected task: {task["id"]}')
         for entry in files:
             path = base / entry['path']
             content = path.read_bytes()

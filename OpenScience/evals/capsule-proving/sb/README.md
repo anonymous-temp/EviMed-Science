@@ -78,6 +78,12 @@ existing `fetch-public.mjs --large --only skillsbench,skilllearnbench` on the la
 The reference runner code is fetched from the exact commits; the lab's upstream
 receipt verifies git blob identities and records SHA256 digests.
 
+SkillLearnBench's runner does not set container resource limits. This adapter
+sets one CPU, 2 GiB memory and 3 GiB memory plus swap equally for every arm on
+the shared lab, and stops Pi after 1,700 seconds before the upstream 1,800-second
+watchdog so a timed-out agent cannot keep editing during verification. These
+limits differ from the task manifests' usual 4 GiB and are a comparability limit.
+
 The lab layout is `/srv/evimed/sb/{code,venv,upstream,manifest.json,practice,learned}`.
 Install BenchFlow 0.6.3 and the pinned SkillLearnBench Python requirements into
 this lane's private virtualenv. Record `pip freeze` and upstream receipts. The
@@ -111,7 +117,10 @@ slot has an exclusive lock. Budget checks combine this lane's proxy usage and
 product-account usage, leave CNY 10 for in-flight work, require the common
 balance floor, and enforce the batch deadline. Shared balance changes are a
 cross-check, not attribution to this lane. Rates are the product's reference
-CNY prices (input 2, cached input 0.04, output 8 per million tokens); provider
+CNY peak prices (input 2, cached input 0.04, output 8 per million tokens). The
+report reuses the product domain's dated price list and peak/off-peak schedule
+for timestamp-adjusted cost, and retains the peak equivalent separately so a
+night discount cannot be mistaken for a methods efficiency gain. Provider
 billing and unpriced/incomplete usage remain distinct.
 
 `report.mjs` uses `run/ledger.mjs` and Wilson intervals. Infrastructure failures

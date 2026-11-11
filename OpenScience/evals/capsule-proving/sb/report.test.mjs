@@ -26,6 +26,13 @@ test('usage totals preserve cached tokens and missing usage', () => {
   assert.equal(result.tokens.prompt, 10); assert.equal(result.tokens.cached, 8);
   assert.equal(result.tokens.completion, 3); assert.equal(result.tokens.missingUsage, 1);
 });
+test('off-peak prices do not masquerade as a methods efficiency gain', () => {
+  const request = { requestedModel: 'deepseek-flash', usage: { prompt_tokens: 1_000_000, completion_tokens: 0 }, costCny: 2 };
+  const result = aggregate([{ task: { category: 'data' }, official: { passed: true }, requests: [
+    { ...request, at: '2026-11-11T05:30:00Z' }, { ...request, at: '2026-11-11T06:30:00Z' }] }], 1);
+  assert.equal(result.tokens.costCny, 3);
+  assert.equal(result.tokens.costCnyPeakEquivalent, 4);
+});
 test('an empty sample has no confidence interval or rate', () => {
   const result = aggregate([], 0);
   assert.equal(result.value, null); assert.equal(result.ci95, null);
