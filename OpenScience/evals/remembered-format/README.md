@@ -68,9 +68,47 @@ wording ("每条先写结论，再写依据"); a method written by `method-disti
 "not published elsewhere", a review's "the clinic work went as planned", an abstract's cohort size).
 
 ## Limits
-## Limits
 
 Samples are small (a direction, not a significance: repeat with `--samples`). The deterministic number check reads the whole reply, not
 only the body, and ignores single-digit numbers. The judge is one Flash call at temperature 0 and is itself a model: its additions are
 verified as quotations, not as truth. One genre per pair, one turn: this is the model's step after it has read the method, not the
 platform's whole path (that is `evals/capsule-longitudinal`, scenario S1).
+
+
+## P32 causal controls and scoring correction (2026-11-11)
+
+The historical `58/90` reference above is the October 25 **current simulated-memory arm**, not a no-memory control. Neither that
+comparison nor the later GX `54/90` identifies memory as the cause. The GX script copies the current persona and guidance but forces
+an older fixture format and method-read exchange; it does not reproduce native extraction, recall, the full kernel prompt, tool use,
+or the unattended-turn instruction.
+
+Use [P32's receipt](../capsule-proving/p32/results.json) for the concurrent controls: the same thirty partial-input fixtures, three
+samples each, with no memory/format, context and format pasted into the request, or simulated recall. The capsule red line is:
+**memory must not increase fabrication relative to the same request with the format supplied by the person**. Similar point estimates
+are not proof of equivalence; the receipt includes the paired comparison and a fixture-cluster bootstrap interval.
+
+The historical scorer's unfamiliar-number count is not a fabrication verdict. It reads examples after the draft and even leaked tool
+syntax, and its same-family judge sometimes rejects correct arithmetic or explicitly marked alternatives. P32 preserves these historical
+results and supplies a separate cross-family Qwen instrument. Code gathers numerical candidates and exposes text outside square-bracket
+spans without assigning meaning. The judge assesses support for factual assertions, including assertions around blanks; strict JSON and
+exact evidence-substring checks validate its output. Invalid evidence is retried, then remains unjudged, never a clean pass. Failed
+protocol-only responses are separately unusable. The manual audit and its disagreements with Qwen are preserved; calibration is not an
+independent validation set, and a lower rescored rate is **not** a product improvement.
+
+P32's product runner uses the existing control-plane/kernel harness, explicit memory-page seeding with native extraction, and automated
+answer turns. It requires `OPEN_SCIENCE_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED=true`, waits for memory tools, records target opening
+requests and reads, and scores delivered document text as well as the final reply. The first automated-seeding attempt was excluded:
+automated turns correctly cannot teach long-term memory. These are disposable lab fixtures, never production accounts.
+
+Lab commands (no dependency installation required):
+
+```bash
+python3 evals/capsule-proving/p32/measure.py --out /srv/evimed/runs/p32-controls --workers 6
+bash evals/capsule-proving/p32/product.sh
+python3 evals/capsule-proving/p32/collect_product.py /srv/evimed/runs/p32-product-v2 /srv/evimed/runs/p32-product-v2/answers.jsonl
+python3 evals/capsule-proving/p32/measure.py --input /srv/evimed/runs/p32-product-v2/answers.jsonl --out /srv/evimed/runs/p32-product-grounded
+python3 -m unittest discover -s evals/capsule-proving/p32 -p test_measure.py
+```
+
+Run the product script in its documented free lab slot; long runs use `setsid nohup` as specified by the campaign brief. The instrument
+records source/rubric hashes and a resumable status. Do not mix rubric versions in one output directory; use a new directory to rescore.

@@ -1,0 +1,254 @@
+{
+  "source": "/srv/evimed/runs/gx-g8-1/cells-enabled.jsonl",
+  "selection": "First 30 partial rows with historical invented>0, fixture order then sample; not a random prevalence estimate",
+  "reviewer": "Codex manual semantic reading; not independent human annotation",
+  "unit": "One run, any real misleading assertion anywhere in the answer; retain ambiguous entailment cases separately",
+  "split": {
+    "real": 19,
+    "benign": 7,
+    "borderline": 3,
+    "invalid": 1
+  },
+  "rows": [
+    {
+      "case": "weekly-report",
+      "sample": 0,
+      "verdict": "benign",
+      "category": "Faithful paraphrase",
+      "reason": "Initial Cox run paraphrased as initially running through; no result or basis was invented.",
+      "ordinal": 1
+    },
+    {
+      "case": "weekly-report",
+      "sample": 1,
+      "verdict": "real",
+      "category": "Unsupported status",
+      "reason": "Results awaiting review was not supplied; omission of a result does not establish review status.",
+      "ordinal": 2
+    },
+    {
+      "case": "weekly-report",
+      "sample": 2,
+      "verdict": "real",
+      "category": "Unsupported status",
+      "reason": "Results awaiting organization was not supplied.",
+      "ordinal": 3
+    },
+    {
+      "case": "monthly-report",
+      "sample": 0,
+      "verdict": "borderline",
+      "category": "Entailment boundary",
+      "reason": "Not launched follows from launching next month. No enrollment data is plausible but stronger than the supplied timeline.",
+      "ordinal": 4
+    },
+    {
+      "case": "monthly-report",
+      "sample": 1,
+      "verdict": "borderline",
+      "category": "Entailment boundary",
+      "reason": "Not launched is entailed; no enrollment is an inferred zero, not an explicit source value.",
+      "ordinal": 5
+    },
+    {
+      "case": "monthly-report",
+      "sample": 2,
+      "verdict": "borderline",
+      "category": "Entailment boundary",
+      "reason": "Progress impeded is defensible given delayed ethics; no enrollment this month is a stronger inference.",
+      "ordinal": 6
+    },
+    {
+      "case": "meeting-minutes",
+      "sample": 1,
+      "verdict": "real",
+      "category": "Invented commitment",
+      "reason": "A decision at the next meeting was not agreed in the request.",
+      "ordinal": 7
+    },
+    {
+      "case": "meeting-minutes",
+      "sample": 2,
+      "verdict": "benign",
+      "category": "Faithful paraphrase",
+      "reason": "Neither proposal approved yet is consistent with an undecided discussion; does not explicitly say rejected.",
+      "ordinal": 8
+    },
+    {
+      "case": "email-reply",
+      "sample": 0,
+      "verdict": "real",
+      "category": "Invented commitment",
+      "reason": "Adds arrangements for data scope/delivery and processing requirements.",
+      "ordinal": 9
+    },
+    {
+      "case": "email-reply",
+      "sample": 1,
+      "verdict": "real",
+      "category": "Invented commitment",
+      "reason": "Adds advance notification and delivery-method commitments.",
+      "ordinal": 10
+    },
+    {
+      "case": "email-reply",
+      "sample": 2,
+      "verdict": "real",
+      "category": "Invented commitment",
+      "reason": "Adds coordination of future participating-center milestones.",
+      "ordinal": 11
+    },
+    {
+      "case": "project-progress",
+      "sample": 1,
+      "verdict": "real",
+      "category": "Invented status",
+      "reason": "Normal status is not established by development continuing.",
+      "ordinal": 12
+    },
+    {
+      "case": "project-progress",
+      "sample": 2,
+      "verdict": "real",
+      "category": "Invented status and dependency",
+      "reason": "At-risk status and dependency on permission review were not supplied.",
+      "ordinal": 13
+    },
+    {
+      "case": "paper-abstract",
+      "sample": 0,
+      "verdict": "real",
+      "category": "Unsupported method outside blanks",
+      "reason": "Adjusted analysis and sensitivity analysis are asserted with only their parameters blank. Some other flagged quotes are benign.",
+      "ordinal": 14
+    },
+    {
+      "case": "paper-abstract",
+      "sample": 1,
+      "verdict": "real",
+      "category": "Unsupported method outside blanks",
+      "reason": "Adjusted model is assumed outside a covariate blank; the illustrative 1000 is not itself fabrication.",
+      "ordinal": 15
+    },
+    {
+      "case": "paper-abstract",
+      "sample": 2,
+      "verdict": "real",
+      "category": "Unsupported method outside blanks",
+      "reason": "Adjusted analysis and secondary endpoints are assumed. Explicit if-performed placeholders are benign.",
+      "ordinal": 16
+    },
+    {
+      "case": "grant-paragraph",
+      "sample": 0,
+      "verdict": "real",
+      "category": "Invented procedures and completeness",
+      "reason": "Uniform collection of specimens and complete structured covariates asserted without sources.",
+      "ordinal": 17
+    },
+    {
+      "case": "grant-paragraph",
+      "sample": 1,
+      "verdict": "real",
+      "category": "Invented findings",
+      "reason": "Preliminary association signals, complete data and sequencing are asserted.",
+      "ordinal": 18
+    },
+    {
+      "case": "grant-paragraph",
+      "sample": 2,
+      "verdict": "benign",
+      "category": "Examples and faithful paraphrase",
+      "reason": "16S occurs only in a marked example; having done some preliminary experiments reasonably supports completed preliminary work without claiming all experiments complete.",
+      "ordinal": 19
+    },
+    {
+      "case": "cover-letter",
+      "sample": 0,
+      "verdict": "real",
+      "category": "Invented substantive boilerplate",
+      "reason": "Registration, author approval and ethics approval asserted. Bracketed dose/design alternatives alone are not the failure.",
+      "ordinal": 20
+    },
+    {
+      "case": "cover-letter",
+      "sample": 1,
+      "verdict": "invalid",
+      "category": "Protocol-only output",
+      "reason": "An unexecuted DSML tool call is not a deliverable. Its head-50 argument was counted as invented user data.",
+      "ordinal": 21
+    },
+    {
+      "case": "cover-letter",
+      "sample": 2,
+      "verdict": "real",
+      "category": "Invented substantive boilerplate",
+      "reason": "Ethics approval, written consent and author approval are not supplied; blanks do not qualify the whole assertion.",
+      "ordinal": 22
+    },
+    {
+      "case": "resume-paragraph",
+      "sample": 1,
+      "verdict": "benign",
+      "category": "Example outside draft",
+      "reason": "20 minutes is an explicit example after the draft. Sales dashboard supporting sales viewing is a functional paraphrase.",
+      "ordinal": 23
+    },
+    {
+      "case": "group-meeting",
+      "sample": 0,
+      "verdict": "benign",
+      "category": "Direct implication",
+      "reason": "Missingness identified as a problem and requiring sensitivity analysis reasonably affects analysis.",
+      "ordinal": 24
+    },
+    {
+      "case": "group-meeting",
+      "sample": 1,
+      "verdict": "real",
+      "category": "Strengthened commitment",
+      "reason": "Next week do supplementary entry became complete supplementary entry next week; old judge cited the weaker analysis implication instead.",
+      "ordinal": 25
+    },
+    {
+      "case": "training-summary",
+      "sample": 0,
+      "verdict": "real",
+      "category": "Invented plan",
+      "reason": "Post-training checks and ensuring every participant passes were not supplied.",
+      "ordinal": 26
+    },
+    {
+      "case": "training-summary",
+      "sample": 2,
+      "verdict": "real",
+      "category": "Invented history and plan",
+      "reason": "Prior shallow compressions/unstable rhythm and remedial testing arrangements were invented.",
+      "ordinal": 27
+    },
+    {
+      "case": "quarterly-review",
+      "sample": 0,
+      "verdict": "benign",
+      "category": "Correct arithmetic",
+      "reason": "34 minus 30 is 4; 90 minus 82 is 8 percentage points.",
+      "ordinal": 28
+    },
+    {
+      "case": "quarterly-review",
+      "sample": 1,
+      "verdict": "benign",
+      "category": "Correct arithmetic",
+      "reason": "Four above target follows directly from 34 versus 30.",
+      "ordinal": 29
+    },
+    {
+      "case": "quarterly-review",
+      "sample": 2,
+      "verdict": "real",
+      "category": "Invented authority outside draft",
+      "reason": "Table arithmetic is correct. The explanation invents a company reporting standard; this is a real unsupported attribution, outside the historical body-only rubric.",
+      "ordinal": 30
+    }
+  ]
+}
