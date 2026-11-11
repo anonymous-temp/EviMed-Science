@@ -10,6 +10,6 @@
     "positive": "Overall 38/100 (38%). Averaging the site percentages yields 57.5%, which is not the pooled completion rate.",
     "negative": "Overall completion is 57.5%, or only the two site percentages with no pooled denominator."
   },
-  "quality": "Compute East 90%, West 25%, pooled 38%, and unweighted mean 57.5% correctly. Do not invent causes or missing cohorts.",
+  "quality": "Provide a usable summary of the supplied completion counts without invented causes or cohorts. Any reported rates must be correct: East 90%, West 25%, pooled 38%, unweighted site mean 57.5%. A valid ordinary summary need not include every one of these metrics; omission of the unweighted mean is a behavior issue only.",
   "code": null
 }

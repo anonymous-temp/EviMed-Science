@@ -10,6 +10,6 @@
     "positive": "PPV in this sample is 24/40=60%; this depends on the sample prevalence and cannot simply be assigned to another population.",
     "negative": "A positive test gives every person a 60% disease probability, or confusing 24/30 sensitivity with PPV."
   },
-  "quality": "Sensitivity 80%, specificity 54/70 about 77.1%, PPV 60%; no diagnostic advice or fabricated study facts.",
+  "quality": "Interpret the fictional counts correctly, without diagnostic advice or fabricated study facts. If reported, sensitivity is 80%, specificity is 54/70 (about 77.1%), and PPV is 60%. A valid ordinary summary need not include every metric; omission of PPV is a behavior issue only.",
   "code": null
 }
