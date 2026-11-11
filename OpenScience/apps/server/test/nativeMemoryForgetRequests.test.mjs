@@ -18,6 +18,7 @@ test('judge uses json_object and control-plane billing, and defaults off', async
   const callModel = async (_deps, request) => {
     called++;
     assert.deepEqual(request.body.response_format, { type: 'json_object' });
+    assert.deepEqual(request.body.thinking, { type: called === 1 ? 'disabled' : 'enabled' });
     assert.equal(request.purpose, 'memory-extraction');
     const value = called === 1 ? valid : { targets: [{ request: 0, candidate: 0, decision: 'remove' }] };
     return { choices: [{ message: { content: JSON.stringify(value) } }] };
