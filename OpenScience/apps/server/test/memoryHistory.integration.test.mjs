@@ -794,3 +794,26 @@ test('a retried remember extraction retains the calling conversation and its del
   await f.store.forgetFile(f.userId,(await f.store.files(f.userId)).find(file=>file.uri===uri),{keepText:true});
   assert.ok(!(await search(f)).some(hit=>hit.sessionId==='session_replaycaller'));
 });
+
+test('settling an unstored forget request fences both earlier raw history and its not-yet-indexed current archive', options, async t => {
+  const f = await setup(t);
+  const { NativeMemoryWorker } = await import('../src/nativeMemoryWorker.mjs');
+  f.stub.files.set(`${f.commit.archiveUri}/messages.jsonl`, JSON.stringify({ role: 'user', content: 'My old project is M-41633.', created_at: '2026-01-01T00:00:00Z' }));
+  await f.service.ingestArchive(f.commit, f.context);
+  assert.ok((await search(f)).some(hit => JSON.stringify(hit).includes('M-41633')));
+  f.store.history = f.service;
+  const archive = await f.commitConversation('forget-unstored', [{ role: 'user', text: 'Forget M-41633.', at: '2026-01-02T00:00:00Z' }], { projectId: 'default' });
+  const worker = new NativeMemoryWorker({ ...f, config: { ...f.config, memoryForgetRequestCheckEnabled: true }, nativeMemory: f.store,
+    forgetRequestJudge: { check: async ({ conversation }) => conversation.some(row => row.text === 'Forget M-41633.')
+      ? { requests: [{ message: 0, quote: 'Forget M-41633.', decision: 'remove', targets: [], intents: [{ message: 0, quote: 'M-41633' }] }], claims: [] }
+      : { requests: [], claims: [] } } });
+  await worker.processCommits({ userId: f.userId });
+  const commit = await f.overlay.commit(f.userId, archive.archive_uri);
+  assert.equal(commit.extraction.forgetRequests.requests[0].status, 'completed');
+  await f.service.ingestArchive(commit, f.context);
+  const hits = await search(f);
+  assert.ok(!JSON.stringify(hits).includes('M-41633'));
+  const fences = (await f.database.query('SELECT archive_uri FROM evimed_memory.history_message_rejections WHERE owner_id=$1', [f.userId])).rows;
+  assert.ok(fences.some(row => row.archive_uri === archive.archive_uri));
+  assert.ok(fences.some(row => row.archive_uri === f.commit.archiveUri));
+});

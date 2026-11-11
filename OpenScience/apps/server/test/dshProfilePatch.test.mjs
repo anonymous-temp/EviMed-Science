@@ -628,3 +628,8 @@ test('the memory-search hint reaches socket guidance through the runtime environ
   assert.equal(runtimeEnvironment(input).EVIMED_MEMORY_SEARCH_HINT_ENABLED, '0');
   assert.equal(runtimeEnvironment({ ...input, flags: { ...input.flags, memorySearchHint: true } }).EVIMED_MEMORY_SEARCH_HINT_ENABLED, '1');
 });
+
+test('forget tool hint reaches runtime guidance and defaults off', () => {
+  assert.equal(runtimeEnvironment(input).EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED, '0');
+  assert.equal(runtimeEnvironment({ ...input, flags: { ...input.flags, memoryForgetToolHint: true } }).EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED, '1');
+});

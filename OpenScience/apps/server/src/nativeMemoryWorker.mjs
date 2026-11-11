@@ -1,3 +1,4 @@
+import { checkForgetRequests } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash } from "node:crypto";
@@ -152,13 +153,14 @@ export class NativeMemoryWorker {
    *   projectOfSession?: ((userId: string, sessionId: string) => Promise<string | null>) | null,
    *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
    *   rejectionJudge?: ReturnType<typeof import("./nativeMemoryRejections.mjs").createRejectionJudge> | null,
+   *   forgetRequestJudge?: any,
    *   pastedInstructionJudge?: ReturnType<typeof import("./nativeMemoryPastedInstructions.mjs").createPastedInstructionJudge> | null,
    *   now?: () => Date, report?: (line: string) => void }} dependencies
    *   `projectOfSession` names the project a platform conversation belongs to, for a commit the gateway never saw.
    *   `rejectionJudge` says whether a line near one the person removed repeats it (`nativeMemoryRejections.mjs`); absent, only a verbatim
    *   repeat and a line that contains a removed one are met.
    */
-  constructor({ config, memorySettings, sessions, overlay, nativeMemory = null, projectOfSession = null, memoryContexts = null, rejectionJudge = null, pastedInstructionJudge = null, now = null, report = () => {} }) {
+  constructor({ config, memorySettings, sessions, overlay, nativeMemory = null, projectOfSession = null, memoryContexts = null, rejectionJudge = null, pastedInstructionJudge = null, forgetRequestJudge = null, now = null, report = () => {} }) {
     this.config = config ?? {};
     this.memorySettings = memorySettings;
     this.sessions = sessions;
@@ -173,6 +175,7 @@ export class NativeMemoryWorker {
     this.scanCursors = new Map();
     this.rejectionJudge = rejectionJudge;
     this.pastedInstructionJudge = pastedInstructionJudge;
+    this.forgetRequestJudge = forgetRequestJudge;
     /** The consolidation of an account's memories, set by the composition root beside this worker (it reads files back through `ingestConsolidation`). @type {import("./nativeMemoryConsolidation.mjs").NativeMemoryConsolidation | null} */
     this.consolidation = null;
     /** What promotes a choice two conversations repeated (`nativeMemoryObservations.mjs`); built from the store when there is one. @type {{ promote: (userId: string) => Promise<any> } | null} */
@@ -511,6 +514,16 @@ export class NativeMemoryWorker {
         this.report(`native memory commit: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
       }
     }
+    if (this.config.memoryForgetRequestCheckEnabled === true && this.nativeMemory && this.forgetRequestJudge) {
+      for (const commit of await this.overlay.retryableForgetChecks({ userId, limit })) {
+        try {
+          const resolved = await this.#commitContext(commit);
+          if (await this.#sourceAuthorized(resolved.commit, resolved.context, { abandon: false })) {
+            await withNativeMemoryWrite(this.overlay.database, commit.userId, () => this.#checkForgetRequest(resolved.commit, resolved.context));
+          }
+        } catch { this.report('native memory forget request retry failed'); }
+      }
+    }
     return settled;
   }
 
@@ -524,6 +537,19 @@ export class NativeMemoryWorker {
     if(!fence||fence.memoryUserRoot&&!(fence.nativeRoots??[fence.memoryUserRoot]).includes(context.userRoot))return true;
     if(typeof ledger.nativeSource==='function'&&!commit.projectCreatedAt)throw new HttpError(409,'memory_source_lineage_unverified','The archive source incarnation is unknown.');
     if(abandon)await this.overlay.abandonCommit(commit.userId,commit.archiveUri,'source_conversation_deleted');return false;
+  }
+
+  /** An optional check whose failure never holds the commit queue. */
+  async #checkForgetRequest(commit, context) {
+    if (this.config.memoryForgetRequestCheckEnabled !== true || !this.nativeMemory || !this.forgetRequestJudge
+      || !['gateway', 'scan', 'replay'].includes(commit.origin)) return;
+    try { await checkForgetRequests({ commit, context, overlay: this.overlay, store: this.nativeMemory, judge: this.forgetRequestJudge }); }
+    catch {
+      const saved = (await this.overlay.commit(commit.userId, commit.archiveUri))?.extraction?.forgetRequests;
+      await this.overlay.setForgetRequests(commit.userId, commit.archiveUri, { ...saved, state: 'failed',
+        attempts: (saved?.attempts ?? 0) + 1, error: 'forget_request_check_failed' });
+      this.report('native memory forget request check failed');
+    }
   }
 
   /** A pending commit: its diff ingested, its failure noted, or left to finish. @param {any} commit */
@@ -562,6 +588,8 @@ export class NativeMemoryWorker {
         }
         const operations = await this.ingest(commit, diff, { context });
         await this.overlay.noteNativeIngested(commit.userId,commit.archiveUri);
+        await this.#checkForgetRequest(commit, context);
+
         // A note of the observations type may have just been written by a second conversation. The account's own namespace only: a shared
         // GEO project's keeps no observations (`OPENVIKING_PROJECT_MEMORY_TYPES`) and no preferences to promote them to.
         if (this.observations && context.kind !== 'geo-project' && touchesObservations(diff, sessions.memoryRoot(commit.userId))) await this.observations.promote(commit.userId);

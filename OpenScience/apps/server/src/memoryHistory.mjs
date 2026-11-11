@@ -148,7 +148,7 @@ export class MemoryHistory {
   /** Resolve the removed line's origins before syncOrigins drops them; legacy
    * remember writes without conversation provenance search the owner's history.
    * Persist message hashes activated by the rejection: undo lifts the fence, and a repeated forget reinstates it. */
-  async rejectRemoved(context, file, removed, judge) {
+  async rejectRemoved(context, file, removed, judge, { archiveUri: requestArchive = null } = {}) {
     if (!removed.length) return;
     if (!context.ownerCreatedAt) context = {...context,ownerCreatedAt:(await this.ledger.database.query(
       'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[context.ownerId])).rows[0]?.stamp};
@@ -157,7 +157,7 @@ export class MemoryHistory {
     const type = nativeMemoryRejectionType(file.type,context.kind === 'geo-project' ? context.namespaceId : null);
     for (const text of removed) {
       const fingerprint = lineFingerprint(text), origin = origins?.get(fingerprint);
-      const archives = [...new Set([origin?.archiveUri,...(origin?.sources ?? []).map(source=>source.archiveUri)].filter(Boolean))];
+      const archives = [...new Set([origin?.archiveUri,...(origin?.sources ?? []).map(source=>source.archiveUri),requestArchive].filter(Boolean))];
       const messages = [];
       for (const archiveUri of archives) {
         const archive = parseArchiveUri(archiveUri);
@@ -178,7 +178,7 @@ export class MemoryHistory {
         }
       }
       const tokens = hardTokens(normalisedStatement(text));
-      const hasConversation = archives.some(uri=>parseArchiveUri(uri)?.session.startsWith('dsh-'));
+      const hasConversation = archives.some(uri=>uri!==requestArchive && parseArchiveUri(uri)?.session.startsWith('dsh-'));
       if (!hasConversation && context.kind !== 'geo-project' && this.enabled) {
         // Internal source lookup uses the same product history search and all its
         // account/incarnation/source proofs. Rejected text is inspected only to

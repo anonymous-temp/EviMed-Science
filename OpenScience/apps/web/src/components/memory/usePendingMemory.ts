@@ -24,10 +24,11 @@ export function usePendingMemory(pending: readonly WebPendingMemory[], reload: (
   const [, setTick] = useState(0);
   const mounted = useRef(now());
   const oldest = pending.reduce<number | null>((least, item) => {
+    if (item.state === "confirmation") return least;
     const at = Date.parse(item.at);
     return Number.isFinite(at) && (least === null || at < least) ? at : least;
   }, null);
-  const waiting = pending.length > 0;
+  const waiting = pending.some(item => item.state !== "confirmation");
   // A request with no readable time is counted from when this page began to wait for it.
   const since = oldest ?? mounted.current;
   const age = now() - since;

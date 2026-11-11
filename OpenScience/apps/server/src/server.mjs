@@ -1,3 +1,4 @@
+import { createForgetRequestJudge } from './nativeMemoryForgetRequests.mjs';
 import { finished } from 'node:stream/promises';
 import { createPersonalLibraryRoutes, createPersonalLibraryWriter } from "./personalLibraryIntake.mjs";
 import {RuntimePromptStops} from './runtimePromptStops.mjs';
@@ -1391,6 +1392,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const nativeMemoryWorker = new NativeMemoryWorker({
     config, memorySettings, sessions: openVikingSessions, overlay: nativeMemoryOverlay, nativeMemory, memoryContexts: nativeMemoryContexts,
     rejectionJudge,
+    forgetRequestJudge: createForgetRequestJudge({ config, usageLedger }),
     pastedInstructionJudge: createPastedInstructionJudge({ config, usageLedger }),
     report: (line) => process.stderr.write(`${line}\n`),
   });

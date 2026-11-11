@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { parseForgetRequestJudgement, parseForgetTargetReview, createForgetRequestJudge } from '../src/nativeMemoryForgetRequests.mjs';
+const candidates = [{ text: 'Project M-41633.' }];
+const conversation = [{ role: 'user', text: 'Forget Project M-41633.' }, { role: 'assistant', text: 'Forgotten.' }];
+const valid = { requests: [{ message: 0, quote: conversation[0].text, decision: 'remove', targets: [0], intents: [] }], claims: [{ message: 1, quote: 'Forgotten.' }] };
+test('structured judgement requires exact own-message quotes and offered targets', () => {
+  assert.deepEqual(parseForgetRequestJudgement(JSON.stringify(valid), candidates, conversation), valid);
+  for (const mutate of [v => v.requests[0].targets.push(5), v => v.requests[0].message = 1, v => v.requests[0].quote = 'invented',
+    v => v.requests[0].targets.push(0), v => v.requests[0].decision = 'yes', v => v.claims[0].message = 0,
+    v => v.requests[0].intents.push({ message: 0, quote: 'invented' }), v => v.claims.push(null)]) {
+    const changed = structuredClone(valid); mutate(changed);
+    assert.equal(parseForgetRequestJudgement(JSON.stringify(changed), candidates, conversation), null);
+  }
+});
+test('judge uses json_object and control-plane billing, and defaults off', async () => {
+  let called = 0;
+  const callModel = async (_deps, request) => {
+    called++;
+    assert.deepEqual(request.body.response_format, { type: 'json_object' });
+    assert.equal(request.purpose, 'memory-extraction');
+    const value = called === 1 ? valid : { targets: [{ request: 0, candidate: 0, decision: 'remove' }] };
+    return { choices: [{ message: { content: JSON.stringify(value) } }] };
+  };
+  const input = { userId: 'u', candidates, conversation };
+  assert.equal(await createForgetRequestJudge({ config: {}, callModel }).check(input), null);
+  assert.equal(called, 0);
+  const config = { memoryForgetRequestCheckEnabled: true, deepseekApiKey: 'test-key', deepseekModel: 'test' };
+  const result = await createForgetRequestJudge({ config, callModel }).check(input);
+  assert.deepEqual(result.requests[0].targets, [0]);
+  assert.deepEqual(result.requests[0].targetReview, [{ text: candidates[0].text, decision: 'remove' }]);
+  assert.equal(called, 2);
+});
+
+test('the whole-line reviewer must cover exactly the offered pairs and can only narrow the removal', async () => {
+  const offered = [{ request: 0, candidate: 0 }];
+  for (const value of [{ targets: [] }, { targets: [{ request: 0, candidate: 1, decision: 'remove' }] }, { targets: [null] }]) {
+    assert.equal(parseForgetTargetReview(JSON.stringify(value), offered), null);
+  }
+  let called = 0;
+  const judged = structuredClone(valid); judged.requests[0].intents = [{ message: 0, quote: 'Project M-41633.' }];
+  const judge = createForgetRequestJudge({ config: { memoryForgetRequestCheckEnabled: true, deepseekApiKey: 'test-key', deepseekModel: 'test' },
+    callModel: async () => ({ choices: [{ message: { content: JSON.stringify(++called === 1 ? judged : { targets: [{ request: 0, candidate: 0, decision: 'keep' }] }) } }] }) });
+  const result = await judge.check({ userId: 'u', candidates, conversation });
+  assert.deepEqual(result.requests[0].targets, []);
+  assert.equal(result.requests[0].targetReview[0].decision, 'keep');
+  assert.equal(result.requests[0].decision, 'remove', 'an absent withdrawn fact still has an exact removal intent');
+});
