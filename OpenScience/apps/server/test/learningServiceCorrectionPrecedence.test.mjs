@@ -211,6 +211,13 @@ test('B4 report lists only account/row identities and titles; read transaction n
   assert.equal(report[0].switchOff.counts.legacyRecovery, 1);
   assert.equal(report[0].switchOff.counts.replayUnjudged, 1);
   assert.equal(report[0].switchOn.counts.replayUnjudged, 0);
+  assert.equal(report[0].switchOn.counts.conditionalReplayUnjudged, 1);
+  const ordinary = await h.make('ordinary');
+  ordinary.payload.learning.relations = [{ type: 'conflicts_with', target: method.id }];
+  const direct = await h.make('manual-report', { provenance: { origin: 'explicit' } });
+  direct.payload.learning.relations = [{ type: 'conflicts_with', target: method.id }];
+  const conditional = correctionImpact([...rows, { ...ordinary, userId: 'u1' }, { ...direct, userId: 'u1' }], jobs)[0].switchOn;
+  assert.deepEqual(conditional.conditionalConflictDemotion.map(row => row.id), [ordinary.id]);
   assert.ok(!JSON.stringify(report).includes('Keep the requested reply form'));
   const queries = [];
   await readCorrectionSnapshot({ query: async sql => { queries.push(sql); return { rows: [] }; } });

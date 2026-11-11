@@ -9,6 +9,7 @@ import { methodPersonCorrection, legacyCorrectionRecoverable, correctionOrder } 
 
 const title = row => String(row.payload?.display?.title ?? row.payload?.frontmatter?.name ?? row.id);
 const identity = row => ({ id: row.id, title: title(row) });
+const conflict = (a, b) => (a.payload.learning?.relations ?? []).some(edge => edge.type === 'conflicts_with' && !edge.resolved && edge.target === b.id);
 
 /** Pure snapshot report, also used by the regression tests. */
 export function correctionImpact(methods, jobs, revisions = []) {
@@ -26,7 +27,6 @@ export function correctionImpact(methods, jobs, revisions = []) {
         if (!proof || winner.payload.status !== 'approved' && !recover.includes(winner)) continue;
         for (const loser of library) {
           if (loser.id === winner.id || loser.payload.status !== 'approved') continue;
-          const conflict = (a, b) => (a.payload.learning?.relations ?? []).some(edge => edge.type === 'conflicts_with' && !edge.resolved && edge.target === b.id);
           if (!conflict(winner, loser) && !conflict(loser, winner)) continue;
           const other = methodPersonCorrection(loser.payload, verified);
           const wins = !other || (verified ? correctionOrder(proof, other) > 0 || correctionOrder(proof, other) === 0 && winner.id > loser.id
@@ -40,6 +40,19 @@ export function correctionImpact(methods, jobs, revisions = []) {
         return method && methodPersonCorrection(method.payload, verified) ? [{ id: job.id, title: title(method) }] : [];
       });
       const rows = { legacyRecovery: recover.map(identity), conflictDemotion: [...holds.values()], replayUnjudged: replay };
+      if (verified) {
+        // No model call belongs in this report. Expose the possible downstream changes separately: the
+        // coverage verdict and original human event time are not known from the method snapshot alone.
+        const conditional = recover.filter(row => !methodPersonCorrection(row.payload, true));
+        rows.conditionalConflictDemotion = library.filter(row => row.payload.status === 'approved'
+          && methodPersonCorrection(row.payload, true)?.source !== 'direct'
+          && conditional.some(winner => conflict(winner, row) || conflict(row, winner))).map(identity);
+        rows.conditionalReplayUnjudged = jobs.filter(job => job.userId === accountId && ['queued', 'running'].includes(job.status)
+          && job.payload?.action === 'replay').flatMap(job => {
+          const method = conditional.find(row => row.id === job.payload.methodId && row.payload.contentDigest === job.payload.digest);
+          return method ? [{ id: job.id, title: title(method) }] : [];
+        });
+      }
       modes[verified ? 'switchOn' : 'switchOff'] = { counts: Object.fromEntries(Object.entries(rows).map(([key, list]) => [key, list.length])), ...rows };
     }
     return { accountId, ...modes };
