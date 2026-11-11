@@ -10,7 +10,13 @@ import time
 repo = pathlib.Path('/srv/evimed/wt/em/OpenScience')
 runs = pathlib.Path('/srv/evimed/runs')
 process = pathlib.Path('/proc') / sys.argv[1]
-while process.exists() and b'score-all.sh' in (process / 'cmdline').read_bytes():
+while True:
+    try:
+        command = (process / 'cmdline').read_bytes()
+    except FileNotFoundError:
+        break
+    if b'score-all.sh' not in command:
+        break
     time.sleep(15)
 for attempt in range(4):
     subprocess.run(['python3', str(repo / 'evals/capsule-proving/em/patient-counts.py'),

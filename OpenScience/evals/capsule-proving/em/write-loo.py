@@ -96,7 +96,7 @@ def main():
                     engines=dict(candidate='ovem1:19360', noSafety='ovem2:19361'),
                     originalBalance=(RUNS / 'BUDGET-LAST').read_text().strip(), comparisons=comparisons)
     manifest_file = RUNS / 'em-loo-manifest.json'
-    if not manifest_file.exists():
+    if not any((directory / 'run.json').exists() for directory in RUNS.glob('em-loo-*')):
         manifest['startedAt'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
         manifest_file.write_text(json.dumps(manifest, indent=2) + '\n')
     if '--start' not in sys.argv:
