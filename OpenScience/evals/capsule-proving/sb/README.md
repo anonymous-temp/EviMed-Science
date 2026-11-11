@@ -152,6 +152,10 @@ pass) is archived and repeated, with all original grades and paid usage retained
 by reward. Native agent/verifier timeouts are read from the pinned task; the outer
 watchdog adds build/install time. The video wrapper's one-time wait recovery is
 recorded separately. Earlier wall times include logging stalls.
+`task-admissions.json` can record a whole task group's unavailable wall allocation
+before any arm is dispatched. Each arm retains an explicit infrastructure record;
+an unrun official verifier never becomes a model failure. Preserve the receipt and
+original task plan. It cannot be used to discard an already graded negative.
 
 The labelled diagnostic judge can process completed native-graded trials with
 `--available` while other agents run: agent proxy URLs own their attribution,

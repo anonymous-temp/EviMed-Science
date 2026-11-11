@@ -80,6 +80,11 @@ def check_budget(start, deadline):
 
 
 def resource_admission_issue(task):
+    admissions = ROOT / 'task-admissions.json'
+    if admissions.exists():
+        denied = json.loads(admissions.read_text()).get(f'{task["bench"]}:{task["id"]}')
+        if denied:
+            return denied['reason']
     if task['bench'] != 'slb':
         return None
     directory = pathlib.Path(task['path'])
