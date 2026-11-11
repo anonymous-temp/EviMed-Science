@@ -573,6 +573,45 @@ pass on 0.1.11 with no paid call (receipts beside the artefact). Spend this roun
 so about half billed), Qwen rerank CNY 5.4, Jev USD 0.31, embeddings 255k tokens. Not done, by the owner's ruling: deployment, and so
 the real production path, retiring the unread tables and deleting the batch judge, which wait for this release to be live.
 
+### 4.9 Production (2026-11-10/11): the release and what only the production path showed
+
+The batch judge was deleted before the release (gate G1, 11-10). Five releases went live in two days: `evimed-ee2276a2f024-1`, then
+`01888f2e9e80`, `6e136d2aa7c9`, `de4acd0b1c3a` and `evimed-0266abec391a-1` (11-11 13:35 UTC), with plugin 0.1.13 and 0.1.14 shipped by
+replacing the host catalogue (no image release). Each defect below passed CI and the local real-kernel replay. The replay ran its own
+loopback host front, and CI's gateway tests stub the invocation, so none of these paths was exercised before production.
+
+| # | Defect on production | Effect | Fix |
+|---|---|---|---|
+| 1 | `tmpfs: [/tmp:rw,noexec,size=16m]` is a YAML flow sequence (three entries) | Docker refused the worker mid-switch | quoted; `composeTmpfsEntries.test.mjs` |
+| 2 | the kernel answers HTTP ~0.2 s before an enabled bundle registers `patientMatching/status` | install probe 404 → rolled back (and `ensureDefault` never retries) | bounded 404 wait in `patientMatchingStatus` |
+| 3 | the plugin transport accepted plain HTTP only on loopback | bundle never loaded behind `open-science-web` | 0.1.13 accepts single-label service names |
+| 4 | the state document held the full manifest twice | `product_document_too_large` (> 256 KiB) | the state keeps a pointer; the manifest is re-read from disk |
+| 5 | the profile row passed the MCP workload token | host calls 401 | the model-gateway token file |
+| 6 | `scope()` without a client | 400, and the plugin silently dropped at later starts | `client ?? this.database` |
+| 7 | discovery ran past the transport's 30 s | `match_discover` aborted | 0.1.14: 110 s host calls |
+| 8 | the evidence search's phrasing bound was not stated | calls over 8 phrasings refused | the description states it |
+| 9 | a correction turn enqueued a second continuation at the same task position | 409 `product_job_idempotency_conflict` | one continuation per task position |
+
+**Live check on `evimed-0266abec391a-1`** (throwaway account, synthetic lung-cancer patient, the kernel's own conversation, 13:49–14:30
+UTC, off-peak): the plugin took effect 1 min 45 s after the first ordinary turn. The matching turn succeeded (975 s), and so did the
+correction turn (1,359 s; `match_correct` then four `match_assess`). The run covered the whole chain (context, discovery, job, assess,
+results, report, evidence, correct), and both replies were in Chinese. No 409 occurred. Kernel-side spend was CNY 2.58 (505 calls,
+reference price). The de4acd check (11-11 01:08 UTC) ran in the weekday peak because the defect it had to confirm blocked every
+production session.
+
+**What it still shows** (counts from the transcript and the web log; no patient text read):
+
+| Finding | Measured | Cause | Next |
+|---|---|---|---|
+| `match_evidence` host failures | 35 of 111 calls (5 in turn 1, 30 in turn 2); Postgres 57014 | `cloud_reads` is one row per study, session and document. Every served sentence is its own short transaction on that row (`recordCloudRead` INSERT … ON CONFLICT, then `recordCloudWindow` UPDATE), concurrent children queue on the row lock, and the 5 s statement timeout cancels the tail (logpoint stack, `pg_stat_activity` `Lock/transactionid`) | record one search's windows in one statement, and skip what is already recorded with a snapshot read that never waits |
+| Database CPU | Postgres 234% of 4 cores, load 8–10, swap nearly full; 45 of 56 active-query samples were `evimed_frontier` queries | 前沿动态's list and pipeline queries (`pg_stat_statements` is not enabled) | profile and index; this slows every module |
+| `match_discover` timeouts | 2 of 4 calls in the first turn hit 110 s (the correction turn needed none); successful calls took 63–75 s | registry search, record reads, rerank and Jev fit on the loaded host | run discovery as a job behind `match_job`, or lighten it |
+| `invalid_arguments` | 9 evidence calls and 1 discover call over both turns | the model passed arguments outside a bound | read which bound |
+
+**Operator steps done.** The unread tables were retired (six on production, all empty; a rerun reports none). Release retention kept
+the current and previous releases and removed the trees of `cb66eedb78bf`, `ee2276a2f024`, `01888f2e9e80` and `6e136d2aa7c9`. The
+superseded adapter and result-replay tags were removed.
+
 ## 4.4 Gaps recorded at the owner's review (2026-11-08 evening)
 
 | Gap | What is known | Next |
@@ -593,16 +632,17 @@ A read-only trace of every importer of the old path decided what could go now; t
 - the pre-2026-11-04 rules-based candidate trials (`vcrPatientTrials.mjs`, `vcrCandidateTrialStore.mjs`, the legacy patient page, four tables; production held no row) — `scripts/ops/vcr-retire-unread-tables.mjs --apply` retires the five tables after the release;
 - V3's multi-candidate Jev priority fallback (replaced by the per-candidate fit) and `OPEN_SCIENCE_PATIENT_MATCHING_PRIORITY_ENABLED`.
 
-**Kept on purpose:** the old batch judge (`match_judge`) is still the live executor for project-scoped studies and for every deployment without a patient-matching catalogue, and V3 persists into the old judgment store. It is deleted once the plugin serves project-scoped studies and ships in every deployment (gate G1, with the deployment decision). Population criteria matching (`vcrMatching.mjs`) is a separate live feature.
+**Deleted 2026-11-10 (gate G1):** the old batch judge (`match_judge`, its executor, prompts, counters, the `rejudge` route and its levers); a project-scoped study's matching now runs on the plugin in the study's own conversation (§4.9). Population criteria matching (`vcrMatching.mjs`) is a separate live feature.
 
 ## 6. Remaining work and its owner
 
 | Item | State | Needs |
 |---|---|---|
 | Native clinical child | done 2026-11-08 (§4.2): P50 79 s, incidents 17/17, Board C 76.7%, n2c2 0.894 (run once) | open: on long multi-record files 4 of 86 patients still saved no decision after the repair (unknown evidence ids); false favourable labels above GPT-4's (88 vs 15) under the silence rule |
-| G1: the plugin serves project-scoped studies and ships everywhere; then delete the batch judge, `match_judge`, the old reranker, `legacy-matching.md`, old eval drivers, prompt builders | old path still live | the deployment decision; one real-session check that a programme run binds the project study |
-| Publication and deployment of plugin 0.1.3 (worker 0.1.0 unchanged) | native smoke and status smoke pass offline on the pinned kernel (DSH 0.2.1-rc.5, zero model calls; bundle SHA256 41704e90…, receipts `native-*-smoke-0.1.3.json` in the assets) | owner |
-| Operator step after the release | — | `node scripts/ops/vcr-retire-unread-tables.mjs --apply` (five tables) |
+| G1: delete the batch judge | done 2026-11-10 | — |
+| Deployment | live 2026-11-11 as `evimed-0266abec391a-1`, plugin 0.1.14 (§4.9) | — |
+| Unread tables | retired on production 2026-11-10 | — |
+| Production path load (§4.9) | evidence 57014 on `cloud_reads`, discovery past 110 s, the database CPU-bound by 前沿动态's queries | a write-pattern fix and a discovery job (one release); the frontier queries' profile |
 | ~~Production trial index~~ | not needed (owner, 2026-11-08): production searches ClinicalTrials.gov (official API), CTIS and ChiCTR (EviMed evidence API) live; the dense branch stays optional and off without a manifest | — |
 
 **Fixed 2026-11-08 (production retrieval).** The live registry search handed discovery one run-sized page (20, `OPEN_SCIENCE_VCR_CANDIDATE_SEARCH_MAX`), so production ranked 20 candidates where the boards ranked 300. Discovery now reads the whole kept list up to its depth (`runtimeRead(..., { listMax })`, the control plane's own option; the runtime's reads keep their page), and reads the ClinicalTrials.gov records it ranks in batches of 100 (`filter.ids`, one request per hundred, a 15-minute cache in front of the single reads) instead of one paced request per trial (300 × 250 ms).
