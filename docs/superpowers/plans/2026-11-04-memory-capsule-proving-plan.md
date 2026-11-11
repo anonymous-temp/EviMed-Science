@@ -853,6 +853,39 @@ L2 在一个模拟用户身上连续 12 场对话，看“第一次就做对”�
 - 已修（`e9ed2ab67`、`42c2fc876`，无开关，已并入集成分支）：用户亲自纠正过的做法留在生效状态，让位的是更老的那条，并留下用户看得懂的原因、可恢复；纠正本身就是证据，不再要求回放证明。复测同一用户 8/12、纠正 6 次。
 - 复测里还看到：两场“换项目”的探针对话都把这个用户的日期偏好带了过去（要判断这算不算该带）。
 
+P26B review closure (2026-11-11, branch `cc/capsule-correction-precedence2-20261111`; not deployed): the additional behavior is behind `OPEN_SCIENCE_METHOD_CORRECTION_PRECEDENCE_ENABLED=false`, forwarded by compose. The rule when enabled is:
+
+1. Directly authored, edited or explicitly restored human text outranks independently verified distilled corrections; verified corrections outrank ordinary system text.
+2. Within each authority level, the original human event/edit time wins, never lesson completion time; method ids break exact ties.
+3. Only already-recorded unresolved conflicts make a lower-priority approved method yield, with a readable, member-neutral reason.
+4. Yielded methods remain restorable candidates; legacy recovery requires independent coverage and excludes recorded retirement, stops and harm.
+5. Official read-only methods and retired methods never move automatically; only an explicit human restore reopens a retired method.
+
+The independent coverage call reads the proposed whole method and original human correction, requires grounded quotations, and grants no authority on failure or uncertainty. A later correction attributed to the same mounted body revokes its replay exemption and queues replay again. Refused legacy recovery cannot fall through to replay's automatic rollback. Conflict settlement reads only the method and incoming/outgoing conflict neighbours. The read-only deployment inventory is `node OpenScience/scripts/ops/correction-precedence-report.mjs --database-url-file PATH`; it reports ids/titles per account, with conditional legacy consequences separate, uses a read-only repeatable-read transaction, and has only been exercised against the isolated lab test database. It makes no model calls and was not run against production.
+
+Validation: 229 targeted tests across 14 files pass, including 18 PostgreSQL cases; changed server-file lint passes. Server typecheck retains 19 diagnostics at pre-existing expressions. The final D01 product-path run, `lx-l2-evolve-r3-p26b`, completed from frozen runtime revision `ad310b2a4`; all seven changed runtime files match the final branch, and both memory-lock isolation and correction precedence were verified in the loaded harness environment. All 22 turns succeeded, with no interrupted turns or failed jobs. Three post-probe `learning-evidence` jobs remain queued in the final snapshot because the frozen/probe phase does not drain learning; no distillation or consolidation job is unfinished.
+
+| Session | First reply correct | Corrections |
+|---|---|---:|
+| 1 | No | 3 |
+| 2 | No | 1 |
+| 3 | Yes | 0 |
+| 4 | Yes | 0 |
+| 5 | Yes | 0 |
+| 6 | Yes | 0 |
+| 7 | Yes | 0 |
+| 8 | Yes | 0 |
+| 9 | Yes | 0 |
+| 10 | Yes | 0 |
+| 11 | No | 1 |
+| 12 | Yes | 0 |
+
+Result: 9/12 first-time-right; five corrections (four in the first half, one in the second); all twelve final replies satisfy the session checks. Frozen tasks pass 8/9 checks, missing the reply-length limit on task 2. Both cross-project probes carry the date prefix into an unrelated project (2/2 leakage checks triggered). These are residual behavioral failures, so this is not an overall shipping sign-off or a statistically established gain over another single D01 run.
+
+The live library ends with two approved methods. The date method records the human event at 06:33:54.318Z, although saved at 06:41:23.066Z; the length method records the event at 06:48:15.287Z, although saved at 06:51:53.417Z. Session 11's attributed correction revokes the length method's exemption at 07:11:31.463Z and queues replay, which settles as `no_runs`; the method remains approved. One proposal is refused authority as `correction_unverified`. No conflict relation was recorded and the account had no legacy candidates: conflict priority, wrong-target refusal and conservative legacy recovery are regression-proven, not exercised by this live account. The independent judge's semantic error rate has not been calibrated by this single run.
+
+Artifacts on `evimed-lab`: `/srv/evimed/runs/lx-l2-evolve-r3-p26b/` (`units/D01/verdict.json`, `units/D01/state-final.json`, `p26b-proof.json`, `code-manifest.json`, `loaded-switches.json`, `lane-usage.json`). The earlier partial attempts are preserved: `lx-l2-evolve-p26b` stopped to fix a judge quotation-grounding failure (joined quotes and escaped line breaks), and `lx-l2-evolve-r2-p26b` stopped to include the final guard against ordinary replay reviving a refused legacy recovery. Their metered costs are CNY 0.9621 and 1.2003; the final run costs CNY 3.8643 (its account receipt is 3.8589, with the remainder in capsule scanning), for CNY 6.0267 total, plus two small standalone diagnostic judge calls not instrumented in that ledger. Shared balance moved from CNY 1825.95 at 05:50:11Z to 1632.87 at 07:30:34Z; other lanes ran concurrently, so that difference is not this lane's cost. No production access, merge or deployment was performed. B1–B5 and member-neutral hold wording are addressed; the switch remains default-off, and the length/transfer failures remain open.
+
 **三、L3（先学后考，五组各 40 次考试）没有可读的差别，而且按现在的设计读不出差别。**
 通过数：不带做法 30、带官方做法 30、学习加分层 27、学习（现行产品）31、只增不整合 27，区间全部重叠；同一组里两次重复之间就有 3–8 道题结果不同。每个学习组只学到 1 条做法（学习题里只有一道带了用户纠正，而学习触发只认纠正），考试里只有一道题和它有关；再加上第一条说的“开头没有记忆”，五组实际上都是“没有记忆”的对照。另有三处评分脚本的误判（把幻灯片页码当成编造的数字等）会单独翻转结果。要让 L3 能读出差别：十对以上带明确纠正的学习题和考试题、考试题按被纠正的行为打分、每组约 300 次、先修好第一条。
 

@@ -1,3 +1,4 @@
+import { correctionSources, judgeCorrection } from './methodCorrectionJudge.mjs';
 import { contextPolicyIdentity } from "./geoContextItems.mjs";
 import { scopedMethodName } from "./geoContextProvenance.mjs";
 /**
@@ -339,7 +340,7 @@ function withoutGoalGesture(transcript, run) {
  * identifier is dropped, and counted.
  * @param {{messages?: any[]} | null | undefined} transcript
  * @param {any} [run] the ledger's record of the run: `sessionId`, `kernelRequestIds`, `nativeTurn`
- * @returns {{corrections: {source: "steered", sessionId: string | null, seq: number | null, text: string}[], dropped: {sensitive: number, bounded: number}}}
+ * @returns {{corrections: {source: "steered", sessionId: string | null, seq: number | null, text: string, at?: string}[], dropped: {sensitive: number, bounded: number}}}
  */
 export function steeredCorrections(transcript, run = null) {
   const { messages } = rootSessionOf(transcript, run);
@@ -350,6 +351,7 @@ export function steeredCorrections(transcript, run = null) {
       sessionId: message.sessionId ?? null,
       seq: Number.isSafeInteger(message.seq) ? message.seq : null,
       text: unwrapUserWrappers(messageText(message)).slice(0, 4000),
+      ...(Number.isFinite(message.time) ? { at: new Date(message.time).toISOString() } : {}),
     })).filter((entry) => entry.text),
     dropped: cleaned.dropped,
   };
@@ -764,7 +766,7 @@ export class MethodDistillationRuns {
    *   onCodeSkill?: ((outcome: string) => void) | null,
    *   contextProvenance?: any,
    *   onEvidence?: ((counts: { kept: number, dropped: number }) => void) | null,
-   *   officialMethods?: ((userId: string) => Promise<readonly any[]>) | null, camp?: boolean, twoStage?: boolean}} dependencies
+   *   officialMethods?: ((userId: string) => Promise<readonly any[]>) | null, camp?: boolean, twoStage?: boolean, correctionJudge?: any}} dependencies
    *   `camp` (`OPEN_SCIENCE_LEARNING_CAMP_ENABLED`, false by default and never set for real accounts) reads a `camp` lesson: any finished lab run with
    *   a machine-checked outcome, with the camp section of the skill. `twoStage` (`OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED`, false by
    *   default) distils a lesson in two steps, the frame and then one method per new sub-skill (`#executeTwoStage`). Off, a lesson is one step as it was.
@@ -775,7 +777,7 @@ export class MethodDistillationRuns {
    */
   constructor({ dispatch, readResult, learning, jobs = null, notifications = null, resolveProject = null, usedMethods = null, resetInstant = null,
     similarity = null, resolveRun = null, scriptUses = null, verifyCode = null, onCodeSkill = null, onEvidence = null, contextProvenance = null,
-    officialMethods = null, camp = false, twoStage = false }) {
+    officialMethods = null, camp = false, twoStage = false, correctionJudge = null }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method distillation requires the bounded run dispatcher and result reader.");
     }
@@ -784,6 +786,7 @@ export class MethodDistillationRuns {
     this.dispatch = dispatch;
     this.readResult = readResult;
     this.learning = learning;
+    this.correctionJudge = correctionJudge;
     this.jobs = jobs;
     this.notifications = notifications;
     this.resolveProject = resolveProject;
@@ -1012,7 +1015,7 @@ export class MethodDistillationRuns {
     }
     const applied = await this.applyCandidate(job, run, result.output ?? {}, { signal: input.signal,
       evidence: shared ? new Map(sourceObservations.map(source => [source.runId, source.humanText])) : evidenceCorpus(input), reactions: reactionCorpus(input),
-      policy, sourceObservations, generationInputRef });
+      policy, sourceObservations, generationInputRef, correctionSources: correctionSources(input) });
     return { state: "complete", ...identityRecord, ...applied };
   }
 
@@ -1111,7 +1114,7 @@ export class MethodDistillationRuns {
       if (detailed.result.status !== "succeeded") { steps.push({ ...label, state: "failed" }); continue; }
       try {
         const applied = await this.applyCandidate(job, run, detailed.result.output ?? {}, { signal: input.signal, evidence, reactions, policy,
-          dependenciesFromFrontmatter: true, step: stepId });
+          dependenciesFromFrontmatter: true, step: stepId, correctionSources: correctionSources(input) });
         steps.push({ ...label, operation: applied.operation, methodId: applied.methodId ?? null, ...(applied.skipped ? { skipped: applied.skipped } : {}) });
         const stored = applied.methodId ? await this.learning.getMethod(job.userId, applied.methodId).catch(() => null) : null;
         if (stored) written.push(stored);
@@ -1141,7 +1144,7 @@ export class MethodDistillationRuns {
    * of the same scope is offered the method (`learnedMethodMount.mjs`).
    * @param {any} job @param {any} run @param {Record<string, any>} output
    * @param {{signal?: string, evidence?: Map<string, string>, reactions?: Map<string, string[]>, abortSignal?: AbortSignal, policy?: any, sourceObservations?: any[], generationInputRef?: string|null,
-   *   dependenciesFromFrontmatter?: boolean, step?: string}} [context] what the lesson's evidence was, read from the job when absent; and the text the distillation was shown, by run.
+   *   dependenciesFromFrontmatter?: boolean, step?: string, correctionSources?: any[]}} [context] what the lesson's evidence was, read from the job when absent; and the text the distillation was shown, by run.
    *   A two-stage detail (`#executeTwoStage`) stores the dependencies its frontmatter pins (`depends_on`) when the candidate states none, so the
    *   methods it builds on are the ledger's edges, and names the step that wrote it (`provenance.distillationStep`) so a retried lesson does not write it twice.
    */
@@ -1260,6 +1263,13 @@ export class MethodDistillationRuns {
     // Only the externally queued correction and its researcher signal grant precedence. Candidate output cannot
     // claim it, and a consolidation copying provenance cannot inherit it for another body.
     const personCorrection = job.payload?.trigger === 'correction' && signal === 'researcher';
+    const correctionProof = this.learning.correctionPrecedence && personCorrection
+      ? await judgeCorrection(this.correctionJudge, context.correctionSources ?? correctionSources(job.payload),
+        { frontmatter: parsed.frontmatter, body: parsed.body, files: candidate?.files },
+        { userId: job.userId, projectId: job.projectId, runId: run.id }) : null;
+    if (this.learning.correctionPrecedence && personCorrection && !correctionProof) {
+      return { operation: 'no_change', methodId: undefined, skipped: 'correction_unverified' };
+    }
     // Only what the proposal itself attaches. `output.files` is the delivered
     // package — SKILL.md, method-candidate.json, the notes — and reading it as
     // the method's scripts made every candidate a method whose attachments sat
@@ -1300,7 +1310,7 @@ export class MethodDistillationRuns {
         body: parsed.body,
         ...(files ? { files } : {}),
         provenance,
-        personCorrection,
+        personCorrection, correctionProof,
         dependencies: candidate?.dependencies ?? pinned,
         // The researcher's line, cleaned by the service; a candidate without
         // one is named on the next consolidation pass.
@@ -1338,7 +1348,7 @@ export class MethodDistillationRuns {
     const evidence = unionEvidence(sources.flatMap((method) => (Array.isArray(method.payload?.provenance?.evidence) ? method.payload.provenance.evidence : [])), verified.kept);
     const amended = await this.learning.amendMethod(job.userId, targetId, {
       expectedRevision: target.revision,
-      personCorrection,
+      personCorrection, correctionProof,
       frontmatter: parsed.frontmatter,
       body: parsed.body,
       ...(files ? { files } : {}),
