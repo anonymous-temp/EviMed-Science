@@ -62,7 +62,13 @@ Object.assign(process.env, {
   const realFetch = globalThis.fetch;
   const requestLog = `${DATA}/model-requests.jsonl`;
   fsSync.mkdirSync(`${DATA}/first-requests`, { recursive: true });
-  let seq = 0;
+  // A resumed harness keeps every earlier first request rather than overwriting 0001.json.
+  let seq = fsSync.readdirSync(`${DATA}/first-requests`).reduce((max, name) => Math.max(max, Number(name.replace(/\.json$/, '')) || 0), 0);
+  if (fsSync.existsSync(requestLog)) {
+    for (const line of fsSync.readFileSync(requestLog, 'utf8').split('\n').filter(Boolean).slice(-100)) {
+      try { seq = Math.max(seq, Number(JSON.parse(line).seq) || 0); } catch { /* interrupted measurement row */ }
+    }
+  }
   globalThis.fetch = async (input, init) => {
     try {
       const url = typeof input === 'string' ? input : input?.url ?? String(input);
