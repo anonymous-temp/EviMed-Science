@@ -38,11 +38,21 @@ async function readSelection(projectDir) {
 /**
  * @param {{ api: any, userId: string, projectId: string, projectName?: string, sessionId: string, first: string, next: (turn: any, index: number) => Promise<string|null>|string|null,
  *   dataDir: string, outDir: string, timeoutMs: number, log: (m: string) => void, observeMethods?: (identity: any) => Promise<any>, waitMemoryTools?: boolean, maxTurns?: number,
- *   keepRuntime?: boolean, automated?: boolean, onTurn?: (record: any) => Promise<void> }} o
+ *   keepRuntime?: boolean, automated?: boolean, memoryBusyRetryMs?: number, onTurn?: (record: any) => Promise<void> }} o
  */
-export async function runConversation({ api, userId, projectId, projectName, sessionId, first, next, dataDir, outDir, timeoutMs, log, observeMethods = null, waitMemoryTools = true, maxTurns = 8, keepRuntime = false, automated = false, onTurn = null }) {
+export async function runConversation({ api, userId, projectId, projectName, sessionId, first, next, dataDir, outDir, timeoutMs, log, observeMethods = null, waitMemoryTools = true, maxTurns = 8, keepRuntime = false, automated = false, memoryBusyRetryMs = 0, onTurn = null }) {
   const t0 = Date.now();
   const record = { schema: 'lx-conversation/1', projectId, sessionId, startedAt: new Date().toISOString(), turns: [] };
+  const admission = async (route, body) => {
+    const deadline = Date.now() + memoryBusyRetryMs;
+    while (true) {
+      const response = await api.call('POST', route, body, route === '/api/commands/start_runtime' ? { timeoutMs: 300_000 } : undefined);
+      if (response.status !== 409 || response.json?.code !== 'memory_source_cleanup_busy' || Date.now() >= deadline) return response;
+      (record.admissionRetries ??= []).push({ at: new Date().toISOString(), route, code: response.json.code, requestId: response.json.requestId });
+      log(`memory admission busy; retrying in 5s requestId=${response.json.requestId}`);
+      await sleep(5000);
+    }
+  };
   api.project = projectId;
   record.project = await ensureProject(api, projectId, projectName);
   const projectDir = `${dataDir}/users/${userId}/projects/${projectId}`;
@@ -50,7 +60,7 @@ export async function runConversation({ api, userId, projectId, projectName, ses
   if (waitMemoryTools && process.env.OPEN_SCIENCE_OPENVIKING_URL) {
     // A project reused across conversations keeps the previous kernel's tool list: wait for the new kernel's.
     await fs.rm(`${projectDir}/eval-memory-tools.json`, { force: true });
-    const start = await api.call('POST', '/api/commands/start_runtime', {}, { timeoutMs: 300_000 });
+    const start = await admission('/api/commands/start_runtime', {});
     if (start.status !== 200) throw new Error(`start runtime: ${start.status} ${start.raw.slice(0, 200)}`);
     record.memoryToolsWait = await waitForMemoryTools(`${projectDir}/eval-memory-tools.json`);
   }
@@ -61,7 +71,7 @@ export async function runConversation({ api, userId, projectId, projectName, ses
     const turn = { index, text, startedAt: new Date().toISOString() };
     const t1 = Date.now();
     const dispatchId = `d_${sessionId}_${index}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120);
-    const dispatched = await api.call('POST', '/api/agent-runs/dispatch', { sessionId, dispatchId, text, ...(automated ? { automated: true } : {}) });
+    const dispatched = await admission('/api/agent-runs/dispatch', { sessionId, dispatchId, text, ...(automated ? { automated: true } : {}) });
     if (dispatched.status !== 202) { turn.error = `dispatch ${dispatched.status} ${dispatched.raw.slice(0, 400)}`; record.turns.push(turn); break; }
     let run = dispatched.json.data;
     turn.runId = run.id;

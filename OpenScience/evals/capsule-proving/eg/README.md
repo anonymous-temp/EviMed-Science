@@ -59,6 +59,9 @@ Cancelled work is retained; resumption uses the same dispatch ids and proceeds
 with the next source user turn. No earlier checkpoint is answered from a later
 memory snapshot. Source times are metadata; product conversations use the real
 wall clock. Replay and product assistant replies can therefore differ.
+The driver retries `memory_source_cleanup_busy` admissions for up to three
+minutes, with request ids and delays retained. It does not retry accepted turns
+under new dispatch ids or bypass the product's exclusive memory lease.
 
 Use the existing `run/score.mjs` with the same development data and Qwen key
 file; `report.mjs --suite g1 --selection SAMPLE --engine BASELINE --runs A,B

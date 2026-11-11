@@ -57,7 +57,7 @@ try {
       if (activeProject && activeProject !== projectId) { identity.api.project = activeProject; await identity.api.call('POST', '/api/commands/stop_runtime', {}); }
       const record = await runConversation({ ...identity, projectId, projectName: project?.name, sessionId: `eg-${item.caseId}-${key}`,
         // Simulated people on isolated accounts: automated runs are deliberately ineligible for memory admission.
-        first: texts[0], next: (_turn, i) => texts[i + 1] ?? null, maxTurns: texts.length, keepRuntime: true, automated: false,
+        first: texts[0], next: (_turn, i) => texts[i + 1] ?? null, maxTurns: texts.length, keepRuntime: true, automated: false, memoryBusyRetryMs: 180_000,
         waitMemoryTools: activeProject !== projectId, dataDir: ctx.dataDir, outDir: `${dir}/conversations/${key}`, timeoutMs: args.timeoutMin * 60_000,
         log: ctx.status, onTurn: async r => { await save(`${dir}/conversations/${key}.partial.json`, r); if (onTurn) await onTurn(r); } });
       activeProject = projectId;

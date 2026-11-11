@@ -129,6 +129,9 @@ if not read(REPORT / "g1.json") or not read(REPORT / "g1.json").get("complete"):
         record_engine(directory)
         run(["node", str(EG / "g1-score.mjs"), "--run", str(directory), "--data", str(DATA), "--selection", str(SAMPLE), "--judge-key-file", "/srv/evimed/secrets/dashscope.api-key"])
     run(["node", str(EG / "report.mjs"), "--suite", "g1", "--selection", str(SAMPLE), "--engine", str(RUNS / "v3-synthetic-users-dev-product-1"), "--runs", ",".join(map(str, g1_dirs)), "--out", str(REPORT), "--ledger", "/srv/evimed/results/ledger.jsonl", "--run-id", "g1pp-eg-paired-20261111"])
+    if not read(REPORT / "g1.json").get("complete"):
+        status("STOP G1 scoring incomplete; later phases remain pending")
+        raise SystemExit(1)
     status("DONE G1 scored, paired and ledgered")
 
 if not read(REPORT / "g10.json") or not read(REPORT / "g10.json").get("complete"):
@@ -139,6 +142,9 @@ if not read(REPORT / "g10.json") or not read(REPORT / "g10.json").get("complete"
         run(["python3", "evals/general-tasks/judges/model_judge.py", "--run", str(directory), "--model", "deepseek-flash", "--key-file", "/srv/evimed/secrets/deepseek.api-key"], {"EVAL_JUDGE_USAGE_LOG": str(directory / "judge-usage.jsonl")})
         run(["python3", "evals/general-tasks/judges/summarize.py", "--run", str(directory)])
     run(["node", str(EG / "report.mjs"), "--suite", "g10", "--empty", str(RUNS / "g10-eg-empty-1"), "--seeded", str(RUNS / "g10-eg-seeded-1"), "--out", str(REPORT), "--ledger", "/srv/evimed/results/ledger.jsonl", "--run-id", "g10-eg-paired-20261111"])
+    if not read(REPORT / "g10.json").get("complete"):
+        status("STOP G10 pairing incomplete; G3 remains pending")
+        raise SystemExit(1)
     status("DONE G10 scored, paired and ledgered")
 
 if not read(REPORT / "g3.json") or not read(REPORT / "g3.json").get("complete"):
