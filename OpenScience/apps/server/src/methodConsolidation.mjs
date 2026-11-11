@@ -397,9 +397,9 @@ export class MethodConsolidation {
     this.linkCheckEnabled = Boolean(linkCheckEnabled);
     this.queueEnabled = queueEnabled === true;
     this.recallEnabled = recallEnabled === true;
-    this.decideVersion = this.recallEnabled ? DECIDE_VERSION + 1 : DECIDE_VERSION;
+    this.decideVersion = this.recallEnabled ? DECIDE_VERSION + 2 : DECIDE_VERSION;
     this.modelCalls = Math.max(1, Math.trunc(modelCalls));
-    this.pairQueue = this.queueEnabled ? new MethodConsolidationQueue(learning.documents, { now, version: this.recallEnabled ? "recall1-batch2" : "base1-batch2" }) : null;
+    this.pairQueue = this.queueEnabled ? new MethodConsolidationQueue(learning.documents, { now, version: this.recallEnabled ? "recall2-batch2" : "base1-batch2" }) : null;
     this.pyramid = pyramid === true;
     this.officialMethods = typeof officialMethods === "function" ? officialMethods : null;
   }
@@ -874,8 +874,10 @@ export class MethodConsolidation {
       return {status:'decided',...empty,builds:replay.applied?1:0,refusals:replay.refusals??[]};
     }
     if (!job.pairBudget && groupDecided(members, key, this.decideVersion)) return { status: "skipped_unchanged", ...empty };
-    const decided = await this.decideGroup(job, members).catch((error) => { if (deferred(error)) throw error; return null; });
+    let decided = await this.decideGroup(job, members).catch((error) => { if (deferred(error)) throw error; return null; });
     if (!decided) return { status: "decide_failed", ...empty };
+    const mergeReview = this.recallEnabled ? await this.#reviewMerges(job, members, decided) : { decided, deferred: 0, refusals: [] };
+    decided = mergeReview.decided;
     /** @type {Record<string, number>} */
     const relationTypes = {};
     const relations = await this.applyRelations(job, members, decided, relationTypes);
@@ -887,13 +889,13 @@ export class MethodConsolidation {
       && (!job.pairBudget || entry.RELATION_TYPE !== "conflicts_with")
       && (entry.RELATION_TYPE !== "subset" || wider));
     const buildable = allBuildable.filter(({ entry }) => !buildTypes || buildTypes.includes(entry.RELATION_TYPE));
-    const deferredBuilds = allBuildable.length - buildable.length;
+    const deferredBuilds = allBuildable.length - buildable.length + mergeReview.deferred;
     const decidedNothing = assignments.length === 0;
     // A merge nobody has proven blocks the build of this group, and nothing else: DECIDE and the relations above have run.
     const blockedUnproven = buildable.length > 0 && members.some(unprovenMerge);
     let builds = 0;
     /** @type {any[]} */
-    let refusals = [];
+    const refusals = [...mergeReview.refusals];
     let limited = false;
     let buildFailed = false;
     if (buildable.length && !blockedUnproven) {
@@ -902,7 +904,7 @@ export class MethodConsolidation {
           .catch((error) => { if (deferred(error)) throw error; return null; });
         if (built?.applied) builds = 1;
         buildFailed = !built || built.completed===false;
-        refusals = built?.refusals ?? [];
+        refusals.push(...(built?.refusals ?? []));
       } else {
         limited = true;
       }
@@ -912,6 +914,44 @@ export class MethodConsolidation {
     if (deferredBuilds) this.#noop('build_deferred', deferredBuilds);
     if (!blockedUnproven && !limited && !buildFailed && !deferredBuilds) await this.#stamp(job, members, key);
     return { status: "decided", relations, relationTypes, builds, blockedUnproven, decidedNothing, deferredBuilds: deferredBuilds + (job.pairBudget ? Number(limited || buildFailed) : 0), refusals };
+  }
+
+  /** A relation suggestion is insufficient authority to fold two memories.
+   * Exact scope equality is deliberately conservative: paraphrased scopes may
+   * miss a merge. An independent body comparison must also establish two-way
+   * equivalence, without treating preservation of extra rules as equivalence. */
+  async #reviewMerges(job, members, decided) {
+    const assignments = [], refusals = []; let waiting = 0;
+    const proposed = resolveAssignments(members, decided.assignments);
+    for (const item of proposed) {
+      if (item.entry.RELATION_TYPE !== "merge") { assignments.push(item.entry); continue; }
+      const sources = members.filter(member => item.skills?.includes(member.id));
+      const scope = member => JSON.stringify([member.payload?.frontmatter?.whenToUse ?? "",
+        member.payload?.frontmatter?.metadata?.applies_when ?? "", member.payload?.frontmatter?.metadata?.not_when ?? ""]);
+      const ids = new Set(sources.map(source => source.id));
+      const distinct = sources.some(source => (source.payload?.learning?.relations ?? []).some(relation =>
+        ids.has(relation.target) && !relation.resolved && ["subset", "conflicts_with"].includes(relation.type)))
+        || proposed.some(other => ["subset", "conflicts_with"].includes(other.entry.RELATION_TYPE)
+          && (other.skills ?? []).filter(id => ids.has(id)).length >= 2);
+      const refused = code => refusals.push({ assignment: String(item.entry.ASSIGNMENT), methodId: sources[0]?.id ?? "", code, dropped: 0, quotesDropped: 0 });
+      if (sources.length < 2 || new Set(sources.map(scope)).size !== 1 || distinct) { refused("merge_scope_or_relation"); continue; }
+      if (job.pairBudget && job.pairBudget.used >= job.pairBudget.limit) { waiting++; continue; }
+      const reviewed = await this.decideGroup({ ...job, pairTargets: undefined }, sources, { equivalence: true })
+        .catch(error => { if (deferred(error)) throw error; return null; });
+      if (!reviewed) { waiting++; continue; }
+      const verdicts = resolveAssignments(sources, reviewed.assignments);
+      const equivalent = verdicts.some(verdict => verdict.entry.RELATION_TYPE === "merge"
+        && verdict.skills?.length === ids.size && verdict.skills.every(id => ids.has(id)))
+        && verdicts.every(verdict => verdict.entry.RELATION_TYPE === "merge");
+      if (equivalent) assignments.push(item.entry);
+      else {
+        refused("merge_not_equivalent");
+        assignments.push(...verdicts.filter(verdict => verdict.entry.RELATION_TYPE !== "merge").map(verdict => ({
+          ...verdict.entry, ASSIGNMENT: `${item.entry.ASSIGNMENT}-review-${verdict.entry.ASSIGNMENT}`,
+        })));
+      }
+    }
+    return { decided: { ...decided, assignments }, deferred: waiting, refusals };
   }
 
   /** Mark every member of a group as read at its current bodies. A stamp is a convenience: one that cannot be written means the
@@ -1213,12 +1253,12 @@ export class MethodConsolidation {
 
   /**
    * The DECIDE step: one bounded run reading one group's bodies.
-   * @param {any} job @param {readonly any[]} members
+   * @param {any} job @param {readonly any[]} members @param {{equivalence?:boolean}} [options]
    */
-  async decideGroup(job, members) {
+  async decideGroup(job, members, { equivalence = false } = {}) {
     const keys = members.map((member) => `${member.id}@${member.payload?.contentDigest ?? ""}${this.recallEnabled ? "@" + methodPairFingerprint(member) : ""}`).sort();
     const result = await this.#step(job, {
-      dispatchId: `method-relations-v${DECIDE_VERSION}${this.recallEnabled ? "-recall1" : ""}${job.pairTargets ? "-batch1" : ""}-${shortDigest(keys.join(" ") + (job.pairTargets ? JSON.stringify(job.pairTargets) : ""))}`,
+      dispatchId: `method-relations-v${DECIDE_VERSION}${this.recallEnabled ? "-recall2" : ""}${equivalence ? "-equivalence1" : ""}${job.pairTargets ? "-batch1" : ""}-${shortDigest(keys.join(" ") + (job.pairTargets ? JSON.stringify(job.pairTargets) : ""))}`,
       input: {
         schemaVersion: 1,
         action: "decide",
@@ -1235,6 +1275,11 @@ export class MethodConsolidation {
         })),
       },
       question: "Decide how the methods in method-relations-input.json relate, using the method-relations capability with action `decide`. "
+        + (equivalence ? "Independently audit whether these methods are interchangeable BEFORE any rewriting. Compare every operation, obligation, exception and applicability condition in both directions. "
+          + "Equivalent means either method alone already requires everything the other requires in the same situations. Being compatible or safely combinable is insufficient. "
+          + "For example, checking a file's rows and checking those rows plus preserving the source and recording exclusions are not equivalent: the latter has additional obligations even if a combined rewrite would preserve them all. "
+          + "A rule for missing fields in a fixed template is not equivalent to an entire reporting workflow that contains that rule. These examples illustrate a general principle, not a list of special cases. "
+          + "Identify any one-sided obligation or narrower condition with exact quotations. Return the supported subset, conflict or other relation instead of merge when such a difference exists; return no assignment when uncertain. " : "")
         + (job.pairTargets ? "Examine every candidatePairs entry independently, including a narrower step or incompatible instruction alongside a duplicate. A group-level pattern does not answer its individual pairs. Do not infer relatedness from co-batching; unrelated pairs need no assignment. " : "")
         + (members.some(isOfficialDocument) ? "A method marked readOnly is the platform's own: a relation may name it, and nothing may change it. " : "")
         + "Return ASSIGNMENT, SKILLS, RELATION_TYPE and REASON for each group you find, naming methods by the id the input gives them. "

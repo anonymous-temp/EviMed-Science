@@ -20,7 +20,7 @@ const save = (file, value) => writeFile(file, JSON.stringify(value, null, 1));
 const args = Object.fromEntries(Array.from({ length: (process.argv.length-2)/2 }, (_,i) => [process.argv[2+i*2].slice(2), process.argv[3+i*2]]));
 const size = Number(args.size), arm = args.arm, passes = Number(args.passes ?? 20), limit = Number(args.calls ?? 12);
 if (![50,200,600].includes(size) || !['on','off'].includes(arm) || passes !== 20) throw new Error('Invalid L4b arguments');
-const root = '/srv/evimed/runs', runId = `l4b-${size}-${arm}-6`, dir = path.join(root, runId);
+const root = '/srv/evimed/runs', runId = `l4b-${size}-${arm}-${arm==='on'?7:6}`, dir = path.join(root, runId);
 const costOf = usage => ((usage.promptTokens-usage.cachedTokens)*2 + usage.cachedTokens*.04 + usage.completionTokens*8)/1e6;
 
 async function main() {
@@ -115,7 +115,8 @@ async function main() {
     loop.state.clock+=3600000;
     await save(stateFile,{...loop.state,documents:loop.documents.snapshot()});
     await save(checkpoint,report);await status(metric);
-    process.stdout.write(JSON.stringify({runId,pass,recall:metric.recordedRecall,modelCalls:metric.modelCalls,costCny,backlog:result.coverage?.backlog})+'\n');
+    process.stdout.write(JSON.stringify({runId,pass,recall:metric.recordedRecall,modelCalls:metric.modelCalls,costCny,backlog:result.coverage?.backlog,harmfulCanonicalMerges:harms.length})+'\n');
+    if(harms.length)throw new Error('L4b harmful planted merge: preserved the failing pass and stopped this arm.');
   }
   await status({phase:'complete'});
   await database.close();

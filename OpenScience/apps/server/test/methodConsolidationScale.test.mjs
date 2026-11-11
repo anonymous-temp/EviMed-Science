@@ -325,3 +325,48 @@ test('a transiently failed pair gets another turn despite a steady stream of new
   const fresh={id:'fresh',payload:{status:'pending',examined:false,attempts:0,score:.99,enqueuedAt:'2026-11-10'}};
   assert.equal(q.pending([fresh,failed])[0].id,'failed');
 });
+
+test('recall refuses a merge across different applicability before recording or building it', async () => {
+  const h=await harness({size:2,recallEnabled:true});const pass=h.make();
+  pass.readResult=async()=>({status:'succeeded',output:{assignments:[{ASSIGNMENT:'A1',SKILLS:['m0','m1'],RELATION_TYPE:'merge',REASON:'One compatible step.'}]}});
+  const result=await pass.sleep({job});
+  assert.equal(h.calls.length,1);
+  assert.equal(result.relations,0);
+  assert.equal(result.coverage.pendingBuilds,0);
+  assert.equal(result.refusals[0].code,'merge_scope_or_relation');
+});
+
+test('independent equivalence review preserves a one-sided obligation as subset instead of merge', async () => {
+  const h=await harness({size:2,recallEnabled:true,budget:4});
+  for(const id of ['m0','m1']) {
+    const row=await h.learning.getMethod('u',id);
+    await h.documents.put('u','method',id,{...row.payload,frontmatter:{...row.payload.frontmatter,whenToUse:'Inspect a file',metadata:{applies_when:'Inspect a file'}},
+      body:id==='m0'?'Check rows.':'Check rows. Preserve the source. Record exclusions.'},{expectedRevision:row.revision});
+  }
+  const pass=h.make();
+  pass.readResult=async identity=>({status:'succeeded',output:identity.dispatchId.includes('build')?{revisions:[]}:{assignments:[identity.dispatchId.includes('equivalence')
+    ?{ASSIGNMENT:'R1',SKILLS:['m0','m1'],RELATION_TYPE:'subset',WIDER:'m1',REASON:'Only m1 requires preserving the source and recording exclusions.'}
+    :{ASSIGNMENT:'A1',SKILLS:['m0','m1'],RELATION_TYPE:'merge',REASON:'Can combine compatible instructions.'}]}});
+  const result=await pass.sleep({job});
+  assert.equal(result.relationTypes.merge,undefined);
+  assert.equal(result.relationTypes.subset,1);
+  assert.ok(h.calls.some(call=>call.dispatchId.includes('equivalence')));
+  assert.ok(h.calls.filter(call=>call.input.action==='build').every(call=>call.input.assignments.every(a=>a.RELATION_TYPE!=='merge')));
+});
+
+test('a deferred independent merge review and build reuse exact paid questions on later passes', async () => {
+  const h=await harness({size:2,recallEnabled:true,budget:1});
+  for(const id of ['m0','m1']) {
+    const row=await h.learning.getMethod('u',id);
+    await h.documents.put('u','method',id,{...row.payload,frontmatter:{...row.payload.frontmatter,whenToUse:'same',metadata:{applies_when:'same'}}},{expectedRevision:row.revision});
+  }
+  const seen=new Set(),pass=h.make();
+  pass.readResult=async identity=>{
+    const calls=seen.has(identity.dispatchId)?0:1;seen.add(identity.dispatchId);
+    return {status:'succeeded',usage:{calls},output:identity.dispatchId.includes('build')?{revisions:[]}:{assignments:[{ASSIGNMENT:'A1',SKILLS:['m0','m1'],RELATION_TYPE:'merge',REASON:'Equivalent obligations.'}]}};
+  };
+  assert.equal((await pass.sleep({job})).coverage.pendingBuilds,1);
+  const reviewed=await pass.sleep({job});assert.equal(reviewed.coverage.modelCalls,1);assert.equal(reviewed.coverage.pendingBuilds,1);
+  const built=await pass.sleep({job});assert.equal(built.coverage.modelCalls,1);assert.equal(built.coverage.pendingBuilds,0);
+  assert.equal(seen.size,3);
+});
