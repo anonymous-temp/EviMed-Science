@@ -11,6 +11,10 @@ flock -n 9 || { echo 'Reference slot already running'; exit 75; }
 note() { echo "$(date -u +%FT%TZ) SB $*" | tee -a /srv/evimed/runs/sb-STATUS; }
 report() { flock "$ROOT/report.lock" node "$TREE/evals/capsule-proving/sb/report.mjs" "$ROOT" /srv/evimed/runs /srv/evimed/results/ledger.jsonl > "$ROOT/report.log"; }
 trap 'note "campaign exit code=$?"' EXIT
+if [[ -f "$ROOT/queue-yield.json" && -d "$ROOT/current.json.tmp" ]]; then
+  rmdir "$ROOT/current.json.tmp"
+  note 'prior task finished; release the recorded queue-yield admission barrier'
+fi
 
 if [[ "${1:-campaign}" == arm ]]; then
   "$PY" "$CODE/run.py" --bench "$2" --arm "$3" "${@:4}"
@@ -42,10 +46,11 @@ PY
 done
 run_arm() {
   local bench="$1" arm="$2"
+  shift 2
   local retry=()
   if [[ "${SB_RETRY_INFRA:-0}" == 1 ]]; then retry=(--retry-infra); fi
   note "start $bench-$arm-1"
-  "$PY" "$CODE/run.py" --bench "$bench" --arm "$arm" "${retry[@]}" || return $?
+  "$PY" "$CODE/run.py" --bench "$bench" --arm "$arm" "${retry[@]}" "$@" || return $?
   report
 }
 stream() {
@@ -58,11 +63,12 @@ stream() {
 }
 code=0
 if [[ "${SB_REFERENCE_SLOTS:-1}" == 1 ]]; then
-  for arm in none learned flat; do
-    for bench in sb slb; do
-      run_arm "$bench" "$arm" || code=$?
+  "$PY" "$CODE/execution_queue.py" > "$ROOT/execution-queue.tsv"
+  while IFS=$'\t' read -r bench task; do
+    for arm in none learned flat; do
+      run_arm "$bench" "$arm" --task "$task" || code=$?
     done
-  done
+  done < "$ROOT/execution-queue.tsv"
 else
   stream sb & sb_pid=$!
   stream slb & slb_pid=$!

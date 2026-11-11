@@ -26,6 +26,7 @@ def main(args):
     accounting = load(root / 'accounting.json', {})
     manifest = load(root / 'manifest.json', {})
     amendments = load(root / 'protocol-amendments.json', [])
+    queue = load(root / 'execution-queue.json', {})
     learning = load(root / 'practice/complete.json', {})
     lines = ['# SkillsBench / SkillLearnBench pilot — 2026-11-11', '',
         '**All scored rows are model + skills in the reference harness, not the product.**', '',
@@ -38,6 +39,8 @@ def main(args):
     lines += ['', 'Rates above keep infrastructure failures and missing tasks in the planned denominator. Wilson intervals describe this feasibility-conditioned pilot, not a population estimate of the full benchmark. Scorer-only rates and every task are in the JSON/CSV. A partial run is not a final benchmark score. Tokens include cached prompt tokens and completion/reasoning tokens. Costs are timestamp-adjusted billing estimates; peak equivalents are retained separately.', '',
               '## Sampling and per-domain results', '', manifest.get('samplingRule', ''), '',
               'Capacity amendment before any SkillLearnBench scoring: only the first frozen held-out variant per family is primary (six families/categories, one variant each); the other six candidates are unused reserves. No scored result selected or removed a task.']
+    if queue:
+        lines += ['', 'Execution capacity rule: ' + queue['rule'] + ' The exact order is retained in `execution-queue.json`.']
     for amendment in amendments:
         lines += ['', f"Harness qualification amendment ({amendment['at']}): {amendment['reason']} Original artifacts: `{amendment['archiveRunId']}`; {len(amendment['tasks'])} tasks repeated. Calibration usage remains in total lane cost, separate from primary per-task inference cost."]
     lines += ['', 'Scorer-only rates (excluding unavailable verifiers/admission, never replacing the planned-denominator rates above):']
@@ -105,7 +108,7 @@ def main(args):
               'The product supplies learned skill bodies here, not the scored execution harness. The official self-generation view is a different generation protocol. SkillLearnBench uses a Sonnet 4.6 reference solver and GPT-5-mini judge; these DeepSeek measurements are not a reproduction of those published absolute scores. The optional official-pyramid arm would require additional paid trials and was omitted.', '',
               '## Verification and artifacts', '',
               f"Data pins: SkillsBench `{manifest.get('pins', {}).get('sb')}`; SkillLearnBench `{manifest.get('pins', {}).get('slb')}`. Selected files match the intake pin; verifier SHA256 maps are checked before/after every task. Upstream runner receipts, Python dependency freeze, exact prompts/outputs, official results and private account state stay on the lab. No runtime/provider secrets or raw account credentials belong in the committed report.", '',
-              'Runner checks: 10 Node tests and 16 Python tests (26 total), run on the lab; the official task/oracle outcomes are separate evidence. See the final delivery note for the latest check counts. Source, STATUS, run manifests and ledger rows are separately reviewable; no deployment or leaderboard submission occurred.', '',
+              'Runner checks: 10 Node tests and 17 Python tests (27 total), run on the lab; the official task/oracle outcomes are separate evidence. See the final delivery note for the latest check counts. Source, STATUS, run manifests and ledger rows are separately reviewable; no deployment or leaderboard submission occurred.', '',
               '## Leaderboard submission requirements (five lines)', '',
               '1. Freeze the product configuration, code/data/agent pins and learning boundary; do not tune a leaderboard-only product.',
               '2. Run the complete required sets/repeats with unchanged official verifiers and retain every result, error and trajectory.',

@@ -97,8 +97,9 @@ practice exited, but retained SkillLearnBench images exhausted the shared disk;
 the runner now removes only its completed image tags and resumes serially.
 `SB_REFERENCE_SLOTS=2` opts into two containers when capacity permits, with
 per-request trial attribution. Each stream runs none, learned, then flat.
-Serial scheduling interleaves benchmarks within each arm, so both methods
-comparisons are reached before the final flat-skill arm.
+Serial scheduling completes none/learned/flat for each task, alternates benchmarks,
+and orders each benchmark by native agent timeout then the frozen seed hash.
+`execution-queue.json` preserves that outcome-independent order; the sample is unchanged.
 Product practice uses port 48848, bridge 19368 and its own database on the existing
 lab PostgreSQL port 55686. Do not stop other lanes' processes or containers.
 
@@ -152,8 +153,11 @@ by reward. Native agent/verifier timeouts are read from the pinned task; the out
 watchdog adds build/install time. The video wrapper's one-time wait recovery is
 recorded separately. Earlier wall times include logging stalls.
 
-After every agent trial has finished, run the labelled diagnostic judge and final
-reports on the lab (the judge owns the legacy single-trial attribution file):
+The labelled diagnostic judge can process completed native-graded trials with
+`--available` while other agents run: agent proxy URLs own their attribution,
+the learned library is frozen, and judge files are outside solver workspaces.
+Run it once without that flag after all trials to include unavailable-case
+diagnostics, then generate the final reports on the lab:
 
 ```sh
 python /srv/evimed/sb/code/judge.py

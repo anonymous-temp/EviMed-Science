@@ -313,7 +313,7 @@ def run(args):
         put(record, {'task': task, 'arm': args.arm, 'wallSeconds': time.time() - t0, **result,
                      'requests': usage(out.name, task['id'])})
         note(f'{out.name} done {task["id"]} infra={result.get("infraError", "-")}')
-    note(f'{out.name} finished {len(list((out / "records").glob("*.json")))}/{len(tasks)}')
+    note(f'{out.name} recorded {len(list((out / "records").glob("*.json")))}/{len(planned_ids)} planned tasks')
 
 
 if __name__ == '__main__':

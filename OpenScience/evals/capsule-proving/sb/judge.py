@@ -2,7 +2,7 @@
 """L7 diagnostic layers using pinned upstream prompts/parsers and a labelled substitute judge.
 
 This is DeepSeek Flash (thinking off), NOT the published GPT-5-mini judge.
-Run after all agent trials, so reference key points can never reach learning/inference.
+Read only completed trial artifacts. Reference key points never enter learning/inference.
 """
 import argparse
 import asyncio
@@ -15,7 +15,7 @@ from openai import AsyncOpenAI
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from run import ROOT, RUNS, DATA, UPSTREAM, GATEWAY, note, put
+from run import ROOT, RUNS, DATA, UPSTREAM, GATEWAY, note, put, infrastructure_record
 
 
 def module(name, file):
@@ -71,6 +71,7 @@ async def main(args):
     put(out / 'config.json', {'judge': 'deepseek-flash', 'thinking': 'disabled',
         'officialJudge': False, 'publishedJudge': 'gpt-5-mini', 'pin': manifest['pins']['slb'],
         'sampling': 'First held-out variant per frozen family, paired across all three arms; skill quality evaluated once per family/skill arm.',
+        'timing': 'Completed native-graded trials only in --available mode. Frozen learned library; judge output is outside every solver workspace and never fed back to learning/inference.',
         'transport': 'Pinned metric functions and exact prompts/normalizers. Local Responses-to-Chat-Completions transport facade; Pi persisted message/tool trace, with thinking blocks omitted, no truncation.',
         'variants': {k: v['id'] for k, v in tasks.items()}})
     try:
@@ -81,8 +82,12 @@ async def main(args):
                     continue
                 record_file = RUNS / f'slb-{arm}-1/records/{task["id"]}.json'
                 if not record_file.exists():
+                    if args.available:
+                        continue
                     raise ValueError(f'Agent trial missing: {record_file}')
                 record = json.loads(record_file.read_text())
+                if args.available and infrastructure_record(record):
+                    continue
                 put(ROOT / 'current.json', {'runId': f'slb-{arm}-1-judge', 'task': task['id'],
                                              'arm': arm, 'purpose': 'judge'})
                 note(f'judge {arm}/{family} start')
@@ -131,4 +136,5 @@ async def main(args):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
+    p.add_argument('--available', action='store_true', help='Judge only completed native-graded trials; skip missing/infrastructure records')
     asyncio.run(main(p.parse_args()))

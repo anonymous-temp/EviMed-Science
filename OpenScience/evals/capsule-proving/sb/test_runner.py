@@ -11,6 +11,21 @@ from gateway import cost, request_context
 
 
 class RunnerTests(unittest.TestCase):
+    def test_capacity_order_keeps_every_task_and_alternates_benchmarks(self):
+        from execution_queue import execution_queue
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            tasks = []
+            for bench, name, seconds in [('sb', 'slow', 1800), ('sb', 'fast', 600), ('slb', 'other', 900)]:
+                path = root / name
+                path.mkdir()
+                content = f'[agent]\ntimeout_sec={seconds}\n' if bench == 'slb' else f'---\nagent:\n  timeout_sec: {seconds}\n---\nTask'
+                (path / ('task.toml' if bench == 'slb' else 'task.md')).write_text(content)
+                tasks.append({'bench': bench, 'id': name, 'family': name, 'path': str(path)})
+            actual = execution_queue({'seed': '20261111', 'tasks': tasks})
+            self.assertEqual([t['task'] for t in actual], ['fast', 'other', 'slow'])
+            self.assertEqual({t['task'] for t in actual}, {t['id'] for t in tasks})
+
     def test_ml_verifier_is_not_started_without_its_declared_storage(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
