@@ -1,11 +1,10 @@
 // Expand frozen replay results to every changed line, including lines the old category/cap filter never offered.
 // Read-only development archives; no engine API writes, ingestion, model calls or database connection.
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { serialJsonlWriter } from './pasted-recording.mjs';
+import { serialJsonlWriter, recordingInput } from './pasted-recording.mjs';
 import { removalLines } from '../../../apps/server/src/nativeMemoryRejections.mjs';
 import { lineFingerprint } from '../../../apps/server/src/nativeMemoryOverlay.mjs';
 import { instructionSourceMessage } from '../../../apps/server/src/nativeMemoryInstructionOrigin.mjs';
@@ -15,7 +14,7 @@ const write=serialJsonlWriter(path.join(out,'rows.jsonl')), cache=new Map(),runs
 const containers=JSON.parse(execFileSync('docker',['inspect','ovcand1','ovcand2','ovcand3','ovcand4'],{encoding:'utf8'}));
 const roots=new Map(containers.flatMap(c=>Object.values(c.NetworkSettings.Ports).flatMap(p=>(p??[]).map(port=>[Number(port.HostPort),c.Mounts.find(m=>m.Destination==='/app/.openviking')?.Source]))));
 let jobs=0,lines=0,offered=0;
-for await(const raw of createInterface({input:createReadStream(path.join(input,'rows.jsonl')),crlfDelay:Infinity})){
+for await(const raw of createInterface({input:recordingInput(path.join(input,'rows.jsonl')),crlfDelay:Infinity})){
  const row=JSON.parse(raw);if(!/^(r3-|r4-|p29-)/.test(row.run))throw Error('recorded_candidate_run_required');
  if(!runs.has(row.run))runs.set(row.run,JSON.parse(await readFile(`/srv/evimed/runs/${row.run}/run.json`,'utf8')));
  const run=runs.get(row.run);if(run.split!=='dev')throw Error('development_only');
