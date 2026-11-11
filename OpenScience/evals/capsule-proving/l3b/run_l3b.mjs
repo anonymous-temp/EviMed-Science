@@ -62,7 +62,8 @@ async function main() {
   if (seed.status !== 0) throw new Error(`Seed failed: ${seed.stderr.slice(-2000)}`);
   const treeDir = seed.stdout.trim().split('\n').pop();
   const commit = process.env.EVAL_TREE_COMMIT ?? 'unrecorded';
-  await atomic(`${out}/run.json`, { schema: 'l3b/1', startedAt: start, arm: args.arm, pairsSha256: digest, commit, env, args,
+  await atomic(`${out}/run.json`, { schema: 'l3b/1', startedAt: start, arm: args.arm, pairsSha256: digest, commit: prior?.commit ?? commit,
+    resumptions: prior ? [...(prior.resumptions ?? []), { at: new Date().toISOString(), commit }] : [], env, args,
     dispatch: 'LX runConversation; attended /api/agent-runs/dispatch without automated',
     treatment: args.arm === 'A' ? 'No learning conversations or memory carried; ordinary official methods unchanged' : args.arm === 'B' ? 'Same learning conversations, native memory on, method learning off' : 'Same conversations, native memory and method learning on',
     exams: 'No feedback or correction. Worker paused during exams to preserve learned-method treatment; attended native memory commits remain on except A. Repetition history may affect later exams; rep-1 and case-majority sensitivity reported.',
