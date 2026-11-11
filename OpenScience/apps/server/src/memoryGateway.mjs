@@ -197,15 +197,25 @@ async function scopedListSearch(sessions, ctx, given) {
   const result = { ...empty };
   let remaining = limit;
   for (const kind of ["memories", "resources", "skills"]) {
-    result[kind] = (Array.isArray(answer.result[kind]) ? answer.result[kind] : []).filter(hit => {
+    const hits = (Array.isArray(answer.result[kind]) ? answer.result[kind] : []).filter(hit => {
       const uri = typeof hit?.uri === "string" ? hit.uri : "";
       return !isMemorySummary(uri) && uri === absolute(uri, ctx.userRoot) && Boolean(nativeMemoryFile(uri, `${ctx.userRoot}/memories`)) && (uri === target || uri.startsWith(`${target}/`)) && !hidden(uri);
-    }).slice(0, remaining).map(hit => ({ uri: hit.uri,
-      ...(typeof hit.context_type === "string" ? { context_type: hit.context_type } : {}),
-      ...(Number.isFinite(hit.score) ? { score: hit.score } : {}), ...(Number.isInteger(hit.level) ? { level: hit.level } : {}),
-      ...(typeof hit.abstract === "string" ? { abstract: hit.abstract } : {}),
-      ...(Array.isArray(hit.tags) ? { tags: hit.tags.filter(tag => typeof tag === "string") } : {}) }));
-    remaining -= result[kind].length;
+    });
+    result[kind] = [];
+    // The vector queue can outlive a deletion or edit. Ranking identifies a candidate, never its
+    // present text: read the exact leaf before returning it, and refill past missing candidates.
+    for (let offset = 0; offset < hits.length && remaining > 0; offset += 4) {
+      const fresh = await Promise.all(hits.slice(offset, offset + 4).map(async hit => {
+        const text = await sessions.read(ctx.user.id, hit.uri).catch(() => null);
+        if (text === null) return null;
+        return { uri: hit.uri,
+          ...(typeof hit.context_type === 'string' ? { context_type: hit.context_type } : {}),
+          ...(Number.isFinite(hit.score) ? { score: hit.score } : {}), ...(Number.isInteger(hit.level) ? { level: hit.level } : {}),
+          abstract: text,
+          ...(Array.isArray(hit.tags) ? { tags: hit.tags.filter(tag => typeof tag === 'string') } : {}) };
+      }));
+      for (const hit of fresh) if (hit && remaining > 0) { result[kind].push(hit); remaining--; }
+    }
   }
   result.total = result.memories.length + result.resources.length + result.skills.length;
   return ok(result);
@@ -636,8 +646,10 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       try { uri = await ctx.checkUri(String(entry?.uri ?? '')); } catch { continue; }
       if (!nativeMemoryFile(uri, `${ctx.userRoot}/memories`) || await ctx.hidden(uri)
         || entry?.detail === 'overview' || entry?.level === 0 || entry?.level === 1) continue;
-      kept.push(context ? { uri, category: entry.category, score: entry.score, detail: entry.detail, text: String(entry.text ?? ''), origin: entry.origin }
-        : { uri, context_type: 'memory', level: entry.level, score: entry.score, abstract: String(entry.abstract ?? ''), tags: [] });
+      const text = await ctx.sessions.read(ctx.user.id, uri).catch(() => null);
+      if (text === null) continue;
+      kept.push(context ? { uri, category: entry.category, score: entry.score, detail: entry.detail, text, origin: entry.origin }
+        : { uri, context_type: 'memory', level: entry.level, score: entry.score, abstract: text, tags: [] });
     }
     if (!context) return ok({ memories: kept, resources: [], skills: [], total: kept.length });
     const rendered = kept.map(entry => `<memory uri="${entry.uri}" type="${nativeMemoryFile(entry.uri, `${ctx.userRoot}/memories`)?.type ?? 'memories'}">\n${entry.text}\n</memory>`).join('\n');

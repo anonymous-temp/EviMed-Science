@@ -13,6 +13,9 @@ const { options, fixture } = nativeIntegration();
 
 async function setup(t, retrievalV2 = false) {
   const f = await fixture(t);
+  // Backfill scans the shared test database. Finished fixtures must not occupy its four-row lease
+  // window and be resolved through the next test's separate stub engine.
+  t.after(() => f.database.query('DELETE FROM evimed_control.users WHERE id=$1', [f.userId]));
   const files = new Map(); const calls = []; let failWrite = false; let failRemove = false; let duringWrite = null;
   const resources = {
     async writeHistory(_owner, uri, content) { new OpenVikingResources({client:{}}).historyAddress(uri,{file:true}); calls.push(['write', uri]); if (failWrite) throw new Error('write unavailable'); files.set(uri, content); if (duringWrite) await duringWrite(); },
@@ -28,7 +31,7 @@ async function setup(t, retrievalV2 = false) {
     resourcesFor: () => resources, resolveSource: async (c, _ctx) => ({ projectId: c.projectId, projectCreatedAt: '2026-01-01T00:00:00Z', sessionId: c.engineSession?.slice(4), conversationTitle: 'Kidney trial', conversationUrl: '/app/projects/default?session=session_a' }),
     eligible: async () => true, admitMessage: async () => true,
   });
-  const archive = await f.commitConversation('a', [{ role: 'user', text: 'I prefer trial tables.', at: new Date(Date.now() + 1000).toISOString() }, { role: 'assistant', text: 'I suggest weekly analyses.' }], { projectId: 'default' });
+  const archive = await f.commitConversation('a', [{ role: 'user', text: 'I prefer trial tables.', at: '2026-01-02T00:00:00.000Z' }, { role: 'assistant', text: 'I suggest weekly analyses.' }], { projectId: 'default' });
   const commit = { userId: f.userId, projectId: 'default', engineSession: archive.session, archiveUri: archive.archive_uri, origin: 'gateway' };
   return { ...f, context, ledger, service, files, calls, commit, resources, failWrites: x => { failWrite = x; }, failDeletes: x => { failRemove = x; }, onWrite: x => { duringWrite = x; } };
 }
@@ -794,3 +797,31 @@ test('a retried remember extraction retains the calling conversation and its del
   await f.store.forgetFile(f.userId,(await f.store.files(f.userId)).find(file=>file.uri===uri),{keepText:true});
   assert.ok(!(await search(f)).some(hit=>hit.sessionId==='session_replaycaller'));
 });
+
+for (const spelling of ['M-31025', 'ｍ＿３１０２５', 'm 31025']) {
+  test(`page removal fences the original remember conversation with an extraction-added minute (${spelling}), while a new conversation remains recallable`, options, async t => {
+    const f = await setup(t); f.store.history = f.service;
+    const at = '2026-11-11T03:30:01.687Z', fresh = '2099-01-01T03:30:00.000Z';
+    const text = `Please remember: I parked at ${spelling}.`;
+    const archive = await f.commitConversation('parked', [{ role: 'user', text, at }], { projectId: 'default' });
+    const commit = { userId: f.userId, projectId: 'default', engineSession: archive.session, archiveUri: archive.archive_uri, origin: 'gateway' };
+    await f.service.ingestArchive(commit, f.context);
+    const tool = await f.commitConversation('tool-parked', [{ role: 'user', text, at }], { projectId: 'default', engineSession: 'mcp-store-parked', origin: 'tool' });
+    await f.worker.processCommits({ userId: f.userId });
+    const body = '- Parked at M-31025 (2026-11-11 03:30).\n- Bring an umbrella.';
+    const uri = f.seed('notes/parking.md', body, { type: 'notes' });
+    await f.overlay.syncOrigins(f.userId, uri, { after: body, origin: { archiveUri: tool.archive_uri, engineSession: tool.session, projectId: 'default' } });
+    const record = await f.store.getRecord(f.userId, nativeFileId(uri));
+    await f.store.update(f.userId, record.id, { value: '- Bring an umbrella.', expectedVersion: record.version });
+    const request = { user: { id: f.userId }, project: { id: 'default', userId: f.userId }, query: 'M-31025', limit: 20 };
+    assert.deepEqual(await f.service.search(request), [], 'the old conversation is fenced before any restatement');
+    const fences = (await f.database.query('SELECT archive_uri FROM evimed_memory.history_message_rejections WHERE owner_id=$1', [f.userId])).rows;
+    assert.ok(fences.some(row => row.archive_uri === archive.archive_uri));
+    const next = await f.commitConversation('parked-new', [{ role: 'user', text, at: fresh }], { projectId: 'default' });
+    await f.service.ingestArchive({ ...commit, engineSession: next.session, archiveUri: next.archive_uri }, f.context);
+    const hits = await f.service.search(request);
+    assert.ok(hits.length > 0);
+    assert.ok(hits.every(hit => hit.sessionId === next.session.slice(4)), 'only the new conversation supplies restated words');
+    assert.equal((await f.service.search({ ...request, query: 'umbrella' })).some(hit => hit.sessionId === archive.session.slice(4)), false);
+  });
+}

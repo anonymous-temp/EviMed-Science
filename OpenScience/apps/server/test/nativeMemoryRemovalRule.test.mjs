@@ -3,6 +3,7 @@ import test from 'node:test';
 import { lineRefusal } from '../src/nativeMemoryWorker.mjs';
 import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { removalLines, removalRefusals } from '../src/nativeMemoryRejections.mjs';
+import { hardTokens, sourceHasToken } from '../src/nativeMemoryHardTokens.mjs';
 
 const removal = { fingerprint: lineFingerprint('Project M-41633.'), text: 'Project M-41633.', rejectedAt: '2026-11-10T10:00:00.000Z' };
 const overlay = { removals: async () => [removal] };
@@ -50,4 +51,28 @@ test('a message timestamp grounds its provenance date when relearning, without l
 test('removal refusals preserve the existing never-kept precedence for secret-shaped body lines', () => {
   const text = 'ID 110101199001011237';
   assert.equal(lineRefusal(text, new Map([[lineFingerprint(text), 'rejected_reworded']])), 'identifier_shape');
+});
+
+for (const spelling of ['M-41633', 'm_41633', 'm 41633', 'Ｍ＿４１６３３', 'Ｍ－４１６３３']) {
+  test(`hard-token removal and source authority share normalized identifier spelling: ${spelling}`, async () => {
+    const candidate = { text: `Project ${spelling}.` };
+    assert.equal((await removalRefusals({ userId: 'u', overlay, candidates: [candidate] })).size, 1);
+    assert.equal((await removalRefusals({ userId: 'u', overlay, candidates: [{ ...candidate, sources: [source(`Project ${spelling}.`)] }] })).size, 0);
+    const reverse = { removals: async () => [{ ...removal, text: candidate.text }] };
+    assert.equal((await removalRefusals({ userId: 'u', overlay: reverse, candidates: [{ text: 'Project M-41633.' }] })).size, 1);
+  });
+}
+
+test('extraction-added clock time is grounded only by the matching original timestamp', async () => {
+  const guard = { removals: async () => [{ ...removal, text: 'Parked at M-41633 (2026-11-10 11:00).' }] };
+  const text = 'Parked at M-41633 (2026-11-10 11:00).';
+  assert.equal((await removalRefusals({ userId: 'u', overlay: guard, candidates: [{ text, sources: [source('Parked at M-41633.')] }] })).size, 0);
+  assert.equal((await removalRefusals({ userId: 'u', overlay: guard, candidates: [{ text, sources: [source('Parked at M-41633.', '2026-11-10T11:01:00.000Z')] }] })).size, 1);
+});
+
+test('a clock time before Chinese provenance words remains one token, grounded in the original message', () => {
+  const tokens = hardTokens('用户把车停在 M-31025 车位（2026-11-11 03:30 会话中告知）。');
+  assert.deepEqual(tokens, ['m-31025', '2026-11-11', '03:30']);
+  const original = { text: '请帮我记住：我把车停在M-31025车位，回来的时候提醒我带伞。', created_at: '2026-11-11T03:30:01.687Z' };
+  assert.ok(tokens.every(token => sourceHasToken(token, original)));
 });

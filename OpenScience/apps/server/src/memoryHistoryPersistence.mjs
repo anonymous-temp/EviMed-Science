@@ -143,29 +143,39 @@ export class MemoryHistoryLedger {
    * rows. Keyset pages cover the complete namespace; overflow is unavailable,
    * never a truncated privacy list. No PostgreSQL character-class substitute.
    */
-  async rejected(context, texts, archiveUri = null) {
+  async rejected(context, texts, archiveUri = null, messages = []) {
     await this.migrate();
     const types = (context.kind === 'geo-project' ? OPENVIKING_PROJECT_MEMORY_TYPES : OPENVIKING_MEMORY_TYPES)
       .map(type => nativeMemoryRejectionType(type, context.kind === 'geo-project' ? context.namespaceId : null));
     // A one-shot remember/page archive can duplicate a conversation capture.
     // Only exact complete-message hashes bridge those copies; a shared number never does.
-    if (archiveUri && (await this.database.query(`SELECT 1 FROM evimed_memory.history_message_rejections h
+    const freshlyStated = (text, at) => messages.some(message => message.role === 'user'
+      && lineFingerprint(message.text) === lineFingerprint(text)
+      && Date.parse(message.created_at ?? '') > Date.parse(at instanceof Date ? at.toISOString() : at));
+    if (archiveUri) for (const row of (await this.database.query(`SELECT h.archive_uri,h.message_hash,r.rejected_at FROM evimed_memory.history_message_rejections h
       JOIN evimed_memory.native_rejections r ON r.user_id=h.owner_id AND r.memory_type=h.memory_type AND r.fingerprint=h.fingerprint
       WHERE h.owner_id=$1 AND h.owner_created_at=$2 AND h.namespace_id=$3 AND (h.archive_uri=$4 OR h.archive_uri ~ '/sessions/(mcp-store-|evimed-page-)')
-      AND h.message_hash=ANY($5::text[]) LIMIT 1`,
-      [context.ownerId,context.ownerCreatedAt,context.namespaceId,archiveUri,texts.map(lineFingerprint)])).rows.length) return true;
+      AND h.message_hash=ANY($5::text[])`,
+      [context.ownerId,context.ownerCreatedAt,context.namespaceId,archiveUri,texts.map(lineFingerprint)])).rows) {
+      // Exact old-archive fences never move. A synthetic copy's hash cannot fence a new human
+      // statement forever: use the verified original message's date, never commit/scan time.
+      if (row.archive_uri === archiveUri || texts.some(text => lineFingerprint(text) === row.message_hash
+        && !freshlyStated(text, row.rejected_at))) return true;
+    }
     const prints = new Set(texts.flatMap(text => text.split('\n')).map(normalisedStatement).filter(Boolean).map(lineFingerprint));
     const candidates = texts.map(compact);
     let type = '', fingerprint = '', count = 0;
     for (;;) {
-      const result = await this.database.query(`SELECT memory_type,fingerprint,text FROM evimed_memory.native_rejections
+      const result = await this.database.query(`SELECT memory_type,fingerprint,text,rejected_at FROM evimed_memory.native_rejections
         WHERE user_id=$1 AND memory_type=ANY($2::text[]) AND (memory_type,fingerprint)>($3,$4)
         ORDER BY memory_type,fingerprint LIMIT 500`, [context.ownerId,types,type,fingerprint]);
       for (const row of result.rows) {
         if (++count > 10000) throw new Error('memory_history_privacy_unavailable');
-        if (prints.has(row.fingerprint)) return true;
         const removed = typeof row.text === 'string' ? compact(row.text) : '';
-        if (removed && candidates.some(candidate => candidate.includes(removed))) return true;
+        if ((prints.has(row.fingerprint) || removed && candidates.some(candidate => candidate.includes(removed)))
+          && texts.some(text => !freshlyStated(text,row.rejected_at)
+            && (text.split('\n').some(line => lineFingerprint(normalisedStatement(line)) === row.fingerprint)
+              || removed && compact(text).includes(removed)))) return true;
       }
       if (result.rows.length < 500) return false;
       const last = result.rows.at(-1); type = last.memory_type; fingerprint = last.fingerprint;

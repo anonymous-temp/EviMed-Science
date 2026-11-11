@@ -310,7 +310,7 @@ export class MemoryHistory {
     const removedIndices = new Set();
     for (const [index,message] of messages.entries()) {
       const text = messageText(message,this.secretRedaction);
-      if (text && await this.ledger.rejected(context,[text],commit.archiveUri)) removedIndices.add(sourceIndices[index]);
+      if (text && await this.ledger.rejected(context,[text],commit.archiveUri,[{role:message.role,text,created_at:message.created_at}])) removedIndices.add(sourceIndices[index]);
     }
     const safeMessages = this.secretRedaction ? messages.map(message => {
       const captured = filterCapturedMessage(message,{ semanticSecrets:this.secretRedaction });
@@ -326,7 +326,7 @@ export class MemoryHistory {
       const meta = { ownerId: context.ownerId, ownerCreatedAt: context.ownerCreatedAt, namespaceId: context.namespaceId, projectId: source.projectId,
         projectCreatedAt: source.projectCreatedAt, sessionId: source.sessionId, archiveUri: commit.archiveUri, uri, minimumDate };
       const body = JSON.stringify({ messages: chunk.messages });
-      if (chunk.messages.some(message => removedIndices.has(message.index)) || await this.ledger.rejected(context, chunk.messages.map(message => message.text),commit.archiveUri)) { rejected++; continue; }
+      if (chunk.messages.some(message => removedIndices.has(message.index))) { rejected++; continue; }
       if (await this.ledger.alreadyIndexed(meta, hash(body))) { indexed++; continue; }
       if (!await this.ledger.reserve(meta, hash(body))) { refused++; continue; }
       await resources.writeHistory(context.ownerId, uri, body);
@@ -434,7 +434,8 @@ export class MemoryHistory {
           .some(chunk=>chunk.messages.some(part=>part.text.includes(redact(message.text))));
       });
       if (!proven) return null;
-      if (!forRemoval && await this.ledger.rejected(context,originalTexts,meta.archive_uri)) return null;
+      if (!forRemoval && await this.ledger.rejected(context,originalTexts,meta.archive_uri,
+        touched.map(message=>({role:message.role,text:messageText(message,this.secretRedaction)??'',created_at:message.created_at})))) return null;
       let title = historyTitle(verified.conversationTitle,'Conversation',this.secretRedaction);
       let projectTitle = historyTitle(verified.projectTitle ?? verified.project?.name,'Project',this.secretRedaction);
       if (await this.ledger.rejected(context,[title])) title='Conversation';

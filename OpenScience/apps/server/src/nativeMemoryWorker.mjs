@@ -11,6 +11,7 @@ import {
 } from "./nativeMemoryMetrics.mjs";
 import { NativeMemoryObservations } from "./nativeMemoryObservations.mjs";
 import { neutralMemoryUri, removalLines, removalRefusals, removalText } from "./nativeMemoryRejections.mjs";
+import { memoryNameVariants } from './nativeMemoryHardTokens.mjs';
 import { NativeMemoryVerification, originalSources, replaceStatement } from './nativeMemoryVerification.mjs';
 import { SOURCE_LABEL_PREFIX, sourcesNamedIn } from "./nativeMemoryStore.mjs";
 import { OPENVIKING_MEMORY_TYPES } from "./openVikingLayout.mjs";
@@ -987,9 +988,11 @@ export class NativeMemoryWorker {
       // Material is never a human restatement that authorizes removed content, even when its words occur in a user message.
       candidates.push({ text, sources: pastedInstructions.has(`${uri}\u0000${lineFingerprint(text)}`) ? [] : [...archive, ...sources, ...inherited] });
     }
-    const filename = uri.slice(uri.lastIndexOf('/') + 1).replace(/\.md$/, '');
-    const filenameVariants = [...new Set([filename, filename.replace(/_/g, ' ')])];
-    if (!priorBody) candidates.push(...filenameVariants.map(text => ({ text, sources: [...archive, ...inherited] })));
+    const filenameVariants = memoryNameVariants(uri);
+    // An existing path can outlive the content removed from it. Check names on updates too, using
+    // this file's original sources so a later human restatement keeps its authority across edits.
+    const nameSources = await this.verification.readRemovalSources(userId, [...origins.values()].flatMap(originalSources), memoryContext, cache);
+    candidates.push(...filenameVariants.map(text => ({ text, sources: [...archive, ...inherited, ...nameSources] })));
     const matches = await removalRefusals({ userId, projectId, overlay: this.overlay,
       namespaceId: memoryContext.kind === 'geo-project' ? memoryContext.namespaceId : null,
       judge: this.rejectionJudge, candidates });
@@ -1032,7 +1035,7 @@ export class NativeMemoryWorker {
         return null;
       }
     }
-    if (!priorBody && filenameVariants.some(text => matches.has(lineFingerprint(text)))) {
+    if (filenameVariants.some(text => matches.has(lineFingerprint(text)))) {
       if (!cleaned.hasStatements) {
         await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.remove(userId, uri));
         await this.overlay.addRevision({ userId, uri, memoryType: type, change: 'deleted', actor: 'platform', reason: 'rejected_filename', before: current, after: null, projectId });
