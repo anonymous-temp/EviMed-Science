@@ -12,6 +12,32 @@ const withJudge = (f, check) => new NativeMemoryWorker({ ...f, nativeMemory: f.s
 const verdict = (input, decision = 'remove') => ({ requests: [{ message: 0, quote: 'Forget that project.', decision,
   targets: input.candidates.flatMap((row, i) => row.text === fact ? [i] : []), intents: [] }], claims: [{ message: 1, quote: 'Forgotten.' }] });
 
+test('a repeated withdrawal repairs an invented extra quote without creating another removal', options, async t => {
+  const f = await fixture(t, { config: { memoryForgetRequestCheckEnabled: true } });
+  const uri = f.seed('notes/test.md', fact);
+  await f.store.forgetLines(f.userId, (await f.store.rawFiles(f.userId)).find(file => file.uri === uri), [fact]);
+  const before = await f.overlay.removals(f.userId);
+  let calls = 0;
+  const judge = createForgetRequestJudge({ config: { memoryForgetRequestCheckEnabled: true, deepseekModel: 'test', deepseekApiKey: 'test-key' },
+    callModel: async (_deps, request) => {
+      const input = JSON.parse(request.body.messages[1].content);
+      const target = input.candidates.find(row => row.removed);
+      return { choices: [{ message: { content: JSON.stringify({ requests: [{ message: 0, quote: 'Forget that project.', decision: 'remove',
+        targets: [target.candidate], intents: ++calls === 1 ? [{ message: 0, quote: fact }] : [] }], claims: [] }) } }] };
+    } });
+  const worker = new NativeMemoryWorker({ ...f, nativeMemory: f.store, forgetRequestJudge: judge });
+  const committed = await f.commitConversation('repeat', [{ role: 'user', text: 'Forget that project.' }]);
+  await worker.processCommits({ userId: f.userId });
+  const request = (await f.overlay.commit(f.userId, committed.archive_uri)).extraction.forgetRequests.requests[0];
+  assert.equal(request.status, 'completed');
+  assert.equal(calls, 2);
+  assert.equal(request.removed, 0);
+  assert.equal(request.alreadyRemoved, 1);
+  assert.deepEqual(request.intents, []);
+  assert.deepEqual(await f.overlay.removals(f.userId), before);
+  assert.equal(await f.sessions.read(f.userId, uri), null);
+});
+
 test('off does not judge or remove', options, async t => {
   const f = await fixture(t), uri = f.seed('notes/test.md', fact);
   const worker = withJudge(f, () => { throw new Error('must not call'); });

@@ -15,11 +15,15 @@ const keyOf = (context, session) => `gnms_${createHash('sha256').update(canonica
 /** Resolve only canonical, registered engine roots. The public gateway expands
  * its own-space alias before calling this helper; a URI never chooses an owner.
  */
-function canonicalUri(uri) {
+function canonicalUri(uri, allowLiteralPercentPaths = false) {
   if (typeof uri !== 'string' || uri.length > 4000 || hasControl(uri) || !/^viking:\/\/user\/[A-Za-z0-9_-]+(?:\/[^?#\\]+)*$/.test(uri)) throw refused();
-  for (const part of uri.slice('viking://user/'.length).split('/')) {
+  const parts = uri.slice('viking://user/'.length).split('/');
+  const literalPercent = allowLiteralPercentPaths && parts[1] === 'memories';
+  for (const part of parts) {
     let decoded;
-    try { decoded = decodeURIComponent(part); } catch { throw refused(); }
+    // Engine filenames can contain a literal percentage. Preserve valid escapes and
+    // all traversal/control checks; only a percent that starts no escape is literal.
+    try { decoded = decodeURIComponent(literalPercent ? part.replace(/%(?![0-9a-f]{2})/gi, '%25') : part); } catch { throw refused(); }
     if (!part || decoded === '.' || decoded === '..' || /[/\\]/.test(decoded) || hasControl(decoded) || /%[0-9a-f]{2}/i.test(decoded)) throw refused();
   }
   return uri;
@@ -30,9 +34,10 @@ function canonicalUri(uri) {
  * independently proved every time; a saved binding is history, not permission.
  */
 export class GeoNativeMemoryContext {
-  constructor({ database, documents, policies, sessions, proveCapture = null, settingsForOwner = null }) {
+  constructor({ database, documents, policies, sessions, proveCapture = null, settingsForOwner = null, allowLiteralPercentPaths = false }) {
     this.database = database; this.documents = documents; this.policies = policies;
     this.sessions = sessions; this.proveCapture = proveCapture; this.settingsForOwner = settingsForOwner;
+    this.allowLiteralPercentPaths = allowLiteralPercentPaths === true;
   }
 
   view(ownerId, ownerCreatedAt, policy = null, projectId = null, projectCreatedAt = null) {
@@ -69,14 +74,14 @@ export class GeoNativeMemoryContext {
   }
 
   async forUri(ownerId, value) {
-    const uri = canonicalUri(value), contexts = await this.all(ownerId);
+    const uri = canonicalUri(value, this.allowLiteralPercentPaths), contexts = await this.all(ownerId);
     const context = contexts.find(item => uri === item.userRoot || uri.startsWith(`${item.userRoot}/`));
     if (!context) throw refused();
     return context;
   }
 
   assertUri(context, value) {
-    const uri = canonicalUri(value);
+    const uri = canonicalUri(value, this.allowLiteralPercentPaths);
     if (uri !== context.userRoot && !uri.startsWith(`${context.userRoot}/`)) throw refused();
     return uri;
   }

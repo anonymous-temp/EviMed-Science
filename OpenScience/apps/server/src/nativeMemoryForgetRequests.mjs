@@ -62,11 +62,21 @@ export function createForgetRequestJudge({ config, usageLedger = null, fetchImpl
         candidates: candidates.map((row, candidate) => ({ candidate, document: row.document ?? null, text: row.text, removed: row.removed === true })),
         conversation: conversation.map((row, message) => ({ message, role: row.role, text: row.text })) });
       if (input.length > 240_000) throw new Error('forget_request_input_limit');
-      const response = await callModel({ config, usageLedger, fetchImpl }, { userId, projectId: projectId || 'default', purpose: 'memory-extraction',
+      const request = { userId, projectId: projectId || 'default', purpose: 'memory-extraction',
         signal: AbortSignal.timeout(Math.min(120_000, Math.max(1000, config.memoryExtractionTimeoutMs || 30_000))),
         body: { model, thinking: { type: 'disabled' }, temperature: 0, max_tokens: 4096, response_format: { type: 'json_object' },
-          messages: [{ role: 'system', content: INSTRUCTION }, { role: 'user', content: input }] } });
-      const result = parseForgetRequestJudgement(response?.choices?.[0]?.message?.content, candidates, conversation);
+          messages: [{ role: 'system', content: INSTRUCTION }, { role: 'user', content: input }] } };
+      const response = await callModel({ config, usageLedger, fetchImpl }, request);
+      let result = parseForgetRequestJudgement(response?.choices?.[0]?.message?.content, candidates, conversation);
+      if (!result) {
+        // One repair of the structured answer, never relaxed validation or a guessed target.
+        const repaired = await callModel({ config, usageLedger, fetchImpl }, { ...request,
+          signal: AbortSignal.timeout(Math.min(120_000, Math.max(1000, config.memoryExtractionTimeoutMs || 30_000))),
+          body: { ...request.body, messages: [...request.body.messages,
+            { role: 'assistant', content: String(response?.choices?.[0]?.message?.content ?? '').slice(0, 20_000) },
+            { role: 'user', content: 'Your JSON failed validation. Every quote must be a verbatim contiguous substring of its referenced conversation message, not a paraphrase or a candidate\'s text. Candidate targets identify stored lines; use an empty intents array when those targets suffice. Re-read the provided data and return a complete corrected JSON object with the required shape and offered indexes. Do not add or broaden deletion targets to repair formatting.' }] } });
+        result = parseForgetRequestJudgement(repaired?.choices?.[0]?.message?.content, candidates, conversation);
+      }
       if (!result) throw new Error('forget_request_judge_invalid');
       const offered = result.requests.flatMap((row, request) => row.decision !== 'remove' ? [] : row.targets
         .filter(candidate => !candidates[candidate].removed).map(candidate => ({ request, candidate, requestQuote: row.quote,

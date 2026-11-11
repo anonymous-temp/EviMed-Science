@@ -33,6 +33,31 @@ test('judge uses json_object and control-plane billing, and defaults off', async
   assert.equal(called, 2);
 });
 
+test('invalid quotes get one structured repair with unchanged validation', async () => {
+  const input = structuredClone(valid);
+  input.requests[0].intents = [{ message: 0, quote: 'A different detail absent from this turn.' }];
+  assert.equal(parseForgetRequestJudgement(JSON.stringify(input), candidates, conversation), null);
+  const removed = [{ ...candidates[0], removed: true }];
+  assert.equal(parseForgetRequestJudgement(JSON.stringify(input), removed, conversation), null);
+  const config = { memoryForgetRequestCheckEnabled: true, deepseekModel: 'test', deepseekApiKey: 'test-key' };
+  let calls = 0;
+  const judge = createForgetRequestJudge({ config, callModel: async (_deps, request) => {
+    calls++;
+    assert.deepEqual(request.body.response_format, { type: 'json_object' });
+    if (calls === 2) assert.match(request.body.messages.at(-1).content, /verbatim contiguous substring/);
+    return { choices: [{ message: { content: JSON.stringify(calls === 1 ? input : valid) } }] };
+  } });
+  assert.deepEqual(await judge.check({ userId: 'u', candidates: removed, conversation }), valid);
+  assert.equal(calls, 2);
+  calls = 0;
+  const invalid = createForgetRequestJudge({ config, callModel: async () => {
+    calls++;
+    return { choices: [{ message: { content: JSON.stringify(input) } }] };
+  } });
+  await assert.rejects(invalid.check({ userId: 'u', candidates: removed, conversation }), /forget_request_judge_invalid/);
+  assert.equal(calls, 2, 'an invalid repair never becomes deletion authority');
+});
+
 test('the whole-line reviewer must cover exactly the offered pairs and can only narrow the removal', async () => {
   const offered = [{ request: 0, candidate: 0 }];
   for (const value of [{ targets: [] }, { targets: [{ request: 0, candidate: 1, decision: 'remove' }] }, { targets: [null] }]) {

@@ -1377,6 +1377,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The registered memory namespaces of an account: its own, and each shared GEO project's (`geoNativeMemoryContext.mjs`).
   const nativeMemoryContexts = productDatabase && sharedContextPolicies ? new GeoNativeMemoryContext({ database: productDatabase,
     documents: productDocuments, policies: sharedContextPolicies, sessions: openVikingSessions,
+    allowLiteralPercentPaths: config.memoryForgetRequestCheckEnabled === true,
     proveCapture: (memoryContext, sessionId) => proveGeoCapture({ userId: memoryContext.ownerId, id: memoryContext.projectId }, platformSessionOf(sessionId)),
     settingsForOwner: userId => memorySettings.settings(userId) }) : null;
   const nativeRememberJournal = nativeMemoryContexts ? new GeoNativeMemoryRemember({ contexts: nativeMemoryContexts, overlay: nativeMemoryOverlay }) : null;

@@ -503,6 +503,7 @@ export async function openLab({
     const admission = createMemoryAdmission({ config, memorySettings });
     const contexts = new GeoNativeMemoryContext({
       database, documents: null, sessions, proveCapture: null, settingsForOwner: (userId) => memorySettings.settings(userId),
+      allowLiteralPercentPaths: config.memoryForgetRequestCheckEnabled === true,
       // Every project of a lab account is an ordinary owned one: no shared GEO namespace exists here.
       policies: { forProject: async () => ({ kind: "owned" }), policiesForOwner: async () => [], read: () => { throw new Error("no shared namespace in the lab"); } },
     });
