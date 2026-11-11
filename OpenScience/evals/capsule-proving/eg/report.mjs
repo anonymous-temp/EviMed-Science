@@ -136,16 +136,25 @@ async function g10() {
   for (const p of pairs) for (const arm of ['empty', 'seeded']) p[arm].metrics.totalTokens = p[arm].metrics.inputTokens + p[arm].metrics.outputTokens;
   const summary = held => ({ empty: prop(held.map(p => p.empty.status === 'pass')), seeded: prop(held.map(p => p.seeded.status === 'pass')),
     pairedPass: pairedBinary(held.map(p => Number(p.seeded.status === 'pass') - Number(p.empty.status === 'pass'))),
-    metrics: Object.fromEntries(['toolCalls', 'inputTokens', 'outputTokens', 'totalTokens'].map(k => [k, { empty: mean(held.map(p => p.empty.metrics[k])), seeded: mean(held.map(p => p.seeded.metrics[k])),
+    metrics: Object.fromEntries(['toolCalls', 'toolCallsTranscript', 'inputTokens', 'outputTokens', 'totalTokens'].map(k => [k, { empty: mean(held.map(p => p.empty.metrics[k])), seeded: mean(held.map(p => p.seeded.metrics[k])),
       emptyCi95: paired(held.map(p => p.empty.metrics[k])).ci95, seededCi95: paired(held.map(p => p.seeded.metrics[k])).ci95,
       paired: paired(held.map(p => p.seeded.metrics[k] - p.empty.metrics[k])) }])) });
   const seedCoverage = [];
+  const toolAvailability = {};
+  for (const arm of ['empty', 'seeded']) {
+    const records = [];
+    for (const file of await fs.readdir(`${args[arm]}/records`).catch(() => [])) if (file.endsWith('.json')) records.push(await read(`${args[arm]}/records/${file}`));
+    toolAvailability[arm] = { records: records.length, firstRequestHadMemoryTools: records.filter(r => r.firstRequest?.hadMemoryTools).length,
+      ledgerTranscriptDiscrepancies: pairs.filter(p => p[arm].metrics.toolCalls !== p[arm].metrics.toolCallsTranscript).map(p => p.caseId) };
+  }
   for (const unit of await fs.readdir(`${args.seeded}/units`).catch(() => [])) {
     const seed = await read(`${args.seeded}/units/${unit}/seed.json`);
     if (seed) seedCoverage.push({ unit, statements: seed.statements.length, files: seed.snapshot.metrics.files, settled: !seed.commits.timedOut });
   }
   const result = { planned: 29, completed: pairs.length, complete: pairs.length === 29, ...summary(pairs),
-    general: summary(pairs.filter(p => p.caseId.startsWith('G'))), medical: summary(pairs.filter(p => p.caseId.startsWith('M'))), seedCoverage, pairs,
+    general: summary(pairs.filter(p => p.caseId.startsWith('G'))), medical: summary(pairs.filter(p => p.caseId.startsWith('M'))), seedCoverage, toolAvailability, pairs,
+    extraCallsOnPreviouslyToolFreeCases: pairs.filter(p => p.empty.metrics.toolCallsTranscript === 0 && p.seeded.metrics.toolCallsTranscript > 0)
+      .map(p => ({ caseId: p.caseId, seededCalls: p.seeded.metrics.toolCallsTranscript, seededTools: p.seeded.metrics.toolNames })),
     modelSatisfaction: { empty: prop(pairs.map(p => model.empty[p.caseId]?.verdict === 'satisfied')), seeded: prop(pairs.map(p => model.seeded[p.caseId]?.verdict === 'satisfied')),
       judged: Object.fromEntries(['empty', 'seeded'].map(arm => [arm, pairs.filter(p => ['satisfied', 'not_satisfied'].includes(model[arm][p.caseId]?.verdict)).length])),
       paired: pairedBinary(pairs.map(p => Number(model.seeded[p.caseId]?.verdict === 'satisfied') - Number(model.empty[p.caseId]?.verdict === 'satisfied'))),
@@ -155,6 +164,8 @@ async function g10() {
     `Empty: ${fmtProp(result.empty)}. Seeded: ${fmtProp(result.seeded)}. Difference: ${fmtPair(result.pairedPass)}.`, '',
     '| Case | Empty / seeded pass | Tool calls empty / seeded | Tokens empty / seeded |', '|---|---|---|---|',
     ...pairs.map(p => `| ${p.caseId} | ${p.empty.status} / ${p.seeded.status} | ${p.empty.metrics.toolCalls} / ${p.seeded.metrics.toolCalls} | ${p.empty.metrics.totalTokens} / ${p.seeded.metrics.totalTokens} |`), '',
+    `Extra tool calls on cases observed tool-free without seeds: ${JSON.stringify(result.extraCallsOnPreviouslyToolFreeCases)}. This is a paired observation, not a preclassified semantic subset.`, '',
+    `First-request memory-tool availability and ledger/transcript count cross-check: ${JSON.stringify(toolAvailability)}.`, '',
     'Seed ingestion is setup and excluded from task token/tool means. Both arms retain the memory plugin. A non-significant difference is not proof of non-inferiority.'];
   await fs.writeFile(`${args.out}/g10.md`, md.join('\n') + '\n');
   return result;
