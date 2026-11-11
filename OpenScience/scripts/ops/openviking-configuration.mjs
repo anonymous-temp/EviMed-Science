@@ -74,10 +74,10 @@ export const OPENVIKING_MODEL_GATEWAY_URL = "http://open-science-web:8787/intern
  * generated the file in one environment and checked it in another would be told their credentials had drifted, about
  * a file that was correct.
  *
- * @param {{ rootApiKey: string, embeddingApiKey: string, modelKey: string, pin: any, modelGatewayUrl?: string }} input
+ * @param {{ rootApiKey: string, embeddingApiKey: string, modelKey: string, pin: any, modelGatewayUrl?: string, safetyNotes?: boolean }} input
  *   `modelGatewayUrl` exists for a lab instance that reaches a control plane on the host; production never passes it.
  */
-export function expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, modelKey, pin, modelGatewayUrl = OPENVIKING_MODEL_GATEWAY_URL }) {
+export function expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, modelKey, pin, modelGatewayUrl = OPENVIKING_MODEL_GATEWAY_URL, safetyNotes = false }) {
   const dimension = pin.embedding.dimension;
   // The gateway replaces the name with the model the deployment certifies; this is what a log line of the engine shows.
   const model = "deepseek-flash";
@@ -132,7 +132,7 @@ export function expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, m
       auth_mode: "trusted",
       root_api_key: rootApiKey,
       user_config_defaults: {
-        memory_policy: { memory_types: [...OPENVIKING_MEMORY_TYPES] },
+        memory_policy: { memory_types: [...OPENVIKING_MEMORY_TYPES, ...(safetyNotes ? ["safety_notes"] : [])] },
         auto_commit_policy: { idle_timeout_seconds: 900, pending_token_threshold: 150_000, message_count_threshold: 100 },
       },
     },

@@ -1366,6 +1366,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // what the engine has no place for. Both exist whenever their dependency does; whether memory is on at all is whether the engine
   // is configured here (`config.memoryEngineEnabled`).
   const openVikingSessions = overrides.openVikingSessions ?? new OpenVikingSessions(openVikingClient, {
+    safetyNotes: config.memorySafetyNotesEnabled === true,
     timeoutMs: config.memoryGatewayTimeoutMs, fastTimeoutMs: Math.round(Number(config.memoryGatewayTimeoutMs ?? 4_000) / 3),
   });
   if (productDatabase) {

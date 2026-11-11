@@ -8,7 +8,7 @@ import { HttpError } from "./security.mjs";
 
 /** The catch-all project: it has no single subject, so its files are no project's (`residentProfile.mjs` names it the same). */
 const CATCH_ALL_PROJECT_ID = "default";
-import { OPENVIKING_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES, userRootUri } from './openVikingLayout.mjs';
+import { OPENVIKING_KNOWN_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES, userRootUri } from './openVikingLayout.mjs';
 
 /**
  * The overlay store of the native memory engine (`nativeMemoryPersistence.mjs` says what it holds and why).
@@ -91,7 +91,7 @@ function scopedRoot(value) {
 
 /** Rejections share the existing table but never cross native namespaces. */
 export function nativeMemoryRejectionType(memoryType, namespaceId = null) {
-  if (!OPENVIKING_MEMORY_TYPES.includes(memoryType) || namespaceId !== null && !/^gp-[a-f0-9]{24}$/.test(namespaceId)) {
+  if (!OPENVIKING_KNOWN_MEMORY_TYPES.includes(memoryType) || namespaceId !== null && !/^gp-[a-f0-9]{24}$/.test(namespaceId)) {
     throw new HttpError(403, 'memory_scope_denied', 'The memory rejection scope is invalid.');
   }
   return namespaceId === null ? memoryType : `${namespaceId}:${memoryType}`;
@@ -1221,7 +1221,7 @@ export class NativeMemoryOverlay {
    * Moving a fact from a preference to a project card cannot change its removal authority.
    * @param {string} userId @param {string|null} [namespaceId] */
   async removals(userId, namespaceId = null) {
-    const types = OPENVIKING_MEMORY_TYPES.map(type => nativeMemoryRejectionType(type, namespaceId));
+    const types = OPENVIKING_KNOWN_MEMORY_TYPES.map(type => nativeMemoryRejectionType(type, namespaceId));
     const result = await this.#query(`SELECT memory_type, fingerprint, text, rejected_at FROM evimed_memory.native_rejections
       WHERE user_id=$1 AND memory_type = ANY($2::text[]) ORDER BY rejected_at DESC`, [owner(userId), types]);
     return result.rows.map(row => ({ memoryType: row.memory_type, fingerprint: row.fingerprint, text: row.text, rejectedAt: instant(row.rejected_at) }));

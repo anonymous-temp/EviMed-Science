@@ -146,7 +146,7 @@ async function ensureDsn(file, label, expected) {
  */
 async function ensureOpenVikingConfiguration(rootApiKey, embeddingApiKey, modelKey) {
   const pin = JSON.parse(await fsp.readFile(path.join(repoRoot, "deps-version.json"), "utf8")).openviking;
-  const expected = JSON.stringify(expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, modelKey, pin }), null, 2);
+  const expected = JSON.stringify(expectedOpenVikingConfiguration({ rootApiKey, embeddingApiKey, modelKey, pin, safetyNotes: process.argv.includes("--safety-notes") }), null, 2);
   const existing = await fsp.lstat(openVikingConfFile).catch((error) => {
     if (error?.code === "ENOENT") return null;
     throw error;

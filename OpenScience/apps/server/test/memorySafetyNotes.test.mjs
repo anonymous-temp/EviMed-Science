@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { MEMORY_SAFETY_NOTES_ANCHOR as anchor } from '@evimed/domain';
 import { renderMemoryTemplates } from '../../../deploy/web/openviking/memory-templates-src/build.mjs';
+import { OpenVikingSessions } from '../src/openVikingSessions.mjs';
+import { expectedOpenVikingConfiguration } from '../../../scripts/ops/openviking-configuration.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { safetyNoteLines, renderSafetyNotes, safetyNoteFile, SAFETY_NOTES_MAX_CHARS, SAFETY_NOTE_LINE_MAX_CHARS } from '../src/memorySafetyNotes.mjs';
 import { estimatePromptTokens } from '../src/modelGateway.mjs';
@@ -17,6 +19,41 @@ const memoryRoot = 'viking://user/owner/memories';
 const body = (label = '父亲', note = '用户说青霉素过敏，曾起皮疹。') => `# ${label}\n## 用药前 ${anchor}\n- ${note}\n## Other context\n- Works at a bank.`;
 const file = (extra = {}) => ({ uri: `${memoryRoot}/people/father.md`, relPath: 'people/father.md', type: 'people', body: body(), ...extra });
 const on = { memorySafetyNotesEnabled: true };
+
+test('P29 fast check: the safety type carries every heading and unheaded paragraph, without a marker', () => {
+  const content = '# Child\n## 过敏与用药安全\nReported penicillin rash.\n## Any other wording\nReaction details remain uncertain.';
+  const safety = file({ uri: `${memoryRoot}/safety_notes/child.md`, relPath: 'safety_notes/child.md', type: 'safety_notes', body: content });
+  assert.deepEqual(safetyNoteLines(content, 'safety_notes'), [content]);
+  assert.ok(safetyNoteFile(safety, { memoryRoot, projectId: 'default' }));
+  const block = renderResidentProfile({ safetyFiles: [safety], config: on });
+  assert.match(block.text, /Reported penicillin rash/);
+  assert.match(block.text, /Reaction details remain uncertain/);
+  assert.equal(renderResidentProfile({ safetyFiles: [safety] }).text, '');
+  const large = { ...safety, body: 'Exact reported history. '.repeat(300) };
+  const overflow = renderSafetyNotes([large], { maxTokens: 1_500 });
+  assert.equal(overflow.memos.length, 0, 'dedicated files are included whole or disclosed as overflow');
+  assert.match(overflow.text, /还有未展示/);
+  assert.ok([...overflow.text].length <= SAFETY_NOTES_MAX_CHARS);
+  const mixed = renderSafetyNotes([{ ...large, uri: `${memoryRoot}/safety_notes/large.md`, updatedAt: '2099-01-01' }, safety], { maxTokens: 1_500 });
+  assert.equal(mixed.memos.length, 1, 'an oversized file cannot suppress another person whose complete file fits');
+  assert.ok(mixed.memos[0].content.endsWith(content));
+  const many = Array.from({ length: 100 }, (_, index) => ({ ...safety,
+    uri: `${memoryRoot}/safety_notes/${index}.md`, relPath: `safety_notes/${index}.md` }));
+  const bounded = renderSafetyNotes(many, { maxTokens: 1_500 });
+  assert.ok(bounded.memos.length > 0 && bounded.memos.length < many.length);
+  assert.ok([...bounded.text].length <= SAFETY_NOTES_MAX_CHARS);
+  assert.match(bounded.text, /还有未展示/);
+  assert.ok(bounded.memos.every(memo => memo.content.endsWith(content)), 'each displayed dedicated file is whole');
+});
+
+
+test('safety extraction allowlists and engine defaults change only with the explicit option', () => {
+  assert.ok(!new OpenVikingSessions({}).memoryTypes.includes('safety_notes'));
+  assert.ok(new OpenVikingSessions({}, { safetyNotes: true }).memoryTypes.includes('safety_notes'));
+  const input = { rootApiKey: 'fixture', embeddingApiKey: 'fixture', modelKey: 'fixture', pin: { embedding: { dimension: 8 } } };
+  assert.ok(!expectedOpenVikingConfiguration(input).server.user_config_defaults.memory_policy.memory_types.includes('safety_notes'));
+  assert.ok(expectedOpenVikingConfiguration({ ...input, safetyNotes: true }).server.user_config_defaults.memory_policy.memory_types.includes('safety_notes'));
+});
 
 test('safety fast check: opt-in marked history reaches the resident block, unrelated details do not', () => {
   const block = renderResidentProfile({ safetyFiles: [file()], config: on });
@@ -48,15 +85,16 @@ test('the lab safety templates alone change; default and deployed bytes are iden
   const variant = renderMemoryTemplates({ safetyNotes: true });
   for (const [name, text] of Object.entries(full)) {
     assert.equal(await readFile(path.join(root, 'deploy/web/openviking/memory-templates', name), 'utf8'), text, name);
-    if (['people.yaml', 'profile.yaml'].includes(name)) {
-      assert.ok(variant[name].includes(anchor));
-      assert.match(variant[name], /examples, not a closed list/);
-      assert.match(variant[name], /exact key terms as spoken/);
-      assert.match(variant[name], /user's language/);
-    } else assert.equal(variant[name], text);
+    assert.match(variant[name], /SAFETY_NOTES/);
+    assert.match(variant[name], /examples, not a closed list/);
+    assert.match(variant[name], /exact key terms as spoken/);
+    assert.match(variant[name], /user's language/);
   }
   assert.doesNotMatch(anchor, /\{[%#{]/, 'the machine marker must not open a Jinja template construct');
-  assert.doesNotMatch(variant['profile.yaml'], /No H2\/H3 headings|No other headings, labels, tables or prose/);
+  assert.equal(full['safety_notes.yaml'], undefined);
+  assert.match(variant['safety_notes.yaml'], /memory_type: safety_notes/);
+  assert.match(variant['safety_notes.yaml'], /memories\/safety_notes/);
+  assert.doesNotMatch(variant['safety_notes.yaml'], /evimed-safety-notes/);
   const build = path.join(root, 'deploy/web/openviking/memory-templates-src/build.mjs');
   for (const args of [['--safety-notes'], ['--safety-notes', '--out', path.join(root, 'deploy/web/openviking/memory-templates')]]) {
     const refused = spawnSync(process.execPath, [build, ...args], { encoding: 'utf8' });

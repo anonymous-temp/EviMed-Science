@@ -4,9 +4,56 @@ import { MEMORY_SAFETY_NOTES_ANCHOR as anchor } from '@evimed/domain';
 import { ResidentProfiles } from '../src/residentProfile.mjs';
 import { createLabResidentProfiles } from '../../../evals/capsule-proving/run/lab.mjs';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
+import { nativeFileId } from '../src/nativeMemoryStore.mjs';
 
 const { fixture, options } = nativeIntegration();
 const body = (label, note) => `# ${label}\n## Before treatment ${anchor}\n- ${note}\n## Work\n- Private work detail.`;
+
+test('dedicated safety history uses ordinary sensitive, project, source-deletion and owner boundaries', options, async t => {
+  const f = await fixture(t);
+  for (const name of ['visible', 'sensitive', 'other-project', 'source-deleted']) {
+    const text = `# ${name}\nReported history ${name}.`;
+    const uri = f.seed(`safety_notes/${name}.md`, text, { type: 'safety_notes' });
+    await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'safety_notes', body: text,
+      sensitive: name === 'sensitive', projectId: name === 'other-project' ? 'another-project' : null });
+  }
+  f.store.sourceDeletion = {
+    hiddenMemoryUris: async () => [`${f.root}/safety_notes/source-deleted.md`],
+    redactRecords: async (_id, rows) => rows,
+  };
+  assert.deepEqual((await f.store.safetyNotes(f.userId, 'default')).map(file => file.relPath), ['safety_notes/visible.md']);
+  f.store.sourceDeletion.redactRecords = async (_id, rows) => rows.map(row => ({ ...row, value: '' }));
+  assert.deepEqual(await f.store.safetyNotes(f.userId, 'default'), [], 'a raw safety body cannot bypass source redaction');
+});
+
+test('P29: native worker settles a dedicated safety file; page edits, undo, deletion and removal fences apply', options, async t => {
+  const f = await fixture(t, { config: { memorySafetyNotesEnabled: true } });
+  const uri = `${f.root}/safety_notes/child.md`;
+  const text = '# Child\n## Extractor chooses this title\n- Child: reported reaction to penicillin S-417.';
+  f.stub.extract = () => ({ adds: [{ uri, memory_type: 'safety_notes', after: text }] });
+  await f.commitConversation('safety', [{ role: 'user', text, at: '2026-01-01T00:00:00Z' }]);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.ok(f.sessions.memoryTypes.includes('safety_notes'));
+  const page = await f.store.profile(f.userId);
+  const record = page.records.find(row => row.uri === uri);
+  assert.equal(record.nativeType, 'safety_notes');
+  assert.equal(record.kind, 'note');
+  assert.equal((await f.store.safetyNotes(f.userId, 'default'))[0].body, text);
+  const edited = await f.store.update(f.userId, record.id, { value: '# Child\nReported reaction details corrected.', expectedVersion: record.version });
+  assert.equal((await f.store.safetyNotes(f.userId, 'default'))[0].body, edited.value);
+  await f.store.undo(f.userId, record.id, { expectedVersion: edited.version });
+  assert.equal((await f.store.safetyNotes(f.userId, 'default'))[0].body, text);
+  await f.store.remove(f.userId, nativeFileId(uri), { keepText: true, actor: 'user' });
+  assert.deepEqual(await f.store.safetyNotes(f.userId, 'default'), []);
+  await f.commitConversation('delayed-safety', [{ role: 'user', text, at: '2026-01-01T00:00:00Z' }]);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), null, 'old extraction cannot restore deleted safety history');
+  assert.deepEqual(await f.store.safetyNotes(f.userId, 'default'), []);
+  assert.ok((await f.overlay.removals(f.userId)).length);
+  const forgotten = (await f.store.forgotten(f.userId)).find(row => row.uri === uri);
+  await f.store.update(f.userId, forgotten.id, { status: 'active', expectedVersion: forgotten.version });
+  assert.equal((await f.store.safetyNotes(f.userId, 'default'))[0].body, text, 'the person can restore the forgotten safety file');
+});
 
 test('written people/profile sections reach product and lab resident paths with privacy, deletion and project boundaries intact', options, async t => {
   const f = await fixture(t);

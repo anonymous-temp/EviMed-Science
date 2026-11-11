@@ -56,7 +56,7 @@ const PASTED_RULE_TYPES = new Set(["preferences.yaml", "corrections.yaml", "prof
  * The rendered text of every type, by file name. `variant` is "full" (every type carries the whole never-kept block: what is
  * deployed) or "short-never" (the lab variant above).
  * `decide` names the decide block (`DECIDE_VARIANTS`); anything but `current` is a lab variant.
- * `safetyNotes` adds the opt-in structural safety section contract to people/profile; the deployed files stay unchanged.
+ * `safetyNotes` adds the opt-in dedicated safety type and its routing guidance; the deployed files stay unchanged.
  * `pastedRule: "v1"` adds the lab attribution wording at the point of use in the three personal types.
  * @param {{ variant?: "full" | "short-never", decide?: "current" | "purpose" | "purpose-verify", safetyNotes?: boolean, pastedRule?: "current" | "v1" }} [options]
  */
@@ -72,20 +72,25 @@ export function renderMemoryTemplates({ variant = "full", decide: decideName = "
   /** @type {Record<string, string>} */
   const rendered = {};
   for (const name of fs.readdirSync(src).filter((file) => file.endsWith(".yaml")).sort()) {
-    let text = fs.readFileSync(path.join(src, name), "utf8");
-    if (safetyNotes && name === "profile.yaml") {
-      text = text.replace("No H2/H3 headings, tables, JSON or paragraphs.", "Only the marked safety H2 section described above is allowed; no other H2/H3 headings, tables, JSON or paragraphs.")
-        .replace("No other headings, labels, tables or prose.", "Include the marked safety H2 section and its bullets when applicable; no other headings, labels, tables or prose.");
-    }
+    const text = fs.readFileSync(path.join(src, name), "utf8");
     if (!text.includes("__NEVER_KEEP__")) throw new Error(`${name} does not carry the never-kept block`);
     if (!text.includes("__DECIDE__")) throw new Error(`${name} does not carry the decide block`);
     if (!text.includes("__LANGUAGE__")) throw new Error(`${name} does not carry the language block`);
     // A function replacement: the blocks carry `$` characters of their own, which a string replacement would read as patterns.
     const never = variant === "short-never" && name !== "profile.yaml" ? reminder : block;
-    const safety = safetyNotes && ["people.yaml", "profile.yaml"].includes(name) ? `\n\n  ${indented(MEMORY_SAFETY_NOTES_TEXT)}` : "";
+    const safety = safetyNotes ? `\n\n  ${indented(MEMORY_SAFETY_NOTES_TEXT)}` : "";
     const attribution = pastedRule === "v1" && PASTED_RULE_TYPES.has(name) && !text.includes(PASTED_RULE_V1)
       ? `\n\n  ${indented(PASTED_RULE_V1)}` : "";
     rendered[name] = text.replace("__NEVER_KEEP__", () => never).replace("__DECIDE__", () => decide + safety).replace("__LANGUAGE__", () => language + attribution);
+  }
+  if (safetyNotes) {
+    const people = rendered['people.yaml'];
+    const description = `  ${indented(MEMORY_SAFETY_NOTES_TEXT)}\n\n  ${language}\n\n  ${block}\n\n  ${decide}`;
+    // Reuse the engine's ordinary per-person fields and patch merge, with a dedicated type/path.
+    rendered['safety_notes.yaml'] = people.slice(0, people.indexOf('description: |'))
+      .replace('memory_type: people', 'memory_type: safety_notes') + 'description: |\n' + description + '\n'
+      + people.slice(people.indexOf('directory: ')).replace('/memories/people"', '/memories/safety_notes"')
+        .replace("Markdown card titled with the user's label.", "Safety history only, titled with the user's label.");
   }
   return rendered;
 }
@@ -93,7 +98,7 @@ export function renderMemoryTemplates({ variant = "full", decide: decideName = "
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   // `node build.mjs` renders what is deployed. A lab variant is rendered elsewhere, never over it:
   // `node build.mjs --variant short-never --out /tmp/templates-b`, `node build.mjs --decide purpose --out /tmp/templates-purpose`.
-  // `node build.mjs --safety-notes --out /tmp/templates-safety` adds the safety section contract only in a lab variant.
+  // `node build.mjs --safety-notes --out /tmp/templates-safety` adds the dedicated safety type only in a lab variant.
   const arguments_ = process.argv.slice(2);
   const option = (/** @type {string} */ name) => { const at = arguments_.indexOf(name); return at >= 0 ? arguments_[at + 1] : undefined; };
   const variant = option("--variant") ?? "full";

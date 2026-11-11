@@ -39,6 +39,9 @@ export const OPENVIKING_MEMORY_TYPES = Object.freeze([
   // worked on, at task level, three lines at most (the project card's 「最近在做」).
   "observations", "recent_work", "people", "notes",
 ]);
+/** Types recognized for edits, deletion and rejection, even after extraction is switched off. */
+export const OPENVIKING_KNOWN_MEMORY_TYPES = Object.freeze([...OPENVIKING_MEMORY_TYPES, "safety_notes"]);
+
 /** Shared project extraction never writes a person's profile or preferences, nor `observations` — a person's own choice noted until a
  *  second conversation of theirs promotes it to a preference, which a shared project's namespace does not keep. */
 export const OPENVIKING_PROJECT_MEMORY_TYPES = Object.freeze(OPENVIKING_MEMORY_TYPES.filter(type => !['profile', 'preferences', 'observations'].includes(type)));

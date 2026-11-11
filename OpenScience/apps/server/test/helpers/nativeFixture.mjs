@@ -55,7 +55,7 @@ export function nativeIntegration({ config: settings = {}, databaseUrl = process
     await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Native memory test','development')", [userId]);
     const stub = await startOpenVikingStub(t, { extract, consolidate });
     const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
-    const sessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
+    const sessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000, safetyNotes: (extra.memorySafetyNotesEnabled ?? config.memorySafetyNotesEnabled) === true });
     const overlay = new NativeMemoryOverlay({ database });
     const merged = { ...config, ...extra };
     const memorySettings = new MemorySettingsStore(merged, { database });

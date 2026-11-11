@@ -15,7 +15,7 @@ export function sourcePrivacyOf(source) {
     seen.add(item);
     const payload=item.payload&&typeof item.payload==='object'?item.payload:null;
     const privacy=item.sourcePrivacy??payload?.sourcePrivacy;
-    const person=item.nativeType==='people'||[item.kind,item.factKind,payload?.factKind,item.subjectType,item.sourceType].some(kind=>['person','patient','personal-context'].includes(kind));
+    const person=['people','safety_notes'].includes(item.nativeType)||[item.kind,item.factKind,payload?.factKind,item.subjectType,item.sourceType].some(kind=>['person','patient','personal-context'].includes(kind));
     const declared=privacy?.schemaVersion===1&&['private','unclassified','ordinary'].includes(privacy.classification)?privacy.classification:'unclassified';
     const own={schemaVersion:/** @type {const} */(1),classification:/** @type {MemorySourcePrivacy['classification']} */(person?'private':declared),reasons:person?['person-context']:Array.isArray(privacy?.reasons)?privacy.reasons.filter((/** @type {unknown} */ value)=>typeof value==='string').slice(0,32):[declared==='ordinary'?'ordinary-source':'source-unclassified']};
     const children=[...(Array.isArray(item.originalSources)?item.originalSources:[]),...(Array.isArray(item.sources)?item.sources:[])].map(child=>visit(child,depth+1));

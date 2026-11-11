@@ -56,6 +56,7 @@ export const MEMORY_SEGMENT_OF_TYPE = Object.freeze({
   project_facts: "project_facts",
   recent_work: "recent_work",
   people: "people",
+  safety_notes: "safety_notes",
   notes: "notes",
 });
 
@@ -218,11 +219,11 @@ function namespaceClient(client, namespace) {
 export class OpenVikingSessions {
   /**
    * @param {any} client an `OpenVikingClient`
-   * @param {{ timeoutMs?: number, fastTimeoutMs?: number, namespace?: any }} [options] `fastTimeoutMs` is the deadline of the calls a
+   * @param {{ timeoutMs?: number, fastTimeoutMs?: number, namespace?: any, safetyNotes?: boolean }} [options] `fastTimeoutMs` is the deadline of the calls a
    *   new kernel waits on (health, the MCP handshake, session start): a memory service that hangs delays the first
    *   prompt of a conversation by eighteen seconds, one that refuses costs nothing.
    */
-  constructor(client, { timeoutMs = 4_000, fastTimeoutMs = 1_500, namespace = null } = {}) {
+  constructor(client, { timeoutMs = 4_000, fastTimeoutMs = 1_500, namespace = null, safetyNotes = false } = {}) {
     if (namespace) {
       const expected = projectNativeMemoryNamespace(namespace);
       if (Object.keys(namespace).length !== Object.keys(expected).length || Object.entries(expected).some(([key, value]) => namespace[key] !== value)) throw new HttpError(403, 'memory_scope_denied', 'Invalid project memory namespace.');
@@ -230,7 +231,7 @@ export class OpenVikingSessions {
     }
     this.rootClient = client; this.namespace = namespace;
     this.client = namespace ? namespaceClient(client, namespace) : client;
-    this.memoryTypes = namespace ? OPENVIKING_PROJECT_MEMORY_TYPES : OPENVIKING_MEMORY_TYPES;
+    this.memoryTypes = namespace ? OPENVIKING_PROJECT_MEMORY_TYPES : safetyNotes ? [...OPENVIKING_MEMORY_TYPES, "safety_notes"] : OPENVIKING_MEMORY_TYPES;
     this.timeoutMs = Math.max(250, Number(timeoutMs) || 4_000);
     this.fastTimeoutMs = Math.max(250, Math.min(this.timeoutMs, Number(fastTimeoutMs) || 1_500));
   }
