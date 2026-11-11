@@ -39,6 +39,12 @@ for s in "${steps[@]}"; do
   done
   [[ "$ok" == 1 ]] || exit 1
   out=/srv/evimed/runs/lx-$exp-$arm-1
+  # Respect the same explicit output override as run_lx.mjs.
+  previous_arg=''
+  for arg in "$@"; do
+    [[ "$previous_arg" != --out ]] || out="$arg"
+    previous_arg="$arg"
+  done
   # One marker per rows file content: a later run over more units (L2 people) adds its own rows.
   if [[ -f "$out/ledger-rows.json" ]]; then
     mark="$out/ledger-added-$(sha1sum "$out/ledger-rows.json" | cut -c1-12)"
