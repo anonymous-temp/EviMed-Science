@@ -597,3 +597,19 @@ productTest("each answer configuration builds its own hint prompt and preserves 
       { output: "agent", recursive: "true", abs_limit: "512", node_limit: "512" });
   }
 });
+
+test('concise style appends exactly one user instruction and leaves the rest of the prompt unchanged', async () => {
+  for (const [question, instruction] of [
+    ['What do I prefer?', 'Answer in one or two sentences, only what was asked.'],
+    ['我喜欢什么？', '请用一两句话回答，只回答所问的内容。'],
+  ]) {
+    const primary = fakeClient([reply('tea')]), concise = fakeClient([reply('tea')]);
+    const baseline = await answerQuestion({ ...options, question, arm: 'no-memory', client: primary });
+    const variant = await answerQuestion({ ...options, question, arm: 'no-memory', client: concise, answerStyle: 'concise' });
+    const expected = structuredClone(primary.requests[0]);
+    expected.messages.at(-1).content += '\n\n' + instruction;
+    assert.deepEqual(concise.requests[0], expected);
+    assert.equal(variant.question, baseline.question);
+    assert.equal(variant.options.answerStyle, 'concise');
+  }
+});
