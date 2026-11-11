@@ -107,7 +107,28 @@ def skills_for(task, arm):
         if not (ROOT / 'practice/complete.json').exists():
             raise RuntimeError('Product practice must finish before the learned arm')
         return ROOT / 'learned'
-    return pathlib.Path(task['path']) / 'environment/skills' if task['bench'] == 'sb' else DATA / 'skilllearnbench/skills/human_authored' / task['family']
+    source = pathlib.Path(task['path']) / 'environment/skills' if task['bench'] == 'sb' else DATA / 'skilllearnbench/skills/human_authored' / task['family']
+    target = ROOT / 'flat' / task['bench'] / task['id']
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(source, target, ignore=shutil.ignore_patterns('__pycache__'))
+    hashes = {}
+    for path in [target, *target.rglob('*')]:
+        if path.is_dir():
+            path.chmod(0o755)
+        elif path.is_file():
+            # Intake files are private (0700/0600); Docker upload preserves modes.
+            # Stage public skill bytes readably for the reference agent's uid.
+            path.chmod(0o755 if path.stat().st_mode & 0o111 else 0o644)
+            relative = path.relative_to(target)
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if digest != hashlib.sha256((source / relative).read_bytes()).hexdigest():
+                raise ValueError('Flat skill staging changed source bytes')
+            hashes[str(relative)] = digest
+    put(ROOT / 'flat-receipts' / task['bench'] / (task['id'] + '.json'),
+        {'source': str(source), 'staged': str(target), 'byteIdentical': True,
+         'directoriesMode': '0755', 'filesReadable': True, 'sha256': hashes})
+    return target
 
 
 def sb_oracle(task):

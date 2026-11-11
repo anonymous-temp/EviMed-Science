@@ -11,6 +11,23 @@ from gateway import cost, request_context
 
 
 class RunnerTests(unittest.TestCase):
+    def test_flat_staging_preserves_bytes_and_makes_private_intake_readable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            source = root / 'task/environment/skills/example'
+            source.mkdir(parents=True)
+            file = source / 'SKILL.md'
+            file.write_text('---\nname: example\ndescription: A public example.\n---\nBody\n')
+            source.chmod(0o700)
+            file.chmod(0o600)
+            with patch('run.ROOT', root / 'runner'):
+                target = run.skills_for({'bench': 'sb', 'id': 'task', 'path': str(root / 'task')}, 'flat')
+            staged = target / 'example/SKILL.md'
+            self.assertEqual(staged.read_bytes(), file.read_bytes())
+            self.assertEqual(file.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(staged.stat().st_mode & 0o444, 0o444)
+            self.assertEqual((target / 'example').stat().st_mode & 0o111, 0o111)
+
     def test_capacity_order_keeps_every_task_and_alternates_benchmarks(self):
         from execution_queue import execution_queue
         with tempfile.TemporaryDirectory() as tmp:

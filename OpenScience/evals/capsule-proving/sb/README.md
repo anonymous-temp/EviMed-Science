@@ -51,6 +51,9 @@ capacity amendment, not selection by task results; each run records it.
 
 - `none`: no benchmark or learned skills.
 - `flat`: the benchmark's own task/family skills, copied without rewriting.
+  Public intake permissions (0700/0600) are staged readably (0755/0644), with
+  byte-equality receipts; otherwise the non-root SkillsBench agent cannot
+  discover them. The first affected flat trial is archived and repeated.
 - `learned`: only methods actually learned and approved by the product from the
   separate practice tasks. An empty library stays empty; it never substitutes
   human-written or independently model-written skills.
