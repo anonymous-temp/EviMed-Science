@@ -17,6 +17,15 @@ export const pairIdentity = (members, version = '1') => hash(version + members.m
 export class MethodConsolidationQueue {
   constructor(documents, { now = () => new Date(), version = '1' } = {}) { this.documents = documents; this.now = now; this.version = version; }
   fingerprint(method) { return hash(this.version + methodPairFingerprint(method)); }
+  /** Rotate isolated libraries before applying one account-level call budget.
+   * A growing owned library must not starve a shared project's pair queue. */
+  async scopeOrder(userId, scopes) {
+    if (scopes.length < 2) return scopes;
+    const id = 'scope-order', prior = await this.documents.get(userId, METHOD_CONSOLIDATION_KIND, id);
+    const start = Math.max(0, scopes.indexOf(prior?.payload.nextScope));
+    await this.save(userId, id, { scope: 'rotation', recordType: 'rotation', nextScope: scopes[(start + 1) % scopes.length] }, prior);
+    return [...scopes.slice(start), ...scopes.slice(0, start)];
+  }
   async rows(userId, scope) {
     const result = []; let cursor = null;
     do {
@@ -81,9 +90,12 @@ export class MethodConsolidationQueue {
     const pending = rows.filter(row => row.payload.status === 'pending');
     pending.sort((a, b) => Number(a.payload.examined) - Number(b.payload.examined)
       || a.payload.attempts - b.payload.attempts || b.payload.score - a.payload.score || b.payload.enqueuedAt.localeCompare(a.payload.enqueuedAt) || a.id.localeCompare(b.id));
-    // One oldest unexamined item per pass guarantees progress even as better
-    // scoring recent methods arrive faster than the remaining budget.
-    const oldest = pending.filter(row => !row.payload.examined).sort((a,b) => a.payload.attempts - b.payload.attempts || a.payload.enqueuedAt.localeCompare(b.payload.enqueuedAt) || a.id.localeCompare(b.id))[0];
+    // One least-recently attempted pair per pass guarantees progress even
+    // while better-scoring methods arrive, including retries after a transient
+    // failure. Attempt counts alone would strand failed pairs behind new ones.
+    const oldest = pending.filter(row => !row.payload.examined).sort((a,b) =>
+      (a.payload.lastTriedAt ?? a.payload.enqueuedAt).localeCompare(b.payload.lastTriedAt ?? b.payload.enqueuedAt)
+      || a.payload.attempts - b.payload.attempts || a.id.localeCompare(b.id))[0];
     if (oldest) pending.splice(0, 0, ...pending.splice(pending.indexOf(oldest), 1));
     return pending;
   }
@@ -98,7 +110,8 @@ export class MethodConsolidationQueue {
  * first, and disjoint work uses spare space. Only supplied pairs are completed. */
 export function queuedPairBatch(pending, anchor, maxMethods = 8) {
   const ids = new Set(anchor.payload.groupIds ?? [anchor.payload.a, anchor.payload.b]);
-  const candidates = pending.filter(row => row.payload.examined === anchor.payload.examined);
+  const candidates = pending.filter(row => row.payload.examined === anchor.payload.examined
+    && (!anchor.payload.examined || row.payload.batchKey === anchor.payload.batchKey));
   if (!anchor.payload.examined) for (;;) {
     const fitting = candidates.filter(row => !ids.has(row.payload.a) || !ids.has(row.payload.b))
       .filter(row => new Set([...ids, row.payload.a, row.payload.b]).size <= maxMethods);

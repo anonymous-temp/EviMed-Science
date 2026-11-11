@@ -91,7 +91,11 @@ test('deferred BUILD uses a later pass without charging the cached DECIDE again'
   assert.equal(first.coverage.backlog, 0);
   assert.equal(first.coverage.pendingBuilds, 2);
   assert.equal(h.calls.length, 1);
+  const queued=[...h.documents.rows.values()].find(row=>row.kind==='method-consolidation'&&row.payload.recordType==='pair');
+  await h.documents.put('u',queued.kind,queued.id,{...queued.payload,status:'done'},{expectedRevision:queued.revision,telemetry:true});
+  const firstQuestion=structuredClone(h.calls[0].input);
   const second = await pass.sleep({ job });
+  assert.deepEqual(h.calls[1].input,firstQuestion,'the exact paid question survives a partially completed batch');
   assert.equal(second.coverage.backlog, 0);
   assert.equal(second.coverage.pendingBuilds, 0);
   assert.equal(second.coverage.modelCalls, 1);
@@ -196,7 +200,7 @@ test('an older unexamined pair gets a turn as higher similarity methods keep arr
   const q=new MethodConsolidationQueue(persistentDocuments());
   const old={id:'old',payload:{status:'pending',examined:false,attempts:0,score:.61,enqueuedAt:'2026-01-01'}};
   const recent={id:'recent',payload:{status:'pending',examined:false,attempts:0,score:.99,enqueuedAt:'2026-11-11'}};
-  const tried={id:'failed',payload:{status:'pending',examined:false,attempts:1,score:1,enqueuedAt:'2025-01-01'}};
+  const tried={id:'failed',payload:{status:'pending',examined:false,attempts:1,score:1,enqueuedAt:'2025-01-01',lastTriedAt:'2026-11-11'}};
   assert.deepEqual(q.pending([recent,old,tried]).map(row=>row.id),['old','recent','failed']);
 });
 
@@ -268,4 +272,56 @@ test('batched decisions cover every queued cross-group pair without exceeding ei
     pending=pending.filter(row=>!examined.has(row.id));
   }
   assert.equal(examined.size,45);
+});
+
+test('one account call budget rotates between owned and shared libraries without mixing their inputs', async () => {
+  const h=await harness({size:4,budget:1});
+  for(const id of ['m2','m3']) {
+    const row=await h.learning.getMethod('u',id);
+    await h.documents.put('u','method',id,{...row.payload,provenance:{sourceProjectId:'geo'}},{expectedRevision:row.revision});
+  }
+  const rows=async()=>[...(await h.learning.listMethods('u',{limit:100})).items];
+  const policyForJob=async job=>job.payload.sourceProjectId?{kind:'geo-project',ownerId:'u',controlProjectId:'geo'}:null;
+  const scopedMethods=async(_user,policy)=>(await rows()).filter(row=>Boolean(row.payload.provenance?.sourceProjectId)===Boolean(policy?.kind==='geo-project'));
+  const pass=h.make();pass.contextProvenance={rows,policyFor:async()=>({kind:'geo-project'}),policyForJob,scopedMethods,
+    methodFor:async(user,id,policy)=>(await scopedMethods(user,policy)).find(row=>row.id===id),completedCompound:async()=>null};
+  const first=await pass.sleep({job});
+  assert.equal(first.coverage.modelCalls,1);
+  assert.ok(h.calls[0].input.methods.every(m=>['m0','m1'].includes(m.id)));
+  const next=await pass.sleep({job:{...job,id:'next'}});
+  assert.equal(next.coverage.modelCalls,1);
+  assert.ok(h.calls[1].input.methods.every(m=>['m2','m3'].includes(m.id)));
+  assert.equal(next.coverage.backlog,0);
+});
+
+test('an examined batch held by an unproven merge costs no repeated DECIDE calls', async () => {
+  const h=await harness({size:2,budget:3});
+  const row=await h.learning.getMethod('u','m0');
+  await h.documents.put('u','method',row.id,{...row.payload,provenance:{origin:'inferred',consolidatedBy:'consolidate:prior'}},{expectedRevision:row.revision});
+  const pass=h.make();
+  pass.readResult=async()=>({status:'succeeded',output:{assignments:[{ASSIGNMENT:'A1',SKILLS:['m0','m1'],RELATION_TYPE:'merge',REASON:'Same complete procedure.'}]}});
+  const first=await pass.sleep({job});
+  assert.equal(first.coverage.pendingBuilds,1);
+  const second=await pass.sleep({job:{...job,id:'later'}});
+  assert.equal(second.coverage.backlog,0);
+  assert.equal(second.coverage.pendingBuilds,1);
+  assert.equal(second.coverage.blockedUnproven,1);
+  assert.equal(second.coverage.modelCalls,0);
+  assert.equal(h.calls.length,1);
+});
+
+test('queued conflicts record their edges without buying a builder that can change nothing', async () => {
+  const h=await harness({size:2});const pass=h.make();
+  pass.readResult=async()=>({status:'succeeded',output:{assignments:[{ASSIGNMENT:'A1',SKILLS:['m0','m1'],RELATION_TYPE:'conflicts_with',REASON:'Incompatible instructions in the same situation.'}]}});
+  const result=await pass.sleep({job});
+  assert.equal(result.coverage.pendingBuilds,0);
+  assert.equal(h.calls.length,1);
+  assert.equal(result.relationTypes.conflicts_with,2);
+});
+
+test('a transiently failed pair gets another turn despite a steady stream of new methods', () => {
+  const q=new MethodConsolidationQueue(persistentDocuments());
+  const failed={id:'failed',payload:{status:'pending',examined:false,attempts:1,score:.6,enqueuedAt:'2026-01-01',lastTriedAt:'2026-11-01'}};
+  const fresh={id:'fresh',payload:{status:'pending',examined:false,attempts:0,score:.99,enqueuedAt:'2026-11-10'}};
+  assert.equal(q.pending([fresh,failed])[0].id,'failed');
 });

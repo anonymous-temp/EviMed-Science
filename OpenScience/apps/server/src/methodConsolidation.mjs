@@ -399,7 +399,7 @@ export class MethodConsolidation {
     this.recallEnabled = recallEnabled === true;
     this.decideVersion = this.recallEnabled ? DECIDE_VERSION + 1 : DECIDE_VERSION;
     this.modelCalls = Math.max(1, Math.trunc(modelCalls));
-    this.pairQueue = this.queueEnabled ? new MethodConsolidationQueue(learning.documents, { now, version: this.recallEnabled ? "recall1-batch1" : "base1-batch1" }) : null;
+    this.pairQueue = this.queueEnabled ? new MethodConsolidationQueue(learning.documents, { now, version: this.recallEnabled ? "recall1-batch2" : "base1-batch2" }) : null;
     this.pyramid = pyramid === true;
     this.officialMethods = typeof officialMethods === "function" ? officialMethods : null;
   }
@@ -514,7 +514,8 @@ export class MethodConsolidation {
       }
       const partitions = [];
       const passPairBudget = this.queueEnabled ? { used: 0, limit: this.modelCalls } : null;
-      for (const sourceProjectId of [null,...projects]) partitions.push(await this.sleep({job:{...job,id:`${job.id}:scope:${sourceProjectId ?? 'owned'}`, ...(passPairBudget ? { passPairBudget } : {}),
+      const scopes = this.queueEnabled ? await this.pairQueue.scopeOrder(job.userId, [null,...[...projects].sort()]) : [null,...projects];
+      for (const sourceProjectId of scopes) partitions.push(await this.sleep({job:{...job,id:`${job.id}:scope:${sourceProjectId ?? 'owned'}`, ...(passPairBudget ? { passPairBudget } : {}),
         payload:{...job.payload,contextPartition:true,...(sourceProjectId ? {sourceProjectId} : {})}}}));
       return {action:'sleep',partitions,methods:partitions.reduce((sum,part)=>sum+part.methods,0),
         ...(passPairBudget ? { coverage: { modelCalls: passPairBudget.used, callBudget: passPairBudget.limit,
@@ -588,6 +589,7 @@ export class MethodConsolidation {
     if (coverage) {
       outcome.groups += coverage.groups ?? 0;
       outcome.decideFailed += coverage.decideFailed ?? 0;
+      outcome.blockedUnproven += coverage.blockedUnproven ?? 0;
       outcome.relations += coverage.relations;
       outcome.builds += coverage.builds;
       outcome.refusals.push(...coverage.refusals);
@@ -691,8 +693,8 @@ export class MethodConsolidation {
       mergedRetirements,
       methods: refreshed.length,
       // `topScore`, `p50` and `p90` are cosines of the nearest-neighbour pairs, below the floor or not: what the candidate floor is read against.
-      shortlist: { mode: shortlist.mode, pairs: shortlist.pairs.length, topScore: shortlist.topScore ?? null, p50: shortlist.distribution?.p50 ?? null, p90: shortlist.distribution?.p90 ?? null },
-      groupsFormed: groups.length,
+      shortlist: { mode: coverage ? "queued" : shortlist.mode, pairs: coverage?.candidatePairs ?? shortlist.pairs.length, topScore: shortlist.topScore ?? null, p50: shortlist.distribution?.p50 ?? null, p90: shortlist.distribution?.p90 ?? null },
+      groupsFormed: groups.length + (coverage?.groups ?? 0),
       groups: outcome.groups,
       skippedUnchanged: outcome.skippedUnchanged,
       blockedUnproven: outcome.blockedUnproven,
@@ -745,13 +747,14 @@ export class MethodConsolidation {
     heartbeat.unref?.();
     const budget = job.passPairBudget ?? { used: 0, limit: this.modelCalls };
     const startedCalls = budget.used;
-    const report = { groups: 0, examined: 0, decideFailed: 0, relations: 0, builds: 0, relationTypes: {}, refusals: [], modelCalls: 0, backlog: 0, pendingBuilds: 0, enqueued: 0, changed: 0 };
+    const report = { groups: 0, examined: 0, decideFailed: 0, blockedUnproven: 0, candidatePairs: 0, relations: 0, builds: 0, relationTypes: {}, refusals: [], modelCalls: 0, backlog: 0, pendingBuilds: 0, enqueued: 0, changed: 0 };
     try {
       const synced = await queue.sync(job.userId, scope, pool, async onlyIds => {
         const pairs = this.similarity ? await this.similarity.pairs(pool, { floor: METHOD_PAIR_FLOOR, applicability: this.recallEnabled, onlyIds }) : candidatePairs(pool);
         return pairs.filter(pair => !pool.filter(method => method.id === pair.a || method.id === pair.b).every(isOfficialDocument));
       });
       report.enqueued = synced.enqueued; report.changed = synced.changed;
+      report.candidatePairs = synced.rows.filter(row => row.payload.status !== "obsolete").length;
       const byId = new Map(pool.map(method => [method.id, method]));
       const pending = queue.pending(synced.rows), consumed = new Set();
       if (!enqueueOnly) for (const anchor of pending) {
@@ -760,7 +763,7 @@ export class MethodConsolidation {
         if (budget.used >= budget.limit) break;
         const batch = queuedPairBatch(pending.filter(row => !consumed.has(row.id)), anchor, CONSOLIDATION_LIMITS.maxGroupSize);
         const fresh = new Map();
-        for (const id of new Set(batch.flatMap(row => [row.payload.a, row.payload.b]))) {
+        for (const id of new Set([...batch.flatMap(row => [row.payload.a, row.payload.b]), ...(anchor.payload.examined ? anchor.payload.groupIds ?? [] : [])])) {
           const method = isOfficialDocument(byId.get(id)) ? byId.get(id) : await this.#get(job, id);
           if (method && method.payload?.status !== "retired") fresh.set(id, method);
         }
@@ -773,19 +776,28 @@ export class MethodConsolidation {
           } else valid.push(row);
         }
         if (!valid.length) continue;
-        const memberIds = [...new Set(valid.flatMap(row => [row.payload.a,row.payload.b]))].sort();
+        // Deferred builds must reuse the exact paid question, even if another
+        // batch has since completed one of its pairs. Re-grouping examined rows
+        // changes the question and quietly buys another DECIDE.
+        const frozen = anchor.payload.examined && anchor.payload.groupPairs
+          && (anchor.payload.groupIds ?? []).every(id => fresh.has(id));
+        const memberIds = frozen ? anchor.payload.groupIds : [...new Set(valid.flatMap(row => [row.payload.a,row.payload.b]))].sort();
         const members = memberIds.map(id => fresh.get(id));
-        const pairTargets = valid.map(row => [row.payload.a, row.payload.b].sort()).map(([a,b]) => ({ a,b }))
-          .sort((one,two) => one.a.localeCompare(two.a) || one.b.localeCompare(two.b));
+        if (anchor.payload.examined && members.some(unprovenMerge)) { report.blockedUnproven += 1; continue; }
+        const pairTargets = frozen ? anchor.payload.groupPairs
+          : valid.map(row => [row.payload.a, row.payload.b].sort()).map(([a,b]) => ({ a,b }))
+            .sort((one,two) => one.a.localeCompare(two.a) || one.b.localeCompare(two.b));
+        const batchKey = shortDigest(JSON.stringify([members.map(method => queue.fingerprint(method)), pairTargets]));
         const done = await this.#processGroup({ ...job, pairBudget: budget, pairTargets }, members);
         report.groups += 1;
         const examined = done.status !== "decide_failed";
         if (!examined) report.decideFailed += 1;
         const pendingBuild = done.blockedUnproven || done.deferredBuilds > 0;
+        if (done.blockedUnproven) report.blockedUnproven += 1;
         for (const row of valid) {
           const p = row.payload;
           Object.assign(row, await queue.save(job.userId, row.id, { ...p, examined: p.examined || examined,
-            status: examined && !pendingBuild ? "done" : "pending", attempts: p.attempts + 1, groupIds: memberIds }, row));
+            status: examined && !pendingBuild ? "done" : "pending", attempts: p.attempts + 1, lastTriedAt: queue.now().toISOString(), groupIds: memberIds, groupPairs: pairTargets, batchKey }, row));
           if (examined && !p.examined) report.examined += 1;
         }
         report.relations += done.relations; report.builds += done.builds;
@@ -872,6 +884,7 @@ export class MethodConsolidation {
     // holds only that is recorded and not sent to the builder.
     // An assignment that names a method the group does not hold, or a `subset` that names no wider one, has nothing the builder could act on.
     const allBuildable = assignments.filter(({ entry, skills, wider }) => skills && entry.RELATION_TYPE !== "supersedes"
+      && (!job.pairBudget || entry.RELATION_TYPE !== "conflicts_with")
       && (entry.RELATION_TYPE !== "subset" || wider));
     const buildable = allBuildable.filter(({ entry }) => !buildTypes || buildTypes.includes(entry.RELATION_TYPE));
     const deferredBuilds = allBuildable.length - buildable.length;

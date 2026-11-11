@@ -3289,7 +3289,8 @@ export function loadConfig(overrides = {}) {
     // The learned-method pyramid (plan 2026-11-04 §5.2 SkillPyramid, §5.4 defect 12), off by default for a measured comparison: an abstract
     // method's level counts the members its `derived_from` names, and the mount adds, above what it selected, the most relevant abstract
     // parent (`METHOD_MOUNT.abstractMax`, reason `abstraction`) and lists the cards abstract first. Off is the flat mount as it was.
-    // P34/L4: persistent pair coverage, bounded by model steps per pass; all off by default.
+    // P34/L4: persistent pair coverage with a provider-call allowance between DECIDE/BUILD steps; all off by default.
+    // Queue screening uses .60: L4 kept recall while removing 16-38% of the old screen's candidates. New retrieval views are measured separately.
     methodConsolidationQueueEnabled: overrides.methodConsolidationQueueEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_CONSOLIDATION_QUEUE_ENABLED", false),
     methodConsolidationRecallEnabled: overrides.methodConsolidationRecallEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_CONSOLIDATION_RECALL_ENABLED", false),
     methodPendingRetirementMountEnabled: overrides.methodPendingRetirementMountEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_PENDING_RETIREMENT_MOUNT_ENABLED", false),
