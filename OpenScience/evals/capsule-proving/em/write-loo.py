@@ -19,6 +19,7 @@ RUNS = pathlib.Path('/srv/evimed/runs')
 DATA = pathlib.Path('/srv/evimed/data/memdata-data')
 STATUS = RUNS / 'EM-STATUS'
 CAP = 150
+WRITE_SIDE = ('memorySafetyNotesEnabled', 'memoryHistorySecretRedactionEnabled', 'memoryPastedInstructionCheckEnabled')
 # Pinned platform reference rates, CNY / million tokens; cache usage is observed.
 DEEPSEEK = (2, .04, 8)
 QWEN = (12, 1.5, 36)
@@ -93,6 +94,8 @@ def main():
         gold = directory / 'gold.json'
         if gold.exists() and any(q.get('category') == 'injection' for q in json.loads(gold.read_text()).get('questions', [])):
             users.append(directory.name)
+    if '--synthetic-subset' in sys.argv:  # reduced design: four 30-session planted-instruction (P) users; the 200-session U users and the M users are dropped for time
+        users = [user for user in users if user in ('P01', 'P02', 'P03', 'P04')]
     comparisons = [
         ('med-m10', 'no-safety', 'memorySafetyNotesEnabled', 19361),
         ('g6', 'no-redaction', 'memoryHistorySecretRedactionEnabled', 19360),
@@ -108,10 +111,12 @@ def main():
     if '--start' not in sys.argv:
         print(json.dumps(manifest, indent=2)); return
     for dataset, variant, feature, port in comparisons:
-        configurations = [('baseline', None, 19360)] + ([(variant, feature, port)] if '--matched-only' in sys.argv
+        configurations = [('baseline', None, 19360)] + ([(variant, feature, port)] + ([('all-off', WRITE_SIDE, 19361)] if '--all-off' in sys.argv else []) if '--matched-only' in sys.argv
             else [(name, switch, engine) for _, name, switch, engine in comparisons])
         for repeat in range(1, int(sys.argv[sys.argv.index('--repeats') + 1]) + 1 if '--repeats' in sys.argv else 4):
             for config, feature, engine in configurations:
+                if '--only-config' in sys.argv and config != sys.argv[sys.argv.index('--only-config') + 1]:
+                    continue
                 name = f'em-loo-{dataset}-{config}-{repeat}'
                 out = RUNS / name
                 if (out / 'EM-COMPLETE').exists():
@@ -127,7 +132,7 @@ def main():
                         '--label', 'EM red-line write-side ablation; round-3 configuration; fresh namespace']
                 for key in ['memorySearchHintEnabled', 'memoryOpeningIndexEnabled', 'memorySafetyNotesEnabled',
                             'memoryHistorySecretRedactionEnabled', 'memoryPastedInstructionCheckEnabled', 'memoryHistoryRetrievalV2Enabled']:
-                    args += ['--config', key + '=' + ('false' if config != 'baseline' and key == feature else 'true')]
+                    args += ['--config', key + '=' + ('false' if config != 'baseline' and key in (feature if isinstance(feature, (list, tuple)) else [feature]) else 'true')]
                 if dataset == 'synthetic-users':
                     args += ['--only', ','.join(users), '--question-category', 'injection']
                 note('START ' + name)
