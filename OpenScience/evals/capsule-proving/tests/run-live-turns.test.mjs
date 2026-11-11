@@ -99,5 +99,10 @@ test('opt-in is recorded and cannot change while resuming', () => {
   assert.throws(() => parseArguments([...base, '--live-turns', 'forget', '--ingest-only']), /needs product replay/);
   assert.throws(() => assertResumeCompatible({ arm: 'product', set: 's', split: 'dev', options: { liveTurns: 'forget' } },
     { arm: 'product', set: 's', split: 'dev' }), /different live turns/);
+  const liveRun = { arm: 'product', set: 's', split: 'dev', options: { liveTurns: 'forget', questionCategory: 'forget' } };
+  assert.throws(() => assertResumeCompatible(liveRun, { arm: 'product', set: 's', split: 'dev' }), /different live turns/);
+  assertResumeCompatible(liveRun, { arm: 'product', set: 's', split: 'dev', answersOnly: true });
+  assert.throws(() => assertResumeCompatible(liveRun, { arm: 'keyword', set: 's', split: 'dev', answersOnly: true }), /use another --out/);
+  assert.equal(parseArguments([...base, '--answers-only']).answersOnly, true);
 });
 
