@@ -11,7 +11,7 @@ const key=(await readFile('/srv/evimed/secrets/dashscope.api-key','utf8')).trim(
 await mkdir(out,{recursive:true});
 const sha=text=>createHash('sha256').update(text).digest('hex');
 const prior=JSON.parse(await readFile(path.join(out,'labels.json'),'utf8').catch(()=>'[]'));
-const done=new Map(prior.filter(r=>!r.error).map(r=>[r.id,r]));
+const done=new Map(prior.map(r=>[r.id,r])); // Failed classifications retain the candidate identity for source-audited recovery.
 const groups=new Map(),links=[];
 let sourceChecks=0;
 for await(const line of createInterface({input:recordingInput(path.join(inputDir,'rows.jsonl')),crlfDelay:Infinity})){
@@ -38,8 +38,12 @@ const workersAt=process.argv.indexOf('--workers'), workers=workersAt<0?3:Number(
 if(!Number.isInteger(workers)||workers<1||workers>8)throw Error('label_workers_invalid');
 const auditHistory = process.argv.includes('--audit-held-history');
 const auditAllHistory = process.argv.includes('--audit-all-history');
+const auditIndex=process.argv.indexOf('--source-audit');
+const adjudications=auditIndex<0?[]:JSON.parse(await readFile(process.argv[auditIndex+1],'utf8'));
+const auditIds=new Set(adjudications.map(row=>row.id));
 const heldSessions = new Map(), histories = new Map();
 if (auditHistory || auditAllHistory) for (const link of links.filter(link => auditAllHistory || link.refused || link.pending)) {
+ if (link.caseId.startsWith('g9-')) continue; // G9's truth sources are its captured archives, not synthetic-user histories.
  const match = /^s(\d+)$/.exec(link.sessionId);
  if (!link.caseId.startsWith('g9-') && !match) throw Error('held_history_session_unknown');
  if (match) heldSessions.set(link.id, Math.min(heldSessions.get(link.id) ?? Infinity, Number(match[1])));
@@ -48,7 +52,7 @@ const jobs=[];
 for(const group of groups.values()){
  let gold=[];
  if(!group.caseId.startsWith('g9-'))gold=JSON.parse(await readFile(`/srv/evimed/data/memdata-data/dev/${group.caseId}/gold.json`,'utf8')).store.filter(s=>['injection','preference_explicit','preference_repeated','correction'].includes(s.category));
- const candidates=[...group.candidates.values()].filter(c=>!done.has(c.id) || heldSessions.has(c.id) && !(done.get(c.id).historyAuditedThrough === heldSessions.get(c.id)));
+ const candidates=[...group.candidates.values()].filter(c=>!auditIds.has(c.id)&&(!done.has(c.id) || done.get(c.id).error || heldSessions.has(c.id) && !(done.get(c.id).historyAuditedThrough === heldSessions.get(c.id))));
  for(const candidate of candidates) {
   const limit=heldSessions.get(candidate.id);
   let renderedHistory;
@@ -87,8 +91,6 @@ await Promise.all(Array.from({length:workers},async()=>{for(;;){const job=jobs[c
 await save();
 const offeredIds=new Set(links.map(link=>link.id));
 const totals={offeredLines:links.length,labelledCandidates:offeredIds.size,cachedLabels:done.size,unknownLabels:[...offeredIds].filter(id=>!done.has(id)||done.get(id).error).length,injected:{trials:0,misses:0,pending:0},realInstructions:{trials:0,held:0},goldRealInstructions:{trials:0,held:0},attributedContent:{trials:0,held:0}};
-const auditIndex=process.argv.indexOf('--source-audit');
-const adjudications=auditIndex<0?[]:JSON.parse(await readFile(process.argv[auditIndex+1],'utf8'));
 const audited=new Map();
 for(const audit of adjudications){
  if(!['injected_standing_instruction','real_person_instruction','attributed_content','other'].includes(audit.kind)||!Array.isArray(audit.ownPlantIds)||audit.ownPlantIds.some(id=>typeof id!=='string'))throw Error('source_audit_schema_invalid');
@@ -96,9 +98,11 @@ for(const audit of adjudications){
  if(audit.evidenceKind==='platform_code'&&!audit.sourceFile.endsWith('/OpenScience/packages/domain/src/memoryNeverKept.mjs'))throw Error('platform_audit_source_invalid');
  const input=audit.evidenceKind==='platform_code'?null:JSON.parse(raw);
  const limit=Math.min(...links.filter(link=>link.id===audit.id).map(link=>Number(/^s(\d+)$/.exec(link.sessionId)?.[1]??Infinity)));
- const source=input?input.sessions.slice(0,limit).flatMap(s=>s.messages).filter(m=>m.role==='user').map(m=>m.text).join('\n'):raw;
+ const operation=audit.evidenceKind==='recorded_diff'?[...(input.operations?.adds??[]),...(input.operations?.updates??[])].find(op=>op.uri===audit.sourceUri):null;
+ if(audit.evidenceKind==='recorded_diff'&&(!audit.sourceFile.startsWith('/var/lib/docker/volumes/ovcand')||!operation?.after?.includes(done.get(audit.id)?.text)))throw Error('recorded_diff_source_invalid');
+ const source=operation?operation.after:input?input.sessions.slice(0,limit).flatMap(s=>s.messages).filter(m=>m.role==='user').map(m=>m.text).join('\n'):raw;
  if(!done.has(audit.id)||!audit.quote||!source.includes(audit.quote))throw Error('source_audit_evidence_invalid');
- audited.set(audit.id,{...done.get(audit.id),...audit,error:null,adjudicatedBy:audit.evidenceKind==='platform_code'?'producer_owned_source':'recorded_human_source'});
+ audited.set(audit.id,{...done.get(audit.id),...audit,error:null,adjudicatedBy:audit.evidenceKind==='platform_code'?'producer_owned_source':operation?'recorded_memory_context':'recorded_human_source'});
 }
 totals.unknownLabels=[...offeredIds].filter(id=>!(audited.get(id)??done.get(id))||(audited.get(id)??done.get(id)).error).length;
 const caseTrials=new Map(),details=[];
