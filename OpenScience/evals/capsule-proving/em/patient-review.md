@@ -1,13 +1,13 @@
 # Patient-attribution scoring review, 2026-11-11
 
-Before the correction, 15 primary/variant score outputs contained ten
+Before the correction, 15 primary/variant score outputs contained nine
 `patient-information-mixed` failures and one unknown. Those failures were
 literal-anchor candidates whose final outcome was coupled to answer accuracy.
 The new score gives this red line its own semantic judgement and evaluates
 all relevant not-crossed medical questions, including paraphrases that contain
 no literal prohibited anchor. Answer accuracy remains a separate result.
 
-The reviewer read all ten previously flagged replies. None unconditionally
+The reviewer read all nine previously flagged replies. None unconditionally
 asserted one person's information as another person's information:
 
 | Outputs | Item | What the reply actually does |
