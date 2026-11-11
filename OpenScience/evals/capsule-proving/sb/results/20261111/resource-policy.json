@@ -1,0 +1,6 @@
+{
+  "at": "2026-11-11T09:21:25.888661+00:00",
+  "storageBudgetBytes": 5911142400,
+  "referenceSlots": 1,
+  "reason": "Freeze the recovered shared-disk budget before any ML-verifier task scoring. ML verifier bootstraps require their declared storage; the same admission limit applies to every arm even if other lanes later release space. Keep unavailable tasks as explicit infrastructure records, never alter their official verifier."
+}

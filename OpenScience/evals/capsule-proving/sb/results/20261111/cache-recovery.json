@@ -1,0 +1,518 @@
+{
+  "at": "2026-11-11T11:48:54.493704+00:00",
+  "reason": "Own completed financial task build caches only; roots identified by exact pinned Dockerfile pip stage and observed parent links. No image, container, result, source, or dataset deletion.",
+  "roots": [
+    "c1q8x5o1plxspr2ixrz7u67vv",
+    "jty8hzrs120t55akps85tcopg"
+  ],
+  "selected": [
+    {
+      "CreatedAt": "2026-11-11 10:57:46.502424033 +0000 UTC",
+      "Description": "mount / from exec /bin/sh -c pip3 install --break-system-packages pandas==2.3.3 rapidfuzz==3.14.3",
+      "ID": "c1q8x5o1plxspr2ixrz7u67vv",
+      "LastUsedAt": "49 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "bx9hlw604k7rgzm0a5jntzzov"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "287.7MB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 10:57:20.217375598 +0000 UTC",
+      "Description": "[17/18] COPY skills /root/.gemini/skills",
+      "ID": "bx9hlw604k7rgzm0a5jntzzov",
+      "LastUsedAt": "49 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "txic8jv1gnn22xiv9xdmxigby"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "90.39kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 10:57:20.171167491 +0000 UTC",
+      "Description": "[16/18] COPY skills /root/.agents/skills",
+      "ID": "txic8jv1gnn22xiv9xdmxigby",
+      "LastUsedAt": "49 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "2cjm9iskvfxlookhcgohrheuj"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "90.38kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 10:57:20.13631759 +0000 UTC",
+      "Description": "[15/18] COPY skills /root/.factory/skills",
+      "ID": "2cjm9iskvfxlookhcgohrheuj",
+      "LastUsedAt": "49 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "358xizvj5s4pwaaig2n2jqvu3"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "90.39kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 10:57:20.098075771 +0000 UTC",
+      "Description": "[14/18] COPY skills /root/.goose/skills",
+      "ID": "358xizvj5s4pwaaig2n2jqvu3",
+      "LastUsedAt": "49 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "bmzxt6s8fdjcnkugoqhd88j5h"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "90.39kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 10:57:20.062745425 +0000 UTC",
+      "Description": "[13/18] COPY skills /root/.opencode/skill",
+      "ID": "bmzxt6s8fdjcnkugoqhd88j5h",
+      "LastUsedAt": "49 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "ui1gxlau0z0r2xqaxz9706xrq"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "90.38kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 10:57:20.01115581 +0000 UTC",
+      "Description": "[12/18] COPY skills /root/.codex/skills",
+      "ID": "ui1gxlau0z0r2xqaxz9706xrq",
+      "LastUsedAt": "49 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "sjzv2dlxx6419w83ogyown2zy"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "90.39kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 10:57:19.967525049 +0000 UTC",
+      "Description": "[11/18] COPY skills /root/.claude/skills",
+      "ID": "sjzv2dlxx6419w83ogyown2zy",
+      "LastUsedAt": "49 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "vm4j21rfetgmsy6tpmfcn8b00"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "90.38kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 10:57:19.924093193 +0000 UTC",
+      "Description": "mount / from exec /bin/sh -c unzip /root/13f-2025-q3.zip -d /root/2025-q3",
+      "ID": "vm4j21rfetgmsy6tpmfcn8b00",
+      "LastUsedAt": "40 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "rt9r1ohpi0f1n5sfze40gekfw"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "427MB",
+      "Type": "regular",
+      "UsageCount": 2
+    },
+    {
+      "CreatedAt": "2026-11-11 08:46:52.244718779 +0000 UTC",
+      "Description": "mount / from exec /bin/sh -c mv /root/01JUN2025-31AUG2025_form13f/* /root/2025-q2",
+      "ID": "rt9r1ohpi0f1n5sfze40gekfw",
+      "LastUsedAt": "49 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "1kg2y2y2x9xzn9nd3vcp53j6i"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "436.9MB",
+      "Type": "regular",
+      "UsageCount": 2
+    },
+    {
+      "CreatedAt": "2026-11-11 08:46:47.498941157 +0000 UTC",
+      "Description": "mount / from exec /bin/sh -c unzip /root/13f-2025-q2.zip -d /root",
+      "ID": "1kg2y2y2x9xzn9nd3vcp53j6i",
+      "LastUsedAt": "3 hours ago",
+      "Mutable": false,
+      "Parents": [
+        "fdsh986szz121pdll0x97iq9u"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "436.9MB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 08:46:38.641140713 +0000 UTC",
+      "Description": "mount / from exec /bin/sh -c mkdir /root/2025-q3",
+      "ID": "fdsh986szz121pdll0x97iq9u",
+      "LastUsedAt": "3 hours ago",
+      "Mutable": false,
+      "Parents": [
+        "rfnaehk8osjgg1t2injasbe2s"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "12.4kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 08:46:37.725877371 +0000 UTC",
+      "Description": "mount / from exec /bin/sh -c mkdir /root/2025-q2",
+      "ID": "rfnaehk8osjgg1t2injasbe2s",
+      "LastUsedAt": "3 hours ago",
+      "Mutable": false,
+      "Parents": [
+        "q1sghrgv2k7q8fb9olpx7bycl"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "12.4kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 08:46:36.592761888 +0000 UTC",
+      "Description": "[ 5/18] COPY 13f-2025-q3.zip /root/13f-2025-q3.zip",
+      "ID": "q1sghrgv2k7q8fb9olpx7bycl",
+      "LastUsedAt": "3 hours ago",
+      "Mutable": false,
+      "Parents": [
+        "y7j3k4m1txrx3c1k0802u3hmu"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "171.3MB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 08:46:35.598345131 +0000 UTC",
+      "Description": "[ 4/18] COPY 13f-2025-q2.zip /root/13f-2025-q2.zip",
+      "ID": "y7j3k4m1txrx3c1k0802u3hmu",
+      "LastUsedAt": "3 hours ago",
+      "Mutable": false,
+      "Parents": [
+        "0siq1kkiqxep8qszpoxrl9ie7"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "172.6MB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 08:46:34.675677077 +0000 UTC",
+      "Description": "[ 3/18] WORKDIR /root",
+      "ID": "0siq1kkiqxep8qszpoxrl9ie7",
+      "LastUsedAt": "3 hours ago",
+      "Mutable": false,
+      "Parents": [
+        "sshqn5h3gzz4mqbsag8c3ad1u"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "4.128kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 08:46:34.343220438 +0000 UTC",
+      "Description": "mount / from exec /bin/sh -c apt-get update && apt-get install -y     python3     python3-pip     python3-venv     wget     unzip     && rm -rf /var/lib/apt/lists/*",
+      "ID": "sshqn5h3gzz4mqbsag8c3ad1u",
+      "LastUsedAt": "3 hours ago",
+      "Mutable": false,
+      "Parents": [
+        "lgwtew9zpy8uaplnyglnd1jfs"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "612.3MB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 11:05:51.257133009 +0000 UTC",
+      "Description": "[17/18] COPY skills /root/.gemini/skills",
+      "ID": "jty8hzrs120t55akps85tcopg",
+      "LastUsedAt": "40 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "mcej7fwzzkfmndge350vajjux"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "65.64kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 11:05:51.187940846 +0000 UTC",
+      "Description": "[16/18] COPY skills /root/.agents/skills",
+      "ID": "mcej7fwzzkfmndge350vajjux",
+      "LastUsedAt": "40 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "2v1dbelg24yjg9il8xiwmo3vg"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "65.64kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 11:05:51.085414916 +0000 UTC",
+      "Description": "[15/18] COPY skills /root/.factory/skills",
+      "ID": "2v1dbelg24yjg9il8xiwmo3vg",
+      "LastUsedAt": "40 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "vbs21uugkaqpjc7kdqak1ijfx"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "65.64kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 11:05:50.984613625 +0000 UTC",
+      "Description": "[14/18] COPY skills /root/.goose/skills",
+      "ID": "vbs21uugkaqpjc7kdqak1ijfx",
+      "LastUsedAt": "40 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "y7ydcifa7mx640rnsevb1m65s"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "65.64kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 11:05:50.853951622 +0000 UTC",
+      "Description": "[13/18] COPY skills /root/.opencode/skill",
+      "ID": "y7ydcifa7mx640rnsevb1m65s",
+      "LastUsedAt": "40 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "y90kwg9hilxefdedqnyajxziw"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "65.63kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 11:05:50.649620154 +0000 UTC",
+      "Description": "[12/18] COPY skills /root/.codex/skills",
+      "ID": "y90kwg9hilxefdedqnyajxziw",
+      "LastUsedAt": "40 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "230tkbq2md94wcedu2zugfozd"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "65.64kB",
+      "Type": "regular",
+      "UsageCount": 1
+    },
+    {
+      "CreatedAt": "2026-11-11 11:05:50.398984314 +0000 UTC",
+      "Description": "[11/18] COPY skills /root/.claude/skills",
+      "ID": "230tkbq2md94wcedu2zugfozd",
+      "LastUsedAt": "40 minutes ago",
+      "Mutable": false,
+      "Parents": [
+        "vm4j21rfetgmsy6tpmfcn8b00"
+      ],
+      "Reclaimable": true,
+      "Shared": false,
+      "Size": "65.63kB",
+      "Type": "regular",
+      "UsageCount": 1
+    }
+  ],
+  "beforeFreeBytes": 1853521920,
+  "prunes": [
+    {
+      "id": "c1q8x5o1plxspr2ixrz7u67vv",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nc1q8x5o1plxspr2ixrz7u67vv               \ttrue \t\t287.7MB   \t49 minutes ago\nTotal:\t287.7MB\n",
+      "error": ""
+    },
+    {
+      "id": "jty8hzrs120t55akps85tcopg",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\njty8hzrs120t55akps85tcopg               \ttrue \t\t65.64kB   \t40 minutes ago\nTotal:\t65.64kB\n",
+      "error": ""
+    },
+    {
+      "id": "bx9hlw604k7rgzm0a5jntzzov",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nbx9hlw604k7rgzm0a5jntzzov               \ttrue \t\t90.39kB   \t49 minutes ago\nTotal:\t90.39kB\n",
+      "error": ""
+    },
+    {
+      "id": "mcej7fwzzkfmndge350vajjux",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nmcej7fwzzkfmndge350vajjux               \ttrue \t\t65.64kB   \t40 minutes ago\nTotal:\t65.64kB\n",
+      "error": ""
+    },
+    {
+      "id": "txic8jv1gnn22xiv9xdmxigby",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\ntxic8jv1gnn22xiv9xdmxigby               \ttrue \t\t90.38kB   \t49 minutes ago\nTotal:\t90.38kB\n",
+      "error": ""
+    },
+    {
+      "id": "2v1dbelg24yjg9il8xiwmo3vg",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\n2v1dbelg24yjg9il8xiwmo3vg               \ttrue \t\t65.64kB   \t40 minutes ago\nTotal:\t65.64kB\n",
+      "error": ""
+    },
+    {
+      "id": "2cjm9iskvfxlookhcgohrheuj",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\n2cjm9iskvfxlookhcgohrheuj               \ttrue \t\t90.39kB   \t49 minutes ago\nTotal:\t90.39kB\n",
+      "error": ""
+    },
+    {
+      "id": "vbs21uugkaqpjc7kdqak1ijfx",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nvbs21uugkaqpjc7kdqak1ijfx               \ttrue \t\t65.64kB   \t40 minutes ago\nTotal:\t65.64kB\n",
+      "error": ""
+    },
+    {
+      "id": "358xizvj5s4pwaaig2n2jqvu3",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\n358xizvj5s4pwaaig2n2jqvu3               \ttrue \t\t90.39kB   \t49 minutes ago\nTotal:\t90.39kB\n",
+      "error": ""
+    },
+    {
+      "id": "y7ydcifa7mx640rnsevb1m65s",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\ny7ydcifa7mx640rnsevb1m65s               \ttrue \t\t65.63kB   \t40 minutes ago\nTotal:\t65.63kB\n",
+      "error": ""
+    },
+    {
+      "id": "bmzxt6s8fdjcnkugoqhd88j5h",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nbmzxt6s8fdjcnkugoqhd88j5h               \ttrue \t\t90.38kB   \t49 minutes ago\nTotal:\t90.38kB\n",
+      "error": ""
+    },
+    {
+      "id": "y90kwg9hilxefdedqnyajxziw",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\ny90kwg9hilxefdedqnyajxziw               \ttrue \t\t65.64kB   \t40 minutes ago\nTotal:\t65.64kB\n",
+      "error": ""
+    },
+    {
+      "id": "ui1gxlau0z0r2xqaxz9706xrq",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nui1gxlau0z0r2xqaxz9706xrq               \ttrue \t\t90.39kB   \t49 minutes ago\nTotal:\t90.39kB\n",
+      "error": ""
+    },
+    {
+      "id": "230tkbq2md94wcedu2zugfozd",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\n230tkbq2md94wcedu2zugfozd               \ttrue \t\t65.63kB   \t40 minutes ago\nTotal:\t65.63kB\n",
+      "error": ""
+    },
+    {
+      "id": "sjzv2dlxx6419w83ogyown2zy",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nsjzv2dlxx6419w83ogyown2zy               \ttrue \t\t90.38kB   \t49 minutes ago\nTotal:\t90.38kB\n",
+      "error": ""
+    },
+    {
+      "id": "vm4j21rfetgmsy6tpmfcn8b00",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nvm4j21rfetgmsy6tpmfcn8b00               \ttrue \t\t427MB     \t40 minutes ago\nTotal:\t427MB\n",
+      "error": ""
+    },
+    {
+      "id": "rt9r1ohpi0f1n5sfze40gekfw",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nrt9r1ohpi0f1n5sfze40gekfw               \ttrue \t\t436.9MB   \t49 minutes ago\nTotal:\t436.9MB\n",
+      "error": ""
+    },
+    {
+      "id": "1kg2y2y2x9xzn9nd3vcp53j6i",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\n1kg2y2y2x9xzn9nd3vcp53j6i               \ttrue \t\t436.9MB   \t3 hours ago\nTotal:\t436.9MB\n",
+      "error": ""
+    },
+    {
+      "id": "fdsh986szz121pdll0x97iq9u",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nfdsh986szz121pdll0x97iq9u               \ttrue \t\t12.4kB    \t3 hours ago\nTotal:\t12.4kB\n",
+      "error": ""
+    },
+    {
+      "id": "rfnaehk8osjgg1t2injasbe2s",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nrfnaehk8osjgg1t2injasbe2s               \ttrue \t\t12.4kB    \t3 hours ago\nTotal:\t12.4kB\n",
+      "error": ""
+    },
+    {
+      "id": "q1sghrgv2k7q8fb9olpx7bycl",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nq1sghrgv2k7q8fb9olpx7bycl               \ttrue \t\t171.3MB   \t3 hours ago\nTotal:\t171.3MB\n",
+      "error": ""
+    },
+    {
+      "id": "y7j3k4m1txrx3c1k0802u3hmu",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\ny7j3k4m1txrx3c1k0802u3hmu               \ttrue \t\t172.6MB   \t3 hours ago\nTotal:\t172.6MB\n",
+      "error": ""
+    },
+    {
+      "id": "0siq1kkiqxep8qszpoxrl9ie7",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\n0siq1kkiqxep8qszpoxrl9ie7               \ttrue \t\t4.128kB   \t3 hours ago\nTotal:\t4.128kB\n",
+      "error": ""
+    },
+    {
+      "id": "sshqn5h3gzz4mqbsag8c3ad1u",
+      "exit": 0,
+      "output": "ID\t\t\t\t\t\tRECLAIMABLE\tSIZE\t\tLAST ACCESSED\nsshqn5h3gzz4mqbsag8c3ad1u               \ttrue \t\t612.3MB   \t3 hours ago\nTotal:\t612.3MB\n",
+      "error": ""
+    }
+  ],
+  "afterFreeBytes": 4396642304
+}

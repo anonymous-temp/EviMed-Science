@@ -1,0 +1,623 @@
+[
+  {
+    "at": "2026-11-11T13:48:17.415Z",
+    "runId": "sb-none-1",
+    "commit": "1a323c0bde7cf71171816dd6d9507179ee2176a7",
+    "engine": {
+      "version": "reference-harness",
+      "templatesDigest": "not-applicable"
+    },
+    "arm": "reference-none",
+    "flags": {
+      "pins": {
+        "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+        "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+      },
+      "manifestSha256": "04ca79cd7edf30a2b59d0463aa6d78413924b3e708bb24f567050f46283cfbae",
+      "thinking": "high",
+      "model": "deepseek-flash",
+      "harness": "BenchFlow 0.6.3 + Pi ACP",
+      "productPracticeLockIsolationEnabled": true,
+      "subset": true,
+      "tasks": [
+        "dapt-intrusion-detection",
+        "invoice-fraud-detection",
+        "manufacturing-fjsp-optimization",
+        "pddl-airport-planning",
+        "video-silence-remover",
+        "lake-warming-attribution",
+        "exceltable-in-ppt",
+        "azure-bgp-oscillation-route-leak"
+      ],
+      "perFamily": null,
+      "resources": "task-manifest",
+      "costBasis": "Provider usage priced by product domain priceListAt/isPeak; proxy budget uses peak equivalent"
+    },
+    "set": "skillsbench",
+    "split": "dev",
+    "label": "model + our methods, not the product",
+    "tokens": {
+      "prompt": 2061301,
+      "completion": 68461,
+      "cached": 1919872,
+      "extractionPrompt": 0,
+      "extractionCompletion": 0
+    },
+    "costCny": 0.8540031599999998,
+    "wallSeconds": 4532.234308242798,
+    "scorer": "sb@f860ecf02ef53412a030f8661c83d644b739ff01:official-verifier",
+    "rawPath": "/srv/evimed/runs/sb-none-1",
+    "metric": "accuracy",
+    "n": 8,
+    "value": 0.125,
+    "ci95": [
+      0.02241749145005667,
+      0.4708881822128535
+    ],
+    "valueValid": 0.125,
+    "ci95Valid": [
+      0.02241690886329617,
+      0.4708948057698615
+    ],
+    "nValid": 8,
+    "invalid": 0,
+    "disputed": 0,
+    "judged": {
+      "code": 6,
+      "judge": 0,
+      "unknown": 0,
+      "error": 2
+    },
+    "byCategory": {
+      "software-engineering": {
+        "n": 1,
+        "value": 0
+      },
+      "cybersecurity": {
+        "n": 1,
+        "value": 0
+      },
+      "office-white-collar": {
+        "n": 1,
+        "value": 1
+      },
+      "finance-economics": {
+        "n": 1,
+        "value": 0
+      },
+      "natural-science": {
+        "n": 1,
+        "value": 0
+      },
+      "industrial-physical-systems": {
+        "n": 1,
+        "value": 0
+      },
+      "mathematics-or-formal-reasoning": {
+        "n": 1,
+        "value": 0
+      },
+      "media-content-production": {
+        "n": 1,
+        "value": 0
+      }
+    },
+    "notes": "Before scores: screen Dockerfile for large ML/compiler/download dependencies, specialized base images and task-required credentials; rank eligible names by SHA256(seed + colon + name). SkillsBench: first per domain test, second practice. SkillLearnBench: first family per README category, variant 1 practice, first two remaining variants by the same hash test. This is a feasibility-conditioned pilot, not a representative full-benchmark estimate.  Model + our methods, NOT the product. Inference only; product practice and adapter calibration cost are separate. Every affected adapter-calibration phase was archived wholly (passes included) and designated for fresh qualification; primary records distinguish actual reruns from explicit unavailability. See protocol-amendments.json. Infrastructure errors and unfinished tasks stay in the planned denominator; scorer-only rate and interval are in summary.json. Mounted/opened 0/0; model-invoked 6/8.",
+    "ledgerId": "1cd6cce60658"
+  },
+  {
+    "at": "2026-11-11T13:48:17.535Z",
+    "runId": "sb-flat-1",
+    "commit": "1a323c0bde7cf71171816dd6d9507179ee2176a7",
+    "engine": {
+      "version": "reference-harness",
+      "templatesDigest": "not-applicable"
+    },
+    "arm": "reference-flat",
+    "flags": {
+      "pins": {
+        "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+        "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+      },
+      "manifestSha256": "04ca79cd7edf30a2b59d0463aa6d78413924b3e708bb24f567050f46283cfbae",
+      "thinking": "high",
+      "model": "deepseek-flash",
+      "harness": "BenchFlow 0.6.3 + Pi ACP",
+      "productPracticeLockIsolationEnabled": true,
+      "subset": true,
+      "tasks": [
+        "dapt-intrusion-detection",
+        "invoice-fraud-detection",
+        "manufacturing-fjsp-optimization",
+        "pddl-airport-planning",
+        "video-silence-remover",
+        "lake-warming-attribution",
+        "exceltable-in-ppt",
+        "azure-bgp-oscillation-route-leak"
+      ],
+      "perFamily": null,
+      "resources": "task-manifest",
+      "costBasis": "Provider usage priced by product domain priceListAt/isPeak; proxy budget uses peak equivalent"
+    },
+    "set": "skillsbench",
+    "split": "dev",
+    "label": "model + our methods, not the product",
+    "tokens": {
+      "prompt": 2061102,
+      "completion": 65684,
+      "cached": 1936512,
+      "extractionPrompt": 0,
+      "extractionCompletion": 0
+    },
+    "costCny": 0.42605624,
+    "wallSeconds": 2439.6401796340942,
+    "scorer": "sb@f860ecf02ef53412a030f8661c83d644b739ff01:official-verifier",
+    "rawPath": "/srv/evimed/runs/sb-flat-1",
+    "metric": "accuracy",
+    "n": 8,
+    "value": 0.5,
+    "ci95": [
+      0.21521606221387757,
+      0.7847839377861224
+    ],
+    "valueValid": 0.5,
+    "ci95Valid": [
+      0.21521252682444186,
+      0.7847874731755582
+    ],
+    "nValid": 8,
+    "invalid": 0,
+    "disputed": 0,
+    "judged": {
+      "code": 6,
+      "judge": 0,
+      "unknown": 0,
+      "error": 2
+    },
+    "byCategory": {
+      "software-engineering": {
+        "n": 1,
+        "value": 0
+      },
+      "cybersecurity": {
+        "n": 1,
+        "value": 1
+      },
+      "office-white-collar": {
+        "n": 1,
+        "value": 1
+      },
+      "finance-economics": {
+        "n": 1,
+        "value": 0
+      },
+      "natural-science": {
+        "n": 1,
+        "value": 1
+      },
+      "industrial-physical-systems": {
+        "n": 1,
+        "value": 0
+      },
+      "mathematics-or-formal-reasoning": {
+        "n": 1,
+        "value": 1
+      },
+      "media-content-production": {
+        "n": 1,
+        "value": 0
+      }
+    },
+    "notes": "Before scores: screen Dockerfile for large ML/compiler/download dependencies, specialized base images and task-required credentials; rank eligible names by SHA256(seed + colon + name). SkillsBench: first per domain test, second practice. SkillLearnBench: first family per README category, variant 1 practice, first two remaining variants by the same hash test. This is a feasibility-conditioned pilot, not a representative full-benchmark estimate.  Model + our methods, NOT the product. Inference only; product practice and adapter calibration cost are separate. Every affected adapter-calibration phase was archived wholly (passes included) and designated for fresh qualification; primary records distinguish actual reruns from explicit unavailability. See protocol-amendments.json. Infrastructure errors and unfinished tasks stay in the planned denominator; scorer-only rate and interval are in summary.json. Mounted/opened 13/7; model-invoked 6/8.",
+    "ledgerId": "b540cecad903"
+  },
+  {
+    "at": "2026-11-11T13:48:17.638Z",
+    "runId": "sb-learned-1",
+    "commit": "1a323c0bde7cf71171816dd6d9507179ee2176a7",
+    "engine": {
+      "version": "reference-harness",
+      "templatesDigest": "not-applicable"
+    },
+    "arm": "reference-learned",
+    "flags": {
+      "pins": {
+        "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+        "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+      },
+      "manifestSha256": "04ca79cd7edf30a2b59d0463aa6d78413924b3e708bb24f567050f46283cfbae",
+      "thinking": "high",
+      "model": "deepseek-flash",
+      "harness": "BenchFlow 0.6.3 + Pi ACP",
+      "productPracticeLockIsolationEnabled": true,
+      "subset": true,
+      "tasks": [
+        "dapt-intrusion-detection",
+        "invoice-fraud-detection",
+        "manufacturing-fjsp-optimization",
+        "pddl-airport-planning",
+        "video-silence-remover",
+        "lake-warming-attribution",
+        "exceltable-in-ppt",
+        "azure-bgp-oscillation-route-leak"
+      ],
+      "perFamily": null,
+      "resources": "task-manifest",
+      "costBasis": "Provider usage priced by product domain priceListAt/isPeak; proxy budget uses peak equivalent"
+    },
+    "set": "skillsbench",
+    "split": "dev",
+    "label": "model + our methods, not the product",
+    "tokens": {
+      "prompt": 1990161,
+      "completion": 90160,
+      "cached": 1876480,
+      "extractionPrompt": 0,
+      "extractionCompletion": 0
+    },
+    "costCny": 0.5118506,
+    "wallSeconds": 2873.0853655338287,
+    "scorer": "sb@f860ecf02ef53412a030f8661c83d644b739ff01:official-verifier",
+    "rawPath": "/srv/evimed/runs/sb-learned-1",
+    "metric": "accuracy",
+    "n": 8,
+    "value": 0.25,
+    "ci95": [
+      0.071479212752109,
+      0.5907245696898311
+    ],
+    "valueValid": 0.25,
+    "ci95Valid": [
+      0.07147768885802763,
+      0.5907301208974108
+    ],
+    "nValid": 8,
+    "invalid": 0,
+    "disputed": 0,
+    "judged": {
+      "code": 6,
+      "judge": 0,
+      "unknown": 0,
+      "error": 2
+    },
+    "byCategory": {
+      "software-engineering": {
+        "n": 1,
+        "value": 0
+      },
+      "cybersecurity": {
+        "n": 1,
+        "value": 0
+      },
+      "office-white-collar": {
+        "n": 1,
+        "value": 1
+      },
+      "finance-economics": {
+        "n": 1,
+        "value": 0
+      },
+      "natural-science": {
+        "n": 1,
+        "value": 0
+      },
+      "industrial-physical-systems": {
+        "n": 1,
+        "value": 0
+      },
+      "mathematics-or-formal-reasoning": {
+        "n": 1,
+        "value": 1
+      },
+      "media-content-production": {
+        "n": 1,
+        "value": 0
+      }
+    },
+    "notes": "Before scores: screen Dockerfile for large ML/compiler/download dependencies, specialized base images and task-required credentials; rank eligible names by SHA256(seed + colon + name). SkillsBench: first per domain test, second practice. SkillLearnBench: first family per README category, variant 1 practice, first two remaining variants by the same hash test. This is a feasibility-conditioned pilot, not a representative full-benchmark estimate.  Model + our methods, NOT the product. Inference only; product practice and adapter calibration cost are separate. Every affected adapter-calibration phase was archived wholly (passes included) and designated for fresh qualification; primary records distinguish actual reruns from explicit unavailability. See protocol-amendments.json. Infrastructure errors and unfinished tasks stay in the planned denominator; scorer-only rate and interval are in summary.json. Mounted/opened 30/0; model-invoked 6/8.",
+    "ledgerId": "971f6276dde3"
+  },
+  {
+    "at": "2026-11-11T13:48:17.764Z",
+    "runId": "slb-none-1",
+    "commit": "1a323c0bde7cf71171816dd6d9507179ee2176a7",
+    "engine": {
+      "version": "reference-harness",
+      "templatesDigest": "not-applicable"
+    },
+    "arm": "reference-none",
+    "flags": {
+      "pins": {
+        "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+        "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+      },
+      "manifestSha256": "04ca79cd7edf30a2b59d0463aa6d78413924b3e708bb24f567050f46283cfbae",
+      "thinking": "high",
+      "model": "deepseek-flash",
+      "harness": "SkillLearnBench core.eval_runner + Pi CLI",
+      "productPracticeLockIsolationEnabled": true,
+      "subset": true,
+      "tasks": [
+        "chinese-poem-generator-3",
+        "financial-analysis-4",
+        "enterprise-information-search-2",
+        "court-form-filling-2",
+        "nlp-paper-reproduction-3",
+        "organize-messy-files-5"
+      ],
+      "perFamily": 1,
+      "resources": {
+        "cpus": 1,
+        "memoryBytes": 2147483648,
+        "memoryAndSwapBytes": 3221225472,
+        "agentTimeoutSeconds": 1700
+      },
+      "costBasis": "Provider usage priced by product domain priceListAt/isPeak; proxy budget uses peak equivalent"
+    },
+    "set": "skilllearnbench",
+    "split": "dev",
+    "label": "model + our methods, not the product",
+    "tokens": {
+      "prompt": 4950168,
+      "completion": 85545,
+      "cached": 4761088,
+      "extractionPrompt": 0,
+      "extractionCompletion": 0
+    },
+    "costCny": 0.70999948,
+    "wallSeconds": 2343.11376285553,
+    "scorer": "slb@726e1f79b96b0cb3d729d0e55a1c847e0b5353ae:official-verifier",
+    "rawPath": "/srv/evimed/runs/slb-none-1",
+    "metric": "accuracy",
+    "n": 6,
+    "value": 0.3333333333333333,
+    "ci95": [
+      0.09677141110578041,
+      0.700006684861608
+    ],
+    "valueValid": 0.3333333333333333,
+    "ci95Valid": [
+      0.09676933255921683,
+      0.7000116786584712
+    ],
+    "nValid": 6,
+    "invalid": 0,
+    "disputed": 0,
+    "judged": {
+      "code": 5,
+      "judge": 0,
+      "unknown": 0,
+      "error": 1
+    },
+    "byCategory": {
+      "Content & Creative": {
+        "n": 1,
+        "value": 1
+      },
+      "Productivity Tools": {
+        "n": 1,
+        "value": 0
+      },
+      "Information Retrieval": {
+        "n": 1,
+        "value": 0
+      },
+      "Data & Analytics": {
+        "n": 1,
+        "value": 0
+      },
+      "Software Engineering": {
+        "n": 1,
+        "value": 0
+      },
+      "Utilities & Other": {
+        "n": 1,
+        "value": 1
+      }
+    },
+    "notes": "Before scores: screen Dockerfile for large ML/compiler/download dependencies, specialized base images and task-required credentials; rank eligible names by SHA256(seed + colon + name). SkillsBench: first per domain test, second practice. SkillLearnBench: first family per README category, variant 1 practice, first two remaining variants by the same hash test. This is a feasibility-conditioned pilot, not a representative full-benchmark estimate. Before any SkillLearnBench scoring: execute the first frozen held-out variant per family; second variants remain unused reserves. Default is one after the 6.3-minute smoke and shared lab load above 50. Model + our methods, NOT the product. Inference only; product practice and adapter calibration cost are separate. Every affected adapter-calibration phase was archived wholly (passes included) and designated for fresh qualification; primary records distinguish actual reruns from explicit unavailability. See protocol-amendments.json. Infrastructure errors and unfinished tasks stay in the planned denominator; scorer-only rate and interval are in summary.json. Mounted/opened 0/0; model-invoked 5/6.",
+    "ledgerId": "dfd364067e2e"
+  },
+  {
+    "at": "2026-11-11T13:48:17.881Z",
+    "runId": "slb-flat-1",
+    "commit": "1a323c0bde7cf71171816dd6d9507179ee2176a7",
+    "engine": {
+      "version": "reference-harness",
+      "templatesDigest": "not-applicable"
+    },
+    "arm": "reference-flat",
+    "flags": {
+      "pins": {
+        "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+        "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+      },
+      "manifestSha256": "04ca79cd7edf30a2b59d0463aa6d78413924b3e708bb24f567050f46283cfbae",
+      "thinking": "high",
+      "model": "deepseek-flash",
+      "harness": "SkillLearnBench core.eval_runner + Pi CLI",
+      "productPracticeLockIsolationEnabled": true,
+      "subset": true,
+      "tasks": [
+        "chinese-poem-generator-3",
+        "financial-analysis-4",
+        "enterprise-information-search-2",
+        "court-form-filling-2",
+        "nlp-paper-reproduction-3",
+        "organize-messy-files-5"
+      ],
+      "perFamily": 1,
+      "resources": {
+        "cpus": 1,
+        "memoryBytes": 2147483648,
+        "memoryAndSwapBytes": 3221225472,
+        "agentTimeoutSeconds": 1700
+      },
+      "costBasis": "Provider usage priced by product domain priceListAt/isPeak; proxy budget uses peak equivalent"
+    },
+    "set": "skilllearnbench",
+    "split": "dev",
+    "label": "model + our methods, not the product",
+    "tokens": {
+      "prompt": 8128119,
+      "completion": 103674,
+      "cached": 7857408,
+      "extractionPrompt": 0,
+      "extractionCompletion": 0
+    },
+    "costCny": 0.8425551600000005,
+    "wallSeconds": 1946.2984144687653,
+    "scorer": "slb@726e1f79b96b0cb3d729d0e55a1c847e0b5353ae:official-verifier",
+    "rawPath": "/srv/evimed/runs/slb-flat-1",
+    "metric": "accuracy",
+    "n": 6,
+    "value": 0.5,
+    "ci95": [
+      0.1876163064826506,
+      0.8123836935173494
+    ],
+    "valueValid": 0.5,
+    "ci95Valid": [
+      0.18761280689940868,
+      0.8123871931005913
+    ],
+    "nValid": 6,
+    "invalid": 0,
+    "disputed": 0,
+    "judged": {
+      "code": 5,
+      "judge": 0,
+      "unknown": 0,
+      "error": 1
+    },
+    "byCategory": {
+      "Content & Creative": {
+        "n": 1,
+        "value": 1
+      },
+      "Productivity Tools": {
+        "n": 1,
+        "value": 0
+      },
+      "Information Retrieval": {
+        "n": 1,
+        "value": 1
+      },
+      "Data & Analytics": {
+        "n": 1,
+        "value": 1
+      },
+      "Software Engineering": {
+        "n": 1,
+        "value": 0
+      },
+      "Utilities & Other": {
+        "n": 1,
+        "value": 0
+      }
+    },
+    "notes": "Before scores: screen Dockerfile for large ML/compiler/download dependencies, specialized base images and task-required credentials; rank eligible names by SHA256(seed + colon + name). SkillsBench: first per domain test, second practice. SkillLearnBench: first family per README category, variant 1 practice, first two remaining variants by the same hash test. This is a feasibility-conditioned pilot, not a representative full-benchmark estimate. Before any SkillLearnBench scoring: execute the first frozen held-out variant per family; second variants remain unused reserves. Default is one after the 6.3-minute smoke and shared lab load above 50. Model + our methods, NOT the product. Inference only; product practice and adapter calibration cost are separate. Every affected adapter-calibration phase was archived wholly (passes included) and designated for fresh qualification; primary records distinguish actual reruns from explicit unavailability. See protocol-amendments.json. Infrastructure errors and unfinished tasks stay in the planned denominator; scorer-only rate and interval are in summary.json. Mounted/opened 10/5; model-invoked 5/6.",
+    "ledgerId": "3d619118eea2"
+  },
+  {
+    "at": "2026-11-11T13:48:17.989Z",
+    "runId": "slb-learned-1",
+    "commit": "1a323c0bde7cf71171816dd6d9507179ee2176a7",
+    "engine": {
+      "version": "reference-harness",
+      "templatesDigest": "not-applicable"
+    },
+    "arm": "reference-learned",
+    "flags": {
+      "pins": {
+        "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+        "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+      },
+      "manifestSha256": "04ca79cd7edf30a2b59d0463aa6d78413924b3e708bb24f567050f46283cfbae",
+      "thinking": "high",
+      "model": "deepseek-flash",
+      "harness": "SkillLearnBench core.eval_runner + Pi CLI",
+      "productPracticeLockIsolationEnabled": true,
+      "subset": true,
+      "tasks": [
+        "chinese-poem-generator-3",
+        "financial-analysis-4",
+        "enterprise-information-search-2",
+        "court-form-filling-2",
+        "nlp-paper-reproduction-3",
+        "organize-messy-files-5"
+      ],
+      "perFamily": 1,
+      "resources": {
+        "cpus": 1,
+        "memoryBytes": 2147483648,
+        "memoryAndSwapBytes": 3221225472,
+        "agentTimeoutSeconds": 1700
+      },
+      "costBasis": "Provider usage priced by product domain priceListAt/isPeak; proxy budget uses peak equivalent"
+    },
+    "set": "skilllearnbench",
+    "split": "dev",
+    "label": "model + our methods, not the product",
+    "tokens": {
+      "prompt": 4042930,
+      "completion": 92566,
+      "cached": 3780480,
+      "extractionPrompt": 0,
+      "extractionCompletion": 0
+    },
+    "costCny": 0.7083235999999997,
+    "wallSeconds": 1855.7983663082123,
+    "scorer": "slb@726e1f79b96b0cb3d729d0e55a1c847e0b5353ae:official-verifier",
+    "rawPath": "/srv/evimed/runs/slb-learned-1",
+    "metric": "accuracy",
+    "n": 6,
+    "value": 0,
+    "ci95": [
+      2.7755575615628914e-17,
+      0.3903342879021653
+    ],
+    "valueValid": 0,
+    "ci95Valid": [
+      0,
+      0.3903430336530645
+    ],
+    "nValid": 6,
+    "invalid": 0,
+    "disputed": 0,
+    "judged": {
+      "code": 5,
+      "judge": 0,
+      "unknown": 0,
+      "error": 1
+    },
+    "byCategory": {
+      "Content & Creative": {
+        "n": 1,
+        "value": 0
+      },
+      "Productivity Tools": {
+        "n": 1,
+        "value": 0
+      },
+      "Information Retrieval": {
+        "n": 1,
+        "value": 0
+      },
+      "Data & Analytics": {
+        "n": 1,
+        "value": 0
+      },
+      "Software Engineering": {
+        "n": 1,
+        "value": 0
+      },
+      "Utilities & Other": {
+        "n": 1,
+        "value": 0
+      }
+    },
+    "notes": "Before scores: screen Dockerfile for large ML/compiler/download dependencies, specialized base images and task-required credentials; rank eligible names by SHA256(seed + colon + name). SkillsBench: first per domain test, second practice. SkillLearnBench: first family per README category, variant 1 practice, first two remaining variants by the same hash test. This is a feasibility-conditioned pilot, not a representative full-benchmark estimate. Before any SkillLearnBench scoring: execute the first frozen held-out variant per family; second variants remain unused reserves. Default is one after the 6.3-minute smoke and shared lab load above 50. Model + our methods, NOT the product. Inference only; product practice and adapter calibration cost are separate. Every affected adapter-calibration phase was archived wholly (passes included) and designated for fresh qualification; primary records distinguish actual reruns from explicit unavailability. See protocol-amendments.json. Infrastructure errors and unfinished tasks stay in the planned denominator; scorer-only rate and interval are in summary.json. Mounted/opened 25/2; model-invoked 5/6.",
+    "ledgerId": "a26ca8e3a6ea"
+  }
+]

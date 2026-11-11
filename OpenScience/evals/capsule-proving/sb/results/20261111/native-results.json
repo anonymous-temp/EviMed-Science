@@ -1,0 +1,589 @@
+[
+  {
+    "runId": "sb-none-1",
+    "records": [
+      {
+        "task": "azure-bgp-oscillation-route-leak",
+        "arm": "none",
+        "infraError": "RuntimeError: Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+        "official": {}
+      },
+      {
+        "task": "dapt-intrusion-detection",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": "Agent prompt exceeded wall-clock budget 600s",
+          "error_category": "timeout",
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 13,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": {
+            "reason": "wall_clock_timeout",
+            "timeout_sec": 600.0,
+            "n_tool_calls": 13,
+            "pending_tool_call_ids": [],
+            "terminal_event_recorded": true,
+            "terminal_trajectory_complete": true
+          }
+        }
+      },
+      {
+        "task": "exceltable-in-ppt",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 1.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 11,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "invoice-fraud-detection",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 17,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "lake-warming-attribution",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": "Agent prompt exceeded wall-clock budget 300s",
+          "error_category": "timeout",
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 10,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": {
+            "reason": "wall_clock_timeout",
+            "timeout_sec": 300.0,
+            "n_tool_calls": 10,
+            "pending_tool_call_ids": [
+              "call_00_rDbaHZTCRvGeNmpl3DNt9236"
+            ],
+            "terminal_event_recorded": true,
+            "terminal_trajectory_complete": false
+          }
+        }
+      },
+      {
+        "task": "manufacturing-fjsp-optimization",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 57,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "pddl-airport-planning",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 10,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "video-silence-remover",
+        "arm": "none",
+        "infraError": "RuntimeError: Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+        "official": {}
+      }
+    ]
+  },
+  {
+    "runId": "sb-flat-1",
+    "records": [
+      {
+        "task": "azure-bgp-oscillation-route-leak",
+        "arm": "flat",
+        "infraError": "RuntimeError: Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+        "official": {}
+      },
+      {
+        "task": "dapt-intrusion-detection",
+        "arm": "flat",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 1.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 7,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "exceltable-in-ppt",
+        "arm": "flat",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 1.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 7,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "invoice-fraud-detection",
+        "arm": "flat",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 21,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "lake-warming-attribution",
+        "arm": "flat",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 1.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 11,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "manufacturing-fjsp-optimization",
+        "arm": "flat",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 35,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "pddl-airport-planning",
+        "arm": "flat",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 1.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 18,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "video-silence-remover",
+        "arm": "flat",
+        "infraError": "RuntimeError: Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+        "official": {}
+      }
+    ]
+  },
+  {
+    "runId": "sb-learned-1",
+    "records": [
+      {
+        "task": "azure-bgp-oscillation-route-leak",
+        "arm": "learned",
+        "infraError": "RuntimeError: Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+        "official": {}
+      },
+      {
+        "task": "dapt-intrusion-detection",
+        "arm": "learned",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": "Agent prompt exceeded wall-clock budget 600s",
+          "error_category": "timeout",
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 11,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": {
+            "reason": "wall_clock_timeout",
+            "timeout_sec": 600.0,
+            "n_tool_calls": 11,
+            "pending_tool_call_ids": [
+              "call_00_ohU0AyYaO1MsylMoeCPB6861"
+            ],
+            "terminal_event_recorded": true,
+            "terminal_trajectory_complete": false
+          }
+        }
+      },
+      {
+        "task": "exceltable-in-ppt",
+        "arm": "learned",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 1.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 10,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "invoice-fraud-detection",
+        "arm": "learned",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 13,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "lake-warming-attribution",
+        "arm": "learned",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": "Agent prompt exceeded wall-clock budget 300s",
+          "error_category": "timeout",
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 16,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": {
+            "reason": "wall_clock_timeout",
+            "timeout_sec": 300.0,
+            "n_tool_calls": 16,
+            "pending_tool_call_ids": [],
+            "terminal_event_recorded": true,
+            "terminal_trajectory_complete": true
+          }
+        }
+      },
+      {
+        "task": "manufacturing-fjsp-optimization",
+        "arm": "learned",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 27,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "pddl-airport-planning",
+        "arm": "learned",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 1.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 19,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "video-silence-remover",
+        "arm": "learned",
+        "infraError": "RuntimeError: Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+        "official": {}
+      }
+    ]
+  },
+  {
+    "runId": "slb-none-1",
+    "records": [
+      {
+        "task": "chinese-poem-generator-3",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "passed": true,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      },
+      {
+        "task": "court-form-filling-2",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "passed": false,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      },
+      {
+        "task": "enterprise-information-search-2",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "passed": false,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      },
+      {
+        "task": "financial-analysis-4",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "passed": false,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      },
+      {
+        "task": "nlp-paper-reproduction-3",
+        "arm": "none",
+        "infraError": "RuntimeError: Capacity unavailable before model dispatch: pinned verifier ML bootstrap, declared storage 10737418240 bytes, shared free 5911142400 bytes. Official verifier is unchanged and unrun.",
+        "official": {}
+      },
+      {
+        "task": "organize-messy-files-5",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "passed": true,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      }
+    ]
+  },
+  {
+    "runId": "slb-flat-1",
+    "records": [
+      {
+        "task": "chinese-poem-generator-3",
+        "arm": "flat",
+        "infraError": null,
+        "official": {
+          "passed": true,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      },
+      {
+        "task": "court-form-filling-2",
+        "arm": "flat",
+        "infraError": null,
+        "official": {
+          "passed": false,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      },
+      {
+        "task": "enterprise-information-search-2",
+        "arm": "flat",
+        "infraError": null,
+        "official": {
+          "passed": true,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      },
+      {
+        "task": "financial-analysis-4",
+        "arm": "flat",
+        "infraError": null,
+        "official": {
+          "passed": true,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      },
+      {
+        "task": "nlp-paper-reproduction-3",
+        "arm": "flat",
+        "infraError": "RuntimeError: Capacity unavailable before model dispatch: pinned verifier ML bootstrap, declared storage 10737418240 bytes, shared free 5911142400 bytes. Official verifier is unchanged and unrun.",
+        "official": {}
+      },
+      {
+        "task": "organize-messy-files-5",
+        "arm": "flat",
+        "infraError": null,
+        "official": {
+          "passed": false,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      }
+    ]
+  },
+  {
+    "runId": "slb-learned-1",
+    "records": [
+      {
+        "task": "chinese-poem-generator-3",
+        "arm": "learned",
+        "infraError": null,
+        "official": {
+          "passed": false,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      },
+      {
+        "task": "court-form-filling-2",
+        "arm": "learned",
+        "infraError": null,
+        "official": {
+          "passed": false,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      },
+      {
+        "task": "enterprise-information-search-2",
+        "arm": "learned",
+        "infraError": null,
+        "official": {
+          "passed": false,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      },
+      {
+        "task": "financial-analysis-4",
+        "arm": "learned",
+        "infraError": null,
+        "official": {
+          "passed": false,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      },
+      {
+        "task": "nlp-paper-reproduction-3",
+        "arm": "learned",
+        "infraError": "RuntimeError: Capacity unavailable before model dispatch: pinned verifier ML bootstrap, declared storage 10737418240 bytes, shared free 5911142400 bytes. Official verifier is unchanged and unrun.",
+        "official": {}
+      },
+      {
+        "task": "organize-messy-files-5",
+        "arm": "learned",
+        "infraError": null,
+        "official": {
+          "passed": false,
+          "agent_timed_out": false,
+          "agent_exit": 0,
+          "verifier_exit": 0
+        }
+      }
+    ]
+  }
+]

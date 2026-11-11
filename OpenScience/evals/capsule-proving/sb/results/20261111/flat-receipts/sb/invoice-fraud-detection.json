@@ -1,0 +1,25 @@
+{
+  "source": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/invoice-fraud-detection/environment/skills",
+  "staged": "/srv/evimed/sb/flat/sb/invoice-fraud-detection",
+  "byteIdentical": true,
+  "directoriesMode": "0755",
+  "filesReadable": true,
+  "sha256": {
+    "xlsx/recalc.py": "f0833720e26fa894c9c1ccf0bd71dfc4609f8a310360fb2de2071efb64fbd409",
+    "xlsx/LICENSE.txt": "79f6d8f5b427252fa3b1c11ecdbdb6bf610b944f7530b4de78f770f38741cfaa",
+    "xlsx/SKILL.md": "9bdc1fee81f3be9cb34ac49f8890c094a3855d3d0236783d10e0ea6df1515e01",
+    "fuzzy-match/SKILL.md": "531e4f484546b24db8a2aa76143e488b487ce4619f9f331bedb5d84751da6907",
+    "pdf/reference.md": "3c6e7c055461d28c2047556dcc65185f542805b0a3198d2fe24236ac07699696",
+    "pdf/LICENSE.txt": "79f6d8f5b427252fa3b1c11ecdbdb6bf610b944f7530b4de78f770f38741cfaa",
+    "pdf/forms.md": "0ab10e9095deb1c1f9f79eb04254589f55c1d16e095cb53191e03f9fc3184449",
+    "pdf/SKILL.md": "38d8559d4899602f82f3560052132aa0c40cfca80203037729756bdb4fb8e0cb",
+    "pdf/scripts/check_bounding_boxes_test.py": "c9614e2dee1f614318985c9bcabb24e4bea6326b866d7dae7494940047f38461",
+    "pdf/scripts/extract_form_field_info.py": "683228c1b909e821739f138e753d00c8f514e7bb54d3686045e38426fc813d46",
+    "pdf/scripts/fill_fillable_fields.py": "c5f7602e1b14d12457bb42812da80cfb22b0bbdbe8b70da4035a69b73e5160fe",
+    "pdf/scripts/convert_pdf_to_images.py": "4fdb00d3042f6c995ad5994a43e306a2b13c3e5b94eef2088dd6db6200476e58",
+    "pdf/scripts/check_fillable_fields.py": "9842bf09975f2cc2bd2e1f7a413ecd0d4a7823b09653278bfc59d84af3b0aeb9",
+    "pdf/scripts/fill_pdf_form_with_annotations.py": "503fc5a22080b2343cbcf9795fe37c7b2afd49a5a5840115d01c9f83afa45f97",
+    "pdf/scripts/create_validation_image.py": "7a58f04c3607897f9491513e4f5f624cfdf7dd8521ce5eaf7b5707c2581e4594",
+    "pdf/scripts/check_bounding_boxes.py": "c5a6c5c418252965eb3b2ed26bb4206f102118805a9d314ab8e7992faf487016"
+  }
+}

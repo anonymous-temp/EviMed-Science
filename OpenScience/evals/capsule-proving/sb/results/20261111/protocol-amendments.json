@@ -1,0 +1,63 @@
+[
+  {
+    "at": "2026-11-11T08:48:11.273198+00:00",
+    "runId": "sb-none-1",
+    "archiveRunId": "sb-none-precompat-1",
+    "tasks": [
+      "dapt-intrusion-detection",
+      "invoice-fraud-detection",
+      "manufacturing-fjsp-optimization",
+      "pddl-airport-planning",
+      "video-silence-remover"
+    ],
+    "primaryAfter": "2026-11-11T08:48:11.273198+00:00",
+    "reason": "BenchFlow 0.6.3 trajectory redaction stalled the control loop; py-spy located the video client in its generic credential-name scan after native Pi completion. Requalify the whole five-task pre-fix phase, including its pass, under the logging-only compatibility fix. Repeat all five, never select retries by reward. Remaining three no-skill tasks and all learned/flat trials start after the fix. Original grades and paid usage are preserved as calibration, not primary comparisons.",
+    "unchanged": [
+      "frozen sample and seed",
+      "native Pi/model/thinking and prompts",
+      "frozen learned library",
+      "official task verifiers"
+    ],
+    "archiveOriginalPrefix": "/srv/evimed/runs/sb-none-1",
+    "archiveNewPrefix": "/srv/evimed/runs/sb-none-precompat-1",
+    "moved": [
+      "records/dapt-intrusion-detection.json",
+      "trials/dapt-intrusion-detection",
+      "dapt-intrusion-detection.log",
+      "records/invoice-fraud-detection.json",
+      "trials/invoice-fraud-detection",
+      "invoice-fraud-detection.log",
+      "records/manufacturing-fjsp-optimization.json",
+      "trials/manufacturing-fjsp-optimization",
+      "manufacturing-fjsp-optimization.log",
+      "records/pddl-airport-planning.json",
+      "trials/pddl-airport-planning",
+      "pddl-airport-planning.log",
+      "records/video-silence-remover.json",
+      "trials/video-silence-remover",
+      "video-silence-remover.log"
+    ]
+  },
+  {
+    "at": "2026-11-11T10:37:13.558817+00:00",
+    "runId": "sb-flat-1",
+    "archiveRunId": "sb-flat-permission-calibration-1",
+    "tasks": [
+      "lake-warming-attribution"
+    ],
+    "primaryAfter": "2026-11-11T10:37:13.558817+00:00",
+    "reason": "Whole one-task flat adapter phase invalidated before any other SkillsBench flat trial: intake folders/files are 0700/0600, runtime upload preserves them, and non-root Pi cannot traverse the canonical skills tree. Flat first prompt had the same 1693 tokens as none; learned was 2797. Stage byte-identical public skill copies with readable permissions and repeat the whole affected phase. No outcome selected the retry.",
+    "unchanged": [
+      "skill content",
+      "sample",
+      "model and thinking",
+      "native time limits",
+      "official verifiers"
+    ],
+    "moved": [
+      "records/lake-warming-attribution.json",
+      "trials/lake-warming-attribution",
+      "lake-warming-attribution.log"
+    ]
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T10:34:25.239889+00:00",
+  "queuePid": 1848925,
+  "activeDrivers": [
+    1916388
+  ],
+  "reason": "Pause only the queue wrapper. Active native task continues; after it exits, requalify the entire affected one-task flat phase with readable byte-identical skill copies, then resume the queue.",
+  "noAgentCanceled": true,
+  "qualificationStartedAt": "2026-11-11T10:39:54.229884+00:00",
+  "qualificationExit": 0,
+  "resumedAt": "2026-11-11T10:44:04.923083+00:00"
+}

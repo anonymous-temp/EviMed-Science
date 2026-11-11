@@ -1,0 +1,76 @@
+{
+  "seed": "20261111",
+  "rule": "Within each benchmark, native agent timeout ascending, then SHA256(seed + colon + task id); alternate benchmarks. Complete none/learned/flat per task. Sample unchanged; no outcome enters ordering.",
+  "tasks": [
+    {
+      "bench": "sb",
+      "task": "lake-warming-attribution",
+      "nativeAgentTimeoutSeconds": 300.0
+    },
+    {
+      "bench": "slb",
+      "task": "enterprise-information-search-2",
+      "nativeAgentTimeoutSeconds": 600.0
+    },
+    {
+      "bench": "sb",
+      "task": "pddl-airport-planning",
+      "nativeAgentTimeoutSeconds": 600.0
+    },
+    {
+      "bench": "slb",
+      "task": "financial-analysis-4",
+      "nativeAgentTimeoutSeconds": 900.0
+    },
+    {
+      "bench": "sb",
+      "task": "dapt-intrusion-detection",
+      "nativeAgentTimeoutSeconds": 600.0
+    },
+    {
+      "bench": "slb",
+      "task": "organize-messy-files-5",
+      "nativeAgentTimeoutSeconds": 900.0
+    },
+    {
+      "bench": "sb",
+      "task": "exceltable-in-ppt",
+      "nativeAgentTimeoutSeconds": 900.0
+    },
+    {
+      "bench": "slb",
+      "task": "nlp-paper-reproduction-3",
+      "nativeAgentTimeoutSeconds": 900.0
+    },
+    {
+      "bench": "sb",
+      "task": "invoice-fraud-detection",
+      "nativeAgentTimeoutSeconds": 900.0
+    },
+    {
+      "bench": "slb",
+      "task": "court-form-filling-2",
+      "nativeAgentTimeoutSeconds": 900.0
+    },
+    {
+      "bench": "sb",
+      "task": "manufacturing-fjsp-optimization",
+      "nativeAgentTimeoutSeconds": 1800.0
+    },
+    {
+      "bench": "slb",
+      "task": "chinese-poem-generator-3",
+      "nativeAgentTimeoutSeconds": 1800
+    },
+    {
+      "bench": "sb",
+      "task": "azure-bgp-oscillation-route-leak",
+      "nativeAgentTimeoutSeconds": 3600.0
+    },
+    {
+      "bench": "sb",
+      "task": "video-silence-remover",
+      "nativeAgentTimeoutSeconds": 3600.0
+    }
+  ]
+}

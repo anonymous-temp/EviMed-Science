@@ -1,0 +1,12 @@
+{
+  "source": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/dapt-intrusion-detection/environment/skills",
+  "staged": "/srv/evimed/sb/flat/sb/dapt-intrusion-detection",
+  "byteIdentical": true,
+  "directoriesMode": "0755",
+  "filesReadable": true,
+  "sha256": {
+    "threat-detection/SKILL.md": "456e491ca6f033a77e871005f913d04a119992ad8ea834669b145ddc66d0de86",
+    "pcap-analysis/pcap_utils.py": "6a9b8a52ff92ef0748b6f12a5553ef4866f7e179d9ff35c609378960c2990820",
+    "pcap-analysis/SKILL.md": "26c80622440b880cd8ac10c0f9990b9ee3686ca9dc48f317d0f66c22f4969fb9"
+  }
+}

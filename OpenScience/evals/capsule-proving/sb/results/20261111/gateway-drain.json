@@ -1,0 +1,9 @@
+{
+  "at": "2026-11-11T13:48:14.418770+00:00",
+  "pid": 1693591,
+  "threadsBeforeStop": 1,
+  "usageRows": 1199,
+  "usageSha256": "fa31ea56d013d2fdd32f058ee8b22f268940a01f8531bb32b81e41acdcabefbf",
+  "usageMissingRows": 0,
+  "reason": "All primary arms and diagnostic calls completed; HTTP/1.0 proxy has only its main thread. Stop the own idle proxy before final ledger accounting."
+}

@@ -1,0 +1,11 @@
+{
+  "at": "2026-11-11T13:46:16.977242+00:00",
+  "selectedTasksAndPractice": 33,
+  "selectedPinnedFiles": 825,
+  "upstreamFiles": 379,
+  "flatFilesBothSourceAndStaged": 244,
+  "selectedDataPinDigestsMatch": true,
+  "verifierMapsMatchFrozenManifest": true,
+  "upstreamReceiptSha256Match": true,
+  "flatBytesMatchReceipts": true
+}

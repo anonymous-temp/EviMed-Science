@@ -1,0 +1,8 @@
+{
+  "at": "2026-11-11T08:56:05.062944+00:00",
+  "freeBytes": 321150976,
+  "reason": "Shared disk exhausted below 3 GiB. Active trials finish; prevent old loaded drivers from starting another task by holding their own atomic admission temp path. No budgets, task data, verifiers or usage records are changed. Remove this empty directory only after old drivers exit and capacity recovers.",
+  "barrier": "/srv/evimed/sb/current.json.tmp",
+  "releasedAt": "2026-11-11T09:21:25.888661+00:00",
+  "freeBytesAtRelease": 5911142400
+}

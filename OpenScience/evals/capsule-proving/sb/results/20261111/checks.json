@@ -1,0 +1,23 @@
+{
+  "nodePassed": 11,
+  "pythonPassed": 19,
+  "totalPassed": 30,
+  "sourceCredentialAuditPassed": true,
+  "targetedEvaluationAuditPassed": true,
+  "logSha256": {
+    "node-tests.log": "673a02969b9b0c5a927ab2340ef95766dd5df0a5389e86ef8d358e2b3d506ee6",
+    "python-tests.log": "80dcb7c9c6a77dadddb71be6231f9851e6889537eda3a243b502805a938b4085",
+    "source-audit.log": "d21189f967798704a5e832afe0394df88d8afccb225b18c50ea66b6391c97aa7"
+  },
+  "pinChecks": {
+    "at": "2026-11-11T13:46:16.977242+00:00",
+    "selectedTasksAndPractice": 33,
+    "selectedPinnedFiles": 825,
+    "upstreamFiles": 379,
+    "flatFilesBothSourceAndStaged": 244,
+    "selectedDataPinDigestsMatch": true,
+    "verifierMapsMatchFrozenManifest": true,
+    "upstreamReceiptSha256Match": true,
+    "flatBytesMatchReceipts": true
+  }
+}

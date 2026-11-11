@@ -219,3 +219,10 @@ What a leaderboard submission would need (five lines):
 3. Disclose the actual model, harness, skill sources, practice/test separation, generated methods, resource limits, tokens and spend.
 4. For SkillLearnBench, include all three layers and the required solver/judge or obtain agreement to clearly labelled substitutions.
 5. Package reproducible artifacts and ask the maintainers for the current submission route/acceptance; this pilot is not a submission.
+
+The default source-secret audit excludes `evals/`. Before publishing a review
+bundle, also invoke its exported `auditSourceSecrets` with explicit roots for
+this lane and the fresh bundle; retain that receipt as `targeted-audit.json`.
+
+`source-commit` pins the completed execution/report freeze. Packaging-only fixes
+may accompany the review-artifact commit without rewriting those ledger entries.

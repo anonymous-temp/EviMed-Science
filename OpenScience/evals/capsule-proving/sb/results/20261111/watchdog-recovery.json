@@ -1,0 +1,7 @@
+{
+  "at": "2026-11-11T08:28:25.416059+00:00",
+  "driverPid": 1526838,
+  "benchmarkPid": 1671053,
+  "reason": "Outer runner watchdog 3300 seconds was shorter than the pinned video agent timeout of 3600 seconds plus its 240-second verifier. Suspend only the waiting wrapper; the reference agent, its native timer and verifier continue unchanged. Resume the wrapper after its benchmark child exits, preserving this first attempt.",
+  "resumedAt": "2026-11-11T08:39:00.575643+00:00"
+}

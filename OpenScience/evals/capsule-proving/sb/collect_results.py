@@ -34,7 +34,7 @@ def collect(root, runs, out, ledger):
     out.mkdir(parents=True, exist_ok=False)
     # Explicit allowlist: no generic copy of the lab root or practice directory.
     files = ['report.md', 'report.csv', 'summary.json', 'accounting.json', 'manifest.json',
-             'findings.md', 'python-freeze.txt', 'pin-checks.json', 'protocol-amendments.json',
+             'findings.md', 'targeted-audit.json', 'python-freeze.txt', 'pin-checks.json', 'protocol-amendments.json',
              'resource-policy.json', 'task-admissions.json', 'execution-queue.json',
              'campaign-amendment.json', 'gateway-drain.json', 'batch.json', 'learned-methods.json', 'source-commit',
              'watchdog-recovery.json', 'flat-permission-recovery.json', 'capacity-hold.json',
@@ -68,7 +68,7 @@ def collect(root, runs, out, ledger):
     actual = [row for row in appended if row.get('runId') in run_ids]
     assert len(actual) == 6, 'Append exactly one final global ledger row per arm before collection'
     for proposed in rows:
-        matches = [row for row in actual if {key: value for key, value in row.items() if key not in ['ledgerId', 'at']} == proposed]
+        matches = [row for row in actual if {key: value for key, value in row.items() if key not in ['ledgerId', 'at']} == {key: value for key, value in proposed.items() if key not in ['ledgerId', 'at']}]
         assert len(matches) == 1 and matches[0].get('ledgerId') and matches[0].get('at'), proposed['runId']
     write(out / 'ledger-rows.json', actual)
     write(out / 'run-configs.json', configs)
@@ -116,6 +116,7 @@ def collect(root, runs, out, ledger):
     assert 'Source credential audit passed:' in audit_log
     write(out / 'checks.json', {'nodePassed': 11, 'pythonPassed': 19, 'totalPassed': 30,
         'sourceCredentialAuditPassed': True,
+        'targetedEvaluationAuditPassed': (root / 'targeted-audit.json').exists() and read(root / 'targeted-audit.json').get('findings') == [],
         'logSha256': {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in
                       ['node-tests.log', 'python-tests.log', 'source-audit.log']},
         'pinChecks': read(root / 'pin-checks.json')})

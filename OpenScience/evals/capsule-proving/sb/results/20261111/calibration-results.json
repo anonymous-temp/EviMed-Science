@@ -1,0 +1,139 @@
+[
+  {
+    "runId": "sb-none-precompat-1",
+    "records": [
+      {
+        "task": "dapt-intrusion-detection",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": "Agent prompt exceeded wall-clock budget 600s",
+          "error_category": "timeout",
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 9,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": {
+            "reason": "wall_clock_timeout",
+            "timeout_sec": 600.0,
+            "n_tool_calls": 9,
+            "pending_tool_call_ids": [
+              "call_00_0CJBzchxVMZ13uOXWOIH6416"
+            ],
+            "terminal_event_recorded": true,
+            "terminal_trajectory_complete": false
+          }
+        }
+      },
+      {
+        "task": "invoice-fraud-detection",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 13,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "manufacturing-fjsp-optimization",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": "Agent prompt exceeded wall-clock budget 1800s",
+          "error_category": "timeout",
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 32,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": {
+            "reason": "wall_clock_timeout",
+            "timeout_sec": 1800.0,
+            "n_tool_calls": 32,
+            "pending_tool_call_ids": [],
+            "terminal_event_recorded": true,
+            "terminal_trajectory_complete": true
+          }
+        }
+      },
+      {
+        "task": "pddl-airport-planning",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 1.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 17,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      },
+      {
+        "task": "video-silence-remover",
+        "arm": "none",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": null,
+          "error_category": null,
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 60,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": null
+        }
+      }
+    ]
+  },
+  {
+    "runId": "sb-flat-permission-calibration-1",
+    "records": [
+      {
+        "task": "lake-warming-attribution",
+        "arm": "flat",
+        "infraError": null,
+        "official": {
+          "rewards": {
+            "reward": 0.0
+          },
+          "error": "Agent prompt exceeded wall-clock budget 300s",
+          "error_category": "timeout",
+          "verifier_error": null,
+          "verifier_error_category": null,
+          "n_tool_calls": 8,
+          "n_skill_invocations": 0,
+          "agent_timeout_info": {
+            "reason": "wall_clock_timeout",
+            "timeout_sec": 300.0,
+            "n_tool_calls": 8,
+            "pending_tool_call_ids": [
+              "call_00_TpnTHmq83tmc2Rr9mAST3750"
+            ],
+            "terminal_event_recorded": true,
+            "terminal_trajectory_complete": false
+          }
+        }
+      }
+    ]
+  }
+]

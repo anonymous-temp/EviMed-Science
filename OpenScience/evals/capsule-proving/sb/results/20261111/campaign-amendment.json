@@ -1,0 +1,37 @@
+{
+  "at": "2026-11-11T08:05:06.581053+00:00",
+  "change": "After product practice released its slot, use one stream per benchmark, at most two reference containers. Within each stream: none, learned, flat. New trial-specific URL attribution replaces the global current-trial fallback; legacy single-slot requests retain their original proxy until settled.",
+  "reason": "Fit fixed paired pilot within the original ten-hour wall allocation; shared lab now has approximately 3 GiB available memory and load 16.",
+  "unchanged": [
+    "frozen sample",
+    "all prior outcomes",
+    "task instructions",
+    "model and thinking",
+    "skill bodies",
+    "official verifiers"
+  ],
+  "priorCompletedScoredTasks": 4,
+  "practiceLearned": 5,
+  "practiceApproved": 5,
+  "serialResume": {
+    "at": "2026-11-11T09:21:25.888661+00:00",
+    "freeBytes": 5911142400,
+    "slots": 1,
+    "imagePolicy": "Remove only exact completed SkillLearnBench image tags after upstream cleanup",
+    "resourcePolicy": "resource-policy.json",
+    "retry": "Infrastructure only; every prior attempt preserved. Valid negative grades are never retried."
+  },
+  "interleavedSerialQueue": {
+    "at": "2026-11-11T09:39:26.708257+00:00",
+    "order": [
+      "sb-none",
+      "slb-none",
+      "sb-learned",
+      "slb-learned",
+      "sb-flat",
+      "slb-flat"
+    ],
+    "currentDriverContinues": 1820670,
+    "reason": "Prioritize both benchmark methods comparisons inside the original wall deadline; queue change only, no agent restart or changed task inputs."
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "source": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/lake-warming-attribution/environment/skills",
+  "staged": "/srv/evimed/sb/flat/sb/lake-warming-attribution",
+  "byteIdentical": true,
+  "directoriesMode": "0755",
+  "filesReadable": true,
+  "sha256": {
+    "trend-analysis/SKILL.md": "eec026677dd73c7407170d01fc2358ba10dacfd4b8b3b9bf669b8f922491514f",
+    "contribution-analysis/SKILL.md": "ec9531b6b06a4e7a699da04bf0e86279af14cc0b7aba77476adbfc4766015c63",
+    "pca-decomposition/SKILL.md": "651fe7e01b2bc9abcf21a51d213398ef27c225ad2ea1a49b5bd681e934015ac2",
+    "meteorology-driver-classification/SKILL.md": "5faebbffdf7c5a5a46c22a11b08d5950f378e71f3a4c967c9495ffb70f64fc2f"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "source": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/pddl-airport-planning/environment/skills",
+  "staged": "/srv/evimed/sb/flat/sb/pddl-airport-planning",
+  "byteIdentical": true,
+  "directoriesMode": "0755",
+  "filesReadable": true,
+  "sha256": {
+    "pddl-skills/generate_plan.skill": "0e87f8ae98a524ce99779bdb79fe569e0dbcc8a77dc1795f0503501c7ae3d629",
+    "pddl-skills/save_plan.skill": "13741f91a5d99190da2f150dd1643a5cfd94dd021af776771c194e69d6a2ff77",
+    "pddl-skills/load_problem.skill": "66fe85a19bfd8f6523b22ce5ec558fe3a68b19daf406546d4cbf1ae15e4399dc",
+    "pddl-skills/validate.skill": "a07da1277fdd81db82cb0edba271be6f46c5233234fd153debc5a93c9b7ba4c0",
+    "pddl-skills/SKILL.md": "adc4db64d2554074650a49a11f008698c7e95f69967e300ba219c5777f9ced4b"
+  }
+}
