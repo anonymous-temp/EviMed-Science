@@ -66,6 +66,10 @@ Read-only IPC exports approved bodies, frontmatter values and script attachments
 The reference trials mount that library through their own skill discovery;
 they do not reproduce the product's pyramid selection. A separate pyramid arm
 would require additional paid trials and is omitted.
+The library is frozen across both benchmark practice pools before learned-arm
+scoring. This is a practice-to-held-out transfer pilot, not the full continual
+curriculum, online adaptation or forgetting measurement. Wilson intervals describe
+this selected pilot; they are not full-benchmark population estimates.
 
 ## Lab operation
 

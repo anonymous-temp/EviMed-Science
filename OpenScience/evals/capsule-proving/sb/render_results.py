@@ -28,13 +28,13 @@ def main(args):
     learning = load(root / 'practice/complete.json', {})
     lines = ['# SkillsBench / SkillLearnBench pilot — 2026-11-11', '',
         '**All scored rows are model + skills in the reference harness, not the product.**', '',
-        '| Run | Passed / planned | Wilson 95% | Scored / infrastructure / missing | Tokens per completed task | CNY per completed task | Mounts / observed opens |',
+        '| Run | Passed / planned | Wilson 95% | Scored / infrastructure / missing | Tokens per completed task | CNY per completed task | Mount incidences / read events (distinct mounted / opened) |',
         '| --- | --- | --- | --- | --- | --- | --- |']
     for r in results:
         interval = 'n/a' if r['ci95'] is None else f"{100*r['ci95'][0]:.1f}–{100*r['ci95'][1]:.1f}%"
         per = r.get('perTask') or {}
-        lines.append(f"| {r['bench']}-{r['arm']}-1 | {r['pass']}/{r['n']} ({fmt(100*r['value'],1)}%) | {interval} | {r['scored']} / {r['error']} / {r['unknown']} | {fmt(per.get('tokens'),0)} | {fmt(per.get('costCny'))} | {r['mounted']} / {r['opened']} |")
-    lines += ['', 'Rates above keep infrastructure failures and missing tasks in the planned denominator. Scorer-only rates and every task are in the JSON/CSV. A partial run is not a final benchmark score. Tokens include cached prompt tokens and completion/reasoning tokens. Costs are timestamp-adjusted billing estimates; peak equivalents are retained separately.', '',
+        lines.append(f"| {r['bench']}-{r['arm']}-1 | {r['pass']}/{r['n']} ({fmt(100*r['value'],1)}%) | {interval} | {r['scored']} / {r['error']} / {r['unknown']} | {fmt(per.get('tokens'),0)} | {fmt(per.get('costCny'))} | {r['mounted']} / {r['opened']} ({r.get('distinctMounted', 'unknown')} / {r.get('distinctOpened', 'unknown')}) |")
+    lines += ['', 'Rates above keep infrastructure failures and missing tasks in the planned denominator. Wilson intervals describe this feasibility-conditioned pilot, not a population estimate of the full benchmark. Scorer-only rates and every task are in the JSON/CSV. A partial run is not a final benchmark score. Tokens include cached prompt tokens and completion/reasoning tokens. Costs are timestamp-adjusted billing estimates; peak equivalents are retained separately.', '',
               '## Sampling and per-domain results', '', manifest.get('samplingRule', ''), '',
               'Capacity amendment before any SkillLearnBench scoring: only the first frozen held-out variant per family is primary (six families/categories, one variant each); the other six candidates are unused reserves. No scored result selected or removed a task.']
     for bench in ['sb', 'slb']:
@@ -63,7 +63,7 @@ def main(args):
     practice_records = [load(p) for p in (root / 'practice').glob('*.json') if p.name.startswith(('sb-', 'slb-'))]
     turns = collections.Counter(t.get('run', {}).get('status', 'unknown') for r in practice_records for t in r.get('turns', []))
     lines += ['', f'Practice task records: {len(practice_records)}; turn outcomes: {dict(turns)}. These are simulated attended user requests (`automated` omitted), not real-user approval. Practice paths were relocated into the product workspace, and practice outputs were not graded by official container verifiers. Failed/time-limited practice and failed learning jobs remain visible.', '',
-              'Scored trials use BenchFlow 0.6.3 + Pi ACP for SkillsBench, and the pinned SkillLearnBench runner + Pi CLI for SkillLearnBench. The learned library comes from product practice/distillation; its mounting and openings here are reference-agent behavior, not product ranking or capsule observer events. Observed openings require a successful read-tool call; shell reads are not counted.', '',
+              'Scored trials use BenchFlow 0.6.3 + Pi ACP for SkillsBench, and the pinned SkillLearnBench runner + Pi CLI for SkillLearnBench. The learned library comes from product practice/distillation across both benchmark practice pools; its mounting and openings here are reference-agent behavior, not product ranking or capsule observer events. Observed openings require a successful read-tool call; shell reads are not counted. This is a frozen practice-to-held-out transfer pilot, not the full continual curriculum, online adaptation or forgetting measurement.', '',
               '## L7 diagnostic layers', '',
               'Task outcomes above use the unchanged official deterministic verifiers. The following optional diagnostic measurements use pinned upstream prompts/parsers with **DeepSeek Flash, thinking off**, replacing the published GPT-5-mini judge. This is also the solver family, so diagnostic self-judging bias is possible. The transport facade and removal of thinking blocks from Pi traces are disclosed in `judges/config.json`; no judge feedback reaches learning or solving.', '',
               '| Arm | Skill coverage | Executability (native scale) | Safety (native scale) | Trajectory key-point recall | Order (1–5) | Completion (1–5) | Judge errors |',

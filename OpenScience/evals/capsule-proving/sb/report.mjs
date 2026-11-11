@@ -82,6 +82,8 @@ export function aggregate(records, planned) {
   return { ...counts, value: planned ? counts.pass / planned : null, ci95: wilson(counts.pass, planned),
     scored: counts.pass + counts.fail, scoredValue: counts.pass + counts.fail ? counts.pass / (counts.pass + counts.fail) : null,
     complete: records.length === planned, byCategory, tokens: totals, mounted, opened,
+    distinctMounted: new Set(records.flatMap(r => r.mounted ?? [])).size,
+    distinctOpened: new Set(records.flatMap(r => r.opened ?? [])).size,
     perTask: records.length ? { tokens: (totals.prompt + totals.completion) / records.length, costCny: totals.costCny / records.length,
       mounted: mounted / records.length, opened: opened / records.length } : null };
 }
