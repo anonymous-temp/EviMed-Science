@@ -297,3 +297,13 @@ test('B4: retirement while legacy coverage is judged prevents the later recovery
   await assert.rejects(h.learning.approve('u1', method.id, { expectedRevision: method.revision }), { code: 'product_revision_conflict' });
   assert.equal((await h.learning.getMethod('u1', method.id)).payload.status, 'retired');
 });
+
+
+test('B3 grounding preserves line wrapping but still refuses joined or paraphrased quotations', () => {
+  const method = 'Write the date year first, then month, then day, joined by slashes, with a two-digit month\nand a two-digit day.';
+  const correction = 'Use slash-separated dates.';
+  const answer = methodQuote => JSON.stringify({ covers: true, methodQuote, correctionQuote: correction });
+  assert.equal(correctionCovered(answer('with a two-digit month and a two-digit day.'), method, correction), true);
+  assert.equal(correctionCovered(answer('Write the date year first ... joined by slashes'), method, correction), false);
+  assert.equal(correctionCovered(answer('Write the date year first joined by slashes'), method, correction), false);
+});
