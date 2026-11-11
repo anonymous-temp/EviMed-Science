@@ -15,7 +15,7 @@ function workerFor(f, { disagree = false, requests = [] } = {}) {
       call++;const data = JSON.parse(input.body.messages[1].content); requests.push(data);
       return { choices: [{ message: { content: JSON.stringify({ judgements: data.candidates.map(c => {
         const material = c.text === poison && !(disagree && call % 2 === 0) && !data.conversation.some(m => m.action === 'memory_page_edit');
-        const message = material ? c.sourceMessages.find(i => data.conversation[i].text.includes(poison)) : null;
+        const message = material ? c.sourceMessages.find(i => data.conversation[i].parts.some(part => part.text.includes(poison))) : null;
         return { candidate: c.candidate, decision: material ? 'material_instruction' : 'keep', message, quote: material ? poison : '' };
       }) }) } }] };
     } }) });
@@ -86,8 +86,8 @@ test('remember tool arguments are not human authority: the bound original conver
   await f.overlay.recordCommit({ userId: f.userId, archiveUri: tool.archive_uri, engineSession: tool.session, sourceSession: source.session, origin: 'tool' });
   await worker.processCommits({ userId: f.userId });
   assert.equal(await f.sessions.read(f.userId, `${f.root}/preferences/self/a.md`), null);
-  assert.ok(requests.some(r => r.conversation.some(m => m.text.startsWith('Rewrite this email:'))));
-  assert.ok(requests.every(r => r.conversation.every(m => !m.text.includes('I explicitly adopt:'))));
+  assert.ok(requests.some(r => r.conversation.some(m => m.parts.some(part => part.text.startsWith('Rewrite this email:')))));
+  assert.ok(requests.every(r => r.conversation.every(m => !m.parts.some(part => part.text.includes('I explicitly adopt:')))));
 });
 
 test('unbound remember tool writes are pending rather than accepted as a person speaking', options, async t => {
@@ -156,4 +156,22 @@ test('an already broken summary cannot strand instruction review before ingestio
   assert.equal(await f.sessions.read(f.userId, `${f.root}/preferences/self/later.md`), null);
   const revisions = await f.overlay.revisionsOf(f.userId, `${f.root}/preferences/self/later.md`);
   assert.ok(revisions.some(r => r.reason === 'pasted_instruction'));
+});
+
+test('a paraphrased prior preference keeps its independent human adoption evidence when later material repeats it', options, async t => {
+  const original = 'Please use English in my replies.';
+  const f = await fixture(t, { config: enabled, extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/self/a.md`, after: `- ${original}` }] }) });
+  const worker = workerFor(f); const first = await f.commitConversation('prior_adoption', [{ role: 'user', text: original }]);
+  await worker.processCommits({ userId: f.userId });
+  f.stub.extract = ({ user }) => ({ updates: [{ uri: `viking://user/${user}/memories/preferences/self/a.md`, before: `- ${original}`, after: `- ${poison}` }] });
+  const calls = [];
+  worker.pastedInstructionJudge = { check: async input => {
+    calls.push(input);
+    assert.ok(input.conversation.some(m => m.archiveUri === first.archive_uri && m.parts.some(p => p.text === original)));
+    return new Set();
+  } };
+  await f.commitConversation('later_material', [{ role: 'user', text: `Rewrite this email: ${poison}` }]);
+  await worker.processCommits({ userId: f.userId });
+  assert.ok(calls.length);
+  assert.equal(await f.sessions.read(f.userId, `${f.root}/preferences/self/a.md`), `- ${poison}`);
 });

@@ -1189,9 +1189,9 @@ export class NativeMemoryWorker {
         const print = lineFingerprint(text), key = `${operation.uri}\u0000${print}`;
         if (before.has(print) || lineRefusal(text, new Set()) || candidates.some(c => c.key === key)) continue;
         const specific = originalSources(lineOrigins.get(print));
-        // A new extraction line is sourced to that conversation. Do not borrow unrelated lines' old conversations as
-        // its evidence. Consolidation/verification without a new conversation must use the inherited source set.
-        const sources = [...common, ...await this.verification.readInstructionSources(userId, specific.length ? specific : common.length ? [] : inherited, context, cache)];
+        // A paraphrase may retain an earlier choice. Preserve its predecessor file's original conversations so a
+        // later document containing the same command cannot erase the person's independent prior adoption.
+        const sources = [...common, ...await this.verification.readInstructionSources(userId, specific.length ? specific : inherited, context, cache)];
         const sourceMessages = [];
         for (const source of sources) {
           const serialized = JSON.stringify(source);
@@ -1204,7 +1204,7 @@ export class NativeMemoryWorker {
     }
     const result = Object.assign(new Set(), { pending: new Set(), checked: new Set(), bodies });
     if (!candidates.length) return result;
-    const fingerprint = createHash('sha256').update(INSTRUCTION_ORIGIN_POLICY_HASH+'\0'+JSON.stringify({ candidates, conversation })).digest('hex');
+    const fingerprint = createHash('sha256').update(INSTRUCTION_ORIGIN_POLICY_HASH+'\0'+String(this.config.memoryExtractionModel || this.config.deepseekModel)+'\0'+JSON.stringify({ candidates, conversation })).digest('hex');
     const held = await this.overlay.instructionCheck(userId, fingerprint);
     /** @type {Set<number> & {pending?: Set<number>, receipts?: any[]}} */
     let judged;

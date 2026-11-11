@@ -5,7 +5,9 @@ import { ControlPlaneDatabase } from '../../../apps/server/src/controlPlaneDatab
 import { OpenVikingClient } from '../../../apps/server/src/openVikingClient.mjs';
 import { OpenVikingSessions } from '../../../apps/server/src/openVikingSessions.mjs';
 if (!process.argv.includes('--retire-own-trials')) throw Error('explicit lab-only retirement required');
-const version=process.argv.includes('--second-attempt')?'v2':'v1';
+const versionIndex=process.argv.indexOf('--archive-version');
+const version=versionIndex>=0?process.argv[versionIndex+1]:process.argv.includes('--second-attempt')?'v2':'v1';
+if(!/^v[1-9][0-9]?$/.test(version??''))throw Error('invalid archive version');
 const root='/srv/evimed/runs',urls=['http://127.0.0.1:19358','http://127.0.0.1:19359'];
 const key=(await readFile('/srv/evimed/ovlab/root.key','utf8')).trim();
 const db=new ControlPlaneDatabase({ databaseUrl:(await readFile('/srv/evimed/ovlab/database.url','utf8')).trim(),databasePoolMax:1,databaseConnectionTimeoutMs:10000 });

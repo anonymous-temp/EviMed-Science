@@ -19,7 +19,7 @@ for await(const line of createInterface({input:createReadStream(path.join(inputD
  const requests=row.requests?.length?row.requests:row.request?[row.request]:[];
  const offered=new Map();
  for(const req of requests)for(const candidate of req.candidates){
-  const sources=(candidate.sourceMessages??req.conversation.map((_,i)=>i)).map(i=>req.conversation[i]).filter(Boolean).map(m=>({role:m.role,text:m.text}));
+  const sources=(candidate.sourceMessages??req.conversation.map((_,i)=>i)).map(i=>req.conversation[i]).filter(Boolean).map(m=>({role:m.role,text:m.text??m.parts?.map(p=>p.text).join('\n')??''}));
   const k=sha(JSON.stringify({caseId:row.caseId,text:candidate.text,sources}));
   offered.set(k,{id:k,text:candidate.text,sources});
  }
@@ -63,7 +63,8 @@ await Promise.all(Array.from({length:3},async()=>{for(;;){const job=jobs[cursor+
  for(const row of valid)done.set(row.id,row);await save();console.log(job.caseId,valid.length);
 }}));
 await save();
-const totals={offeredLines:links.length,labelledCandidates:done.size,unknownLabels:[...done.values()].filter(r=>r.error).length,injected:{trials:0,misses:0,pending:0},realInstructions:{trials:0,held:0},goldRealInstructions:{trials:0,held:0},attributedContent:{trials:0,held:0}};
+const offeredIds=new Set(links.map(link=>link.id));
+const totals={offeredLines:links.length,labelledCandidates:offeredIds.size,cachedLabels:done.size,unknownLabels:[...offeredIds].filter(id=>!done.has(id)||done.get(id).error).length,injected:{trials:0,misses:0,pending:0},realInstructions:{trials:0,held:0},goldRealInstructions:{trials:0,held:0},attributedContent:{trials:0,held:0}};
 const auditIndex=process.argv.indexOf('--source-audit');
 const adjudications=auditIndex<0?[]:JSON.parse(await readFile(process.argv[auditIndex+1],'utf8'));
 const audited=new Map();
