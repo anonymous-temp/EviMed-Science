@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Fresh red-line ingests, matched feature ablations, and a lane-local CNY cap.
+"""Fresh red-line ingests, feature ablations, and a lane-local CNY cap.
 
-Uses two EM-owned engines; never reconfigures another lane's engine. The six
+Uses two EM-owned engines; never reconfigures another lane's engine. The
 synthetic ingests retain every session of every planted-instruction dev user.
 Usage: python3 write-loo.py [--start]
 """
@@ -92,7 +92,7 @@ def main():
         ('g6', 'no-redaction', 'memoryHistorySecretRedactionEnabled', 19360),
         ('synthetic-users', 'no-pasted-check', 'memoryPastedInstructionCheckEnabled', 19360),
     ]
-    manifest = dict(sourceCommit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(), scope='matched-set leave-one-out', syntheticUsers=users, capCny=CAP, rates=dict(deepseek=DEEPSEEK, qwen=QWEN),
+    manifest = dict(sourceCommit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(), scope='matched-set leave-one-out' if '--matched-only' in sys.argv else 'full red-line leave-one-out matrix', syntheticUsers=users, capCny=CAP, rates=dict(deepseek=DEEPSEEK, qwen=QWEN),
                     engines=dict(candidate='ovem1:19360', noSafety='ovem2:19361'),
                     originalBalance=(RUNS / 'BUDGET-LAST').read_text().strip(), comparisons=comparisons)
     manifest_file = RUNS / 'em-loo-manifest.json'
@@ -102,8 +102,10 @@ def main():
     if '--start' not in sys.argv:
         print(json.dumps(manifest, indent=2)); return
     for dataset, variant, feature, port in comparisons:
+        configurations = [('baseline', None, 19360)] + ([(variant, feature, port)] if '--matched-only' in sys.argv
+            else [(name, switch, engine) for _, name, switch, engine in comparisons])
         for repeat in [1, 2, 3]:
-            for config, engine in [('baseline', 19360), (variant, port)]:
+            for config, feature, engine in configurations:
                 name = f'em-loo-{dataset}-{config}-{repeat}'
                 out = RUNS / name
                 if (out / 'EM-COMPLETE').exists():
@@ -115,7 +117,7 @@ def main():
                         '--engine-key-file', '/srv/evimed/ovlab/root.key', '--database-url-file', '/srv/evimed/ovlab/database.url',
                         '--deepseek-key-file', '/srv/evimed/secrets/deepseek.api-key', '--plugin-tgz', '/srv/evimed/cache/dsh-memory-plugin-0.5.31.tgz',
                         '--templates-dir', template, '--concurrency', '2', '--database-pool-max', '1', '--extraction-timeout-ms', '900000',
-                        '--label', 'EM matched red-line write-side ablation; round-3 configuration; fresh namespace']
+                        '--label', 'EM red-line write-side ablation; round-3 configuration; fresh namespace']
                 for key in ['memorySearchHintEnabled', 'memoryOpeningIndexEnabled', 'memorySafetyNotesEnabled',
                             'memoryHistorySecretRedactionEnabled', 'memoryPastedInstructionCheckEnabled', 'memoryHistoryRetrievalV2Enabled']:
                     args += ['--config', key + '=' + ('false' if config != 'baseline' and key == feature else 'true')]
@@ -129,7 +131,7 @@ def main():
                      '--ledger', '/srv/evimed/results/ledger.jsonl'], out / 'ledger.log')
                 (out / 'EM-COMPLETE').write_text('answers, scores and ledger complete\n')
                 note('DONE ' + name + f' settled CNY {spend():.2f}')
-    note('STEP4 DONE all 18 matched-set fresh ingests scored and ledgered')
+    note('STEP4 DONE all ' + ('18 matched-set' if '--matched-only' in sys.argv else '36 matrix') + ' fresh ingests scored and ledgered')
 
 if __name__ == '__main__':
     try:
