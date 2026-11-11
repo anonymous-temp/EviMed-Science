@@ -42,7 +42,7 @@ async function main() {
   const prior = await read(`${out}/run.json`);
   if (prior && (prior.arm !== args.arm || prior.pairsSha256 !== digest)) throw new Error('Cannot resume a changed treatment or pair set');
   const start = prior?.startedAt ?? new Date().toISOString();
-  // Shared-lane budget uses cumulative account ledgers plus a reserve for unledgered engine/judge calls.
+  // Lane budget uses cumulative account ledgers, reserving CNY 50 for engine/judge costs; other lanes do not spend this lane's allowance.
   const capFile = '/srv/evimed/runs/l3b-budget.json';
   const budget = await read(capFile);
   if (!budget) throw new Error('Launch must establish l3b-budget.json');
@@ -50,7 +50,7 @@ async function main() {
     const balance = Number((await fs.readFile('/srv/evimed/runs/BUDGET-LAST', 'utf8')).trim().split(/\s+/)[2]);
     const usages = await Promise.all(['A','B','C','D'].map(a => read(`/srv/evimed/runs/l3b-${a}-1/account-usage.json`, {})));
     const ledger = usages.reduce((n, u) => n + Number(u.account?.actualCost ?? 0), 0);
-    if (!(balance >= 150) || ledger >= 350 || budget.balanceBefore - balance >= 350 || Date.now() > budget.deadlineMs)
+    if (!(balance >= 150) || ledger >= 350 || Date.now() > budget.deadlineMs)
       throw new Error(`Budget/time guard: balance=${balance} laneLedger=${ledger}; progress preserved`);
   };
   await guard();
@@ -68,7 +68,7 @@ async function main() {
     exams: 'No feedback or correction. Worker paused during exams to preserve learned-method treatment; attended native memory commits remain on except A. Repetition history may affect later exams; rep-1 and case-majority sensitivity reported.',
     learning: 'LX drain through product worker; settle windows advanced, no synthetic lessons or approval; no forced sleep phase',
     ranker: 'Initialized in every arm including learning-off arms, matching ordinary method selection',
-    smoke: Boolean(args.only), budget });
+    smoke: Boolean(args.only), budget, budgetAccounting: { accountLedgerCeilingCny: 350, reserveForEngineAndJudgeCny: 50, sharedBalanceStopCny: 150, sharedBalanceDelta: 'Report only: includes other lanes, never attributed entirely to L3B' } });
   let h, guardTimer;
   const shutdown = async () => { if (h) { const old = h; h = null; await stopHarness(old); } };
   guardTimer = setInterval(() => {

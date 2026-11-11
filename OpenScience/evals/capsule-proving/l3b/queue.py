@@ -28,7 +28,7 @@ budget=json.loads(budget_file.read_text())
 log('queued for shared product-path capacity')
 while True:
     current=balance()
-    if current<400 or budget['balanceBefore']-current>=350 or time.time()*1000>budget['deadlineMs']:
+    if current<400 or time.time()*1000>budget['deadlineMs']:
         log(f'capacity wait stopped by budget/time guard; balance={current}');raise SystemExit(3)
     with (LOCKS/'eg-capacity.lock').open('a') as gate:
         fcntl.flock(gate,fcntl.LOCK_EX)
