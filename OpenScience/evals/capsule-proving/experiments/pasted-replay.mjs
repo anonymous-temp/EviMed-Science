@@ -15,7 +15,9 @@ const base='/srv/evimed/runs', data='/srv/evimed/data/memdata-data';
 const out=process.argv[2]; if(!out) throw Error('output directory required');
 await mkdir(out,{recursive:true});
 const appendRow=serialJsonlWriter(path.join(out,'rows.jsonl'));
+await appendFile(path.join(out,'STATUS'),`${new Date().toISOString()} START archive-check replay\n`);
 const json=async p=>JSON.parse(await readFile(p,'utf8'));
+async function archivedRead(sessions,userId,uri){for(let attempt=0;attempt<3;attempt++){try{return await sessions.read(userId,uri);}catch(error){if(attempt===2||Number(error.status)<500)throw error;await new Promise(resolve=>setTimeout(resolve,2000));}}return null;}
 const database = new ControlPlaneDatabase({ databaseUrl: (await readFile('/srv/evimed/ovlab/database.url','utf8')).trim(), databasePoolMax: 1, databaseConnectionTimeoutMs: 10000 });
 const key=(await readFile('/srv/evimed/ovlab/root.key','utf8')).trim();
 const config={memoryPastedInstructionCheckEnabled:true,memoryPastedInstructionRobustEnabled:process.argv.includes('--robust'), deepseekProviderEnabled:true,deepseekApiKey:(await readFile('/srv/evimed/secrets/deepseek.api-key','utf8')).trim(),deepseekBaseUrl:'https://api.deepseek.com',deepseekModel:'deepseek-flash',memoryExtractionModel:'deepseek-flash',memoryExtractionTimeoutMs:60000};
@@ -41,7 +43,7 @@ for(const name of (await readdir(base)).filter(n=>/^(r3-|r4-|p29-)/.test(n)).sor
    selected=ingest.filter((r,i)=>ns.has(i+1));
   }
   const urls=run.engine.urls??[run.engine.url];const shard=createHash('sha256').update(caseId).digest().readUInt32BE(0)%urls.length;
-  const sessions=new OpenVikingSessions(new OpenVikingClient({openVikingUrl:urls[shard],openVikingApiKey:key,openVikingAccount:run.engine.account,openVikingRequestTimeoutMs:30000}));
+  const sessions=new OpenVikingSessions(new OpenVikingClient({openVikingUrl:urls[shard],openVikingApiKey:key,openVikingAccount:run.engine.account,openVikingRequestTimeoutMs:120000}));
   const userId=`evlab_${name}_${caseId}`;
   const revisions=(await database.query('SELECT id,uri,actor,archive_uri,"before","after" FROM evimed_memory.native_revisions WHERE user_id=$1 ORDER BY id',[userId])).rows;
   const positions=new Map(ingest.map((r,i)=>[r.commit?.archiveUri,i]));
@@ -64,8 +66,8 @@ for(const name of (await readdir(base)).filter(n=>/^(r3-|r4-|p29-)/.test(n)).sor
   for(const record of selected){
    if(sessionAt>=0&&record.sessionId!==process.argv[sessionAt+1])continue;
    const archiveUri=record.commit?.archiveUri;if(!archiveUri)continue;
-   const diffRaw=await sessions.read(`evlab_${name}_${caseId}`,`${archiveUri}/memory_diff.json`);
-   const raw=await sessions.read(`evlab_${name}_${caseId}`,`${archiveUri}/messages.jsonl`);
+   const diffRaw=await archivedRead(sessions,`evlab_${name}_${caseId}`,`${archiveUri}/memory_diff.json`);
+   const raw=await archivedRead(sessions,`evlab_${name}_${caseId}`,`${archiveUri}/messages.jsonl`);
    if(!diffRaw||!raw){await appendFile(path.join(out,'unavailable.jsonl'),JSON.stringify({run:name,caseId,archiveUri,diff:!!diffRaw,messages:!!raw})+'\n');continue;}
    const diff=JSON.parse(diffRaw),ops=diff.operations??{},prior=projection(record);
    for(let rep=1;rep<=(process.argv.includes('--once')?1:5);rep++) jobs.push({id:`${name}/${caseId}/${record.sessionId}/${rep}`,run:name,caseId,rep,record,archiveUri,ops,raw,gold,sessions,prior});
@@ -84,12 +86,12 @@ await Promise.all(Array.from({length:workers},async()=>{for(;;){const job=jobs[c
  const worker=new NativeMemoryWorker({config,memorySettings:null,sessions,overlay,pastedInstructionJudge:judge});
  const userId=`evlab_${run}_${caseId}`;const sourceRoot=archiveUri.split('/sessions/')[0]; const archiveCache=new Map([[`${archiveUri}/messages.jsonl`,Promise.resolve(raw)]]);
  const context={sessions:{userRoot:()=>sourceRoot,memoryRoot:()=>sourceRoot+'/memories',read:async(_u,uri)=>{
-   if(uri.endsWith('/messages.jsonl')){if(!archiveCache.has(uri))archiveCache.set(uri,sessions.read(userId,uri));return archiveCache.get(uri);}
+   if(uri.endsWith('/messages.jsonl')){if(!archiveCache.has(uri))archiveCache.set(uri,archivedRead(sessions,userId,uri));return archiveCache.get(uri);}
    return [...(ops.adds??[]),...(ops.updates??[])].find(o=>o.uri===uri)?.after??null;
  }}};
  const reviewed=await worker.checkPastedInstructions({userId,archiveUri,projectId:record.project?.id??null},ops,context); const refused=[...reviewed];
  const row={id,run,caseId,rep,sessionId:record.sessionId,archiveUri,ledger:record.ledger,request,requests,answers,limits,refused,pending:[...(reviewed.pending??[])],
   realPreferenceRefusals:refused.filter(k=>gold?.store.some(s=>s.expectStored===true&&['preference_explicit','preference_repeated','correction'].includes(s.category)&&k.split('\u0000')[1]===lineFingerprint(request?.candidates.find(c=>c.text.includes(s.current))?.text??''))).length};
- await appendRow(row);console.log(id,'candidates',request?.candidates.length??0,'refused',refused.length);
+ await appendRow(row);await appendFile(path.join(out,'STATUS'),`${new Date().toISOString()} DONE ${id}\n`);console.log(id,'candidates',request?.candidates.length??0,'refused',refused.length);
 }}));
-await database.close(); console.log('DONE');
+await database.close();await appendFile(path.join(out,'STATUS'),`${new Date().toISOString()} COMPLETE\n`); console.log('DONE');

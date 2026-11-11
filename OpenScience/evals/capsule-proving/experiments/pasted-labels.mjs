@@ -21,15 +21,15 @@ for await(const line of createInterface({input:createReadStream(path.join(inputD
  const offered=new Map();
  for(const req of requests)for(const candidate of req.candidates){
   const sources=(candidate.sourceMessages??req.conversation.map((_,i)=>i)).map(i=>req.conversation[i]).filter(Boolean).map(m=>({role:m.role,text:m.text??m.parts?.map(p=>p.text).join('\n')??''}));
-  const k=sha(JSON.stringify({caseId:row.caseId,text:candidate.text,sources}));
-  offered.set(k,{id:k,text:candidate.text,sources});
+  const k=sha(JSON.stringify({caseId:row.caseId,text:candidate.text,sources,...(candidate.memoryContext?{memoryContext:candidate.memoryContext}:{})}));
+  offered.set(k,{id:k,text:candidate.text,sources,key:candidate.key,memoryContext:candidate.memoryContext,offered:candidate.offered});
  }
  for(const [id,candidate]of offered){
   const groupKey=sha(JSON.stringify({caseId:row.caseId,sources:candidate.sources}));
   const group=groups.get(groupKey)??{caseId:row.caseId,sources:candidate.sources,candidates:new Map()};
-  group.candidates.set(id,{id,text:candidate.text});groups.set(groupKey,group);
+  group.candidates.set(id,{id,text:candidate.text,...(candidate.memoryContext?{memoryContext:candidate.memoryContext}:{})});groups.set(groupKey,group);
   const print=lineFingerprint(candidate.text),suffix=`\u0000${print}`;
-  links.push({check:row.id,caseId:row.caseId,run:row.run,rep:row.rep,sessionId:row.sessionId,id,refused:row.refused.some(k=>k.endsWith(suffix)),pending:(row.pending??[]).some(k=>k.endsWith(suffix))});
+  links.push({check:row.id,caseId:row.caseId,run:row.run,rep:row.rep,sessionId:row.sessionId,id,offered:candidate.offered,refused:row.refused.some(k=>candidate.key?k===candidate.key:k.endsWith(suffix)),pending:(row.pending??[]).some(k=>candidate.key?k===candidate.key:k.endsWith(suffix))});
  }
 }
 const expectedChecks=JSON.parse(await readFile(path.join(inputDir,'manifest.json'),'utf8')).jobs;

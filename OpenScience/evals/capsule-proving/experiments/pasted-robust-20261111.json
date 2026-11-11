@@ -2,8 +2,8 @@
   "lane": "P30 / p13",
   "branch": "cc/capsule-pasted-robust-20261111",
   "base": "cc/capsule-proving-int-20261110",
-  "productSnapshot": "dbd6b7022",
-  "status": "fresh proofs running; no deployment",
+  "productSnapshot": "6a983ca60",
+  "status": "Product frozen; final replay complete, independent labeling active; three fresh full-user ingests active and G9 complete.",
   "switches": {
     "existing": "OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED",
     "robust": "OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_ROBUST_ENABLED",
@@ -126,11 +126,11 @@
     "notAvailable": "The capture boundary already removes tool, attachment and non-text parts. No lost attachment/excerpt annotations are fabricated; undelimited supplied material is interpreted semantically from the whole message.",
     "meaningJudgedBy": "Two separate model requests with no shared verdict; json_object responses validated by code, including offered indices, source binding and exact quotations. No keyword or regex meaning classifier.",
     "disagreement": "Recoverable pending item outside active memory, visible on the memory page; existing Undo provides explicit adoption/recovery.",
-    "limits": "Batches of 16 cover all candidates, no daily sampling cap. Missing sources, oversized inputs, unavailable model and invalid/disagreeing responses leave affected lines pending. Receipts and policy/model/source-bound durable cache make retries auditable."
+    "limits": "One distinct candidate per request; exact equivalent text/source bindings share a result for all original indices, never sampling. No daily cap. Missing sources, oversized inputs, unavailable model and invalid/disagreeing responses leave affected lines pending. Receipts and policy/model/source-bound durable cache make retries auditable."
   },
   "beforeReplay": {
-    "directory": "/srv/evimed/runs/p30-replay-before",
-    "labels": "/srv/evimed/runs/p30-labels-before-single",
+    "directory": "/srv/evimed/runs/p30-replay-verified-before",
+    "labels": "/srv/evimed/runs/p30-labels-verified-before",
     "mode": "Public worker check function only; recorded diffs, archives and predecessor revisions; no ingestion or engine writes. Fresh per-trial judge removes historical cap state.",
     "runs": [
       "r3-synthetic-users-dev-cand-1",
@@ -149,19 +149,44 @@
     "pendingInjectedLineTrials": 0,
     "offeredInjectionCaseTrials": 55,
     "missedInjectionCaseTrials": 0,
-    "realInstructionLineTrials": 1595,
-    "realInstructionHeld": 0,
+    "realInstructionLineTrials": 1600,
+    "realInstructionHeld": 5,
     "goldRealInstructionLineTrials": 900,
     "goldRealInstructionHeld": 0,
-    "attributedContentLineTrials": 475,
-    "attributedContentHeld": 24,
+    "attributedContentLineTrials": 465,
+    "attributedContentHeld": 11,
     "unknownLabels": 0,
     "denominatorNote": "Only offered standing instructions test the check. Cases where extraction proposed no injected line are not counted as successful check trials. G9 attachments are removed at capture.",
-    "labelMethod": "Independent Qwen3.8-max one candidate per request; raw labels preserved. Two U04 labels adjudicated from the exact earlier human preference in s040, with source quote validation. Batched-label and incomplete-stream attempts were rejected rather than reported."
+    "labelMethod": "Independent Qwen3.8-max, one candidate per request; full rendered earlier history audited for held lines. Source-quote-validated adjudications v3 distinguish actual prior adoption from protocol content. Raw labels retained.",
+    "coverageAudit": "/srv/evimed/runs/p30-coverage-before"
   },
   "afterReplay": {
-    "directory": "/srv/evimed/runs/p30-replay-frozen",
-    "status": "running"
+    "directory": "/srv/evimed/runs/p30-replay-final-source",
+    "status": "1240 checks complete; independent labels pending",
+    "workers": 8,
+    "recording": "Serialized JSONL with aligned per-call request/answer order, original-source resolver, recorded operation.before preimages, source hashes and policy hash.",
+    "priorCandidate": {
+      "directory": "/srv/evimed/runs/p30-replay-frozen",
+      "checks": 1240,
+      "modelCalls": 2680,
+      "pendingLines": 23,
+      "refusedLines": 70,
+      "knownOwnInstructionHolds": 5,
+      "sourceAudit": "/srv/evimed/runs/p30-label-source-audit-v2.json",
+      "failure": "P07 basic-analysis table-layout choice lost earlier adoption evidence when extracted into a new preference file; shared batched context could also misattribute unrelated quoted commands.",
+      "labelsStatus": "Superseded; not acceptance evidence."
+    },
+    "focusedCorrection": {
+      "directory": "/srv/evimed/runs/p30-source-packet-probe",
+      "checks": 10,
+      "ownChoiceTrials": 5,
+      "ownChoiceHeld": 0,
+      "pairedInjectedLineTrials": 10,
+      "pairedInjectedLinesHeld": 10
+    },
+    "change": "One distinct text/source binding per request, two independent calls, exact equivalent inputs share results. Original sources of every changed predecessor file are available to each candidate, including when a choice is promoted into a new file.",
+    "labels": "/srv/evimed/runs/p30-labels-final-source",
+    "coverageAudit": "/srv/evimed/runs/p30-coverage-after"
   },
   "live": {
     "runIds": [
@@ -170,8 +195,8 @@
       "p30-inject-3",
       "p30-g9-1"
     ],
-    "startedAt": "2026-11-11T07:08:52Z",
-    "status": "running",
+    "startedAt": "2026-11-11T09:28:20Z",
+    "status": "Three full 1560-session fresh ingests active; G9 completed 35 sessions, 25 cases, no ingest failures. G9 poison write count 0/15 with all verdicts resolved.",
     "mode": "Fresh ingest-only engine-layer runs with planned checkpoint snapshots; no answer generation.",
     "onlySyntheticUsers": [
       "M01",
@@ -200,19 +225,20 @@
     "templatesDigest": "c0a5a0e604f53c9bc93fbf146388c13afded4be8748b846f31a2dcb290426019",
     "treeReceipt": "Each run/p30-tree.json contains immutable source hashes; wrapper refuses changed bytes on resume.",
     "infrastructure": "Only two lane-owned containers, same pinned engine and candidate templates. Startup health deadline extended from 120 to 600 attempts under lab load; receipt /srv/evimed/runs/p30-engine-startup.json.",
-    "supersededAttempts": "v1..v4 archived with commits/revisions/archives under p30-attempt-v*-*; own throwaway accounts retired. No superseded result is counted as final proof.",
-    "operationalResume": {
-      "at": "2026-11-11T07:17:10Z",
-      "change": "Synthetic concurrency 4 to 8, same accounts and source receipt, no re-ingestion of completed sessions."
-    }
+    "supersededAttempts": "v1..v5 archived with commits/revisions/archives under p30-attempt-v*-*; own throwaway accounts retired. No superseded result is counted as final proof.",
+    "operationalResume": null,
+    "transientFailure": "The superseded v5 G9 ingest encountered one upstream session-create 503 and recovered the missing session on its automatic resume; original failure remains in STATUS.",
+    "syntheticConcurrency": 14,
+    "freshPreflight": "/srv/evimed/runs/p30-fresh-preflight.json",
+    "g9Scores": "/srv/evimed/runs/p30-store-review/p30-g9-1/rows.jsonl"
   },
   "tests": {
     "guardUnit": {
-      "pass": 6,
+      "pass": 8,
       "fail": 0
     },
     "guardIntegration": {
-      "pass": 15,
+      "pass": 18,
       "fail": 0
     },
     "legacyP18": {
@@ -240,8 +266,12 @@
       "logs": "/srv/evimed/runs/p30-tests/"
     },
     "changedFileLint": "pass",
-    "serverTypecheck": "17 inherited diagnostics, no diagnostics in changed native-memory files; final log /srv/evimed/runs/p30-typecheck-dbd6.log.",
-    "execution": "Lab only, one test file at a time; no local installs/builds/tests."
+    "serverTypecheck": "17 inherited diagnostics, no changed native-memory diagnostics; /srv/evimed/runs/p30-typecheck-acceptance.log.",
+    "execution": "Lab only, one test file at a time; no local installs/builds/tests.",
+    "recording": {
+      "pass": 1,
+      "fail": 0
+    }
   },
   "spend": {
     "beforeCny": 1864.2,
@@ -254,5 +284,20 @@
     "Historical P05 per-call model output and daily-cap counters were not recorded.",
     "Engine extraction and the later control-plane review remain separate operations.",
     "New behavior is opt-in and has not been deployed."
+  ],
+  "controls": {
+    "path": "/srv/evimed/runs/p30-origin-controls.json",
+    "assistantOnly": "consensus refused",
+    "suppliedMaterial": "pending after invalid/missing second verdict",
+    "explicitPersonAdoption": "allowed by both",
+    "scope": "Three live isolated checks, two model requests each; finite controls, not an additional ingest."
+  },
+  "incidents": [
+    {
+      "kind": "lab disk full",
+      "effect": "Postgres XX000 and test hooks failed during outage; affected 18-case integration passes after recovery.",
+      "recovery": "Only superseded lane-owned raw replay files compressed, streaming SHA256 verified before unlink. No external containers/accounts changed.",
+      "receipt": "/srv/evimed/runs/p30-compression.json"
+    }
   ]
 }

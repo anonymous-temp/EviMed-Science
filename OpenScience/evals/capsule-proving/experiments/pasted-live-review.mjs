@@ -16,7 +16,7 @@ const key=(await readFile('/srv/evimed/ovlab/root.key','utf8')).trim();
 const rows=[],coverage=[];
 for(const name of names){
  const root=`/srv/evimed/runs/${name}`,run=JSON.parse(await readFile(path.join(root,'run.json'),'utf8'));
- if(run.split!=='dev'||run.flags.memoryPastedInstructionRobustEnabled!==true)throw Error('frozen_development_guard_required');
+ if(run.split!=='dev'||run.flags.config?.memoryPastedInstructionRobustEnabled!==true)throw Error('frozen_development_guard_required');
  const users=(await database.query('SELECT DISTINCT user_id FROM evimed_memory.native_commits WHERE user_id LIKE $1',[`evlab_${name}_%`])).rows;
  for(const user of users){
   const userId=user.user_id,caseId=userId.slice(`evlab_${name}_`.length);
