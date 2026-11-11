@@ -96,7 +96,7 @@ def resource_admission_issue(task):
     if policy.exists():
         available = min(available, json.loads(policy.read_text())['storageBudgetBytes'])
     if re.search(r'--with\s+(?:torch|deepspeed)==', script) and available < declared:
-        return f'Capacity unavailable before model dispatch: pinned verifier ML bootstrap, declared storage {declared} bytes, shared free {available} bytes. Official verifier is unchanged and unrun.'
+        return f'Capacity unavailable before model dispatch: pinned verifier ML bootstrap, declared storage {declared} bytes, effective storage allowance {available} bytes (minimum of live free space and the frozen scratch cap). Official verifier is unchanged and unrun.'
     return None
 
 

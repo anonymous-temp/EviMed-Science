@@ -74,6 +74,8 @@ class RunnerTests(unittest.TestCase):
                 self.assertIn('unchanged and unrun', run.resource_admission_issue(task))
                 disk.return_value.free = 12 * 1024**3
                 self.assertIsNone(run.resource_admission_issue(task))
+                (root / 'resource-policy.json').write_text(json.dumps({'storageBudgetBytes': 5 * 1024**3}))
+                self.assertIn('effective storage allowance', run.resource_admission_issue(task))
 
     def test_logging_fix_still_redacts_credentials(self):
         import redaction_compat

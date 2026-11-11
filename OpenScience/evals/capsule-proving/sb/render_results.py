@@ -48,6 +48,18 @@ def main(args):
         interval = r.get('scoredCi95')
         ci = 'n/a' if not interval else f'{100*interval[0]:.1f}–{100*interval[1]:.1f}%'
         lines.append(f"- {r['bench']}-{r['arm']}-1: {r['pass']}/{r['scored']}, Wilson 95% {ci}; {r.get('modelInvoked', 0)} tasks invoked the model.")
+    unavailable = collections.defaultdict(list)
+    for result in results:
+        for row in result['rows']:
+            if not row['scored'] and row.get('error'):
+                unavailable[(result['bench'], row['task'])].append((result['arm'], row['error']))
+    if unavailable:
+        lines += ['', 'ML-verifier admission uses the minimum of live free space and the frozen scratch cap in `resource-policy.json` (5,911,142,400 bytes). The NLP verifier declares 10 GiB. Later shared-disk recovery does not change this uniform resource profile; earlier raw errors label the effective allowance as shared free space.']
+        lines += ['', 'Unavailable native cases (these are not solver failures):', '',
+                  '| Case | Arms | Admission/setup reason |', '| --- | --- | --- |']
+        for (bench, task), records in sorted(unavailable.items()):
+            reason = records[0][1].replace('\n', ' ').replace('|', '/')
+            lines.append(f"| {bench}/{task} | {', '.join(arm for arm, _ in records)} | {reason} |")
     for bench in ['sb', 'slb']:
         arms = {r['arm']: r for r in results if r['bench'] == bench}
         categories = sorted(manifest.get('perDomain', {}).get(bench, {}))
@@ -89,10 +101,10 @@ def main(args):
         completion = [j['completeness']['score'] for j in judged if 'completeness' in j]
         errors = sum(bool(j.get('skillQualityError')) + bool(j.get('trajectoryError')) for j in judged)
         lines.append(f"| {arm} | {fmt(mean(coverage))} (n={len(coverage)}) | {fmt(mean(exe))} (n={len(exe)}) | {fmt(mean(safety))} (n={len(safety)}) | {fmt(mean(recall))} (n={len(recall)}) | {fmt(mean(order))} (n={len(order)}) | {fmt(mean(completion))} (n={len(completion)}) | {errors} |")
-    lines += ['', 'Skill quality is evaluated once per sampled family/skill arm; trajectory diagnostics use the first held-out variant per family, paired across arms. Means with different units are not combined into a new score. Missing/no-skill diagnostics are n/a, not zero quality. Oracle-trajectory alignment can penalize a valid alternative workflow, including success without invoking the oracle human skill; it does not override the task verifier.', '',
+    lines += ['', 'Skill quality is evaluated once per sampled family/skill arm; executability/safety n counts method-family assessments, not distinct learned methods. Trajectory diagnostics use the first held-out variant per family, paired across arms. Means with different units are not combined into a new score. Missing/no-skill diagnostics are n/a, not zero quality. Oracle-trajectory alignment can penalize a valid alternative workflow, including success without invoking the oracle human skill; it does not override the task verifier.', '',
               '## Cost, time and full-run scenario', '',
               f"Lane known-cost estimate: CNY {fmt(accounting.get('totalObservedCny'))}; conservative peak-equivalent bound plus product reservations: CNY {fmt(accounting.get('conservativeUpperBoundCny'))}. This includes paid smokes, inference, product practice/learning and available diagnostics.", '',
-              f"Primary task costs in the table are solver inference only. Paid pre-compatibility calibration: CNY {fmt(accounting.get('precompatCalibration', {}).get('costCny'))}; smokes: CNY {fmt(accounting.get('smokes', {}).get('costCny'))}; diagnostic judges: CNY {fmt(accounting.get('judges', {}).get('costCny'))}. Product practice/learning: CNY {fmt((accounting.get('practice') or {}).get('account', {}).get('actualCost'))} (its learning subtotal is included, not added again). Shared engine embedding/reranking charges are not separately allocated; this is known model usage, not an isolated vendor invoice.", '',
+              f"Primary task costs in the table are solver inference only. Paid adapter/permission calibration: CNY {fmt(accounting.get('precompatCalibration', {}).get('costCny'))}; smokes: CNY {fmt(accounting.get('smokes', {}).get('costCny'))}; diagnostic judges: CNY {fmt(accounting.get('judges', {}).get('costCny'))}. Product practice/learning: CNY {fmt((accounting.get('practice') or {}).get('account', {}).get('actualCost'))} (its learning subtotal is included, not added again). Shared engine embedding/reranking charges are not separately allocated; this is known model usage, not an isolated vendor invoice.", '',
               f"Shared provider balance: {accounting.get('balanceBefore', 'unknown')} → {accounting.get('balanceAfter', 'unknown')}. Other lanes were active; the balance delta is not this lane's spend. Start: {accounting.get('startedAt')}; report: {accounting.get('at')}.", '']
     for bench, full_n in [('sb', 87), ('slb', 100)]:
         rows = [r for r in results if r['bench'] == bench]

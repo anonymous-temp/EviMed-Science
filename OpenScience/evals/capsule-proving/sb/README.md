@@ -91,6 +91,13 @@ the shared lab, and stops Pi after 1,700 seconds before the upstream 1,800-secon
 watchdog so a timed-out agent cannot keep editing during verification. These
 limits differ from the task manifests' usual 4 GiB and are a comparability limit.
 
+After the disk outage, `resource-policy.json` froze 5,911,142,400 bytes of scratch
+before any ML-verifier case was scored. Admission uses the minimum of live free
+space and that cap for every arm, even if other lanes later release space.
+The NLP family declares 10 GiB and bootstraps Torch in its pinned verifier, so
+all three arms remain explicitly unrun under this resource profile. Earlier
+error text calls the effective allowance "shared free"; it is not a later `df` reading.
+
 The lab layout is `/srv/evimed/sb/{code,venv,upstream,manifest.json,practice,learned}`.
 Install BenchFlow 0.6.3 and the pinned SkillLearnBench Python requirements into
 this lane's private virtualenv. Record `pip freeze` and upstream receipts. The
