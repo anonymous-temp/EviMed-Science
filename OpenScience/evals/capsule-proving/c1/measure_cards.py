@@ -24,7 +24,8 @@ def distribution(values):
 
 def library_stats(file):
     saved = json.loads(file.read_text())
-    methods = [m["payload"] for m in saved["methods"] if m["payload"]["status"] == "approved"]
+    stored = [m["payload"] for m in saved["methods"]]
+    methods = [m for m in stored if m["status"] == "approved"]
     sections = collections.Counter()
     per_method = []
     for method in methods:
@@ -48,6 +49,10 @@ def library_stats(file):
     cards = [len((m["frontmatter"].get("description", "") + "\n" + m["frontmatter"].get("whenToUse", "") + "\n" + m["body"]).encode()) for m in methods]
     total = sum(bodies)
     return {"path": str(file), "sha256": hashlib.sha256(file.read_bytes()).hexdigest(), "policy": saved.get("policy"),
+            "cardAccounting": "C1 budgets description + newline + trigger + newline + body; renderedCardBytes excludes prompt labels and headings. Native runtime budgets metadata/path entries and reads bodies on demand.",
+            "statusCounts": dict(collections.Counter(m["status"] for m in stored)),
+            "allStoredBodyBytes": distribution([len(m["body"].encode()) for m in stored]),
+            "population": "Remaining statistics use approved methods, the only status eligible for mounting; stored includes current candidate/retired records, not historical revisions.",
             "bodyBytes": distribution(bodies), "renderedCardBytes": distribution(cards),
             "attachedBytes": distribution([sum(len(v.encode()) for v in m.get("files", {}).values()) for m in methods]),
             "roles": dict(collections.Counter(m["frontmatter"].get("metadata", {}).get("role") for m in methods)),
