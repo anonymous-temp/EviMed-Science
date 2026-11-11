@@ -7,6 +7,7 @@
  *        --pool <c1 training pool> --out <dir> [--gate every-success|product] [--sleep-every 10] [--embed-key-file F] [--key-file F] [--dry-run]
  *   node build_library.mjs evolve --env alfworld --dir <a copy of a pyramid variant dir> --episodes <trajectory files in task order...>
  *   node build_library.mjs build  --lessons camp ...   # the training camp: every finished episode is a lesson, two-stage distillation
+ *   OPEN_SCIENCE_METHOD_CONCISE_DISTILLATION_ENABLED=true node build_library.mjs build --lessons camp ... # short cards; also --concise
  *
  * `--lessons camp` (F3, 2026-11-10) is the training camp of plan §5.3 with the product's two lab switches on: `OPEN_SCIENCE_LEARNING_CAMP_ENABLED`
  * (every finished training episode, success or failure, is a `camp` lesson raised by `campLessonFor` with the game's outcome and its

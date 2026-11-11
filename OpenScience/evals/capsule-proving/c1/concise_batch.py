@@ -1,8 +1,9 @@
 """P33: resumable concise C1 rebuild and three-arm evaluation, with an owned-process budget guard.
 
-Run on the lab from the frozen lane tree. The global balance decrease is a conservative
-ceiling on this lane's spend when other lanes share the account; only this batch's
-process groups are stopped. No keys or vendor response bodies enter its logs.
+Run on the lab from the frozen lane tree. Lane receipts, charged at the peak tariff,
+bound its cost independently of other lanes. A CNY 50 reserve covers unfinished episodes,
+in-flight replies and embeddings. Only this batch's process groups are stopped.
+No keys or vendor response bodies enter its logs.
 """
 import argparse
 import datetime
@@ -48,7 +49,7 @@ def main():
     budget = json.loads(budget_file.read_text()) if budget_file.exists() else {
         "startedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "balanceBefore": current, "cap": args.cap,
-        "attribution": "Shared balance decrease; conservative upper bound, includes other lanes"}
+        "attribution": "Shared balance decrease plus lane-local peak-rate receipt ceiling"}
     if args.cap != budget["cap"]:
         raise RuntimeError("Resume cap changed")
     done_file = queue / "STATUS"
@@ -63,9 +64,11 @@ def main():
         remaining = balance(key)
         budget.update(balanceAfter=remaining, checkedAt=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                       sharedDecrease=round(budget["balanceBefore"] - remaining, 2))
+        spend = json.loads(subprocess.check_output(["node", str(c1 / "spend.mjs"), str(root)], text=True))
+        budget.update(laneReceipts=spend, reserveCny=50,
+                      attribution="Lane-local receipts at peak rates; shared balance decrease includes other lanes")
         budget_file.write_text(json.dumps(budget, indent=2) + "\n")
-        # Reserve CNY 10 for the at-most-two in-flight calls and accounting delay.
-        if remaining < 150 or budget["sharedDecrease"] >= args.cap - 10:
+        if remaining < 150 or spend["peakCostUpperCny"] >= args.cap - 50:
             raise RuntimeError("Conservative lane budget stop")
 
     def run(label, command):
