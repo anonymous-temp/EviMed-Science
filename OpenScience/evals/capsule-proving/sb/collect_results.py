@@ -28,7 +28,7 @@ def native(record):
             'official': {key: official[key] for key in fields if key in official}}
 
 
-def collect(root, runs, out):
+def collect(root, runs, out, ledger):
     summary = read(root / 'summary.json')
     assert len(summary) == 6 and all(row['complete'] for row in summary), 'Six complete arm records required'
     out.mkdir(parents=True, exist_ok=False)
@@ -36,7 +36,7 @@ def collect(root, runs, out):
     files = ['report.md', 'report.csv', 'summary.json', 'accounting.json', 'manifest.json',
              'findings.md', 'python-freeze.txt', 'pin-checks.json', 'protocol-amendments.json',
              'resource-policy.json', 'task-admissions.json', 'execution-queue.json',
-             'campaign-amendment.json', 'batch.json', 'learned-methods.json', 'source-commit',
+             'campaign-amendment.json', 'gateway-drain.json', 'batch.json', 'learned-methods.json', 'source-commit',
              'watchdog-recovery.json', 'flat-permission-recovery.json', 'capacity-hold.json',
              'queue-yield.json', 'cache-recovery.json', 'cache-recovery-organize.json']
     for name in files:
@@ -63,7 +63,14 @@ def collect(root, runs, out):
         configs.append(read(directory / 'run.json'))
         native_results.append({'runId': directory.name,
             'records': [native(read(file)) for file in sorted((directory / 'records').glob('*.json'))]})
-    write(out / 'ledger-rows.json', rows)
+    appended = [json.loads(line) for line in ledger.read_text().splitlines() if line.strip()]
+    run_ids = {row['runId'] for row in rows}
+    actual = [row for row in appended if row.get('runId') in run_ids]
+    assert len(actual) == 6, 'Append exactly one final global ledger row per arm before collection'
+    for proposed in rows:
+        matches = [row for row in actual if {key: value for key, value in row.items() if key not in ['ledgerId', 'at']} == proposed]
+        assert len(matches) == 1 and matches[0].get('ledgerId') and matches[0].get('at'), proposed['runId']
+    write(out / 'ledger-rows.json', actual)
     write(out / 'run-configs.json', configs)
     write(out / 'native-results.json', native_results)
     calibration = []
@@ -125,5 +132,6 @@ if __name__ == '__main__':
     parser.add_argument('--root', type=pathlib.Path, default=pathlib.Path('/srv/evimed/sb'))
     parser.add_argument('--runs', type=pathlib.Path, default=pathlib.Path('/srv/evimed/runs'))
     parser.add_argument('--out', type=pathlib.Path, default=pathlib.Path('/srv/evimed/sb/public-results'))
+    parser.add_argument('--ledger', type=pathlib.Path, default=pathlib.Path('/srv/evimed/results/ledger.jsonl'))
     args = parser.parse_args()
-    collect(args.root, args.runs, args.out)
+    collect(args.root, args.runs, args.out, args.ledger)
