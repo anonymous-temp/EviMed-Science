@@ -50,7 +50,7 @@ async function main() {
     const balance = Number((await fs.readFile('/srv/evimed/runs/BUDGET-LAST', 'utf8')).trim().split(/\s+/)[2]);
     const usages = await Promise.all(['A','B','C','D'].map(a => read(`/srv/evimed/runs/l3b-${a}-1/account-usage.json`, {})));
     const ledger = usages.reduce((n, u) => n + Number(u.account?.actualCost ?? 0), 0);
-    if (!(balance >= 150) || ledger >= 350 || budget.balanceBefore - balance >= 400 || Date.now() > budget.deadlineMs)
+    if (!(balance >= 150) || ledger >= 350 || budget.balanceBefore - balance >= 350 || Date.now() > budget.deadlineMs)
       throw new Error(`Budget/time guard: balance=${balance} laneLedger=${ledger}; progress preserved`);
   };
   await guard();
@@ -69,8 +69,14 @@ async function main() {
     learning: 'LX drain through product worker; settle windows advanced, no synthetic lessons or approval; no forced sleep phase',
     ranker: 'Initialized in every arm including learning-off arms, matching ordinary method selection',
     smoke: Boolean(args.only), budget });
-  let h;
+  let h, guardTimer;
   const shutdown = async () => { if (h) { const old = h; h = null; await stopHarness(old); } };
+  guardTimer = setInterval(() => {
+    guard().catch(async error => {
+      clearInterval(guardTimer); status(String(error.message)); await shutdown(); process.exit(3);
+    });
+  }, 30_000);
+  guardTimer.unref();
   for (const signal of ['SIGINT','SIGTERM']) process.on(signal, async () => { await shutdown(); process.exit(143); });
   try {
     h = await startHarness({ args, treeOs, treeDir, dataDir, profile: 'normal', arm: 'B', dbUrl: `postgresql://coder@127.0.0.1:${args.pgPort}/${dbName}` });
@@ -163,6 +169,6 @@ async function main() {
     await atomic(`${out}/state-final.json`, await ipc(h, 'lxState', { userId }));
     await memoryState('final'); await usage();
     await atomic(`${out}/complete.json`, { at: new Date().toISOString() }); status('product-path complete');
-  } finally { await shutdown(); }
+  } finally { clearInterval(guardTimer); await shutdown(); }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(error => { console.error(error); process.exitCode = 1; });
