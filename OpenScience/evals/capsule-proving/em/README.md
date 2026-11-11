@@ -47,3 +47,10 @@ available memory is below approximately 1 GB. It never stops or reconfigures
 another lane's engines or processes. Completed cases, score packets and ledger
 rows resume through the existing runner conventions. A cap stop or an
 incomplete judge pass is not successful completion of the experiment.
+
+Validation at the final code revision: 169 Node tests passed, one skipped;
+4/4 live attribution-pilot verdicts matched expectations, and two budget-rate
+checks passed. Bulk score outputs from `/7` are intermediate: only `/8`
+outputs satisfy the continuation's completion check. Ledger CLI rows now use
+the summary's scoring schema rather than the run's old commit as the scorer
+identity, so a correction back to an earlier numeric result is appended.
