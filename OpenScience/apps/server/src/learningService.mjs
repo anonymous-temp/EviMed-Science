@@ -105,6 +105,17 @@ export function isLearnedMethod(document) {
   return document?.payload?.recordType === LEARNED_METHOD_RECORD_TYPE;
 }
 
+/** A person's correction proves this body, never a later system rewrite. @param {any} payload */
+export function methodPersonCorrection(payload) {
+  if (payload && Object.hasOwn(payload, 'personCorrection')) return payload.personCorrection?.digest === payload.contentDigest ? payload.personCorrection : null;
+  // Legacy correction amendments have no stamp. Their externally recorded lesson signal and feedback identities,
+  // with no subsequent consolidation producer, are the available proof. No model-authored field grants this authority.
+  const provenance = payload?.provenance;
+  return provenance?.trigger === 'correction' && provenance.signal === 'researcher' && !provenance.consolidatedBy
+    && provenance.feedbackEventIds?.length && payload.learning?.rewrites?.count > 0
+    ? { digest: payload.contentDigest, at: payload.bodyUpdatedAt ?? payload.createdAt } : null;
+}
+
 /**
  * Why a method that is not retired stands as it does, in the reader's words.
  *
@@ -119,6 +130,7 @@ export function isLearnedMethod(document) {
  */
 export function effectiveStatusReason(payload) {
   if (payload?.status === "candidate") {
+    if (payload.conflictHold) return payload.statusReason;
     return unresolvedConflicts(payload?.learning?.relations).length
       ? "它和另一条做法说法相反，理清之前不会用上。"
       : "刚刚更新过，下一次整理时生效。";
@@ -377,7 +389,7 @@ export class LearningService {
    * follows the researcher, and one filed under its project was deleted with it
    * (audit 2026-09-26, L-G1).
    * @param {string} userId
-   * @param {{projectId?: string|null, frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown, scope?: unknown}} input
+   * @param {{projectId?: string|null, frontmatter: any, body: string, files?: any, provenance: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown, scope?: unknown, personCorrection?: boolean}} input
    */
   async createCandidate(userId, input) {
     return withLearnedLibrary(this.documents, userId, () => this.#createCandidate(userId, input));
@@ -420,6 +432,7 @@ export class LearningService {
       bodyVersion: 1,
       bodyUpdatedAt: createdAt,
       createdAt,
+      personCorrection: null,
     };
     // A method takes effect now — the researcher's own, and since 2026-09-20 a
     // distilled one too (see `promotionVerdict`: the evidence bar moved to
@@ -441,6 +454,8 @@ export class LearningService {
       // has one answer however it became effective.
       payload.statusChangedAt = payload.createdAt;
     }
+    if (input.personCorrection) payload.personCorrection = await this.#correctionStamp(userId, payload);
+    payload.statusReason = effectiveStatusReason(payload);
     await (this.contextProvenance ? this.contextProvenance.write.bind(this.contextProvenance) : this.documents.put.bind(this.documents))(userId, "method", productId(id, "method"), payload, {
       expectedRevision: 0,
       projectId: null,
@@ -459,7 +474,7 @@ export class LearningService {
    * they knew.
    * @param {string} userId
    * @param {string} methodId
-   * @param {{expectedRevision: number, frontmatter: any, body: string, files?: any, provenance?: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown, scope?: unknown}} input
+   * @param {{expectedRevision: number, frontmatter: any, body: string, files?: any, provenance?: any, dependencies?: any[], mountedTools?: readonly string[], display?: unknown, steps?: unknown, scope?: unknown, personCorrection?: boolean}} input
    */
   async amendMethod(userId, methodId, input) {
     return withLearnedLibrary(this.documents, userId, () => this.#amendMethod(userId, methodId, input));
@@ -516,16 +531,19 @@ export class LearningService {
       bodyVersion: bodyChanged ? bodyVersionOf(current.payload) + 1 : bodyVersionOf(current.payload),
       bodyUpdatedAt: bodyChanged ? at : current.payload.bodyUpdatedAt ?? current.createdAt ?? at,
       updatedAt: at,
+      ...(bodyChanged ? { personCorrection: null } : {}),
     };
+    if (input.personCorrection && current.payload.status !== 'retired') payload.personCorrection = await this.#correctionStamp(userId, payload);
     if (payload.files === undefined) delete payload.files;
-    if (bodyChanged && current.payload.status !== 'retired') {
+    if ((bodyChanged || input.personCorrection) && current.payload.status !== 'retired') {
       const verdict = promotionVerdict(methodRecordFrom({ id: methodId, payload }), { isApproved: await this.#inForce(userId, payload) });
-      payload.status = verdict.status;
-      if (verdict.status === 'approved') payload.statusReason = effectiveStatusReason(payload);
-      else delete payload.statusReason;
+      payload.status = input.personCorrection ? 'approved' : verdict.status;
+      if (payload.status === 'approved') delete payload.conflictHold;
+      payload.statusReason = effectiveStatusReason(payload);
       payload.statusChangedAt = at;
     }
     await (this.contextProvenance ? this.contextProvenance.write.bind(this.contextProvenance) : this.documents.put.bind(this.documents))(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
+    if (input.personCorrection && payload.status === 'approved') await this.#settleCorrectionConflicts(userId, await this.getMethod(userId, methodId));
     this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);
   }
@@ -619,13 +637,16 @@ export class LearningService {
     const document = await this.getMethod(userId, methodId);
     // The verdict reads the method's own conflicts and nothing else (since 2026-09-20).
     const verdict = promotionVerdict(methodRecordFrom(document), { isApproved: await this.#inForce(userId, document.payload) });
-    if (verdict.status !== "approved") {
+    const corrected = methodPersonCorrection(document.payload) && !document.payload.conflictHold && document.payload.status !== 'retired';
+    if (verdict.status !== "approved" && !corrected) {
       throw new HttpError(409, "method_not_promotable", `The method is not eligible: ${verdict.missing.join("; ")}`);
     }
     // The reader's sentence, from the record: a promotion used to keep
     // whatever reason an earlier path had written, English included.
-    return this.#setStatus(userId, methodId, "approved", input.expectedRevision, document,
+    await this.#setStatus(userId, methodId, "approved", input.expectedRevision, document,
       effectiveStatusReason({ ...document.payload, status: "approved" }));
+    if (corrected) await this.#settleCorrectionConflicts(userId, await this.getMethod(userId, methodId));
+    return this.getMethod(userId, methodId);
   }
 
   /**
@@ -655,6 +676,57 @@ export class LearningService {
       if (isLearnedMethod(other) && other.payload.status === "approved") approved.add(id);
     }
     return (id) => approved.has(id);
+  }
+
+  /** Correction precedence is a library write, under the same authority as the amendment. No meaning is judged here:
+   * only conflicts already judged by consolidation are read. The newest correction wins; an exact timestamp tie uses the id.
+   * Both directions are read so a one-sided or partly recorded conflict cannot hide an older instruction.
+   * @param {string} userId @param {any} document */
+  async #settleCorrectionConflicts(userId, document) {
+    if (document.payload.status === 'retired') return;
+    const methods = await this.#conflictLibrary(userId, document.payload);
+    for (const listed of methods) {
+      if (listed.id === document.id) continue;
+      const current = await this.getMethod(userId, document.id);
+      const other = await this.getMethod(userId, listed.id);
+      if (current.payload.status === 'retired' || other.payload.status === 'retired') continue;
+      const relation = unresolvedConflicts(current.payload.learning?.relations).find(entry => entry.target === other.id)
+        ?? unresolvedConflicts(other.payload.learning?.relations).find(entry => entry.target === current.id);
+      if (!relation) continue;
+      const own = methodPersonCorrection(current.payload), theirs = methodPersonCorrection(other.payload);
+      if (!own && !theirs) continue;
+      const ownWins = Boolean(own && (!theirs || `${own.at}:${current.id}` > `${theirs.at}:${other.id}`));
+      const winner = ownWins ? current : other, loser = ownWins ? other : current;
+      // A correction that has itself yielded is not authority to withdraw another method.
+      if (winner.payload.status !== 'approved' || loser.payload.status !== 'approved') continue;
+      const reason = `它和你较新纠正的「${winner.payload.display?.title ?? winner.payload.frontmatter.name}」说法相反，先让较新的做法生效；你可以在版本历史里恢复这条做法。`;
+      const learning = foldRelation(loser.payload.learning, { ...relation, type: 'conflicts_with', target: winner.id, resolved: false });
+      const held = { ...loser, payload: { ...loser.payload, learning,
+        conflictHold: { methodId: winner.id, digest: winner.payload.contentDigest } } };
+      await this.#setStatus(userId, loser.id, 'candidate', loser.revision, held, reason);
+    }
+  }
+
+  /** @param {string} userId @param {any} payload */
+  async #conflictLibrary(userId, payload) {
+    const projectId = sourceProjectOf(payload.provenance, null);
+    const policy = this.contextProvenance && projectId ? await this.contextProvenance.policyFor({ userId, id: projectId }) : null;
+    if (this.contextProvenance) return this.contextProvenance.scopedMethods(userId, policy);
+    const methods = [];
+    let cursor = null;
+    do {
+      const page = await this.listMethods(userId, { limit: 100, cursor });
+      methods.push(...page.items);
+      cursor = page.nextCursor ?? null;
+    } while (cursor);
+    return methods;
+  }
+
+  /** Corrections committed within one millisecond still have an unambiguous order. @param {string} userId @param {any} payload */
+  async #correctionStamp(userId, payload) {
+    const methods = await this.#conflictLibrary(userId, payload);
+    const latest = Math.max(0, ...methods.map(method => Date.parse(methodPersonCorrection(method.payload)?.at ?? '') || 0));
+    return { digest: payload.contentDigest, at: new Date(Math.max(this.now().getTime(), latest + 1)).toISOString() };
   }
 
   /**
@@ -755,10 +827,11 @@ export class LearningService {
     const payload = {
       ...document.payload,
       status,
-      ...(reason ? { statusReason: String(reason).slice(0, 500) } : {}),
+      statusReason: String(reason || (status === 'retired' ? '你已停用这条做法，可以在版本历史里恢复。' : effectiveStatusReason({ ...document.payload, status }))).slice(0, 500),
       ...(link ? { links: appendMethodLink(document.payload.links, link) } : {}),
       statusChangedAt: this.now().toISOString(),
     };
+    if (status === 'approved') delete payload.conflictHold;
     await this.documents.put(userId, "method", methodId, payload, { expectedRevision });
     this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);
@@ -839,7 +912,7 @@ export class LearningService {
       if (!Number.isSafeInteger(requested) || requested > current.revision || index < 0) {
         throw new HttpError(404, "method_revision_unavailable", "That method revision is unavailable.");
       }
-      if (current.payload.status === "retired") {
+      if (current.payload.status === "retired" || current.payload.conflictHold) {
         while (index < saved.length && (saved[index].payload?.status === "retired" || saved[index].deletedAt)) index += 1;
       } else {
         while (index < saved.length && (digestOf(saved[index]) === current.payload.contentDigest || saved[index].deletedAt)) index += 1;
@@ -879,11 +952,19 @@ export class LearningService {
     };
     if (payload.files === undefined) delete payload.files;
     if (payload.scope === undefined) delete payload.scope;
+    // Restoring a held method is the person's explicit choice between the two instructions. Automatic regressions
+    // carry a link/targetDigest and retain their normal conflict checks.
+    const restoreHeld = current.payload.conflictHold && !input.link && !input.targetDigest;
+    if (restoreHeld) {
+      payload.personCorrection = await this.#correctionStamp(userId, payload);
+      delete payload.conflictHold;
+    }
     const verdict = promotionVerdict(methodRecordFrom({ id: methodId, payload: { ...payload, status: "candidate" } }), { isApproved: await this.#inForce(userId, payload) });
-    payload.status = verdict.status;
+    payload.status = restoreHeld ? 'approved' : verdict.status;
     payload.statusReason = effectiveStatusReason(payload);
     payload.statusChangedAt = at;
     await this.documents.put(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
+    if (restoreHeld) await this.#settleCorrectionConflicts(userId, await this.getMethod(userId, methodId));
     this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);
   }
@@ -1092,14 +1173,23 @@ export class LearningService {
   /**
    * @param {string} userId @param {string} methodId @param {any[]} relations
    * @param {(id: string) => boolean} [exists]
+   * @param {{expectedDigest?: string, targetDigests?: Record<string, string>, resolveConflicts?: string[]}} [options]
    */
-  async recordRelations(userId, methodId, relations, exists) {
-    return withLearnedLibrary(this.documents, userId, () => this.#recordRelations(userId, methodId, relations, exists));
+  async recordRelations(userId, methodId, relations, exists, options = {}) {
+    return withLearnedLibrary(this.documents, userId, () => this.#recordRelations(userId, methodId, relations, exists, options));
   }
 
-  async #recordRelations(userId, methodId, relations, exists) {
+  async #recordRelations(userId, methodId, relations, exists, options) {
     const document = await this.getMethod(userId, methodId);
+    if (options.expectedDigest && document.payload.contentDigest !== options.expectedDigest) return null;
+    for (const [id, digest] of Object.entries(options.targetDigests ?? {})) {
+      const target = await this.getMethod(userId, id);
+      if (target?.payload.contentDigest !== digest) return null;
+    }
     let learning = document.payload.learning;
+    for (const relation of unresolvedConflicts(learning?.relations)) {
+      if (options.resolveConflicts?.includes(relation.target)) learning = foldRelation(learning, { ...relation, resolved: true });
+    }
     for (const relation of relations ?? []) {
       const issues = relationIssues(relation, exists);
       if (issues.length) {
@@ -1107,7 +1197,21 @@ export class LearningService {
       }
       learning = foldRelation(learning, relation);
     }
-    return this.#saveLearning(userId, methodId, document, learning);
+    const saved = await this.#saveLearning(userId, methodId, document, learning);
+    // A conflict is symmetric even when the replacement relation (subset, supersedes) is directional. Resolve both
+    // ends against the very bodies DECIDE read, before correction precedence or the next approval sees them.
+    for (const id of options.resolveConflicts ?? []) {
+      if (!options.targetDigests?.[id]) continue;
+      const target = await this.getMethod(userId, id);
+      if (!target || target.payload.contentDigest !== options.targetDigests[id]) continue;
+      let targetLearning = target.payload.learning;
+      for (const relation of unresolvedConflicts(targetLearning?.relations)) {
+        if (relation.target === methodId) targetLearning = foldRelation(targetLearning, { ...relation, resolved: true });
+      }
+      if (targetLearning !== target.payload.learning) await this.#saveLearning(userId, id, target, targetLearning);
+    }
+    await this.#settleCorrectionConflicts(userId, saved);
+    return this.getMethod(userId, methodId);
   }
 
   /**

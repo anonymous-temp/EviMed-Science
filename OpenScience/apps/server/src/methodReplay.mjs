@@ -37,7 +37,7 @@ import { methodSourceIdentifierShapesIn, trajectoryDigest, scopeRunTranscript, t
 
 import { readArtifactShapes } from "./artifactShapes.mjs";
 import { CONVERSATION_SCOPE, methodScopeId } from "./learnedMethodMount.mjs";
-import { methodScopeOf, methodSourceProjects } from "./learningService.mjs";
+import { methodPersonCorrection, methodScopeOf, methodSourceProjects } from "./learningService.mjs";
 import { retirementSentence } from "./methodConsolidation.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { readRunTranscript } from "./runTranscripts.mjs";
@@ -55,7 +55,7 @@ export const REPLAY_WINDOW_DAYS = 90;
 
 /** What one judgement came to, and what one job came to: closed vocabularies, each a counter. */
 export const REPLAY_VERDICTS = Object.freeze(["agreed", "contradiction", "unverified", "failed", "unavailable"]);
-export const REPLAY_OUTCOMES = Object.freeze(["clean", "regressed", "no_runs", "judge_failed", "not_in_force", "version_changed", "method_gone", "paused", "restore_failed"]);
+export const REPLAY_OUTCOMES = Object.freeze(["clean", "person_correction", "regressed", "no_runs", "judge_failed", "not_in_force", "version_changed", "method_gone", "paused", "restore_failed"]);
 
 /** How much of the method and of a run the judge is shown, and the least a quotation may be. */
 const METHOD_CHARS = 6_000;
@@ -321,6 +321,15 @@ export class MethodReplay {
     // Amended again before this ran: the newer body has a job of its own.
     if (method.payload.contentDigest !== digest) return { ...base, outcome: this.#outcome("version_changed"), replayed: 0, contradictions: 0 };
     if (method.payload.status === "retired") return { ...base, outcome: this.#outcome("not_in_force"), replayed: 0, contradictions: 0 };
+
+    // Accepted older work cannot veto a person's newer correction. This also drains legacy correction jobs that
+    // otherwise returned no_runs forever while their candidate was never mounted. System rewrites have another digest.
+    if (methodPersonCorrection(method.payload)) {
+      if (method.payload.status === 'candidate' && !method.payload.conflictHold) {
+        await this.learning.approve(job.userId, methodId, { expectedRevision: method.revision });
+      }
+      return { ...base, outcome: this.#outcome('person_correction'), replayed: 0, contradictions: 0 };
+    }
 
     const scope = methodScopeId(method.payload) ?? CONVERSATION_SCOPE;
     const to = this.now();

@@ -443,7 +443,7 @@ test("approvals do not wait for the model steps: a pass that cannot finish has a
     /** @type {any} */ (learning).approve = async (_userId, id) => {
       events.push(`approve:${id}`);
       if (id === "m2") throw Object.assign(new Error("not promotable"), { code: "method_not_promotable" });
-      return { id };
+      return { id, payload: { status: "approved" } };
     };
     const consolidation = new MethodConsolidation({
       learning,
@@ -471,7 +471,7 @@ test("a candidate approved before the model steps is reported once, and the pass
     // m2 is held by a conflict until the pass has run (as one recorded by its DECIDE step would be lifted by a retirement in it).
     if (id === "m2" && !item.payload.released) throw Object.assign(new Error("not promotable"), { code: "method_not_promotable" });
     item.payload.status = "approved";
-    return { id };
+    return item;
   };
   const { instance } = consolidation({
     learning,

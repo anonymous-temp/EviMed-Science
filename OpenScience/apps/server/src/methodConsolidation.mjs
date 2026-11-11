@@ -815,7 +815,7 @@ export class MethodConsolidation {
       if (document.payload?.status !== "candidate") continue;
       try {
         const approvedDocument = await this.learning.approve(job.userId, document.id, { expectedRevision: document.revision });
-        promoted.push(approvedDocument.id);
+        if (approvedDocument.payload.status === 'approved') promoted.push(approvedDocument.id);
       } catch (error) {
         // Not promotable now means one thing only: an unresolved conflict
         // with another method, which no measurement repairs. The reason is
@@ -927,6 +927,8 @@ export class MethodConsolidation {
    */
   async applyRelations(job, members, decided, tally = {}) {
     const byId = new Map(members.map((member) => [member.id, member]));
+    // Only an explicit new judgement of this pair can resolve its earlier conflict. Silence or an omitted pair cannot.
+    const conflicting = resolveAssignments(members, decided?.assignments).filter(item => item.entry.RELATION_TYPE === 'conflicts_with');
     let count = 0;
     for (const { entry, skills, wider, replaces } of resolveAssignments(members, decided?.assignments)) {
       if (!skills) continue;
@@ -946,11 +948,20 @@ export class MethodConsolidation {
         // What the method holds now, not what the pass listed it with: a pass that reads a group again must not count a fact twice.
         const held = (await this.#get(job, source).catch(() => null))?.payload?.learning?.relations ?? byId.get(source)?.payload?.learning?.relations ?? [];
         const relations = links.filter((link) => link.source === source)
-          .map((link) => ({ type, target: link.target, evidence: entry.REASON ?? "", proposedBy: `consolidate:${job.id}` }));
+          .map((link) => ({ type, target: link.target, evidence: entry.REASON ?? "", proposedBy: `consolidate:${job.id}`,
+            ...(type === 'conflicts_with' ? { resolved: false } : {}) }));
+        const resolveConflicts = type === 'conflicts_with' ? [] : relations.map(relation => relation.target)
+          .filter(target => !conflicting.some(item => item.skills?.includes(source) && item.skills.includes(target)));
         // A retry that learned no new relation must retain the original fact
         // and its revision, including the frozen input of an unfinished build.
-        if(relations.every(relation=>held.some(before=>before.type===relation.type&&before.target===relation.target&&before.evidence===relation.evidence)))continue;
-        const written = await this.learning.recordRelations(job.userId, source, relations, (/** @type {string} */ id) => byId.has(id)).catch(() => null);
+        if(relations.every(relation=>held.some(before=>before.type===relation.type&&before.target===relation.target&&before.evidence===relation.evidence
+          && (type !== 'conflicts_with' || !before.resolved)))
+          && !held.some(before => before.type === 'conflicts_with' && !before.resolved && resolveConflicts.includes(before.target)))continue;
+        const targetDigests = Object.fromEntries(relations.filter(relation => !isOfficialDocument(byId.get(relation.target)))
+          .map(relation => [relation.target, byId.get(relation.target).payload.contentDigest]));
+        const written = await this.learning.recordRelations(job.userId, source, relations, (/** @type {string} */ id) => byId.has(id), {
+          expectedDigest: byId.get(source).payload.contentDigest, targetDigests, resolveConflicts,
+        }).catch(() => null);
         if (!written) continue;
         const added = relations.filter((relation) => !held.some((/** @type {any} */ before) => before.type === relation.type && before.target === relation.target)).length;
         if (!added) continue;
