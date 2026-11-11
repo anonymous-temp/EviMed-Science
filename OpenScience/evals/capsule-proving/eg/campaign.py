@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Resumable phase supervisor: finish G1, then G10, then G3 within the shared budget/time guard."""
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
 import subprocess
 import time
+from slot_capacity import process_token
 
 TREE = Path("/srv/evimed/wt/run/OpenScience")
 EG = TREE / "evals/capsule-proving/eg"
@@ -37,6 +39,7 @@ def check_budget():
             status(f"STOP budget/time guard: initial={b['balance']} current={current} elapsedSeconds={age:.0f}")
             raise SystemExit(3)
         if fresh:
+            retain_owned_slots(b)
             return
         status("WAIT incomplete lane accounting; no new phase/slot admitted")
         time.sleep(30)
@@ -49,6 +52,37 @@ def run(argv, extra_env=None):
 
 def read(file):
     return json.loads(file.read_text()) if file.exists() else None
+
+
+def retain_owned_slots(budget):
+    # Adopt only a slot an EG batch has already won. A separate PID keeps the legacy reservation format intact.
+    locks = Path('/srv/evimed/pp/locks')
+    with (locks / 'eg-capacity.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        held = [read(p) for p in locks.glob('eg-reservation-*.json')]
+        owned = {r['slot'] for r in held if r and r.get('campaignPid') == os.getpid() and process_token(r['pid'])}
+        for r in held:
+            if not r or r['slot'] in owned or not process_token(r['pid']):
+                continue
+            if r['slot'] not in ['/srv/evimed/pp/live/p48854', '/srv/evimed/pp/live/p48857']:
+                continue
+            try:
+                argv = Path(f"/proc/{r['pid']}/cmdline").read_bytes().split(b'\0')
+            except OSError:
+                continue
+            if str(EG / 'queue-slot.py').encode() not in argv:
+                continue
+            token = process_token(os.getpid())
+            deadline = datetime.fromisoformat(budget['startedAt'].replace('Z', '+00:00')) + timedelta(hours=12)
+            holder = subprocess.Popen(['python3', str(EG / 'hold_slot.py'), '--campaign-pid', str(os.getpid()), '--campaign-token', token,
+                                       '--deadline', deadline.isoformat()], cwd=TREE, env=ENV, stdin=subprocess.DEVNULL,
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            file = locks / f'eg-reservation-{holder.pid}.json'
+            temporary = file.with_suffix('.json.tmp')
+            temporary.write_text(json.dumps({'pid': holder.pid, 'slot': r['slot'], 'campaignPid': os.getpid(), 'campaignToken': token, 'expiresAt': deadline.isoformat()}))
+            temporary.replace(file)
+            owned.add(r['slot'])
+            status(f"retained admitted slot {r['slot']} holder={holder.pid} until={deadline.isoformat()}")
 
 
 def record_engine(directory):
@@ -72,7 +106,8 @@ def record_engine(directory):
 def launch(suite, run_id, port, pg, bridge, extra):
     out = RUNS / run_id
     out.mkdir(exist_ok=True)
-    env = {**ENV, "PORT": str(port), "PG_PORT": str(pg), "BRIDGE_PORT": str(bridge)}
+    env = {**ENV, "PORT": str(port), "PG_PORT": str(pg), "BRIDGE_PORT": str(bridge),
+           "EVAL_EG_CAMPAIGN_PID": str(os.getpid()), "EVAL_EG_CAMPAIGN_TOKEN": process_token(os.getpid())}
     argv = ["python3", str(EG / "queue-slot.py"), "--status", str(out / "STATUS"), "--", "bash", str(EG / "lab.sh"), suite, "--out", str(out), *extra]
     log = (out / "launcher.log").open("a")
     child = subprocess.Popen(argv, env=env, cwd=TREE, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True)

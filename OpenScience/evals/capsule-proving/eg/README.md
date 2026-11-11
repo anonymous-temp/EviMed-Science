@@ -10,6 +10,12 @@ Run on the lab host, never the development box. `lab.sh` expects the existing
 Postgres port per active slot, and `queue-slot.py` to respect the host-wide
 limit of two product slots. It counts all live product slot environments,
 including diagnostic harnesses, and reserves capacity while a slot starts.
+An admitted EG slot has a lightweight lease bound to the campaign PID and its
+process start time, expiring at the original twelve-hour deadline. It remains
+reserved while that campaign recovers or switches phases. Only an existing EG
+batch reservation can create such a lease; cold reuse cannot overlap a live
+batch or raise the host limit. The lease uses the existing PID/slot file format
+and releases itself when the campaign ends.
 
 All runs require `candidate.env`: lock isolation, search hint, opening index,
 secret redaction, pasted-instruction checking and history retrieval v2 are on;
@@ -24,6 +30,8 @@ migrations and become visible to the meter before any source turn is sent.
 Shared balance decline includes other lanes and is reported separately.
 
 Order: G1, then G10, then G3. Do not start a new batch below CNY 400 balance.
+Recoverable failures get three consecutive attempts without new accepted work;
+completed source work resets that retry budget. Budget stops are never retried.
 
 ## G1
 
