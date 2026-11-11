@@ -65,6 +65,35 @@ def _slide_key(name: str) -> int:
     return int(match.group(1)) if match else 0
 
 
+def pptx_content_text(path: Path) -> str:
+    """Text for numeric provenance, excluding actual page fields and isolated page labels at the margins."""
+    chunks = []
+    with zipfile.ZipFile(path) as archive:
+        size = _slide_size(archive)
+        order = _slide_order(archive)
+        for index, name in enumerate(order, 1):
+            root = ET.fromstring(archive.read(name))
+            for shape in root.findall(".//p:sp", NS):
+                text = " ".join(t.text or "" for t in shape.findall(".//a:t", NS)).strip()
+                placeholder = shape.find(".//p:ph", NS)
+                field = shape.find(".//a:fld[@type='slidenum']", NS)
+                if field is not None or (placeholder is not None and placeholder.get("type") == "sldNum"):
+                    continue
+                offset = shape.find(".//a:xfrm/a:off", NS)
+                extent = shape.find(".//a:xfrm/a:ext", NS)
+                margin = size and offset is not None and extent is not None and (
+                    int(offset.get("y", 0)) >= size[1] * .88 or
+                    int(offset.get("y", 0)) + int(extent.get("cy", 0)) <= size[1] * .12)
+                label = re.fullmatch(r"(?:page\s*|第\s*)?0*(\d+)(?:\s*(?:/|of)\s*0*(\d+))?\s*页?", text, re.I)
+                if margin and label and int(label[1]) == index and (label[2] is None or int(label[2]) == len(order)):
+                    continue
+                chunks.append(text)
+            # Tables are outside p:sp and still contain numerical claims.
+            for table in root.findall(".//a:tbl", NS):
+                chunks.append(" ".join(t.text or "" for t in table.findall(".//a:t", NS)))
+    return "\n".join(chunks)
+
+
 def pptx_info(path: Path) -> dict:
     """Slides in presentation order with their title, texts, charts and pictures; raises if the zip or an XML part is broken."""
     with zipfile.ZipFile(path) as archive:

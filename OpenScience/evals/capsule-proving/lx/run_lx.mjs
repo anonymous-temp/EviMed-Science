@@ -62,7 +62,7 @@ async function atomic(file, value) {
   await fs.rename(`${file}.tmp`, file);
 }
 const readJson = async (file, fallback = null) => { try { return JSON.parse(await fs.readFile(file, 'utf8')); } catch { return fallback; } };
-function ipc(h, action, args = {}) {
+export function ipc(h, action, args = {}) {
   const id = randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { h.child.off('message', reply); reject(new Error(`eval control timeout: ${action}`)); }, 300_000);
@@ -92,7 +92,7 @@ export function skillOf({ name, whenToUse, body }) {
 }
 
 /** The runner's side of a learning settlement: the product worker claims every queued learning job; nothing is written for it. */
-async function drain(h, userId, { sleepKey = null, consolidate = true, timeoutMin = 45 } = {}, status = () => {}) {
+export async function drain(h, userId, { sleepKey = null, consolidate = true, timeoutMin = 45 } = {}, status = () => {}) {
   await ipc(h, 'start', { userId });
   const deadline = Date.now() + timeoutMin * 60_000;
   let quiet = 0, slept = false, last = null, timedOut = false, settled = false, applied = null;

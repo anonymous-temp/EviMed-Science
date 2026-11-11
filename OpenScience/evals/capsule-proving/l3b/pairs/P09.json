@@ -1,0 +1,15 @@
+{
+  "id": "P09",
+  "learning": {
+    "initial": "Make a compact evidence note from these fictional education records: Chalk-P is a registered plan to test spaced quizzes next term; Chalk-R reports a completed study finding improved delayed recall but no difference in attendance. Reply here.",
+    "correction": "The compact note mixes intended tests with observed findings. For my notes from mixed research records, explicitly separate planned-only work from completed observations and keep measured null results distinct from outcomes never measured. Please redo it and use this distinction in later notes; never count a registration as a positive result."
+  },
+  "exam": "Make an evidence note from these fictional ecology records: Moss-P registers a future test of shade screens on seedling survival. Moss-R is completed: shade screens lowered midday soil temperature, found no difference in seedling height, and did not measure survival. Use only these records. Reply here.",
+  "behavior": {
+    "principle": "Explicitly separate the planned survival test from completed temperature reduction and measured null height result; survival in Moss-R is unmeasured, not null.",
+    "positive": "Planned only: Moss-P will test survival. Completed: Moss-R lowered temperature, found no height difference; survival was not measured.",
+    "negative": "Both studies support improved seedling survival, or Moss-R found no survival difference."
+  },
+  "quality": "No claim of improved survival or that registration demonstrates efficacy; all three outcome statuses are correct.",
+  "code": null
+}

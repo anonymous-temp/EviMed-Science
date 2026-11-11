@@ -1,0 +1,22 @@
+{
+  "id": "P04",
+  "learning": {
+    "initial": "Summarize these fictional sensor readings in a short paragraph: 4, 8, missing, 12, 16. Give observed count, missing count, and median. Reply here.",
+    "correction": "The paragraph cannot be imported into my notebook. For my small sensor-reading summaries, return only a JSON object with exactly n_observed, n_missing, median, in that order. Exclude missing values from the median; never turn missing into zero. No Markdown fence or commentary. Please redo it, and keep this output convention for later sensor summaries."
+  },
+  "exam": "Summarize these fictional sensor readings for my notebook: 6, missing, 18, 10, missing, 14. Give observed count, missing count, and median. Reply here.",
+  "behavior": {
+    "principle": "Return only JSON with ordered keys n_observed, n_missing, median; values 4, 2, 12.",
+    "positive": "{\"n_observed\":4,\"n_missing\":2,\"median\":12}",
+    "negative": "A fenced JSON object, extra explanation, or median computed with zeros."
+  },
+  "quality": "There are four observed readings, two missing, median 12. Missing values must not be treated as zero.",
+  "code": {
+    "type": "json",
+    "expected": {
+      "n_observed": 4,
+      "n_missing": 2,
+      "median": 12
+    }
+  }
+}

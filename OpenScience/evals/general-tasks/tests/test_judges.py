@@ -90,6 +90,12 @@ class TextDetectors(unittest.TestCase):
     def test_a_reference_word_inside_a_sentence_is_not_a_reference_list(self):
         self.assertTrue(self.check("这个参考文献的写法很常见。", ["references"])["references"])
 
+    def test_nonmedical_caveats_are_not_medical_disclaimers(self):
+        for text in ["不构成投资建议", "不构成法律建议", "仅供参考", "not financial advice", "not legal advice"]:
+            self.assertTrue(self.check(text, ["medical_disclaimer"])["medical_disclaimer"], text)
+        for text in ["不构成任何医疗建议", "Not medical advice", "请咨询专业医生"]:
+            self.assertFalse(self.check(text, ["medical_disclaimer"])["medical_disclaimer"], text)
+
 
 class RecordChecks(unittest.TestCase):
     def test_route_not_catches_agent_and_named_reason(self):
@@ -249,7 +255,13 @@ class LanguageChecks(unittest.TestCase):
         env.record["turns"][2]["reply"] = short + "\n请问是哪一条？"
         out = {r["id"]: r["ok"] for r in checks.chk_weekly({}, env.ctx())}
         self.assertFalse(out["final_contains_37_percent"])
-        self.assertFalse(out["does_not_ask_again_for_given_information"])
+        self.assertIsNone(out["does_not_ask_again_for_given_information"])
+        check = next(r for r in checks.chk_weekly({}, env.ctx()) if r["id"] == "does_not_ask_again_for_given_information")
+        self.assertFalse(check["required"])
+        env.record["turns"][2]["reply"] = fixed + "\n如果你要改的是别处的数，请告诉我。"
+        check = next(r for r in checks.chk_weekly({}, env.ctx()) if r["id"] == "does_not_ask_again_for_given_information")
+        self.assertIsNone(check["ok"])
+        self.assertFalse(check["required"])
         env.close()
 
     def test_weekly_reads_the_file_when_the_reply_only_points_at_it(self):

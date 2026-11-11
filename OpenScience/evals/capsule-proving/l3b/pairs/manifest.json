@@ -1,0 +1,23 @@
+{
+  "schema": "l3b-pairs/1",
+  "created": "2026-11-11",
+  "generator": "Codex, authored directly; no Kimi calls",
+  "sealedData": "Never accessed. New fictional scenarios authored from scratch, not derived from any benchmark split.",
+  "review": "Each pair reviewed for a distinct exam request, explicit first-person correction, scoped transferable behavior, independently supplied exam facts, and ordinary quality. Medical tasks are fictional study interpretation, never patient-specific advice.",
+  "design": "Twelve paired tasks, three per kind, plus six unrelated controls. Exam prompts never contain the correction. Code scores exact format/arithmetic; Qwen scores meaning using principle and positive/negative examples. Ordinary quality is separate. One account per arm, three repetitions per exam. Repetitions are not independent people.",
+  "items": [
+    {"id":"P01","kind":"documents","generator":"Codex-direct","reviewed":true,"file":"P01.json"},
+    {"id":"P02","kind":"documents","generator":"Codex-direct","reviewed":true,"file":"P02.json"},
+    {"id":"P03","kind":"documents","generator":"Codex-direct","reviewed":true,"file":"P03.json"},
+    {"id":"P04","kind":"data-analysis","generator":"Codex-direct","reviewed":true,"file":"P04.json"},
+    {"id":"P05","kind":"data-analysis","generator":"Codex-direct","reviewed":true,"file":"P05.json"},
+    {"id":"P06","kind":"data-analysis","generator":"Codex-direct","reviewed":true,"file":"P06.json"},
+    {"id":"P07","kind":"literature","generator":"Codex-direct","reviewed":true,"file":"P07.json"},
+    {"id":"P08","kind":"literature","generator":"Codex-direct","reviewed":true,"file":"P08.json"},
+    {"id":"P09","kind":"literature","generator":"Codex-direct","reviewed":true,"file":"P09.json"},
+    {"id":"P10","kind":"medical-evidence","generator":"Codex-direct","reviewed":true,"file":"P10.json"},
+    {"id":"P11","kind":"medical-evidence","generator":"Codex-direct","reviewed":true,"file":"P11.json"},
+    {"id":"P12","kind":"medical-evidence","generator":"Codex-direct","reviewed":true,"file":"P12.json"}
+  ],
+  "controls": "controls.json"
+}

@@ -1,0 +1,22 @@
+{
+  "id": "P01",
+  "learning": {
+    "initial": "Draft a single-paragraph internal decision memo: the ceramics studio will rent kiln K for six months because it has spare capacity; reassess if monthly demand exceeds 80 pieces. Reply here.",
+    "correction": "The paragraph buries the decision and the condition for changing it. For my internal decision memos, I want exactly three level-two headings in this order: Decision, Basis, Revisit. Put the chosen action, its supplied reason, and the stated review condition under them. Do not invent a review date. Please rewrite it that way and use this structure for my later decision memos."
+  },
+  "exam": "Draft an internal decision memo for our seed library: choose a paper sign-out ledger for the winter pilot because internet access in the shed is unreliable; review the choice if weekly loans exceed 45. Reply here.",
+  "behavior": {
+    "principle": "Use exactly the three Markdown level-two headings Decision, Basis, Revisit, in order, without any other headings.",
+    "positive": "## Decision\nUse the paper ledger.\n## Basis\nThe supplied reason.\n## Revisit\nThe supplied threshold.",
+    "negative": "One paragraph or headings Recommendation/Background/Next steps, even if substantively correct."
+  },
+  "quality": "Choose a paper ledger for the winter pilot; give unreliable shed internet as reason and more than 45 weekly loans as the review trigger. No invented dates, outcomes or facts.",
+  "code": {
+    "type": "headings",
+    "expected": [
+      "Decision",
+      "Basis",
+      "Revisit"
+    ]
+  }
+}

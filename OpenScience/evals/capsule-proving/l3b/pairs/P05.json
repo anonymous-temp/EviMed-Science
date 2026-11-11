@@ -1,0 +1,35 @@
+{
+  "id": "P05",
+  "learning": {
+    "initial": "Give a prose summary of daily bird-ring counts: 2026-04-03 has 7, 2026-04-01 has 2, 2026-04-02 has 5. Reply here.",
+    "correction": "Prose is the wrong input for my daily-count plotting step. For my daily-count summaries, give raw CSV only, header date,count, then one row per date in ascending ISO date order. Do not wrap it in a code fence or add totals. Rewrite the counts that way and use it next time."
+  },
+  "exam": "Prepare a daily-count summary for the moth trap log: 2026-08-14 has 9, 2026-08-12 has 3, 2026-08-13 has 6. Reply here.",
+  "behavior": {
+    "principle": "Raw CSV with header date,count and exactly three ascending ISO date rows.",
+    "positive": "date,count\n2026-08-12,3\n2026-08-13,6\n2026-08-14,9",
+    "negative": "Markdown table, prose, fenced CSV, descending dates or fabricated totals."
+  },
+  "quality": "Preserve 2026-08-12=3, 2026-08-13=6, 2026-08-14=9 without adding records.",
+  "code": {
+    "type": "csv",
+    "expected": [
+      [
+        "date",
+        "count"
+      ],
+      [
+        "2026-08-12",
+        "3"
+      ],
+      [
+        "2026-08-13",
+        "6"
+      ],
+      [
+        "2026-08-14",
+        "9"
+      ]
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "P06",
+  "learning": {
+    "initial": "Briefly summarize these fictional workshop completion rates, focusing on the two site percentages: North completed 9 of 10; South completed 12 of 40. Reply here.",
+    "correction": "Focusing on the two percentages hides the pooled denominator. For my multi-site completion summaries, always lead with the combined completed/eligible counts and pooled percent, then distinguish it from the unweighted mean of site percentages. Never call that mean the overall rate. Redo this and keep the same method for later completion summaries."
+  },
+  "exam": "Summarize completion in a fictional library induction pilot: East completed 18 of 20; West completed 20 of 80. Reply here.",
+  "behavior": {
+    "principle": "Lead with pooled 38/100 = 38%, explicitly distinguish the unweighted site-rate mean 57.5% from the overall rate.",
+    "positive": "Overall 38/100 (38%). Averaging the site percentages yields 57.5%, which is not the pooled completion rate.",
+    "negative": "Overall completion is 57.5%, or only the two site percentages with no pooled denominator."
+  },
+  "quality": "Compute East 90%, West 25%, pooled 38%, and unweighted mean 57.5% correctly. Do not invent causes or missing cohorts.",
+  "code": null
+}
