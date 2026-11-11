@@ -92,10 +92,11 @@ The lab layout is `/srv/evimed/sb/{code,venv,upstream,manifest.json,practice,lea
 Install BenchFlow 0.6.3 and the pinned SkillLearnBench Python requirements into
 this lane's private virtualenv. Record `pip freeze` and upstream receipts. The
 agent npm versions are installed by the reference harness in each task container.
-Use one reference container slot while product practice is active. After practice
-exits, the campaign uses at most two containers: one sequential stream per benchmark,
-with per-request trial attribution in the proxy URL. Each stream runs none, learned,
-then flat; this prioritizes the methods comparison if shared capacity runs out.
+Use one reference container slot by default. Two streams were briefly used after
+practice exited, but retained SkillLearnBench images exhausted the shared disk;
+the runner now removes only its completed image tags and resumes serially.
+`SB_REFERENCE_SLOTS=2` opts into two containers when capacity permits, with
+per-request trial attribution. Each stream runs none, learned, then flat.
 Product practice uses port 48848, bridge 19368 and its own database on the existing
 lab PostgreSQL port 55686. Do not stop other lanes' processes or containers.
 
@@ -137,6 +138,26 @@ record and the final report is invoked with `--append`. Interim arm reports do
 not append ledger rows. Do not silently drop a broken verifier or retry a legitimate failure.
 An upstream oracle must pass before each SkillsBench task is scored. A failed
 oracle is an infrastructure finding, not an agent failure or a replacement task.
+
+`redaction_compat.py` bounds BenchFlow 0.6.3's generic credential-name scan
+with a leading identifier boundary. A captured stack located a live stall in
+trajectory redaction after native Pi completion. The shim retains credential
+redaction and writes a compatibility receipt; it changes logging, not agent
+inputs or task verification. The whole five-task pre-fix phase (including its
+pass) is archived and repeated, with all original grades and paid usage retained.
+`protocol-amendments.json` defines the primary cost boundary. No retry is selected
+by reward. Native agent/verifier timeouts are read from the pinned task; the outer
+watchdog adds build/install time. The video wrapper's one-time wait recovery is
+recorded separately. Earlier wall times include logging stalls.
+
+After every agent trial has finished, run the labelled diagnostic judge and final
+reports on the lab (the judge owns the legacy single-trial attribution file):
+
+```sh
+python /srv/evimed/sb/code/judge.py
+node evals/capsule-proving/sb/report.mjs /srv/evimed/sb /srv/evimed/runs /srv/evimed/results/ledger.jsonl --append
+python /srv/evimed/sb/code/render_results.py
+```
 
 Mounted means deployed skill folders. Opened means a successful read-tool call
 for a mounted `SKILL.md`, deduplicated by tool-call ID. Shell reads are not counted

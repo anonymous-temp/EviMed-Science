@@ -9,6 +9,11 @@ import { isPeak, priceUsage, priceListAt } from '../../../packages/domain/src/me
 const read = file => fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
 const walk = dir => fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(dir, e.name)) : [path.join(dir, e.name)]) : [];
 
+export function primaryRequest(request, amendments = []) {
+  return !amendments.some(a => request.runId === a.runId && a.tasks.includes(request.task)
+    && (!request.at || request.at < a.primaryAfter));
+}
+
 export function verdict(record) {
   if (record.infraError) return { pass: false, scored: false, error: record.infraError };
   const official = record.official ?? {};
@@ -81,9 +86,14 @@ export function aggregate(records, planned) {
   for (const part of Object.values(byCategory)) { part.value = part.pass / part.n; part.ci95 = wilson(part.pass, part.n); }
   return { ...counts, value: planned ? counts.pass / planned : null, ci95: wilson(counts.pass, planned),
     scored: counts.pass + counts.fail, scoredValue: counts.pass + counts.fail ? counts.pass / (counts.pass + counts.fail) : null,
+    scoredCi95: wilson(counts.pass, counts.pass + counts.fail),
     complete: records.length === planned, byCategory, tokens: totals, mounted, opened,
     distinctMounted: new Set(records.flatMap(r => r.mounted ?? [])).size,
     distinctOpened: new Set(records.flatMap(r => r.opened ?? [])).size,
+    modelInvoked: records.filter(r => r.requests?.length).length,
+    perModelTask: records.some(r => r.requests?.length) ? {
+      tokens: (totals.prompt + totals.completion) / records.filter(r => r.requests?.length).length,
+      costCny: totals.costCny / records.filter(r => r.requests?.length).length } : null,
     perTask: records.length ? { tokens: (totals.prompt + totals.completion) / records.length, costCny: totals.costCny / records.length,
       mounted: mounted / records.length, opened: opened / records.length } : null };
 }
@@ -92,6 +102,7 @@ function main() {
   const root = process.argv[2] ?? '/srv/evimed/sb', runs = process.argv[3] ?? '/srv/evimed/runs';
   const ledger = process.argv[4] ?? '/srv/evimed/results/ledger.jsonl';
   const manifest = read(`${root}/manifest.json`);
+  const amendments = read(`${root}/protocol-amendments.json`) ?? [];
   const usageFile = `${root}/usage.jsonl`;
   const metered = fs.existsSync(usageFile) ? fs.readFileSync(usageFile, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)) : null;
   const results = [];
@@ -102,7 +113,7 @@ function main() {
     for (const record of records) {
       // A canceled agent can leave a provider stream settling after its task record was written.
       // The append-only gateway record, including late/disconnected completions, owns the final charge.
-      if (metered) record.requests = metered.filter(request => request.runId === runId && request.task === record.task.id);
+      if (metered) record.requests = metered.filter(request => request.runId === runId && request.task === record.task.id && primaryRequest(request, amendments));
       const events = walk(record.trialPath ?? `${dir}/trials`).filter(f => f.includes(record.task.id) && /(?:trajectory|pi\.jsonl|sessions).*\.jsonl$/.test(f)).flatMap(file => fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } }));
       record.opened = openings(events, record.mounted ?? []);
     }
@@ -129,7 +140,7 @@ function main() {
         judged: { code: summary.scored, judge: 0, unknown: summary.unknown, error: summary.error }, byCategory: summary.byCategory } },
         tokens: summary.tokens, wallSeconds: records.reduce((s, r) => s + r.wallSeconds, 0) },
       costCny: summary.tokens.costCny, scorer: `${bench}@${manifest.pins[bench]}:official-verifier` });
-    for (const row of rows) row.notes = `${manifest.samplingRule} ${run.capacityAmendment ?? ''} Model + our methods, NOT the product. Inference only; product practice cost is separate. Infrastructure errors and unfinished tasks stay in the planned denominator; scorer-only rate is in summary.json. Mounted/opened ${summary.mounted}/${summary.opened}.`;
+    for (const row of rows) row.notes = `${manifest.samplingRule} ${run.capacityAmendment ?? ''} Model + our methods, NOT the product. Inference only; product practice and pre-compatibility calibration cost are separate. The entire five-task pre-fix phase, including its pass, was archived and repeated under the logging-only fix; see protocol-amendments.json. Infrastructure errors and unfinished tasks stay in the planned denominator; scorer-only rate and interval are in summary.json. Mounted/opened ${summary.mounted}/${summary.opened}; model-invoked ${summary.modelInvoked}/${summary.n}.`;
     fs.writeFileSync(`${dir}/ledger-row.json`, JSON.stringify(rows, null, 2) + '\n');
     // Incomplete arms have a reviewable summary, but no final ledger row until all planned records exist.
     if (summary.complete && process.argv.slice(5).includes('--append')) appendLedgerRows(ledger, rows);
@@ -143,6 +154,7 @@ function main() {
   const balanceText = fs.existsSync('/srv/evimed/runs/BUDGET-LAST') ? fs.readFileSync('/srv/evimed/runs/BUDGET-LAST', 'utf8') : '';
   const accounting = { at: new Date().toISOString(), reference,
     smokes: costOf((metered ?? []).filter(r => r.runId?.includes('smoke'))),
+    precompatCalibration: costOf((metered ?? []).filter(r => !primaryRequest(r, amendments))),
     judges: costOf((metered ?? []).filter(r => r.purpose === 'judge')),
     practice: practice ?? null, totalObservedCny: reference.costCny + (practice?.account?.actualCost ?? 0),
     conservativeUpperBoundCny: reference.costCnyPeakEquivalent + (practice?.account?.actualCost ?? 0) + (practice?.account?.reservedCost ?? 0),

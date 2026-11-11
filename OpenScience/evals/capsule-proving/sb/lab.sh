@@ -42,19 +42,26 @@ PY
 done
 stream() {
   local bench="$1"
+  local retry=()
+  if [[ "${SB_RETRY_INFRA:-0}" == 1 ]]; then retry=(--retry-infra); fi
   # Prioritize the methods comparison if shared lab capacity prevents the final arm.
   # Order fixed before learned/flat scores. Trial URLs own attribution across both slots.
   for arm in none learned flat; do
     note "start $bench-$arm-1"
-    "$PY" "$CODE/run.py" --bench "$bench" --arm "$arm" || return $?
+    "$PY" "$CODE/run.py" --bench "$bench" --arm "$arm" "${retry[@]}" || return $?
     report
   done
 }
-stream sb & sb_pid=$!
-stream slb & slb_pid=$!
 code=0
-wait "$sb_pid" || code=$?
-wait "$slb_pid" || code=$?
+if [[ "${SB_REFERENCE_SLOTS:-1}" == 1 ]]; then
+  stream sb || code=$?
+  stream slb || code=$?
+else
+  stream sb & sb_pid=$!
+  stream slb & slb_pid=$!
+  wait "$sb_pid" || code=$?
+  wait "$slb_pid" || code=$?
+fi
 report
 [[ "$code" == 0 ]] || exit "$code"
 note 'six arms finished'

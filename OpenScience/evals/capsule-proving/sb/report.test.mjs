@@ -5,7 +5,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { aggregate, openings, verdict } from './report.mjs';
+import { aggregate, openings, primaryRequest, verdict } from './report.mjs';
+
+test('whole pre-compatibility calibration phase is excluded without selecting outcomes', () => {
+  const amendments = [{ runId: 'sb-none-1', tasks: ['pass', 'fail'], primaryAfter: '2026-11-11T08:40:00Z' }];
+  for (const task of ['pass', 'fail']) {
+    assert.equal(primaryRequest({ runId: 'sb-none-1', task, at: '2026-11-11T08:30:00Z' }, amendments), false);
+    assert.equal(primaryRequest({ runId: 'sb-none-1', task, at: '2026-11-11T09:30:00Z' }, amendments), true);
+  }
+  assert.equal(primaryRequest({ runId: 'sb-learned-1', task: 'fail', at: '2026-11-11T08:30:00Z' }, amendments), true);
+});
 
 test('verifier infrastructure errors never become scored task failures', () => {
   assert.deepEqual(verdict({ official: { verifier_error: 'bootstrap failed', rewards: { reward: 0 } } }),

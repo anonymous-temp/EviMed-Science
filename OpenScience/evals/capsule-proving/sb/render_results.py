@@ -25,18 +25,26 @@ def main(args):
     results = load(root / 'summary.json', [])
     accounting = load(root / 'accounting.json', {})
     manifest = load(root / 'manifest.json', {})
+    amendments = load(root / 'protocol-amendments.json', [])
     learning = load(root / 'practice/complete.json', {})
     lines = ['# SkillsBench / SkillLearnBench pilot — 2026-11-11', '',
         '**All scored rows are model + skills in the reference harness, not the product.**', '',
-        '| Run | Passed / planned | Wilson 95% | Scored / infrastructure / missing | Tokens per completed task | CNY per completed task | Mount incidences / read events (distinct mounted / opened) |',
+        '| Run | Passed / planned | Wilson 95% | Scored / infrastructure / missing | Tokens per model-invoked task | CNY per model-invoked task | Mount incidences / read events (distinct mounted / opened) |',
         '| --- | --- | --- | --- | --- | --- | --- |']
     for r in results:
         interval = 'n/a' if r['ci95'] is None else f"{100*r['ci95'][0]:.1f}–{100*r['ci95'][1]:.1f}%"
-        per = r.get('perTask') or {}
+        per = r.get('perModelTask') or {}
         lines.append(f"| {r['bench']}-{r['arm']}-1 | {r['pass']}/{r['n']} ({fmt(100*r['value'],1)}%) | {interval} | {r['scored']} / {r['error']} / {r['unknown']} | {fmt(per.get('tokens'),0)} | {fmt(per.get('costCny'))} | {r['mounted']} / {r['opened']} ({r.get('distinctMounted', 'unknown')} / {r.get('distinctOpened', 'unknown')}) |")
     lines += ['', 'Rates above keep infrastructure failures and missing tasks in the planned denominator. Wilson intervals describe this feasibility-conditioned pilot, not a population estimate of the full benchmark. Scorer-only rates and every task are in the JSON/CSV. A partial run is not a final benchmark score. Tokens include cached prompt tokens and completion/reasoning tokens. Costs are timestamp-adjusted billing estimates; peak equivalents are retained separately.', '',
               '## Sampling and per-domain results', '', manifest.get('samplingRule', ''), '',
               'Capacity amendment before any SkillLearnBench scoring: only the first frozen held-out variant per family is primary (six families/categories, one variant each); the other six candidates are unused reserves. No scored result selected or removed a task.']
+    for amendment in amendments:
+        lines += ['', f"Harness qualification amendment ({amendment['at']}): {amendment['reason']} Original artifacts: `{amendment['archiveRunId']}`; {len(amendment['tasks'])} tasks repeated. Calibration usage remains in total lane cost, separate from primary per-task inference cost."]
+    lines += ['', 'Scorer-only rates (excluding unavailable verifiers/admission, never replacing the planned-denominator rates above):']
+    for r in results:
+        interval = r.get('scoredCi95')
+        ci = 'n/a' if not interval else f'{100*interval[0]:.1f}–{100*interval[1]:.1f}%'
+        lines.append(f"- {r['bench']}-{r['arm']}-1: {r['pass']}/{r['scored']}, Wilson 95% {ci}; {r.get('modelInvoked', 0)} tasks invoked the model.")
     for bench in ['sb', 'slb']:
         arms = {r['arm']: r for r in results if r['bench'] == bench}
         categories = sorted(manifest.get('perDomain', {}).get(bench, {}))
@@ -81,13 +89,14 @@ def main(args):
     lines += ['', 'Skill quality is evaluated once per sampled family/skill arm; trajectory diagnostics use the first held-out variant per family, paired across arms. Means with different units are not combined into a new score. Missing/no-skill diagnostics are n/a, not zero quality.', '',
               '## Cost, time and full-run scenario', '',
               f"Lane known-cost estimate: CNY {fmt(accounting.get('totalObservedCny'))}; conservative peak-equivalent bound plus product reservations: CNY {fmt(accounting.get('conservativeUpperBoundCny'))}. This includes paid smokes, inference, product practice/learning and available diagnostics.", '',
+              f"Primary task costs in the table are solver inference only. Paid pre-compatibility calibration: CNY {fmt(accounting.get('precompatCalibration', {}).get('costCny'))}; smokes: CNY {fmt(accounting.get('smokes', {}).get('costCny'))}; diagnostic judges: CNY {fmt(accounting.get('judges', {}).get('costCny'))}. Product practice/learning: CNY {fmt((accounting.get('practice') or {}).get('account', {}).get('actualCost'))} (its learning subtotal is included, not added again). Shared engine embedding/reranking charges are not separately allocated; this is known model usage, not an isolated vendor invoice.", '',
               f"Shared provider balance: {accounting.get('balanceBefore', 'unknown')} → {accounting.get('balanceAfter', 'unknown')}. Other lanes were active; the balance delta is not this lane's spend. Start: {accounting.get('startedAt')}; report: {accounting.get('at')}.", '']
     for bench, full_n in [('sb', 87), ('slb', 100)]:
         rows = [r for r in results if r['bench'] == bench]
         if len(rows) != 3 or not all(r['complete'] for r in rows):
             lines.append(f'- {bench}: full-run budget scenario pending completed paired arms; no zero-cost assumption for missing runs.')
             continue
-        cost = sum(r['tokens']['costCnyPeakEquivalent'] / r['completed'] * full_n for r in rows if r['completed'])
+        cost = sum(r['tokens']['costCnyPeakEquivalent'] / r['modelInvoked'] * full_n for r in rows if r.get('modelInvoked'))
         hours = sum(sum(t['wallSeconds'] for t in r['rows']) / r['completed'] * full_n / 3600 for r in rows if r['completed'])
         lines.append(f"- {bench}: linear scenario for {full_n} instances × {len(rows)} arms: CNY {cost:.2f} model spend at peak-equivalent pilot prices, {hours:.1f} sequential lab hours at observed throughput (including baseline oracle setup where applicable).")
     lines += ['', 'These are budget scenarios, not validated full-run quotes or extrapolated success scores. Unseen heavy/credentialed tasks, host rental, a complete official-judge evaluation and additional independent practice are not priced. A full SkillsBench learned-method submission needs external practice (the pilot practice tasks are part of its 87-task corpus); the SkillLearnBench first variants are learning inputs, so an entirely held-out extension has 80 remaining variants, distinct from a 100-instance published-protocol run.', '',
@@ -96,7 +105,7 @@ def main(args):
               'The product supplies learned skill bodies here, not the scored execution harness. The official self-generation view is a different generation protocol. SkillLearnBench uses a Sonnet 4.6 reference solver and GPT-5-mini judge; these DeepSeek measurements are not a reproduction of those published absolute scores. The optional official-pyramid arm would require additional paid trials and was omitted.', '',
               '## Verification and artifacts', '',
               f"Data pins: SkillsBench `{manifest.get('pins', {}).get('sb')}`; SkillLearnBench `{manifest.get('pins', {}).get('slb')}`. Selected files match the intake pin; verifier SHA256 maps are checked before/after every task. Upstream runner receipts, Python dependency freeze, exact prompts/outputs, official results and private account state stay on the lab. No runtime/provider secrets or raw account credentials belong in the committed report.", '',
-              'Runner checks: 9 Node tests and 12 Python tests (21 total), run on the lab; the official task/oracle outcomes are separate evidence. See the final delivery note for the latest check counts. Source, STATUS, run manifests and ledger rows are separately reviewable; no deployment or leaderboard submission occurred.', '',
+              'Runner checks: 10 Node tests and 16 Python tests (26 total), run on the lab; the official task/oracle outcomes are separate evidence. See the final delivery note for the latest check counts. Source, STATUS, run manifests and ledger rows are separately reviewable; no deployment or leaderboard submission occurred.', '',
               '## Leaderboard submission requirements (five lines)', '',
               '1. Freeze the product configuration, code/data/agent pins and learning boundary; do not tune a leaderboard-only product.',
               '2. Run the complete required sets/repeats with unchanged official verifiers and retain every result, error and trajectory.',

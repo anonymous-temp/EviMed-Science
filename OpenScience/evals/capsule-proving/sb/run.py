@@ -12,10 +12,13 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
 import time
+import tomllib
+import yaml
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = pathlib.Path(os.environ.get('SB_ROOT', '/srv/evimed/sb'))
@@ -60,6 +63,8 @@ def usage(run_id, task_id):
 
 
 def check_budget(start, deadline):
+    if shutil.disk_usage(ROOT).free < 3 * 1024**3:
+        raise RuntimeError('Shared disk below 3 GiB free: stop before creating another task container')
     balance = float((RUNS / 'BUDGET-LAST').read_text().split('balance ')[1].split()[0])
     if balance < 400:
         raise RuntimeError('Balance below CNY 400: do not start a new batch')
@@ -72,6 +77,19 @@ def check_budget(start, deadline):
         raise RuntimeError('Combined lane usage reached CNY 340; CNY 10 reserved for in-flight work')
     if time.time() > deadline:
         raise RuntimeError('Lane wall-clock allocation reached')
+
+
+def resource_admission_issue(task):
+    if task['bench'] != 'slb':
+        return None
+    directory = pathlib.Path(task['path'])
+    script = (directory / 'tests/test.sh').read_text()
+    config = tomllib.loads((directory / 'task.toml').read_text())
+    declared = config.get('environment', {}).get('storage_mb', 0) * 1024**2
+    available = shutil.disk_usage(ROOT).free
+    if re.search(r'--with\s+(?:torch|deepspeed)==', script) and available < declared:
+        return f'Capacity unavailable before model dispatch: pinned verifier ML bootstrap, declared storage {declared} bytes, shared free {available} bytes. Official verifier is unchanged and unrun.'
+    return None
 
 
 def skills_for(task, arm):
@@ -124,7 +142,7 @@ def sb_trial(task, arm, out):
     env = {**os.environ, 'DEEPSEEK_API_KEY': 'lab-proxy', 'DEEPSEEK_BASE_URL': trial_gateway(task, arm),
            'PI_TELEMETRY': '0'}
     with (out / f'{task["id"]}.log').open('a') as log:
-        result = subprocess.run(cmd, env=env, stdout=log, stderr=log, timeout=3300)
+        result = subprocess.run(cmd, env=env, stdout=log, stderr=log, timeout=sb_watchdog(task))
     files = sorted(jobs.glob('*/*/result.json'))
     if not files:
         raise RuntimeError(f'BenchFlow produced no result (exit {result.returncode}); see task log')
@@ -132,6 +150,12 @@ def sb_trial(task, arm, out):
     return {'official': official, 'officialResultPath': str(files[-1]), 'referenceExit': result.returncode,
             'trialPath': str(files[-1].parent),
             'mounted': sorted(p.parent.name for p in source.rglob('SKILL.md')) if has_skills else []}
+
+
+def sb_watchdog(task):
+    # This wrapper must outlive the official agent and verifier, plus build/install time.
+    config = yaml.safe_load((pathlib.Path(task['path']) / 'task.md').read_text().split('---', 2)[1])
+    return float(config.get('agent', {}).get('timeout_sec', 1800)) + float(config.get('verifier', {}).get('timeout_sec', 600)) + 1200
 
 
 def slb_trial(task, arm, out):
@@ -181,7 +205,16 @@ def slb_trial(task, arm, out):
                 trial_id=f'sb-{arm}-1', trials_dir=out / 'trials', max_steps=100)
     finally:
         eval_runner.subprocess.run = original_run
+        # These exact tags belong to this lane. The upstream runner keeps them after
+        # deleting its container; retaining three arms' images exhausted the shared disk.
+        tag = f'evaluation_{task["family"]}-{task["id"]}_{arm if has_skills else "no_skill"}:sb-{arm}-1'
+        try:
+            cleaned = original_run(['docker', 'image', 'rm', tag], capture_output=True, text=True, timeout=120)
+            image_cleanup = {'tag': tag, 'exit': cleaned.returncode, 'error': cleaned.stderr[:500]}
+        except (OSError, subprocess.TimeoutExpired) as error:
+            image_cleanup = {'tag': tag, 'error': type(error).__name__}
     return {'official': official, 'referenceExit': code,
+            'imageCleanup': image_cleanup,
             'resourceFacts': resource_facts,
             'verifierLogs': [str(out / f'{task["id"]}.verifier-stdout.txt'), str(out / f'{task["id"]}.verifier-stderr.txt')],
             'trialPath': str(eval_runner._trial_path(f'{task["family"]}/{task["id"]}', arm if has_skills else 'no_skill', f'sb-{arm}-1', trials_dir=out / 'trials')),
@@ -264,6 +297,8 @@ def run(args):
         note(f'{out.name} start {task["id"]}')
         t0 = time.time()
         try:
+            if issue := resource_admission_issue(task):
+                raise RuntimeError(issue)
             if task['bench'] == 'sb':
                 oracle = sb_oracle(task)
                 if not oracle['passed']:

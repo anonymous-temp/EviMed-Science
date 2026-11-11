@@ -2,6 +2,7 @@ import hashlib
 import json
 import pathlib
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 import prepare
@@ -10,6 +11,44 @@ from gateway import cost, request_context
 
 
 class RunnerTests(unittest.TestCase):
+    def test_ml_verifier_is_not_started_without_its_declared_storage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / 'tests').mkdir()
+            (root / 'tests/test.sh').write_text('uvx --with torch==2.1.2 pytest')
+            (root / 'task.toml').write_text('[environment]\nstorage_mb=10240\n')
+            task = {'bench': 'slb', 'path': tmp}
+            with patch('run.shutil.disk_usage') as disk:
+                disk.return_value.free = 4 * 1024**3
+                self.assertIn('unchanged and unrun', run.resource_admission_issue(task))
+                disk.return_value.free = 12 * 1024**3
+                self.assertIsNone(run.resource_admission_issue(task))
+
+    def test_logging_fix_still_redacts_credentials(self):
+        import redaction_compat
+        from benchflow.trajectories.types import redact_trajectory_text
+        receipt = redaction_compat.apply()
+        self.assertEqual(len(receipt['patterns']), 1)
+        for carrier in ['GITHUB_TOKEN=', 'SLACK_SECRET:', '"custom_TOKEN": "']:
+            output = redact_trajectory_text(carrier + 'example-value')
+            self.assertNotIn('example-value', output)
+            self.assertIn('REDACTED', output)
+
+    def test_logging_fix_handles_long_noncredential_identifiers(self):
+        import redaction_compat
+        from benchflow.trajectories.types import redact_trajectory_text
+        redaction_compat.apply()
+        text = 'A' * 100_000
+        started = time.perf_counter()
+        self.assertEqual(redact_trajectory_text(text), text)
+        self.assertLess(time.perf_counter() - started, 3)
+
+    def test_outer_watchdog_outlives_the_native_agent_and_verifier(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / 'task.md').write_text('---\nagent:\n  timeout_sec: 3600\nverifier:\n  timeout_sec: 240\n---\nTask')
+            self.assertEqual(run.sb_watchdog({'path': tmp}), 5040)
+
     def test_parallel_requests_keep_their_own_trial_attribution(self):
         a = {'bench': 'sb', 'id': 'task-a'}
         b = {'bench': 'slb', 'id': 'task-b'}
