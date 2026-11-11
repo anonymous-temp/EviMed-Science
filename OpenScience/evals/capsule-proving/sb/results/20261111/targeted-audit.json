@@ -1,9 +1,9 @@
 {
-  "at": "2026-11-11T14:00:33.192Z",
-  "reason": "Explicit lane-source and final-review-bundle audit; default source audit excludes evals.",
+  "at": "2026-11-11T14:08:03.030Z",
+  "reason": "Explicit lane-source and complete review-bundle audit; default source audit excludes evals.",
   "roots": [
     "/srv/evimed/wt/sb/OpenScience/evals/capsule-proving/sb",
-    "/srv/evimed/sb/review-final"
+    "/srv/evimed/sb/review-pinned-final"
   ],
   "findings": []
 }

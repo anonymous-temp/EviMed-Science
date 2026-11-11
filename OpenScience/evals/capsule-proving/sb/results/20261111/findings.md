@@ -68,3 +68,8 @@ remove rebuilt image/input caches; runtime-fetched external files and mutable
 base-image/dependency resolutions were not separately archived as a complete
 replay snapshot. A submission must retain those resolved snapshots as well. `SHA256SUMS` covers this small review bundle.
 No leaderboard submission, product deployment or branch merge occurred.
+
+The additional shared-library pin audit covers 169 files and 12 human-authored
+SKILL.md bodies across all six sampled SkillLearnBench families. These libraries
+live outside the task folders. Every file matched the original intake pin; see
+`shared-human-skill-pins.json`.

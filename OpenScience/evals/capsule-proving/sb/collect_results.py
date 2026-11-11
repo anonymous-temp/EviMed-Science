@@ -35,7 +35,7 @@ def collect(root, runs, out, ledger):
     # Explicit allowlist: no generic copy of the lab root or practice directory.
     files = ['report.md', 'report.csv', 'summary.json', 'accounting.json', 'manifest.json',
              'findings.md', 'targeted-audit.json', 'python-freeze.txt', 'pin-checks.json', 'protocol-amendments.json',
-             'resource-policy.json', 'task-admissions.json', 'execution-queue.json',
+             'resource-policy.json', 'shared-human-skill-pins.json', 'task-admissions.json', 'execution-queue.json',
              'campaign-amendment.json', 'gateway-drain.json', 'batch.json', 'learned-methods.json', 'source-commit',
              'watchdog-recovery.json', 'flat-permission-recovery.json', 'capacity-hold.json',
              'queue-yield.json', 'cache-recovery.json', 'cache-recovery-organize.json']

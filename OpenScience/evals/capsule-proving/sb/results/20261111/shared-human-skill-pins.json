@@ -1,0 +1,29 @@
+{
+  "at": "2026-11-11T14:06:33.066211+00:00",
+  "pin": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae",
+  "reason": "Shared human-authored SkillLearnBench libraries live outside task folders; verify their complete files against the original intake, including the direct-source enterprise arm and NLP diagnostic-only library.",
+  "families": {
+    "chinese-poem-generator": 1,
+    "court-form-filling": 12,
+    "enterprise-information-search": 1,
+    "financial-analysis": 6,
+    "nlp-paper-reproduction": 13,
+    "organize-messy-files": 136
+  },
+  "totalFiles": 169,
+  "skillBodySha256": {
+    "skills/human_authored/chinese-poem-generator/regulated-lvshi-composer/SKILL.md": "64745f320e52606bdd17df6bad0f06568aa64df781b37ffb21cf4bc265fbf638",
+    "skills/human_authored/court-form-filling/pdf/SKILL.md": "38d8559d4899602f82f3560052132aa0c40cfca80203037729756bdb4fb8e0cb",
+    "skills/human_authored/enterprise-information-search/artifact-review-search/SKILL.md": "2fd1538635c086e965887a41d3f0b0eb71f2fe97bdb9c060321d8223462275c3",
+    "skills/human_authored/financial-analysis/13f-analyzer/SKILL.md": "fac0b5f05405e1e8631f0dcc8f34649e1eaf3252ae3dd8ef7eb9aadaf3c5290d",
+    "skills/human_authored/financial-analysis/fuzzy-name-search/SKILL.md": "d3a1180be787f8d19bc5bcb4a234b4db145ab88ba5ee1bdb1acde99bc97fef98",
+    "skills/human_authored/nlp-paper-reproduction/nlp-research-repo-package-installment/SKILL.md": "65c77284858ffc4544dd8d85dbae5771855e6df44c37812f2877490e3afa70b2",
+    "skills/human_authored/nlp-paper-reproduction/pdf/SKILL.md": "38d8559d4899602f82f3560052132aa0c40cfca80203037729756bdb4fb8e0cb",
+    "skills/human_authored/organize-messy-files/docx/SKILL.md": "f63920be5bf299e6ba2fc77d57363425a9d9b88418318cd6a821fc2cfbd381a2",
+    "skills/human_authored/organize-messy-files/file-organizer/SKILL.md": "bfd190964b2c4dfdd0c747d914db477bd15ffba2e136a540546a9f08cd7239a2",
+    "skills/human_authored/organize-messy-files/pdf/SKILL.md": "38d8559d4899602f82f3560052132aa0c40cfca80203037729756bdb4fb8e0cb",
+    "skills/human_authored/organize-messy-files/planning-with-files/SKILL.md": "e22c50c824e6b99ac10ed311a1e7aec8944a2fdfda0708f67462c8c51897ba15",
+    "skills/human_authored/organize-messy-files/pptx/SKILL.md": "7d39d6f9917d87886ebb89a3696394d7295f2dc1dd9bc1376bfa31d81e139532"
+  },
+  "allFilesMatchIntakePin": true
+}
