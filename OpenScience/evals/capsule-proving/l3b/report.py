@@ -52,7 +52,8 @@ def arm_report(root, arm):
             mounted.extend(obs.get('methodsLoaded',[])); opened.extend(obs.get('methodsInvoked',[]))
         row=dict(id=r['id'],rep=r['rep'],passed=s.get('passed'),behavior=s.get('behavior'),quality=s.get('quality'),
                  profile=r.get('memory',{}).get('profileBlockPresent'), preferencePresent=s.get('preferencePresent'),
-                 searched=len(r.get('memory',{}).get('searchCalls',[]))>0, mounted=mounted, opened=opened)
+                 searched=len(r.get('memory',{}).get('searchCalls',[]))>0,
+                 searchSucceeded=any(not t.get('error') for t in r.get('memory',{}).get('searchCalls',[])), mounted=mounted, opened=opened)
         rows.append(row)
         for t in trace:
             if t['id'] != r['id']:
@@ -73,7 +74,7 @@ def arm_report(root, arm):
                 unknown=sum(r['passed'] is None for r in rows), recorded=len(rows), expected=54, missingRecords=max(0,54-len(rows)),
                 trace=trace, correctionsLearned=sum(t['learned'] for t in trace), correctionsApproved=sum(t['approved'] for t in trace),
                 correctionsMounted=sum(t['mounted']>0 for t in trace), correctionsOpened=sum(t['opened']>0 for t in trace),
-                memory=dict(profile=sum(bool(r['profile']) for r in paired), relevantPreference=sum(r['preferencePresent'] is True for r in paired), searched=sum(r['searched'] for r in paired),n=len(paired)),
+                memory=dict(profile=sum(bool(r['profile']) for r in paired), relevantPreference=sum(r['preferencePresent'] is True for r in paired), searchAttempted=sum(r['searched'] for r in paired), searchSucceeded=sum(r['searchSucceeded'] for r in paired), n=len(paired)),
                 usage=read(out/'account-usage.json'), judgeUsage=judge_usage, learningComplete=bool(learn), complete=(out/'complete.json').exists(), rows=rows), scores, behavior, majority
 
 def main():
