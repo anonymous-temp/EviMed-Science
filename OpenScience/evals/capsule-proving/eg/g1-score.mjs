@@ -31,15 +31,15 @@ for (const user of sourceRun.options.caseIds) {
   if (normalized.length) await fs.writeFile(`${args.run}/cases/${user}/answers.jsonl`, normalized.map(a => JSON.stringify(a)).join('\n') + '\n');
 }
 const base = await scoreRun({ run: args.run, data: args.data, noJudge: true, out: `${target}/source-checks` });
-const rows = base.rawRows.filter(r => r.kind === 'answer' && selected.some(q => q.qid === r.id));
+const rows = base.rawRows.filter(r => r.kind === 'answer' && normalizedAnswers.has(r.id));
 const packets = [];
 for (const sq of selected) {
   const dir = `${args.run}/cases/${sq.user}`;
   const gold = await read(`${args.data}/dev/${sq.user}/gold.json`);
   const q = gold.questions.find(q => q.qid === sq.qid);
-  const row = rows.find(r => r.id === sq.qid), old = base.packets.find(p => p.rowKey === rowKey(row));
   const answer = normalizedAnswers.get(sq.qid);
   if (!answer) continue;
+  const row = rows.find(r => r.id === sq.qid), old = base.packets.find(p => p.rowKey === rowKey(row));
   const perQuestion = await read(`${dir}/question-snapshots/${sq.qid}.json`);
   const snapshot = perQuestion ?? await read(`${dir}/snapshots/${sq.checkpoint}.json`);
   const anchors = questionAnchors({ gold, skeleton: await read(`${args.data}/dev/${sq.user}/skeleton.json`) }, q);

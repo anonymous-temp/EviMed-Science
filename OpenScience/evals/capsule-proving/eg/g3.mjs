@@ -10,6 +10,7 @@ const ctx = await setup(args);
 process.env.EG_CONTROL_DIR = `${args.out}/control`;
 const database = `evimed_test_${path.basename(args.out).replace(/[^a-z0-9]+/gi, '_').toLowerCase()}`.slice(0, 60);
 let child;
+process.once('exit', () => child?.kill('SIGTERM'));
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child?.kill('SIGTERM'));
 try {
   const argv = [path.resolve(args.tree, 'evals/capsule-proving/eg/g3_host.py'), '--tree', args.tree, '--out', args.out,

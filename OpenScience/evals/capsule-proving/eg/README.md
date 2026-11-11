@@ -33,6 +33,14 @@ its unasked later questions with underrepresented categories from M01/P01/P02
 at checkpoints the account has not reached. No answer/score content enters this
 selection. Both manifests and the amendment's exact removed/added ids remain
 in the run record. This reduces required source history from 300 to 200 sessions.
+`g1-minimize.mjs DATA PREVIOUS OUTPUT` records the subsequent exhaustive
+metadata-only resource amendment. It minimizes the sum of source checkpoints
+over the same four users, retains every observed probe and all categories,
+and forbids new questions from a checkpoint already passed. The frozen v3
+sample needs 158 source sessions: M01 14 questions through session 20, P01 9
+through 8, P02 54 through 30, and U03 23 through 100. Both earlier manifests
+remain available. This changes the user/category weights, so category results
+are required and the aggregate is not a user-balanced population estimate.
 The runner sees normalized inputs and selected question ids only; gold is
 confined to the separate selector and existing scorer.
 
@@ -62,6 +70,10 @@ wall clock. Replay and product assistant replies can therefore differ.
 The driver retries `memory_source_cleanup_busy` admissions for up to three
 minutes, with request ids and delays retained. It does not retry accepted turns
 under new dispatch ids or bypass the product's exclusive memory lease.
+G1 cancels a source turn at its recorded ten-minute evaluation timeout and
+continues with the next scripted human turn in the same conversation. Timed-out
+question probes are retained as errors, never passes. Earlier complete attempt
+records are archived before a resume can replace their receipt or wall time.
 
 Use the existing `run/score.mjs` with the same development data and Qwen key
 file; `report.mjs --suite g1 --selection SAMPLE --engine BASELINE --runs A,B

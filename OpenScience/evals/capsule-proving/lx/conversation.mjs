@@ -38,9 +38,9 @@ async function readSelection(projectDir) {
 /**
  * @param {{ api: any, userId: string, projectId: string, projectName?: string, sessionId: string, first: string, next: (turn: any, index: number) => Promise<string|null>|string|null,
  *   dataDir: string, outDir: string, timeoutMs: number, log: (m: string) => void, observeMethods?: (identity: any) => Promise<any>, waitMemoryTools?: boolean, maxTurns?: number,
- *   keepRuntime?: boolean, automated?: boolean, memoryBusyRetryMs?: number, onTurn?: (record: any) => Promise<void> }} o
+ *   keepRuntime?: boolean, automated?: boolean, memoryBusyRetryMs?: number, continueAfterTimeout?: boolean, onTurn?: (record: any) => Promise<void> }} o
  */
-export async function runConversation({ api, userId, projectId, projectName, sessionId, first, next, dataDir, outDir, timeoutMs, log, observeMethods = null, waitMemoryTools = true, maxTurns = 8, keepRuntime = false, automated = false, memoryBusyRetryMs = 0, onTurn = null }) {
+export async function runConversation({ api, userId, projectId, projectName, sessionId, first, next, dataDir, outDir, timeoutMs, log, observeMethods = null, waitMemoryTools = true, maxTurns = 8, keepRuntime = false, automated = false, memoryBusyRetryMs = 0, continueAfterTimeout = false, onTurn = null }) {
   const t0 = Date.now();
   const record = { schema: 'lx-conversation/1', projectId, sessionId, startedAt: new Date().toISOString(), turns: [] };
   const admission = async (route, body) => {
@@ -101,7 +101,7 @@ export async function runConversation({ api, userId, projectId, projectName, ses
     record.turns.push(turn);
     if (onTurn) await onTurn(record);
     log(`    turn ${index}: ${run.status} route=${run.effectiveAgentId}/${run.effectiveRouteReason} tools=${turn.tools.map(t => t.name).join('>') || '-'} wall=${Math.round(turn.wallMs / 1000)}s`);
-    if (turn.timedOut) break;
+    if (turn.timedOut && !continueAfterTimeout) break;
     text = await next(turn, index);
   }
   if (!keepRuntime) await api.call('POST', '/api/commands/stop_runtime', {}).catch(() => null);

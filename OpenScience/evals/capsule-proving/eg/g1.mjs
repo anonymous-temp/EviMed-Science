@@ -54,15 +54,17 @@ try {
     const max = Math.max(...selected.map(q => q.checkpoint));
     const converse = async (key, texts, project, onTurn = null) => {
       const projectId = project?.id ?? 'ordinary';
+      const previous = await read(`${dir}/conversations/${key}.json`);
+      if (previous) await save(`${dir}/conversation-attempts/${key}-${previous.startedAt.replaceAll(':', '-')}.json`, previous);
       if (activeProject && activeProject !== projectId) { identity.api.project = activeProject; await identity.api.call('POST', '/api/commands/stop_runtime', {}); }
       const record = await runConversation({ ...identity, projectId, projectName: project?.name, sessionId: `eg-${item.caseId}-${key}`,
         // Simulated people on isolated accounts: automated runs are deliberately ineligible for memory admission.
-        first: texts[0], next: (_turn, i) => texts[i + 1] ?? null, maxTurns: texts.length, keepRuntime: true, automated: false, memoryBusyRetryMs: 180_000,
+        first: texts[0], next: (_turn, i) => texts[i + 1] ?? null, maxTurns: texts.length, keepRuntime: true, automated: false, memoryBusyRetryMs: 180_000, continueAfterTimeout: true,
         waitMemoryTools: activeProject !== projectId, dataDir: ctx.dataDir, outDir: `${dir}/conversations/${key}`, timeoutMs: args.timeoutMin * 60_000,
         log: ctx.status, onTurn: async r => { await save(`${dir}/conversations/${key}.partial.json`, r); if (onTurn) await onTurn(r); } });
       activeProject = projectId;
       await save(`${dir}/conversations/${key}.json`, record);
-      if (record.turns.some(t => t.error || t.timedOut)) throw new Error(`Conversation ${item.caseId}/${key} incomplete`);
+      if (record.turns.some(t => t.error) || record.turns.length !== texts.length) throw new Error(`Conversation ${item.caseId}/${key} incomplete`);
       return record;
     };
     for (let n = p.sessions; n <= max; n++) {
