@@ -23,6 +23,15 @@
     "flatFailedPrefix": [1, 1, 0], "flatPassedPrefix": [0, 0, 2],
     "conclusion": "Only 0-2 calls precede task-directed action in these 12 traces. The all-episode first-target-pickup delay is larger, but cannot all be called irrelevant or method-caused. Initial-delay evidence alone does not explain the score drop."
   },
+  "extremeExamples": {
+    "selection": "Exploratory maxima of informative-action prefix by arm and success; separate from the 12-case sample above.",
+    "rows": [
+      {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-b55c435301ae6f85486c.json", "success": false, "prefixCalls": 39, "reason": "Repeated remote open commands all return Nothing happens; thoughts explicitly follow closed-container-first sweep and strike-off-on-no-change rules; first informative navigation is step 40."},
+      {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-6d6ffa3432d281c70c59.json", "success": true, "prefixCalls": 27, "reason": "Opens cabinets 1-21, drawers and fridge remotely, striking them off; first informative navigation to countertop at step 28 reveals lettuce and it is taken at step 29."},
+      {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-aaea57f251d77b056cb7.json", "success": false, "prefixCalls": 39, "reason": "Inventory then remote drawer/cabinet opens, each treated as out of reach; first informative navigation at step 40 reveals a spatula."},
+      {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-95ca1c312d189c5ec647.json", "success": true, "prefixCalls": 40, "reason": "Inventory then remote cabinet/drawer opens; first informative countertop visit at step 41, then mug sighted at step 42. The episode still succeeds, so delay alone is not a failure classifier."}
+    ]
+  },
   "commandReplay": {
     "trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-2d58f31451c1021ce745.json",
     "procedure": "Fresh environment, replay first five recorded actions, then compare commands; no model call.",
