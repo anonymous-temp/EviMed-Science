@@ -235,3 +235,37 @@ test('L2 correction precedence and its undo commit together on the real ledger, 
   assert.equal(restored.payload.status, 'approved');
   assert.equal((await h.learning.getMethod(h.owner, corrected.id)).payload.status, 'candidate');
 });
+
+test('P26B: targeted conflict settlement and read-only deploy inventory use the real PostgreSQL shapes', options, async () => {
+  const { readCorrectionSnapshot } = await import('../../../scripts/ops/correction-precedence-report.mjs');
+  const h = await harness();
+  h.learning.correctionPrecedence = true;
+  const direct = await h.make('direct-instruction', 'axis-a', { provenance: { origin: 'explicit' } });
+  const other = await h.make('conflicting-lesson', 'axis-a');
+  for (let index = 0; index < 160; index++) await h.documents.put(h.owner, 'method', `unrelated-${index}`, other.payload, { expectedRevision: 0 });
+  let reads = 0;
+  const query = database.query.bind(database);
+  database.query = async (sql, values) => {
+    if (sql.trimStart().startsWith('SELECT')) reads++;
+    if (sql.includes('FROM evimed_product.documents') && values?.includes('method')) {
+      assert.ok(!values.some(value => typeof value === 'string' && value.startsWith('unrelated-')));
+    }
+    return query(sql, values);
+  };
+  try {
+    await h.learning.recordRelations(h.owner, other.id, [{ type: 'conflicts_with', target: direct.id, evidence: 'Opposite instructions.', proposedBy: 'test' }]);
+    assert.ok(reads < 20, `Only conflict neighbours are read: ${reads}`);
+  } finally { database.query = query; }
+  assert.equal((await h.learning.getMethod(h.owner, direct.id)).payload.status, 'approved');
+  assert.equal((await h.learning.getMethod(h.owner, other.id)).payload.status, 'candidate');
+  const pg = await import('pg');
+  const client = new pg.default.Client({ connectionString: url, options: '-c default_transaction_read_only=on' });
+  try {
+    await client.connect();
+    const inventory = await readCorrectionSnapshot(client);
+    const account = inventory.find(row => row.accountId === h.owner);
+    assert.ok(account);
+    assert.equal(account.switchOn.counts.legacyRecovery, 0);
+    await assert.rejects(client.query("UPDATE evimed_product.documents SET revision=revision WHERE user_id=$1", [h.owner]), { code: '25006' });
+  } finally { await client.end(); }
+});

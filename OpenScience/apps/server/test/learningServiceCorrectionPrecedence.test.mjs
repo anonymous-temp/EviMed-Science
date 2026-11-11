@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+import { createLearningRoutes } from '../src/learningRoutes.mjs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { renderMethodSkill } from '@evimed/domain';
@@ -215,4 +217,83 @@ test('B4 report lists only account/row identities and titles; read transaction n
   assert.match(queries[0], /READ ONLY$/);
   assert.equal(queries.at(-1), 'ROLLBACK');
   assert.ok(queries.slice(1, -1).every(sql => sql.startsWith('SELECT')));
+});
+
+
+test('B1: authenticated method create/edit routes grant direct authority and reject caller-supplied proof', async () => {
+  const h = harness();
+  let csrf = 0;
+  const routes = createLearningRoutes({ service: h.learning, maxJsonBytes: 30_000,
+    store: { ensureSessionUser: async () => ({ user: { id: 'u1' } }), assertCsrf: async () => { csrf++; } } });
+  const request = async (method, url, body) => {
+    const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), { method, url, headers: { 'content-type': 'application/json' } });
+    let result;
+    await routes(req, { writeHead() {}, end(text) { result = JSON.parse(text); } });
+    return result.data;
+  };
+  const made = await request('POST', '/api/methods', { skill: renderMethodSkill(frontmatter('manual-page'), BODY) });
+  let stored = await h.learning.getMethod('u1', made.id);
+  assert.equal(stored.payload.personCorrection.source, 'direct');
+  await request('PATCH', `/api/methods/${encodeURIComponent(made.id)}`, { expectedRevision: made.revision,
+    skill: renderMethodSkill(frontmatter('manual-page'), `${BODY}\n\nUse ISO dates.`) });
+  stored = await h.learning.getMethod('u1', made.id);
+  assert.equal(stored.payload.personCorrection.source, 'direct');
+  assert.equal(stored.payload.personCorrection.digest, stored.payload.contentDigest);
+  await assert.rejects(request('PATCH', `/api/methods/${encodeURIComponent(made.id)}`, { expectedRevision: stored.revision,
+    skill: renderMethodSkill(frontmatter('manual-page'), BODY), correctionProof: { source: 'judged' } }), { status: 400 });
+  assert.equal(csrf, 3);
+});
+
+test('official read-only records are never moved by learned conflict precedence', async () => {
+  const h = harness();
+  const direct = await h.make('direct', { provenance: { origin: 'explicit' } });
+  const officialId = 'method:official:read-only';
+  await h.documents.put('u1', 'method', officialId, { ...direct.payload, recordType: 'official-method', readOnly: true }, { expectedRevision: 0 });
+  await h.learning.recordRelations('u1', direct.id, [{ type: 'conflicts_with', target: officialId, evidence: 'Opposite text.', proposedBy: 'test' }]);
+  const official = await h.documents.get('u1', 'method', officialId);
+  assert.equal(official.payload.status, 'approved');
+  assert.equal(official.revision, 1);
+});
+
+test('B2: delayed distillation completion cannot replace a newer event on the same method', async () => {
+  const h = harness();
+  const method = await h.make('shared-target');
+  let release;
+  let started;
+  const waiting = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { started = resolve; });
+  h.distillation.correctionJudge = { read: async ({ runText }) => {
+    if (runText === 'Older correction.') { started(); await waiting; }
+    return JSON.stringify({ covers: true, methodQuote: 'Keep the requested reply form.', correctionQuote: runText });
+  } };
+  const apply = (text, time) => h.distillation.applyCandidate({ ...eventJob, payload: { ...eventJob.payload,
+    feedback: [{ id: text, occurredAt: time, detail: { verdict: 'correction', quote: text } }] } }, { id: 'run_2' },
+  { candidate: { operation: 'amend', targetMethodId: method.id }, skill: renderMethodSkill(method.payload.frontmatter, `${BODY}
+
+${text}`) });
+  const older = apply('Older correction.', at('08'));
+  await entered;
+  await apply('Newer correction.', at('10'));
+  release();
+  await assert.rejects(older, { code: 'method_correction_superseded' });
+  assert.match((await h.learning.getMethod('u1', method.id)).payload.body, /Newer correction/);
+});
+
+test('B3: corrections to a different body or predating the proof cannot revoke it', async () => {
+  const h = harness();
+  const method = await corrected(h, await h.make('dated-proof'), at('10'));
+  await h.learning.recordApplied('u1', method.id, { runId: 'old-use', outcome: 'corrected', at: at('09') }, method.payload.contentDigest);
+  await h.learning.recordApplied('u1', method.id, { runId: 'different-body', outcome: 'corrected', at: at('11') }, 'sha256:other');
+  assert.ok(methodPersonCorrection((await h.learning.getMethod('u1', method.id)).payload, true));
+});
+
+test('B4: retirement while legacy coverage is judged prevents the later recovery commit', async () => {
+  const h = harness();
+  const method = await legacy(h, 'retired-during-judgement');
+  h.learning.verifyLegacyCorrection = async (_owner, row) => {
+    await h.learning.retire('u1', row.id, { expectedRevision: row.revision });
+    return proofFor(row, at('09'));
+  };
+  await assert.rejects(h.learning.approve('u1', method.id, { expectedRevision: method.revision }), { code: 'product_revision_conflict' });
+  assert.equal((await h.learning.getMethod('u1', method.id)).payload.status, 'retired');
 });

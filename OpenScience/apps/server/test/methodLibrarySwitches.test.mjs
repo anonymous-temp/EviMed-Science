@@ -201,7 +201,9 @@ test("快测 C: off by default; on, a card carries its evidence, counter-example
 });
 
 // P26B keeps the reviewed behavior opt-in until the product-path proof is assessed.
-test("correction precedence defaults off and can be selected independently", () => {
+test("correction precedence defaults off, reaches the web service, and can be selected independently", async () => {
   assert.equal(configUnder({}).methodCorrectionPrecedenceEnabled, false);
   assert.equal(configUnder({ OPEN_SCIENCE_METHOD_CORRECTION_PRECEDENCE_ENABLED: "true" }).methodCorrectionPrecedenceEnabled, true);
+  assert.match(await readFile(path.join(repoRoot, 'deploy/web/docker-compose.yml'), 'utf8'), /OPEN_SCIENCE_METHOD_CORRECTION_PRECEDENCE_ENABLED:/);
+  assert.match(await readFile(path.join(repoRoot, 'deploy/web/.env.example'), 'utf8'), /OPEN_SCIENCE_METHOD_CORRECTION_PRECEDENCE_ENABLED=false/);
 });
