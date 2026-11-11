@@ -145,10 +145,25 @@ def slb_trial(task, arm, out):
     # An empty learned library is a measured outcome, not a reason to substitute human skills.
     has_skills = source and any(source.rglob('SKILL.md'))
     original_run = eval_runner.subprocess.run
+    resource_facts = None
     def limited_run(command, *positional, **kwargs):
-        if isinstance(command, (list, tuple)) and list(command[:2]) == ['docker', 'run']:
+        nonlocal resource_facts
+        container_start = isinstance(command, (list, tuple)) and list(command[:2]) == ['docker', 'run']
+        if container_start:
             command = list(command[:2]) + ['--memory', '2g', '--memory-swap', '3g', '--cpus', '1'] + list(command[2:])
-        return original_run(command, *positional, **kwargs)
+        result = original_run(command, *positional, **kwargs)
+        if container_start and result.returncode == 0:
+            try:
+                observed = original_run(['docker', 'inspect', '--format',
+                    '{{.HostConfig.Memory}} {{.HostConfig.MemorySwap}} {{.HostConfig.NanoCpus}}', result.stdout.strip()],
+                    capture_output=True, text=True, timeout=15)
+                resource_facts = {'exit': observed.returncode, 'memoryMemorySwapNanoCpus': observed.stdout.strip()}
+            except (subprocess.TimeoutExpired, OSError) as error:
+                resource_facts = {'error': type(error).__name__}
+        if isinstance(command, (list, tuple)) and list(command[:2]) == ['docker', 'exec'] and command[-1] == '/tests/test.sh':
+            (out / f'{task["id"]}.verifier-stdout.txt').write_text(result.stdout or '')
+            (out / f'{task["id"]}.verifier-stderr.txt').write_text(result.stderr or '')
+        return result
     # Resource boundary only, applied equally to all arms. The pinned runner and verifier files remain unchanged.
     eval_runner.subprocess.run = limited_run
     try:
@@ -160,6 +175,8 @@ def slb_trial(task, arm, out):
     finally:
         eval_runner.subprocess.run = original_run
     return {'official': official, 'referenceExit': code,
+            'resourceFacts': resource_facts,
+            'verifierLogs': [str(out / f'{task["id"]}.verifier-stdout.txt'), str(out / f'{task["id"]}.verifier-stderr.txt')],
             'trialPath': str(eval_runner._trial_path(f'{task["family"]}/{task["id"]}', arm if has_skills else 'no_skill', f'sb-{arm}-1', trials_dir=out / 'trials')),
             'mounted': sorted(p.parent.name for p in source.rglob('SKILL.md')) if has_skills else []}
 
@@ -175,6 +192,12 @@ def active_tasks(manifest, bench, per_family=1):
             counts[task['family']] = count + 1
         return selected
     return tasks
+
+
+def infrastructure_record(record):
+    official = record.get('official', {})
+    return bool(record.get('infraError') or official.get('verifier_error') or
+                (official.get('error') and official.get('verifier_exit') is None and official.get('rewards') is None))
 
 
 def run(args):
@@ -206,13 +229,28 @@ def run(args):
         record = out / 'records' / f'{task["id"]}.json'
         if record.exists():
             previous = json.loads(record.read_text())
-            if not args.retry_infra or not (previous.get('infraError') or previous.get('official', {}).get('verifier_error')):
+            if not args.retry_infra or not infrastructure_record(previous):
                 continue
-            put(out / 'attempts' / f'{task["id"]}-{int(time.time())}.json', previous)
             # Keep all previous trial artifacts; a new jobs directory prevents upstream resume from adopting stale errors.
-            trials = out / 'trials' / task['id']
-            if task['bench'] == 'sb' and trials.exists():
-                trials.rename(out / 'attempts' / f'{task["id"]}-trials-{int(time.time())}')
+            attempts = out / 'attempts'
+            attempts.mkdir(exist_ok=True)
+            trials = out / 'trials' / task['id'] if task['bench'] == 'sb' else pathlib.Path(previous.get('trialPath', out / 'trials/missing'))
+            if trials.exists() and trials.resolve().is_relative_to((out / 'trials').resolve()):
+                archived = attempts / f'{task["id"]}-trials-{time.time_ns()}'
+                trials.rename(archived)
+                previous['archivedTrialPath'] = str(archived)
+            previous['archivedVerifierLogs'] = []
+            for log in out.glob(f'{task["id"]}.verifier-*.txt'):
+                archived_log = attempts / f'{log.name}-{time.time_ns()}'
+                log.rename(archived_log)
+                previous['archivedVerifierLogs'].append(str(archived_log))
+            put(attempts / f'{task["id"]}-{time.time_ns()}.json', previous)
+            oracle_file = RUNS / f'sb-oracle-1/records/{task["id"]}.json'
+            if task['bench'] == 'sb' and oracle_file.exists() and not json.loads(oracle_file.read_text())['passed']:
+                oracle_file.rename(attempts / f'{task["id"]}-oracle-{time.time_ns()}.json')
+                oracle_trials = RUNS / 'sb-oracle-1/trials' / task['id']
+                if oracle_trials.exists():
+                    oracle_trials.rename(attempts / f'{task["id"]}-oracle-trials-{time.time_ns()}')
         check_budget(batch_info['balanceBefore'], batch_info['deadline'])
         check_verifier(task)
         put(ROOT / 'current.json', {'runId': out.name, 'task': task['id'], 'arm': args.arm})

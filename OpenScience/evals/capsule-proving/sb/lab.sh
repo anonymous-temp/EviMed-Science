@@ -32,25 +32,24 @@ print('Reference smoke has an official verifier result')
 PY
 fi
 
-for arm in none flat; do
+# Run learned before flat so the methods comparison is available even if the shared lab
+# balance prevents the final arm. This order is fixed before any learned/flat scores.
+for arm in none learned flat; do
+  if [[ "$arm" == learned ]]; then
+    note 'waiting for product practice and actual method export'
+    until [[ -f "$ROOT/practice/complete.json" ]]; do
+      "$PY" - "$ROOT/batch.json" <<'PY'
+import json,sys,time
+if time.time()>json.load(open(sys.argv[1]))['deadline']:raise SystemExit('Lane wall time allocation reached')
+PY
+      sleep 20
+    done
+  fi
   for bench in sb slb; do
     note "start $bench-$arm-1"
     "$PY" "$CODE/run.py" --bench "$bench" --arm "$arm"
     report
   done
-done
-note 'waiting for product practice and actual method export'
-until [[ -f "$ROOT/practice/complete.json" ]]; do
-  "$PY" - "$ROOT/batch.json" <<'PY'
-import json,sys,time
-if time.time()>json.load(open(sys.argv[1]))['deadline']:raise SystemExit('Lane wall time allocation reached')
-PY
-  sleep 20
-done
-for bench in sb slb; do
-  note "start $bench-learned-1"
-  "$PY" "$CODE/run.py" --bench "$bench" --arm learned
-  report
 done
 node "$TREE/evals/capsule-proving/sb/report.mjs" "$ROOT" /srv/evimed/runs /srv/evimed/results/ledger.jsonl --append > "$ROOT/report.log"
 note 'six arms finished'

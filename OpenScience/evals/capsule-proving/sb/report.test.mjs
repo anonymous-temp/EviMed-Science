@@ -1,5 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { aggregate, openings, verdict } from './report.mjs';
 
 test('verifier infrastructure errors never become scored task failures', () => {
@@ -52,4 +57,29 @@ test('upstream ACP read events retain method identity and completion state', () 
   const events = [{ type: 'tool_call', tool_call_id: 'a', kind: 'read', title: '/home/agent/.agents/skills/foo/SKILL.md', status: 'completed' },
     { type: 'tool_call', tool_call_id: 'b', kind: 'read', title: '/home/agent/.agents/skills/foo/SKILL.md', status: 'failed' }];
   assert.deepEqual(openings(events, ['foo']), ['foo']);
+});
+test('final report includes late gateway charges and appends one idempotent ledger row', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sb-report-'));
+  try {
+    const runs = path.join(root, 'runs'), dir = path.join(runs, 'sb-none-1');
+    fs.mkdirSync(path.join(dir, 'records'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({ pins: { sb: 'fixture-pin' }, samplingRule: 'fixture' }));
+    fs.writeFileSync(path.join(dir, 'run.json'), JSON.stringify({ tasks: ['x'], model: 'deepseek-flash', pins: { sb: 'fixture-pin' } }));
+    const first = { runId: 'sb-none-1', task: 'x', usage: { prompt_tokens: 10, completion_tokens: 1 }, costCny: .1 };
+    const late = { ...first, disconnected: true };
+    fs.writeFileSync(path.join(dir, 'records/x.json'), JSON.stringify({ task: { id: 'x', category: 'data' },
+      official: { passed: true }, wallSeconds: 1, mounted: [], requests: [first] }));
+    fs.writeFileSync(path.join(root, 'usage.jsonl'), [first, late, { ...first, runId: 'another-arm' }].map(JSON.stringify).join('\n'));
+    const ledger = path.join(root, 'ledger.jsonl');
+    const script = fileURLToPath(new URL('./report.mjs', import.meta.url));
+    for (let i = 0; i < 2; i += 1) {
+      const result = spawnSync(process.execPath, [script, root, runs, ledger, '--append'], { encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr);
+    }
+    const summary = JSON.parse(fs.readFileSync(path.join(dir, 'summary.json'), 'utf8'));
+    assert.equal(summary.tokens.requests, 2); assert.equal(summary.tokens.prompt, 20);
+    assert.equal(summary.tokens.costCny, .2);
+    const rows = fs.readFileSync(ledger, 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(rows.length, 1); assert.equal(rows[0].costCny, .2); assert.equal(rows[0].n, 1);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

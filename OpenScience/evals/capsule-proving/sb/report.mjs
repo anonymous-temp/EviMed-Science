@@ -90,17 +90,24 @@ function main() {
   const root = process.argv[2] ?? '/srv/evimed/sb', runs = process.argv[3] ?? '/srv/evimed/runs';
   const ledger = process.argv[4] ?? '/srv/evimed/results/ledger.jsonl';
   const manifest = read(`${root}/manifest.json`);
+  const usageFile = `${root}/usage.jsonl`;
+  const metered = fs.existsSync(usageFile) ? fs.readFileSync(usageFile, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)) : null;
   const results = [];
   for (const bench of ['sb', 'slb']) for (const arm of ['none', 'flat', 'learned']) {
     const runId = `${bench}-${arm}-1`, dir = `${runs}/${runId}`, run = read(`${dir}/run.json`);
     if (!run) continue;
     const records = walk(`${dir}/records`).filter(f => f.endsWith('.json')).map(read);
     for (const record of records) {
+      // A canceled agent can leave a provider stream settling after its task record was written.
+      // The append-only gateway record, including late/disconnected completions, owns the final charge.
+      if (metered) record.requests = metered.filter(request => request.runId === runId && request.task === record.task.id);
       const events = walk(record.trialPath ?? `${dir}/trials`).filter(f => f.includes(record.task.id) && /(?:trajectory|pi\.jsonl|sessions).*\.jsonl$/.test(f)).flatMap(file => fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).flatMap(line => { try { return [JSON.parse(line)]; } catch { return []; } }));
       record.opened = openings(events, record.mounted ?? []);
     }
     const summary = aggregate(records, run.tasks.length);
     summary.rows = records.map(record => ({ task: record.task.id, category: record.task.category, ...verdict(record),
+      agentError: record.official?.error ?? null,
+      agentTimedOut: record.official?.agent_timed_out === true || record.official?.error_category === 'timeout',
       mounted: record.mounted, opened: record.opened, wallSeconds: record.wallSeconds,
       tokens: aggregate([record], 1).tokens }));
     const learning = read(`${root}/practice/complete.json`);
@@ -127,6 +134,21 @@ function main() {
     results.push({ bench, arm, ...summary });
   }
   fs.writeFileSync(`${root}/summary.json`, JSON.stringify(results, null, 2) + '\n');
+  const costOf = requests => aggregate([{ task: { category: 'accounting' }, official: { passed: true }, requests }], 1).tokens;
+  const practice = read(`${root}/practice/complete.json`)?.usage ?? read(`${root}/practice/usage.json`);
+  const reference = costOf(metered ?? []);
+  const batch = read(`${root}/batch.json`);
+  const balanceText = fs.existsSync('/srv/evimed/runs/BUDGET-LAST') ? fs.readFileSync('/srv/evimed/runs/BUDGET-LAST', 'utf8') : '';
+  const accounting = { at: new Date().toISOString(), reference,
+    smokes: costOf((metered ?? []).filter(r => r.runId?.includes('smoke'))),
+    judges: costOf((metered ?? []).filter(r => r.purpose === 'judge')),
+    practice: practice ?? null, totalObservedCny: reference.costCny + (practice?.account?.actualCost ?? 0),
+    conservativeUpperBoundCny: reference.costCnyPeakEquivalent + (practice?.account?.actualCost ?? 0) + (practice?.account?.reservedCost ?? 0),
+    balanceBefore: batch?.balanceBefore ?? null, balanceAfter: /balance\s+([\d.]+)/.exec(balanceText)?.[1] ?? null,
+    balanceScope: 'Shared account; balance delta includes other lanes and is not attribution to SB.',
+    startedAt: batch?.startedAt ? new Date(batch.startedAt * 1000).toISOString() : null,
+    priceBasis: 'Provider token usage at observed timestamps, product domain dated prices/peak schedule; billing estimate, not an isolated vendor invoice.' };
+  fs.writeFileSync(`${root}/accounting.json`, JSON.stringify(accounting, null, 2) + '\n');
   console.log(JSON.stringify(results.map(({ rows, byCategory, ...rest }) => rest), null, 2));
 }
 

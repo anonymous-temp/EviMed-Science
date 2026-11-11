@@ -15,7 +15,7 @@ agent's skills. Never relabel these scores as product-path results.
 | SkillsBench runner | BenchFlow 0.6.3, the version in the pinned repository's `uv.lock` |
 | SkillLearnBench runner | The pinned `core/eval_runner.py`, with a registry entry for Pi CLI |
 | Reference agent | `@earendil-works/pi-coding-agent@1.5.2`; SkillsBench uses `pi-acp@0.0.34` |
-| Inference | `deepseek-flash`, thinking enabled, effort high; provider response model and usage recorded |
+| Inference | `deepseek-flash`, thinking enabled, effort high, 32,768 output-token cap; provider response model and usage recorded |
 
 BenchFlow's original Pi installer uses a retired package incompatible with its
 floating ACP adapter. `bench_entry.py` pins the compatible renamed package and

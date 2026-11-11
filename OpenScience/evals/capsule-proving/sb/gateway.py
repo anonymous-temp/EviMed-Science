@@ -67,7 +67,8 @@ def serve(args):
                 if context.get('purpose') == 'judge':
                     body['thinking'] = {'type': 'disabled'}
                     body.pop('reasoning_effort', None)
-                body['max_tokens'] = min(int(body.get('max_tokens', 32768)), 32768)
+                output_limit = body.pop('max_completion_tokens', body.get('max_tokens', 32768))
+                body['max_tokens'] = min(int(output_limit), 32768)
                 if body.get('stream'):
                     body['stream_options'] = {'include_usage': True}
                 request = urllib.request.Request('https://api.deepseek.com/chat/completions',

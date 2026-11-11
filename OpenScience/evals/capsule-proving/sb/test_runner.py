@@ -10,6 +10,12 @@ from gateway import cost
 
 
 class RunnerTests(unittest.TestCase):
+    def test_retry_never_repeats_a_valid_failed_answer_or_timeout(self):
+        self.assertFalse(run.infrastructure_record({'official': {'error': 'timeout', 'rewards': {'reward': 0}}}))
+        self.assertFalse(run.infrastructure_record({'official': {'passed': False, 'reward': 0, 'verifier_exit': 0}}))
+        self.assertTrue(run.infrastructure_record({'official': {'error': 'docker_build_failed', 'passed': False, 'verifier_exit': None}}))
+        self.assertTrue(run.infrastructure_record({'official': {'verifier_error': 'container unavailable'}}))
+
     def test_pin_verification_rejects_wrong_revision_or_an_empty_pin(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
