@@ -273,7 +273,7 @@ export function createLearningRuntime({
   return {
     /**
      * @param {{job: any, dispatchId: string, capabilityId: string, contractKind: string, input: any, question: string,
-     *          userId: string, projectId: string, unprovenPriorDispatchId?: string}} request
+     *          userId: string, projectId: string, unprovenPriorDispatchId?: string, countCalls?: boolean}} request
      */
     async dispatch(request) {
       const { job, capabilityId, input, question } = request;
@@ -323,7 +323,7 @@ export function createLearningRuntime({
         else if (runtimeManager.boundedRuntimeScope(scoped)?.runId === dispatchId) {
           await runtimeManager.endBoundedRuntime(scoped, dispatchId);
         }
-        return identityOf(existing);
+        return { ...identityOf(existing), ...(request.countCalls && existing.status === "succeeded" ? { reused: true } : {}) };
       }
 
       // The learning loop is never the reason a researcher's own run waits.
@@ -433,7 +433,7 @@ export function createLearningRuntime({
 
     /**
      * @param {{userId: string, projectId: string, runId: string, sessionId: string, dispatchId: string,
-     *          capabilityId?: string, contractKind?: string, outputs?: string[]}} identity
+     *          capabilityId?: string, contractKind?: string, outputs?: string[], includeUsage?: boolean}} identity
      */
     async readResult(identity) {
       const capabilityId = identity.capabilityId
@@ -455,7 +455,8 @@ export function createLearningRuntime({
       if (run.errorCode === RUNTIME_YIELDED_CODE) {
         throw new HttpError(409, RUNTIME_YIELDED_CODE, "A researcher needed the runtime; the learning step runs again when there is room.");
       }
-      if (run.status !== "succeeded") return { status: run.status };
+      if (run.status !== "succeeded") return { status: run.status,
+        ...(identity.includeUsage ? { usage: await usageLedger.summaryRun(identity.userId, identity.dispatchId) } : {}) };
 
       // Archived once a later step needed the workspace; until then, still in
       // it. A workspace a later step has already taken holds that step's files.

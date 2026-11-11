@@ -283,9 +283,9 @@ export class LearningMetrics {
  * The durable half, read from the product ledger: across every account, or
  * one account's when `userId` is given. Each read stands alone — a usage
  * schema this deployment never created costs the spend, not the rest.
- * @param {any} database @param {{userId?: string | null, now?: Date}} [options]
+ * @param {any} database @param {{userId?: string | null, now?: Date, consolidationQueue?: boolean}} [options]
  */
-export async function learningLedgerCounts(database, { userId = null, now = new Date() } = {}) {
+export async function learningLedgerCounts(database, { userId = null, now = new Date(), consolidationQueue = false } = {}) {
   const owner = userId == null ? null : String(userId);
   /** @param {string} sql @param {unknown[]} values */
   const rows = async (sql, values) => (await database.query(sql, values)).rows;
@@ -369,16 +369,24 @@ export async function learningLedgerCounts(database, { userId = null, now = new 
     account: createHash("sha256").update(`learning-evidence:${row.user_id}`).digest("hex").slice(0, 12),
     at: Math.floor(new Date(row.last_at).getTime() / 1000),
   })).filter((entry) => Number.isFinite(entry.at));
-  return { methods: byStatus, uses, lessons, results, evidence, evidenceLastAt, spend };
+  let coverage = null;
+  if (consolidationQueue) {
+    const [row] = await rows(`SELECT count(*) FILTER (WHERE payload->>'examined'='false')::integer AS backlog,
+      count(*) FILTER (WHERE payload->>'examined'='true')::integer AS pending_builds
+      FROM evimed_product.documents WHERE kind='method-consolidation' AND deleted_at IS NULL
+      AND payload->>'recordType'='pair' AND payload->>'status'='pending' AND ($1::text IS NULL OR user_id=$1)`, [owner]);
+    coverage = { backlog: Number(row?.backlog ?? 0), pendingBuilds: Number(row?.pending_builds ?? 0) };
+  }
+  return { methods: byStatus, uses, lessons, results, evidence, evidenceLastAt, spend, ...(coverage ? { coverage } : {}) };
 }
 
 /**
  * One account's summary for `GET /api/methods`: the same reads, the same
  * vocabulary, no rendering. Read-only.
- * @param {any} database @param {string} userId @param {{now?: Date}} [options]
+ * @param {any} database @param {string} userId @param {{now?: Date, consolidationQueue?: boolean}} [options]
  */
-export async function learningSummary(database, userId, { now = new Date() } = {}) {
-  const counts = await learningLedgerCounts(database, { userId, now });
+export async function learningSummary(database, userId, { now = new Date(), consolidationQueue = false } = {}) {
+  const counts = await learningLedgerCounts(database, { userId, now, consolidationQueue });
   /** @type {Record<string, number>} */
   const queued = {};
   /** @type {Record<string, number>} */
@@ -390,6 +398,7 @@ export async function learningSummary(database, userId, { now = new Date() } = {
   }
   return {
     methods: counts.methods,
+    ...(counts.coverage ? { consolidation: counts.coverage } : {}),
     uses: counts.uses,
     lessons: { byTrigger: queued, ...ended },
     results: counts.results,
@@ -433,6 +442,11 @@ export function learningMetricFamilies(enabled, ledger, counters) {
       { name: "open_science_learning_distill_results", help: "Finished distillation lessons, by what they wrote.", type: "gauge",
         series: RESULT_OPERATIONS.map((operation) => ({ value: ledger.results[operation] ?? 0, labels: { operation } })) },
     );
+    if (ledger.coverage) families.push({ name: "open_science_learning_consolidation_backlog", type: "gauge",
+      help: "Proposed method pairs awaiting examination, and examined pairs with deferred builds.", series: [
+        { value: ledger.coverage.backlog, labels: { state: "unexamined" } },
+        { value: ledger.coverage.pendingBuilds, labels: { state: "build_deferred" } },
+      ] });
     if (ledger.spend) {
       families.push({ name: "open_science_learning_spend_cny", help: "Learning model spend over the last 24 hours: settled, and still open (reserved or uncertain).", type: "gauge", series: [
         { value: ledger.spend.settled, labels: { window: "24h", state: "settled" } },

@@ -12,7 +12,9 @@
  * The embedder is the control plane's own (`KbEmbedder`, the knowledge base's DashScope pin): the caller hands in
  * `embed(texts) -> number[][]` and nothing here holds a key or a URL. Method text is the same data class as memory
  * (owner decision 2026-10-23, item 6): the name, the description, the situation it is for, and the line the researcher
- * reads for it — never a body, a transcript or a quotation.
+ * reads for it — never a transcript. The opt-in consolidation recall view also
+ * embeds the stored method body and, separately, its applicability; ordinary
+ * mount/distillation retrieval keeps the original summary-only view.
  *
  * Vectors are kept per `methodId@contentDigest`, in memory and bounded, and not in the method's `learning` payload:
  * a 1,024-float vector is about ten kilobytes of JSON, every counter write rewrites the whole payload, and the library
@@ -182,12 +184,15 @@ export function createMethodSimilarity({ embed = null, logger = null, cacheLimit
   /**
    * The unit vectors of these methods, and of extra texts, in one call for what is not cached.
    * @param {readonly any[]} methods @param {readonly string[]} [extra] texts embedded beside them (a query)
+   * @param {(method: any) => string} [textOf]
+   * @param {string} [variant]
+   * @param {boolean} [batch]
    * @returns {Promise<{methods: Float32Array[], extra: Float32Array[]}>}
    */
-  async function vectors(methods, extra = []) {
+  async function vectors(methods, extra = [], textOf = methodText, variant = "", batch = false) {
     const wanted = methods.map((method) => {
-      const text = methodText(method);
-      return { key: cacheKey(method), text, hash: textHash(text) };
+      const text = textOf(method);
+      return { key: variant + cacheKey(method), text, hash: textHash(text) };
     });
     /** @type {typeof wanted} */
     const missing = [];
@@ -205,11 +210,15 @@ export function createMethodSimilarity({ embed = null, logger = null, cacheLimit
       }
     }
     const texts = [...extra, ...missing.map((entry) => entry.text)];
-    if (texts.length > MAX_TEXTS_PER_CALL) throw new RangeError("method_similarity_too_many_texts");
+    if (!batch && texts.length > MAX_TEXTS_PER_CALL) throw new RangeError("method_similarity_too_many_texts");
+
     /** @type {Float32Array[]} */
     let fresh = [];
     if (texts.length) {
-      const answer = await /** @type {Function} */ (embed)(texts);
+      const answer = [];
+      for (let start = 0; start < texts.length; start += MAX_TEXTS_PER_CALL) {
+        answer.push(...await /** @type {Function} */ (embed)(texts.slice(start, start + MAX_TEXTS_PER_CALL)));
+      }
       if (!Array.isArray(answer) || answer.length !== texts.length) throw new TypeError("method_similarity_embedding_invalid");
       const dimension = Array.isArray(answer[0]) ? answer[0].length : 0;
       fresh = answer.map((vector) => unit(vector, dimension));
@@ -266,15 +275,31 @@ export function createMethodSimilarity({ embed = null, logger = null, cacheLimit
    * neighbour pairs of every method taken whether or not they reached the floor (each unordered pair once), so what the floor
    * kept out is as visible as what it let through.
    * @param {readonly any[]} methods method documents
-   * @param {{topK?: number, floor?: number}} [options]
+   * @param {{topK?: number, floor?: number, applicability?: boolean, onlyIds?: string[] | null}} [options]
    * @returns {Promise<{a: string, b: string, score: number, overlap: number}[] & {mode: "embedding" | "lexical", topScore?: number | null, distribution?: {p50: number, p90: number, n: number} | null}>}
    */
-  async function pairs(methods, { topK = METHOD_SIMILARITY_TOP_K, floor = METHOD_SIMILARITY_PAIR_FLOOR } = {}) {
+  async function pairs(methods, { topK = METHOD_SIMILARITY_TOP_K, floor = METHOD_SIMILARITY_PAIR_FLOOR, applicability = false, onlyIds = null } = {}) {
+    if (applicability) {
+      const combined = new Map();
+      // Separate views prevent a short applicability clause being diluted by
+      // a longer procedure. These are retrieval scores, never relation verdicts.
+      for (const view of ["summary", "body", "when"]) {
+        const projected = methods.map(method => ({ ...method, id: `${view}:${method.id}`, payload: { ...method.payload,
+          similarityText: view === "when" ? [method.payload?.frontmatter?.whenToUse, method.payload?.frontmatter?.metadata?.applies_when].filter(Boolean).join("\n")
+            : view === "body" ? String(method.payload?.body ?? "") : methodText(method) } }));
+        const result = await pairs(projected, { topK, floor, onlyIds: onlyIds?.map(id => `${view}:${id}`) });
+        for (const pair of result) {
+          const a = pair.a.slice(view.length + 1), b = pair.b.slice(view.length + 1), key = JSON.stringify([a,b].sort());
+          if (!combined.has(key) || combined.get(key).score < pair.score) combined.set(key, { ...pair, a, b });
+        }
+      }
+      return withMode([...combined.values()].sort((a,b) => b.score-a.score || a.a.localeCompare(b.a)), available() ? "embedding" : "lexical");
+    }
     const list = [...(methods ?? [])];
     if (list.length < 2) return withMode([], available() ? "embedding" : "lexical");
     if (available()) {
       try {
-        const { methods: methodVectors } = await vectors(list);
+        const { methods: methodVectors } = await vectors(list, [], method => method.payload?.similarityText ?? methodText(method), "", onlyIds !== null || list.some(method => method.payload?.similarityText !== undefined));
         /** @type {Map<string, {a: string, b: string, score: number, overlap: number}>} */
         const found = new Map();
         /** @type {Map<string, number>} every method's nearest-neighbour pairs, floor or not */
@@ -290,6 +315,7 @@ export function createMethodSimilarity({ embed = null, logger = null, cacheLimit
           }
           neighbours.sort((one, two) => two.score - one.score || byId(list[one.right], list[two.right]));
           for (const { right, score } of neighbours.slice(0, Math.max(0, topK))) {
+            if (onlyIds && !onlyIds.includes(list[left].id) && !onlyIds.includes(list[right].id)) continue;
             const [first, second] = left < right ? [left, right] : [right, left];
             const key = `${first}\u0000${second}`;
             seen.set(key, score);
@@ -305,7 +331,7 @@ export function createMethodSimilarity({ embed = null, logger = null, cacheLimit
     } else if (typeof embed === "function") {
       counters.fallbacks += 1;
     }
-    return withMode(lexicalPairs(list, topK), "lexical");
+    return withMode(lexicalPairs(list, topK).filter(pair => !onlyIds || onlyIds.includes(pair.a) || onlyIds.includes(pair.b)), "lexical");
   }
 
   return {

@@ -1480,7 +1480,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const learningRoutes = createLearningRoutes({
     store, service: learningService, maxJsonBytes: config.maxJsonBytes,
     // Whether the loop is turning for this account, beside its list (§13).
-    summary: productDatabase && config.learningEnabled ? (userId) => learningSummary(productDatabase, userId) : null,
+    summary: productDatabase && config.learningEnabled ? (userId) => learningSummary(productDatabase, userId, { consolidationQueue: config.methodConsolidationQueueEnabled }) : null,
     // 「从哪里学到的」: a lesson's run, live or kept when its project was deleted (`agentRuns` is composed further down; asked per request).
     resolveRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
   });
@@ -4927,6 +4927,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     }) : null;
     const consolidation = new MethodConsolidation({
       contextProvenance,
+      queueEnabled: config.methodConsolidationQueueEnabled,
+      recallEnabled: config.methodConsolidationRecallEnabled,
+      modelCalls: config.methodConsolidationModelCalls,
       // Report-only: with `OPEN_SCIENCE_LINK_CHECK_ENABLED`, the pass returns the library's broken-link counts as
       // `linkIssues` and never blocks on them.
       linkCheckEnabled: config.linkCheckEnabled,
@@ -10713,7 +10716,7 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   for (const family of reviewMetricFamilies(Boolean(review), review ? review.service.stats() : null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The method-learning loop: the library, the lessons by trigger and result,
   // uses, the day's spend, and what launches mounted (learningMetrics.mjs, §13).
-  const learningLedger = learning?.enabled && productDatabase ? await learningLedgerCounts(productDatabase).catch(() => null) : null;
+  const learningLedger = learning?.enabled && productDatabase ? await learningLedgerCounts(productDatabase, { consolidationQueue: config.methodConsolidationQueueEnabled }).catch(() => null) : null;
   for (const family of learningMetricFamilies(Boolean(learning?.enabled), learningLedger, learning?.counters ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // Refusals by model provider and status; 402 is an exhausted balance and
   // pages (providerRefusals.mjs, alert ModelProviderBalanceExhausted).

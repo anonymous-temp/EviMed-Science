@@ -3945,7 +3945,7 @@ export class RuntimeManager {
   /**
    * The learned-method library's experiment switches as the mount reads them (`materializeCapsuleMethods`), each off by default so the
    * same commit runs with and without it (plan 2026-11-04 §5.4).
-   * @returns {{ pyramid: boolean, minSimilarity: number, officialInLoop: boolean, cardEvidence: boolean }}
+   * @returns {{ pyramid: boolean, minSimilarity: number, officialInLoop: boolean, cardEvidence: boolean, skipPendingRetirements: boolean }}
    */
   methodSelectionSwitches() {
     return {
@@ -3953,6 +3953,7 @@ export class RuntimeManager {
       minSimilarity: Number(this.config?.methodMountMinSimilarity ?? 0) || 0,
       officialInLoop: this.config?.methodOfficialInLoopEnabled === true,
       cardEvidence: this.config?.methodCardEvidenceEnabled === true,
+      skipPendingRetirements: this.config?.methodPendingRetirementMountEnabled === true,
     };
   }
 
