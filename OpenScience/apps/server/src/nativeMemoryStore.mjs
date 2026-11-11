@@ -1,8 +1,8 @@
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
-import { hardTokens } from './nativeMemoryHardTokens.mjs';
-import { compact, neutralMemoryUri, removalLines } from './nativeMemoryRejections.mjs';
+import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
+import { neutralMemoryUri, removalLines } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
@@ -1267,7 +1267,7 @@ export class NativeMemoryStore {
     // edited document at an opaque address; the before-image remains undoable.
     const nextTokens = new Set(hardTokens(next));
     const pathRemoved = actor === "user" && origin === "edit" && removed.some(text => hardTokens(text)
-      .some(token => !nextTokens.has(token) && compact(oldUri.slice(oldUri.lastIndexOf('/')+1)).includes(compact(token))));
+      .some(token => !nextTokens.has(token) && memoryNameVariants(oldUri).some(name => tokenPresent(token,name))));
     if (pathRemoved) file.uri = await neutralMemoryUri({ userId, overlay: this.overlay, uri: oldUri, projectId: file.projectId,
       namespaceId: context.kind === 'geo-project' ? context.namespaceId : null, judge: this.rejectionJudge });
     await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.replace(userId, file.uri, next)));
@@ -1509,8 +1509,11 @@ export class NativeMemoryStore {
     const context = await this.#fileContext(userId, file.uri);
     this.#touch(userId);
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
-    await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, [...removalLines(file.body), ...(hardTokens(titleOf(file.type, file.uri, file.body)).length ? [titleOf(file.type, file.uri, file.body)] : [])]);
-    if (actor !== "platform") await this.history?.rejectRemoved(context,file,statements(file.body),this.rejectionJudge);
+    const names = [...new Set([titleOf(file.type, file.uri, file.body), ...memoryNameVariants(file.uri)])].filter(name => hardTokens(name).length);
+    const removedLines = [...new Set([...removalLines(file.body), ...names])];
+    await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, removedLines);
+    if (actor !== "platform") await this.history?.rejectRemoved(context,file,
+      [...new Map([...statements(file.body), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge);
     await this.history?.retireWriteSessions(context,oldOrigins,statements(file.body));
     const removed = await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.remove(userId, file.uri)));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),
@@ -1619,7 +1622,7 @@ export class NativeMemoryStore {
     const context = await this.#fileContext(userId, uri);
     if (context.kind === 'geo-project') projectId = context.projectId;
     await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, text)));
-    await this.overlay.unreject(userId, this.#rejectionType(context, memoryType), [...removalLines(text), titleOf(memoryType, uri, text)]);
+    await this.overlay.unreject(userId, this.#rejectionType(context, memoryType), [...removalLines(text), titleOf(memoryType, uri, text), ...memoryNameVariants(uri)]);
     await this.overlay.upsertFile({ userId, uri, memoryType, body: text, projectId: projectId ?? undefined });
     if (projectId) await this.#engine(() => context.sessions.setTags(userId, uri, [`project=${projectId}`])).catch(() => {});
     const sourceRevision=await this.overlay.revision(userId,revisionId);

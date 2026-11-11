@@ -400,17 +400,26 @@ export class OpenVikingSessions {
 
   /**
    * Replace an existing memory file's body. `wait` re-embeds before answering, so the edit is searchable when this
-   * returns (about a second). The engine has no compare-and-swap: the caller holds the hash it last saw.
+   * returns (about a second). Use batch-write's exact URI semantics: content/write normalizes spaces
+   * into underscores and can leave a second, untracked file behind during a removal or undo.
+   * The engine has no compare-and-swap: the caller holds the hash it last saw.
    */
   replace(userId, uri, content, { wait = true } = {}) {
+    // v0.5.3 batch-write requires a memory-type directory as its root. The one root-level
+    // file has a fixed canonical name, so the single-write endpoint cannot alias its URI.
+    if (uri === `${this.memoryRoot(userId)}/profile.md`) return this.client.request({
+      method: 'POST', path: '/api/v1/content/write', userId, timeoutMs: Math.max(this.timeoutMs, 20_000),
+      body: { uri, content: String(content ?? ''), mode: 'replace', wait: Boolean(wait) },
+    });
     return this.client.request({
-      method: "POST", path: "/api/v1/content/write", userId, timeoutMs: Math.max(this.timeoutMs, 20_000),
-      body: { uri, content: String(content ?? ""), mode: "replace", wait: Boolean(wait) },
+      method: "POST", path: "/api/v1/content/batch-write", userId, timeoutMs: Math.max(this.timeoutMs, 20_000),
+      body: { root_uri: uri.slice(0, uri.lastIndexOf('/')), wait: Boolean(wait),
+        operations: [{ uri, content: String(content ?? ""), mode: "replace" }] },
     });
   }
 
   /** Delete a file or a subtree. @returns {Promise<boolean>} false when nothing was there */
-  remove(userId, uri, { recursive = false, wait = false } = {}) {
+  remove(userId, uri, { recursive = false, wait = true } = {}) {
     return this.client.remove(userId, uri, { recursive, wait });
   }
 

@@ -247,12 +247,26 @@ export class OpenVikingStub {
       return send(200, ok(this.files.get(uri)));
     }
     if (path === "/api/v1/content/write" && req.method === "POST") {
-      const uri = String(body?.uri ?? "");
+      // v0.5.3 single writes normalize filenames, unlike extraction and batch-write.
+      const uri = String(body?.uri ?? "").replaceAll(' ', '_');
       if (!within(uri)) return send(403, fail("PERMISSION_DENIED", "Access denied"));
       // v0.5.1.1: `create` is an alias of `replace` (no 409 on an existing file), and `replace` creates a file that is not there.
       this.files.set(uri, String(body?.content ?? ""));
       if (!this.tags.has(uri)) this.tags.set(uri, []);
       return send(200, ok({ uri, mode: body?.mode, written_bytes: Buffer.byteLength(String(body?.content ?? "")), content_updated: true, vector_status: "complete" }));
+    }
+    if (path === '/api/v1/content/batch-write' && req.method === 'POST') {
+      const root = String(body?.root_uri ?? '');
+      const operations = body?.operations ?? [];
+      if (root === `${own}/memories`) return send(400, fail('INVALID_ARGUMENT', 'batch-write root must be inside a memory type directory'));
+      if (!within(root) || operations.some(op => !String(op.uri).startsWith(`${root}/`) || !within(op.uri))) return send(403, fail('PERMISSION_DENIED', 'Access denied'));
+      const created = [], updated = [];
+      for (const op of operations) {
+        (this.files.has(op.uri) ? updated : created).push(op.uri);
+        this.files.set(op.uri, String(op.content ?? ''));
+        if (!this.tags.has(op.uri)) this.tags.set(op.uri, []);
+      }
+      return send(200, ok({ root_uri: root, created, updated, unchanged: [], vector_status: 'complete' }));
     }
     if (path === '/api/v1/content/reindex' && req.method === 'POST') {
       if (!within(String(body?.uri ?? ''))) return send(403, fail('PERMISSION_DENIED', 'Access denied'));

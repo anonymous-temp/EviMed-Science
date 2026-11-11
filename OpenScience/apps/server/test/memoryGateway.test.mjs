@@ -576,7 +576,8 @@ test("native list search uses the pinned REST contract and MCP returns actual al
 
 test("REST and batched MCP list search filter hidden, derived, foreign and out-of-target rows before counts or metadata", async t => {
   const hidden = `${ROOT}/memories/preferences/hidden.md`, target = `${ROOT}/memories/preferences`;
-  const { sessions, mcp, call } = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => [hidden] } });
+  const { stub, sessions, mcp, call } = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => [hidden] } });
+  stub.seedMemory(OV_USER, "preferences/allowed.md", "VISIBLE");
   let upstreamCalls = 0;
   sessions.search = async (_user, body) => {
     upstreamCalls++;
@@ -641,7 +642,8 @@ test("knowledge resources are unreachable through memory read, listing or model 
   assert.equal((await call("GET","/api/v1/content/read?uri="+encodeURIComponent(`${ROOT}/memories/profile.md`))).json.result,"Native profile only");
 });
 test("model search and structured listings exclude aggregate sidecars and sensitive siblings without leaking metadata or false completion",async t=>{
- const hidden=`${ROOT}/memories/preferences/self/private.md`,parent=`${ROOT}/memories/preferences/self`,leaf=parent+'/allowed.md';const{sessions,mcp,call}=await fixture(t,{overlay:{configured:true,sensitiveUris:async()=>[hidden]}});
+ const hidden=`${ROOT}/memories/preferences/self/private.md`,parent=`${ROOT}/memories/preferences/self`,leaf=parent+'/allowed.md';const{stub,sessions,mcp,call}=await fixture(t,{overlay:{configured:true,sensitiveUris:async()=>[hidden]}});
+ stub.seedMemory(OV_USER,'preferences/self/allowed.md','Allowed native leaf');
  sessions.search=async(_user,body)=>{assert.equal(body.level,2);return{result:{memories:[{uri:parent+'/.abstract.md',abstract:'SENSITIVE-SUMMARY'},{uri:parent+'/.overview.md',abstract:'SENSITIVE-OVERVIEW'},{uri:parent,abstract:'PARENT-SUMMARY'},{uri:hidden,abstract:'PRIVATE'},{uri:leaf,abstract:'Allowed native leaf',level:2}],resources:[],skills:[],total:5}};};
  const searched=await mcp({jsonrpc:'2.0',id:112,method:'tools/call',params:{name:'search',arguments:{query:'x'}}});const answer=JSON.parse(searched.messages[0].result.content[0].text);assert.equal(answer.total,1);assert.equal(answer.memories[0].uri,leaf);assert.doesNotMatch(JSON.stringify(answer),/SENSITIVE|PARENT|PRIVATE/);
  sessions.client.request=async()=>({result:[{uri:leaf,isDir:false,name:'allowed.md',rel_path:'allowed.md',abstract:'SIDE-METADATA'},{uri:hidden,isDir:false,name:'private.md'},{uri:parent+'/.overview.md',isDir:false,abstract:'SENSITIVE-OVERVIEW'},{uri:`${ROOT}/resources/private.md`,isDir:false}],has_more:true,total:999,rendered:'SENSITIVE-RENDERED'});
@@ -770,14 +772,16 @@ test("the native capsule search is the capsule's own recall, scoped to the proje
 test("a conversation of one project reads no other named project's card, decisions or facts: search, read and list leave them out (S7, 2026-10-27)", async t => {
   const otherCard = `${ROOT}/memories/projects/sglt2 抑制剂综述.md`, otherDecision = `${ROOT}/memories/decisions/sglt2.md`, own = `${ROOT}/memories/projects/高血压科普.md`;
   const asked = [];
-  const { sessions, mcp, call } = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => [],
+  const { stub, sessions, mcp, call } = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => [],
     otherProjectUris: async (userId, projectId) => { asked.push([userId, projectId]); return [otherCard, otherDecision]; } } });
+  stub.seedMemory(OV_USER, "projects/高血压科普.md", "OWN-CARD");
   sessions.search = async () => ({ result: { memories: [
     { uri: otherCard, abstract: "所有文字交付物一律用英文写" }, { uri: otherDecision, abstract: "OTHER-DECISION" }, { uri: own, abstract: "OWN-CARD" },
   ], resources: [], skills: [], total: 3 } });
   const found = await call("POST", "/api/v1/search/search", { query: "项目简介" });
   assert.deepEqual(found.json.result.memories.map((hit) => hit.abstract), ["OWN-CARD"], "the project's own card only");
   assert.deepEqual(asked[0], [USER, "p1"], "asked for the files of projects other than the conversation's");
+  stub.files.set(own, 'OWN PROJECT WORDS');
   sessions.search = async () => ({result:{entries:[
     {uri:otherCard,detail:'content',text:'OTHER PROJECT WORDS'},
     {uri:own,detail:'content',text:'OWN PROJECT WORDS'},
@@ -860,7 +864,8 @@ test("the catch-all project's memory session carries no project line", async t =
 test("a search of the engine over-fetches when other projects' files are hidden, so their ranking above the project's own does not empty the answer (S7)", async t => {
   const others = Array.from({ length: 6 }, (_, index) => `${ROOT}/memories/projects/其他项目${index}.md`), own = [`${ROOT}/memories/projects/高血压科普.md`, `${ROOT}/memories/decisions/高血压.md`];
   const asked = [];
-  const { sessions, call } = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => [], otherProjectUris: async () => others } });
+  const { stub, sessions, call } = await fixture(t, { overlay: { configured: true, sensitiveUris: async () => [], otherProjectUris: async () => others } });
+  for (const uri of own) stub.seedMemory(OV_USER, uri.slice((ROOT + "/memories/").length), uri.split("/").at(-1));
   sessions.search = async (_user, body) => { asked.push(body.limit); return { result: { memories: [...others, ...own].slice(0, body.limit).map((uri) => ({ uri, abstract: uri.split("/").at(-1) })), resources: [], skills: [], total: 8 } }; };
   const found = await call("POST", "/api/v1/search/search", { query: "项目简介", limit: 2 });
   assert.deepEqual(asked, [8], "four times what is returned");
@@ -1067,3 +1072,28 @@ test('native memory filenames with spaces round-trip through REST and MCP withou
     assert.equal((await call('GET', `/api/v1/content/read?uri=${encodeURIComponent(refused)}`)).status, 403);
   }
 });
+
+for (const unavailable of [false, true]) {
+  test(`stale vectors cannot expose deleted or edited text through REST, MCP or plugin context (${unavailable ? 'unreadable' : 'missing'} leaf)`, async t => {
+    const { sessions, stub, call, mcp } = await fixture(t);
+    const gone = `${ROOT}/memories/notes/removed.md`, edited = `${ROOT}/memories/notes/edited.md`;
+    const marker = 'M-41633', current = '- Current independent fact.';
+    stub.seedMemory(OV_USER, 'notes/edited.md', current);
+    const read = sessions.read.bind(sessions);
+    if (unavailable) sessions.read = async (user, uri, options) => { if (uri === gone) throw new Error('read unavailable'); return read(user, uri, options); };
+    sessions.search = async (_user, body) => ({ result: body.mode === 'context'
+      ? { entries: [gone, edited].map(uri => ({ uri, category: 'memories', detail: 'content', text: marker })), rendered: marker }
+      : { memories: [gone, edited].map(uri => ({ uri, context_type: 'memory', level: 2, abstract: marker })), resources: [], skills: [], total: 2 } });
+    const rest = await call('POST', '/api/v1/search/search', { query: marker, limit: 1 });
+    assert.equal(rest.json.result.total, 1, 'refill past the unavailable first hit');
+    assert.equal(rest.json.result.memories[0].uri, edited);
+    assert.equal(rest.json.result.memories[0].abstract, current);
+    const model = await mcp({ jsonrpc: '2.0', id: 809, method: 'tools/call', params: { name: 'search', arguments: { query: marker, limit: 1 } } });
+    const context = await call('POST', '/api/v1/search/search', { query: marker, mode: 'context' });
+    assert.doesNotMatch(JSON.stringify([rest.json, model.messages, context.json]), /M-41633|removed\.md/);
+    assert.equal(context.json.result.entries[0].text, current);
+    stub.files.set(edited, `- The person restated ${marker}.`);
+    const relearned = await call('POST', '/api/v1/search/search', { query: marker });
+    assert.match(relearned.json.result.memories[0].abstract, /M-41633/, 'a live later statement remains recallable');
+  });
+}

@@ -280,7 +280,7 @@ for (const state of ['retracted', 'current']) for (const boundary of ['replace',
     const original = target[method].bind(target);
     let injected = false;
     target[method] = async (...args) => {
-      const applies = !injected && (boundary !== 'replace' || args[0].path === '/api/v1/content/write');
+      const applies = !injected && (boundary !== 'replace' || args[0].path === '/api/v1/content/batch-write');
       if (applies) {
         injected = true;
         if (timing === 'before') throw new Error('Injected source interruption');
@@ -304,9 +304,9 @@ for (const state of ['retracted', 'current']) for (const boundary of ['replace',
     const revisions = (await f.overlay.revisionsOf(f.owner.id, uri)).filter(row => row.actor === 'platform' && row.reason === (state === 'current' ? 'source current again' : 'source retracted'));
     assert.equal(revisions.length, 1); assert.equal(revisions[0].before, previous.body); assert.equal(revisions[0].after, body);
     if (state === 'retracted') assert.ok(body.includes(boundary === 'replace' && timing === 'before' ? '2026-10-25' : '2026-10-24'));
-    const writes = f.stub.sent('POST', '/api/v1/content/write').length;
+    const writes = f.stub.sent('POST', '/api/v1/content/batch-write').length;
     assert.equal(await f.worker.labelSource(f.owner.id, source, state), 0);
-    assert.equal(f.stub.sent('POST', '/api/v1/content/write').length, writes);
+    assert.equal(f.stub.sent('POST', '/api/v1/content/batch-write').length, writes);
     assert.equal((await f.overlay.revisionsOf(f.owner.id, uri)).filter(row => row.actor === 'platform' && row.reason === revisions[0].reason).length, 1);
   });
 }

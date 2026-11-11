@@ -134,7 +134,7 @@ test('the forgotten page restores a project file through its namespace and prese
   assert.equal(await f.a.sessions.read(user, a), text); assert.equal(await f.b.sessions.read(user, b), text);
   assert.equal((await f.overlay.rejectedFingerprints(user, `${f.a.namespaceId}:entities`)).size, 0);
   assert.equal((await f.overlay.rejectedFingerprints(user, `${f.b.namespaceId}:entities`)).size, 1);
-  for (const request of f.stub.sent('POST', '/api/v1/content/write')) assert.ok(request.body.uri.startsWith(`viking://user/${request.user}/`));
+  for (const request of f.stub.sent('POST', '/api/v1/content/batch-write')) for (const operation of request.body.operations) assert.ok(operation.uri.startsWith(`viking://user/${request.user}/`));
 });
 
 test('equal session ids in personal and project namespaces retain their own conversation project identity', options, async t => {
