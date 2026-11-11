@@ -37,8 +37,8 @@ const PINNED = {
   edit: { input: "f23d742547f6375c2ce23c48771899bbc5840d2ba6a6f6f0cd71015baedc3f00", question: "a12063d8366ea6ca6aacd7149d82444e3b30da46e4144cb00c1712e0c185e247",
     dispatched: "ad7f9f54cd685f06b07cf45282ebb7ad5c5800c8f6bf4fecb4011bed0e17cc6e", identity: "0bc578048184082e3fc2113d37d75cf3fb4427a859907e56f342339a53f55452" },
 };
-/** The method-distillation SKILL.md before the switches (both copies). */
-const SKILL_SHA256 = "7ae51ed377416bd6a526360d7224417786893a80baedfac6ed3bbad270beb161";
+/** The method-distillation SKILL.md with every switch off (both copies). Repinned when the correction-precedence fix stated that only an approved method covers an instruction. */
+const SKILL_SHA256 = "e33b944b8697af9fd2a530d609a9ce18326a984635f83ca70af5bbb3cb0409ee";
 
 /* ------------------------------------------------------------------------------------------------------------- off: byte-identical */
 
