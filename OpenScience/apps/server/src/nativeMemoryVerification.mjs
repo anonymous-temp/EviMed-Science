@@ -225,16 +225,18 @@ export class NativeMemoryVerification {
     const authorities = new Map([...origins].filter(([print]) => !prior.has(print)).flatMap(([, sources]) => sources)
       .map(source => [JSON.stringify([source.engineSession, source.projectId, source.projectCreatedAt]), source]));
     const authority = authorities.size === 1 ? [...authorities.values()][0] : null;
-    await withMemorySummaryInvalidation(sessions, this.overlay, userId, file.uri, () => sessions.replace(userId, file.uri, next));
-    await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId ?? null,
+    const record = () => this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId ?? null,
       change: 'updated', actor: 'platform', reason, before: file.body, after: next,
       engineSession: authority?.engineSession ?? null,
       sourceProjectId: authority?.projectId ?? null,
       sourceProjectCreatedAt: authority?.projectCreatedAt ?? null });
-    if (this.instructionWriteCheck) {
+    const review = this.instructionWriteCheck ? async () => {
+      await record();
       next = await this.instructionWriteCheck(userId, file, next, origins, context);
-      if (next === null) return true;
-    }
+    } : null;
+    await withMemorySummaryInvalidation(sessions, this.overlay, userId, file.uri, () => sessions.replace(userId, file.uri, next), review);
+    if (!review) await record();
+    if (next === null) return true;
     await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId ?? null, body: next });
     await this.overlay.syncOrigins(userId, file.uri, { after: next });
     await this.overlay.inheritOrigins(userId, file.uri, origins);

@@ -189,3 +189,22 @@ test('material instructions in headings are checked and disagreements remain vis
     if (disagree) assert.equal(pending[0].text, poison);
   }
 });
+
+
+test('page edits and verification repairs are reviewed before a failing summary rebuild', options, async t => {
+  for (const path of ['page', 'verification']) {
+    const f = await fixture(t, { config: enabled }); const worker = workerFor(f);
+    const uri = f.seed('preferences/self/a.md', `- ${own}`);
+    await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'preferences', body: `- ${own}` });
+    let reviews = 0;
+    worker.pastedInstructionJudge = { check: async ({ candidates }) => { reviews++; return new Set(candidates.flatMap((c,i) => c.text === poison ? [i] : [])); } };
+    f.sessions.rebuildMemoryDirectory = async () => { throw Object.assign(new Error('summary failed'), { code: 'memory_summary_rebuild_failed' }); };
+    const write = path === 'page'
+      ? async () => { const record = await f.store.getRecord(f.userId, nativeFileId(uri)); return f.store.update(f.userId, record.id, { value: `- ${poison}`, expectedVersion: record.version }); }
+      : () => worker.verification.write(f.userId, { uri, type: 'preferences', body: `- ${own}` }, `- ${poison}`, 'verification_corrected');
+    await assert.rejects(write, { code: 'memory_summary_rebuild_failed' });
+    assert.equal(reviews, 1, path);
+    assert.equal(await f.sessions.read(f.userId, uri), null, path);
+    assert.ok((await f.overlay.revisionsOf(f.userId, uri)).some(r => r.reason === 'pasted_instruction'), path);
+  }
+});

@@ -1284,12 +1284,16 @@ export class NativeMemoryStore {
       .some(token => !nextTokens.has(token) && compact(oldUri.slice(oldUri.lastIndexOf('/')+1)).includes(compact(token))));
     if (pathRemoved) file.uri = await neutralMemoryUri({ userId, overlay: this.overlay, uri: oldUri, projectId: file.projectId,
       namespaceId: context.kind === 'geo-project' ? context.namespaceId : null, judge: this.rejectionJudge });
-    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.replace(userId, file.uri, next)));
-    const revision = await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId,...source });
-    if (this.instructionWriteCheck && actor === 'user') {
+    let revision;
+    const record = () => this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId,...source });
+    const review = this.instructionWriteCheck && actor === 'user' ? async () => {
+      revision = await record();
       next = await this.instructionWriteCheck(userId, file, next, context);
-      if (next === null) return;
-    }
+    } : null;
+    // Attribution runs after the bytes change and before summary maintenance can throw.
+    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.replace(userId, file.uri, next), review));
+    if (!review) revision = await record();
+    if (next === null) return;
     await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, body: next, projectId: file.projectId, sensitive: file.sensitive });
     await this.overlay.setSources(userId, file.uri, sourcesNamedIn(next));
     // A line the person took out leaves the index of origins with it; one they wrote names no conversation.
@@ -1612,8 +1616,9 @@ export class NativeMemoryStore {
     const had = new Set(statements(before).map(lineFingerprint));
     await this.overlay.reject(userId, rejectionType, uri, statements(live.body).filter((text) => !had.has(lineFingerprint(text))));
     await this.overlay.unreject(userId, rejectionType, removalLines(before));
-    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, before)));
-    const checkedBefore = this.instructionWriteCheck ? await this.instructionWriteCheck(userId, { ...live, uri, type: memoryType }, before, context) : before;
+    let checkedBefore = before;
+    const review = this.instructionWriteCheck ? async () => { checkedBefore = await this.instructionWriteCheck(userId, { ...live, uri, type: memoryType }, before, context); } : null;
+    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, before), review));
     await this.overlay.addRevision({ userId, uri, memoryType, change: "updated", actor: "user", reason: "undo", before: live.body, after: before, projectId: live.projectId,sourceProjectId:last.sourceProjectId??last.projectId,sourceProjectCreatedAt:last.sourceProjectCreatedAt??null });
     if (checkedBefore !== null) {
       await this.overlay.upsertFile({ userId, uri, memoryType, body: checkedBefore, projectId });
@@ -1639,11 +1644,9 @@ export class NativeMemoryStore {
   async #restoreText(userId, { uri, text, memoryType, projectId = null, revisionId, reason }) {
     const context = await this.#fileContext(userId, uri);
     if (context.kind === 'geo-project') projectId = context.projectId;
-    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, text)));
-    if (this.instructionWriteCheck) {
-      text = await this.instructionWriteCheck(userId, { uri, body: '', type: memoryType, projectId }, text, context);
-      if (text === null) return;
-    }
+    const review = this.instructionWriteCheck ? async () => { text = await this.instructionWriteCheck(userId, { uri, body: '', type: memoryType, projectId }, text, context); } : null;
+    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, text), review));
+    if (text === null) return;
     await this.overlay.unreject(userId, this.#rejectionType(context, memoryType), [...removalLines(text), titleOf(memoryType, uri, text)]);
     await this.overlay.upsertFile({ userId, uri, memoryType, body: text, projectId: projectId ?? undefined });
     if (projectId) await this.#engine(() => context.sessions.setTags(userId, uri, [`project=${projectId}`])).catch(() => {});

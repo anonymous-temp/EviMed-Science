@@ -966,12 +966,17 @@ export class NativeMemoryWorker {
       // If a rejected merge consumed another file, restore that pre-image too. Its deletion revision remains undoable.
       if (restoreDeleted) for (const file of removed) {
         if (await sessions.read(userId, file.uri) !== null) continue;
-        await withMemorySummaryInvalidation(sessions, this.overlay, userId, file.uri, () => sessions.replace(userId, file.uri, file.body));
+        const operations = { adds: [{ uri: file.uri, after: file.body }] };
+        const review = this.robustInstructions ? await this.#instructionOrigins({ userId }, operations, context, mergeOrigins) : null;
+        await withMemorySummaryInvalidation(sessions, this.overlay, userId, file.uri, () => sessions.replace(userId, file.uri, file.body),
+          review ? () => this.#holdInstructionLines(userId, operations, context, review, file.projectId) : null);
+        const restored = review ? await sessions.read(userId, file.uri) : file.body;
+        if (restored === null) continue;
         await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId,
-          actor: 'platform', change: 'added', reason: 'consolidation_unverified', before: null, after: file.body });
-        await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId, body: file.body });
+          actor: 'platform', change: 'added', reason: 'consolidation_unverified', before: null, after: restored });
+        await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId, body: restored });
         await this.overlay.inheritOrigins(userId, file.uri, new Map([...(origins.get(file.uri) ?? [])].map(([print, origin]) => [print, originalSources(origin)])));
-        await this.#afterWrite(userId, file.uri, file.type, { projectId: file.projectId, diffAfter: file.body, diffBefore: '', fresh: true, archiveUri: null, memoryContext: context, extraOrigins: mergeOrigins });
+        await this.#afterWrite(userId, file.uri, file.type, { projectId: file.projectId, diffAfter: restored, diffBefore: '', fresh: true, archiveUri: null, memoryContext: context, extraOrigins: mergeOrigins });
       }
     }
     return counts;
