@@ -5,6 +5,7 @@ import csv
 import io
 import json
 import re
+import subprocess
 import time
 import urllib.request
 from pathlib import Path
@@ -37,10 +38,11 @@ def formal(spec, reply):
     if kind == 'csv':
         return list(csv.reader(io.StringIO(reply.strip()))) == expected
     if kind == 'table':
-        for line in reply.splitlines():
-            if line.strip().startswith('|'):
-                return [s.strip() for s in line.strip().strip('|').split('|')] == expected
-        return False
+        rows = [[s.strip() for s in line.strip().strip('|').split('|')] for line in reply.splitlines() if line.strip().startswith('|')]
+        if len(rows) < 3 or rows[0] != expected:
+            return False
+        data = [row for row in rows[1:] if not all(re.fullmatch(r':?-+:?', c) for c in row)]
+        return all(len(row) == 3 and all(row) for row in data) and sorted(row[1] for row in data) == sorted(spec.get('sources', []))
     raise ValueError(kind)
 
 def packet(item, record):
@@ -74,6 +76,10 @@ def main():
     items.update({r['id']:r for r in json.loads((HERE/'pairs/controls.json').read_text())})
     target = args.run/'judged'; target.mkdir(exist_ok=True)
     key = args.key_file.read_text().strip()
+    price_module = (HERE.parents[2]/'packages/domain/src/metering.mjs').as_uri()
+    prices = json.loads(subprocess.check_output(['node', '--input-type=module', '-e',
+        'import { REFERENCE_PRICE_LIST as p } from '+json.dumps(price_module)+'; console.log(JSON.stringify(p))'], text=True))
+    price = prices['model']['qwen3.8-max']
     failures = 0
     for file in sorted((args.run/'records').glob('exam-*.json')):
         out = target/file.name
@@ -93,7 +99,9 @@ def main():
             failures += 1; out.write_text(json.dumps(dict(error=error_type))); continue
         behavior = code if item.get('code') else result.get('behavior') if item.get('behavior') else None
         run_ok = len(record.get('turns', [])) == 1 and all(t.get('run', {}).get('status') in ('succeeded','unverified') and not t.get('timedOut') and not t.get('error') for t in record['turns'])
-        verdict = dict(schema='l3b-score/1', id=item['id'], rep=record['rep'], model='qwen3.8-max', formal=code,
+        cached = usage.get('prompt_tokens_details', {}).get('cached_tokens', 0)
+        estimated_cny = (cached*price['cacheHit'] + max(0,usage.get('prompt_tokens',0)-cached)*price['cacheMiss'] + usage.get('completion_tokens',0)*price['output'])/1_000_000
+        verdict = dict(estimatedCostCny=estimated_cny, priceVersion=prices['version'], schema='l3b-score/1', id=item['id'], rep=record['rep'], model='qwen3.8-max', formal=code,
                        behavior=behavior, quality=result['quality'], runOk=run_ok,
                        passed=run_ok and result['quality'] and (behavior is not False),
                        preferencePresent=result['preferencePresent'], rationale=result.get('rationale'), usage=usage)

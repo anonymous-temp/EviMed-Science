@@ -11,6 +11,12 @@ class Scoring(unittest.TestCase):
         self.assertFalse(formal({'type':'prefix_lines','expected':['A:','B:']},'A:\nB: x'))
         self.assertTrue(formal({'type':'csv','expected':[['date','count'],['2026-01-01','3']]},'date,count\n2026-01-01,3'))
         self.assertFalse(formal({'type':'table','expected':['Claim','Source','Limit']},'| Claim | Limit | Source |'))
+    def test_table_requires_source_bound_rows(self):
+        spec={'type':'table','expected':['Claim','Source','Limit'],'sources':['A','B']}
+        header='| Claim | Source | Limit |\n|---|---|---|\n'
+        self.assertTrue(formal(spec,header+'| C | A | L |\n| D | B | M |'))
+        self.assertFalse(formal(spec,header+'Claims for A and B are discussed in prose.'))
+        self.assertFalse(formal(spec,header+'| C | B | L |\n| D | B | M |'))
     def test_blinding(self):
         item={'exam':'Question','quality':'Correct answer','behavior':{'principle':'P'},'code':None}
         p,_=packet(item,{'arm':'D','turns':[{'reply':'Answer'}],'memory':{}})

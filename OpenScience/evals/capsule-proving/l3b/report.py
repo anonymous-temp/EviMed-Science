@@ -28,7 +28,7 @@ def read(file, default=None):
     return json.loads(file.read_text()) if file.exists() else default
 
 def arm_report(root, arm):
-    out=root/f'l3b-{arm}-1'; rows=[]
+    out=root/f'l3b-{arm}-1'; rows=[]; judge_usage=dict(inputTokens=0,outputTokens=0,estimatedCostCny=0)
     learn=read(out/'learning-complete.json', {})
     methods=learn.get('state',{}).get('methods',[])
     trace=[]
@@ -43,6 +43,9 @@ def arm_report(root, arm):
         trace.append(dict(id=r['id'], methods=associated, learned=bool(associated), approved=any(m['status']=='approved' for m in associated), mounted=0, opened=0))
     for f in sorted((out/'records').glob('exam-*.json')):
         r=read(f); s=read(out/'judged'/f.name, {})
+        judge_usage['inputTokens'] += s.get('usage',{}).get('prompt_tokens',0)
+        judge_usage['outputTokens'] += s.get('usage',{}).get('completion_tokens',0)
+        judge_usage['estimatedCostCny'] += s.get('estimatedCostCny',0)
         mounted=[]; opened=[]
         for t in r['turns']:
             obs=t.get('methodObservation') or t.get('run') or {}
@@ -71,7 +74,7 @@ def arm_report(root, arm):
                 trace=trace, correctionsLearned=sum(t['learned'] for t in trace), correctionsApproved=sum(t['approved'] for t in trace),
                 correctionsMounted=sum(t['mounted']>0 for t in trace), correctionsOpened=sum(t['opened']>0 for t in trace),
                 memory=dict(profile=sum(bool(r['profile']) for r in paired), relevantPreference=sum(r['preferencePresent'] is True for r in paired), searched=sum(r['searched'] for r in paired),n=len(paired)),
-                usage=read(out/'account-usage.json'), learningComplete=bool(learn), complete=(out/'complete.json').exists(), rows=rows), scores, behavior, majority
+                usage=read(out/'account-usage.json'), judgeUsage=judge_usage, learningComplete=bool(learn), complete=(out/'complete.json').exists(), rows=rows), scores, behavior, majority
 
 def main():
     p=argparse.ArgumentParser(); p.add_argument('--root',type=Path,default=Path('/srv/evimed/runs')); p.add_argument('--out',type=Path)
@@ -83,8 +86,12 @@ def main():
         arms[a]['rep1VsA']=mcnemar({k:v for k,v in maps['A'].items() if k[1]==1},{k:v for k,v in maps[a].items() if k[1]==1})
         arms[a]['caseMajorityVsA']=mcnemar(majorities['A'],majorities[a])
     arms['C']['vsB']=mcnemar(maps['B'],maps['C'])
+    for a in 'BCD':
+        base={(r['id'],r['rep']):r['passed'] for r in arms['A']['rows'] if r['id'].startswith('U') and type(r['passed']) is bool}
+        candidate={(r['id'],r['rep']):r['passed'] for r in arms[a]['rows'] if r['id'].startswith('U') and type(r['passed']) is bool}
+        arms[a]['controlsVsA']=mcnemar(base,candidate)
     report=dict(arms=arms, uncertainty='Wilson and exact McNemar on 36 repeated exams are descriptive: repetitions share one account per arm and 12 task pairs. Report rep-1 and case-majority sensitivities; population inference needs independent accounts. C versus B isolates added method learning; C versus A combines memory and learning.',
-                judgeCost='Qwen token usage is saved per verdict; provider-billed CNY is not returned. DeepSeek account ledger includes learning; shared balance delta is a conservative envelope, not lane-specific attribution.')
+                judgeCost='Qwen token usage and CNY estimated from the repository reference price list are saved per verdict; provider-billed CNY is not returned. DeepSeek account ledger includes learning; shared balance delta is a conservative envelope, not lane-specific attribution.')
     target=args.out or args.root/'l3b-report.json'; target.write_text(json.dumps(report,indent=2)+'\n')
     for a,r in arms.items():
         print(a, 'paired',r['paired'],'controls',r['controls'],'unknown',r['unknown'],'vsA',r.get('vsA'))

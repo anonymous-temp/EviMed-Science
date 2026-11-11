@@ -21,6 +21,20 @@ class L3Artifacts(unittest.TestCase):
             result=textio.pptx_content_text(p)
             self.assertNotIn('01 / 01',result); self.assertNotIn('88',result)
             self.assertIn('01',result); self.assertIn('99%',result)
+    def test_sequential_section_headers_after_cover_are_not_measurements(self):
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'deck.pptx'
+            ns='xmlns:p="'+textio.NS['p']+'" xmlns:a="'+textio.NS['a']+'"'
+            with zipfile.ZipFile(p,'w') as z:
+                z.writestr('ppt/presentation.xml',f'<p:presentation {ns}><p:sldSz cx="1000" cy="1000"/></p:presentation>')
+                z.writestr('ppt/slides/slide1.xml',f'<p:sld {ns}/>')
+                for i in range(1,4):
+                    text=f'{i:02d}\u3000Section with 44% accuracy'
+                    z.writestr(f'ppt/slides/slide{i+1}.xml',f'<p:sld {ns}><p:sp><p:spPr><a:xfrm><a:off x="1" y="20"/><a:ext cx="800" cy="50"/></a:xfrm></p:spPr><p:txBody><a:p><a:r><a:t>{text}</a:t></a:r></a:p></p:txBody></p:sp></p:sld>')
+            result=textio.pptx_content_text(p)
+            self.assertNotIn('01',result)
+            self.assertNotIn('02',result)
+            self.assertIn('44%',result)
     def test_standalone_ordered_numbers_are_three_items(self):
         self.assertEqual(checks._items('1\n\nFirst\n\n2\n\nSecond\n\n3\n\nThird'),3)
         self.assertEqual(checks._items('1\nFirst\n7\nSecond'),0)

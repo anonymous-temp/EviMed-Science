@@ -71,6 +71,21 @@ def pptx_content_text(path: Path) -> str:
     with zipfile.ZipFile(path) as archive:
         size = _slide_size(archive)
         order = _slide_order(archive)
+        # Some decks number the section headings after an unnumbered cover. Require a consecutive
+        # ordinal sequence across slides and explicit heading typography, not a numeric value whitelist.
+        headings = []
+        for index, name in enumerate(order, 1):
+            root = ET.fromstring(archive.read(name))
+            for shape in root.findall(".//p:sp", NS):
+                text = " ".join(t.text or "" for t in shape.findall(".//a:t", NS)).strip()
+                offset = shape.find(".//a:xfrm/a:off", NS)
+                extent = shape.find(".//a:xfrm/a:ext", NS)
+                label = re.match(r"^(\d{2})(?:\u3000|[.、)]\s+|\s+[|｜]\s+)(\D.*)$", text)
+                if label and size and offset is not None and extent is not None and int(offset.get("y", 0)) + int(extent.get("cy", 0)) <= size[1] * .12:
+                    headings.append((index, int(label[1]), text, label[2]))
+        numbered = {text: remainder for index, ordinal, text, remainder in headings} if len(headings) >= 3 and (
+            [h[1] for h in headings] == list(range(1, len(headings) + 1)) and
+            len({index - ordinal for index, ordinal, _, _ in headings}) == 1) else {}
         for index, name in enumerate(order, 1):
             root = ET.fromstring(archive.read(name))
             for shape in root.findall(".//p:sp", NS):
@@ -87,7 +102,7 @@ def pptx_content_text(path: Path) -> str:
                 label = re.fullmatch(r"(?:page\s*|第\s*)?0*(\d+)(?:\s*(?:/|of)\s*0*(\d+))?\s*页?", text, re.I)
                 if margin and label and int(label[1]) == index and (label[2] is None or int(label[2]) == len(order)):
                     continue
-                chunks.append(text)
+                chunks.append(numbered.get(text, text))
             # Tables are outside p:sp and still contain numerical claims.
             for table in root.findall(".//a:tbl", NS):
                 chunks.append(" ".join(t.text or "" for t in table.findall(".//a:t", NS)))

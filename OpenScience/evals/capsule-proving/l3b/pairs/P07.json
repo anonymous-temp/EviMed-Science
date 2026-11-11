@@ -17,6 +17,10 @@
       "Claim",
       "Source",
       "Limit"
+    ],
+    "sources": [
+      "Reed-A",
+      "Reed-B"
     ]
   }
 }
