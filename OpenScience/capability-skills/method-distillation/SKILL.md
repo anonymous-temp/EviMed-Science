@@ -229,6 +229,8 @@ it carries: it is not on file to amend or merge into, and evidence that would
 bring its rule back is `no_change` with that reason. Then choose exactly one
 `operation`:
 
+Coverage means a method is in service (`approved`), not merely that its text exists. A `candidate` is not covering the person’s instruction. When a new correction says what a candidate already says, choose `amend`, name its current `targetMethodId` and `baseDigest`, and preserve its text if the instruction requires no wording change. Its status reason explains why it was held; do not treat that hold as a retirement or silently discard the correction as `no_change`. A retired method keeps the stop rule above.
+
 - `create` — nothing on file covers this situation. `baseDigest` is `null`.
 - `amend` — one method on file covers the situation and is incomplete or wrong
   in a way this evidence fixes. Name it in `targetMethodId` and pin the exact
@@ -238,7 +240,7 @@ bring its rule back is `no_change` with that reason. Then choose exactly one
   surviving method in `targetMethodId`, list every method folded into it in
   `mergedMethodIds`, and pin `baseDigest`.
 - `no_change` — the right answer, and a common one. Choose it when the evidence
-  is a one-off, when it is already covered by a method on file, when it is a
+  is a one-off, when it is already covered by an approved method on file, when it is a
   fact rather than a procedure, or when it is too thin to state without
   inventing the parts you did not observe. Give `reason` in full; when a method
   on file already covers it, name that method in `targetMethodId`, pin

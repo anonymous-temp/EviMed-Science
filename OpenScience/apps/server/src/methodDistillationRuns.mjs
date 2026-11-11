@@ -43,7 +43,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 import {
-  METHOD_EVIDENCE_QUOTE_LENGTH, METHOD_OPERATIONS, METHOD_ROLES, TRAJECTORY_ANCHOR_RADIUS, isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName, methodScientific,
+  METHOD_EVIDENCE_QUOTE_LENGTH, METHOD_OPERATIONS, METHOD_ROLES, TRAJECTORY_ANCHOR_RADIUS, isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName, methodContentDigest, methodScientific,
   parseDependsOn, parseSkillFrontmatter, projectMethodResultLinks, rootSessionOf, scopeRunTranscript, sourcePrivacyOf, SKILL_AUTHORING_LIMITS, steeredMessages, trajectoryDigest, transcriptMessageText, unwrapUserWrappers,
 } from "@evimed/domain";
 import { readArtifactShapes } from "./artifactShapes.mjs";
@@ -584,7 +584,7 @@ export function buildDistillationInput(input) {
  */
 function relatedMethodEntry(method) {
   const status = method.payload?.status ?? method.status ?? null;
-  const statusReason = status === "retired" ? (method.payload?.statusReason ?? method.statusReason ?? null) : null;
+  const statusReason = method.payload?.statusReason ?? method.statusReason ?? null;
   const digest = method.payload?.contentDigest ?? method.digest;
   // What later became of the results produced under the body it holds now, and the scope it declared: so a lesson
   // that finds a counterexample narrows `not_when` of the method that has it, and never states a rule the method's
@@ -1151,7 +1151,29 @@ export class MethodDistillationRuns {
     if (!METHOD_OPERATIONS.includes(operation)) {
       throw new HttpError(422, "method_candidate_invalid", `Unknown operation ${JSON.stringify(operation)}.`);
     }
-    if (operation === "no_change") return { operation, methodId: undefined };
+    if (operation === "no_change") {
+      // Text on file is not coverage while it is out of service. The model supplies the identity and exact pinned
+      // text (the existing no_change contract); no keyword or similarity rule guesses what the lesson meant.
+      const targetId = candidate?.targetMethodId;
+      if (targetId && job.payload?.trigger === 'correction' && lessonSignal({ feedback: job.payload?.feedback,
+        corrections: Number(job.payload?.steeredCorrections ?? 0) > 0 ? [{}] : [], trigger: 'correction' }) === 'researcher') {
+        const projectId = job.payload?.sourceProjectId ?? job.projectId;
+        const policy = context.policy ?? (this.contextProvenance ? await this.contextProvenance.policyFor({ userId: job.userId, id: projectId }) : null);
+        const target = this.contextProvenance ? await this.contextProvenance.methodFor(job.userId, targetId, policy ?? { kind: 'owned', ownerId: job.userId })
+          : await this.learning.getMethod(job.userId, targetId).catch(() => null);
+        const hasConflict = target?.payload?.learning?.relations?.some(relation => relation.type === 'conflicts_with' && !relation.resolved);
+        if (target?.payload?.status === 'candidate' || target?.payload?.status === 'approved' && hasConflict) {
+          const parsed = parseSkillFrontmatter(String(output.skill ?? output['SKILL.md'] ?? ''));
+          const digest = methodContentDigest({ ...parsed, files: candidate.files ?? target.payload.files }, text => createHash('sha256').update(text).digest('hex'));
+          if (parsed.issues.length || candidate.baseDigest !== target.payload.contentDigest || digest !== target.payload.contentDigest) {
+            throw new HttpError(409, 'method_candidate_stale', 'A covered method must name the exact current text before it can be restored.');
+          }
+          return this.applyCandidate(job, run, { ...output, candidate: { ...candidate, operation: 'amend',
+            ...(target.payload.files ? { files: target.payload.files } : {}) } }, context);
+        }
+      }
+      return { operation, methodId: undefined };
+    }
     if (!methodSourceAllowsLearning(run)) throw new HttpError(409, 'distillation_run_unavailable', 'Original private memory sources cannot teach a reusable method.');
     // The conversation this lesson comes from was over before the account reset its memory: what the reset deleted is not
     // written back by a lesson that was already on its way (review M-11).
@@ -1196,10 +1218,9 @@ export class MethodDistillationRuns {
     // this whole design claims is structural, that generation cannot approve
     // itself, had a one-token bypass.
     //
-    // A correction-triggered distillation is not an exception. The *trigger* is
-    // external, and that is already recorded in `feedbackEventIds`; the *text*
-    // is still the model's, and text nobody has read yet goes through the gate.
-    // Explicit origin is reserved for a method a researcher authored, which
+    // A correction-triggered distillation still has inferred origin. Its external trigger and researcher signal
+    // grant correction precedence for the exact saved body, separately from origin; the candidate cannot claim that
+    // signal or transfer its authority to a later system rewrite. Explicit origin is reserved for a method a researcher authored, which
     // arrives through a route that carries their session.
     //
     // `safetyRelated` is the run's own claim and buys one thing only: the
@@ -1236,6 +1257,9 @@ export class MethodDistillationRuns {
       ...(context.step ? { distillationStep: context.step } : {}),
     };
     const pinned = context.dependenciesFromFrontmatter ? parseDependsOn(parsed.frontmatter?.metadata?.depends_on).dependencies : [];
+    // Only the externally queued correction and its researcher signal grant precedence. Candidate output cannot
+    // claim it, and a consolidation copying provenance cannot inherit it for another body.
+    const personCorrection = job.payload?.trigger === 'correction' && signal === 'researcher';
     // Only what the proposal itself attaches. `output.files` is the delivered
     // package — SKILL.md, method-candidate.json, the notes — and reading it as
     // the method's scripts made every candidate a method whose attachments sat
@@ -1276,6 +1300,7 @@ export class MethodDistillationRuns {
         body: parsed.body,
         ...(files ? { files } : {}),
         provenance,
+        personCorrection,
         dependencies: candidate?.dependencies ?? pinned,
         // The researcher's line, cleaned by the service; a candidate without
         // one is named on the next consolidation pass.
@@ -1313,6 +1338,7 @@ export class MethodDistillationRuns {
     const evidence = unionEvidence(sources.flatMap((method) => (Array.isArray(method.payload?.provenance?.evidence) ? method.payload.provenance.evidence : [])), verified.kept);
     const amended = await this.learning.amendMethod(job.userId, targetId, {
       expectedRevision: target.revision,
+      personCorrection,
       frontmatter: parsed.frontmatter,
       body: parsed.body,
       ...(files ? { files } : {}),

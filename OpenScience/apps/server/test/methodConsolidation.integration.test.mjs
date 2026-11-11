@@ -211,3 +211,27 @@ test("on a real ledger a merge keeps its originals in force until the merged met
   const rolled = await h.learning.rollback(h.owner, one.id, { expectedRevision: stoppedOne.revision, targetRevision: stoppedOne.revision - 1 });
   assert.equal(rolled.payload.status, "approved");
 });
+
+test('L2 correction precedence and its undo commit together on the real ledger, including a readable held reason', options, async () => {
+  const h = await harness();
+  const older = await h.make('keep-date-format-consistent', 'axis-a');
+  const corrected = await h.make('dated-terse-replies', 'axis-a');
+  for (const [source, target] of [[older, corrected], [corrected, older]]) {
+    await h.learning.recordRelations(h.owner, source.id, [{ type: 'conflicts_with', target: target.id,
+      proposedBy: 'consolidate:l2-recording', evidence: 'The generic format and requested first line disagree.' }]);
+  }
+  const before = await h.learning.getMethod(h.owner, corrected.id);
+  const amended = await h.learning.amendMethod(h.owner, corrected.id, { expectedRevision: before.revision,
+    frontmatter: before.payload.frontmatter, body: sections('- Put the date on the first line and keep the reply short.'),
+    personCorrection: true, provenance: { trigger: 'correction', signal: 'researcher', feedbackEventIds: ['l2-correction'] } });
+  assert.equal(amended.payload.status, 'approved');
+  assert.deepEqual((await h.learning.approvedMethods(h.owner)).map(method => method.id), [corrected.id]);
+  const held = await h.learning.getMethod(h.owner, older.id);
+  assert.equal(held.payload.status, 'candidate');
+  assert.ok(held.payload.statusReason.includes('dated-terse-replies'));
+  const saved = await h.documents.history(h.owner, 'method', held.id, { limit: 100 });
+  assert.ok(saved.some(revision => revision.payload.status === 'candidate' && revision.payload.statusReason === held.payload.statusReason));
+  const restored = await h.learning.rollback(h.owner, held.id, { expectedRevision: held.revision, targetRevision: older.revision });
+  assert.equal(restored.payload.status, 'approved');
+  assert.equal((await h.learning.getMethod(h.owner, corrected.id)).payload.status, 'candidate');
+});
