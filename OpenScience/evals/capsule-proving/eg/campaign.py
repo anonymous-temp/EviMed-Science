@@ -27,15 +27,19 @@ def status(message):
 
 
 def check_budget():
-    b = json.loads((RUNS / "eg-budget-20261111.json").read_text())
-    current = float((RUNS / "BUDGET-LAST").read_text().strip().split()[-1])
-    age = (datetime.now(timezone.utc) - datetime.fromisoformat(b["startedAt"].replace("Z", "+00:00"))).total_seconds()
-    meter = read(RUNS / "eg-spend-20261111.json")
-    fresh = meter and not meter["errors"] and not meter["missing"] and (datetime.now(timezone.utc) - datetime.fromisoformat(meter["at"].replace("Z", "+00:00"))).total_seconds() < 300
-    exhausted = meter["estimatedUpperCny"] >= 330 if fresh else b["balance"] - current >= 340
-    if exhausted or current < 150 or age > 12 * 3600:
-        status(f"STOP budget/time guard: initial={b['balance']} current={current} elapsedSeconds={age:.0f}")
-        raise SystemExit(3)
+    while True:
+        b = json.loads((RUNS / "eg-budget-20261111.json").read_text())
+        current = float((RUNS / "BUDGET-LAST").read_text().strip().split()[-1])
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(b["startedAt"].replace("Z", "+00:00"))).total_seconds()
+        meter = read(RUNS / "eg-spend-20261111.json")
+        fresh = meter and not meter["errors"] and not meter["missing"] and (datetime.now(timezone.utc) - datetime.fromisoformat(meter["at"].replace("Z", "+00:00"))).total_seconds() < 300
+        if (meter and meter["estimatedUpperCny"] >= 330) or current < 150 or age > 12 * 3600:
+            status(f"STOP budget/time guard: initial={b['balance']} current={current} elapsedSeconds={age:.0f}")
+            raise SystemExit(3)
+        if fresh:
+            return
+        status("WAIT incomplete lane accounting; no new phase/slot admitted")
+        time.sleep(30)
 
 
 def run(argv, extra_env=None):
@@ -87,7 +91,7 @@ def wait_children(children):
 
 REPORT.mkdir(exist_ok=True)
 status("supervisor active; phase order G1 -> G10 -> G3")
-g1_dirs = [RUNS / "g1pp-eg-2", RUNS / "g1pp-eg-3"]
+g1_dirs = [RUNS / "g1pp-eg-4", RUNS / "g1pp-eg-5"]
 sample = read(SAMPLE)
 desired = {u: sum(q["user"] == u for q in sample["questions"]) for u in sample["users"]}
 if not read(REPORT / "g1.json") or not read(REPORT / "g1.json").get("complete"):

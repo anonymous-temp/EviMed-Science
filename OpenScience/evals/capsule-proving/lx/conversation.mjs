@@ -16,6 +16,8 @@ export const learnedDirectory = methodId => `_lm${createHash('sha256').update(St
 
 /** @param {any} api @param {string} projectId @param {string} name */
 export async function ensureProject(api, projectId, name) {
+  // The catch-all is provisioned by the product; creating a named substitute changes memory scope.
+  if (projectId === 'default') return 'default';
   const created = await api.call('POST', '/api/projects', { id: projectId, name: name ?? projectId }, { project: null });
   if (created.status === 200 || created.status === 201) return 'created';
   const list = await api.call('GET', '/api/projects', undefined, { project: null });

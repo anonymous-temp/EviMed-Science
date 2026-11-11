@@ -45,9 +45,12 @@ def observed(answer):
         searches.append({'querySha256': hashlib.sha256(query.encode()).hexdigest(), 'hits': len(hits), 'memoryPaths': paths,
                          'appendedTextChars': suffix_chars, 'jsonObjects': len(decoded), 'isError': call.get('isError', False)})
     usage = answer.get('usage', {})
-    opening = answer.get('opening', {}).get('profileBlock', '')
+    native = answer.get('opening', {}).get('profileBlock') or ''
+    resident = answer.get('opening', {}).get('residentBlock') or ''
+    opening = native + '\n' + resident
     result = {'openingChars': len(opening), 'openingSha256': hashlib.sha256(opening.encode()).hexdigest(),
-              'openingHasAvailableMemories': '<available-memories>' in opening, 'calls': len(calls),
+              'nativeProfileChars': len(native), 'residentMemoryChars': len(resident),
+              'openingHasAvailableMemories': '<available-memories>' in native, 'calls': len(calls),
               'memoryCalls': sum(c.get('name', '').startswith('mcp__openviking__') for c in calls), 'searches': searches,
               'inputTokens': usage.get('promptTokens', usage.get('inputTokens')), 'outputTokens': usage.get('completionTokens', usage.get('outputTokens')),
               'wallMs': answer.get('wallMs', answer.get('ms'))}
@@ -80,7 +83,7 @@ def main():
                       'bothSearched': bool(a['searches'] and b['searches']),
                       'querySequenceEqual': [s['querySha256'] for s in a['searches']] == [s['querySha256'] for s in b['searches']],
                       'resultPathJaccard': len(ap & bp) / len(ap | bp) if ap | bp else None})
-    metrics = ['openingChars', 'calls', 'memoryCalls', 'inputTokens', 'outputTokens', 'wallMs']
+    metrics = ['openingChars', 'nativeProfileChars', 'residentMemoryChars', 'calls', 'memoryCalls', 'inputTokens', 'outputTokens', 'wallMs']
     summary = {k: {arm: mean(p[arm][k] for p in pairs if p[arm][k] is not None) if any(p[arm][k] is not None for p in pairs) else None
                    for arm in ['engine', 'product']} for k in metrics}
     both = [p for p in pairs if p['bothSearched']]

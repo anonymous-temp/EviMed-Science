@@ -8,11 +8,16 @@ import { Api, registerAccount } from '../../general-tasks/runner/cell.mjs';
 import { ensurePostgres, ensureDatabase, startHarness, stopHarness } from '../../general-tasks/runner/run.mjs';
 
 export const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-export function profileOpening(request) {
+function requestContext(request) {
   const text = value => typeof value === 'string' ? value : Array.isArray(value) ? value.map(v => v.text ?? '').join('\n') : '';
-  const context = [text(request.system), ...(request.messages ?? []).map(m => text(m.content))].join('\n');
+  return [text(request.system), ...(request.messages ?? []).map(m => text(m.content))].join('\n');
+}
+export function profileOpening(request) {
   // Guidance mentions the bare tag as an example; only the plugin's attributed profile block is an opening.
-  return (context.match(/<openviking-context\s+source="profile"[^>]*>[\s\S]*?<\/openviking-context>/g) ?? []).join('\n');
+  return (requestContext(request).match(/<openviking-context\s+source="profile"[^>]*>[\s\S]*?<\/openviking-context>/g) ?? []).join('\n');
+}
+export function residentOpening(request) {
+  return (requestContext(request).match(/<evimed-memory\s+[^>]*>[\s\S]*?<\/evimed-memory>/g) ?? []).join('\n');
 }
 export const read = async (file, fallback = null) => { try { return JSON.parse(await fs.readFile(file, 'utf8')); } catch (e) { if (e.code === 'ENOENT') return fallback; throw e; } };
 export async function save(file, value) {
@@ -84,13 +89,21 @@ export async function setup(args) {
     budget = { startedAt: new Date().toISOString(), balance: Number(line.trim().split(/\s+/).at(-1)), capCny: 350, deadlineHours: 12 };
     await save(budgetFile, budget);
   }
+  // Fresh databases need their migrations before the meter can read them. Admit no user turn until accounting is complete.
+  const meterDeadline = Date.now() + 180_000;
+  for (;;) {
+    const spend = await read('/srv/evimed/runs/eg-spend-20261111.json');
+    if (spend && Date.now() - Date.parse(spend.at) < 300_000 && !spend.errors.length && !spend.missing.length) break;
+    if (Date.now() > meterDeadline) { await close(); throw new Error('Lane accounting not ready; no user turn admitted'); }
+    status('waiting for complete lane accounting before user turns'); await sleep(10_000);
+  }
   const guard = setInterval(async () => {
     try {
       const balance = Number((await fs.readFile('/srv/evimed/runs/BUDGET-LAST', 'utf8')).trim().split(/\s+/).at(-1));
       const spend = await read('/srv/evimed/runs/eg-spend-20261111.json');
       const metered = spend && Date.now() - Date.parse(spend.at) < 300_000 && !spend.errors.length && !spend.missing.length;
-      const exhausted = metered ? spend.estimatedUpperCny >= 330 : budget.balance - balance >= 340;
-      if (exhausted || balance < 150 || Date.now() - Date.parse(budget.startedAt) > 12 * 3600_000) {
+      const exhausted = spend?.estimatedUpperCny >= 330;
+      if (!metered || exhausted || balance < 150 || Date.now() - Date.parse(budget.startedAt) > 12 * 3600_000) {
         clearInterval(guard); status(`STOP budget/time guard: currentBalance=${balance} laneUpperCny=${spend?.estimatedUpperCny ?? 'unavailable'} metered=${metered}`);
         await close(); process.exit(3);
       }

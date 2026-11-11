@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { runConversation } from '../../lx/conversation.mjs';
+import { runConversation, ensureProject } from '../../lx/conversation.mjs';
+
+test('the product catch-all never becomes a newly created named project', async () => {
+  assert.equal(await ensureProject({ call: async () => { throw new Error('The product provisions its catch-all'); } }, 'default'), 'default');
+});
 
 async function timeoutConversation(continueAfterTimeout) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'eg-conversation-'));

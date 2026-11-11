@@ -52,7 +52,7 @@ try {
     const identity = await account(ctx.h, `${dir}/account.json`, 'eg10');
     if (args.arm === 'seeded' && !await read(`${dir}/seed.json`)) {
       const statements = unit.cases.flatMap(c => byId.get(c.id).statements.map(s => s.text));
-      const record = await runConversation({ ...identity, projectId: 'ordinary', sessionId: `seed-${unit.id.replaceAll('+', '-')}`,
+      const record = await runConversation({ ...identity, projectId: 'default', sessionId: `seed-${unit.id.replaceAll('+', '-')}`,
         first: statements.join('\n'), next: () => null, maxTurns: 1, automated: false, memoryBusyRetryMs: 180_000, dataDir: ctx.dataDir, outDir: `${dir}/seed`, timeoutMs: args.timeoutMin * 60_000, log: ctx.status });
       const commits = await settle(ctx.h, identity.userId, ctx.status);
       const snapshot = await ipc(ctx.h, 'lxEGSnapshot', { userId: identity.userId });

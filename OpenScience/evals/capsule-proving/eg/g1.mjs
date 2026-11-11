@@ -5,7 +5,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { runConversation } from '../lx/conversation.mjs';
 import { loadCases } from '../run/cases.mjs';
-import { argsOf, setup, account, read, save, settle, ipc, profileOpening } from './common.mjs';
+import { argsOf, setup, account, read, save, settle, ipc, profileOpening, residentOpening } from './common.mjs';
 
 const args = argsOf(process.argv.slice(2));
 const sample = await read(args.selection);
@@ -15,7 +15,7 @@ const cases = await loadCases({ set: 'synthetic-users', split: 'dev', dataDir: a
 const ctx = await setup(args);
 const runId = path.basename(args.out);
 await save(`${args.out}/run.json`, { runId, set: 'synthetic-users', split: 'dev', arm: 'product-path', commit: ctx.commit, engine: await read(`${args.out}/engine.json`),
-  flags: { lockIsolation: true, safetyNotes: false, conversationDriver: 'LX', generatedAssistant: true, historyTimestamps: 'wall-clock' },
+  flags: { lockIsolation: true, safetyNotes: false, conversationDriver: 'LX', generatedAssistant: true, historyTimestamps: 'wall-clock', unscopedProjectId: 'default' },
   options: { caseIds: users }, model: { answer: 'deepseek-flash', thinking: 'enabled' }, selection: args.selection });
 
 async function observeAnswer(record, q, since) {
@@ -36,7 +36,7 @@ async function observeAnswer(record, q, since) {
   const firstCopy = `${args.out}/cases/${q.user}/conversations/${q.qid}/first-request.json`;
   if (first) await save(firstCopy, first);
   const opening = first ? profileOpening(first) : '';
-  return { qid: q.qid, caseId: q.user, arm: 'product-path', question: q.text, asOf: q.asOf, answer: turn.reply, opening: { profileBlock: opening }, toolCalls,
+  return { qid: q.qid, caseId: q.user, arm: 'product-path', question: q.text, asOf: q.asOf, answer: turn.reply, opening: { profileBlock: opening, residentBlock: first ? residentOpening(first) : '' }, toolCalls,
     usage: { ...(turn.run?.usage ?? {}), promptTokens: turn.run?.usage?.inputTokens ?? 0, completionTokens: turn.run?.usage?.outputTokens ?? 0,
       cachedTokens: turn.run?.usage?.cachedInputTokens ?? 0 }, runId: turn.runId, status: turn.run?.status, wallMs: turn.wallMs,
     evidence: { firstRequest: first ? firstCopy : null, availableTools: first?.tools?.map(t => t.function?.name ?? t.name) ?? [],
@@ -53,7 +53,7 @@ try {
     const selected = sample.questions.filter(q => q.user === item.caseId);
     const max = Math.max(...selected.map(q => q.checkpoint));
     const converse = async (key, texts, project, onTurn = null) => {
-      const projectId = project?.id ?? 'ordinary';
+      const projectId = project?.id ?? 'default';
       const previous = await read(`${dir}/conversations/${key}.json`);
       if (previous) await save(`${dir}/conversation-attempts/${key}-${previous.startedAt.replaceAll(':', '-')}.json`, previous);
       if (activeProject && activeProject !== projectId) { identity.api.project = activeProject; await identity.api.call('POST', '/api/commands/stop_runtime', {}); }

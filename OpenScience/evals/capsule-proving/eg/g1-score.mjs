@@ -6,7 +6,7 @@ import { scoreRun, questionAnchors } from '../run/score.mjs';
 import { containsAnchor } from '../run/scoreChecks.mjs';
 import { answerTrace, buildJudgePacket, judgePackets, mergeJudgeResults, rowKey } from '../run/judgePackets.mjs';
 import { createTranscriptIndex } from '../run/baselines.mjs';
-import { read, save, profileOpening } from './common.mjs';
+import { read, save, profileOpening, residentOpening } from './common.mjs';
 
 const args = {};
 for (let i = 2; i < process.argv.length; i += 2) args[process.argv[i].slice(2)] = process.argv[i + 1];
@@ -23,8 +23,8 @@ for (const user of sourceRun.options.caseIds) {
     const answer = await read(`${args.run}/cases/${user}/answer-records/${q.qid}.json`);
     if (!answer) continue;
     const first = answer.evidence?.firstRequest && await read(answer.evidence.firstRequest);
-    normalized.push({ ...answer, opening: { ...answer.opening, profileBlock: first ? profileOpening(first) : '' },
-      openingExtractionVersion: 2, usage: { ...answer.usage, promptTokens: answer.usage.promptTokens ?? answer.usage.inputTokens ?? 0,
+    normalized.push({ ...answer, opening: { ...answer.opening, profileBlock: first ? profileOpening(first) : '', residentBlock: first ? residentOpening(first) : '' },
+      openingExtractionVersion: 3, usage: { ...answer.usage, promptTokens: answer.usage.promptTokens ?? answer.usage.inputTokens ?? 0,
         completionTokens: answer.usage.completionTokens ?? answer.usage.outputTokens ?? 0, cachedTokens: answer.usage.cachedTokens ?? answer.usage.cachedInputTokens ?? 0 } });
   }
   for (const answer of normalized) normalizedAnswers.set(answer.qid, answer);
@@ -45,7 +45,9 @@ for (const sq of selected) {
   const anchors = questionAnchors({ gold, skeleton: await read(`${args.data}/dev/${sq.user}/skeleton.json`) }, q);
   row.traceLegacy = row.trace;
   row.trace = { ...answerTrace({ ...answer, toolCalls: answer.toolCalls.filter(c => /^mcp__openviking__(search|read|list)$/.test(c.name)) }, snapshot, anchors),
-    inOpening: anchors.some(a => containsAnchor(answer.opening.profileBlock, a)), storageSnapshot: perQuestion ? 'pre-question' : 'checkpoint-only' };
+    inNativeProfile: anchors.some(a => containsAnchor(answer.opening.profileBlock, a)),
+    inResidentMemory: anchors.some(a => containsAnchor(answer.opening.residentBlock, a)),
+    inOpening: anchors.some(a => containsAnchor(`${answer.opening.profileBlock}\n${answer.opening.residentBlock}`, a)), storageSnapshot: perQuestion ? 'pre-question' : 'checkpoint-only' };
   if (!old) continue;
   const input = await read(`${args.data}/dev/${sq.user}/input.json`);
   const sessions = [];

@@ -18,9 +18,10 @@ The engine's actual mounted templates and image are recorded independently.
 `budget-meter.sh` records account charges, conservatively prices direct engine
 extraction tokens at uncached peak rates, and deduplicates Qwen judge requests.
 The guard stops at CNY 330 plus a CNY 20 reserve for unobserved small charges,
-or twelve hours from the initial snapshot. If the meter is stale or incomplete,
-the earlier conservative shared-balance guard applies. Shared balance decline
-includes other lanes and is reported separately.
+or twelve hours from the initial snapshot. Stale or incomplete accounting stops
+active user turns and holds new admissions. A new database must finish its
+migrations and become visible to the meter before any source turn is sent.
+Shared balance decline includes other lanes and is reported separately.
 
 Order: G1, then G10, then G3. Do not start a new batch below CNY 400 balance.
 
@@ -55,6 +56,12 @@ These are attended simulated people on isolated, freshly registered accounts,
 as in LX. An automated run is deliberately excluded from memory admission.
 The initial `g1pp-eg-1` smoke incorrectly used automated turns and is invalid;
 it is retained separately and excluded from scores.
+The subsequent `g1pp-eg-2/3` pilot mistakenly mapped unscoped conversations to
+a named `ordinary` project. That changes project-card and write scope compared
+with the engine's `default` catch-all, so its four probes are also excluded
+from paired inference and all its costs retained. The corrected `g1pp-eg-4/5`
+runs use fresh accounts and the same frozen v3 questions, preserving explicit
+source projects and mapping unscoped conversations to the actual `default`.
 
 Progress, stable dispatch ids, per-turn partial records, full compressed
 transcripts, copied first provider requests, exact tool outputs, checkpoint

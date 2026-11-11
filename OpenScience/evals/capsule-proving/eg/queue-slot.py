@@ -30,10 +30,14 @@ while True:
     meter_file = Path("/srv/evimed/runs/eg-spend-20261111.json")
     meter = json.loads(meter_file.read_text()) if meter_file.exists() else None
     fresh = meter and not meter["errors"] and not meter["missing"] and (datetime.now(timezone.utc) - datetime.fromisoformat(meter["at"].replace("Z", "+00:00"))).total_seconds() < 300
-    exhausted = meter["estimatedUpperCny"] >= 330 if fresh else budget["balance"] - balance >= 340
+    exhausted = meter and meter["estimatedUpperCny"] >= 330
     if balance < 400 or exhausted or elapsed > 12 * 3600:
         status(f"STOP budget/time guard while queued: balance={balance}")
         raise SystemExit(3)
+    if not fresh:
+        status("waiting for complete lane accounting; no slot admitted")
+        time.sleep(30)
+        continue
     slots = set()
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit():

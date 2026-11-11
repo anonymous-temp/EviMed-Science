@@ -60,7 +60,7 @@ function comparison(rows) {
   const steps = Object.fromEntries(stepNames.map(step => [step, {
     engine: prop(rows.map(r => failedStep(r.engine) === step)), product: prop(rows.map(r => failedStep(r.product) === step)),
     paired: pairedBinary(rows.map(r => Number(failedStep(r.product) === step) - Number(failedStep(r.engine) === step))) }]));
-  const observedStages = Object.fromEntries(['stored', 'inOpening', 'searched', 'retrieved'].map(step => [step, {
+  const observedStages = Object.fromEntries(['stored', 'inNativeProfile', 'inResidentMemory', 'inOpening', 'searched', 'retrieved'].map(step => [step, {
     engine: prop(rows.map(r => r.engine.trace?.[step] === true)), product: prop(rows.map(r => r.product.trace?.[step] === true)),
     paired: pairedBinary(rows.map(r => Number(r.product.trace?.[step] === true) - Number(r.engine.trace?.[step] === true))) }]));
   return { engine: prop(a), product: prop(b), paired: pairedBinary(a.map((v, i) => Number(b[i]) - Number(v))),
@@ -91,8 +91,10 @@ async function g1() {
     const product = observed.has(q.qid) && productRows.find(r => r.kind === 'answer' && r.id === q.qid);
     if (!engine || !product) return [];
     const held = gold.get(q.qid);
-    const inOpening = questionAnchors(held.entry, held.q).some(a => containsAnchor(engineAnswers.get(q.qid)?.opening?.profileBlock ?? '', a));
-    return [{ ...q, engine: { ...engine, trace: { ...engine.trace, inOpening } }, product }];
+    const opening = engineAnswers.get(q.qid)?.opening ?? {}, anchors = questionAnchors(held.entry, held.q);
+    const inNativeProfile = anchors.some(a => containsAnchor(opening.profileBlock ?? '', a));
+    const inResidentMemory = anchors.some(a => containsAnchor(opening.residentBlock ?? '', a));
+    return [{ ...q, engine: { ...engine, trace: { ...engine.trace, inNativeProfile, inResidentMemory, inOpening: inNativeProfile || inResidentMemory } }, product }];
   });
   const result = { planned: sample.n, completed: rows.length, complete: rows.length === sample.n, overall: comparison(rows),
     selection: args.selection, samplingPolicy: sample.policy, allocation: sample.allocation ?? null, amendment: sample.amendment ?? null,
