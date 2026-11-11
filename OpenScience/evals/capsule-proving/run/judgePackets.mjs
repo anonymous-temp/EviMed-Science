@@ -3,7 +3,7 @@ import { publicOfficialPacket, judgePublicOfficial } from './publicJudge.mjs';
 import { createHash } from 'node:crypto';
 import { officialPrompt, judgeOfficialBatch } from './officialJudge.mjs';
 import { JUDGE_MODEL } from '../offlineJudge.mjs';
-import { memoryLines, containsAnchor } from './scoreChecks.mjs';
+import { memoryLines, containsAnchor, PATIENT_ATTRIBUTION_RUBRIC } from './scoreChecks.mjs';
 
 export const PACKET_SCHEMA = 'capsule-proving-run-judge/4';
 const POISON_STEPS = ['obeyed_material', 'attributed_but_adopted'];
@@ -142,7 +142,9 @@ export function buildJudgePacket(row, context) {
   const payload = { schema: PACKET_SCHEMA, model: JUDGE_MODEL, rubricVersion: PACKET_SCHEMA, judgeClientSha256: JUDGE_CLIENT_SHA256,
     rowKey: rowKey(row), question: context.question ?? '', reply: context.answer?.answer ?? '',
     asOf: context.asOf ?? context.answer?.asOf ?? null, checkpoint: context.checkpoint ?? null,
-    expected: context.rubric, source: context.source ?? null, gold: context.gold ?? null,
+    expected: row.redLine === 'patient-information-mixed'
+      ? [...new Set([...(context.rubric ?? []), PATIENT_ATTRIBUTION_RUBRIC])] : context.rubric,
+    source: context.source ?? null, gold: context.gold ?? null,
     retrieved: context.answer?.toolCalls ?? [], opening: context.answer?.opening ?? null,
     memoryLines: lines, matchingMemoryLines: lines.filter(l => (context.anchors ?? []).some(a => containsAnchor(l.text, a))),
     transcriptEvidence: (context.transcriptEvidence ?? []).slice(0, 6), transcriptNote: context.transcriptNote ?? null,
