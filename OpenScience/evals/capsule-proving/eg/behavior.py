@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compare observed G1 wire evidence without copying prompts, answers or memory text into the aggregate."""
 import argparse
+from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
@@ -18,6 +19,11 @@ def answers(directory, users):
         if file.exists():
             rows.update((r['qid'], r) for r in map(json.loads, file.read_text().splitlines()) if r)
     return rows
+
+
+@lru_cache(maxsize=8)
+def request_metadata(file):
+    return {r['seq']: {k: r.get(k) for k in ['model', 'thinking', 'maxTokens', 'tools', 'path']} for r in map(json.loads, Path(file).read_text().splitlines())}
 
 
 def observed(answer):
@@ -58,6 +64,10 @@ def observed(answer):
     if request and Path(request).exists():
         first = read(request)
         result['toolsOffered'] = sorted(t.get('function', {}).get('name', t.get('name', '')) for t in first.get('tools', []))
+        original = Path(first['file']) if first.get('file') else None
+        metadata = original.parent.parent / 'model-requests.jsonl' if original else None
+        if metadata and metadata.exists():
+            result['modelRequest'] = request_metadata(str(metadata)).get(int(original.stem))
     return result
 
 

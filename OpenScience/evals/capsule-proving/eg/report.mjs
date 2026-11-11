@@ -60,7 +60,7 @@ function comparison(rows) {
   const steps = Object.fromEntries(stepNames.map(step => [step, {
     engine: prop(rows.map(r => failedStep(r.engine) === step)), product: prop(rows.map(r => failedStep(r.product) === step)),
     paired: pairedBinary(rows.map(r => Number(failedStep(r.product) === step) - Number(failedStep(r.engine) === step))) }]));
-  const observedStages = Object.fromEntries(['stored', 'inNativeProfile', 'inResidentMemory', 'inOpening', 'searched', 'retrieved'].map(step => [step, {
+  const observedStages = Object.fromEntries(['stored', 'inNativeProfile', 'inResidentMemory', 'inOpening', 'searched', 'retrieved', 'inOtherToolOutput'].map(step => [step, {
     engine: prop(rows.map(r => r.engine.trace?.[step] === true)), product: prop(rows.map(r => r.product.trace?.[step] === true)),
     paired: pairedBinary(rows.map(r => Number(r.product.trace?.[step] === true) - Number(r.engine.trace?.[step] === true))) }]));
   return { engine: prop(a), product: prop(b), paired: pairedBinary(a.map((v, i) => Number(b[i]) - Number(v))),
@@ -68,7 +68,8 @@ function comparison(rows) {
     judged: Object.fromEntries(['engine', 'product'].map(k => [k, Object.fromEntries(['pass', 'fail', 'unknown', 'error', 'needs-judge', 'gold-disputed'].map(v => [v, rows.filter(r => r[k].verdict === v).length]))])),
     byFailureStep: steps, observedStages,
     availableButWrong: Object.fromEntries(['engine', 'product'].map(k => [k, rows.filter(r => r[k].verdict === 'fail' && (r[k].trace?.inOpening || r[k].trace?.retrieved)).length])),
-    correctWithContext: Object.fromEntries(['engine', 'product'].map(k => [k, rows.filter(r => r[k].verdict === 'pass' && (r[k].trace?.inOpening || r[k].trace?.retrieved)).length])) };
+    correctWithContext: Object.fromEntries(['engine', 'product'].map(k => [k, rows.filter(r => r[k].verdict === 'pass' && (r[k].trace?.inOpening || r[k].trace?.retrieved)).length])),
+    correctWithOtherContext: Object.fromEntries(['engine', 'product'].map(k => [k, rows.filter(r => r[k].verdict === 'pass' && r[k].trace?.inOtherToolOutput).length])) };
 }
 const fmt = x => x == null ? '—' : (100 * x).toFixed(1);
 const fmtProp = p => p.n ? `${p.pass}/${p.n} (${fmt(p.value)}%; ${p.ci95.map(fmt).join('–')}%)` : 'not observed';
@@ -94,7 +95,9 @@ async function g1() {
     const opening = engineAnswers.get(q.qid)?.opening ?? {}, anchors = questionAnchors(held.entry, held.q);
     const inNativeProfile = anchors.some(a => containsAnchor(opening.profileBlock ?? '', a));
     const inResidentMemory = anchors.some(a => containsAnchor(opening.residentBlock ?? '', a));
-    return [{ ...q, engine: { ...engine, trace: { ...engine.trace, inNativeProfile, inResidentMemory, inOpening: inNativeProfile || inResidentMemory } }, product }];
+    const inOtherToolOutput = (engineAnswers.get(q.qid)?.toolCalls ?? []).some(c => !c.name.startsWith('mcp__openviking__') && !c.isError
+      && c.blocks.some(b => anchors.some(a => containsAnchor(b, a))));
+    return [{ ...q, engine: { ...engine, trace: { ...engine.trace, inNativeProfile, inResidentMemory, inOtherToolOutput, inOpening: inNativeProfile || inResidentMemory } }, product }];
   });
   const result = { planned: sample.n, completed: rows.length, complete: rows.length === sample.n, overall: comparison(rows),
     selection: args.selection, samplingPolicy: sample.policy, allocation: sample.allocation ?? null, amendment: sample.amendment ?? null,
@@ -115,7 +118,7 @@ async function g1() {
     ...Object.entries(result.overall.byFailureStep).map(([c, r]) => `| ${c} | ${fmtProp(r.engine)} | ${fmtProp(r.product)} | ${fmtPair(r.paired)} |`), '',
     '| Observed stage | Engine | Product | Paired difference |', '|---|---|---|---|',
     ...Object.entries(result.overall.observedStages).map(([c, r]) => `| ${c} | ${fmtProp(r.engine)} | ${fmtProp(r.product)} | ${fmtPair(r.paired)} |`), '',
-    `Correct with matching context available: engine ${result.overall.correctWithContext.engine}, product ${result.overall.correctWithContext.product}. Wrong despite matching context: engine ${result.overall.availableButWrong.engine}, product ${result.overall.availableButWrong.product}. These are observations, not proof of causal memory use.`, '',
+    `Correct with matching memory context available: engine ${result.overall.correctWithContext.engine}, product ${result.overall.correctWithContext.product}. Wrong despite matching memory context: engine ${result.overall.availableButWrong.engine}, product ${result.overall.availableButWrong.product}. Correct with a matching non-memory tool output: engine ${result.overall.correctWithOtherContext.engine}, product ${result.overall.correctWithOtherContext.product}. These are anchor observations, not proof of causal use.`, '',
     'The legacy denominator retains registered invalid items, matching the earlier ledger. The valid paired row excludes invalid items and either-arm disputed references; all attempted questions remain in the evidence.', '', ...result.limitations.map(x => `- ${x}`)];
   await fs.writeFile(`${args.out}/g1.md`, md.join('\n') + '\n');
   return result;

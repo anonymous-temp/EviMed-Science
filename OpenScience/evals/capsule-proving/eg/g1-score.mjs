@@ -44,9 +44,12 @@ for (const sq of selected) {
   const snapshot = perQuestion ?? await read(`${dir}/snapshots/${sq.checkpoint}.json`);
   const anchors = questionAnchors({ gold, skeleton: await read(`${args.data}/dev/${sq.user}/skeleton.json`) }, q);
   row.traceLegacy = row.trace;
+  const otherCalls = answer.toolCalls.filter(c => !c.name.startsWith('mcp__openviking__'));
   row.trace = { ...answerTrace({ ...answer, toolCalls: answer.toolCalls.filter(c => /^mcp__openviking__(search|read|list)$/.test(c.name)) }, snapshot, anchors),
     inNativeProfile: anchors.some(a => containsAnchor(answer.opening.profileBlock, a)),
     inResidentMemory: anchors.some(a => containsAnchor(answer.opening.residentBlock, a)),
+    otherTools: otherCalls.map(c => c.name),
+    inOtherToolOutput: otherCalls.some(c => !c.isError && c.blocks.some(b => anchors.some(a => containsAnchor(b, a)))),
     inOpening: anchors.some(a => containsAnchor(`${answer.opening.profileBlock}\n${answer.opening.residentBlock}`, a)), storageSnapshot: perQuestion ? 'pre-question' : 'checkpoint-only' };
   if (!old) continue;
   const input = await read(`${args.data}/dev/${sq.user}/input.json`);
