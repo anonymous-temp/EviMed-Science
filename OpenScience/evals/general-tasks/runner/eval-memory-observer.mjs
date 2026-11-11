@@ -12,5 +12,6 @@ export function apply(ctx) {
   sample();
   const timer = setInterval(sample, 500);
   timer.unref();
-  ctx.on('dispose', () => clearInterval(timer));
+  // Dispose the observer before its injected tools service is torn down.
+  ctx.effect(() => () => clearInterval(timer));
 }

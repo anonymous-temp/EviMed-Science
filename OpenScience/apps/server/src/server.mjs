@@ -1132,7 +1132,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   // The project floor survives GEO disable/removal and is reused by native context composition.
-  const sharedContextPolicies = productDatabase && productDocuments ? new GeoSharedContext({ database: productDatabase, documents: productDocuments }) : null;
+  const sharedContextPolicies = productDatabase && productDocuments ? new GeoSharedContext({ database: productDatabase, documents: productDocuments, runtimeLockIsolation: config.memoryRuntimeLockIsolationEnabled }) : null;
   let sharedKnowledgeContext = null;
   /** @type {GeoNativeAuthority | null} */ let geoNativeAuthority = null;
   /** @type {GeoNativeInputs | null} */ let geoNativeInputs = null;

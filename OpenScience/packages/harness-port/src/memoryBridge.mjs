@@ -193,6 +193,7 @@ function isToolCall(pathname, body) {
  * @property {() => number} [now]
  * @property {{ healthMs?: number, requestMs?: number, toolCallMs?: number }} [deadlines]
  * @property {number} [cooldownMs]
+ * @property {boolean} [retryHealthTimeout]
  * @property {(event: 'unreachable' | 'restored', detail: string) => void} [onState] called on a change, never per request
  * @property {number} [outageMs] see {@link MEMORY_BRIDGE_OUTAGE_NOTICE_MS}
  * @property {(detail: string) => void} [onOutage] called once per outage, by the forward that fails after the service has not answered for `outageMs`
@@ -332,7 +333,10 @@ export function createMemoryBridge(options) {
       if (callerLeft) return
       const timedOut = abort.signal.aborted
       // A tool call that ran out of time says the tool was slow, not that the gateway is gone.
-      if (!(timedOut && deadline === deadlines.toolCallMs)) closedUntil = now() + cooldownMs
+      // A slow liveness probe says nothing about reads/tools. Keep their first
+      // attempt available; connection failures still trip the outage cooldown.
+      const slowHealth = options.retryHealthTimeout === true && timedOut && url.pathname === '/health'
+      if (!(timedOut && deadline === deadlines.toolCallMs) && !slowHealth) closedUntil = now() + cooldownMs
       const detail = timedOut ? `no answer in ${deadline} ms` : reason(error)
       observe(false, detail)
       failingSince ??= attemptStarted
@@ -374,7 +378,7 @@ export function createMemoryBridge(options) {
  * dialling a closed port — which costs nothing — and a notice where an operator looks.
  *
  * @param {any} ctx
- * @param {{ enabled?: boolean, gatewayUrl?: string, tokenFile?: string, port?: number, outageNoticeMs?: number, cooldownMs?: number }} config
+ * @param {{ enabled?: boolean, gatewayUrl?: string, tokenFile?: string, port?: number, outageNoticeMs?: number, cooldownMs?: number, retryHealthTimeout?: boolean }} config
  */
 export async function registerMemoryBridge(ctx, config) {
   if (config.enabled !== true) return
@@ -389,6 +393,7 @@ export async function registerMemoryBridge(ctx, config) {
     tokenFile: config.tokenFile,
     port: config.port,
     cooldownMs: config.cooldownMs,
+    retryHealthTimeout: config.retryHealthTimeout,
     outageMs: config.outageNoticeMs,
     // One line per state, not per failure: the set an operator reads holds each line once.
     onState: (event, detail) => ctx.logger?.warn?.(`evimed memory bridge: gateway ${event} (${detail})`),

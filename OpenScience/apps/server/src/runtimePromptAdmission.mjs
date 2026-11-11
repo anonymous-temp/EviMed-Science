@@ -64,7 +64,14 @@ export function withSessionPromptAdmission(manager,project,sessionId,operation,{
     controller.signal.throwIfAborted();
     const restore=()=>previous?client.query("SELECT set_config('lock_timeout',$1,true),set_config('statement_timeout',$2,true)",[previous.lock_timeout,previous.statement_timeout]):Promise.resolve();
     let value;
-    try{value=await database.withTransactionClient(client,operate);}
+    try{
+     // The dedicated transaction owns only the session fence. Proofs/receipts
+     // use short transactions, never its client, while the kernel acknowledges.
+     // A borrowed native-input transaction keeps its atomic journal; policy
+     // lookups release their read fences before returning to that caller.
+     value=manager.config?.memoryRuntimeLockIsolationEnabled===true&&!borrowed
+      ? await database.withoutTransactionClient(operate) : await database.withTransactionClient(client,operate);
+    }
     catch(error){if(!(error instanceof pg.DatabaseError))await restore();throw error;}
     await restore();return value;
    }finally{state.counters.active--;}

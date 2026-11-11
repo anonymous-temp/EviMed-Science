@@ -14,7 +14,7 @@ import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposable PostgreSQL required' };
 const refused = error => error.code === 'memory_scope_denied';
-async function setup(t) {
+async function setup(t, { runtimeLockIsolation = false } = {}) {
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'geomemorycontext');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'geo-memory-context-'));
   const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: 1 }));
@@ -27,7 +27,7 @@ async function setup(t) {
   const geoStore = new GeoStore({ database: accounts.database }); await geoStore.ready();
   // A shared GEO project: one with a member (a one-person GEO project is an owned project, owner ruling 2026-10-25).
   for (const project of [a, b]) await geoStore.addMember({ geoId: (await geoStore.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 })).id, userId: 'member', role: 'editor', invitedBy: owner.id });
-  const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents });
+  const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents, runtimeLockIsolation });
   const requests = [];
   const sessions = new OpenVikingSessions({ configured: true, account: 'fixture', request: async input => { requests.push(input); return { status: 'ok' }; } });
   let proof = { rootSessionId: 'root', rootProofRefs: ['primary-fixture'], runtimeGeneration: 'generation-1' };
@@ -127,4 +127,30 @@ test('an owned live context cannot survive its project incarnation even though i
   await f.accounts.database.query("UPDATE evimed_control.projects SET created_at=created_at+interval '1 second' WHERE user_id=$1 AND id=$2",[f.owner.id,f.normal.id]);
   const current=await f.contexts.forProject(f.normal);assert.equal(current.namespaceId,old.namespaceId);assert.notEqual(current.projectCreatedAt,old.projectCreatedAt);
   await assert.rejects(f.contexts.assertLive(old),refused);await f.contexts.assertLive(current);
+});
+
+
+test('memory paths with spaces remain canonical while encoded traversal and controls are refused', options, async t => {
+  const f = await setup(t), context = await f.contexts.forProject(f.a);
+  for (const suffix of ['memories/preferences/weekly report.md', 'memories/preferences/weekly%20report.md']) {
+    const uri = `${context.userRoot}/${suffix}`;
+    assert.equal((await f.contexts.forUri(f.owner.id, uri)).namespaceId, context.namespaceId);
+    assert.equal(f.contexts.assertUri(context, uri), uri);
+  }
+  for (const suffix of ['memories/%2e%2e/profile.md', 'memories/bad%0aname.md', 'memories/bad%2fname.md', 'memories/bad%252fname.md']) {
+    await assert.rejects(f.contexts.forUri(f.owner.id, `${context.userRoot}/${suffix}`), refused);
+  }
+});
+
+
+test('isolated context selection initializes a shared namespace with a single database connection', options, async t => {
+  const f = await setup(t, { runtimeLockIsolation: true });
+  const context = await f.contexts.forProject(f.a);
+  assert.equal(context.kind, 'geo-project');
+  await f.accounts.database.transaction(client => f.accounts.database.withTransactionClient(client, async () => {
+    const reread = await f.contexts.forProject(f.a);
+    assert.equal(reread.namespaceId, context.namespaceId);
+    assert.deepEqual(reread.policy, context.policy);
+    await f.contexts.assertLive(context);
+  }));
 });

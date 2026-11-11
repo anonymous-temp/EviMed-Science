@@ -12,17 +12,17 @@ import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposable PostgreSQL required' };
 // A shared project: one with a member. A one-person GEO project keeps its owner's own context (owner ruling 2026-10-25).
-async function setup(t, { shared = true } = {}) {
+async function setup(t, { shared = true, runtimeLockIsolation = false } = {}) {
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'geocontext');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'geo-context-'));
-  const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: 1 }));
+  const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: runtimeLockIsolation ? 4 : 1 }));
   t.after(async () => { await accounts.database.close(); await isolated.drop(); await rm(dataDir, { recursive: true, force: true }); });
   for (const id of ['owner', 'editor']) await accounts.createUser(id, 'local-fixture-password', id);
   const owner = await accounts.userById('owner'), editor = await accounts.userById('editor');
   const project = await accounts.requireProject(owner, 'default'), personal = await accounts.requireProject(editor, 'default');
   const geoStore = new GeoStore({ database: accounts.database }); await geoStore.ready();
   const geo = await geoStore.createProject({ userId: owner.id, projectId: project.id, engines: ['deepseek'], coverageDays: 30 });
-  const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents });
+  const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents, runtimeLockIsolation });
   if (shared) await geoStore.addMember({ geoId: geo.id, userId: editor.id, role: 'editor', invitedBy: owner.id });
   return { accounts, documents, policies, geoStore, owner, editor, project, personal, geo };
 }
@@ -84,4 +84,53 @@ test('a removed policy cannot silently restore personal context, and account reu
   await f.documents.restore(f.owner.id, 'geo-plan-context', first.referenceId, first.revision + 1);
   await f.accounts.database.query("UPDATE evimed_control.users SET created_at=created_at+interval '1 second' WHERE id=$1", [f.owner.id]);
   assert.deepEqual(await f.policies.namespacesForOwner(f.owner.id), []);
+});
+
+
+test('isolated policy creation serializes writers and commits before an outer admission finishes', options, async t => {
+  const f = await setup(t, { runtimeLockIsolation: true });
+  let release, entered;
+  const held = new Promise(resolve => { release = resolve; });
+  const writing = new Promise(resolve => { entered = resolve; });
+  const put = f.documents.put.bind(f.documents);
+  let writes = 0;
+  f.documents.put = async (...args) => {
+    writes++;
+    entered();
+    await held;
+    return put(...args);
+  };
+  const first = f.policies.forProject(f.project);
+  await writing;
+  const second = f.policies.forProject(f.project);
+  try {
+    let waiting = false;
+    const deadline = Date.now() + 3000;
+    while (!waiting && writes === 1 && Date.now() < deadline) {
+      waiting = (await f.accounts.database.query(`SELECT EXISTS (SELECT 1 FROM pg_locks
+        WHERE locktype='advisory' AND NOT granted AND database=(SELECT oid FROM pg_database WHERE datname=current_database())) AS waiting`)).rows[0].waiting;
+      if (!waiting) await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    assert.equal(writes, 1, 'a second publisher cannot enter the protected write');
+    assert.equal(waiting, true, 'the second writer has reached the lock before the first is released');
+  } finally { release(); }
+  assert.deepEqual(await first, await second);
+  assert.equal(writes, 1);
+  await f.accounts.createProject(f.owner, 'new-shared', 'New shared');
+  const fresh = await f.accounts.requireProject(f.owner, 'new-shared');
+  const geo = await f.geoStore.createProject({ userId: f.owner.id, projectId: fresh.id, engines: ['deepseek'], coverageDays: 30 });
+  await f.geoStore.addMember({ geoId: geo.id, userId: f.editor.id, role: 'editor', invitedBy: f.owner.id });
+  await assert.rejects(f.accounts.database.transaction(client => f.accounts.database.withTransactionClient(client, async () => {
+    const initialized = await f.policies.forProject(fresh);
+    const visible = await f.accounts.database.withoutTransactionClient(() => f.documents.get(f.owner.id, 'geo-plan-context', initialized.referenceId));
+    assert.equal(visible.revision, 1, 'publication is already committed before the outer operation can wait on a kernel');
+    throw new Error('outer admission refused');
+  })), /outer admission refused/);
+  assert.equal((await f.policies.forProject(fresh)).revision, 1, 'an admission rollback retains the namespace floor');
+  await f.accounts.database.transaction(client => f.accounts.database.withTransactionClient(client, async () => {
+    const policy = await f.policies.forProject(f.project);
+    const contender = await f.accounts.database.withoutTransactionClient(() => f.accounts.database.transaction(async other =>
+      (await other.query('SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired', [policy.referenceId])).rows[0].acquired));
+    assert.equal(contender, true, 'read policy selection retains no creation lock in its caller');
+  }));
 });

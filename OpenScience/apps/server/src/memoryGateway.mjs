@@ -1163,7 +1163,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       }
       // Body streaming may outlive a runtime stop, a rotation or an account's removal.
       if (raw.length) await runtimeManager.assertActiveEviMedWorkloadToken(token).catch(() => { throw new HttpError(401, "memory_gateway_unauthenticated", "The memory gateway does not know this caller."); });
-      const memoryContext = await resolveContext(user, project);
+      // Liveness carries no namespace data and needs no project policy.
+      const memoryContext = config.memoryRuntimeLockIsolationEnabled === true && route === 'health' ? null : await resolveContext(user, project);
       const view = memoryContext?.sessions ?? sessions;
       const shared = memoryContext?.kind === 'geo-project';
       const engineUser = /** @type {any} */ (view).engineUser(user.id);

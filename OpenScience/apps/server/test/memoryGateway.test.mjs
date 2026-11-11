@@ -1055,3 +1055,15 @@ test('generated directory summaries never reach memory search, read, list, REST 
   const searched = await f.mcp({ jsonrpc: '2.0', id: 20, method: 'tools/call', params: { name: 'search', arguments: { query: marker, limit: 20 } } });
   assert.equal(JSON.stringify(searched).includes(marker), false);
 });
+
+test('native memory filenames with spaces round-trip through REST and MCP without loosening URI guards', async t => {
+  const { stub, call, mcp } = await fixture(t);
+  const uri = stub.seedMemory(OV_USER, 'preferences/weekly report.md', 'Keep weekly reports concise');
+  const read = await call('GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}`);
+  assert.equal(read.status, 200); assert.match(read.text, /Keep weekly reports concise/);
+  const tool = await mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read', arguments: { uris: [uri] } } });
+  assert.match(tool.text, /Keep weekly reports concise/);
+  for (const refused of [`${ROOT}/memories/../profile.md`, 'viking://user/foreign/memories/profile.md']) {
+    assert.equal((await call('GET', `/api/v1/content/read?uri=${encodeURIComponent(refused)}`)).status, 403);
+  }
+});
