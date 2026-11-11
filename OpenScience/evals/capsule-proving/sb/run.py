@@ -5,6 +5,7 @@ SkillsBench: pinned BenchFlow CLI + Pi ACP. SkillLearnBench: pinned core.eval_ru
 + a Pi CLI registry entry. Both are MODEL + METHODS, NOT THE PRODUCT.
 """
 import argparse
+import base64
 import contextlib
 import datetime
 import hashlib
@@ -21,7 +22,13 @@ ROOT = pathlib.Path(os.environ.get('SB_ROOT', '/srv/evimed/sb'))
 DATA = pathlib.Path('/srv/evimed/data/memdata-data/public')
 RUNS = pathlib.Path('/srv/evimed/runs')
 UPSTREAM = ROOT / 'upstream'
-GATEWAY = 'http://172.17.0.1:19411/v1'
+GATEWAY = 'http://172.17.0.1:19412/v1'
+
+
+def trial_gateway(task, arm):
+    context = {'runId': f'{task["bench"]}-{arm}-1', 'task': task['id'], 'arm': arm}
+    token = base64.urlsafe_b64encode(json.dumps(context).encode()).decode().rstrip('=')
+    return f'{GATEWAY}/trial/{token}'
 
 
 def put(path, value):
@@ -114,7 +121,7 @@ def sb_trial(task, arm, out):
     cmd += ['--skill-mode', 'with-skill' if has_skills else 'no-skill']
     if has_skills:
         cmd += ['--skills-dir', str(source)]
-    env = {**os.environ, 'DEEPSEEK_API_KEY': 'lab-proxy', 'DEEPSEEK_BASE_URL': GATEWAY,
+    env = {**os.environ, 'DEEPSEEK_API_KEY': 'lab-proxy', 'DEEPSEEK_BASE_URL': trial_gateway(task, arm),
            'PI_TELEMETRY': '0'}
     with (out / f'{task["id"]}.log').open('a') as log:
         result = subprocess.run(cmd, env=env, stdout=log, stderr=log, timeout=3300)
@@ -139,7 +146,7 @@ def slb_trial(task, arm, out):
         'install': install + f' && echo {encoded} | base64 -d > /opt/benchflow/pi-solve.py',
         'run': 'timeout --signal=TERM --kill-after=10s 1700s python3 /opt/benchflow/pi-solve.py', 'trajectory_tee': '/logs/agent/pi.jsonl',
         'default_model': 'deepseek-flash'}
-    os.environ['SB_GATEWAY_URL'] = GATEWAY
+    os.environ['SB_GATEWAY_URL'] = trial_gateway(task, arm)
     os.environ['PI_TELEMETRY'] = '0'
     source = skills_for(task, arm)
     # An empty learned library is a measured outcome, not a reason to substitute human skills.

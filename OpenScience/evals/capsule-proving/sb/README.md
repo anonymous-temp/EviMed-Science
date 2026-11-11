@@ -88,9 +88,12 @@ The lab layout is `/srv/evimed/sb/{code,venv,upstream,manifest.json,practice,lea
 Install BenchFlow 0.6.3 and the pinned SkillLearnBench Python requirements into
 this lane's private virtualenv. Record `pip freeze` and upstream receipts. The
 agent npm versions are installed by the reference harness in each task container.
-Use one reference container slot; product practice uses port 48848, bridge 19368
-and its own database on the existing lab PostgreSQL port 55686. Do not stop
-other lanes' processes or containers.
+Use one reference container slot while product practice is active. After practice
+exits, the campaign uses at most two containers: one sequential stream per benchmark,
+with per-request trial attribution in the proxy URL. Each stream runs none, learned,
+then flat; this prioritizes the methods comparison if shared capacity runs out.
+Product practice uses port 48848, bridge 19368 and its own database on the existing
+lab PostgreSQL port 55686. Do not stop other lanes' processes or containers.
 
 ```sh
 # Product practice, resumable by task record and completed export:

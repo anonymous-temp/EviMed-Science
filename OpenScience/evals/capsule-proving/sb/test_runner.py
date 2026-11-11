@@ -6,10 +6,23 @@ import unittest
 from unittest.mock import patch
 import prepare
 import run
-from gateway import cost
+from gateway import cost, request_context
 
 
 class RunnerTests(unittest.TestCase):
+    def test_parallel_requests_keep_their_own_trial_attribution(self):
+        a = {'bench': 'sb', 'id': 'task-a'}
+        b = {'bench': 'slb', 'id': 'task-b'}
+        for task, arm in [(a, 'none'), (b, 'learned')]:
+            self.assertEqual(request_context(run.trial_gateway(task, arm) + '/chat/completions', None),
+                             {'runId': f'{task["bench"]}-{arm}-1', 'task': task['id'], 'arm': arm})
+
+    def test_legacy_single_slot_and_judge_attribution_remains_readable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            current = pathlib.Path(tmp) / 'current.json'
+            current.write_text(json.dumps({'purpose': 'judge', 'task': 'a'}))
+            self.assertEqual(request_context('/v1/responses', current), {'purpose': 'judge', 'task': 'a'})
+
     def test_retry_never_repeats_a_valid_failed_answer_or_timeout(self):
         self.assertFalse(run.infrastructure_record({'official': {'error': 'timeout', 'rewards': {'reward': 0}}}))
         self.assertFalse(run.infrastructure_record({'official': {'passed': False, 'reward': 0, 'verifier_exit': 0}}))

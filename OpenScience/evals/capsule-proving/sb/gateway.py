@@ -5,6 +5,7 @@ The reference harness owns the agent loop. This proxy changes only model,
 thinking effort, usage reporting and the lane's spending boundary.
 """
 import argparse
+import base64
 import datetime
 import http.server
 import json
@@ -18,6 +19,16 @@ def cost(usage):
     prompt = usage.get('prompt_tokens', 0)
     cached = min(prompt, usage.get('prompt_cache_hit_tokens', 0))
     return ((prompt - cached) * 2 + cached * .04 + usage.get('completion_tokens', 0) * 8) / 1e6
+
+
+def request_context(url, fallback):
+    if '/trial/' not in url:
+        return json.loads(fallback.read_text())
+    token = url.split('/trial/', 1)[1].split('/', 1)[0]
+    context = json.loads(base64.urlsafe_b64decode(token + '=' * (-len(token) % 4)))
+    if not all(isinstance(context.get(k), str) for k in ['runId', 'task', 'arm']):
+        raise ValueError('Invalid trial attribution')
+    return context
 
 
 def serve(args):
@@ -53,7 +64,7 @@ def serve(args):
                     if spent + practice_cost >= args.cap - 5 or balance < 160:
                         self.send_error(429, 'Lane budget boundary reached')
                         return
-                context = json.loads((root / 'current.json').read_text())
+                context = request_context(self.path, root / 'current.json')
                 responses_facade = self.path.endswith('/responses')
                 if responses_facade:
                     # Judge transport only: the pinned SkillLearnBench skill metrics speak Responses.
@@ -136,6 +147,6 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('--root', default='/srv/evimed/sb')
     p.add_argument('--key-file', default='/srv/evimed/secrets/deepseek.api-key')
-    p.add_argument('--port', type=int, default=19411)
+    p.add_argument('--port', type=int, default=19412)
     p.add_argument('--cap', type=float, default=350)
     serve(p.parse_args())

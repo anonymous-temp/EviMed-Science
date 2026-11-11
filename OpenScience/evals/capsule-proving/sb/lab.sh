@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One reference-container slot. Product practice uses its separate, locked host-kernel slot.
+# Two reference slots after product practice exits; one sequential stream per benchmark.
 set -euo pipefail
 ROOT=${SB_ROOT:-/srv/evimed/sb}
 TREE=${SB_PRODUCT_TREE:-/srv/evimed/wt/sb/OpenScience}
@@ -9,7 +9,7 @@ export PATH="/srv/evimed/pp/node24/bin:$PATH" PI_TELEMETRY=0
 exec 9> "$ROOT/reference.lock"
 flock -n 9 || { echo 'Reference slot already running'; exit 75; }
 note() { echo "$(date -u +%FT%TZ) SB $*" | tee -a /srv/evimed/runs/sb-STATUS; }
-report() { node "$TREE/evals/capsule-proving/sb/report.mjs" "$ROOT" /srv/evimed/runs /srv/evimed/results/ledger.jsonl > "$ROOT/report.log"; }
+report() { flock "$ROOT/report.lock" node "$TREE/evals/capsule-proving/sb/report.mjs" "$ROOT" /srv/evimed/runs /srv/evimed/results/ledger.jsonl > "$ROOT/report.log"; }
 trap 'note "campaign exit code=$?"' EXIT
 
 if [[ "${1:-campaign}" == arm ]]; then
@@ -32,24 +32,29 @@ print('Reference smoke has an official verifier result')
 PY
 fi
 
-# Run learned before flat so the methods comparison is available even if the shared lab
-# balance prevents the final arm. This order is fixed before any learned/flat scores.
-for arm in none learned flat; do
-  if [[ "$arm" == learned ]]; then
-    note 'waiting for product practice and actual method export'
-    until [[ -f "$ROOT/practice/complete.json" ]]; do
-      "$PY" - "$ROOT/batch.json" <<'PY'
+note 'waiting for product practice to release its slot and freeze the learned library'
+until [[ -f "$ROOT/practice/complete.json" ]]; do
+  "$PY" - "$ROOT/batch.json" <<'PY'
 import json,sys,time
 if time.time()>json.load(open(sys.argv[1]))['deadline']:raise SystemExit('Lane wall time allocation reached')
 PY
-      sleep 20
-    done
-  fi
-  for bench in sb slb; do
+  sleep 20
+done
+stream() {
+  local bench="$1"
+  # Prioritize the methods comparison if shared lab capacity prevents the final arm.
+  # Order fixed before learned/flat scores. Trial URLs own attribution across both slots.
+  for arm in none learned flat; do
     note "start $bench-$arm-1"
-    "$PY" "$CODE/run.py" --bench "$bench" --arm "$arm"
+    "$PY" "$CODE/run.py" --bench "$bench" --arm "$arm" || return $?
     report
   done
-done
-node "$TREE/evals/capsule-proving/sb/report.mjs" "$ROOT" /srv/evimed/runs /srv/evimed/results/ledger.jsonl --append > "$ROOT/report.log"
+}
+stream sb & sb_pid=$!
+stream slb & slb_pid=$!
+code=0
+wait "$sb_pid" || code=$?
+wait "$slb_pid" || code=$?
+report
+[[ "$code" == 0 ]] || exit "$code"
 note 'six arms finished'
