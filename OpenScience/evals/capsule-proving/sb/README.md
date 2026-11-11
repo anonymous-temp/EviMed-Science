@@ -153,7 +153,9 @@ with a leading identifier boundary. A captured stack located a live stall in
 trajectory redaction after native Pi completion. The shim retains credential
 redaction and writes a compatibility receipt; it changes logging, not agent
 inputs or task verification. The whole five-task pre-fix phase (including its
-pass) is archived and repeated, with all original grades and paid usage retained.
+pass) is archived in full, with all original grades and paid usage retained.
+Its tasks are designated for fresh qualification; primary records distinguish
+actual reruns from explicit unavailability under the remaining allocation.
 `protocol-amendments.json` defines the primary cost boundary. No retry is selected
 by reward. Native agent/verifier timeouts are read from the pinned task; the outer
 watchdog adds build/install time. The video wrapper's one-time wait recovery is

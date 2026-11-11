@@ -42,7 +42,7 @@ def main(args):
     if queue:
         lines += ['', 'Execution capacity rule: ' + queue['rule'] + ' The exact order is retained in `execution-queue.json`.']
     for amendment in amendments:
-        lines += ['', f"Harness qualification amendment ({amendment['at']}): {amendment['reason']} Original artifacts: `{amendment['archiveRunId']}`; {len(amendment['tasks'])} tasks repeated. Calibration usage remains in total lane cost, separate from primary per-task inference cost."]
+        lines += ['', f"Harness qualification amendment ({amendment['at']}): {amendment['reason']} Original artifacts: `{amendment['archiveRunId']}`; {len(amendment['tasks'])} tasks designated for fresh qualification; primary records distinguish actual reruns from unavailable admissions. Calibration usage remains in total lane cost, separate from primary per-task inference cost."]
     lines += ['', 'Scorer-only rates (excluding unavailable verifiers/admission, never replacing the planned-denominator rates above):']
     for r in results:
         interval = r.get('scoredCi95')
@@ -88,7 +88,7 @@ def main(args):
         order = [j['executionOrder']['score'] for j in judged if 'executionOrder' in j]
         completion = [j['completeness']['score'] for j in judged if 'completeness' in j]
         errors = sum(bool(j.get('skillQualityError')) + bool(j.get('trajectoryError')) for j in judged)
-        lines.append(f"| {arm} | {fmt(mean(coverage))} (n={len(coverage)}) | {fmt(mean(exe))} (n={len(exe)}) | {fmt(mean(safety))} (n={len(safety)}) | {fmt(mean(recall))} (n={len(recall)}) | {fmt(mean(order))} | {fmt(mean(completion))} | {errors} |")
+        lines.append(f"| {arm} | {fmt(mean(coverage))} (n={len(coverage)}) | {fmt(mean(exe))} (n={len(exe)}) | {fmt(mean(safety))} (n={len(safety)}) | {fmt(mean(recall))} (n={len(recall)}) | {fmt(mean(order))} (n={len(order)}) | {fmt(mean(completion))} (n={len(completion)}) | {errors} |")
     lines += ['', 'Skill quality is evaluated once per sampled family/skill arm; trajectory diagnostics use the first held-out variant per family, paired across arms. Means with different units are not combined into a new score. Missing/no-skill diagnostics are n/a, not zero quality. Oracle-trajectory alignment can penalize a valid alternative workflow, including success without invoking the oracle human skill; it does not override the task verifier.', '',
               '## Cost, time and full-run scenario', '',
               f"Lane known-cost estimate: CNY {fmt(accounting.get('totalObservedCny'))}; conservative peak-equivalent bound plus product reservations: CNY {fmt(accounting.get('conservativeUpperBoundCny'))}. This includes paid smokes, inference, product practice/learning and available diagnostics.", '',
@@ -100,7 +100,8 @@ def main(args):
             lines.append(f'- {bench}: full-run budget scenario pending completed paired arms; no zero-cost assumption for missing runs.')
             continue
         cost = sum(r['tokens']['costCnyPeakEquivalent'] / r['modelInvoked'] * full_n for r in rows if r.get('modelInvoked'))
-        hours = sum(sum(t['wallSeconds'] for t in r['rows']) / r['completed'] * full_n / 3600 for r in rows if r['completed'])
+        # Admission-only records have no runtime sample; do not let them dilute throughput.
+        hours = sum(sum(t['wallSeconds'] for t in r['rows'] if t['tokens']['requests']) / r['modelInvoked'] * full_n / 3600 for r in rows if r.get('modelInvoked'))
         lines.append(f"- {bench}: linear scenario for {full_n} instances × {len(rows)} arms: CNY {cost:.2f} model spend at peak-equivalent pilot prices, {hours:.1f} sequential lab hours at observed throughput (including baseline oracle setup where applicable).")
     lines += ['', 'These are budget scenarios, not validated full-run quotes or extrapolated success scores. The fixed arm order, warmed build caches, reused oracle controls and shared lab load affect throughput. Unseen heavy/credentialed tasks, fresh full-set oracle builds, host rental, a complete official-judge evaluation and additional independent practice are not priced. A full SkillsBench learned-method submission needs external practice (the pilot practice tasks are part of its 87-task corpus); the SkillLearnBench first variants are learning inputs, so an entirely held-out extension has 80 remaining variants, distinct from a 100-instance published-protocol run.', '',
               '## Comparability', '',
