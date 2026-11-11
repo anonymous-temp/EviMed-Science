@@ -180,7 +180,9 @@ node evals/capsule-proving/sb/report.mjs /srv/evimed/sb /srv/evimed/runs /srv/ev
 Mounted means deployed skill folders. Opened means a successful read-tool call
 for a mounted `SKILL.md`, deduplicated by tool-call ID. Shell reads are not counted
 by that conservative observer. Learned-method openings on held-out tasks are
-reference-agent reuse, not product observer events.
+reference-agent reuse, not product observer events. Catalog descriptions are
+visible before a body is opened, so zero observed reads does not prove zero
+method influence.
 ACP can omit the path and title the operation only `read`; a completed read
 returning the mounted skill's frontmatter also identifies an opening.
 
