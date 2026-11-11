@@ -362,7 +362,9 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     memoryHistorySecretRedactionEnabled: overrides.memoryHistorySecretRedactionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_ENABLED", false),
     memoryHistorySecretRedactionDailyCalls: boundedInteger(overrides.memoryHistorySecretRedactionDailyCalls ?? process.env.OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS, 120, 0, 10_000, "OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS"),
     memoryHistorySearchEnabled: overrides.memoryHistorySearchEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED", true),
+    memoryHistoryRetrievalV2Enabled: overrides.memoryHistoryRetrievalV2Enabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_RETRIEVAL_V2_ENABLED", false),
     memorySearchHintEnabled: overrides.memorySearchHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SEARCH_HINT_ENABLED", false),
+    memorySafetyNotesEnabled: overrides.memorySafetyNotesEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED", false),
     memoryOpeningIndexEnabled: overrides.memoryOpeningIndexEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_INDEX_ENABLED", false),
     memoryOpeningByUseEnabled: overrides.memoryOpeningByUseEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_BY_USE_ENABLED", false),
     // Zero uses the pinned plugin's current effective opening size, including its profile and listing cuts.
@@ -2952,6 +2954,8 @@ export function loadConfig(overrides = {}) {
     // of — unreachable, not the one answer shape, or the account's day spent — is kept. The day's calls per account are the bound
     // (`open_science_native_memory_rejection_judge_total`); off, only a verbatim repeat and a line that contains a removed one are met.
     nativeMemoryRejectionJudgeEnabled: overrides.nativeMemoryRejectionJudgeEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED", true),
+    // Experimental attribution check after extraction; a failed check keeps the written line.
+    memoryPastedInstructionCheckEnabled: overrides.memoryPastedInstructionCheckEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED", false),
     // The page's import of what another assistant remembered (`nativeMemoryImport.mjs`): one Flash call splits the pasted text, the person
     // reviews the list, the engine writes what they keep. The offers an account may ask for in an hour are the bound on that call
     // (`open_science_native_memory_imports_total{outcome="rate_limited"}`); 0 refuses every import.
@@ -3294,6 +3298,14 @@ export function loadConfig(overrides = {}) {
     // A learned method's card carries up to two quotations it rests on, two situations it is not for, and whether it was used after its last
     // change and not corrected (plan 2026-11-04 item 11), off by default; SKILL.md and the digest never change. Off, the card is two lines.
     methodCardEvidenceEnabled: overrides.methodCardEvidenceEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED", false),
+    // The training camp's lesson (plan 2026-11-04 §5.3), off by default: the distillation reads a `camp` lesson — any finished run with an outcome
+    // a checker decided in code, a failure as much as a success, through excerpts of its decisive and closing steps. Only a camp driver raises
+    // one, in lab accounts; NEVER set this for a deployment that serves real accounts. `learningRefusal` is not loosened either way.
+    learningCampEnabled: overrides.learningCampEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_CAMP_ENABLED", false),
+    // Two-stage distillation (plan 2026-11-04 §5.2, SkillPyramid's two-stage creation), off by default: a lesson is first framed (which methods on
+    // file it reuses, which sub-skills are new, under the `method-frame` contract) and then each new sub-skill is written as its own method that
+    // pins what it builds on. Off, a lesson is the one step it was and the skill text is byte-identical.
+    methodTwoStageDistillationEnabled: overrides.methodTwoStageDistillationEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED", false),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),
     // The context window the kernel is told it has.

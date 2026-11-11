@@ -28,18 +28,18 @@ export function normalizeUsage(usage = {}) {
 /**
  * Minimal non-streaming chat client. A retry count of five means at most six attempts.
  * @param {{keyFile: string, baseURL?: string, model?: string, thinking?: 'disabled'|'enabled',
- * fetch?: typeof globalThis.fetch, timeoutMs?: number, maxRetries?: number,
+ * protocol?: 'deepseek'|'openai', fetch?: typeof globalThis.fetch, timeoutMs?: number, maxRetries?: number,
  * backoffMs?: number, sleep?: (ms: number) => Promise<any>}} options
  * @returns {{model: string, thinking: string, redact: (value: any) => string, complete: (request: any) => Promise<any>}}
  */
 export function createDeepSeekClient(options) {
   const { keyFile, baseURL = "https://api.deepseek.com", model = "deepseek-flash",
-    thinking = "disabled", fetch: fetchImpl = globalThis.fetch, timeoutMs = 120000,
+    thinking = "disabled", reasoningEffort = "high", fetch: fetchImpl = globalThis.fetch, timeoutMs = 120000,
     maxRetries = 5, backoffMs = 500, sleep = delay } = options;
   let key = "";
   const redact = (value) => firstLine(value, [key]);
   return {
-    model, thinking, redact,
+    model, thinking, reasoningEffort: thinking === "enabled" ? reasoningEffort : null, redact,
     async complete({ messages, tools = [], toolChoice, tool_choice }) {
       if (!["enabled", "disabled"].includes(thinking)) throw failure("invalid_thinking", "Unsupported thinking mode");
       if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw failure("invalid_timeout", "Timeout must be positive");
@@ -48,7 +48,10 @@ export function createDeepSeekClient(options) {
         catch { throw failure("key_file", "Unable to read API key file"); }
         if (!key) throw failure("key_file", "API key file is empty");
       }
-      const body = { model, messages, stream: false, thinking: { type: thinking } };
+      const body = { model, messages, stream: false, ...(options.protocol === "openai"
+        ? { enable_thinking: thinking === "enabled", max_tokens: 8192 }
+        // What the product's model gateway sends upstream (`reasoningFields`, modelReasoningPolicy.mjs): the thinking switch and, when on, the effort.
+        : { thinking: { type: thinking }, ...(thinking === "enabled" ? { reasoning_effort: reasoningEffort } : {}) }) };
       if (tools.length) body.tools = tools;
       const choice = toolChoice ?? tool_choice;
       if (choice !== undefined) body.tool_choice = choice;
@@ -93,4 +96,9 @@ export function createDeepSeekClient(options) {
       }
     },
   };
+}
+
+/** DashScope's OpenAI format, sharing retry, redaction and tool-call handling with DeepSeek. */
+export function createOpenAICompatibleClient(options) {
+  return createDeepSeekClient({ ...options, protocol: "openai" });
 }

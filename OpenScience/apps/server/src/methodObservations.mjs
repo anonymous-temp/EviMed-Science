@@ -34,9 +34,9 @@
  * - a name in the receipt that resolves to no approved method is another
  *   source's entry sharing the same mount directory, and is passed through to
  *   the ledger's receipt without being counted as anything;
- * - a method read in a session that produced no deliverable has no mounted
- *   digest and no verdict, so it is reported as read and attributed to nothing.
- *   It still counts as "not passed over", which is the one claim it supports.
+ * - an ordinary conversation opening a mounted method earns one `opened`
+ *   observation, without inventing an acceptance; an unmounted read remains
+ *   a read and never credits the current method body with unproven bytes.
  *
  * @module
  */
@@ -283,7 +283,7 @@ export function invokedSkillsBySession(sessions) {
  * @property {{name: string, digest: string, reason?: string}[]} methodsLoaded   with why each card was there, when the mount said (`METHOD_MOUNT_REASONS`)
  * @property {{name: string, digest: string}[]} methodsInvoked   every approved method the run opened, with the digest of the file it was carried as
  * @property {{name: string, mounted: string, current: string}[]} mismatched
- * @property {{id: string, name: string}[]} invokedWithoutMount   opened, and credited to no deliverable's observation
+ * @property {{id: string, name: string}[]} invokedWithoutMount   opened without proven mounted bytes, or outside an attributable workflow item
  * @property {string[]} carried   ids of the approved methods the run carried a card for
  * @property {{id: string, reason: string | null}[]} carriedBy   the same, with why each card was in front of the run: `null` when the receipt does not say (a runtime that predates the reason)
  * @property {boolean} answered   the model got to act in the run's own session, so a card it did not open was passed over rather than unseen
@@ -312,7 +312,7 @@ const isRelevantReason = (reason) => /** @type {readonly string[]} */ (METHOD_RE
  *    the loop learnt from recorded zero observations, and nine successful runs
  *    that carried a method produced two (audit 2026-09-26, L-G2).
  *
- * @param {{run: {id: string, sessionId?: string}, projection: any, methods: readonly KnownMethod[], sessions?: readonly any[], at?: string}} input
+ * @param {{run: {id: string, sessionId?: string, status?: string}, projection: any, methods: readonly KnownMethod[], sessions?: readonly any[], at?: string}} input
  * @returns {RunMethodObservations}
  */
 export function runMethodObservations(input) {
@@ -414,32 +414,28 @@ export function runMethodObservations(input) {
     }
   }
 
-  // Read in a session that produced no deliverable, or by one that did not
-  // credit it.
-  //
-  // The mount is recorded on the delegation receipt, so a run that never
-  // delegates has no receipt and every loop above skips it — while the root
-  // session may well have called the `skill` tool on a learned method and read
-  // it. The whole open-domain answer line works that way, and for it this
-  // module reported nothing at all *and* counted every approved method as
-  // "available and passed over", which is the opposite of what happened.
-  //
-  // MemOS's local plugin takes the same signal at the moment of the load, from
-  // `skill_get`, and calls it a use. Ours is read back off the transcript,
-  // which costs nothing extra and cannot be forgotten by a caller.
-  //
-  // It is not an attribution and never becomes one: with no receipt there is no
-  // mounted digest, so there is no text to credit and no deliverable verdict to
-  // credit it with. It is a name that was read, which is enough to say the
-  // method was not passed over — and enough, through `foldRead`, to keep the
-  // retirement rule from reading a method the answer line uses daily as idle.
-  //
-  // "Credited" is what an observation of this run says was used. A method the
-  // root session opened while a child made the deliverable, or one a child
-  // opened in a deliverable that never reached a verdict, is opened and
-  // credited to nothing, and used to be counted nowhere: 2026-10-12, three of
-  // the four production runs whose transcripts show a mounted method's file
-  // being opened left no trace of it in the run's ledger row.
+  // Ordinary conversations have no workflow items. The runtime selection proves
+  // the mounted bytes; the root's scoped transcript proves opening them. One
+  // run family gives retries the same observation key without inventing a gate verdict.
+  if (!items.length) {
+    for (const entry of mountedForRoot) {
+      const known = byName.get(entry.name);
+      if (!known || !usedIn(rootInvoked, known)) continue;
+      if (known.digest !== entry.digest) {
+        if (!mismatched.some(mismatch => mismatch.name === entry.name)) mismatched.push({ name: entry.name, mounted: entry.digest, current: known.digest });
+        continue;
+      }
+      observations.push({ methodId: known.id, observation: {
+        runId, family: `${runId}:conversation`, outcome: "opened", at, invoked: true,
+        ...(known.contentDigest ? { contentDigest: known.contentDigest } : {}),
+      } });
+      loaded.set(entry.name, entry.digest);
+      invoked.set(entry.name, entry.digest);
+    }
+  }
+
+  // Openings not credited above remain reads: a method without proven mounted
+  // bytes, a root opening outside a child's deliverable, or an unfinished child.
   const invokedAnywhere = new Set([...invokedBySession.values()].flatMap((names) => [...names]));
   const credited = new Set(observations.filter((entry) => entry.observation.invoked).map((entry) => entry.methodId));
   const opened = (input.methods ?? []).filter((method) => usedIn(invokedAnywhere, method));

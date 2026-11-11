@@ -418,7 +418,7 @@ export function clipCardFact(text) {
  * quotations the method rests on, one of the situations it is not for, and one saying it was used after its last change and not
  * corrected (`verified`). Without it the card is the two lines it always was.
  * @param {{ name: string, description?: string, whenToUse?: string, path?: string,
- *   card?: { evidence?: readonly string[], counterexamples?: readonly string[], verified?: boolean } | null }} method
+ *   card?: { evidence?: readonly string[], counterexamples?: readonly string[], verified?: boolean, rewrites?: {count: number, dates: readonly string[]} } | null }} method
  * @returns {string[]}
  */
 export function learnedMethodCardEntry(method) {
@@ -435,8 +435,8 @@ export function learnedMethodCardEntry(method) {
 
 /**
  * The lines a card's facts add under it (`learnedMethodCardEntry`, and the session's method section in the capsule plugin): the quotations
- * the method rests on, the situations it is not for, and a verified line when it is. None for no card.
- * @param {{ evidence?: readonly string[], counterexamples?: readonly string[], verified?: boolean } | null | undefined} card
+ * the method rests on, the situations it is not for, its corrective rewrite history and a verified line when it is. None for no card.
+ * @param {{ evidence?: readonly string[], counterexamples?: readonly string[], verified?: boolean, rewrites?: {count: number, dates: readonly string[]} } | null | undefined} card
  * @returns {string[]}
  */
 export function learnedMethodCardFactLines(card) {
@@ -447,6 +447,7 @@ export function learnedMethodCardFactLines(card) {
   return [
     ...(evidence.length ? [`  依据：${evidence.map((quote) => `「${quote}」`).join('')}`] : []),
     ...(counterexamples.length ? [`  不适用：${counterexamples.join('；')}`] : []),
+    ...(Number(card.rewrites?.count ?? 0) > 0 ? [`  纠正后重写：${card.rewrites?.count} 次；最近：${card.rewrites?.dates.at(-1) ?? ''}`] : []),
     ...(card.verified === true ? ['  已验证：最近一次修改后用过，没有被纠正'] : []),
   ]
 }

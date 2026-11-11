@@ -102,3 +102,29 @@ test('applying the plugin with a method mounted reaches no service it does not i
   // card names, which is the path the control plane recognises being opened.
   assert.equal(provided.evimedCapsuleMethods[0].path, `/runtime/capsule-methods/${directory}/SKILL.md`)
 })
+
+test('corrective rewrite evidence survives selection parsing into the mounted card', async () => {
+  const directory = `_lm${'e'.repeat(32)}`
+  const dates = ['2026-11-09T10:00:00.000Z', '2026-11-10T10:00:00.000Z']
+  const card = { evidence: [], counterexamples: [], verified: false, rewrites: { count: 2, dates } }
+  /** @type {any[]} */
+  const sections = []
+  /** @type {Record<string, any>} */
+  const provided = {}
+  const fs = {
+    resolve: async (/** @type {string} */ relative, /** @type {{cwd: string}} */ { cwd }) => `${cwd}/${relative}`,
+    listDir: async () => [{ name: directory, isDirectory: true }],
+    readText: async (/** @type {string} */ target) => target.endsWith('_selection.json')
+      ? JSON.stringify({ version: 'rewrites', methods: [{ directory, card }] })
+      : target.endsWith('/SKILL.md') ? '---\nname: corrected-method\ndescription: A corrected method.\n---\n## Workflow\nDo the work.' : '',
+  }
+  const ctx = {
+    effect: (/** @type {any} */ fn) => fn(), on: () => () => {}, provide: (/** @type {string} */ key, /** @type {any} */ value) => { provided[key] = value },
+    get: (/** @type {string} */ key) => key === 'fs' ? fs : undefined,
+    systemPrompt: { section: (/** @type {any} */ section) => { sections.push(section); return () => {} } },
+    tools: { register: () => () => {} },
+  }
+  await apply(ctx, { methodsDir: '/runtime/capsule-methods', recallUrl: '', tokenFile: '', recallTimeoutMs: 1000 })
+  assert.deepEqual(provided.evimedCapsuleMethods[0].card.rewrites, { count: 2, dates: dates.slice(-1) })
+  assert.match(sections[0].text, /纠正后重写：2 次；最近：2026-11-10T10:00:00.000Z/)
+})

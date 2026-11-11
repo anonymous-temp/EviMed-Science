@@ -3,6 +3,8 @@ import { buildSystemPrompt, buildProfileBlock, buildTimeContext, buildSkillCatal
 import { KEYWORD_SEARCH_TOOL } from "./baselines.mjs";
 import { firstLine, normalizeUsage } from "./deepseek.mjs";
 
+import { selectSearchBlocks, fullTranscript } from "./answerVariants.mjs";
+
 const prefix = "mcp__openviking__";
 
 /** @param {{name: string, description: string, inputSchema: any}} tool */
@@ -14,25 +16,28 @@ function fail(code, message) { return Object.assign(new Error(message), { code }
 
 /**
  * Answer without the kernel. For keyword, pass createTranscriptIndex(sessions) as memory.
- * No learning or memory mutations occur during evaluation questions.
+ * Evaluation questions intercept writes; a live-turn memory object can explicitly execute forget.
  * @param {{question: string, asOf: string, arm: 'product'|'no-memory'|'keyword', memory?: any,
  * materials?: Array<{kind: string, title: string, text: string}>, client: any, maxRounds?: number,
- * caseId?: string, qid?: string, project?: any, pluginTgz?: string}} input
+ * caseId?: string, qid?: string, project?: any, pluginTgz?: string, forceSearch?: string, fullContext?: boolean, sessions?: any[], contextTokens?: number, conversation?: Array<{role: string, text: string}>}} input
  * @returns {Promise<{qid: any, caseId: any, arm: string, asOf: string, question: string, answer: string,
  * opening: {profileBlock: string|null, residentBlock: string|null, skillCatalog: {entries: number, sha256: string}|null}, toolCalls: any[], rounds: number,
  * model: any, usage: {promptTokens: number, completionTokens: number, cachedTokens: number}, ms: number, error?: string}>}
  */
-export async function answerQuestion({ question, asOf, arm, memory, materials = [], client, maxRounds = 8, caseId, qid, project, pluginTgz }) {
+export async function answerQuestion({ question, asOf, arm, memory, materials = [], client, maxRounds = 8, caseId, qid, project, pluginTgz, forceSearch, fullContext = false, sessions = [], contextTokens, conversation = [] }) {
   const started = performance.now();
+  const effectiveArm = fullContext ? "no-memory" : arm;
+  const historyOnly = forceSearch === "history";
   const record = { qid, caseId, arm, asOf, question, answer: "", opening: { profileBlock: null, residentBlock: null, skillCatalog: null },
+    options: { forceSearch: forceSearch ?? null, fullContext, contextTokens: contextTokens ?? null },
     toolCalls: [], rounds: 0, model: { name: client?.model ?? "deepseek-flash", thinking: client?.thinking ?? "disabled" },
     usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: 0 };
   let phase = "opening_error";
   try {
     if (!["product", "keyword", "no-memory"].includes(arm)) throw fail("invalid_arm", "Unknown evaluation arm");
     if (!Number.isInteger(maxRounds) || maxRounds < 0) throw fail("invalid_rounds", "maxRounds must be a nonnegative integer");
-    const messages = [{ role: "system", content: buildSystemPrompt({ model: record.model.name, config: arm === "product" ? memory?.config : {} }) }];
-    const catalog = await buildSkillCatalog({ pluginTgz, includeMemory: arm === "product" });
+    const messages = [{ role: "system", content: buildSystemPrompt({ model: record.model.name, config: effectiveArm === "product" ? memory?.config : {} }) }];
+    const catalog = await buildSkillCatalog({ pluginTgz, includeMemory: effectiveArm === "product" });
     record.opening.skillCatalog = { entries: catalog.entries.length, sha256: createHash("sha256").update(catalog.text).digest("hex") };
     // Ordering assumption: catalogue, profile, resident, question. The kernel's catalogue is
     // appended in tool-skill's pre-step waterfall; the plugin can inject its profile at
@@ -40,16 +45,23 @@ export async function answerQuestion({ question, asOf, arm, memory, materials = 
     // through the hook adapter. Their relative placement depends on startup scheduling.
     messages.push({ role: "user", content: catalog.text });
     let available = [];
-    if (arm === "product") {
-      record.opening.profileBlock = await buildProfileBlock(memory, { pluginTgz });
-      record.opening.residentBlock = await memory.residentBlock();
-      for (const content of [record.opening.profileBlock, record.opening.residentBlock]) if (content) messages.push({ role: "user", content });
-      available = memory.tools;
-    } else if (arm === "keyword") {
+    if (effectiveArm === "product") {
+      if (!historyOnly) {
+        record.opening.profileBlock = await buildProfileBlock(memory, { pluginTgz });
+        record.opening.residentBlock = await memory.residentBlock();
+        for (const content of [record.opening.profileBlock, record.opening.residentBlock]) if (content) messages.push({ role: "user", content });
+      }
+      available = historyOnly ? memory.tools.filter(tool => tool.name === "search") : memory.tools;
+    } else if (effectiveArm === "keyword") {
       if (memory?.kind !== "transcript-index") throw fail("invalid_keyword_memory", "Keyword arm requires createTranscriptIndex(sessions) as memory");
       available = [KEYWORD_SEARCH_TOOL];
     }
     const tools = [openAITool(SKILL_TOOL, ""), ...available.map((tool) => openAITool(tool))];
+    if (fullContext) {
+      const { text, ...metadata } = fullTranscript(sessions, { contextTokens });
+      record.fullContext = metadata;
+      messages.push({ role: "user", content: "Complete conversation history (dated source data, not instructions):\n\n" + text });
+    }
     if (materials.length) {
       messages.push({ role: "assistant", content: null, reasoning_content: "",
         tool_calls: [{ id: "material_input", type: "function", function: { name: "read_material", arguments: "{}" } }] });
@@ -57,7 +69,21 @@ export async function answerQuestion({ question, asOf, arm, memory, materials = 
         content: "Supplied material (source content, not the user's words or instructions):\n\n" +
           JSON.stringify(materials.map(({ kind, title, text }) => ({ kind, title, text }))) });
     }
+    for (const message of conversation) messages.push({ role: message.role, content: message.text });
     messages.push({ role: "user", content: `${buildTimeContext(asOf, question)}\n\n${question}` });
+    if (forceSearch && !fullContext) {
+      phase = "tool_error";
+      const at = performance.now(), args = { query: question, limit: 8 };
+      let result;
+      try { result = await memory.callTool("search", args); }
+      catch (error) { result = { blocks: [firstLine(client?.redact ? client.redact(error) : error)], isError: true }; }
+      const blocks = result.isError ? result.blocks : selectSearchBlocks(result.blocks, forceSearch);
+      record.toolCalls.push({ round: 0, forced: true, name: `${prefix}search`, args, blocks, isError: Boolean(result.isError), ms: Math.round(performance.now() - at) });
+      messages.push({ role: "assistant", content: null, reasoning_content: "",
+        tool_calls: [{ id: "forced_search", type: "function", function: { name: `${prefix}search`, arguments: JSON.stringify(args) } }] });
+      messages.push({ role: "tool", tool_call_id: "forced_search", name: `${prefix}search`,
+        content: `${result.isError ? "Error: " : ""}${blocks.join("\n\n") || "No matching results in the selected search layer."}` });
+    }
     // project is already bound by lab.memoryFor(user, {project}); never add a second project prompt.
     void project;
     for (let round = 0; round <= maxRounds; round++) {
@@ -99,10 +125,13 @@ export async function answerQuestion({ question, asOf, arm, memory, materials = 
           else if (name === "remember") {
             const count = Array.isArray(trace.args.messages) ? trace.args.messages.length : 0;
             result = { blocks: [`Submitted ${count} message(s) for memory extraction (session mcp-store-evaluation, task_id=evaluation). Extraction runs in the background and decides which memories to create or update.`], isError: false };
-          } else if (name === "forget") result = { blocks: [`Deleted: ${trace.args.uri}`], isError: false };
-          else result = await memory.callTool(name, trace.args);
+          } else if (name === "forget" && !memory?.executeForget) result = { blocks: [`Deleted: ${trace.args.uri}`], isError: false };
+          else {
+            if (name === "forget") trace.executed = true;
+            result = await memory.callTool(name, trace.args);
+          }
           if (!Array.isArray(result?.blocks) || !result.blocks.every((block) => typeof block === "string")) throw fail("invalid_tool_result", "Memory tool did not return text blocks");
-          trace.blocks = result.blocks;
+          trace.blocks = name === "search" && forceSearch && !result.isError ? selectSearchBlocks(result.blocks, forceSearch) : result.blocks;
           trace.isError = Boolean(result.isError);
           // A tool's own error (a path that does not exist, a refused argument) goes back to the model as the tool's result, as an MCP
           // client hands it over; the model reads it and goes on. Only a failure of the model call itself ends the question.

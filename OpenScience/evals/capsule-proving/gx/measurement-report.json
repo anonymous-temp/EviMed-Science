@@ -1,0 +1,320 @@
+{
+  "completedAt": "2026-11-10T14:16:08.411Z",
+  "checkout": {
+    "commit": "7163df070506baffcc0e1e5c0b0c71d2c3c499f4",
+    "branch": "cc/capsule-proving-int-20261110",
+    "dirty": true
+  },
+  "validation": {
+    "archiveReaderAgrees": true,
+    "allExistingSuitesPassed": true,
+    "successfulIndexedFiles": 500,
+    "queryCountsAndUnchangedPrefixes": true
+  },
+  "rawRoot": "/srv/evimed/runs",
+  "ledger": "/srv/evimed/results/ledger.jsonl",
+  "g7": {
+    "sourceRun": "v3-synthetic-users-dev-product-1",
+    "sourceRunCommit": "1e4c750aa349729140de743bac70a7b3d30ee699",
+    "users": 17,
+    "n": 6431,
+    "withOrigin": 6430,
+    "originShare": 0.9998445031876847,
+    "byType": {
+      "follow_ups": {
+        "n": 27,
+        "withOrigin": 27,
+        "withConversation": 27,
+        "share": 1
+      },
+      "notes": {
+        "n": 1487,
+        "withOrigin": 1487,
+        "withConversation": 1487,
+        "share": 1
+      },
+      "observations": {
+        "n": 102,
+        "withOrigin": 102,
+        "withConversation": 102,
+        "share": 1
+      },
+      "people": {
+        "n": 330,
+        "withOrigin": 330,
+        "withConversation": 330,
+        "share": 1
+      },
+      "preferences": {
+        "n": 3121,
+        "withOrigin": 3121,
+        "withConversation": 3121,
+        "share": 1
+      },
+      "profile": {
+        "n": 460,
+        "withOrigin": 459,
+        "withConversation": 459,
+        "share": 0.9978260869565218
+      },
+      "project_context": {
+        "n": 726,
+        "withOrigin": 726,
+        "withConversation": 726,
+        "share": 1
+      },
+      "entities": {
+        "n": 19,
+        "withOrigin": 19,
+        "withConversation": 19,
+        "share": 1
+      },
+      "corrections": {
+        "n": 146,
+        "withOrigin": 146,
+        "withConversation": 146,
+        "share": 1
+      },
+      "decisions": {
+        "n": 13,
+        "withOrigin": 13,
+        "withConversation": 13,
+        "share": 1
+      }
+    },
+    "sample": {
+      "n": 200,
+      "supported": 79,
+      "missingTokens": 19,
+      "noHardTokens": 102,
+      "archiveUnreadable": 0,
+      "allTokensPresent": 181
+    },
+    "productArchiveReaderRecheck": {
+      "n": 200,
+      "mismatches": 0,
+      "reader": "NativeMemoryVerification.readSources (uses sessions.read and filterCapturedMessage)",
+      "wallAt": "2026-11-10T13:51:26.468Z"
+    },
+    "labelledUniqueLines": {
+      "suggestion": {
+        "matchedLines": 41,
+        "labelledLines": 12
+      },
+      "opinion": {
+        "matchedLines": 30,
+        "labelledLines": 14
+      },
+      "document_claim": {
+        "matchedLines": 32,
+        "labelledLines": 24
+      }
+    },
+    "labelledGoldItems": {
+      "suggestion": {
+        "planted": 40,
+        "anchorMatched": 24,
+        "labelled": 10
+      },
+      "opinion": {
+        "planted": 23,
+        "anchorMatched": 15,
+        "labelled": 12
+      },
+      "document_claim": {
+        "planted": 42,
+        "anchorMatched": 21,
+        "labelled": 19
+      }
+    },
+    "limit": "Expanded literal renderings observed in the final development snapshots. Subject-bearing profile verbs count as user belief. These are descriptive code counts, not semantic proof; vague gold anchors can match unrelated lines. The earlier exact-label count remains above."
+  },
+  "g8": {
+    "reference": 58,
+    "n": 90,
+    "settings": {
+      "enabled": {
+        "invented": 54,
+        "n": 90,
+        "fullAllGiven": 83,
+        "pairsRight": 32,
+        "errors": 0,
+        "unjudged": 0,
+        "usage": {
+          "prompt": 558958,
+          "completion": 124377,
+          "cached": 413306
+        }
+      },
+      "disabled": {
+        "invented": 50,
+        "n": 90,
+        "fullAllGiven": 85,
+        "pairsRight": 36,
+        "errors": 0,
+        "unjudged": 0,
+        "usage": {
+          "prompt": 550088,
+          "completion": 48117,
+          "cached": 428536
+        }
+      }
+    },
+    "promptAudit": {
+      "defaultPersonaGuidanceEqual": true,
+      "sha256": "7ab76f5944c1c3f0726e8b3bca10de64bb8a8c79342ed12141615902bc1fa088",
+      "source": "Both use packages/socket/src/guidanceText.mjs buildGuidanceText and the preset persona; matches the native-memory default options in packages/socket/plugins/guidance.mjs.",
+      "options": {
+        "askUserEnabled": true,
+        "capsuleActive": false,
+        "reviewEnabled": false,
+        "runPolicyEnabled": true,
+        "capsuleToolEnabled": false,
+        "openVikingMemory": true,
+        "memorySearchHint": false
+      },
+      "defaultAnswer": "apps/server/src/dshProfilePatch.mjs: thinking enabled, reasoningEffort high",
+      "limits": [
+        "The memory block and learned-method read exchange are simulated by the paired instrument. It omits other kernel system sections and tool definitions.",
+        "Its synthesized method path is /runtime/capsule-methods/_lm/SKILL.md; real learned method paths are dynamic.",
+        "It does not model attended receipt behavior, history search or opening index feature variants. This is prompt-component parity, not full-wire equality.",
+        "Judge is fixed to deepseek-flash thinking disabled in both arms, retaining harness scoring; historical baseline judge mode was implicit."
+      ]
+    },
+    "comparison": "Historical reference 58/90, not a concurrent paired control. Enabled 54/90, disabled 50/90; overlapping sampling uncertainty, not established improvement. Judge mode in the historical reference was implicit."
+  },
+  "g12": {
+    "areas": {
+      "capsule-lifecycle": {
+        "files": 16,
+        "tests": 131,
+        "pass": 131,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "infrastructureErrors": 0
+      },
+      "container-tamper-sealing": {
+        "files": 3,
+        "tests": 55,
+        "pass": 55,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "infrastructureErrors": 0
+      },
+      "transfer-import-export": {
+        "files": 3,
+        "tests": 28,
+        "pass": 28,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "infrastructureErrors": 0
+      },
+      "sharing-versions-revocation": {
+        "files": 11,
+        "tests": 70,
+        "pass": 70,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "infrastructureErrors": 0
+      },
+      "official-packs": {
+        "files": 3,
+        "tests": 20,
+        "pass": 20,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "infrastructureErrors": 0
+      },
+      "promotion-gate": {
+        "files": 2,
+        "tests": 38,
+        "pass": 38,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "infrastructureErrors": 0
+      }
+    },
+    "totalTests": 342,
+    "totalPassed": 342,
+    "files": 38
+  },
+  "g13": {
+    "statementsPerFile": 20,
+    "writePath": "POST /api/v1/content/write mode=create wait=true; 20 original statement bullet lines per product notes file",
+    "writeDeviation": "NativeMemoryStore.remember extracts via a model per add. Corpus events/cases are disabled product types; every statement uses notes. Statement text and ids stay in the external load manifest. This measures packed files, not one vector per statement or extraction.",
+    "sizes": [
+      {
+        "statements": 1000,
+        "files": 50,
+        "queries": 200,
+        "p50Ms": 483.27335999999195,
+        "p95Ms": 1019.458065999992,
+        "hit5": 88,
+        "hitAt5": 0.44,
+        "queryErrors": 0,
+        "loadSeconds": 78.241,
+        "embeddingCalls": 100,
+        "embeddingTokens": 52938,
+        "queryEmbeddingCalls": 400,
+        "queryEmbeddingTokens": 10220,
+        "containerMemoryAfterLoad": "906.3MiB / 3GiB",
+        "containerMemoryAfterQueries": "780.4MiB / 3GiB",
+        "failedWriteAttempts": 0,
+        "recoveredFiles": 0,
+        "unresolvedFailedWrites": 0,
+        "costCny": null,
+        "costFormulaCny": {
+          "load": "52938 * embeddingCnyPerMillion / 1000000",
+          "per200Queries": "10220 * embeddingCnyPerMillion / 1000000",
+          "monthly": "load / amortizationMonths + queriesPerDay * 30 * per200Queries / 200; excludes answering, extraction and hosting"
+        }
+      },
+      {
+        "statements": 10000,
+        "files": 500,
+        "queries": 200,
+        "p50Ms": 493.2064680000767,
+        "p95Ms": 1106.8375009999145,
+        "hit5": 50,
+        "hitAt5": 0.25,
+        "queryErrors": 0,
+        "loadSeconds": 1613.54,
+        "embeddingCalls": 1001,
+        "embeddingTokens": 3132506,
+        "queryEmbeddingCalls": 400,
+        "queryEmbeddingTokens": 10360,
+        "containerMemoryAfterLoad": "1.033GiB / 3GiB",
+        "containerMemoryAfterQueries": "1.017GiB / 3GiB",
+        "failedWriteAttempts": 1,
+        "recoveredFiles": 1,
+        "unresolvedFailedWrites": 0,
+        "costCny": null,
+        "costFormulaCny": {
+          "load": "3132506 * embeddingCnyPerMillion / 1000000",
+          "per200Queries": "10360 * embeddingCnyPerMillion / 1000000",
+          "monthly": "load / amortizationMonths + queriesPerDay * 30 * per200Queries / 200; excludes answering, extraction and hosting"
+        }
+      }
+    ],
+    "skipped100000": {
+      "reason": "Observed writes project the additional 90,000 statements above one hour",
+      "estimatedAdditionalSeconds": 14521.860000000002,
+      "additionalFiles": 4500
+    },
+    "costLimit": "Exact account-scoped observer deltas, including the engine embedding wrapper Calls counter and tokens, are recorded. No independent provider HTTP-request attestation or billing rate is available; CNY and per-active-user monthly totals remain unknown without a price and workload. Only GX uses engine account evlab-gx-g13-1.",
+    "memoryLimit": "docker stats reports the whole shared engine container, not a per-user allocation or continuous peak."
+  },
+  "limitations": [
+    "G7 literal token and label checks do not establish semantic faithfulness. No-token lines are separate; missing gold anchors keep their planted denominator.",
+    "G8 is the remembered-format instrument, not a full kernel run. Its Flash judge is the same model family as the answerer; the historical reference is not a concurrent control.",
+    "G12 proves existing suite outcomes; it adds no new tests. PostgreSQL suites were run serially.",
+    "G13 packs unrelated corpus statements 20 per notes file. It measures those 50/500 files, not 1,000/10,000 independently indexed records. It bypasses extraction and does not measure whole-product monthly cost."
+  ],
+  "ledgerMetadata": "Initial G7/G8/G12 rows used the older development-run commit. Append-only correction rows reference the superseded ids; their values are unchanged."
+}

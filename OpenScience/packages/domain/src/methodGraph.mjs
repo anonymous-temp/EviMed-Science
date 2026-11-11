@@ -66,8 +66,8 @@ export const METHOD_RELATION_TYPES = Object.freeze([
   'shared_part', 'subset', 'merge', 'abstract_pattern', 'conflicts_with', 'supersedes',
 ])
 
-/** How a run ended, from the point of view of a method that was loaded for it. */
-export const METHOD_OBSERVATION_OUTCOMES = Object.freeze(['accepted', 'repaired', 'rejected'])
+/** How a run ended for a method it loaded. `opened` proves use only, with no delivery or human-reaction verdict. */
+export const METHOD_OBSERVATION_OUTCOMES = Object.freeze(['accepted', 'repaired', 'rejected', 'opened'])
 
 /** Outcomes that count toward the induction threshold. A run the gate refused
  *  is evidence against the method, not for it. */
@@ -154,6 +154,7 @@ export const METHOD_APPLIED_OUTCOMES = Object.freeze(['corrected', 'clean'])
  * @property {{eligible: number, loaded: number, invoked: number, succeeded: number, read: number, carried?: number, explored?: number, appliedCorrected?: number, appliedClean?: number}} counts
  * @property {MethodObservation[]} observations
  * @property {MethodRelation[]} relations
+ * @property {{count: number, dates: string[]}} [rewrites] corrective body changes over the method identity, across counter resets
  * @property {number} level  derived from `depends_on` by `computeMethodLevels` and written back by the consolidation pass (`foldLevel`)
  * @property {string|null} [lastReadAt]  when a run last read the body with nothing to attribute it to
  * @property {{key: string, at: string, version?: number}} [decided]  the group of methods this one was last decided in
@@ -228,7 +229,7 @@ export function withoutRetiredLearningKeys(learning) {
  *
  * Everything measured against the previous body is discarded, deliberately and
  * loudly: counters and observations both describe text that no longer exists. Relations survive because they are about the method's place in
- * the library, not about a particular wording.
+ * the library, not about a particular wording. Corrective rewrite dates also survive: they describe the method identity.
  * @param {MethodLearning} learning
  * @param {string} digest
  * @returns {MethodLearning}
@@ -236,7 +237,7 @@ export function withoutRetiredLearningKeys(learning) {
 export function resetLearningForDigest(learning, digest) {
   const current = learning ?? emptyLearning(digest)
   if (current.digest === digest) return current
-  return { ...emptyLearning(digest), relations: current.relations ?? [], level: current.level ?? 0 }
+  return { ...emptyLearning(digest), relations: current.relations ?? [], level: current.level ?? 0, ...(current.rewrites ? { rewrites: current.rewrites } : {}) }
 }
 
 /**
@@ -620,7 +621,7 @@ function harmPath(carried, observations, { baseRate, harmRate, alpha, beta, minR
 /** The observations the harm test reads — a known outcome of a run that used the method — oldest first. @param {readonly MethodObservation[] | undefined} observations */
 function usedObservations(observations) {
   return [...(observations ?? [])]
-    .filter((observation) => METHOD_OBSERVATION_OUTCOMES.includes(observation?.outcome) && observation?.invoked === true)
+    .filter((observation) => METHOD_OBSERVATION_OUTCOMES.includes(observation?.outcome) && observation.outcome !== 'opened' && observation?.invoked === true)
     .sort((left, right) => String(left.at ?? '').localeCompare(String(right.at ?? '')))
 }
 
@@ -1093,14 +1094,15 @@ export function methodCardVerified(payload) {
  * What a learned method's card carries beyond when it applies (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`): the first quotations it rests on
  * (`storedEvidenceQuotes` of `provenance.evidence`), the first situations it was declared not to be for (`scope.counterexamples`), each clipped
  * to a card's line (`LEARNED_METHOD_CARD_FACTS`), and `verified` (`methodCardVerified`). Outside SKILL.md, so nothing that hashes the method
- * moves when a card does.
- * @param {any} payload @returns {{ evidence: string[], counterexamples: string[], verified: boolean }}
+ * moves when a card does. Corrective rewrites retain their identity-wide count and latest date here; the method page keeps all dates.
+ * @param {any} payload @returns {{ evidence: string[], counterexamples: string[], verified: boolean, rewrites?: {count: number, dates: string[]} }}
  */
 export function methodCardFacts(payload) {
   const evidence = storedEvidenceQuotes(payload?.provenance).map(clipCardFact).filter(Boolean).slice(0, LEARNED_METHOD_CARD_FACTS.evidence)
   const counterexamples = (Array.isArray(payload?.scope?.counterexamples) ? payload.scope.counterexamples : [])
     .filter((/** @type {unknown} */ entry) => typeof entry === 'string').map(clipCardFact).filter(Boolean).slice(0, LEARNED_METHOD_CARD_FACTS.counterexamples)
-  return { evidence, counterexamples, verified: methodCardVerified(payload) }
+  return { evidence, counterexamples, verified: methodCardVerified(payload),
+    ...(payload?.learning?.rewrites ? { rewrites: { count: payload.learning.rewrites.count, dates: payload.learning.rewrites.dates.slice(-1) } } : {}) }
 }
 
 /**

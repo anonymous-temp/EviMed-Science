@@ -13,10 +13,14 @@ import { buildJudgePacket, judgePackets, mergeJudgeResults, sha256, answerTrace,
 import { createTranscriptIndex } from './baselines.mjs';
 import { loadCases } from './cases.mjs';
 
+import { readPublicMemory, PUBLIC_MEMORY_SETS } from './publicSets.mjs';
+import { publicMemoryRubric, PUBLIC_OFFICIAL } from './publicJudge.mjs';
+import { OFFICIAL, rubricFacts } from './officialJudge.mjs';
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const SCORER_VERSION = 'capsule-proving-run-score/4';
+export const SCORER_VERSION = 'capsule-proving-run-score/6';
 export const SUPPORTED_SETS = ['synthetic-users', 'scenarios', 'med-m1', 'med-m2', 'med-m3', 'med-m5', 'med-m10',
-  'g6', 'g9', 'm6', 'm7', 'm11', 'brand-generic', 'longmemeval-s', 'medmemorybench'];
+  ...PUBLIC_MEMORY_SETS, 'g6', 'g9', 'm6', 'm7', 'm11', 'brand-generic', 'longmemeval-s', 'medmemorybench'];
 const json = async file => JSON.parse(await readFile(file, 'utf8'));
 const jsonl = async file => (await readFile(file, 'utf8')).split('\n').filter(l => l.trim()).map(l => JSON.parse(l));
 /** An appending runner may leave a torn final record visible during a read; completed records remain usable. */
@@ -96,6 +100,7 @@ export async function loadGold(data, run, { sources, pools } = {}) {
   if (!SUPPORTED_SETS.includes(set)) throw new Error(`unknown_set:${set}; supported: ${SUPPORTED_SETS.join(',')}`);
   if (!poolName(split)) throw new Error(`unknown_split:${split}`);
   if (/sealed|confirmation/.test(split) || data.split(path.sep).some(p => /^(?:.*-)?sealed$/.test(p))) throw new Error('sealed_data_forbidden');
+  if (PUBLIC_MEMORY_SETS.includes(set)) return loadPublicMemoryGold(data, run);
   if (set === 'synthetic-users') {
     const dir = path.join(data, split);
     const entries = (await list(dir)).filter(d => d.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
@@ -132,6 +137,17 @@ export async function loadGold(data, run, { sources, pools } = {}) {
     ];
     return [{ caseId, gold: item, input, ...prov }];
   });
+}
+
+async function loadPublicMemoryGold(data, run) {
+  const entries = await readPublicMemory({ set: run.set, split: run.split, dataDir: data, withGold: true });
+  return entries.map(entry => ({ caseId: entry.caseId, itemId: entry.itemId, generator: 'public', input: null,
+    gold: { questions: entry.gold.map((gold, i) => {
+      const input = entry.inputs[i], rubric = publicMemoryRubric(run.set, gold);
+      return { qid: input.id, question: input.question.text, category: gold.categoryName ?? gold.category_name ?? gold.question_type ?? gold.task,
+        afterSession: input.histories.length, rubric: rubric.status, official: gold,
+        expect: { judge: rubric.text } };
+    }) } }));
 }
 
 async function loadPublic(data, run, { sources, pools }) {
@@ -210,7 +226,8 @@ async function caseEvidence(root, caseId, variant) {
     snapshots.push({ ...snapshot, afterSession: snapshot.afterSession ?? Number.parseInt(d.name) });
   }
   const ingest = await evidenceLines(path.join(dir, 'ingest.jsonl'));
-  return { answers, ingest, snapshots, snapshot: snapshots.at(-1) ?? null };
+  const liveTurns = await evidenceLines(path.join(dir, 'live-turns.jsonl'));
+  return { answers, ingest, liveTurns, snapshots, snapshot: snapshots.at(-1) ?? null };
 }
 function snapshotFor(evidence, question) {
   const at = question.checkpoint ?? question.afterSession;
@@ -279,7 +296,7 @@ function questionContext(entry, loaded, question, answer, evidence) {
     if (typeof anchor === 'string') anchors.push(anchor);
   }
   const index = createTranscriptIndex(sessions);
-  const queries = [question.question ?? question.text ?? answer?.question ?? '', ...anchors];
+  const queries = [...anchors, question.question ?? question.text ?? answer?.question ?? ''];
   const hits = queries.map(query => index.search(query, 6)), excerpts = [], seen = new Set();
   // Interleave the question and anchor searches so neither can crowd the other out.
   for (let rank = 0; rank < 6 && excerpts.length < 6; rank++) for (const results of hits) {
@@ -333,7 +350,7 @@ function addUsage(totals, evidence) {
     totals.extraction.prompt += Number(row.usage?.promptTokens) || 0;
     totals.extraction.completion += Number(row.usage?.completionTokens) || 0;
   }
-  for (const row of evidence.answers) {
+  for (const row of [...evidence.answers, ...evidence.liveTurns.map(turn => turn.record).filter(Boolean)]) {
     totals.answer.prompt += Number(row.usage?.promptTokens) || 0;
     totals.answer.completion += Number(row.usage?.completionTokens) || 0;
     totals.answer.cached += Number(row.usage?.cachedTokens) || 0;
@@ -416,6 +433,7 @@ export function summarize(rows) {
   return { schema: SCORER_VERSION, overall: stats(rows), answers: stats(rows.filter(r => r.kind === 'answer')),
     disputed: rows.filter(r => r.disputed).map(r => ({ set: r.set, split: r.split, caseId: r.caseId, id: r.id, reason: r.judge?.reason })),
     sets,
+    forget: summarizeForget(rows),
     bySet: group('set'), byCategory: group('category'), byRubric: group('rubric'),
     byGenerator: Object.fromEntries([...new Set(rows.flatMap(r => r.generators ?? [r.generator ?? 'unknown']))].sort()
       .map(g => [g, stats(rows.filter(r => (r.generators ?? [r.generator ?? 'unknown']).includes(g)))])),
@@ -433,6 +451,21 @@ export function summarize(rows) {
               [place, items.filter(r => r.verdict === 'fail' && r.places?.includes(place)).length])) } : {}) }];
       })) } };
 
+}
+
+/** Separate model inaction from a called tool whose result did not remove the content.
+ * Missing/errored interventions and answers remain in n and are explicitly unknown.
+ */
+export function summarizeForget(rows) {
+  const items = rows.filter(row => row.kind === 'answer' && row.forget);
+  const group = called => {
+    const held = items.filter(row => row.forget.toolCalled === called);
+    return { n: held.length, count: held.filter(row => row.forget.reappeared === true).length,
+      unknown: held.filter(row => row.forget.reappeared === null).length };
+  };
+  return { forgetToolCalled: { n: items.length, count: items.filter(row => row.forget.toolCalled === true).length,
+      unknown: items.filter(row => row.forget.toolCalled === null).length },
+    forgottenReappeared: { toolCalled: group(true), toolNotCalled: group(false), unobserved: group(null) } };
 }
 
 /** Metadata fingerprints avoid reading unchanged public corpora. Never traverse sealed inputs. */
@@ -453,14 +486,14 @@ function assertDevelopment(data, run) {
   if (!poolName(run.split)) throw new Error(`unknown_split:${run.split}`);
 }
 async function goldCacheKey(data, run, { sources, pools }) {
-  const publicName = { 'longmemeval-s': 'longmemeval', medmemorybench: 'medmemorybench-hf', 'brand-generic': 'brand-generic-probe' }[run.set];
+  const publicName = { 'longmemeval-s': 'longmemeval', medmemorybench: 'medmemorybench-hf', 'brand-generic': 'brand-generic-probe', locomo: 'locomo-refined', 'locomo-original': 'locomo', realmem: 'realmem', halumem: 'halumem', memsyco: 'memsyco' }[run.set];
   const root = publicName ? path.join(data, 'public', publicName) : run.set === 'synthetic-users' ? path.join(data, run.split) : setDir(data, run.set, run.split);
   return sha256(stableJson({ version: SCORER_VERSION, set: run.set, split: run.split, options: run.options, sources, pools,
     files: await metadataTree(root), code: await metadataTree(HERE),
     dependencies: await Promise.all(['../inputs.mjs', '../inputsLearning.mjs', '../normalize.mjs', '../offlineJudge.mjs', '../sources.json', '../pools'].map(f => metadataTree(path.join(HERE, f)))) }));
 }
 
-async function adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl, judgeConcurrency, retryDelayMs }) {
+async function adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl, judgeConcurrency, judgeBatchSize, retryDelayMs }) {
   let results = await optional(() => jsonl(path.join(out, 'judge-results.jsonl')), []);
   const packetIds = new Set(packets.map(p => p.id));
   results = results.filter(r => packetIds.has(r.id));
@@ -472,7 +505,7 @@ async function adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl
   if (!noJudge && judgeKeyFile && packets.length) {
     const key = (await readFile(judgeKeyFile, 'utf8')).trim();
     try {
-      results = await judgePackets(packets, { key, results, fetchImpl, concurrency: judgeConcurrency, retries: 3, retryDelayMs,
+      results = await judgePackets(packets, { key, results, fetchImpl, concurrency: judgeConcurrency, batchSize: judgeBatchSize, retries: 3, retryDelayMs,
         persist: rows => saveLines(path.join(out, 'judge-results.jsonl'), rows) });
     } catch (error) {
       if (/^judge_(?:checkpoint|resume)/.test(error.message)) throw error;
@@ -480,12 +513,12 @@ async function adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl
       results = await optional(() => jsonl(path.join(out, 'judge-results.jsonl')), []);
     }
   }
-  return { results, judgeError };
+  return { results, judgeError, completed: results.filter(r => r.verdict !== 'error').length };
 }
 
 /** Shards retain their original run identities in packets, so hash resumption remains exact. */
 async function scoreRuns(options) {
-  const { runs, data, out, variant } = options;
+  const { runs, data, out, variant, rubric = 'approximate' } = options;
   if (!Array.isArray(runs) || !runs.length || runs.some(r => typeof r !== 'string' || !r)) throw new Error('runs_invalid');
   if (!out) throw new Error('runs_out_required');
   if (!data) throw new Error('run_and_data_required');
@@ -506,7 +539,7 @@ async function scoreRuns(options) {
     for (const id of own) { if (cases.has(id)) throw new Error(`overlapping_case_id:${id}`); cases.add(id); }
     rows.push(...part.rawRows); packets.push(...part.packets); parts.push(part.summary);
   }
-  const { results, judgeError } = await adjudicate(rows, packets, options);
+  const { results, judgeError, completed } = await adjudicate(rows, packets, options);
   const merged = pairM6(mergeJudgeResults(rows, packets, results));
   const tokens = { extraction: { prompt: 0, completion: 0 }, answer: { prompt: 0, completion: 0, cached: 0 }, prompt: 0, completion: 0 };
   for (const part of parts) {
@@ -514,9 +547,9 @@ async function scoreRuns(options) {
     tokens.prompt += part.tokens.prompt; tokens.completion += part.tokens.completion;
   }
   const walls = parts.map(p => p.wallSeconds).filter(v => v !== null);
-  const summary = { ...summarize(merged), runIds: manifests.map(r => r.runId), set: first.set, split: first.split, variant: variant ?? null,
+  const summary = { ...summarize(merged), runIds: manifests.map(r => r.runId), set: first.set, split: first.split, variant: variant ?? null, rubric, answerModel: parts[0]?.answerModel,
     tokens, wallSeconds: walls.length ? Math.max(...walls) : null,
-    judge: { model: 'qwen3.8-max', packets: packets.length, completed: results.length, pending: packets.length - results.length, error: judgeError },
+    judge: { ...rubricFacts(rubric, parts[0]?.answerModel), model: 'qwen3.8-max', packets: packets.length, completed, pending: packets.length - completed, error: judgeError },
     controlRun: options.control ? path.resolve(options.control) : null, evidenceNotes: parts[0]?.evidenceNotes ?? [] };
   await saveLines(path.join(out, 'rows.jsonl'), merged);
   await atomic(path.join(out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
@@ -525,14 +558,17 @@ async function scoreRuns(options) {
 
 /** @param {object} options */
 export async function scoreRun({ run: runDir, data, control: controlDir, judgeKeyFile, noJudge = false, out,
-  fetchImpl, sources, pools, judgeConcurrency = 6, variant, runs, retryDelayMs = 250, shard = false } = {}) {
+  fetchImpl, sources, pools, judgeConcurrency = 6, judgeBatchSize = 6, variant, runs, retryDelayMs = 250, shard = false, rubric = 'approximate' } = {}) {
+  if (!['approximate', 'official'].includes(rubric)) throw new Error('rubric_invalid');
   if (runs && runDir) throw new Error('run_and_runs_exclusive');
-  if (runs) return scoreRuns({ runs, data, control: controlDir, judgeKeyFile, noJudge, out, fetchImpl, sources, pools, judgeConcurrency, variant, retryDelayMs });
+  if (runs) return scoreRuns({ runs, data, control: controlDir, judgeKeyFile, noJudge, out, fetchImpl, sources, pools, judgeConcurrency, judgeBatchSize, variant, retryDelayMs, rubric });
   if (variant !== undefined && !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(variant)) throw new Error('variant_invalid');
   if (!runDir || !data) throw new Error('run_and_data_required');
   if (!Number.isSafeInteger(judgeConcurrency) || judgeConcurrency < 1) throw new Error('judge_concurrency_invalid');
-  runDir = path.resolve(runDir); data = path.resolve(data); out = path.resolve(out ?? path.join(runDir, variant ? `scores.${variant}` : 'scores'));
+  if (!Number.isSafeInteger(judgeBatchSize) || judgeBatchSize < 1 || judgeBatchSize > 12) throw new Error('judge_batch_invalid');
+  runDir = path.resolve(runDir); data = path.resolve(data); out = path.resolve(out ?? path.join(runDir, `${variant ? `scores.${variant}` : 'scores'}${rubric === 'official' ? '.official' : ''}`));
   const run = await json(path.join(runDir, 'run.json'));
+  if (rubric === 'official' && run.set !== 'longmemeval-s') throw new Error('official_requires_longmemeval_s');
   if (!run.runId) throw new Error('run_id_missing');
   // Inspect metadata only for reuse; changed bytes invalidate via inode/size/mtime/ctime.
   // No traversal of a parent data directory: only this set's development/public inputs.
@@ -562,14 +598,14 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
     if (control.set !== run.set || control.split !== run.split) throw new Error('control_set_split_mismatch');
     if (run.set === 'm11' && !['no-memory', 'without-memory', 'no-history'].includes(control.arm)) throw new Error('m11_control_requires_no_history_arm');
   }
-  const buildKey = sha256(stableJson({ goldKey, run, variant, ids: entries.map(e => e.caseId),
+  const buildKey = sha256(stableJson({ goldKey, run, variant, rubric, officialPin: rubric === 'official' ? OFFICIAL : null, ids: entries.map(e => e.caseId),
     evidence: await metadataTree(path.join(runDir, 'cases')), control: controlDir ? await metadataTree(controlDir) : null }));
   const buildHit = goldHit && cache.buildKey === buildKey;
   const errata = (await json(path.join(HERE, 'errata.json'))).items;
   const rows = buildHit ? cache.rows : [], packets = buildHit ? cache.packets : [];
   const tokens = buildHit ? cache.tokens : { extraction: { prompt: 0, completion: 0 }, answer: { prompt: 0, completion: 0, cached: 0 } };
   const emit = (entry, id, kind, category, outcome, context = {}, extra = {}) => {
-    const { rubric = [], ...result } = outcome;
+    const { rubric: instructions = [], ...result } = outcome;
     const row = { runId: run.runId, set: run.set, split: run.split, caseId: entry.caseId, id, kind,
       category: category ?? entry.gold.kind ?? entry.gold.domain ?? run.set, generator: entry.generator,
       ...(entry.generators ? { generators: entry.generators } : {}),
@@ -578,7 +614,8 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
     const invalid = errata.find(e => e.set === run.set && e.split === run.split && e.id === id);
     if (invalid) { row.verdict = 'invalid-item'; row.erratum = invalid; }
     rows.push(row);
-    const packet = buildJudgePacket(row, { source: entry.input, ...context, rubric, gold: context.gold ?? entry.gold });
+    if (run.set === 'longmemeval-s') row.rubric = rubric;
+    const packet = buildJudgePacket(row, { ...(PUBLIC_MEMORY_SETS.includes(run.set) ? { publicSet: run.set } : {}), ...(rubric === 'official' ? { official: { commit: OFFICIAL.commit, sha256: OFFICIAL.sha256 } } : {}), source: entry.input, ...context, rubric: instructions, gold: context.gold ?? entry.gold });
     if (packet) packets.push(packet);
     if (row.redLineOutcome?.verdict === 'needs-judge') {
       const redPacket = buildJudgePacket({ ...row, ...row.redLineOutcome, kind: 'redline-check' },
@@ -636,6 +673,7 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
     if (!Array.isArray(gold.questions)) throw new Error(`gold_questions_missing:${entry.caseId}`);
     if (new Set(gold.questions.map(q => q.qid)).size !== gold.questions.length) throw new Error(`duplicate_gold_question:${entry.caseId}`);
     for (const q of gold.questions) {
+      if (run.options?.questionCategory && q.category !== run.options.questionCategory) continue;
       const primary = findAnswer(evidence, q);
       const answer = primary ?? (control && run.set === 'm6' && q.arm === 'without-memory' ? findAnswer(control, q, { fallback: true }) : null);
       let controlAnswer = null;
@@ -656,15 +694,27 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
           'Compare this response against the supplied no-history control response to the same question. Does prior history introduce clinical framing, disclaimers, health references, or evidence-method language, or impair the ordinary task? A control defect is not proof that memory caused it; score this reply against the absolute rubric too.'] };
       }
       const redLine = answerRedLine(run.set, q, outcome);
+      const forgetEvent = q.category === 'forget' && q.type === 'after-forget'
+        ? entry.schedule?.events?.find(event => event.kind === 'forget' && event.plantId === q.plantId) : null;
+      const forgetSession = entry.schedule?.sessions?.find(session => session.index === forgetEvent?.session);
+      const forgetIndex = forgetEvent?.messageIndex ?? forgetSession?.inserts?.find(insert => insert.plantId === q.plantId && insert.event === 'forget')?.messageIndex;
+      const liveTurn = forgetSession ? evidence.liveTurns.find(turn => turn.sessionId === forgetSession.id
+        && (forgetIndex === undefined || turn.messageIndex === forgetIndex)) : null;
+      const forget = q.category === 'forget' && q.type === 'after-forget' ? {
+        toolCalled: liveTurn?.forgetCalled ?? null, state: liveTurn?.state ?? 'unobserved',
+        turnId: liveTurn?.turnId ?? null, gatewayErrors: liveTurn?.gatewayAnswers?.filter(answer => answer.isError).length ?? null,
+        reappeared: !answer || answer.error ? null : outcome.checks.some(check => check.name === 'mustNotContain' && check.ok === false),
+      } : null;
       const entityOutcome = run.set === 'med-m2' ? checkEntityReplacement(answer?.answer ?? '', q.expect, Boolean(answer && !answer.error)) : null;
       emit(entry, q.qid, 'answer', q.category ?? q.type, answerState(answer, outcome),
         { ...questionContext(entry, loaded, q, answer, evidence), control: controlAnswer,
           gold: q.official ?? { ...q, poison: gold.poison,
             plant: entry.skeleton?.plants?.find(p => p.id === q.plantId) } },
         { ...(run.set === 'med-m2' ? { entityExpected: q.expect.exact, entityAsserted: entityOutcome.checks?.[0]?.detail?.extracted?.length ? entityOutcome.checks[0].detail.extracted : answer?.answer ?? null } : {}), arm: ['no-memory', 'keyword'].includes(run.arm) ? run.arm : q.arm ?? entry.arm ?? answer?.arm ?? run.arm, ...(q.rubric ? { rubric: q.rubric } : {}),
-          ...(redLine ? { redLine } : {}), ...(run.set === 'med-m2' ? { redLineOutcome: entityOutcome } : {}) });
+          ...(forget ? { forget } : {}), ...(redLine ? { redLine } : {}), ...(run.set === 'med-m2' ? { redLineOutcome: entityOutcome } : {}) });
     }
     for (const store of gold.store ?? []) {
+      if (run.options?.questionCategory && store.category !== run.options.questionCategory) continue;
       const selected = storeEvidence(entry, loaded, evidence, store, run.set);
       const subjectSnapshot = scopeMemory(selected.snapshot, store);
       let outcome = checkStore(store, subjectSnapshot, { set: run.set, gold });
@@ -692,33 +742,55 @@ export async function scoreRun({ run: runDir, data, control: controlDir, judgeKe
   if (!buildHit) await atomic(cacheFile, JSON.stringify({ goldKey, entries: allEntries, buildKey, rows, packets, tokens }));
   const rowIds = rows.map(r => `${r.caseId}\0${r.kind}\0${r.id}`);
   if (new Set(rowIds).size !== rowIds.length) throw new Error('duplicate_score_row');
-  const { results, judgeError } = await adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl, judgeConcurrency, retryDelayMs });
+  const { results, judgeError, completed } = await adjudicate(rows, packets, { out, noJudge, judgeKeyFile, fetchImpl, judgeConcurrency, judgeBatchSize, retryDelayMs });
   const status = await optional(() => readFile(path.join(runDir, 'STATUS'), 'utf8'), '');
   const times = status.split('\n').filter(l => /^\S+\s+(?:DONE|FAIL)\s+/.test(l)).map(l => Date.parse(l.split(/\s+/)[0])).filter(Number.isFinite);
   tokens.prompt = tokens.extraction.prompt + tokens.answer.prompt;
   tokens.completion = tokens.extraction.completion + tokens.answer.completion;
-  const merged = pairM6(mergeJudgeResults(rows, packets, results)), summary = { ...summarize(merged), runId: run.runId, runIds: [run.runId], set: run.set, split: run.split, variant: variant ?? null,
+  const answerModel = run.answerVariants?.find(v => v.name === variant)?.config?.answerModel ?? run.model?.answer;
+  const merged = pairM6(mergeJudgeResults(rows, packets, results)), summary = { ...summarize(merged), runId: run.runId, runIds: [run.runId], set: run.set, split: run.split, variant: variant ?? null, rubric, answerModel,
     tokens, wallSeconds: times.length ? Math.max(0, (times.at(-1) - times[0]) / 1000) : null,
-    judge: { model: 'qwen3.8-max', packets: packets.length, completed: results.length, pending: packets.length - results.length, error: judgeError },
+    judge: { ...rubricFacts(rubric, answerModel), model: 'qwen3.8-max', packets: packets.length, completed, pending: packets.length - completed, error: judgeError },
     controlRun: controlDir ? path.resolve(controlDir) : null,
     evidenceNotes: ['Store recall measures normalized anchor presence; attribution and current/history semantics are scored separately.',
       'G6 raw-history results certify recorded search blocks only; no unseen index contents are inferred.',
       'Unknown generator provenance is reported as unknown, never inferred from the split.',
       'Mixed-generator cases appear in every recorded generator group; those groups overlap.',
       'Public answer objects and any per-item rubric are preserved; rows without a pinned official grading prompt are marked rubric: approximate and grouped by benchmark question type.'] };
+  if (PUBLIC_MEMORY_SETS.includes(run.set)) {
+    const status = run.set.startsWith('locomo') ? 'approximate' : 'official';
+    summary.rubric = status;
+    summary.judge = { ...summary.judge, rubric: status,
+      prompt: PUBLIC_OFFICIAL[run.set]?.url ?? (run.set === 'memsyco' ? 'Pinned per-item evaluation.rubric' : 'Approximate semantic accuracy; official token F1 not run'),
+      officialJudgeModel: false, comparability: 'Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row.' };
+    const answers = merged.filter(row => row.kind === 'answer');
+    const native = answers.map(row => row.judge?.officialResult).filter(Boolean);
+    if (run.set === 'halumem') {
+      summary.answerTrack = { n: answers.length, ...Object.fromEntries(['Correct','Hallucination','Omission'].map(label => {
+        const count = native.filter(r => r.evaluation_result === label).length;
+        return [label, { n: answers.length, count, value: count / answers.length, ci95: wilson(count, answers.length) }];
+      })), unknown: answers.length - native.length };
+      summary.notRun = ['Extraction FMR and update hallucination: require per-session newly written memory export and separate native grading.'];
+    }
+    if (run.set === 'realmem') summary.nativeScore = { scale: [0,3], n: answers.length, judged: native.length,
+      meanWithUnknownZero: native.reduce((n,r) => n+r.score,0) / answers.length,
+      note: 'Unjudged remains in denominator; binary accuracy requires score 3. References are LLM-generated, not human-verified.' };
+    if (run.set === 'memsyco') summary.evidenceNotes.push('Probe with one artificial session per item; source has no sessions or timestamps.');
+  }
   await saveLines(path.join(out, 'rows.jsonl'), merged);
   await atomic(path.join(out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
   return { rows: merged, rawRows: rows, packets, results, summary, caseIds: entries.map(e => e.caseId), cache: { gold: goldHit, packets: buildHit } };
 }
 
 export function parseArgs(args) {
-  const options = {}, names = { '--run': 'run', '--data': 'data', '--control': 'control', '--judge-key-file': 'judgeKeyFile', '--out': 'out', '--judge-concurrency': 'judgeConcurrency', '--variant': 'variant', '--runs': 'runs' };
+  const options = {}, names = { '--run': 'run', '--data': 'data', '--control': 'control', '--judge-key-file': 'judgeKeyFile', '--out': 'out', '--judge-concurrency': 'judgeConcurrency', '--judge-batch-size': 'judgeBatchSize', '--variant': 'variant', '--rubric': 'rubric', '--runs': 'runs' };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--list-redlines') { options.listRedlines = true; continue; }
     if (args[i] === '--no-judge') { options.noJudge = true; continue; }
     const name = names[args[i]], value = args[++i];
     if (!name || !value || value.startsWith('--') || options[name] !== undefined) throw new Error('Usage: score.mjs --run DIR --data DIR [--variant NAME] [--control DIR] [--judge-key-file FILE] [--judge-concurrency N] [--no-judge] [--list-redlines] [--out DIR]; or --runs DIR1,DIR2 --data DIR --out DIR');
-    options[name] = name === 'judgeConcurrency' ? Number(value) : value;
+    options[name] = ['judgeConcurrency', 'judgeBatchSize'].includes(name) ? Number(value) : value;
+    if (name === 'judgeBatchSize' && (!Number.isSafeInteger(options[name]) || options[name] < 1 || options[name] > 12)) throw new Error('judge_batch_invalid');
     if (name === 'judgeConcurrency' && (!Number.isSafeInteger(options[name]) || options[name] < 1)) throw new Error('judge_concurrency_invalid');
   }
   if ((!options.run && !options.runs) || !options.data) throw new Error('run_and_data_required');
@@ -736,7 +808,13 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
     const options = parseArgs(process.argv.slice(2));
     const { summary, rows } = await scoreRun(options);
     if (options.listRedlines) for (const line of listRedlines(rows)) process.stdout.write(`${line}\n`);
+    if (summary.forget.forgetToolCalled.n) {
+      const f = summary.forget, count = f.forgetToolCalled;
+      process.stdout.write(`forgetToolCalled ${count.count}/${count.n} (unknown ${count.unknown})\n`);
+      for (const [group, result] of Object.entries(f.forgottenReappeared)) process.stdout.write(`forgottenReappeared ${group} ${result.count}/${result.n} (unknown ${result.unknown})\n`);
+    }
     process.stdout.write('set\tn\tpass\tfail\tunknown\terror\taccuracy (Wilson 95%)\n');
+    if (summary.judge.error) process.stderr.write(`judge error: ${summary.judge.error} (see judge-results.jsonl)\n`);
     if (summary.judge.pending) {
       process.stderr.write(`${summary.judge.pending} items pending — rerun the same command\n`);
       process.exitCode = 2;

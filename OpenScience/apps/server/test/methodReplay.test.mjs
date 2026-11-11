@@ -196,6 +196,7 @@ test("it reads up to five accepted runs of the method's own scope, newest first,
   assert.equal(h.windows.length, 1);
   assert.equal(h.windows[0].scope, "meta-analysis");
   assert.equal(h.windows[0].limit, REPLAY_MAX_RUNS);
+  assert.equal(h.windows[0].requireShape, false, "replay accepts text-only work");
   assert.equal(Math.round((h.windows[0].to.getTime() - h.windows[0].from.getTime()) / 86_400_000), 90);
   assert.equal(h.judged.length, REPLAY_MAX_RUNS, "never more than five calls, whatever the ledger returned");
   assert.deepEqual(h.judged.map((entry) => entry.runId), ["run_7", "run_6", "run_5", "run_4", "run_3"], "the most recent first");
@@ -307,4 +308,24 @@ test("the replay counters have a closed vocabulary and appear on the scrape", ()
   assert.equal(verdicts?.series.find((entry) => entry.labels?.verdict === "other")?.value, 1);
   assert.ok(learningMetricFamilies(true, null, metrics).find((family) => family.name === "open_science_learning_method_retirements_total")?.series.some((entry) => entry.labels?.code === "replay_regressed"));
   assert.equal(learnedMethodId("x"), "method:learned:x");
+});
+
+test("text-only replay reads the accepted final answer from this root turn, with no older or child answer", async () => {
+  const run = { id: "answer_run", sessionId: "root", nativeTurn: { startSeq: 2 }, status: "succeeded" };
+  const text = (sessionId, role, seq, turnStartSeq, content) => ({ sessionId, role, source: "user", seq, turnStartSeq, parts: [{ type: "text", text: content }] });
+  const transcript = { header: { sessions: [{ sessionId: "root", parentSessionId: null, seedEndSeq: -1 }, { sessionId: "child", parentSessionId: "root", seedEndSeq: -1 }] }, messages: [
+    text("root", "user", 0, 1, "Earlier report"), text("root", "assistant", 1, 1, "Older answer never shown"),
+    text("root", "user", 2, 2, "Write a weekly report"), text("root", "assistant", 3, 2, "Conclusion first: the project is on track.\nNext steps follow."),
+    text("child", "assistant", 4, 2, "Unowned child answer never shown"),
+  ] };
+  const reader = createTrajectoryReader({ resolveProject: async () => ({}), listRuns: async () => [run], readTranscript: async () => transcript, readTraces: async () => [] });
+  const digest = await reader("u1", { runId: run.id, projectId: "p1" });
+  assert.equal(digest?.answer, "Conclusion first: the project is on track.\nNext steps follow.");
+  const shown = trajectoryReplayText(digest);
+  assert.match(shown, /accepted answer:\nConclusion first/);
+  assert.doesNotMatch(shown, /Older answer|Unowned child/);
+  const bounded = trajectoryReplayText({ ...digest, requests: [{ sessionId: "root", seq: 2, text: "x".repeat(10_000) }] });
+  assert.match(bounded, /accepted answer:\nConclusion first/, "long requests leave room for the accepted work");
+  transcript.messages[3].parts[0].text = `Do not keep ${["sk", "a".repeat(36)].join("-")}`;
+  assert.equal((await reader("u1", { runId: run.id, projectId: "p1" }))?.answer, undefined, "the same identifier boundary as requests");
 });

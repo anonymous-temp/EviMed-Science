@@ -483,6 +483,7 @@ import { createMemoryHistorySources } from './memoryHistorySources.mjs';
 import { NativeMemoryWorker } from "./nativeMemoryWorker.mjs";
 import { NativeTurnCommit } from "./nativeTurnCommit.mjs";
 import { createRejectionJudge } from "./nativeMemoryRejections.mjs";
+import { createPastedInstructionJudge } from "./nativeMemoryPastedInstructions.mjs";
 import { createVerificationJudge } from './nativeMemoryVerification.mjs';
 import { NativeMemoryConsolidation } from "./nativeMemoryConsolidation.mjs";
 import { nativeMemoryMetricFamilies } from "./nativeMemoryMetrics.mjs";
@@ -1390,6 +1391,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const nativeMemoryWorker = new NativeMemoryWorker({
     config, memorySettings, sessions: openVikingSessions, overlay: nativeMemoryOverlay, nativeMemory, memoryContexts: nativeMemoryContexts,
     rejectionJudge,
+    pastedInstructionJudge: createPastedInstructionJudge({ config, usageLedger }),
     report: (line) => process.stderr.write(`${line}\n`),
   });
   nativeMemoryWorker.verification.judge = createVerificationJudge({ config, usageLedger });
@@ -1585,10 +1587,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         methodsInvoked: derived.methodsInvoked,
       });
     }
-    // A method the run read without any delegation to hang it on. It earns no
-    // observation — no mounted digest, no deliverable verdict — but a run that
-    // answered directly out of a learned method and left no trace of it is how
-    // a whole product line comes to look like it never uses the library.
+    // A read with no proven mount stays a read. Mounted ordinary conversations
+    // already earned one run observation above, even without a workflow receipt.
     if (derived.invokedWithoutMount.length) {
       await securityAudit(config, "learning.observation.record", "unmounted", {
         userId: project.userId, projectId: project.id, runId: run.id,
@@ -1684,6 +1684,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     config, store: memorySettings, capsules: capsuleService, contextPolicies: sharedContextPolicies,
     nativeFiles: config.memoryEngineEnabled ? (userId, projectId, limit) => nativeMemory.openingFiles(userId, projectId, limit) : null,
     nativeIndex: config.memoryEngineEnabled ? (userId, projectId) => nativeMemory.openingIndex(userId, projectId) : null,
+    safetyNotes: config.memoryEngineEnabled ? (userId, projectId) => nativeMemory.safetyNotes(userId, projectId) : null,
     // The project's card, read as the memory page's 项目 tab reads it: the engine's own project-context file. Handed to a
     // conversation a person is in (`ResidentProfiles.forDispatch`); a deployment without the engine has no card to hand over.
     // What a conversation of the project is handed up front is the card and the project's other standing files (`residentCard`); the
@@ -4893,6 +4894,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       onEvidence: ({ kept, dropped }) => learningMetrics.observeEvidenceQuotes(kept, dropped),
       // The official tier among the related methods, read-only (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`, off by default).
       officialMethods: officialInLoop,
+      // Lab switches, both off by default: the training camp's lesson and two-stage distillation.
+      camp: config.learningCampEnabled === true,
+      twoStage: config.methodTwoStageDistillationEnabled === true,
     });
     // A method that was just rewritten is read against up to five runs the person accepted, afterwards and never waited for (`methodReplay.mjs`),
     // inside the learning scope the method belongs to (a shared GEO project's runs for its methods, none of them for the account's own).

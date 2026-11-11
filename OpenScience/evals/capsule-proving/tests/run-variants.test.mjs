@@ -49,7 +49,7 @@ test("stable userKey sharding refuses any changed or reordered resume engine lis
   assertResumeCompatible({ ...facts, engine: { url: options.engineUrls[0] } }, { ...facts, engine: { urls: options.engineUrls.slice(0, 1) } });
 });
 
-test("variant gateways read the same engine memory but only the enabled one returns raw history", async (t) => {
+test("variant gateways read the same engine memory and select history retrieval without mutating primary configuration", async (t) => {
   const stub = await startOpenVikingStub(t);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
   const sessions = new OpenVikingSessions(client, { timeoutMs: 2_000, fastTimeoutMs: 1_000 });
@@ -57,13 +57,14 @@ test("variant gateways read the same engine memory but only the enabled one retu
   const engineUser = sessions.engineUser(userId);
   await sessions.register(userId);
   const uri = stub.seedMemory(engineUser, "preferences/tea.md", "- keeps a blue teapot", { type: "preferences" });
-  let historyCalls = 0;
+  let historyCalls = 0; const retrievalModes=[];
   const group = await startLabGateways({ sessions,
     runtimeManager: { assertActiveEviMedWorkloadToken: async () => ({ userId, projectId: "default" }) },
     store: { userById: async (id) => ({ id }), requireProject: async (user, id) => ({ id, userId: user.id, name: "Default" }) },
     admission: { admit: async () => ({ learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null }) },
     historySearch: async () => { historyCalls += 1; return [{ conversationTitle: "Teapot", conversationUrl: "/chat/tea", messages: [{ sourceRole: "user", date: "2026-01-02", text: "The teapot is blue." }] }]; },
-  }, { memoryEngineEnabled: true, memoryEnabled: true, memoryHistorySearchEnabled: true }, [{ name: "nohistory", config: { memoryHistorySearchEnabled: false } }]);
+    historySearchFor: config=>async()=>{historyCalls++;retrievalModes.push(config.memoryHistoryRetrievalV2Enabled===true);return [{conversationTitle:'Teapot',conversationUrl:'/chat/tea',messages:[{sourceRole:'user',date:'2026-01-02',text:'The teapot is blue.'}]}];},
+  }, { memoryEngineEnabled: true, memoryEnabled: true, memoryHistorySearchEnabled: true }, [{ name: "nohistory", config: { memoryHistorySearchEnabled: false } },{name:'hv2',config:{memoryHistoryRetrievalV2Enabled:true}}]);
   t.after(() => group.close());
   const primary = createMemoryClient({ base: group.gateways.get("").base, token: "lab-test" });
   const variant = createMemoryClient({ base: group.gateways.get("nohistory").base, token: "lab-test" });
@@ -74,6 +75,10 @@ test("variant gateways read the same engine memory but only the enabled one retu
   assert.match(first.blocks.join("\n"), /Original conversation excerpts/);
   assert.doesNotMatch(second.blocks.join("\n"), /Original conversation excerpts/);
   assert.equal(historyCalls, 1);
+  const hv2=createMemoryClient({base:group.gateways.get('hv2').base,token:'lab-test'});
+  assert.deepEqual(await hv2.callTool('search',{query:'teapot'}),first);
+  await primary.callTool('search',{query:'teapot'});
+  assert.deepEqual(retrievalModes,[false,true,false]);
   assert.deepEqual(await primary.callTool("read", { uris: [uri] }), await variant.callTool("read", { uris: [uri] }));
   const request = `/api/v1/content/read?uri=${encodeURIComponent(uri)}`;
   assert.deepEqual(await primary.fetchJSON(request), await variant.fetchJSON(request));
@@ -310,4 +315,39 @@ test("lab consolidation polls the explicit product entry with force and retains 
   assert.equal(result.outcome, "completed"); assert.deepEqual(result.results, results);
   assert.deepEqual(seen, Array.from({ length: 3 }, () => ["u", { mode: "verify", force: true }]));
   assert.equal((await pollLabConsolidation({ consolidate: async () => "submitted" }, "u", { timeoutMs: 0 })).outcome, "submitted");
+});
+
+test('answers-only refuses incomplete ingestion and never calls ingestion', async t => {
+  const f = await runnerFixture(t);
+  const result = await main([...f.args, '--answers-only'], f.dependencies);
+  assert.equal(result.failures, 1);
+  assert.equal(result.sessions, 0);
+  assert.equal(f.events.some(e => e.startsWith('ingest:')), false);
+  assert.match(await readFile(path.join(f.out, 'STATUS'), 'utf8'), /answers_only_incomplete_ingestion/);
+});
+
+test('new answer variants reuse settled memory, select their own model and preserve earlier variants on resume', async t => {
+  const f = await runnerFixture(t);
+  f.item.questions = [f.item.questions[1]];
+  await main([...f.args, '--answer-variant', 'prior:memorySearchHintEnabled=true'], f.dependencies);
+  f.events.length = 0;
+  const captured = [];
+  f.dependencies.answering.answerQuestion = async input => {
+    captured.push(input);
+    return { qid: input.qid, caseId: input.caseId, answer: 'fixture', toolCalls: [], usage: {}, model: { name: input.client.model }, fullContext: { truncated: true } };
+  };
+  const args = [...f.args, '--answers-only', '--variants-only', '--answer-variant', 'strong:forceSearch=all,answerModel=qwen3.8-max'];
+  const result = await main(args, f.dependencies);
+  assert.equal(result.sessions, 0); assert.equal(result.answers, 1);
+  assert.equal(captured[0].client.model, 'qwen3.8-max');
+  assert.equal(captured[0].forceSearch, 'all'); assert.equal(captured[0].sessions.length, 2);
+  assert.equal(f.events.some(e => e.startsWith('ingest:')), false);
+  assert.deepEqual(f.opened.at(-1).answerVariants[0].config, {});
+  const manifest = await json(path.join(f.out, 'run.json'));
+  assert.deepEqual(manifest.answerVariants.map(v => v.name), ['prior', 'strong']);
+  assert.equal(manifest.answerVariants[1].model.answerJudgeSameFamily, true);
+  assert.equal(manifest.answerStats.strong.truncatedQuestions, 1);
+  const opens = f.opened.length;
+  await assert.rejects(main([...f.args, '--answers-only', '--answer-variant', 'strong:forceSearch=history'], f.dependencies), /variant strong changed/);
+  assert.equal(f.opened.length, opens);
 });

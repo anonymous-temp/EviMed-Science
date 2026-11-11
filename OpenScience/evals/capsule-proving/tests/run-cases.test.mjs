@@ -92,3 +92,15 @@ test("registerSet adds a loader that loadCases then uses", async () => {
   assert.deepEqual(cases.map((item) => [item.set, item.caseId]), [["invented-set", "Y01"]]);
   assert.throws(() => registerSet("Bad Name", async () => []), /set name/);
 });
+
+test('synthetic selection retains case/user aliases when directory names differ', async t => {
+  const root = await dataDir(t, { folder: invented('X01', { caseId: 'alias' }) });
+  assert.equal((await loadCases({ set: 'synthetic-users', split: 'dev', dataDir: root, only: 'X01' }))[0].caseId, 'alias');
+  assert.equal((await loadCases({ set: 'synthetic-users', split: 'dev', dataDir: root, only: 'alias' }))[0].userKey, 'X01');
+});
+
+test('live markers must select a user request followed by its recorded assistant reply', () => {
+  const item = normalizeSyntheticUser(invented('X01'), { set: 'synthetic-users', split: 'dev', dirName: 'X01' });
+  item.sessions[0].messages[1].liveTurn = 'forget';
+  assert.match(caseIssues(item).join(' '), /invalid liveTurn/);
+});

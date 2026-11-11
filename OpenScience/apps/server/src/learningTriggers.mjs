@@ -382,6 +382,42 @@ export function adoptedLessonFor({ run, runs, project = null, event, internalAge
   };
 }
 
+/** How many decisive steps one camp lesson may name. */
+const CAMP_MAX_ANCHORS = 32;
+
+/**
+ * The training camp's lesson about one finished run, or null (plan 2026-11-04 §5.3; `OPEN_SCIENCE_LEARNING_CAMP_ENABLED`, `enabled` here).
+ *
+ * Only the camp driver raises it — a lab script that runs tasks in a lab account and distils every finished one — never this module's
+ * own triggers, and nothing here loosens `learningRefusal` for a person's runs: the camp's runs are the platform's, which that gate refuses
+ * by design. Any finished run whose outcome a checker decided in code is a lesson, a failure as much as a success: `outcome.success` (a
+ * boolean, or there is no machine-checked outcome and no lesson), its `score` where the task has one, and the checker's `verdict`; `anchors`
+ * are the decisive steps by transcript `seq` (where the score moved, where the task was won), which the excerpts are cut around
+ * (`buildDistillationInput`). One lesson per run.
+ * @param {{ run: any, outcome: { success: boolean, score?: number | null, verdict?: string } | null, anchors?: readonly { seq: number, kind?: string }[],
+ *   scope?: string | null, enabled?: boolean }} input
+ * @returns {{ trigger: string, idempotencyKey: string, payload: Record<string, any> } | null}
+ */
+export function campLessonFor({ run, outcome, anchors = [], scope = null, enabled = false }) {
+  if (enabled !== true || !run?.id || !["succeeded", "failed"].includes(run.status)) return null;
+  if (typeof outcome?.success !== "boolean") return null;
+  const score = Number(outcome.score);
+  const lessonScope = scope ?? learningScopeOf(run);
+  return {
+    trigger: "camp",
+    idempotencyKey: `distill:${run.id}:camp`,
+    payload: {
+      runId: run.id,
+      trigger: "camp",
+      scope: lessonScope,
+      capabilityId: lessonScope === CONVERSATION_SCOPE ? null : lessonScope,
+      outcome: { success: outcome.success, score: Number.isFinite(score) ? score : null, verdict: String(outcome.verdict ?? "").slice(0, 600) },
+      anchors: (Array.isArray(anchors) ? anchors : []).filter((anchor) => Number.isSafeInteger(anchor?.seq) && anchor.seq >= 0).slice(0, CAMP_MAX_ANCHORS)
+        .map((anchor) => ({ seq: anchor.seq, kind: String(anchor.kind ?? "decisive").slice(0, 40) })),
+    },
+  };
+}
+
 export class LearningTriggers {
   /**
    * `routinePeriodDays` is the transcript retention (`ROUTINE_PERIOD_DAYS`), which a routine's period is (its family is read from the

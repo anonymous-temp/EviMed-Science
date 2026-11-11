@@ -38,6 +38,7 @@ import { NativeMemoryConsolidation } from "../../../apps/server/src/nativeMemory
 import { nativeMemoryCounters } from "../../../apps/server/src/nativeMemoryMetrics.mjs";
 import { NativeMemoryOverlay } from "../../../apps/server/src/nativeMemoryOverlay.mjs";
 import { createRejectionJudge } from "../../../apps/server/src/nativeMemoryRejections.mjs";
+import { createPastedInstructionJudge } from "../../../apps/server/src/nativeMemoryPastedInstructions.mjs";
 import { NativeMemoryStore } from "../../../apps/server/src/nativeMemoryStore.mjs";
 import { NativeMemoryWorker } from "../../../apps/server/src/nativeMemoryWorker.mjs";
 import { withNativeMemoryWrite } from "../../../apps/server/src/nativeMemoryWriteFence.mjs";
@@ -249,16 +250,17 @@ export function toolAnswer({ status, contentType, text }, id) {
  * The model-facing half of the lab surface over one bearer: `tools`, `callTool` (real JSON-RPC `tools/call` to the
  * gateway's `/mcp`) and `fetchJSON` (the gateway's REST routes, answering as the plugin's own `createOvHttp` does:
  * `{ ok, status, result, error }`, never throwing).
- * @param {{ base: string, token: string, readOnly?: boolean, ready?: Promise<unknown> | null, fetchImpl?: typeof fetch, timeoutMs?: number }} options
+ * @param {{ base: string, token: string, readOnly?: boolean, executeForget?: boolean, ready?: Promise<unknown> | null, fetchImpl?: typeof fetch, timeoutMs?: number }} options
  */
-export function createMemoryClient({ base, token, readOnly = true, ready = null, fetchImpl = globalThis.fetch, timeoutMs = 60_000 }) {
+export function createMemoryClient({ base, token, readOnly = true, executeForget = false, ready = null, fetchImpl = globalThis.fetch, timeoutMs = 60_000 }) {
   let rpcId = 0;
   const auth = { authorization: `Bearer ${token}` };
   return {
     tools: memoryTools(),
+    executeForget,
     /** @param {string} name @param {Record<string, any>} [args] @returns {Promise<{ blocks: string[], isError: boolean }>} */
     async callTool(name, args = {}) {
-      if (readOnly && WRITE_TOOLS.has(name)) return { blocks: [`lab_read_only: ${name} is not executed by this memory object`], isError: true };
+      if (readOnly && WRITE_TOOLS.has(name) && !(name === "forget" && executeForget)) return { blocks: [`lab_read_only: ${name} is not executed by this memory object`], isError: true };
       await ready;
       const id = ++rpcId;
       try {
@@ -320,6 +322,7 @@ export async function startLabGateways(shared, config, variants = []) {
     for (const entry of [{ name: "", config: {} }, ...variants]) {
       const merged = { ...config, ...entry.config };
       const handler = createMemoryGatewayHandler({ ...shared, config: merged,
+        ...(shared.historySearchFor ? { historySearch:shared.historySearchFor(merged) } : {}),
         admission: entry.name && shared.admissionFor ? shared.admissionFor(merged) : shared.admission });
       gateways.set(entry.name, { ...await startGatewayServer(handler), handler, config: merged });
     }
@@ -339,6 +342,7 @@ export function createLabResidentProfiles({ config, memorySettings, nativeMemory
     projectCard: (userId, projectId) => nativeMemory.residentCard(userId, projectId),
     nativeFiles: (userId, projectId, limit) => nativeMemory.openingFiles(userId, projectId, limit),
     nativeIndex: (userId, projectId) => nativeMemory.openingIndex(userId, projectId),
+    safetyNotes: (userId, projectId) => nativeMemory.safetyNotes(userId, projectId),
   });
 }
 
@@ -404,17 +408,46 @@ async function secretFrom(file) {
  * @typedef {{ sessionId: string, at: string, project?: { id: string, name: string } | null, messages: { role: string, text: string, at?: string }[], attachments?: any[] }} LabSession
  */
 
+/** Run the product's per-user settlement work without its account scheduler or consolidation.
+ * A completed engine task can still owe summary cleanup and overlay/history ingestion. Never advance past it.
+ * @param {{worker: any, overlay: any, userId: string, deadline: number, waitTask: Function, pollMs?: number}} input
+ */
+export async function settleLabCommits({ worker, overlay, userId, deadline, waitTask, pollMs = 2_000 }) {
+  let settled = 0;
+  let rounds = 0;
+  const transient = new Set(["memory_index_conflict", "memory_index_timeout", "memory_engine_unavailable", "memory_summary_rebuild_failed"]);
+  for (;;) {
+    rounds += 1;
+    try { await worker.drainSummaryInvalidations(userId); }
+    catch (error) {
+      if (!transient.has(error?.code) || Date.now() >= deadline) throw error;
+      await sleep(pollMs);
+      continue;
+    }
+    settled += await worker.processCommits({ userId, limit: 50 });
+    const open = await overlay.openCommits({ userId, limit: 50 });
+    if (!open.length) return { settled, rounds, open: 0 };
+    if (Date.now() >= deadline) throw Object.assign(new Error(`Product commits remain unsettled: ${open.length}`), { code: "lab_unsettled_commits" });
+    for (const commit of open.filter(commit => commit.state === "pending" && commit.taskId)) {
+      await waitTask(userId, commit.taskId, deadline);
+    }
+    // A completed task may still have a writer lease or a retryable cleanup conflict. The hosted worker tries on
+    // its next pass; poll within the session's deadline rather than spinning eight times and advancing anyway.
+    await sleep(pollMs);
+  }
+}
+
 /**
  * Open the lab: the product's memory stack against the lab engine and PostgreSQL.
  * @param {{ engineUrl: string, engineKeyFile: string, account: string, databaseUrlFile: string, historySearch?: boolean, deepseekKeyFile?: string | null,
  *   now?: (() => Date) | null, runId?: string | null, commitEvery?: "session" | "turn", extractionTimeoutMs?: number, pollMs?: number,
- *   configOverrides?: Record<string, any>, answerVariants?: {name: string, config: Record<string, any>}[], rejectionJudge?: boolean,
+ *   stockEngine?: boolean, configOverrides?: Record<string, any>, answerVariants?: {name: string, config: Record<string, any>}[], rejectionJudge?: boolean,
  *   gatewayTimeoutMs?: number, residentCardTimeoutMs?: number, engineTimeoutMs?: number, databasePoolMax?: number, report?: (line: string) => void }} options
  */
 export async function openLab({
   engineUrl, engineKeyFile, account, databaseUrlFile, historySearch = true, deepseekKeyFile = null, now = null, runId = null,
   commitEvery = "session", extractionTimeoutMs = 300_000, pollMs = 2_000, gatewayTimeoutMs = 4_000, residentCardTimeoutMs = 1_500,
-  configOverrides = {}, answerVariants = [], rejectionJudge = true,
+  configOverrides = {}, answerVariants = [], rejectionJudge = true, stockEngine = false,
   engineTimeoutMs = 30_000, databasePoolMax = 8, report = (line) => process.stderr.write(`${line}\n`),
 }) {
   if (typeof account !== "string" || !/^evlab-[A-Za-z0-9_-]{1,100}$/.test(account)) throw new Error("the lab engine account is evlab-<runId>");
@@ -474,7 +507,8 @@ export async function openLab({
     });
     const productRejectionJudge = createRejectionJudge({ config: rejectionJudge ? config : { ...config, deepseekApiKey: "", nativeMemoryRejectionJudgeEnabled: false } });
     const nativeMemory = new NativeMemoryStore({ sessions, overlay, memoryContexts: contexts, rejectionJudge: productRejectionJudge, ...(now ? { now } : {}), report: say });
-    const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay, nativeMemory, memoryContexts: contexts, rejectionJudge: productRejectionJudge, now, report: say });
+    const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay, nativeMemory, memoryContexts: contexts, rejectionJudge: productRejectionJudge,
+      pastedInstructionJudge: createPastedInstructionJudge({ config }), now, report: say });
     const resources = new OpenVikingResources({ client });
     const profilesFor = (selectedConfig) => createLabResidentProfiles({ config: selectedConfig, memorySettings, nativeMemory });
     const residentProfiles = profilesFor(config);
@@ -584,6 +618,7 @@ export async function openLab({
       admissionFor: (merged) => createMemoryAdmission({ config: merged, memorySettings }),
       historySecrets: history.secrets,
       historySearch: (request) => history.search(request),
+      historySearchFor: selected => request => history.search(request,{ retrievalV2:selected.memoryHistoryRetrievalV2Enabled === true }),
     }, config, answerVariants);
     const gateway = gatewayGroup.gateways.get("");
     const handler = gateway.handler;
@@ -616,19 +651,7 @@ export async function openLab({
      * repeated choice, a replay), waited for in bounded rounds.
      * @param {string} userId @param {number} deadline
      */
-    const settle = async (userId, deadline) => {
-      let settled = 0;
-      let rounds = 0;
-      for (; rounds < 8; rounds += 1) {
-        settled += await worker.processCommits({ userId, limit: 50 });
-        const open = await overlay.openCommits({ userId, limit: 50 });
-        const running = open.filter((commit) => commit.state === "pending" && commit.taskId);
-        if (!open.length || Date.now() >= deadline || (!running.length && !open.some((commit) => commit.state === "failed"))) break;
-        for (const commit of running) await waitTask(userId, /** @type {string} */ (commit.taskId), deadline);
-      }
-      const left = await overlay.openCommits({ userId, limit: 50 });
-      return { settled, rounds: rounds + 1, open: left.length };
-    };
+    const settle = (userId, deadline) => settleLabCommits({ worker, overlay, userId, deadline, waitTask, pollMs });
 
     /** The messages of the session's archives that came from the conversation (the project line is the gateway's own). @param {string} userId @param {any[]} commits @param {string | null} line */
     const archivedMessages = async (userId, commits, line) => {
@@ -667,15 +690,18 @@ export async function openLab({
         await sessions.register(userId);
         await overlay.noteRegistered(userId);
         // The worker's policy check (`#syncPolicy`): the account's type allowlist is the deployment's, restated when it is not.
-        const held = await sessions.settings(userId);
+        const held = stockEngine ? null : await sessions.settings(userId);
         const expected = [...OPENVIKING_MEMORY_TYPES].sort();
         if (held && !(held.memoryTypes.length === expected.length && held.memoryTypes.every((type, index) => type === expected[index]))) {
           const settings = await memorySettings.settings(userId);
           await sessions.setLearning(userId, !settings.learningPaused);
           facts.policyRewritten += 1;
         }
+        // The experiment varies only the engine templates. Its default policy must never be restated with product types.
+        // processCommits normally leaves policy sync to tick; guard that path too for any future lab worker invocation.
+        if (stockEngine) worker.policyChecked.set(userId, Infinity);
         facts.memoryTypes ??= (await sessions.settings(userId))?.memoryTypes ?? null;
-        if (facts.templatesMounted === null) {
+        if (!stockEngine && facts.templatesMounted === null) {
           // 400 "not editable" means the deployment's templates are mounted; 404 means the engine fell back to its built-in types.
           try { await client.request({ path: `/api/v1/admin/accounts/${account}/memory-templates/people`, userId }); facts.templatesMounted = true; }
           catch (error) { const status = Number(/** @type {any} */ (error)?.upstreamStatus) || 0; facts.templatesMounted = status === 400 ? true : status === 404 ? false : null; }
@@ -693,9 +719,9 @@ export async function openLab({
        * One dataset session, as the product would learn it: messages through the gateway's door (with `created_at`), the
        * project line where production writes it, a commit through `commitSession`, the extraction awaited, the worker's settle.
        * Attachments are never sent. A rerun of a session already committed resumes from its commits instead of sending again.
-       * @param {LabUser} user @param {LabSession} session @param {{ commitEvery?: "session" | "turn", timeoutMs?: number }} [options]
+       * @param {LabUser} user @param {LabSession} session @param {{ commitEvery?: "session" | "turn", timeoutMs?: number, resumeMessages?: boolean }} [options]
        */
-      async ingestSession(user, session, { commitEvery: mode = commitEvery, timeoutMs = extractionTimeoutMs } = {}) {
+      async ingestSession(user, session, { commitEvery: mode = commitEvery, timeoutMs = extractionTimeoutMs, resumeMessages = false } = {}) {
         const started = Date.now();
         const deadline = started + timeoutMs;
         const project = session.project && session.project.id !== DEFAULT_PROJECT_ID ? session.project : null;
@@ -721,7 +747,7 @@ export async function openLab({
           const result = answer?.json?.result ?? {};
           commits.push({ taskId: typeof result.task_id === "string" ? result.task_id : null, archiveUri: typeof result.archive_uri === "string" ? result.archive_uri : null, outcome: answer.commit });
         };
-        if (prior.length && mode === "session") {
+        if (prior.length && mode === "session" && !resumeMessages) {
           resumed = true;
           for (const commit of prior) commits.push({ taskId: commit.taskId, archiveUri: commit.archiveUri, outcome: "resumed" });
         } else {
@@ -759,8 +785,8 @@ export async function openLab({
         const root = sessions.memoryRoot(user.userId);
         const operations = { adds: 0, updates: 0, deletes: 0 };
         let observations = 0;
-        const tokens = sessionUsage(commits.map((commit) => commit.task ?? null));
-        const usage = tokens.total;
+        const extractionTokens = sessionUsage(commits.map((commit) => commit.task ?? null));
+        const usage = extractionTokens.total;
         for (const commit of commits) {
           if (!commit.archiveUri) continue;
           const diffUri = typeof commit.task?.result?.memory_diff_uri === "string" ? commit.task.result.memory_diff_uri : `${commit.archiveUri}/memory_diff.json`;
@@ -781,7 +807,7 @@ export async function openLab({
           messages: session.messages.length, userTurns: session.messages.filter((message) => message.role === "user").length, dropped,
           attachmentsWithheld: Array.isArray(session.attachments) ? session.attachments.length : 0,
           commit: { taskId: last?.taskId ?? null, status: String(last?.task?.status ?? last?.outcome ?? "none"), outcome: last?.outcome ?? "none", archiveUri: last?.archiveUri ?? null },
-          ...(commits.length > 1 ? { commits: commits.map((commit, index) => ({ taskId: commit.taskId, status: String(commit.task?.status ?? commit.outcome), outcome: commit.outcome, usage: tokens.perCommit[index] })) } : {}),
+          ...(commits.length > 1 ? { commits: commits.map((commit, index) => ({ taskId: commit.taskId, status: String(commit.task?.status ?? commit.outcome), outcome: commit.outcome, usage: extractionTokens.perCommit[index] })) } : {}),
           operations, observations, usage,
           ledger: ledger ? { state: ledger.state, operations: ledger.operations, error: ledger.error ? scrub(ledger.error).slice(0, 200) : "" } : null,
           refused: Object.fromEntries(refusals.map((row) => [String(row.reason || "unspecified"), Number(row.n)])),
@@ -830,9 +856,9 @@ export async function openLab({
 
       /**
        * What the answering model reaches memory through, in one project of the account.
-       * @param {LabUser} user @param {{ project?: { id: string, name: string } | null, variant?: string, readOnly?: boolean }} [options]
+       * @param {LabUser} user @param {{ project?: { id: string, name: string } | null, variant?: string, readOnly?: boolean, executeForget?: boolean }} [options]
        */
-      memoryFor(user, { project = null, variant = "", readOnly = true } = {}) {
+      memoryFor(user, { project = null, variant = "", readOnly = true, executeForget = false } = {}) {
         const selected = gatewayGroup.gateways.get(variant);
         if (!selected) throw new Error(`unknown answer variant ${variant}`);
         const profiles = variant ? profilesFor(selected.config) : residentProfiles;
@@ -841,7 +867,7 @@ export async function openLab({
         const projectId = named?.id ?? DEFAULT_PROJECT_ID;
         const ready = ensureProject(user.userId, named);
         ready.catch(() => {});
-        const memoryClient = createMemoryClient({ base: selected.base, token: tokenFor(user.userId, projectId), readOnly, ready, timeoutMs: engineTimeoutMs * 2 });
+        const memoryClient = createMemoryClient({ base: selected.base, token: tokenFor(user.userId, projectId), readOnly, executeForget, ready, timeoutMs: engineTimeoutMs * 2 });
         return {
           ...memoryClient,
           config: selected.config,

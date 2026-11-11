@@ -9,7 +9,9 @@
 //     [--commit-every session|turn] [--plant-corruptions-after <afterSession>] [--limit-questions N] [--plugin-tgz <file>] \
 //     [--ingest-only] [--templates-dir <dir>] [--max-rounds N] [--extraction-timeout-ms N] [--gateway-timeout-ms N]
 //     [--config key=value] [--answer-variant name:key=value,...] [--maintain none|consolidate|verify|consolidate+verify]
-//     [--maintain-after n[,n...]|each] [--no-rejection-judge] [--label text]
+//     [--live-turns forget] [--question-category CATEGORY]
+//     [--answers-only] [--variants-only] [--retrieval-only] [--answer-model ID] [--answer-base URL] [--answer-key-file FILE]
+//     [--maintain-after n[,n...]|each] [--no-rejection-judge] [--label text] [--stock-engine] [--database-pool-max N]
 //
 // `--engine-url` accepts an ordered comma-separated shard list; `each` maintains at every existing checkpoint.
 // Arms `no-memory` and `keyword` never touch the engine. Step keys: `<caseId>/ingest/<sessionId>`, `<caseId>/plant/<n>`,
@@ -20,12 +22,14 @@ import { createHash, randomBytes } from "node:crypto";
 import { appendFile, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { promisify } from "node:util";
+import { promisify, isDeepStrictEqual } from "node:util";
 
 import { bloatMetrics } from "./bloat.mjs";
 import { checkRestored } from "./corruptions.mjs";
 import { loadCases } from "./cases.mjs";
+import { answerOptions, gatewayOptions } from "./answerVariants.mjs";
 import { firstLine } from "./lab.mjs";
+import { ingestLiveSession } from "./liveTurns.mjs";
 import { openStatus } from "./status.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -79,6 +83,9 @@ export function engineShard(userKey, count) {
 export function assertResumeCompatible(previous, facts) {
   if (!previous) return;
   if (previous.arm !== facts.arm || previous.set !== facts.set || previous.split !== facts.split) throw new Error(`the run directory holds a ${previous.set}/${previous.split} ${previous.arm} run: use another --out`);
+  if ((previous.options?.liveTurns ?? "") !== (facts.options?.liveTurns ?? facts.liveTurns ?? "")) throw new Error("cannot resume with different live turns");
+  if ((previous.options?.questionCategory ?? "") !== (facts.options?.questionCategory ?? facts.questionCategory ?? "")) throw new Error("cannot resume with different question category");
+  if ((previous.engine?.templates === "stock") !== Boolean(facts.stockEngine)) throw new Error("cannot resume with different engine templates");
   const urls = (record) => record.engine?.urls ?? record.engineUrls ?? (record.engine?.url ? engineUrlsOf(record.engine.url) : []);
   if (JSON.stringify(urls(previous)) !== JSON.stringify(urls(facts))) throw new Error("cannot resume with a different engine URL list (including order)");
 }
@@ -86,23 +93,30 @@ export function assertResumeCompatible(previous, facts) {
 /** @param {string[]} argv */
 export function parseArguments(argv) {
   const options = {
+    answerModel: "", answerBase: "", answerKeyFile: "", stockEngine: false, answersOnly: false, retrievalOnly: false, variantsOnly: false,
     set: "", split: "", data: "", out: "", engineUrl: "", engineKeyFile: "", databaseUrlFile: "", deepseekKeyFile: "",
-    arm: "product", only: "", maxSessions: 0, concurrency: 3, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
-    config: {}, answerVariants: [], maintain: "none", maintainAfter: [], rejectionJudge: true, label: "",
-    limitQuestions: 0, pluginTgz: "", ingestOnly: false, templatesDir: "", maxRounds: 8, extractionTimeoutMs: 300_000, gatewayTimeoutMs: 4_000,
+    arm: "product", only: "", maxSessions: 0, concurrency: 3, databasePoolMax: 2, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
+    config: {}, answerVariants: [], maintain: "none", maintainAfter: [], rejectionJudge: true, label: "", thinking: "enabled", reasoningEffort: "high",
+    liveTurns: "", questionCategory: "", limitQuestions: 0, pluginTgz: "", ingestOnly: false, templatesDir: "", maxRounds: 8, extractionTimeoutMs: 300_000, gatewayTimeoutMs: 4_000,
   };
   /** @type {Record<string, [keyof typeof options, "string" | "int"]>} */
   const valued = {
+    "--live-turns": ["liveTurns", "string"], "--question-category": ["questionCategory", "string"],
+    "--answer-model": ["answerModel", "string"], "--answer-base": ["answerBase", "string"], "--answer-key-file": ["answerKeyFile", "string"],
     "--set": ["set", "string"], "--split": ["split", "string"], "--data": ["data", "string"], "--out": ["out", "string"],
     "--engine-url": ["engineUrl", "string"], "--engine-key-file": ["engineKeyFile", "string"], "--database-url-file": ["databaseUrlFile", "string"],
     "--deepseek-key-file": ["deepseekKeyFile", "string"], "--arm": ["arm", "string"], "--only": ["only", "string"],
-    "--max-sessions": ["maxSessions", "int"], "--concurrency": ["concurrency", "int"], "--commit-every": ["commitEvery", "string"],
+    "--database-pool-max": ["databasePoolMax", "int"], "--max-sessions": ["maxSessions", "int"], "--concurrency": ["concurrency", "int"], "--commit-every": ["commitEvery", "string"],
     "--plant-corruptions-after": ["plantCorruptionsAfter", "int"], "--limit-questions": ["limitQuestions", "int"], "--plugin-tgz": ["pluginTgz", "string"],
     "--templates-dir": ["templatesDir", "string"], "--max-rounds": ["maxRounds", "int"], "--extraction-timeout-ms": ["extractionTimeoutMs", "int"],
-    "--gateway-timeout-ms": ["gatewayTimeoutMs", "int"], "--maintain": ["maintain", "string"], "--label": ["label", "string"],
+    "--gateway-timeout-ms": ["gatewayTimeoutMs", "int"], "--maintain": ["maintain", "string"], "--label": ["label", "string"], "--thinking": ["thinking", "string"], "--reasoning-effort": ["reasoningEffort", "string"],
   };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
+    if (flag === "--stock-engine") { options.stockEngine = true; continue; }
+    if (flag === "--answers-only") { options.answersOnly = true; continue; }
+    if (flag === "--variants-only") { options.variantsOnly = true; continue; }
+    if (flag === "--retrieval-only") { options.retrievalOnly = true; options.answersOnly = true; continue; }
     if (flag === "--no-history-search") { options.historySearch = false; continue; }
     if (flag === "--no-rejection-judge") { options.rejectionJudge = false; continue; }
     if (["--config", "--answer-variant", "--maintain-after"].includes(flag)) {
@@ -135,19 +149,29 @@ export function parseArguments(argv) {
   for (const [flag, field] of [["--set", "set"], ["--split", "split"], ["--data", "data"], ["--out", "out"]]) {
     if (!/** @type {any} */ (options)[field]) throw new Error(`${flag} is required`);
   }
+  if (options.liveTurns && options.liveTurns !== "forget") throw new Error("--live-turns is forget");
+  if (options.liveTurns && (options.arm !== "product" || options.stockEngine || options.answersOnly || options.ingestOnly)) throw new Error("--live-turns needs product replay with model answers");
+  if (options.questionCategory && options.set !== "synthetic-users") throw new Error("--question-category needs synthetic-users structural categories");
   if (!ARMS.has(options.arm)) throw new Error("--arm is product, no-memory or keyword");
   if (!["session", "turn"].includes(options.commitEvery)) throw new Error("--commit-every is session or turn");
+  if (options.databasePoolMax < 1 || options.databasePoolMax > 8) throw new Error("--database-pool-max is 1 to 8 per engine");
   if (options.concurrency < 1 || options.concurrency > 16) throw new Error("--concurrency is 1 to 16");
   if (options.maxRounds < 1 || options.maxRounds > 32) throw new Error("--max-rounds is 1 to 32");
   if (options.arm === "product" && (!options.engineUrl || !options.engineKeyFile || !options.databaseUrlFile)) {
     throw new Error("arm product needs --engine-url, --engine-key-file and --database-url-file");
   }
-  if (!options.ingestOnly && !options.deepseekKeyFile) throw new Error("answering needs --deepseek-key-file (or pass --ingest-only)");
+  if (!options.ingestOnly && !options.retrievalOnly && !options.deepseekKeyFile && !options.answerKeyFile) throw new Error("answering needs --deepseek-key-file (or pass --ingest-only)");
+  if (options.stockEngine && options.arm !== "product") throw new Error("--stock-engine needs arm product");
   if (options.arm !== "product" && options.plantCorruptionsAfter >= 0) throw new Error("--plant-corruptions-after needs arm product");
   if (options.arm !== "product" && options.ingestOnly) throw new Error("--ingest-only has nothing to do without the engine (arm product)");
   if (!["none", "consolidate", "verify", "consolidate+verify"].includes(options.maintain)) throw new Error("--maintain is none, consolidate, verify or consolidate+verify");
   if (options.maintain !== "none" && options.maintainAfter.length === 0) throw new Error("--maintain needs --maintain-after");
   if (options.arm !== "product" && (options.answerVariants.length || options.maintain !== "none")) throw new Error("answer variants and maintenance need arm product");
+  answerOptions({ ...options.config, ...(options.answerModel ? { answerModel: options.answerModel } : {}), ...(options.answerBase ? { answerBase: options.answerBase } : {}) });
+  for (const variant of options.answerVariants) answerOptions({ ...options.config, ...variant.config });
+  if (options.retrievalOnly && (options.set !== "longmemeval-s" || options.split !== "dev")) throw new Error("retrieval diagnosis requires longmemeval-s dev");
+  if (options.answersOnly && (options.ingestOnly || options.maintain !== "none" || options.plantCorruptionsAfter >= 0)) throw new Error("answers-only cannot ingest or maintain");
+  if (options.variantsOnly && !options.answerVariants.length) throw new Error("variants-only needs an answer variant");
   options.engineUrls = engineUrlsOf(options.engineUrl);
   if (new Set(options.engineUrls).size !== options.engineUrls.length) throw new Error("engine URLs must be distinct");
   return options;
@@ -248,37 +272,74 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   const wallStart = Date.now();
 
   const cases = await (dependencies.loadCases ?? loadCases)({ set: options.set, split: options.split, dataDir: options.data, only: options.only || null });
+  if (options.liveTurns && cases.some(item => item.meta?.unlocatedLiveTurns)) throw new Error("forget_message_index_missing: annotate schedule messageIndex before live replay");
   if (!cases.length) throw new Error("no cases to run");
 
   // The answering side (lane B), only when questions are asked: an ingest-only run needs none of it.
   /** @type {any} */ let answering = null;
   /** @type {any} */ let baselines = null;
   /** @type {any} */ let client = null;
-  if (!options.ingestOnly) {
+  const clients = new Map();
+  const baseAnswer = { ...answerOptions(options.config), ...(options.answerModel ? { answerModel: options.answerModel } : {}), ...(options.answerBase ? { answerBase: options.answerBase } : {}), ...(options.answerKeyFile ? { answerKeyFile: options.answerKeyFile } : {}) };
+  if (!options.ingestOnly && !options.retrievalOnly) {
     if (options.pluginTgz) process.env.CAPSULE_PROVING_PLUGIN_TGZ = path.resolve(options.pluginTgz);
     if (options.arm === "product" && !process.env.CAPSULE_PROVING_PLUGIN_TGZ) throw new Error("arm product answers with the plugin's profile block: pass --plugin-tgz");
     answering = dependencies.answering ?? await import(pathToFileURL(path.join(here, "answerer.mjs")).href);
     if (options.arm === "keyword") baselines = await import(pathToFileURL(path.join(here, "baselines.mjs")).href);
-    const { createDeepSeekClient } = await import(pathToFileURL(path.join(here, "deepseek.mjs")).href);
-    client = dependencies.client ?? createDeepSeekClient({ keyFile: path.resolve(options.deepseekKeyFile) });
+    const { createDeepSeekClient, createOpenAICompatibleClient } = await import(pathToFileURL(path.join(here, "deepseek.mjs")).href);
+    const makeClient = (selected) => {
+      const qwen = /^qwen/.test(selected.answerModel ?? "");
+      return (qwen ? createOpenAICompatibleClient : createDeepSeekClient)({
+        keyFile: selected.answerKeyFile ?? (qwen ? "/srv/evimed/secrets/dashscope.api-key" : path.resolve(options.deepseekKeyFile)),
+        model: selected.answerModel ?? "deepseek-flash",
+        // Production's default for a conversation is thinking on at effort "high" (OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT); runs before 2026-11-10 10:30Z answered with thinking off.
+        thinking: selected.thinking ?? options.thinking, reasoningEffort: selected.reasoningEffort ?? options.reasoningEffort,
+        baseURL: selected.answerBase ?? (qwen ? "https://dashscope.aliyuncs.com/compatible-mode/v1" : "https://api.deepseek.com"),
+        timeoutMs: 300_000,
+      });
+    };
+    client = dependencies.client ?? makeClient(baseAnswer);
+    for (const variant of options.answerVariants) clients.set(variant.name, dependencies.clients?.[variant.name] ?? (dependencies.client && !variant.config.answerModel && !variant.config.thinking ? dependencies.client : makeClient({ ...baseAnswer, ...answerOptions(variant.config) })));
   }
 
+  const retrievalRows = [];
+  let retrieval = null, diagnosticGold = null;
+  if (options.retrievalOnly) {
+    retrieval = await import("./retrieval.mjs");
+    const { loadGold } = await import("./score.mjs");
+    diagnosticGold = new Map((await (dependencies.loadGold ?? loadGold)(options.data, options)).map(entry => [entry.caseId, entry]));
+  }
   const previous = await readJson(path.join(out, "run.json"));
+  for (const variant of options.answerVariants) {
+    const held = previous?.answerVariants?.find(v => v.name === variant.name);
+    if (held && !isDeepStrictEqual(held.config, variant.config)) throw new Error(`answer variant ${variant.name} changed: use another name`);
+  }
   assertResumeCompatible(previous, { ...options, engine: options.arm === "product" ? { urls: options.engineUrls } : null });
   /** @type {any[]} */ const labs = [];
   /** @type {any} */ let lab = null;
   const templatesDir = path.resolve(options.templatesDir || path.join(repoRoot, "deploy/web/openviking/memory-templates"));
-  const templates = await directoryDigest(templatesDir).catch(() => ({ digest: null, files: 0 }));
+  const templates = options.stockEngine ? { digest: null, files: 0 } : await directoryDigest(templatesDir).catch(() => ({ digest: null, files: 0 }));
   if (options.arm === "product") {
     const { openLab } = await import(pathToFileURL(path.join(here, "lab.mjs")).href);
     try {
-      for (const engineUrl of options.engineUrls) labs.push(await (dependencies.openLab ?? openLab)({
-        engineUrl, engineKeyFile: path.resolve(options.engineKeyFile), account: `evlab-${runId}`, runId,
-        databaseUrlFile: path.resolve(options.databaseUrlFile), historySearch: options.historySearch,
-        deepseekKeyFile: options.deepseekKeyFile ? path.resolve(options.deepseekKeyFile) : null, commitEvery: options.commitEvery,
-        extractionTimeoutMs: options.extractionTimeoutMs, gatewayTimeoutMs: options.gatewayTimeoutMs,
-        configOverrides: options.config, answerVariants: options.answerVariants, rejectionJudge: options.rejectionJudge,
-      }));
+      for (const engineUrl of options.engineUrls) {
+        // Concurrent lab initializers may race on PostgreSQL DDL. Retry only the explicit deadlock code.
+        for (let attempt = 0; ; attempt++) {
+          try {
+            labs.push(await (dependencies.openLab ?? openLab)({
+              databasePoolMax: options.databasePoolMax, stockEngine: options.stockEngine, engineUrl, engineKeyFile: path.resolve(options.engineKeyFile), account: `evlab-${runId}`, runId,
+              databaseUrlFile: path.resolve(options.databaseUrlFile), historySearch: options.historySearch,
+              deepseekKeyFile: options.deepseekKeyFile ? path.resolve(options.deepseekKeyFile) : null, commitEvery: options.commitEvery,
+              extractionTimeoutMs: options.extractionTimeoutMs, gatewayTimeoutMs: options.gatewayTimeoutMs,
+              configOverrides: gatewayOptions(options.config), answerVariants: options.answerVariants.map(v => ({ ...v, config: gatewayOptions(v.config) })), rejectionJudge: options.rejectionJudge,
+            }));
+            break;
+          } catch (error) {
+            if (attempt >= 4 || !(error?.code === "40P01" || /40P01|deadlock detected/.test(String(error?.message)))) throw error;
+            await new Promise(resolve => setTimeout(resolve, 2_000 * (attempt + 1)));
+          }
+        }
+      }
     } catch (error) { await Promise.all(labs.map((entry) => entry.close())); throw error; }
     lab = labs[0];
   }
@@ -293,23 +354,24 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
   const facts = {
     runId, set: options.set, split: options.split, arm: options.arm, automated: true,
     commit: git.commit, dirty: git.dirty, dirtyPaths: git.dirtyPaths, runnerDigest: runnerHash.digest("hex"),
-    engine: lab ? { url: options.engineUrls[0], urls: options.engineUrls, version: lab.facts.engineVersion, account: lab.account, templatesDigest: templates.digest, templatesFiles: templates.files,
-      templatesDir: path.relative(repoRoot, templatesDir) || templatesDir,
+    engine: lab ? { templates: options.stockEngine ? "stock" : "product", url: options.engineUrls[0], urls: options.engineUrls, version: lab.facts.engineVersion, account: lab.account, templatesDigest: templates.digest, templatesFiles: templates.files,
+      templatesDir: options.stockEngine ? null : path.relative(repoRoot, templatesDir) || templatesDir,
       shards: labs.map((entry, index) => ({ url: options.engineUrls[index], account: entry.account, version: entry.facts.engineVersion })) } : null,
-    flags: { historySearch: options.arm === "product" ? options.historySearch : false, commitEvery: options.commitEvery, plantCorruptionsAfter: options.plantCorruptionsAfter >= 0 ? options.plantCorruptionsAfter : null,
+    flags: { liveTurns: options.liveTurns, questionCategory: options.questionCategory, historySearch: options.arm === "product" ? options.historySearch : false, commitEvery: options.commitEvery, plantCorruptionsAfter: options.plantCorruptionsAfter >= 0 ? options.plantCorruptionsAfter : null,
       consolidation: "manual-only", rejectionJudge: Boolean(lab?.config.nativeMemoryRejectionJudgeEnabled), gatewayCommitsPerHour: 0,
       gatewayTimeoutMs: options.gatewayTimeoutMs, capsuleSearch: false, config: options.config, maintain: options.maintain, maintainAfter: options.maintainAfter },
-    answerVariants: options.answerVariants.map((variant) => ({ ...variant, flags: { config: { ...options.config, ...variant.config } } })), label: options.label,
+    answerVariants: options.answerVariants.map((variant) => ({ ...variant, model: { answer: clients.get(variant.name)?.model ?? null, thinking: clients.get(variant.name)?.thinking ?? null, answerJudgeSameFamily: /^qwen/.test(clients.get(variant.name)?.model ?? "") }, flags: { config: { ...options.config, ...variant.config } } })), label: options.label,
+    answerOptions: baseAnswer,
     model: { answer: client?.model ?? null, thinking: client?.thinking ?? null, extraction: options.arm === "product" ? "deepseek-flash (lab engine ov.conf, provider direct)" : null },
-    options: { only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, limitQuestions: options.limitQuestions || null,
-      ingestOnly: options.ingestOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, dataDir: path.resolve(options.data) },
+    options: { liveTurns: options.liveTurns, questionCategory: options.questionCategory, only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, databasePoolMax: options.databasePoolMax, limitQuestions: options.limitQuestions || null,
+      ingestOnly: options.ingestOnly, answersOnly: options.answersOnly, retrievalOnly: options.retrievalOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, dataDir: path.resolve(options.data) },
     cases: cases.map((item) => item.caseId),
   };
   const runJson = previous ? { ...previous,
     engine: previous.engine ? { ...previous.engine, urls: options.engineUrls, shards: facts.engine.shards } : null,
     flags: { ...previous.flags, config: facts.flags.config, maintain: facts.flags.maintain, maintainAfter: facts.flags.maintainAfter, rejectionJudge: facts.flags.rejectionJudge },
-    answerVariants: facts.answerVariants, label: options.label || previous.label || "",
-    resumes: [...(previous.resumes ?? []), { at: startedAt, commit: git.commit, dirty: git.dirty, runnerDigest: facts.runnerDigest, options: facts.options, flags: facts.flags, answerVariants: facts.answerVariants, label: facts.label }] }
+    answerVariants: [...(previous.answerVariants ?? []).filter(old => !facts.answerVariants.some(v => v.name === old.name)), ...facts.answerVariants], label: options.label || previous.label || "",
+    resumes: [...(previous.resumes ?? []), { at: startedAt, commit: git.commit, dirty: git.dirty, runnerDigest: facts.runnerDigest, options: facts.options, answerOptions: facts.answerOptions, model: facts.model, flags: facts.flags, answerVariants: facts.answerVariants, label: facts.label }] }
     : { runId, startedAt, ...facts, resumes: [] };
   await writeAtomic(runFile, `${JSON.stringify(runJson, null, 2)}\n`);
 
@@ -323,6 +385,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     await mkdir(path.join(caseDir, "snapshots"), { recursive: true, mode: 0o700 });
     const sessions = options.maxSessions ? item.sessions.slice(0, options.maxSessions) : item.sessions;
     let questions = options.ingestOnly ? [] : item.questions.filter((question) => question.afterSession <= sessions.length);
+    if (options.questionCategory) questions = questions.filter(question => question.category === options.questionCategory);
     if (options.limitQuestions) questions = questions.slice(0, options.limitQuestions);
     const plantAfter = options.plantCorruptionsAfter;
     const checkpoints = [...new Set([...checkpointsFor(questions, sessions.length, plantAfter),
@@ -347,6 +410,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
         const ahead = sessions.slice(ingested).filter((session) => status.isDone(ingestKey(session)));
         if (ahead.length) throw new Error(`STATUS records sessions done past the first one not done (${ahead[0].sessionId}): ingestion order is broken`);
       }
+      if (lab && options.answersOnly && ingested !== sessions.length) throw new Error("answers_only_incomplete_ingestion: refusing to ingest");
       const resumedAt = ingested;
       stats.skipped = ingested;
       /** @type {Map<string, any>} */
@@ -358,7 +422,24 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
             const session = sessions[ingested];
             const key = ingestKey(session);
             let row;
-            try { row = await lab.ingestSession(user, session); }
+            try {
+              if (options.liveTurns) {
+                const file = path.join(caseDir, "live-turns.jsonl");
+                const records = await readJsonl(file);
+                row = await ingestLiveSession({ lab, user, session, caseId: item.caseId, records,
+                  persist: async entry => {
+                    await upsertJsonl(file, "turnId", entry);
+                    const held = records.findIndex(record => record.turnId === entry.turnId);
+                    if (held < 0) records.push(entry); else records[held] = entry;
+                  },
+                  answer: input => answering.answerQuestion({ ...baseAnswer, client, maxRounds: options.maxRounds, ...input }),
+                  onUsage: record => {
+                    stats.answer.prompt += Number(record.usage?.promptTokens) || 0;
+                    stats.answer.completion += Number(record.usage?.completionTokens) || 0;
+                  },
+                });
+              } else row = await lab.ingestSession(user, session);
+            }
             catch (error) {
               await fail(key, errorLine(error));
               stats.stopped = `ingest of ${session.sessionId} failed`;
@@ -423,7 +504,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
             await writeAtomic(path.join(caseDir, "corruptions-restored.json"), `${JSON.stringify({ afterSession: checkpoint, at: new Date().toISOString(), results: checkRestored(after.files, planted.applied, list.filter((entry) => planted.applied.some((applied) => applied.id === entry.id))) }, null, 2)}\n`);
           }
           const snapKey = `${item.caseId}/snapshot/${checkpoint}`;
-          if (!status.isDone(snapKey) || checkpointChanged) {
+          if (!options.retrievalOnly && (!status.isDone(snapKey) || checkpointChanged)) {
             if (resumedAt > checkpoint) await fail(snapKey, "stale_checkpoint: ingestion has moved past this checkpoint");
             else {
               let lastError = null;
@@ -442,7 +523,20 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
           }
         } else ingested = checkpoint;
         for (const question of questions.filter((entry) => entry.afterSession === checkpoint)) {
-          for (const variant of [null, ...options.answerVariants]) {
+          if (options.retrievalOnly) {
+            const entry = diagnosticGold.get(item.caseId);
+            if (!entry) throw new Error("retrieval_gold_missing");
+            const file = path.join(caseDir, options.config.memoryHistoryRetrievalV2Enabled===true ? 'retrieval.v2.json' : 'retrieval.json');
+            let row = await readJson(file);
+            if (!row || row.qid !== question.qid || row.results.some(r => r.isError)) {
+              row = await retrieval.diagnoseQuestion({ entry, item, question, memory: lab.memoryFor(user), lab, user });
+              await writeAtomic(file, `${JSON.stringify(row, null, 2)}\n`);
+            }
+            retrievalRows.push(row);
+            await status.markDone(`${item.caseId}/retrieval/${question.qid}`, `limits=8,20`);
+            continue;
+          }
+          for (const variant of [...(options.variantsOnly ? [] : [null]), ...options.answerVariants]) {
             const key = `${item.caseId}/answer${variant ? `.${variant.name}` : ""}/${question.qid}`;
             if (status.isDone(key)) continue;
             if (lab && resumedAt > checkpoint) { await fail(key, "stale_checkpoint: ingestion has moved past this question's checkpoint"); continue; }
@@ -453,6 +547,8 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
               memory = memories.get(projectKey);
             } else if (options.arm === "keyword") memory = baselines.createTranscriptIndex(sessions.slice(0, checkpoint));
             let record;
+            const selectedClient = variant ? clients.get(variant.name) : client;
+            const selectedOptions = { ...baseAnswer, ...answerOptions(variant?.config ?? {}) };
             try {
               if (Array.isArray(question.probe)) {
                 // A probe is a direct tool call, with no model: what the memory surface returns for a query (the secret red line reads it).
@@ -468,7 +564,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
                   usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: Date.now() - started };
               } else
               record = await answering.answerQuestion({ question: question.text, asOf: question.asOf, arm: options.arm, memory, materials: question.materials ?? [],
-                client, maxRounds: options.maxRounds, caseId: item.caseId, qid: question.qid, project: question.project ?? null });
+                ...selectedOptions, sessions: sessions.slice(0, checkpoint), client: selectedClient, maxRounds: options.maxRounds, caseId: item.caseId, qid: question.qid, project: question.project ?? null });
             } catch (error) {
               record = { qid: question.qid, caseId: item.caseId, arm: options.arm, asOf: question.asOf, question: question.text, answer: "", opening: { profileBlock: null, residentBlock: null },
                 toolCalls: [], rounds: 0, model: client?.model ?? null, usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: 0, error: `runner: ${errorLine(error)}` };
@@ -481,7 +577,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
           }
         }
       }
-      if (lab) await writeAtomic(path.join(caseDir, "bloat.json"), `${JSON.stringify(await bloat(), null, 2)}\n`);
+      if (lab && !options.retrievalOnly) await writeAtomic(path.join(caseDir, "bloat.json"), `${JSON.stringify(await bloat(), null, 2)}\n`);
     } catch (error) {
       stats.failures += 1;
       stats.stopped = errorLine(error);
@@ -515,6 +611,23 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
         }
       } finally { await Promise.all(labs.map((entry) => entry.close().catch(() => {}))); }
     }
+  }
+  if (!options.ingestOnly && !options.retrievalOnly) {
+    const latest = await readJson(runFile);
+    latest.answerStats ??= {};
+    for (const variant of options.answerVariants) {
+      const records = (await Promise.all(cases.map(item => readJsonl(path.join(out, "cases", item.caseId, `answers.${variant.name}.jsonl`))))).flat();
+      latest.answerStats[variant.name] = { questions: records.length, errors: records.filter(r => r.error).length,
+        truncatedQuestions: records.filter(r => r.fullContext?.truncated).length,
+        models: [...new Set(records.map(r => r.model?.resolvedModel ?? r.model?.name).filter(Boolean))] };
+    }
+    await writeAtomic(runFile, `${JSON.stringify(latest, null, 2)}\n`);
+  }
+  if (options.retrievalOnly) {
+    const report = retrieval.retrievalReport(retrievalRows, { runId, expectedQuestions: cases.reduce((n, c) => n + c.questions.length, 0),
+      historyExcerptCap:options.config.memoryHistoryRetrievalV2Enabled===true?20:8 });
+    await writeAtomic(path.join(out, options.config.memoryHistoryRetrievalV2Enabled===true ? 'retrieval.v2.json' : 'retrieval.json'), `${JSON.stringify(report, null, 2)}\n`);
+    process.stdout.write(retrieval.summaryText(report) + "\n");
   }
   const wall = Math.round((Date.now() - wallStart) / 1000);
   process.stdout.write(`total ${cases.length} case(s): sessions ${totals.sessions} (+${totals.skipped} done earlier), extraction ${kilo(totals.extraction.prompt)}/${kilo(totals.extraction.completion)} tok, `

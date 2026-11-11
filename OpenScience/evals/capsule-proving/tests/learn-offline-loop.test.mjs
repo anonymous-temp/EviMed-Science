@@ -8,7 +8,7 @@ import test from "node:test";
 
 import { OfflineLoop, selectCards, libraryDocuments } from "../learn/offlineLoop.mjs";
 import { createModelSteps, fakeLearningModel, filesOfReply } from "../learn/modelSteps.mjs";
-import { episodeAsRun, toolNameOf } from "../learn/gameTranscript.mjs";
+import { decisiveAnchors, episodeAsRun, episodeOutcome, toolNameOf } from "../learn/gameTranscript.mjs";
 import { buildDistillationInput } from "../../../apps/server/src/methodDistillationRuns.mjs";
 import { createMethodSimilarity } from "../../../apps/server/src/methodSimilarity.mjs";
 import { learnFrom } from "../c1/build_library.mjs";
@@ -29,7 +29,8 @@ function recordingModel() {
   const inputs = [];
   return { inputs, async complete(/** @type {any} */ request) {
     const text = String(request.messages.find((/** @type {any} */ message) => message.role === "user")?.content ?? "");
-    const match = text.match(/```json\n([\s\S]*?)\n```/);
+    // The frozen input follows the question, which may carry a JSON example of its own (a switched-on skill section).
+    const match = text.slice(Math.max(0, text.indexOf("The frozen input `"))).match(/```json\n([\s\S]*?)\n```/);
     if (match) inputs.push(JSON.parse(match[1]));
     return inner.complete(request);
   } };
@@ -190,4 +191,69 @@ test("the library build teaches successes only, waits for two earlier clean runs
   const gated = await OfflineLoop.open({ dir: path.join(dir, "product"), env: "alfworld", model: fakeLearningModel() });
   const strict = await learnFrom(gated, episodes, { gate: "product", sleepEvery: 0, prefix: "" });
   assert.equal(strict.distilled, strict.productGate);
+});
+
+/* -------------------------------------------------------------------------------------------------------------- the camp (F3, 2026-11-10) */
+
+test("an episode's decisive steps are where the game's score rose and where it was won, by the transcript seq the run is stored under", () => {
+  const record = { env: "scienceworld", fold: "train", taskId: "t", task: "boil water", success: false, score: -100, stepCap: 100,
+    steps: [{ step: 1, action: "look around", score: 0 }, { step: 2, action: "go to kitchen", score: 8 }, { step: 3, action: "look around", score: 8 },
+      { step: 4, action: "pick up pot", score: 17 }, { step: 5, action: "wait", score: -100 }].map((step) => ({ ...step, reply: { text: `Action: ${step.action}` }, observation: "ok" })) };
+  assert.deepEqual(decisiveAnchors(record).map((anchor) => [anchor.seq, anchor.step]), [[2, 2], [4, 4]]);
+  const { transcript } = episodeAsRun(record, { finishedAt: "2026-11-10T00:00:00.000Z" });
+  assert.equal(transcript.messages.find((message) => message.seq === 4).parts.find((/** @type {any} */ part) => part.type === "tool").input.command, "pick up pot");
+  const outcome = episodeOutcome(record);
+  assert.equal(outcome.success, false);
+  assert.equal(outcome.score, -100);
+  assert.match(outcome.verdict, /did not find the task completed; the episode ended after 5 of at most 100 steps/);
+  const won = episode("train/a", "heat some apple and put it in fridge.", HEAT);
+  won.steps = won.steps.map((step, index) => ({ ...step, score: index === HEAT.length - 1 ? 1 : 0, success: index === HEAT.length - 1 }));
+  // ALFWorld credits nothing before the win: its accepted state-changing commands (take, heat, put) are the decisive steps, and the win.
+  assert.deepEqual(decisiveAnchors(won).map((anchor) => anchor.seq), [2, 4, 6]);
+  won.steps[1] = { ...won.steps[1], observation: "Nothing happens." };
+  assert.deepEqual(decisiveAnchors(won).map((anchor) => anchor.seq), [4, 6], "a command the game refused changed nothing");
+});
+
+test("camp mode: every finished episode is a lesson, framed then written one method per new sub-skill; failures included, errors not", async (t) => {
+  const dir = await mkdtemp(path.join(tmpdir(), "c1-camp-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const model = recordingModel();
+  const loop = await OfflineLoop.open({ dir, env: "alfworld", variant: "pyramid", policy: { camp: true, twoStage: true }, model });
+  const foods = ["apple", "egg", "bread"];
+  const episodes = foods.map((food, index) => episode(`train/${food}`, `heat some ${food} and put it in fridge.`, HEAT.map((action) => action.replace(/apple/g, food)), index !== 1));
+  episodes.push({ ...episode("train/broken", "cool some lettuce.", []), error: "DeepSeek HTTP 500", success: false });
+  const tally = await learnFrom(loop, episodes, { gate: "every-success", sleepEvery: 0, prefix: "" });
+  assert.deepEqual([tally.episodes, tally.successes, tally.failures, tally.distilled], [4, 2, 2, 3], "the failure is a lesson; the errored episode is not");
+  const frames = model.inputs.filter((input) => input.stage === "frame");
+  assert.equal(frames.length, 3);
+  assert.ok(frames.every((input) => input.trigger === "camp" && input.camp?.outcome && Array.isArray(input.transcriptExcerpts)));
+  assert.equal(frames[1].camp.outcome.success, false);
+  assert.ok(frames[1].transcriptExcerpts.some((/** @type {any} */ excerpt) => excerpt.anchor.kind === "closing"), "a failure is read through its closing steps");
+  const details = model.inputs.filter((input) => input.stage === "detail");
+  assert.deepEqual(details.slice(0, 2).map((input) => input.focus.role), ["atomic", "abstract"], "atomic first, so the abstract method can pin it");
+  const stats = await loop.stats();
+  assert.equal(stats.camp.lessons, 4);
+  assert.equal(stats.camp.states.skipped, 1);
+  assert.ok(stats.camp.details.create >= 4);
+  assert.ok((stats.byRole.atomic ?? 0) >= 2 && (stats.byRole.abstract ?? 0) >= 2);
+  assert.ok(stats.withDependencies >= 2, "an abstract method's depends_on is stored as the ledger's dependencies");
+  const abstract = (await loop.methods()).find((method) => method.payload.frontmatter.metadata.role === "abstract");
+  assert.deepEqual(abstract.payload.dependencies.map((/** @type {any} */ dependency) => dependency.name.startsWith("fake-atomic-")), [true]);
+  // A camp library reopens under the policy it was built with, and refuses another.
+  const reopened = await OfflineLoop.open({ dir, env: "alfworld", variant: "pyramid", policy: { camp: true, twoStage: true }, model: fakeLearningModel() });
+  assert.ok(reopened.done("camp:train/apple"));
+  await assert.rejects(OfflineLoop.open({ dir, env: "alfworld", variant: "pyramid", model: fakeLearningModel() }), /another environment or policy/);
+});
+
+test("the cards' bodies are bounded by the product's mount budget, spent in the order the product lists them", async () => {
+  const body = (/** @type {number} */ size) => `## Purpose\n${"Look before acting. ".repeat(size / 20)}`;
+  const method = (/** @type {string} */ name, /** @type {number} */ size) => ({ id: `method:learned:${name}`, payload: { status: "approved", contentDigest: `sha256:${name.length.toString(16).padStart(64, "0")}`,
+    frontmatter: { name, description: `${name} for a text game task.`, whenToUse: "A text game task.", metadata: { role: "functional" } }, body: body(size), dependencies: [] } });
+  const library = [method("one-big-method", 20_000), method("two-big-method", 20_000), method("three-small-method", 2_000)];
+  const selected = await selectCards({ library, taskText: "a text game task", mode: "flat", similarity: createMethodSimilarity(), maxBytes: 32 * 1024 });
+  assert.ok(selected.budget.spent <= 32 * 1024);
+  assert.equal(selected.budget.leftOut.length, 1);
+  assert.equal(selected.skills.length, 2);
+  const unbounded = await selectCards({ library, taskText: "a text game task", mode: "flat", similarity: createMethodSimilarity(), maxBytes: 1_000_000 });
+  assert.equal(unbounded.skills.length, 3);
 });

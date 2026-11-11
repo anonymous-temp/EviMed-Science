@@ -21,7 +21,8 @@
 import path from "node:path";
 import { inflateRawSync } from "node:zlib";
 
-import { ARTIFACT_SHAPE_LIMITS, cleanArtifactShape, fileFormatOf } from "@evimed/domain";
+import { ARTIFACT_SHAPE_LIMITS, cleanArtifactShape, fileFormatOf, RUNTIME_WORKSPACE_ROOT, scopeRunTranscript } from "@evimed/domain";
+import { readRunTranscript } from "./runTranscripts.mjs";
 import { openScopedFileNoFollow } from "./security.mjs";
 
 /** The largest file whose contents are read, and the largest an Office part may inflate to. */
@@ -221,11 +222,53 @@ export function shapeOfBytes(relativePath, bytes) {
 }
 
 /**
+ * Same-run script lineage for an ambiguous output inventory. A workspace script
+ * must have been written and then executed successfully in this run, even if
+ * it is absent from the output inventory (unchanged bytes or a hidden helper). Its exact
+ * quoted file operands link other changed files. No names, prose or extensions
+ * are used to guess which output matters. This only permits ignoring an extra
+ * format when another run delivered the common formats.
+ * @param {readonly string[]} files @param {readonly any[]} messages
+ * @param {string | null} [workspaceDir] @returns {Set<string>}
+ */
+export function scriptRelatedFiles(files, messages, workspaceDir = null) {
+  const roots = [...new Set([RUNTIME_WORKSPACE_ROOT, workspaceDir].filter(Boolean))];
+  const aliases = (/** @type {string} */ file) => [file, `./${file}`, ...roots.map(root => `${root}/${file}`)];
+  const written = new Map();
+  const related = new Set();
+  for (const message of messages) for (const part of message.parts ?? []) {
+    if (part.type !== "tool" || part.status !== "completed") continue;
+    if (part.tool === "write" || part.tool === "edit") {
+      const target = String(part.input?.file_path ?? part.input?.filePath ?? part.input?.path ?? "");
+      const root = roots.find(candidate => target.startsWith(`${candidate}/`));
+      const file = (root ? target.slice(root.length + 1) : path.posix.isAbsolute(target) ? "" : target).replace(/^\.\//, "");
+      if (file && !file.split("/").includes("..")) {
+        written.delete(file); // An edited script needs another complete write witness.
+        if (part.tool === "write" && typeof part.input?.content === "string") written.set(file, part.input.content);
+      }
+    }
+    if (part.tool !== "bash") continue;
+    const command = String(part.input?.command ?? part.input?.cmd ?? "");
+    for (const [script, source] of written) {
+      const escaped = aliases(script).map(alias => alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+      // An interpreter's first operand, not an arbitrary mention in a command.
+      if (!new RegExp(`(?:^|&&|;|\\n)\\s*(?:python3?|node|Rscript|bash|sh)\\s+["']?(?:\\./)?(?:${escaped})["']?(?:\\s|$)`).test(command)) continue;
+      const operands = files.filter(file => aliases(file).some(alias => source.includes(JSON.stringify(alias)) || source.includes("'" + alias + "'")));
+      if (!operands.length) continue;
+      if (files.includes(script)) related.add(script);
+      for (const file of operands) related.add(file);
+    }
+  }
+  return related;
+}
+
+/**
  * The shapes of a run's files, by workspace-relative path. A file that is not there, is a link, or cannot be opened has none.
- * @param {{ workspaceDir: string }} project @param {readonly string[]} files
+ * @param {{ workspaceDir: string, rootDir?: string }} project @param {readonly string[]} files
+ * @param {any} [run]
  * @returns {Promise<Record<string, import("@evimed/domain").ArtifactShape>>}
  */
-export async function readArtifactShapes(project, files) {
+export async function readArtifactShapes(project, files, run = null) {
   /** @type {Record<string, import("@evimed/domain").ArtifactShape>} */
   const shapes = {};
   for (const relative of [...new Set(files)].slice(0, SHAPE_FILES)) {
@@ -238,6 +281,13 @@ export async function readArtifactShapes(project, files) {
       if (shape) shapes[relative] = shape;
     } catch { /* unreadable, escaped or linked: no shape */ }
     finally { await opened?.handle.close().catch(() => {}); }
+  }
+  if (run && project.rootDir && !run.presentedFiles?.length) {
+    const transcript = await readRunTranscript(/** @type {any} */ (project), run.id).catch(() => null);
+    if (transcript) {
+      const scoped = scopeRunTranscript(transcript, run);
+      for (const file of scriptRelatedFiles(files, scoped.messages, project.workspaceDir)) if (shapes[file]) shapes[file] = { ...shapes[file], scriptRelated: true };
+    }
   }
   return shapes;
 }

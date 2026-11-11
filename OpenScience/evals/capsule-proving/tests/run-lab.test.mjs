@@ -171,3 +171,46 @@ test("a message the product writes without a time gets the conversation's time; 
   await sessions.addMessage("evlab_test_U02", "dsh-x", { role: "assistant", parts: [{ type: "text", text: "no clock" }] });
   assert.equal(stub.sent("POST", "/api/v1/sessions/dsh-x/messages").at(-1).body.created_at, undefined);
 });
+
+
+test("settlement drains the product's pending summary invalidations before consuming commits", async () => {
+  const { settleLabCommits } = await import('../run/lab.mjs');
+  let invalid = true, pending = true;
+  const calls = [];
+  const worker = {
+    async drainSummaryInvalidations() { invalid = false; calls.push('drain'); },
+    async processCommits() { assert.equal(invalid, false); pending = false; calls.push('consume'); return 1; },
+  };
+  const result = await settleLabCommits({ worker, userId: 'fixture', deadline: Date.now() + 1000,
+    overlay: { async openCommits() { return pending ? [{ state: 'pending', taskId: 'task' }] : []; } },
+    waitTask: async () => { throw new Error('No task wait needed after settlement'); } });
+  assert.deepEqual(calls, ['drain', 'consume']);
+  assert.equal(result.open, 0);
+  assert.equal(result.settled, 1);
+});
+
+test('unsettled product commits stop replay rather than masquerading as completed sessions', async () => {
+  const { settleLabCommits } = await import('../run/lab.mjs');
+  await assert.rejects(settleLabCommits({
+    worker: { async drainSummaryInvalidations() {}, async processCommits() { return 0; } },
+    overlay: { async openCommits() { return [{ state: 'pending', taskId: 'task' }]; } },
+    userId: 'fixture', deadline: Date.now() - 1, waitTask: async () => ({ status: 'completed' }),
+  }), { code: 'lab_unsettled_commits' });
+});
+
+test('settlement polls transient engine summary conflicts and waits for the next product pass', async () => {
+  const { settleLabCommits } = await import('../run/lab.mjs');
+  let drains = 0, passes = 0;
+  const result = await settleLabCommits({
+    worker: {
+      async drainSummaryInvalidations() { if (++drains === 1) throw Object.assign(new Error('busy sidecar'), { code: 'memory_index_conflict' }); },
+      async processCommits() { passes += 1; return passes === 2 ? 1 : 0; },
+    },
+    overlay: { async openCommits() { return passes < 2 ? [{ state: 'pending', taskId: 'task' }] : []; } },
+    userId: 'fixture', deadline: Date.now() + 1000, pollMs: 1, waitTask: async () => ({ status: 'completed' }),
+  });
+  assert.equal(result.open, 0);
+  assert.equal(result.settled, 1);
+  assert.ok(drains > 1);
+  assert.equal(passes, 2);
+});

@@ -214,7 +214,7 @@ function methodFileBytes(payload) {
  * resolve. `card`, given only where the mount writes one (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`, `methodCardFacts`), is budgeted with
  * the lines it adds; without it the bytes are what they always were.
  * @param {any} payload @param {string} directoryName @param {string} cardDirectory
- * @param {{ evidence: string[], counterexamples: string[], verified: boolean } | null} [card]
+ * @param {{ evidence: string[], counterexamples: string[], verified: boolean, rewrites?: {count: number, dates: string[]} } | null} [card]
  * @returns {number}
  */
 export function learnedMethodCardBytes(payload, directoryName, cardDirectory, card = null) {
@@ -240,7 +240,7 @@ export function learnedMethodCardBytes(payload, directoryName, cardDirectory, ca
  * @property {number} bytes
  * @property {number} promptBytes
  * @property {"similarity" | "dependency" | "explore" | "recent" | "abstraction"} reason why its card is in front of the run (`METHOD_MOUNT_REASONS`)
- * @property {{ evidence: string[], counterexamples: string[], verified: boolean }} [card] what the card adds (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`)
+ * @property {{ evidence: string[], counterexamples: string[], verified: boolean, rewrites?: {count: number, dates: string[]} }} [card] what the card adds (`OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`)
  */
 
 /**

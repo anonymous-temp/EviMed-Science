@@ -274,6 +274,9 @@ def main():
                                    "--episodes", ",".join(files)]
                         if args.embed_key_file:
                             command += ["--embed-key-file", args.embed_key_file]
+                        # The library's learning steps think as the library was built (run_camp_libs.sh: C1_LEARN_THINKING).
+                        if os.environ.get("C1_LEARN_THINKING"):
+                            command += ["--thinking", os.environ["C1_LEARN_THINKING"]]
                         subprocess.run(command, check=True)
         selected = [r for r in rows if r["env"] == args.env and r["fold"] == args.fold
                     and r["arm"] == args.arm and r["taskId"] in set(tasks)]

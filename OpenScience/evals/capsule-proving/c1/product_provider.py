@@ -79,7 +79,7 @@ class ProductSkillProvider:
                 temp.replace(cached)
         self.last = {"mode": self.mode, "removeRoles": self.remove_roles, "ranking": answer.get("mode"),
                      "topScore": answer.get("topScore"), "libraryMethods": answer.get("libraryMethods"),
-                     "embedModel": answer.get("embedModel"), "cacheKey": key,
+                     "embedModel": answer.get("embedModel"), "cacheKey": key, "budget": answer.get("budget"),
                      "selected": [{k: s.get(k) for k in ("name", "role", "levelNumber", "reason", "digest")}
                                   for s in answer.get("skills", [])]}
         return [{"name": s["name"], "level": s.get("role", s.get("level")), "text": render(s), "reason": s.get("reason")}

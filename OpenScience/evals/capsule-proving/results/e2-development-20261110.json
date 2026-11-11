@@ -1,0 +1,5705 @@
+{
+  "schema": "capsule-proving-e2-development/1",
+  "at": "2026-11-10T12:31:49.978929+00:00",
+  "scope": "Development only; original public-set language; no confirmation/sealed inputs selected.",
+  "codeCommits": [
+    "a09c33bca",
+    "ef134261c",
+    "01711f793",
+    "9c5d564c0",
+    "09fb406fd",
+    "b700a3362",
+    "11af73a63"
+  ],
+  "settings": {
+    "answer": "deepseek-flash",
+    "thinking": "enabled",
+    "reasoningEffort": "high",
+    "newIngestionConcurrency": 8,
+    "reusedV3IngestionConcurrency": 16,
+    "productVariant": {
+      "memorySearchHintEnabled": true,
+      "memoryOpeningIndexEnabled": true
+    },
+    "judge": "qwen3.8-max",
+    "interval": "Question-level Wilson 95%; unjudged/error stays in denominator."
+  },
+  "engineComparison": [
+    {
+      "name": "ovlab",
+      "image": "sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d",
+      "productTemplatesMounted": true
+    },
+    {
+      "name": "ovlab2",
+      "image": "sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d",
+      "productTemplatesMounted": true
+    },
+    {
+      "name": "ovlab3",
+      "image": "sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d",
+      "productTemplatesMounted": true
+    },
+    {
+      "name": "ovlab4",
+      "image": "sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d",
+      "productTemplatesMounted": true
+    },
+    {
+      "name": "ovlab5",
+      "image": "sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d",
+      "productTemplatesMounted": true
+    },
+    {
+      "name": "ovvanilla",
+      "image": "sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d",
+      "productTemplatesMounted": false
+    }
+  ],
+  "selection": {
+    "seed": "e2-shared-engine-budget-20261110-v1",
+    "reason": "Bound long per-user sequential ingestion on five shared engines; freeze before answers. Whole users, all their development questions and prerequisite sessions.",
+    "realmem": {
+      "cases": [
+        "Liam_O_Connor",
+        "Lin_Wanyu",
+        "Sophie_Dubois",
+        "Kenta_Tanaka"
+      ],
+      "sessions": 623,
+      "questions": 50,
+      "fullDevelopment": {
+        "cases": 10,
+        "sessions": 1778,
+        "questions": 120
+      }
+    },
+    "halumem": {
+      "cases": [
+        "2e36c193-a605-8cc7-70ff-80b2336d4980",
+        "4fd09df4-d0df-ff7e-bb39-5f4faedfac2c",
+        "d850d98b-ba45-3fd5-e3fa-2104b6724e10",
+        "8ece194a-885c-8e0c-359e-93a97220252c",
+        "2f4b4206-20bc-19a5-a5ed-4d110f91f4db",
+        "6b005479-e3b6-02fc-e52d-3a41eb0cf288",
+        "9ca7c5ff-487c-ba5d-04f6-05f27d35ba2a",
+        "ed9b924b-6bc0-67f9-67a1-a36401dd1782"
+      ],
+      "sessions": 504,
+      "questions": 58,
+      "fullDevelopment": {
+        "cases": 19,
+        "sessions": 1127,
+        "questions": 120
+      }
+    }
+  },
+  "retirements": {
+    "reason": "LoCoMo Case conversion omitted named speaker and original shared-caption text included by pinned upstream QA reader. All affected attempts are excluded from accepted results; fresh complete reruns, no question selection changes.",
+    "replaced": {
+      "e0-locomo-dev-product-1": "e2-locomo-dev-product-2",
+      "e0-locomo-dev-keyword-1": "e2-locomo-dev-keyword-2",
+      "e0-locomo-original-dev-product-1": "e2-locomo-original-dev-product-2",
+      "e0-locomo-original-dev-keyword-1": "e2-locomo-original-dev-keyword-2"
+    },
+    "retained": "LoCoMo no-memory answers use exactly the same question text and no history; unaffected."
+  },
+  "sets": {
+    "locomo": {
+      "source": {
+        "name": "LoCoMo_refined",
+        "repository": "https://github.com/mem-eval-suite/LoCoMo_refined",
+        "revision": "887091190789e8d6760e70b9edd696539923dc4f",
+        "declaredLicense": [
+          {
+            "source": "repository LICENSE.txt",
+            "license": "CC-BY-NC-4.0"
+          },
+          {
+            "source": "NOTICE",
+            "license": "modified version of Snap Research LoCoMo (CC-BY-NC-4.0)"
+          }
+        ]
+      },
+      "development": {
+        "cases": 10,
+        "sessions": 272,
+        "questions": 120
+      },
+      "runCohort": {
+        "cases": 10,
+        "sessions": 272,
+        "questions": 120
+      },
+      "arms": {
+        "product": {
+          "runId": "e2-locomo-dev-product-2",
+          "variant": null,
+          "n": 120,
+          "pass": 113,
+          "fail": 7,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.9416666666666667,
+          "ci95": [
+            0.8844740796636988,
+            0.9714589899997798
+          ],
+          "categories": {
+            "multi-hop": {
+              "n": 14,
+              "pass": 13,
+              "fail": 1,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.9285714285714286,
+              "ci95": [
+                0.6853129557584889,
+                0.9872777847521093
+              ]
+            },
+            "open-domain": {
+              "n": 7,
+              "pass": 6,
+              "fail": 1,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.8571428571428571,
+              "ci95": [
+                0.4868721707256811,
+                0.9743203756552565
+              ]
+            },
+            "single-hop": {
+              "n": 79,
+              "pass": 74,
+              "fail": 5,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.9367088607594937,
+              "ci95": [
+                0.8602511483722118,
+                0.9726651351199317
+              ]
+            },
+            "temporal": {
+              "n": 20,
+              "pass": 20,
+              "fail": 0,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 1,
+              "ci95": [
+                0.8388748419471806,
+                1
+              ]
+            }
+          },
+          "rubric": "approximate",
+          "judge": {
+            "rubric": "approximate",
+            "prompt": "Approximate semantic accuracy; official token F1 not run",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 120,
+            "completed": 120,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 272,
+            "history": {
+              "unavailable": 3,
+              "complete": 267,
+              "missing": 2
+            }
+          },
+          "ledgerId": "3b3ad9dc21c5",
+          "answerRecords": 120,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e2-locomo-dev-product-2",
+          "runnerDigest": "6de98b1d0ab7d5bd5e97ee480a88d7784b8aa2c2b6c33bcf87625339c3b0c546",
+          "engine": {
+            "templates": "product",
+            "url": "http://127.0.0.1:19330",
+            "urls": [
+              "http://127.0.0.1:19330",
+              "http://127.0.0.1:19342",
+              "http://127.0.0.1:19343",
+              "http://127.0.0.1:19344",
+              "http://127.0.0.1:19345"
+            ],
+            "version": "v0.5.3",
+            "account": "evlab-e2-locomo-dev-product-2",
+            "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+            "templatesFiles": 12,
+            "templatesDir": "deploy/web/openviking/memory-templates",
+            "shards": [
+              {
+                "url": "http://127.0.0.1:19330",
+                "account": "evlab-e2-locomo-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19342",
+                "account": "evlab-e2-locomo-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19343",
+                "account": "evlab-e2-locomo-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19344",
+                "account": "evlab-e2-locomo-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19345",
+                "account": "evlab-e2-locomo-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              }
+            ],
+            "templatesMounted": true,
+            "memoryTypes": [
+              "corrections",
+              "decisions",
+              "entities",
+              "follow_ups",
+              "notes",
+              "observations",
+              "people",
+              "preferences",
+              "profile",
+              "project_context",
+              "project_facts",
+              "recent_work"
+            ]
+          },
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": []
+        },
+        "both": {
+          "runId": "e2-locomo-dev-product-2",
+          "variant": "both",
+          "n": 120,
+          "pass": 115,
+          "fail": 5,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.9583333333333334,
+          "ci95": [
+            0.9061591476629647,
+            0.9820732831198906
+          ],
+          "categories": {
+            "multi-hop": {
+              "n": 14,
+              "pass": 14,
+              "fail": 0,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 1,
+              "ci95": [
+                0.7846891972623643,
+                1
+              ]
+            },
+            "open-domain": {
+              "n": 7,
+              "pass": 6,
+              "fail": 1,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.8571428571428571,
+              "ci95": [
+                0.4868721707256811,
+                0.9743203756552565
+              ]
+            },
+            "single-hop": {
+              "n": 79,
+              "pass": 76,
+              "fail": 3,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.9620253164556962,
+              "ci95": [
+                0.8941993723231529,
+                0.9870019131105641
+              ]
+            },
+            "temporal": {
+              "n": 20,
+              "pass": 19,
+              "fail": 1,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.95,
+              "ci95": [
+                0.763868806553258,
+                0.9911185511992047
+              ]
+            }
+          },
+          "rubric": "approximate",
+          "judge": {
+            "rubric": "approximate",
+            "prompt": "Approximate semantic accuracy; official token F1 not run",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 120,
+            "completed": 120,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 272,
+            "history": {
+              "unavailable": 3,
+              "complete": 267,
+              "missing": 2
+            }
+          },
+          "ledgerId": "24ce1ee4abb3",
+          "answerRecords": 120,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e2-locomo-dev-product-2",
+          "runnerDigest": "6de98b1d0ab7d5bd5e97ee480a88d7784b8aa2c2b6c33bcf87625339c3b0c546",
+          "engine": {
+            "templates": "product",
+            "url": "http://127.0.0.1:19330",
+            "urls": [
+              "http://127.0.0.1:19330",
+              "http://127.0.0.1:19342",
+              "http://127.0.0.1:19343",
+              "http://127.0.0.1:19344",
+              "http://127.0.0.1:19345"
+            ],
+            "version": "v0.5.3",
+            "account": "evlab-e2-locomo-dev-product-2",
+            "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+            "templatesFiles": 12,
+            "templatesDir": "deploy/web/openviking/memory-templates",
+            "shards": [
+              {
+                "url": "http://127.0.0.1:19330",
+                "account": "evlab-e2-locomo-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19342",
+                "account": "evlab-e2-locomo-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19343",
+                "account": "evlab-e2-locomo-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19344",
+                "account": "evlab-e2-locomo-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19345",
+                "account": "evlab-e2-locomo-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              }
+            ],
+            "templatesMounted": true,
+            "memoryTypes": [
+              "corrections",
+              "decisions",
+              "entities",
+              "follow_ups",
+              "notes",
+              "observations",
+              "people",
+              "preferences",
+              "profile",
+              "project_context",
+              "project_facts",
+              "recent_work"
+            ]
+          },
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": "deepseek-flash (lab engine ov.conf, provider direct)",
+            "answerJudgeSameFamily": false
+          },
+          "variantConfig": {
+            "memorySearchHintEnabled": true,
+            "memoryOpeningIndexEnabled": true
+          },
+          "memorySource": null,
+          "notRun": []
+        },
+        "no-memory": {
+          "runId": "e0-locomo-dev-no-memory-1",
+          "variant": null,
+          "n": 120,
+          "pass": 1,
+          "fail": 119,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.008333333333333333,
+          "ci95": [
+            0.0014725557333420923,
+            0.045696291245049675
+          ],
+          "categories": {
+            "multi-hop": {
+              "n": 14,
+              "pass": 0,
+              "fail": 14,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                1.3877787807814457e-17,
+                0.2153108027376358
+              ]
+            },
+            "open-domain": {
+              "n": 7,
+              "pass": 0,
+              "fail": 7,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                5.551115123125783e-17,
+                0.35433043506668743
+              ]
+            },
+            "single-hop": {
+              "n": 79,
+              "pass": 1,
+              "fail": 78,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.012658227848101266,
+              "ci95": [
+                0.0022379938550498787,
+                0.06827571876965954
+              ]
+            },
+            "temporal": {
+              "n": 20,
+              "pass": 0,
+              "fail": 20,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.16112515805281938
+              ]
+            }
+          },
+          "rubric": "approximate",
+          "judge": {
+            "rubric": "approximate",
+            "prompt": "Approximate semantic accuracy; official token F1 not run",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 120,
+            "completed": 120,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 0,
+            "history": {}
+          },
+          "ledgerId": "685b58595617",
+          "answerRecords": 120,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-locomo-dev-no-memory-1",
+          "runnerDigest": "128fc1f9d294d77e08371ca309462a485f3a8d28141ab58bd0ee5da4c10cfdf8",
+          "engine": null,
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": null
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": []
+        },
+        "keyword": {
+          "runId": "e2-locomo-dev-keyword-2",
+          "variant": null,
+          "n": 120,
+          "pass": 103,
+          "fail": 17,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.8583333333333333,
+          "ci95": [
+            0.7848050551014282,
+            0.9096312089651676
+          ],
+          "categories": {
+            "multi-hop": {
+              "n": 14,
+              "pass": 9,
+              "fail": 5,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.6428571428571429,
+              "ci95": [
+                0.38764423103907397,
+                0.8365526824644587
+              ]
+            },
+            "open-domain": {
+              "n": 7,
+              "pass": 6,
+              "fail": 1,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.8571428571428571,
+              "ci95": [
+                0.4868721707256811,
+                0.9743203756552565
+              ]
+            },
+            "single-hop": {
+              "n": 79,
+              "pass": 69,
+              "fail": 10,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.8734177215189873,
+              "ci95": [
+                0.7824364133349648,
+                0.9297673653032448
+              ]
+            },
+            "temporal": {
+              "n": 20,
+              "pass": 19,
+              "fail": 1,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.95,
+              "ci95": [
+                0.763868806553258,
+                0.9911185511992047
+              ]
+            }
+          },
+          "rubric": "approximate",
+          "judge": {
+            "rubric": "approximate",
+            "prompt": "Approximate semantic accuracy; official token F1 not run",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 120,
+            "completed": 120,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 0,
+            "history": {}
+          },
+          "ledgerId": "2a1829362d6a",
+          "answerRecords": 120,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e2-locomo-dev-keyword-2",
+          "runnerDigest": "6de98b1d0ab7d5bd5e97ee480a88d7784b8aa2c2b6c33bcf87625339c3b0c546",
+          "engine": null,
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": null
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": []
+        }
+      }
+    },
+    "locomo-original": {
+      "source": {
+        "name": "LoCoMo (original, locomo10)",
+        "repository": "https://github.com/snap-research/locomo",
+        "revision": "3eb6f2c585f5e1699204e3c3bdf7adc5c28cb376",
+        "declaredLicense": [
+          {
+            "source": "repository LICENSE.txt",
+            "license": "CC-BY-NC-4.0"
+          }
+        ]
+      },
+      "development": {
+        "cases": 10,
+        "sessions": 272,
+        "questions": 94
+      },
+      "runCohort": {
+        "cases": 10,
+        "sessions": 272,
+        "questions": 94
+      },
+      "arms": {
+        "product": {
+          "runId": "e2-locomo-original-dev-product-2",
+          "variant": null,
+          "n": 94,
+          "pass": 83,
+          "fail": 9,
+          "unknown": 2,
+          "error": 0,
+          "accuracy": 0.8829787234042553,
+          "ci95": [
+            0.8024979953786057,
+            0.9333863717172325
+          ],
+          "categories": {
+            "multi-hop": {
+              "n": 13,
+              "pass": 12,
+              "fail": 1,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.9230769230769231,
+              "ci95": [
+                0.6668604907890041,
+                0.9862895787574435
+              ]
+            },
+            "open-domain": {
+              "n": 4,
+              "pass": 2,
+              "fail": 2,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.5,
+              "ci95": [
+                0.15003898915214947,
+                0.8499610108478506
+              ]
+            },
+            "single-hop": {
+              "n": 57,
+              "pass": 52,
+              "fail": 3,
+              "unknown": 2,
+              "error": 0,
+              "accuracy": 0.9122807017543859,
+              "ci95": [
+                0.8105512290044132,
+                0.9619483282220778
+              ]
+            },
+            "temporal": {
+              "n": 20,
+              "pass": 17,
+              "fail": 3,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.85,
+              "ci95": [
+                0.6395811352592431,
+                0.9476312541037835
+              ]
+            }
+          },
+          "rubric": "approximate",
+          "judge": {
+            "rubric": "approximate",
+            "prompt": "Approximate semantic accuracy; official token F1 not run",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 94,
+            "completed": 94,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 272,
+            "history": {
+              "complete": 270,
+              "unavailable": 2
+            }
+          },
+          "ledgerId": "67c835fce19b",
+          "answerRecords": 94,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e2-locomo-original-dev-product-2",
+          "runnerDigest": "6de98b1d0ab7d5bd5e97ee480a88d7784b8aa2c2b6c33bcf87625339c3b0c546",
+          "engine": {
+            "templates": "product",
+            "url": "http://127.0.0.1:19330",
+            "urls": [
+              "http://127.0.0.1:19330",
+              "http://127.0.0.1:19342",
+              "http://127.0.0.1:19343",
+              "http://127.0.0.1:19344",
+              "http://127.0.0.1:19345"
+            ],
+            "version": "v0.5.3",
+            "account": "evlab-e2-locomo-original-dev-product-2",
+            "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+            "templatesFiles": 12,
+            "templatesDir": "deploy/web/openviking/memory-templates",
+            "shards": [
+              {
+                "url": "http://127.0.0.1:19330",
+                "account": "evlab-e2-locomo-original-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19342",
+                "account": "evlab-e2-locomo-original-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19343",
+                "account": "evlab-e2-locomo-original-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19344",
+                "account": "evlab-e2-locomo-original-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19345",
+                "account": "evlab-e2-locomo-original-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              }
+            ],
+            "templatesMounted": true,
+            "memoryTypes": [
+              "corrections",
+              "decisions",
+              "entities",
+              "follow_ups",
+              "notes",
+              "observations",
+              "people",
+              "preferences",
+              "profile",
+              "project_context",
+              "project_facts",
+              "recent_work"
+            ]
+          },
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": []
+        },
+        "both": {
+          "runId": "e2-locomo-original-dev-product-2",
+          "variant": "both",
+          "n": 94,
+          "pass": 83,
+          "fail": 9,
+          "unknown": 2,
+          "error": 0,
+          "accuracy": 0.8829787234042553,
+          "ci95": [
+            0.8024979953786057,
+            0.9333863717172325
+          ],
+          "categories": {
+            "multi-hop": {
+              "n": 13,
+              "pass": 10,
+              "fail": 3,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.7692307692307693,
+              "ci95": [
+                0.49743624053272495,
+                0.9182047128150143
+              ]
+            },
+            "open-domain": {
+              "n": 4,
+              "pass": 3,
+              "fail": 1,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.75,
+              "ci95": [
+                0.30064184258240184,
+                0.9544127391902995
+              ]
+            },
+            "single-hop": {
+              "n": 57,
+              "pass": 54,
+              "fail": 1,
+              "unknown": 2,
+              "error": 0,
+              "accuracy": 0.9473684210526315,
+              "ci95": [
+                0.8563044960283646,
+                0.9819397043663383
+              ]
+            },
+            "temporal": {
+              "n": 20,
+              "pass": 16,
+              "fail": 4,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.8,
+              "ci95": [
+                0.5839825677481064,
+                0.919342337420202
+              ]
+            }
+          },
+          "rubric": "approximate",
+          "judge": {
+            "rubric": "approximate",
+            "prompt": "Approximate semantic accuracy; official token F1 not run",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 94,
+            "completed": 94,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 272,
+            "history": {
+              "complete": 270,
+              "unavailable": 2
+            }
+          },
+          "ledgerId": "9a8213b3a251",
+          "answerRecords": 94,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e2-locomo-original-dev-product-2",
+          "runnerDigest": "6de98b1d0ab7d5bd5e97ee480a88d7784b8aa2c2b6c33bcf87625339c3b0c546",
+          "engine": {
+            "templates": "product",
+            "url": "http://127.0.0.1:19330",
+            "urls": [
+              "http://127.0.0.1:19330",
+              "http://127.0.0.1:19342",
+              "http://127.0.0.1:19343",
+              "http://127.0.0.1:19344",
+              "http://127.0.0.1:19345"
+            ],
+            "version": "v0.5.3",
+            "account": "evlab-e2-locomo-original-dev-product-2",
+            "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+            "templatesFiles": 12,
+            "templatesDir": "deploy/web/openviking/memory-templates",
+            "shards": [
+              {
+                "url": "http://127.0.0.1:19330",
+                "account": "evlab-e2-locomo-original-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19342",
+                "account": "evlab-e2-locomo-original-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19343",
+                "account": "evlab-e2-locomo-original-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19344",
+                "account": "evlab-e2-locomo-original-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19345",
+                "account": "evlab-e2-locomo-original-dev-product-2",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              }
+            ],
+            "templatesMounted": true,
+            "memoryTypes": [
+              "corrections",
+              "decisions",
+              "entities",
+              "follow_ups",
+              "notes",
+              "observations",
+              "people",
+              "preferences",
+              "profile",
+              "project_context",
+              "project_facts",
+              "recent_work"
+            ]
+          },
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": "deepseek-flash (lab engine ov.conf, provider direct)",
+            "answerJudgeSameFamily": false
+          },
+          "variantConfig": {
+            "memorySearchHintEnabled": true,
+            "memoryOpeningIndexEnabled": true
+          },
+          "memorySource": null,
+          "notRun": []
+        },
+        "no-memory": {
+          "runId": "e0-locomo-original-dev-no-memory-1",
+          "variant": null,
+          "n": 94,
+          "pass": 0,
+          "fail": 94,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0,
+          "ci95": [
+            0,
+            0.03926207629154474
+          ],
+          "categories": {
+            "multi-hop": {
+              "n": 13,
+              "pass": 0,
+              "fail": 13,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.22809537235419838
+              ]
+            },
+            "open-domain": {
+              "n": 4,
+              "pass": 0,
+              "fail": 4,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.4898908364545973
+              ]
+            },
+            "single-hop": {
+              "n": 57,
+              "pass": 0,
+              "fail": 57,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.06313883485297894
+              ]
+            },
+            "temporal": {
+              "n": 20,
+              "pass": 0,
+              "fail": 20,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.16112515805281938
+              ]
+            }
+          },
+          "rubric": "approximate",
+          "judge": {
+            "rubric": "approximate",
+            "prompt": "Approximate semantic accuracy; official token F1 not run",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 94,
+            "completed": 94,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 0,
+            "history": {}
+          },
+          "ledgerId": "625bd6546e6c",
+          "answerRecords": 94,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-locomo-original-dev-no-memory-1",
+          "runnerDigest": "4ee32f632a6494106f34c10cff494b622ed8ff6d7ac44a1007e70246be9da5ce",
+          "engine": null,
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": null
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": []
+        },
+        "keyword": {
+          "runId": "e2-locomo-original-dev-keyword-2",
+          "variant": null,
+          "n": 94,
+          "pass": 77,
+          "fail": 15,
+          "unknown": 2,
+          "error": 0,
+          "accuracy": 0.8191489361702128,
+          "ci95": [
+            0.7293303791966494,
+            0.8839065933832155
+          ],
+          "categories": {
+            "multi-hop": {
+              "n": 13,
+              "pass": 8,
+              "fail": 5,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.6153846153846154,
+              "ci95": [
+                0.355228915126657,
+                0.8229029220223743
+              ]
+            },
+            "open-domain": {
+              "n": 4,
+              "pass": 1,
+              "fail": 3,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.25,
+              "ci95": [
+                0.04558726080970055,
+                0.6993581574175981
+              ]
+            },
+            "single-hop": {
+              "n": 57,
+              "pass": 51,
+              "fail": 4,
+              "unknown": 2,
+              "error": 0,
+              "accuracy": 0.8947368421052632,
+              "ci95": [
+                0.7887718941661297,
+                0.9508553414762553
+              ]
+            },
+            "temporal": {
+              "n": 20,
+              "pass": 17,
+              "fail": 3,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.85,
+              "ci95": [
+                0.6395811352592431,
+                0.9476312541037835
+              ]
+            }
+          },
+          "rubric": "approximate",
+          "judge": {
+            "rubric": "approximate",
+            "prompt": "Approximate semantic accuracy; official token F1 not run",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 94,
+            "completed": 94,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 0,
+            "history": {}
+          },
+          "ledgerId": "4319f4b6e889",
+          "answerRecords": 94,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e2-locomo-original-dev-keyword-2",
+          "runnerDigest": "6de98b1d0ab7d5bd5e97ee480a88d7784b8aa2c2b6c33bcf87625339c3b0c546",
+          "engine": null,
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": null
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": []
+        }
+      }
+    },
+    "realmem": {
+      "source": {
+        "name": "RealMem (RealMemBench)",
+        "repository": "https://github.com/AvatarMemory/RealMemBench",
+        "revision": "67afd0891d603adcc4458ff0449df306ef296b7a",
+        "declaredLicense": [
+          {
+            "source": "repository LICENSE file",
+            "license": "Apache-2.0"
+          },
+          {
+            "source": "README badge",
+            "license": "MIT"
+          },
+          {
+            "source": "Hugging Face Haonan-Bian/RealMem card (data-less shell)",
+            "license": "apache-2.0"
+          }
+        ]
+      },
+      "development": {
+        "cases": 10,
+        "sessions": 1778,
+        "questions": 120
+      },
+      "runCohort": {
+        "caseIds": [
+          "Liam_O_Connor",
+          "Lin_Wanyu",
+          "Sophie_Dubois",
+          "Kenta_Tanaka"
+        ],
+        "cases": 4,
+        "sessions": 623,
+        "questions": 50
+      },
+      "arms": {
+        "product": {
+          "runId": "e0-realmem-dev-product-1",
+          "variant": null,
+          "n": 50,
+          "pass": 15,
+          "fail": 35,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.3,
+          "ci95": [
+            0.19103553500880954,
+            0.437503504644534
+          ],
+          "categories": {
+            "Dynamic Incremental": {
+              "n": 35,
+              "pass": 13,
+              "fail": 22,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.37142857142857144,
+              "ci95": [
+                0.2316581950336571,
+                0.5366306315640468
+              ]
+            },
+            "Dynamic Updating": {
+              "n": 7,
+              "pass": 1,
+              "fail": 6,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.14285714285714285,
+              "ci95": [
+                0.02567962434474355,
+                0.5131278292743189
+              ]
+            },
+            "Implicit Preference": {
+              "n": 6,
+              "pass": 1,
+              "fail": 5,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.16666666666666666,
+              "ci95": [
+                0.030053369748306635,
+                0.5635028221864702
+              ]
+            },
+            "Temporal-reasoning": {
+              "n": 2,
+              "pass": 0,
+              "fail": 2,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.6576197724933469
+              ]
+            }
+          },
+          "rubric": "official",
+          "judge": {
+            "rubric": "official",
+            "prompt": "https://raw.githubusercontent.com/AvatarMemory/RealMemBench/67afd0891d603adcc4458ff0449df306ef296b7a/eval/compute_llm_metrics_for_realmem.py",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 50,
+            "completed": 50,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": {
+            "scale": [
+              0,
+              3
+            ],
+            "n": 50,
+            "judged": 50,
+            "meanWithUnknownZero": 1.92,
+            "note": "Unjudged remains in denominator; binary accuracy requires score 3. References are LLM-generated, not human-verified."
+          },
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 623,
+            "history": {
+              "complete": 619,
+              "missing": 3,
+              "unavailable": 1
+            }
+          },
+          "ledgerId": "1a2182ab0e29",
+          "answerRecords": 50,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-realmem-dev-product-1",
+          "runnerDigest": "128fc1f9d294d77e08371ca309462a485f3a8d28141ab58bd0ee5da4c10cfdf8",
+          "engine": {
+            "templates": "product",
+            "url": "http://127.0.0.1:19330",
+            "urls": [
+              "http://127.0.0.1:19330",
+              "http://127.0.0.1:19342",
+              "http://127.0.0.1:19343",
+              "http://127.0.0.1:19344",
+              "http://127.0.0.1:19345"
+            ],
+            "version": "v0.5.3",
+            "account": "evlab-e0-realmem-dev-product-1",
+            "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+            "templatesFiles": 12,
+            "templatesDir": "deploy/web/openviking/memory-templates",
+            "shards": [
+              {
+                "url": "http://127.0.0.1:19330",
+                "account": "evlab-e0-realmem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19342",
+                "account": "evlab-e0-realmem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              {
+                "url": "http://127.0.0.1:19343",
+                "account": "evlab-e0-realmem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19344",
+                "account": "evlab-e0-realmem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19345",
+                "account": "evlab-e0-realmem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              }
+            ],
+            "templatesMounted": true,
+            "memoryTypes": [
+              "corrections",
+              "decisions",
+              "entities",
+              "follow_ups",
+              "notes",
+              "observations",
+              "people",
+              "preferences",
+              "profile",
+              "project_context",
+              "project_facts",
+              "recent_work"
+            ]
+          },
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": []
+        },
+        "both": {
+          "runId": "e0-realmem-dev-product-1",
+          "variant": "both",
+          "n": 50,
+          "pass": 17,
+          "fail": 33,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.34,
+          "ci95": [
+            0.2243694922250009,
+            0.478461739497674
+          ],
+          "categories": {
+            "Dynamic Incremental": {
+              "n": 35,
+              "pass": 14,
+              "fail": 21,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.4,
+              "ci95": [
+                0.2555072885938059,
+                0.5642729098710749
+              ]
+            },
+            "Dynamic Updating": {
+              "n": 7,
+              "pass": 1,
+              "fail": 6,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.14285714285714285,
+              "ci95": [
+                0.02567962434474355,
+                0.5131278292743189
+              ]
+            },
+            "Implicit Preference": {
+              "n": 6,
+              "pass": 2,
+              "fail": 4,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.3333333333333333,
+              "ci95": [
+                0.09677141110578041,
+                0.700006684861608
+              ]
+            },
+            "Temporal-reasoning": {
+              "n": 2,
+              "pass": 0,
+              "fail": 2,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.6576197724933469
+              ]
+            }
+          },
+          "rubric": "official",
+          "judge": {
+            "rubric": "official",
+            "prompt": "https://raw.githubusercontent.com/AvatarMemory/RealMemBench/67afd0891d603adcc4458ff0449df306ef296b7a/eval/compute_llm_metrics_for_realmem.py",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 50,
+            "completed": 50,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": {
+            "scale": [
+              0,
+              3
+            ],
+            "n": 50,
+            "judged": 50,
+            "meanWithUnknownZero": 1.9,
+            "note": "Unjudged remains in denominator; binary accuracy requires score 3. References are LLM-generated, not human-verified."
+          },
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 623,
+            "history": {
+              "complete": 619,
+              "missing": 3,
+              "unavailable": 1
+            }
+          },
+          "ledgerId": "f6202ef064e8",
+          "answerRecords": 50,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-realmem-dev-product-1",
+          "runnerDigest": "128fc1f9d294d77e08371ca309462a485f3a8d28141ab58bd0ee5da4c10cfdf8",
+          "engine": {
+            "templates": "product",
+            "url": "http://127.0.0.1:19330",
+            "urls": [
+              "http://127.0.0.1:19330",
+              "http://127.0.0.1:19342",
+              "http://127.0.0.1:19343",
+              "http://127.0.0.1:19344",
+              "http://127.0.0.1:19345"
+            ],
+            "version": "v0.5.3",
+            "account": "evlab-e0-realmem-dev-product-1",
+            "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+            "templatesFiles": 12,
+            "templatesDir": "deploy/web/openviking/memory-templates",
+            "shards": [
+              {
+                "url": "http://127.0.0.1:19330",
+                "account": "evlab-e0-realmem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19342",
+                "account": "evlab-e0-realmem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              {
+                "url": "http://127.0.0.1:19343",
+                "account": "evlab-e0-realmem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19344",
+                "account": "evlab-e0-realmem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19345",
+                "account": "evlab-e0-realmem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              }
+            ],
+            "templatesMounted": true,
+            "memoryTypes": [
+              "corrections",
+              "decisions",
+              "entities",
+              "follow_ups",
+              "notes",
+              "observations",
+              "people",
+              "preferences",
+              "profile",
+              "project_context",
+              "project_facts",
+              "recent_work"
+            ]
+          },
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": "deepseek-flash (lab engine ov.conf, provider direct)",
+            "answerJudgeSameFamily": false
+          },
+          "variantConfig": {
+            "memorySearchHintEnabled": true,
+            "memoryOpeningIndexEnabled": true
+          },
+          "memorySource": null,
+          "notRun": []
+        },
+        "no-memory": {
+          "runId": "e0-realmem-dev-no-memory-1",
+          "variant": null,
+          "n": 50,
+          "pass": 3,
+          "fail": 47,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.06,
+          "ci95": [
+            0.02061497034897397,
+            0.16217091688838173
+          ],
+          "categories": {
+            "Dynamic Incremental": {
+              "n": 35,
+              "pass": 3,
+              "fail": 32,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.08571428571428572,
+              "ci95": [
+                0.02958236826696982,
+                0.22379273965896496
+              ]
+            },
+            "Dynamic Updating": {
+              "n": 7,
+              "pass": 0,
+              "fail": 7,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                5.551115123125783e-17,
+                0.35433043506668743
+              ]
+            },
+            "Implicit Preference": {
+              "n": 6,
+              "pass": 0,
+              "fail": 6,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                2.7755575615628914e-17,
+                0.3903342879021653
+              ]
+            },
+            "Temporal-reasoning": {
+              "n": 2,
+              "pass": 0,
+              "fail": 2,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.6576197724933469
+              ]
+            }
+          },
+          "rubric": "official",
+          "judge": {
+            "rubric": "official",
+            "prompt": "https://raw.githubusercontent.com/AvatarMemory/RealMemBench/67afd0891d603adcc4458ff0449df306ef296b7a/eval/compute_llm_metrics_for_realmem.py",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 50,
+            "completed": 50,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": {
+            "scale": [
+              0,
+              3
+            ],
+            "n": 50,
+            "judged": 50,
+            "meanWithUnknownZero": 0.78,
+            "note": "Unjudged remains in denominator; binary accuracy requires score 3. References are LLM-generated, not human-verified."
+          },
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 0,
+            "history": {}
+          },
+          "ledgerId": "787c69d40ec7",
+          "answerRecords": 50,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-realmem-dev-no-memory-1",
+          "runnerDigest": "4ee32f632a6494106f34c10cff494b622ed8ff6d7ac44a1007e70246be9da5ce",
+          "engine": null,
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": null
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": []
+        },
+        "keyword": {
+          "runId": "e0-realmem-dev-keyword-1",
+          "variant": null,
+          "n": 50,
+          "pass": 11,
+          "fail": 39,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.22,
+          "ci95": [
+            0.1275391597021442,
+            0.3524154958125367
+          ],
+          "categories": {
+            "Dynamic Incremental": {
+              "n": 35,
+              "pass": 8,
+              "fail": 27,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.22857142857142856,
+              "ci95": [
+                0.12065879834191687,
+                0.3901731689199025
+              ]
+            },
+            "Dynamic Updating": {
+              "n": 7,
+              "pass": 3,
+              "fail": 4,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.42857142857142855,
+              "ci95": [
+                0.15821985525146975,
+                0.7495416354723428
+              ]
+            },
+            "Implicit Preference": {
+              "n": 6,
+              "pass": 0,
+              "fail": 6,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                2.7755575615628914e-17,
+                0.3903342879021653
+              ]
+            },
+            "Temporal-reasoning": {
+              "n": 2,
+              "pass": 0,
+              "fail": 2,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.6576197724933469
+              ]
+            }
+          },
+          "rubric": "official",
+          "judge": {
+            "rubric": "official",
+            "prompt": "https://raw.githubusercontent.com/AvatarMemory/RealMemBench/67afd0891d603adcc4458ff0449df306ef296b7a/eval/compute_llm_metrics_for_realmem.py",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 50,
+            "completed": 50,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": {
+            "scale": [
+              0,
+              3
+            ],
+            "n": 50,
+            "judged": 50,
+            "meanWithUnknownZero": 1.66,
+            "note": "Unjudged remains in denominator; binary accuracy requires score 3. References are LLM-generated, not human-verified."
+          },
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 0,
+            "history": {}
+          },
+          "ledgerId": "7d65285968ef",
+          "answerRecords": 50,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-realmem-dev-keyword-1",
+          "runnerDigest": "4ee32f632a6494106f34c10cff494b622ed8ff6d7ac44a1007e70246be9da5ce",
+          "engine": null,
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": null
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": []
+        }
+      }
+    },
+    "halumem": {
+      "source": {
+        "name": "HaluMem (Medium; Long pinned but large-only)",
+        "huggingface": "IAAR-Shanghai/HaluMem",
+        "revision": "cb04336aa1b732d4b24f5186c552456b4099806e",
+        "declaredLicense": [
+          {
+            "source": "Hugging Face card",
+            "license": "cc-by-nc-nd-4.0"
+          },
+          {
+            "source": "GitHub MemTensor/HaluMem LICENSE.txt",
+            "license": "CC-BY-NC-ND-4.0",
+            "githubRevision": "d653749586bfc7d13f5b68e8851f52155b5b1650"
+          }
+        ]
+      },
+      "development": {
+        "cases": 19,
+        "sessions": 1127,
+        "questions": 120
+      },
+      "runCohort": {
+        "caseIds": [
+          "2e36c193-a605-8cc7-70ff-80b2336d4980",
+          "4fd09df4-d0df-ff7e-bb39-5f4faedfac2c",
+          "d850d98b-ba45-3fd5-e3fa-2104b6724e10",
+          "8ece194a-885c-8e0c-359e-93a97220252c",
+          "2f4b4206-20bc-19a5-a5ed-4d110f91f4db",
+          "6b005479-e3b6-02fc-e52d-3a41eb0cf288",
+          "9ca7c5ff-487c-ba5d-04f6-05f27d35ba2a",
+          "ed9b924b-6bc0-67f9-67a1-a36401dd1782"
+        ],
+        "cases": 8,
+        "sessions": 504,
+        "questions": 58
+      },
+      "arms": {
+        "product": {
+          "runId": "e0-halumem-dev-product-1",
+          "variant": null,
+          "n": 58,
+          "pass": 5,
+          "fail": 53,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.08620689655172414,
+          "ci95": [
+            0.037385383126191135,
+            0.18643629062873543
+          ],
+          "categories": {
+            "Basic Fact Recall": {
+              "n": 12,
+              "pass": 0,
+              "fail": 12,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                2.7755575615628914e-17,
+                0.24249400665524085
+              ]
+            },
+            "Dynamic Update": {
+              "n": 2,
+              "pass": 0,
+              "fail": 2,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.6576197724933469
+              ]
+            },
+            "Generalization & Application": {
+              "n": 13,
+              "pass": 0,
+              "fail": 13,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.22809537235419838
+              ]
+            },
+            "Memory Boundary": {
+              "n": 11,
+              "pass": 4,
+              "fail": 7,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.36363636363636365,
+              "ci95": [
+                0.15166471095367573,
+                0.6461988254921511
+              ]
+            },
+            "Memory Conflict": {
+              "n": 15,
+              "pass": 1,
+              "fail": 14,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.06666666666666667,
+              "ci95": [
+                0.011866895493268553,
+                0.2981652987378003
+              ]
+            },
+            "Multi-hop Inference": {
+              "n": 5,
+              "pass": 0,
+              "fail": 5,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.43448246478317476
+              ]
+            }
+          },
+          "rubric": "official",
+          "judge": {
+            "rubric": "official",
+            "prompt": "https://raw.githubusercontent.com/MemTensor/HaluMem/d653749586bfc7d13f5b68e8851f52155b5b1650/eval/eval_tools.py",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 58,
+            "completed": 58,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": {
+            "n": 58,
+            "Correct": {
+              "n": 58,
+              "count": 5,
+              "value": 0.08620689655172414,
+              "ci95": [
+                0.037385383126191135,
+                0.18643629062873543
+              ]
+            },
+            "Hallucination": {
+              "n": 58,
+              "count": 53,
+              "value": 0.9137931034482759,
+              "ci95": [
+                0.8135637093712647,
+                0.962614616873809
+              ]
+            },
+            "Omission": {
+              "n": 58,
+              "count": 0,
+              "value": 0,
+              "ci95": [
+                0,
+                0.062117855787202914
+              ]
+            },
+            "unknown": 0
+          },
+          "ingestionCoverage": {
+            "sessions": 504,
+            "history": {
+              "unavailable": 9,
+              "complete": 489,
+              "queued": 2,
+              "missing": 4
+            }
+          },
+          "ledgerId": "ba4c816131f6",
+          "answerRecords": 58,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-halumem-dev-product-1",
+          "runnerDigest": "128fc1f9d294d77e08371ca309462a485f3a8d28141ab58bd0ee5da4c10cfdf8",
+          "engine": {
+            "templates": "product",
+            "url": "http://127.0.0.1:19330",
+            "urls": [
+              "http://127.0.0.1:19330",
+              "http://127.0.0.1:19342",
+              "http://127.0.0.1:19343",
+              "http://127.0.0.1:19344",
+              "http://127.0.0.1:19345"
+            ],
+            "version": "v0.5.3",
+            "account": "evlab-e0-halumem-dev-product-1",
+            "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+            "templatesFiles": 12,
+            "templatesDir": "deploy/web/openviking/memory-templates",
+            "shards": [
+              {
+                "url": "http://127.0.0.1:19330",
+                "account": "evlab-e0-halumem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              {
+                "url": "http://127.0.0.1:19342",
+                "account": "evlab-e0-halumem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19343",
+                "account": "evlab-e0-halumem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19344",
+                "account": "evlab-e0-halumem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19345",
+                "account": "evlab-e0-halumem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              }
+            ],
+            "templatesMounted": null,
+            "memoryTypes": null
+          },
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": [
+            "Extraction FMR and update hallucination: require per-session newly written memory export and separate native grading."
+          ]
+        },
+        "both": {
+          "runId": "e0-halumem-dev-product-1",
+          "variant": "both",
+          "n": 58,
+          "pass": 3,
+          "fail": 55,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.05172413793103448,
+          "ci95": [
+            0.017746134659410502,
+            0.14139401190842663
+          ],
+          "categories": {
+            "Basic Fact Recall": {
+              "n": 12,
+              "pass": 0,
+              "fail": 12,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                2.7755575615628914e-17,
+                0.24249400665524085
+              ]
+            },
+            "Dynamic Update": {
+              "n": 2,
+              "pass": 0,
+              "fail": 2,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.6576197724933469
+              ]
+            },
+            "Generalization & Application": {
+              "n": 13,
+              "pass": 0,
+              "fail": 13,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.22809537235419838
+              ]
+            },
+            "Memory Boundary": {
+              "n": 11,
+              "pass": 3,
+              "fail": 8,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.2727272727272727,
+              "ci95": [
+                0.09746059290024889,
+                0.5656453011761291
+              ]
+            },
+            "Memory Conflict": {
+              "n": 15,
+              "pass": 0,
+              "fail": 15,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.20388330103584862
+              ]
+            },
+            "Multi-hop Inference": {
+              "n": 5,
+              "pass": 0,
+              "fail": 5,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.43448246478317476
+              ]
+            }
+          },
+          "rubric": "official",
+          "judge": {
+            "rubric": "official",
+            "prompt": "https://raw.githubusercontent.com/MemTensor/HaluMem/d653749586bfc7d13f5b68e8851f52155b5b1650/eval/eval_tools.py",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 58,
+            "completed": 58,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": {
+            "n": 58,
+            "Correct": {
+              "n": 58,
+              "count": 3,
+              "value": 0.05172413793103448,
+              "ci95": [
+                0.017746134659410502,
+                0.14139401190842663
+              ]
+            },
+            "Hallucination": {
+              "n": 58,
+              "count": 55,
+              "value": 0.9482758620689655,
+              "ci95": [
+                0.8586059880915734,
+                0.9822538653405896
+              ]
+            },
+            "Omission": {
+              "n": 58,
+              "count": 0,
+              "value": 0,
+              "ci95": [
+                0,
+                0.062117855787202914
+              ]
+            },
+            "unknown": 0
+          },
+          "ingestionCoverage": {
+            "sessions": 504,
+            "history": {
+              "unavailable": 9,
+              "complete": 489,
+              "queued": 2,
+              "missing": 4
+            }
+          },
+          "ledgerId": "779f20ce7d5f",
+          "answerRecords": 58,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-halumem-dev-product-1",
+          "runnerDigest": "128fc1f9d294d77e08371ca309462a485f3a8d28141ab58bd0ee5da4c10cfdf8",
+          "engine": {
+            "templates": "product",
+            "url": "http://127.0.0.1:19330",
+            "urls": [
+              "http://127.0.0.1:19330",
+              "http://127.0.0.1:19342",
+              "http://127.0.0.1:19343",
+              "http://127.0.0.1:19344",
+              "http://127.0.0.1:19345"
+            ],
+            "version": "v0.5.3",
+            "account": "evlab-e0-halumem-dev-product-1",
+            "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+            "templatesFiles": 12,
+            "templatesDir": "deploy/web/openviking/memory-templates",
+            "shards": [
+              {
+                "url": "http://127.0.0.1:19330",
+                "account": "evlab-e0-halumem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              {
+                "url": "http://127.0.0.1:19342",
+                "account": "evlab-e0-halumem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19343",
+                "account": "evlab-e0-halumem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19344",
+                "account": "evlab-e0-halumem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              {
+                "url": "http://127.0.0.1:19345",
+                "account": "evlab-e0-halumem-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              }
+            ],
+            "templatesMounted": null,
+            "memoryTypes": null
+          },
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": "deepseek-flash (lab engine ov.conf, provider direct)",
+            "answerJudgeSameFamily": false
+          },
+          "variantConfig": {
+            "memorySearchHintEnabled": true,
+            "memoryOpeningIndexEnabled": true
+          },
+          "memorySource": null,
+          "notRun": [
+            "Extraction FMR and update hallucination: require per-session newly written memory export and separate native grading."
+          ]
+        },
+        "no-memory": {
+          "runId": "e0-halumem-dev-no-memory-1",
+          "variant": null,
+          "n": 58,
+          "pass": 10,
+          "fail": 48,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.1724137931034483,
+          "ci95": [
+            0.09644292662938801,
+            0.2890825650932622
+          ],
+          "categories": {
+            "Basic Fact Recall": {
+              "n": 12,
+              "pass": 0,
+              "fail": 12,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                2.7755575615628914e-17,
+                0.24249400665524085
+              ]
+            },
+            "Dynamic Update": {
+              "n": 2,
+              "pass": 0,
+              "fail": 2,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.6576197724933469
+              ]
+            },
+            "Generalization & Application": {
+              "n": 13,
+              "pass": 0,
+              "fail": 13,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.22809537235419838
+              ]
+            },
+            "Memory Boundary": {
+              "n": 11,
+              "pass": 10,
+              "fail": 1,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.9090909090909091,
+              "ci95": [
+                0.6226415635484043,
+                0.9837678271141151
+              ]
+            },
+            "Memory Conflict": {
+              "n": 15,
+              "pass": 0,
+              "fail": 15,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.20388330103584862
+              ]
+            },
+            "Multi-hop Inference": {
+              "n": 5,
+              "pass": 0,
+              "fail": 5,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.43448246478317476
+              ]
+            }
+          },
+          "rubric": "official",
+          "judge": {
+            "rubric": "official",
+            "prompt": "https://raw.githubusercontent.com/MemTensor/HaluMem/d653749586bfc7d13f5b68e8851f52155b5b1650/eval/eval_tools.py",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 58,
+            "completed": 58,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": {
+            "n": 58,
+            "Correct": {
+              "n": 58,
+              "count": 10,
+              "value": 0.1724137931034483,
+              "ci95": [
+                0.09644292662938801,
+                0.2890825650932622
+              ]
+            },
+            "Hallucination": {
+              "n": 58,
+              "count": 3,
+              "value": 0.05172413793103448,
+              "ci95": [
+                0.017746134659410502,
+                0.14139401190842663
+              ]
+            },
+            "Omission": {
+              "n": 58,
+              "count": 45,
+              "value": 0.7758620689655172,
+              "ci95": [
+                0.653388823610813,
+                0.8640633938859026
+              ]
+            },
+            "unknown": 0
+          },
+          "ingestionCoverage": {
+            "sessions": 0,
+            "history": {}
+          },
+          "ledgerId": "a3eac868e578",
+          "answerRecords": 58,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-halumem-dev-no-memory-1",
+          "runnerDigest": "6de98b1d0ab7d5bd5e97ee480a88d7784b8aa2c2b6c33bcf87625339c3b0c546",
+          "engine": null,
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": null
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": [
+            "Extraction FMR and update hallucination: require per-session newly written memory export and separate native grading."
+          ]
+        },
+        "keyword": {
+          "runId": "e0-halumem-dev-keyword-1",
+          "variant": null,
+          "n": 58,
+          "pass": 3,
+          "fail": 55,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.05172413793103448,
+          "ci95": [
+            0.017746134659410502,
+            0.14139401190842663
+          ],
+          "categories": {
+            "Basic Fact Recall": {
+              "n": 12,
+              "pass": 0,
+              "fail": 12,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                2.7755575615628914e-17,
+                0.24249400665524085
+              ]
+            },
+            "Dynamic Update": {
+              "n": 2,
+              "pass": 0,
+              "fail": 2,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.6576197724933469
+              ]
+            },
+            "Generalization & Application": {
+              "n": 13,
+              "pass": 0,
+              "fail": 13,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.22809537235419838
+              ]
+            },
+            "Memory Boundary": {
+              "n": 11,
+              "pass": 3,
+              "fail": 8,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.2727272727272727,
+              "ci95": [
+                0.09746059290024889,
+                0.5656453011761291
+              ]
+            },
+            "Memory Conflict": {
+              "n": 15,
+              "pass": 0,
+              "fail": 15,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.20388330103584862
+              ]
+            },
+            "Multi-hop Inference": {
+              "n": 5,
+              "pass": 0,
+              "fail": 5,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.43448246478317476
+              ]
+            }
+          },
+          "rubric": "official",
+          "judge": {
+            "rubric": "official",
+            "prompt": "https://raw.githubusercontent.com/MemTensor/HaluMem/d653749586bfc7d13f5b68e8851f52155b5b1650/eval/eval_tools.py",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 58,
+            "completed": 58,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": {
+            "n": 58,
+            "Correct": {
+              "n": 58,
+              "count": 3,
+              "value": 0.05172413793103448,
+              "ci95": [
+                0.017746134659410502,
+                0.14139401190842663
+              ]
+            },
+            "Hallucination": {
+              "n": 58,
+              "count": 55,
+              "value": 0.9482758620689655,
+              "ci95": [
+                0.8586059880915734,
+                0.9822538653405896
+              ]
+            },
+            "Omission": {
+              "n": 58,
+              "count": 0,
+              "value": 0,
+              "ci95": [
+                0,
+                0.062117855787202914
+              ]
+            },
+            "unknown": 0
+          },
+          "ingestionCoverage": {
+            "sessions": 0,
+            "history": {}
+          },
+          "ledgerId": "ee62c49f8e82",
+          "answerRecords": 58,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-halumem-dev-keyword-1",
+          "runnerDigest": "6de98b1d0ab7d5bd5e97ee480a88d7784b8aa2c2b6c33bcf87625339c3b0c546",
+          "engine": null,
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": null
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": [
+            "Extraction FMR and update hallucination: require per-session newly written memory export and separate native grading."
+          ]
+        }
+      }
+    },
+    "memsyco": {
+      "source": {
+        "name": "MemSyco-Bench",
+        "huggingface": "MemSyco-Bench/MemSyco-Bench",
+        "revision": "5e802e20112dc77d2b8503ca2f0408434104be3d",
+        "declaredLicense": [
+          {
+            "source": "Hugging Face card and LICENSE",
+            "license": "mit"
+          },
+          {
+            "source": "GitHub XMUDeepLIT/MemSyco-Bench LICENSE",
+            "license": "MIT",
+            "githubRevision": "3c3aa013ac5bee2f0e252fe8748644edc7f9af0a"
+          }
+        ]
+      },
+      "development": {
+        "cases": 120,
+        "sessions": 120,
+        "questions": 120
+      },
+      "runCohort": {
+        "cases": 120,
+        "sessions": 120,
+        "questions": 120
+      },
+      "arms": {
+        "product": {
+          "runId": "e0-memsyco-dev-product-1",
+          "variant": null,
+          "n": 120,
+          "pass": 102,
+          "fail": 17,
+          "unknown": 1,
+          "error": 0,
+          "accuracy": 0.85,
+          "ci95": [
+            0.775324706432755,
+            0.9029618770741527
+          ],
+          "categories": {
+            "contextual_scope_control": {
+              "n": 26,
+              "pass": 25,
+              "fail": 1,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.9615384615384616,
+              "ci95": [
+                0.8110722109696524,
+                0.9931780150064564
+              ]
+            },
+            "memory_evidence_conflict": {
+              "n": 24,
+              "pass": 20,
+              "fail": 4,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.8333333333333334,
+              "ci95": [
+                0.6414692935030095,
+                0.9332132367136705
+              ]
+            },
+            "objective_fact_judgment": {
+              "n": 30,
+              "pass": 25,
+              "fail": 5,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.8333333333333334,
+              "ci95": [
+                0.6643564949358398,
+                0.9266345762815145
+              ]
+            },
+            "personalized_memory_use": {
+              "n": 16,
+              "pass": 9,
+              "fail": 7,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.5625,
+              "ci95": [
+                0.331785563988119,
+                0.7690134759450765
+              ]
+            },
+            "valid_memory_selection": {
+              "n": 24,
+              "pass": 23,
+              "fail": 0,
+              "unknown": 1,
+              "error": 0,
+              "accuracy": 0.9583333333333334,
+              "ci95": [
+                0.7975819352134406,
+                0.9926065438344942
+              ]
+            }
+          },
+          "rubric": "official",
+          "judge": {
+            "rubric": "official",
+            "prompt": "Pinned per-item evaluation.rubric",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 120,
+            "completed": 120,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 120,
+            "history": {
+              "complete": 110,
+              "queued": 4,
+              "unavailable": 6
+            }
+          },
+          "ledgerId": "2c4b64f87b48",
+          "answerRecords": 120,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-memsyco-dev-product-1",
+          "runnerDigest": "128fc1f9d294d77e08371ca309462a485f3a8d28141ab58bd0ee5da4c10cfdf8",
+          "engine": {
+            "templates": "product",
+            "url": "http://127.0.0.1:19330",
+            "urls": [
+              "http://127.0.0.1:19330",
+              "http://127.0.0.1:19342",
+              "http://127.0.0.1:19343",
+              "http://127.0.0.1:19344",
+              "http://127.0.0.1:19345"
+            ],
+            "version": "v0.5.3",
+            "account": "evlab-e0-memsyco-dev-product-1",
+            "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+            "templatesFiles": 12,
+            "templatesDir": "deploy/web/openviking/memory-templates",
+            "shards": [
+              {
+                "url": "http://127.0.0.1:19330",
+                "account": "evlab-e0-memsyco-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              {
+                "url": "http://127.0.0.1:19342",
+                "account": "evlab-e0-memsyco-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              {
+                "url": "http://127.0.0.1:19343",
+                "account": "evlab-e0-memsyco-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              {
+                "url": "http://127.0.0.1:19344",
+                "account": "evlab-e0-memsyco-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              {
+                "url": "http://127.0.0.1:19345",
+                "account": "evlab-e0-memsyco-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              }
+            ],
+            "templatesMounted": null,
+            "memoryTypes": null
+          },
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": []
+        },
+        "both": {
+          "runId": "e0-memsyco-dev-product-1",
+          "variant": "both",
+          "n": 120,
+          "pass": 107,
+          "fail": 13,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.8916666666666667,
+          "ci95": [
+            0.8234463978470834,
+            0.9355885884582658
+          ],
+          "categories": {
+            "contextual_scope_control": {
+              "n": 26,
+              "pass": 26,
+              "fail": 0,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 1,
+              "ci95": [
+                0.8712710781407846,
+                1
+              ]
+            },
+            "memory_evidence_conflict": {
+              "n": 24,
+              "pass": 22,
+              "fail": 2,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.9166666666666666,
+              "ci95": [
+                0.741511978067893,
+                0.9768411847029567
+              ]
+            },
+            "objective_fact_judgment": {
+              "n": 30,
+              "pass": 25,
+              "fail": 5,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.8333333333333334,
+              "ci95": [
+                0.6643564949358398,
+                0.9266345762815145
+              ]
+            },
+            "personalized_memory_use": {
+              "n": 16,
+              "pass": 11,
+              "fail": 5,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.6875,
+              "ci95": [
+                0.44404355834740666,
+                0.8583535614521796
+              ]
+            },
+            "valid_memory_selection": {
+              "n": 24,
+              "pass": 23,
+              "fail": 1,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.9583333333333334,
+              "ci95": [
+                0.7975819352134406,
+                0.9926065438344942
+              ]
+            }
+          },
+          "rubric": "official",
+          "judge": {
+            "rubric": "official",
+            "prompt": "Pinned per-item evaluation.rubric",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 120,
+            "completed": 120,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 120,
+            "history": {
+              "complete": 110,
+              "queued": 4,
+              "unavailable": 6
+            }
+          },
+          "ledgerId": "a6f7d264ec79",
+          "answerRecords": 120,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-memsyco-dev-product-1",
+          "runnerDigest": "128fc1f9d294d77e08371ca309462a485f3a8d28141ab58bd0ee5da4c10cfdf8",
+          "engine": {
+            "templates": "product",
+            "url": "http://127.0.0.1:19330",
+            "urls": [
+              "http://127.0.0.1:19330",
+              "http://127.0.0.1:19342",
+              "http://127.0.0.1:19343",
+              "http://127.0.0.1:19344",
+              "http://127.0.0.1:19345"
+            ],
+            "version": "v0.5.3",
+            "account": "evlab-e0-memsyco-dev-product-1",
+            "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+            "templatesFiles": 12,
+            "templatesDir": "deploy/web/openviking/memory-templates",
+            "shards": [
+              {
+                "url": "http://127.0.0.1:19330",
+                "account": "evlab-e0-memsyco-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              {
+                "url": "http://127.0.0.1:19342",
+                "account": "evlab-e0-memsyco-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              {
+                "url": "http://127.0.0.1:19343",
+                "account": "evlab-e0-memsyco-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              {
+                "url": "http://127.0.0.1:19344",
+                "account": "evlab-e0-memsyco-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              {
+                "url": "http://127.0.0.1:19345",
+                "account": "evlab-e0-memsyco-dev-product-1",
+                "version": "v0.5.3",
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              }
+            ],
+            "templatesMounted": null,
+            "memoryTypes": null
+          },
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": "deepseek-flash (lab engine ov.conf, provider direct)",
+            "answerJudgeSameFamily": false
+          },
+          "variantConfig": {
+            "memorySearchHintEnabled": true,
+            "memoryOpeningIndexEnabled": true
+          },
+          "memorySource": null,
+          "notRun": []
+        },
+        "no-memory": {
+          "runId": "e0-memsyco-dev-no-memory-1",
+          "variant": null,
+          "n": 120,
+          "pass": 42,
+          "fail": 78,
+          "unknown": 0,
+          "error": 0,
+          "accuracy": 0.35,
+          "ci95": [
+            0.2705189959028541,
+            0.438786754022757
+          ],
+          "categories": {
+            "contextual_scope_control": {
+              "n": 26,
+              "pass": 0,
+              "fail": 26,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.1287289218592153
+              ]
+            },
+            "memory_evidence_conflict": {
+              "n": 24,
+              "pass": 0,
+              "fail": 24,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                1.3877787807814457e-17,
+                0.13797620467498017
+              ]
+            },
+            "objective_fact_judgment": {
+              "n": 30,
+              "pass": 27,
+              "fail": 3,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.9,
+              "ci95": [
+                0.7437891742081593,
+                0.9654001112526658
+              ]
+            },
+            "personalized_memory_use": {
+              "n": 16,
+              "pass": 0,
+              "fail": 16,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0,
+              "ci95": [
+                0,
+                0.1936076805344365
+              ]
+            },
+            "valid_memory_selection": {
+              "n": 24,
+              "pass": 15,
+              "fail": 9,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.625,
+              "ci95": [
+                0.42709962442674276,
+                0.7884063244045122
+              ]
+            }
+          },
+          "rubric": "official",
+          "judge": {
+            "rubric": "official",
+            "prompt": "Pinned per-item evaluation.rubric",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 120,
+            "completed": 120,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 0,
+            "history": {}
+          },
+          "ledgerId": "4ffed62de1a3",
+          "answerRecords": 120,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-memsyco-dev-no-memory-1",
+          "runnerDigest": "6de98b1d0ab7d5bd5e97ee480a88d7784b8aa2c2b6c33bcf87625339c3b0c546",
+          "engine": null,
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": null
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": []
+        },
+        "keyword": {
+          "runId": "e0-memsyco-dev-keyword-1",
+          "variant": null,
+          "n": 120,
+          "pass": 97,
+          "fail": 22,
+          "unknown": 1,
+          "error": 0,
+          "accuracy": 0.8083333333333333,
+          "ci95": [
+            0.7287884399579756,
+            0.8687497407504907
+          ],
+          "categories": {
+            "contextual_scope_control": {
+              "n": 26,
+              "pass": 24,
+              "fail": 2,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.9230769230769231,
+              "ci95": [
+                0.7585844622837095,
+                0.9786449115277238
+              ]
+            },
+            "memory_evidence_conflict": {
+              "n": 24,
+              "pass": 21,
+              "fail": 3,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.875,
+              "ci95": [
+                0.6899611872949993,
+                0.9565566591987655
+              ]
+            },
+            "objective_fact_judgment": {
+              "n": 30,
+              "pass": 27,
+              "fail": 3,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.9,
+              "ci95": [
+                0.7437891742081593,
+                0.9654001112526658
+              ]
+            },
+            "personalized_memory_use": {
+              "n": 16,
+              "pass": 11,
+              "fail": 5,
+              "unknown": 0,
+              "error": 0,
+              "accuracy": 0.6875,
+              "ci95": [
+                0.44404355834740666,
+                0.8583535614521796
+              ]
+            },
+            "valid_memory_selection": {
+              "n": 24,
+              "pass": 14,
+              "fail": 9,
+              "unknown": 1,
+              "error": 0,
+              "accuracy": 0.5833333333333334,
+              "ci95": [
+                0.3883466586522876,
+                0.7553239739018824
+              ]
+            }
+          },
+          "rubric": "official",
+          "judge": {
+            "rubric": "official",
+            "prompt": "Pinned per-item evaluation.rubric",
+            "answerJudgeSameFamily": false,
+            "model": "qwen3.8-max",
+            "packets": 120,
+            "completed": 120,
+            "pending": 0,
+            "error": null,
+            "officialJudgeModel": false,
+            "comparability": "Qwen judge; binary accuracy is full credit (RealMem native score 3). Native results are retained per row."
+          },
+          "nativeScore": null,
+          "answerTrack": null,
+          "ingestionCoverage": {
+            "sessions": 0,
+            "history": {}
+          },
+          "ledgerId": "660bff8a3c63",
+          "answerRecords": 120,
+          "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+          "rawPath": "/srv/evimed/runs/e0-memsyco-dev-keyword-1",
+          "runnerDigest": "6de98b1d0ab7d5bd5e97ee480a88d7784b8aa2c2b6c33bcf87625339c3b0c546",
+          "engine": null,
+          "model": {
+            "answer": "deepseek-flash",
+            "thinking": "enabled",
+            "extraction": null
+          },
+          "variantConfig": {},
+          "memorySource": null,
+          "notRun": []
+        }
+      }
+    }
+  },
+  "stock": {
+    "scenarios": {
+      "source": "Frozen internal generated development inputs and isolated gold.",
+      "cohort": {
+        "cases": 20,
+        "sessions": 73,
+        "questions": 80
+      },
+      "only": null,
+      "stock": {
+        "runId": "e0-scenarios-dev-vanilla-1",
+        "variant": null,
+        "n": 80,
+        "pass": 71,
+        "fail": 9,
+        "unknown": 0,
+        "error": 0,
+        "accuracy": 0.8875,
+        "ci95": [
+          0.7998178190762713,
+          0.9396731305336952
+        ],
+        "categories": {
+          "abstain": {
+            "n": 20,
+            "pass": 19,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.95,
+            "ci95": [
+              0.763868806553258,
+              0.9911185511992047
+            ]
+          },
+          "assistant_suggestion": {
+            "n": 12,
+            "pass": 11,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.9166666666666666,
+            "ci95": [
+              0.646120088858883,
+              0.9851349055950829
+            ]
+          },
+          "changed": {
+            "n": 19,
+            "pass": 13,
+            "fail": 6,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.6842105263157895,
+            "ci95": [
+              0.46010407675327475,
+              0.8463562091220773
+            ]
+          },
+          "detail": {
+            "n": 6,
+            "pass": 6,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.6096657120978346,
+              1
+            ]
+          },
+          "stated": {
+            "n": 11,
+            "pass": 10,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.9090909090909091,
+            "ci95": [
+              0.6226415635484043,
+              0.9837678271141151
+            ]
+          },
+          "third_party": {
+            "n": 12,
+            "pass": 12,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.7575059933447592,
+              1
+            ]
+          }
+        },
+        "rubric": "approximate",
+        "judge": {
+          "rubric": "approximate",
+          "prompt": "capsule approximate",
+          "answerJudgeSameFamily": false,
+          "model": "qwen3.8-max",
+          "packets": 49,
+          "completed": 49,
+          "pending": 0,
+          "error": null
+        },
+        "nativeScore": null,
+        "answerTrack": null,
+        "ingestionCoverage": {
+          "sessions": 73,
+          "history": {
+            "complete": 72,
+            "unavailable": 1
+          }
+        },
+        "ledgerId": "fd93135686eb",
+        "answerRecords": 80,
+        "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+        "rawPath": "/srv/evimed/runs/e0-scenarios-dev-vanilla-1",
+        "runnerDigest": "128fc1f9d294d77e08371ca309462a485f3a8d28141ab58bd0ee5da4c10cfdf8",
+        "engine": {
+          "templates": "stock",
+          "url": "http://127.0.0.1:19331",
+          "urls": [
+            "http://127.0.0.1:19331"
+          ],
+          "version": "v0.5.3",
+          "account": "evlab-e0-scenarios-dev-vanilla-1",
+          "templatesDigest": null,
+          "templatesFiles": 0,
+          "templatesDir": null,
+          "shards": [
+            {
+              "url": "http://127.0.0.1:19331",
+              "account": "evlab-e0-scenarios-dev-vanilla-1",
+              "version": "v0.5.3",
+              "templatesMounted": null,
+              "memoryTypes": [
+                "cases",
+                "entities",
+                "events",
+                "experiences",
+                "identity",
+                "preferences",
+                "profile",
+                "soul",
+                "trajectories"
+              ]
+            }
+          ],
+          "templatesMounted": null,
+          "memoryTypes": [
+            "cases",
+            "entities",
+            "events",
+            "experiences",
+            "identity",
+            "preferences",
+            "profile",
+            "soul",
+            "trajectories"
+          ]
+        },
+        "model": {
+          "answer": "deepseek-flash",
+          "thinking": "enabled",
+          "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+        },
+        "variantConfig": {},
+        "memorySource": null,
+        "notRun": []
+      },
+      "productThinkingHigh": {
+        "runId": "e0-scenarios-dev-product-2",
+        "variant": "think",
+        "n": 80,
+        "pass": 73,
+        "fail": 7,
+        "unknown": 0,
+        "error": 0,
+        "accuracy": 0.9125,
+        "ci95": [
+          0.8302320449152499,
+          0.9569679982179401
+        ],
+        "categories": {
+          "abstain": {
+            "n": 20,
+            "pass": 18,
+            "fail": 2,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.9,
+            "ci95": [
+              0.6989663547715128,
+              0.9721335187862319
+            ]
+          },
+          "assistant_suggestion": {
+            "n": 12,
+            "pass": 12,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.7575059933447592,
+              1
+            ]
+          },
+          "changed": {
+            "n": 19,
+            "pass": 14,
+            "fail": 5,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.7368421052631579,
+            "ci95": [
+              0.5120844910218489,
+              0.8819358765321748
+            ]
+          },
+          "detail": {
+            "n": 6,
+            "pass": 6,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.6096657120978346,
+              1
+            ]
+          },
+          "stated": {
+            "n": 11,
+            "pass": 11,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.7411670330319684,
+              1
+            ]
+          },
+          "third_party": {
+            "n": 12,
+            "pass": 12,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.7575059933447592,
+              1
+            ]
+          }
+        },
+        "rubric": "approximate",
+        "judge": {
+          "rubric": "approximate",
+          "prompt": "capsule approximate",
+          "answerJudgeSameFamily": false,
+          "model": "qwen3.8-max",
+          "packets": 48,
+          "completed": 48,
+          "pending": 0,
+          "error": null
+        },
+        "nativeScore": null,
+        "answerTrack": null,
+        "ingestionCoverage": {
+          "sessions": 73,
+          "history": {
+            "complete": 73
+          }
+        },
+        "ledgerId": "a42ce14f9430",
+        "answerRecords": 80,
+        "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+        "rawPath": "/srv/evimed/runs/e0-scenarios-dev-product-2",
+        "runnerDigest": "9eadfd030f3ac8f827b83de8a454d51ae8ef03fd1d96995722e447176eb44c5a",
+        "engine": {
+          "url": "http://127.0.0.1:19330",
+          "urls": [
+            "http://127.0.0.1:19330"
+          ],
+          "version": "v0.5.3",
+          "account": "evlab-e0-scenarios-dev-product-2",
+          "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+          "templatesFiles": 12,
+          "templatesDir": "deploy/web/openviking/memory-templates",
+          "shards": [
+            {
+              "url": "http://127.0.0.1:19330",
+              "account": "evlab-e0-scenarios-dev-product-2",
+              "version": "v0.5.3",
+              "templatesMounted": true,
+              "memoryTypes": [
+                "corrections",
+                "decisions",
+                "entities",
+                "follow_ups",
+                "notes",
+                "observations",
+                "people",
+                "preferences",
+                "profile",
+                "project_context",
+                "project_facts",
+                "recent_work"
+              ]
+            }
+          ],
+          "templatesMounted": true,
+          "memoryTypes": [
+            "corrections",
+            "decisions",
+            "entities",
+            "follow_ups",
+            "notes",
+            "observations",
+            "people",
+            "preferences",
+            "profile",
+            "project_context",
+            "project_facts",
+            "recent_work"
+          ]
+        },
+        "model": {
+          "answer": "deepseek-flash",
+          "thinking": "enabled",
+          "extraction": "deepseek-flash (lab engine ov.conf, provider direct)",
+          "answerJudgeSameFamily": false
+        },
+        "variantConfig": {
+          "thinking": "enabled"
+        },
+        "memorySource": null,
+        "notRun": []
+      }
+    },
+    "med-m10": {
+      "source": "Frozen internal generated development inputs and isolated gold.",
+      "cohort": {
+        "cases": 15,
+        "sessions": 51,
+        "questions": 15
+      },
+      "only": null,
+      "stock": {
+        "runId": "e0-med-m10-dev-vanilla-1",
+        "variant": null,
+        "n": 15,
+        "pass": 15,
+        "fail": 0,
+        "unknown": 0,
+        "error": 0,
+        "accuracy": 1,
+        "ci95": [
+          0.7961166989641515,
+          1
+        ],
+        "categories": {
+          "med-safety": {
+            "n": 15,
+            "pass": 15,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.7961166989641515,
+              1
+            ]
+          }
+        },
+        "rubric": "approximate",
+        "judge": {
+          "rubric": "approximate",
+          "prompt": "capsule approximate",
+          "answerJudgeSameFamily": false,
+          "model": "qwen3.8-max",
+          "packets": 30,
+          "completed": 30,
+          "pending": 0,
+          "error": null
+        },
+        "nativeScore": null,
+        "answerTrack": null,
+        "ingestionCoverage": {
+          "sessions": 51,
+          "history": {
+            "complete": 51
+          }
+        },
+        "ledgerId": "6db8ecaa45dc",
+        "answerRecords": 15,
+        "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+        "rawPath": "/srv/evimed/runs/e0-med-m10-dev-vanilla-1",
+        "runnerDigest": "4ee32f632a6494106f34c10cff494b622ed8ff6d7ac44a1007e70246be9da5ce",
+        "engine": {
+          "templates": "stock",
+          "url": "http://127.0.0.1:19331",
+          "urls": [
+            "http://127.0.0.1:19331"
+          ],
+          "version": "v0.5.3",
+          "account": "evlab-e0-med-m10-dev-vanilla-1",
+          "templatesDigest": null,
+          "templatesFiles": 0,
+          "templatesDir": null,
+          "shards": [
+            {
+              "url": "http://127.0.0.1:19331",
+              "account": "evlab-e0-med-m10-dev-vanilla-1",
+              "version": "v0.5.3",
+              "templatesMounted": null,
+              "memoryTypes": [
+                "cases",
+                "entities",
+                "events",
+                "experiences",
+                "identity",
+                "preferences",
+                "profile",
+                "soul",
+                "trajectories"
+              ]
+            }
+          ],
+          "templatesMounted": null,
+          "memoryTypes": [
+            "cases",
+            "entities",
+            "events",
+            "experiences",
+            "identity",
+            "preferences",
+            "profile",
+            "soul",
+            "trajectories"
+          ]
+        },
+        "model": {
+          "answer": "deepseek-flash",
+          "thinking": "enabled",
+          "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+        },
+        "variantConfig": {},
+        "memorySource": null,
+        "notRun": []
+      },
+      "productThinkingHigh": {
+        "runId": "e0-med-m10-dev-product-2",
+        "variant": "think",
+        "n": 15,
+        "pass": 8,
+        "fail": 7,
+        "unknown": 0,
+        "error": 0,
+        "accuracy": 0.5333333333333333,
+        "ci95": [
+          0.30116980025498397,
+          0.7519046463426261
+        ],
+        "categories": {
+          "med-safety": {
+            "n": 15,
+            "pass": 8,
+            "fail": 7,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.5333333333333333,
+            "ci95": [
+              0.30116980025498397,
+              0.7519046463426261
+            ]
+          }
+        },
+        "rubric": "approximate",
+        "judge": {
+          "rubric": "approximate",
+          "prompt": "capsule approximate",
+          "answerJudgeSameFamily": false,
+          "model": "qwen3.8-max",
+          "packets": 30,
+          "completed": 30,
+          "pending": 0,
+          "error": null
+        },
+        "nativeScore": null,
+        "answerTrack": null,
+        "ingestionCoverage": {
+          "sessions": 51,
+          "history": {
+            "complete": 51
+          }
+        },
+        "ledgerId": "f8fcd213993f",
+        "answerRecords": 15,
+        "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+        "rawPath": "/srv/evimed/runs/e0-med-m10-dev-product-2",
+        "runnerDigest": "19be435382b60a5b42264ba1ef19ae42fe1fa5ca6f2198ced035eea5c3ffdfc5",
+        "engine": {
+          "url": "http://127.0.0.1:19330",
+          "urls": [
+            "http://127.0.0.1:19330"
+          ],
+          "version": "v0.5.3",
+          "account": "evlab-e0-med-m10-dev-product-2",
+          "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+          "templatesFiles": 12,
+          "templatesDir": "deploy/web/openviking/memory-templates",
+          "shards": [
+            {
+              "url": "http://127.0.0.1:19330",
+              "account": "evlab-e0-med-m10-dev-product-2",
+              "version": "v0.5.3",
+              "templatesMounted": true,
+              "memoryTypes": [
+                "corrections",
+                "decisions",
+                "entities",
+                "follow_ups",
+                "notes",
+                "observations",
+                "people",
+                "preferences",
+                "profile",
+                "project_context",
+                "project_facts",
+                "recent_work"
+              ]
+            }
+          ],
+          "templatesMounted": true,
+          "memoryTypes": [
+            "corrections",
+            "decisions",
+            "entities",
+            "follow_ups",
+            "notes",
+            "observations",
+            "people",
+            "preferences",
+            "profile",
+            "project_context",
+            "project_facts",
+            "recent_work"
+          ]
+        },
+        "model": {
+          "answer": "deepseek-flash",
+          "thinking": "enabled",
+          "extraction": "deepseek-flash (lab engine ov.conf, provider direct)",
+          "answerJudgeSameFamily": false
+        },
+        "variantConfig": {
+          "thinking": "enabled"
+        },
+        "memorySource": null,
+        "notRun": []
+      }
+    },
+    "synthetic-users": {
+      "source": "Frozen internal generated development inputs and isolated gold.",
+      "cohort": {
+        "cases": 4,
+        "sessions": 470,
+        "questions": 288
+      },
+      "only": [
+        "U01",
+        "U02",
+        "M01",
+        "P01"
+      ],
+      "stock": {
+        "runId": "e0-synthetic-users-dev-vanilla-1",
+        "variant": null,
+        "n": 288,
+        "pass": 254,
+        "fail": 31,
+        "unknown": 2,
+        "error": 0,
+        "accuracy": 0.8819444444444444,
+        "ci95": [
+          0.839556989724426,
+          0.9142769613838256
+        ],
+        "categories": {
+          "abstention": {
+            "n": 16,
+            "pass": 16,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.8063923194655637,
+              1
+            ]
+          },
+          "changed": {
+            "n": 33,
+            "pass": 28,
+            "fail": 3,
+            "unknown": 1,
+            "error": 0,
+            "accuracy": 0.8484848484848485,
+            "ci95": [
+              0.6908012411955788,
+              0.9334954271839244
+            ]
+          },
+          "correction": {
+            "n": 6,
+            "pass": 5,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.8333333333333334,
+            "ci95": [
+              0.43649717781352987,
+              0.9699466302516935
+            ]
+          },
+          "detail": {
+            "n": 34,
+            "pass": 33,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.9705882352941176,
+            "ci95": [
+              0.8508442670731406,
+              0.9947890937237309
+            ]
+          },
+          "document_claim": {
+            "n": 9,
+            "pass": 8,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.8888888888888888,
+            "ci95": [
+              0.5650002944233439,
+              0.9801091123614551
+            ]
+          },
+          "family_medical": {
+            "n": 24,
+            "pass": 24,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.8620237953250198,
+              1
+            ]
+          },
+          "forget": {
+            "n": 8,
+            "pass": 7,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.875,
+            "ci95": [
+              0.5291118177871464,
+              0.9775825085499433
+            ]
+          },
+          "hypothetical": {
+            "n": 6,
+            "pass": 5,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.8333333333333334,
+            "ci95": [
+              0.43649717781352987,
+              0.9699466302516935
+            ]
+          },
+          "injection": {
+            "n": 4,
+            "pass": 4,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.5101091635454027,
+              1
+            ]
+          },
+          "medical": {
+            "n": 8,
+            "pass": 8,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.6755924351161198,
+              1
+            ]
+          },
+          "opinion": {
+            "n": 6,
+            "pass": 4,
+            "fail": 2,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.6666666666666666,
+            "ci95": [
+              0.299993315138392,
+              0.9032285888942195
+            ]
+          },
+          "patient_changed": {
+            "n": 12,
+            "pass": 12,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.7575059933447592,
+              1
+            ]
+          },
+          "preference_explicit": {
+            "n": 6,
+            "pass": 6,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.6096657120978346,
+              1
+            ]
+          },
+          "preference_repeated": {
+            "n": 8,
+            "pass": 7,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.875,
+            "ci95": [
+              0.5291118177871464,
+              0.9775825085499433
+            ]
+          },
+          "project": {
+            "n": 7,
+            "pass": 4,
+            "fail": 3,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.5714285714285714,
+            "ci95": [
+              0.2504583645276572,
+              0.8417801447485302
+            ]
+          },
+          "project_constraint": {
+            "n": 4,
+            "pass": 4,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.5101091635454027,
+              1
+            ]
+          },
+          "project_decision": {
+            "n": 10,
+            "pass": 10,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.7224672001371107,
+              0.9999999999999999
+            ]
+          },
+          "project_decision_changed": {
+            "n": 9,
+            "pass": 8,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.8888888888888888,
+            "ci95": [
+              0.5650002944233439,
+              0.9801091123614551
+            ]
+          },
+          "secret": {
+            "n": 6,
+            "pass": 4,
+            "fail": 2,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.6666666666666666,
+            "ci95": [
+              0.299993315138392,
+              0.9032285888942195
+            ]
+          },
+          "stable": {
+            "n": 32,
+            "pass": 28,
+            "fail": 4,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.875,
+            "ci95": [
+              0.7193169451834978,
+              0.9502986561251991
+            ]
+          },
+          "suggestion": {
+            "n": 10,
+            "pass": 5,
+            "fail": 4,
+            "unknown": 1,
+            "error": 0,
+            "accuracy": 0.5,
+            "ci95": [
+              0.236593090512564,
+              0.7634069094874361
+            ]
+          },
+          "suggestion_adopted": {
+            "n": 3,
+            "pass": 3,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.4385029682449546,
+              1
+            ]
+          },
+          "third_party": {
+            "n": 27,
+            "pass": 21,
+            "fail": 6,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.7777777777777778,
+            "ci95": [
+              0.5924307113336742,
+              0.8939276054763996
+            ]
+          }
+        },
+        "rubric": "approximate",
+        "judge": {
+          "rubric": "approximate",
+          "prompt": "capsule approximate",
+          "answerJudgeSameFamily": false,
+          "model": "qwen3.8-max",
+          "packets": 246,
+          "completed": 246,
+          "pending": 0,
+          "error": null
+        },
+        "nativeScore": null,
+        "answerTrack": null,
+        "ingestionCoverage": {
+          "sessions": 470,
+          "history": {
+            "complete": 468,
+            "unavailable": 1,
+            "missing": 1
+          }
+        },
+        "ledgerId": "f09c6d0f8843",
+        "answerRecords": 288,
+        "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+        "rawPath": "/srv/evimed/runs/e0-synthetic-users-dev-vanilla-1",
+        "runnerDigest": "4ee32f632a6494106f34c10cff494b622ed8ff6d7ac44a1007e70246be9da5ce",
+        "engine": {
+          "templates": "stock",
+          "url": "http://127.0.0.1:19331",
+          "urls": [
+            "http://127.0.0.1:19331"
+          ],
+          "version": "v0.5.3",
+          "account": "evlab-e0-synthetic-users-dev-vanilla-1",
+          "templatesDigest": null,
+          "templatesFiles": 0,
+          "templatesDir": null,
+          "shards": [
+            {
+              "url": "http://127.0.0.1:19331",
+              "account": "evlab-e0-synthetic-users-dev-vanilla-1",
+              "version": "v0.5.3",
+              "templatesMounted": null,
+              "memoryTypes": [
+                "cases",
+                "entities",
+                "events",
+                "experiences",
+                "identity",
+                "preferences",
+                "profile",
+                "soul",
+                "trajectories"
+              ]
+            }
+          ],
+          "templatesMounted": null,
+          "memoryTypes": [
+            "cases",
+            "entities",
+            "events",
+            "experiences",
+            "identity",
+            "preferences",
+            "profile",
+            "soul",
+            "trajectories"
+          ]
+        },
+        "model": {
+          "answer": "deepseek-flash",
+          "thinking": "enabled",
+          "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+        },
+        "variantConfig": {},
+        "memorySource": null,
+        "notRun": []
+      },
+      "productThinkingHigh": {
+        "runId": "e2-synthetic-users-dev-product-four",
+        "variant": null,
+        "n": 288,
+        "pass": 262,
+        "fail": 25,
+        "unknown": 0,
+        "error": 0,
+        "accuracy": 0.9097222222222222,
+        "ci95": [
+          0.8710106809783772,
+          0.9376475574832016
+        ],
+        "categories": {
+          "abstention": {
+            "n": 16,
+            "pass": 16,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.8063923194655637,
+              1
+            ]
+          },
+          "changed": {
+            "n": 33,
+            "pass": 31,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.9393939393939394,
+            "ci95": [
+              0.8039375519135219,
+              0.9832191169128082
+            ]
+          },
+          "correction": {
+            "n": 6,
+            "pass": 6,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.6096657120978346,
+              1
+            ]
+          },
+          "detail": {
+            "n": 34,
+            "pass": 34,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.8984854458466761,
+              0.9999999999999999
+            ]
+          },
+          "document_claim": {
+            "n": 9,
+            "pass": 8,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.8888888888888888,
+            "ci95": [
+              0.5650002944233439,
+              0.9801091123614551
+            ]
+          },
+          "family_medical": {
+            "n": 24,
+            "pass": 18,
+            "fail": 6,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.75,
+            "ci95": [
+              0.55100555994846,
+              0.8800063377140499
+            ]
+          },
+          "forget": {
+            "n": 8,
+            "pass": 7,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.875,
+            "ci95": [
+              0.5291118177871464,
+              0.9775825085499433
+            ]
+          },
+          "hypothetical": {
+            "n": 6,
+            "pass": 5,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.8333333333333334,
+            "ci95": [
+              0.43649717781352987,
+              0.9699466302516935
+            ]
+          },
+          "injection": {
+            "n": 4,
+            "pass": 4,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.5101091635454027,
+              1
+            ]
+          },
+          "medical": {
+            "n": 8,
+            "pass": 8,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.6755924351161198,
+              1
+            ]
+          },
+          "opinion": {
+            "n": 6,
+            "pass": 5,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.8333333333333334,
+            "ci95": [
+              0.43649717781352987,
+              0.9699466302516935
+            ]
+          },
+          "patient_changed": {
+            "n": 12,
+            "pass": 12,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.7575059933447592,
+              1
+            ]
+          },
+          "preference_explicit": {
+            "n": 6,
+            "pass": 5,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.8333333333333334,
+            "ci95": [
+              0.43649717781352987,
+              0.9699466302516935
+            ]
+          },
+          "preference_repeated": {
+            "n": 8,
+            "pass": 7,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.875,
+            "ci95": [
+              0.5291118177871464,
+              0.9775825085499433
+            ]
+          },
+          "project": {
+            "n": 7,
+            "pass": 6,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.8571428571428571,
+            "ci95": [
+              0.4868721707256811,
+              0.9743203756552565
+            ]
+          },
+          "project_constraint": {
+            "n": 4,
+            "pass": 4,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.5101091635454027,
+              1
+            ]
+          },
+          "project_decision": {
+            "n": 10,
+            "pass": 10,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.7224672001371107,
+              0.9999999999999999
+            ]
+          },
+          "project_decision_changed": {
+            "n": 9,
+            "pass": 9,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.7008549515804559,
+              1
+            ]
+          },
+          "secret": {
+            "n": 6,
+            "pass": 5,
+            "fail": 1,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.8333333333333334,
+            "ci95": [
+              0.43649717781352987,
+              0.9699466302516935
+            ]
+          },
+          "stable": {
+            "n": 32,
+            "pass": 32,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.8928208017449293,
+              1
+            ]
+          },
+          "suggestion": {
+            "n": 10,
+            "pass": 4,
+            "fail": 6,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.4,
+            "ci95": [
+              0.16818032970623614,
+              0.6873262302663417
+            ]
+          },
+          "suggestion_adopted": {
+            "n": 3,
+            "pass": 3,
+            "fail": 0,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 1,
+            "ci95": [
+              0.4385029682449546,
+              1
+            ]
+          },
+          "third_party": {
+            "n": 27,
+            "pass": 23,
+            "fail": 4,
+            "unknown": 0,
+            "error": 0,
+            "accuracy": 0.8518518518518519,
+            "ci95": [
+              0.6752131457218702,
+              0.9408407222375568
+            ]
+          }
+        },
+        "rubric": "approximate",
+        "judge": {
+          "rubric": "approximate",
+          "prompt": "capsule approximate",
+          "answerJudgeSameFamily": false,
+          "model": "qwen3.8-max",
+          "packets": 249,
+          "completed": 249,
+          "pending": 0,
+          "error": null
+        },
+        "nativeScore": null,
+        "answerTrack": null,
+        "ingestionCoverage": {
+          "sessions": 470,
+          "history": {
+            "complete": 467,
+            "unavailable": 2,
+            "missing": 1
+          }
+        },
+        "ledgerId": "16bacb02cdef",
+        "answerRecords": 288,
+        "ledgerPath": "/srv/evimed/results/ledger.jsonl",
+        "rawPath": "/srv/evimed/runs/e2-synthetic-users-dev-product-four",
+        "runnerDigest": "fadc2ec5c5089216be4d3c6022c0b8799887e23ab0f2c7055d2a8afce2e56466",
+        "engine": {
+          "templates": "product",
+          "url": "http://127.0.0.1:19330",
+          "urls": [
+            "http://127.0.0.1:19330",
+            "http://127.0.0.1:19342",
+            "http://127.0.0.1:19343",
+            "http://127.0.0.1:19344",
+            "http://127.0.0.1:19345"
+          ],
+          "version": "v0.5.3",
+          "account": "multiple source accounts (score-only cohort)",
+          "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+          "templatesFiles": 12,
+          "templatesDir": "deploy/web/openviking/memory-templates",
+          "shards": [
+            {
+              "url": "http://127.0.0.1:19330",
+              "account": "evlab-v3-synthetic-users-dev-product-1",
+              "version": "v0.5.3",
+              "templatesMounted": true,
+              "memoryTypes": [
+                "corrections",
+                "decisions",
+                "entities",
+                "follow_ups",
+                "notes",
+                "observations",
+                "people",
+                "preferences",
+                "profile",
+                "project_context",
+                "project_facts",
+                "recent_work"
+              ]
+            },
+            {
+              "url": "http://127.0.0.1:19342",
+              "account": "evlab-v3-synthetic-users-dev-product-1",
+              "version": "v0.5.3",
+              "templatesMounted": true,
+              "memoryTypes": [
+                "corrections",
+                "decisions",
+                "entities",
+                "follow_ups",
+                "notes",
+                "observations",
+                "people",
+                "preferences",
+                "profile",
+                "project_context",
+                "project_facts",
+                "recent_work"
+              ]
+            },
+            {
+              "url": "http://127.0.0.1:19343",
+              "account": "evlab-v3-synthetic-users-dev-product-1",
+              "version": "v0.5.3",
+              "templatesMounted": true,
+              "memoryTypes": [
+                "corrections",
+                "decisions",
+                "entities",
+                "follow_ups",
+                "notes",
+                "observations",
+                "people",
+                "preferences",
+                "profile",
+                "project_context",
+                "project_facts",
+                "recent_work"
+              ]
+            },
+            {
+              "url": "http://127.0.0.1:19344",
+              "account": "evlab-v3-synthetic-users-dev-product-1",
+              "version": "v0.5.3",
+              "templatesMounted": null,
+              "memoryTypes": null
+            },
+            {
+              "url": "http://127.0.0.1:19345",
+              "account": "evlab-v3-synthetic-users-dev-product-1",
+              "version": "v0.5.3",
+              "templatesMounted": null,
+              "memoryTypes": null
+            }
+          ],
+          "templatesMounted": true,
+          "memoryTypes": [
+            "corrections",
+            "decisions",
+            "entities",
+            "follow_ups",
+            "notes",
+            "observations",
+            "people",
+            "preferences",
+            "profile",
+            "project_context",
+            "project_facts",
+            "recent_work"
+          ]
+        },
+        "model": {
+          "answer": "deepseek-flash",
+          "thinking": "enabled",
+          "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+        },
+        "variantConfig": {},
+        "memorySource": {
+          "kind": "score-only-cohort",
+          "rule": "All questions of the four predeclared whole users; no quality-based selection. Each existing answer/error retained. Hard links freeze completed evidence inodes; no source writes.",
+          "cases": [
+            {
+              "caseId": "M01",
+              "runId": "e2-synthetic-users-dev-product-um-fork",
+              "sourcePath": "/srv/evimed/runs/e2-synthetic-users-dev-product-um-fork",
+              "engine": {
+                "templates": "product",
+                "url": "http://127.0.0.1:19330",
+                "urls": [
+                  "http://127.0.0.1:19330",
+                  "http://127.0.0.1:19342",
+                  "http://127.0.0.1:19343",
+                  "http://127.0.0.1:19344",
+                  "http://127.0.0.1:19345"
+                ],
+                "version": "v0.5.3",
+                "account": "evlab-v3-synthetic-users-dev-product-1",
+                "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+                "templatesFiles": 12,
+                "templatesDir": "deploy/web/openviking/memory-templates",
+                "shards": [
+                  {
+                    "url": "http://127.0.0.1:19330",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": true,
+                    "memoryTypes": [
+                      "corrections",
+                      "decisions",
+                      "entities",
+                      "follow_ups",
+                      "notes",
+                      "observations",
+                      "people",
+                      "preferences",
+                      "profile",
+                      "project_context",
+                      "project_facts",
+                      "recent_work"
+                    ]
+                  },
+                  {
+                    "url": "http://127.0.0.1:19342",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": true,
+                    "memoryTypes": [
+                      "corrections",
+                      "decisions",
+                      "entities",
+                      "follow_ups",
+                      "notes",
+                      "observations",
+                      "people",
+                      "preferences",
+                      "profile",
+                      "project_context",
+                      "project_facts",
+                      "recent_work"
+                    ]
+                  },
+                  {
+                    "url": "http://127.0.0.1:19343",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": true,
+                    "memoryTypes": [
+                      "corrections",
+                      "decisions",
+                      "entities",
+                      "follow_ups",
+                      "notes",
+                      "observations",
+                      "people",
+                      "preferences",
+                      "profile",
+                      "project_context",
+                      "project_facts",
+                      "recent_work"
+                    ]
+                  },
+                  {
+                    "url": "http://127.0.0.1:19344",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": null,
+                    "memoryTypes": null
+                  },
+                  {
+                    "url": "http://127.0.0.1:19345",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": null,
+                    "memoryTypes": null
+                  }
+                ],
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              "model": {
+                "answer": "deepseek-flash",
+                "thinking": "enabled",
+                "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+              },
+              "runnerDigest": "fadc2ec5c5089216be4d3c6022c0b8799887e23ab0f2c7055d2a8afce2e56466",
+              "answerFork": {
+                "source": "/srv/evimed/runs/v3-synthetic-users-dev-product-1",
+                "sourceRunId": "v3-synthetic-users-dev-product-1",
+                "set": "synthetic-users",
+                "split": "dev",
+                "caseIds": [
+                  "M01",
+                  "U01",
+                  "U02"
+                ],
+                "sessionsDigest": "01c81873026c31f1cb9238584538a43fe2dbdd097d4978de75c5daec5d5e0b06",
+                "questionsDigest": "3add701953070eae27573306be02b5408bbc76be1181ddaa46f62d25d8cdd23f",
+                "at": "2026-11-10T12:03:44.380Z",
+                "sourceRunnerDigest": "66f0edd3e531d61ecfdb8f761c33d375b92e40f9a00cd7cf70348043316be462",
+                "sourceCommit": "1e4c750aa349729140de743bac70a7b3d30ee699",
+                "readOnly": true,
+                "rule": "Copy the first source prefix, retain every recorded error without retry, ask only pending questions at the final checkpoint. No new ingestion or source-file writes.",
+                "cases": [
+                  {
+                    "caseId": "M01",
+                    "sessions": 40,
+                    "copiedAnswers": 65,
+                    "snapshotSha256": "f1bc23635da941310fa5afd11a478ef55f383c397c4536017aa7e03c80a44bc0",
+                    "ingestSha256": "64840fa966009e487e52611240599d76e7ce5299d62c22c623a5a0fd79d65363",
+                    "answersSha256": "d10ed9fa950b68b523a69c9ce137c489bbd5b2df55fbb6ce9bdca9b88e8b92b4",
+                    "preservedErrors": []
+                  },
+                  {
+                    "caseId": "U01",
+                    "sessions": 200,
+                    "copiedAnswers": 41,
+                    "snapshotSha256": "15d923c5cbf3cdb6d966a4ab18d2b686e181fd0023dfcf953e851d6aced984d1",
+                    "ingestSha256": "86100b570d145b55b847d38473db08b1cfb06e055c2094e4396318d345d8803e",
+                    "answersSha256": "f56ce72e5bd18b0fe4e83de86c800344c28fc0b411485fb1a5682bc2a61e820c",
+                    "preservedErrors": []
+                  },
+                  {
+                    "caseId": "U02",
+                    "sessions": 200,
+                    "copiedAnswers": 27,
+                    "snapshotSha256": "9b856df5386db349573152cd382579644ce2d46e12e3255cb985c67a79611c7f",
+                    "ingestSha256": "23e039990acadead395865ada665b1ab7b8b7df169dfa6b0f2849d4ca348f1e6",
+                    "answersSha256": "b53aed07b1ece69ddf3990a2da48d2b1539378b1a6f40cf3fe8268d025f85983",
+                    "preservedErrors": []
+                  }
+                ]
+              },
+              "answersSha256": "8a1c969bb3388a5963445a9d30716ed58cb64dfbcfc2ea4f4bd3076d3d2edfff",
+              "questions": 65,
+              "sessions": 40
+            },
+            {
+              "caseId": "P01",
+              "runId": "e2-synthetic-users-dev-product-p01",
+              "sourcePath": "/srv/evimed/runs/e2-synthetic-users-dev-product-p01",
+              "engine": {
+                "templates": "product",
+                "url": "http://127.0.0.1:19330",
+                "urls": [
+                  "http://127.0.0.1:19330",
+                  "http://127.0.0.1:19342",
+                  "http://127.0.0.1:19343",
+                  "http://127.0.0.1:19344",
+                  "http://127.0.0.1:19345"
+                ],
+                "version": "v0.5.3",
+                "account": "evlab-e2-synthetic-users-dev-product-p01",
+                "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+                "templatesFiles": 12,
+                "templatesDir": "deploy/web/openviking/memory-templates",
+                "shards": [
+                  {
+                    "url": "http://127.0.0.1:19330",
+                    "account": "evlab-e2-synthetic-users-dev-product-p01",
+                    "version": "v0.5.3",
+                    "templatesMounted": null,
+                    "memoryTypes": null
+                  },
+                  {
+                    "url": "http://127.0.0.1:19342",
+                    "account": "evlab-e2-synthetic-users-dev-product-p01",
+                    "version": "v0.5.3",
+                    "templatesMounted": null,
+                    "memoryTypes": null
+                  },
+                  {
+                    "url": "http://127.0.0.1:19343",
+                    "account": "evlab-e2-synthetic-users-dev-product-p01",
+                    "version": "v0.5.3",
+                    "templatesMounted": null,
+                    "memoryTypes": null
+                  },
+                  {
+                    "url": "http://127.0.0.1:19344",
+                    "account": "evlab-e2-synthetic-users-dev-product-p01",
+                    "version": "v0.5.3",
+                    "templatesMounted": true,
+                    "memoryTypes": [
+                      "corrections",
+                      "decisions",
+                      "entities",
+                      "follow_ups",
+                      "notes",
+                      "observations",
+                      "people",
+                      "preferences",
+                      "profile",
+                      "project_context",
+                      "project_facts",
+                      "recent_work"
+                    ]
+                  },
+                  {
+                    "url": "http://127.0.0.1:19345",
+                    "account": "evlab-e2-synthetic-users-dev-product-p01",
+                    "version": "v0.5.3",
+                    "templatesMounted": null,
+                    "memoryTypes": null
+                  }
+                ],
+                "templatesMounted": null,
+                "memoryTypes": null
+              },
+              "model": {
+                "answer": "deepseek-flash",
+                "thinking": "enabled",
+                "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+              },
+              "runnerDigest": "6de98b1d0ab7d5bd5e97ee480a88d7784b8aa2c2b6c33bcf87625339c3b0c546",
+              "answerFork": null,
+              "answersSha256": "9c2fb6047e5a85123411140ac495d4b37df693202c0c7f39d2c85bd8f63a16c6",
+              "questions": 55,
+              "sessions": 30
+            },
+            {
+              "caseId": "U01",
+              "runId": "e2-synthetic-users-dev-product-um-fork",
+              "sourcePath": "/srv/evimed/runs/e2-synthetic-users-dev-product-um-fork",
+              "engine": {
+                "templates": "product",
+                "url": "http://127.0.0.1:19330",
+                "urls": [
+                  "http://127.0.0.1:19330",
+                  "http://127.0.0.1:19342",
+                  "http://127.0.0.1:19343",
+                  "http://127.0.0.1:19344",
+                  "http://127.0.0.1:19345"
+                ],
+                "version": "v0.5.3",
+                "account": "evlab-v3-synthetic-users-dev-product-1",
+                "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+                "templatesFiles": 12,
+                "templatesDir": "deploy/web/openviking/memory-templates",
+                "shards": [
+                  {
+                    "url": "http://127.0.0.1:19330",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": true,
+                    "memoryTypes": [
+                      "corrections",
+                      "decisions",
+                      "entities",
+                      "follow_ups",
+                      "notes",
+                      "observations",
+                      "people",
+                      "preferences",
+                      "profile",
+                      "project_context",
+                      "project_facts",
+                      "recent_work"
+                    ]
+                  },
+                  {
+                    "url": "http://127.0.0.1:19342",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": true,
+                    "memoryTypes": [
+                      "corrections",
+                      "decisions",
+                      "entities",
+                      "follow_ups",
+                      "notes",
+                      "observations",
+                      "people",
+                      "preferences",
+                      "profile",
+                      "project_context",
+                      "project_facts",
+                      "recent_work"
+                    ]
+                  },
+                  {
+                    "url": "http://127.0.0.1:19343",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": true,
+                    "memoryTypes": [
+                      "corrections",
+                      "decisions",
+                      "entities",
+                      "follow_ups",
+                      "notes",
+                      "observations",
+                      "people",
+                      "preferences",
+                      "profile",
+                      "project_context",
+                      "project_facts",
+                      "recent_work"
+                    ]
+                  },
+                  {
+                    "url": "http://127.0.0.1:19344",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": null,
+                    "memoryTypes": null
+                  },
+                  {
+                    "url": "http://127.0.0.1:19345",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": null,
+                    "memoryTypes": null
+                  }
+                ],
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              "model": {
+                "answer": "deepseek-flash",
+                "thinking": "enabled",
+                "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+              },
+              "runnerDigest": "fadc2ec5c5089216be4d3c6022c0b8799887e23ab0f2c7055d2a8afce2e56466",
+              "answerFork": {
+                "source": "/srv/evimed/runs/v3-synthetic-users-dev-product-1",
+                "sourceRunId": "v3-synthetic-users-dev-product-1",
+                "set": "synthetic-users",
+                "split": "dev",
+                "caseIds": [
+                  "M01",
+                  "U01",
+                  "U02"
+                ],
+                "sessionsDigest": "01c81873026c31f1cb9238584538a43fe2dbdd097d4978de75c5daec5d5e0b06",
+                "questionsDigest": "3add701953070eae27573306be02b5408bbc76be1181ddaa46f62d25d8cdd23f",
+                "at": "2026-11-10T12:03:44.380Z",
+                "sourceRunnerDigest": "66f0edd3e531d61ecfdb8f761c33d375b92e40f9a00cd7cf70348043316be462",
+                "sourceCommit": "1e4c750aa349729140de743bac70a7b3d30ee699",
+                "readOnly": true,
+                "rule": "Copy the first source prefix, retain every recorded error without retry, ask only pending questions at the final checkpoint. No new ingestion or source-file writes.",
+                "cases": [
+                  {
+                    "caseId": "M01",
+                    "sessions": 40,
+                    "copiedAnswers": 65,
+                    "snapshotSha256": "f1bc23635da941310fa5afd11a478ef55f383c397c4536017aa7e03c80a44bc0",
+                    "ingestSha256": "64840fa966009e487e52611240599d76e7ce5299d62c22c623a5a0fd79d65363",
+                    "answersSha256": "d10ed9fa950b68b523a69c9ce137c489bbd5b2df55fbb6ce9bdca9b88e8b92b4",
+                    "preservedErrors": []
+                  },
+                  {
+                    "caseId": "U01",
+                    "sessions": 200,
+                    "copiedAnswers": 41,
+                    "snapshotSha256": "15d923c5cbf3cdb6d966a4ab18d2b686e181fd0023dfcf953e851d6aced984d1",
+                    "ingestSha256": "86100b570d145b55b847d38473db08b1cfb06e055c2094e4396318d345d8803e",
+                    "answersSha256": "f56ce72e5bd18b0fe4e83de86c800344c28fc0b411485fb1a5682bc2a61e820c",
+                    "preservedErrors": []
+                  },
+                  {
+                    "caseId": "U02",
+                    "sessions": 200,
+                    "copiedAnswers": 27,
+                    "snapshotSha256": "9b856df5386db349573152cd382579644ce2d46e12e3255cb985c67a79611c7f",
+                    "ingestSha256": "23e039990acadead395865ada665b1ab7b8b7df169dfa6b0f2849d4ca348f1e6",
+                    "answersSha256": "b53aed07b1ece69ddf3990a2da48d2b1539378b1a6f40cf3fe8268d025f85983",
+                    "preservedErrors": []
+                  }
+                ]
+              },
+              "answersSha256": "f1bf74f535583c6e5cab00d89f72c005a75ad6ea9fa8db58aa6c7d043198231a",
+              "questions": 84,
+              "sessions": 200
+            },
+            {
+              "caseId": "U02",
+              "runId": "e2-synthetic-users-dev-product-um-fork",
+              "sourcePath": "/srv/evimed/runs/e2-synthetic-users-dev-product-um-fork",
+              "engine": {
+                "templates": "product",
+                "url": "http://127.0.0.1:19330",
+                "urls": [
+                  "http://127.0.0.1:19330",
+                  "http://127.0.0.1:19342",
+                  "http://127.0.0.1:19343",
+                  "http://127.0.0.1:19344",
+                  "http://127.0.0.1:19345"
+                ],
+                "version": "v0.5.3",
+                "account": "evlab-v3-synthetic-users-dev-product-1",
+                "templatesDigest": "4b7b92eb5efc69739eda0ed4b0e02f51e619f4bc916f7fcb7ee95ff17dfc7378",
+                "templatesFiles": 12,
+                "templatesDir": "deploy/web/openviking/memory-templates",
+                "shards": [
+                  {
+                    "url": "http://127.0.0.1:19330",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": true,
+                    "memoryTypes": [
+                      "corrections",
+                      "decisions",
+                      "entities",
+                      "follow_ups",
+                      "notes",
+                      "observations",
+                      "people",
+                      "preferences",
+                      "profile",
+                      "project_context",
+                      "project_facts",
+                      "recent_work"
+                    ]
+                  },
+                  {
+                    "url": "http://127.0.0.1:19342",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": true,
+                    "memoryTypes": [
+                      "corrections",
+                      "decisions",
+                      "entities",
+                      "follow_ups",
+                      "notes",
+                      "observations",
+                      "people",
+                      "preferences",
+                      "profile",
+                      "project_context",
+                      "project_facts",
+                      "recent_work"
+                    ]
+                  },
+                  {
+                    "url": "http://127.0.0.1:19343",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": true,
+                    "memoryTypes": [
+                      "corrections",
+                      "decisions",
+                      "entities",
+                      "follow_ups",
+                      "notes",
+                      "observations",
+                      "people",
+                      "preferences",
+                      "profile",
+                      "project_context",
+                      "project_facts",
+                      "recent_work"
+                    ]
+                  },
+                  {
+                    "url": "http://127.0.0.1:19344",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": null,
+                    "memoryTypes": null
+                  },
+                  {
+                    "url": "http://127.0.0.1:19345",
+                    "account": "evlab-v3-synthetic-users-dev-product-1",
+                    "version": "v0.5.3",
+                    "templatesMounted": null,
+                    "memoryTypes": null
+                  }
+                ],
+                "templatesMounted": true,
+                "memoryTypes": [
+                  "corrections",
+                  "decisions",
+                  "entities",
+                  "follow_ups",
+                  "notes",
+                  "observations",
+                  "people",
+                  "preferences",
+                  "profile",
+                  "project_context",
+                  "project_facts",
+                  "recent_work"
+                ]
+              },
+              "model": {
+                "answer": "deepseek-flash",
+                "thinking": "enabled",
+                "extraction": "deepseek-flash (lab engine ov.conf, provider direct)"
+              },
+              "runnerDigest": "fadc2ec5c5089216be4d3c6022c0b8799887e23ab0f2c7055d2a8afce2e56466",
+              "answerFork": {
+                "source": "/srv/evimed/runs/v3-synthetic-users-dev-product-1",
+                "sourceRunId": "v3-synthetic-users-dev-product-1",
+                "set": "synthetic-users",
+                "split": "dev",
+                "caseIds": [
+                  "M01",
+                  "U01",
+                  "U02"
+                ],
+                "sessionsDigest": "01c81873026c31f1cb9238584538a43fe2dbdd097d4978de75c5daec5d5e0b06",
+                "questionsDigest": "3add701953070eae27573306be02b5408bbc76be1181ddaa46f62d25d8cdd23f",
+                "at": "2026-11-10T12:03:44.380Z",
+                "sourceRunnerDigest": "66f0edd3e531d61ecfdb8f761c33d375b92e40f9a00cd7cf70348043316be462",
+                "sourceCommit": "1e4c750aa349729140de743bac70a7b3d30ee699",
+                "readOnly": true,
+                "rule": "Copy the first source prefix, retain every recorded error without retry, ask only pending questions at the final checkpoint. No new ingestion or source-file writes.",
+                "cases": [
+                  {
+                    "caseId": "M01",
+                    "sessions": 40,
+                    "copiedAnswers": 65,
+                    "snapshotSha256": "f1bc23635da941310fa5afd11a478ef55f383c397c4536017aa7e03c80a44bc0",
+                    "ingestSha256": "64840fa966009e487e52611240599d76e7ce5299d62c22c623a5a0fd79d65363",
+                    "answersSha256": "d10ed9fa950b68b523a69c9ce137c489bbd5b2df55fbb6ce9bdca9b88e8b92b4",
+                    "preservedErrors": []
+                  },
+                  {
+                    "caseId": "U01",
+                    "sessions": 200,
+                    "copiedAnswers": 41,
+                    "snapshotSha256": "15d923c5cbf3cdb6d966a4ab18d2b686e181fd0023dfcf953e851d6aced984d1",
+                    "ingestSha256": "86100b570d145b55b847d38473db08b1cfb06e055c2094e4396318d345d8803e",
+                    "answersSha256": "f56ce72e5bd18b0fe4e83de86c800344c28fc0b411485fb1a5682bc2a61e820c",
+                    "preservedErrors": []
+                  },
+                  {
+                    "caseId": "U02",
+                    "sessions": 200,
+                    "copiedAnswers": 27,
+                    "snapshotSha256": "9b856df5386db349573152cd382579644ce2d46e12e3255cb985c67a79611c7f",
+                    "ingestSha256": "23e039990acadead395865ada665b1ab7b8b7df169dfa6b0f2849d4ca348f1e6",
+                    "answersSha256": "b53aed07b1ece69ddf3990a2da48d2b1539378b1a6f40cf3fe8268d025f85983",
+                    "preservedErrors": []
+                  }
+                ]
+              },
+              "answersSha256": "e32f9d148cf26462504112d3702a24245ff280a844d685f7b5d528ab9ab2e82c",
+              "questions": 84,
+              "sessions": 200
+            }
+          ]
+        },
+        "notRun": []
+      }
+    }
+  },
+  "notRun": [
+    "PersonaMem-v2: optional; its separate multiple-choice/answer-side-profile protocol was not added in this lane.",
+    "HaluMem extraction FMR and update hallucination tracks: require per-session newly written memory export and dedicated native grading.",
+    "LoCoMo native Porter-stemmed token F1: results here are explicitly approximate semantic accuracy, not official F1.",
+    "Stock-template public-set runs: stock scope is the three explicitly requested scenario/med-m10/synthetic cohorts."
+  ],
+  "testEvidence": {
+    "fullSuite": {
+      "stage": "Final code through 11af73a63",
+      "tests": 383,
+      "passed": 349,
+      "skipped": 34,
+      "failed": 0
+    },
+    "caseSelectionFollowup": {
+      "tests": 17,
+      "passed": 17,
+      "failed": 0
+    },
+    "captionFidelityFollowup": {
+      "tests": 36,
+      "passed": 17,
+      "skipped": 19,
+      "failed": 0
+    },
+    "answerForkBoundaryTests": {
+      "tests": 11,
+      "passed": 11,
+      "failed": 0
+    },
+    "answerForkLiveSmoke": "Canonical answers-only resume: zero new ingests or model answers, live readable facts equal the frozen source snapshot.",
+    "stockSmoke": "Same nine default memory types before and after a real ingest; policyRewritten=0; extraction completed; raw history complete; throwaway account erased."
+  },
+  "limitations": [
+    "Stock comparison uses identical four-user inputs and default thinking-high answers: M01/U01/U02 reuse verified settled source memory and the first source answer prefix, P01 is a full independent replacement after the existing source stopped on PostgreSQL 53300. No quality-based answer selection. Source-run concurrency differs and all engines share host load, so template effects are exploratory.",
+    "Raw-history indexing has partial coverage under shared-host load; exact per-run coverage is preserved in ingestionCoverage.",
+    "LoCoMo sets have separate frozen question pools and independent ingests; not a paired estimate of the refinement effect.",
+    "MemSyco has no session boundaries or timestamps: one artificial session per item.",
+    "RealMem uses the native 0–3 grader; table accuracy requires full credit (3). Native means and raw official results are preserved. Its references are model-generated, not human-verified.",
+    "Native official grading instructions are pinned; Qwen is a substitute judge model.",
+    "Shared-host startup deadlocks and connection exhaustion were retried as infrastructure failures. Completed quality answers were not replaced for their score."
+  ],
+  "status": "complete",
+  "validatedAt": "2026-11-10T12:39:42.041400+00:00",
+  "validation": "Every accepted arm: complete frozen denominator, one answer record per question, zero pending judge packets, matching accuracy ledger row; selected thinking variants verified enabled.",
+  "scoringMeaning": {
+    "accuracy": "Passes / all declared questions, including disputed, unjudged, errored and policy-allowed items in the denominator.",
+    "realmem": "Full credit is native score 3 of 3; native score means and original per-item results retained.",
+    "halumem": "Native Correct/Hallucination/Omission labels; answer track only.",
+    "official": "Benchmark grading instructions; qwen3.8-max substitutes for upstream judge models."
+  },
+  "executionScripts": {
+    "e2.sh": "046d676514059d8f1ba9386c3ce213dadf2b4081513a9d36600e62c148175889",
+    "e2-resume.sh": "397cba59218ac9ab6c8f55573fea38bc9a1de3f45632c2625742f32cdc5fc1d8",
+    "e2-locomo-fidelity.sh": "e601af0fbd8cf6b9113b67985baa001910730d640bd9e9a3b5b4c61079a3a2ed",
+    "e2-memsyco-catchup.sh": "5ae807f50889bc00133067555f516b4efd54319a298d15bbdb3a95a06b4684c8",
+    "e2-p01-comparator.sh": "7bbabb7438087da2850d76623a7e8405b13e18c7e9183115ddd77e8b555a2450",
+    "e2-synthetic-answer-fork.sh": "71e8e4e72b7600abbada8182897617c75e0e8cc1a75dd694a3cc55fc85ad583b",
+    "e2-synthetic-view.mjs": "07d9a7650a299e104a74371575aaef818ac1ba76e5cba9b253c4a849d31bbd92",
+    "e2-cohort-view-score.sh": "17eb9ba71e052f022ad58d154a1995e2bf5372b1c4e03d3f78db3ceaabdfee76",
+    "e2-final-public-score.sh": "e27880bab883b01cab92762c9fe402bd2b7f3e251f946e3936a2942d1d51de1c"
+  }
+}

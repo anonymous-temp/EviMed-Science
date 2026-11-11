@@ -35,14 +35,17 @@ import { MethodConsolidation } from "../../../apps/server/src/methodConsolidatio
 import { MethodDistillationRuns } from "../../../apps/server/src/methodDistillationRuns.mjs";
 import { createMethodSimilarity } from "../../../apps/server/src/methodSimilarity.mjs";
 import { selectMethodsForTask } from "../../../apps/server/src/learnedMethodMount.mjs";
-import { routineLessonFor } from "../../../apps/server/src/learningTriggers.mjs";
+import { campLessonFor, routineLessonFor } from "../../../apps/server/src/learningTriggers.mjs";
+import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "../../../apps/server/src/capsuleMethods.mjs";
 import { persistentDocuments } from "./documents.mjs";
-import { episodeAsRun, episodeRunId, requestText, storeTranscript, toolNameOf } from "./gameTranscript.mjs";
+import { decisiveAnchors, episodeAsRun, episodeOutcome, episodeRunId, requestText, storeTranscript, toolNameOf } from "./gameTranscript.mjs";
 import { createModelSteps, fakeLearningModel } from "./modelSteps.mjs";
 import { createDeepSeekClient } from "../run/deepseek.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const OFFLINE_USER = "c1-offline";
+/** The error codes of a step a resumed build runs again: the model client's transport faults. */
+const TRANSIENT_STEP_ERRORS = new Set(["invalid_response", "timeout", "network", "http_429", "http_500", "http_502", "http_503", "http_504"]);
 const STEP_MS = 60_000;
 
 /** Which lesson policies exist: every successful episode as a routine lesson, or the product's routine gate (τ = 3, toolchain switch on). */
@@ -56,6 +59,9 @@ export const LESSON_GATES = Object.freeze(["every-success", "product"]);
  * @property {"immediate" | "after-consolidation"} approve  immediate = the product (a method takes effect when written unless it conflicts);
  *   after-consolidation = selection sees only methods written before the last consolidation pass
  * @property {boolean} officialInLoop  `OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`, with `officialSet` as the account's official methods
+ * @property {boolean} [camp]  the training camp (`OPEN_SCIENCE_LEARNING_CAMP_ENABLED`): every finished episode is a `camp` lesson (`campLesson`)
+ * @property {boolean} [twoStage]  `OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED`: frame, then one method per new sub-skill
+ * Absent `camp` and `twoStage` are off, so a library saved before they existed reopens under the policy it was built with.
  */
 
 /** @type {LoopPolicy} */
@@ -90,27 +96,44 @@ export function libraryDocuments(saved) {
  * @param {{ library: readonly any[], taskText: string, mode: "flat" | "pyramid", similarity: any, removeRoles?: readonly string[],
  *   visibleBefore?: string | null, minSimilarity?: number, cardEvidence?: boolean }} input
  */
-export async function selectCards({ library, taskText, mode, similarity, removeRoles = [], visibleBefore = null, minSimilarity = 0, cardEvidence = false }) {
+export async function selectCards({ library, taskText, mode, similarity, removeRoles = [], visibleBefore = null, minSimilarity = 0, cardEvidence = false,
+  maxBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES }) {
   const removed = new Set(removeRoles);
   const documents = library.filter((document) => !removed.has(String(document.payload?.frontmatter?.metadata?.role ?? ""))
     && (!visibleBefore || String(document.payload?.bodyUpdatedAt ?? document.payload?.createdAt ?? "") <= visibleBefore));
   const selected = await selectMethodsForTask({ library: documents, taskText,
     options: { similarity, pyramid: mode === "pyramid", minSimilarity, cardEvidence } });
   const byId = new Map(documents.map((document) => [String(document.id), document]));
+  const skills = selected.cards.map((card) => {
+    const payload = byId.get(card.id)?.payload ?? {};
+    const role = String(payload.frontmatter?.metadata?.role ?? "functional");
+    return {
+      name: card.name, level: role === "abstract" || card.level >= 2 ? "abstract" : "atomic", role, levelNumber: card.level,
+      when: String(payload.frontmatter?.whenToUse ?? ""), description: String(payload.frontmatter?.description ?? ""),
+      body: String(payload.body ?? ""), depends_on: (payload.dependencies ?? []).map((/** @type {any} */ dependency) => String(dependency.name)),
+      reason: card.reason, digest: card.digest,
+    };
+  });
+  // The product's run is shown each method's two-line card and reads the body from its directory; C1's loop has no tool to read it, so the
+  // body is in the prompt, and the product's mount budget (`MAX_MOUNTED_CAPSULE_METHOD_BYTES`, what `selectLearnedMethods` spends) bounds
+  // what the bodies cost: spent in the order the product lists the cards, a body that does not fit is left out and counted.
+  /** @type {typeof skills} */
+  const kept = [];
+  /** @type {string[]} */
+  const leftOut = [];
+  let spent = 0;
+  for (const skill of skills) {
+    const bytes = Buffer.byteLength(`${skill.description}\n${skill.when}\n${skill.body}`, "utf8");
+    if (spent + bytes > maxBytes) { leftOut.push(skill.name); continue; }
+    spent += bytes;
+    kept.push(skill);
+  }
   return {
     mode: selected.mode,
     topScore: selected.topScore,
     libraryMethods: documents.filter((document) => (document.payload?.status ?? "approved") === "approved").length,
-    skills: selected.cards.map((card) => {
-      const payload = byId.get(card.id)?.payload ?? {};
-      const role = String(payload.frontmatter?.metadata?.role ?? "functional");
-      return {
-        name: card.name, level: role === "abstract" || card.level >= 2 ? "abstract" : "atomic", role, levelNumber: card.level,
-        when: String(payload.frontmatter?.whenToUse ?? ""), description: String(payload.frontmatter?.description ?? ""),
-        body: String(payload.body ?? ""), depends_on: (payload.dependencies ?? []).map((/** @type {any} */ dependency) => String(dependency.name)),
-        reason: card.reason, digest: card.digest,
-      };
-    }),
+    budget: { maxBytes, spent, leftOut },
+    skills: kept,
   };
 }
 
@@ -173,6 +196,7 @@ export class OfflineLoop {
       dispatch: this.steps.dispatch, readResult: this.steps.readResult, learning: distillerLearning, jobs, similarity: this.similarity,
       resolveRun: async (_project, runId) => this.state.runs[runId] ?? null,
       officialMethods: this.policy.related === "empty" ? null : official,
+      camp: this.policy.camp === true, twoStage: this.policy.twoStage === true,
     });
     this.consolidation = new MethodConsolidation({
       dispatch: this.steps.dispatch, readResult: this.steps.readResult, learning, jobs, similarity: this.similarity, now,
@@ -196,8 +220,15 @@ export class OfflineLoop {
     await appendFile(this.statusPath, `${new Date().toISOString()} ${stepId} ${JSON.stringify(summary)}\n`);
   }
 
-  /** Whether a step is already in the saved library. @param {string} stepId */
-  done(stepId) { return Object.hasOwn(this.state.steps, stepId); }
+  /**
+   * Whether a step is already in the saved library. A lesson that ended in a transport fault (the model's reply never came, or came empty) is
+   * not done: a resumed build asks it again. A contract or store refusal is a result and stays.
+   * @param {string} stepId
+   */
+  done(stepId) {
+    const step = this.state.steps[stepId];
+    return Boolean(step) && !(step.state === "error" && TRANSIENT_STEP_ERRORS.has(String(step.code ?? "")));
+  }
 
   /** Register an episode as a run of this offline project, with its transcript on disk. @param {any} record */
   async registerEpisode(record) {
@@ -232,6 +263,54 @@ export class OfflineLoop {
       summary = { kind: "distill", taskId: record.taskId, runId: run.id, peers: peerRuns.map((peer) => peer.id), state: "error",
         code: String(/** @type {any} */ (error)?.code ?? "error"), message: String(/** @type {any} */ (error)?.message ?? error).split("\n")[0].slice(0, 300) };
       this.#count(`error:${summary.code}`);
+    }
+    summary.integrate = await this.#drain({ sleep: false });
+    summary.modelCalls = this.steps.usage.calls - usageBefore.calls;
+    summary.tokens = (this.steps.usage.promptTokens - usageBefore.promptTokens) + (this.steps.usage.completionTokens - usageBefore.completionTokens);
+    await this.#save(stepId, summary);
+    return summary;
+  }
+
+  /**
+   * One camp lesson (policy `camp`): any finished episode — a success or a failure — raised by the product's `campLessonFor` with the game's
+   * outcome and its decisive steps (`decisiveAnchors`), and distilled by the product's `execute` (with `twoStage`, a frame and its details).
+   * An episode that ended in an error (no machine-checked outcome) is no lesson.
+   * @param {{ record: any, stepId: string }} input
+   */
+  async campLesson({ record, stepId }) {
+    if (this.done(stepId)) return this.state.steps[stepId];
+    if (this.policy.camp !== true) throw new Error("campLesson needs a camp policy.");
+    this.state.clock += STEP_MS;
+    const run = await this.registerEpisode(record);
+    const lesson = record.error ? null : campLessonFor({ run, outcome: episodeOutcome(record), anchors: decisiveAnchors(record), scope: this.env, enabled: true });
+    const usageBefore = { ...this.steps.usage };
+    /** @type {any} */
+    let summary;
+    if (!lesson) {
+      summary = { kind: "camp", taskId: record.taskId, runId: run.id, success: record.success === true, state: "skipped", reason: "no_outcome" };
+      this.#count("camp:skipped");
+    } else {
+      const job = { id: `distill:${run.id}:camp`, userId: OFFLINE_USER, projectId: this.project.id, payload: lesson.payload };
+      try {
+        const result = await this.distillation.execute({ job, project: this.project, run, feedback: [] });
+        const steps = result.twoStage?.steps ?? null;
+        summary = { kind: "camp", taskId: record.taskId, runId: run.id, success: record.success === true, score: Number(record.score) || 0,
+          anchors: lesson.payload.anchors.length, state: result.state, operation: result.operation ?? null, methodId: result.methodId ?? null,
+          ...(result.twoStage ? { frame: result.twoStage.frame, details: steps } : {}), skipped: result.skipped ?? null };
+        if (steps) {
+          this.#count("frame:runs");
+          this.#count("frame:newSkills", result.twoStage.frame.newSkills.length);
+          this.#count("frame:reuses", result.twoStage.frame.reuses);
+          this.#count("frame:amend", result.twoStage.frame.amend);
+          if (!result.twoStage.frame.newSkills.length && !result.twoStage.frame.amend) this.#count("frame:empty");
+          for (const step of steps) this.#count(`detail:${step.operation ?? step.state}`);
+        } else this.#count(`operation:${result.operation ?? "none"}`);
+        this.#count(`camp:${record.success === true ? "success" : "failure"}`);
+      } catch (error) {
+        summary = { kind: "camp", taskId: record.taskId, runId: run.id, success: record.success === true, state: "error",
+          code: String(/** @type {any} */ (error)?.code ?? "error"), message: String(/** @type {any} */ (error)?.message ?? error).split("\n")[0].slice(0, 300) };
+        this.#count(`error:${summary.code}`);
+      }
     }
     summary.integrate = await this.#drain({ sleep: false });
     summary.modelCalls = this.steps.usage.calls - usageBefore.calls;
@@ -296,7 +375,16 @@ export class OfflineLoop {
 
   /** The library's documents as they stand. */
   async methods() {
-    return (await this.learning.listMethods(OFFLINE_USER, { limit: 100 })).items ?? [];
+    // Every page: a camp library can pass the 100 one page holds (the product's own reads stop at 100; see the report).
+    /** @type {any[]} */
+    const items = [];
+    let cursor = null;
+    do {
+      const page = await this.learning.listMethods(OFFLINE_USER, { limit: 100, cursor });
+      items.push(...(page.items ?? []));
+      cursor = page.nextCursor ?? null;
+    } while (cursor);
+    return items;
   }
 
   /** @param {{ taskText: string, mode?: "flat" | "pyramid", removeRoles?: string[] }} input */
@@ -346,6 +434,9 @@ export class OfflineLoop {
     const live = methods.filter((method) => method.payload?.status !== "retired");
     const relations = live.flatMap((method) => method.payload?.learning?.relations ?? []);
     const steps = Object.values(this.state.steps);
+    const camp = steps.filter((step) => step.kind === "camp");
+    const details = camp.flatMap((step) => step.details ?? []);
+    const retired = methods.filter((method) => method.payload?.status === "retired");
     return {
       env: this.env, variant: this.variant, policy: this.policy,
       methods: methods.length, byStatus: tally((method) => String(method.payload?.status), methods),
@@ -355,8 +446,23 @@ export class OfflineLoop {
       withDependencies: live.filter((method) => (method.payload?.dependencies ?? []).length).length,
       consolidated: live.filter((method) => String(method.payload?.provenance?.consolidatedBy ?? "").startsWith("consolidate:")).length,
       amended: live.filter((method) => Number(method.payload?.bodyVersion ?? 1) > 1).length,
-      lessons: steps.filter((step) => step.kind === "distill").length,
-      operations: tally((step) => String(step.operation ?? step.state), steps.filter((step) => step.kind === "distill")),
+      lessons: steps.filter((step) => step.kind === "distill" || step.kind === "camp").length,
+      operations: tally((step) => String(step.operation ?? step.state), steps.filter((step) => step.kind === "distill" || step.kind === "camp")),
+      ...(camp.length ? { camp: {
+        lessons: camp.length, successes: camp.filter((step) => step.success).length, failures: camp.filter((step) => !step.success).length,
+        states: tally((step) => String(step.state), camp),
+        frames: camp.filter((step) => step.frame).length,
+        emptyFrames: camp.filter((step) => step.frame && !step.frame.newSkills.length && !step.frame.amend).length,
+        newSkillsNamed: camp.reduce((sum, step) => sum + (step.frame?.newSkills?.length ?? 0), 0),
+        newSkillsByRole: tally((name) => String(name).split(":")[0], camp.flatMap((step) => step.frame?.newSkills ?? [])),
+        reusesNamed: camp.reduce((sum, step) => sum + (step.frame?.reuses ?? 0), 0),
+        details: tally((step) => String(step.operation ?? step.state), details),
+        detailsByRole: tally((step) => `${step.role}:${step.operation ?? step.state}`, details),
+        byOutcome: { success: tally((step) => String(step.operation ?? step.state), camp.filter((step) => step.success)),
+          failure: tally((step) => String(step.operation ?? step.state), camp.filter((step) => !step.success)) },
+      } } : {}),
+      retired: { count: retired.length, reasons: tally((method) => String(method.payload?.statusReason?.code ?? method.payload?.statusReason ?? "none").slice(0, 60), retired) },
+      foldedByConsolidation: methods.filter((method) => Array.isArray(method.payload?.provenance?.mergedFrom) && String(method.payload?.provenance?.consolidatedBy ?? "").startsWith("consolidate:")).reduce((sum, method) => sum + method.payload.provenance.mergedFrom.length, 0),
       sleeps: steps.filter((step) => step.kind === "sleep").length,
       counters: this.state.counters,
       modelUsage: this.state.modelUsage ?? null,

@@ -63,6 +63,7 @@ export const UNREVIEWED_CONTRACT_KINDS = Object.freeze([
   'source-understanding',
   'method-candidate',
   'method-relations',
+  'method-frame',
   'surveillance-diff',
   'hypothesis-set',
 ])

@@ -5,6 +5,7 @@ import { MemoryHistorySecrets, createHistorySecretJudge } from './memoryHistoryS
 import { privateByDefault } from '@evimed/domain';
 import { filterCapturedMessage } from './memoryGateway.mjs';
 import { OpenVikingResources } from './openVikingResources.mjs';
+import { diverseHistoryCandidates, historyLexicalScorer, compactHistoryMessages } from './memoryHistoryRetrieval.mjs';
 import { parseArchiveUri, platformSessionOf } from './openVikingSessions.mjs';
 export { MemoryHistoryLedger } from './memoryHistoryPersistence.mjs';
 
@@ -370,8 +371,11 @@ export class MemoryHistory {
   async coverage(ownerId) { return this.ledger.archiveCoverage(ownerId); }
   status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill } }; }
 
-  async search({ user, project, query, limit = 5 }, { includeOrigins = false, forRemoval = false } = {}) {
+  async search({ user, project, query, limit = 5 }, { includeOrigins = false, forRemoval = false, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
     if (!this.enabled || !query?.trim()) return [];
+    // Leave time for the gateway to render already verified hits. A slow tail
+    // must not turn a useful prefix into an empty history block at its deadline.
+    const deadline=retrievalV2 ? Date.now()+Math.max(250,Number(this.config.memoryGatewayTimeoutMs)||4000)-150 : Infinity;
     const context = await this.contexts.forProject(project);
     if (context.ownerId !== user.id || context.kind === 'geo-project') return [];
     const source = await this.resolveSource({ userId: user.id, projectId: project.id, engineSession: null }, context);
@@ -381,27 +385,28 @@ export class MemoryHistory {
     const account = project.id === 'default' && context.kind === 'owned';
     const root = account ? `${context.userRoot}/resources/history/${hash(context.ownerCreatedAt).slice(0,24)}` : this.root(context,source);
     const resources = this.resourcesFor(context);
-    const asked = Math.max(1, Math.min(8, Math.trunc(Number(limit)) || 5));
-    const candidates = await resources.searchHistory(user.id, root, query.slice(0, 2000), { limit: 40 });
+    const asked = Math.max(1, Math.min(retrievalV2 ? 20 : 8, Math.trunc(Number(limit)) || 5));
+    const found = await resources.searchHistory(user.id, root, query.slice(0, 2000), { limit: 40, ...(retrievalV2 ? { retrievalV2:true } : {}) });
+    const candidates = retrievalV2 ? diverseHistoryCandidates(found) : found;
     const redact = this.secretRedaction ? await this.secrets.filterFor(user.id) : text => text;
-    const hits = [], originals = new Map();
-    for (const candidate of candidates.slice(0, 80)) {
-      if (!candidate.uri?.startsWith(`${root}/`)) continue;
+    const hits = [], originals = new Map(), seenMessages = new Map();
+    const hydrate = async candidate => {
+      if (!candidate.uri?.startsWith(`${root}/`)) return null;
       const meta = await this.ledger.lookup(user.id, context.ownerCreatedAt, context.namespaceId, account ? null : project.id, account ? null : source.projectCreatedAt, candidate.uri);
-      if (!meta || this.secretRedaction && !await this.ledger.secretReviewed(context,meta.archive_uri)) continue;
+      if (!meta || this.secretRedaction && !await this.ledger.secretReviewed(context,meta.archive_uri)) return null;
       let verified;
       try { verified = await this.resolveSource({ userId: user.id, projectId: meta.project_id, engineSession: `dsh-${meta.session_id}` }, context); }
-      catch { continue; } // A deleted/revoked source never falls back to another project.
-      if (!verified || verified.projectId !== meta.project_id || verified.projectCreatedAt !== meta.project_created_at) continue;
-      if (!await this.eligible(context, verified)) { await this.removeConversation({ ...context, projectId: verified.projectId, projectCreatedAt: verified.projectCreatedAt }, verified.sessionId); continue; }
+      catch { return null; } // A deleted/revoked source never falls back to another project.
+      if (!verified || verified.projectId !== meta.project_id || verified.projectCreatedAt !== meta.project_created_at) return null;
+      if (!await this.eligible(context, verified)) { await this.removeConversation({ ...context, projectId: verified.projectId, projectCreatedAt: verified.projectCreatedAt }, verified.sessionId); return null; }
       const body = await resources.readHistory(user.id, candidate.uri);
-      if (body === null || Buffer.byteLength(body) > 32_000 || hash(body) !== meta.digest) continue;
-      let parsed; try { parsed = JSON.parse(body); } catch { continue; }
+      if (body === null || Buffer.byteLength(body) > 32_000 || hash(body) !== meta.digest) return null;
+      let parsed; try { parsed = JSON.parse(body); } catch { return null; }
       const messages = hydrateMessages(parsed.messages,this.secretRedaction);
-      if (!messages.length) continue;
+      if (!messages.length) return null;
       // Full source messages, not fragments, decide whether a removed statement
       // is present. This also protects legacy chunks cut across a deletion.
-      if (!originals.has(meta.archive_uri)) {
+      if (!originals.has(meta.archive_uri)) originals.set(meta.archive_uri,(async()=>{
         const archive = parseArchiveUri(meta.archive_uri);
         if (!archive || archive.userRoot !== context.userRoot || archive.session !== `dsh-${meta.session_id}` || archive.rest) throw new Error('memory_history_privacy_unavailable');
         const expected = await this.ledger.archiveSourceHash(context,meta.archive_uri);
@@ -413,9 +418,9 @@ export class MemoryHistory {
           archiveMessages.push(message);
           if (archiveMessages.length>MAX_MESSAGES) throw new Error('memory_history_privacy_unavailable');
         }
-        originals.set(meta.archive_uri,archiveMessages);
-      }
-      const original = originals.get(meta.archive_uri);
+        return archiveMessages;
+      })());
+      const original = await originals.get(meta.archive_uri);
       const touched = [...new Set(messages.map(message=>message.index))].map(index=>original[index]);
       if (touched.some(message=>!message)) throw new Error('memory_history_privacy_unavailable');
       const originalTexts = touched.map(message=>messageText(message,this.secretRedaction)).filter(Boolean);
@@ -428,22 +433,45 @@ export class MemoryHistory {
         return historyChunks([{role:own.role,content:redact(text)}],{semanticSecrets:true})
           .some(chunk=>chunk.messages.some(part=>part.text.includes(redact(message.text))));
       });
-      if (!proven) continue;
-      if (!forRemoval && await this.ledger.rejected(context,originalTexts,meta.archive_uri)) continue;
+      if (!proven) return null;
+      if (!forRemoval && await this.ledger.rejected(context,originalTexts,meta.archive_uri)) return null;
       let title = historyTitle(verified.conversationTitle,'Conversation',this.secretRedaction);
       let projectTitle = historyTitle(verified.projectTitle ?? verified.project?.name,'Project',this.secretRedaction);
       if (await this.ledger.rejected(context,[title])) title='Conversation';
       if (await this.ledger.rejected(context,[projectTitle])) projectTitle='Project';
-      if (!await this.ledger.lookup(user.id,context.ownerCreatedAt,context.namespaceId,verified.projectId,verified.projectCreatedAt,candidate.uri)) continue;
-      hits.push({ conversationTitle: redact(title), conversationUrl: verified.conversationUrl, projectId: verified.projectId, projectTitle: redact(projectTitle), scope: 'project',
+      if (!await this.ledger.lookup(user.id,context.ownerCreatedAt,context.namespaceId,verified.projectId,verified.projectCreatedAt,candidate.uri)) return null;
+      return { meta,hit:{ conversationTitle: redact(title), conversationUrl: verified.conversationUrl, projectId: verified.projectId, projectTitle: redact(projectTitle), scope: 'project',
         sessionId: meta.session_id, messages: this.secretRedaction ? messages.map(message=>({...message,text:redact(message.text)})) : messages, contextOnly: true, confirmed: false, privateByDefault: privateByDefault({ nativeType: 'people' }),
         ...(forRemoval ? {originalMessages:original.map(message=>{
           const text=messageText(message,this.secretRedaction)??'';
           return {sourceRole:message.role,date:message.created_at,text:redact(text),messageHash:lineFingerprint(text)};
         }).filter(message=>message.text)} : {}),
         ...(includeOrigins ? { origin: { archiveUri: meta.archive_uri, engineSession: `dsh-${meta.session_id}`,
-          projectId: verified.projectId, projectCreatedAt: verified.projectCreatedAt, addedAt: meta.minimum_date } } : {}) });
-      if (hits.length >= asked) break;
+          projectId: verified.projectId, projectCreatedAt: verified.projectCreatedAt, addedAt: meta.minimum_date } } : {}) } };
+    };
+    // V1 remains serial. V2 overlaps at most four source validations, reusing
+    // only this request's proven archive promises; selection stays rank ordered.
+    for (let offset=0;offset<Math.min(candidates.length,80) && hits.length<asked;) {
+      if (Date.now()>=deadline) break;
+      const width=retrievalV2 ? Math.min(4,asked-hits.length) : 1;
+      const batch=candidates.slice(offset,Math.min(offset+width,80)); offset+=batch.length;
+      let timer;
+      const pending=Promise.all(batch.map(hydrate));
+      const validated=await (retrievalV2 ? Promise.race([pending,/** @type {Promise<null>} */ (new Promise(resolve=>{
+        timer=setTimeout(()=>resolve(null),Math.max(1,deadline-Date.now()));
+      }))]).finally(()=>clearTimeout(timer)) : pending);
+      if (!validated) break;
+      for (const value of validated) {
+        if (!value) continue;
+        const {hit,meta}=value;
+        if (retrievalV2) {
+          const seen=seenMessages.get(meta.session_id)??new Set();seenMessages.set(meta.session_id,seen);
+          const headerChars=historySearchText([{...hit,messages:[]}],{semanticSecrets:this.secretRedaction}).length;
+          hit.messages=compactHistoryMessages(hit.messages,query,historyLexicalScorer([{messages:hit.messages}],query),Math.floor(48_000/asked)-headerChars,seen);
+          if (!hit.messages.length) continue;
+        }
+        hits.push(hit);
+      }
     }
     return hits;
   }

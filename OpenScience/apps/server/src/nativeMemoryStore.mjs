@@ -1,11 +1,12 @@
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
+import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens } from './nativeMemoryHardTokens.mjs';
 import { compact, neutralMemoryUri, removalLines } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
-import { carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine, sourcePrivacyOf } from "@evimed/domain";
+import { carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine, sourcePrivacyOf, MEMORY_SAFETY_NOTES_ANCHOR } from "@evimed/domain";
 import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhere.mjs";
 import { recordForgetDuplicates, recordMapReplaced } from "./nativeMemoryMetrics.mjs";
 import { freshnessOf } from "./memoryMapSources/common.mjs";
@@ -929,6 +930,40 @@ export class NativeMemoryStore {
   async openingIndex(userId, projectId) {
     const hiddenUris = [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId)];
     return nativeMemoryIndex((await this.overlay.files(userId)).values(), { memoryRoot: this.sessions.memoryRoot(userId), hiddenUris });
+  }
+
+  /** Only structurally marked safety sections of owned people/profile files; no health keyword inference.
+   * The ordinary file/record readers apply deletion fences, forgotten lines and producer receipts.
+   * @param {string} userId @param {string} projectId */
+  async safetyNotes(userId, projectId) {
+    const scope = { memoryRoot: this.sessions.memoryRoot(userId), projectId,
+      hiddenUris: [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId)] };
+    const selected = [...(await this.overlay.files(userId)).values()]
+      .filter(file => safetyNoteFile(file, scope) && safetyNoteLines(file.body).length);
+    if (!selected.length) return [];
+    const files = (await this.files(userId, { uris: selected.map(file => file.uri) })).filter(file => safetyNoteFile(file, scope));
+    const records = await this.records(userId, { files });
+    return files.flatMap(file => {
+      const sources = records.filter(record => record.uri === file.uri);
+      if (!sources.length) return [];
+      let body = sources[0].value;
+      if (file.type === 'profile') {
+        // Profile records are individual statements. Reconstruct only marked lines still visible after redaction.
+        const visible = new Set(sources.map(record => lineFingerprint(record.value)));
+        const lines = safetyNoteLines(file.body).filter(line => visible.has(lineFingerprint(line)));
+        if (!lines.length) return [];
+        const heading = /^#\s+.+$/m.exec(file.body)?.[0] ?? '# 用户';
+        const section = file.body.split('\n').find(line => line.trim().startsWith('## ') && line.trim().endsWith(MEMORY_SAFETY_NOTES_ANCHOR));
+        body = `${heading}\n${section}\n${lines.map(line => `- ${line}`).join('\n')}`;
+      }
+      if (!safetyNoteLines(body).length) return [];
+      const receipt = sourceReceiptState(sources.map(record => ({ id: record.id, contentDigest: record.contentHash,
+        sourcePrivacy: record.sourcePrivacy, attribution: record.attribution })), { trusted: true });
+      const origins = [...new Set(sources.flatMap(record => record.attribution?.origins ?? ['unknown']))];
+      return [{ ...file, body, updatedAt: sources[0].updatedAt ?? file.modTime,
+        originalSources: receipt.originalSources, sourcePrivacy: receipt.sourcePrivacy,
+        origin: origins.length === 1 ? origins[0] : 'mixed', attribution: { schemaVersion: 1, origins, confirmed: false } }];
+    });
   }
 
   /** Most-used owned files, through the existing deletion and producer-receipt readers.

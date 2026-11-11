@@ -87,7 +87,7 @@ export function splitMountedMethods(methods) {
  * said to be an inference; the platform's default methods follow, and yield to anything of the person's. A method that carries `card` (the
  * selection file's, `OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED`) shows its evidence, counter-examples and verified line under its card.
  * @param {readonly { name: string, description?: string, whenToUse?: string, path?: string, directory?: string,
- *   card?: { evidence?: readonly string[], counterexamples?: readonly string[], verified?: boolean } | null }[]} methods
+ *   card?: { evidence?: readonly string[], counterexamples?: readonly string[], verified?: boolean, rewrites?: {count: number, dates: readonly string[]} } | null }[]} methods
  * @returns {string[]}
  */
 export function learnedMethodCardLines(methods) {

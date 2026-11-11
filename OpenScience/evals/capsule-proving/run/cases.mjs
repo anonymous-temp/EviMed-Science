@@ -2,8 +2,8 @@
 // (`{ caseId, set, split, userKey, sessions, questions }`), which never carries an answer.
 //
 // Sets register a loader (`registerSet(name, loader)`); `loadCases` picks the loader, filters by `only`, and checks the
-// shape. `synthetic-users` is built in: one user per directory, `<dataDir>/<split>/<user>/input.json`. Only `input.json`
-// is read — gold, corruptions and the generator's own files are never opened here.
+// shape. `synthetic-users` is built in: one user per directory, `<dataDir>/<split>/<user>/input.json`. `input.json`
+// and structural schedule/skeleton metadata are read; gold and corruptions are never opened here.
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -11,13 +11,13 @@ import { SET_LOADERS } from "./sets.mjs";
 
 /**
  * @typedef {{ id: string, name: string } | null} CaseProject
- * @typedef {{ role: "user"|"assistant", text: string, at?: string }} CaseMessage
+ * @typedef {{ role: "user"|"assistant", text: string, at?: string, liveTurn?: "forget" }} CaseMessage
  * @typedef {{ afterMessage: number, kind: string, title: string, text: string }} CaseAttachment
  * @typedef {{ sessionId: string, at: string, project: CaseProject, messages: CaseMessage[], attachments?: CaseAttachment[] }} CaseSession
  * @typedef {{ kind: string, title: string, text: string }} CaseMaterial
- * @typedef {{ qid: string, afterSession: number, asOf: string, text: string, project?: CaseProject, materials?: CaseMaterial[] }} CaseQuestion
+ * @typedef {{ qid: string, afterSession: number, asOf: string, text: string, category?: string, project?: CaseProject, materials?: CaseMaterial[] }} CaseQuestion
  * @typedef {{ caseId: string, set: string, split: string, userKey: string, sessions: CaseSession[], questions: CaseQuestion[], meta?: Record<string, unknown> }} Case
- * @typedef {(input: { split: string, dataDir: string, set: string }) => Promise<Case[]>} SetLoader
+ * @typedef {(input: { split: string, dataDir: string, set: string, only?: string[] }) => Promise<Case[]>} SetLoader
  */
 
 /** @type {Map<string, SetLoader>} */
@@ -84,6 +84,37 @@ export function normalizeSyntheticUser(raw, { set, split, dirName }) {
     meta: { ...(typeof raw?.kind === "string" ? { kind: raw.kind } : {}), ...(typeof raw?.schema === "string" ? { schema: raw.schema } : {}) } };
 }
 
+/** Apply only structural annotations. Plant identities and their values never enter the Case.
+ * Message offsets are zero-based schedule annotations, reviewed outside the runner; missing offsets fail closed
+ * when live turns are requested. Question categories join on the generator's declared question, never on anchors.
+ * @param {Case} item @param {any} skeleton @param {any} schedule
+ */
+export function annotateSyntheticUser(item, skeleton, schedule) {
+  if (!skeleton || !schedule) return item;
+  const plants = new Map((skeleton.plants ?? []).map(plant => [plant.id, plant]));
+  for (const event of schedule.events ?? []) {
+    if (event.kind !== "forget" || plants.get(event.plantId)?.category !== "forget") continue;
+    const planned = schedule.sessions?.find(session => session.index === event.session);
+    const session = item.sessions.find(session => session.sessionId === planned?.id);
+    if (!session) throw new Error(`${item.caseId}: forget session is missing`);
+    const insert = planned.inserts?.find(insert => insert.plantId === event.plantId && insert.event === "forget");
+    const index = event.messageIndex ?? insert?.messageIndex;
+    if (index === undefined) {
+      item.meta ??= {};
+      item.meta.unlocatedLiveTurns = Number(item.meta.unlocatedLiveTurns ?? 0) + 1;
+      continue;
+    }
+    if (!Number.isInteger(index) || index < 0 || session.messages[index]?.role !== "user"
+      || session.messages[index + 1]?.role !== "assistant") throw new Error(`${item.caseId}: invalid forget messageIndex`);
+    session.messages[index].liveTurn = "forget";
+  }
+  for (const question of item.questions) {
+    const categories = new Set([...plants.values()].filter(plant => plant.question === question.text).map(plant => plant.category));
+    if (categories.size === 1) question.category = [...categories][0];
+  }
+  return item;
+}
+
 /**
  * What is wrong with a Case, as readable lines ([] when it is sound).
  * @param {Case} item @returns {string[]}
@@ -101,8 +132,9 @@ export function caseIssues(item) {
     ids.add(session?.sessionId);
     if (!isoOk(session?.at)) issues.push(`${where}: session ${session?.sessionId} has no ISO time`);
     if (!Array.isArray(session?.messages) || !session.messages.length) issues.push(`${where}: session ${session?.sessionId} has no messages`);
-    for (const message of session?.messages ?? []) {
+    for (const [index, message] of (session?.messages ?? []).entries()) {
       if (!ROLES.has(message?.role)) { issues.push(`${where}: session ${session?.sessionId} has a message whose role is not user/assistant`); break; }
+      if (message.liveTurn !== undefined && (message.liveTurn !== "forget" || message.role !== "user" || session.messages[index + 1]?.role !== "assistant")) issues.push(`${where}: session ${session.sessionId} has an invalid liveTurn`);
     }
   });
   const qids = new Set();
@@ -143,7 +175,12 @@ async function loadSyntheticUsers({ split, dataDir, set }) {
     let text;
     try { text = await readFile(file, "utf8"); }
     catch (error) { if (/** @type {any} */ (error)?.code === "ENOENT") continue; throw error; }
-    cases.push(normalizeSyntheticUser(JSON.parse(text), { set, split, dirName: name }));
+    const metadata = async file => {
+      try { return JSON.parse(await readFile(path.join(root, name, file), "utf8")); }
+      catch (error) { if (error?.code === "ENOENT") return null; throw error; }
+    };
+    const [skeleton, schedule] = await Promise.all([metadata("skeleton.json"), metadata("schedule.json")]);
+    cases.push(annotateSyntheticUser(normalizeSyntheticUser(JSON.parse(text), { set, split, dirName: name }), skeleton, schedule));
   }
   return cases;
 }
@@ -169,7 +206,7 @@ export async function loadCases({ set, split, dataDir, only = null }) {
   if (!loader) throw new Error(`unknown set ${set} (registered: ${registeredSets().join(", ") || "none"})`);
   if (!dataDir) throw new Error("a data directory is required");
   const wanted = onlyList(only);
-  const cases = (await loader({ split, dataDir, set })).filter((item) => !wanted || wanted.has(item.caseId) || wanted.has(item.userKey));
+  const cases = (await loader({ split, dataDir, set, ...(wanted ? { only: [...wanted] } : {}) })).filter((item) => !wanted || wanted.has(item.caseId) || wanted.has(item.userKey));
   if (wanted) {
     const found = new Set(cases.flatMap((item) => [item.caseId, item.userKey]));
     const missing = [...wanted].filter((name) => !found.has(name));
