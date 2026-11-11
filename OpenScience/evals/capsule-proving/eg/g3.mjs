@@ -15,7 +15,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child?.kill
 try {
   const argv = [path.resolve(args.tree, 'evals/capsule-proving/eg/g3_host.py'), '--tree', args.tree, '--out', args.out,
     '--port', String(args.port), '--pg-port', String(args.pgPort), '--database', database];
-  for (const [flag, key] of [['--scenarios', 'scenarios'], ['--repeats', 'repeats']]) if (args[key]) argv.push(flag, args[key]);
+  for (const [flag, key] of [['--scenarios', 'scenarios'], ['--repeats', 'repeats'], ['--queue-dir', 'queueDir'], ['--queue-runs', 'queueRuns']]) if (args[key]) argv.push(flag, args[key]);
   const code = await new Promise((resolve, reject) => {
     child = spawn('python3', argv, { stdio: ['ignore', 'pipe', 'inherit'] });
     readline.createInterface({ input: child.stdout }).on('line', async line => {

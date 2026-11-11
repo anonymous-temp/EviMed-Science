@@ -153,9 +153,13 @@ if not read(REPORT / "g10.json") or not read(REPORT / "g10.json").get("complete"
     status("DONE G10 scored, paired and ledgered")
 
 if not read(REPORT / "g3.json") or not read(REPORT / "g3.json").get("complete"):
-    children = [launch("g3", "g3-eg-a-1", 48854, 55684, 19374, ["--scenarios", "S1,S2,S3,S6,S9,S11"]),
-                launch("g3", "g3-eg-b-1", 48857, 55685, 19377, ["--scenarios", "S4,S5,S7,S8,S10"])]
+    queue_args = ["--queue-dir", str(RUNS / "eg-g3-queue-20261111"), "--queue-runs", str(RUNS / "g3-eg-a-1") + "," + str(RUNS / "g3-eg-b-1")]
+    children = [launch("g3", "g3-eg-a-1", 48854, 55684, 19374, queue_args),
+                launch("g3", "g3-eg-b-1", 48857, 55685, 19377, queue_args)]
     wait_children(children)
     run(["node", str(EG / "report.mjs"), "--suite", "g3", "--runs", str(RUNS / "g3-eg-a-1") + "," + str(RUNS / "g3-eg-b-1"), "--out", str(REPORT), "--ledger", "/srv/evimed/results/ledger.jsonl", "--run-id", "g3-eg-five-20261111"])
+    if not read(REPORT / "g3.json").get("complete"):
+        status("STOP G3 incomplete; no full-suite result claimed")
+        raise SystemExit(1)
     status("DONE G3 scored and ledgered")
 status("DONE all three product-path evaluations")

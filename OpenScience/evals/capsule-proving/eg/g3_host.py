@@ -23,6 +23,7 @@ import host as hosting
 import scenarios
 import scoring
 import model_judge
+from g3_queue import ScenarioQueue
 
 spec = importlib.util.spec_from_file_location("longitudinal_run", LONG / "run.py")
 long_run = importlib.util.module_from_spec(spec)
@@ -114,6 +115,8 @@ def main():
     p.add_argument("--database", required=True)
     p.add_argument("--scenarios", default=",".join(s[0] for s in scenarios.SCENARIOS))
     p.add_argument("--repeats", default="1,2,3,4,5")
+    p.add_argument("--queue-dir")
+    p.add_argument("--queue-runs")
     args = p.parse_args()
     signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     out = Path(args.out)
@@ -126,21 +129,39 @@ def main():
     judge = scoring.Judge(long_run.read_key("/srv/evimed/secrets/deepseek.api-key"), "deepseek-flash", post=metered_post)
     caps = host.capabilities()
     (out / "scenario-capabilities.json").write_text(json.dumps(caps))
-    for rep in map(int, args.repeats.split(",")):
-        for scenario in scenarios.SCENARIOS:
-            sid = scenario[0]
-            if sid not in args.scenarios.split(","):
+    selected = [s for s in scenarios.SCENARIOS if s[0] in args.scenarios.split(',')]
+    tasks = [(s[0], rep) for rep in map(int, args.repeats.split(',')) for s in selected]
+    by_id = {s[0]: s for s in selected}
+    def execute(task):
+        sid, rep = task
+        result_file = out / 'results' / f'{sid}-r{rep}.json'
+        if result_file.exists():
+            return
+        host.config.out_dir = out / 'browser' / f'{sid}-r{rep}'
+        with (out / 'STATUS').open('a') as handle:
+            handle.write(f'{datetime.now(timezone.utc).isoformat()} EG START {sid}-r{rep}\n')
+        result = long_run.run_scenario(by_id[sid], host, judge, caps, log=lambda text: print(text, flush=True))
+        result['rep'] = rep
+        result_file.parent.mkdir(parents=True, exist_ok=True)
+        temporary = result_file.with_suffix('.json.tmp')
+        temporary.write_text(json.dumps(result, ensure_ascii=False, indent=1))
+        temporary.replace(result_file)
+        with (out / 'STATUS').open('a') as handle:
+            handle.write(f"{datetime.now(timezone.utc).isoformat()} EG DONE {sid}-r{rep} {result['status']}\n")
+    if args.queue_dir:
+        queue = ScenarioQueue(args.queue_dir, args.queue_runs.split(','), out, tasks)
+        while not queue.complete():
+            task = queue.claim()
+            if task is None:
+                time.sleep(3)
                 continue
-            result_file = out / "results" / f"{sid}-r{rep}.json"
-            if result_file.exists():
-                continue
-            host.config.out_dir = out / "browser" / f"{sid}-r{rep}"
-            result = long_run.run_scenario(scenario, host, judge, caps, log=lambda text: print(text, flush=True))
-            result["rep"] = rep
-            result_file.parent.mkdir(parents=True, exist_ok=True)
-            result_file.write_text(json.dumps(result, ensure_ascii=False, indent=1))
-            with (out / "STATUS").open("a") as handle:
-                handle.write(f"{datetime.now(timezone.utc).isoformat()} EG DONE {sid}-r{rep} {result['status']}\n")
+            try:
+                execute(task)
+            finally:
+                queue.release(task)
+    else:
+        for task in tasks:
+            execute(task)
 
 
 if __name__ == "__main__":

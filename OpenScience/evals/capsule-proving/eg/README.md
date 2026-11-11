@@ -115,12 +115,19 @@ is on for this suite. Each scenario registers and deletes its throwaway
 accounts; failed deletion is still a failure. Scenario premises and outdated
 criteria are reported rather than silently rewritten. The headline is the
 share of eleven scenarios for which all five repetitions pass.
+The campaign's two workers claim the next unfinished scenario/repetition from
+one fixed 55-run queue. Claims bind the worker PID and its process start time;
+interrupted owners are recorded before reclaim. Completed failures and
+inconclusive runs are never retried. Result writes are atomic, and duplicate
+results or a changed cohort stop the queue.
 
 Before a native conversation, the lab adapter reclaims completed, idle internal
 learning kernels, as the LX driver does between learning and questioning. Host
 kernels share a bridge port whereas production containers have separate
 loopbacks. Queued due jobs and live runs are allowed to finish first; the
-worker, evidence, lessons, approvals and scenario checks are unchanged.
+worker, evidence, lessons, approvals and scenario checks are unchanged. Release
+checks the live kernel as well as jobs and runs, then checks again inside the
+runtime manager's guarded idle-stop operation; unknown never means idle.
 
 `report.mjs` uses Wilson proportion intervals. Binary differences use a
 conservative exact bound: the difference of 97.5% Clopper-Pearson intervals for

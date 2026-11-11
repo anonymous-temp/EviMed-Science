@@ -1,4 +1,4 @@
-// Read-only observations; no memories, evidence or approvals are fabricated.
+// Evaluation observations and guarded idle-runtime release; no memory, evidence or approval writes.
 export async function control(app, action, { userId, userIds = [] } = {}) {
   if (action === 'lxEGIdleLearning') {
     // Host kernels share a bridge port; reclaim completed internal learning kernels before the next native conversation.
@@ -14,9 +14,16 @@ export async function control(app, action, { userId, userIds = [] } = {}) {
       if (!user) continue;
       let project;
       try { project = await app.store.requireProject(user, 'evimed-learning'); } catch (e) { if (e.status !== 404) throw e; continue; }
-      const live = (await app.agentRuns.list(project)).some(r => ['queued', 'running', 'planned', 'dispatching', 'starting', 'waiting'].includes(r.status));
-      if (live) return { busy: true };
-      await app.runtimeManager.stop(project); stopped.push(owner);
+      const idle = async () => {
+        const jobs = await app.store.database.query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND kind=ANY($2::text[]) AND (status='running' OR (status='queued' AND run_after<=clock_timestamp())) LIMIT 1", [owner, ['distill', 'consolidate', 'learning-evidence']]);
+        if (jobs.rows.length) return false;
+        const live = (await app.agentRuns.list(project)).some(r => ['queued', 'running', 'planned', 'dispatching', 'starting', 'waiting'].includes(r.status));
+        return !live && !await app.runtimeManager.runtimeBusy(project).catch(() => true);
+      };
+      if (!await idle()) return { busy: true };
+      const released = await app.runtimeManager.stopIdleRuntime(project, { event: 'yielded', evenIfConnected: true, guard: idle });
+      if (!released && app.runtimeManager.hasAttachedOrStartingRuntime(project)) return { busy: true };
+      if (released) stopped.push(owner);
     }
     return { busy: false, stopped };
   }
