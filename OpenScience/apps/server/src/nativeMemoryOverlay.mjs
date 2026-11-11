@@ -129,6 +129,24 @@ function publicFile(row) {
   };
 }
 
+/** Query-only original-authorship resolver, shared by the worker ledger and read-only archive replay. */
+export async function readNativeMemoryOriginalSources(query, userId, archiveUris) {
+    if (!archiveUris.length) return [];
+    const result = await query(`WITH RECURSIVE edges AS (
+      SELECT replayed_as AS child,archive_uri AS parent FROM evimed_memory.native_commits WHERE user_id=$1 AND replayed_as IS NOT NULL
+      UNION SELECT copy_archive_uri,source_archive_uri FROM evimed_memory.native_source_copies WHERE user_id=$1
+    ), lineage(uri) AS (
+      SELECT unnest($2::text[]) UNION SELECT e.parent FROM edges e JOIN lineage l ON e.child=l.uri
+    ) SELECT l.uri AS archive_uri,c.engine_session,c.project_id,c.project_created_at FROM lineage l
+      LEFT JOIN evimed_memory.native_commits c ON c.user_id=$1 AND c.archive_uri=l.uri
+      WHERE NOT EXISTS(SELECT 1 FROM edges e WHERE e.child=l.uri)
+      AND COALESCE(c.origin,'') NOT IN ('promotion','replay')
+      AND NOT EXISTS(SELECT 1 FROM evimed_memory.native_admissions a WHERE a.user_id=$1
+        AND (a.archive_uri=l.uri OR a.engine_session=c.engine_session))`, [owner(userId), archiveUris]);
+    return result.rows.map(row => ({ archiveUri: row.archive_uri, engineSession: row.engine_session,
+      projectId: row.project_id, projectCreatedAt: row.project_created_at }));
+}
+
 export class NativeMemoryOverlay {
   /** @param {{ database?: any }} dependencies */
   constructor({ database = null } = {}) {
@@ -440,20 +458,7 @@ export class NativeMemoryOverlay {
    * Promotion and outside-agent candidates are not statements by the person.
    * @param {string} userId @param {string[]} archiveUris */
   async removalOrigins(userId, archiveUris) {
-    if (!archiveUris.length) return [];
-    const result = await this.#query(`WITH RECURSIVE edges AS (
-      SELECT replayed_as AS child,archive_uri AS parent FROM evimed_memory.native_commits WHERE user_id=$1 AND replayed_as IS NOT NULL
-      UNION SELECT copy_archive_uri,source_archive_uri FROM evimed_memory.native_source_copies WHERE user_id=$1
-    ), lineage(uri) AS (
-      SELECT unnest($2::text[]) UNION SELECT e.parent FROM edges e JOIN lineage l ON e.child=l.uri
-    ) SELECT l.uri AS archive_uri,c.engine_session,c.project_id,c.project_created_at FROM lineage l
-      LEFT JOIN evimed_memory.native_commits c ON c.user_id=$1 AND c.archive_uri=l.uri
-      WHERE NOT EXISTS(SELECT 1 FROM edges e WHERE e.child=l.uri)
-      AND COALESCE(c.origin,'') NOT IN ('promotion','replay')
-      AND NOT EXISTS(SELECT 1 FROM evimed_memory.native_admissions a WHERE a.user_id=$1
-        AND (a.archive_uri=l.uri OR a.engine_session=c.engine_session))`, [owner(userId), archiveUris]);
-    return result.rows.map(row => ({ archiveUri: row.archive_uri, engineSession: row.engine_session,
-      projectId: row.project_id, projectCreatedAt: row.project_created_at }));
+    return readNativeMemoryOriginalSources((text, values) => this.#query(text, values), userId, archiveUris);
   }
 
   /** The archives of one account the ledger already holds. @param {string} userId @returns {Promise<Set<string>>} */

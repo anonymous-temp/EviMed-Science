@@ -1,22 +1,27 @@
 // Read-only P30 replay: recorded engine diffs and archives, never re-ingestion or engine writes.
 import { readFile, readdir, mkdir, appendFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { serialJsonlWriter, recordedIds } from './pasted-recording.mjs';
 import { createHash } from 'node:crypto';
 import { ControlPlaneDatabase } from '../../../apps/server/src/controlPlaneDatabase.mjs';
 import { NativeMemoryWorker } from '../../../apps/server/src/nativeMemoryWorker.mjs';
 import { createPastedInstructionJudge } from '../../../apps/server/src/nativeMemoryPastedInstructions.mjs';
+import { INSTRUCTION_ORIGIN_POLICY_HASH } from '../../../apps/server/src/nativeMemoryInstructionOrigin.mjs';
 import { callModelForControlPlane } from '../../../apps/server/src/modelGateway.mjs';
 import { OpenVikingClient } from '../../../apps/server/src/openVikingClient.mjs';
 import { OpenVikingSessions } from '../../../apps/server/src/openVikingSessions.mjs';
-import { memoryLines, lineFingerprint } from '../../../apps/server/src/nativeMemoryOverlay.mjs';
+import { memoryLines, lineFingerprint, readNativeMemoryOriginalSources } from '../../../apps/server/src/nativeMemoryOverlay.mjs';
 const base='/srv/evimed/runs', data='/srv/evimed/data/memdata-data';
 const out=process.argv[2]; if(!out) throw Error('output directory required');
 await mkdir(out,{recursive:true});
+const appendRow=serialJsonlWriter(path.join(out,'rows.jsonl'));
 const json=async p=>JSON.parse(await readFile(p,'utf8'));
 const database = new ControlPlaneDatabase({ databaseUrl: (await readFile('/srv/evimed/ovlab/database.url','utf8')).trim(), databasePoolMax: 1, databaseConnectionTimeoutMs: 10000 });
 const key=(await readFile('/srv/evimed/ovlab/root.key','utf8')).trim();
 const config={memoryPastedInstructionCheckEnabled:true,memoryPastedInstructionRobustEnabled:process.argv.includes('--robust'), deepseekProviderEnabled:true,deepseekApiKey:(await readFile('/srv/evimed/secrets/deepseek.api-key','utf8')).trim(),deepseekBaseUrl:'https://api.deepseek.com',deepseekModel:'deepseek-flash',memoryExtractionModel:'deepseek-flash',memoryExtractionTimeoutMs:60000};
-const completed=new Set((await readFile(path.join(out,'rows.jsonl'),'utf8').catch(()=>'' )).split('\n').filter(Boolean).map(l=>JSON.parse(l).id));
+const sourceHashes={};
+for(const file of ['nativeMemoryWorker.mjs','nativeMemoryPastedInstructions.mjs','nativeMemoryInstructionOrigin.mjs','nativeMemoryVerification.mjs','nativeMemoryOverlay.mjs'])sourceHashes[file]=createHash('sha256').update(await readFile(new URL('../../../apps/server/src/'+file,import.meta.url))).digest('hex');
+const completed=await recordedIds(path.join(out,'rows.jsonl'));
 const jobs=[];
 const caseAt=process.argv.indexOf('--only-case'), sessionAt=process.argv.indexOf('--only-session'), workersAt=process.argv.indexOf('--workers');
 const workers=workersAt<0?4:Number(process.argv[workersAt+1]);if(!Number.isInteger(workers)||workers<1||workers>16)throw Error('replay_workers_invalid');
@@ -67,14 +72,15 @@ for(const name of (await readdir(base)).filter(n=>/^(r3-|r4-|p29-)/.test(n)).sor
   }
  }
 }
-await writeFile(path.join(out,'manifest.json'),JSON.stringify({at:new Date().toISOString(),robust:config.memoryPastedInstructionRobustEnabled,repetitions:process.argv.includes('--once')?1:5,projection:'prior recorded revisions and per-line archive origins; no ingestion or mutations',workers,filter:{caseId:caseAt<0?null:process.argv[caseAt+1],sessionId:sessionAt<0?null:process.argv[sessionAt+1]},jobs:jobs.length,runs:[...new Set(jobs.map(j=>j.run))]},null,2));
+await writeFile(path.join(out,'manifest.json'),JSON.stringify({at:new Date().toISOString(),robust:config.memoryPastedInstructionRobustEnabled,repetitions:process.argv.includes('--once')?1:5,projection:'Recorded engine before/after isolates changed-line checking; retained revision metadata provides predecessor-source evidence. No ingestion or mutations; not a reconstruction of the original worker schedule.',policyHash:config.memoryPastedInstructionRobustEnabled?INSTRUCTION_ORIGIN_POLICY_HASH:null,sourceHashes,workers,filter:{caseId:caseAt<0?null:process.argv[caseAt+1],sessionId:sessionAt<0?null:process.argv[sessionAt+1]},jobs:jobs.length,runs:[...new Set(jobs.map(j=>j.run))]},null,2));
 let cursor=0;
 await Promise.all(Array.from({length:workers},async()=>{for(;;){const job=jobs[cursor++];if(!job)return;if(completed.has(job.id))continue;
  const {id,run,caseId,rep,archiveUri,ops,raw,record,gold,sessions,prior}=job;let request=null;const answers=[],requests=[];
- const judge=createPastedInstructionJudge({config,callModel:async(d,c)=>{request=JSON.parse(c.body.messages[1].content);const sequence=requests.length;requests.push(request);const r=await callModelForControlPlane(d,c);answers[sequence]=r?.choices?.[0]?.message?.content??'';return r;}});
+ const classifier=createPastedInstructionJudge({config,callModel:async(d,c)=>{request=JSON.parse(c.body.messages[1].content);const sequence=requests.length;requests.push(request);const r=await callModelForControlPlane(d,c);answers[sequence]=r?.choices?.[0]?.message?.content??'';return r;}});
+ const limits=[];const judge={check:async input=>{const result=await classifier.check(input);limits.push(...(result.receipts??[]).map(r=>({inputChars:r.inputChars,limited:r.limited,attempts:r.attempts})));return result;}};
  const overlay={originsOf:async(_u,uris)=>new Map(uris.map(uri=>[uri,prior.origins.get(uri)??new Map()])),
-  removalOrigins:async(_u,uris)=>uris.map(archiveUri=>({archiveUri,projectId:record.project?.id??null})),instructionCheck:async()=>null,recordInstructionCheck:async()=>{},
-  file:async(_u,uri)=>prior.files.has(uri)?{body:prior.files.get(uri)}:null};
+  removalOrigins:(_u,uris)=>readNativeMemoryOriginalSources((sql,values)=>database.query(sql,values),_u,uris),instructionCheck:async()=>null,recordInstructionCheck:async()=>{},
+  file:async(_u,uri)=>{const operation=[...(ops.adds??[]),...(ops.updates??[])].find(row=>row.uri===uri);return typeof operation?.before==='string'?{body:operation.before}:null;}};
  const worker=new NativeMemoryWorker({config,memorySettings:null,sessions,overlay,pastedInstructionJudge:judge});
  const userId=`evlab_${run}_${caseId}`;const sourceRoot=archiveUri.split('/sessions/')[0]; const archiveCache=new Map([[`${archiveUri}/messages.jsonl`,Promise.resolve(raw)]]);
  const context={sessions:{userRoot:()=>sourceRoot,memoryRoot:()=>sourceRoot+'/memories',read:async(_u,uri)=>{
@@ -82,8 +88,8 @@ await Promise.all(Array.from({length:workers},async()=>{for(;;){const job=jobs[c
    return [...(ops.adds??[]),...(ops.updates??[])].find(o=>o.uri===uri)?.after??null;
  }}};
  const reviewed=await worker.checkPastedInstructions({userId,archiveUri,projectId:record.project?.id??null},ops,context); const refused=[...reviewed];
- const row={id,run,caseId,rep,sessionId:record.sessionId,archiveUri,ledger:record.ledger,request,requests,answers,refused,pending:[...(reviewed.pending??[])],
+ const row={id,run,caseId,rep,sessionId:record.sessionId,archiveUri,ledger:record.ledger,request,requests,answers,limits,refused,pending:[...(reviewed.pending??[])],
   realPreferenceRefusals:refused.filter(k=>gold?.store.some(s=>s.expectStored===true&&['preference_explicit','preference_repeated','correction'].includes(s.category)&&k.split('\u0000')[1]===lineFingerprint(request?.candidates.find(c=>c.text.includes(s.current))?.text??''))).length};
- await appendFile(path.join(out,'rows.jsonl'),JSON.stringify(row)+'\n');console.log(id,'candidates',request?.candidates.length??0,'refused',refused.length);
+ await appendRow(row);console.log(id,'candidates',request?.candidates.length??0,'refused',refused.length);
 }}));
 await database.close(); console.log('DONE');

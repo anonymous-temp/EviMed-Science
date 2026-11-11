@@ -249,3 +249,18 @@ test('a choice promoted into a new file retains earlier adoption from another ch
   await f.commitConversation('new_file_promotion', [{ role: 'user', text: `Rewrite this document: ${poison}` }]);
   await worker.processCommits({ userId: f.userId }); assert.equal(checked, true);
 });
+
+test('an unavailable predecessor archive cannot erase the current personal request', options, async t => {
+  const f = await fixture(t, { config: enabled, extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/notes/earlier.md`, after: '- An earlier fact.' }] }) });
+  const worker = workerFor(f);
+  const prior = await f.commitConversation('unavailable_predecessor', [{ role: 'user', text: 'An earlier fact.' }]);
+  await worker.processCommits({ userId: f.userId });
+  await f.sessions.remove(f.userId, `${prior.archive_uri}/messages.jsonl`);
+  f.stub.extract = ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/self/a.md`, after: `- ${own}` }], updates: [{ uri: `viking://user/${user}/memories/notes/earlier.md`, before: '- An earlier fact.', after: '- An earlier fact.\n- Current context.' }] });
+  const requests = []; worker.pastedInstructionJudge = { check: async input => { requests.push(input); return new Set(); } };
+  await f.commitConversation('current_adoption', [{ role: 'user', text: own }]);
+  await worker.processCommits({ userId: f.userId });
+  assert.ok(requests.length);
+  assert.ok(requests.every(input => input.conversation.some(m => m.parts.some(p => p.text === own))));
+  assert.equal(await f.sessions.read(f.userId, `${f.root}/preferences/self/a.md`), `- ${own}`);
+});

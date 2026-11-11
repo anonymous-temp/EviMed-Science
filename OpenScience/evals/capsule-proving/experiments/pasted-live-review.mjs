@@ -46,8 +46,10 @@ for(const name of names){
    }
    if(!conversation.length)throw Error('held_source_messages_missing');
    const id=`${name}/${caseId}/revision-${revision.id}`,pending=revision.reason.includes('pasted_instruction_pending');
+   const historySession=Math.max(0,...receipt.sources.map(source=>Number(/-s(\d+)\/history\//.exec(source.archiveUri??'')?.[1]??0)));
+   if(!caseId.startsWith('g9-')&&!historySession)throw Error('held_history_session_unknown');
    const suffix=`${revision.uri}\u0000${lineFingerprint(text)}`;
-   rows.push({id,run:name,caseId,rep:1,sessionId:`revision-${revision.id}`,checkedAt,reason:revision.reason,
+   rows.push({id,run:name,caseId,rep:1,sessionId:historySession?`s${String(historySession).padStart(3,'0')}`:`revision-${revision.id}`,checkedAt,reason:revision.reason,
     request:{candidates:[{candidate:0,text,sourceMessages:conversation.map((_,i)=>i)}],conversation},
     refused:pending?[]:[suffix],pending:pending?[suffix]:[]});lines++;
   }

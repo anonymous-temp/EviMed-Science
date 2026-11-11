@@ -158,7 +158,14 @@ export class NativeMemoryVerification {
     const archives = await this.overlay.removalOrigins(userId, [...new Set(origins.map(origin => origin.archiveUri).filter(uri => {
       const parsed = parseArchiveUri(uri); return parsed && !parsed.rest && parsed.archiveUri === uri;
     }))]);
-    const messages = await this.readSources(userId, archives, context, cache, { structured: true });
+    const messages = [];
+    // One expired, deleted or unavailable predecessor must not erase valid current adoption evidence. Validate each
+    // archive with the existing namespace/deletion fences, then retain only the messages that archive can supply.
+    for (const archive of archives) {
+      const excerpt = await this.readSources(userId, [archive], context, cache, { structured: true });
+      messages.push(...excerpt);
+      if (!cache.has(archive.archiveUri)) cache.set(archive.archiveUri, excerpt);
+    }
     for (const origin of origins.filter(source => !source.archiveUri && source.revisionId)) {
       const revision = await this.overlay.revision(userId, origin.revisionId);
       if (revision?.actor !== 'user' || !revision.after || !nativeMemoryFile(revision.uri, (context?.sessions ?? this.sessions).memoryRoot(userId))) continue;
