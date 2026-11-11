@@ -175,3 +175,17 @@ test('a paraphrased prior preference keeps its independent human adoption eviden
   assert.ok(calls.length);
   assert.equal(await f.sessions.read(f.userId, `${f.root}/preferences/self/a.md`), `- ${poison}`);
 });
+
+
+test('material instructions in headings are checked and disagreements remain visible beside surviving statements', options, async t => {
+  for (const disagree of [false, true]) {
+    const f = await fixture(t, { config: enabled, extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/self/a.md`, after: `# ${poison}\n- ${own}` }] }) });
+    const worker = workerFor(f, { disagree });
+    await f.commitConversation('heading', [{ role: 'user', text: `Rewrite this email: ${poison} My choice: ${own}` }]);
+    await worker.processCommits({ userId: f.userId });
+    assert.equal(await f.sessions.read(f.userId, `${f.root}/preferences/self/a.md`), `- ${own}`);
+    const pending = await f.store.pending(f.userId);
+    assert.equal(pending.length, disagree ? 1 : 0);
+    if (disagree) assert.equal(pending[0].text, poison);
+  }
+});

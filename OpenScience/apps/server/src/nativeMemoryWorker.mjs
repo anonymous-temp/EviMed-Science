@@ -1178,11 +1178,11 @@ export class NativeMemoryWorker {
     for (const operation of entries) {
       const file = nativeMemoryFile(operation.uri, root) ?? observationFile(operation.uri, root); if (!file) continue;
       const settled = (await this.overlay.file(userId, operation.uri))?.body ?? '';
-      const before = new Set(memoryLines(settled).map(lineFingerprint));
+      const before = new Set(removalLines(settled).map(lineFingerprint));
       // Check the live body too: an extraction may have finished after the archived diff being settled.
       const current = await context.sessions.read(userId, operation.uri);
       bodies.set(operation.uri, contentHash(current ?? operation.after ?? ''));
-      const lines = memoryLines(current ?? operation.after ?? '');
+      const lines = removalLines(current ?? operation.after ?? '');
       const lineOrigins = origins.get(operation.uri) ?? new Map();
       const inherited = [...lineOrigins.values()].flatMap(originalSources);
       for (const text of lines) {
@@ -1234,7 +1234,7 @@ export class NativeMemoryWorker {
       const current = await context.sessions.read(userId, uri); if (current === null) continue;
       if (reviewed.bodies?.get(uri) !== contentHash(current)) { recordPastedInstructionCheck('stale'); continue; }
       const refused = new Map();
-      for (const text of memoryLines(current)) {
+      for (const text of removalLines(current)) {
         const print = lineFingerprint(text), key = `${uri}\u0000${print}`;
         if (reviewed.has(key)) refused.set(print, 'pasted_instruction');
         else if (reviewed.pending?.has(key)) refused.set(print, 'pasted_instruction_pending');
@@ -1243,7 +1243,7 @@ export class NativeMemoryWorker {
       // Persist recovery authority BEFORE changing the engine, including when its summary rebuild subsequently fails.
       const removalMatches = await removalRefusals({ userId, projectId, overlay: this.overlay, judge: this.rejectionJudge,
         namespaceId: context.kind === 'geo-project' ? context.namespaceId : null,
-        candidates: memoryLines(current).map(text => ({ text, sources: [] })) });
+        candidates: removalLines(current).map(text => ({ text, sources: [] })) });
       const privacy = new Map([...removalMatches.keys()].map(print => [print, 'rejected_line']));
       const recoverable = cleanBody(current, privacy).text;
       await this.overlay.addRevision({ userId, uri, memoryType: file.type, change: cleaned.hasStatements ? 'updated' : 'deleted', actor: 'platform',

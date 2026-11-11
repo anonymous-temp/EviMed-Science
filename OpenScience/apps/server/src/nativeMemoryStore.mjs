@@ -858,8 +858,8 @@ export class NativeMemoryStore {
     const held = await this.overlay.pendingInstructionRevisions(userId);
     const files = await this.overlay.files(userId);
     return [...commits, ...held.flatMap(revision => {
-      const kept = new Set([...memoryLines(revision.after ?? ''), ...memoryLines(files.get(revision.uri)?.body ?? '')].map(lineFingerprint));
-      return memoryLines(revision.before ?? '').filter(text => !kept.has(lineFingerprint(text)) && (!revision.pendingFingerprints || revision.pendingFingerprints.has(lineFingerprint(text)))).map(text => ({
+      const kept = new Set([...removalLines(revision.after ?? ''), ...removalLines(files.get(revision.uri)?.body ?? '')].map(lineFingerprint));
+      return removalLines(revision.before ?? '').filter(text => !kept.has(lineFingerprint(text)) && (!revision.pendingFingerprints || revision.pendingFingerprints.has(lineFingerprint(text)))).map(text => ({
         id: `instruction:${revision.id}:${lineFingerprint(text)}`, text, at: revision.changedAt, state: 'pending', reason: 'instruction_origin_uncertain',
       }));
     })];
