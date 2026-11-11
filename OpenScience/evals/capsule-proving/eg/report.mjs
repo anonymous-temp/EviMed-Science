@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { wilson, appendLedgerRows } from '../run/ledger.mjs';
+import { containsAnchor } from '../run/scoreChecks.mjs';
+import { questionAnchors } from '../run/score.mjs';
 import { read, save } from './common.mjs';
 
 const args = {};
@@ -31,13 +33,15 @@ function comparison(rows) {
   const steps = Object.fromEntries(stepNames.map(step => [step, {
     engine: prop(rows.map(r => failedStep(r.engine) === step)), product: prop(rows.map(r => failedStep(r.product) === step)),
     paired: paired(rows.map(r => Number(failedStep(r.product) === step) - Number(failedStep(r.engine) === step))) }]));
-  const observedStages = Object.fromEntries(['stored', 'searched', 'retrieved'].map(step => [step, {
+  const observedStages = Object.fromEntries(['stored', 'inOpening', 'searched', 'retrieved'].map(step => [step, {
     engine: prop(rows.map(r => r.engine.trace?.[step] === true)), product: prop(rows.map(r => r.product.trace?.[step] === true)),
     paired: paired(rows.map(r => Number(r.product.trace?.[step] === true) - Number(r.engine.trace?.[step] === true))) }]));
   return { engine: prop(a), product: prop(b), paired: paired(a.map((v, i) => Number(b[i]) - Number(v))),
     engineOnlyPass: a.filter((v, i) => v && !b[i]).length, productOnlyPass: b.filter((v, i) => v && !a[i]).length,
     judged: Object.fromEntries(['engine', 'product'].map(k => [k, Object.fromEntries(['pass', 'fail', 'unknown', 'error', 'needs-judge', 'gold-disputed'].map(v => [v, rows.filter(r => r[k].verdict === v).length]))])),
-    byFailureStep: steps, observedStages };
+    byFailureStep: steps, observedStages,
+    availableButWrong: Object.fromEntries(['engine', 'product'].map(k => [k, rows.filter(r => r[k].verdict === 'fail' && (r[k].trace?.inOpening || r[k].trace?.retrieved)).length])),
+    correctWithContext: Object.fromEntries(['engine', 'product'].map(k => [k, rows.filter(r => r[k].verdict === 'pass' && (r[k].trace?.inOpening || r[k].trace?.retrieved)).length])) };
 }
 const fmt = x => x == null ? '—' : (100 * x).toFixed(1);
 const fmtProp = p => p.n ? `${p.pass}/${p.n} (${fmt(p.value)}%; ${p.ci95.map(fmt).join('–')}%)` : 'not observed';
@@ -49,27 +53,40 @@ async function g1() {
   const productRows = (await Promise.all(args.runs.split(',').map(async dir => { try { return await lines(`${dir}/scores/rows.jsonl`); } catch { return []; } }))).flat();
   const observed = new Set();
   for (const dir of args.runs.split(',')) for (const q of sample.questions) if (await read(`${dir}/cases/${q.user}/answer-records/${q.qid}.json`)) observed.add(q.qid);
+  const engineAnswers = new Map(), gold = new Map();
+  for (const user of sample.users) {
+    for (const a of await lines(`${args.engine}/cases/${user}/answers.jsonl`)) engineAnswers.set(a.qid, a);
+    const entry = { gold: await read(`${args.data ?? '/srv/evimed/data/memdata-data'}/dev/${user}/gold.json`), skeleton: await read(`${args.data ?? '/srv/evimed/data/memdata-data'}/dev/${user}/skeleton.json`) };
+    for (const q of entry.gold.questions) gold.set(q.qid, { q, entry });
+  }
   const rows = sample.questions.flatMap(q => {
     const engine = engineRows.find(r => r.kind === 'answer' && r.id === q.qid);
     const product = observed.has(q.qid) && productRows.find(r => r.kind === 'answer' && r.id === q.qid);
-    return engine && product ? [{ ...q, engine, product }] : [];
+    if (!engine || !product) return [];
+    const held = gold.get(q.qid);
+    const inOpening = questionAnchors(held.entry, held.q).some(a => containsAnchor(engineAnswers.get(q.qid)?.opening?.profileBlock ?? '', a));
+    return [{ ...q, engine: { ...engine, trace: { ...engine.trace, inOpening } }, product }];
   });
   const result = { planned: sample.n, completed: rows.length, complete: rows.length === sample.n, overall: comparison(rows),
+    selection: args.selection, samplingPolicy: sample.policy, allocation: sample.allocation ?? null, amendment: sample.amendment ?? null,
     validGoldPairs: comparison(rows.filter(r => !r.engine.disputed && !r.product.disputed && ![r.engine.verdict, r.product.verdict].includes('invalid-item'))),
     byCategory: Object.fromEntries(sample.categories.map(c => [c, comparison(rows.filter(r => r.category === c))])),
     byUser: Object.fromEntries(sample.users.map(u => [u, comparison(rows.filter(r => r.user === u))])),
     limitations: ['Only four users; question bootstrap does not establish population-level user uncertainty.', 'Engine v3 baseline and candidate product path differ in switches and generated versus replayed assistant messages.',
       'Legacy failure attribution tests normalized anchors, excludes opening context from retrieved, and can call a raw-history recovery not_stored.',
+      'Product search/retrieval traces include only the native memory tools; web search and workspace tool outputs do not count as capsule recall. Opening availability is reported separately; storage fractions include categories that should not be retained.',
       'Source timestamps are preserved as metadata; product conversations use the real wall clock.', 'Unobserved product rows are excluded from the completed-pair estimate; observed errors and unknowns remain in its denominator and never pass. Gold-disputed pairs are also reported separately.'],
     pairs: rows };
   await save(`${args.out}/g1.json`, result);
   const md = ['# G1: engine versus real conversations', '', `Completed ${rows.length}/${sample.n} frozen pairs. Intervals are Wilson; differences are paired bootstrap.`, '',
     '| Category | Engine | Product | Paired difference |', '|---|---|---|---|',
-    ...[['Overall', result.overall], ...Object.entries(result.byCategory)].map(([c, r]) => `| ${c} | ${fmtProp(r.engine)} | ${fmtProp(r.product)} | ${fmtPair(r.paired)} |`), '',
-    '| Failure step (legacy convention) | Engine | Product | Paired difference |', '|---|---|---|---|',
+    ...[['Overall (legacy denominator)', result.overall], ['Valid paired questions', result.validGoldPairs], ...Object.entries(result.byCategory)].map(([c, r]) => `| ${c} | ${fmtProp(r.engine)} | ${fmtProp(r.product)} | ${fmtPair(r.paired)} |`), '',
+    '| Failure step (legacy hierarchy, memory tools only) | Engine | Product | Paired difference |', '|---|---|---|---|',
     ...Object.entries(result.overall.byFailureStep).map(([c, r]) => `| ${c} | ${fmtProp(r.engine)} | ${fmtProp(r.product)} | ${fmtPair(r.paired)} |`), '',
     '| Observed stage | Engine | Product | Paired difference |', '|---|---|---|---|',
-    ...Object.entries(result.overall.observedStages).map(([c, r]) => `| ${c} | ${fmtProp(r.engine)} | ${fmtProp(r.product)} | ${fmtPair(r.paired)} |`), '', ...result.limitations.map(x => `- ${x}`)];
+    ...Object.entries(result.overall.observedStages).map(([c, r]) => `| ${c} | ${fmtProp(r.engine)} | ${fmtProp(r.product)} | ${fmtPair(r.paired)} |`), '',
+    `Correct with matching context available: engine ${result.overall.correctWithContext.engine}, product ${result.overall.correctWithContext.product}. Wrong despite matching context: engine ${result.overall.availableButWrong.engine}, product ${result.overall.availableButWrong.product}. These are observations, not proof of causal memory use.`, '',
+    'The legacy denominator retains registered invalid items, matching the earlier ledger. The valid paired row excludes invalid items and either-arm disputed references; all attempted questions remain in the evidence.', '', ...result.limitations.map(x => `- ${x}`)];
   await fs.writeFile(`${args.out}/g1.md`, md.join('\n') + '\n');
   return result;
 }
@@ -78,6 +95,11 @@ async function g10() {
   if (!empty || !seeded) return { complete: false };
   const e = empty.rows ?? [], s = seeded.rows ?? [];
   const pairs = e.flatMap(a => { const b = s.find(b => b.caseId === a.caseId && b.variant === a.variant); return b ? [{ caseId: a.caseId, empty: a, seeded: b }] : []; });
+  const model = {};
+  for (const arm of ['empty', 'seeded']) {
+    model[arm] = {};
+    for (const file of await fs.readdir(`${args[arm]}/model-judged`).catch(() => [])) if (file.endsWith('.json')) Object.assign(model[arm], (await read(`${args[arm]}/model-judged/${file}`))?.entries ?? {});
+  }
   for (const p of pairs) for (const arm of ['empty', 'seeded']) p[arm].metrics.totalTokens = p[arm].metrics.inputTokens + p[arm].metrics.outputTokens;
   const summary = held => ({ empty: prop(held.map(p => p.empty.status === 'pass')), seeded: prop(held.map(p => p.seeded.status === 'pass')),
     pairedPass: paired(held.map(p => Number(p.seeded.status === 'pass') - Number(p.empty.status === 'pass'))),
@@ -90,7 +112,11 @@ async function g10() {
     if (seed) seedCoverage.push({ unit, statements: seed.statements.length, files: seed.snapshot.metrics.files, settled: !seed.commits.timedOut });
   }
   const result = { planned: 29, completed: pairs.length, complete: pairs.length === 29, ...summary(pairs),
-    general: summary(pairs.filter(p => p.caseId.startsWith('G'))), medical: summary(pairs.filter(p => p.caseId.startsWith('M'))), seedCoverage, pairs };
+    general: summary(pairs.filter(p => p.caseId.startsWith('G'))), medical: summary(pairs.filter(p => p.caseId.startsWith('M'))), seedCoverage, pairs,
+    modelSatisfaction: { empty: prop(pairs.map(p => model.empty[p.caseId]?.verdict === 'satisfied')), seeded: prop(pairs.map(p => model.seeded[p.caseId]?.verdict === 'satisfied')),
+      judged: Object.fromEntries(['empty', 'seeded'].map(arm => [arm, pairs.filter(p => ['satisfied', 'not_satisfied'].includes(model[arm][p.caseId]?.verdict)).length])),
+      paired: paired(pairs.map(p => Number(model.seeded[p.caseId]?.verdict === 'satisfied') - Number(model.empty[p.caseId]?.verdict === 'satisfied'))),
+      note: 'Existing general-task model rubric, DeepSeek judge in the answer family; unknown never passes. Direct judge provider usage is recorded separately from task tokens.' } };
   await save(`${args.out}/g10.json`, result);
   const md = ['# G10: paired ordinary work', '', `Completed ${pairs.length}/29 pairs. Deterministic checks are the existing general-task checks; normal variants only.`, '',
     `Empty: ${fmtProp(result.empty)}. Seeded: ${fmtProp(result.seeded)}. Difference: ${fmtPair(result.pairedPass)}.`, '',

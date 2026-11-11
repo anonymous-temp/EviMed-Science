@@ -13,7 +13,7 @@ EG = TREE / "evals/capsule-proving/eg"
 RUNS = Path("/srv/evimed/runs")
 REPORT = RUNS / "eg-report-20261111"
 DATA = Path("/srv/evimed/data/memdata-data")
-SAMPLE = RUNS / "g1pp-selection-20261111.json"
+SAMPLE = RUNS / "g1pp-selection-20261111-v2.json"
 STATUS = RUNS / "eg-STATUS"
 COMMIT = "aba955293db897e4c09cc7d1702de89d17a7b138"
 ENV = {**os.environ, "PATH": "/srv/evimed/pp/node24/bin:/srv/evimed/pp/runtime-venv/bin:/srv/evimed/pp/judge-bin:" + os.environ["PATH"], "EVAL_TREE_COMMIT": COMMIT}
@@ -30,14 +30,17 @@ def check_budget():
     b = json.loads((RUNS / "eg-budget-20261111.json").read_text())
     current = float((RUNS / "BUDGET-LAST").read_text().strip().split()[-1])
     age = (datetime.now(timezone.utc) - datetime.fromisoformat(b["startedAt"].replace("Z", "+00:00"))).total_seconds()
-    if b["balance"] - current >= 340 or current < 150 or age > 12 * 3600:
+    meter = read(RUNS / "eg-spend-20261111.json")
+    fresh = meter and not meter["errors"] and not meter["missing"] and (datetime.now(timezone.utc) - datetime.fromisoformat(meter["at"].replace("Z", "+00:00"))).total_seconds() < 300
+    exhausted = meter["estimatedUpperCny"] >= 330 if fresh else b["balance"] - current >= 340
+    if exhausted or current < 150 or age > 12 * 3600:
         status(f"STOP budget/time guard: initial={b['balance']} current={current} elapsedSeconds={age:.0f}")
         raise SystemExit(3)
 
 
-def run(argv):
+def run(argv, extra_env=None):
     check_budget()
-    subprocess.run(argv, cwd=TREE, env=ENV, check=True)
+    subprocess.run(argv, cwd=TREE, env={**ENV, **(extra_env or {})}, check=True)
 
 
 def read(file):
@@ -85,7 +88,12 @@ def wait_children(children):
 REPORT.mkdir(exist_ok=True)
 status("supervisor active; phase order G1 -> G10 -> G3")
 g1_dirs = [RUNS / "g1pp-eg-2", RUNS / "g1pp-eg-3"]
+sample = read(SAMPLE)
+desired = {u: sum(q["user"] == u for q in sample["questions"]) for u in sample["users"]}
 if not read(REPORT / "g1.json") or not read(REPORT / "g1.json").get("complete"):
+    # Existing detached G1 owners predate this supervisor. A spent shared-balance guard or a crash may leave a partial user;
+    # retry under the current lane-specific guard, preserving ids and progress, at most three times.
+    resumes = {}
     while True:
         check_budget()
         completed = []
@@ -93,6 +101,25 @@ if not read(REPORT / "g1.json") or not read(REPORT / "g1.json").get("complete"):
             completed.extend((read(directory / "cases" / u / "progress.json") or {}).get("answered", []) for u in users)
         if sum(map(len, completed)) == 100 and all((d / "cases" / u / "answers.jsonl").exists() for d, users in zip(g1_dirs, [["M01", "P01", "P02"], ["U03"]]) for u in users):
             break
+        for directory, users, port, pg, bridge in [(g1_dirs[0], ["M01", "P01", "P02"], 48854, 55684, 19374), (g1_dirs[1], ["U03"], 48857, 55685, 19377)]:
+            if all(len((read(directory / "cases" / u / "progress.json") or {}).get("answered", [])) == desired[u] and (directory / "cases" / u / "answers.jsonl").exists() for u in users):
+                continue
+            active = False
+            for proc in Path("/proc").iterdir():
+                if not proc.name.isdigit():
+                    continue
+                try:
+                    argv = (proc / "cmdline").read_bytes().split(b"\0")
+                    active |= str(directory).encode() in argv and any(a.endswith((b"/eg/g1.mjs", b"/queue-slot.py")) for a in argv)
+                except OSError:
+                    pass
+            if not active:
+                n = resumes.get(str(directory), 0)
+                if n >= 3:
+                    status(f"STOP {directory.name}: three supervisor resumes failed")
+                    raise SystemExit(1)
+                resumes[str(directory)] = n + 1
+                launch("g1", directory.name, port, pg, bridge, ["--selection", str(SAMPLE), "--users", ",".join(users)])
         time.sleep(30)
     # Wait for both run owners to close the harness before admitting the next phase.
     while any("DONE G1 product conversations" not in (d / "STATUS").read_text() for d in g1_dirs):
@@ -108,6 +135,9 @@ if not read(REPORT / "g10.json") or not read(REPORT / "g10.json").get("complete"
     children = [launch("g10", "g10-eg-empty-1", 48854, 55684, 19374, ["--arm", "empty"]),
                 launch("g10", "g10-eg-seeded-1", 48857, 55685, 19377, ["--arm", "seeded"])]
     wait_children(children)
+    for directory in [RUNS / "g10-eg-empty-1", RUNS / "g10-eg-seeded-1"]:
+        run(["python3", "evals/general-tasks/judges/model_judge.py", "--run", str(directory), "--model", "deepseek-flash", "--key-file", "/srv/evimed/secrets/deepseek.api-key"], {"EVAL_JUDGE_USAGE_LOG": str(directory / "judge-usage.jsonl")})
+        run(["python3", "evals/general-tasks/judges/summarize.py", "--run", str(directory)])
     run(["node", str(EG / "report.mjs"), "--suite", "g10", "--empty", str(RUNS / "g10-eg-empty-1"), "--seeded", str(RUNS / "g10-eg-seeded-1"), "--out", str(REPORT), "--ledger", "/srv/evimed/results/ledger.jsonl", "--run-id", "g10-eg-paired-20261111"])
     status("DONE G10 scored, paired and ledgered")
 

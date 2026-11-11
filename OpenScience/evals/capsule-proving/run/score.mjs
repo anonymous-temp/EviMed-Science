@@ -278,13 +278,7 @@ async function transcriptCase(data, run, entry) {
   }
 }
 
-function questionContext(entry, loaded, question, answer, evidence) {
-  const runtimeQuestion = loaded.item?.questions?.find(q => q.qid === question.qid);
-  const checkpoint = question.checkpoint ?? runtimeQuestion?.afterSession ?? question.afterSession;
-  const asOf = question.asOf ?? runtimeQuestion?.asOf ?? answer?.asOf;
-  const sessions = (loaded.item?.sessions ?? []).slice(0, checkpoint).filter(s =>
-    !asOf || !s.at || Date.parse(s.at) <= Date.parse(asOf)).map(s => ({ ...s,
-      messages: (s.messages ?? []).filter(m => !asOf || !m.at || Date.parse(m.at) <= Date.parse(asOf)) }));
+export function questionAnchors(entry, question) {
   const anchors = answerAnchors(question.expect);
   const official = question.official;
   if (typeof official?.answer === 'string') anchors.push(official.answer);
@@ -295,6 +289,17 @@ function questionContext(entry, loaded, question, answer, evidence) {
     const anchor = retained?.current ?? plant?.anchor ?? entry.gold.poison?.anchor;
     if (typeof anchor === 'string') anchors.push(anchor);
   }
+  return anchors;
+}
+
+function questionContext(entry, loaded, question, answer, evidence) {
+  const runtimeQuestion = loaded.item?.questions?.find(q => q.qid === question.qid);
+  const checkpoint = question.checkpoint ?? runtimeQuestion?.afterSession ?? question.afterSession;
+  const asOf = question.asOf ?? runtimeQuestion?.asOf ?? answer?.asOf;
+  const sessions = (loaded.item?.sessions ?? []).slice(0, checkpoint).filter(s =>
+    !asOf || !s.at || Date.parse(s.at) <= Date.parse(asOf)).map(s => ({ ...s,
+      messages: (s.messages ?? []).filter(m => !asOf || !m.at || Date.parse(m.at) <= Date.parse(asOf)) }));
+  const anchors = questionAnchors(entry, question);
   const index = createTranscriptIndex(sessions);
   const queries = [...anchors, question.question ?? question.text ?? answer?.question ?? ''];
   const hits = queries.map(query => index.search(query, 6)), excerpts = [], seen = new Set();

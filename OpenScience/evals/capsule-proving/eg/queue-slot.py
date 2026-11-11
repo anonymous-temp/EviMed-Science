@@ -27,7 +27,11 @@ while True:
     budget = json.loads(Path("/srv/evimed/runs/eg-budget-20261111.json").read_text())
     balance = float(Path("/srv/evimed/runs/BUDGET-LAST").read_text().strip().split()[-1])
     elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(budget["startedAt"].replace("Z", "+00:00"))).total_seconds()
-    if balance < 400 or budget["balance"] - balance >= 340 or elapsed > 12 * 3600:
+    meter_file = Path("/srv/evimed/runs/eg-spend-20261111.json")
+    meter = json.loads(meter_file.read_text()) if meter_file.exists() else None
+    fresh = meter and not meter["errors"] and not meter["missing"] and (datetime.now(timezone.utc) - datetime.fromisoformat(meter["at"].replace("Z", "+00:00"))).total_seconds() < 300
+    exhausted = meter["estimatedUpperCny"] >= 330 if fresh else budget["balance"] - balance >= 340
+    if balance < 400 or exhausted or elapsed > 12 * 3600:
         status(f"STOP budget/time guard while queued: balance={balance}")
         raise SystemExit(3)
     slots = set()
@@ -39,8 +43,10 @@ while True:
             if len(argv) > 1 and b"node" in argv[0]:
                 env = dict(s.split(b"=", 1) for s in (entry / "environ").read_bytes().split(b"\0") if b"=" in s)
                 live = env.get(b"EVAL_LIVE_DIR", env.get(b"LIVE_DIR", b"")).decode(errors="replace")
-                if live.startswith("/srv/evimed/pp/live/p"):
+                if live:
                     slots.add(live)
+                elif argv[1].endswith(b"/general-tasks/runner/harness.mjs"):
+                    slots.add(f"harness:{entry.name}")
         except (OSError, ProcessLookupError):
             pass
     available = int(next(line.split()[1] for line in Path("/proc/meminfo").read_text().splitlines() if line.startswith("MemAvailable:")))

@@ -5,7 +5,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { runConversation } from '../lx/conversation.mjs';
 import { loadCases } from '../run/cases.mjs';
-import { argsOf, setup, account, read, save, settle, ipc } from './common.mjs';
+import { argsOf, setup, account, read, save, settle, ipc, profileOpening } from './common.mjs';
 
 const args = argsOf(process.argv.slice(2));
 const sample = await read(args.selection);
@@ -35,9 +35,7 @@ async function observeAnswer(record, q, since) {
   const first = requests.sort((a, b) => a.at.localeCompare(b.at))[0];
   const firstCopy = `${args.out}/cases/${q.user}/conversations/${q.qid}/first-request.json`;
   if (first) await save(firstCopy, first);
-  const textOf = value => typeof value === 'string' ? value : Array.isArray(value) ? value.map(v => v.text ?? '').join('\n') : '';
-  const context = first ? [textOf(first.system), ...first.messages.map(m => textOf(m.content))].join('\n') : '';
-  const opening = (context.match(/<openviking-context(?:\s[^>]*)?>[\s\S]*?<\/openviking-context>/g) ?? []).join('\n');
+  const opening = first ? profileOpening(first) : '';
   return { qid: q.qid, caseId: q.user, arm: 'product-path', question: q.text, asOf: q.asOf, answer: turn.reply, opening: { profileBlock: opening }, toolCalls,
     usage: { ...(turn.run?.usage ?? {}), promptTokens: turn.run?.usage?.inputTokens ?? 0, completionTokens: turn.run?.usage?.outputTokens ?? 0,
       cachedTokens: turn.run?.usage?.cachedInputTokens ?? 0 }, runId: turn.runId, status: turn.run?.status, wallMs: turn.wallMs,
@@ -70,12 +68,17 @@ try {
     for (let n = p.sessions; n <= max; n++) {
       const questions = selected.filter(q => q.checkpoint === n && !p.answered.includes(q.qid));
       if (questions.length) {
-        const commits = await settle(ctx.h, identity.userId, ctx.status);
-        await save(`${dir}/commits-${n}.json`, commits);
-        const snapshot = await ipc(ctx.h, 'lxEGSnapshot', { userId: identity.userId });
-        await save(`${dir}/snapshots/${n}.json`, { ...snapshot, afterSession: n, settle: commits });
+        // A resume must never replace the state an earlier probe actually saw with a later state.
+        if (!await read(`${dir}/snapshots/${n}.json`)) {
+          const commits = await settle(ctx.h, identity.userId, ctx.status);
+          await save(`${dir}/commits-${n}.json`, commits);
+          const snapshot = await ipc(ctx.h, 'lxEGSnapshot', { userId: identity.userId });
+          await save(`${dir}/snapshots/${n}.json`, { ...snapshot, afterSession: n, settle: commits });
+        }
         for (const sq of questions) {
           const q = { ...item.questions.find(q => q.qid === sq.qid), user: item.caseId };
+          if (!await read(`${dir}/question-snapshots/${q.qid}.json`)) await save(`${dir}/question-snapshots/${q.qid}.json`,
+            { ...await ipc(ctx.h, 'lxEGSnapshot', { userId: identity.userId }), afterSession: n });
           const since = Date.now();
           ctx.status(`${item.caseId} question ${q.qid} checkpoint=${n}`);
           const record = await converse(q.qid, [q.text], q.project);

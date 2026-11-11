@@ -15,17 +15,24 @@ All runs require `candidate.env`: lock isolation, search hint, opening index,
 secret redaction, pasted-instruction checking and history retrieval v2 are on;
 safety notes are off. Each attempt records these values in `provenance.json`.
 The engine's actual mounted templates and image are recorded independently.
-The shared balance guard stops at CNY 340 of balance decline (CNY 10 reserve)
-or twelve hours from the campaign's initial snapshot. Other lanes' spend makes
-that guard conservative. Account usage receipts provide attributed cost.
+`budget-meter.sh` records account charges, conservatively prices direct engine
+extraction tokens at uncached peak rates, and deduplicates Qwen judge requests.
+The guard stops at CNY 330 plus a CNY 20 reserve for unobserved small charges,
+or twelve hours from the initial snapshot. If the meter is stale or incomplete,
+the earlier conservative shared-balance guard applies. Shared balance decline
+includes other lanes and is reported separately.
 
 Order: G1, then G10, then G3. Do not start a new batch below CNY 400 balance.
 
 ## G1
 
-`g1-select.mjs DATA OUTPUT` freezes 100 development questions: 25 each from
-M01, P01, P02 and U03, one per category before taking a second, earliest
-checkpoint first. The sample covers all 24 categories found in these users.
+`g1-select.mjs DATA OUTPUT` records the original 100-question selection.
+`g1-refine.mjs DATA ORIGINAL OUTPUT` records its resource amendment: retain every
+observed question and all 24 categories, limit U03 to session 100, and replace
+its unasked later questions with underrepresented categories from M01/P01/P02
+at checkpoints the account has not reached. No answer/score content enters this
+selection. Both manifests and the amendment's exact removed/added ids remain
+in the run record. This reduces required source history from 300 to 200 sessions.
 The runner sees normalized inputs and selected question ids only; gold is
 confined to the separate selector and existing scorer.
 
@@ -44,6 +51,10 @@ it is retained separately and excluded from scores.
 Progress, stable dispatch ids, per-turn partial records, full compressed
 transcripts, copied first provider requests, exact tool outputs, checkpoint
 memory snapshots and usage receipts make runs resumable and reviewable.
+Checkpoint snapshots are immutable across resumes; subsequent probes also keep
+their own pre-question snapshots because earlier probes can themselves be
+committed on the product path. The first four pilot probes have only the
+original checkpoint snapshot and are labelled `checkpoint-only` in their traces.
 Cancelled work is retained; resumption uses the same dispatch ids and proceeds
 with the next source user turn. No earlier checkpoint is answered from a later
 memory snapshot. Source times are metadata; product conversations use the real
@@ -66,7 +77,11 @@ Case/seed digests are verified before any model call. G06/G07 retain their
 existing shared conversation and get both cases' seed sets. All 29 seed sets
 are used, with normal variants only. Report paired pass, tools, input/output
 tokens and their differences; do not treat an inconclusive difference as
-proven non-inferiority.
+proven non-inferiority. The existing model judge additionally scores satisfaction
+and relevance on its unchanged general-task rubric; it is in the answer model
+family and reported separately from the deterministic pass rate. The optional
+`EVAL_JUDGE_USAGE_LOG` retains usage and request ids only, so direct judge calls
+are metered independently of the task tokens.
 
 ## G3
 
@@ -78,6 +93,12 @@ is on for this suite. Each scenario registers and deletes its throwaway
 accounts; failed deletion is still a failure. Scenario premises and outdated
 criteria are reported rather than silently rewritten. The headline is the
 share of eleven scenarios for which all five repetitions pass.
+
+Before a native conversation, the lab adapter reclaims completed, idle internal
+learning kernels, as the LX driver does between learning and questioning. Host
+kernels share a bridge port whereas production containers have separate
+loopbacks. Queued due jobs and live runs are allowed to finish first; the
+worker, evidence, lessons, approvals and scenario checks are unchanged.
 
 `report.mjs` uses Wilson proportion intervals and a fixed-seed paired bootstrap
 for differences. Missing runs never pass. Raw data remains outside Git.

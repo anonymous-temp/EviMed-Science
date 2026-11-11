@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 import subprocess
 import signal
+import time
+import uuid
 import sys
 from datetime import datetime, timezone
 
@@ -20,6 +22,7 @@ sys.path.insert(0, str(LONG))
 import host as hosting
 import scenarios
 import scoring
+import model_judge
 
 spec = importlib.util.spec_from_file_location("longitudinal_run", LONG / "run.py")
 long_run = importlib.util.module_from_spec(spec)
@@ -30,6 +33,30 @@ class LabHost(hosting.Host):
     def __init__(self, config, database, pg_port):
         super().__init__(config)
         self.database, self.pg_port = database, pg_port
+        self.test_users = []
+
+    def register(self, label):
+        account = super().register(label)
+        self.test_users.append(account.username)
+        return account
+
+    def idle_learning(self):
+        deadline = time.monotonic() + 600
+        while time.monotonic() < deadline:
+            request = {"id": uuid.uuid4().hex, "userIds": self.test_users}
+            print("EG_CONTROL " + json.dumps(request), flush=True)
+            response = Path(os.environ["EG_CONTROL_DIR"]) / f"{request['id']}.json"
+            while not response.exists() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            if not response.exists():
+                raise RuntimeError("lab idle-runtime control timed out")
+            value = json.loads(response.read_text())
+            if value.get("error"):
+                raise RuntimeError(value["error"])
+            if not value["value"]["busy"]:
+                return
+            time.sleep(3)
+        raise RuntimeError("learning work did not become idle before the next native conversation")
 
     def psql(self, query):
         result = self.sh(["docker", "exec", "-i", f"pgpp-{self.pg_port}", "psql", "-U", "coder", "-d", self.database, "-At", "-F", "|"], input=query)
@@ -61,6 +88,7 @@ class LabHost(hosting.Host):
         return rows
 
     def browse(self, account, plan, name, timeout=3300):
+        self.idle_learning()
         out = Path(self.config.out_dir)
         out.mkdir(parents=True, exist_ok=True)
         plan_file, result_file = out / f"{name}-plan.json", out / f"{name}-result.json"
@@ -91,7 +119,11 @@ def main():
     out = Path(args.out)
     config = hosting.HostConfig(root=args.tree, public_url=f"http://127.0.0.1:{args.port}", out_dir=out / "browser")
     host = LabHost(config, args.database, args.pg_port)
-    judge = scoring.Judge(long_run.read_key("/srv/evimed/secrets/deepseek.api-key"), "deepseek-flash")
+    def metered_post(body, key):
+        result = scoring.rf.post(body, key)
+        model_judge.record_usage(result, body["model"])
+        return result
+    judge = scoring.Judge(long_run.read_key("/srv/evimed/secrets/deepseek.api-key"), "deepseek-flash", post=metered_post)
     caps = host.capabilities()
     (out / "scenario-capabilities.json").write_text(json.dumps(caps))
     for rep in map(int, args.repeats.split(",")):

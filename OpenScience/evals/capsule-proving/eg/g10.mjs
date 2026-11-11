@@ -31,8 +31,24 @@ await save(`${args.out}/run.json`, { runId: path.basename(args.out), arm: args.a
 try {
   for (const unit of plan) {
     const name = `${unit.id}-r1`;
-    if (await read(`${args.out}/records/${name}.json`)) { ctx.status(`skip ${name}`); continue; }
     const dir = `${args.out}/units/${unit.id}`;
+    if (await read(`${args.out}/records/${name}.json`)) {
+      if (!await read(`${args.out}/judged/${name}.json`)) judge(args, args.out, name);
+      const identity = await read(`${dir}/account.json`);
+      if (identity && !await read(`${dir}/usage.json`)) await save(`${dir}/usage.json`, await ipc(ctx.h, 'usage', { userId: identity.userId }));
+      await fs.rm(`${dir}/in-flight.json`, { force: true });
+      ctx.status(`skip ${name}`); continue;
+    }
+    if (await read(`${dir}/in-flight.json`)) {
+      // A half-attempt must not turn the empty arm into a remembered second attempt.
+      const archived = `${args.out}/interrupted/${unit.id}-${Date.now()}`;
+      await fs.mkdir(`${args.out}/interrupted`, { recursive: true });
+      await fs.rename(dir, archived);
+      const files = `${args.out}/records/${name}.files`;
+      if (await fs.stat(files).catch(() => null)) await fs.rename(files, `${archived}/task-files`);
+      ctx.status(`${name} interrupted; evidence archived, restarting on a fresh identity`);
+    }
+    await save(`${dir}/in-flight.json`, { at: new Date().toISOString(), arm: args.arm });
     const identity = await account(ctx.h, `${dir}/account.json`, 'eg10');
     if (args.arm === 'seeded' && !await read(`${dir}/seed.json`)) {
       const statements = unit.cases.flatMap(c => byId.get(c.id).statements.map(s => s.text));
@@ -53,6 +69,7 @@ try {
     await save(`${args.out}/records/${name}.json`, record);
     await save(`${dir}/usage.json`, await ipc(ctx.h, 'usage', { userId: identity.userId }));
     judge(args, args.out, name); summarize(args.out);
+    await fs.rm(`${dir}/in-flight.json`, { force: true });
     ctx.status(`DONE ${name} arm=${args.arm}`);
   }
   summarize(args.out); ctx.status(`DONE G10 ${args.arm}`);
