@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:ff5a6c17d20b251c4c66d8691f3070d8f71a9f2aa9c73de3691cff065b7d5baf",
+  "version": "sha256:a40bd246bae3480217b383a63ccada6c577d981ab0485d045dfbbce93a053887",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 39,
@@ -883,7 +883,7 @@
             "minLength": 1,
             "maxLength": 200
           },
-          "description": "Further phrasings of the same question searched together: synonyms, abbreviations and the other language, for example \"myocardial infarction\", \"MI\", \"STEMI\", \"heart attack\". Patient search covers the whole record, not only the passages already shown."
+          "description": "At most 8 further phrasings of the same question searched together: synonyms, abbreviations and the other language, for example \"myocardial infarction\", \"MI\", \"STEMI\", \"heart attack\". Patient search covers the whole record, not only the passages already shown."
         },
         "sourceId": {
           "type": "string",
