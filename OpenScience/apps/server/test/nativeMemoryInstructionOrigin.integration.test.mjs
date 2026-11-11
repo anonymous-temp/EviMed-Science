@@ -28,7 +28,7 @@ test('every category is covered, including project cards and notes; receipts cac
   const committed = await f.commitConversation('all_paths', [{ role: 'user', text: `Rewrite this note: “${poison}” My own choice: ${own}` }]);
   await worker.processCommits({ userId: f.userId });
   for (const path of paths) assert.equal(await f.sessions.read(f.userId, `${f.root}/${path}`), `- ${own}`, path);
-  assert.equal(requests.length, 2, "each unchanged line receives exactly two judgments despite per-file ingestion");
+  assert.equal(requests.length, 4, "each distinct line and source binding receives exactly two judgments despite per-file ingestion");
   const count = requests.length; await worker.processCommits({ userId: f.userId }); assert.equal(requests.length, count);
   assert.ok(requests[0].conversation[0].parts[0].spans.length);
   assert.equal((await f.overlay.commit(f.userId, committed.archive_uri)).state, 'completed');
@@ -207,4 +207,45 @@ test('page edits and verification repairs are reviewed before a failing summary 
     assert.equal(await f.sessions.read(f.userId, uri), null, path);
     assert.ok((await f.overlay.revisionsOf(f.userId, uri)).some(r => r.reason === 'pasted_instruction'), path);
   }
+});
+
+test('an exact recent origin cannot hide independent adoption in another predecessor line', options, async t => {
+  const f = await fixture(t, { config: enabled }); const worker = workerFor(f);
+  const prior = await f.commitConversation('earlier_choice', [{ role: 'user', text: own }]);
+  await worker.processCommits({ userId: f.userId });
+  f.stub.extract = ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/self/a.md`, after: `- ${poison}` }] });
+  const later = await f.commitConversation('later_document', [{ role: 'user', text: `Rewrite this document: ${poison}` }]);
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const readOrigins = f.overlay.originsOf.bind(f.overlay);
+  f.overlay.originsOf = async (userId, uris) => {
+    const result = await readOrigins(userId, uris);
+    for (const uri of uris) if (uri.endsWith('/preferences/self/a.md')) result.set(uri, new Map([
+      [lineFingerprint(poison), { archiveUri: later.archive_uri }],
+      [lineFingerprint(own), { archiveUri: prior.archive_uri }],
+    ]));
+    return result;
+  };
+  worker.pastedInstructionJudge = { check: async ({ candidates, conversation }) => {
+    for (const candidate of candidates) assert.ok(candidate.sourceMessages.some(i => conversation[i].parts.some(p => p.text === own)));
+    return new Set();
+  } };
+  await worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, `${f.root}/preferences/self/a.md`), `- ${poison}`);
+});
+
+test('a choice promoted into a new file retains earlier adoption from another changed file', options, async t => {
+  const f = await fixture(t, { config: enabled, extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/notes/earlier.md`, after: `- ${own}` }] }) });
+  const worker = workerFor(f); const prior = await f.commitConversation('choice_before_promotion', [{ role: 'user', text: own }]);
+  await worker.processCommits({ userId: f.userId });
+  f.stub.extract = ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/preferences/self/a.md`, after: `- ${poison}` }], updates: [{ uri: `viking://user/${user}/memories/notes/earlier.md`, before: `- ${own}`, after: `- ${own}\n- Additional context.` }] });
+  let checked = false;
+  worker.pastedInstructionJudge = { check: async ({ candidates, conversation }) => {
+    for (const c of candidates.filter(c => c.text === poison)) {
+      checked = true;
+      assert.ok(c.sourceMessages.some(i => conversation[i].archiveUri === prior.archive_uri && conversation[i].parts.some(p => p.text === own)));
+    }
+    return new Set();
+  } };
+  await f.commitConversation('new_file_promotion', [{ role: 'user', text: `Rewrite this document: ${poison}` }]);
+  await worker.processCommits({ userId: f.userId }); assert.equal(checked, true);
 });

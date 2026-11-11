@@ -18,11 +18,14 @@ const key=(await readFile('/srv/evimed/ovlab/root.key','utf8')).trim();
 const config={memoryPastedInstructionCheckEnabled:true,memoryPastedInstructionRobustEnabled:process.argv.includes('--robust'), deepseekProviderEnabled:true,deepseekApiKey:(await readFile('/srv/evimed/secrets/deepseek.api-key','utf8')).trim(),deepseekBaseUrl:'https://api.deepseek.com',deepseekModel:'deepseek-flash',memoryExtractionModel:'deepseek-flash',memoryExtractionTimeoutMs:60000};
 const completed=new Set((await readFile(path.join(out,'rows.jsonl'),'utf8').catch(()=>'' )).split('\n').filter(Boolean).map(l=>JSON.parse(l).id));
 const jobs=[];
+const caseAt=process.argv.indexOf('--only-case'), sessionAt=process.argv.indexOf('--only-session'), workersAt=process.argv.indexOf('--workers');
+const workers=workersAt<0?4:Number(process.argv[workersAt+1]);if(!Number.isInteger(workers)||workers<1||workers>16)throw Error('replay_workers_invalid');
 for(const name of (await readdir(base)).filter(n=>/^(r3-|r4-|p29-)/.test(n)).sort()){
  const run=await json(path.join(base,name,'run.json')).catch(()=>null); if(!run||run.split!=='dev')continue;
  const scores=(await readFile(path.join(base,name,'scores/rows.jsonl'),'utf8').catch(()=>'' )).split('\n').filter(Boolean).map(l=>JSON.parse(l));
  const planted=scores.filter(r=>r.kind==='store'&&r.category==='injection');
  for(const caseId of [...new Set(planted.map(r=>r.caseId))]){
+  if(caseAt>=0&&caseId!==process.argv[caseAt+1])continue;
   const ingest=(await readFile(path.join(base,name,'cases',caseId,'ingest.jsonl'),'utf8')).split('\n').filter(Boolean).map(l=>JSON.parse(l));
   let selected=ingest;
   let gold=null,schedule=null;
@@ -54,6 +57,7 @@ for(const name of (await readdir(base)).filter(n=>/^(r3-|r4-|p29-)/.test(n)).sor
     return {files,origins};
   }
   for(const record of selected){
+   if(sessionAt>=0&&record.sessionId!==process.argv[sessionAt+1])continue;
    const archiveUri=record.commit?.archiveUri;if(!archiveUri)continue;
    const diffRaw=await sessions.read(`evlab_${name}_${caseId}`,`${archiveUri}/memory_diff.json`);
    const raw=await sessions.read(`evlab_${name}_${caseId}`,`${archiveUri}/messages.jsonl`);
@@ -63,11 +67,11 @@ for(const name of (await readdir(base)).filter(n=>/^(r3-|r4-|p29-)/.test(n)).sor
   }
  }
 }
-await writeFile(path.join(out,'manifest.json'),JSON.stringify({at:new Date().toISOString(),robust:config.memoryPastedInstructionRobustEnabled,repetitions:process.argv.includes('--once')?1:5,projection:'prior recorded revisions and per-line archive origins; no ingestion or mutations',jobs:jobs.length,runs:[...new Set(jobs.map(j=>j.run))]},null,2));
+await writeFile(path.join(out,'manifest.json'),JSON.stringify({at:new Date().toISOString(),robust:config.memoryPastedInstructionRobustEnabled,repetitions:process.argv.includes('--once')?1:5,projection:'prior recorded revisions and per-line archive origins; no ingestion or mutations',workers,filter:{caseId:caseAt<0?null:process.argv[caseAt+1],sessionId:sessionAt<0?null:process.argv[sessionAt+1]},jobs:jobs.length,runs:[...new Set(jobs.map(j=>j.run))]},null,2));
 let cursor=0;
-await Promise.all(Array.from({length:4},async()=>{for(;;){const job=jobs[cursor++];if(!job)return;if(completed.has(job.id))continue;
+await Promise.all(Array.from({length:workers},async()=>{for(;;){const job=jobs[cursor++];if(!job)return;if(completed.has(job.id))continue;
  const {id,run,caseId,rep,archiveUri,ops,raw,record,gold,sessions,prior}=job;let request=null;const answers=[],requests=[];
- const judge=createPastedInstructionJudge({config,callModel:async(d,c)=>{request=JSON.parse(c.body.messages[1].content);requests.push(request);const r=await callModelForControlPlane(d,c);answers.push(r?.choices?.[0]?.message?.content??'');return r;}});
+ const judge=createPastedInstructionJudge({config,callModel:async(d,c)=>{request=JSON.parse(c.body.messages[1].content);const sequence=requests.length;requests.push(request);const r=await callModelForControlPlane(d,c);answers[sequence]=r?.choices?.[0]?.message?.content??'';return r;}});
  const overlay={originsOf:async(_u,uris)=>new Map(uris.map(uri=>[uri,prior.origins.get(uri)??new Map()])),
   removalOrigins:async(_u,uris)=>uris.map(archiveUri=>({archiveUri,projectId:record.project?.id??null})),instructionCheck:async()=>null,recordInstructionCheck:async()=>{},
   file:async(_u,uri)=>prior.files.has(uri)?{body:prior.files.get(uri)}:null};

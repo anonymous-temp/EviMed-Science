@@ -1178,7 +1178,10 @@ export class NativeMemoryWorker {
     // manufactured one-shot session, is evidence of adoption. Without a committed source, leave the item pending.
     const toolWrite = commit.origin === 'tool' || String(commit.engineSession ?? '').startsWith('mcp-store-');
     const toolSources = toolWrite && commit.sourceSession ? await this.overlay.commitsOfSession(userId, commit.sourceSession, { userRoot: context.sessions.userRoot(userId) }) : [];
-    const commonOrigins = [...extraOrigins, ...(toolWrite ? toolSources : commit.archiveUri ? [{ archiveUri: commit.archiveUri, projectId: commit.projectId ?? null }] : [])];
+    // Extraction can promote a choice from another changed file into a new preference file. Its earlier
+    // adoption belongs to the same source packet even when the new file has no line origins yet.
+    const predecessorOrigins = [...origins.values()].flatMap(lines => [...lines.values()].flatMap(originalSources));
+    const commonOrigins = [...extraOrigins, ...predecessorOrigins, ...(toolWrite ? toolSources : commit.archiveUri ? [{ archiveUri: commit.archiveUri, projectId: commit.projectId ?? null }] : [])];
     const common = [...extraMessages, ...await this.verification.readInstructionSources(userId, commonOrigins, context, cache)];
     for (const operation of entries) {
       const file = nativeMemoryFile(operation.uri, root) ?? observationFile(operation.uri, root); if (!file) continue;
@@ -1194,9 +1197,9 @@ export class NativeMemoryWorker {
         const print = lineFingerprint(text), key = `${operation.uri}\u0000${print}`;
         if (before.has(print) || lineRefusal(text, new Set()) || candidates.some(c => c.key === key)) continue;
         const specific = originalSources(lineOrigins.get(print));
-        // A paraphrase may retain an earlier choice. Preserve its predecessor file's original conversations so a
-        // later document containing the same command cannot erase the person's independent prior adoption.
-        const sources = [...common, ...await this.verification.readInstructionSources(userId, specific.length ? specific : inherited, context, cache)];
+        // A copied or paraphrased line may retain an earlier choice even when its most recent origin names only
+        // a later document. Preserve the predecessor file's original conversations as well as its exact origins.
+        const sources = [...common, ...await this.verification.readInstructionSources(userId, [...specific, ...inherited], context, cache)];
         const sourceMessages = [];
         for (const source of sources) {
           const serialized = JSON.stringify(source);

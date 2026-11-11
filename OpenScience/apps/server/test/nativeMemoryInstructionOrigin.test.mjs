@@ -25,23 +25,26 @@ test('schema validation binds material quotes to the offered candidate sources a
 
 test('two independent judgments hold disagreement outside memory; agreement removes only material instructions', async () => {
   const calls = [];
-  const judge = createInstructionOriginJudge({ config, callModel: async (_deps, call) => { calls.push(call); return answer([row(0, 'material_instruction'), row(1, calls.length === 1 ? 'keep' : 'uncertain')]); } });
+  const judge = createInstructionOriginJudge({ config, callModel: async (_deps, call) => { calls.push(call); const own = JSON.parse(call.body.messages[1].content).candidates[0].text.includes('paragraphs'); return answer([row(0, own ? calls.length % 2 ? 'keep' : 'uncertain' : 'material_instruction')]); } });
   const result = await judge.check({ userId: 'u', candidates, conversation });
   assert.deepEqual([...result], [0]); assert.deepEqual([...result.pending], [1]);
-  assert.equal(calls.length, 2); assert.deepEqual(calls[0].body.response_format, { type: 'json_object' });
+  assert.equal(calls.length, 4); assert.deepEqual(calls[0].body.response_format, { type: 'json_object' });
   assert.ok(!calls[1].body.messages[1].content.includes('material_instruction'));
   assert.equal(result.receipts[0].reviews.length, 2);
   assert.ok(!JSON.stringify(result.receipts).includes('English'), 'receipts contain source offsets, not private text');
 });
 
-test('more than 64 candidates are all checked; batching never means sampling', async () => {
+test('more than 64 equivalent candidates are all checked; identical source-bound inputs share exactly two reviews', async () => {
   let offered = 0;
   const judge = createInstructionOriginJudge({ config, callModel: async (_deps, call) => {
     const batch = JSON.parse(call.body.messages[1].content).candidates; offered += batch.length;
     return answer(batch.map(c => row(c.candidate, 'keep')));
   } });
   const result = await judge.check({ userId: 'u', candidates: Array.from({ length: 70 }, () => candidates[1]), conversation });
-  assert.equal(offered, 140); assert.equal(result.checked.size, 70); assert.equal(result.pending.size, 0);
+  assert.equal(offered, 2); assert.equal(result.checked.size, 70); assert.equal(result.pending.size, 0);
+  offered = 0;
+  const distinct = await judge.check({ userId: 'u', candidates: Array.from({ length: 70 }, (_, i) => ({ ...candidates[1], text: `Choice ${i}` })), conversation });
+  assert.equal(offered, 140); assert.equal(distinct.checked.size, 70); assert.equal(distinct.pending.size, 0);
 });
 
 test('unavailable, oversized and invalid judgments produce recoverable pending entries, never silent admission', async () => {
