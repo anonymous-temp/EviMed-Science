@@ -162,10 +162,15 @@ test('selected headings disappear too and a removed identifier leaves the filena
   assert.ok(!kept.uri.includes('M-41633'));
 });
 
-test('retained archive context cannot execute the same request after its removal was undone', options, async t => {
+test('retained archive context cannot repeat an undone request when the judge changes its quote span', options, async t => {
   const f = await fixture(t, { config: { memoryForgetRequestCheckEnabled: true } });
   const uri = f.seed('notes/test.md', fact);
-  const worker = withJudge(f, input => verdict(input));
+  let checks = 0;
+  const worker = withJudge(f, input => {
+    const result = verdict(input);
+    if (++checks > 1) result.requests[0].quote = 'Forget that project';
+    return result;
+  });
   const messages = [{ role: 'user', text: 'Forget that project.', at: old }];
   const original = await f.commitConversation('retained', messages);
   await worker.processCommits({ userId: f.userId });
@@ -331,4 +336,15 @@ test('an absent intent cannot withdraw the newly correct fact through the reject
   const request = (await f.overlay.commit(f.userId, committed.archive_uri)).extraction.forgetRequests.requests[0];
   assert.equal(request.status, 'pending');
   assert.deepEqual(request.intents, []);
+});
+
+test('two withdrawals in one original message both apply before that message is deduplicated', options, async t => {
+  const f = await fixture(t, { config: { memoryForgetRequestCheckEnabled: true } });
+  const targets = [fact, 'Project N-51744.'];
+  const worker = withJudge(f, () => ({ requests: targets.map(text => ({ message: 0, quote: `Forget ${text}`,
+    decision: 'remove', targets: [], intents: [{ message: 0, quote: text }] })), claims: [] }));
+  await f.commitConversation('same-message-intents', [{ role: 'user', text: targets.map(text => `Forget ${text}`).join(' ') }]);
+  await worker.processCommits({ userId: f.userId });
+  assert.equal((await f.overlay.removals(f.userId)).length, 2);
+  assert.equal((await f.store.forgotten(f.userId)).length, 2);
 });

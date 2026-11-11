@@ -139,7 +139,8 @@ export async function checkForgetRequests({ commit, context, overlay, store, jud
     const judged = await judge.check({ userId, projectId: commit.projectId, candidates, conversation, documents });
     if (!judged) throw new Error('forget_request_judge_unavailable');
     const priorKeys = await overlay.forgetRequestKeys(userId, context.userRoot);
-    const keyOf = row => contentHash(JSON.stringify([source.engineSession, conversation[row.message]?.at, conversation[row.message]?.text, row.quote]));
+    // Quote boundaries are model choices; the original message owns request identity.
+    const keyOf = row => contentHash(JSON.stringify([source.engineSession, conversation[row.message]?.at, conversation[row.message]?.role, conversation[row.message]?.text]));
     plan = { state: 'applying', sourceArchive: source.archiveUri, requests: judged.requests.filter(row => !priorKeys.has(keyOf(row))).map(row => ({ ...row, key: keyOf(row), candidates: row.targets.map(i => candidates[i]),
       requestMessage: conversation[row.message], intents: row.intents.map(intent => intent.quote), status: row.decision === 'uncertain' ? 'pending' : 'applying', removed: 0 })),
       claims: judged.claims.filter(row => !priorKeys.has(keyOf(row))).map(row => ({ ...row, key: keyOf(row),
