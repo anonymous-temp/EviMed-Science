@@ -184,7 +184,10 @@ async function ledger(result) {
   } else if (args.suite === 'g10') {
     for (const arm of ['empty', 'seeded']) measurements.push({ metric: `passRate:${arm}`, arm, ...result[arm] });
     for (const [metric, value] of Object.entries(result.metrics)) for (const arm of ['empty', 'seeded']) measurements.push({ metric: `${metric}PerTask:${arm}`, arm, n: result.completed, value: value[arm], ci95: value[`${arm}Ci95`] });
-  } else measurements.push({ metric: 'allFivePass', ...result.allFivePass });
+  } else if (result.allFivePass) measurements.push({ metric: 'allFivePass', ...result.allFivePass });
+  else if (result.completedScenarioEstimate.n) measurements.push({ metric: 'allFivePassCompletedScenarios', ...result.completedScenarioEstimate });
+  measurements.push({ metric: 'completionRate', n: result.planned ?? result.plannedRuns,
+    value: (result.completed ?? result.completedRuns) / (result.planned ?? result.plannedRuns), ci95: null });
   const receipts = [];
   const walk = async dir => {
     for (const entry of await fs.readdir(dir, { withFileTypes: true }).catch(() => [])) {
@@ -205,10 +208,11 @@ async function ledger(result) {
       judge: held.filter(r => ['pass', 'fail'].includes(r.verdict) && r.by === 'judge').length,
       unknown: held.filter(r => !['pass', 'fail', 'error'].includes(r.verdict)).length, error: held.filter(r => r.verdict === 'error').length };
   };
-  const rows = measurements.map(m => ({ runId: args['run-id'] ?? `eg-${args.suite}-20261111`, commit: provenance.commit, arm: m.arm ?? 'product-path', set: args.suite, split: 'dev',
+  const rows = measurements.filter(m => m.n > 0 && Number.isFinite(m.value)).map(m => ({ runId: args['run-id'] ?? `eg-${args.suite}-20261111`, commit: provenance.commit, arm: m.arm ?? 'product-path', set: args.suite, split: 'dev',
     metric: m.metric, scorer: 'eg-product-path/1', rawPath: `${args.out}/${args.suite}.json`, engine, flags: { lane: 'run', lockIsolation: true, safetyNotes: false,
       candidate: Object.fromEntries(Object.entries(provenance.env).filter(([k]) => k.startsWith('OPEN_SCIENCE_MEMORY_'))), complete: result.complete,
-      tokenScope: 'control-plane account receipts including setup, direct engine extraction unobserved', observedControlPlaneCostCny: receipts.reduce((n, r) => n + r.actualCost, 0) },
+      tokenScope: 'available control-plane account receipts including setup; absent receipts and direct engine extraction unobserved', receiptsObserved: receipts.length,
+      observedControlPlaneCostCny: receipts.length ? receipts.reduce((n, r) => n + r.actualCost, 0) : null },
     n: m.n, value: m.value, ci95: m.ci95, judged: judgedFor(m),
     tokens, costCny: null, wallSeconds: Math.max(0, (Date.now() - Date.parse(provenance.attempts?.[0]?.at ?? provenance.at)) / 1000), ...(m.byStep ? { byStep: m.byStep } : {}) }));
   await save(`${args.out}/${args.suite}-ledger-rows.json`, rows);

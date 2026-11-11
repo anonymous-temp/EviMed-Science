@@ -185,6 +185,7 @@ export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeout
   const seedFile = seedMethods ?? spec.seed_methods;
   if (seedFile) record.seededMethods = await seedMethodLibrary(api, seedFile);
   if (waitMemoryTools && process.env.OPEN_SCIENCE_OPENVIKING_URL) {
+    await fs.rm(`${projectDir}/eval-memory-tools.json`, { force: true });
     const start = await api.call('POST', '/api/commands/start_runtime', {}, { timeoutMs: 300_000 });
     if (start.status !== 200) throw new Error(`start runtime: ${start.status} ${start.raw.slice(0, 200)}`);
     record.memoryToolsWait = await waitForMemoryTools(`${projectDir}/eval-memory-tools.json`);
