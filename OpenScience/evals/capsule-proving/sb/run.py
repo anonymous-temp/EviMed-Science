@@ -320,14 +320,14 @@ def run(args):
                 oracle_trials = RUNS / 'sb-oracle-1/trials' / task['id']
                 if oracle_trials.exists():
                     oracle_trials.rename(attempts / f'{task["id"]}-oracle-trials-{time.time_ns()}')
-        check_budget(batch_info['balanceBefore'], batch_info['deadline'])
         check_verifier(task)
-        put(ROOT / 'current.json', {'runId': out.name, 'task': task['id'], 'arm': args.arm})
         note(f'{out.name} start {task["id"]}')
         t0 = time.time()
         try:
             if issue := resource_admission_issue(task):
                 raise RuntimeError(issue)
+            check_budget(batch_info['balanceBefore'], batch_info['deadline'])
+            put(ROOT / 'current.json', {'runId': out.name, 'task': task['id'], 'arm': args.arm})
             if task['bench'] == 'sb':
                 oracle = sb_oracle(task)
                 if not oracle['passed']:

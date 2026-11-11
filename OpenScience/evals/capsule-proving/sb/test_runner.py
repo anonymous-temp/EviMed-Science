@@ -4,6 +4,7 @@ import pathlib
 import tempfile
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 import prepare
 import run
@@ -11,6 +12,20 @@ from gateway import cost, request_context
 
 
 class RunnerTests(unittest.TestCase):
+    def test_budget_denial_is_recorded_without_invoking_an_agent_or_oracle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            task = {'bench': 'sb', 'id': 'budget-case', 'path': tmp}
+            (root / 'manifest.json').write_text(json.dumps({'pins': prepare.PINS, 'tasks': [task]}))
+            (root / 'batch.json').write_text(json.dumps({'balanceBefore': 1000, 'deadline': 1e12}))
+            with patch('run.ROOT', root), patch('run.RUNS', root / 'runs'), patch('run.note'), patch('run.check_verifier'), patch('run.check_budget', side_effect=RuntimeError('Budget admission unavailable')), patch('run.sb_oracle') as oracle, patch('run.sb_trial') as agent:
+                run.run(SimpleNamespace(bench='sb', arm='none', task=None, per_family=1, retry_infra=False))
+            record = json.loads((root / 'runs/sb-none-1/records/budget-case.json').read_text())
+            self.assertIn('Budget admission unavailable', record['infraError'])
+            self.assertEqual(record['requests'], [])
+            oracle.assert_not_called()
+            agent.assert_not_called()
+
     def test_flat_staging_preserves_bytes_and_makes_private_intake_readable(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
