@@ -156,9 +156,9 @@ const RUN_FIELDS = ['id', 'status', 'effectiveAgentId', 'effectiveRouteReason', 
  * @param {string} args.fixtureRoot @param {string} args.dataDir @param {string} args.outDir directory of this record @param {number} args.timeoutMs per turn
  * @param {(msg:string)=>void} args.log
  */
-export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeoutMs, log, account = null, seedMethods = null, waitMemoryTools = false, automated = false, observeMethods = null }) {
-  const startedAt = new Date().toISOString();
-  const t0 = Date.now();
+export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeoutMs, log, account = null, seedMethods = null, waitMemoryTools = false, automated = false, observeMethods = null, beforeTask = null }) {
+  let startedAt = new Date().toISOString();
+  let t0 = Date.now();
   const suffix = randomBytes(3).toString('hex');
   const slug = spec.id.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   const username = `evg${suffix}${Date.now().toString(36).slice(-4)}`;
@@ -175,6 +175,13 @@ export async function runCell({ api, spec, fixtureRoot, dataDir, outDir, timeout
   const workspace = `${projectDir}/workspace`;
   await fs.mkdir(workspace, { recursive: true });
   record.userId = userId; record.projectDir = projectDir;
+  if (beforeTask) {
+    record.preparation = await beforeTask({ userId, projectId, projectDir });
+    // Seed conversations are setup, not the task's first request, latency or usage.
+    startedAt = new Date().toISOString();
+    t0 = Date.now();
+    record.startedAt = startedAt;
+  }
   const seedFile = seedMethods ?? spec.seed_methods;
   if (seedFile) record.seededMethods = await seedMethodLibrary(api, seedFile);
   if (waitMemoryTools && process.env.OPEN_SCIENCE_OPENVIKING_URL) {

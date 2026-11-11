@@ -171,7 +171,7 @@ async function g3() {
   return result;
 }
 async function ledger(result) {
-  if (!result.complete || !args.ledger) return;
+  if ((!result.complete && args['allow-partial'] !== 'true') || !args.ledger) return;
   const dirs = args.runs?.split(',') ?? [args.empty, args.seeded];
   const provenance = await read(`${dirs[0]}/provenance.json`);
   const engine = await read(`${dirs[0]}/engine.json`);
@@ -207,7 +207,7 @@ async function ledger(result) {
   };
   const rows = measurements.map(m => ({ runId: args['run-id'] ?? `eg-${args.suite}-20261111`, commit: provenance.commit, arm: m.arm ?? 'product-path', set: args.suite, split: 'dev',
     metric: m.metric, scorer: 'eg-product-path/1', rawPath: `${args.out}/${args.suite}.json`, engine, flags: { lane: 'run', lockIsolation: true, safetyNotes: false,
-      candidate: Object.fromEntries(Object.entries(provenance.env).filter(([k]) => k.startsWith('OPEN_SCIENCE_MEMORY_'))), complete: true,
+      candidate: Object.fromEntries(Object.entries(provenance.env).filter(([k]) => k.startsWith('OPEN_SCIENCE_MEMORY_'))), complete: result.complete,
       tokenScope: 'control-plane account receipts including setup, direct engine extraction unobserved', observedControlPlaneCostCny: receipts.reduce((n, r) => n + r.actualCost, 0) },
     n: m.n, value: m.value, ci95: m.ci95, judged: judgedFor(m),
     tokens, costCny: null, wallSeconds: Math.max(0, (Date.now() - Date.parse(provenance.attempts?.[0]?.at ?? provenance.at)) / 1000), ...(m.byStep ? { byStep: m.byStep } : {}) }));

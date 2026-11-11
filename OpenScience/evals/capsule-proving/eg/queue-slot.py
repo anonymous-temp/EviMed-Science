@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
-from slot_capacity import can_admit
+from slot_capacity import choose_slot
 
 p = argparse.ArgumentParser()
 p.add_argument("--status", required=True)
@@ -25,6 +25,14 @@ def status(message):
 status("queued for a product-path slot (host limit two)")
 reservation = Path(f"/srv/evimed/pp/locks/eg-reservation-{os.getpid()}.json")
 own_slot = f"/srv/evimed/pp/live/p{os.environ['PORT']}"
+candidates = [own_slot]
+for port in os.environ.get('EVAL_EG_FLEXIBLE_PORTS', '').split(','):
+    if port:
+        if port not in ['48854', '48857']:
+            raise ValueError('Only EG ports may be selected')
+        slot = f'/srv/evimed/pp/live/p{port}'
+        if slot not in candidates:
+            candidates.append(slot)
 while True:
     budget = json.loads(Path("/srv/evimed/runs/eg-budget-20261111.json").read_text())
     balance = float(Path("/srv/evimed/runs/BUDGET-LAST").read_text().strip().split()[-1])
@@ -58,24 +66,23 @@ while True:
     available = int(next(line.split()[1] for line in Path("/proc/meminfo").read_text().splitlines() if line.startswith("MemAvailable:")))
     with Path("/srv/evimed/pp/locks/eg-capacity.lock").open("a") as gate:
         fcntl.flock(gate, fcntl.LOCK_EX)
-        active_slots, reserved_slots = set(slots), set()
-        campaign_owned, batch_claimed = False, False
+        active_slots, live_reservations = set(slots), []
         for held in Path("/srv/evimed/pp/locks").glob("eg-reservation-*.json"):
             r = json.loads(held.read_text())
             if Path(f"/proc/{r['pid']}").exists():
-                reserved_slots.add(r["slot"])
-                if r['slot'] == own_slot:
-                    owned = str(r.get('campaignPid', '')) == os.environ.get('EVAL_EG_CAMPAIGN_PID') and r.get('campaignToken') == os.environ.get('EVAL_EG_CAMPAIGN_TOKEN')
-                    campaign_owned |= owned
-                    batch_claimed |= not owned and held != reservation
+                live_reservations.append(r)
             else:
                 held.unlink(missing_ok=True)
-        slots |= reserved_slots
-        start = can_admit(active_slots, reserved_slots, own_slot, campaign_owned, batch_claimed) and available > 1700 * 1024
+        slots |= {r['slot'] for r in live_reservations}
+        chosen = choose_slot(active_slots, live_reservations, candidates, os.environ.get('EVAL_EG_CAMPAIGN_PID'), os.environ.get('EVAL_EG_CAMPAIGN_TOKEN'))
+        start = chosen is not None and available > 1700 * 1024
         if start:
-            reservation.write_text(json.dumps({"pid": os.getpid(), "slot": f"/srv/evimed/pp/live/p{os.environ['PORT']}"}))
+            own_slot = chosen
+            os.environ['PORT'] = chosen.rsplit('p', 1)[1]
+            os.environ['BRIDGE_PORT'] = {'48854': '19374', '48857': '19377'}[os.environ['PORT']]
+            reservation.write_text(json.dumps({"pid": os.getpid(), "slot": chosen}))
     if start:
-        status(f"starting slot: existingSlots={len(slots)} availableKiB={available}")
+        status(f"starting slot={own_slot}: existingSlots={len(slots)} availableKiB={available}")
         try:
             raise SystemExit(subprocess.call(command))
         finally:

@@ -89,6 +89,7 @@ export async function runConversation({ api, userId, projectId, projectName, ses
     await sleep(2500);
     const settled = await api.call('GET', '/api/agent-runs');
     run = (settled.json?.data ?? []).find(item => item.id === turn.runId) ?? run;
+    if (turn.timedOut && RUNNING.has(String(run.status))) turn.error = 'cancel_not_confirmed';
     turn.run = Object.fromEntries(RUN_FIELDS.filter(k => k in run).map(k => [k, run[k]]));
     const lines = await readTranscript(projectDir, turn.runId);
     const digest = digestTranscript(lines);
@@ -103,7 +104,7 @@ export async function runConversation({ api, userId, projectId, projectName, ses
     record.turns.push(turn);
     if (onTurn) await onTurn(record);
     log(`    turn ${index}: ${run.status} route=${run.effectiveAgentId}/${run.effectiveRouteReason} tools=${turn.tools.map(t => t.name).join('>') || '-'} wall=${Math.round(turn.wallMs / 1000)}s`);
-    if (turn.timedOut && !continueAfterTimeout) break;
+    if (turn.error || (turn.timedOut && !continueAfterTimeout)) break;
     text = await next(turn, index);
   }
   if (!keepRuntime) await api.call('POST', '/api/commands/stop_runtime', {}).catch(() => null);

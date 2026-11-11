@@ -4,6 +4,7 @@ import argparse
 from functools import lru_cache
 import hashlib
 import json
+import re
 from pathlib import Path
 from statistics import mean
 
@@ -56,6 +57,7 @@ def observed(answer):
     opening = native + '\n' + resident
     result = {'openingChars': len(opening), 'openingSha256': hashlib.sha256(opening.encode()).hexdigest(),
               'nativeProfileChars': len(native), 'residentMemoryChars': len(resident),
+              'productIndexChars': None, 'earlierFilesContextChars': None,
               'openingHasAvailableMemories': '<available-memories>' in native, 'calls': len(calls),
               'memoryCalls': sum(c.get('name', '').startswith('mcp__openviking__') for c in calls), 'searches': searches,
               'inputTokens': usage.get('promptTokens', usage.get('inputTokens')), 'outputTokens': usage.get('completionTokens', usage.get('outputTokens')),
@@ -63,6 +65,11 @@ def observed(answer):
     request = answer.get('evidence', {}).get('firstRequest')
     if request and Path(request).exists():
         first = read(request)
+        def text(value):
+            return value if isinstance(value, str) else '\n'.join(v.get('text', '') for v in value) if isinstance(value, list) else ''
+        context = '\n'.join([text(first.get('system')), *(text(m.get('content')) for m in first.get('messages', []))])
+        result['productIndexChars'] = sum(len(s) for s in re.findall(r'记忆索引：[^\n]*；用 mcp__openviking__search 查找。', context))
+        result['earlierFilesContextChars'] = sum(len(s) for s in re.findall(r'<evimed-earlier-files[^>]*>[\s\S]*?</evimed-earlier-files>', context))
         result['toolsOffered'] = sorted(t.get('function', {}).get('name', t.get('name', '')) for t in first.get('tools', []))
         original = Path(first['file']) if first.get('file') else None
         metadata = original.parent.parent / 'model-requests.jsonl' if original else None
@@ -93,7 +100,7 @@ def main():
                       'bothSearched': bool(a['searches'] and b['searches']),
                       'querySequenceEqual': [s['querySha256'] for s in a['searches']] == [s['querySha256'] for s in b['searches']],
                       'resultPathJaccard': len(ap & bp) / len(ap | bp) if ap | bp else None})
-    metrics = ['openingChars', 'nativeProfileChars', 'residentMemoryChars', 'calls', 'memoryCalls', 'inputTokens', 'outputTokens', 'wallMs']
+    metrics = ['openingChars', 'nativeProfileChars', 'residentMemoryChars', 'productIndexChars', 'earlierFilesContextChars', 'calls', 'memoryCalls', 'inputTokens', 'outputTokens', 'wallMs']
     summary = {k: {arm: mean(p[arm][k] for p in pairs if p[arm][k] is not None) if any(p[arm][k] is not None for p in pairs) else None
                    for arm in ['engine', 'product']} for k in metrics}
     both = [p for p in pairs if p['bothSearched']]
@@ -104,6 +111,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     (out / 'g1-behavior.json').write_text(json.dumps({'summary': summary, 'pairs': pairs, 'limitations': [
         'Observed normalized answer records only; no unasked placeholder is compared.', 'Equal memory paths do not imply equal contents or correct recall.',
+        'The product counts-only index and earlier-files context are measured separately from fact-bearing memory blocks. No raw engine wire request is available here; its corresponding fields are unobserved, not zero.',
         'Search query differences are observed behavior, not an isolated causal estimate of any switch.',
         'Product wall time includes the control-plane run wait; engine time has a different scope. Shared-host timing is not a production benchmark.']}, indent=1))
     print(json.dumps(summary))

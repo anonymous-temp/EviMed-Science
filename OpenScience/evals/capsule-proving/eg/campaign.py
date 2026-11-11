@@ -107,6 +107,7 @@ def launch(suite, run_id, port, pg, bridge, extra):
     out = RUNS / run_id
     out.mkdir(exist_ok=True)
     env = {**ENV, "PORT": str(port), "PG_PORT": str(pg), "BRIDGE_PORT": str(bridge),
+           "EVAL_EG_FLEXIBLE_PORTS": "48854,48857",
            "EVAL_EG_CAMPAIGN_PID": str(os.getpid()), "EVAL_EG_CAMPAIGN_TOKEN": process_token(os.getpid())}
     argv = ["python3", str(EG / "queue-slot.py"), "--status", str(out / "STATUS"), "--", "bash", str(EG / "lab.sh"), suite, "--out", str(out), *extra]
     log = (out / "launcher.log").open("a")
@@ -129,18 +130,20 @@ status("supervisor active; phase order G1 -> G10 -> G3")
 g1_dirs = [RUNS / "g1pp-eg-4", RUNS / "g1pp-eg-5"]
 sample = read(SAMPLE)
 desired = {u: sum(q["user"] == u for q in sample["questions"]) for u in sample["users"]}
-if not read(REPORT / "g1.json") or not read(REPORT / "g1.json").get("complete"):
+schedule = read(RUNS / "eg-g1-schedule-20261111.json") or [
+    {"run": "g1pp-eg-4", "users": ["M01", "P01", "P02"], "port": 48854, "pg": 55684, "bridge": 19374},
+    {"run": "g1pp-eg-5", "users": ["U03"], "port": 48857, "pg": 55685, "bridge": 19377}]
+if not read(REPORT / "g1-phase-finished.json") and (not read(REPORT / "g1.json") or not read(REPORT / "g1.json").get("complete")):
     # Existing detached G1 owners predate this supervisor. A spent shared-balance guard or a crash may leave a partial user;
     # retry under the current lane-specific guard, preserving ids and progress, at most three times.
     resumes = {}
     while True:
         check_budget()
-        completed = []
-        for directory, users in zip(g1_dirs, [["M01", "P01", "P02"], ["U03"]]):
-            completed.extend((read(directory / "cases" / u / "progress.json") or {}).get("answered", []) for u in users)
-        if sum(map(len, completed)) == 100 and all((d / "cases" / u / "answers.jsonl").exists() for d, users in zip(g1_dirs, [["M01", "P01", "P02"], ["U03"]]) for u in users):
+        if all(len((read(RUNS / s['run'] / 'cases' / u / 'progress.json') or {}).get('answered', [])) == desired[u]
+               and (RUNS / s['run'] / 'cases' / u / 'answers.jsonl').exists() for s in schedule for u in s['users']):
             break
-        for directory, users, port, pg, bridge in [(g1_dirs[0], ["M01", "P01", "P02"], 48854, 55684, 19374), (g1_dirs[1], ["U03"], 48857, 55685, 19377)]:
+        for spec in schedule:
+            directory, users, port, pg, bridge = RUNS / spec['run'], spec['users'], spec['port'], spec['pg'], spec['bridge']
             if all(len((read(directory / "cases" / u / "progress.json") or {}).get("answered", [])) == desired[u] and (directory / "cases" / u / "answers.jsonl").exists() for u in users):
                 continue
             active = False
@@ -161,18 +164,21 @@ if not read(REPORT / "g1.json") or not read(REPORT / "g1.json").get("complete"):
                 launch("g1", directory.name, port, pg, bridge, ["--selection", str(SAMPLE), "--users", ",".join(users)])
         time.sleep(30)
     # Wait for both run owners to close the harness before admitting the next phase.
-    while any("DONE G1 product conversations" not in (d / "STATUS").read_text() for d in g1_dirs):
+    while any("DONE G1 product conversations" not in (RUNS / s['run'] / "STATUS").read_text() for s in schedule):
         check_budget()
         time.sleep(10)
     for directory in g1_dirs:
         record_engine(directory)
         run(["node", str(EG / "g1-score.mjs"), "--run", str(directory), "--data", str(DATA), "--selection", str(SAMPLE), "--judge-key-file", "/srv/evimed/secrets/dashscope.api-key"])
-    run(["node", str(EG / "report.mjs"), "--suite", "g1", "--selection", str(SAMPLE), "--engine", str(RUNS / "v3-synthetic-users-dev-product-1"), "--runs", ",".join(map(str, g1_dirs)), "--out", str(REPORT), "--ledger", "/srv/evimed/results/ledger.jsonl", "--run-id", "g1pp-eg-paired-20261111"])
-    if not read(REPORT / "g1.json").get("complete"):
-        status("STOP G1 scoring incomplete; later phases remain pending")
+    run(["node", str(EG / "report.mjs"), "--suite", "g1", "--selection", str(SAMPLE), "--engine", str(RUNS / "v3-synthetic-users-dev-product-1"), "--runs", ",".join(map(str, g1_dirs)), "--out", str(REPORT), "--ledger", "/srv/evimed/results/ledger.jsonl", "--run-id", "g1pp-eg-paired-20261111", "--allow-partial", "true"])
+    result = read(REPORT / "g1.json")
+    blocked = [str(p) for d in g1_dirs for p in (d / 'cases').glob('*/BLOCKED.json')]
+    if not result.get("complete") and not blocked:
+        status("STOP G1 scoring incomplete without a recorded product blocker")
         raise SystemExit(1)
     run(["python3", str(EG / "behavior.py"), "--selection", str(SAMPLE), "--engine", str(RUNS / "v3-synthetic-users-dev-product-1"), "--runs", ",".join(map(str, g1_dirs)), "--out", str(REPORT)])
-    status("DONE G1 scored, paired and ledgered")
+    (REPORT / 'g1-phase-finished.json').write_text(json.dumps({'complete': result['complete'], 'completed': result['completed'], 'blockedEvidence': blocked}))
+    status(f"DONE G1 phase: {result['completed']}/100 scored; blocked={blocked}; proceeding to G10")
 
 if not read(REPORT / "g10.json") or not read(REPORT / "g10.json").get("complete"):
     children = [launch("g10", "g10-eg-empty-1", 48854, 55684, 19374, ["--arm", "empty"]),

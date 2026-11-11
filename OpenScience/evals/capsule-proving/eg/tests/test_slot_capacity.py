@@ -8,10 +8,18 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from slot_capacity import can_admit, process_token
+from slot_capacity import can_admit, choose_slot, process_token
 
 
 class CapacityTests(unittest.TestCase):
+    def test_waiting_batch_can_use_the_campaigns_other_cold_slot(self):
+        held = [{'slot': 'a', 'pid': 1, 'campaignPid': 7, 'campaignToken': 'live'}, {'slot': 'foreign', 'pid': 2}]
+        self.assertEqual(choose_slot({'foreign'}, held, ['b', 'a'], 7, 'live'), 'a')
+
+    def test_flexible_batch_never_overlaps_an_active_batch_or_foreign_reservation(self):
+        held = [{'slot': 'a', 'pid': 1, 'campaignPid': 7, 'campaignToken': 'live'}, {'slot': 'foreign', 'pid': 2}]
+        self.assertIsNone(choose_slot({'a'}, held, ['a', 'foreign'], 7, 'live'))
+
     def test_free_capacity_can_be_admitted(self):
         self.assertTrue(can_admit({'other'}, {'other'}, 'own'))
 

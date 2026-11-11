@@ -9,7 +9,7 @@ test('the product catch-all never becomes a newly created named project', async 
   assert.equal(await ensureProject({ call: async () => { throw new Error('The product provisions its catch-all'); } }, 'default'), 'default');
 });
 
-async function timeoutConversation(continueAfterTimeout) {
+async function timeoutConversation(continueAfterTimeout, cancelConfirms = true) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'eg-conversation-'));
   const runs = [], dispatched = [], canceled = [];
   const project = `${dir}/users/eg-test/projects/ordinary`;
@@ -26,7 +26,8 @@ async function timeoutConversation(continueAfterTimeout) {
     }
     if (route.endsWith('/cancel')) {
       const run = runs.find(r => route.includes(r.id));
-      run.status = 'canceled'; canceled.push(run.id);
+      if (cancelConfirms) run.status = 'canceled';
+      canceled.push(run.id);
       return { status: 200 };
     }
     if (route === '/api/agent-runs') return { status: 200, json: { data: runs.map(r => ({ ...r })) } };
@@ -56,4 +57,11 @@ test('the existing LX default still stops after a timeout', async () => {
   assert.equal(record.turns.length, 1);
   assert.equal(dispatched.length, 1);
   assert.equal(record.turns[0].run.status, 'canceled');
+});
+
+test('an unconfirmed cancellation never admits the next human turn', async () => {
+  const { record, dispatched } = await timeoutConversation(true, false);
+  assert.equal(dispatched.length, 1);
+  assert.equal(record.turns[0].run.status, 'running');
+  assert.equal(record.turns[0].error, 'cancel_not_confirmed');
 });
