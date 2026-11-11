@@ -64,6 +64,12 @@ def run(args, log):
             break
         note(f'WAIT host pressure: load={os.getloadavg()[0]:.1f}, available KiB={available}')
         time.sleep(60)
+    if args[1].endswith('/run.mjs'):
+        free = os.statvfs('/').f_bavail * os.statvfs('/').f_frsize / 1e9
+        while free < 3:
+            note(f'WAIT root disk free {free:.1f} GB < 3 GB: not starting a fresh ingest')
+            time.sleep(120)
+            free = os.statvfs('/').f_bavail * os.statvfs('/').f_frsize / 1e9
     if spend() >= CAP - 5:
         raise RuntimeError('lane cap reserve reached before new work')
     with log.open('a') as stream:
@@ -104,14 +110,15 @@ def main():
     for dataset, variant, feature, port in comparisons:
         configurations = [('baseline', None, 19360)] + ([(variant, feature, port)] if '--matched-only' in sys.argv
             else [(name, switch, engine) for _, name, switch, engine in comparisons])
-        for repeat in [1, 2, 3]:
+        for repeat in range(1, int(sys.argv[sys.argv.index('--repeats') + 1]) + 1 if '--repeats' in sys.argv else 4):
             for config, feature, engine in configurations:
                 name = f'em-loo-{dataset}-{config}-{repeat}'
                 out = RUNS / name
                 if (out / 'EM-COMPLETE').exists():
                     continue
                 out.mkdir(exist_ok=True)
-                template = '/srv/evimed/wt/em/templates/candidate' if engine == 19360 else str(REPO / 'deploy/web/openviking/memory-templates')
+                # Both template sets are the p29 candidate (dedicated safety_notes type); the safety ablation drops only that type's file.
+                template = '/srv/evimed/wt/em/templates/safety-on' if engine == 19360 else '/srv/evimed/wt/em/templates/safety-off'
                 args = ['node', 'evals/capsule-proving/run/run.mjs', '--set', dataset, '--split', 'dev', '--arm', 'product',
                         '--data', str(DATA), '--out', str(out), '--engine-url', f'http://127.0.0.1:{engine}',
                         '--engine-key-file', '/srv/evimed/ovlab/root.key', '--database-url-file', '/srv/evimed/ovlab/database.url',
