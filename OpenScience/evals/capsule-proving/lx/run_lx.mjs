@@ -565,7 +565,7 @@ async function main() {
     const { sum, done } = await finish();
     if (done) {
       const tokens = await tokensOf(outDir, units);
-      const rows = ledgerRows(sum, { runId: `lx-${args.exp}-${args.arm}-1`, commit, flags: { lane: 'LX', exp: args.exp, arm: args.arm, toolchain: env.OPEN_SCIENCE_LEARNING_TOOLCHAIN_ROUTINE_ENABLED === 'true', addOnly: env.EVAL_ADD_ONLY === '1', automated: false },
+      const rows = ledgerRows(sum, { runId: path.basename(outDir), commit, flags: { lane: 'LX', exp: args.exp, arm: args.arm, toolchain: env.OPEN_SCIENCE_LEARNING_TOOLCHAIN_ROUTINE_ENABLED === 'true', addOnly: env.EVAL_ADD_ONLY === '1', automated: false },
         rawPath: outDir, wallSeconds: (Date.now() - t0) / 1000, tokens });
       await atomic(`${outDir}/ledger-rows.json`, rows);
       status(`complete; ledger rows in ${outDir}/ledger-rows.json`);

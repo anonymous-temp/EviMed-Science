@@ -1,7 +1,8 @@
 /** Answer-time controls, kept separate from the product gateway configuration. */
-export const ANSWER_KEYS = new Set(['forceSearch', 'fullContext', 'thinking', 'answerModel', 'answerBase', 'answerKeyFile', 'contextTokens']);
+export const ANSWER_KEYS = new Set(['forceSearch', 'fullContext', 'thinking', 'answerModel', 'answerBase', 'answerKeyFile', 'contextTokens', 'answerStyle']);
 export function answerOptions(config = {}) {
   const options = Object.fromEntries(Object.entries(config).filter(([key]) => ANSWER_KEYS.has(key)));
+  if (options.answerStyle !== undefined && options.answerStyle !== 'concise') throw new Error('answerStyle is concise');
   if (options.forceSearch !== undefined && !['all', 'history', 'memory'].includes(options.forceSearch)) throw new Error('forceSearch is all, history or memory');
   if (options.fullContext !== undefined && typeof options.fullContext !== 'boolean') throw new Error('fullContext must be boolean');
   if (options.thinking !== undefined && !['enabled', 'disabled'].includes(options.thinking)) throw new Error('thinking is enabled or disabled');

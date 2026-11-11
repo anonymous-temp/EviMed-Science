@@ -167,7 +167,7 @@ export function parseArguments(argv) {
   if (options.arm !== "product" && options.ingestOnly) throw new Error("--ingest-only has nothing to do without the engine (arm product)");
   if (!["none", "consolidate", "verify", "consolidate+verify"].includes(options.maintain)) throw new Error("--maintain is none, consolidate, verify or consolidate+verify");
   if (options.maintain !== "none" && options.maintainAfter.length === 0) throw new Error("--maintain needs --maintain-after");
-  if (options.arm !== "product" && (options.answerVariants.length || options.maintain !== "none")) throw new Error("answer variants and maintenance need arm product");
+  if (options.arm !== "product" && (options.maintain !== "none" || options.answerVariants.some(variant => Object.keys(gatewayOptions(variant.config)).length))) throw new Error("gateway variants and maintenance need arm product");
   answerOptions({ ...options.config, ...(options.answerModel ? { answerModel: options.answerModel } : {}), ...(options.answerBase ? { answerBase: options.answerBase } : {}) });
   for (const variant of options.answerVariants) answerOptions({ ...options.config, ...variant.config });
   if (options.retrievalOnly && (options.set !== "longmemeval-s" || options.split !== "dev")) throw new Error("retrieval diagnosis requires longmemeval-s dev");

@@ -367,3 +367,12 @@ test('new answer variants reuse settled memory, select their own model and prese
   await assert.rejects(main([...f.args, '--answers-only', '--answer-variant', 'strong:forceSearch=history'], f.dependencies), /variant strong changed/);
   assert.equal(f.opened.length, opens);
 });
+
+test('baseline arms accept answer-only variants and reject product gateway overrides', () => {
+  for (const arm of ['keyword', 'no-memory']) {
+    const args = ['--set', 'halumem', '--split', 'dev', '--data', '/d', '--out', '/r', '--arm', arm, '--deepseek-key-file', '/k', '--answers-only', '--variants-only'];
+    assert.equal(parseArguments([...args, '--answer-variant', 'concise:answerStyle=concise']).answerVariants[0].config.answerStyle, 'concise');
+    assert.throws(() => parseArguments([...args, '--answer-variant', 'bad:answerStyle=verbose']), /answerStyle/);
+    assert.throws(() => parseArguments([...args, '--answer-variant', 'bad:memoryOpeningIndexEnabled=true']), /gateway variants/);
+  }
+});

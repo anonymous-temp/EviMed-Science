@@ -19,17 +19,17 @@ function fail(code, message) { return Object.assign(new Error(message), { code }
  * Evaluation questions intercept writes; a live-turn memory object can explicitly execute forget.
  * @param {{question: string, asOf: string, arm: 'product'|'no-memory'|'keyword', memory?: any,
  * materials?: Array<{kind: string, title: string, text: string}>, client: any, maxRounds?: number,
- * caseId?: string, qid?: string, project?: any, pluginTgz?: string, forceSearch?: string, fullContext?: boolean, sessions?: any[], contextTokens?: number, conversation?: Array<{role: string, text: string}>}} input
+ * caseId?: string, qid?: string, project?: any, pluginTgz?: string, forceSearch?: string, fullContext?: boolean, answerStyle?: string, sessions?: any[], contextTokens?: number, conversation?: Array<{role: string, text: string}>}} input
  * @returns {Promise<{qid: any, caseId: any, arm: string, asOf: string, question: string, answer: string,
  * opening: {profileBlock: string|null, residentBlock: string|null, skillCatalog: {entries: number, sha256: string}|null}, toolCalls: any[], rounds: number,
  * model: any, usage: {promptTokens: number, completionTokens: number, cachedTokens: number}, ms: number, error?: string}>}
  */
-export async function answerQuestion({ question, asOf, arm, memory, materials = [], client, maxRounds = 8, caseId, qid, project, pluginTgz, forceSearch, fullContext = false, sessions = [], contextTokens, conversation = [] }) {
+export async function answerQuestion({ question, asOf, arm, memory, materials = [], client, maxRounds = 8, caseId, qid, project, pluginTgz, forceSearch, fullContext = false, answerStyle, sessions = [], contextTokens, conversation = [] }) {
   const started = performance.now();
   const effectiveArm = fullContext ? "no-memory" : arm;
   const historyOnly = forceSearch === "history";
   const record = { qid, caseId, arm, asOf, question, answer: "", opening: { profileBlock: null, residentBlock: null, skillCatalog: null },
-    options: { forceSearch: forceSearch ?? null, fullContext, contextTokens: contextTokens ?? null },
+    options: { forceSearch: forceSearch ?? null, fullContext, contextTokens: contextTokens ?? null, ...(answerStyle ? { answerStyle } : {}) },
     toolCalls: [], rounds: 0, model: { name: client?.model ?? "deepseek-flash", thinking: client?.thinking ?? "disabled" },
     usage: { promptTokens: 0, completionTokens: 0, cachedTokens: 0 }, ms: 0 };
   let phase = "opening_error";
@@ -70,7 +70,9 @@ export async function answerQuestion({ question, asOf, arm, memory, materials = 
           JSON.stringify(materials.map(({ kind, title, text }) => ({ kind, title, text }))) });
     }
     for (const message of conversation) messages.push({ role: message.role, content: message.text });
-    messages.push({ role: "user", content: `${buildTimeContext(asOf, question)}\n\n${question}` });
+    const styleInstruction = answerStyle === 'concise'
+      ? (/\p{Script=Han}/u.test(question) ? '\n\n请用一两句话回答，只回答所问的内容。' : '\n\nAnswer in one or two sentences, only what was asked.') : '';
+    messages.push({ role: "user", content: `${buildTimeContext(asOf, question)}\n\n${question}${styleInstruction}` });
     if (forceSearch && !fullContext) {
       phase = "tool_error";
       const at = performance.now(), args = { query: question, limit: 8 };

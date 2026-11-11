@@ -846,3 +846,20 @@ test('live forget metrics reach the append-only ledger with separate action grou
   assert.deepEqual(groups.map(row => row.value), [1, 0, 0]);
   for (const row of [called, ...groups]) assert.deepEqual(validateLedgerRow(row), []);
 });
+
+test('CLI records the scoring schema so a corrected verdict can return to an older value', t => {
+  const dir = tempDir(t), runDir = join(dir, 'run'), ledger = join(dir, 'ledger.jsonl');
+  mkdirSync(join(runDir, 'scores'), { recursive: true });
+  writeFileSync(join(runDir, 'run.json'), JSON.stringify(inventedRun()));
+  for (const [schema, pass] of [['fixture-score/1', 1], ['fixture-score/2', 0], ['fixture-score/3', 1]]) {
+    writeFileSync(join(runDir, 'scores', 'summary.json'), JSON.stringify({ schema,
+      sets: { 'synthetic-users': { n: 1, pass, fail: 1 - pass, unknown: 0, error: 0, accuracy: pass,
+        judged: { code: 1, judge: 0, unknown: 0, error: 0 } } } }));
+    const result = spawnSync(process.execPath, [LEDGER_CLI, 'append', '--run', runDir, '--ledger', ledger], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).appended, 1);
+  }
+  const rows = readFileSync(ledger, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(rows.map(row => row.scorer), ['fixture-score/1', 'fixture-score/2', 'fixture-score/3']);
+  assert.deepEqual(rows.map(row => row.value), [1, 0, 1]);
+});
