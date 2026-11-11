@@ -50,5 +50,8 @@ export const Config = Schema.object({
  * @returns {Promise<void>}
  */
 export async function apply(ctx, config) {
-  await registerMemoryBridge(ctx, config)
+  // The deployment's switch arrives in the launch environment and is read here rather than through the plugin row: the row is part
+  // of the kernel's recorded config dump, and a new key there would change the attested baseline for a setting that is ours alone.
+  const retryHealthTimeout = config.retryHealthTimeout === true || process.env.EVIMED_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED === '1'
+  await registerMemoryBridge(ctx, { ...config, retryHealthTimeout })
 }

@@ -221,6 +221,8 @@ export function createMemoryBridge(options) {
   /** When the first forward that failed since the service last answered began; null while it answers. */
   let failingSince = /** @type {number | null} */ (null)
   let outageTold = false
+  /** Health probes that timed out since the gateway last answered anything. */
+  let slowHealthInRow = 0
 
   /** @param {boolean} ok @param {string} detail */
   const observe = (ok, detail) => {
@@ -327,15 +329,19 @@ export function createMemoryBridge(options) {
       stats.forwarded += 1
       failingSince = null
       outageTold = false
+      slowHealthInRow = 0
       observe(true, `HTTP ${response.status}`)
     } catch (error) {
       // The caller hung up first: nothing was learned about the gateway, and there is nobody to answer.
       if (callerLeft) return
       const timedOut = abort.signal.aborted
       // A tool call that ran out of time says the tool was slow, not that the gateway is gone.
-      // A slow liveness probe says nothing about reads/tools. Keep their first
-      // attempt available; connection failures still trip the outage cooldown.
-      const slowHealth = options.retryHealthTimeout === true && timedOut && url.pathname === '/health'
+      // One slow liveness probe says nothing about reads and tools, so the first in a row leaves them available. A second in a row
+      // is a gateway that accepts connections and does not answer: the cooldown applies again, or every model step would wait
+      // out the health deadline before it could start. Connection failures always trip the cooldown.
+      const healthTimedOut = timedOut && url.pathname === '/health'
+      const slowHealth = options.retryHealthTimeout === true && healthTimedOut && slowHealthInRow === 0
+      if (healthTimedOut) slowHealthInRow += 1
       if (!(timedOut && deadline === deadlines.toolCallMs) && !slowHealth) closedUntil = now() + cooldownMs
       const detail = timedOut ? `no answer in ${deadline} ms` : reason(error)
       observe(false, detail)

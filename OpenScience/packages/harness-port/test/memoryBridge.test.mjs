@@ -409,3 +409,24 @@ test('an isolated health timeout leaves immediate profile reads and remember ava
     assert.equal(forwards, 4, 'the real transport outage prevents another forward during cooldown')
   } finally { await bridge.close(); await gateway.close() }
 })
+
+test('a second health timeout in a row brings the cooldown back, and an answer from the gateway resets the count', async () => {
+  let hangHealth = true
+  const gateway = await fakeGateway(req => req.url.endsWith('/health') && hangHealth ? { hang: true } : { body: '{"status":"ok"}' })
+  let forwards = 0
+  const { bridge, call } = await startBridge({ gatewayUrl: gateway.url, retryHealthTimeout: true, cooldownMs: 120, deadlines: { healthMs: 30 },
+    fetchImpl: (input, init) => { forwards++; return globalThis.fetch(input, init) } })
+  try {
+    assert.equal((await call('/health')).status, 503)
+    assert.equal((await call('/health')).status, 503)
+    assert.equal(forwards, 2)
+    assert.match((await call('/api/v1/content/read?uri=profile')).text, /unreachable/)
+    assert.equal(forwards, 2, 'two slow probes in a row close the bridge for the cooldown')
+    await new Promise(resolve => setTimeout(resolve, 150))
+    assert.equal((await call('/api/v1/content/read?uri=profile')).status, 200)
+    assert.equal((await call('/health')).status, 503)
+    assert.equal((await call('/api/v1/content/read?uri=profile')).status, 200, 'after an answer, one slow probe is again only one slow probe')
+    hangHealth = false
+    assert.equal((await call('/health')).status, 200)
+  } finally { await bridge.close(); await gateway.close() }
+})
