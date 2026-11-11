@@ -7,7 +7,7 @@
 //     --engine-url http://127.0.0.1:19330 --engine-key-file <file> --database-url-file <file> --deepseek-key-file <file> \
 //     [--arm product|no-memory|keyword] [--only U01,U02] [--max-sessions N] [--concurrency N] [--no-history-search] \
 //     [--commit-every session|turn] [--plant-corruptions-after <afterSession>] [--limit-questions N] [--plugin-tgz <file>] \
-//     [--ingest-only] [--templates-dir <dir>] [--max-rounds N] [--extraction-timeout-ms N] [--gateway-timeout-ms N]
+//     [--ingest-only] [--snapshot-checkpoints] [--templates-dir <dir>] [--max-rounds N] [--extraction-timeout-ms N] [--gateway-timeout-ms N]
 //     [--config key=value] [--answer-variant name:key=value,...] [--maintain none|consolidate|verify|consolidate+verify]
 //     [--live-turns forget] [--question-category CATEGORY]
 //     [--answers-only] [--variants-only] [--retrieval-only] [--answer-model ID] [--answer-base URL] [--answer-key-file FILE]
@@ -97,7 +97,7 @@ export function parseArguments(argv) {
     set: "", split: "", data: "", out: "", engineUrl: "", engineKeyFile: "", databaseUrlFile: "", deepseekKeyFile: "",
     arm: "product", only: "", maxSessions: 0, concurrency: 3, databasePoolMax: 2, historySearch: true, commitEvery: "session", plantCorruptionsAfter: -1,
     config: {}, answerVariants: [], maintain: "none", maintainAfter: [], rejectionJudge: true, label: "", thinking: "enabled", reasoningEffort: "high",
-    liveTurns: "", questionCategory: "", limitQuestions: 0, pluginTgz: "", ingestOnly: false, templatesDir: "", maxRounds: 8, extractionTimeoutMs: 300_000, gatewayTimeoutMs: 4_000,
+    liveTurns: "", questionCategory: "", limitQuestions: 0, pluginTgz: "", ingestOnly: false, snapshotCheckpoints: false, templatesDir: "", maxRounds: 8, extractionTimeoutMs: 300_000, gatewayTimeoutMs: 4_000,
   };
   /** @type {Record<string, [keyof typeof options, "string" | "int"]>} */
   const valued = {
@@ -134,6 +134,7 @@ export function parseArguments(argv) {
       }
       continue;
     }
+    if (flag === "--snapshot-checkpoints") { options.snapshotCheckpoints = true; continue; }
     if (flag === "--ingest-only") { options.ingestOnly = true; continue; }
     const spec = valued[flag];
     if (!spec) throw new Error(`unknown argument ${flag}`);
@@ -364,7 +365,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     answerOptions: baseAnswer,
     model: { answer: client?.model ?? null, thinking: client?.thinking ?? null, extraction: options.arm === "product" ? "deepseek-flash (lab engine ov.conf, provider direct)" : null },
     options: { liveTurns: options.liveTurns, questionCategory: options.questionCategory, only: options.only || null, maxSessions: options.maxSessions || null, concurrency: options.concurrency, databasePoolMax: options.databasePoolMax, limitQuestions: options.limitQuestions || null,
-      ingestOnly: options.ingestOnly, answersOnly: options.answersOnly, retrievalOnly: options.retrievalOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, dataDir: path.resolve(options.data) },
+      ingestOnly: options.ingestOnly, snapshotCheckpoints: options.snapshotCheckpoints, answersOnly: options.answersOnly, retrievalOnly: options.retrievalOnly, maxRounds: options.maxRounds, extractionTimeoutMs: options.extractionTimeoutMs, dataDir: path.resolve(options.data) },
     cases: cases.map((item) => item.caseId),
   };
   const runJson = previous ? { ...previous,
@@ -388,7 +389,7 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     if (options.questionCategory) questions = questions.filter(question => question.category === options.questionCategory);
     if (options.limitQuestions) questions = questions.slice(0, options.limitQuestions);
     const plantAfter = options.plantCorruptionsAfter;
-    const checkpoints = [...new Set([...checkpointsFor(questions, sessions.length, plantAfter),
+    const checkpoints = [...new Set([...checkpointsFor(options.snapshotCheckpoints ? item.questions : questions, sessions.length, plantAfter),
       ...(options.maintain !== "none" && Array.isArray(options.maintainAfter) ? options.maintainAfter.filter((n) => n <= sessions.length) : [])])].sort((a, b) => a - b);
     const bloat = async (current = null) => {
       const names = (await readdir(path.join(caseDir, "snapshots"))).filter((name) => /^\d+\.json$/.test(name)).sort((a, b) => Number(a.split(".")[0]) - Number(b.split(".")[0]));

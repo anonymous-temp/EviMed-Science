@@ -2957,6 +2957,7 @@ export function loadConfig(overrides = {}) {
     nativeMemoryRejectionJudgeEnabled: overrides.nativeMemoryRejectionJudgeEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED", true),
     // Experimental attribution check after extraction; a failed check keeps the written line.
     memoryPastedInstructionCheckEnabled: overrides.memoryPastedInstructionCheckEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED", false),
+    memoryPastedInstructionRobustEnabled: overrides.memoryPastedInstructionRobustEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_ROBUST_ENABLED", false),
     // The page's import of what another assistant remembered (`nativeMemoryImport.mjs`): one Flash call splits the pasted text, the person
     // reviews the list, the engine writes what they keep. The offers an account may ask for in an hour are the bound on that call
     // (`open_science_native_memory_imports_total{outcome="rate_limited"}`); 0 refuses every import.

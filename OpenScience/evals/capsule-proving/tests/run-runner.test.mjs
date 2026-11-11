@@ -28,6 +28,14 @@ test("arguments: arm product needs the engine; answering needs a model key; --in
   assert.throws(() => parseArguments(["--set", "s"]), /--split is required/);
 });
 
+test("ingest-only can retain every planned snapshot checkpoint without creating answer calls", () => {
+  const off = parseArguments([...base, ...engine, "--ingest-only"]);
+  const on = parseArguments([...base, ...engine, "--ingest-only", "--snapshot-checkpoints"]);
+  assert.equal(off.snapshotCheckpoints, false);
+  assert.equal(on.snapshotCheckpoints, true);
+  assert.deepEqual(checkpointsFor([{ afterSession: 4 }, { afterSession: 8 }], 12), [4, 8, 12]);
+});
+
 test("the run id is the run directory's name, in the engine's alphabet", () => {
   assert.equal(runIdOf("/srv/evimed/runs/smoke-laneA-1"), "smoke-laneA-1");
   assert.throws(() => runIdOf("/srv/runs/has space"), /run id/);

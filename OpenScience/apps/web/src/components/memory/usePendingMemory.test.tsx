@@ -63,6 +63,15 @@ describe("waiting for the memory to write what was asked", () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
+  it("keeps disputed preferences visible without polling or describing a delayed save", () => {
+    const reload = vi.fn();
+    const waiting = [{ ...asked(Date.now() - PENDING_STALL_MS), reason: "instruction_origin_uncertain" as const }];
+    const { result } = renderHook(() => usePendingMemory(waiting, reload));
+    expect(result.current).toEqual({ slow: false, stalled: false });
+    act(() => { vi.advanceTimersByTime(PENDING_STALL_MS); });
+    expect(reload).not.toHaveBeenCalled();
+  });
+
   it("does nothing when nothing waits, and stops the moment what waited is written", () => {
     const reload = vi.fn();
     const { rerender, result } = renderHook(({ items }) => usePendingMemory(items, reload), { initialProps: { items: [asked(Date.now())] } });

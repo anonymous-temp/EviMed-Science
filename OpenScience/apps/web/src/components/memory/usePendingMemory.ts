@@ -23,11 +23,12 @@ export const PENDING_STALL_MS = 10 * 60_000;
 export function usePendingMemory(pending: readonly WebPendingMemory[], reload: () => void, now: () => number = Date.now): { slow: boolean; stalled: boolean } {
   const [, setTick] = useState(0);
   const mounted = useRef(now());
-  const oldest = pending.reduce<number | null>((least, item) => {
+  const writing = pending.filter(item => item.reason !== "instruction_origin_uncertain");
+  const oldest = writing.reduce<number | null>((least, item) => {
     const at = Date.parse(item.at);
     return Number.isFinite(at) && (least === null || at < least) ? at : least;
   }, null);
-  const waiting = pending.length > 0;
+  const waiting = writing.length > 0;
   // A request with no readable time is counted from when this page began to wait for it.
   const since = oldest ?? mounted.current;
   const age = now() - since;

@@ -23,6 +23,18 @@ test("the pasted-instruction attribution experiment defaults off and supports en
   } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
 });
 
+test("robust instruction attribution is independently default off and accepts explicit overrides", () => {
+  const key = "OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_ROBUST_ENABLED";
+  const saved = process.env[key];
+  try {
+    delete process.env[key];
+    assert.equal(loadConfig({ rootDir: repoRoot }).memoryPastedInstructionRobustEnabled, false);
+    process.env[key] = "true";
+    assert.equal(loadConfig({ rootDir: repoRoot }).memoryPastedInstructionRobustEnabled, true);
+    assert.equal(loadConfig({ rootDir: repoRoot, memoryPastedInstructionRobustEnabled: false }).memoryPastedInstructionRobustEnabled, false);
+  } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
+});
+
 test('opening-by-use defaults off, derives today’s character size, and exposes in-process experiment overrides', () => {
   const config = loadConfig({ rootDir: repoRoot });
   assert.equal(config.memoryOpeningByUseEnabled, false);

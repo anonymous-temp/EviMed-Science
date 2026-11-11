@@ -10,6 +10,7 @@ import {
   recordPolicySync, recordRejectionLines, recordResetSweep, recordVerificationLines, recordPastedInstructionCheck,
 } from "./nativeMemoryMetrics.mjs";
 import { NativeMemoryObservations } from "./nativeMemoryObservations.mjs";
+import { INSTRUCTION_ORIGIN_POLICY_HASH, instructionSourceMessage, pendingInstructionResult } from './nativeMemoryInstructionOrigin.mjs';
 import { neutralMemoryUri, removalLines, removalRefusals, removalText } from "./nativeMemoryRejections.mjs";
 import { NativeMemoryVerification, originalSources, replaceStatement } from './nativeMemoryVerification.mjs';
 import { SOURCE_LABEL_PREFIX, sourcesNamedIn } from "./nativeMemoryStore.mjs";
@@ -173,6 +174,14 @@ export class NativeMemoryWorker {
     this.scanCursors = new Map();
     this.rejectionJudge = rejectionJudge;
     this.pastedInstructionJudge = pastedInstructionJudge;
+    if (nativeMemory && this.robustInstructions) nativeMemory.instructionWriteCheck = (userId, file, body, context) => this.checkInstructionWrite(userId, file, body, context);
+    if (this.robustInstructions) this.verification.instructionWriteCheck = async (userId, file, body, origins, context) => {
+      context ??= await this.#contextForUri(userId, file.uri);
+      const operations = { updates: [{ uri: file.uri, before: file.body, after: body }] };
+      const reviewed = await this.#instructionOrigins({ userId, projectId: file.projectId ?? null }, operations, context, [...origins.values()].flat());
+      await this.#holdInstructionLines(userId, operations, context, reviewed, file.projectId ?? null);
+      return context.sessions.read(userId, file.uri);
+    };
     /** The consolidation of an account's memories, set by the composition root beside this worker (it reads files back through `ingestConsolidation`). @type {import("./nativeMemoryConsolidation.mjs").NativeMemoryConsolidation | null} */
     this.consolidation = null;
     /** What promotes a choice two conversations repeated (`nativeMemoryObservations.mjs`); built from the store when there is one. @type {{ promote: (userId: string) => Promise<any> } | null} */
@@ -266,6 +275,7 @@ export class NativeMemoryWorker {
 
   /** Maintenance waits for active writers, including a crashed writer's expiring lease. */
   async drainSummaryInvalidations(userId) {
+    if (this.robustInstructions) await this.reviewPendingInstructionWrites(userId);
     if (!(await this.overlay.pendingSummaryInvalidations(userId)).length) return 0;
     return withNativeMemoryWrite(this.overlay.database, userId, () => drainMemorySummaryInvalidations(this.sessions, this.overlay, userId,
       this.memoryContexts ? async uri => (await this.memoryContexts.forUri(userId, uri)).sessions : null), { exclusive: true });
@@ -553,6 +563,7 @@ export class NativeMemoryWorker {
         // that found this very archive running wrote it down, and then no message needs to be readable to know.
         const tombstone = await this.overlay.tombstone(commit.userId, commit.archiveUri);
         const removed = tombstone ? await this.#removeWrittenBy(commit.userId, diff, sessions) : await this.#undoBeforeReset(commit, diff, context);
+        if (removed === null && this.robustInstructions) await this.#prepareInstructionWrites(commit, diff, context);
         await this.#assertSummariesSettled(commit.userId);
         if (tombstone && tombstone.state === "open") await this.overlay.closeTombstone(commit.userId, commit.archiveUri, "swept", removed ?? 0);
         if (removed !== null) {
@@ -772,6 +783,7 @@ export class NativeMemoryWorker {
     const pastedInstructions = sourceDeleted ? new Set() : await this.#pastedInstructions(commit, operations, context).catch(() => {
       recordPastedInstructionCheck("failed"); return new Set();
     });
+    const instructionRevisions = !sourceDeleted && this.robustInstructions ? await this.#prepareInstructionWrites(commit, diff, context, pastedInstructions) : new Map();
     for (const [list, change] of /** @type {const} */ ([["adds", "added"], ["updates", "updated"], ["deletes", "deleted"]])) {
       for (const operation of Array.isArray(operations[list]) ? operations[list] : []) {
         const uri = String(operation?.uri ?? "");
@@ -791,7 +803,7 @@ export class NativeMemoryWorker {
           await withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, async () => {});
         }
         const settledBefore = sourceDeleted ? String(operation?.before ?? "") : (await this.overlay.file(userId, uri))?.body ?? "";
-        const recorded = await this.overlay.addRevision({ ...base, uri, memoryType: file.type, change, actor: "engine", reason: "",
+        const recorded = instructionRevisions.get(`${uri}:${change}`) ?? await this.overlay.addRevision({ ...base, uri, memoryType: file.type, change, actor: "engine", reason: "",
           before: change === "updated" ? String(operation?.before ?? "") : null, after, projectId });
         const body = sourceDeleted?await context.sessions.read(userId,uri):await this.#afterWrite(userId, uri, file.type, { projectId, diffAfter: after, diffBefore: change === "updated" ? String(operation?.before ?? "") : "", fresh: recorded !== null, archiveUri: commit.archiveUri, memoryContext: context, pastedInstructions });
         // The lines this commit brought are recorded as its own, beyond the revisions a file keeps (what the checks took out is not).
@@ -842,6 +854,18 @@ export class NativeMemoryWorker {
     const verify = mode === 'verify' && this.config.nativeMemoryConsolidationEnabled === true;
     const origins = await this.overlay.originsOf(userId, [...new Set([...adds, ...updates, ...deletes])]);
     const mergeOrigins = [...origins.values()].flatMap(lines => [...lines.values()].flatMap(originalSources));
+    let instructionReview = null;
+    if (this.robustInstructions) {
+      const instructionUpdates = [];
+      for (const uri of new Set([...adds, ...updates])) {
+        const after = await sessions.read(userId, uri);
+        if (after !== null) instructionUpdates.push({ uri, before: held.get(uri)?.body ?? '', after });
+      }
+      const operations = { updates: instructionUpdates };
+      const reviewed = await this.#instructionOrigins({ userId }, operations, context, mergeOrigins);
+      instructionReview = reviewed;
+      await this.#holdInstructionLines(userId, operations, context, reviewed, null);
+    }
     const removed = [];
     // One revision per file and task, however often the same task is read (the revisions' own uniqueness key).
     const archiveUri = `consolidation:${taskId}`;
@@ -877,7 +901,7 @@ export class NativeMemoryWorker {
     // The tag of a project's file is put back: a rewrite is not known to keep it.
     const candidates = [], archiveCache = new Map();
     for (const entry of written) {
-      const body = await this.#afterWrite(userId, entry.uri, entry.type, { projectId: entry.projectId, diffAfter: entry.after, diffBefore: entry.before, fresh: true, archiveUri: null, memoryContext: context, extraOrigins: mergeOrigins });
+      const body = await this.#afterWrite(userId, entry.uri, entry.type, { projectId: entry.projectId, diffAfter: entry.after, diffBefore: entry.before, fresh: true, archiveUri: null, memoryContext: context, extraOrigins: mergeOrigins, pastedInstructions: instructionReview ?? new Set() });
       // A line the consolidation wrote anew names no conversation; a line it kept is already in the index with its own.
       if (body !== null && mergeOrigins.length) {
         const prior = new Set(memoryLines(entry.before).map(lineFingerprint));
@@ -957,13 +981,20 @@ export class NativeMemoryWorker {
    * What follows an engine write of one file: the checks, the project tag, the sources and their labels, the overlay's copy.
    * Acts on the file as it is now, not as the diff says: a later commit may already have changed it.
    * @param {string} userId @param {string} uri @param {string} type
-   * @param {{ projectId: string | null, diffAfter: string, diffBefore?: string, fresh: boolean, archiveUri: string | null, memoryContext: any, extraOrigins?: any[], pastedInstructions?: Set<string> }} context
+   * @param {{ projectId: string | null, diffAfter: string, diffBefore?: string, fresh: boolean, archiveUri: string | null, memoryContext: any, extraOrigins?: any[], pastedInstructions?: Set<string> & {bodies?: Map<string,string>} }} context
    * @returns {Promise<string | null>} the file's text after the checks, or null when the file is gone
    */
   async #afterWrite(userId, uri, type, { projectId, diffAfter, diffBefore = "", fresh, archiveUri, memoryContext, extraOrigins = [], pastedInstructions = new Set() }) {
     const sessions = memoryContext.sessions;
-    const current = await sessions.read(userId, uri);
+    let current = await sessions.read(userId, uri);
     if (current === null) return null;
+    if (this.robustInstructions && pastedInstructions.bodies?.get(uri) !== contentHash(current)) {
+      const operations = { updates: [{ uri, before: diffBefore, after: current }] };
+      const reviewed = await this.#instructionOrigins({ userId, archiveUri, projectId }, operations, memoryContext, extraOrigins);
+      await this.#holdInstructionLines(userId, operations, memoryContext, reviewed, projectId, { archiveUri });
+      current = await sessions.read(userId, uri);
+      if (current === null) return null;
+    }
     // What a project was last worked on is the project's: a conversation of the catch-all has no project to carry it, and a file written
     // from one is taken out (the project card is never handed over in the default project either).
     if (type === "recent_work" && projectId === CATCH_ALL_PROJECT_ID) {
@@ -1081,10 +1112,162 @@ export class NativeMemoryWorker {
     }
   }
 
+  /** Read-only replay of the attribution check against an archived commit; performs no ingestion or engine mutation.
+   * @param {any} commit @param {any} operations @param {any} context
+   */
+  checkPastedInstructions(commit, operations, context) { return this.#pastedInstructions(commit, operations, context); }
+
+  get robustInstructions() { return this.config.memoryPastedInstructionCheckEnabled === true && this.config.memoryPastedInstructionRobustEnabled === true; }
+
+  /** Review is ahead of summary settlement and has no queue sampling. A maintenance fault cannot leave later raw engine
+   * writes unchecked. Namespace, deletion and reset authority still precede reading any source as learning.
+   */
+  async reviewPendingInstructionWrites(userId) {
+    if (!this.robustInstructions) return;
+    for (const pending of await this.overlay.instructionCommits(userId)) {
+      try {
+        const { commit, context } = await this.#commitContext(pending);
+        if (!await this.#sourceAuthorized(commit, context, { abandon: false }) || await this.overlay.tombstone(userId, commit.archiveUri)) continue;
+        const raw = await context.sessions.read(userId, `${commit.archiveUri}/memory_diff.json`); if (!raw) continue;
+        const diff = JSON.parse(raw); this.#assertDiffContext(commit, diff, context);
+        if (await this.#undoBeforeReset(commit, diff, context) !== null) continue;
+        await this.#prepareInstructionWrites(commit, diff, context);
+      } catch (error) { this.report(`native instruction review: ${String(error?.code ?? 'unavailable')}`); }
+    }
+  }
+
+  /** The engine's revision precedes its correction, so the latest Undo always restores the held line. */
+  async #prepareInstructionWrites(commit, diff, context, reviewed = null) {
+    const operations = diff?.operations ?? {}, root = context.sessions.memoryRoot(commit.userId);
+    reviewed ??= await this.#instructionOrigins(commit, operations, context);
+    const revisions = new Map();
+    for (const [list, change] of [['adds', 'added'], ['updates', 'updated']]) for (const operation of operations[list] ?? []) {
+      const file = nativeMemoryFile(operation.uri, root) ?? observationFile(operation.uri, root); if (!file) continue;
+      const projectId = context.kind === 'geo-project' ? context.projectId : PROJECT_MEMORY_TYPES.includes(file.type) ? commit.projectId ?? null : null;
+      revisions.set(`${operation.uri}:${change}`, await this.overlay.addRevision({ userId: commit.userId, archiveUri: commit.archiveUri, engineSession: commit.engineSession,
+        uri: operation.uri, memoryType: file.type, change, actor: 'engine', before: change === 'updated' ? String(operation.before ?? '') : null,
+        after: String(operation.after ?? ''), projectId, sourceProjectId: commit.projectId ?? null, sourceProjectCreatedAt: commit.projectCreatedAt ?? null,
+        changedAt: diff.extracted_at ?? null }));
+    }
+    await this.#holdInstructionLines(commit.userId, operations, context, reviewed, commit.projectId ?? null, commit);
+    return revisions;
+  }
+
+  /** Direct edits/restores are checked too. The action itself is explicit adoption; quoted material retains attribution. */
+  async checkInstructionWrite(userId, file, body, context) {
+    if (!this.robustInstructions) return body;
+    const operations = { updates: [{ uri: file.uri, before: file.body ?? '', after: body }] };
+    const reviewed = await this.#instructionOrigins({ userId, projectId: file.projectId ?? null }, operations, context, [],
+      [instructionSourceMessage({ role: 'user', content: body, action: 'memory_page_edit' })]);
+    await this.#holdInstructionLines(userId, operations, context, reviewed, file.projectId ?? null);
+    return context.sessions.read(userId, file.uri);
+  }
+
+  /** Read every changed line, with source identities bound per candidate, independent of its destination category. */
+  async #instructionOrigins(commit, operations, context, extraOrigins = [], extraMessages = []) {
+    const userId = commit.userId, root = context.sessions.memoryRoot(userId);
+    const candidates = [], conversation = [], cache = new Map(), bodies = new Map();
+    const entries = [...(operations.adds ?? []), ...(operations.updates ?? [])];
+    const origins = await this.overlay.originsOf(userId, entries.map(e => e.uri));
+    // A remember tool's user-role arguments were authored by the model. Its bound human conversation, not that
+    // manufactured one-shot session, is evidence of adoption. Without a committed source, leave the item pending.
+    const toolWrite = commit.origin === 'tool' || String(commit.engineSession ?? '').startsWith('mcp-store-');
+    const toolSources = toolWrite && commit.sourceSession ? await this.overlay.commitsOfSession(userId, commit.sourceSession, { userRoot: context.sessions.userRoot(userId) }) : [];
+    const commonOrigins = [...extraOrigins, ...(toolWrite ? toolSources : commit.archiveUri ? [{ archiveUri: commit.archiveUri, projectId: commit.projectId ?? null }] : [])];
+    const common = [...extraMessages, ...await this.verification.readInstructionSources(userId, commonOrigins, context, cache)];
+    for (const operation of entries) {
+      const file = nativeMemoryFile(operation.uri, root) ?? observationFile(operation.uri, root); if (!file) continue;
+      const settled = (await this.overlay.file(userId, operation.uri))?.body ?? '';
+      const before = new Set(memoryLines(settled).map(lineFingerprint));
+      // Check the live body too: an extraction may have finished after the archived diff being settled.
+      const current = await context.sessions.read(userId, operation.uri);
+      bodies.set(operation.uri, contentHash(current ?? operation.after ?? ''));
+      const lines = memoryLines(current ?? operation.after ?? '');
+      const lineOrigins = origins.get(operation.uri) ?? new Map();
+      const inherited = [...lineOrigins.values()].flatMap(originalSources);
+      for (const text of lines) {
+        const print = lineFingerprint(text), key = `${operation.uri}\u0000${print}`;
+        if (before.has(print) || lineRefusal(text, new Set()) || candidates.some(c => c.key === key)) continue;
+        const specific = originalSources(lineOrigins.get(print));
+        // A new extraction line is sourced to that conversation. Do not borrow unrelated lines' old conversations as
+        // its evidence. Consolidation/verification without a new conversation must use the inherited source set.
+        const sources = [...common, ...await this.verification.readInstructionSources(userId, specific.length ? specific : common.length ? [] : inherited, context, cache)];
+        const sourceMessages = [];
+        for (const source of sources) {
+          const serialized = JSON.stringify(source);
+          let index = conversation.findIndex(m => JSON.stringify(m) === serialized);
+          if (index < 0) { index = conversation.length; conversation.push(source); }
+          sourceMessages.push(index);
+        }
+        candidates.push({ key, text, sourceMessages: [...new Set(sourceMessages)] });
+      }
+    }
+    const result = Object.assign(new Set(), { pending: new Set(), checked: new Set(), bodies });
+    if (!candidates.length) return result;
+    const fingerprint = createHash('sha256').update(INSTRUCTION_ORIGIN_POLICY_HASH+'\0'+JSON.stringify({ candidates, conversation })).digest('hex');
+    const held = await this.overlay.instructionCheck(userId, fingerprint);
+    /** @type {Set<number> & {pending?: Set<number>, receipts?: any[]}} */
+    let judged;
+    if (held) judged = Object.assign(new Set(held.refused), { pending: new Set(held.pending), checked: new Set(candidates.map((_, i) => i)) });
+    else {
+      try { judged = this.pastedInstructionJudge ? await this.pastedInstructionJudge.check({ userId, projectId: commit.projectId ?? null, candidates, conversation }) : pendingInstructionResult(candidates); }
+      catch { recordPastedInstructionCheck('failed'); judged = pendingInstructionResult(candidates); }
+      await this.overlay.recordInstructionCheck(userId, fingerprint, { refused: [...judged], pending: [...(judged.pending ?? [])], receipts: judged.receipts ?? [],
+        pendingKeys: [...(judged.pending ?? [])].map(index => { const [uri, linePrint] = candidates[index].key.split('\u0000'); return { uri, fingerprint: linePrint }; }) });
+    }
+    for (let index = 0; index < candidates.length; index++) {
+      const key = candidates[index].key; result.checked.add(key);
+      if (judged.has(index)) result.add(key);
+      else if (judged.pending?.has(index)) result.pending.add(key);
+    }
+    return result;
+  }
+
+  /** Apply all instruction findings before unrelated summary maintenance can stop commit settlement. Each actual body is
+   * compared with its reviewed hash after model calls. A concurrent rewrite is left for its own receipt, never overwritten.
+   */
+  async #holdInstructionLines(userId, operations, context, reviewed, projectId, authority = {}) {
+    if (!this.robustInstructions) return;
+    for (const operation of [...(operations.adds ?? []), ...(operations.updates ?? [])]) {
+      const uri = operation.uri, file = nativeMemoryFile(uri, context.sessions.memoryRoot(userId)) ?? observationFile(uri, context.sessions.memoryRoot(userId));
+      if (!file) continue;
+      const current = await context.sessions.read(userId, uri); if (current === null) continue;
+      if (reviewed.bodies?.get(uri) !== contentHash(current)) { recordPastedInstructionCheck('stale'); continue; }
+      const refused = new Map();
+      for (const text of memoryLines(current)) {
+        const print = lineFingerprint(text), key = `${uri}\u0000${print}`;
+        if (reviewed.has(key)) refused.set(print, 'pasted_instruction');
+        else if (reviewed.pending?.has(key)) refused.set(print, 'pasted_instruction_pending');
+      }
+      const cleaned = cleanBody(current, refused); if (!cleaned.reasons.length) continue;
+      // Persist recovery authority BEFORE changing the engine, including when its summary rebuild subsequently fails.
+      const removalMatches = await removalRefusals({ userId, projectId, overlay: this.overlay, judge: this.rejectionJudge,
+        namespaceId: context.kind === 'geo-project' ? context.namespaceId : null,
+        candidates: memoryLines(current).map(text => ({ text, sources: [] })) });
+      const privacy = new Map([...removalMatches.keys()].map(print => [print, 'rejected_line']));
+      const recoverable = cleanBody(current, privacy).text;
+      await this.overlay.addRevision({ userId, uri, memoryType: file.type, change: cleaned.hasStatements ? 'updated' : 'deleted', actor: 'platform',
+        reason: [...new Set(cleaned.reasons)].join(','), before: recoverable, after: cleaned.hasStatements ? cleaned.text : null, projectId,
+        engineSession: authority.engineSession ?? null, sourceProjectId: authority.projectId ?? projectId, sourceProjectCreatedAt: authority.projectCreatedAt ?? context.projectCreatedAt ?? null });
+      if (file.type === 'observations' && !cleaned.hasStatements) await this.#retireObservationEvidence(userId, uri, authority.archiveUri ?? null);
+      for (const reason of cleaned.reasons) recordNativeCheck(reason);
+      try {
+        await withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => cleaned.hasStatements
+          ? context.sessions.replace(userId, uri, cleaned.text) : context.sessions.remove(userId, uri));
+      } catch (error) {
+        if (error?.code !== 'memory_summary_rebuild_failed') throw error;
+        this.report('native instruction check: summary maintenance pending');
+      }
+      if (!cleaned.hasStatements) await this.overlay.removeFile(userId, uri);
+      else await this.overlay.upsertFile({ userId, uri, memoryType: file.type, body: cleaned.text, projectId });
+    }
+  }
+
   /** Only new personal lines, checked once against the complete captured conversation, never by paste markers.
    * @param {any} commit @param {any} operations @param {any} context @returns {Promise<Set<string>>}
    */
   async #pastedInstructions(commit, operations, context) {
+    if (this.robustInstructions) return this.#instructionOrigins(commit, operations, context);
     const refused = new Set();
     if (this.config.memoryPastedInstructionCheckEnabled !== true || !this.pastedInstructionJudge || !commit.archiveUri) return refused;
     const root = context.sessions.memoryRoot(commit.userId);

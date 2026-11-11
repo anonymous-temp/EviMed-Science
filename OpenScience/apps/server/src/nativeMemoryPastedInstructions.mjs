@@ -1,5 +1,6 @@
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { recordPastedInstructionCheck } from "./nativeMemoryMetrics.mjs";
+import { createInstructionOriginJudge } from "./nativeMemoryInstructionOrigin.mjs";
 
 const MAX_CANDIDATES = 64;
 const MAX_INPUT_CHARS = 200_000;
@@ -43,6 +44,7 @@ export function parsePastedInstructionJudgement(content, candidates, conversatio
  * @param {{config:any,usageLedger?:any,fetchImpl?:typeof fetch,now?:()=>Date,callModel?:typeof callModelForControlPlane}} dependencies
  */
 export function createPastedInstructionJudge({ config, usageLedger = null, fetchImpl = globalThis.fetch, now = () => new Date(), callModel = callModelForControlPlane }) {
+  if (config.memoryPastedInstructionRobustEnabled === true) return createInstructionOriginJudge({ config, usageLedger, fetchImpl, callModel });
   const model = String(config.memoryExtractionModel || config.deepseekModel || "");
   const timeoutMs = Math.max(1000, Math.min(120_000, Number(config.memoryExtractionTimeoutMs ?? 30_000)));
   /** @type {Map<string,{day:string,calls:number}>} */

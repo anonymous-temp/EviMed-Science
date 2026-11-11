@@ -706,6 +706,8 @@ export interface WebMemoryProfile {
 
 /** One thing the person asked the page to remember that is not in the list yet (about twelve seconds). */
 export interface WebPendingMemory {
+  /** A held attribution finding is not a write in progress. */
+  reason?: "instruction_origin_uncertain";
   id: string;
   text: string;
   at: string;

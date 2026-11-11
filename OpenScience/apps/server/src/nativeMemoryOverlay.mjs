@@ -567,6 +567,37 @@ export class NativeMemoryOverlay {
 
   // --------------------------------------------------------------- revisions
 
+  /** A content/source-bound receipt makes retries auditable without spending the judging budget again. */
+  async instructionCheck(userId, fingerprint) {
+    const result = await this.#query('SELECT result FROM evimed_memory.native_instruction_checks WHERE user_id=$1 AND fingerprint=$2', [owner(userId), fingerprint]);
+    return result.rows[0]?.result ?? null;
+  }
+
+  /** Instruction review must not share the settlement queue's page limit: an older broken summary can strand later writes. */
+  async instructionCommits(userId) {
+    const result = await this.#query("SELECT * FROM evimed_memory.native_commits WHERE user_id=$1 AND state='pending' ORDER BY created_at,archive_uri", [owner(userId)]);
+    return result.rows.map(publicCommit);
+  }
+
+  async recordInstructionCheck(userId, fingerprint, result) {
+    await this.#query(`INSERT INTO evimed_memory.native_instruction_checks(user_id,fingerprint,result) VALUES($1,$2,$3::jsonb)
+      ON CONFLICT(user_id,fingerprint) DO NOTHING`, [owner(userId), fingerprint, JSON.stringify(result)]);
+  }
+
+  /** Disputed lines stay outside active recall, with the same recoverable revision authority as Undo. */
+  async pendingInstructionRevisions(userId) {
+    const rows = await this.#query(`SELECT r.* FROM evimed_memory.native_revisions r WHERE user_id=$1 AND actor='platform'
+      AND reason LIKE '%pasted_instruction_pending%' AND undone_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM evimed_memory.native_revisions newer WHERE newer.user_id=r.user_id AND newer.uri=r.uri
+        AND newer.id>r.id AND newer.actor='user') ORDER BY id DESC LIMIT 100`, [owner(userId)]);
+    const checks = await this.#query("SELECT result->'pendingKeys' AS keys FROM evimed_memory.native_instruction_checks WHERE user_id=$1 AND result ? 'pendingKeys'", [owner(userId)]);
+    const prints = new Map();
+    for (const row of checks.rows) for (const key of row.keys ?? []) {
+      const held = prints.get(key.uri) ?? new Set(); held.add(key.fingerprint); prints.set(key.uri, held);
+    }
+    return (await this.protectRevisions(userId, rows.rows.map(publicRevision))).map(row => ({ ...row, pendingFingerprints: prints.get(row.uri) ?? null }));
+  }
+
   /**
    * One change of one file. A change read from an archive's diff is written once however often the diff is read.
    * @returns {Promise<ReturnType<typeof publicRevision> | null>} null when this archive's change was already there

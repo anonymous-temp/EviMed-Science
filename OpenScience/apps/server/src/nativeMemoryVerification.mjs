@@ -3,6 +3,7 @@ import { withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
 import { carriesPlatformContext, identifierShapesIn, platformIdentifiersIn } from '@evimed/domain';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { filterCapturedMessage } from './memoryGateway.mjs';
+import { instructionSourceMessage } from './nativeMemoryInstructionOrigin.mjs';
 import { lineFingerprint, memoryLines, originalSources } from './nativeMemoryOverlay.mjs';
 export { originalSources } from './nativeMemoryOverlay.mjs';
 import { nativeMemoryFile, parseArchiveUri } from './openVikingSessions.mjs';
@@ -110,10 +111,12 @@ export class NativeMemoryVerification {
   constructor({ config, sessions, overlay, memoryContexts = null, history = null, judge = null, rejectionJudge = null }) {
     this.config = config ?? {}; this.sessions = sessions; this.overlay = overlay; this.memoryContexts = memoryContexts;
     this.history = history; this.rejectionJudge = rejectionJudge; this.judge = judge ?? createVerificationJudge({ config });
+    /** Attribution of any new correction, composed by the native worker. @type {any} */
+    this.instructionWriteCheck = null;
   }
 
   /** Read only an archive proven inside this memory namespace, filtered exactly as capture/history readers do. */
-  async readSources(userId, origins, context = null, cache = new Map()) {
+  async readSources(userId, origins, context = null, cache = new Map(), { structured = false } = {}) {
     try {
       const sessions = context?.sessions ?? this.sessions;
       const root = sessions.userRoot(userId), result = [];
@@ -141,13 +144,27 @@ export class NativeMemoryVerification {
           let message; try { message = JSON.parse(line); } catch { return []; }
           const decision = filterCapturedMessage(message);
           if (!('forward' in decision)) continue;
-          excerpts.push({ role: message.role, text: decision.forward.parts.map(part => part.text).join('\n'), created_at: message.created_at ?? null });
+          excerpts.push(structured ? instructionSourceMessage(message, uri) : { role: message.role, text: decision.forward.parts.map(part => part.text).join('\n'), created_at: message.created_at ?? null });
         }
         cache.set(uri, excerpts);
         result.push(...excerpts);
       }
       return result;
     } catch { return []; }
+  }
+
+  /** The same namespace/deletion authority as verification, retaining source structure for instruction attribution. */
+  async readInstructionSources(userId, origins, context = null, cache = new Map()) {
+    const archives = await this.overlay.removalOrigins(userId, [...new Set(origins.map(origin => origin.archiveUri).filter(uri => {
+      const parsed = parseArchiveUri(uri); return parsed && !parsed.rest && parsed.archiveUri === uri;
+    }))]);
+    const messages = await this.readSources(userId, archives, context, cache, { structured: true });
+    for (const origin of origins.filter(source => !source.archiveUri && source.revisionId)) {
+      const revision = await this.overlay.revision(userId, origin.revisionId);
+      if (revision?.actor !== 'user' || !revision.after || !nativeMemoryFile(revision.uri, (context?.sessions ?? this.sessions).memoryRoot(userId))) continue;
+      messages.push(instructionSourceMessage({ role: 'user', content: revision.after, action: 'memory_page_edit', created_at: revision.changedAt }));
+    }
+    return messages.filter(Boolean);
   }
 
   /** Removal authority follows original sources, excluding newly manufactured promotion/replay messages.
@@ -214,6 +231,10 @@ export class NativeMemoryVerification {
       engineSession: authority?.engineSession ?? null,
       sourceProjectId: authority?.projectId ?? null,
       sourceProjectCreatedAt: authority?.projectCreatedAt ?? null });
+    if (this.instructionWriteCheck) {
+      next = await this.instructionWriteCheck(userId, file, next, origins, context);
+      if (next === null) return true;
+    }
     await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, projectId: file.projectId ?? null, body: next });
     await this.overlay.syncOrigins(userId, file.uri, { after: next });
     await this.overlay.inheritOrigins(userId, file.uri, origins);
