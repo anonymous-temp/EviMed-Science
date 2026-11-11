@@ -103,6 +103,9 @@ per-request trial attribution. Each stream runs none, learned, then flat.
 Serial scheduling completes none/learned/flat for each task, alternates benchmarks,
 and orders each benchmark by native agent timeout then the frozen seed hash.
 `execution-queue.json` preserves that outcome-independent order; the sample is unchanged.
+Official container builds share warmed Docker caches and cached oracle controls on this lab.
+The fixed arm order is not randomized. Wall throughput includes order/cache effects
+and shared load, so it is not an intrinsic model-speed comparison.
 Product practice uses port 48848, bridge 19368 and its own database on the existing
 lab PostgreSQL port 55686. Do not stop other lanes' processes or containers.
 
@@ -167,9 +170,9 @@ Run it once without that flag after all trials to include unavailable-case
 diagnostics, then generate the final reports on the lab:
 
 ```sh
-python /srv/evimed/sb/code/judge.py
+/srv/evimed/sb/venv/bin/python /srv/evimed/sb/code/judge.py
 node evals/capsule-proving/sb/report.mjs /srv/evimed/sb /srv/evimed/runs /srv/evimed/results/ledger.jsonl --append
-python /srv/evimed/sb/code/render_results.py
+/srv/evimed/sb/venv/bin/python /srv/evimed/sb/code/render_results.py
 ```
 
 Mounted means deployed skill folders. Opened means a successful read-tool call
@@ -198,7 +201,7 @@ measurement and cannot be called the published GPT-5-mini result.
 
 What a leaderboard submission would need (five lines):
 
-1. Freeze the product configuration, code/data/agent pins and learning boundary; do not tune a special leaderboard product.
+1. Freeze code/data/agent pins and the learning boundary; a product claim needs the actual control-plane/DSH task-container adapter, or an accepted, explicitly labelled reference-harness entry.
 2. Run the complete required sets/repeats with the unchanged official verifiers and retain every task result, error and trajectory.
 3. Disclose the actual model, harness, skill sources, practice/test separation, generated methods, resource limits, tokens and spend.
 4. For SkillLearnBench, include all three layers and the required solver/judge or obtain agreement to clearly labelled substitutions.
