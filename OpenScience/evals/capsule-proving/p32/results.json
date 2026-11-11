@@ -1,0 +1,4406 @@
+{
+  "lane": "P32/p10",
+  "automated": true,
+  "productBehaviorChanged": false,
+  "reference": {
+    "source": "evals/remembered-format/results/2026-10-25-current+pre-1025+conditional-method-deepseek-flash.json",
+    "arm": "current",
+    "fabricating": 58,
+    "n": 90,
+    "meaning": "Historical simulated-memory arm, never a no-memory control; answer/judge thinking implicit."
+  },
+  "controls": {
+    "none/partial": {
+      "n": 90,
+      "fabricating": 36,
+      "unusable": 1,
+      "allGivenLexical": 77,
+      "allGivenSemantic": 83,
+      "scored": 85,
+      "unjudged": 5
+    },
+    "pasted/partial": {
+      "n": 90,
+      "fabricating": 44,
+      "unusable": 2,
+      "allGivenLexical": 82,
+      "allGivenSemantic": 88,
+      "scored": 90,
+      "unjudged": 0
+    },
+    "recalled/partial": {
+      "n": 90,
+      "fabricating": 30,
+      "unusable": 2,
+      "allGivenLexical": 80,
+      "allGivenSemantic": 85,
+      "scored": 87,
+      "unjudged": 3
+    }
+  },
+  "unjudgedControls": [
+    [
+      "none",
+      "email-reply",
+      "partial",
+      2
+    ],
+    [
+      "none",
+      "ethics-summary",
+      "partial",
+      0
+    ],
+    [
+      "none",
+      "referral-note",
+      "partial",
+      0
+    ],
+    [
+      "none",
+      "referral-note",
+      "partial",
+      1
+    ],
+    [
+      "none",
+      "referral-note",
+      "partial",
+      2
+    ],
+    [
+      "recalled",
+      "handover-note",
+      "partial",
+      1
+    ],
+    [
+      "recalled",
+      "midterm-report",
+      "partial",
+      0
+    ],
+    [
+      "recalled",
+      "referral-note",
+      "partial",
+      0
+    ]
+  ],
+  "paired": {
+    "left": "recalled",
+    "right": "pasted",
+    "usablePairs": 83,
+    "leftOnly": 8,
+    "rightOnly": 19,
+    "rateDifference": -0.13253012048192772,
+    "caseClusterBootstrap95": [
+      -0.2619047619047619,
+      -0.012195121951219513
+    ],
+    "mcnemarExactPUnclustered": 0.052238985896110535,
+    "warning": "Three samples share one fixture; bootstrap resamples fixtures. Overlap is not proof of equivalence."
+  },
+  "withoutFormat": {
+    "left": "recalled",
+    "right": "none",
+    "usablePairs": 80,
+    "leftOnly": 16,
+    "rightOnly": 24,
+    "rateDifference": -0.1,
+    "caseClusterBootstrap95": [
+      -0.2625,
+      0.07317073170731707
+    ],
+    "mcnemarExactPUnclustered": 0.26818725105476915,
+    "warning": "Three samples share one fixture; bootstrap resamples fixtures. Overlap is not proof of equivalence."
+  },
+  "gxSameAnswersRescored": {
+    "gx-recalled/full": {
+      "n": 90,
+      "fabricating": 37,
+      "unusable": 0,
+      "allGivenLexical": 83,
+      "allGivenSemantic": 90
+    },
+    "gx-recalled/partial": {
+      "n": 90,
+      "fabricating": 32,
+      "unusable": 2,
+      "allGivenLexical": 85,
+      "allGivenSemantic": 88
+    }
+  },
+  "firstQwenRubricControls": {
+    "none/partial": {
+      "n": 90,
+      "fabricating": 27,
+      "unusable": 1,
+      "allGivenLexical": 79,
+      "allGivenSemantic": 89
+    },
+    "pasted/partial": {
+      "n": 90,
+      "fabricating": 26,
+      "unusable": 2,
+      "allGivenLexical": 82,
+      "allGivenSemantic": 86
+    },
+    "recalled/partial": {
+      "n": 90,
+      "fabricating": 27,
+      "unusable": 2,
+      "allGivenLexical": 83,
+      "allGivenSemantic": 88
+    }
+  },
+  "handRead": {
+    "real": 19,
+    "benign": 7,
+    "borderline": 3,
+    "invalid": 1
+  },
+  "calibrationAgreementExcludingAmbiguousAndInvalid": {
+    "trueNegative": 6,
+    "truePositive": 16,
+    "falseNegative": 3,
+    "falsePositive": 1
+  },
+  "calibrationLimitation": "The manual audit informed rubric development; this is calibration, not independent judge validation.",
+  "productSample": {
+    "product": {
+      "product/partial": {
+        "n": 20,
+        "fabricating": 10,
+        "unusable": 0,
+        "allGivenLexical": 18,
+        "allGivenSemantic": 20
+      }
+    },
+    "sameItemsEngine": {
+      "recalled/partial": {
+        "n": 20,
+        "fabricating": 7,
+        "unusable": 0,
+        "allGivenLexical": 19,
+        "allGivenSemantic": 20
+      }
+    },
+    "lockIsolation": true,
+    "seedRoute": "POST /api/memory/remember; native extraction, then automated answer turn",
+    "withMemoryReads": 20,
+    "withArtifacts": 6,
+    "runStatuses": {
+      "succeeded": 20
+    },
+    "attemptExcluded": "p32-product: automated seed turn correctly refused long-term writes; no usable recalled-format exposure.",
+    "knownScorerDisagreements": [
+      {
+        "case": "grant-paragraph",
+        "qwen": false,
+        "manualConcern": "The supplied facts establish a cohort and some preliminary experiments, not a specimen bank, complete workflows or technical facilities. The draft asserts those outside blanks."
+      },
+      {
+        "case": "project-progress",
+        "qwen": true,
+        "manualConcern": "The status is explicitly marked as provisional and awaiting confirmation inline; the rubric excludes clearly labelled assumptions."
+      }
+    ],
+    "comparisonLimits": "Automated turns carry the product instruction to finish with labelled assumptions; GX omits it. First 20 fixture cases, sample 0. Real native memory/tool use and full kernel prompt versus forced GX context; not a single-variable kernel ablation."
+  },
+  "conclusion": {
+    "verified": "Invention occurs without memory and with a pasted format; all twenty product cases completed with real memory reads. Native storage fixtures contain formats, not filled examples.",
+    "inference": "This corpus supports a general drafting failure rather than a memory-specific increase. No new capsule behavior is justified by these controls.",
+    "scorerLimits": "Qwen still misses unsupported assertions around blanks and sometimes penalizes labelled assumptions/general knowledge. Exact quote checks verify evidence location, not semantic truth.",
+    "remaining": "General drafting fabrication is unresolved. No product remedy or on/off scenario acceptance is claimed."
+  },
+  "acceptance": {
+    "featureAccepted": false,
+    "reason": "No product candidate; diagnostics and scorer changes only. Revised rates must not be presented as a reduction caused by a product fix.",
+    "redLine": "Memory must not worsen fabrication relative to the same request with the format supplied by the person.",
+    "historicalFullLexical": 83,
+    "targetPartial": 36,
+    "scenariosOnOff": "Not run: no behavior switch or product code change."
+  },
+  "balanceBeforeFirstRead": "2026-11-11T05:08:04Z balance 1864.20",
+  "balanceBefore": "2026-11-11T05:10:04Z balance 1862.43",
+  "balanceAfter": "2026-11-11T05:46:10Z balance 1828.04",
+  "spendCaveat": "Shared DeepSeek balance movement, not isolated lane spend; Qwen billed separately.",
+  "evidenceSha256": {
+    "p32-controls": "16ab2379d7012c89f244f15ee3b78e4f6ea67f9276a96a8937ce884868c8f83a",
+    "p32-controls-v3": "1c2bc5ca65519fa874dd9574d71bf668d88e46513ecfdf3d2b125c600472252c",
+    "p32-gx-rescore": "e54f9dd14038c84b0f8bfc6c4d36260d5e3102ad60623cecb01fba4c53a3bba8",
+    "p32-gx-v3": "dd4af436dbb608df731a4ab120d2b095ab9f24d33c3c68b9c2198db5f5e67cea",
+    "p32-calibration": "7ea250471d351ceed89a9ff73909d4a74b99dcc6bbcbc70ed481243e356609db",
+    "p32-calibration-v3": "b6c4c5eb9b27bd5049a051e5dae4a4d699636fea5b29b46357e75cf0a4f732a1",
+    "p32-product-score": "d36b4293938e44e6b0e4868d37f2a3e6656d9fb3d487b4c006df43c2e768b1fb",
+    "p32-product-grounded": "afc3984bb8665ee46a4cda4a58befba9c80345d78e540ef9d74897d08d5bd4b3"
+  },
+  "tests": {
+    "p32": 7,
+    "existingRememberedFormat": 26,
+    "nodeSyntaxCheck": true,
+    "shellSyntaxCheck": true
+  },
+  "rows": [
+    {
+      "arm": "none",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "email-reply",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "email-reply",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "email-reply",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "email-reply",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "email-reply",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "email-reply",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "email-reply",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": null,
+      "allGivenLexical": false,
+      "allGivenSemantic": false
+    },
+    {
+      "arm": "pasted",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": false
+    },
+    {
+      "arm": "pasted",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": null,
+      "allGivenLexical": false,
+      "allGivenSemantic": false
+    },
+    {
+      "arm": "recalled",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "handover-note",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "handover-note",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "handover-note",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "handover-note",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "handover-note",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "handover-note",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "handover-note",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "customer-visit",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "handover-note",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "customer-visit",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "customer-visit",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "customer-visit",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "customer-visit",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "customer-visit",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "customer-visit",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "customer-visit",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "release-notes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "customer-visit",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "release-notes",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "release-notes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "release-notes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "release-notes",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "release-notes",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "release-notes",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "release-notes",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "release-notes",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "ethics-summary",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "ethics-summary",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "ethics-summary",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "ethics-summary",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "ethics-summary",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "ethics-summary",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "midterm-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "ethics-summary",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "midterm-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": null,
+      "allGivenLexical": false,
+      "allGivenSemantic": false
+    },
+    {
+      "arm": "none",
+      "case": "midterm-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "ethics-summary",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "midterm-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "midterm-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": null,
+      "allGivenLexical": false,
+      "allGivenSemantic": false
+    },
+    {
+      "arm": "pasted",
+      "case": "midterm-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "midterm-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "recommendation-letter",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "recommendation-letter",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "recommendation-letter",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "recommendation-letter",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "midterm-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "recommendation-letter",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "recommendation-letter",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "recommendation-letter",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "recommendation-letter",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "referral-note",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "referral-note",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "referral-note",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "referral-note",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "referral-note",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "conference-abstract",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "conference-abstract",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "conference-abstract",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "conference-abstract",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "conference-abstract",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "conference-abstract",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "weekly-plan",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": null,
+      "allGivenLexical": false,
+      "allGivenSemantic": false
+    },
+    {
+      "arm": "pasted",
+      "case": "conference-abstract",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "weekly-plan",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "conference-abstract",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "weekly-plan",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "weekly-plan",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "weekly-plan",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "weekly-plan",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "weekly-plan",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "weekly-plan",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "interview-feedback",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "interview-feedback",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "interview-feedback",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "interview-feedback",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "interview-feedback",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "interview-feedback",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "interview-feedback",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "interview-feedback",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "weekly-plan",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "status-update",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "status-update",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "status-update",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "status-update",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "status-update",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "status-update",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "status-update",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "email-reply",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "recalled",
+      "case": "recommendation-letter",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "interview-feedback",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "conference-abstract",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "pasted",
+      "case": "status-update",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "none",
+      "case": "status-update",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "weekly-report",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "weekly-report",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "weekly-report",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "monthly-report",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "monthly-report",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "meeting-minutes",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "monthly-report",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "meeting-minutes",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "meeting-minutes",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "email-reply",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "email-reply",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "email-reply",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "email-reply",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "project-progress",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "project-progress",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "project-progress",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "paper-abstract",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "paper-abstract",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "paper-abstract",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "grant-paragraph",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "grant-paragraph",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "cover-letter",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "cover-letter",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": null,
+      "allGivenLexical": false,
+      "allGivenSemantic": false
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "resume-paragraph",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "resume-paragraph",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "resume-paragraph",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "group-meeting",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "group-meeting",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "group-meeting",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "lab-notes",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "lab-notes",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "lab-notes",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "training-summary",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "training-summary",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "training-summary",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "quarterly-review",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "quarterly-review",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "quarterly-review",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "cover-letter",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "response-to-reviewers",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "response-to-reviewers",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "response-to-reviewers",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "postmortem",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "postmortem",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "postmortem",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "trip-report",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "trip-report",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "purchase-request",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "teaching-reflection",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "purchase-request",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "teaching-reflection",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "teaching-reflection",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "purchase-request",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "annual-review",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "annual-review",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "annual-review",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "handover-note",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "handover-note",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "handover-note",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "handover-note",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "handover-note",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "handover-note",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "customer-visit",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "customer-visit",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "customer-visit",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "customer-visit",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "customer-visit",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "customer-visit",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "release-notes",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "release-notes",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "release-notes",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "release-notes",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "release-notes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "release-notes",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "ethics-summary",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "ethics-summary",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "ethics-summary",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "ethics-summary",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "midterm-report",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "ethics-summary",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "ethics-summary",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "midterm-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "midterm-report",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "midterm-report",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "midterm-report",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "recommendation-letter",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "recommendation-letter",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "recommendation-letter",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "recommendation-letter",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "recommendation-letter",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "referral-note",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "referral-note",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "recommendation-letter",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "referral-note",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "referral-note",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "referral-note",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "conference-abstract",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "conference-abstract",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "conference-abstract",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "conference-abstract",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "conference-abstract",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "conference-abstract",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "weekly-plan",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "weekly-plan",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "weekly-plan",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": null,
+      "allGivenLexical": false,
+      "allGivenSemantic": false
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "weekly-plan",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "weekly-plan",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "weekly-plan",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "midterm-report",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "interview-feedback",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "interview-feedback",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "interview-feedback",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "interview-feedback",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "interview-feedback",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "interview-feedback",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "status-update",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "status-update",
+      "variant": "full",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "status-update",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "status-update",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "status-update",
+      "variant": "full",
+      "sample": 2,
+      "fabricating": false,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "status-update",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "referral-note",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "email-reply",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "email-reply",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "grant-paragraph",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "trip-report",
+      "variant": "full",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 2,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "gx-recalled",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 1,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "email-reply",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "group-meeting",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "lab-notes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "cover-letter",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "monthly-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "meeting-minutes",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "grant-paragraph",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "postmortem",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "project-progress",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "paper-abstract",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "quarterly-review",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "response-to-reviewers",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "resume-paragraph",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": false,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "weekly-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "training-summary",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "purchase-request",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "trip-report",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "teaching-reflection",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "annual-review",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": true,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    },
+    {
+      "arm": "product",
+      "case": "handover-note",
+      "variant": "partial",
+      "sample": 0,
+      "fabricating": false,
+      "allGivenLexical": true,
+      "allGivenSemantic": true
+    }
+  ]
+}
