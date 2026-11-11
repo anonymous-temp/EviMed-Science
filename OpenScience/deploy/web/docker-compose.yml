@@ -400,6 +400,16 @@ services:
       OPEN_SCIENCE_MEMORY_OPENING_MAX_CHARS:
       OPEN_SCIENCE_MEMORY_OPENING_NEW_FILE_DAYS:
       OPEN_SCIENCE_MEMORY_OPENING_TOP_K:
+      OPEN_SCIENCE_MEMORY_SEARCH_HINT_ENABLED:
+      OPEN_SCIENCE_MEMORY_OPENING_INDEX_ENABLED:
+      OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED:
+      OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_ENABLED:
+      OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS:
+      OPEN_SCIENCE_MEMORY_HISTORY_RETRIEVAL_V2_ENABLED:
+      OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED:
+      OPEN_SCIENCE_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED:
+      OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_MODE:
+      OPEN_SCIENCE_NATIVE_MEMORY_VERIFY_DAILY_CALLS:
       # The memory dashboard's document (总览): the read-only map of what is remembered (unset follows OPEN_SCIENCE_MEMORY_ENABLED), and
       # the topics a model groups an account's memories into (switch, groupings per account per day, memories needed before there is
       # anything to group).
@@ -1079,6 +1089,9 @@ services:
       # The learned-method library's experiment switches (plan 2026-11-04 §5.4); value-less: unset is off / 0, the mount as it was.
       OPEN_SCIENCE_METHOD_PYRAMID_ENABLED:
       OPEN_SCIENCE_METHOD_MOUNT_MIN_SIMILARITY:
+      OPEN_SCIENCE_LEARNING_TOOLCHAIN_ROUTINE_ENABLED:
+      OPEN_SCIENCE_LEARNING_TOOLCHAIN_MIN_SIMILARITY:
+      OPEN_SCIENCE_LINK_CHECK_ENABLED:
       OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED:
       OPEN_SCIENCE_METHOD_CARD_EVIDENCE_ENABLED:
       OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED:
@@ -2281,6 +2294,9 @@ services:
       OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: ${OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES:-12582912}
       # And the socket plugins it launches every runtime without.
       OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS:
+      # Read where runtimes are launched: the kernel-side memory bridge and the guidance preset take these from the launch environment.
+      OPEN_SCIENCE_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED:
+      OPEN_SCIENCE_MEMORY_SEARCH_HINT_ENABLED:
       # And every other setting the launch plan reads, as the web API has it.
       # Until 2026-09-23 these four reached only the web API, so every runtime
       # started with EVIMED_REVIEW_ENABLED=0 — a submission never asked for the
