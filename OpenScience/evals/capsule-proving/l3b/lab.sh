@@ -36,8 +36,11 @@ PY
 cd "$TREE"
 IFS=',' read -ra arms <<< "$plan"
 for arm in "${arms[@]}"; do
+  exec 9>"/srv/evimed/runs/l3b-$arm-1.lock"
+  flock -n 9 || { echo "Arm $arm is already running"; exit 75; }
   nice -n 5 node evals/capsule-proving/l3b/run_l3b.mjs --tree "$TREE" --arm "$arm" --port "$PORT" --pg-port "$PG_PORT"
   python3 evals/capsule-proving/l3b/score.py --run "/srv/evimed/runs/l3b-$arm-1"
   python3 evals/capsule-proving/l3b/report.py
+  flock -u 9
   printf '%s L3B %s complete\n' "$(date -u +%FT%TZ)" "$arm"
 done

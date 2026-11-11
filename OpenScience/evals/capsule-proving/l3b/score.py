@@ -73,6 +73,11 @@ def call_qwen(payload, key):
         raise ValueError('Missing behavior verdict')
     return result, raw.get('usage', {})
 
+def write_verdict(file, value):
+    temp = file.with_suffix('.tmp')
+    temp.write_text(json.dumps(value, indent=2)+'\n')
+    temp.replace(file)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--run', type=Path, required=True)
@@ -103,7 +108,7 @@ def main():
                 error_type = type(error).__name__  # Provider error bodies can contain credentials; never persist them.
                 time.sleep(2 * (attempt + 1))
         if result is None:
-            failures += 1; out.write_text(json.dumps(dict(error=error_type))); continue
+            failures += 1; write_verdict(out, dict(error=error_type)); continue
         behavior = code if item.get('code') else result.get('behavior') if item.get('behavior') else None
         run_ok = len(record.get('turns', [])) == 1 and all(t.get('run', {}).get('status') in ('succeeded','unverified') and not t.get('timedOut') and not t.get('error') for t in record['turns'])
         cached = (usage.get('prompt_tokens_details') or {}).get('cached_tokens', 0)
@@ -112,7 +117,7 @@ def main():
                        behavior=behavior, quality=result['quality'], runOk=run_ok,
                        passed=run_ok and result['quality'] and (behavior is not False),
                        preferencePresent=result['preferencePresent'], rationale=result.get('rationale'), usage=usage)
-        out.write_text(json.dumps(verdict, indent=2)+'\n')
+        write_verdict(out, verdict)
         print(file.stem, 'behavior='+str(behavior), 'quality='+str(result['quality']), flush=True)
     if failures:
         raise SystemExit(f'{failures} judge failures; saved for retry, never counted as ordinary task failures')

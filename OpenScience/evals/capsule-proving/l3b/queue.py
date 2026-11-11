@@ -4,6 +4,7 @@ import fcntl
 import json
 import os
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,9 @@ HERE=Path(__file__).resolve().parent
 ROOT=Path('/srv/evimed/runs')
 LOCKS=Path('/srv/evimed/pp/locks')
 LOCKS.mkdir(parents=True,exist_ok=True)
+plan=sys.argv[1] if len(sys.argv)>1 else 'A,B,C,D'
+if not plan or any(a not in 'ABCD' or len(a)!=1 for a in plan.split(',')) or len(set(plan.split(',')))!=len(plan.split(',')):
+    raise SystemExit('Expected a comma-separated subset of A,B,C,D')
 port=os.environ.get('PORT','48853')
 slot=f'/srv/evimed/pp/live/p{port}-l3b'
 reservation=LOCKS/f'eg-reservation-{os.getpid()}.json'
@@ -53,7 +57,7 @@ while True:
     if start:
         log(f'starting reserved slot={slot}, existing={len(slots)}, availableKiB={available}')
         try:
-            result=subprocess.call(['bash',str(HERE/'lab.sh')],env={**os.environ,'PORT':port,'L3B_CAPACITY_RESERVED':'1'})
+            result=subprocess.call(['bash',str(HERE/'lab.sh'),plan],env={**os.environ,'PORT':port,'L3B_CAPACITY_RESERVED':'1'})
             log(f'batch exited code={result}')
             raise SystemExit(result)
         finally:reservation.unlink(missing_ok=True)

@@ -3,6 +3,7 @@
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 
 
@@ -93,7 +94,9 @@ def main():
         arms[a]['controlsVsA']=mcnemar(base,candidate)
     report=dict(arms=arms, uncertainty='Wilson and exact McNemar on 36 repeated exams are descriptive: repetitions share one account per arm and 12 task pairs. Report rep-1 and case-majority sensitivities; population inference needs independent accounts. C versus B isolates added method learning; C versus A combines memory and learning.',
                 judgeCost='Qwen token usage and CNY estimated from the repository reference price list are saved per verdict; provider-billed CNY is not returned. DeepSeek account ledger includes learning; shared balance delta is a conservative envelope, not lane-specific attribution.')
-    target=args.out or args.root/'l3b-report.json'; target.write_text(json.dumps(report,indent=2)+'\n')
+    target=args.out or args.root/'l3b-report.json'
+    temp=target.with_name(target.name+f'.{os.getpid()}.tmp')
+    temp.write_text(json.dumps(report,indent=2)+'\n'); temp.replace(target)
     for a,r in arms.items():
         print(a, 'paired',r['paired'],'controls',r['controls'],'unknown',r['unknown'],'vsA',r.get('vsA'))
 if __name__=='__main__':main()
