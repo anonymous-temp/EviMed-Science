@@ -32,11 +32,13 @@ def main():
     parser.add_argument("--root", default="/srv/evimed/runs")
     parser.add_argument("--cap", type=float, default=300)
     parser.add_argument("--probe", action="store_true", help="One training-only ScienceWorld lesson before the full rebuild")
+    parser.add_argument("--code", help="Frozen OpenScience tree; defaults to the tree containing this operator script")
+    parser.add_argument("--workers", type=int, choices=(1, 2, 3), default=2)
     args = parser.parse_args()
     root = Path(args.root)
     queue = root / "c1c-batch"
     queue.mkdir(exist_ok=True)
-    code = Path(__file__).resolve().parents[3]
+    code = Path(args.code).resolve() if args.code else Path(__file__).resolve().parents[3]
     c1 = code / "evals/capsule-proving/c1"
     pool = code / "evals/capsule-proving/pools/c-samples-20261110.json"
     train_pool = code / "evals/capsule-proving/pools/c1-train-20261110.json"
@@ -67,6 +69,7 @@ def main():
                       sharedDecrease=round(budget["balanceBefore"] - remaining, 2))
         spend = json.loads(subprocess.check_output(["node", str(c1 / "spend.mjs"), str(root)], text=True))
         budget.update(laneReceipts=spend, reserveCny=50,
+                      workers=args.workers, frozenCode=str(code),
                       attribution="Lane-local receipts at peak rates; shared balance decrease includes other lanes")
         budget_file.write_text(json.dumps(budget, indent=2) + "\n")
         if remaining < 150 or spend["peakCostUpperCny"] >= args.cap - 50:
@@ -114,7 +117,7 @@ def main():
         for arm in ("no-skill", "flat", "pyramid"):
             command = ["/srv/evimed/c1/venv/bin/python", "run_c1.py", "--env", env, "--fold", fold,
                        "--samples", str(pool), "--arm", arm, "--out", str(root / ("c1c-" + arm)),
-                       "--workers", "2", "--key-file", key]
+                       "--workers", str(args.workers), "--key-file", key]
             if arm != "no-skill":
                 command += ["--library", str(libs / (env + "-pyramid.json")), "--mode", arm,
                             "--selector", "product", "--embed-key-file", embed]

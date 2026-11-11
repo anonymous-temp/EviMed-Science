@@ -19,6 +19,8 @@ def library_of(source, arm, env):
     if arm == "no-skill":
         return None
     variant = "from-scratch" if arm == "from-scratch" else "add-only" if arm == "add-only" else "pyramid"
+    if source.startswith("c1c-"):
+        return f"c1c-lib/{env}-{variant}.json"
     return f"c1-lib-2/{env}-{variant}.json" if source.startswith("c1-arm2-") else f"c1-lib-1/{env}-{variant}.json"
 
 
@@ -36,6 +38,7 @@ def main():
             continue
         env, fold, arm = cell["env"], cell["fold"], cell["arm"]
         source = (cell.get("sources") or ["unknown"])[0]
+        concise = source.startswith("c1c-") and arm != "no-skill"
         mode = "flat" if arm == "flat" else None if arm == "no-skill" else "pyramid"
         removed = {"no-abstract": ["abstract"], "no-atomic": ["atomic"]}.get(arm, [])
         rows.append({
@@ -43,7 +46,9 @@ def main():
             "metric": "accuracy" if env == "alfworld" else "mean_score",
             "scorer": "c1-game-checker", "engine": {"version": "n/a (C1 text games, direct DeepSeek loop)", "templatesDigest": "n/a"},
             "flags": {"model": "deepseek-flash", "thinking": "disabled", "library": library_of(source, arm, env), "selection": mode, "removeRoles": removed,
-                      "lessons": "camp+two-stage" if source.startswith("c1-arm2-") else None, "cardBodyBudgetBytes": 32768 if source.startswith("c1-arm2-") else None,
+                      "lessons": "camp+two-stage" if source.startswith("c1-arm2-") or concise else None,
+                      "cardBodyBudgetBytes": 32768 if source.startswith("c1-arm2-") or concise else None,
+                      **({"conciseDistillation": True, "learningTransport": "system-skill-section"} if concise else {}),
                       "scale": "fraction of 1" if env == "alfworld" else "mean score / 100 (a -100 ending counted as 0)",
                       **({"rawMeanScore": cell.get("rawMeanScore"), "successRate": cell.get("successRate")} if env == "scienceworld" else {})},
             "n": cell["n"], "value": round(cell["value"] / 100, 4),

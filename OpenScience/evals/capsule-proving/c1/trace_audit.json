@@ -168,5 +168,71 @@
     "acceptedScore": 1,
     "acceptedSuccess": true,
     "decision": "Keep the existing prompt unchanged for the length experiment; report the command mismatch as a confound."
-  }
+  },
+  "twoObjectReplay": {
+    "trace": "/srv/evimed/runs/c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-1b276759a89e622a33db.json",
+    "replayedActions": 6,
+    "modelCalls": 0,
+    "steps": [
+      {
+        "action": "take cd 2 from desk 1",
+        "observation": "Nothing happens.",
+        "score": 0.0,
+        "done": false,
+        "success": false
+      },
+      {
+        "action": "inventory",
+        "observation": "You are carrying: a cd 1.",
+        "score": 0.0,
+        "done": false,
+        "success": false
+      },
+      {
+        "action": "move cd 1 to desk 1",
+        "observation": "You move the cd 1 to the desk 1.",
+        "score": 0.0,
+        "done": false,
+        "success": false
+      },
+      {
+        "action": "take cd 2 from desk 1",
+        "observation": "You pick up the cd 2 from the desk 1.",
+        "score": 0.0,
+        "done": false,
+        "success": false
+      },
+      {
+        "action": "inventory",
+        "observation": "You are carrying: a cd 2.",
+        "score": 0.0,
+        "done": false,
+        "success": false
+      }
+    ]
+  },
+  "twoObjectTaskTypeCounts": [
+    {
+      "arm": "no-skill",
+      "taskType": "pick_two_obj_and_place",
+      "n": 24,
+      "wins": 6,
+      "meanSteps": 45.67
+    },
+    {
+      "arm": "flat",
+      "taskType": "pick_two_obj_and_place",
+      "n": 24,
+      "wins": 0,
+      "meanSteps": 50.0
+    },
+    {
+      "arm": "pyramid",
+      "taskType": "pick_two_obj_and_place",
+      "n": 24,
+      "wins": 0,
+      "meanSteps": 50.0
+    }
+  ],
+  "twoObjectInterpretation": "The old instruction to hold the full quantity before any placement is incompatible with this replay. This is a content confound for a length-only causal claim; all new arms still use the unchanged original game prompt."
 }
