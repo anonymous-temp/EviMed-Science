@@ -103,19 +103,26 @@ async function main() {
     const execute = async (item, phase, rep) => {
       await guard();
       const name = `${phase}-${item.id}-r${rep}`, file = `${out}/records/${name}.json`;
-      if (fsSync.existsSync(file)) return read(file);
       const pending = `${out}/pending.json`;
       const interrupted = await read(pending);
-      if (interrupted) throw new Error(`Unfinished conversation ${interrupted.name}; inspect product state before resuming, do not silently replay it`);
+      if (fsSync.existsSync(file)) {
+        if (interrupted?.name === name) await fs.rm(pending);
+        return read(file);
+      }
+      if (interrupted && interrupted.name !== name) throw new Error(`Unfinished conversation ${interrupted.name} precedes ${name}`);
       const sessionId = `l3b-${phase}-${item.id.toLowerCase()}-${rep}`;
       const projectId = `l3b-${phase}-${item.id.toLowerCase()}-${rep}`;
-      await atomic(pending, { name, sessionId, projectId, at: new Date().toISOString() });
+      const checkpoint = `${out}/checkpoint-${name}.json`;
+      const resumeRecord = interrupted ? await read(checkpoint, { schema: 'lx-conversation/1', projectId, sessionId, startedAt: interrupted.at, turns: [] }) : null;
+      // A not-yet-checkpointed turn reuses LX's stable dispatchId: the product returns its existing run, never a second prompt.
+      await atomic(pending, interrupted ?? { name, sessionId, projectId, at: new Date().toISOString() });
       status(`${name} start`);
       const record = await runConversation({ api, userId, projectId, projectName: `L3B ${item.kind}`, sessionId,
         first: phase === 'learning' ? item.learning.initial : item.exam,
         next: (_turn, i) => phase === 'learning' && i === 0 ? item.learning.correction : null,
         dataDir, outDir: `${out}/records/${name}.files`, timeoutMs: args.timeoutMin * 60_000, maxTurns: phase === 'learning' ? 2 : 1,
-        log: status, observeMethods: identity => ipc(h, 'methods', identity), waitMemoryTools: args.arm !== 'A' });
+        log: status, observeMethods: identity => ipc(h, 'methods', identity), waitMemoryTools: args.arm !== 'A', resumeRecord,
+        onTurn: value => atomic(checkpoint, value) });
       Object.assign(record, { name, phase, rep, id: item.id, kind: item.kind, arm: args.arm });
       const firstRequests = [];
       for (const f of await fs.readdir(`${dataDir}/first-requests`)) {
