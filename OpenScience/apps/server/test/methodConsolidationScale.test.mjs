@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { METHOD_SKILL_SCHEMA, renderMethodSkill } from '@evimed/domain';
 import { MethodConsolidation } from '../src/methodConsolidation.mjs';
 import { MethodConsolidationQueue, METHOD_PAIR_FLOOR } from '../src/methodConsolidationQueue.mjs';
 import { createMethodSimilarity } from '../src/methodSimilarity.mjs';
 import { selectLearnedMethods } from '../src/learnedMethodMount.mjs';
-import { LearningService } from '../src/learningService.mjs';
+import { LearningService, learnedMethodId } from '../src/learningService.mjs';
 import { learningSummary, learningMetricFamilies } from '../src/learningMetrics.mjs';
 import { persistentDocuments } from '../../../evals/capsule-proving/learn/documents.mjs';
 
@@ -370,4 +371,24 @@ test('a deferred independent merge review and build reuse exact paid questions o
   const reviewed=await pass.sleep({job});assert.equal(reviewed.coverage.modelCalls,1);assert.equal(reviewed.coverage.pendingBuilds,1);
   const built=await pass.sleep({job});assert.equal(built.coverage.modelCalls,1);assert.equal(built.coverage.pendingBuilds,0);
   assert.equal(seen.size,3);
+});
+
+test('confirmed equivalent methods with identical scope can create a canonical without retiring their originals', async () => {
+  const h=await harness({size:2,recallEnabled:true,budget:5});
+  const body='## Purpose\nWrite an accurate note.\n\n## When to Use\nWhen drafting a note.\n\n## Inputs\nSupplied facts.\n\n## Workflow\n1. Write only supplied facts.\n\n## Verification\n- Check each fact.\n\n## Constraints\n- Never invent a fact.\n\n## Output\nThe note.';
+  const frontmatter={name:'confirmed-note',description:'Write a factual note with every supplied fact checked.',whenToUse:'When drafting a note.',
+    metadata:{role:'functional',applies_when:'When drafting a note.',not_when:'Outside that situation.',derived_from:'run:test',evimed_schema:METHOD_SKILL_SCHEMA}};
+  for(const id of ['m0','m1']) {
+    const row=await h.learning.getMethod('u',id);
+    await h.documents.put('u','method',id,{...row.payload,frontmatter:{...frontmatter,name:id},body},{expectedRevision:row.revision});
+  }
+  const canonicalId=learnedMethodId(frontmatter.name),pass=h.make();
+  pass.readResult=async identity=>({status:'succeeded',output:identity.dispatchId.includes('build')?{revisions:[
+    {assignment:'A1',methodId:canonicalId,operation:'create',baseDigest:null,skill:renderMethodSkill(frontmatter,body)},
+    ...['m0','m1'].map(id=>({assignment:'A1',methodId:id,operation:'retire',baseDigest:`sha256:${id}`,supersededBy:canonicalId})),
+  ]}:{assignments:[{ASSIGNMENT:'A1',SKILLS:['m0','m1'],RELATION_TYPE:'merge',REASON:'Equivalent complete procedures under identical conditions.'}]}});
+  assert.equal((await pass.sleep({job})).builds,1);
+  assert.equal((await h.learning.getMethod('u',canonicalId)).payload.provenance.pendingRetirements.length,2);
+  assert.equal((await h.learning.getMethod('u','m0')).payload.status,'approved');
+  assert.equal((await h.learning.getMethod('u','m1')).payload.status,'approved');
 });

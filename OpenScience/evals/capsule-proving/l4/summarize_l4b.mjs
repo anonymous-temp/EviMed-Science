@@ -9,7 +9,7 @@ for(const size of [50,200,600])for(const arm of ['off','on']) {
   let report;try{report=await load(`${root}/${runId}/report.json`);}catch(error){if(partial&&error.code==='ENOENT')continue;throw error;}
   if(!partial&&report.passes.length!==20)throw new Error(`${runId} is incomplete`);
   const passes=report.passes.map(({pass,modelCalls,modelSteps,costCnyPeakUpper,lock,recall,recordedRecall,harmfulCanonicalMerges,retired,wallMs,result,embeddingTokens,embeddingCostCnyUpper})=>({
-    pass,embeddingTokens,embeddingCostCnyUpper,recall:recordedRecall,judgeRecall:recall,modelCalls,modelSteps,costCnyPeakUpper,lockHeldOperationMs:lock.heldMs,lockWaitMs:lock.waitMs,
+    pass,embeddingTokens,embeddingCostCnyUpper,recall:recordedRecall,judgeRecall:recall,modelCalls,budgetedCalls:modelSteps,costCnyPeakUpper,lockHeldOperationMs:lock.heldMs,lockWaitMs:lock.waitMs,
     wallMs,harmfulCanonicalMerges,retired,backlog:result.coverage?.backlog??null,pendingBuilds:result.coverage?.pendingBuilds??null,
     examined:result.coverage?.examined??null,enqueued:result.coverage?.enqueued??null,
     candidatePairs:result.coverage?.candidatePairs??null,decideFailed:result.coverage?.decideFailed??null,
@@ -42,9 +42,10 @@ const result={schema:'p34-l4b/1',at:new Date().toISOString(),complete:runs.lengt
     visibility:'GET /api/methods summary.consolidation and open_science_learning_consolidation_backlog expose unexamined and deferred-build counts.',
     pendingRetirementMount:'One guarded condition skips an original only while an approved canonical names its exact current digest.',
     mergeReview:'Independent bidirectional equivalence review before recording a merge relation; automatic folding additionally requires exactly equal applicability fields. Paraphrased scopes retain reviewed relations but separate memories.'},
-  validation:{selectedTests:214,newScaleTests:25,existingServerTests:179,l4Tests:10,changedServerFileLint:'passed',
-    serverTypecheck:'Not clean: 19 diagnostics in unchanged files; completed before the final retry-age metadata edit. No changed-file diagnostic in that completed check.'},
+  validation:{selectedTests:215,newScaleTests:26,existingServerTests:179,l4Tests:10,changedServerFileLint:'passed',
+    serverTypecheck:'Final-policy check completed with 19 diagnostics in unchanged files and no changed-file diagnostic; not a clean full-server typecheck.'},
   plantedPairsPerKind:{50:8,200:16,600:16},supersededSwitchOnRuns:superseded,
+  overconservativeAttempt:{runs:['l4b-50-on-7','l4b-600-on-7'],disposition:'Stopped when inspection showed all 40 original planted duplicate pairs paraphrase applicability. Final policy preserves independently reviewed relations while withholding automatic folding across different scope text.'},
   historicalFloorCalibration:{source:'results-2026-11-10.json',sizes:[50,200,600],floorOff:.50,floorOn:.60,
     candidatesOff:[164,680,2106],candidatesOn:[137,422,1625],screenPositiveRecallOffAndOn:[.875,5/6,5/6]},
   missAudit:{scope:audit.scope,counts:audit.counts,positiveJudgeStorage:audit.positiveJudgeStorage,
@@ -61,11 +62,13 @@ const result={schema:'p34-l4b/1',at:new Date().toISOString(),complete:runs.lengt
     'Harmful merges count known planted nonduplicate pairs named together in a canonical pendingRetirements record; unlabelled pairs are not independently adjudicated.',
     'Direct model-step transport; product LearningService, ProductDocuments, relation writer, queue and PostgreSQL authority. No DSH.',
     'L4 composes one owned library with no contextProvenance. Namespace-budget rotation is covered by a separate two-scope product test; it is not an L4 measurement.',
-    'Source digests are retained per arm. Retry-age fairness metadata was finalized during the batch; failure/retry coverage is separately unit-tested.',
+    'The off arm retains the legacy 100-method read window in this L4 composition; the native context reader already paginates. These gains do not isolate the six-group limit alone.',
+    'Per-arm source digests are retained. Off6 controls predate queue retry-age metadata and merge review, both inactive in the unchanged off path. All on8 proofs use the final guarded policy.',
     'All original planted duplicate pairs paraphrase their applicability fields. The conservative automatic-folding guard therefore withholds their replacement, even when the independent review records a duplicate relation. Canonical-creation counts are reported separately.',
     'Lock hold is time executing the library operation under its PostgreSQL advisory lock; final COMMIT overhead is excluded.',
     'The call allowance controls admission between bounded steps; an admitted repair can finish above it. Actual calls and overrun are reported.',
     'The queued allowance covers DECIDE/BUILD calls. The pre-existing ten-description limit and embedding requests are separate; pass receipts include all model calls.',
+    'pendingBuilds counts examined pairs awaiting a follow-up, including an independent merge review deferred by the call allowance, a body build, or the unchanged harm guard.',
     'Retirement policy and active-library cap are unchanged. Superseded/retired snapshots become obsolete; current pair versions are queued.',
     'Old 0.60 calibration applies to the original summary screen, not proof of recall for the union of new retrieval views.'],runs};
 await writeFile(`${root}/l4b-p34-results.json`,JSON.stringify(result,null,1));
