@@ -97,6 +97,8 @@ practice exited, but retained SkillLearnBench images exhausted the shared disk;
 the runner now removes only its completed image tags and resumes serially.
 `SB_REFERENCE_SLOTS=2` opts into two containers when capacity permits, with
 per-request trial attribution. Each stream runs none, learned, then flat.
+Serial scheduling interleaves benchmarks within each arm, so both methods
+comparisons are reached before the final flat-skill arm.
 Product practice uses port 48848, bridge 19368 and its own database on the existing
 lab PostgreSQL port 55686. Do not stop other lanes' processes or containers.
 

@@ -40,22 +40,29 @@ if time.time()>json.load(open(sys.argv[1]))['deadline']:raise SystemExit('Lane w
 PY
   sleep 20
 done
-stream() {
-  local bench="$1"
+run_arm() {
+  local bench="$1" arm="$2"
   local retry=()
   if [[ "${SB_RETRY_INFRA:-0}" == 1 ]]; then retry=(--retry-infra); fi
+  note "start $bench-$arm-1"
+  "$PY" "$CODE/run.py" --bench "$bench" --arm "$arm" "${retry[@]}" || return $?
+  report
+}
+stream() {
+  local bench="$1"
   # Prioritize the methods comparison if shared lab capacity prevents the final arm.
   # Order fixed before learned/flat scores. Trial URLs own attribution across both slots.
   for arm in none learned flat; do
-    note "start $bench-$arm-1"
-    "$PY" "$CODE/run.py" --bench "$bench" --arm "$arm" "${retry[@]}" || return $?
-    report
+    run_arm "$bench" "$arm" || return $?
   done
 }
 code=0
 if [[ "${SB_REFERENCE_SLOTS:-1}" == 1 ]]; then
-  stream sb || code=$?
-  stream slb || code=$?
+  for arm in none learned flat; do
+    for bench in sb slb; do
+      run_arm "$bench" "$arm" || code=$?
+    done
+  done
 else
   stream sb & sb_pid=$!
   stream slb & slb_pid=$!
