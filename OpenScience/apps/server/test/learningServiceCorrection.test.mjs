@@ -94,7 +94,8 @@ test('system rewrites retain conflict checks and a stored reason even when they 
   const a = await h.make('a');
   const b = await h.make('b');
   await h.conflict(a, b);
-  const changed = await h.amend(b, { provenance: { trigger: 'correction', signal: 'researcher', feedbackEventIds: ['fe_1'], consolidatedBy: 'consolidate:1' } });
+  const changed = await h.amend(b, { personCorrection: { digest: b.payload.contentDigest, at: '2026-11-10T00:00:00Z' },
+    provenance: { trigger: 'correction', signal: 'researcher', feedbackEventIds: ['fe_1'], consolidatedBy: 'consolidate:1' } });
   assert.equal(changed.payload.status, 'candidate');
   assert.ok(changed.payload.statusReason);
   assert.equal(methodPersonCorrection(changed.payload), null);
@@ -195,5 +196,49 @@ test('a legacy withdrawn correction exits no_runs through approval without waiti
   assert.ok(methodPersonCorrection(current.payload));
   await h.learning.approve('u1', legacy.id, { expectedRevision: current.revision });
   assert.equal((await h.learning.getMethod('u1', newer.id)).payload.status, 'approved');
+  assert.equal((await h.learning.getMethod('u1', older.id)).payload.status, 'candidate');
+});
+
+test('restoring pinned coverage preserves the withdrawn method attachments as well as its text', async () => {
+  const h = harness();
+  const older = await h.make('older');
+  const files = { 'tests/reply-example.txt': 'Keep the requested form.' };
+  const changed = await h.make('changed', { files });
+  await h.conflict(older, changed);
+  const withdrawn = await h.amend(changed, { files });
+  await h.distillation.applyCandidate(job, { id: 'run_2' }, { candidate: { operation: 'no_change', targetMethodId: changed.id,
+    baseDigest: withdrawn.payload.contentDigest }, skill: renderMethodSkill(withdrawn.payload.frontmatter, withdrawn.payload.body) });
+  const restored = await h.learning.getMethod('u1', changed.id);
+  assert.equal(restored.payload.status, 'approved');
+  assert.equal(restored.payload.contentDigest, withdrawn.payload.contentDigest);
+  assert.deepEqual(restored.payload.files, files);
+});
+
+test('integration rejudges a recorded conflict even when similarity no longer shortlists the old wording', async () => {
+  const h = harness();
+  const a = await h.make('a');
+  const b = await h.make('b');
+  await h.conflict(a, b);
+  await h.amend(b, { personCorrection: true });
+  const inputs = [];
+  const consolidation = new MethodConsolidation({ learning: h.learning,
+    similarity: { nearest: async () => [], methodText: () => '' },
+    dispatch: async request => { inputs.push(request.input); return { runId: 'relate' }; },
+    readResult: async () => ({ status: 'succeeded', output: { assignments: [] } }) });
+  await consolidation.integrate({ job: { ...job, payload: { action: 'integrate', methodId: b.id } } });
+  assert.equal(inputs.length, 1);
+  assert.deepEqual(inputs[0].methods.map(method => method.id).sort(), [a.id, b.id].sort());
+});
+
+test('a pinned repeated correction also settles legacy conflicts between two still-approved methods', async () => {
+  const h = harness();
+  const older = await h.make('older');
+  const corrected = await h.make('corrected');
+  await h.conflict(older, corrected);
+  const target = await h.learning.getMethod('u1', corrected.id);
+  const result = await h.distillation.applyCandidate(job, { id: 'run_2' }, { candidate: { operation: 'no_change',
+    targetMethodId: target.id, baseDigest: target.payload.contentDigest }, skill: renderMethodSkill(target.payload.frontmatter, target.payload.body) });
+  assert.equal(result.operation, 'amend');
+  assert.equal((await h.learning.getMethod('u1', corrected.id)).payload.status, 'approved');
   assert.equal((await h.learning.getMethod('u1', older.id)).payload.status, 'candidate');
 });

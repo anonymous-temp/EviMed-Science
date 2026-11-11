@@ -887,13 +887,15 @@ export class MethodDistillationRuns {
         const policy = context.policy ?? (this.contextProvenance ? await this.contextProvenance.policyFor({ userId: job.userId, id: projectId }) : null);
         const target = this.contextProvenance ? await this.contextProvenance.methodFor(job.userId, targetId, policy ?? { kind: 'owned', ownerId: job.userId })
           : await this.learning.getMethod(job.userId, targetId).catch(() => null);
-        if (target?.payload?.status === 'candidate') {
+        const hasConflict = target?.payload?.learning?.relations?.some(relation => relation.type === 'conflicts_with' && !relation.resolved);
+        if (target?.payload?.status === 'candidate' || target?.payload?.status === 'approved' && hasConflict) {
           const parsed = parseSkillFrontmatter(String(output.skill ?? output['SKILL.md'] ?? ''));
           const digest = methodContentDigest({ ...parsed, files: candidate.files ?? target.payload.files }, text => createHash('sha256').update(text).digest('hex'));
           if (parsed.issues.length || candidate.baseDigest !== target.payload.contentDigest || digest !== target.payload.contentDigest) {
             throw new HttpError(409, 'method_candidate_stale', 'A covered method must name the exact current text before it can be restored.');
           }
-          return this.applyCandidate(job, run, { ...output, candidate: { ...candidate, operation: 'amend' } }, context);
+          return this.applyCandidate(job, run, { ...output, candidate: { ...candidate, operation: 'amend',
+            ...(target.payload.files ? { files: target.payload.files } : {}) } }, context);
         }
       }
       return { operation, methodId: undefined };
@@ -942,10 +944,9 @@ export class MethodDistillationRuns {
     // this whole design claims is structural, that generation cannot approve
     // itself, had a one-token bypass.
     //
-    // A correction-triggered distillation is not an exception. The *trigger* is
-    // external, and that is already recorded in `feedbackEventIds`; the *text*
-    // is still the model's, and text nobody has read yet goes through the gate.
-    // Explicit origin is reserved for a method a researcher authored, which
+    // A correction-triggered distillation still has inferred origin. Its external trigger and researcher signal
+    // grant correction precedence for the exact saved body, separately from origin; the candidate cannot claim that
+    // signal or transfer its authority to a later system rewrite. Explicit origin is reserved for a method a researcher authored, which
     // arrives through a route that carries their session.
     //
     // `safetyRelated` is the run's own claim and buys one thing only: the

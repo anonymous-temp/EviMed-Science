@@ -849,6 +849,15 @@ export class MethodConsolidation {
     if (!subject) throw new HttpError(409,'geo_learning_target_unverified','The method is outside this learning scope.');
     const neighbours = [...(await this.#library(job)).filter((item) => item.id !== methodId && item.payload?.status !== "retired"), ...await this.#officialDocs(job)];
     const nearest = await this.#nearestTo(subject, neighbours);
+    // A changed body must be compared with its recorded conflicts even when the new wording no longer embeds near
+    // the older text. These are known relations, not a language heuristic; otherwise an obsolete conflict could hold
+    // the other method indefinitely without DECIDE ever reading the amended pair.
+    const conflicts = neighbours.filter(other => [
+      ...(subject.payload.learning?.relations ?? []).filter(relation => relation.target === other.id),
+      ...(other.payload.learning?.relations ?? []).filter(relation => relation.target === subject.id),
+    ].some(relation => relation.type === 'conflicts_with' && !relation.resolved));
+    nearest.splice(0, nearest.length, ...[...new Map([...conflicts, ...nearest].map(method => [method.id, method])).values()]
+      .slice(0, CONSOLIDATION_LIMITS.maxGroupSize - 1));
     const group = [subject, ...nearest];
     if (group.length < CONSOLIDATION_LIMITS.minGroupSize) {
       this.#noop("no_groups");

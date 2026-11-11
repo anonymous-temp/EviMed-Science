@@ -29,8 +29,9 @@ import { withLearnedLibrary, deferLearnedLibraryObserver } from './learnedLibrar
  * learned, wears 「新」, and its own runs retire it if they show it making
  * results worse (`retirementProposal`; the paired evaluation that was to
  * do so as well was deleted on 2026-10-10 — no paid method on/off study). The
- * only thing that still blocks effect is an unresolved conflict with another
- * method, which no measurement repairs. The safety net is unchanged: every
+ * only thing that still blocks ordinary effect is an unresolved conflict with another
+ * method. A newer person correction takes precedence: the older conflicting method yields reversibly, with a reason.
+ * The safety net is unchanged: every
  * change is a revision and every revision can be restored.
  *
  * Two things a method is not, since 2026-09-27 (audit 2026-09-26, L-G1/L-G4):
@@ -454,7 +455,7 @@ export class LearningService {
       // has one answer however it became effective.
       payload.statusChangedAt = payload.createdAt;
     }
-    if (input.personCorrection) payload.personCorrection = await this.#correctionStamp(userId, payload);
+    if (input.personCorrection === true) payload.personCorrection = await this.#correctionStamp(userId, payload);
     payload.statusReason = effectiveStatusReason(payload);
     await (this.contextProvenance ? this.contextProvenance.write.bind(this.contextProvenance) : this.documents.put.bind(this.documents))(userId, "method", productId(id, "method"), payload, {
       expectedRevision: 0,
@@ -467,8 +468,8 @@ export class LearningService {
   /**
    * Replace a method's body, which resets everything measured about the old one.
    *
-   * A revised method is judged immediately under the same promotion rule as a
-   * new one, while a recorded stop stays stopped. Its counters go to zero. That is the point of keying counts to
+   * A system revision is judged immediately under the ordinary promotion rule. A person correction stays in service
+   * and the older conflicting method yields; its proof is bound to this body. A recorded stop stays stopped. Its counters go to zero. That is the point of keying counts to
    * `(method, contentDigest)`: the alternative is EvoDS's, where a rewrite
    * inherits its predecessor's confidence and the authors left a comment saying
    * they knew.
@@ -491,6 +492,7 @@ export class LearningService {
     const digest = this.#validated({ ...input, resolveDigest: await this.#digestResolver(userId, sourceProjectOf(input.provenance, null)) });
     const learning = withoutRetiredLearningKeys(resetLearningForDigest(current.payload.learning, digest));
     const bodyChanged = digest !== current.payload.contentDigest;
+    const personCorrection = input.personCorrection === true;
     const at = this.now().toISOString();
     if (bodyChanged && input.provenance?.trigger === "correction") {
       const rewrites = learning.rewrites ?? { count: 0, dates: [] };
@@ -533,17 +535,17 @@ export class LearningService {
       updatedAt: at,
       ...(bodyChanged ? { personCorrection: null } : {}),
     };
-    if (input.personCorrection && current.payload.status !== 'retired') payload.personCorrection = await this.#correctionStamp(userId, payload);
+    if (personCorrection && current.payload.status !== 'retired') payload.personCorrection = await this.#correctionStamp(userId, payload);
     if (payload.files === undefined) delete payload.files;
-    if ((bodyChanged || input.personCorrection) && current.payload.status !== 'retired') {
+    if ((bodyChanged || personCorrection) && current.payload.status !== 'retired') {
       const verdict = promotionVerdict(methodRecordFrom({ id: methodId, payload }), { isApproved: await this.#inForce(userId, payload) });
-      payload.status = input.personCorrection ? 'approved' : verdict.status;
+      payload.status = personCorrection ? 'approved' : verdict.status;
       if (payload.status === 'approved') delete payload.conflictHold;
       payload.statusReason = effectiveStatusReason(payload);
       payload.statusChangedAt = at;
     }
     await (this.contextProvenance ? this.contextProvenance.write.bind(this.contextProvenance) : this.documents.put.bind(this.documents))(userId, "method", methodId, payload, { expectedRevision: input.expectedRevision });
-    if (input.personCorrection && payload.status === 'approved') await this.#settleCorrectionConflicts(userId, await this.getMethod(userId, methodId));
+    if (personCorrection && payload.status === 'approved') await this.#settleCorrectionConflicts(userId, await this.getMethod(userId, methodId));
     this.#mountChanged(userId, methodId);
     return this.getMethod(userId, methodId);
   }
