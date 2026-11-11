@@ -23,6 +23,33 @@ export function paired(values) {
   draws.sort((a, b) => a - b);
   return { n: values.length, difference: mean(values), ci95: [draws[249], draws[9749]], method: 'paired percentile bootstrap, 10000 resamples, seed 11112026' };
 }
+// Bound each discordant-pair probability by a 97.5% Clopper-Pearson interval.
+// Bonferroni gives at least 95% coverage for their difference under the question/case sampling model.
+// This stays informative about uncertainty when a small sample has no discordant pairs.
+export function pairedBinary(values) {
+  if (!values.length) return { n: 0, difference: null, ci95: null };
+  if (values.some(x => ![-1, 0, 1].includes(x))) throw new Error('Binary paired differences must be -1, 0 or 1');
+  const n = values.length, alpha = 0.0125;
+  const cdf = (k, p) => {
+    if (p === 0) return 1;
+    if (p === 1) return Number(k >= n);
+    let sum = 0, choose = 0;
+    for (let j = 0; j <= k; j++) {
+      if (j) choose += Math.log(n - j + 1) - Math.log(j);
+      sum += Math.exp(choose + j * Math.log(p) + (n - j) * Math.log1p(-p));
+    }
+    return Math.min(1, sum);
+  };
+  const root = (k, target) => {
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; if (cdf(k, mid) > target) lo = mid; else hi = mid; }
+    return (lo + hi) / 2;
+  };
+  const interval = x => [x ? root(x - 1, 1 - alpha) : 0, x < n ? root(x, alpha) : 1];
+  const plus = interval(values.filter(x => x === 1).length), minus = interval(values.filter(x => x === -1).length);
+  return { n, difference: mean(values), ci95: [plus[0] - minus[1], plus[1] - minus[0]],
+    method: 'Bonferroni difference of exact 97.5% binomial intervals for the two discordant-pair probabilities' };
+}
 const stepNames = ['not_stored', 'not_searched', 'not_retrieved', 'retrieved_but_wrong'];
 function failedStep(row) {
   if (row.verdict !== 'fail' || !row.trace) return null;
@@ -32,11 +59,11 @@ function comparison(rows) {
   const a = rows.map(r => r.engine.verdict === 'pass'), b = rows.map(r => r.product.verdict === 'pass');
   const steps = Object.fromEntries(stepNames.map(step => [step, {
     engine: prop(rows.map(r => failedStep(r.engine) === step)), product: prop(rows.map(r => failedStep(r.product) === step)),
-    paired: paired(rows.map(r => Number(failedStep(r.product) === step) - Number(failedStep(r.engine) === step))) }]));
+    paired: pairedBinary(rows.map(r => Number(failedStep(r.product) === step) - Number(failedStep(r.engine) === step))) }]));
   const observedStages = Object.fromEntries(['stored', 'inOpening', 'searched', 'retrieved'].map(step => [step, {
     engine: prop(rows.map(r => r.engine.trace?.[step] === true)), product: prop(rows.map(r => r.product.trace?.[step] === true)),
-    paired: paired(rows.map(r => Number(r.product.trace?.[step] === true) - Number(r.engine.trace?.[step] === true))) }]));
-  return { engine: prop(a), product: prop(b), paired: paired(a.map((v, i) => Number(b[i]) - Number(v))),
+    paired: pairedBinary(rows.map(r => Number(r.product.trace?.[step] === true) - Number(r.engine.trace?.[step] === true))) }]));
+  return { engine: prop(a), product: prop(b), paired: pairedBinary(a.map((v, i) => Number(b[i]) - Number(v))),
     engineOnlyPass: a.filter((v, i) => v && !b[i]).length, productOnlyPass: b.filter((v, i) => v && !a[i]).length,
     judged: Object.fromEntries(['engine', 'product'].map(k => [k, Object.fromEntries(['pass', 'fail', 'unknown', 'error', 'needs-judge', 'gold-disputed'].map(v => [v, rows.filter(r => r[k].verdict === v).length]))])),
     byFailureStep: steps, observedStages,
@@ -78,7 +105,8 @@ async function g1() {
       'Source timestamps are preserved as metadata; product conversations use the real wall clock.', 'Unobserved product rows are excluded from the completed-pair estimate; observed errors and unknowns remain in its denominator and never pass. Gold-disputed pairs are also reported separately.'],
     pairs: rows };
   await save(`${args.out}/g1.json`, result);
-  const md = ['# G1: engine versus real conversations', '', `Completed ${rows.length}/${sample.n} frozen pairs. Intervals are Wilson; differences are paired bootstrap.`, '',
+  const md = ['# G1: engine versus real conversations', '', `Completed ${rows.length}/${sample.n} frozen pairs. Proportion intervals are Wilson.`, '',
+    'Binary paired differences use conservative exact discordance bounds, including when there are no discordant pairs.', '',
     '| Category | Engine | Product | Paired difference |', '|---|---|---|---|',
     ...[['Overall (legacy denominator)', result.overall], ['Valid paired questions', result.validGoldPairs], ...Object.entries(result.byCategory)].map(([c, r]) => `| ${c} | ${fmtProp(r.engine)} | ${fmtProp(r.product)} | ${fmtPair(r.paired)} |`), '',
     '| Failure step (legacy hierarchy, memory tools only) | Engine | Product | Paired difference |', '|---|---|---|---|',
@@ -102,7 +130,7 @@ async function g10() {
   }
   for (const p of pairs) for (const arm of ['empty', 'seeded']) p[arm].metrics.totalTokens = p[arm].metrics.inputTokens + p[arm].metrics.outputTokens;
   const summary = held => ({ empty: prop(held.map(p => p.empty.status === 'pass')), seeded: prop(held.map(p => p.seeded.status === 'pass')),
-    pairedPass: paired(held.map(p => Number(p.seeded.status === 'pass') - Number(p.empty.status === 'pass'))),
+    pairedPass: pairedBinary(held.map(p => Number(p.seeded.status === 'pass') - Number(p.empty.status === 'pass'))),
     metrics: Object.fromEntries(['toolCalls', 'inputTokens', 'outputTokens', 'totalTokens'].map(k => [k, { empty: mean(held.map(p => p.empty.metrics[k])), seeded: mean(held.map(p => p.seeded.metrics[k])),
       emptyCi95: paired(held.map(p => p.empty.metrics[k])).ci95, seededCi95: paired(held.map(p => p.seeded.metrics[k])).ci95,
       paired: paired(held.map(p => p.seeded.metrics[k] - p.empty.metrics[k])) }])) });
@@ -115,7 +143,7 @@ async function g10() {
     general: summary(pairs.filter(p => p.caseId.startsWith('G'))), medical: summary(pairs.filter(p => p.caseId.startsWith('M'))), seedCoverage, pairs,
     modelSatisfaction: { empty: prop(pairs.map(p => model.empty[p.caseId]?.verdict === 'satisfied')), seeded: prop(pairs.map(p => model.seeded[p.caseId]?.verdict === 'satisfied')),
       judged: Object.fromEntries(['empty', 'seeded'].map(arm => [arm, pairs.filter(p => ['satisfied', 'not_satisfied'].includes(model[arm][p.caseId]?.verdict)).length])),
-      paired: paired(pairs.map(p => Number(model.seeded[p.caseId]?.verdict === 'satisfied') - Number(model.empty[p.caseId]?.verdict === 'satisfied'))),
+      paired: pairedBinary(pairs.map(p => Number(model.seeded[p.caseId]?.verdict === 'satisfied') - Number(model.empty[p.caseId]?.verdict === 'satisfied'))),
       note: 'Existing general-task model rubric, DeepSeek judge in the answer family; unknown never passes. Direct judge provider usage is recorded separately from task tokens.' } };
   await save(`${args.out}/g10.json`, result);
   const md = ['# G10: paired ordinary work', '', `Completed ${pairs.length}/29 pairs. Deterministic checks are the existing general-task checks; normal variants only.`, '',

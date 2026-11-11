@@ -115,5 +115,8 @@ kernels share a bridge port whereas production containers have separate
 loopbacks. Queued due jobs and live runs are allowed to finish first; the
 worker, evidence, lessons, approvals and scenario checks are unchanged.
 
-`report.mjs` uses Wilson proportion intervals and a fixed-seed paired bootstrap
-for differences. Missing runs never pass. Raw data remains outside Git.
+`report.mjs` uses Wilson proportion intervals. Binary differences use a
+conservative exact bound: the difference of 97.5% Clopper-Pearson intervals for
+the two discordant-pair probabilities, with at least 95% simultaneous coverage
+under the question/case sampling model. Tool/token differences use a fixed-seed
+paired bootstrap. Missing runs never pass. Raw data remains outside Git.
