@@ -817,3 +817,41 @@ test('settling an unstored forget request fences both earlier raw history and it
   assert.ok(fences.some(row => row.archive_uri === archive.archive_uri));
   assert.ok(fences.some(row => row.archive_uri === f.commit.archiveUri));
 });
+
+for (const pending of [false, true]) {
+  test(`withdrawal wording and its acknowledgement cannot recall a partial detail; confirmation=${pending}, undo restores recall`, options, async t => {
+    const f = await setup(t, true);
+    const { NativeMemoryWorker } = await import('../src/nativeMemoryWorker.mjs');
+    const fact = 'The badminton schedule belongs to project M-41633.';
+    const request = 'Forget that badminton arrangement.';
+    const uri = f.seed('notes/arrangement.md', fact);
+    f.store.history = f.service;
+    const archive = await f.commitConversation('partial-request', [
+      { role: 'user', text: request }, { role: 'assistant', text: 'The badminton arrangement is forgotten.' },
+      { role: 'user', text: 'Keep the independent research plan.' }, { role: 'assistant', text: 'The research plan remains.' },
+    ], { projectId: 'default' });
+    const worker = new NativeMemoryWorker({ ...f, config: { ...f.config, memoryForgetRequestCheckEnabled: true }, nativeMemory: f.store,
+      forgetRequestJudge: { check: async ({ candidates, conversation }) => conversation.some(row => row.text === request)
+        ? { requests: [{ message: 0, quote: request, decision: pending ? 'uncertain' : 'remove',
+          targets: candidates.flatMap((candidate, index) => candidate.text === fact ? [index] : []), intents: [] }], claims: [] }
+        : { requests: [], claims: [] } } });
+    await worker.processCommits({ userId: f.userId });
+    const commit = await f.overlay.commit(f.userId, archive.archive_uri);
+    await f.service.ingestArchive(commit, f.context);
+    if (pending) {
+      assert.ok(JSON.stringify(await search(f)).includes('badminton'));
+      const item = (await f.store.pending(f.userId)).find(row => row.state === 'confirmation');
+      await f.store.resolveForgetRequest(f.userId, item.id, { action: 'confirm', choices: [0] });
+    }
+    assert.equal(await f.sessions.read(f.userId, uri), null);
+    const hits = JSON.stringify(await search(f));
+    assert.ok(!hits.includes('badminton'));
+    assert.equal(await f.ledger.rejected(f.context, ['Keep the independent research plan.'], archive.archive_uri), false);
+    assert.ok((await f.sessions.read(f.userId, `${archive.archive_uri}/messages.jsonl`)).includes('independent research plan'));
+    const forgotten = (await f.store.profile(f.userId)).records.find(row => row.status === 'archived' && row.value === fact);
+    await f.store.update(f.userId, forgotten.id, { status: 'active', expectedVersion: forgotten.version });
+    assert.equal(await f.ledger.rejected(f.context, [request], archive.archive_uri), false);
+    await f.service.ingestArchive(commit, f.context);
+    assert.ok(JSON.stringify(await search(f)).includes('badminton'));
+  });
+}

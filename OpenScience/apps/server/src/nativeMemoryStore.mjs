@@ -892,6 +892,7 @@ export class NativeMemoryStore {
         for (const uri of new Set(selected.map(candidate => candidate.uri))) {
           request.removed += await this.forgetLines(userId, files.find(file => file.uri === uri), selected.filter(candidate => candidate.uri === uri).map(candidate => candidate.text));
         }
+        await this.fenceForgetRequest(userId, context, plan.sourceArchive ?? commit.archiveUri, request);
       }
       request.status = action === 'confirm' ? 'confirmed' : 'dismissed';
       await this.overlay.setForgetRequests(userId, commit.archiveUri, plan);
@@ -1472,6 +1473,15 @@ export class NativeMemoryStore {
     await this.overlay.addRevision({ userId, uri, memoryType: 'notes', change: 'deleted', actor: 'conversation',
       reason: 'forgotten by conversation request', before: lines.join('\n'), after: null, archiveUri });
     this.#touch(userId);
+  }
+
+  /** The withdrawal and its acknowledgement can themselves repeat part of the withdrawn fact. Undo lifts their existing rejection fence too. */
+  async fenceForgetRequest(userId, context, archiveUri, request) {
+    if (!this.history || !request.requestMessage) return;
+    const prints = new Set([...request.intents, ...request.candidates.map(candidate => candidate.text)].map(lineFingerprint));
+    const removals = (await this.overlay.removals(userId, context.kind === 'geo-project' ? context.namespaceId : null))
+      .filter(row => prints.has(row.fingerprint));
+    await this.history.rejectRequestExchange(context, archiveUri, request.requestMessage, removals);
   }
 
   /**

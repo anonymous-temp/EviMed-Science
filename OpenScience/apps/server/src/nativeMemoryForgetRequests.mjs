@@ -118,7 +118,7 @@ export async function checkForgetRequests({ commit, context, overlay, store, jud
     const priorKeys = await overlay.forgetRequestKeys(userId, context.userRoot);
     const keyOf = row => contentHash(JSON.stringify([source.engineSession, conversation[row.message]?.at, conversation[row.message]?.text, row.quote]));
     plan = { state: 'applying', sourceArchive: source.archiveUri, requests: judged.requests.filter(row => !priorKeys.has(keyOf(row))).map(row => ({ ...row, key: keyOf(row), candidates: row.targets.map(i => candidates[i]),
-      intents: row.intents.map(intent => intent.quote), status: row.decision === 'uncertain' ? 'pending' : 'applying', removed: 0 })),
+      requestMessage: conversation[row.message], intents: row.intents.map(intent => intent.quote), status: row.decision === 'uncertain' ? 'pending' : 'applying', removed: 0 })),
       claims: judged.claims.filter(row => !priorKeys.has(keyOf(row))).map(row => ({ ...row, key: keyOf(row),
         turnMessage: conversation.slice(0, row.message).findLastIndex(message => message.role === 'user') })), falseClaims: 0 };
     await overlay.setForgetRequests(userId, commit.archiveUri, plan);
@@ -146,6 +146,7 @@ export async function checkForgetRequests({ commit, context, overlay, store, jud
     if (intents.length && !request.candidates.some(candidate => candidate.removed) && !selected.length) {
       await store.recordForgetIntent(userId, context, plan.sourceArchive ?? commit.archiveUri, intents);
     }
+    await store.fenceForgetRequest(userId, context, plan.sourceArchive ?? commit.archiveUri, request);
     request.status = 'completed';
     request.alreadyRemoved = request.candidates.filter(candidate => candidate.removed).length;
     request.toolRemoved = request.candidates.filter(candidate => candidate.toolRemoved).length;

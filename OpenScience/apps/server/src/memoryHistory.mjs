@@ -206,6 +206,29 @@ export class MemoryHistory {
     return messages.filter((_message,index)=>verdict?.same.has(index));
   }
 
+  /** A model-validated withdrawal can name only part of its target ("forget that badminton arrangement").
+   * Fence that exact exchange as recall material, using the target's existing undoable rejection authority.
+   * The conversation itself is unchanged; the next user's exchange gets no rejection. */
+  async rejectRequestExchange(context, archiveUri, request, removals) {
+    if (!removals.length) return;
+    const archive = parseArchiveUri(archiveUri);
+    if (!archive || archive.userRoot !== context.userRoot || archive.rest) throw new Error('memory_history_privacy_unavailable');
+    if (!context.ownerCreatedAt) context = { ...context, ownerCreatedAt: (await this.ledger.database.query(
+      'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1', [context.ownerId])).rows[0]?.stamp };
+    const raw = await context.sessions.read(context.ownerId, `${archiveUri}/messages.jsonl`);
+    if (raw === null || Buffer.byteLength(raw) > MAX_ARCHIVE_BYTES) throw new Error('memory_history_privacy_unavailable');
+    const messages = []; let inExchange = false;
+    for (const line of raw.split('\n').filter(entry => entry.trim())) {
+      const body = JSON.parse(line);
+      if (body.role === 'user') inExchange = messageText(body) === request.text && (!request.at || body.created_at === request.at);
+      if (!inExchange || !['user', 'assistant'].includes(body.role)) continue;
+      const text = messageText(body, this.secretRedaction);
+      if (text) messages.push({ archiveUri, text });
+    }
+    if (!messages.length) throw new Error('memory_history_privacy_unavailable');
+    for (const row of removals) await this.ledger.rejectMessages(context, row.memoryType, row.fingerprint, messages);
+  }
+
   /** One-shot write sessions are source copies, never conversations to retain.
    * Retire every synthetic source of a removed line, preserving the other derived memories. */
   async retireWriteSessions(context, origins, removed) {
