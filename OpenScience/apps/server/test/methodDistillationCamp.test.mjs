@@ -16,6 +16,7 @@ import { METHOD_SKILL_SCHEMA, parseSkillFrontmatter, runGate } from "@evimed/dom
 import { loadConfig } from "../src/config.mjs";
 import { campLessonFor } from "../src/learningTriggers.mjs";
 import { LearningService, learnedMethodId } from "../src/learningService.mjs";
+import { selectLearnedMethods } from "../src/learnedMethodMount.mjs";
 import {
   CAMP_TRIGGER, DISTILLATION_TRIGGERS, METHOD_FRAME_CONTRACT, MethodDistillationRuns, buildDistillationInput, distillationSkillVariants, evidenceCorpus,
   verifiedEvidence,
@@ -49,7 +50,7 @@ test("with both switches off, every fixed lesson's input, question and dispatch 
     const dir = await mkdtemp(path.join(tmpdir(), "distill-identity-"));
     try {
       // Constructed with the switches named and off, and with them absent: both are today's loop.
-      for (const options of [{}, { camp: false, twoStage: false }]) {
+      for (const options of [{}, { camp: false, twoStage: false, concise: false }]) {
         const requests = await dispatchedFor(MethodDistillationRuns, dir, fixture, options);
         assert.equal(requests.length, 1, `${fixture.label}: one step`);
         assert.equal(sha(requests.map((request) => request.question)), pinned.question, `${fixture.label}: question`);
@@ -86,9 +87,26 @@ test("both switches are off by default and read from their environment variables
   const off = configUnder({});
   assert.equal(off.learningCampEnabled, false);
   assert.equal(off.methodTwoStageDistillationEnabled, false);
+  assert.equal(off.methodConciseDistillationEnabled, false);
   const on = configUnder({ OPEN_SCIENCE_LEARNING_CAMP_ENABLED: "true", OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED: "true" });
   assert.equal(on.learningCampEnabled, true);
   assert.equal(on.methodTwoStageDistillationEnabled, true);
+  assert.equal(configUnder({ OPEN_SCIENCE_METHOD_CONCISE_DISTILLATION_ENABLED: "true" }).methodConciseDistillationEnabled, true);
+});
+
+test("concise variant reaches one-step and both two-stage steps without changing the base skill", async () => {
+  const authored = await readFile(path.join(repoRoot, "capabilities/method-distillation/variants/concise.md"), "utf8");
+  assert.equal(await readFile(path.join(repoRoot, "capability-skills/method-distillation/variants/concise.md"), "utf8"), authored);
+  assert.equal(await distillationSkillVariants(["concise"]), authored.trim());
+  const dir = await mkdtemp(path.join(tmpdir(), "distill-concise-"));
+  try {
+    const fixture = identityFixtures()[0];
+    for (const twoStage of [false, true]) {
+      const requests = await dispatchedFor(MethodDistillationRuns, dir, fixture, { concise: true, twoStage });
+      assert.ok(requests[0].question.endsWith(authored.trim()));
+      assert.equal(requests[0].input.stage, twoStage ? "frame" : undefined);
+    }
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 /* ------------------------------------------------------------------------------------------------------------------ the camp lesson */
@@ -188,6 +206,31 @@ test("a camp lesson's candidate passes the same method-candidate contract as any
   assert.equal(verdict.ok, true, JSON.stringify(verdict.issues));
 });
 
+test("a concise card's optional detail survives the normal candidate store and mount without code execution", async () => {
+  const learning = new LearningService({ documents: productDocumentsDouble() });
+  const runs = new MethodDistillationRuns({ learning, concise: true,
+    dispatch: async () => { throw new Error("No model call expected"); }, readResult: async () => null,
+    verifyCode: async () => { throw new Error("Markdown detail is not executable code"); } });
+  const files = methodPackage({ name: "check-sink-before-carrying", role: "atomic", runId: "run_camp_lost", quote: "Check the sink." });
+  const candidate = JSON.parse(files["method-candidate.json"]);
+  candidate.files = { "scripts/detail.md": "An extended worked example, opened only after an unfamiliar failure." };
+  const skill = files["SKILL.md"].replace("1. Look, then act.", "1. Look, then act. For an unfamiliar failure, open [detail](scripts/detail.md).");
+  await runs.applyCandidate({ userId: "u_detail", projectId: "p_detail", payload: {} }, { id: "run_camp_lost" }, { skill, candidate });
+  const stored = await learning.getMethod("u_detail", learnedMethodId("check-sink-before-carrying"));
+  assert.deepEqual(stored.payload.files, candidate.files);
+  const mounted = await selectLearnedMethods(learning, { userId: "u_detail", projectId: "p_detail" });
+  assert.equal(mounted.length, 1);
+  assert.deepEqual(mounted[0].files, candidate.files);
+  assert.ok(!mounted[0].document.includes("An extended worked example"), "detail stays off the card");
+  const amendedCandidate = { ...candidate, operation: "amend", targetMethodId: stored.id, baseDigest: stored.payload.contentDigest };
+  delete amendedCandidate.files;
+  await runs.applyCandidate({ userId: "u_detail", projectId: "p_detail", payload: {} }, { id: "run_camp_lost" },
+    { skill: skill.replace("Do check-sink-before-carrying.", "Do check-sink-before-carrying with care."), candidate: amendedCandidate });
+  const amended = await learning.getMethod("u_detail", stored.id);
+  assert.deepEqual(amended.payload.files, stored.payload.files, "a normal amendment keeps omitted detail attachments");
+  assert.ok(amended.revision > stored.revision);
+});
+
 test("with the camp switch on, the camp lesson's question carries the camp section of the skill", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "distill-camp-"));
   try {
@@ -277,7 +320,7 @@ test("two-stage: the frame first, then one method per new sub-skill, atomic befo
       const files = methodPackage({ name: focus.name, role: focus.role, dependsOn: pins, runId: run.id, quote });
       return { status: "succeeded", output: { skill: files["SKILL.md"], candidate: JSON.parse(files["method-candidate.json"]) } };
     };
-    const runs = new MethodDistillationRuns({ camp: true, twoStage: true, learning, dispatch, readResult });
+    const runs = new MethodDistillationRuns({ camp: true, twoStage: true, concise: true, learning, dispatch, readResult });
     const lesson = /** @type {any} */ (campLessonFor({ run, outcome: { success: true, score: 1, verdict: "Won." }, anchors: [{ seq: 30 }], enabled: true }));
     const job = { id: "j_two", userId, projectId: project.id, payload: lesson.payload };
     const result = await runs.execute({ job, project, run });
@@ -286,6 +329,7 @@ test("two-stage: the frame first, then one method per new sub-skill, atomic befo
       [[METHOD_FRAME_CONTRACT, "frame", null], ["method-candidate", "detail", "check-sink-first"], ["method-candidate", "detail", "clean-then-place-plan"]]);
     assert.ok(requests[0].question.startsWith("Step one of a two-stage distillation"));
     assert.ok(requests[0].question.includes("## Variant: two-stage creation") && requests[0].question.includes("## Variant: a training-camp lesson"));
+    assert.ok(requests.every(request => request.question.includes("## Variant: a short method card")));
     // What the frame named but the lesson was never shown is not read on its word.
     assert.deepEqual(requests[1].input.frame.reuses.map((/** @type {any} */ entry) => entry.methodId), [reusedDoc.id]);
     assert.deepEqual(requests[1].input.frame.amend, []);

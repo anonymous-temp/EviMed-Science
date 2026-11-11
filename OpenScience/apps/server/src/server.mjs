@@ -4897,6 +4897,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // Lab switches, both off by default: the training camp's lesson and two-stage distillation.
       camp: config.learningCampEnabled === true,
       twoStage: config.methodTwoStageDistillationEnabled === true,
+      concise: config.methodConciseDistillationEnabled === true,
     });
     // A method that was just rewritten is read against up to five runs the person accepted, afterwards and never waited for (`methodReplay.mjs`),
     // inside the learning scope the method belongs to (a shared GEO project's runs for its methods, none of them for the account's own).
@@ -4926,6 +4927,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       unusedAfterLoads: config.learningUnusedRetireLoads, onRetirement: (code) => learningMetrics.observeRetirement(code),
       // The levels the pass stores read an abstract method's members (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`, off by default).
       pyramid: config.methodPyramidEnabled === true,
+      concise: config.methodConciseDistillationEnabled === true,
       // The official tier in the shortlist, the screen and DECIDE, read-only (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`, off by default).
       officialMethods: officialInLoop,
       // The shortlist is by embedding when there is one; every stage that did nothing, and every relation recorded, is counted.

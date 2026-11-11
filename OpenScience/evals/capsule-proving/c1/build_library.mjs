@@ -109,6 +109,7 @@ async function build(options) {
   if (!LESSON_GATES.includes(gate)) throw new Error(`Unknown gate ${gate}`);
   const lessons = String(options.lessons ?? "routine");
   if (!["routine", "camp"].includes(lessons)) throw new Error(`Unknown lessons ${lessons}`);
+  const concise = options.concise || process.env.OPEN_SCIENCE_METHOD_CONCISE_DISTILLATION_ENABLED === "true" ? { concise: true } : {};
   const camp = lessons === "camp" ? { camp: true, twoStage: options["one-stage"] ? false : true } : {};
   // The learning steps' thinking (DeepSeek); the product's runtime thinks (reasoning effort high), F2's builds did. `disabled` is ~4x faster
   // per step, and answers are cached apart from thinking ones.
@@ -134,7 +135,7 @@ async function build(options) {
   const embedder = options["embed-key-file"] ? await embedderFrom(String(options["embed-key-file"])) : null;
   const dir = path.join(out, `${env}-${variant}`);
   await mkdir(out, { recursive: true });
-  const loop = await OfflineLoop.open({ dir, env, variant, policy: { ...VARIANTS[/** @type {keyof typeof VARIANTS} */ (variant)], approve: "immediate", officialInLoop: false, ...camp },
+  const loop = await OfflineLoop.open({ dir, env, variant, policy: { ...VARIANTS[/** @type {keyof typeof VARIANTS} */ (variant)], approve: "immediate", officialInLoop: false, ...camp, ...concise },
     model: learningModel({ dryRun: Boolean(options["dry-run"]), keyFile: options["key-file"] ?? undefined, thinking }),
     embed: embedder?.embed ?? null, embedModel: embedder?.model ?? null, cacheDir: path.join(out, thinking === "enabled" ? "cache" : "cache-thinking-disabled") });
   const started = Date.now();

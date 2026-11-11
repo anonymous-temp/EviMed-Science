@@ -148,6 +148,9 @@ def run_episode(env, model, env_name, phase, provider=None, checkpoint=None):
         if cards:
             system += "\nSkill cards:\n" + "\n\n".join(
                 f"[{c['level']}] {c['name']}\n{c['text']}" for c in cards)
+        if any(card.get("detailAvailable") for card in cards):
+            system += ("\nFor a mounted card with attached scripts/detail.md, Action: read_skill <card name> "
+                       "reads that file only when needed. It uses one of the same bounded calls; other actions are game commands.")
         messages = record["messages"]
         messages.extend([{"role": "system", "content": system}, {"role": "user", "content": obs}])
         for step in range(STEP_CAPS[env_name]):
@@ -162,7 +165,12 @@ def run_episode(env, model, env_name, phase, provider=None, checkpoint=None):
             record["steps"].append(entry)
             action = parse_action(reply["text"])
             entry["action"] = action
-            obs, score, done, won = env.step(action)
+            if action.startswith("read_skill ") and any(card.get("detailAvailable") for card in cards):
+                obs = provider.read_detail(action.removeprefix("read_skill ").strip())
+                score, done, won = record["score"], False, record["success"]
+                entry["detailRead"] = True
+            else:
+                obs, score, done, won = env.step(action)
             entry.update(observation=obs, score=score, done=done, success=won,
                          seconds=time.monotonic() - step_start)
             record.update(score=score, success=won)

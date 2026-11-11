@@ -78,6 +78,23 @@ class Tests(unittest.TestCase):
         finally:
             provider.close()
 
+    def test_attached_detail_is_available_only_for_mounted_cards_and_is_not_injected(self):
+        library = json.loads(self.library.read_text())
+        for entry in library["methods"]:
+            entry["payload"]["files"] = {"scripts/detail.md": "Extended recovery for " + entry["payload"]["frontmatter"]["name"]}
+        self.library.write_text(json.dumps(library))
+        provider = ProductSkillProvider(self.library, "flat")
+        try:
+            cards = provider.cards_for("heat some egg", "alfworld", "seen")
+            self.assertTrue(cards)
+            for card in cards:
+                self.assertTrue(card["detailAvailable"])
+                self.assertNotIn("Extended recovery", card["text"])
+                self.assertEqual(provider.read_detail(card["name"]), "Extended recovery for " + card["name"])
+            self.assertEqual(provider.read_detail("unmounted-method"), "No attached detail for that mounted method.")
+        finally:
+            provider.close()
+
     def test_request_text_matches_how_the_library_was_learnt(self):
         self.assertEqual(request_text("find the exit.", "A room. Your task is to: find the exit."), "A room. Your task is to: find the exit.")
         self.assertEqual(request_text("boil water", "This room is called the kitchen."), "Your task is to: boil water\n\nThis room is called the kitchen.")

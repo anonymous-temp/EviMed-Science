@@ -61,6 +61,7 @@ export const LESSON_GATES = Object.freeze(["every-success", "product"]);
  * @property {boolean} officialInLoop  `OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`, with `officialSet` as the account's official methods
  * @property {boolean} [camp]  the training camp (`OPEN_SCIENCE_LEARNING_CAMP_ENABLED`): every finished episode is a `camp` lesson (`campLesson`)
  * @property {boolean} [twoStage]  `OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED`: frame, then one method per new sub-skill
+ * @property {boolean} [concise] `OPEN_SCIENCE_METHOD_CONCISE_DISTILLATION_ENABLED`: short cards, optional detail attachments
  * Absent `camp` and `twoStage` are off, so a library saved before they existed reopens under the policy it was built with.
  */
 
@@ -110,7 +111,8 @@ export async function selectCards({ library, taskText, mode, similarity, removeR
     return {
       name: card.name, level: role === "abstract" || card.level >= 2 ? "abstract" : "atomic", role, levelNumber: card.level,
       when: String(payload.frontmatter?.whenToUse ?? ""), description: String(payload.frontmatter?.description ?? ""),
-      body: String(payload.body ?? ""), depends_on: (payload.dependencies ?? []).map((/** @type {any} */ dependency) => String(dependency.name)),
+      body: String(payload.body ?? ""),
+      ...(payload.files?.["scripts/detail.md"] ? { detail: String(payload.files["scripts/detail.md"]) } : {}), depends_on: (payload.dependencies ?? []).map((/** @type {any} */ dependency) => String(dependency.name)),
       reason: card.reason, digest: card.digest,
     };
   });
@@ -196,11 +198,11 @@ export class OfflineLoop {
       dispatch: this.steps.dispatch, readResult: this.steps.readResult, learning: distillerLearning, jobs, similarity: this.similarity,
       resolveRun: async (_project, runId) => this.state.runs[runId] ?? null,
       officialMethods: this.policy.related === "empty" ? null : official,
-      camp: this.policy.camp === true, twoStage: this.policy.twoStage === true,
+      camp: this.policy.camp === true, twoStage: this.policy.twoStage === true, concise: this.policy.concise === true,
     });
     this.consolidation = new MethodConsolidation({
       dispatch: this.steps.dispatch, readResult: this.steps.readResult, learning, jobs, similarity: this.similarity, now,
-      wait: async () => {}, pyramid: this.policy.pyramid === true, officialMethods: official,
+      wait: async () => {}, concise: this.policy.concise === true, pyramid: this.policy.pyramid === true, officialMethods: official,
     });
     this.project = { id: `c1-${this.env}`, userId: OFFLINE_USER, rootDir: path.join(this.dir, "project"),
       metaDir: path.join(this.dir, "project", ".openscience"), workspaceDir: path.join(this.dir, "project", "workspace") };

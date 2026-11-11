@@ -42,6 +42,7 @@ class ProductSkillProvider:
         self.node = node
         self.proc = None
         self.last = None
+        self.details = {}
 
     def _bridge(self):
         if self.proc is None or self.proc.poll() is not None:
@@ -77,16 +78,21 @@ class ProductSkillProvider:
                 temp = cached.with_suffix(".tmp")
                 temp.write_text(json.dumps(answer))
                 temp.replace(cached)
+        self.details = {s["name"]: s["detail"] for s in answer.get("skills", []) if s.get("detail")}
         self.last = {"mode": self.mode, "removeRoles": self.remove_roles, "ranking": answer.get("mode"),
                      "topScore": answer.get("topScore"), "libraryMethods": answer.get("libraryMethods"),
                      "embedModel": answer.get("embedModel"), "cacheKey": key, "budget": answer.get("budget"),
                      "selected": [{k: s.get(k) for k in ("name", "role", "levelNumber", "reason", "digest")}
                                   for s in answer.get("skills", [])]}
-        return [{"name": s["name"], "level": s.get("role", s.get("level")), "text": render(s), "reason": s.get("reason")}
+        return [{"name": s["name"], "level": s.get("role", s.get("level")), "text": render(s), "reason": s.get("reason"),
+                 **({"detailAvailable": True} if s.get("detail") else {})}
                 for s in answer.get("skills", [])]
 
     def cards_for(self, task_description, env_name, phase):
         return self.cards_for_episode(task_description, "", env_name, phase)
+
+    def read_detail(self, name):
+        return self.details.get(name, "No attached detail for that mounted method.")
 
     def close(self):
         if self.proc is not None and self.proc.poll() is None:

@@ -1,0 +1,34 @@
+{
+  "schema": "c1c-offline-trace-audit/1",
+  "annotation": "Coding-agent reading of existing traces; no external model calls. Exploratory, not blinded or causal.",
+  "selection": "First three taskIds lexicographically within each arm x success stratum, ALFWorld seen; 12 traces. This overrepresents examine tasks among successes and must not be generalized.",
+  "milestone": "First goal-directed navigation or manipulation that produced an informative observation. A preparatory inventory or no-change command before this milestone is counted separately; search after the milestone is still task-relevant even when it follows a poor fixed order.",
+  "root": "/srv/evimed/runs",
+  "rows": [
+    {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-6efd149527952bfcc7ac.json", "success": false, "prefixCalls": 1, "firstRelevantStep": 2, "reason": "Inventory first matches the mounted locate-and-deliver plan; then searches desks for the CD and lamp."},
+    {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-2d58f31451c1021ce745.json", "success": false, "prefixCalls": 1, "firstRelevantStep": 2, "reason": "Inventory before searching the garbagecan; finds and takes the candle at step 4. Later failure is repeated invalid placement, not pre-action delay."},
+    {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-aab797d56b9d8322621f.json", "success": false, "prefixCalls": 2, "firstRelevantStep": 3, "reason": "Inventory and remote open fail before informative navigation. Cabinet sweep continues afterwards and delays target acquisition; it is task-directed search, not absence of action."},
+    {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-cc38494c036a74638397.json", "success": true, "prefixCalls": 0, "firstRelevantStep": 1, "reason": "Immediately goes to desk where lamp and alarmclock are found; does not follow the delivery plans' initial inventory rule."},
+    {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-c05d834f11d0eb4f1249.json", "success": true, "prefixCalls": 1, "firstRelevantStep": 2, "reason": "Inventory before visiting the desk and taking the bowl."},
+    {"trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-73ee1d878f910506b986.json", "success": true, "prefixCalls": 2, "firstRelevantStep": 3, "reason": "Inventory and remote open before informative drawer search; the fixed closed-container-first sweep delays reaching the desk until step 6."},
+    {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-92de517128948a4d99bc.json", "success": false, "prefixCalls": 1, "firstRelevantStep": 2, "reason": "Inventory before cabinet and drawer search. Long exhaustive search consumes later steps."},
+    {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-aab797d56b9d8322621f.json", "success": false, "prefixCalls": 1, "firstRelevantStep": 2, "reason": "Inventory before a method-matching cabinet sweep; the sweep itself is goal-directed search."},
+    {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-bd1b5592af3275cd0d27.json", "success": false, "prefixCalls": 0, "firstRelevantStep": 1, "reason": "Searches fridge immediately; later cabinet/drawer-first search postpones open counters."},
+    {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-cc38494c036a74638397.json", "success": true, "prefixCalls": 0, "firstRelevantStep": 1, "reason": "Immediately visits desk; later attempted under-lamp placement reflects a misleading state-matching method, not initial delay."},
+    {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-c05d834f11d0eb4f1249.json", "success": true, "prefixCalls": 0, "firstRelevantStep": 1, "reason": "Immediately visits desk; later moves between desk and dresser before taking the visible bowl."},
+    {"trace": "c1-arm2-flat-1/trajectories/alfworld-seen-flat-73ee1d878f910506b986.json", "success": true, "prefixCalls": 2, "firstRelevantStep": 3, "reason": "Redundant look returns nothing, then inventory, before visiting the desk."}
+  ],
+  "summary": {
+    "pyramidFailedPrefix": [1, 1, 2], "pyramidPassedPrefix": [0, 1, 2],
+    "flatFailedPrefix": [1, 1, 0], "flatPassedPrefix": [0, 0, 2],
+    "conclusion": "Only 0-2 calls precede task-directed action in these 12 traces. The all-episode first-target-pickup delay is larger, but cannot all be called irrelevant or method-caused. Initial-delay evidence alone does not explain the score drop."
+  },
+  "commandReplay": {
+    "trace": "c1-arm2-pyramid-1/trajectories/alfworld-seen-pyramid-2d58f31451c1021ce745.json",
+    "procedure": "Fresh environment, replay first five recorded actions, then compare commands; no model call.",
+    "advertisedCommand": "put candle 1 in/on toilet 1", "advertisedResult": "Nothing happens.",
+    "acceptedCommand": "move candle 1 to toilet 1", "acceptedResult": "You move the candle 1 to the toilet 1.",
+    "acceptedScore": 1, "acceptedSuccess": true,
+    "decision": "Keep the existing prompt unchanged for the length experiment; report the command mismatch as a confound."
+  }
+}

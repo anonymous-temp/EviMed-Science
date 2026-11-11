@@ -39,6 +39,24 @@ class FakeModel:
 
 
 class Tests(unittest.TestCase):
+    def test_detail_is_read_only_on_request_and_spends_the_same_call_budget(self):
+        provider = Mock()
+        provider.cards_for_episode.return_value = [{"name": "card", "level": "atomic", "text": "A short card.", "detailAvailable": True}]
+        provider.last = None
+        provider.read_detail.return_value = "Extended recovery, not initially injected."
+        model = Mock()
+        model.complete.side_effect = [
+            {"text": "Action: read_skill card", "usage": {}},
+            {"text": "Action: go", "usage": {}}]
+        env = FakeEnvironment(finish=1)
+        row = run_episode(env, model, "alfworld", "seen", provider)
+        self.assertTrue(row["success"])
+        self.assertEqual(env.actions, ["go"])
+        self.assertEqual(len(row["steps"]), 2)
+        self.assertTrue(row["steps"][0]["detailRead"])
+        self.assertNotIn("Extended recovery", model.complete.call_args_list[0].args[0][0]["content"])
+        provider.read_detail.assert_called_once_with("card")
+
     def test_one_action_per_reply_and_usage(self):
         env, model = FakeEnvironment(), FakeModel()
         row = run_episode(env, model, "alfworld", "seen")
