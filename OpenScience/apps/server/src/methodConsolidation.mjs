@@ -80,7 +80,7 @@ import { learnedMethodId, methodRecordFrom, methodSourceProjects, methodStepsOf 
 import { LEARNING_PROJECT_ID, RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
 import { HttpError } from "./security.mjs";
 import { candidatePairs } from "./methodSimilarity.mjs";
-import { MethodConsolidationQueue, METHOD_PAIR_FLOOR, methodPairFingerprint } from "./methodConsolidationQueue.mjs";
+import { MethodConsolidationQueue, METHOD_PAIR_FLOOR, methodPairFingerprint, queuedPairBatch } from "./methodConsolidationQueue.mjs";
 import { isOfficialDocument, officialLibraryDocument } from "./officialPackSources.mjs";
 
 // The lexical shortlist lives with the similarity module (it is that module's fallback); it is still this pass's too.
@@ -399,7 +399,7 @@ export class MethodConsolidation {
     this.recallEnabled = recallEnabled === true;
     this.decideVersion = this.recallEnabled ? DECIDE_VERSION + 1 : DECIDE_VERSION;
     this.modelCalls = Math.max(1, Math.trunc(modelCalls));
-    this.pairQueue = this.queueEnabled ? new MethodConsolidationQueue(learning.documents, { now, version: this.recallEnabled ? "recall1" : "base1" }) : null;
+    this.pairQueue = this.queueEnabled ? new MethodConsolidationQueue(learning.documents, { now, version: this.recallEnabled ? "recall1-batch1" : "base1-batch1" }) : null;
     this.pyramid = pyramid === true;
     this.officialMethods = typeof officialMethods === "function" ? officialMethods : null;
   }
@@ -586,7 +586,7 @@ export class MethodConsolidation {
     }
     const coverage = this.queueEnabled ? await this.#pairPass(job, pool) : null;
     if (coverage) {
-      outcome.groups += coverage.examined + (coverage.decideFailed ?? 0);
+      outcome.groups += coverage.groups ?? 0;
       outcome.decideFailed += coverage.decideFailed ?? 0;
       outcome.relations += coverage.relations;
       outcome.builds += coverage.builds;
@@ -745,7 +745,7 @@ export class MethodConsolidation {
     heartbeat.unref?.();
     const budget = job.passPairBudget ?? { used: 0, limit: this.modelCalls };
     const startedCalls = budget.used;
-    const report = { examined: 0, decideFailed: 0, relations: 0, builds: 0, relationTypes: {}, refusals: [], modelCalls: 0, backlog: 0, pendingBuilds: 0, enqueued: 0, changed: 0 };
+    const report = { groups: 0, examined: 0, decideFailed: 0, relations: 0, builds: 0, relationTypes: {}, refusals: [], modelCalls: 0, backlog: 0, pendingBuilds: 0, enqueued: 0, changed: 0 };
     try {
       const synced = await queue.sync(job.userId, scope, pool, async onlyIds => {
         const pairs = this.similarity ? await this.similarity.pairs(pool, { floor: METHOD_PAIR_FLOOR, applicability: this.recallEnabled, onlyIds }) : candidatePairs(pool);
@@ -753,24 +753,41 @@ export class MethodConsolidation {
       });
       report.enqueued = synced.enqueued; report.changed = synced.changed;
       const byId = new Map(pool.map(method => [method.id, method]));
-      if (!enqueueOnly) for (const row of queue.pending(synced.rows)) {
+      const pending = queue.pending(synced.rows), consumed = new Set();
+      if (!enqueueOnly) for (const anchor of pending) {
+        if (consumed.has(anchor.id)) continue;
         if (leaseError) throw leaseError;
         if (budget.used >= budget.limit) break;
-        const p = row.payload, members = [];
-        for (const id of [p.a, p.b]) {
+        const batch = queuedPairBatch(pending.filter(row => !consumed.has(row.id)), anchor, CONSOLIDATION_LIMITS.maxGroupSize);
+        const fresh = new Map();
+        for (const id of new Set(batch.flatMap(row => [row.payload.a, row.payload.b]))) {
           const method = isOfficialDocument(byId.get(id)) ? byId.get(id) : await this.#get(job, id);
-          if (method && method.payload?.status !== "retired") members.push(method);
+          if (method && method.payload?.status !== "retired") fresh.set(id, method);
         }
-        if (members.length !== 2 || members.some((method,index) => queue.fingerprint(method) !== p.fingerprints[index])) {
-          Object.assign(row, await queue.save(job.userId, row.id, { ...p, status: "obsolete" }, row)); continue;
+        const valid = [];
+        for (const row of batch) {
+          consumed.add(row.id);
+          const p = row.payload;
+          if ([p.a,p.b].some((id,index) => !fresh.has(id) || queue.fingerprint(fresh.get(id)) !== p.fingerprints[index])) {
+            Object.assign(row, await queue.save(job.userId, row.id, { ...p, status: "obsolete" }, row));
+          } else valid.push(row);
         }
-        const done = await this.#processGroup({ ...job, pairBudget: budget }, members);
+        if (!valid.length) continue;
+        const memberIds = [...new Set(valid.flatMap(row => [row.payload.a,row.payload.b]))].sort();
+        const members = memberIds.map(id => fresh.get(id));
+        const pairTargets = valid.map(row => [row.payload.a, row.payload.b].sort()).map(([a,b]) => ({ a,b }))
+          .sort((one,two) => one.a.localeCompare(two.a) || one.b.localeCompare(two.b));
+        const done = await this.#processGroup({ ...job, pairBudget: budget, pairTargets }, members);
+        report.groups += 1;
         const examined = done.status !== "decide_failed";
         if (!examined) report.decideFailed += 1;
         const pendingBuild = done.blockedUnproven || done.deferredBuilds > 0;
-        Object.assign(row, await queue.save(job.userId, row.id, { ...p, examined: p.examined || examined,
-          status: examined && !pendingBuild ? "done" : "pending", attempts: p.attempts + 1 }, row));
-        if (examined && !p.examined) report.examined += 1;
+        for (const row of valid) {
+          const p = row.payload;
+          Object.assign(row, await queue.save(job.userId, row.id, { ...p, examined: p.examined || examined,
+            status: examined && !pendingBuild ? "done" : "pending", attempts: p.attempts + 1, groupIds: memberIds }, row));
+          if (examined && !p.examined) report.examined += 1;
+        }
         report.relations += done.relations; report.builds += done.builds;
         report.refusals.push(...done.refusals);
         for (const [type, count] of Object.entries(done.relationTypes)) report.relationTypes[type] = (report.relationTypes[type] ?? 0) + count;
@@ -836,7 +853,7 @@ export class MethodConsolidation {
     // Before DECIDE, only this job's original group is eligible. Cross-job
     // adoption must present its exact decision at buildGroup.
     const replay=await this.contextProvenance?.completedCompound(job.userId,policy,job.id,members,null,true);
-    if(replay) {
+    if(replay && !job.pairBudget) {
       // A resumed worker may see the result's exact successor heads. Adopt its
       // committed group before asking DECIDE or BUILD to read it again.
       // A compound receipt proves the assignments that reached BUILD, not the
@@ -1188,11 +1205,12 @@ export class MethodConsolidation {
   async decideGroup(job, members) {
     const keys = members.map((member) => `${member.id}@${member.payload?.contentDigest ?? ""}${this.recallEnabled ? "@" + methodPairFingerprint(member) : ""}`).sort();
     const result = await this.#step(job, {
-      dispatchId: `method-relations-v${DECIDE_VERSION}${this.recallEnabled ? "-recall1" : ""}-${shortDigest(keys.join(" "))}`,
+      dispatchId: `method-relations-v${DECIDE_VERSION}${this.recallEnabled ? "-recall1" : ""}${job.pairTargets ? "-batch1" : ""}-${shortDigest(keys.join(" ") + (job.pairTargets ? JSON.stringify(job.pairTargets) : ""))}`,
       input: {
         schemaVersion: 1,
         action: "decide",
         relationTypes: [...METHOD_RELATION_TYPES],
+        ...(job.pairTargets ? { candidatePairs: job.pairTargets } : {}),
         methods: members.map((member) => ({
           id: member.id,
           name: member.payload?.frontmatter?.name,
@@ -1204,6 +1222,7 @@ export class MethodConsolidation {
         })),
       },
       question: "Decide how the methods in method-relations-input.json relate, using the method-relations capability with action `decide`. "
+        + (job.pairTargets ? "Examine every candidatePairs entry independently, including a narrower step or incompatible instruction alongside a duplicate. A group-level pattern does not answer its individual pairs. Do not infer relatedness from co-batching; unrelated pairs need no assignment. " : "")
         + (members.some(isOfficialDocument) ? "A method marked readOnly is the platform's own: a relation may name it, and nothing may change it. " : "")
         + "Return ASSIGNMENT, SKILLS, RELATION_TYPE and REASON for each group you find, naming methods by the id the input gives them. "
         + "For subset also return WIDER, the id of the method that does everything the other does; for supersedes also return REPLACES, the id of the method that replaces the other. "

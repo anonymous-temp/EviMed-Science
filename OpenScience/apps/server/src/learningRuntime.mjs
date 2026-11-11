@@ -273,7 +273,7 @@ export function createLearningRuntime({
   return {
     /**
      * @param {{job: any, dispatchId: string, capabilityId: string, contractKind: string, input: any, question: string,
-     *          userId: string, projectId: string, unprovenPriorDispatchId?: string}} request
+     *          userId: string, projectId: string, unprovenPriorDispatchId?: string, countCalls?: boolean}} request
      */
     async dispatch(request) {
       const { job, capabilityId, input, question } = request;
@@ -433,7 +433,7 @@ export function createLearningRuntime({
 
     /**
      * @param {{userId: string, projectId: string, runId: string, sessionId: string, dispatchId: string,
-     *          capabilityId?: string, contractKind?: string, outputs?: string[]}} identity
+     *          capabilityId?: string, contractKind?: string, outputs?: string[], includeUsage?: boolean}} identity
      */
     async readResult(identity) {
       const capabilityId = identity.capabilityId

@@ -27,16 +27,17 @@ async function harness({ size = 10, budget = 3, queueEnabled = true, recallEnabl
 }
 
 test('scale fast check: overlapping pairs survive budgets and a restart; unchanged work costs no calls', async () => {
-  const h = await harness();
+  const h = await harness({budget:1});
   const first = await h.make().sleep({ job });
-  assert.equal(first.coverage.backlog, 6);
-  assert.equal(first.coverage.modelCalls, 3);
+  assert.equal(first.coverage.backlog, 2);
+  assert.equal(first.coverage.examined, 7);
+  assert.equal(first.coverage.modelCalls, 1);
   for (let i = 1; i < 3; i++) await h.make().sleep({ job: { ...job, id: `pass${i}` } });
   const last = await h.make().sleep({ job });
   assert.equal(last.coverage.backlog, 0);
   assert.equal(last.coverage.modelCalls, 0);
-  assert.equal(h.calls.length, 9);
-  assert.equal(new Set(h.calls.map(r => r.dispatchId)).size, 9);
+  assert.equal(h.calls.length, 2);
+  assert.equal(new Set(h.calls.map(r => r.dispatchId)).size, 2);
   assert.equal(h.proposals.length, 1);
   assert.equal(h.proposals[0].floor, METHOD_PAIR_FLOOR);
   const changed = await h.learning.getMethod('u', 'm2');
@@ -76,19 +77,25 @@ test('failed decisions remain unexamined; scope leases exclude concurrent spend 
   assert.ok(await q.acquire('u', 'owned', 100));
 });
 
-test('deferred BUILD consumes the remaining call budget on a later pass without stranding other pairs', async () => {
+test('deferred BUILD uses a later pass without charging the cached DECIDE again', async () => {
   const h = await harness({ size: 3, budget: 1 });
-  const pass = h.make();
-  pass.readResult = async identity => ({ status: 'succeeded', output: identity.runId.includes('build') ? { revisions: [] } : { assignments: [
-    { ASSIGNMENT: 'A1', SKILLS: h.calls.at(-1).input.methods.map(m => m.id), RELATION_TYPE: 'shared_part', REASON: 'Same exact sub-step.' },
-  ] } });
+  const pass = h.make(); let decided = false;
+  pass.readResult = async identity => {
+    const build = identity.runId.includes('build'), calls = build || !decided ? 1 : 0;
+    decided = true;
+    return { status:'succeeded', usage:{calls}, output:build ? {revisions:[]} : {assignments:[
+      {ASSIGNMENT:'A1',SKILLS:h.calls.at(-1).input.methods.map(m=>m.id),RELATION_TYPE:'shared_part',REASON:'Same exact sub-step.'},
+    ]} };
+  };
   const first = await pass.sleep({ job });
-  assert.equal(first.coverage.backlog, 1);
-  assert.equal(first.coverage.pendingBuilds, 1);
+  assert.equal(first.coverage.backlog, 0);
+  assert.equal(first.coverage.pendingBuilds, 2);
   assert.equal(h.calls.length, 1);
   const second = await pass.sleep({ job });
   assert.equal(second.coverage.backlog, 0);
-  assert.equal(second.coverage.pendingBuilds, 2);
+  assert.equal(second.coverage.pendingBuilds, 0);
+  assert.equal(second.coverage.modelCalls, 1);
+  assert.equal(h.calls.length, 3);
 });
 
 test('applicability retrieval proposes a pair missed by the summary view; switch off preserves the old answer', async () => {
@@ -158,7 +165,7 @@ test('provider call receipts include repairs before admitting another pair', asy
   const result = await pass.sleep({job});
   assert.equal(result.coverage.modelCalls,3);
   assert.equal(h.calls.length,1);
-  assert.equal(result.coverage.backlog,8);
+  assert.equal(result.coverage.backlog,2);
 });
 
 test('retirement invalidates pending snapshots, and restoring the same body proposes them again', async () => {
@@ -247,4 +254,18 @@ test('recall screening embeds the entire stored body separately from applicabili
   await sim.pairs([a,method('b')],{applicability:true});
   assert.ok(seen.includes(a.payload.body));
   assert.ok(seen.includes('a\na'));
+});
+
+test('batched decisions cover every queued cross-group pair without exceeding eight bodies', async () => {
+  const {queuedPairBatch}=await import('../src/methodConsolidationQueue.mjs');
+  let pending=[];
+  for(let a=0;a<10;a++)for(let b=a+1;b<10;b++)pending.push({id:`${a}:${b}`,payload:{a:String(a),b:String(b),examined:false}});
+  const examined=new Set();
+  while(pending.length) {
+    const batch=queuedPairBatch(pending,pending[0],8);
+    assert.ok(new Set(batch.flatMap(row=>[row.payload.a,row.payload.b])).size<=8);
+    for(const row of batch){assert.ok(!examined.has(row.id));examined.add(row.id);}
+    pending=pending.filter(row=>!examined.has(row.id));
+  }
+  assert.equal(examined.size,45);
 });

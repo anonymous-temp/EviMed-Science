@@ -92,3 +92,19 @@ export class MethodConsolidationQueue {
       pendingBuilds: rows.filter(row => row.payload.status === 'pending' && row.payload.examined).length };
   }
 }
+
+/** Batch nearby queued work without discarding cross-group pairs. The oldest
+ * anchor gets its turn; connected endpoints fill the existing eight-body bound
+ * first, and disjoint work uses spare space. Only supplied pairs are completed. */
+export function queuedPairBatch(pending, anchor, maxMethods = 8) {
+  const ids = new Set(anchor.payload.groupIds ?? [anchor.payload.a, anchor.payload.b]);
+  const candidates = pending.filter(row => row.payload.examined === anchor.payload.examined);
+  if (!anchor.payload.examined) for (;;) {
+    const fitting = candidates.filter(row => !ids.has(row.payload.a) || !ids.has(row.payload.b))
+      .filter(row => new Set([...ids, row.payload.a, row.payload.b]).size <= maxMethods);
+    const next = fitting.find(row => ids.has(row.payload.a) || ids.has(row.payload.b)) ?? fitting[0];
+    if (!next) break;
+    ids.add(next.payload.a); ids.add(next.payload.b);
+  }
+  return candidates.filter(row => ids.has(row.payload.a) && ids.has(row.payload.b));
+}

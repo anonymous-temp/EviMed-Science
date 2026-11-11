@@ -20,7 +20,7 @@ const save = (file, value) => writeFile(file, JSON.stringify(value, null, 1));
 const args = Object.fromEntries(Array.from({ length: (process.argv.length-2)/2 }, (_,i) => [process.argv[2+i*2].slice(2), process.argv[3+i*2]]));
 const size = Number(args.size), arm = args.arm, passes = Number(args.passes ?? 20), limit = Number(args.calls ?? 12);
 if (![50,200,600].includes(size) || !['on','off'].includes(arm) || passes !== 20) throw new Error('Invalid L4b arguments');
-const root = '/srv/evimed/runs', runId = `l4b-${size}-${arm}-3`, dir = path.join(root, runId);
+const root = '/srv/evimed/runs', runId = `l4b-${size}-${arm}-5`, dir = path.join(root, runId);
 const costOf = usage => ((usage.promptTokens-usage.cachedTokens)*2 + usage.cachedTokens*.04 + usage.completionTokens*8)/1e6;
 
 async function main() {
@@ -46,14 +46,16 @@ async function main() {
   // Real lane-only PostgreSQL persistence and authority; the external step
   // transport stays the existing L4 direct-model adapter. No production data.
   const dbUrl=new URL((await readFile('/srv/evimed/ovlab/database.url','utf8')).trim());
-  dbUrl.pathname='/evimed_test_p34';
+  dbUrl.pathname=`/evimed_test_p34_l4b_${size}_${arm}`;
   const database=new ControlPlaneDatabase({databaseUrl:dbUrl.href,databasePoolMax:2,databaseConnectionTimeoutMs:5000});
   const owner=`p34-${runId}`;
-  const existed=(await database.query('SELECT id FROM evimed_control.users WHERE id=$1',[owner])).rows.length>0;
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,'L4b lab','development') ON CONFLICT DO NOTHING",[owner]);
   const real=new ProductDocuments(database), mirrored=new Map();
   const remember=row=>{if(row)mirrored.set(JSON.stringify([OFFLINE_USER,row.kind,row.id]),{...row,userId:OFFLINE_USER});return row;};
-  if(!existed)for(const row of seed.documents.rows)if(row.kind==='method')remember(await real.put(owner,row.kind,row.id,row.payload,{expectedRevision:0}));
+  for(const row of seed.documents.rows)if(row.kind==='method') {
+    const prior=await real.get(owner,row.kind,row.id);
+    remember(prior??await real.put(owner,row.kind,row.id,row.payload,{expectedRevision:0}));
+  }
   for(const kind of ['method','method-consolidation']) {
     let cursor=null;do{const page=await real.list(owner,kind,{limit:100,cursor});page.items.forEach(remember);cursor=page.nextCursor;}while(cursor);
   }
@@ -78,14 +80,14 @@ async function main() {
   const checkpoint = path.join(dir,'report.json');
   let report;
   try {report=await load(checkpoint);} catch(error) {if(error.code!=='ENOENT')throw error;report={runId,size,arm,model:client.model,thinking:client.thinking,modelCallBudget:limit,budgetSemantics:'Admit model steps while under the call allowance; charge actual transport calls including repairs after each step. An already admitted bounded step may finish over the allowance. Cached reads cost zero.',passes:[],
-    scope:'Product LearningService, MethodConsolidation, ProductDocuments and PostgreSQL learned-library authority on evimed_test_p34; direct model-step transport, no DSH. Retirement cap unchanged.',
+    scope:'Product LearningService, MethodConsolidation, ProductDocuments and PostgreSQL learned-library authority on isolated evimed_test_p34_l4b databases; direct model-step transport, no DSH. Retirement cap unchanged.',
     originalLibrary:`l4-${size}-1/seed/library.json`,sourceDigests:Object.fromEntries(await Promise.all([
       '../../../apps/server/src/methodConsolidation.mjs','../../../apps/server/src/methodConsolidationQueue.mjs',
       '../../../apps/server/src/methodSimilarity.mjs','../../../apps/server/src/learnedLibraryAuthority.mjs','./run_l4b.mjs',
     ].map(async file=>[file,createHash('sha256').update(await readFile(new URL(file,import.meta.url))).digest('hex')]))),predictions:[]};}
   for(let pass=report.passes.length+1;pass<=passes;pass++) {
     lock={heldMs:0,waitMs:0,acquisitions:0}; outputs.length=0;
-    const started=performance.now();
+    const started=performance.now(), embeddingTokensBefore=embedder.counters.tokens??0;
     const callCountBefore=(await readFile(spendFile,'utf8').catch(()=>'')).trim().split('\n').filter(Boolean).map(JSON.parse).filter(row=>row.runId===runId).length;
     const spendBefore=(await readFile(spendFile,'utf8').catch(()=>'' )).trim().split('\n').filter(Boolean).map(JSON.parse).filter(row=>row.runId===runId).reduce((n,row)=>n+row.costCny,0);
     const result=await loop.consolidation.sleep({job:{id:`${runId}-pass-${pass}`,userId:owner,projectId:loop.project.id,payload:{action:'sleep'}}});
@@ -104,7 +106,8 @@ async function main() {
     const spendRows=(await readFile(spendFile,'utf8').catch(()=>'' )).trim().split('\n').filter(Boolean).map(JSON.parse).filter(row=>row.runId===runId);
     const costCny=spendRows.reduce((n,row)=>n+row.costCny,0)-spendBefore;
     const passCalls=spendRows.length-callCountBefore;
-    const metric={pass,wallMs:performance.now()-started,modelCalls:passCalls,modelSteps:result.coverage?.modelCalls??null,costCnyPeakUpper:costCny,
+    const embeddingTokens=(embedder.counters.tokens??0)-embeddingTokensBefore;
+    const metric={pass,embeddingTokens,embeddingCostCnyUpper:embeddingTokens*.000525/1000,wallMs:performance.now()-started,modelCalls:passCalls,modelSteps:result.coverage?.modelCalls??null,costCnyPeakUpper:costCny,
       lock:{...lock,kind:'PostgreSQL learned-library authority; excludes model time'},recall:Object.fromEntries(Object.entries(scored.byKind).map(([kind,row])=>[kind,row.recall])),
       recordedRecall:Object.fromEntries(Object.entries(scoreDecisions(gold,stored).byKind).map(([kind,row])=>[kind,row.recall])),
       harmfulCanonicalMerges:harms.length,retired:rows.filter(row=>row.payload.status==='retired').length,result};
