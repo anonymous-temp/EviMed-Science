@@ -307,7 +307,7 @@ export function learnedMethodCardBytes(payload, directoryName, cardDirectory, ca
  * @param {any} learning `LearningService`
  * @param {{userId: string, contextPolicy?: any, contextItems?: any, contextProvenance?: any, projectId: string, maxCount?: number, maxBytes?: number, family?: "geo" | "research" | null,
  *   scopeId?: string | null, query?: string | null, similarity?: { nearest: Function } | null, keep?: Iterable<string> | null,
- *   cardDirectory?: string | null, onLeftOut?: ((methodId: string) => void) | null, pyramid?: boolean, minSimilarity?: number, cardEvidence?: boolean}} scope
+ *   cardDirectory?: string | null, onLeftOut?: ((methodId: string) => void) | null, pyramid?: boolean, minSimilarity?: number, cardEvidence?: boolean, skipPendingRetirements?: boolean}} scope
  * @returns {Promise<MountedLearnedMethod[] & { mode?: "embedding" | "lexical" | "recent", topScore?: number | null, kept?: MountedLearnedMethod[], levels?: Map<string, number> }>}
  */
 export async function selectLearnedMethods(learning, scope) {
@@ -382,6 +382,7 @@ export async function selectLearnedMethods(learning, scope) {
   /** @type {Map<string, Entry>} */
   const entries = new Map();
   for (const document of library.values()) {
+    if (scope.skipPendingRetirements && [...library.values()].some(canonical => canonical.id !== document.id && (canonical.payload?.provenance?.pendingRetirements ?? []).some(pending => pending.methodId === document.id && pending.baseDigest === document.payload?.contentDigest))) continue;
     const payload = document?.payload ?? {};
     const name = String(payload.frontmatter?.name ?? "");
     const body = String(payload.body ?? "");
@@ -685,7 +686,7 @@ const OFFLINE_CARD_DIRECTORY = "/runtime/capsule-methods";
  * Returns the cards in the order a run is shown them, each with why it is there (`METHOD_MOUNT_REASONS`), its level in the library,
  * and the card's lines (`learnedMethodCardEntry`); `mode` and `topScore` say how the library was ranked.
  * @param {{ library: readonly any[], taskText?: string | null, embed?: ((texts: string[]) => Promise<number[][]>) | null,
- *   options?: { pyramid?: boolean, minSimilarity?: number, cardEvidence?: boolean, scopeId?: string | null, family?: "geo" | "research" | null,
+ *   options?: { pyramid?: boolean, minSimilarity?: number, cardEvidence?: boolean, skipPendingRetirements?: boolean, scopeId?: string | null, family?: "geo" | "research" | null,
  *     maxCount?: number, maxBytes?: number, cardDirectory?: string, similarity?: { nearest: Function } | null } }} input
  * @returns {Promise<{ cards: { id: string, name: string, reason: string, level: number, digest: string, directoryName: string, promptBytes: number, lines: string[] }[],
  *   mode: "embedding" | "lexical" | "recent", topScore: number | null }>}
@@ -702,6 +703,7 @@ export async function selectMethodsForTask({ library, taskText = null, embed = n
     pyramid: options.pyramid === true,
     minSimilarity: Number(options.minSimilarity ?? 0),
     cardEvidence: options.cardEvidence === true,
+    skipPendingRetirements: options.skipPendingRetirements === true,
     ...(options.scopeId === undefined ? {} : { scopeId: options.scopeId }),
     ...(options.family === undefined ? {} : { family: options.family }),
     ...(Number.isSafeInteger(options.maxCount) ? { maxCount: options.maxCount } : {}),

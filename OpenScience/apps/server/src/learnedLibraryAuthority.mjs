@@ -1,6 +1,7 @@
 /** Serialize a library's conflict reads and visibility writes, across service
  * instances and processes. No model call belongs inside this authority. */
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { performance } from 'node:perf_hooks';
 import { HttpError } from './security.mjs';
 
 const owners = new AsyncLocalStorage(), frames = new AsyncLocalStorage();
@@ -25,6 +26,12 @@ function nested(scope, operation) {
  * @param {{transactionClient?:any}} [options] */
 export async function withLearnedLibrary(documents, userId, operation, { transactionClient = null } = {}) {
   const key = ownerOf(documents), database = documents.database;
+  const waitingAt = performance.now();
+  const measured = async () => {
+    const acquiredAt = performance.now();
+    try { return await runFrame(operation); }
+    finally { try { documents.observeLearnedLibraryLock?.({ heldMs: performance.now() - acquiredAt, waitMs: acquiredAt - waitingAt }); } catch { /* observation never decides */ } }
+  };
   if (transactionClient) {
     if (!database?.withTransactionClient) throw conflict();
     return database.withTransactionClient(transactionClient, () => withLearnedLibrary(documents, userId, operation));
@@ -50,7 +57,7 @@ export async function withLearnedLibrary(documents, userId, operation, { transac
           const result = await client.query('SELECT pg_try_advisory_xact_lock(hashtext($1)) AS locked', [name]);
           if (result.rows[0]?.locked !== true) throw conflict();
         } else await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [name]);
-        return owners.run(scope, () => runFrame(operation));
+        return owners.run(scope, measured);
       }));
     } finally { scope.open = false; }
   }
@@ -59,7 +66,7 @@ export async function withLearnedLibrary(documents, userId, operation, { transac
   let queue = memoryQueues.get(key); if (!queue) { queue = new Map(); memoryQueues.set(key, queue); }
   const previous = queue.get(userId) ?? Promise.resolve();
   const current = previous.catch(() => {}).then(async () => {
-    const result = await owners.run(scope, () => runFrame(operation));
+    const result = await owners.run(scope, measured);
     scope.open = false;
     for (const observer of scope.observers) try { await owners.run(undefined, () => frames.run(undefined, observer)); } catch { /* observers own their failure */ }
     return result;

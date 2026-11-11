@@ -3,7 +3,7 @@ import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 import { EXTENSION_PRODUCT_KINDS, EXTENSION_JOB_KINDS, EVOLUTION_JOB_KINDS } from "@evimed/domain";
 
 export const PRODUCT_KINDS = Object.freeze([
-  "capsule", "fact", "method", "source", "source-unit", "knowledge", "profile",
+  "capsule", "fact", "method", "method-consolidation", "source", "source-unit", "knowledge", "profile",
   "notification", "preferences", "plugin", "price-list",
   // One long research goal: what the control plane keeps about it between its rounds (`researchGoalService.mjs`).
   "research-goal",
