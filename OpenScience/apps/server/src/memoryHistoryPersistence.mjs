@@ -3,7 +3,7 @@ import { secretHash } from './memoryHistorySecrets.mjs';
 import { migrateMemorySettings } from './memorySettingsPersistence.mjs';
 import { migrateNativeMemory } from './nativeMemoryPersistence.mjs';
 import { lineFingerprint, normalisedStatement, nativeMemoryRejectionType } from './nativeMemoryOverlay.mjs';
-import { OPENVIKING_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from './openVikingLayout.mjs';
+import { OPENVIKING_KNOWN_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from './openVikingLayout.mjs';
 import { compact } from './nativeMemoryRejections.mjs';
 
 const migrations = new WeakMap();
@@ -145,7 +145,7 @@ export class MemoryHistoryLedger {
    */
   async rejected(context, texts, archiveUri = null) {
     await this.migrate();
-    const types = (context.kind === 'geo-project' ? OPENVIKING_PROJECT_MEMORY_TYPES : OPENVIKING_MEMORY_TYPES)
+    const types = (context.kind === 'geo-project' ? OPENVIKING_PROJECT_MEMORY_TYPES : OPENVIKING_KNOWN_MEMORY_TYPES)
       .map(type => nativeMemoryRejectionType(type, context.kind === 'geo-project' ? context.namespaceId : null));
     // A one-shot remember/page archive can duplicate a conversation capture.
     // Only exact complete-message hashes bridge those copies; a shared number never does.

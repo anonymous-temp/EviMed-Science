@@ -328,7 +328,7 @@ export class NativeMemoryWorker {
       const held = await this.sessions.settings(userId);
       // An account the engine's admin routes do not know yet has the default; it is looked at again at the next pass.
       if (!held) return;
-      const expected = [...OPENVIKING_MEMORY_TYPES].sort();
+      const expected = [...(this.sessions?.memoryTypes ?? OPENVIKING_MEMORY_TYPES)].sort();
       if (held.memoryTypes.length === expected.length && held.memoryTypes.every((type, index) => type === expected[index])) {
         recordPolicySync("current");
       } else {

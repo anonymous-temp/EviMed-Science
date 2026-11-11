@@ -23,3 +23,10 @@ test('original private or unknown evidence cannot be made public by generic body
   assert.equal(api.sourceAllowsEgress({sourcePrivacy:{schemaVersion:1,classification:'ordinary'}},{purpose:'method'}),true);
   assert.equal(api.sourceAllowsEgress({originalSources:[{sourcePrivacy:{schemaVersion:1,classification:'ordinary'}}]},{purpose:'method'}),true,'a derived envelope preserves its proven ordinary originals');
 });
+
+test('dedicated safety history stays private even if ordinary metadata is supplied', async () => {
+  const { sourcePrivacyOf, sourceAllowsEgress } = await import('../src/memoryPrivacy.mjs');
+  const safety = { nativeType: 'safety_notes', sourcePrivacy: { schemaVersion: 1, classification: 'ordinary' } };
+  assert.equal(sourcePrivacyOf(safety).classification, 'private');
+  assert.equal(sourceAllowsEgress(safety), false);
+});

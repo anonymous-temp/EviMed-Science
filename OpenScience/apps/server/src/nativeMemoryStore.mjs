@@ -12,7 +12,7 @@ import { recordForgetDuplicates, recordMapReplaced } from "./nativeMemoryMetrics
 import { freshnessOf } from "./memoryMapSources/common.mjs";
 import { replacedStatements, statementForgotten } from "./memoryMapSources/replacedStatements.mjs";
 import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType, originalSources } from "./nativeMemoryOverlay.mjs";
-import { OPENVIKING_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from "./openVikingLayout.mjs";
+import { OPENVIKING_KNOWN_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from "./openVikingLayout.mjs";
 import { MEMORY_SEGMENT_OF_TYPE, OBSERVATIONS_SEGMENT, PROJECT_MEMORY_TYPES, nativeMemoryFile, observationFile, parseArchiveUri, platformSessionOf, unfinishedArchives } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
 import { sourceReceiptState } from './memorySourceReceipts.mjs';
@@ -65,6 +65,7 @@ export function nativeConversationTitleKey(ref) {
 export const PAGE_KIND_OF_TYPE = Object.freeze({
   profile: "profile",
   people: "person",
+  safety_notes: "note",
   notes: "note",
   preferences: "preference",
   corrections: "correction",
@@ -735,7 +736,7 @@ export class NativeMemoryStore {
     /** @type {Map<string | null, { fingerprint: string, text: string | null }[] | null>} */
     const out = new Map();
     for (const namespace of new Set(files.map((file) => file.namespaceId ?? null))) {
-      const types = (namespace === null ? OPENVIKING_MEMORY_TYPES : OPENVIKING_PROJECT_MEMORY_TYPES).map((type) => nativeMemoryRejectionType(type, namespace));
+      const types = (namespace === null ? OPENVIKING_KNOWN_MEMORY_TYPES : OPENVIKING_PROJECT_MEMORY_TYPES).map((type) => nativeMemoryRejectionType(type, namespace));
       out.set(namespace, await Promise.resolve().then(() => this.overlay.forgottenLines(userId, types)).catch(() => null));
     }
     return out;
@@ -932,14 +933,14 @@ export class NativeMemoryStore {
     return nativeMemoryIndex((await this.overlay.files(userId)).values(), { memoryRoot: this.sessions.memoryRoot(userId), hiddenUris });
   }
 
-  /** Only structurally marked safety sections of owned people/profile files; no health keyword inference.
+  /** Dedicated safety files and legacy marked sections of owned people/profile files; no health keyword inference.
    * The ordinary file/record readers apply deletion fences, forgotten lines and producer receipts.
    * @param {string} userId @param {string} projectId */
   async safetyNotes(userId, projectId) {
     const scope = { memoryRoot: this.sessions.memoryRoot(userId), projectId,
       hiddenUris: [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId)] };
     const selected = [...(await this.overlay.files(userId)).values()]
-      .filter(file => safetyNoteFile(file, scope) && safetyNoteLines(file.body).length);
+      .filter(file => safetyNoteFile(file, scope) && safetyNoteLines(file.body, file.memoryType).length);
     if (!selected.length) return [];
     const files = (await this.files(userId, { uris: selected.map(file => file.uri) })).filter(file => safetyNoteFile(file, scope));
     const records = await this.records(userId, { files });
@@ -956,7 +957,7 @@ export class NativeMemoryStore {
         const section = file.body.split('\n').find(line => line.trim().startsWith('## ') && line.trim().endsWith(MEMORY_SAFETY_NOTES_ANCHOR));
         body = `${heading}\n${section}\n${lines.map(line => `- ${line}`).join('\n')}`;
       }
-      if (!safetyNoteLines(body).length) return [];
+      if (!safetyNoteLines(body, file.type).length) return [];
       const receipt = sourceReceiptState(sources.map(record => ({ id: record.id, contentDigest: record.contentHash,
         sourcePrivacy: record.sourcePrivacy, attribution: record.attribution })), { trusted: true });
       const origins = [...new Set(sources.flatMap(record => record.attribution?.origins ?? ['unknown']))];
@@ -1025,7 +1026,7 @@ export class NativeMemoryStore {
     /** @type {Map<string | null, { fingerprint: string, text: string | null }[]>} */
     const rejected = new Map();
     for (const namespace of new Set(files.filter((file) => revisions.get(file.uri)?.length).map((file) => file.namespaceId ?? null))) {
-      const lists = await Promise.all((namespace === null ? OPENVIKING_MEMORY_TYPES : OPENVIKING_PROJECT_MEMORY_TYPES).map((type) => this.overlay.rejectedLines(userId, nativeMemoryRejectionType(type, namespace), { limit: 1_000 })));
+      const lists = await Promise.all((namespace === null ? OPENVIKING_KNOWN_MEMORY_TYPES : OPENVIKING_PROJECT_MEMORY_TYPES).map((type) => this.overlay.rejectedLines(userId, nativeMemoryRejectionType(type, namespace), { limit: 1_000 })));
       rejected.set(namespace, lists.flat());
     }
     return files.flatMap((file) => {

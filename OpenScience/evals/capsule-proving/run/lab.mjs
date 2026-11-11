@@ -491,7 +491,7 @@ export async function openLab({
     client.writeAdmission = (userId, operation) => withNativeMemoryWrite(database, userId, operation);
     /** The conversation time each account is at, for writes the product makes without one (`LabClockSessions`). @type {Map<string, string>} */
     const conversationClock = new Map();
-    const sessions = new LabClockSessions(client, { timeoutMs: engineTimeoutMs, fastTimeoutMs: Math.max(1_000, Math.round(engineTimeoutMs / 3)) }, conversationClock);
+    const sessions = new LabClockSessions(client, { safetyNotes: config.memorySafetyNotesEnabled === true, timeoutMs: engineTimeoutMs, fastTimeoutMs: Math.max(1_000, Math.round(engineTimeoutMs / 3)) }, conversationClock);
     const health = await sessions.health();
     if (!health.healthy) throw new Error(`the lab engine is not healthy (${health.status})`);
     // A run's own engine account (production's single account exists from `ov.conf`); 409 is an account an earlier attempt made.
@@ -691,7 +691,7 @@ export async function openLab({
         await overlay.noteRegistered(userId);
         // The worker's policy check (`#syncPolicy`): the account's type allowlist is the deployment's, restated when it is not.
         const held = stockEngine ? null : await sessions.settings(userId);
-        const expected = [...OPENVIKING_MEMORY_TYPES].sort();
+        const expected = [...sessions.memoryTypes].sort();
         if (held && !(held.memoryTypes.length === expected.length && held.memoryTypes.every((type, index) => type === expected[index]))) {
           const settings = await memorySettings.settings(userId);
           await sessions.setLearning(userId, !settings.learningPaused);

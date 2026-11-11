@@ -186,7 +186,7 @@ export class OpenVikingEngine {
   async #memoryTemplates() {
     const account = this.client.account;
     const missing = [];
-    for (const type of OPENVIKING_MEMORY_TYPES) {
+    for (const type of this.config.memorySafetyNotesEnabled ? [...OPENVIKING_MEMORY_TYPES, "safety_notes"] : OPENVIKING_MEMORY_TYPES) {
       try {
         await this.client.request({ path: `/api/v1/admin/accounts/${account}/memory-templates/${type}`, openVikingUser: OPENVIKING_ENGINE_USER });
       } catch (error) {
@@ -206,7 +206,7 @@ export class OpenVikingEngine {
       path: `/api/v1/admin/accounts/${account}/users/${OPENVIKING_ENGINE_USER}/settings`, openVikingUser: OPENVIKING_ENGINE_USER,
     });
     const types = Array.isArray(settings?.result?.memory_policy?.memory_types) ? [...settings.result.memory_policy.memory_types].sort() : [];
-    const expected = [...OPENVIKING_MEMORY_TYPES].sort();
+    const expected = [...OPENVIKING_MEMORY_TYPES, ...(this.config.memorySafetyNotesEnabled ? ["safety_notes"] : [])].sort();
     return types.length === expected.length && types.every((type, index) => type === expected[index])
       ? { ok: true, types }
       : { ok: false, code: "openviking_memory_types_mismatch", types };
