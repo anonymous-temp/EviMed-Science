@@ -18,7 +18,7 @@ import { publicMemoryRubric, PUBLIC_OFFICIAL } from './publicJudge.mjs';
 import { OFFICIAL, rubricFacts } from './officialJudge.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const SCORER_VERSION = 'capsule-proving-run-score/7';
+export const SCORER_VERSION = 'capsule-proving-run-score/8';
 export const SUPPORTED_SETS = ['synthetic-users', 'scenarios', 'med-m1', 'med-m2', 'med-m3', 'med-m5', 'med-m10',
   ...PUBLIC_MEMORY_SETS, 'g6', 'g9', 'm6', 'm7', 'm11', 'brand-generic', 'longmemeval-s', 'medmemorybench'];
 const json = async file => JSON.parse(await readFile(file, 'utf8'));

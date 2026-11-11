@@ -25,7 +25,7 @@ for attempt in range(4):
     incomplete = set()
     for entry in after:
         summary = json.loads((runs / entry['run'] / entry['variant'] / 'summary.json').read_text())
-        if summary['schema'] != 'capsule-proving-run-score/7' or summary['judge']['pending'] or summary['judge']['error']:
+        if summary['schema'] != 'capsule-proving-run-score/8' or summary['judge']['pending'] or summary['judge']['error']:
             incomplete.add(str(runs / entry['run']))
     if not incomplete:
         break

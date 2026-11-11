@@ -967,7 +967,7 @@ function main() {
   const rows = rowsFromSummary({
     run: { ...run, ...(arm ? { arm } : {}), rawPath: runDir },
     summary,
-    scorer: run.scorer ?? run.scorerVersion ?? run.commit ?? 'unknown',
+    scorer: summary.schema ?? run.scorer ?? run.scorerVersion ?? run.commit ?? 'unknown',
     costCny: options.costCny,
     prices: options.prices,
     extractionCachedShare: options.extractionCachedShare,
