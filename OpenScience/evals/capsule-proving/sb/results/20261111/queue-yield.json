@@ -1,0 +1,11 @@
+{
+  "at": "2026-11-11T09:58:16.596375+00:00",
+  "reason": "Let the currently running task finish, then stop the old loaded arm driver before its next dispatch. The waiting wrapper will release this empty admission barrier and execute the frozen case-balanced capacity queue. No task is canceled and no grade changes.",
+  "waitingDriver": 1820670,
+  "sampleChanged": false,
+  "armsPerTask": [
+    "none",
+    "learned",
+    "flat"
+  ]
+}

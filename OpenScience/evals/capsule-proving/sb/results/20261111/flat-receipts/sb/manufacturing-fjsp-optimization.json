@@ -1,0 +1,11 @@
+{
+  "source": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/manufacturing-fjsp-optimization/environment/skills",
+  "staged": "/srv/evimed/sb/flat/sb/manufacturing-fjsp-optimization",
+  "byteIdentical": true,
+  "directoriesMode": "0755",
+  "filesReadable": true,
+  "sha256": {
+    "reference.md": "46f76e2898e1f1a3d7f0d8c7ee4e5390f7e9f8e57c1695dd5eb3ddf739f71743",
+    "fjsp-baseline-repair-with-downtime-and-policy/SKILL.md": "2668bd6b9c6977ccedcf1f1d4af4401afdfe215666d68f82df41b662852b2125"
+  }
+}

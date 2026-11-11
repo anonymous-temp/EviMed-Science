@@ -1,0 +1,15 @@
+{
+  "source": "/srv/evimed/data/memdata-data/public/skilllearnbench/skills/human_authored/financial-analysis",
+  "staged": "/srv/evimed/sb/flat/slb/financial-analysis-4",
+  "byteIdentical": true,
+  "directoriesMode": "0755",
+  "filesReadable": true,
+  "sha256": {
+    "13f-analyzer/SKILL.md": "fac0b5f05405e1e8631f0dcc8f34649e1eaf3252ae3dd8ef7eb9aadaf3c5290d",
+    "fuzzy-name-search/SKILL.md": "d3a1180be787f8d19bc5bcb4a234b4db145ab88ba5ee1bdb1acde99bc97fef98",
+    "fuzzy-name-search/scripts/search_fund.py": "e283c1f4e8428930941c79011615a7211f4d7e17a392f820af1d2a9f204964a3",
+    "fuzzy-name-search/scripts/search_stock_cusip.py": "83e4ba631d57b0d8b44e609efdc2552483687c6e90cb766eb227ea0c8a708b66",
+    "13f-analyzer/scripts/holding_analysis.py": "b2043afd020a32475e9a45ddb5a810082dbb4b1b967fae2153c3bb7e31b6d860",
+    "13f-analyzer/scripts/one_fund_analysis.py": "cf599cfc21d7419573641397252d0bb8f6da43deefd2aefdbb59fcae28034f15"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "sb:azure-bgp-oscillation-route-leak": {
+    "at": "2026-11-11T12:44:25.345006+00:00",
+    "reason": "Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+    "remainingSecondsAtDecision": 10182.655284404755,
+    "requiredConservativeSeconds": 12720,
+    "noPrimaryArmDispatched": true,
+    "criterion": "Outcome-independent whole-group wall admission; no valid primary result removed. All pinned oracle controls passed separately. Earlier video calibration remains archived and excluded by the whole-phase qualification amendment."
+  },
+  "sb:video-silence-remover": {
+    "at": "2026-11-11T12:44:25.345253+00:00",
+    "reason": "Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+    "remainingSecondsAtDecision": 10182.655284404755,
+    "requiredConservativeSeconds": 12720,
+    "noPrimaryArmDispatched": true,
+    "criterion": "Outcome-independent whole-group wall admission; no valid primary result removed. All pinned oracle controls passed separately. Earlier video calibration remains archived and excluded by the whole-phase qualification amendment."
+  }
+}

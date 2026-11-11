@@ -1,0 +1,10 @@
+{
+  "source": "/srv/evimed/data/memdata-data/public/skilllearnbench/skills/human_authored/chinese-poem-generator",
+  "staged": "/srv/evimed/sb/flat/slb/chinese-poem-generator-3",
+  "byteIdentical": true,
+  "directoriesMode": "0755",
+  "filesReadable": true,
+  "sha256": {
+    "regulated-lvshi-composer/SKILL.md": "64745f320e52606bdd17df6bad0f06568aa64df781b37ffb21cf4bc265fbf638"
+  }
+}

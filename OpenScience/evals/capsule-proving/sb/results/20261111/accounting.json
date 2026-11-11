@@ -1,0 +1,100 @@
+{
+  "at": "2026-11-11T13:48:18.069Z",
+  "reference": {
+    "prompt": 58978295,
+    "completion": 749544,
+    "cached": 31957632,
+    "costCny": 32.561753719999956,
+    "costCnyPeakEquivalent": 61.31598327999995,
+    "requests": 1199,
+    "missingUsage": 0
+  },
+  "smokes": {
+    "prompt": 273500,
+    "completion": 17223,
+    "cached": 256128,
+    "costCny": 0.18277311999999998,
+    "costCnyPeakEquivalent": 0.18277312,
+    "requests": 31,
+    "missingUsage": 0
+  },
+  "precompatCalibration": {
+    "prompt": 9770620,
+    "completion": 143632,
+    "cached": 9454848,
+    "costCny": 2.11176204,
+    "costCnyPeakEquivalent": 2.158793919999999,
+    "requests": 143,
+    "missingUsage": 0
+  },
+  "judges": {
+    "prompt": 25700394,
+    "completion": 82599,
+    "cached": 114816,
+    "costCny": 26.214430320000012,
+    "costCnyPeakEquivalent": 51.836540640000024,
+    "requests": 391,
+    "missingUsage": 0
+  },
+  "practice": {
+    "account": {
+      "since": "1970-01-01T00:00:00.000Z",
+      "totalCalls": 594,
+      "reservedCalls": 0,
+      "settledCalls": 594,
+      "releasedCalls": 0,
+      "uncertainCalls": 0,
+      "actualCost": 6.06104456,
+      "reservedCost": 0,
+      "uncertainCost": 0,
+      "currency": "CNY",
+      "cacheHitTokens": 28531328,
+      "cacheMissTokens": 569666,
+      "completionTokens": 482182,
+      "unpricedCalls": 0,
+      "byModel": [
+        {
+          "model": "deepseek-flash",
+          "calls": 594,
+          "cost": 6.06104456
+        }
+      ],
+      "priceVersions": [
+        "evimed-reference-2026-10-17"
+      ]
+    },
+    "learning": {
+      "since": "1970-01-01T00:00:00.000Z",
+      "totalCalls": 172,
+      "reservedCalls": 0,
+      "settledCalls": 172,
+      "releasedCalls": 0,
+      "uncertainCalls": 0,
+      "actualCost": 1.60253216,
+      "reservedCost": 0,
+      "uncertainCost": 0,
+      "currency": "CNY",
+      "cacheHitTokens": 8811904,
+      "cacheMissTokens": 181420,
+      "completionTokens": 110902,
+      "unpricedCalls": 0,
+      "byModel": [
+        {
+          "model": "deepseek-flash",
+          "calls": 172,
+          "cost": 1.60253216
+        }
+      ],
+      "priceVersions": [
+        "evimed-reference-2026-10-17"
+      ]
+    }
+  },
+  "totalObservedCny": 38.622798279999955,
+  "conservativeUpperBoundCny": 67.37702783999995,
+  "balanceBefore": 1841.78,
+  "balanceAfter": "877.03",
+  "balanceScope": "Shared account; balance delta includes other lanes and is not attribution to SB.",
+  "startedAt": "2026-11-11T05:34:08.000Z",
+  "priceBasis": "Provider token usage at observed timestamps, product domain dated prices/peak schedule; billing estimate, not an isolated vendor invoice."
+}

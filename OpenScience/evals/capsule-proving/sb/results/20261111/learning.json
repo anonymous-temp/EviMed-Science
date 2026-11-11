@@ -1,0 +1,190 @@
+{
+  "at": "2026-11-11T07:46:29.348Z",
+  "learned": 5,
+  "approved": 5,
+  "reachedQuiet": true,
+  "productPath": true,
+  "scoredTrialsProductPath": false,
+  "methods": [
+    {
+      "name": "sort-corpus-by-content-and-prove-it-unchanged",
+      "status": "approved"
+    },
+    {
+      "name": "answer-question-set-from-supplied-corpus",
+      "status": "approved"
+    },
+    {
+      "name": "check-fixed-form-text-against-its-grid",
+      "status": "approved"
+    },
+    {
+      "name": "pdf-display-equation-extraction",
+      "status": "approved"
+    },
+    {
+      "name": "fill-template-workbook-with-live-formulas",
+      "status": "approved"
+    }
+  ],
+  "jobs": [
+    {
+      "kind": "consolidate",
+      "status": "succeeded",
+      "count": 10
+    },
+    {
+      "kind": "distill",
+      "status": "succeeded",
+      "count": 5
+    },
+    {
+      "kind": "learning-evidence",
+      "status": "succeeded",
+      "count": 10
+    }
+  ],
+  "practice": [
+    {
+      "task": "sb-bike-rebalance",
+      "turns": [
+        {
+          "status": "canceled",
+          "dispatchError": false
+        }
+      ]
+    },
+    {
+      "task": "sb-drone-planning-control",
+      "turns": [
+        {
+          "status": "canceled",
+          "dispatchError": false
+        }
+      ]
+    },
+    {
+      "task": "sb-latex-formula-extraction",
+      "turns": [
+        {
+          "status": "succeeded",
+          "dispatchError": false
+        },
+        {
+          "status": "succeeded",
+          "dispatchError": false
+        }
+      ]
+    },
+    {
+      "task": "sb-parallel-tfidf-search",
+      "turns": [
+        {
+          "status": "canceled",
+          "dispatchError": false
+        }
+      ]
+    },
+    {
+      "task": "sb-radar-vital-signs",
+      "turns": [
+        {
+          "status": "canceled",
+          "dispatchError": false
+        }
+      ]
+    },
+    {
+      "task": "sb-reserves-at-risk-calc",
+      "turns": [
+        {
+          "status": "succeeded",
+          "dispatchError": false
+        },
+        {
+          "status": "succeeded",
+          "dispatchError": false
+        }
+      ]
+    },
+    {
+      "task": "sb-threejs-to-obj",
+      "turns": [
+        {
+          "status": "canceled",
+          "dispatchError": false
+        }
+      ]
+    },
+    {
+      "task": "slb-chinese-poem-generator-1",
+      "turns": [
+        {
+          "status": "succeeded",
+          "dispatchError": false
+        },
+        {
+          "status": "succeeded",
+          "dispatchError": false
+        }
+      ]
+    },
+    {
+      "task": "slb-court-form-filling-1",
+      "turns": [
+        {
+          "status": "canceled",
+          "dispatchError": false
+        }
+      ]
+    },
+    {
+      "task": "slb-enterprise-information-search-1",
+      "turns": [
+        {
+          "status": "succeeded",
+          "dispatchError": false
+        },
+        {
+          "status": "succeeded",
+          "dispatchError": false
+        }
+      ]
+    },
+    {
+      "task": "slb-financial-analysis-1",
+      "turns": [
+        {
+          "status": "canceled",
+          "dispatchError": false
+        }
+      ]
+    },
+    {
+      "task": "slb-nlp-paper-reproduction-1",
+      "turns": [
+        {
+          "status": "failed",
+          "dispatchError": false
+        },
+        {
+          "status": null,
+          "dispatchError": true
+        }
+      ]
+    },
+    {
+      "task": "slb-organize-messy-files-1",
+      "turns": [
+        {
+          "status": "succeeded",
+          "dispatchError": false
+        },
+        {
+          "status": "succeeded",
+          "dispatchError": false
+        }
+      ]
+    }
+  ]
+}

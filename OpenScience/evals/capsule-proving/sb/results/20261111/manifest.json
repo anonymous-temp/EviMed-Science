@@ -1,0 +1,733 @@
+{
+  "schema": 1,
+  "seed": "20261111",
+  "pins": {
+    "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+    "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+  },
+  "tasks": [
+    {
+      "bench": "sb",
+      "id": "dapt-intrusion-detection",
+      "category": "cybersecurity",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/dapt-intrusion-detection",
+      "family": "dapt-intrusion-detection",
+      "pinnedFiles": 13,
+      "verifierSha256": {
+        "test.sh": "1f539ad9a5a8845c570a92413db2c48046c23764bf3ae9000ae7ad2687813529",
+        "test_outputs.py": "cb318c3f217135a79decd55894671e00fb9d2b843d5ef3f5ee9e639e09c696b6"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "invoice-fraud-detection",
+      "category": "finance-economics",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/invoice-fraud-detection",
+      "family": "invoice-fraud-detection",
+      "pinnedFiles": 25,
+      "verifierSha256": {
+        "ground_truth.json": "1e8e6cf9bd28298f5bb4a8c8e07fcdc8199cb877bdbc9def87d9541f596d385d",
+        "test.sh": "dfb59780bbce55de353a8c7f25ad136e7c0fc75da3744bd54b273aed42a8bb16",
+        "test_outputs.py": "51365f014273d149a67c19484dadb9f494083fd82f242d524a15014838fd8649"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "manufacturing-fjsp-optimization",
+      "category": "industrial-physical-systems",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/manufacturing-fjsp-optimization",
+      "family": "manufacturing-fjsp-optimization",
+      "pinnedFiles": 12,
+      "verifierSha256": {
+        "test.sh": "42027720cc961a84910926116d7b6032c76465eb886bdcbd6ab650aa4069fdaf",
+        "test_outputs.py": "a5f2536f384b52bb36ca2fc0348b480187d49fc19eb39368e01d6a720a7a1990"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "pddl-airport-planning",
+      "category": "mathematics-or-formal-reasoning",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/pddl-airport-planning",
+      "family": "pddl-airport-planning",
+      "pinnedFiles": 73,
+      "verifierSha256": {
+        "test.sh": "3ddb0d982a52a04feb799fa903c57714733008cc8a2db3087a16f9775d622f59",
+        "test_outputs.py": "1f8c6cd4be1ed7fdf0925494643dd2d78848c9ec4c855a7a7837612675ac87e4"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "video-silence-remover",
+      "category": "media-content-production",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/video-silence-remover",
+      "family": "video-silence-remover",
+      "pinnedFiles": 22,
+      "verifierSha256": {
+        "ground_truth.json": "1c955a40cf8935d836ceebfa7864fd441a18699958186d2088666ea4afcadd16",
+        "test.sh": "795600f8600f40c253047ac0c5aac4e297f2e957fbafafab48721786af0c31cd",
+        "test_outputs.py": "188e11e0571fb8655f10bab9fcbf71f7bba253f380ba26c6144cfc183e93d042"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "lake-warming-attribution",
+      "category": "natural-science",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/lake-warming-attribution",
+      "family": "lake-warming-attribution",
+      "pinnedFiles": 13,
+      "verifierSha256": {
+        "test.sh": "3c5baf21d06f82fd4b25a3111b82e9308a9e479980c98bb87832f8b8c21ad29a",
+        "test_outputs.py": "94424ee977ae3435c75f420b4dfce346e1b66937e165f9999ea3288f632811f9"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "exceltable-in-ppt",
+      "category": "office-white-collar",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/exceltable-in-ppt",
+      "family": "exceltable-in-ppt",
+      "pinnedFiles": 69,
+      "verifierSha256": {
+        "test.sh": "e1360fbfb1e7577ff66793b3ec27a5953a8e708b8e35d5040086c72e6f315b2f",
+        "test_outputs.py": "5c69a1cb8c95ceb39ff2da566fc24f26ebc90715b8cac8ac92991760ee2ad1ad"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "azure-bgp-oscillation-route-leak",
+      "category": "software-engineering",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/azure-bgp-oscillation-route-leak",
+      "family": "azure-bgp-oscillation-route-leak",
+      "pinnedFiles": 11,
+      "verifierSha256": {
+        "test.sh": "fe7195562321b71ace6e1f6858994939238cc7ce0ec2d0ae3b610278489a42b7",
+        "test_outputs.py": "a4b39c30b6b0efcec27b7217f8001c1efe0e90b4f67f78d79951f4466f5dff6c"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "chinese-poem-generator-3",
+      "category": "Content & Creative",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/chinese-poem-generator/chinese-poem-generator-3",
+      "family": "chinese-poem-generator",
+      "pinnedFiles": 5,
+      "verifierSha256": {
+        "test.sh": "c5fc058d1c372ab4040fc31a1462e434a104de6b9d148c228978121bff8d4ef9",
+        "test_outputs.py": "f883dbd46c65e6f305498bf9bc2dbbcbec3fbec06d3d993fad50ced0bc7764a5"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "chinese-poem-generator-2",
+      "category": "Content & Creative",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/chinese-poem-generator/chinese-poem-generator-2",
+      "family": "chinese-poem-generator",
+      "pinnedFiles": 5,
+      "verifierSha256": {
+        "test.sh": "c5fc058d1c372ab4040fc31a1462e434a104de6b9d148c228978121bff8d4ef9",
+        "test_outputs.py": "f883dbd46c65e6f305498bf9bc2dbbcbec3fbec06d3d993fad50ced0bc7764a5"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "financial-analysis-4",
+      "category": "Data & Analytics",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/financial-analysis/financial-analysis-4",
+      "family": "financial-analysis",
+      "pinnedFiles": 9,
+      "verifierSha256": {
+        "expected_output.json": "8595b4cf71dad6b062322aa70c15470282ca8706d2e39ff099e1c9be1250e5ca",
+        "test.sh": "de060ab298637151cf7ba35aaedd5be520a9e3ea18e169849efb42d13730f1b8",
+        "test_outputs.py": "95c1247a59f84363dda6fb4134a804b97387535caf1c37b9a1f28715442b0305"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "financial-analysis-3",
+      "category": "Data & Analytics",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/financial-analysis/financial-analysis-3",
+      "family": "financial-analysis",
+      "pinnedFiles": 9,
+      "verifierSha256": {
+        "expected_output.json": "c26c7002fc803e5a092d8c88b9c36fc37246f83f91fedcdf8d380869d65dab9e",
+        "test.sh": "de060ab298637151cf7ba35aaedd5be520a9e3ea18e169849efb42d13730f1b8",
+        "test_outputs.py": "64452e3e6fd6753e907d7e2bfd264875f7fc4ce6990cbc5b7ba3e41995dd0591"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "enterprise-information-search-2",
+      "category": "Information Retrieval",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/enterprise-information-search/enterprise-information-search-2",
+      "family": "enterprise-information-search",
+      "pinnedFiles": 39,
+      "verifierSha256": {
+        "test.sh": "e26daee2de02446ae541140c19d4616cc85818bb3291713657e2bd360db6248a",
+        "test_outputs.py": "d51d13f1329281eeec327544c8f4feca2e230e0f97143aeb48ceb73a6785a774"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "enterprise-information-search-6",
+      "category": "Information Retrieval",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/enterprise-information-search/enterprise-information-search-6",
+      "family": "enterprise-information-search",
+      "pinnedFiles": 39,
+      "verifierSha256": {
+        "test.sh": "e26daee2de02446ae541140c19d4616cc85818bb3291713657e2bd360db6248a",
+        "test_outputs.py": "aa6e9cd61b750e3aa03835d8d40a4176cf42840cf4c33eaf60e4fa0a406d6030"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "court-form-filling-2",
+      "category": "Productivity Tools",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/court-form-filling/court-form-filling-2",
+      "family": "court-form-filling",
+      "pinnedFiles": 7,
+      "verifierSha256": {
+        "test.sh": "3b737fad7a00d6b8f63ffef481beea1e4b8ca518a558cfb6d28772cd49eefa38",
+        "test_outputs.py": "c981f861c463101e6244aeaec99f7238a67a07600480cec8fdd7f0df60c89cda"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "court-form-filling-4",
+      "category": "Productivity Tools",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/court-form-filling/court-form-filling-4",
+      "family": "court-form-filling",
+      "pinnedFiles": 7,
+      "verifierSha256": {
+        "test.sh": "3b737fad7a00d6b8f63ffef481beea1e4b8ca518a558cfb6d28772cd49eefa38",
+        "test_outputs.py": "ccb5f72cc4c9a540f2f268adf1728fdf18c655470348551882c8ed9006ccbc4e"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "nlp-paper-reproduction-3",
+      "category": "Software Engineering",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/nlp-paper-reproduction/nlp-paper-reproduction-3",
+      "family": "nlp-paper-reproduction",
+      "pinnedFiles": 71,
+      "verifierSha256": {
+        "loss.npz": "162e3cd015afa98503a8419c6955523ba7c4401cd50f34e7d8f7e601e8489d2c",
+        "print_loss_npz.py": "934f27c0b78d4aef4709666efbebed53c32a341d2c6359d33777049c06676d8d",
+        "test.sh": "613c24a6f949715c50ae0cdee17d0a3a2d09da018c1d7e53a01c7a6e683d81db",
+        "test_outputs.py": "cbf2fe1623617ad1089af4e2ed8a6b4aee7e67593d7daf12882e194df004ff16"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "nlp-paper-reproduction-2",
+      "category": "Software Engineering",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/nlp-paper-reproduction/nlp-paper-reproduction-2",
+      "family": "nlp-paper-reproduction",
+      "pinnedFiles": 71,
+      "verifierSha256": {
+        "loss.npz": "162e3cd015afa98503a8419c6955523ba7c4401cd50f34e7d8f7e601e8489d2c",
+        "print_loss_npz.py": "934f27c0b78d4aef4709666efbebed53c32a341d2c6359d33777049c06676d8d",
+        "test.sh": "613c24a6f949715c50ae0cdee17d0a3a2d09da018c1d7e53a01c7a6e683d81db",
+        "test_outputs.py": "cbf2fe1623617ad1089af4e2ed8a6b4aee7e67593d7daf12882e194df004ff16"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "organize-messy-files-5",
+      "category": "Utilities & Other",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/organize-messy-files/organize-messy-files-5",
+      "family": "organize-messy-files",
+      "pinnedFiles": 10,
+      "verifierSha256": {
+        "test.sh": "38eb985143f55e21a90887a3b2a4a9aa1163a0a5cf6b1cb70d90ab815c5a79f9",
+        "test_outputs.py": "febf5fce1333e48f433851aa79d3d7fef790cdf0f10c86b9b4875119e85fcc0f"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "organize-messy-files-2",
+      "category": "Utilities & Other",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/organize-messy-files/organize-messy-files-2",
+      "family": "organize-messy-files",
+      "pinnedFiles": 10,
+      "verifierSha256": {
+        "test.sh": "38eb985143f55e21a90887a3b2a4a9aa1163a0a5cf6b1cb70d90ab815c5a79f9",
+        "test_outputs.py": "12d757eac4b4fb6d553dd99d2528f13e9bb00b11b3677e43a7c02af2b07c8945"
+      }
+    }
+  ],
+  "practice": [
+    {
+      "bench": "sb",
+      "id": "reserves-at-risk-calc",
+      "category": "finance-economics",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/reserves-at-risk-calc",
+      "family": "reserves-at-risk-calc",
+      "pinnedFiles": 10,
+      "verifierSha256": {
+        "test.sh": "8c19cd71192307dca91fad22715869428e8a158fb77710ac83695b8873192396",
+        "test_outputs.py": "cbefaf02b57cadafb51f4e0055bab5a5f0dead3956edb83ee79d263bdbb59432"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "drone-planning-control",
+      "category": "industrial-physical-systems",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/drone-planning-control",
+      "family": "drone-planning-control",
+      "pinnedFiles": 44,
+      "verifierSha256": {
+        "_oracle_sim.py": "d1975586c0a113c87dd87a5770f25a4afc7077c6de86616dbe385da3bbfe716d",
+        "test.sh": "f9076fdbe9519a47721db33c0ff4e2ce18177088f0735e68e5e30284a767c71f",
+        "test_outputs.py": "dd7455dd0ebaf2db603e3e2e71f79cf0babf529055ea6bb66f0f17de3d65b3d2"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "bike-rebalance",
+      "category": "mathematics-or-formal-reasoning",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/bike-rebalance",
+      "family": "bike-rebalance",
+      "pinnedFiles": 10,
+      "verifierSha256": {
+        "test.sh": "ee72f22b7cb8fcdfe222d36715980f08bb5c6d0273d9c7dbecfc60407331ac0f",
+        "test_outputs.py": "930c406ed2c38235cadd42dbf08d8a205a81c548cfdea4c19094104597336479"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "threejs-to-obj",
+      "category": "media-content-production",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/threejs-to-obj",
+      "family": "threejs-to-obj",
+      "pinnedFiles": 15,
+      "verifierSha256": {
+        "gen_ground_truth.mjs": "210b32a6b77aa02b5bba4ec008be836f5c96bf3daa2511e9a42a1f069d2efecd",
+        "test.sh": "04f77d1342c0106060bca0d7b40aa2e429e11bbc2e0bd0200524b2b00feaca9c",
+        "test_outputs.py": "2e8ca83fb5ddeb3ba323cfa9d0a282ed2911e69623fbadf251263c560c3a6226"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "radar-vital-signs",
+      "category": "natural-science",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/radar-vital-signs",
+      "family": "radar-vital-signs",
+      "pinnedFiles": 52,
+      "verifierSha256": {
+        "expected_values.json": "cecb584552228e226a2b2172f796acd766560c06275c64e24f893b3487d9e084",
+        "test.sh": "88a81047a9612c44cb8ef6c72fd325924b76516e77b0bae4304a4a477026cdf0",
+        "test_outputs.py": "0874200937776965a2402b0ba0d6e662ebdff8edc8575934a442c58f0893abc0"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "latex-formula-extraction",
+      "category": "office-white-collar",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/latex-formula-extraction",
+      "family": "latex-formula-extraction",
+      "pinnedFiles": 20,
+      "verifierSha256": {
+        "test.sh": "3099d125be6772aab900335982a6c649a58a08591ea3f3a4130ad31fb3ac85f8",
+        "test_outputs.py": "857e670f1813bed43129e73fef31a4f472cdd50e5c73087a6e63821eaedb38c7"
+      }
+    },
+    {
+      "bench": "sb",
+      "id": "parallel-tfidf-search",
+      "category": "software-engineering",
+      "path": "/srv/evimed/data/memdata-data/public/skillsbench/tasks/parallel-tfidf-search",
+      "family": "parallel-tfidf-search",
+      "pinnedFiles": 13,
+      "verifierSha256": {
+        "test.sh": "6688b3179091a57c0857a5e1df0e77b92aba50b21cbcecea114843c303f89176",
+        "test_outputs.py": "3de14cb18c18d2c4afdfee4cf70809acb866aa67c13d8d6f4bc67d7f44e26c20"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "chinese-poem-generator-1",
+      "category": "Content & Creative",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/chinese-poem-generator/chinese-poem-generator-1",
+      "family": "chinese-poem-generator",
+      "pinnedFiles": 5,
+      "verifierSha256": {
+        "test.sh": "c5fc058d1c372ab4040fc31a1462e434a104de6b9d148c228978121bff8d4ef9",
+        "test_outputs.py": "f883dbd46c65e6f305498bf9bc2dbbcbec3fbec06d3d993fad50ced0bc7764a5"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "financial-analysis-1",
+      "category": "Data & Analytics",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/financial-analysis/financial-analysis-1",
+      "family": "financial-analysis",
+      "pinnedFiles": 9,
+      "verifierSha256": {
+        "expected_output.json": "2a8145033cc6d4376d5ef07b5e49e91f10ec8e1a001fbff50df72d7adf2b5d59",
+        "test.sh": "de060ab298637151cf7ba35aaedd5be520a9e3ea18e169849efb42d13730f1b8",
+        "test_outputs.py": "95c1247a59f84363dda6fb4134a804b97387535caf1c37b9a1f28715442b0305"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "enterprise-information-search-1",
+      "category": "Information Retrieval",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/enterprise-information-search/enterprise-information-search-1",
+      "family": "enterprise-information-search",
+      "pinnedFiles": 39,
+      "verifierSha256": {
+        "test.sh": "e26daee2de02446ae541140c19d4616cc85818bb3291713657e2bd360db6248a",
+        "test_outputs.py": "4d0d203df5b91b4d026bd237c44999dea79c4230e97538e92a342aabc5070886"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "court-form-filling-1",
+      "category": "Productivity Tools",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/court-form-filling/court-form-filling-1",
+      "family": "court-form-filling",
+      "pinnedFiles": 7,
+      "verifierSha256": {
+        "test.sh": "3b737fad7a00d6b8f63ffef481beea1e4b8ca518a558cfb6d28772cd49eefa38",
+        "test_outputs.py": "cccc72ef7d553f645a885ad6b921d8401807a7ccf465eaa7ee50ed6e34a0ca6e"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "nlp-paper-reproduction-1",
+      "category": "Software Engineering",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/nlp-paper-reproduction/nlp-paper-reproduction-1",
+      "family": "nlp-paper-reproduction",
+      "pinnedFiles": 71,
+      "verifierSha256": {
+        "loss.npz": "162e3cd015afa98503a8419c6955523ba7c4401cd50f34e7d8f7e601e8489d2c",
+        "print_loss_npz.py": "934f27c0b78d4aef4709666efbebed53c32a341d2c6359d33777049c06676d8d",
+        "test.sh": "613c24a6f949715c50ae0cdee17d0a3a2d09da018c1d7e53a01c7a6e683d81db",
+        "test_outputs.py": "cbf2fe1623617ad1089af4e2ed8a6b4aee7e67593d7daf12882e194df004ff16"
+      }
+    },
+    {
+      "bench": "slb",
+      "id": "organize-messy-files-1",
+      "category": "Utilities & Other",
+      "path": "/srv/evimed/data/memdata-data/public/skilllearnbench/tasks/organize-messy-files/organize-messy-files-1",
+      "family": "organize-messy-files",
+      "pinnedFiles": 10,
+      "verifierSha256": {
+        "test.sh": "38eb985143f55e21a90887a3b2a4a9aa1163a0a5cf6b1cb70d90ab815c5a79f9",
+        "test_outputs.py": "ce1d6cb719076a1de78cd565542db7687e4f2725636e96d9a5eddefbf49d8bcf"
+      }
+    }
+  ],
+  "perDomain": {
+    "sb": {
+      "cybersecurity": {
+        "eligible": 1,
+        "test": 1,
+        "practice": 0
+      },
+      "finance-economics": {
+        "eligible": 9,
+        "test": 1,
+        "practice": 1
+      },
+      "industrial-physical-systems": {
+        "eligible": 14,
+        "test": 1,
+        "practice": 1
+      },
+      "mathematics-or-formal-reasoning": {
+        "eligible": 8,
+        "test": 1,
+        "practice": 1
+      },
+      "media-content-production": {
+        "eligible": 4,
+        "test": 1,
+        "practice": 1
+      },
+      "natural-science": {
+        "eligible": 14,
+        "test": 1,
+        "practice": 1
+      },
+      "office-white-collar": {
+        "eligible": 14,
+        "test": 1,
+        "practice": 1
+      },
+      "software-engineering": {
+        "eligible": 13,
+        "test": 1,
+        "practice": 1
+      }
+    },
+    "slb": {
+      "Content & Creative": {
+        "eligibleFamilies": 3,
+        "family": "chinese-poem-generator",
+        "practice": 1,
+        "test": 2
+      },
+      "Data & Analytics": {
+        "eligibleFamilies": 5,
+        "family": "financial-analysis",
+        "practice": 1,
+        "test": 2
+      },
+      "Information Retrieval": {
+        "eligibleFamilies": 2,
+        "family": "enterprise-information-search",
+        "practice": 1,
+        "test": 2
+      },
+      "Productivity Tools": {
+        "eligibleFamilies": 3,
+        "family": "court-form-filling",
+        "practice": 1,
+        "test": 2
+      },
+      "Software Engineering": {
+        "eligibleFamilies": 2,
+        "family": "nlp-paper-reproduction",
+        "practice": 1,
+        "test": 2
+      },
+      "Utilities & Other": {
+        "eligibleFamilies": 2,
+        "family": "organize-messy-files",
+        "practice": 1,
+        "test": 2
+      }
+    }
+  },
+  "excluded": [
+    {
+      "bench": "sb",
+      "id": "debug-trl-grpo",
+      "reasons": [
+        "large ML/compiler/download dependency"
+      ]
+    },
+    {
+      "bench": "sb",
+      "id": "fix-build-agentops",
+      "reasons": [
+        "specialized base image"
+      ]
+    },
+    {
+      "bench": "sb",
+      "id": "fix-druid-loophole-cve",
+      "reasons": [
+        "large ML/compiler/download dependency"
+      ]
+    },
+    {
+      "bench": "sb",
+      "id": "fix-erlang-ssh-cve",
+      "reasons": [
+        "large ML/compiler/download dependency"
+      ]
+    },
+    {
+      "bench": "sb",
+      "id": "multilingual-video-dubbing",
+      "reasons": [
+        "large ML/compiler/download dependency"
+      ]
+    },
+    {
+      "bench": "sb",
+      "id": "setup-fuzzing-py",
+      "reasons": [
+        "large ML/compiler/download dependency",
+        "specialized base image"
+      ]
+    },
+    {
+      "bench": "sb",
+      "id": "software-dependency-audit",
+      "reasons": [
+        "large ML/compiler/download dependency"
+      ]
+    },
+    {
+      "bench": "sb",
+      "id": "spring-boot-jakarta-migration",
+      "reasons": [
+        "large ML/compiler/download dependency"
+      ]
+    },
+    {
+      "bench": "sb",
+      "id": "suricata-custom-exfil",
+      "reasons": [
+        "specialized base image"
+      ]
+    },
+    {
+      "bench": "sb",
+      "id": "syzkaller-ppdev-syzlang",
+      "reasons": [
+        "large ML/compiler/download dependency"
+      ]
+    },
+    {
+      "bench": "slb",
+      "id": "dependency-vulnerability-check",
+      "reasons": [
+        "large ML/compiler/download dependency"
+      ]
+    },
+    {
+      "bench": "slb",
+      "id": "github-repo-analytics",
+      "reasons": [
+        "external credentials required"
+      ]
+    },
+    {
+      "bench": "slb",
+      "id": "fix-security-bug",
+      "reasons": [
+        "large ML/compiler/download dependency"
+      ]
+    }
+  ],
+  "samplingRule": "Before scores: screen Dockerfile for large ML/compiler/download dependencies, specialized base images and task-required credentials; rank eligible names by SHA256(seed + colon + name). SkillsBench: first per domain test, second practice. SkillLearnBench: first family per README category, variant 1 practice, first two remaining variants by the same hash test. This is a feasibility-conditioned pilot, not a representative full-benchmark estimate.",
+  "pinVerification": [
+    {
+      "id": "dapt-intrusion-detection",
+      "files": 13
+    },
+    {
+      "id": "invoice-fraud-detection",
+      "files": 25
+    },
+    {
+      "id": "manufacturing-fjsp-optimization",
+      "files": 12
+    },
+    {
+      "id": "pddl-airport-planning",
+      "files": 73
+    },
+    {
+      "id": "video-silence-remover",
+      "files": 22
+    },
+    {
+      "id": "lake-warming-attribution",
+      "files": 13
+    },
+    {
+      "id": "exceltable-in-ppt",
+      "files": 69
+    },
+    {
+      "id": "azure-bgp-oscillation-route-leak",
+      "files": 11
+    },
+    {
+      "id": "chinese-poem-generator-3",
+      "files": 5
+    },
+    {
+      "id": "chinese-poem-generator-2",
+      "files": 5
+    },
+    {
+      "id": "financial-analysis-4",
+      "files": 9
+    },
+    {
+      "id": "financial-analysis-3",
+      "files": 9
+    },
+    {
+      "id": "enterprise-information-search-2",
+      "files": 39
+    },
+    {
+      "id": "enterprise-information-search-6",
+      "files": 39
+    },
+    {
+      "id": "court-form-filling-2",
+      "files": 7
+    },
+    {
+      "id": "court-form-filling-4",
+      "files": 7
+    },
+    {
+      "id": "nlp-paper-reproduction-3",
+      "files": 71
+    },
+    {
+      "id": "nlp-paper-reproduction-2",
+      "files": 71
+    },
+    {
+      "id": "organize-messy-files-5",
+      "files": 10
+    },
+    {
+      "id": "organize-messy-files-2",
+      "files": 10
+    },
+    {
+      "id": "reserves-at-risk-calc",
+      "files": 10
+    },
+    {
+      "id": "drone-planning-control",
+      "files": 44
+    },
+    {
+      "id": "bike-rebalance",
+      "files": 10
+    },
+    {
+      "id": "threejs-to-obj",
+      "files": 15
+    },
+    {
+      "id": "radar-vital-signs",
+      "files": 52
+    },
+    {
+      "id": "latex-formula-extraction",
+      "files": 20
+    },
+    {
+      "id": "parallel-tfidf-search",
+      "files": 13
+    },
+    {
+      "id": "chinese-poem-generator-1",
+      "files": 5
+    },
+    {
+      "id": "financial-analysis-1",
+      "files": 9
+    },
+    {
+      "id": "enterprise-information-search-1",
+      "files": 39
+    },
+    {
+      "id": "court-form-filling-1",
+      "files": 7
+    },
+    {
+      "id": "nlp-paper-reproduction-1",
+      "files": 71
+    },
+    {
+      "id": "organize-messy-files-1",
+      "files": 10
+    }
+  ]
+}

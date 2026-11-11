@@ -1,0 +1,1783 @@
+[
+  {
+    "bench": "sb",
+    "arm": "none",
+    "n": 8,
+    "completed": 8,
+    "pass": 1,
+    "fail": 5,
+    "error": 2,
+    "unknown": 0,
+    "value": 0.125,
+    "ci95": [
+      0.02241749145005667,
+      0.4708881822128535
+    ],
+    "scored": 6,
+    "scoredValue": 0.16666666666666666,
+    "scoredCi95": [
+      0.030053369748306635,
+      0.5635028221864702
+    ],
+    "complete": true,
+    "byCategory": {
+      "software-engineering": {
+        "n": 1,
+        "pass": 0,
+        "fail": 0,
+        "error": 1,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "cybersecurity": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "office-white-collar": {
+        "n": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "value": 1,
+        "ci95": [
+          0.20654931437723745,
+          1
+        ]
+      },
+      "finance-economics": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "natural-science": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "industrial-physical-systems": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "mathematics-or-formal-reasoning": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "media-content-production": {
+        "n": 1,
+        "pass": 0,
+        "fail": 0,
+        "error": 1,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      }
+    },
+    "tokens": {
+      "prompt": 2061301,
+      "completion": 68461,
+      "cached": 1919872,
+      "costCny": 0.8540031599999998,
+      "costCnyPeakEquivalent": 0.90734088,
+      "requests": 88,
+      "missingUsage": 0
+    },
+    "mounted": 0,
+    "opened": 0,
+    "distinctMounted": 0,
+    "distinctOpened": 0,
+    "modelInvoked": 6,
+    "perModelTask": {
+      "tokens": 354960.3333333333,
+      "costCny": 0.14233385999999995
+    },
+    "perTask": {
+      "tokens": 266220.25,
+      "costCny": 0.10675039499999997,
+      "mounted": 0,
+      "opened": 0
+    },
+    "rows": [
+      {
+        "task": "azure-bgp-oscillation-route-leak",
+        "category": "software-engineering",
+        "pass": false,
+        "scored": false,
+        "error": "RuntimeError: Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 0.0007348060607910156,
+        "tokens": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "costCny": 0,
+          "costCnyPeakEquivalent": 0,
+          "requests": 0,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "dapt-intrusion-detection",
+        "category": "cybersecurity",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": "Agent prompt exceeded wall-clock budget 600s",
+        "agentTimedOut": true,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 940.4358568191528,
+        "tokens": {
+          "prompt": 191581,
+          "completion": 11749,
+          "cached": 142208,
+          "costCny": 0.19842632000000002,
+          "costCnyPeakEquivalent": 0.19842632000000002,
+          "requests": 8,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "exceltable-in-ppt",
+        "category": "office-white-collar",
+        "pass": true,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 900.4923748970032,
+        "tokens": {
+          "prompt": 38048,
+          "completion": 3731,
+          "cached": 31744,
+          "costCny": 0.02186288,
+          "costCnyPeakEquivalent": 0.04372576,
+          "requests": 7,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "invoice-fraud-detection",
+        "category": "finance-economics",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 576.4664912223816,
+        "tokens": {
+          "prompt": 228230,
+          "completion": 9439,
+          "cached": 202368,
+          "costCny": 0.13533072,
+          "costCnyPeakEquivalent": 0.13533072,
+          "requests": 11,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "lake-warming-attribution",
+        "category": "natural-science",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": "Agent prompt exceeded wall-clock budget 300s",
+        "agentTimedOut": true,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 814.2563290596008,
+        "tokens": {
+          "prompt": 53135,
+          "completion": 6253,
+          "cached": 47872,
+          "costCny": 0.06246488,
+          "costCnyPeakEquivalent": 0.06246487999999999,
+          "requests": 10,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "manufacturing-fjsp-optimization",
+        "category": "industrial-physical-systems",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 1073.8972828388214,
+        "tokens": {
+          "prompt": 1400024,
+          "completion": 34408,
+          "cached": 1362688,
+          "costCny": 0.40444351999999995,
+          "costCnyPeakEquivalent": 0.40444351999999995,
+          "requests": 41,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "pddl-airport-planning",
+        "category": "mathematics-or-formal-reasoning",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 226.6847152709961,
+        "tokens": {
+          "prompt": 150283,
+          "completion": 2881,
+          "cached": 132992,
+          "costCny": 0.03147484,
+          "costCnyPeakEquivalent": 0.06294968000000001,
+          "requests": 11,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "video-silence-remover",
+        "category": "media-content-production",
+        "pass": false,
+        "scored": false,
+        "error": "RuntimeError: Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 0.0005233287811279297,
+        "tokens": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "costCny": 0,
+          "costCnyPeakEquivalent": 0,
+          "requests": 0,
+          "missingUsage": 0
+        }
+      }
+    ]
+  },
+  {
+    "bench": "sb",
+    "arm": "flat",
+    "n": 8,
+    "completed": 8,
+    "pass": 4,
+    "fail": 2,
+    "error": 2,
+    "unknown": 0,
+    "value": 0.5,
+    "ci95": [
+      0.21521606221387757,
+      0.7847839377861224
+    ],
+    "scored": 6,
+    "scoredValue": 0.6666666666666666,
+    "scoredCi95": [
+      0.299993315138392,
+      0.9032285888942195
+    ],
+    "complete": true,
+    "byCategory": {
+      "software-engineering": {
+        "n": 1,
+        "pass": 0,
+        "fail": 0,
+        "error": 1,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "cybersecurity": {
+        "n": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "value": 1,
+        "ci95": [
+          0.20654931437723745,
+          1
+        ]
+      },
+      "office-white-collar": {
+        "n": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "value": 1,
+        "ci95": [
+          0.20654931437723745,
+          1
+        ]
+      },
+      "finance-economics": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "natural-science": {
+        "n": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "value": 1,
+        "ci95": [
+          0.20654931437723745,
+          1
+        ]
+      },
+      "industrial-physical-systems": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "mathematics-or-formal-reasoning": {
+        "n": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "value": 1,
+        "ci95": [
+          0.20654931437723745,
+          1
+        ]
+      },
+      "media-content-production": {
+        "n": 1,
+        "pass": 0,
+        "fail": 0,
+        "error": 1,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      }
+    },
+    "tokens": {
+      "prompt": 2061102,
+      "completion": 65684,
+      "cached": 1936512,
+      "costCny": 0.42605624,
+      "costCnyPeakEquivalent": 0.8521124800000001,
+      "requests": 82,
+      "missingUsage": 0
+    },
+    "mounted": 13,
+    "opened": 7,
+    "distinctMounted": 12,
+    "distinctOpened": 7,
+    "modelInvoked": 6,
+    "perModelTask": {
+      "tokens": 354464.3333333333,
+      "costCny": 0.07100937333333333
+    },
+    "perTask": {
+      "tokens": 265848.25,
+      "costCny": 0.05325703,
+      "mounted": 1.625,
+      "opened": 0.875
+    },
+    "rows": [
+      {
+        "task": "azure-bgp-oscillation-route-leak",
+        "category": "software-engineering",
+        "pass": false,
+        "scored": false,
+        "error": "RuntimeError: Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 0.0006511211395263672,
+        "tokens": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "costCny": 0,
+          "costCnyPeakEquivalent": 0,
+          "requests": 0,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "dapt-intrusion-detection",
+        "category": "cybersecurity",
+        "pass": true,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "pcap-analysis",
+          "threat-detection"
+        ],
+        "opened": [
+          "pcap-analysis",
+          "threat-detection"
+        ],
+        "wallSeconds": 373.78727531433105,
+        "tokens": {
+          "prompt": 59101,
+          "completion": 2809,
+          "cached": 47232,
+          "costCny": 0.024049640000000004,
+          "costCnyPeakEquivalent": 0.04809928000000001,
+          "requests": 6,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "exceltable-in-ppt",
+        "category": "office-white-collar",
+        "pass": true,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "pptx",
+          "xlsx"
+        ],
+        "opened": [],
+        "wallSeconds": 299.6988937854767,
+        "tokens": {
+          "prompt": 39161,
+          "completion": 3019,
+          "cached": 32256,
+          "costCny": 0.019626120000000004,
+          "costCnyPeakEquivalent": 0.03925224,
+          "requests": 8,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "invoice-fraud-detection",
+        "category": "finance-economics",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "fuzzy-match",
+          "pdf",
+          "xlsx"
+        ],
+        "opened": [],
+        "wallSeconds": 276.2518308162689,
+        "tokens": {
+          "prompt": 540179,
+          "completion": 9883,
+          "cached": 497280,
+          "costCny": 0.0923766,
+          "costCnyPeakEquivalent": 0.1847532,
+          "requests": 15,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "lake-warming-attribution",
+        "category": "natural-science",
+        "pass": true,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "contribution-analysis",
+          "meteorology-driver-classification",
+          "pca-decomposition",
+          "trend-analysis"
+        ],
+        "opened": [
+          "trend-analysis",
+          "contribution-analysis",
+          "meteorology-driver-classification",
+          "pca-decomposition"
+        ],
+        "wallSeconds": 249.9513499736786,
+        "tokens": {
+          "prompt": 65061,
+          "completion": 5764,
+          "cached": 56832,
+          "costCny": 0.03242164,
+          "costCnyPeakEquivalent": 0.06484328,
+          "requests": 8,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "manufacturing-fjsp-optimization",
+        "category": "industrial-physical-systems",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "fjsp-baseline-repair-with-downtime-and-policy"
+        ],
+        "opened": [
+          "fjsp-baseline-repair-with-downtime-and-policy"
+        ],
+        "wallSeconds": 954.1967554092407,
+        "tokens": {
+          "prompt": 1098782,
+          "completion": 39737,
+          "cached": 1065216,
+          "costCny": 0.21381832000000003,
+          "costCnyPeakEquivalent": 0.42763664000000007,
+          "requests": 30,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "pddl-airport-planning",
+        "category": "mathematics-or-formal-reasoning",
+        "pass": true,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "pddl-skills"
+        ],
+        "opened": [],
+        "wallSeconds": 285.75274777412415,
+        "tokens": {
+          "prompt": 258818,
+          "completion": 4472,
+          "cached": 237696,
+          "costCny": 0.04376392,
+          "costCnyPeakEquivalent": 0.08752784,
+          "requests": 15,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "video-silence-remover",
+        "category": "media-content-production",
+        "pass": false,
+        "scored": false,
+        "error": "RuntimeError: Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 0.0006754398345947266,
+        "tokens": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "costCny": 0,
+          "costCnyPeakEquivalent": 0,
+          "requests": 0,
+          "missingUsage": 0
+        }
+      }
+    ]
+  },
+  {
+    "bench": "sb",
+    "arm": "learned",
+    "n": 8,
+    "completed": 8,
+    "pass": 2,
+    "fail": 4,
+    "error": 2,
+    "unknown": 0,
+    "value": 0.25,
+    "ci95": [
+      0.071479212752109,
+      0.5907245696898311
+    ],
+    "scored": 6,
+    "scoredValue": 0.3333333333333333,
+    "scoredCi95": [
+      0.09677141110578041,
+      0.700006684861608
+    ],
+    "complete": true,
+    "byCategory": {
+      "software-engineering": {
+        "n": 1,
+        "pass": 0,
+        "fail": 0,
+        "error": 1,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "cybersecurity": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "office-white-collar": {
+        "n": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "value": 1,
+        "ci95": [
+          0.20654931437723745,
+          1
+        ]
+      },
+      "finance-economics": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "natural-science": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "industrial-physical-systems": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "mathematics-or-formal-reasoning": {
+        "n": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "value": 1,
+        "ci95": [
+          0.20654931437723745,
+          1
+        ]
+      },
+      "media-content-production": {
+        "n": 1,
+        "pass": 0,
+        "fail": 0,
+        "error": 1,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      }
+    },
+    "tokens": {
+      "prompt": 1990161,
+      "completion": 90160,
+      "cached": 1876480,
+      "costCny": 0.5118506,
+      "costCnyPeakEquivalent": 1.0237011999999999,
+      "requests": 94,
+      "missingUsage": 0
+    },
+    "mounted": 30,
+    "opened": 0,
+    "distinctMounted": 5,
+    "distinctOpened": 0,
+    "modelInvoked": 6,
+    "perModelTask": {
+      "tokens": 346720.1666666667,
+      "costCny": 0.08530843333333334
+    },
+    "perTask": {
+      "tokens": 260040.125,
+      "costCny": 0.063981325,
+      "mounted": 3.75,
+      "opened": 0
+    },
+    "rows": [
+      {
+        "task": "azure-bgp-oscillation-route-leak",
+        "category": "software-engineering",
+        "pass": false,
+        "scored": false,
+        "error": "RuntimeError: Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 0.00044155120849609375,
+        "tokens": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "costCny": 0,
+          "costCnyPeakEquivalent": 0,
+          "requests": 0,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "dapt-intrusion-detection",
+        "category": "cybersecurity",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": "Agent prompt exceeded wall-clock budget 600s",
+        "agentTimedOut": true,
+        "mounted": [
+          "answer-question-set-from-supplied-corpus",
+          "check-fixed-form-text-against-its-grid",
+          "fill-template-workbook-with-live-formulas",
+          "pdf-display-equation-extraction",
+          "sort-corpus-by-content-and-prove-it-unchanged"
+        ],
+        "opened": [],
+        "wallSeconds": 756.3418581485748,
+        "tokens": {
+          "prompt": 73178,
+          "completion": 8496,
+          "cached": 65792,
+          "costCny": 0.042685839999999996,
+          "costCnyPeakEquivalent": 0.08537167999999999,
+          "requests": 9,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "exceltable-in-ppt",
+        "category": "office-white-collar",
+        "pass": true,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "answer-question-set-from-supplied-corpus",
+          "check-fixed-form-text-against-its-grid",
+          "fill-template-workbook-with-live-formulas",
+          "pdf-display-equation-extraction",
+          "sort-corpus-by-content-and-prove-it-unchanged"
+        ],
+        "opened": [],
+        "wallSeconds": 325.14802742004395,
+        "tokens": {
+          "prompt": 71622,
+          "completion": 3259,
+          "cached": 65792,
+          "costCny": 0.02018184,
+          "costCnyPeakEquivalent": 0.040363680000000006,
+          "requests": 11,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "invoice-fraud-detection",
+        "category": "finance-economics",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "answer-question-set-from-supplied-corpus",
+          "check-fixed-form-text-against-its-grid",
+          "fill-template-workbook-with-live-formulas",
+          "pdf-display-equation-extraction",
+          "sort-corpus-by-content-and-prove-it-unchanged"
+        ],
+        "opened": [],
+        "wallSeconds": 331.8644332885742,
+        "tokens": {
+          "prompt": 366513,
+          "completion": 11768,
+          "cached": 327936,
+          "costCny": 0.09220772,
+          "costCnyPeakEquivalent": 0.18441544,
+          "requests": 10,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "lake-warming-attribution",
+        "category": "natural-science",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": "Agent prompt exceeded wall-clock budget 300s",
+        "agentTimedOut": true,
+        "mounted": [
+          "answer-question-set-from-supplied-corpus",
+          "check-fixed-form-text-against-its-grid",
+          "fill-template-workbook-with-live-formulas",
+          "pdf-display-equation-extraction",
+          "sort-corpus-by-content-and-prove-it-unchanged"
+        ],
+        "opened": [],
+        "wallSeconds": 551.6576170921326,
+        "tokens": {
+          "prompt": 363093,
+          "completion": 25018,
+          "cached": 347264,
+          "costCny": 0.12284628000000002,
+          "costCnyPeakEquivalent": 0.24569256000000003,
+          "requests": 20,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "manufacturing-fjsp-optimization",
+        "category": "industrial-physical-systems",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "answer-question-set-from-supplied-corpus",
+          "check-fixed-form-text-against-its-grid",
+          "fill-template-workbook-with-live-formulas",
+          "pdf-display-equation-extraction",
+          "sort-corpus-by-content-and-prove-it-unchanged"
+        ],
+        "opened": [],
+        "wallSeconds": 644.3889644145966,
+        "tokens": {
+          "prompt": 592646,
+          "completion": 31366,
+          "cached": 580096,
+          "costCny": 0.14961592,
+          "costCnyPeakEquivalent": 0.29923184,
+          "requests": 25,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "pddl-airport-planning",
+        "category": "mathematics-or-formal-reasoning",
+        "pass": true,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "answer-question-set-from-supplied-corpus",
+          "check-fixed-form-text-against-its-grid",
+          "fill-template-workbook-with-live-formulas",
+          "pdf-display-equation-extraction",
+          "sort-corpus-by-content-and-prove-it-unchanged"
+        ],
+        "opened": [],
+        "wallSeconds": 263.6831851005554,
+        "tokens": {
+          "prompt": 523109,
+          "completion": 10253,
+          "cached": 489600,
+          "costCny": 0.08431299999999999,
+          "costCnyPeakEquivalent": 0.16862600000000003,
+          "requests": 19,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "video-silence-remover",
+        "category": "media-content-production",
+        "pass": false,
+        "scored": false,
+        "error": "RuntimeError: Whole primary task group unavailable before any arm dispatch: remaining lane allocation 10183s is below three pinned 3600s agent windows plus 240s verification each and 1200s setup/report reserve (12720s). Official verifier is unchanged; no primary model/scorer result is claimed. All three arms retain explicit unavailable records.",
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 0.0008385181427001953,
+        "tokens": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "costCny": 0,
+          "costCnyPeakEquivalent": 0,
+          "requests": 0,
+          "missingUsage": 0
+        }
+      }
+    ],
+    "learning": {
+      "learned": 5,
+      "approved": 5,
+      "distinctOpenedInOtherTasks": 0,
+      "tasksOpeningLearned": 0,
+      "reachedQuiet": true
+    }
+  },
+  {
+    "bench": "slb",
+    "arm": "none",
+    "n": 6,
+    "completed": 6,
+    "pass": 2,
+    "fail": 3,
+    "error": 1,
+    "unknown": 0,
+    "value": 0.3333333333333333,
+    "ci95": [
+      0.09677141110578041,
+      0.700006684861608
+    ],
+    "scored": 5,
+    "scoredValue": 0.4,
+    "scoredCi95": [
+      0.11762077423264783,
+      0.769275718723987
+    ],
+    "complete": true,
+    "byCategory": {
+      "Content & Creative": {
+        "n": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "value": 1,
+        "ci95": [
+          0.20654931437723745,
+          1
+        ]
+      },
+      "Productivity Tools": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "Information Retrieval": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "Data & Analytics": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "Software Engineering": {
+        "n": 1,
+        "pass": 0,
+        "fail": 0,
+        "error": 1,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "Utilities & Other": {
+        "n": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "value": 1,
+        "ci95": [
+          0.20654931437723745,
+          1
+        ]
+      }
+    },
+    "tokens": {
+      "prompt": 4950168,
+      "completion": 85545,
+      "cached": 4761088,
+      "costCny": 0.70999948,
+      "costCnyPeakEquivalent": 1.25296352,
+      "requests": 120,
+      "missingUsage": 0
+    },
+    "mounted": 0,
+    "opened": 0,
+    "distinctMounted": 0,
+    "distinctOpened": 0,
+    "modelInvoked": 5,
+    "perModelTask": {
+      "tokens": 1007142.6,
+      "costCny": 0.14199989600000001
+    },
+    "perTask": {
+      "tokens": 839285.5,
+      "costCny": 0.11833324666666667,
+      "mounted": 0,
+      "opened": 0
+    },
+    "rows": [
+      {
+        "task": "chinese-poem-generator-3",
+        "category": "Content & Creative",
+        "pass": true,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 352.724570274353,
+        "tokens": {
+          "prompt": 24818,
+          "completion": 10218,
+          "cached": 23168,
+          "costCny": 0.08597072,
+          "costCnyPeakEquivalent": 0.08597072,
+          "requests": 3,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "court-form-filling-2",
+        "category": "Productivity Tools",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 680.5266027450562,
+        "tokens": {
+          "prompt": 1832604,
+          "completion": 32171,
+          "cached": 1773824,
+          "costCny": 0.22294047999999997,
+          "costCnyPeakEquivalent": 0.44588096,
+          "requests": 41,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "enterprise-information-search-2",
+        "category": "Information Retrieval",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 365.57351899147034,
+        "tokens": {
+          "prompt": 2267330,
+          "completion": 26087,
+          "cached": 2199552,
+          "costCny": 0.21611704000000007,
+          "costCnyPeakEquivalent": 0.43223408000000013,
+          "requests": 48,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "financial-analysis-4",
+        "category": "Data & Analytics",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 629.9375538825989,
+        "tokens": {
+          "prompt": 152889,
+          "completion": 5811,
+          "cached": 138368,
+          "costCny": 0.08106471999999999,
+          "costCnyPeakEquivalent": 0.08106471999999999,
+          "requests": 12,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "nlp-paper-reproduction-3",
+        "category": "Software Engineering",
+        "pass": false,
+        "scored": false,
+        "error": "RuntimeError: Capacity unavailable before model dispatch: pinned verifier ML bootstrap, declared storage 10737418240 bytes, shared free 5911142400 bytes. Official verifier is unchanged and unrun.",
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 0.002759695053100586,
+        "tokens": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "costCny": 0,
+          "costCnyPeakEquivalent": 0,
+          "requests": 0,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "organize-messy-files-5",
+        "category": "Utilities & Other",
+        "pass": true,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 314.3487572669983,
+        "tokens": {
+          "prompt": 672527,
+          "completion": 11258,
+          "cached": 626176,
+          "costCny": 0.10390651999999999,
+          "costCnyPeakEquivalent": 0.20781303999999995,
+          "requests": 16,
+          "missingUsage": 0
+        }
+      }
+    ]
+  },
+  {
+    "bench": "slb",
+    "arm": "flat",
+    "n": 6,
+    "completed": 6,
+    "pass": 3,
+    "fail": 2,
+    "error": 1,
+    "unknown": 0,
+    "value": 0.5,
+    "ci95": [
+      0.1876163064826506,
+      0.8123836935173494
+    ],
+    "scored": 5,
+    "scoredValue": 0.6,
+    "scoredCi95": [
+      0.2307242812760128,
+      0.882379225767352
+    ],
+    "complete": true,
+    "byCategory": {
+      "Content & Creative": {
+        "n": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "value": 1,
+        "ci95": [
+          0.20654931437723745,
+          1
+        ]
+      },
+      "Productivity Tools": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "Information Retrieval": {
+        "n": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "value": 1,
+        "ci95": [
+          0.20654931437723745,
+          1
+        ]
+      },
+      "Data & Analytics": {
+        "n": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "value": 1,
+        "ci95": [
+          0.20654931437723745,
+          1
+        ]
+      },
+      "Software Engineering": {
+        "n": 1,
+        "pass": 0,
+        "fail": 0,
+        "error": 1,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "Utilities & Other": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      }
+    },
+    "tokens": {
+      "prompt": 8128119,
+      "completion": 103674,
+      "cached": 7857408,
+      "costCny": 0.8425551600000005,
+      "costCnyPeakEquivalent": 1.685110320000001,
+      "requests": 141,
+      "missingUsage": 0
+    },
+    "mounted": 10,
+    "opened": 5,
+    "distinctMounted": 9,
+    "distinctOpened": 5,
+    "modelInvoked": 5,
+    "perModelTask": {
+      "tokens": 1646358.6,
+      "costCny": 0.16851103200000012
+    },
+    "perTask": {
+      "tokens": 1371965.5,
+      "costCny": 0.1404258600000001,
+      "mounted": 1.6666666666666667,
+      "opened": 0.8333333333333334
+    },
+    "rows": [
+      {
+        "task": "chinese-poem-generator-3",
+        "category": "Content & Creative",
+        "pass": true,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "regulated-lvshi-composer"
+        ],
+        "opened": [
+          "regulated-lvshi-composer"
+        ],
+        "wallSeconds": 126.19717621803284,
+        "tokens": {
+          "prompt": 22311,
+          "completion": 3550,
+          "cached": 16128,
+          "costCny": 0.02070556,
+          "costCnyPeakEquivalent": 0.04141112,
+          "requests": 4,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "court-form-filling-2",
+        "category": "Productivity Tools",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "pdf"
+        ],
+        "opened": [
+          "pdf"
+        ],
+        "wallSeconds": 342.54611229896545,
+        "tokens": {
+          "prompt": 3369741,
+          "completion": 27776,
+          "cached": 3269632,
+          "costCny": 0.27660564,
+          "costCnyPeakEquivalent": 0.55321128,
+          "requests": 41,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "enterprise-information-search-2",
+        "category": "Information Retrieval",
+        "pass": true,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "artifact-review-search"
+        ],
+        "opened": [
+          "artifact-review-search"
+        ],
+        "wallSeconds": 432.0774347782135,
+        "tokens": {
+          "prompt": 3082829,
+          "completion": 38084,
+          "cached": 2983936,
+          "costCny": 0.31090771999999994,
+          "costCnyPeakEquivalent": 0.6218154399999999,
+          "requests": 41,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "financial-analysis-4",
+        "category": "Data & Analytics",
+        "pass": true,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "13f-analyzer",
+          "fuzzy-name-search"
+        ],
+        "opened": [
+          "13f-analyzer",
+          "fuzzy-name-search"
+        ],
+        "wallSeconds": 601.8918750286102,
+        "tokens": {
+          "prompt": 379966,
+          "completion": 9816,
+          "cached": 360704,
+          "costCny": 0.06574008,
+          "costCnyPeakEquivalent": 0.13148016,
+          "requests": 22,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "nlp-paper-reproduction-3",
+        "category": "Software Engineering",
+        "pass": false,
+        "scored": false,
+        "error": "RuntimeError: Capacity unavailable before model dispatch: pinned verifier ML bootstrap, declared storage 10737418240 bytes, shared free 5911142400 bytes. Official verifier is unchanged and unrun.",
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 0.0013527870178222656,
+        "tokens": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "costCny": 0,
+          "costCnyPeakEquivalent": 0,
+          "requests": 0,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "organize-messy-files-5",
+        "category": "Utilities & Other",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "docx",
+          "file-organizer",
+          "pdf",
+          "planning-with-files",
+          "pptx"
+        ],
+        "opened": [],
+        "wallSeconds": 443.5844633579254,
+        "tokens": {
+          "prompt": 1273272,
+          "completion": 24448,
+          "cached": 1227008,
+          "costCny": 0.16859615999999997,
+          "costCnyPeakEquivalent": 0.33719231999999993,
+          "requests": 33,
+          "missingUsage": 0
+        }
+      }
+    ]
+  },
+  {
+    "bench": "slb",
+    "arm": "learned",
+    "n": 6,
+    "completed": 6,
+    "pass": 0,
+    "fail": 5,
+    "error": 1,
+    "unknown": 0,
+    "value": 0,
+    "ci95": [
+      2.7755575615628914e-17,
+      0.3903342879021653
+    ],
+    "scored": 5,
+    "scoredValue": 0,
+    "scoredCi95": [
+      0,
+      0.43448246478317476
+    ],
+    "complete": true,
+    "byCategory": {
+      "Content & Creative": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "Productivity Tools": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "Information Retrieval": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "Data & Analytics": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "Software Engineering": {
+        "n": 1,
+        "pass": 0,
+        "fail": 0,
+        "error": 1,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      },
+      "Utilities & Other": {
+        "n": 1,
+        "pass": 0,
+        "fail": 1,
+        "error": 0,
+        "value": 0,
+        "ci95": [
+          0,
+          0.7934506856227626
+        ]
+      }
+    },
+    "tokens": {
+      "prompt": 4042930,
+      "completion": 92566,
+      "cached": 3780480,
+      "costCny": 0.7083235999999997,
+      "costCnyPeakEquivalent": 1.4166471999999994,
+      "requests": 109,
+      "missingUsage": 0
+    },
+    "mounted": 25,
+    "opened": 2,
+    "distinctMounted": 5,
+    "distinctOpened": 2,
+    "modelInvoked": 5,
+    "perModelTask": {
+      "tokens": 827099.2,
+      "costCny": 0.14166471999999994
+    },
+    "perTask": {
+      "tokens": 689249.3333333334,
+      "costCny": 0.11805393333333329,
+      "mounted": 4.166666666666667,
+      "opened": 0.3333333333333333
+    },
+    "rows": [
+      {
+        "task": "chinese-poem-generator-3",
+        "category": "Content & Creative",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "answer-question-set-from-supplied-corpus",
+          "check-fixed-form-text-against-its-grid",
+          "fill-template-workbook-with-live-formulas",
+          "pdf-display-equation-extraction",
+          "sort-corpus-by-content-and-prove-it-unchanged"
+        ],
+        "opened": [
+          "check-fixed-form-text-against-its-grid"
+        ],
+        "wallSeconds": 354.4023184776306,
+        "tokens": {
+          "prompt": 153750,
+          "completion": 24037,
+          "cached": 148864,
+          "costCny": 0.10401128,
+          "costCnyPeakEquivalent": 0.20802256,
+          "requests": 9,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "court-form-filling-2",
+        "category": "Productivity Tools",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "answer-question-set-from-supplied-corpus",
+          "check-fixed-form-text-against-its-grid",
+          "fill-template-workbook-with-live-formulas",
+          "pdf-display-equation-extraction",
+          "sort-corpus-by-content-and-prove-it-unchanged"
+        ],
+        "opened": [],
+        "wallSeconds": 361.11855244636536,
+        "tokens": {
+          "prompt": 1323037,
+          "completion": 29239,
+          "cached": 1286400,
+          "costCny": 0.17932099999999998,
+          "costCnyPeakEquivalent": 0.358642,
+          "requests": 33,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "enterprise-information-search-2",
+        "category": "Information Retrieval",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "answer-question-set-from-supplied-corpus",
+          "check-fixed-form-text-against-its-grid",
+          "fill-template-workbook-with-live-formulas",
+          "pdf-display-equation-extraction",
+          "sort-corpus-by-content-and-prove-it-unchanged"
+        ],
+        "opened": [],
+        "wallSeconds": 293.1051959991455,
+        "tokens": {
+          "prompt": 1724517,
+          "completion": 17444,
+          "cached": 1656192,
+          "costCny": 0.17122484,
+          "costCnyPeakEquivalent": 0.34244968,
+          "requests": 37,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "financial-analysis-4",
+        "category": "Data & Analytics",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "answer-question-set-from-supplied-corpus",
+          "check-fixed-form-text-against-its-grid",
+          "fill-template-workbook-with-live-formulas",
+          "pdf-display-equation-extraction",
+          "sort-corpus-by-content-and-prove-it-unchanged"
+        ],
+        "opened": [],
+        "wallSeconds": 512.7111446857452,
+        "tokens": {
+          "prompt": 416898,
+          "completion": 10239,
+          "cached": 298112,
+          "costCny": 0.16570424,
+          "costCnyPeakEquivalent": 0.33140848,
+          "requests": 14,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "nlp-paper-reproduction-3",
+        "category": "Software Engineering",
+        "pass": false,
+        "scored": false,
+        "error": "RuntimeError: Capacity unavailable before model dispatch: pinned verifier ML bootstrap, declared storage 10737418240 bytes, shared free 5911142400 bytes. Official verifier is unchanged and unrun.",
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [],
+        "opened": [],
+        "wallSeconds": 0.0020151138305664062,
+        "tokens": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "costCny": 0,
+          "costCnyPeakEquivalent": 0,
+          "requests": 0,
+          "missingUsage": 0
+        }
+      },
+      {
+        "task": "organize-messy-files-5",
+        "category": "Utilities & Other",
+        "pass": false,
+        "scored": true,
+        "error": null,
+        "agentError": null,
+        "agentTimedOut": false,
+        "mounted": [
+          "answer-question-set-from-supplied-corpus",
+          "check-fixed-form-text-against-its-grid",
+          "fill-template-workbook-with-live-formulas",
+          "pdf-display-equation-extraction",
+          "sort-corpus-by-content-and-prove-it-unchanged"
+        ],
+        "opened": [
+          "sort-corpus-by-content-and-prove-it-unchanged"
+        ],
+        "wallSeconds": 334.459139585495,
+        "tokens": {
+          "prompt": 424728,
+          "completion": 11607,
+          "cached": 390912,
+          "costCny": 0.08806224,
+          "costCnyPeakEquivalent": 0.17612448,
+          "requests": 16,
+          "missingUsage": 0
+        }
+      }
+    ],
+    "learning": {
+      "learned": 5,
+      "approved": 5,
+      "distinctOpenedInOtherTasks": 2,
+      "tasksOpeningLearned": 2,
+      "reachedQuiet": true
+    }
+  }
+]

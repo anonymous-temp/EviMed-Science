@@ -1,0 +1,440 @@
+[
+  {
+    "family": "chinese-poem-generator",
+    "variant": "chinese-poem-generator-3",
+    "arm": "flat",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": null,
+    "trajectoryChars": 14377,
+    "coverage": 1.0,
+    "executability": {
+      "regulated-lvshi-composer": 2.25
+    },
+    "safety": {
+      "regulated-lvshi-composer": 5.0
+    },
+    "keyPointRecall": 0.625,
+    "order": 3.0,
+    "completeness": 5.0
+  },
+  {
+    "family": "court-form-filling",
+    "variant": "court-form-filling-2",
+    "arm": "flat",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": null,
+    "trajectoryChars": 1083449,
+    "coverage": 1.0,
+    "executability": {
+      "pdf": 1.5
+    },
+    "safety": {
+      "pdf": 5.0
+    },
+    "keyPointRecall": 0.9090909090909091,
+    "order": 4.0,
+    "completeness": 4.0
+  },
+  {
+    "family": "enterprise-information-search",
+    "variant": "enterprise-information-search-2",
+    "arm": "flat",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": "ValueError: failed to parse JSON after 3 attempts: model output does not contain a JSON object; raw=",
+    "skillQuality": null,
+    "trajectoryChars": 403018,
+    "coverage": 1.0,
+    "executability": {
+      "artifact-review-search": 2.0
+    },
+    "safety": {
+      "artifact-review-search": 5.0
+    },
+    "keyPointRecall": 0.6923076923076923,
+    "order": 2.0,
+    "completeness": null
+  },
+  {
+    "family": "financial-analysis",
+    "variant": "financial-analysis-4",
+    "arm": "flat",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": null,
+    "trajectoryChars": 65188,
+    "coverage": 1.0,
+    "executability": {
+      "13f-analyzer": 2.0,
+      "fuzzy-name-search": 1.75
+    },
+    "safety": {
+      "13f-analyzer": 5.0,
+      "fuzzy-name-search": 5.0
+    },
+    "keyPointRecall": 1.0,
+    "order": 5.0,
+    "completeness": 5.0
+  },
+  {
+    "family": "nlp-paper-reproduction",
+    "variant": "nlp-paper-reproduction-3",
+    "arm": "flat",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": "KeyError: 'trialPath'",
+    "skillQuality": null,
+    "trajectoryChars": null,
+    "coverage": 1.0,
+    "executability": {
+      "nlp-research-repo-package-installment": 1.75,
+      "pdf": 1.0
+    },
+    "safety": {
+      "nlp-research-repo-package-installment": 4.5,
+      "pdf": 5.0
+    },
+    "keyPointRecall": null,
+    "order": null,
+    "completeness": null
+  },
+  {
+    "family": "organize-messy-files",
+    "variant": "organize-messy-files-5",
+    "arm": "flat",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": null,
+    "trajectoryChars": 168475,
+    "coverage": 0.8333333333333334,
+    "executability": {
+      "docx": 1.0,
+      "file-organizer": 1.0,
+      "pdf": 1.0,
+      "planning-with-files": 1.75,
+      "pptx": 1.0
+    },
+    "safety": {
+      "docx": 4.833333333333333,
+      "file-organizer": 4.166666666666667,
+      "pdf": 4.666666666666667,
+      "planning-with-files": 5.0,
+      "pptx": 4.833333333333333
+    },
+    "keyPointRecall": 0.9090909090909091,
+    "order": 4.0,
+    "completeness": 5.0
+  },
+  {
+    "family": "chinese-poem-generator",
+    "variant": "chinese-poem-generator-3",
+    "arm": "learned",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": null,
+    "trajectoryChars": 25060,
+    "coverage": 0.05555555555555555,
+    "executability": {
+      "answer-question-set-from-supplied-corpus": 1.0,
+      "check-fixed-form-text-against-its-grid": 2.25,
+      "fill-template-workbook-with-live-formulas": 1.0,
+      "pdf-display-equation-extraction": 1.0,
+      "sort-corpus-by-content-and-prove-it-unchanged": 1.0
+    },
+    "safety": {
+      "answer-question-set-from-supplied-corpus": 5.0,
+      "check-fixed-form-text-against-its-grid": 4.833333333333333,
+      "fill-template-workbook-with-live-formulas": 4.666666666666667,
+      "pdf-display-equation-extraction": 5.0,
+      "sort-corpus-by-content-and-prove-it-unchanged": 4.833333333333333
+    },
+    "keyPointRecall": 0.75,
+    "order": 3.0,
+    "completeness": 5.0
+  },
+  {
+    "family": "court-form-filling",
+    "variant": "court-form-filling-2",
+    "arm": "learned",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": null,
+    "trajectoryChars": 647315,
+    "coverage": 0.0,
+    "executability": {
+      "answer-question-set-from-supplied-corpus": 1.0,
+      "check-fixed-form-text-against-its-grid": 1.0,
+      "fill-template-workbook-with-live-formulas": 1.0,
+      "pdf-display-equation-extraction": 1.0,
+      "sort-corpus-by-content-and-prove-it-unchanged": 1.0
+    },
+    "safety": {
+      "answer-question-set-from-supplied-corpus": 5.0,
+      "check-fixed-form-text-against-its-grid": 5.0,
+      "fill-template-workbook-with-live-formulas": 4.666666666666667,
+      "pdf-display-equation-extraction": 5.0,
+      "sort-corpus-by-content-and-prove-it-unchanged": 4.833333333333333
+    },
+    "keyPointRecall": 0.8181818181818182,
+    "order": 4.0,
+    "completeness": 5.0
+  },
+  {
+    "family": "enterprise-information-search",
+    "variant": "enterprise-information-search-2",
+    "arm": "learned",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": null,
+    "trajectoryChars": 251907,
+    "coverage": 0.0,
+    "executability": {
+      "answer-question-set-from-supplied-corpus": 2.5,
+      "check-fixed-form-text-against-its-grid": 1.0,
+      "fill-template-workbook-with-live-formulas": 1.0,
+      "pdf-display-equation-extraction": 1.0,
+      "sort-corpus-by-content-and-prove-it-unchanged": 1.0
+    },
+    "safety": {
+      "answer-question-set-from-supplied-corpus": 5.0,
+      "check-fixed-form-text-against-its-grid": 5.0,
+      "fill-template-workbook-with-live-formulas": 4.5,
+      "pdf-display-equation-extraction": 5.0,
+      "sort-corpus-by-content-and-prove-it-unchanged": 4.833333333333333
+    },
+    "keyPointRecall": 0.46153846153846156,
+    "order": 4.0,
+    "completeness": 5.0
+  },
+  {
+    "family": "financial-analysis",
+    "variant": "financial-analysis-4",
+    "arm": "learned",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": null,
+    "trajectoryChars": 29002,
+    "coverage": 0.0,
+    "executability": {
+      "answer-question-set-from-supplied-corpus": 1.25,
+      "check-fixed-form-text-against-its-grid": 1.0,
+      "fill-template-workbook-with-live-formulas": 1.0,
+      "pdf-display-equation-extraction": 1.0,
+      "sort-corpus-by-content-and-prove-it-unchanged": 1.0
+    },
+    "safety": {
+      "answer-question-set-from-supplied-corpus": 5.0,
+      "check-fixed-form-text-against-its-grid": 4.833333333333333,
+      "fill-template-workbook-with-live-formulas": 4.833333333333333,
+      "pdf-display-equation-extraction": 5.0,
+      "sort-corpus-by-content-and-prove-it-unchanged": 4.666666666666667
+    },
+    "keyPointRecall": 0.9,
+    "order": 4.0,
+    "completeness": 3.0
+  },
+  {
+    "family": "nlp-paper-reproduction",
+    "variant": "nlp-paper-reproduction-3",
+    "arm": "learned",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": "KeyError: 'trialPath'",
+    "skillQuality": null,
+    "trajectoryChars": null,
+    "coverage": 0.0,
+    "executability": {
+      "answer-question-set-from-supplied-corpus": 1.25,
+      "check-fixed-form-text-against-its-grid": 1.0,
+      "fill-template-workbook-with-live-formulas": 1.0,
+      "pdf-display-equation-extraction": 1.0,
+      "sort-corpus-by-content-and-prove-it-unchanged": 1.0
+    },
+    "safety": {
+      "answer-question-set-from-supplied-corpus": 5.0,
+      "check-fixed-form-text-against-its-grid": 5.0,
+      "fill-template-workbook-with-live-formulas": 4.5,
+      "pdf-display-equation-extraction": 5.0,
+      "sort-corpus-by-content-and-prove-it-unchanged": 4.833333333333333
+    },
+    "keyPointRecall": null,
+    "order": null,
+    "completeness": null
+  },
+  {
+    "family": "organize-messy-files",
+    "variant": "organize-messy-files-5",
+    "arm": "learned",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": null,
+    "trajectoryChars": 147274,
+    "coverage": 0.0,
+    "executability": {
+      "answer-question-set-from-supplied-corpus": 1.0,
+      "check-fixed-form-text-against-its-grid": 1.0,
+      "fill-template-workbook-with-live-formulas": 1.0,
+      "pdf-display-equation-extraction": 1.0,
+      "sort-corpus-by-content-and-prove-it-unchanged": 2.75
+    },
+    "safety": {
+      "answer-question-set-from-supplied-corpus": 5.0,
+      "check-fixed-form-text-against-its-grid": 5.0,
+      "fill-template-workbook-with-live-formulas": 4.333333333333333,
+      "pdf-display-equation-extraction": 5.0,
+      "sort-corpus-by-content-and-prove-it-unchanged": 4.833333333333333
+    },
+    "keyPointRecall": 0.8181818181818182,
+    "order": 5.0,
+    "completeness": 5.0
+  },
+  {
+    "family": "chinese-poem-generator",
+    "variant": "chinese-poem-generator-3",
+    "arm": "none",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": {
+      "status": "not-applicable",
+      "reason": "No skills available",
+      "skills": 0
+    },
+    "trajectoryChars": 2397,
+    "coverage": null,
+    "executability": {},
+    "safety": {},
+    "keyPointRecall": 0.375,
+    "order": 3.0,
+    "completeness": 5.0
+  },
+  {
+    "family": "court-form-filling",
+    "variant": "court-form-filling-2",
+    "arm": "none",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": {
+      "status": "not-applicable",
+      "reason": "No skills available",
+      "skills": 0
+    },
+    "trajectoryChars": 560609,
+    "coverage": null,
+    "executability": {},
+    "safety": {},
+    "keyPointRecall": 0.8181818181818182,
+    "order": 3.0,
+    "completeness": 3.0
+  },
+  {
+    "family": "enterprise-information-search",
+    "variant": "enterprise-information-search-2",
+    "arm": "none",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": {
+      "status": "not-applicable",
+      "reason": "No skills available",
+      "skills": 0
+    },
+    "trajectoryChars": 254500,
+    "coverage": null,
+    "executability": {},
+    "safety": {},
+    "keyPointRecall": 0.6153846153846154,
+    "order": 4.0,
+    "completeness": 4.0
+  },
+  {
+    "family": "financial-analysis",
+    "variant": "financial-analysis-4",
+    "arm": "none",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": {
+      "status": "not-applicable",
+      "reason": "No skills available",
+      "skills": 0
+    },
+    "trajectoryChars": 61227,
+    "coverage": null,
+    "executability": {},
+    "safety": {},
+    "keyPointRecall": 0.8,
+    "order": 4.0,
+    "completeness": 3.0
+  },
+  {
+    "family": "nlp-paper-reproduction",
+    "variant": "nlp-paper-reproduction-3",
+    "arm": "none",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": "KeyError: 'trialPath'",
+    "skillQuality": {
+      "status": "not-applicable",
+      "reason": "No skills available",
+      "skills": 0
+    },
+    "trajectoryChars": null,
+    "coverage": null,
+    "executability": {},
+    "safety": {},
+    "keyPointRecall": null,
+    "order": null,
+    "completeness": null
+  },
+  {
+    "family": "organize-messy-files",
+    "variant": "organize-messy-files-5",
+    "arm": "none",
+    "judge": "deepseek-flash",
+    "officialJudge": false,
+    "skillQualityError": null,
+    "trajectoryError": null,
+    "skillQuality": {
+      "status": "not-applicable",
+      "reason": "No skills available",
+      "skills": 0
+    },
+    "trajectoryChars": 120482,
+    "coverage": null,
+    "executability": {},
+    "safety": {},
+    "keyPointRecall": 0.9090909090909091,
+    "order": 5.0,
+    "completeness": 5.0
+  }
+]

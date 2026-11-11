@@ -1,0 +1,18 @@
+{
+  "judge": "deepseek-flash",
+  "thinking": "disabled",
+  "officialJudge": false,
+  "publishedJudge": "gpt-5-mini",
+  "pin": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae",
+  "sampling": "First held-out variant per frozen family, paired across all three arms; skill quality evaluated once per family/skill arm.",
+  "timing": "Completed native-graded trials only in --available mode. Frozen learned library; judge output is outside every solver workspace and never fed back to learning/inference.",
+  "transport": "Pinned metric functions and exact prompts/normalizers. Local Responses-to-Chat-Completions transport facade; Pi persisted message/tool trace, with thinking blocks omitted, no truncation.",
+  "variants": {
+    "chinese-poem-generator": "chinese-poem-generator-3",
+    "financial-analysis": "financial-analysis-4",
+    "enterprise-information-search": "enterprise-information-search-2",
+    "court-form-filling": "court-form-filling-2",
+    "nlp-paper-reproduction": "nlp-paper-reproduction-3",
+    "organize-messy-files": "organize-messy-files-5"
+  }
+}

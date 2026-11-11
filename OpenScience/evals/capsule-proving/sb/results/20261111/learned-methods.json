@@ -1,0 +1,59 @@
+{
+  "at": "2026-11-11T10:13:49.077728+00:00",
+  "exportAt": "2026-11-11T07:46:29.348Z",
+  "learned": 5,
+  "approved": 5,
+  "approval": "Product worker after simulated attended adoption, not external human review",
+  "methods": [
+    {
+      "name": "sort-corpus-by-content-and-prove-it-unchanged",
+      "sha256": "320cfb365f16ef3cc6ef857d3949de8c4fb50c702b621909e892bd63194e9c40",
+      "bytes": 7470,
+      "status": "approved",
+      "frontmatterValuesMatchProductExport": true,
+      "bodyMatchesIgnoringTerminalNewlines": true,
+      "mountBodyTerminalNewlines": 2,
+      "exportBodyTerminalNewlines": 1
+    },
+    {
+      "name": "answer-question-set-from-supplied-corpus",
+      "sha256": "cc4b0db7b730d654b7cb51dde6fe07cc35f466c136364f829ac61dab656d2aa0",
+      "bytes": 7100,
+      "status": "approved",
+      "frontmatterValuesMatchProductExport": true,
+      "bodyMatchesIgnoringTerminalNewlines": true,
+      "mountBodyTerminalNewlines": 2,
+      "exportBodyTerminalNewlines": 1
+    },
+    {
+      "name": "check-fixed-form-text-against-its-grid",
+      "sha256": "9262e04b4cacbbf209fffcc4cf4e5d102537e68606e30293d5671074685a920c",
+      "bytes": 7289,
+      "status": "approved",
+      "frontmatterValuesMatchProductExport": true,
+      "bodyMatchesIgnoringTerminalNewlines": true,
+      "mountBodyTerminalNewlines": 2,
+      "exportBodyTerminalNewlines": 1
+    },
+    {
+      "name": "pdf-display-equation-extraction",
+      "sha256": "860728455f5e733b837f1a2eaa86920127a69dcf3c481b9dfc51f7fbea526ffc",
+      "bytes": 6403,
+      "status": "approved",
+      "frontmatterValuesMatchProductExport": true,
+      "bodyMatchesIgnoringTerminalNewlines": true,
+      "mountBodyTerminalNewlines": 2,
+      "exportBodyTerminalNewlines": 1
+    },
+    {
+      "name": "fill-template-workbook-with-live-formulas",
+      "sha256": "aeef5c289b2e1a621929dc9f5be2c7344f54f5706df80a27754cbd27ecf6190b",
+      "bytes": 7513,
+      "status": "approved",
+      "frontmatterValuesMatchProductExport": true,
+      "bodyMatchesIgnoringTerminalNewlines": true,
+      "mountBodyTerminalNewlines": 2,
+      "exportBodyTerminalNewlines": 1
+    }
+  ]
+}

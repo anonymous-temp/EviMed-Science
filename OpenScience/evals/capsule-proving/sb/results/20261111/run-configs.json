@@ -1,0 +1,170 @@
+[
+  {
+    "bench": "sb",
+    "arm": "none",
+    "manifestSha256": "04ca79cd7edf30a2b59d0463aa6d78413924b3e708bb24f567050f46283cfbae",
+    "pins": {
+      "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+      "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+    },
+    "adapter": "model + our methods, not the product",
+    "model": "deepseek-flash",
+    "thinking": "high",
+    "benchflow": "0.6.3",
+    "pi": "@earendil-works/pi-coding-agent@1.5.2",
+    "pi-acp": "0.0.34",
+    "tasks": [
+      "dapt-intrusion-detection",
+      "invoice-fraud-detection",
+      "manufacturing-fjsp-optimization",
+      "pddl-airport-planning",
+      "video-silence-remover",
+      "lake-warming-attribution",
+      "exceltable-in-ppt",
+      "azure-bgp-oscillation-route-leak"
+    ]
+  },
+  {
+    "bench": "sb",
+    "arm": "flat",
+    "manifestSha256": "04ca79cd7edf30a2b59d0463aa6d78413924b3e708bb24f567050f46283cfbae",
+    "pins": {
+      "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+      "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+    },
+    "adapter": "model + our methods, not the product",
+    "model": "deepseek-flash",
+    "thinking": "high",
+    "benchflow": "0.6.3",
+    "pi": "@earendil-works/pi-coding-agent@1.5.2",
+    "pi-acp": "0.0.34",
+    "tasks": [
+      "dapt-intrusion-detection",
+      "invoice-fraud-detection",
+      "manufacturing-fjsp-optimization",
+      "pddl-airport-planning",
+      "video-silence-remover",
+      "lake-warming-attribution",
+      "exceltable-in-ppt",
+      "azure-bgp-oscillation-route-leak"
+    ]
+  },
+  {
+    "bench": "sb",
+    "arm": "learned",
+    "manifestSha256": "04ca79cd7edf30a2b59d0463aa6d78413924b3e708bb24f567050f46283cfbae",
+    "pins": {
+      "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+      "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+    },
+    "adapter": "model + our methods, not the product",
+    "model": "deepseek-flash",
+    "thinking": "high",
+    "benchflow": "0.6.3",
+    "pi": "@earendil-works/pi-coding-agent@1.5.2",
+    "pi-acp": "0.0.34",
+    "tasks": [
+      "dapt-intrusion-detection",
+      "invoice-fraud-detection",
+      "manufacturing-fjsp-optimization",
+      "pddl-airport-planning",
+      "video-silence-remover",
+      "lake-warming-attribution",
+      "exceltable-in-ppt",
+      "azure-bgp-oscillation-route-leak"
+    ]
+  },
+  {
+    "bench": "slb",
+    "arm": "none",
+    "manifestSha256": "04ca79cd7edf30a2b59d0463aa6d78413924b3e708bb24f567050f46283cfbae",
+    "pins": {
+      "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+      "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+    },
+    "adapter": "model + our methods, not the product",
+    "model": "deepseek-flash",
+    "thinking": "high",
+    "benchflow": "0.6.3",
+    "pi": "@earendil-works/pi-coding-agent@1.5.2",
+    "pi-acp": "0.0.34",
+    "tasks": [
+      "chinese-poem-generator-3",
+      "financial-analysis-4",
+      "enterprise-information-search-2",
+      "court-form-filling-2",
+      "nlp-paper-reproduction-3",
+      "organize-messy-files-5"
+    ],
+    "perFamily": 1,
+    "resources": {
+      "cpus": 1,
+      "memoryBytes": 2147483648,
+      "memoryAndSwapBytes": 3221225472,
+      "agentTimeoutSeconds": 1700
+    },
+    "capacityAmendment": "Before any SkillLearnBench scoring: execute the first frozen held-out variant per family; second variants remain unused reserves. Default is one after the 6.3-minute smoke and shared lab load above 50."
+  },
+  {
+    "bench": "slb",
+    "arm": "flat",
+    "manifestSha256": "04ca79cd7edf30a2b59d0463aa6d78413924b3e708bb24f567050f46283cfbae",
+    "pins": {
+      "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+      "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+    },
+    "adapter": "model + our methods, not the product",
+    "model": "deepseek-flash",
+    "thinking": "high",
+    "benchflow": "0.6.3",
+    "pi": "@earendil-works/pi-coding-agent@1.5.2",
+    "pi-acp": "0.0.34",
+    "tasks": [
+      "chinese-poem-generator-3",
+      "financial-analysis-4",
+      "enterprise-information-search-2",
+      "court-form-filling-2",
+      "nlp-paper-reproduction-3",
+      "organize-messy-files-5"
+    ],
+    "perFamily": 1,
+    "resources": {
+      "cpus": 1,
+      "memoryBytes": 2147483648,
+      "memoryAndSwapBytes": 3221225472,
+      "agentTimeoutSeconds": 1700
+    },
+    "capacityAmendment": "Before any SkillLearnBench scoring: execute the first frozen held-out variant per family; second variants remain unused reserves. Default is one after the 6.3-minute smoke and shared lab load above 50."
+  },
+  {
+    "bench": "slb",
+    "arm": "learned",
+    "manifestSha256": "04ca79cd7edf30a2b59d0463aa6d78413924b3e708bb24f567050f46283cfbae",
+    "pins": {
+      "sb": "f860ecf02ef53412a030f8661c83d644b739ff01",
+      "slb": "726e1f79b96b0cb3d729d0e55a1c847e0b5353ae"
+    },
+    "adapter": "model + our methods, not the product",
+    "model": "deepseek-flash",
+    "thinking": "high",
+    "benchflow": "0.6.3",
+    "pi": "@earendil-works/pi-coding-agent@1.5.2",
+    "pi-acp": "0.0.34",
+    "tasks": [
+      "chinese-poem-generator-3",
+      "financial-analysis-4",
+      "enterprise-information-search-2",
+      "court-form-filling-2",
+      "nlp-paper-reproduction-3",
+      "organize-messy-files-5"
+    ],
+    "perFamily": 1,
+    "resources": {
+      "cpus": 1,
+      "memoryBytes": 2147483648,
+      "memoryAndSwapBytes": 3221225472,
+      "agentTimeoutSeconds": 1700
+    },
+    "capacityAmendment": "Before any SkillLearnBench scoring: execute the first frozen held-out variant per family; second variants remain unused reserves. Default is one after the 6.3-minute smoke and shared lab load above 50."
+  }
+]
