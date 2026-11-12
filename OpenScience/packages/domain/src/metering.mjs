@@ -290,7 +290,7 @@ const referencePrices20260928 = deepFreeze({
  * the same price and through the same method, so its row does not move.
  * @type {PriceList}
  */
-export const REFERENCE_PRICE_LIST = deepFreeze({
+const referencePrices20261017 = deepFreeze({
   ...referencePrices20260928,
   version: 'evimed-reference-2026-10-17',
   effectiveFrom: '2026-10-17T00:00:00.000Z',
@@ -298,6 +298,42 @@ export const REFERENCE_PRICE_LIST = deepFreeze({
   toolRequest: {
     'deepseek-search': { perThousand: 5 },
     'deepseek-fetch': { perThousand: 5 },
+  },
+})
+
+/**
+ * The 2026-10-17 rates plus DashScope's text reranker, which the patient-matching search asks to put the trials a registry found in the
+ * order of how they read against one patient (\`vcrCandidateRerank.mjs\`, booked under purpose \`vcr\`). qwen3-rerank, Beijing: text input
+ * ¥0.5 per million tokens, nothing for output, no night rate and no cache tier (https://help.aliyun.com/zh/model-studio/qwen3-rerank,
+ * read 2026-11-04); the provider's own \`usage.total_tokens\` of a request is the count. Another rerank model is unpriced until it has a row.
+ * @type {PriceList}
+ */
+const referencePrices20261104 = deepFreeze({
+  ...referencePrices20261017,
+  version: 'evimed-reference-2026-11-04',
+  effectiveFrom: '2026-11-04T00:00:00.000Z',
+  modelSource: `${referencePrices20261017.modelSource} · https://help.aliyun.com/zh/model-studio/qwen3-rerank`,
+  model: {
+    ...referencePrices20261017.model,
+    'qwen3-rerank': { cacheHit: 0.5, cacheMiss: 0.5, output: 0, offPeak: false },
+  },
+})
+
+/** Matching Qwen3.7 online input prices, Beijing, read 2026-11-05 from the official model cards.
+ * Historical lists stay unchanged; batch embedding and other regions are not priced by these rows.
+ * @type {PriceList}
+ */
+export const REFERENCE_PRICE_LIST = deepFreeze({
+  ...referencePrices20261104,
+  version: 'evimed-reference-2026-11-05',
+  effectiveFrom: '2026-11-05T00:00:00.000Z',
+  modelSource: `${referencePrices20261104.modelSource} · https://help.aliyun.com/en/model-studio/qwen3-7-text-embedding · https://help.aliyun.com/en/model-studio/qwen3-7-text-rerank · https://docs.typesafe.ai/models`,
+  model: {
+    ...referencePrices20261104.model,
+    // Jev 1.14: official current-model rate, verified 2026-11-05 (docs.typesafe.ai/models).
+    'jev-1.14.0': { cacheHit: 0.042, cacheMiss: 0.042, output: 0, offPeak: false, currency: 'USD' },
+    'qwen3.7-text-embedding': { cacheHit: 0.5, cacheMiss: 0.5, output: 0, offPeak: false },
+    'qwen3.7-text-rerank': { cacheHit: 0.5, cacheMiss: 0.5, output: 0, offPeak: false },
   },
 })
 
@@ -330,7 +366,9 @@ const priceLists = deepFreeze({
   'evimed-reference-2026-09-23': referencePrices20260923,
   'evimed-reference-2026-09-24': referencePrices20260924,
   'evimed-reference-2026-09-28': referencePrices20260928,
-  'evimed-reference-2026-10-17': REFERENCE_PRICE_LIST,
+  'evimed-reference-2026-10-17': referencePrices20261017,
+  'evimed-reference-2026-11-04': referencePrices20261104,
+  'evimed-reference-2026-11-05': REFERENCE_PRICE_LIST,
 })
 
 /**

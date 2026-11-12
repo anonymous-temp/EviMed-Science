@@ -50,6 +50,7 @@ function memoryStore(valueSource = 'observed') {
       return { file, created: true };
     },
     async setSourceStatus({ status }) { source.status = status; },
+    async isSubjectWithdrawn() { return false; },
     async listSourceFiles() { return [...files]; },
     async listSourceFilesForStudy() { return [...files]; },
     async saveFieldMapDraft({ columns, hash, by }) {

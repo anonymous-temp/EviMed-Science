@@ -663,14 +663,14 @@ test("the flow: the platform freezes the protocol and the instant, a job evaluat
   assert.equal((await vcr.matching.onJobFinished({ state: "failed", job: { kind: "match_criteria", studyId: study.id }, engineResult: result })).persisted, 0);
 });
 
-test("M-17 a re-saved assessment keeps a person's override, drops a criterion the protocol no longer has, and keeps a countersignature only while its summary stands", options, async () => {
+test("M-17 a re-saved assessment keeps a person's override, drops a criterion the protocol no longer has, and keeps an earlier countersignature only while its summary stands", options, async () => {
   const [assessment] = await vcr.matchStore.listAssessments({ studyId: study.id, subjectKey: "P-002", limit: 1 });
   const full = await vcr.matchStore.getAssessment(assessment.id, study.id);
   const judgment = full.judgments[0];
   const overridden = await vcr.matching.overrideJudgment({ id: "coordinator-1" }, study, { assessmentId: assessment.id, criterionId: judgment.criterionId, state: "satisfied", note: "电话核实" });
   assert.equal(overridden.overrideState, "satisfied");
   assert.equal(overridden.overriddenBy, "coordinator-1", "by the session's account");
-  await vcr.matching.reviewAssessment({ id: "coordinator-1" }, study, { assessmentId: assessment.id });
+  await vcr.matchStore.query(`UPDATE evimed_vcr.matching_assessments SET reviewed_by = $2, reviewed_at = now() WHERE id = $1`, [assessment.id, "coordinator-1"]);
   // The same assessment saved again.
   const saved = await vcr.matchStore.saveAssessment({ userId: USER, assessment: {
     studyId: study.id, protocolVersionId: assessment.protocolVersionId, subjectKey: "P-002", asOf: assessment.asOf, provenance: assessment.provenance, summary: assessment.summary,
@@ -691,7 +691,6 @@ test("CS-35 M-14 the store's lookups are study-scoped: another study's assessmen
   assert.equal(await vcr.matchStore.getAssessment(assessment.id, otherStudy.id), null);
   await assert.rejects(() => vcr.matching.overrideJudgment({ id: "x" }, otherStudy, { assessmentId: assessment.id, criterionId: "any", state: "satisfied" }),
     (error) => /** @type {any} */ (error).code === "vcr_assessment_not_found");
-  await assert.rejects(() => vcr.matching.reviewAssessment({ id: "x" }, otherStudy, { assessmentId: assessment.id }), (error) => /** @type {any} */ (error).code === "vcr_assessment_not_found");
   await assert.rejects(() => vcr.matchStore.overrideJudgment({ assessmentId: assessment.id, criterionId: "c", state: "maybe", by: "x", userId: USER, studyId: study.id }),
     (error) => /** @type {any} */ (error).code === "vcr_write_value_invalid", "an unknown state is refused, not stored");
 

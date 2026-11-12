@@ -46,6 +46,13 @@ test("the brief names the patient and the direction, and gives the run no number
   assert.match(brief, /vcr-matching/);
   assert.match(brief, /EV-201 二线 NSCLC/);
   assert.ok(brief.length < 700, "a brief is a pointer into the skill, not a second copy of it");
+  // The way the skill teaches: search, then the judging job. Candidate rows written by the run draw nothing on the page.
+  assert.match(brief, /candidates/);
+  assert.match(brief, /match_judge/);
+  assert.match(brief, /candidate_trials/);
+  assert.doesNotMatch(brief, /候选试验由 vcr_write 写入/);
+  assert.doesNotMatch(brief, /不要自己下判定/);
+  assert.doesNotMatch(brief, /一节/, "the skill has no such section");
 });
 
 test("the request is dispatched as a run of the matching capability, and the run's end closes it without moving a step", skipWithoutDatabase, async () => {

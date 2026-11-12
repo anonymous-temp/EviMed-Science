@@ -89,6 +89,7 @@
  * @property {string} persona
  * @property {Record<string, unknown>} outputSchema
  * @property {number} [maxDepth]
+ * @property {{provider?: string, model?: string, reasoningEffort?: string, maxTokens?: number}} [agentOptions]
  */
 
 /**

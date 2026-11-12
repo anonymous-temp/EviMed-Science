@@ -1054,6 +1054,7 @@ export async function startSubagent(ctx, request, parent, signal) {
         prompt: [{ type: 'text', text: request.prompt }],
         parent,
         outputSchema: request.outputSchema,
+        ...(request.agentOptions === undefined ? {} : { agentOptions: { ...request.agentOptions } }),
         ...(request.maxDepth === undefined ? {} : { maxDepth: request.maxDepth }),
       },
     })
@@ -1643,3 +1644,5 @@ export {
   pinOpenVikingPluginEnvironment,
   registerMemoryBridge,
 } from './src/memoryBridge.mjs'
+
+export { registerPatientMatchingStatus } from './src/patientMatchingStatus.mjs'

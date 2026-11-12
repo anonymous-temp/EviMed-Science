@@ -51,6 +51,17 @@ const workspaceRoot = path.resolve(repoRoot, "..");
 export const RULES = [
   {
     kind: "provenance",
+    where: /^OpenScience\/evals\/capsule-proving\/results\/ledger-\d{8}\.jsonl$/,
+    why: "the dated capsule evaluation ledger retains the exact kernel each measured run used; an upgrade cannot change those observations",
+  },
+  {
+    kind: "provenance",
+    where: /^OpenScience\/evals\/capsule-proving\/c2\/run_c2\.mjs$/,
+    line: /text: \[\x60C2 .* arm on the product path \(real control plane, DSH /,
+    why: "the C2 ledger annotation names the kernel used for this recorded comparison, not the version installed by the runner",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/evals\/acceptance\/(?:local-integration-\d{8}\/)?[^/]+\.json$/,
     why: "a live acceptance record names the release and the image tags it was measured on; re-dating it claims the acceptance ran on a kernel it never saw",
   },

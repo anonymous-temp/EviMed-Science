@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-analysis",
-  "version": "sha256:98167007eff4e1673787bdbabd5dfc2d47a4c5894e30e6f25a14870660b77ac9",
+  "version": "sha256:d33378af168d13877d1ae8d069a587bcd324ea8641bd5b7322131b3fe1634cd4",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 34,
@@ -1282,7 +1282,7 @@
     {
       "name": "mcp__evimed__term_normalize",
       "source": "mcp",
-      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization. Set mesh to map an English term to its MeSH descriptor: entry terms, tree numbers, narrower descriptors and a PubMed query that searches them.",
+      "description": "Normalize a medical term, Chinese or English. With the deployment's terminology file, `matches` give the entities the term names: English and Chinese names, synonyms, codes (ICD-10, MeSH, NCIt, HPO, HGNC, CIViC) and their source and version; without it a short built-in table answers and the answer says so. A match is a name and its codes, not a finding about a patient. scale returns the wording of a scale the term names (ECOG, Karnofsky, NYHA, Child-Pugh, Glasgow Coma). annotate adds PubTator3 concept identifiers, which a relation query in literature_search is addressed with; mesh maps an English term to its MeSH descriptor (entry terms, tree numbers, a PubMed query).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1305,6 +1305,42 @@
             "type": "boolean"
           },
           "mesh": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "zh",
+              "en"
+            ]
+          },
+          "kinds": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "type": "string",
+              "enum": [
+                "disease",
+                "finding",
+                "drug",
+                "chemical",
+                "gene",
+                "variant",
+                "procedure",
+                "lab",
+                "anatomy",
+                "organism",
+                "phenotype",
+                "other"
+              ]
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "scale": {
             "type": "boolean"
           }
         },
@@ -1352,6 +1388,16 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 40
+          },
+          "collection": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9_.:@-]+$"
+          },
+          "collectionRevision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
           }
         },
         "required": [
@@ -1375,7 +1421,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches. Any eligibility verdict you deliver (reply, table or file) is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
+      "description": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists uploads, knowledge-base documents, this study's patients and authenticated human messages (messageSeq); follow nextUploadRead for more uploads. subject_document reads original material; kind=sentences numbers it. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists upload handles; candidate_trials reads patient trial matches. Any eligibility verdict you deliver is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1511,7 +1557,8 @@
               "borrowing_prior",
               "train_prognostic_model",
               "generate_progression",
-              "match_extract",
+              "match_judge",
+              "records_import",
               "forecast_trajectories",
               "evaluate_forecast",
               "compare_forecasts",
@@ -1683,7 +1730,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. A fact states only what its quote says: what the text does not mention is unknown, never negated, and age, sex or a diagnosis do not imply pregnancy, menopause or a negative result. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before writing facts, criteria or trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs.",
+      "description": "Save research objects, never calculated results. data_intake imports a patient table or record folder, nothing to confirm (see contracts). protocol: data={title,protocolText}. patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case; add subjectKey for a patient already here. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your judgment of a patient against a trial or protocol, with sentence ids as evidence. For object contracts use the workflow skill (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before matching trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the catalogue) and vcr_simulate action=shape for numerical inputs.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1718,7 +1765,7 @@
               "history",
               "forecast_design",
               "trial_benchmark",
-              "candidate_trial",
+              "trial_judgment",
               "soa",
               "regulatory_contact",
               "result_record"

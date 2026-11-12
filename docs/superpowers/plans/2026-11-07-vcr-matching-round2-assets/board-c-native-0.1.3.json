@@ -1,0 +1,457 @@
+{
+  "agreement": {
+    "difference": {
+      "ci": [
+        -0.15162454873646214,
+        -0.05933014354066979
+      ],
+      "value": -0.10640394088669951
+    },
+    "gpt4": {
+      "ci": [
+        0.8338338338338338,
+        0.9063992359121299
+      ],
+      "correct": 886,
+      "rate": 0.8729064039408867
+    },
+    "ours": {
+      "ci": [
+        0.7327044025157232,
+        0.7988165680473372
+      ],
+      "correct": 778,
+      "rate": 0.7665024630541872
+    },
+    "selfCheck": "GPT-4 reproduced at 886/1015"
+  },
+  "answers": {
+    "criteriaMatchingNoClause": 0,
+    "criteriaRepeated": 0,
+    "criteriaTextDiffers": 0,
+    "missing": 1,
+    "unrecognised": 0,
+    "usable": 1014
+  },
+  "board": "C",
+  "bootstrap": {
+    "interval": "95% percentile",
+    "pairedWith": "gpt4_eligibility, same rows",
+    "resamples": 10000,
+    "seed": 20261104,
+    "unit": "patient"
+  },
+  "completion": {
+    "duplicateRecords": 0,
+    "pairs": 105,
+    "pairsFailedByCode": {},
+    "pairsWithAnswers": 105,
+    "patients": 53,
+    "patientsFinished": 53,
+    "patientsWithRecord": 53,
+    "statusCounts": {
+      "complete": 53
+    },
+    "usage": {
+      "costCny": 5.641600000000001,
+      "inputTokens": 713438,
+      "outputTokens": 522063,
+      "patientsReporting": 53
+    }
+  },
+  "confusion": {
+    "gpt4": {
+      "excluded": {
+        "(missing)": 0,
+        "(unrecognised)": 0,
+        "excluded": 10,
+        "included": 0,
+        "not applicable": 0,
+        "not enough information": 0,
+        "not excluded": 0,
+        "not included": 0
+      },
+      "included": {
+        "(missing)": 0,
+        "(unrecognised)": 0,
+        "excluded": 0,
+        "included": 135,
+        "not applicable": 0,
+        "not enough information": 14,
+        "not excluded": 0,
+        "not included": 1
+      },
+      "not applicable": {
+        "(missing)": 0,
+        "(unrecognised)": 0,
+        "excluded": 0,
+        "included": 0,
+        "not applicable": 54,
+        "not enough information": 0,
+        "not excluded": 1,
+        "not included": 0
+      },
+      "not enough information": {
+        "(missing)": 0,
+        "(unrecognised)": 0,
+        "excluded": 1,
+        "included": 2,
+        "not applicable": 17,
+        "not enough information": 255,
+        "not excluded": 11,
+        "not included": 7
+      },
+      "not excluded": {
+        "(missing)": 0,
+        "(unrecognised)": 0,
+        "excluded": 5,
+        "included": 0,
+        "not applicable": 48,
+        "not enough information": 17,
+        "not excluded": 414,
+        "not included": 0
+      },
+      "not included": {
+        "(missing)": 0,
+        "(unrecognised)": 0,
+        "excluded": 0,
+        "included": 2,
+        "not applicable": 0,
+        "not enough information": 3,
+        "not excluded": 0,
+        "not included": 18
+      }
+    },
+    "ours": {
+      "excluded": {
+        "(missing)": 0,
+        "(unrecognised)": 0,
+        "excluded": 8,
+        "included": 0,
+        "not applicable": 0,
+        "not enough information": 1,
+        "not excluded": 1,
+        "not included": 0
+      },
+      "included": {
+        "(missing)": 0,
+        "(unrecognised)": 0,
+        "excluded": 0,
+        "included": 137,
+        "not applicable": 0,
+        "not enough information": 13,
+        "not excluded": 0,
+        "not included": 0
+      },
+      "not applicable": {
+        "(missing)": 0,
+        "(unrecognised)": 0,
+        "excluded": 0,
+        "included": 0,
+        "not applicable": 32,
+        "not enough information": 3,
+        "not excluded": 19,
+        "not included": 1
+      },
+      "not enough information": {
+        "(missing)": 0,
+        "(unrecognised)": 0,
+        "excluded": 3,
+        "included": 18,
+        "not applicable": 7,
+        "not enough information": 173,
+        "not excluded": 68,
+        "not included": 24
+      },
+      "not excluded": {
+        "(missing)": 1,
+        "(unrecognised)": 0,
+        "excluded": 7,
+        "included": 0,
+        "not applicable": 10,
+        "not enough information": 55,
+        "not excluded": 411,
+        "not included": 0
+      },
+      "not included": {
+        "(missing)": 0,
+        "(unrecognised)": 0,
+        "excluded": 0,
+        "included": 1,
+        "not applicable": 1,
+        "not enough information": 4,
+        "not excluded": 0,
+        "not included": 17
+      }
+    }
+  },
+  "decisiveRows": {
+    "gpt4Correct": 163,
+    "labels": [
+      "included",
+      "not included",
+      "excluded"
+    ],
+    "oursCorrect": 162,
+    "rows": 183
+  },
+  "evidencedRows": {
+    "byBasis": {
+      "inferred": {
+        "agreement": 0.6792452830188679,
+        "correct": 72,
+        "falseFavourable": 15,
+        "predictedLabels": {
+          "excluded": 12,
+          "included": 45,
+          "not applicable": 4,
+          "not enough information": 3,
+          "not excluded": 29,
+          "not included": 13
+        },
+        "rows": 106
+      },
+      "silent": {
+        "agreement": 0.72,
+        "correct": 90,
+        "falseFavourable": 12,
+        "predictedLabels": {
+          "excluded": 1,
+          "not enough information": 77,
+          "not excluded": 43,
+          "not included": 4
+        },
+        "rows": 125
+      },
+      "stated": {
+        "agreement": 0.9367816091954023,
+        "correct": 163,
+        "falseFavourable": 5,
+        "predictedLabels": {
+          "excluded": 2,
+          "included": 102,
+          "not applicable": 9,
+          "not excluded": 56,
+          "not included": 5
+        },
+        "rows": 174
+      }
+    },
+    "gpt4Correct": 350,
+    "oursCorrect": 325,
+    "rows": 405
+  },
+  "falseFavourable": {
+    "broadDefinition": "any expert label other than included or not excluded with a favourable answer (the plan's wider count)",
+    "definition": "expert not enough information or disqualifying (not included, excluded) with a favourable answer (included, not excluded)",
+    "gpt4": {
+      "byExpertLabel": {
+        "not enough information": 13,
+        "not included": 2
+      },
+      "count": 15
+    },
+    "gpt4Broad": {
+      "byExpertLabel": {
+        "not applicable": 1,
+        "not enough information": 13,
+        "not included": 2
+      },
+      "count": 16
+    },
+    "ours": {
+      "byExpertLabel": {
+        "excluded": 1,
+        "not enough information": 86,
+        "not included": 1
+      },
+      "count": 88
+    },
+    "oursBroad": {
+      "byExpertLabel": {
+        "excluded": 1,
+        "not applicable": 19,
+        "not enough information": 86,
+        "not included": 1
+      },
+      "count": 107
+    }
+  },
+  "patients": 53,
+  "perLabel": {
+    "excluded": {
+      "decisive": true,
+      "gpt4": {
+        "expert": 10,
+        "precision": 0.625,
+        "predicted": 16,
+        "recall": 1.0,
+        "truePositive": 10
+      },
+      "ours": {
+        "expert": 10,
+        "precision": 0.4444444444444444,
+        "predicted": 18,
+        "recall": 0.8,
+        "truePositive": 8
+      }
+    },
+    "included": {
+      "decisive": true,
+      "gpt4": {
+        "expert": 150,
+        "precision": 0.9712230215827338,
+        "predicted": 139,
+        "recall": 0.9,
+        "truePositive": 135
+      },
+      "ours": {
+        "expert": 150,
+        "precision": 0.8782051282051282,
+        "predicted": 156,
+        "recall": 0.9133333333333333,
+        "truePositive": 137
+      }
+    },
+    "not applicable": {
+      "decisive": false,
+      "gpt4": {
+        "expert": 55,
+        "precision": 0.453781512605042,
+        "predicted": 119,
+        "recall": 0.9818181818181818,
+        "truePositive": 54
+      },
+      "ours": {
+        "expert": 55,
+        "precision": 0.64,
+        "predicted": 50,
+        "recall": 0.5818181818181818,
+        "truePositive": 32
+      }
+    },
+    "not enough information": {
+      "decisive": false,
+      "gpt4": {
+        "expert": 293,
+        "precision": 0.8823529411764706,
+        "predicted": 289,
+        "recall": 0.8703071672354948,
+        "truePositive": 255
+      },
+      "ours": {
+        "expert": 293,
+        "precision": 0.6947791164658634,
+        "predicted": 249,
+        "recall": 0.590443686006826,
+        "truePositive": 173
+      }
+    },
+    "not excluded": {
+      "decisive": false,
+      "gpt4": {
+        "expert": 484,
+        "precision": 0.971830985915493,
+        "predicted": 426,
+        "recall": 0.8553719008264463,
+        "truePositive": 414
+      },
+      "ours": {
+        "expert": 484,
+        "precision": 0.8236472945891784,
+        "predicted": 499,
+        "recall": 0.8491735537190083,
+        "truePositive": 411
+      }
+    },
+    "not included": {
+      "decisive": true,
+      "gpt4": {
+        "expert": 23,
+        "precision": 0.6923076923076923,
+        "predicted": 26,
+        "recall": 0.782608695652174,
+        "truePositive": 18
+      },
+      "ours": {
+        "expert": 23,
+        "precision": 0.40476190476190477,
+        "predicted": 42,
+        "recall": 0.7391304347826086,
+        "truePositive": 17
+      }
+    }
+  },
+  "protocol": "six-label agreement with the expert column over all 1,015 annotated rows; a row with no usable answer is wrong",
+  "provenance": {
+    "boardsInputsDigest": "71d895a359acc25ef0dd4d802566a8be7082ae87f28176ebfb50872a3c8e5d51",
+    "evaluatorSha256": {
+      "nih_recall": "a165ff5318a35372012d1688abfd5edd28fcd5c3a321a2ad96567d0448e3adee",
+      "rankings": "550f3e6d9dc222b0cd96e153b24d5e3bc9c676be521d45360228f88c198f8527"
+    },
+    "trialgpt1Commit": "1b3242cd50c153a9c324661d4a0bd94fc68a4226",
+    "trialgpt2Commit": "1c5f9ebc3b98d1f780ceea68043efdaa2daba880"
+  },
+  "rows": 1015,
+  "silentRows": {
+    "byBasis": {
+      "(missing)": {
+        "agreement": 0.0,
+        "correct": 0,
+        "falseFavourable": 0,
+        "predictedLabels": {
+          "(missing)": 1
+        },
+        "rows": 1
+      },
+      "inferred": {
+        "agreement": 0.4915254237288136,
+        "correct": 29,
+        "falseFavourable": 10,
+        "predictedLabels": {
+          "excluded": 3,
+          "included": 7,
+          "not applicable": 12,
+          "not enough information": 1,
+          "not excluded": 30,
+          "not included": 6
+        },
+        "rows": 59
+      },
+      "silent": {
+        "agreement": 0.7596899224806202,
+        "correct": 392,
+        "falseFavourable": 46,
+        "predictedLabels": {
+          "included": 2,
+          "not applicable": 2,
+          "not enough information": 168,
+          "not excluded": 330,
+          "not included": 14
+        },
+        "rows": 516
+      },
+      "stated": {
+        "agreement": 0.9411764705882353,
+        "correct": 32,
+        "falseFavourable": 0,
+        "predictedLabels": {
+          "not applicable": 23,
+          "not excluded": 11
+        },
+        "rows": 34
+      }
+    },
+    "definition": "rows whose expert annotation cites no note sentence",
+    "expertLabels": {
+      "included": 7,
+      "not applicable": 44,
+      "not enough information": 184,
+      "not excluded": 366,
+      "not included": 9
+    },
+    "gpt4Correct": 536,
+    "oursCorrect": 453,
+    "rows": 610
+  }
+}

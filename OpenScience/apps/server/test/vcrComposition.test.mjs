@@ -14,6 +14,7 @@ import YAML from "yaml";
 import { validateEngineResult, validateEngineJob, FACT_EVIDENCE_RULE } from "@evimed/domain";
 
 import { freezeMatchingInputs, MATCHING_SNAPSHOT_PREFIX } from "../src/vcrMatchingSnapshot.mjs";
+import { matchingInputDigest } from "../src/vcrMatching.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { VcrService, vcrReadiness } from "../src/vcrService.mjs";
 import { removeVcrArtifacts } from "../src/vcrStoreBase.mjs";
@@ -120,7 +121,6 @@ function matchStoreDouble(overrides = {}) {
       return { id: "mas_1", summary: "insufficient_evidence", asOf: AS_OF, protocolVersionId: "prt_1", reviewedBy: "coordinator-li@hospital",
         counts: { satisfied: 1, not_satisfied: 0, unknown: 1, pending_recheck: 0, notApplicable: 0, total: 2 },
         evidenceGaps: [{ variable: "myocardial_infarction", reason: "not_recorded", criterionIds: ["crt_mi"] }],
-        priority: { score: 0.9, rationale: "患者 3 月前在我院行 PCI，家属要求尽快入组" },
         judgments: [{ criterionId: "crt_mi", state: "unknown", applicable: true, decidedBy: "code", recheckAt: null, evidence: [],
           overrideState: "satisfied", overriddenBy: "coordinator-li@hospital", overrideNote: "电话核实，无心梗" }] };
     },
@@ -212,6 +212,29 @@ async function snapshotInputs(matchStore, criteria = CRITERIA) {
   await matchStore.saveMatchingSnapshot(snapshot);
   return [...matchingInputs(), { kind: "evidence", id: `${MATCHING_SNAPSHOT_PREFIX}${snapshot.id}` }];
 }
+
+test("matching discovers language in both axes and fences old evaluator snapshots", async () => {
+  const criteria = [{ id: "c1", kind: "inclusion", requirement: { op: "language", key: "requirement", text: "Requirement" },
+    applicability: { op: "language", key: "applicability", text: "Scope" } }];
+  const matchStore = matchStoreDouble({ async listCriteria() { return criteria; } });
+  const seam = vcrMatchingSeam({ matchStore, store: storeDouble, documents: cloudDocuments });
+  assert.deepEqual((await seam.languageKeys({ id: "std_1" })).sort(), ["applicability", "requirement"]);
+  const view = await seam.runtimeRead({ id: "std_1" }, { subjectKey: "P-001" });
+  assert.deepEqual(view.requests.map(row => row.criterionKey).sort(), ["applicability", "requirement"]);
+  const conflicting = [...criteria, { id: "c2", kind: "inclusion", requirement: { op: "language", key: "requirement", text: "Different" } }];
+  const legacy = vcrMatchingSeam({ matchStore: matchStoreDouble({ async listCriteria() { return conflicting; } }), store: storeDouble, documents: cloudDocuments });
+  assert.deepEqual(await legacy.languageKeys({ id: "std_1" }), ["applicability"]);
+  assert.deepEqual((await legacy.runtimeRead({ id: "std_1" }, { subjectKey: "P-001" })).requests.map(row => row.criterionKey), ["applicability"]);
+  const old = freezeMatchingInputs({ studyId: "std_1", protocolVersionId: "prt_1", asOf: AS_OF,
+    criteria, facts: [], languages: new Map(), subjects: ["P-001"] });
+  old.payload.matchingEvaluatorVersion = "old";
+  old.id = matchingInputDigest(old.payload);
+  await matchStore.saveMatchingSnapshot(old);
+  await assert.rejects(seam.matchScenario({ id: "std_1" }, { snapshotId: old.id }), error => error.code === "vcr_matching_evaluator_changed");
+  const execute = vcrMatchingExecutor({ matchStore, store: { async studyById() { return { id: "std_1" }; } } });
+  await assert.rejects(execute({ job: { studyId: "std_1", inputs: [...matchingInputs(), { kind: "evidence", id: `${MATCHING_SNAPSHOT_PREFIX}${old.id}` }] }, onProgress: async () => {} }),
+    error => error.code === "vcr_matching_evaluator_changed");
+});
 
 test("AC-14 CS-31 the local executor loads what it evaluates by study, decides in code and answers a valid engine result", async () => {
   const facts = new Map([["P-001", [{ id: "f1", subjectKey: "P-001", variable: "age", value: 62, unit: "year", polarity: "affirmed", occurredAt: null,
@@ -944,4 +967,30 @@ test('matching result reads omit repeated schema/terminology and preserve narrow
  const narrow=await seam.runtimeRead({id:'std_1'},{subjectKey:'P-001',id:'crt_mi'});assert.deepEqual(narrow.assessment.judgments.map(row=>row.criterionId),['crt_mi']);assert.equal(narrow.assessment.judgments[0].state,'unknown');assert.ok('evidence' in narrow.assessment.judgments[0]);
  const contract=await seam.runtimeRead({id:'std_1'},{kind:'contract'});assert.ok(contract.factContract);assert.equal(contract.factRule,FACT_EVIDENCE_RULE);assert.ok(contract.protocolWrite.data.criteria[0].requirement);assert.equal('terminology' in contract,false);
  const terminology=await seam.runtimeRead({id:'std_1'},{kind:'terminology'});assert.ok(terminology.terminology);
+});
+
+test("the meaning of a table's codes is settled when the inputs are frozen, a running job reads it without asking, and a corrected map is a changed input", async () => {
+  /** @type {any[]} */ const asks = [];
+  let digest = "meaning-1";
+  const subjectTableSeam = { async read(_study, options = {}) {
+    asks.push(options);
+    return { ...subjectTable(), ...(digest ? { meaningDigest: digest } : {}), meaningStatus: { status: "proposed" } };
+  } };
+  const matchStore = matchStoreDouble({ async listCriteria() { return TABLE_CRITERIA; }, async listFacts() { return []; } });
+  matchStore.candidateSubjects = async () => [];
+  const study = await owner.studyById();
+  const frozen = await vcrMatchingSeam({ matchStore, store: owner, subjectTable: subjectTableSeam, now: () => new Date(AS_OF) }).matchScenario(study);
+  assert.deepEqual(asks.at(-1), { variables: ["age", "creatinine", "myocardial_infarction", "sex"], propose: true }, "freezing is where the meaning is asked for");
+  const job = { ...tableJob(), inputs: frozen.inputs, scenario: frozen.scenario };
+  const execute = vcrMatchingExecutor({ matchStore, store: owner, subjectTable: subjectTableSeam });
+  const result = await execute({ job, onProgress: async () => {} });
+  assert.deepEqual(asks.at(-1), { variables: ["age", "creatinine", "myocardial_infarction", "sex"], propose: false }, "a running job never asks");
+  assert.deepEqual(result.diagnostics.subjectTable.meaning, { status: "proposed" }, "the result says what became of the meaning when it was frozen");
+  // a researcher corrected a map between the freeze and the run: the job's inputs are not the ones it was frozen with
+  digest = "meaning-2";
+  await assert.rejects(execute({ job, onProgress: async () => {} }), (error) => /** @type {any} */ (error).code === "vcr_matching_input_changed");
+  // a study with no meaning keeps the identity it had: freezing with and without a digest differ only by it
+  digest = "";
+  const bare = await vcrMatchingSeam({ matchStore, store: owner, subjectTable: subjectTableSeam, now: () => new Date(AS_OF) }).matchScenario(study);
+  await execute({ job: { ...tableJob(), inputs: bare.inputs, scenario: bare.scenario }, onProgress: async () => {} });
 });

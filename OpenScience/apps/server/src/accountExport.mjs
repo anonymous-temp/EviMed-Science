@@ -45,6 +45,10 @@ const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "kn
  * and a kind nothing here decided is no longer an outage: the export carries
  * what it has a contract for and states the rest in its own `omissions`. */
 export const UNEXPORTED_DOCUMENT_KINDS = Object.freeze({
+  "patient-matching-task": "source- and conversation-bound matching coordination references; clinical results leave through authenticated saved-result reports, not reusable task authority",
+  "patient-matching-continuation": "deployment-local native continuation dispatch references and retry epochs; these cannot authorize work after an account archive is imported",
+  "patient-matching-lifecycle": "deployment-owned package admission, prepared generation manifests and runtime authority; independent release artifacts are distributed separately",
+
   "geo-plan-context": "deployment-bound GEO conversation records: project context policies, native session identities, accepted-request bindings and staging receipts are runtime authority, not portable content; selected analysis pages and source-input snapshots share this kind and require their parent context to interpret, so they leave through the existing selected-analysis export rather than this account archive",
   "geo-signal": "GEO observation and handling records tied to this deployment's question selections, source versions, run requests and paged event materials; this account archive does not export the related GEO schema, so these records would be incomplete outside it; the existing selected-history analysis exports their preserved observations and handling state, without transferring request authority",
   "research-goal": "the control plane's own note of where a long research goal stands between its rounds; the rounds and their files are the run ledger's and the workspace's, which the export carries",

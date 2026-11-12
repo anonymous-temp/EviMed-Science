@@ -128,7 +128,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
-  VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_ROBUSTNESS_STAGES,
+  VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_RETIRED_JOB_KINDS, VCR_ROBUSTNESS_STAGES,
   VCR_SCREENING, canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrAppliedDefaults, vcrLocationIsValid, vcrNormalizeScenarioKeys, vcrNullReplicateFloor, vcrReplicatePlanFor, vcrResultOutputPayload, vcrScenarioRows,
 } from "@evimed/domain";
 
@@ -378,7 +378,7 @@ const SIZED_KINDS = new Set(["design_simulation", "design_grid", "map_prior"]);
  * that is validated: a literature population (its baseline bindings are verified and removed), a reconstruction (its curve receipt),
  * a matched time-to-event comparison (its reconstruction), a model's equation, and the pooled and matched scenarios the platform builds.
  */
-const PLATFORM_BOUND_KINDS = new Set(["literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "match_extract"]);
+const PLATFORM_BOUND_KINDS = new Set(["literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "match_judge"]);
 
 /**
  * What set a simulation's replicate count, in a sentence: the floor of its case, the study's intended use, a borrowing design, the
@@ -596,8 +596,8 @@ export function vcrResultKindFor(kind) {
   if (["design_analytic", "design_simulation", "assurance"].includes(kind)) return "trial_scenario";
   if (kind === "design_grid") return "design_grid";
   if (kind === "match_criteria") return "matching";
-  // The batch reading of patient records leaves a record of what was read, not a matching: its own kind, read by nothing that lists matchings.
-  if (kind === "match_extract") return "match_extract";
+  // A judging job's result is the record of what it did; the judgments themselves are `match_judgments`, read by nothing that lists matchings.
+  if (kind === "match_judge") return "match_judge";
   if (kind === "accrual_forecast") return "accrual_forecast";
   // A confirmatory design is its own result, not a stage of a trial scenario: it is not a design of the page's table (A, B, C) and has its own card.
   if (kind === "design_confirmatory") return "design_confirmatory";
@@ -946,7 +946,7 @@ export class VcrJobs {
    */
   async validate(input) {
     const kind = String(input.kind);
-    if (!VCR_JOB_KINDS.includes(kind)) throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
+    if (!VCR_JOB_KINDS.includes(kind) || VCR_RETIRED_JOB_KINDS.includes(kind)) throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.filter((entry) => !VCR_RETIRED_JOB_KINDS.includes(entry)).join(", ")}.`);
     const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
     if (PLATFORM_BOUND_KINDS.has(kind) || Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind) || Object.hasOwn(VCR_MATCH_BATCH_JOBS, kind)) {
       return { action: "validate", kind, queued: false, checked: false,
@@ -1009,8 +1009,8 @@ export class VcrJobs {
    */
   async enqueue(input) {
     const kind = String(input.kind);
-    if (!VCR_JOB_KINDS.includes(kind)) {
-      throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
+    if (!VCR_JOB_KINDS.includes(kind) || VCR_RETIRED_JOB_KINDS.includes(kind)) {
+      throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.filter((entry) => !VCR_RETIRED_JOB_KINDS.includes(entry)).join(", ")}.`);
     }
     const studyId = String(input.studyId);
     const method = /** @type {Record<string, string>} */ ({...VCR_JOB_METHODS,...VCR_LONGITUDINAL_JOBS})[kind];
@@ -1468,6 +1468,9 @@ export class VcrJobs {
     // Three lanes. The engine's takes what is not a local method; the local one takes the short local methods (a verdict, a forecast);
     // the slow one takes the local methods that call a model per record (`VCR_SLOW_LOCAL_METHODS`), so that one long job does not hold
     // the short ones behind it on the same worker loop.
+    // One running job per account on the two local lanes: an account's work takes turns and no account fills the lane. A job of many hours would
+    // keep that turn for all of them, and a one-patient judgment asked for in a conversation would wait for it. So a long job gives its turn back
+    // between batches (`#yieldTurn`, queued again with `run_after` now), and the order below (`run_after`, oldest first) puts what was waiting ahead of it.
     const allLocal = Object.keys(this.localExecutors).filter(method => typeof this.localExecutors[method] === 'function');
     const localMethods = lane === 'slow' ? allLocal.filter(method => VCR_SLOW_LOCAL_METHODS.includes(method))
       : lane === 'local' ? allLocal.filter(method => !VCR_SLOW_LOCAL_METHODS.includes(method)) : allLocal;
@@ -1638,6 +1641,27 @@ export class VcrJobs {
   }
 
   /**
+   * A job of a kind that is no longer run (`VCR_RETIRED_JOB_KINDS`) that was queued or running when it was retired ends here as cancelled, with
+   * the reason on it, so that nothing waits on it for ever. A finished row is not touched, and a second call finds nothing.
+   * @returns {Promise<Array<ReturnType<typeof jobSummaryFromRow>>>}
+   */
+  async retireRetiredKinds() {
+    const rows = await this.store.rows(`UPDATE ${VCR_SCHEMA}.jobs
+      SET state = 'canceled', cancel_requested = true, finished_at = now(), updated_at = now(), lease_owner = NULL, lease_until = NULL,
+          error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('code', 'vcr_job_kind_retired', 'message', '这类作业已停用，没有继续做。')
+      WHERE kind = ANY($1::text[]) AND state = ANY($2::text[]) RETURNING *`, [[...VCR_RETIRED_JOB_KINDS], [...VCR_JOB_OPEN_STATES]]);
+    const jobs = [];
+    for (const row of rows) {
+      this.counters.canceled += 1;
+      await this.store.audit({ studyId: String(row.study_id), userId: String(row.user_id), actor: "control-plane", action: "vcr.job.retired", object: String(row.id), detail: { kind: String(row.kind) } });
+      const job = jobSummaryFromRow(row);
+      await this.deliverFinishHooks(String(row.id), { action: "finished", state: "canceled", job, result: null, canceled: true });
+      jobs.push(job);
+    }
+    return jobs;
+  }
+
+  /**
    * The second human stop, cleared: the confirmed CPU-seconds are added to the
    * study's budget and every job waiting on it is released in one go — a
    * person confirms a study's compute once, not once per job (plan §10.1).
@@ -1683,8 +1707,9 @@ export class VcrJobs {
    * otherwise read where it got to and finish it when it is done. Answers
    * what it did, so the worker can count.
    * @param {any} job a row shape from {@link claim}
+   * @param {{ mayYield?: boolean }} [options] `mayYield`: this caller claims again, so a long local job may hand its turn back between batches
    */
-  async advance(job) {
+  async advance(job, { mayYield = false } = {}) {
     const row = await this.#row(job.id);
     if (!row || row.state !== "running") return { action: "skipped", state: row?.state ?? "gone" };
     const owner = String(row.lease_owner ?? "");
@@ -1692,7 +1717,7 @@ export class VcrJobs {
       || Number(job.attempts ?? row.attempts) !== Number(row.attempts)) return { action: "skipped", state: "lease_changed" };
     const frozen = this.#engineJob(row);
     const local = this.localExecutors[String(row.method)];
-    if (local) return this.#runLocal(row, { ...frozen, principal: String(object(row.checkpoint).principal ?? row.user_id) }, local, owner);
+    if (local) return this.#runLocal(row, { ...frozen, principal: String(object(row.checkpoint).principal ?? row.user_id) }, local, owner, mayYield);
     if (!this.engine?.configured?.()) {
       return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), error: { code: "engine_unavailable",
         message: "计算引擎未接入本部署，这一步暂不可用。" } });
@@ -1891,14 +1916,19 @@ export class VcrJobs {
    * cannot drift in what a result was computed from.
    * @param {any} row @param {Record<string, any>} frozen @param {Function} executor @param {string} owner
    */
-  async #runLocal(row, frozen, executor, owner) {
+  async #runLocal(row, frozen, executor, owner, mayYield = false) {
     const startedAt = this.now().toISOString();
     try {
       const result = await executor({
         job: { ...frozen, scenarioHash: String(row.scenario_hash ?? "") },
         onProgress: (/** @type {any} */ progress) => this.progress(String(row.id), progress ?? {}, owner, Number(row.attempts)),
         isCanceled: async () => { const current = await this.#row(String(row.id)); return !current || current.state !== 'running' || current.lease_owner !== owner || current.attempts !== row.attempts; },
+        // Only a caller that will claim the job again lets it give its turn back (the worker's slow lane); one that runs a job to its end does not.
+        yieldable: mayYield === true,
+        // What must outlive this attempt even if it never reaches a batch's end.
+        saveCheckpoint: (/** @type {Record<string, any>} */ patch) => this.checkpoint(String(row.id), patch, owner, Number(row.attempts)),
       });
+      if (result?.yield) return await this.#yieldTurn(row, result.yield, owner);
       return this.finish(String(row.id), {
         status: String(result?.status ?? "succeeded"),
         result: { ...object(result), jobId: frozen.jobId, scenarioHash: String(row.scenario_hash ?? "") },
@@ -1913,6 +1943,21 @@ export class VcrJobs {
     } catch (error) {
       return this.#fail(row, error, owner);
     }
+  }
+
+  /**
+   * A long local job hands its slot back between batches: it goes behind what its account has waiting, with what it has done so far in its
+   * checkpoint, and the next claim carries on from there. Its tries start over, because a batch that ended is a worker that worked: only
+   * deaths in a row may use up a job that takes a day and outlives deployments.
+   * @param {any} row @param {{ checkpoint?: Record<string, any>, afterSeconds?: number }} turn @param {string} owner
+   */
+  async #yieldTurn(row, { checkpoint = {}, afterSeconds = 0 }, owner) {
+    const requeued = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
+      SET state = 'queued', lease_owner = NULL, lease_until = NULL, run_after = now() + make_interval(secs => $2), attempts = 0,
+          checkpoint = checkpoint || $3::jsonb, updated_at = now()
+      WHERE id = $1 AND state = 'running' AND lease_owner = $4 AND attempts = $5 RETURNING *`,
+    [String(row.id), Math.max(0, Math.round(Number(afterSeconds) || 0)), JSON.stringify(object(checkpoint)), owner, Number(row.attempts)]);
+    return requeued ? { action: "yielded", job: jobSummaryFromRow(requeued) } : { action: "skipped", state: "changed" };
   }
 
   /** The job as the engine protocol carries it. @param {any} row */
@@ -1953,7 +1998,8 @@ export class VcrJobs {
     const attempts = Number(row.attempts ?? 0);
     this.lastError = code;
     this.report(code);
-    if (retryable) this.engineObserver?.observe(false, code);
+    // A local job that goes back to the queue (a database that stalled) says nothing about the engine.
+    if (retryable && typeof this.localExecutors[String(row.method)] !== "function") this.engineObserver?.observe(false, code);
     if (retryable && object(row.checkpoint).engineJobId) {
       const held = await this.checkpoint(String(row.id), { transportError: code }, owner, Number(row.attempts));
       return held ? { action: "waiting", state: "engine_unreachable", code } : { action: "skipped", state: "changed" };

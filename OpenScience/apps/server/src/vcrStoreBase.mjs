@@ -48,6 +48,7 @@ export const VCR_ID_PREFIXES = Object.freeze({
   modelAssessment: "mia", modelPlan: "mpv",
   simulation: "sim", candidate: "pcn", signal: "sig", secondRead: "esr",
   candidateTrial: "ctr", candidateCriterion: "ctc", candidateAssessment: "cta", candidateJudgment: "ctj",
+  matchJudgment: "mjd", candidateSearch: "cns",
 });
 
 /**
@@ -67,6 +68,16 @@ const TABLE = /^[a-z_]+$/;
 export const VCR_MEMBER_NAME_FALLBACK = "研究成员";
 /** An account id as the control plane mints and accepts one (`security.mjs`): what `personNames` may ask for. */
 const ACCOUNT_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
+
+/**
+ * The lock between what writes a person's words and what takes them away, per person of a study: writers (a judgment saved, a document stored) hold it shared, an erasure (a withdrawal, a
+ * document's deletion, a retired projection) holds it alone from before it deletes until it commits. Without it a write that started before the withdrawal was committed reads no withdrawal, and
+ * commits after the delete that was meant to take it. Held to the transaction's end.
+ * @param {any} client @param {string} studyId @param {string} subjectKey @param {{ shared?: boolean }} [options]
+ */
+export async function lockSubject(client, studyId, subjectKey, { shared = false } = {}) {
+  await client.query(`SELECT ${shared ? "pg_advisory_xact_lock_shared" : "pg_advisory_xact_lock"}(hashtextextended($1, 0))`, [`vcr-subject:${studyId}:${subjectKey}`]);
+}
 
 /**
  * The shared store. Each package extends it with its own queries rather than
@@ -299,7 +310,6 @@ export async function deleteVcrUserRows(client, userId) {
   await client.query(`DELETE FROM ${VCR_SCHEMA}.knowledge_packs WHERE user_id = $1`, [userId]);
   // The account's pointers and its record of re-checks: rows of the account alone, with no study to cascade from.
   await client.query(`DELETE FROM ${VCR_SCHEMA}.precedent_candidates WHERE user_id = $1`, [userId]);
-  await client.query(`DELETE FROM ${VCR_SCHEMA}.parsed_trial_criteria WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.pack_promotions WHERE user_id = $1`, [userId]);
   // A platform pack the account was the author of is not the account's to take away — studies of others may have pinned it — but the
   // attribution goes with the account: the version is retired for new studies and carries no name.

@@ -97,7 +97,8 @@
     "test:port": "pnpm --filter @evimed/harness-port test",
     "test:socket": "pnpm --filter @evimed/dsh-socket test",
     "test:search-topics": "pnpm --filter @evimed/dsh-search-topics test",
-    "test:packages": "pnpm test:domain && pnpm test:port && pnpm test:socket && pnpm test:contracts && pnpm test:research-plugins",
+    "test:packages": "pnpm test:domain && pnpm test:port && pnpm test:socket && pnpm test:contracts && pnpm test:research-plugins && pnpm test:patient-matching-core && pnpm test:patient-matching-plugin && pnpm test:patient-matching-worker",
+    "test:patient-matching-core": "pnpm --filter @evimed/patient-matching-core test",
     "check:skill-digests": "node scripts/build/repin-curated-skill-digests.mjs --check",
     "check:skill-packages": "node scripts/build/generate-skill-packages.mjs --check",
     "generate:skill-packages": "node scripts/build/generate-skill-packages.mjs",
@@ -142,7 +143,9 @@
     "test:statistical-analysis": "python3 -m pytest evals/statistical-analysis -q && node --test evals/statistical-analysis/live/driver.test.mjs",
     "test:rsi": "PYTHONPATH=../.evimed-local/toolchains/rsi-python python3 -m unittest discover -s evals/rsi-campaigns/tests -p 'test_*.py' && node --test --test-concurrency=1 evals/rsi-campaigns/tests/*.test.mjs evals/paper-gold/*.test.mjs",
     "test:rsi-offline": "bash evals/harness-adaptation/setup.sh && (cd evals/harness-adaptation && python3 -m unittest discover -s tests && cd lab && python3 -m unittest discover -p 'test_*.py') && (cd evals/public-benchmarks && python3 -I -m unittest discover -s tools/test -p 'test_*.py' && node --test tools/test/lane.test.mjs && node tools/test/driver-flows.test.mjs)",
-    "test:research-plugins": "pnpm --filter @evimed/research-plugin-runtime test && pnpm --filter @evimed/research-plugin-runtime typecheck && pnpm --filter @evimed/research-plugin-runtime lint && node --import ./scripts/test/localhostProbeGuard.mjs --test deploy/runtime-dsh/research-bundles.test.mjs && node --import ./scripts/test/localhostProbeGuard.mjs --test evals/vcr-hosted-native/start-ui-fixture.test.mjs evals/vcr-hosted-native/artifact-export.test.mjs evals/vcr-hosted-native/budget-guard.test.mjs evals/vcr-hosted-native/snapshot.test.mjs && python3 -m unittest discover -s evals/vcr-professional-plugins -p 'test_*.py'"
+    "test:research-plugins": "pnpm --filter @evimed/research-plugin-runtime test && pnpm --filter @evimed/research-plugin-runtime typecheck && pnpm --filter @evimed/research-plugin-runtime lint && node --import ./scripts/test/localhostProbeGuard.mjs --test deploy/runtime-dsh/research-bundles.test.mjs && node --import ./scripts/test/localhostProbeGuard.mjs --test evals/vcr-hosted-native/start-ui-fixture.test.mjs evals/vcr-hosted-native/artifact-export.test.mjs evals/vcr-hosted-native/budget-guard.test.mjs evals/vcr-hosted-native/snapshot.test.mjs && python3 -m unittest discover -s evals/vcr-professional-plugins -p 'test_*.py'",
+    "test:patient-matching-plugin": "pnpm --filter @evimed/dsh-patient-matching test",
+    "test:patient-matching-worker": "pnpm --filter @evimed/patient-matching-worker test"
   },
   "engines": {
     "node": ">=22.22.0"
@@ -201,7 +204,8 @@
       "pptx-preview>uuid": "11.1.1",
       "js-yaml": "4.3.2",
       "zod@>=4 <5": "4.6.7",
-      "qs": "6.16.1"
+      "qs": "6.16.1",
+      "fast-uri@>=3.0.0 <3.1.9": "3.1.9"
     }
   },
   "devDependencies": {

@@ -547,6 +547,51 @@ def test_evidence_adapter_serves_the_drug_label_index_without_depending_on_it(tm
     assert missing["error"]["code"] == "drug_label_index_unconfigured"
 
 
+def test_evidence_adapter_serves_the_terminology_file_without_depending_on_it(tmp_path, monkeypatch) -> None:
+    _, _, secret, _ = _load_service(tmp_path, monkeypatch)
+    mcp_root = Path(__file__).resolve().parents[2] / "runtime" / "mcp" / "evimed-research"
+    monkeypatch.syspath_prepend(str(mcp_root / "test"))
+    import test_terminology
+
+    pharmacy = tmp_path / "pharmacy.sqlite"
+    connection = sqlite3.connect(pharmacy)
+    connection.executescript(
+        "CREATE TABLE records(id INTEGER PRIMARY KEY, search_text TEXT NOT NULL);"
+        "INSERT INTO records(search_text) VALUES ('aspirin');"
+        "CREATE VIRTUAL TABLE records_fts USING fts5(search_text);"
+    )
+    connection.close()
+    terminology_file = tmp_path / "terminology.sqlite"
+    test_terminology.build(str(terminology_file))
+    monkeypatch.setenv("EVIMED_MCP_ROOT", str(mcp_root))
+    monkeypatch.setenv("EVIMED_PHARMACY_REFERENCE_DB", str(pharmacy))
+    monkeypatch.setenv("EVIMED_TERMINOLOGY_DB", str(terminology_file))
+    sys.modules.pop("evimed_specialist_adapter.evidence_service", None)
+    module = importlib.import_module("evimed_specialist_adapter.evidence_service")
+    client = TestClient(module.app)
+    headers = {"Authorization": f"Bearer {_token(secret)}"}
+    endpoint = "/api/v1/evimed/terminology-lookup"
+
+    health = client.get("/health").json()
+    assert health["ready"] is True
+    assert "terminology_lookup" in health["tools"]
+    assert health["terminology"]["available"] is True
+    assert client.post(endpoint, json={"term": "肺癌"}).status_code == 401
+    body = client.post(endpoint, json={"term": "肺癌", "limit": 1}, headers=headers).json()
+    assert body["status"] == "success"
+    assert body["data"]["matches"][0]["english"] == "Lung Carcinoma"
+    assert body["sources"][0]["source"] == "evimed-terminology"
+
+    # Not shipped: the adapter stays ready, says so on /health, and answers the lookup with a warning the runtime reads as "keep the built-in table".
+    monkeypatch.setenv("EVIMED_TERMINOLOGY_DB", str(tmp_path / "absent.sqlite"))
+    health = client.get("/health").json()
+    assert health["ready"] is True
+    assert health["terminology"] == {"configured": True, "available": False, "reason": "terminology_unavailable"}
+    missing = client.post(endpoint, json={"term": "肺癌"}, headers=headers).json()
+    assert missing["status"] == "warning"
+    assert "data" not in missing
+
+
 @pytest.mark.parametrize("model", ["deepseek-v4.1-flash", "deepseek-unknown", ""])
 def test_capabilities_reject_an_uncertified_model(tmp_path, monkeypatch, model):
     _, client, secret, _ = _load_service(tmp_path, monkeypatch)

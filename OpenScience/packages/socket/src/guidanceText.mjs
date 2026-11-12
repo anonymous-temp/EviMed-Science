@@ -98,6 +98,8 @@ export function buildGuidanceText(capabilities, options) {
       '',
       index,
       '',
+      // Not a deliverable in the table, so a model read an uploaded list of patients as ordinary work and scripted its own tally, with nothing saved (real session, 2026-11-05).
+      ...(capabilities.some((manifest) => manifest.id === 'vcr-matching') ? ['按入排标准判断患者（一位患者找试验，或一份方案筛一批患者）不在这张表里，也不靠你自己写脚本：用 `mcp__evimed__vcr_write` 与 `mcp__evimed__vcr_simulate`，结论会存下，能在页面上看、能导出、能接着问。', ''] : []),
     ] : []),
     ...contextGuidanceLines(options.capsuleActive, capsuleTool, options.openVikingMemory === true, options.memorySearchHint === true, options.memoryForgetToolHint === true, options.memoryForgetTargets === true, options.memoryStandingInstructions === true),
     options.askUserEnabled

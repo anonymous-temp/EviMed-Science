@@ -34,6 +34,7 @@ import drug_label_index
 from immutable_capture import ImmutableCaptureError, managed_workspace, preserve
 import meta_agent
 import specialist_jobs
+import terminology
 import source_catalog
 import geo_probe
 import web_search
@@ -43,6 +44,7 @@ import frontier_search
 import geo_platform
 import vcr_platform
 import research_calculate
+import clinical_scores
 import data_semantics
 import gene_expression_tools
 
@@ -463,7 +465,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "term_normalize",
-        "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization. Set mesh to map an English term to its MeSH descriptor: entry terms, tree numbers, narrower descriptors and a PubMed query that searches them.",
+        "description": "Normalize a medical term, Chinese or English. With the deployment's terminology file, `matches` give the entities the term names: English and Chinese names, synonyms, codes (ICD-10, MeSH, NCIt, HPO, HGNC, CIViC) and their source and version; without it a short built-in table answers and the answer says so. A match is a name and its codes, not a finding about a patient. scale returns the wording of a scale the term names (ECOG, Karnofsky, NYHA, Child-Pugh, Glasgow Coma). annotate adds PubTator3 concept identifiers, which a relation query in literature_search is addressed with; mesh maps an English term to its MeSH descriptor (entry terms, tree numbers, a PubMed query).",
         "inputSchema": object_schema(
             {
                 "term": STRING,
@@ -473,6 +475,12 @@ TOOL_DEFINITIONS = [
                 },
                 "annotate": {"type": "boolean"},
                 "mesh": {"type": "boolean"},
+                "language": {"type": "string", "enum": ["zh", "en"]},
+                "kinds": {
+                    "type": "array", "maxItems": len(terminology.KINDS), "items": {"type": "string", "enum": list(terminology.KINDS)},
+                },
+                "limit": {"type": "integer", "minimum": 1, "maximum": terminology.LIMIT_MAX},
+                "scale": {"type": "boolean"},
             },
             ("term",),
         ),
@@ -995,6 +1003,10 @@ TOOL_DEFINITIONS.extend(geo_platform.tool_definitions())
 # None of them computes in the model: `vcr_simulate` queues a frozen scenario.
 TOOL_DEFINITIONS.extend(vcr_platform.tool_definitions())
 TOOL_DEFINITIONS.extend(research_calculate.tool_definitions())
+# Clinical scales and multi-step clinical formulas, computed from their published definitions (2026-11-02). Local and
+# deterministic: it needs no gateway, no execution context and no account, so a deployment offers it unless an operator
+# names it in EVIMED_DISABLED_TOOLS.
+TOOL_DEFINITIONS.extend(clinical_scores.tool_definitions())
 # What a project's datasets mean, and the deterministic checks of its files against that (2026-10-04, N03):
 # offered to the two capabilities that start from a researcher's own data. With the module off it answers a
 # warning and `check` still runs on what the call declares, so it is not an optional tool.
@@ -1013,6 +1025,8 @@ ADAPTER_ENV = {
     "clinical_trial_search": "EVIMED_CLINICAL_TRIAL_SEARCH_URL",
     "patent_search": "EVIMED_PATENT_SEARCH_URL",
     "pharmacy_reference_search": "EVIMED_PHARMACY_REFERENCE_SEARCH_URL",
+    # Not a tool: the terminology file served by the evidence adapter to the runtimes that cannot read it (term_normalize).
+    "terminology_lookup": "EVIMED_TERMINOLOGY_SEARCH_URL",
     "drug_label_search": "EVIMED_DRUG_LABEL_SEARCH_URL",
     "adr_case_query": "EVIMED_ADR_CASE_QUERY_URL",
     "adr_signal_analysis": "EVIMED_ADR_SIGNAL_ANALYSIS_URL",
@@ -1086,8 +1100,11 @@ def disabled_tools():
 # (`OPEN_SCIENCE_VCR_ENABLED`, off by default), and its six tools answer
 # `vcr_disabled` without asking where it is not open to this account; every
 # research question is answered without them (2026-09-28).
+# clinical_score: a local calculator with no dependency, so nothing here withholds it; an operator may still switch it off
+# with EVIMED_DISABLED_TOOLS, and every question is answered without it, as it was before it existed (2026-11-02).
 OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search", "geo_read", "geo_write", "social_posts_search",
-                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool", "research_calculate"})
+                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool", "research_calculate",
+                            "clinical_score"})
 
 
 def list_tools():
@@ -1227,6 +1244,86 @@ def _validate(value, schema, path):
             raise ValueError("%s must be a finite number" % path)
         if value < schema.get("minimum", value) or value > schema.get("maximum", value):
             raise ValueError("%s is outside the allowed range" % path)
+
+
+# The entity types a domain leans towards: they sort first, nothing is filtered out by a domain.
+_DOMAIN_TYPES = {
+    "drug": ["drug", "chemical"],
+    "disease": ["disease", "phenotype", "finding"],
+    "indication": ["disease", "phenotype", "finding"],
+    "adverse_event": ["finding", "disease", "phenotype"],
+}
+
+
+def _terminology_matches(arguments):
+    """The terminology file's answer for a term: `(lookup, None)`, or `(None, reason)` when it cannot answer. Never raises: a lookup that fails or
+    finds nothing leaves the built-in table to answer, and the answer says which it was."""
+    request = {"term": arguments["term"], "limit": arguments.get("limit", terminology.LIMIT_DEFAULT)}
+    for key in ("language", "kinds"):
+        if arguments.get(key):
+            request[key] = arguments[key]
+    prefer = _DOMAIN_TYPES.get(arguments.get("domain", "general"))
+    if prefer:
+        request["prefer"] = prefer
+    try:
+        if os.environ.get("EVIMED_TERMINOLOGY_SEARCH_URL", "").strip():
+            result = _adapter_call("terminology_lookup", request)
+            found = result.get("data") if isinstance(result, dict) and result.get("status") in ("success", "warning") else None
+            if isinstance(found, dict) and found.get("available"):
+                return {key: value for key, value in found.items() if key != "provenance"}, None
+            return None, "terminology_adapter_unavailable"
+        if terminology.configured():
+            found = terminology.lookup(request["term"], request["limit"], request.get("language"), request.get("kinds"), prefer)
+            return (found, None) if found.get("available") else (None, found.get("reason", "terminology_unavailable"))
+    except Exception:  # noqa: BLE001 -- a lookup must never end the turn; the built-in table answers
+        return None, "terminology_lookup_failed"
+    return None, "terminology_unconfigured"
+
+
+def _with_terminology(data, arguments, builtin_hit, outcome, reason, annotation_warnings):
+    """Adds what the terminology file and the scale definitions know to a `term_normalize` answer, and returns the finished result when they changed
+    its outcome (a match or a scale where the built-in table had none); `None` leaves the caller's own ending in place.
+
+    The built-in table keeps `preferred` and `synonyms` where it has the term; where it has not, the first match supplies them. `terminology` always
+    says whether the file answered, so a term with no match is not mistaken for a lookup that was never made."""
+    warnings = annotation_warnings  # the caller's list: what is said here reaches its own ending too
+    matches = list(outcome.get("matches", [])) if outcome else []
+    data["terminology"] = (
+        {"available": True, "release": outcome.get("release"), "sources": outcome.get("sources", []), "found": outcome.get("found", 0)}
+        if outcome else {"available": False, "reason": reason}
+    )
+    if matches:
+        data["matches"] = matches
+        if not builtin_hit:
+            top = matches[0]
+            names = [name for name in (top.get("english"), top.get("chinese")) if name]
+            data["preferred"] = top.get("english") or top.get("chinese")
+            data["synonyms"] = list(dict.fromkeys(names + top["synonyms"]["en"] + top["synonyms"]["zh"]))[:12]
+            data["vocabulary"] = "evimed-terminology"
+    scale = None
+    if arguments.get("scale"):
+        scale = terminology.scale(arguments["term"])
+        if scale:
+            data["scale"] = {"note": terminology.scales()["note"], **scale}
+        else:
+            warnings.append("No scale definition is held for this name; the scales held are: %s." % ", ".join(terminology.scale_names()))
+    if not matches and not scale:
+        return None
+    sources = [{
+        "id": item["id"], "source": item["id"], "retrievedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "title": "%s %s" % (item["name"], item["version"]) if item.get("version") else item["name"],
+    } for item in (outcome or {}).get("sources", [])]
+    if scale:
+        sources.append({
+            "id": "scale:%s" % scale["id"], "source": "cdisc-sdtm", "retrievedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "title": scale["source"]["name"],
+        })
+    summary = ("Returned the definition of the %s scale%s." % (scale["name"], " and %d terminology matches" % len(matches) if matches else "")) if scale else (
+        "Found %d terminology matches for the term." % len(matches))
+    data = _data_with_provenance(data, "term_normalize", arguments, _scope())
+    if warnings:
+        return warning(summary, warnings, ["Use what was found; the warnings say what was not."], data=data, sources=sources)
+    return success(summary, data=data, sources=sources)
 
 
 def _normalize_term(term):
@@ -1644,6 +1741,10 @@ def _refused_for_workload_token(result):
     )
 
 
+# Adapters whose upstream is slow often enough that one more ask is the better first answer (the EviMed guideline index: 3 timeouts in 10 calls).
+ADAPTER_ASKED_AGAIN_ON_TIMEOUT = frozenset({"guideline_search"})
+
+
 def _adapter_call(name, arguments, execution_context=None):
     """One adapter call, asked once more when the platform replaced the workload
     token while the adapter was admitting the job.
@@ -1657,6 +1758,10 @@ def _adapter_call(name, arguments, execution_context=None):
     now, and only when the file does hold another token."""
     used = _workload_token_or_none()
     result = _adapter_call_once(name, arguments, execution_context)
+    if name in ADAPTER_ASKED_AGAIN_ON_TIMEOUT and (result.get("error") or {}).get("code") == "adapter_unavailable":
+        # A guideline index that timed out is asked once more (the public connector does the same); a second failure is the status returned.
+        time.sleep(0.5)
+        result = _adapter_call_once(name, arguments, execution_context)
     if not _refused_for_workload_token(result):
         return result
     fresh = _workload_token_or_none()
@@ -2215,6 +2320,18 @@ def _dispatch(name, arguments, execution_context=None):
             return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
+    if name == clinical_scores.TOOL_NAME:
+        try:
+            # No provenance wrapper: this is arithmetic on the caller's own inputs, and the result already names its sources.
+            return clinical_scores.call(arguments)
+        except clinical_scores.ScoreError as error:
+            # One calculation declined with its reason; nothing else is affected, so the answer goes on without a guess.
+            refused = failure(error.code, str(error), False,
+                              "unsupported" if error.code == "clinical_score_not_applicable" else "invalid_input",
+                              [clinical_scores.next_action(error)])
+            if error.data:
+                refused["data"] = error.data
+            return refused
     if name == "dataset_semantics":
         try:
             result = data_semantics.call(arguments)
@@ -2367,8 +2484,10 @@ def _dispatch(name, arguments, execution_context=None):
             return success("Normalized the supplied term against the RxNorm vocabulary.", data=data)
         data = _normalize_term(arguments["term"])
         annotation_warnings = []
+        terminology_outcome, terminology_reason = None, None
         if name == "term_normalize":
             data["domain"] = arguments.get("domain", "general")
+            terminology_outcome, terminology_reason = _terminology_matches(arguments)
             # An identifier, not a second opinion on the preferred term: the
             # curated vocabulary still decides that. What the annotation buys is
             # an address a relation query can be sent to.
@@ -2406,6 +2525,12 @@ def _dispatch(name, arguments, execution_context=None):
         else:
             data["domain"] = "drug"
             data["vocabulary"] = "curated-local" if normalized_key in TERM_VOCABULARY else "unresolved"
+        if name == "term_normalize":
+            terminology_result = _with_terminology(
+                data, arguments, normalized_key in TERM_VOCABULARY, terminology_outcome, terminology_reason, annotation_warnings,
+            )
+            if terminology_result is not None:
+                return terminology_result
         data = _data_with_provenance(data, name, arguments, _scope())
         if normalized_key in TERM_VOCABULARY:
             if annotation_warnings:
@@ -2424,7 +2549,9 @@ def _dispatch(name, arguments, execution_context=None):
         return warning(
             "No curated normalization exists for this term; returned the input unchanged.",
             ["The returned preferred term and synonyms are the unmodified input, not an authoritative normalization."]
-            + annotation_warnings,
+            + annotation_warnings
+            + (["The terminology file did not answer (%s); only the short built-in table was used." % terminology_reason]
+               if name == "term_normalize" and terminology_outcome is None else []),
             ["Verify the term against an authoritative terminology (for example UMLS, RxNorm, or MeSH) before relying on it."],
             data=data,
         )

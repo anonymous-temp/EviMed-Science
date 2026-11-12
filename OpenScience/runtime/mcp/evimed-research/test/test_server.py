@@ -162,6 +162,9 @@ class ToolContractTests(unittest.TestCase):
             # What a project's datasets mean, and the deterministic checks of
             # its files against that (`data_semantics.py`, 2026-10-04).
             "dataset_semantics",
+            # Clinical scales and multi-step clinical formulas computed from their
+            # published definitions (`clinical_scores.py`, 2026-11-02).
+            "clinical_score",
         }
         self.assertEqual(set(by_name), expected)
         for tool in tools:

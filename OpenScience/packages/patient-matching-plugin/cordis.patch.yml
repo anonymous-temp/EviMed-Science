@@ -1,0 +1,8 @@
+- insert:
+    - id: evimed-patient-matching
+      name: '@evimed/dsh-patient-matching'
+      disabled: !!js process.env.EVIMED_PATIENT_MATCHING_ENABLED !== '1'
+      config:
+        enabled: true
+        endpoint: !!js process.env.EVIMED_PATIENT_MATCHING_HOST_ENDPOINT || ''
+        tokenFile: !!js process.env.EVIMED_PATIENT_MATCHING_TOKEN_FILE || ''

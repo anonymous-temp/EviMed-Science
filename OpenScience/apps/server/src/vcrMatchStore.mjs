@@ -20,9 +20,9 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { correctionHash, correctionPartition } from "./vcrCorrectionCases.mjs";
-import { publicMatchingProvenance, languageKeysOf, matchingInputDigest } from "./vcrMatching.mjs";
-import { languageCriterionHash, languageInput, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
-import { VCR_CRITERION_STATES, clinicalFactIssues, clinicalFactPolarity, matchBatchUnitKey } from "@evimed/domain";
+import { publicMatchingProvenance, matchingInputDigest } from "./vcrMatching.mjs";
+import { languageCriteriaByKey, languageCriterionHash, languageInput, readCriterionEvaluation, storedCriterionEvaluation, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
+import { VCR_CRITERION_STATES, clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
 import { VCR_SCHEMA, matchingManifestDigestSql } from "./vcrPersistence.mjs";
@@ -31,6 +31,22 @@ import { carryScheduleForward } from "./vcrSchedule.mjs";
 
 /** A fact's id: `fac_` and the tail of a uuid, like every id of the module (the base's table has no row for it). */
 const factId = () => `fac_${randomUUID().replace(/-/g, "").slice(0, 22)}`;
+
+/**
+ * Bind calendar dates as UTC midnight, like the evaluator, never as the database session's midnight.
+ * A timestamp must name its zone; check its calendar day separately because Date.parse rolls February 30 forward.
+ * @param {unknown} value @param {string} field @returns {string | null}
+ */
+function factTimestamp(value, field) {
+  if (value == null) return null;
+  const shape = typeof value === "string" && /^(\d{4}-\d{2}-\d{2})(?:T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d))?$/.exec(value);
+  const day = shape ? Date.parse(`${shape[1]}T00:00:00.000Z`) : NaN;
+  const timestamp = shape ? Date.parse(value) : NaN;
+  if (!shape || shape[1].startsWith("0000-") || !Number.isFinite(day) || new Date(day).toISOString().slice(0, 10) !== shape[1] || !Number.isFinite(timestamp)) {
+    throw new HttpError(400, "vcr_payload_invalid", `${field} must be a valid ISO calendar date or a timestamp with an explicit timezone.`);
+  }
+  return new Date(timestamp).toISOString();
+}
 
 /**
  * The outcomes recorded by every batch of one candidate denominator (the batches whose manifests differ only by offset), oldest
@@ -72,7 +88,6 @@ const assessmentOf = (row) => (row ? {
   summary: row.summary,
   counts: row.counts ?? {},
   provenance: publicMatchingProvenance(row.provenance ?? {}),
-  priority: row.priority ?? null,
   evidenceGaps: row.evidence_gaps ?? [],
   reviewedBy: row.reviewed_by ?? null,
   reviewedAt: row.reviewed_at ?? null,
@@ -87,7 +102,7 @@ const judgmentOf = (row) => (row ? {
   state: row.state,
   applicable: row.applicable,
   decidedBy: row.decided_by,
-  evidence: row.evidence ?? [],
+  ...readCriterionEvaluation(row),
   recheckAt: row.recheck_at ?? null,
   overriddenBy: row.overridden_by ?? null,
   overrideState: row.override_state ?? null,
@@ -161,7 +176,7 @@ export class VcrMatchStore extends VcrStoreBase {
              (id, study_id, protocol_version_id, user_id, ordinal, kind, criterion_type,
               requirement, applicability, source_text, source_locator, evidence_needed, review_state)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11::jsonb, $12::jsonb, $13) RETURNING *`,
-          [vcrId("criterion"), studyId, id, userId, index + 1, criterion?.kind === "exclusion" ? "exclusion" : "inclusion",
+          [vcrId("criterion"), studyId, id, userId, index + 1, criterion?.kind === "unclassified" ? 'unclassified' : criterion?.kind === "exclusion" ? "exclusion" : "inclusion",
             criterion?.criterionType ?? "other", JSON.stringify(criterion?.requirement ?? {}),
             criterion?.applicability ? JSON.stringify(criterion.applicability) : null, String(criterion?.sourceText ?? ""),
             JSON.stringify(criterion?.sourceLocator ?? {}), JSON.stringify(criterion?.evidenceNeeded ?? []),
@@ -205,7 +220,7 @@ export class VcrMatchStore extends VcrStoreBase {
              review_state = EXCLUDED.review_state
            RETURNING *`,
           [criterion?.id ?? vcrId("criterion"), studyId, protocolVersionId, userId, ordinal,
-            criterion?.kind === "exclusion" ? "exclusion" : "inclusion", criterion?.criterionType ?? "other",
+            criterion?.kind === "unclassified" ? 'unclassified' : criterion?.kind === "exclusion" ? "exclusion" : "inclusion", criterion?.criterionType ?? "other",
             JSON.stringify(criterion?.requirement ?? {}), criterion?.applicability ? JSON.stringify(criterion.applicability) : null,
             String(criterion?.sourceText ?? ""), JSON.stringify(criterion?.sourceLocator ?? {}),
             JSON.stringify(criterion?.evidenceNeeded ?? []), criterion?.reviewState ?? "ai_set"],
@@ -240,11 +255,17 @@ export class VcrMatchStore extends VcrStoreBase {
     return rows.map(criterionOf);
   }
 
+  /** Criteria for the selected protocol versions in this study. @param {string} studyId @param {readonly string[]} ids */
+  async criteriaOfProtocols(studyId, ids) {
+    if (!ids.length) return [];
+    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.criteria WHERE study_id = $1 AND protocol_version_id = ANY($2::text[]) ORDER BY protocol_version_id, ordinal`, [studyId, [...ids]])).map(criterionOf);
+  }
+
   /** @param {string} studyId @param {string|null} [id] */
   async protocols(studyId, id = null) {
-    return (await this.rows(`SELECT id,version,title,source_ref FROM ${VCR_SCHEMA}.protocol_versions
+    return (await this.rows(`SELECT id,version,title,source_ref,usdm FROM ${VCR_SCHEMA}.protocol_versions
       WHERE study_id=$1 AND ($2::text IS NULL OR id=$2) ORDER BY version DESC LIMIT 200`, [studyId,id]))
-      .map(row => ({ id: row.id, version: Number(row.version), title: row.title ?? '', sourceRef: row.source_ref ?? null }));
+      .map(row => ({ id: row.id, version: Number(row.version), title: row.title ?? '', sourceRef: row.source_ref ?? null,...(typeof row.usdm?.originalEligibilityText==='string'?{originalEligibilityText:row.usdm.originalEligibilityText}:{}) }));
   }
 
   /** The newest protocol version of a study. @param {string} studyId */
@@ -271,20 +292,19 @@ export class VcrMatchStore extends VcrStoreBase {
       const id = assessment?.id ?? vcrId("assessment");
       const saved = await client.query(
         `INSERT INTO ${VCR_SCHEMA}.matching_assessments
-           (id, study_id, protocol_version_id, user_id, subject_key, direction, as_of, summary, counts, priority, evidence_gaps, provenance, input_snapshot_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, $13)
+           (id, study_id, protocol_version_id, user_id, subject_key, direction, as_of, summary, counts, evidence_gaps, provenance, input_snapshot_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12)
          ON CONFLICT (study_id, protocol_version_id, subject_key, as_of, input_snapshot_id) DO UPDATE SET
            reviewed_by = CASE WHEN ${VCR_SCHEMA}.matching_assessments.summary = EXCLUDED.summary
              THEN ${VCR_SCHEMA}.matching_assessments.reviewed_by END,
            reviewed_at = CASE WHEN ${VCR_SCHEMA}.matching_assessments.summary = EXCLUDED.summary
              THEN ${VCR_SCHEMA}.matching_assessments.reviewed_at END,
            summary = EXCLUDED.summary, counts = EXCLUDED.counts,
-           priority = EXCLUDED.priority, evidence_gaps = EXCLUDED.evidence_gaps, provenance = EXCLUDED.provenance
+           evidence_gaps = EXCLUDED.evidence_gaps, provenance = EXCLUDED.provenance
          RETURNING *`,
         [id, assessment.studyId, assessment.protocolVersionId ?? null, userId, assessment.subjectKey,
           assessment.direction ?? "trial_to_patient", assessment.asOf, assessment.summary,
           JSON.stringify(assessment.counts ?? {}),
-          assessment.priority ? JSON.stringify(assessment.priority) : null,
           JSON.stringify(assessment.evidenceGaps ?? []), JSON.stringify(assessment.provenance ?? {}), assessment.provenance?.inputSnapshotId ?? "legacy"],
       );
       const row = saved.rows[0];
@@ -293,16 +313,17 @@ export class VcrMatchStore extends VcrStoreBase {
         `DELETE FROM ${VCR_SCHEMA}.criterion_judgments WHERE assessment_id = $1 AND NOT (criterion_id = ANY($2::text[]))`,
         [row.id, kept]);
       for (const judgment of assessment.judgments ?? []) {
+        const { evidence, evaluation } = storedCriterionEvaluation(judgment);
         await client.query(
           `INSERT INTO ${VCR_SCHEMA}.criterion_judgments
-             (id, assessment_id, criterion_id, user_id, state, applicable, decided_by, evidence, recheck_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
+             (id, assessment_id, criterion_id, user_id, state, applicable, decided_by, evidence, recheck_at, evaluation)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::jsonb)
            ON CONFLICT (assessment_id, criterion_id) DO UPDATE SET
              state = EXCLUDED.state, applicable = EXCLUDED.applicable, decided_by = EXCLUDED.decided_by,
-             evidence = EXCLUDED.evidence, recheck_at = EXCLUDED.recheck_at`,
+             evidence = EXCLUDED.evidence, recheck_at = EXCLUDED.recheck_at, evaluation = EXCLUDED.evaluation`,
           [vcrId("judgment"), row.id, judgment.criterionId, userId, judgment.state,
             judgment.applicable !== false, judgment.decidedBy ?? "code",
-            JSON.stringify(judgment.evidence ?? []), judgment.recheckAt ?? null],
+            evidence, judgment.recheckAt ?? null, evaluation],
         );
       }
       await this.audit({
@@ -325,6 +346,18 @@ export class VcrMatchStore extends VcrStoreBase {
     const judgments = await this.rows(
       `SELECT * FROM ${VCR_SCHEMA}.criterion_judgments WHERE assessment_id = $1 ORDER BY created_at, id`, [id]);
     return { ...assessmentOf(row), judgments: judgments.map(judgmentOf) };
+  }
+
+  /** @param {string} studyId @param {string} subjectKey */
+  async latestAssessmentsByProtocol(studyId, subjectKey) {
+    const rows = await this.rows(`SELECT DISTINCT ON (protocol_version_id) * FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1 AND subject_key = $2 ORDER BY protocol_version_id, as_of DESC, created_at DESC, id DESC`, [studyId, subjectKey]);
+    return new Map(rows.map(row => [String(row.protocol_version_id), assessmentOf(row)]));
+  }
+
+  /** @param {string} studyId @param {readonly string[]} ids */
+  async judgmentsForAssessments(studyId, ids) {
+    if (!ids.length) return [];
+    return (await this.rows(`SELECT j.assessment_id, j.criterion_id, j.state, j.applicable FROM ${VCR_SCHEMA}.criterion_judgments j JOIN ${VCR_SCHEMA}.matching_assessments a ON a.id = j.assessment_id WHERE a.study_id = $1 AND a.id = ANY($2::text[])`, [studyId, [...ids]])).map(judgmentOf);
   }
 
   /**
@@ -548,22 +581,6 @@ export class VcrMatchStore extends VcrStoreBase {
     return (await this.one("SELECT detail->'manifest' AS manifest FROM evimed_vcr.audit WHERE study_id=$1 AND action='vcr.evaluation.dataset' AND object=$2 ORDER BY id LIMIT 1", [studyId,datasetId]))?.manifest ?? null;
   }
 
-  /**
-   * Countersign an assessment of this study (plan §10.2: a signature, not a gate).
-   * @param {{ id: string, reviewedBy: string, userId: string, studyId: string }} input
-   */
-  async reviewAssessment({ id, reviewedBy, userId, studyId }) {
-    if (!studyId) throw new TypeError("An assessment is reviewed inside its study: studyId is required.");
-    return this.transaction(async (client) => {
-      const result = await client.query(
-        `UPDATE ${VCR_SCHEMA}.matching_assessments SET reviewed_by = $2, reviewed_at = now() WHERE id = $1 AND study_id = $3 RETURNING *`,
-        [id, reviewedBy, studyId]);
-      if (!result.rowCount) return null;
-      await this.audit({ client, studyId, userId, actor: reviewedBy, action: "vcr.assessment.review", object: id });
-      return assessmentOf(result.rows[0]);
-    });
-  }
-
   /** Every judgment a human changed, with the platform's own answer beside it — the evaluation set. */
   async overriddenJudgments({ studyId, limit = 500 }) {
     const rows = await this.rows(
@@ -589,11 +606,15 @@ export class VcrMatchStore extends VcrStoreBase {
    */
   async dueRecheckSubjects({ studyId = null, now = new Date(), limit = 200 } = {}) {
     const rows = await this.rows(
-      `SELECT DISTINCT a.study_id, a.subject_key, min(j.recheck_at) AS due
+      `SELECT a.study_id, a.subject_key, min(recheck.due_at) AS due
          FROM ${VCR_SCHEMA}.criterion_judgments j
          JOIN ${VCR_SCHEMA}.matching_assessments a ON a.id = j.assessment_id
          JOIN ${VCR_SCHEMA}.studies s ON s.id = a.study_id AND s.deleted_at IS NULL AND s.status = 'active'
-        WHERE j.state = 'pending_recheck' AND j.recheck_at IS NOT NULL AND j.recheck_at <= $2
+         CROSS JOIN LATERAL (SELECT LEAST(
+           CASE WHEN COALESCE(j.evaluation->>'requirementState', j.state) = 'pending_recheck' THEN j.recheck_at END,
+           CASE WHEN j.evaluation->>'applicabilityState' = 'pending_recheck' THEN (j.evaluation->>'applicabilityRecheckAt')::timestamptz END
+         ) AS due_at) recheck
+        WHERE j.applicable AND recheck.due_at <= $2
           AND ($1::text IS NULL OR a.study_id = $1)
           AND a.id = (SELECT id FROM ${VCR_SCHEMA}.matching_assessments l WHERE l.study_id = a.study_id AND l.subject_key = a.subject_key
                        ORDER BY l.as_of DESC, l.created_at DESC LIMIT 1)
@@ -642,6 +663,10 @@ export class VcrMatchStore extends VcrStoreBase {
    */
   async saveFact({ studyId, userId, fact }) {
     if (clinicalFactIssues(fact.clinical).length) throw new HttpError(400, 'vcr_clinical_fact_invalid', 'Clinical metadata is invalid.');
+    const occurredAt = factTimestamp(fact.occurredAt, "occurredAt");
+    const recordedAt = factTimestamp(fact.recordedAt, "recordedAt");
+    const visibleAt = factTimestamp(fact.visibleAt, "visibleAt");
+    // Keep the raw-input key: normalizing identity would duplicate previously stored readings on replay.
     const key = createHash("sha256").update(JSON.stringify([
       fact.subjectKey, fact.variable, fact.polarity, fact.value ?? null, fact.unit ?? null,
       fact.source?.documentId ?? null, fact.source?.start ?? null, fact.source?.end ?? null, fact.occurredAt ?? null, fact.source?.vocabularyVersion ?? null, ...(fact.clinical ? [fact.clinical] : []),
@@ -654,7 +679,7 @@ export class VcrMatchStore extends VcrStoreBase {
          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $17::jsonb, $18::jsonb)
          ON CONFLICT (study_id, fact_key) DO UPDATE SET fact_key = EXCLUDED.fact_key RETURNING *, (xmax = 0) AS inserted`,
         [factId(), studyId, userId, fact.subjectKey, key, fact.variable, JSON.stringify(fact.value ?? null), fact.unit ?? null,
-          clinicalFactPolarity(fact), fact.occurredAt ?? null, fact.recordedAt ?? null, fact.visibleAt,
+          clinicalFactPolarity(fact), occurredAt, recordedAt, visibleAt,
           String(fact.surface ?? ""), fact.dateSurface ?? null, fact.source ? JSON.stringify(fact.source) : null, fact.extractedBy ?? "model",
           fact.provenance ? JSON.stringify(fact.provenance) : null, fact.clinical ? JSON.stringify(fact.clinical) : null]);
       const row = inserted.rows[0];
@@ -725,29 +750,6 @@ export class VcrMatchStore extends VcrStoreBase {
    * @param {string} studyId @returns {Promise<Set<string>>} */
   async withdrawnSubjects(studyId) {
     return new Set((await this.rows(`SELECT subject_key FROM ${VCR_SCHEMA}.subject_withdrawals WHERE study_id=$1`, [studyId])).map(row => String(row.subject_key)));
-  }
-
-  /**
-   * The records already read for one set of questions (D4): the keys the batch planner skips. Hashes and counts only.
-   * @param {string} studyId @param {string} variablesDigest
-   * @returns {Promise<Set<string>>} `matchBatchUnitKey`s
-   */
-  async extractionsRead(studyId, variablesDigest) {
-    const rows = await this.rows(`SELECT subject_key,document_id FROM ${VCR_SCHEMA}.matching_extractions WHERE study_id=$1 AND variables_digest=$2`, [studyId, variablesDigest]);
-    return new Set(rows.map(row => matchBatchUnitKey(String(row.subject_key), String(row.document_id))));
-  }
-
-  /**
-   * One record read (D4). Idempotent: a record read twice by two workers is one row.
-   * @param {{ studyId: string, subjectKey: string, documentId: string, variablesDigest: string, documentHash?: string|null, facts?: number, rejected?: number,
-   *   inputTokens?: number|null, outputTokens?: number|null, model?: string|null, jobId?: string|null }} entry
-   */
-  async recordExtraction(entry) {
-    await this.rows(`INSERT INTO ${VCR_SCHEMA}.matching_extractions
-      (study_id,subject_key,document_id,variables_digest,document_hash,facts,rejected,input_tokens,output_tokens,model,job_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING`,
-    [entry.studyId, entry.subjectKey, entry.documentId, entry.variablesDigest, entry.documentHash ?? null, Math.max(0, Math.floor(entry.facts ?? 0)),
-      Math.max(0, Math.floor(entry.rejected ?? 0)), entry.inputTokens ?? null, entry.outputTokens ?? null, entry.model ?? null, entry.jobId ?? null]);
   }
 
   /** @param {{id:string,payload:any}} snapshot */
@@ -841,9 +843,10 @@ export class VcrMatchStore extends VcrStoreBase {
         AND ($2::text IS NULL OR id=$2) ORDER BY version DESC LIMIT 1`, [studyId, protocolVersionId])).rows[0];
       if (!protocol) throw new HttpError(409, 'vcr_protocol_version_not_found', 'The protocol version is unavailable.');
       const criteria = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.criteria WHERE study_id=$1 AND protocol_version_id=$2 ORDER BY ordinal`,
-        [studyId, protocol.id])).rows.map(criterionOf).filter((/** @type {any} */ criterion) => languageKeysOf(criterion.requirement, criterion.id).includes(criterionKey));
-      if (!criteria.length) throw new HttpError(409, 'vcr_criterion_malformed', 'This language key does not belong to the protocol version.');
-      const criterionHash = languageCriterionHash(criteria, criterionKey);
+        [studyId, protocol.id])).rows.map(criterionOf);
+      const bound = languageCriteriaByKey(criteria).get(criterionKey);
+      if (!bound) throw new HttpError(409, 'vcr_criterion_malformed', 'This language key is absent or ambiguous in the protocol version.');
+      const criterionHash = languageCriterionHash(bound, criterionKey);
       const visibleAt = (evidence ?? []).map((/** @type {any} */ item) => Date.parse(item?.visibleAt ?? "")).filter(Number.isFinite);
       const result = await client.query(
         `INSERT INTO ${VCR_SCHEMA}.language_judgments (id, study_id, user_id, subject_key, criterion_key, state, evidence, visible_at, protocol_version_id, criterion_hash, provenance)
@@ -866,7 +869,7 @@ export class VcrMatchStore extends VcrStoreBase {
   async latestLanguageJudgments({ studyId, visibleBy = null, protocolVersionId = null }) {
     const version = protocolVersionId ?? (await this.latestProtocol(studyId))?.id;
     if (!version) return new Map();
-    const criteria = await this.listCriteria({ studyId, protocolVersionId: version });
+    const criteria = languageCriteriaByKey(await this.listCriteria({ studyId, protocolVersionId: version }));
     const rows = await this.rows(
       `SELECT DISTINCT ON (subject_key, criterion_key) *
          FROM ${VCR_SCHEMA}.language_judgments
@@ -876,8 +879,8 @@ export class VcrMatchStore extends VcrStoreBase {
     /** @type {Map<string, Record<string, any>>} */
     const bySubject = new Map();
     for (const row of rows) {
-      const bound = criteria.filter(criterion => languageKeysOf(criterion.requirement, criterion.id).includes(row.criterion_key));
-      if (!bound.length || row.criterion_hash !== languageCriterionHash(bound, row.criterion_key)) continue;
+      const bound = criteria.get(row.criterion_key);
+      if (!bound || row.criterion_hash !== languageCriterionHash(bound, row.criterion_key)) continue;
       const entry = bySubject.get(String(row.subject_key)) ?? {};
       entry[String(row.criterion_key)] = languageInput({ id: row.id, state: row.state, evidence: row.evidence,
         protocolVersionId: row.protocol_version_id, criterionHash: row.criterion_hash, provenance: row.provenance });

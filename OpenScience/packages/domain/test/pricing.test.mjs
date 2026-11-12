@@ -4,7 +4,7 @@ import { priceUsage, priceListFor, REFERENCE_PRICE_LIST } from '../index.mjs'
 
 // Verified against https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ on 2026-09-10.
 test('the versioned model reference prices match the current CNY table', () => {
-  assert.equal(REFERENCE_PRICE_LIST.version, 'evimed-reference-2026-10-17')
+  assert.equal(REFERENCE_PRICE_LIST.version, 'evimed-reference-2026-11-05')
   /** @type {[string, number, number][]} */
   const cases = [['deepseek-flash', 10, 5], ['deepseek-v4-flash', 10, 5], ['deepseek-v4-flash-vision-exp', 10, 5], ['deepseek-v4-pro', 36, 18]]
   for (const [model, peak, off] of cases) {
@@ -59,7 +59,7 @@ test('DeepSeek Search and Fetch are priced by the successful call, in yuan, and 
   assert.equal(priceUsage({ resourceType: 'tool-request', tool: 'probe', requests: 1_000, peak: true }, dollars).cost, Math.round(0.75 * Number(REFERENCE_PRICE_LIST.exchangeRates?.USD?.rate) * 1e8) / 1e8)
   assert.equal(priceUsage({ resourceType: 'tool-request', tool: 'probe', requests: 1, peak: true }, { ...dollars, exchangeRates: {} }).priced, false)
   // The model rows did not move: deepseek-flash is V4.1-Flash-1017 at the same price.
-  assert.deepEqual(REFERENCE_PRICE_LIST.model, priceListFor('evimed-reference-2026-09-28')?.model)
+  assert.deepEqual(priceListFor('evimed-reference-2026-10-17')?.model, priceListFor('evimed-reference-2026-09-28')?.model, 'the tool rows moved no model row')
 })
 
 test('small cache charges remain nonzero before aggregation', () => {
@@ -125,3 +125,15 @@ test('the lists that priced rows before Jev are untouched', () => {
   for (const [model, rate] of Object.entries(september23.model)) assert.deepEqual(REFERENCE_PRICE_LIST.model[model], rate, model)
 })
 
+
+// Verified against https://help.aliyun.com/zh/model-studio/qwen3-rerank (华北2（北京）: 文本输入 ¥0.5 每百万 tokens), read 2026-11-04.
+test('the candidate reranker is priced by the provider\'s token count at DashScope\'s one rate, and only from 2026-11-04', () => {
+  const at = (/** @type {boolean} */ peak, /** @type {any[]} */ ...list) => priceUsage({ resourceType: 'model', model: 'qwen3-rerank', cacheMiss: 1_000_000, peak }, ...list)
+  assert.equal(at(true).cost, 0.5)
+  assert.equal(at(false).cost, 0.5, 'no night rate')
+  assert.equal(priceUsage({ resourceType: 'model', model: 'qwen3-rerank', cacheMiss: 79, peak: true }).cost, 0.0000395)
+  assert.equal(at(true).priced, true)
+  assert.equal(at(true, priceListFor('evimed-reference-2026-10-17')).priced, false, 'a list from before it was metered cannot price it')
+  assert.equal(priceUsage({ resourceType: 'model', model: 'gte-rerank-v2', cacheMiss: 1_000_000, peak: true }).priced, false, 'a rerank model with no row is a visible gap')
+  assert.deepEqual(REFERENCE_PRICE_LIST.model['deepseek-flash'], priceListFor('evimed-reference-2026-10-17')?.model['deepseek-flash'])
+})

@@ -1,0 +1,216 @@
+{
+  "sourceCommit": "d5f690b15866c2891ffde593ca5321259b4d6297",
+  "scoredCode": "a2d109cf5",
+  "method": {
+    "resamples": 20000,
+    "seed": 20261105,
+    "unit": "topic",
+    "interval": "paired percentile 95%; exploratory; one saved run; not model-repeat variance"
+  },
+  "inputSha256": {
+    "board-a.json": "330a66133c56fe2b3131ee5038dfd6fe2b6202bda795d32e1642cd2472846fd6",
+    "zh-real-text-usability.json": "80622766b6c0075ec6fb1c8061d9763c4880d49de219f3318d96ec3314e1a8ed",
+    "board-f.json": "ca52a27298000743ca0abcb1f3efb47d7e11b1b1220bbc54b509536bb163f9ac",
+    "incidents-on-the-real-job.json": "09c9fe79118d833af38cfafa692b8cb00803f7e7037c1185ddea32dc111785e1",
+    "board-g-chinese-sigir.json": "bc9277ce6fbdbc4c0de1032895ea288e67127664b0f916b17ecd2567f2a46c6e",
+    "board-e-end2end.json": "86d93936f8a8e1743d27d05db98b382e14cb708cf8e3a014b3556be5ff6b447c",
+    "board-b.json": "35df27e97c5e150023c0a813f300b6aab72d4e31428d8dd93dfd6a36ecd063e0",
+    "board-c.json": "a601500c15dbbb477025b5b9c79422a1ac8a74268f71830f208d697f08646dbd"
+  },
+  "trec": {
+    "2021": {
+      "topics": 65,
+      "ndcgDelta": {
+        "mean": 0.010988020630730752,
+        "low": -0.04090597554322399,
+        "high": 0.06504043068364662,
+        "wins": 30,
+        "ties": 1,
+        "losses": 34
+      },
+      "p10Delta": {
+        "mean": 0.08153846153846155,
+        "low": 0.027692307692307693,
+        "high": 0.1353846153846154,
+        "wins": 33,
+        "ties": 15,
+        "losses": 17
+      },
+      "meanEligibleRecallAt100": 0.33483443113284905,
+      "meanGradeWeightedRecallAt100": 0.2898689871223433,
+      "zeroEligibleInTop10": 7,
+      "zeroJudgedInTop10": 5,
+      "allPairsHaveFit": true,
+      "listedCounts": [
+        100
+      ],
+      "meanUnjudgedSlotsInTop10": 4.6923076923076925,
+      "recall500IsSameTruncatedList": true,
+      "meanEligibleRecallCeilingAt100": 0.9230505827436021,
+      "meanPerTopicRecallCapacityRatio": 0.3505052404392461,
+      "meanCostCny": 0.225889092
+    },
+    "2022": {
+      "topics": 40,
+      "ndcgDelta": {
+        "mean": 0.05420954918828558,
+        "low": -0.023014958092999905,
+        "high": 0.13343240117266686,
+        "wins": 25,
+        "ties": 0,
+        "losses": 15
+      },
+      "p10Delta": {
+        "mean": 0.0925,
+        "low": 0.0225,
+        "high": 0.1625,
+        "wins": 24,
+        "ties": 5,
+        "losses": 11
+      },
+      "meanEligibleRecallAt100": 0.3898546471946459,
+      "meanGradeWeightedRecallAt100": 0.35142327518511973,
+      "zeroEligibleInTop10": 1,
+      "zeroJudgedInTop10": 0,
+      "allPairsHaveFit": true,
+      "listedCounts": [
+        100
+      ],
+      "meanUnjudgedSlotsInTop10": 3.2499999999999996,
+      "recall500IsSameTruncatedList": true,
+      "meanEligibleRecallCeilingAt100": 0.9034941012882818,
+      "meanPerTopicRecallCapacityRatio": 0.4264168918764629,
+      "meanCostCny": 0.220861077
+    },
+    "2023": {
+      "topics": 28,
+      "ndcgDelta": {
+        "mean": -0.10902175753210297,
+        "low": -0.20634701211955658,
+        "high": -0.014554102503757218,
+        "wins": 10,
+        "ties": 1,
+        "losses": 17
+      },
+      "p10Delta": {
+        "mean": 0.039285714285714285,
+        "low": -0.05357142857142858,
+        "high": 0.13214285714285715,
+        "wins": 11,
+        "ties": 7,
+        "losses": 10
+      },
+      "meanEligibleRecallAt100": 0.068317234460726,
+      "meanGradeWeightedRecallAt100": 0.07461913778642547,
+      "zeroEligibleInTop10": 2,
+      "zeroJudgedInTop10": 2,
+      "allPairsHaveFit": true,
+      "listedCounts": [
+        100
+      ],
+      "meanUnjudgedSlotsInTop10": 5.964285714285714,
+      "recall500IsSameTruncatedList": true,
+      "meanEligibleRecallCeilingAt100": 0.415144595034386,
+      "meanPerTopicRecallCapacityRatio": 0.19925627487837239,
+      "meanCostCny": 0.21805578857142857
+    },
+    "pooled": {
+      "topics": 133,
+      "ndcgDelta": {
+        "mean": -0.001278239867443316,
+        "low": -0.042291488325286876,
+        "high": 0.041055634096209145,
+        "wins": 65,
+        "ties": 2,
+        "losses": 66
+      },
+      "p10Delta": {
+        "mean": 0.07593984962406015,
+        "low": 0.036842105263157884,
+        "high": 0.11654135338345861,
+        "wins": 68,
+        "ties": 27,
+        "losses": 38
+      },
+      "meanEligibleRecallAt100": 0.29527298102497257,
+      "meanGradeWeightedRecallAt100": 0.2630657972058423,
+      "zeroEligibleInTop10": 10,
+      "zeroJudgedInTop10": 7,
+      "allPairsHaveFit": true,
+      "listedCounts": [
+        100
+      ],
+      "meanUnjudgedSlotsInTop10": 4.526315789473684,
+      "recall500IsSameTruncatedList": true,
+      "meanEligibleRecallCeilingAt100": 0.810241357825776,
+      "meanPerTopicRecallCapacityRatio": 0.34149392481356344,
+      "meanCostCny": 0.22272779052631578
+    }
+  },
+  "criterion": {
+    "totalErrors": 212,
+    "unknownGoldErrors": 114,
+    "falseFavourable": 98,
+    "falseFavourableUnknownGold": 96,
+    "falseFavourableExplicitDisqualification": 2,
+    "falseFavourablePerAllRows": 0.09655172413793103,
+    "falseFavourablePerAtRiskGold": 0.3006134969325153,
+    "unknownGoldErrorsShareOfAllErrors": 0.5377358490566038,
+    "predictionFavourablePrecisionUnderThisGold": 0.8306801736613604,
+    "definition": "retrospective diagnosis under the benchmark labels, not a patient-level harm rate"
+  },
+  "realChinese": {
+    "inputs": 115,
+    "withJudgments": 90,
+    "complete": 88,
+    "completePerInput": 0.7652173913043478,
+    "withJudgmentsPerInput": 0.782608695652174,
+    "completeAmongJudged": 0.9777777777777777,
+    "noGold": true
+  },
+  "scopeNotes": [
+    "No model calls or original scoring rerun. Derived only from committed result rows.",
+    "Board E recall500 is calculated on the final 100-item list; it does not measure pre-cut recall at 500.",
+    "No original retrieval lists or qrels were used here, so candidate oracle nDCG and gold grades at displaced ranks cannot be recovered."
+  ],
+  "nih": {
+    "microRecallAt10": 0.8809523809523809,
+    "macroInstituteRecallAt10": 0.9332963784183297,
+    "institutes": 11,
+    "nciHits": 28,
+    "nciCases": 41,
+    "nciMisses": 13,
+    "allMisses": 15,
+    "nciMissShare": 0.8666666666666667,
+    "note": "Macro computed from exact hit counts, no interval reconstructed from aggregate institute rows."
+  },
+  "currentCodeProbe": {
+    "module": "OpenScience/packages/domain/src/vcrTrialJudgment.mjs",
+    "function": "trialVerdict",
+    "head": "d5f690b15866c2891ffde593ca5321259b4d6297",
+    "input": {
+      "fit": 10,
+      "criteria": [
+        {
+          "number": 1,
+          "label": "included",
+          "basis": "stated"
+        },
+        {
+          "number": 2,
+          "label": "not_excluded",
+          "basis": "stated"
+        }
+      ],
+      "missing": [],
+      "ineligibleReasons": []
+    },
+    "actual": {
+      "verdict": "ineligible",
+      "label": "\u4e0d\u7b26\u5408",
+      "because": "fit_band",
+      "disqualifiers": []
+    },
+    "scope": "Pure function replay; demonstrates conflation for a valid low-recommendation/high-eligibility input, not prevalence on the scored corpus."
+  }
+}

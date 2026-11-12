@@ -86,8 +86,8 @@ describe("what the page refuses before the plane has to", () => {
 
   it("holds a patient record to what the deployment would take: text, PDF and Word where they are converted, never a picture", () => {
     const max = 50 * 1024 * 1024;
-    const converted = { formats: ["txt", "md", "pdf", "docx"], maxBytes: 25 * 1024 * 1024, maxText: "25 MB", converter: true };
-    const textOnly = { formats: ["txt", "md"], maxBytes: null, maxText: null, converter: false };
+    const converted = { formats: ["txt", "md", "pdf", "docx"], maxBytes: 25 * 1024 * 1024, maxText: "25 MB", converter: true, scans: false };
+    const textOnly = { formats: ["txt", "md"], maxBytes: null, maxText: null, converter: false, scans: false };
     expect(documentAccept(null)).toBe(".txt,.md");
     expect(documentAccept(textOnly)).toBe(".txt,.md");
     expect(documentAccept(converted)).toBe(".txt,.md,.pdf,.docx");
@@ -102,6 +102,12 @@ describe("what the page refuses before the plane has to", () => {
     for (const name of ["x.png", "x.JPG", "x.jpeg", "x.tiff", "x.heic"]) {
       expect(uploadProblem({ name, size: 10 }, "document", max, converted)).toBe(knownErrorCodeMessage("vcr_document_needs_text"));
     }
+    // Where the in-house parser is reachable a picture is taken, and so is a PDF with no converter composed: the parser reads both.
+    const scanning = { ...textOnly, formats: ["txt", "md", "pdf", "docx"], maxBytes: 25 * 1024 * 1024, maxText: "25 MB", scans: true };
+    expect(documentAccept(scanning)).toBe(".txt,.md,.pdf,.docx,.png,.jpg,.jpeg,.gif,.bmp,.tif,.tiff,.webp,.heic,.heif");
+    expect(uploadProblem({ name: "x.PNG", size: 10 }, "document", max, scanning)).toBeNull();
+    expect(uploadProblem({ name: "x.pdf", size: 10 }, "document", max, scanning)).toBeNull();
+    expect(uploadProblem({ name: "x.png", size: 30 * 1024 * 1024 }, "document", max, scanning)).toMatch(/25 MB/);
     expect(uploadProblem({ name: "x.doc", size: 10 }, "document", max, converted)).toMatch(/另存为 \.docx/);
     expect(uploadProblem({ name: "x.csv", size: 10 }, "document", max, converted)).toMatch(/txt、md、pdf、docx/);
     // Another role is unchanged: a PDF is not a data file, and a picture of one is not a document's problem.

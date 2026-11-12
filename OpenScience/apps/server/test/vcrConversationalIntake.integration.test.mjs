@@ -31,8 +31,9 @@ before(async () => {
   vcr = composeVcr({ productDatabase: database, config: { vcrEnabled: true, vcrAudience: 'all', vcrDataPlaneDir: path.join(dir, 'plane') } });
   await vcr.store.ready();
   documents = new ProductDocuments(database);
-  receipts = createVcrUploadReceipts({ documents, sources: { list: async () => ({ items: [] }), get: async () => null } });
-  intake = createVcrDataIntake({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane, sources: receipts, resolveProject: async () => project });
+  receipts = createVcrUploadReceipts({ documents, sources: { list: async () => ({ items: [] }), get: async () => null }, resolveProject: async () => project });
+  vcr.recordsOriginals.receipts = receipts;
+  intake = createVcrDataIntake({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane, sources: receipts, resolveProject: async () => project, recordsImport: vcr.recordsImport });
   vcr.dataIntake = intake;
 });
 after(async () => { await database?.close(); await isolated?.drop(); if (dir) await fs.rm(dir, { recursive: true, force: true }); });
@@ -56,7 +57,8 @@ test('contracts and matching schemas are available before a task exists and pers
   const discovery = await call('read', { what: 'contracts' });
   assert.equal(discovery.status, 200);
   assert.deepEqual(discovery.json.data.writes.decision.required, ['question', 'chosen', 'rationale']);
-  assert.ok(discovery.json.data.dataIntake.import_documents.required.includes('subjectColumn'));
+  assert.match(discovery.json.data.dataIntake.import_documents.subjectColumn, /optional/);
+  assert.deepEqual(discovery.json.data.dataIntake.import_standard.format, ['fhir', 'omop', 'adam']);
   const matching = await call('read', { what: 'matching', filter: { kind: 'contract' } });
   assert.ok(matching.json.data.protocolWrite);
   assert.equal(await count('studies'), 0);
@@ -67,7 +69,8 @@ test('contracts and matching schemas are available before a task exists and pers
 test('ordinary authenticated file API persists an immutable original receipt without publishing or learning a knowledge source', options, async () => {
   const app = createWebApiApp({ dataDir: path.join(dir, 'http-app'), runtimeMode: 'mock', devAuth: false, authMode: 'local',
     bootstrapUser: '', bootstrapPassword: '', stateStore: 'postgres', requireSharedStateStore: true, databaseUrl: isolated.url,
-    vcrEnabled: true, vcrAudience: 'all', vcrDataPlaneDir: path.join(dir, 'http-plane'), vcrPollMs: 3_600_000 });
+    vcrEnabled: true, vcrAudience: 'all', vcrDataPlaneDir: path.join(dir, 'http-plane'), vcrPollMs: 3_600_000,
+    vcrProviderAgreements: true, vcrProviderAgreementReference: 'Local synthetic fixture', deepseekBaseUrl: 'https://model.invalid' });
   try {
     await app.store.createUser('http_uploader', 'test-only-password', 'Uploader');
     const address = await app.listen(0, '127.0.0.1');
@@ -101,7 +104,84 @@ test('ordinary authenticated file API persists an immutable original receipt wit
     const sourceImport = await app.vcr.dataIntake(study, { action: 'import', sourceId: source.id,
       generation: source.payload.generation, sha256: source.payload.fingerprint.sha256 }, nativeOrigin);
     assert.equal(sourceImport.state, 'uploaded');
+
+    const patientText = 'Synthetic case aged 62. No prior infarction.';
+    const uploadPatient = () => fetch(`${base}/api/files/upload`, { method: 'POST', headers,
+      body: JSON.stringify({ path: 'inputs/patient.txt', data: patientText }) });
+    const patientUpload = await uploadPatient();
+    assert.equal(patientUpload.status, 200);
+    const { data: { vcrInput: handle } } = await patientUpload.json();
+    assert.match(handle.sourceId, /^upl_/);
+    assert.equal((await documents.list(user.id, 'source', { projectId: owned.id, limit: 20 })).items.length, 1);
+    app.runtimeManager.sessionTranscript = async (_project, sessionId) => ({ sessionId, exhausted: true, messages: [
+      { role: 'user', source: 'user', seq: 1, turnStartSeq: 0, parts: [{ type: 'text', text: 'Automated instruction with fabricated age 99.' }] },
+    ] });
+    const candidates = await app.vcr.patientContext.candidates(nativeOrigin);
+    assert.deepEqual(candidates.candidates, []);
+    assert.deepEqual(candidates.uploads, [{ ...handle, name: 'patient.txt', format: 'txt' }]);
+    assert.ok(!(await app.vcr.dataIntake.read(study, {}, nativeOrigin)).uploads.some(row => row.sourceId === handle.sourceId));
+    await assert.rejects(app.vcr.dataIntake(study, { action: 'import', ...handle }, nativeOrigin), { code: 'vcr_intake_source_invalid' });
+    study.cloudContext = { runId: nativeOrigin.runId, sessionId: nativeOrigin.rootSessionId };
+    const admitted = await app.vcr.patientContext(study, handle, nativeOrigin);
+    assert.ok(admitted.subjectKey);
+    assert.equal(admitted.basis, 'owned_upload');
+    const held = await app.vcr.documents.runtimeRead(study, { subjectKey: admitted.subjectKey, documentId: admitted.documentId });
+    assert.equal(held.text, patientText);
+    const original = (await app.vcr.dataStore.listSourceFilesForStudy(study.id)).find(file => file.id === admitted.documentId);
+    assert.deepEqual(original.detail.import, { kind: 'owned_upload', ...handle });
+    assert.equal(original.detail.originalSha256, handle.sha256);
+    const again = await app.vcr.patientContext(study, handle, nativeOrigin);
+    assert.equal(again.subjectKey, admitted.subjectKey);
+    assert.equal(again.documentId, admitted.documentId);
+
+    const receipt = await documents.get(user.id, 'preferences', handle.sourceId);
+    const keptPath = path.join(owned.baseDir, receipt.payload.paths[0]);
+    const rejected = input => assert.rejects(app.vcr.patientContext(study, input, nativeOrigin), { code: 'vcr_patient_context_invalid' });
+    await rejected({ messageSeq: 1 });
+    await rejected({ sourceId: 'inputs/model-written.txt' });
+    await rejected({ ...handle, sourceId: 'upl_' + 'f'.repeat(40) });
+    await rejected({ ...handle, generation: 2 });
+    await rejected({ ...handle, sha256: 'f'.repeat(64) });
+    await fs.writeFile(keptPath, Buffer.alloc(Buffer.byteLength(patientText), 65));
+    await rejected(handle);
+    const repaired = await uploadPatient();
+    assert.equal(repaired.status, 200);
+    assert.deepEqual((await repaired.json()).data.vcrInput, handle);
+    assert.equal(await fs.readFile(keptPath, 'utf8'), patientText);
+    await fs.rm(keptPath);
+    await rejected(handle);
+    const restored = await uploadPatient();
+    assert.equal(restored.status, 200);
+    assert.deepEqual((await restored.json()).data.vcrInput, handle);
+    assert.equal(await fs.readFile(keptPath, 'utf8'), patientText);
+    await fs.rm(keptPath);
+    const outside = path.join(dir, 'foreign-original.txt');
+    await fs.writeFile(outside, 'Foreign content');
+    await fs.symlink(outside, keptPath);
+    await rejected(handle);
+    const generalOnly = await uploadPatient();
+    assert.equal(generalOnly.status, 200);
+    const general = (await generalOnly.json()).data;
+    assert.equal(general.path, 'inputs/patient.txt');
+    assert.equal(general.vcrInput, undefined);
+    assert.equal(general.vcrInputWarning.code, 'vcr_upload_original_unavailable');
+    assert.equal(await fs.readFile(outside, 'utf8'), 'Foreign content');
+    assert.ok((await fs.lstat(keptPath)).isSymbolicLink());
   } finally { await app.close(); }
+});
+test('plain-text receipt selection excludes other accounts, projects and native roots', options, async () => {
+  const patientReceipts = createVcrUploadReceipts({ documents, sources: null, resolveProject: async () => project });
+  const bytes = Buffer.from('A synthetic original patient case.');
+  const handle = await patientReceipts.record(project, { name: 'selected.md', bytes, sessionId: origin.rootSessionId });
+  const otherRoot = { ...origin, rootSessionId: 'sibling_root' };
+  const otherProject = { ...origin, projectId: 'sibling_project' };
+  const otherAccount = { ...origin, userId: 'other' };
+  for (const scope of [otherRoot, otherProject, otherAccount]) {
+    assert.deepEqual((await patientReceipts.patientCandidates(scope, {})).uploads, []);
+    assert.equal(await patientReceipts.readPatientOriginal(scope, handle), null);
+  }
+  assert.deepEqual((await patientReceipts.patientCandidates(origin, {})).uploads, [{ ...handle, name: 'selected.md', format: 'md' }]);
+  assert.deepEqual((await patientReceipts.readPatientOriginal(origin, handle)).bytes, bytes);
 });
 test('authenticated upload -> real map -> frozen snapshot -> population binds exact saved ids, with no cloud grant', options, async () => {
   const handle = await receipts.record(project, { name: 'baseline.csv', bytes: Buffer.from(csv) });
@@ -273,17 +353,35 @@ test('upload continuation preserves PostgreSQL timestamp precision and does not 
   } while (filter);
   assert.deepEqual(found.slice(0, originals.length), originals.map(row => row.sourceId));
 });
-test('batch matching imports original subject narratives from owned CSV and never manufactures subject ids', options, async () => {
+test('batch matching imports original subject narratives from owned CSV as a job and never manufactures subject ids', options, async () => {
   const study = await vcr.store.taskContext(origin, { create: false });
+  const drain = async () => { for (let turn = 0; turn < 20; turn += 1) { const claimed = await vcr.jobs.claim({ lane: 'slow' }); if (!claimed.length) return; for (const job of claimed) await vcr.jobs.advance(job, { mayYield: true }); } };
   const handle = await receipts.record(project, { name: 'cases.csv', bytes: Buffer.from('case_id,narrative\nP01,Original age 62\nP02,Original age 58\n') });
   const done = await intake(study, { action: 'import_documents', ...handle, subjectColumn: 'case_id', textColumn: 'narrative' }, origin);
-  assert.equal(done.documents.length, 2);
-  assert.ok(done.documents.every(row => row.subjectKey && row.subjectKey !== 'P01' && row.subjectKey !== 'P02'));
-  assert.equal(new Set(done.documents.map(row => row.subjectKey)).size, 2);
-  const again = await intake(study, { action: 'import_documents', ...handle, subjectColumn: 'case_id', textColumn: 'narrative' }, origin);
-  assert.deepEqual(again.documents, done.documents);
-  const duplicate = await receipts.record(project, { name: 'duplicate.csv', bytes: Buffer.from('case_id,narrative\nP01,A\nP01,B\n') });
-  await assert.rejects(intake(study, { action: 'import_documents', ...duplicate, subjectColumn: 'case_id', textColumn: 'narrative' }, origin));
-  await assert.rejects(vcr.documents.runtimeRead({ ...study, cloudContext: { runId: 'automated-run', sessionId: 'root' } }, done.documents[0]),
+  assert.match(done.jobId, /./, 'a job, whatever the size');
+  await drain();
+  const keys = async () => (await vcr.documents.roster(study)).map(row => row.subjectKey);
+  const first = await keys();
+  assert.equal(first.length, 2);
+  assert.ok(first.every(key => key && key !== 'P01' && key !== 'P02'));
+  assert.equal(new Set(first).size, 2);
+  await intake(study, { action: 'import_documents', ...handle, subjectColumn: 'case_id', textColumn: 'narrative' }, origin);
+  await drain();
+  assert.deepEqual(await keys(), first);
+  // Several notes of one person are several documents of that person, no longer a refusal of the file.
+  const several = await receipts.record(project, { name: 'several.csv', bytes: Buffer.from('case_id,narrative\nP01,A\nP01,B\n') });
+  await intake(study, { action: 'import_documents', ...several, subjectColumn: 'case_id', textColumn: 'narrative' }, origin);
+  await drain();
+  assert.equal((await keys()).length, 4);
+  // Through the gateway, as a conversation does it: the job's id comes back, and what it could not read is a read away.
+  const viaGateway = await call('write', { what: 'data_intake', data: { action: 'import_documents', ...several, subjectColumn: 'case_id', textColumn: 'narrative' } });
+  assert.equal(viaGateway.status, 200, JSON.stringify(viaGateway.json));
+  assert.match(viaGateway.json.data.jobId, /./);
+  await drain();
+  const report = await call('read', { what: 'data_intake', filter: { id: viaGateway.json.data.jobId } });
+  assert.equal(report.status, 200);
+  assert.deepEqual(report.json.data.importReport.rows, []);
+  const documents_ = await vcr.documents.roster(study);
+  await assert.rejects(vcr.documents.runtimeRead({ ...study, cloudContext: { runId: 'automated-run', sessionId: 'root' } }, { subjectKey: documents_[0].subjectKey, documentId: documents_[0].id }),
     { code: 'vcr_cloud_processing_not_authorized' }, 'preservation is not a cloud grant');
 });

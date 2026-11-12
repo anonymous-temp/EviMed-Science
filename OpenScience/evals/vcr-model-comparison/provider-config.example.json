@@ -1,0 +1,26 @@
+{
+  "deepseek": {
+    "key_file": "/absolute/private/path/deepseek.api-key",
+    "endpoint": "https://api.deepseek.com/chat/completions",
+    "proxy": null,
+    "budget": 30,
+    "max_calls": 4000,
+    "timeout_s": 90
+  },
+  "typesafe": {
+    "key_file": "/absolute/private/path/typesafe.api-key",
+    "endpoint": "https://api.typesafe.ai/v1/systemone",
+    "proxy": null,
+    "budget": 2,
+    "max_calls": 4000,
+    "timeout_s": 90
+  },
+  "dashscope": {
+    "key_file": "/absolute/private/path/dashscope.api-key",
+    "endpoint": "https://dashscope.aliyuncs.com/compatible-api/v1/reranks",
+    "proxy": null,
+    "budget": 10,
+    "max_calls": 180,
+    "timeout_s": 90
+  }
+}

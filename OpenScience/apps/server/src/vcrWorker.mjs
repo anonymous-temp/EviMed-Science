@@ -15,6 +15,10 @@
  *                     entity keys: precedent candidates, 「有新证据」 on a card,
  *                     and the request for a new version (flywheel F24; absent
  *                     while its switch is off, which readiness does not report)
+ *   `registryWatch` — read a bounded number of the trials a person holds a verdict
+ *                     about again and mark the verdicts of one whose record
+ *                     changed (G15, `vcrRegistryWatch.mjs`; absent while its
+ *                     switch is off)
  *   `packSources`   — label a live platform knowledge pack 「来源有变更」 when the
  *                     source-change ledger holds a change to one of its sources
  *                     (flywheel F26; absent while platform packs are off)
@@ -65,6 +69,7 @@ export const VCR_WORKER_LOOPS = Object.freeze([
   Object.freeze({ name: "recompute", package: "orchestrator", every: MINUTE, leased: true }),
   Object.freeze({ name: "recheck", package: "matching", every: 15 * MINUTE, leased: true }),
   Object.freeze({ name: "frontierEvents", package: "frontierEvents", every: 10 * MINUTE, leased: true, optional: true }),
+  Object.freeze({ name: "registryWatch", package: "registryWatch", every: 60 * MINUTE, leased: true, optional: true }),
   Object.freeze({ name: "packSources", package: "knowledge", every: 30 * MINUTE, leased: true, optional: true }),
   Object.freeze({ name: "drafts", package: "drafts", every: 10 * MINUTE, leased: true, optional: true }),
 ]);
@@ -261,9 +266,9 @@ export class VcrWorker {
  * `server.mjs` composes a worker with one call and the loops' own logic stays
  * with the packages that own it.
  *
- * @param {{ jobs: any, orchestrator: any, store: any, matching?: any, frontierEvents?: any, knowledge?: any, drafts?: any, completions?: any, experiments?: any }} vcr
+ * @param {{ jobs: any, orchestrator: any, store: any, matching?: any, frontierEvents?: any, knowledge?: any, drafts?: any, completions?: any, experiments?: any, registryWatch?: any }} vcr
  */
-export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null, knowledge = null, drafts = null, completions = null, experiments = null }) {
+export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null, knowledge = null, drafts = null, completions = null, experiments = null, registryWatch = null }) {
   /**
    * The slow lane's work in this process, by job id. A batch reading is hours of model calls, so the lane's tick starts it and does not
    * wait for it: the tick that waited held the lane, and another account's batch queued behind the first whatever the lane's capacity
@@ -281,6 +286,8 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = nul
     }
   };
   const jobLoop = lane => jobs ? async () => {
+    // A job of a kind that is no longer run ends as cancelled with its reason, once.
+    if (lane === "local") await jobs.retireRetiredKinds?.().catch((/** @type {any} */ error) => { jobs.report?.(error?.code ?? "vcr_job_retire_failed"); });
     const claimed = await jobs.claim({ limit: lane !== "engine" ? Number(jobs.config?.vcrLocalConcurrency ?? 2) : Math.max(1,Number(jobs.maxConcurrent ?? 1)), lane });
     const methods = Object.keys(jobs.localExecutors ?? {});
     const laneOf = (/** @type {string} */ method) => (VCR_SLOW_LOCAL_METHODS.includes(method) && methods.includes(method) ? "slow" : methods.includes(method) ? "local" : "engine");
@@ -295,7 +302,7 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = nul
       started = fresh.length;
       for (const job of fresh) {
         const id = String(job.id);
-        inFlight.set(id, Promise.resolve().then(() => jobs.advance(job)).then(finishedHook)
+        inFlight.set(id, Promise.resolve().then(() => jobs.advance(job, { mayYield: true })).then(finishedHook)
           .catch((reason) => { jobs.report?.(reason?.code ?? "vcr_job_advance_failed"); }).finally(() => { inFlight.delete(id); }));
       }
     } else {
@@ -369,6 +376,9 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = nul
 
     /** The frontier feed's trial events for every active study, a bounded number each tick (`vcrFrontierEvents.mjs`). Absent while off. */
     frontierEvents: frontierEvents?.tick ? () => frontierEvents.tick() : null,
+
+    /** The trials a person holds a verdict about, read again a few at a time (`vcrRegistryWatch.mjs`). Absent while its switch is off. */
+    registryWatch: registryWatch?.tick ? () => registryWatch.tick() : null,
 
     /** The platform packs' source watch (`vcrKnowledge.mjs`). Absent while platform packs are off. */
     packSources: knowledge?.platform?.enabled && knowledge.watchPlatformPackSources ? () => knowledge.watchPlatformPackSources() : null,

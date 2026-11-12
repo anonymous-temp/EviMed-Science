@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { vcrSubjectLabels } from '@evimed/domain';
 import { Button } from '@/components/ui/Button';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { Select } from '@/components/ui/Input';
@@ -30,6 +31,7 @@ export function WithdrawConsent({ studyId, source, onChanged }: { studyId: strin
   const [message, setMessage] = useState('');
   const [failed, setFailed] = useState(false);
   const subjects = withdrawableSubjects(source);
+  const labels = vcrSubjectLabels(subjects);
   if (!subjects.length) return null;
   const withdraw = async () => {
     if (busy || !subject) return;
@@ -43,7 +45,7 @@ export function WithdrawConsent({ studyId, source, onChanged }: { studyId: strin
   return <Disclosure summary="患者撤回同意">
     <div className="flex flex-col gap-3">
       <Select label="撤回的患者" value={subject} onChange={event => setSubject(event.target.value)}>
-        <option value="">选择患者</option>{subjects.map(key => <option key={key} value={key}>{key}</option>)}
+        <option value="">选择患者</option>{subjects.map(key => <option key={key} value={key}>{labels.get(key) ?? key}</option>)}
       </Select>
       <Button actionKind="set" variant="secondary" loading={busy} disabled={busy || !subject} onClick={() => void withdraw()}>清除该患者的病历文本</Button>
       {message && <p role={failed ? 'alert' : 'status'} className={failed ? 'text-caption text-error' : 'text-caption text-text-3'}>{message}</p>}

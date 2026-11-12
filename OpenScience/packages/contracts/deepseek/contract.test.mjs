@@ -72,14 +72,16 @@ test("the control plane's own defaults are the pin", async () => {
 // by the gateways' own tests (apps/server/test/fixtures/deepseek-tools).
 test("the tool APIs the gateways call are the pinned paths, rate and price", async () => {
   const tools = await import("../../../apps/server/src/deepseekTools.mjs");
-  const { REFERENCE_PRICE_LIST, priceUsage } = await import("@evimed/domain");
+  const { REFERENCE_PRICE_LIST, priceListAt, priceUsage } = await import("@evimed/domain");
+  // The list in force on the day the tools were adopted priced them from that day; every later list carries the same rates.
+  const adoptedList = priceListAt(`${pin.tools.adopted}T23:59:59Z`);
   assert.equal(tools.DEEPSEEK_SEARCH_PATH, pin.tools.search);
   assert.equal(tools.DEEPSEEK_FETCH_PATH, pin.tools.fetch);
   assert.equal(tools.DEEPSEEK_TOOL_REQUESTS_PER_SECOND, pin.tools.requestsPerSecond);
   for (const tool of ["deepseek-search", "deepseek-fetch"]) {
     assert.deepEqual(REFERENCE_PRICE_LIST.toolRequest?.[tool], { perThousand: pin.tools.cnyPerThousandRequests });
+    assert.deepEqual(adoptedList?.toolRequest?.[tool], { perThousand: pin.tools.cnyPerThousandRequests }, "priced from the day it was adopted");
     assert.equal(REFERENCE_PRICE_LIST.currency, "CNY");
-    assert.ok(Date.parse(REFERENCE_PRICE_LIST.effectiveFrom) <= Date.parse(`${pin.tools.adopted}T00:00:00Z`), "priced from the day it was adopted");
     assert.equal(priceUsage({ resourceType: "tool-request", tool, requests: 1, peak: true }).priced, true);
   }
   // The research model stays what the pin certifies: V4.1-Flash-1017 serves the same name at the same price.

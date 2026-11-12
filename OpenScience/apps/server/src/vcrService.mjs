@@ -38,14 +38,14 @@ import { resolveVcrReplyStudy } from './vcrReplyContext.mjs';
  * @module vcrService
  */
 
-import { VCR_PRIVATE_MATCHING_PROVENANCE_KEYS, statedRequirement } from './vcrMatching.mjs';
+import { VCR_MATCHING_EVALUATOR_VERSION, VCR_PRIVATE_MATCHING_PROVENANCE_KEYS, statedRequirement } from './vcrMatching.mjs';
 import { passageTerms } from './vcrPassages.mjs';
 import { presentLongitudinalRead } from './vcrLongitudinalPresentation.mjs';
 import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
 import {
   clinicalFactView, VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_MODEL_INTERFACES, VCR_ROUTE_MIN_TIER,
   VCR_JOB_METHODS, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrAssessmentIssues,
-  VCR_TRAINED_MODEL_LABEL_ZH, validateScenario, vcrModelCardIssues, vcrModelInterfaceOf, vcrResultClass, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds,
+  VCR_TRAINED_MODEL_LABEL_ZH, validateScenario, vcrModelCardIssues, vcrModelInterfaceOf, vcrResultClass, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds, segmentCriteria,
 } from "@evimed/domain";
 
 import { vcrScenarioHash } from "./vcrJobs.mjs";
@@ -55,6 +55,9 @@ import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrTypeOneLevel, vcrWithTypeOneVerdicts } from "./vcrTypeOneVerdict.mjs";
 import { vcrProgressionWithDifferences } from "./vcrProgression.mjs";
+
+/** The people of a table screened by rules, a page at a time: the same 25 the judged page shows, at most 100. */
+const RULE_PAGE = Object.freeze({ default: 25, most: 100 });
 import {
   presentConversationStudy, presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, resultNode, useCeilingOf, intakeNeedsOf,
   vcrCurrentNodes, vcrReviewIsCurrent,
@@ -139,7 +142,7 @@ export const VCR_WRITE_WHATS = Object.freeze([
   "task_context", "patient_context", "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
   "fact", "language_judgment", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
-  "candidate_trial", "soa", "regulatory_contact", "result_record",
+  "trial_judgment", "soa", "regulatory_contact", "result_record",
 ]);
 
 /** @param {unknown} value */
@@ -460,11 +463,11 @@ export class VcrService {
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config: Record<string, any>, engine?: any, now?: () => Date,
    *   metricName?: ((id: string) => string | null) | null,
    *   access?: any, dataPlane?: any, evidence?: any, matching?: any, jobs?: any, seal?: any,
-   *   matchStore?: any, evidenceStore?: any, documents?: any, knowledge?: any, patientTrials?: any }} options
+   *   matchStore?: any, evidenceStore?: any, documents?: any, knowledge?: any }} options
    */
   constructor({ store, config, engine = null, now = () => new Date(), metricName = null,
     access = null, dataPlane = null, evidence = null, matching = null, jobs = null, seal = null,
-    matchStore = null, evidenceStore = null, documents = null, knowledge = null, patientTrials = null }) {
+    matchStore = null, evidenceStore = null, documents = null, knowledge = null }) {
     if (!store || !config) throw new TypeError("The VCR service needs its store and the config.");
     this.store = store;
     this.config = config;
@@ -478,7 +481,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, patientTrials, erasure: null, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null),
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, erasure: null, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null, draftSpokenIn: null, longitudinal: /** @type {any} */ (null),
       // The run ledger's record of one run (`{ startedAt, progress }`) and the study's conversation (`{ sessionId, exists }`, created for the owner
       // when a study has none): both are the control plane's, attached by the composition root (R3, 2026-10-14).
       runLedger: /** @type {any} */ (null), conversations: /** @type {any} */ (null),
@@ -1288,34 +1291,49 @@ export class VcrService {
     const criteria = protocol ? await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }).catch(() => []) : [];
     const latest = `SELECT DISTINCT ON (subject_key) * FROM ${VCR_SCHEMA}.matching_assessments
       WHERE study_id = $1 AND ($2::text IS NULL OR protocol_version_id=$2) ORDER BY subject_key, as_of DESC, created_at DESC`;
-    const [tallyRows, subjectRows, gapRows, reviewRows] = await Promise.all([
+    // The people are a server-cut page, like the judged page's: a verdict to narrow to, a page of 25 (at most 100), the counts the whole table's.
+    const verdictSummaries = /** @type {Record<string, string[]>} */ ({ eligible: ["eligible"], insufficient: ["insufficient_evidence", "pending"], ineligible: ["ineligible"] });
+    if (query.verdict && !verdictSummaries[String(query.verdict)]) throw new HttpError(400, "vcr_payload_invalid", "verdict is eligible, insufficient or ineligible.");
+    const narrowedTo = query.verdict ? String(query.verdict) : null;
+    const wholeNumber = (/** @type {unknown} */ value, /** @type {number} */ fallback, /** @type {number} */ most) => {
+      if (value === undefined || value === "") return fallback;
+      const number = Number(value);
+      if (!Number.isInteger(number) || number < 0 || number > most) throw new HttpError(400, "vcr_payload_invalid", `offset and limit are whole numbers from 0 to ${most}.`);
+      return number;
+    };
+    const pageSize = Math.max(1, wholeNumber(query.limit, RULE_PAGE.default, RULE_PAGE.most));
+    const pageStart = wholeNumber(query.offset, 0, 1_000_000);
+    const narrowing = narrowedTo ? "WHERE summary = ANY($3::text[])" : "";
+    const narrowArgs = narrowedTo ? [verdictSummaries[narrowedTo]] : [];
+    const [tallyRows, subjectRows, gapRows, pageTotal] = await Promise.all([
       // A subject whose consent was withdrawn is listed with their evaluation, as withdrawn, and is not counted among the candidates.
       matchStore.rows(`SELECT summary, count(*)::int AS total FROM (${latest}) l
         WHERE NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = $1 AND w.subject_key = l.subject_key) GROUP BY summary`, matchingArgs).catch(() => []),
       // Everyone who has been assessed is a person on the page, the ones judged not eligible too: their rule-by-rule judgement is what
-      // says which rule failed and on what evidence. Those still in play come first, so the cap cuts the not-eligible ones.
-      matchStore.rows(`SELECT * FROM (${latest}) l ORDER BY CASE summary WHEN 'eligible' THEN 0 WHEN 'insufficient_evidence' THEN 1
-        WHEN 'pending' THEN 2 ELSE 3 END, subject_key LIMIT 200`, matchingArgs).catch(() => []),
+      // says which rule failed and on what evidence. Those still in play come first, so the last pages hold the not-eligible ones.
+      matchStore.rows(`SELECT l.* FROM (SELECT x.*, EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = $1 AND w.subject_key = x.subject_key) AS withdrawn
+        FROM (${latest}) x) l ${narrowing}
+        ORDER BY l.withdrawn, CASE l.summary WHEN 'eligible' THEN 0 WHEN 'insufficient_evidence' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,
+          COALESCE((l.counts ->> 'unknown')::int, 0), l.subject_key COLLATE "C" LIMIT ${pageSize} OFFSET ${pageStart}`, [...matchingArgs, ...narrowArgs]).catch(() => []),
       matchStore.rows(`SELECT j.criterion_id, count(*)::int AS unknown FROM ${VCR_SCHEMA}.criterion_judgments j
         WHERE j.assessment_id IN (SELECT id FROM (${latest}) l) AND j.applicable AND j.state = 'unknown' GROUP BY 1`, matchingArgs).catch(() => []),
-      // Excluded on a model's word alone: they wait in 「待复核排除」, so the
-      // false-exclusion rate has a denominator (plan §7.1).
-      matchStore.rows(`SELECT l.subject_key FROM (${latest}) l WHERE l.summary = 'ineligible'
-        AND EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.criterion_judgments j WHERE j.assessment_id = l.id AND j.applicable AND j.state = 'not_satisfied')
-        AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.criterion_judgments j WHERE j.assessment_id = l.id AND j.applicable
-          AND j.state = 'not_satisfied' AND j.decided_by <> 'model') ORDER BY l.subject_key LIMIT 200`, matchingArgs).catch(() => []),
+      matchStore.rows(`SELECT count(*)::int AS total FROM (${latest}) l ${narrowing}`, [...matchingArgs, ...narrowArgs]).catch(() => []),
     ]);
-    // A person asked for by name who the cap left out is still read: the page opens whoever it is told to, not the first 200.
+    const listedTotal = Number(pageTotal[0]?.total ?? subjectRows.length);
+    // A person asked for by name who the page left out is still read: the page opens whoever it is told to, not the first 25.
     if (query.candidate && !subjectRows.some((row) => String(row.subject_key) === query.candidate)) {
-      subjectRows.push(...await matchStore.rows(`SELECT * FROM (${latest}) l WHERE subject_key = $3`, [...matchingArgs, query.candidate]).catch(() => []));
+      subjectRows.push(...await matchStore.rows(`SELECT l.*, EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id = $1 AND w.subject_key = l.subject_key) AS withdrawn
+        FROM (${latest}) l WHERE subject_key = $3`, [...matchingArgs, query.candidate]).catch(() => []));
     }
     // What the evaluation rested on, when that has since changed (a document, a projection, a permission) or was withdrawn: a plain
     // state beside the subject, and the evaluation that already exists offered again. Nothing is blocked and nothing re-runs.
     const marks = await this.packages.erasure?.assessmentMarks?.(study.id, subjectRows.map((row) => String(row.id))).catch(() => new Map()) ?? new Map();
     const subjects = subjectRows.map((row) => ({
       id: String(row.id), subjectKey: String(row.subject_key), summary: String(row.summary), counts: row.counts ?? {},
-      priority: row.priority ?? null, direction: String(row.direction ?? "trial_to_patient"), asOf: row.as_of, reviewedBy: row.reviewed_by ?? null,
+      direction: String(row.direction ?? "trial_to_patient"), asOf: row.as_of, reviewedBy: row.reviewed_by ?? null,
       basis: marks.get(String(row.id))?.cause === "withdrawn" ? "withdrawn" : marks.has(String(row.id)) ? "updated" : null,
+      // Made by an earlier set of rules: it stands, and says so. (vcr-eligibility-2 read a filled 0 as affirmed.)
+      evaluatorOlder: object(row.provenance).matchingEvaluatorVersion !== VCR_MATCHING_EVALUATOR_VERSION,
     }));
     const wanted = subjects.map((subject) => subject.id);
     const openRows = wanted.length
@@ -1337,8 +1355,12 @@ export class VcrService {
       || Number(a.counts?.unknown ?? 0) - Number(b.counts?.unknown ?? 0) || a.subjectKey.localeCompare(b.subjectKey));
     const focus = listed.find((subject) => subject.subjectKey === query.candidate) ?? listed[0] ?? null;
     const selected = focus ? await matchStore.getAssessment(focus.id).catch(() => null) : null;
-    if (selected) selected.judgments = await Promise.all(list(selected.judgments).map(async judgment => ({ ...judgment,
-      evidence: await this.packages.documents?.viewEvidence?.(study, list(judgment.evidence), focus.subjectKey, viewer) ?? [] })));
+    if (selected) selected.judgments = await Promise.all(list(selected.judgments).map(async judgment => {
+      // Both axes contain patient quotations and must pass the same viewer grant.
+      const evidence = await this.packages.documents?.viewEvidence?.(study, list(judgment.evidence), focus.subjectKey, viewer) ?? [];
+      const applicabilityEvidence = await this.packages.documents?.viewEvidence?.(study, list(judgment.applicabilityEvidence), focus.subjectKey, viewer) ?? [];
+      return { ...judgment, evidence, applicabilityEvidence };
+    }));
     const candidateRoster = typeof matchStore.candidateSubjects === 'function' ? await matchStore.candidateSubjects({ studyId: study.id }) : [];
     const focusKey = query.candidate ?? focus?.subjectKey;
     const comparisons = focusKey ? await Promise.all(protocols.map(async entry => ({ protocol: entry,
@@ -1351,42 +1373,24 @@ export class VcrService {
     const clinicalTimeline = timeline.map(fact => ({ ...fact, superseded: longitudinal.superseded.includes(fact.id),
       conflicts: longitudinal.conflicts.find(entry => entry.factId === fact.id)?.withFacts ?? [], ...(factMarks.has(fact.id) ? { basis: "updated" } : {}) }));
     const candidateCoverage = protocol && matchStore.latestMatchingProgress ? await matchStore.latestMatchingProgress(study.id,protocol.id) : null;
+    // Whether the people here have records to read: what 开始评估 starts. No document at all is a table study, which is screened by its rules. A read that fails is no such statement.
+    const records = await this.packages.documents?.roster?.(study).catch(() => null) ?? null;
     // The documents the page cites, by the names the data tab lists them under: a citation carries an id, a reader needs a name.
-    const cited = [...list(selected?.judgments).flatMap((/** @type {any} */ judgment) => list(judgment.evidence).map((/** @type {any} */ item) => item?.locator?.documentId)),
+    const cited = [...list(selected?.judgments).flatMap((/** @type {any} */ judgment) => [...list(judgment.evidence), ...list(judgment.applicabilityEvidence)].map((/** @type {any} */ item) => item?.locator?.documentId)),
       ...clinicalTimeline.map(fact => fact.source?.documentId)].filter(Boolean);
     const documentNames = cited.length && typeof matchStore.documentNames === 'function' ? await matchStore.documentNames(study.id, cited).catch(() => new Map()) : new Map();
-    // 「给患者找试验」: the patient the page asks for, and the trials that have judged them (the candidates a run found, and the study's own
-    // protocol) in order. Read only for that direction, and only for a patient the study holds.
-    const patientTrials = query.direction === "patient_to_trial" && (query.view ?? "matching") === "matching"
-      ? await this.#patientTrials(study, candidateRoster, query, viewer) : null;
     return {
       ...(candidateCoverage ? {candidateCoverage} : {}),
+      ...(records ? { hasRecords: records.length > 0 } : {}),
       documentNames,
-      ...(patientTrials ? { patientTrials } : {}),
+      people: { total: listedTotal, offset: pageStart, limit: pageSize, verdict: narrowedTo },
       protocols, candidateRoster, comparisons, timeline: clinicalTimeline,
       protocol, criteria, subjects, selected, openByAssessment,
       tallies: Object.fromEntries(tallyRows.map((row) => [String(row.summary), Number(row.total)])),
       gapsByCriterion: new Map(gapRows.map((row) => [String(row.criterion_id), { unknown: Number(row.unknown) }])),
-      pendingReview: reviewRows.map((row) => String(row.subject_key)),
       forecastResult: null,
       snapshotAt: null,
     };
-  }
-
-  /**
-   * What the matching tab needs of 「给患者找试验」: the patient (one the study holds, else none), the trials that have judged them in order,
-   * and the one chosen — `query.trial` when it is one of theirs, else the first — with the criteria it was judged on.
-   * @param {any} study @param {readonly string[]} roster @param {Record<string, string>} query @param {{id:string}} viewer
-   */
-  async #patientTrials(study, roster, query, viewer) {
-    const seam = this.packages.patientTrials;
-    if (!seam?.ranked) return { available: false, subjectKey: null, ranked: [], detail: null };
-    const subjectKey = query.candidate && roster.includes(query.candidate) ? query.candidate : null;
-    if (!subjectKey) return { available: true, subjectKey: null, ranked: [], detail: null };
-    const ranked = await seam.ranked(study, { subjectKey });
-    const chosen = ranked.find((/** @type {any} */ row) => row.id === query.trial) ?? ranked[0] ?? null;
-    const detail = chosen ? await seam.detail(study, { subjectKey, id: chosen.id, ranked, viewer }) : null;
-    return { available: true, subjectKey, ranked, detail };
   }
 
   // --- cross-study pages --------------------------------------------------------------
@@ -1698,9 +1702,21 @@ export class VcrService {
    * only: another trial's numbers pass the boundary's other half (no plane
    * address, a cycle refused whole) and are not judged as this study's head
    * counts: the exemption is a rule about numbers, not a hole.
-   * @param {unknown} payload @param {{ publishedFigures?: boolean, projection?: string }} [options]
+   *
+   * `ownerView` is the one other exemption (owner ruling 2026-11-04): the study owner's own conversation and page read the exact head
+   * counts of the owner's own study. The caller establishes it from the acting identity (the study's `userId`, a native conversation
+   * that is not a programme run), never from anything the model sends, and it is false unless said, so publications, review inputs,
+   * exports, a member's read and every caller that says nothing keep the suppression below. The plane addresses are still stripped,
+   * and a payload that boundary cannot finish is still refused whole; the small-cell walker is simply not run, so it cannot refuse
+   * the owner's read.
+   * @param {unknown} payload @param {{ publishedFigures?: boolean, projection?: string, ownerView?: boolean }} [options]
    */
-  forModel(payload, { publishedFigures = false, projection = '' } = {}) {
+  forModel(payload, { publishedFigures = false, projection = '', ownerView = false } = {}) {
+    if (ownerView) {
+      try { return stripPlaneAddresses(payload); } catch {
+        throw failure(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含数据平面地址，已整体拒绝。");
+      }
+    }
     try {
       const addressed = stripPlaneAddresses(payload);
       const shown = publishedFigures ? addressed : suppressForModel(addressed, { minCell: this.minCell });
@@ -1755,6 +1771,15 @@ export class VcrService {
   }
 
   /**
+   * Patient-matching discovery reads a few hundred live ClinicalTrials.gov records: one batched request per hundred first (best effort).
+   * @param {string[]} registryIds
+   */
+  async prefetchRegistryRecords(registryIds) {
+    const evidence = this.packages?.evidence;
+    return typeof evidence?.prefetchRecords === "function" ? evidence.prefetchRecords(registryIds) : { prefetched: 0, missing: 0 };
+  }
+
+  /**
    * What a run may read. **Aggregates and structure only**: no row of any
    * person ever appears here, and a cell speaking for fewer than
    * `minCell` people is suppressed by the domain's `suppressForModel` before it
@@ -1764,9 +1789,13 @@ export class VcrService {
    * the person's own record, so it is judged and audited per read and answers
    * with a pseudonymous key and nothing that names anyone.
    *
-   * @param {any} study @param {string} what @param {Record<string, any>} [filter]
+   * `options.ownerView` is {@link forModel}'s: set only by the gateway for the study owner's own conversation. `options.listMax` is the
+   * control plane's own and never the runtime's (the gateway passes only `signal` and `ownerView`): patient-matching discovery reads a live
+   * search's whole kept list, up to its ranking depth, where a run reads it a page at a time.
+   *
+   * @param {any} study @param {string} what @param {Record<string, any>} [filter] @param {{ signal?: AbortSignal, ownerView?: boolean, listMax?: number }} [options]
    */
-  async runtimeRead(study, what, filter = {}) {
+  async runtimeRead(study, what, filter = {}, { signal, ownerView = false, listMax = 0 } = {}) {
     if (!VCR_READ_WHATS.includes(what)) {
       throw failure(400, "vcr_read_what_invalid", `what must be one of: ${VCR_READ_WHATS.join(", ")}.`);
     }
@@ -1777,10 +1806,10 @@ export class VcrService {
     if (what === 'data_intake') return { available: false, code: 'vcr_invocation_unavailable', message: 'Original upload intake requires the verified current conversation.' };
     if (!study.id && !['trial_registry_record','models','library','candidates'].includes(what)
       && !(what === 'matching' && ['contract', 'terminology'].includes(filter.kind))) return { available:true,empty:true,study:null,scope:'conversation' };
-    const payload = await this.#runtimeRead(study, what, filter);
+    const payload = await this.#runtimeRead(study, what, filter, signal, ownerView, listMax);
     // This one projection has already verified the entire generated lineage; synthetic counts are not patient disclosure cells.
     if (what === "generated_records") return stripPlaneAddresses(payload);
-    const shown = this.forModel(payload, { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what), projection:what });
+    const shown = this.forModel(payload, { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what), projection:what, ownerView });
     return what === "results" ? this.#resultsAnswer(study, shown) : shown;
   }
 
@@ -1809,8 +1838,8 @@ export class VcrService {
       ? vcrWithTypeOneVerdicts(result, vcrTypeOneLevel({ scenario: scenarios.get(String(result.id)) ?? null, result })) : result) };
   }
 
-  /** @param {any} study @param {string} what @param {Record<string, any>} filter */
-  async #runtimeRead(study, what, filter) {
+  /** @param {any} study @param {string} what @param {Record<string, any>} filter @param {AbortSignal} [signal] @param {boolean} [ownerView] */
+  async #runtimeRead(study, what, filter, signal, ownerView = false, listMax = 0) {
     if (what === "followup_history") return this.followupHistoryForRuntime(study);
     // Only the gateway has the verified native root invocation needed to locate a selected patient's context.
     if (what === "patient_context") return { candidates: [], nextBeforeSeq: null };
@@ -1920,7 +1949,7 @@ export class VcrService {
         // Bound to this study and judged (and audited) there: a snapshot of
         // another study, or one the study's owner may not read, is refused by
         // name, never profiled.
-        return dataPlane.runtimeProfile(study, filter);
+        return dataPlane.runtimeProfile(study, filter, { exact: ownerView });
       }
       case 'longitudinal': return this.packages.longitudinal ? this.packages.longitudinal.view(study,filter)
         : {available:false,code:'vcr_data_plane_unavailable',alternatives:['literature_scenario','trial_design']};
@@ -1928,6 +1957,11 @@ export class VcrService {
         const documents = this.packages.documents;
         if (!documents?.subjectDocuments) {
           return { available: false, code: "vcr_data_plane_unavailable", message: "数据平面未接入病历文档：这一步暂不可用，其余步骤照常。" };
+        }
+        // The whole record as numbered sentences, the same numbers a judgment's evidence names, with the hash that binds a later write to them.
+        if (filter.kind === "sentences") {
+          if (!this.packages.matchJudgments?.sentences) return { available: false, code: "vcr_matching_unavailable", message: "患者判定未接入：这一步暂不可用，其余步骤照常。" };
+          return this.packages.matchJudgments.sentences(study, filter);
         }
         // A read of one document that names a criterion (`id`) or some words (`query`) asks for the passages that bear on it (M4).
         const passages = filter.documentId && (filter.id || filter.query) ? await this.#passageRequest(study, filter) : null;
@@ -1940,6 +1974,11 @@ export class VcrService {
           return { available: false, code: "vcr_matching_unavailable", message: "患者匹配未接入：这一步暂不可用，其余步骤照常。" };
         }
         const answer = await matching.runtimeRead(study, filter);
+        // A protocol version the model has judged people against: those judgments, ranked, and the numbered clauses a conversation judges by.
+        const judged = filter.protocolVersionId && filter.kind !== "contract" && this.packages.matchJudgments?.forProtocol
+          ? { ...await this.packages.matchJudgments.forProtocol(study, String(filter.protocolVersionId), { subjectKey: filter.subjectKey ? String(filter.subjectKey) : null, limit, offset: Number(filter.offset ?? 0) }),
+            clauses: await this.packages.matchJudgments.protocolClauses(study, String(filter.protocolVersionId)) } : null;
+        if (judged) Object.assign(answer, judged.ranking.length || judged.failedPairs || judged.total ? judged : { clauses: judged.clauses });
         // The study-level read also says which concept names the pack uses for the variables the criteria
         // name and which dataset columns realise them — the names a fact is written under.
         const guide = filter.subjectKey || filter.kind ? null : await this.#matchingGuide(study);
@@ -1960,11 +1999,17 @@ export class VcrService {
         return knowledge.runtimeReadLibrary(study, filter);
       }
       case "candidate_trials": {
-        const trials = this.packages.patientTrials;
-        if (!trials?.runtimeRead) {
-          return { available: false, code: "vcr_matching_unavailable", message: "给患者找试验在本部署尚未接入：这一步暂不可用，其余步骤照常。" };
+        // What the model judged for a patient, in order; a patient nobody judged trials for, or one who withdrew, is a plain answer.
+        const subjectKey = filter.subjectKey ? String(filter.subjectKey) : null;
+        if (subjectKey && (await this.packages.matchStore?.withdrawnSubjects?.(study.id) ?? new Set()).has(subjectKey)) {
+          return { subjectKey, withdrawn: true, trials: [], ranking: [], assessment: null, more: false };
         }
-        return trials.runtimeRead(study, { ...filter, limit });
+        const offset = Math.max(0, Number(filter.offset ?? 0));
+        if (subjectKey && !filter.id && !filter.registryId && this.packages.matchJudgments?.forSubject) {
+          const judged = await this.packages.matchJudgments.forSubject(study, subjectKey, { limit, offset });
+          if (judged.ranking.length || judged.failedPairs || judged.total) return { subjectKey, ...judged };
+        }
+        return subjectKey ? { subjectKey, total: 0, offset, more: false, ranking: [] } : { trials: [], more: false };
       }
       case "precedents": {
         const evidence = this.packages.evidence;
@@ -1980,14 +2025,8 @@ export class VcrService {
         if (!evidence?.candidatesFor) {
           return { available: false, code: "registry_unavailable", message: "试验登记检索未接入：这一步暂不可用，其余步骤照常。" };
         }
-        const max = Number(this.config?.vcrCandidateSearchMax) > 0 ? Number(this.config.vcrCandidateSearchMax) : 20;
-        const answer = await evidence.candidatesFor(study, filter, max);
-        const trials = this.packages.patientTrials;
-        if (answer?.available && answer.candidates?.length && trials?.parsedHeld && study.userId) {
-          // A trial the account has structured before can be written again without its criteria while its record is unchanged (M2).
-          const held = await trials.parsedHeld(study, answer.candidates);
-          answer.candidates = answer.candidates.map((/** @type {any} */ candidate) => (held.has(`${candidate.registry}\u0000${candidate.registryId}`) ? { ...candidate, parsedBefore: true } : candidate));
-        }
+        const max = Number(listMax) > 0 ? Math.min(500, Math.trunc(Number(listMax))) : Number(this.config?.vcrCandidateSearchMax) > 0 ? Number(this.config.vcrCandidateSearchMax) : 20;
+        const answer = await evidence.candidatesFor(study, filter, max, signal);
         return answer;
       }
       case "trial_registry_record": {
@@ -1998,7 +2037,10 @@ export class VcrService {
         if (!evidence?.registryRecord) {
           return { available: false, code: "registry_unavailable", message: "试验登记检索未接入：这一步暂不可用，其余步骤照常。" };
         }
-        return evidence.registryRecord(study, filter);
+        const read = await evidence.registryRecord(study, filter, signal);
+        // Its eligibility text as the same numbered clauses a judgment answers by.
+        const clauses = read?.record?.eligibilityText ? segmentCriteria(read.record.eligibilityText) : [];
+        return clauses.length ? { ...read, clauses: clauses.map(({ start: _start, end: _end, ...clause }) => clause) } : read;
       }
       default: throw failure(400, "vcr_read_what_invalid", "This read has no implementation.");
     }
@@ -2015,10 +2057,9 @@ export class VcrService {
     const query = filter.query ? String(filter.query) : null;
     if (!filter.id) return { terms: passageTerms(null, null, query), criterionId: null };
     const id = String(filter.id);
-    const criterion = await this.packages.matching?.criterionById?.(study, id).catch(() => null)
-      ?? await this.packages.patientTrials?.criterionById?.(study, id).catch(() => null) ?? null;
+    const criterion = await this.packages.matching?.criterionById?.(study, id).catch(() => null) ?? null;
     if (!criterion) {
-      return { refusal: { available: false, code: "vcr_read_filter_invalid", message: "本研究里没有这条条件：id 取自 vcr_read what:criteria（方案的条件）或 what:candidate_trials（候选试验的条件）。" } };
+      return { refusal: { available: false, code: "vcr_read_filter_invalid", message: "本研究里没有这条条件：id 取自 vcr_read what:criteria（方案的条件）。" } };
     }
     const terminology = await this.packages.matching?.passageTerminology?.(study, criterion).catch(() => null) ?? null;
     return { terms: passageTerms(criterion, terminology, query), criterionId: id };

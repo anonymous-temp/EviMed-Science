@@ -20,7 +20,7 @@ import { statisticalAnalysisFindings } from './statisticalAnalysisContract.mjs'
 import { datasetScopingFindings } from './datasetScopingContract.mjs'
 import { GENE_EXPRESSION_CHECK_IDS, geneExpressionFindings } from './geneExpression.mjs'
 import { GEO_RECORDS_PREFIX, geoCompanionPaths, geoContentFindings, geoInsightFindings, geoProposalFindings, geoProseNotices, geoStrategyFindings } from './geoContracts.mjs'
-import { VCR_CHECK_IDS, vcrCohortFindings, vcrComparatorFindings, vcrMatchingFindings, vcrSimulationReportFindings, vcrStudyPackageFindings } from './vcrContracts.mjs'
+import { VCR_CHECK_IDS, vcrCohortFindings, vcrComparatorFindings, vcrSimulationReportFindings, vcrStudyPackageFindings } from './vcrContracts.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
 import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
 import { EMPTY_SNAPSHOT_MESSAGE, EVIDENCE_SNAPSHOT_FILE, INVALID_SNAPSHOT_MESSAGE, NOT_OBJECT_SNAPSHOT_MESSAGE, UNRECORDED_LIMIT, auditCitedSources, citationUrlDefectsByLine, platformCardCitationsByLine, unrecordedCitationMessage, unretrievedCitationMessage } from './citedSources.mjs'
@@ -921,7 +921,7 @@ const VALIDATORS = Object.freeze({
   'vcr-simulation-report': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrSimulationReportFindings(input)),
   'vcr-comparator-analysis': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrComparatorFindings(input)),
   'vcr-cohort-snapshot': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrCohortFindings(input)),
-  'vcr-matching-assessment': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrMatchingFindings(input)),
+  'vcr-matching-assessment': (input) => validateReportShaped(input, proseFilesOf(input)),
   'clinical-decision-brief': (input) => validateReportShaped(input, proseFilesOf(input)),
   'surveillance-diff': (input) => validateJsonShaped(input, { file: 'surveillance-diff.json', check: checkSurveillanceDiff }),
   'hypothesis-set': (input) => validateJsonShaped(input, { file: 'hypothesis-set.json', check: checkHypothesisSet }),

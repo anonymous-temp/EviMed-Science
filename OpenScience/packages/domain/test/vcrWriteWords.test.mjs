@@ -67,12 +67,12 @@ test("an assumption: a source kind in other words, and a sentence in the one-wor
   assert.equal(vcrNormalizeWriteRow("assumption", { key: "k", fromPooling: {}, valueSource: sentence }).row.valueSource, sentence);
 });
 
-test("criterion types are read in criteria, in a protocol's and in a candidate trial's; a word that is no type is saved as other, and said", () => {
+test("criterion types are read in criteria and in a protocol's; a word that is no type is saved as other, and said", () => {
   const criteria = [
     { criterionType: "disease", kind: "inclusion" }, { criterionType: "prior_therapy" }, { criterionType: "performance" }, { criterionType: "organ_function" },
     { criterionType: "histology" }, { criterionType: "cns" }, { criterionType: "biomarker" }, { kind: "exclusion" },
   ];
-  const read = vcrNormalizeWriteRow("candidate_trial", { registryId: "NCT06927986", criteria });
+  const read = vcrNormalizeWriteRow("protocol", { title: "v1", criteria });
   assert.deepEqual(read.row.criteria.map((/** @type {any} */ criterion) => criterion.criterionType), ["diagnosis", "prior_treatment", "performance_status", "lab", "diagnosis", "other", "biomarker", undefined]);
   assert.deepEqual(read.applied.map((entry) => entry.field), ["criteria[0].criterionType", "criteria[1].criterionType", "criteria[2].criterionType", "criteria[3].criterionType", "criteria[4].criterionType", "criteria[5].criterionType"]);
   const unknown = read.applied.find((entry) => entry.from === "cns");
@@ -87,12 +87,11 @@ test("criterion types are read in criteria, in a protocol's and in a candidate t
 });
 
 test("a registry is read in its own spelling, and a publication's name is left for the evidence writer", () => {
-  assert.equal(vcrNormalizeWriteRow("candidate_trial", { registry: "ClinicalTrials.gov", registryId: "NCT06927986", criteria: [] }).row.registry, "clinicaltrials.gov");
   assert.equal(vcrNormalizeWriteRow("precedent", { registry: "CTgov", registryId: "NCT06927986" }).row.registry, "clinicaltrials.gov");
   assert.equal(vcrNormalizeWriteRow("evidence_item", { registry: "ChiCTR", registryId: "ChiCTR2000000001" }).row.registry, "chictr");
   const paper = { registry: "pubmed", registryId: "37676259" };
   assert.deepEqual(vcrNormalizeWriteRow("evidence_item", paper), { row: paper, applied: [] });
-  assert.equal(vcrNormalizeWriteRow("candidate_trial", { registry: "WHO ICTRP" }).row.registry, "WHO ICTRP", "a registry that is none of the three is refused by its writer");
+  assert.equal(vcrNormalizeWriteRow("precedent", { registry: "WHO ICTRP" }).row.registry, "WHO ICTRP", "a registry that is none of the three is refused by its writer");
 });
 
 test("a plan's lists and sentences are kept as they were written", () => {

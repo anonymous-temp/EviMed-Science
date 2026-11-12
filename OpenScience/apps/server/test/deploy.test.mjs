@@ -280,11 +280,14 @@ test("the workflow that gates every PR runs the gates ci:web runs", async () => 
     typecheck: /pnpm --filter @ai4s\/web typecheck\b/,
     "build:web": /pnpm --filter @ai4s\/web build\b/,
     "audit:capabilities": /pnpm check:capabilities\b/,
-    // `pnpm test:packages`, which CI runs, is exactly these four.
+    // `pnpm test:packages` is the shared package gate, including optional matching packages.
     "test:domain": /pnpm test:packages\b/,
     "test:port": /pnpm test:packages\b/,
     "test:socket": /pnpm test:packages\b/,
     "test:contracts": /pnpm test:packages\b/,
+    "test:patient-matching-core": /pnpm test:packages\b/,
+    "test:patient-matching-plugin": /pnpm test:packages\b/,
+    "test:patient-matching-worker": /pnpm test:packages\b/,
     // `pnpm lint`, which CI now runs, chains desktop + server + domain + port
     // + socket. Verified against package.json rather than assumed.
     "lint:server": /pnpm lint\b/,
@@ -2445,8 +2448,8 @@ test("file-delivery capabilities fix the two pre-delivery steps instead of leavi
     // use proportional numerical checks and optional companions, as covered by
     // their capability suites: their numbers are rendered from a tool's or a
     // script's results, not typed from sources. They do not inherit the full
-    // report pipeline's mandatory skill sequence.
-    if (["dataset-research-scoping", "statistical-analysis", "gene-expression-analysis"].includes(name)) continue;
+    // report pipeline's mandatory skill sequence. Patient matching (owner decisions of 2026-11-04) answers in the reply from saved judgments and owes no file.
+    if (["dataset-research-scoping", "statistical-analysis", "gene-expression-analysis", "vcr-matching"].includes(name)) continue;
     for (const step of ["traceability-review", "manuscript-humanize"]) {
       assert.ok(skill.includes(step), `${name}/SKILL.md does not name ${step} as a pre-delivery step`);
       assert.ok(shipped.includes(step), `capability-skills/${name}/SKILL.md does not name ${step}; the authored copy is not what the run reads`);

@@ -75,7 +75,7 @@ export const VCR_REQUIREMENT_LIMITS = Object.freeze({
   maxValues: 200,
   maxStringLength: 200,
   maxUnitLength: 40,
-  maxLanguageText: 500,
+  maxLanguageText: 4_000,
   windowDaysMax: 36_500,
   windowMonthsMax: 1_200,
   windowYearsMax: 100,

@@ -792,11 +792,12 @@
       "origin": "capability",
       "version": "1.7.0",
       "source": {"kind":"release"},
-      "digest": "sha256:8897284f66093a34fa3d0ad7e911c1143faa9ba940270edd575b93dfbe2c56c0",
+      "digest": "sha256:b64ae584b2f7e16a04d0071390b19b84a83db6f6329760a691097f450e5ecdfb",
       "digestAlgorithm": "release-directory-v1",
       "references": [
         {"path":"capability.yaml","sha256":"70ad72400112128f6f27eb48e3b61cf1d4f7a0cf0736bc575f3e798a60722314"},
         {"path":"variants/camp.md","sha256":"b5898d245fe4b7c28a4c182f1898545c7473137a887a52bcb741e6f3d02750e1"},
+        {"path":"variants/concise.md","sha256":"3ee11f99fc639732878a086f8421dc67db7459e1f6e7712892f5e6f84e84519d"},
         {"path":"variants/two-stage.md","sha256":"a8f82b3df17ffc1673c218c15f235572725b6ee47c459ef8d803fe0b541a4b81"}
       ],
       "operations": [
@@ -1167,18 +1168,17 @@
       "id": "capability/vcr-matching",
       "name": "vcr-matching",
       "origin": "capability",
-      "version": "1.6.2",
+      "version": "1.10.0",
       "source": {"kind":"release"},
-      "digest": "sha256:bfc342fd1faf7527717a595cda7b46307d283889e267f23f79009d14cd073ba5",
+      "digest": "sha256:a8db50a00ec120b439f97a34d9415366e535d346807a1f8e44736ae54b154049",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"aaae1a149d338a488503331ab87139e8adc1fd66d305f63fcfda18d8a5a81d52"}],
+      "references": [{"path":"capability.yaml","sha256":"426b632a4e4c70ec72a71d726f1afbeab67647d34546543ae51271272ce0e5e5"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"kb_browse","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"kb_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"literature_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
-        {"kind":"platform-tool","name":"locate_quote","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"term_normalize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"trial_registry_record","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"vcr_read","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1189,11 +1189,11 @@
         {
           "name": "vcr-matching-assessment",
           "kind": "deliverable",
-          "summary": "Assess eligibility in either direction using original case records and source-bound trial criteria. Preserve unknown states, criterion evidence and recheck needs; no recruitment operations.",
-          "summaryZh": "把病例或患者队列与试验条件逐条核对，保留原文依据、未知项与排除原因。",
+          "summary": "Use the installed patient-matching plugin for source-backed eligibility assessment in either direction, native evidence and calculation, saved results and reports. Clinical eligibility and recommendation remain separate; missing evidence remains explicit.",
+          "summaryZh": "把病例或患者队列与试验条件逐条判断，保留病历依据，没写的条款标明怎么判的。",
           "accepts": ["studyId","protocolVersionId","subjectKeys","direction","asOf"],
-          "produces": ["matching-assessment.md","matching.json","criterion-funnel.md","revision-notes.md"],
-          "limits": ["资格判定由平台代码计算，不设统一准确率门槛，也不引用外部产品的准确率。","缺证据一律记「未知」，不会替患者补全；任一排除标准未知时整体不判为「符合」。"]
+          "produces": ["matching-assessment.md","revision-notes.md"],
+          "limits": ["结论由模型逐条判断，证据句由平台核对；不设统一准确率门槛，也不引用外部产品的准确率。","病历没写的条款会标明「未见记载，按未排除」或「未见记载，需确认」：这是判断，不是病历的记载。"]
         }
       ]
     },
@@ -1233,13 +1233,13 @@
       "id": "capability/vcr-protocol",
       "name": "vcr-protocol",
       "origin": "capability",
-      "version": "1.4.5",
+      "version": "1.4.6",
       "source": {"kind":"release"},
-      "digest": "sha256:fdb92427321809cff9017193004b5ad863b012e01d40d21b1079deaa633559ae",
+      "digest": "sha256:9b3e7812762272192c52bd0651900288cc1d9394ac5ee42ff2699829975d854d",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"cec7f1853e7983a22f71f348dfa5e8d7382920698f1fff4900057462eb2a1e06"},
-        {"path":"references/operating-contract.md","sha256":"9050a5c45846c08a7f5676eff012a31701677be24c586f8806802c314f08e6aa"}
+        {"path":"capability.yaml","sha256":"08f34f5f2e81c439b10fbee78b1873bf397c8dc59a8f97ed23a08fd9b17c4a43"},
+        {"path":"references/operating-contract.md","sha256":"e805e2c1a957e277456af13941015a0452bd314b7a836f230c59deb9fcf46b0d"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},

@@ -1,0 +1,15 @@
+{
+  "sha256": "33fa64d754ac018816e80826f786b35def898062f7a16cfcd2486dbb38284d59",
+  "kernel": "0.2.1-rc.5",
+  "installation": "passed: offline self-contained tarball",
+  "nativeTools": 9,
+  "nativeManagedChild": "passed",
+  "nativeModelCallBudget": "passed",
+  "nativeCancelRpcAndDisposal": "passed",
+  "childEvidenceAndCompute": "passed",
+  "structuredPersistence": "passed",
+  "FlashProfileOverride": "passed (synthetic parent has a distinct model)",
+  "disabledGeneralConversation": "passed",
+  "paidModelCalls": 0,
+  "syntheticOnly": true
+}

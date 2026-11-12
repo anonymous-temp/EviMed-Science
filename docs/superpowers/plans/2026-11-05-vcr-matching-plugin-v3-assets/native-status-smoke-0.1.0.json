@@ -1,0 +1,23 @@
+{
+  "sha256": "33fa64d754ac018816e80826f786b35def898062f7a16cfcd2486dbb38284d59",
+  "kernel": "0.2.1-rc.5",
+  "endpoint": "patientMatching/status",
+  "authentication": "passed",
+  "noArgumentInjection": "passed",
+  "cancelWireArguments": "passed",
+  "actualTools": [
+    "match_context",
+    "match_discover",
+    "match_evidence",
+    "match_compute",
+    "match_assess",
+    "match_job",
+    "match_results",
+    "match_correct",
+    "match_report"
+  ],
+  "actualLoadableSkill": "patient-matching",
+  "disabledServiceAbsent": "passed",
+  "modelCalls": 0,
+  "paidModelCalls": 0
+}

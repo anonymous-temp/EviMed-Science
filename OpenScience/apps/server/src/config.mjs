@@ -11,6 +11,7 @@ import { researchDbSettings } from "./researchDbConfig.mjs";
 import { EVOLUTION_CONFIG_SCHEMA, validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
 import { REGISTER_JUDGE_MAX_LINES } from "./reportRegisterJudge.mjs";
 import { PINNED } from "./pinnedVersions.mjs";
+import { patientMatchingConfiguration } from './patientMatchingConfiguration.mjs';
 
 /**
  * How much of the caller's window a gateway leaves itself to answer in.
@@ -75,6 +76,23 @@ function parseReasoningEffort(value) {
     throw new Error(`OPEN_SCIENCE_DEEPSEEK_REASONING_EFFORT must be one of ${DEEPSEEK_REASONING_EFFORTS.join(", ")}, got ${JSON.stringify(value)}.`);
   }
   return effort;
+}
+
+/** A job's stage two: how many of a person's best-ranked trials, or every pair. @param {unknown} value @returns {number | 'all'} */
+function matchJudgeTopK(value) {
+  if (value == null || value === "") return 20;
+  if (String(value).trim().toLowerCase() === "all") return "all";
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < 0 || number > 500) throw new Error(`OPEN_SCIENCE_VCR_MATCH_JUDGE_TOP_K must be a whole number from 0 to 500 or "all", got ${JSON.stringify(value)}.`);
+  return number;
+}
+
+/** @param {unknown} value @param {'high' | 'off'} [fallback] @returns {'high' | 'off'} */
+function matchJudgeThinking(value, fallback = "high") {
+  if (value == null || value === "") return fallback;
+  const word = String(value).trim().toLowerCase();
+  if (word !== "high" && word !== "off") throw new Error(`OPEN_SCIENCE_VCR_MATCH_JUDGE_THINKING must be "high" or "off", got ${JSON.stringify(value)}.`);
+  return /** @type {'high' | 'off'} */ (word);
 }
 
 /**
@@ -1147,15 +1165,47 @@ function vcrSettings(overrides) {
     // A trial-registry read's deadline: the registry client's and the gateway's budget for it are this one key
     // (vcrComposition, vcrGateway); the client clamps it to 5–60 s. Read since the registry client existed, defined
     // here only on 2026-10-10 — until then the variable reached nothing and the deadline was always 20 s.
+    vcrTrialCorpusManifest: String(read("vcrTrialCorpusManifest", "OPEN_SCIENCE_VCR_TRIAL_CORPUS_MANIFEST", "") ?? "").trim(),
     vcrRegistryTimeoutMs: integer("vcrRegistryTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS", 20_000, 5_000, 60_000),
-    // The most candidate trials one study holds (「给患者找试验」, vcrPatientTrials): each one costs an evaluation for every patient the
-    // study judges against it, so the count is bounded; a trial the study already holds can always be updated. Counter:
-    // `open_science_vcr_patient_trials_total{kind="capReached"}`.
-    vcrCandidateTrialsMax: integer("vcrCandidateTrialsMax", "OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX", 60, 1, 500),
     // The most trials one `vcr_read what: candidates` list returns (vcrCandidateSearch, M1). Each one is a record the run may read and
     // structure, so the list is cut to what a reader can go through; the registries are asked for twice as many because some are left out by
     // what their records state. Unset = 20.
     vcrCandidateSearchMax: integer("vcrCandidateSearchMax", "OPEN_SCIENCE_VCR_CANDIDATE_SEARCH_MAX", 20, 5, 50),
+    // How deep and how long one search for a patient's trials reads (vcrCandidateRetrieve, G11): the most trials a search keeps for one patient (the list a
+    // judging job takes its trials from; the answer shows `vcrCandidateSearchMax` of them at a time), the deadline for the registries' part of the search (a phrase
+    // not started by then is said to be not reached), how many phrases of one registry are asked at once, and the least gap between two requests to one public
+    // registry (their interfaces limit a caller's rate; 0 = unpaced). Counters: `open_science_vcr_candidate_search_total`.
+    vcrCandidateRetrieveMax: integer("vcrCandidateRetrieveMax", "OPEN_SCIENCE_VCR_CANDIDATE_RETRIEVE_MAX", 500, 20, 500),
+    vcrCandidateRetrieveDeadlineMs: integer("vcrCandidateRetrieveDeadlineMs", "OPEN_SCIENCE_VCR_CANDIDATE_RETRIEVE_DEADLINE_MS", 30_000, 2_000, 120_000),
+    vcrCandidateRetrieveConcurrency: integer("vcrCandidateRetrieveConcurrency", "OPEN_SCIENCE_VCR_CANDIDATE_RETRIEVE_CONCURRENCY", 3, 1, 8),
+    vcrRegistryPaceMs: integer("vcrRegistryPaceMs", "OPEN_SCIENCE_VCR_REGISTRY_PACE_MS", 250, 0, 5_000),
+    // The reranker of a candidate list (vcrCandidateRerank, G11): DashScope's `qwen3-rerank` reads the run's summary of the patient against each trial's title, conditions,
+    // interventions and the head of its eligibility text and puts the list in that order; it falls open to the registries' order. On by default where a DashScope key exists
+    // (unset follows the key; `=false` turns it off). One request's limit, all requests' limit, and the documents of a batch (the model takes 500 in one request; a
+    // smaller batch keeps one call's tokens and time small). Counters: `open_science_vcr_candidate_rerank_total`.
+    patientMatchingProfile: patientMatchingConfiguration(overrides),
+    // TrialLink ranking policy triallink-3 (2026-11-08): Jev's fit and graded readings, from one request per candidate, are fused with the Qwen3.7 rerank; one request
+    // per candidate, bounded by the depth. Off keeps the rerank order alone. The depth bounds lexical, dense, fused, rerank and Jev stages.
+    // Thinking effort of the clinical assessment child (DeepSeek Flash): "high" (default) or "low".
+    patientMatchingReasoningEffort: overrides.patientMatchingReasoningEffort ?? (process.env.OPEN_SCIENCE_PATIENT_MATCHING_REASONING_EFFORT?.trim() === "low" ? "low" : "high"),
+    patientMatchingJevEnabled: overrides.patientMatchingJevEnabled ?? boolEnv("OPEN_SCIENCE_PATIENT_MATCHING_JEV_ENABLED", true),
+    patientMatchingDiscoveryDepth: integer("patientMatchingDiscoveryDepth", "OPEN_SCIENCE_PATIENT_MATCHING_DISCOVERY_DEPTH", 300, 20, 500),
+    patientMatchingRankView: ["balanced", "trial-record"].includes(String(overrides.patientMatchingRankView ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_RANK_VIEW ?? "").trim()) ? String(overrides.patientMatchingRankView ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_RANK_VIEW).trim() : "trial-record",
+    patientMatchingJevDepth: integer("patientMatchingJevDepth", "OPEN_SCIENCE_PATIENT_MATCHING_JEV_DEPTH", 300, 0, 500),
+    patientMatchingTrialIndexManifest: String(overrides.patientMatchingTrialIndexManifest ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_TRIAL_INDEX_MANIFEST ?? ''),
+    patientMatchingCataloguePath: String(overrides.patientMatchingCataloguePath ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_CATALOGUE ?? ''),
+    // The release a project gets when its owner never chose one (`PatientMatchingLifecycleService.ensureDefault`): a catalogue release id,
+    // `none` for no default, unset for the catalogue's only release.
+    patientMatchingDefaultRelease: String(overrides.patientMatchingDefaultRelease ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_DEFAULT_RELEASE ?? '').trim(),
+    patientMatchingWorkerSocket: String(overrides.patientMatchingWorkerSocket ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_WORKER_SOCKET ?? ''),
+    patientMatchingWorkerTokenFile: String(overrides.patientMatchingWorkerTokenFile ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_WORKER_TOKEN_FILE ?? ''),
+    patientMatchingWorkerContainer: String(overrides.patientMatchingWorkerContainer ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_WORKER_CONTAINER ?? ''),
+    patientMatchingWorkerImageDigest: String(overrides.patientMatchingWorkerImageDigest ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_WORKER_IMAGE_DIGEST ?? ''),
+    vcrMatchRerankEnabled: process.env.OPEN_SCIENCE_VCR_MATCH_RERANK_ENABLED == null || process.env.OPEN_SCIENCE_VCR_MATCH_RERANK_ENABLED === ""
+      ? (overrides.vcrMatchRerankEnabled ?? null) : (overrides.vcrMatchRerankEnabled ?? boolEnv("OPEN_SCIENCE_VCR_MATCH_RERANK_ENABLED", true)),
+    vcrMatchRerankTimeoutMs: integer("vcrMatchRerankTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_RERANK_TIMEOUT_MS", 8_000, 1_000, 60_000),
+    vcrMatchRerankBudgetMs: integer("vcrMatchRerankBudgetMs", "OPEN_SCIENCE_VCR_MATCH_RERANK_BUDGET_MS", 15_000, 2_000, 120_000),
+    vcrMatchRerankBatchSize: integer("vcrMatchRerankBatchSize", "OPEN_SCIENCE_VCR_MATCH_RERANK_BATCH_SIZE", 50, 2, 100),
     // A patient's record longer than this many characters is read through the passages that bear on a criterion (vcrPassages, M4) rather
     // than window after window: past about two windows (20,000 characters each) a chart is more than a run reads in order, and the part of it
     // a criterion asks about is a small part. Unset = 40,000. A shorter record is read as it always was.
@@ -1163,12 +1213,54 @@ function vcrSettings(overrides) {
     // How long a research tool's first call waits for its turn to reach the run ledger. A turn typed in the kernel's composer is adopted
     // after the routing decision, whose own limit is 20 s; a call refused meanwhile told the run to go on without the study. The tool waits 30 s for its answer. Unset = 20 s.
     vcrRunAdoptionWaitMs: integer("vcrRunAdoptionWaitMs", "OPEN_SCIENCE_VCR_RUN_ADOPTION_WAIT_MS", 20_000, 0, 120_000),
-    // Batch matching (remediation plan D4, vcrMatchBatch): the most people one batch reads the records of (a roster larger than this is read
-    // in batches, each start taking the next people not yet read), how many records are read at once, and how long one record's model call
-    // may take. A start states the cost of its batch before it begins; a batch is bounded so that stated cost is a bounded one.
-    vcrMatchBatchMaxSubjects: integer("vcrMatchBatchMaxSubjects", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS", 300, 1, 5_000),
-    vcrMatchExtractConcurrency: integer("vcrMatchExtractConcurrency", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_CONCURRENCY", 3, 1, 8),
+    // How long one model call of reading a table's codes may take (vcrTableMeaning).
     vcrMatchExtractTimeoutMs: integer("vcrMatchExtractTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_TIMEOUT_MS", 90_000, 10_000, 300_000),
+    // The plan a judging start states beforehand (vcrMatchJudge `planMatchJudge`, owner decisions 2026-11-04; the plugin runs the judgments): how many of a person's best-ranked trials are judged
+    // clause by clause (0 none, "all" every pair); thinking `high` or `off`; the output allowance of one call; and the most one start may be estimated at.
+    // A selection may name fit, topK and thinking for one start, so a benchmark can ask for each arm.
+    vcrMatchJudgeTopK: matchJudgeTopK(overrides.vcrMatchJudgeTopK ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_TOP_K),
+    // Measured on public boards, 2026-11-04: the trial-level call ranks as well with thinking off (SIGIR nDCG@10 .669 off, .648 high; TREC 2021 dev .810,
+    // .795; TREC 2022 dev .881, .852) at a third of the price and time; clause by clause thinking helps (746 to 782 of 1,015 on the same prompt).
+    vcrMatchJudgeThinking: matchJudgeThinking(overrides.vcrMatchJudgeThinking ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_THINKING, "off"),
+    vcrMatchJudgeCriteriaThinking: matchJudgeThinking(overrides.vcrMatchJudgeCriteriaThinking ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_CRITERIA_THINKING, "high"),
+    vcrMatchJudgeOutputTokens: integer("vcrMatchJudgeOutputTokens", "OPEN_SCIENCE_VCR_MATCH_JUDGE_OUTPUT_TOKENS", 32_000, 2_000, 64_000),
+    // The most one judging job may spend, in CNY. The `vcr` purpose has no account cap (owner, 2026-10-10), so this is what stops one selection of a long note against hundreds of trials from
+    // running the shared key dry: it is a resource limit and not an opinion (principle 15). At it the job stops `limited`, keeps its work, says so, and one action continues it.
+    vcrMatchJudgeJobCeilingCny: integer("vcrMatchJudgeJobCeilingCny", "OPEN_SCIENCE_VCR_MATCH_JUDGE_JOB_CEILING_CNY", 500, 1, 1_000_000),
+    // Taking many patients' records in (vcrRecordsImport): how much one turn of the job does, and how many entries are read at once. Each entry may be a conversion in a container or a parser call.
+    vcrRecordsImportSliceEntries: integer("vcrRecordsImportSliceEntries", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_SLICE_ENTRIES", 500, 1, 100_000),
+    vcrRecordsImportSliceMs: integer("vcrRecordsImportSliceMs", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_SLICE_MS", 300_000, 1_000, 3_600_000),
+    vcrRecordsImportConcurrency: integer("vcrRecordsImportConcurrency", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_CONCURRENCY", 4, 1, 16),
+    vcrRecordsImportProposalTimeoutMs: integer("vcrRecordsImportProposalTimeoutMs", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_PROPOSAL_TIMEOUT_MS", 120_000, 1_000, 600_000),
+    // What one import may cost the shared server, so that one upload cannot take it down or fill its disk: a cell and a row of a table of notes, in characters; the rows or files of one import and
+    // the bytes it stores; the files of an archive and what it really inflates to; a person's documents and text. What is over is counted by its own code and said, and the remainder proceeds.
+    vcrRecordsImportMaxCellChars: integer("vcrRecordsImportMaxCellChars", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_CELL_CHARS", 1_000_000, 1_000, 16_000_000),
+    vcrRecordsImportMaxRowChars: integer("vcrRecordsImportMaxRowChars", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_ROW_CHARS", 2_000_000, 1_000, 32_000_000),
+    vcrRecordsImportMaxEntries: integer("vcrRecordsImportMaxEntries", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_ENTRIES", 200_000, 1, 5_000_000),
+    vcrRecordsImportMaxBytes: integer("vcrRecordsImportMaxBytes", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_BYTES", 8 * 1024 * 1024 * 1024, 1024, 1024 * 1024 * 1024 * 1024),
+    vcrRecordsImportMaxZipEntries: integer("vcrRecordsImportMaxZipEntries", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_ZIP_ENTRIES", 100_000, 1, 1_000_000),
+    vcrRecordsImportMaxZipBytes: integer("vcrRecordsImportMaxZipBytes", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_ZIP_BYTES", 8 * 1024 * 1024 * 1024, 1024, 1024 * 1024 * 1024 * 1024),
+    vcrRecordsImportMaxPersonDocuments: integer("vcrRecordsImportMaxPersonDocuments", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_PERSON_DOCUMENTS", 2_000, 1, 100_000),
+    vcrRecordsImportMaxPersonChars: integer("vcrRecordsImportMaxPersonChars", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_PERSON_CHARS", 4_000_000, 1_000, 64_000_000),
+    // The registry watch (vcrRegistryWatch, G15). Once an hour it looks again at a bounded number of the trials a person holds a verdict about, the one checked
+    // longest ago first, and marks the verdicts of a trial whose record changed (the verdict stays; a read offers to judge it again). Batch: how many trials a tick
+    // reads (each read is one request to a public registry, which paces itself); hours: how long a trial that read fine waits before it is read again; retry hours:
+    // the same after a read that failed, so a registry that was down is asked again while the others go first; read timeout: one trial's read, after which the tick
+    // goes on. Off with `=false`, and then nothing is read and no verdict is marked. Counters: `open_science_vcr_registry_watch_total`.
+    vcrRegistryWatchEnabled: overrides.vcrRegistryWatchEnabled ?? boolEnv("OPEN_SCIENCE_VCR_REGISTRY_WATCH_ENABLED", true),
+    vcrRegistryWatchBatch: integer("vcrRegistryWatchBatch", "OPEN_SCIENCE_VCR_REGISTRY_WATCH_BATCH", 20, 1, 200),
+    vcrRegistryWatchHours: integer("vcrRegistryWatchHours", "OPEN_SCIENCE_VCR_REGISTRY_WATCH_HOURS", 168, 1, 8_760),
+    vcrRegistryWatchRetryHours: integer("vcrRegistryWatchRetryHours", "OPEN_SCIENCE_VCR_REGISTRY_WATCH_RETRY_HOURS", 6, 1, 168),
+    vcrRegistryWatchReadTimeoutMs: integer("vcrRegistryWatchReadTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_WATCH_READ_TIMEOUT_MS", 60_000, 5_000, 300_000),
+    // The eligibility text of a ChiCTR record (vcrRegistryPages, G10). The registry's listing carries none and its pages refuse a plain request, so the page is read
+    // through the platform's web reader (robots.txt, per-site pacing, the address check, a browser where one is configured) and the labelled sections are cut out of it.
+    // A page that read is kept this many days before it is read again; a page that could not be read (or held no section) is not asked for again for this many hours,
+    // so a job of thousands of pairs does not ask a browser for one page thousands of times; one read's deadline, after which the pair is judged on title and condition.
+    // Off with `=false`: no page is read and a ChiCTR pair is judged on what the listing carries. Counters: `open_science_vcr_registry_pages_total`.
+    vcrRegistryPagesEnabled: overrides.vcrRegistryPagesEnabled ?? boolEnv("OPEN_SCIENCE_VCR_REGISTRY_PAGES_ENABLED", true),
+    vcrRegistryPageDays: integer("vcrRegistryPageDays", "OPEN_SCIENCE_VCR_REGISTRY_PAGE_DAYS", 7, 1, 365),
+    vcrRegistryPageFailureHours: integer("vcrRegistryPageFailureHours", "OPEN_SCIENCE_VCR_REGISTRY_PAGE_FAILURE_HOURS", 6, 1, 168),
+    vcrRegistryPageTimeoutMs: integer("vcrRegistryPageTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_PAGE_TIMEOUT_MS", 45_000, 5_000, 150_000),
     // A second, independent reading of the passage an extracted number was read from, by Flash through the control plane's model client under the
     // purpose `vcr`, compared in code (algorithm round E1, vcrEvidenceSecondRead): on by default; a disagreement is a note, the first value stands.
     vcrEvidenceSecondReadEnabled: overrides.vcrEvidenceSecondReadEnabled ?? boolEnv("OPEN_SCIENCE_VCR_EVIDENCE_SECOND_READ_ENABLED", true),
@@ -1713,6 +1805,9 @@ export function loadConfig(overrides = {}) {
     overrides.pharmacyReferenceDb ??
     process.env.OPEN_SCIENCE_PHARMACY_REFERENCE_DB ??
     (localPharmacyReferenceDb && fs.existsSync(localPharmacyReferenceDb) ? localPharmacyReferenceDb : "");
+  // The terminology file term_normalize reads (scripts/ops/build-terminology.mjs). A host runtime reads it by this path; Docker runtimes reach it
+  // through the evidence adapter (EVIMED_TERMINOLOGY_SEARCH_URL), which mounts it from the data volume.
+  const configuredTerminologyDb = overrides.terminologyDb ?? process.env.OPEN_SCIENCE_TERMINOLOGY_DB ?? "";
   const specialistAgentDefinitions = {
     mendelianRandomization: {
       rootEnv: "OPEN_SCIENCE_MR_AGENT_ROOT",
@@ -1762,6 +1857,7 @@ export function loadConfig(overrides = {}) {
       ["clinicalTrialSearch", "EVIMED_CLINICAL_TRIAL_SEARCH_URL"],
       ["patentSearch", "EVIMED_PATENT_SEARCH_URL"],
       ["pharmacyReferenceSearch", "EVIMED_PHARMACY_REFERENCE_SEARCH_URL"],
+      ["terminologyLookup", "EVIMED_TERMINOLOGY_SEARCH_URL"],
       ["drugLabelSearch", "EVIMED_DRUG_LABEL_SEARCH_URL"],
       ["adrCaseQuery", "EVIMED_ADR_CASE_QUERY_URL"],
       ["adrSignalAnalysis", "EVIMED_ADR_SIGNAL_ANALYSIS_URL"],
@@ -2619,6 +2715,9 @@ export function loadConfig(overrides = {}) {
       ? (path.isAbsolute(configuredPharmacyReferenceDb)
         ? configuredPharmacyReferenceDb
         : path.join(rootDir, configuredPharmacyReferenceDb))
+      : "",
+    terminologyDb: configuredTerminologyDb
+      ? (path.isAbsolute(configuredTerminologyDb) ? configuredTerminologyDb : path.join(rootDir, configuredTerminologyDb))
       : "",
     requireAllSpecialistAdapters:
       overrides.requireAllSpecialistAdapters ??

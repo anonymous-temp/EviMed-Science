@@ -29,7 +29,7 @@
  */
 
 import {
-  VCR_CONCLUSIONS, VCR_COUNT_KEYS, VCR_CRITERION_STATES, VCR_INTERVAL_KINDS, VCR_NOT_ESTIMABLE_RULES, VCR_VALUE_SOURCES,
+  VCR_CONCLUSIONS, VCR_COUNT_KEYS, VCR_INTERVAL_KINDS, VCR_NOT_ESTIMABLE_RULES, VCR_VALUE_SOURCES,
 } from './vcrVocabulary.mjs'
 import { validateRequirement } from './vcrRules.mjs'
 
@@ -45,7 +45,6 @@ export const VCR_CHECK_IDS = Object.freeze([
   'vcr-interval-named',
   'vcr-assumption-source',
   'vcr-simulation-report-shape',
-  'vcr-matching-state-shape',
   'vcr-criteria-shape',
   'vcr-package-cover',
 ])
@@ -54,8 +53,6 @@ export const VCR_CHECK_IDS = Object.freeze([
 export const VCR_RESULTS_FILE = 'results.json'
 /** The simulation report's own structured companion (FDA CID checklist, plan §5.4). */
 export const VCR_SIMULATION_FILE = 'simulation.json'
-/** The matching assessment's structured companion (plan §7.1). */
-export const VCR_MATCHING_FILE = 'matching.json'
 /** The protocol step's structured eligibility criteria (plan §7.1). */
 export const VCR_CRITERIA_FILE = 'criteria.json'
 /** The study package's own document, whose cover states review and sealing. */
@@ -427,71 +424,4 @@ export function vcrCohortFindings(input) {
       { path: VCR_RESULTS_FILE, check: 'vcr-conclusion-stated' }))
   }
   return base
-}
-
-/**
- * A matching assessment: three-valued judgments with their evidence.
- * @param {{ files: Map<string, string> }} input
- * @returns {VcrFindings}
- */
-export function vcrMatchingFindings(input) {
-  /** @type {VcrIssue[]} */
-  const issues = []
-  const assessment = parsed(input.files, VCR_MATCHING_FILE)
-  if (assessment === undefined) {
-    issues.push(notice('vcr_matching_unreadable', `${VCR_MATCHING_FILE} 不是有效的 JSON。`, { path: VCR_MATCHING_FILE, check: 'vcr-matching-state-shape' }))
-    return { issues, metrics: {} }
-  }
-  if (assessment === null) {
-    issues.push(notice('vcr_matching_missing', `匹配评估缺 ${VCR_MATCHING_FILE}（方案 §7.1）。`, { path: VCR_MATCHING_FILE, check: 'vcr-matching-state-shape' }))
-    return { issues, metrics: {} }
-  }
-  const judgments = Array.isArray(assessment.judgments) ? assessment.judgments : []
-  let unanchored = 0
-  for (const judgment of judgments) {
-    if (judgment?.state === 'satisfied' || judgment?.state === 'not_satisfied') {
-      const evidence = Array.isArray(judgment?.evidence) ? judgment.evidence : []
-      if (!evidence.some((/** @type {any} */ item) => item?.quote && item?.locator)) unanchored += 1
-    }
-  }
-  if (unanchored) {
-    issues.push(notice('vcr_judgment_unanchored', `${unanchored} 条判定没有带原文位置的证据；找不到证据的条件应记为「未知」（方案 §7.1）。`,
-      { path: VCR_MATCHING_FILE, check: 'vcr-matching-state-shape' }))
-  }
-
-  // Two things a reader cannot check and the bytes can (AC-14). Neither
-  // recomputes the verdict — the eligibility rule has one implementation, in
-  // the control plane — they check the package against itself:
-  //
-  //  - 「不适用」 written where a state belongs. It is an applicability field
-  //    beside the judgment, and folding it in is one of the two errors
-  //    TrialGPT's own error analysis names.
-  //  - a package that calls a subject 「符合」 while one of its own exclusion
-  //    criteria is 「未知」. That is the invariant the plan states outright,
-  //    and it is decidable here without knowing anything else.
-  let badState = 0
-  let blockingUnknown = 0
-  for (const judgment of judgments) {
-    const state = String(judgment?.state ?? '')
-    if (state && !VCR_CRITERION_STATES.includes(state)) badState += 1
-    if (judgment?.applicable !== false && judgment?.kind === 'exclusion' && state === 'unknown') blockingUnknown += 1
-  }
-  if (badState) {
-    issues.push(notice('vcr_judgment_state_unknown',
-      `${badState} 条判定的状态不在词表里（满足 / 不满足 / 未知 / 待复评）；「不适用」是判定旁边的适用性字段，不是第五种状态（方案 §7.1）。`,
-      { path: VCR_MATCHING_FILE, check: 'vcr-matching-state-shape' }))
-  }
-  if (blockingUnknown && assessment.summary === 'eligible') {
-    issues.push(notice('vcr_summary_contradicted',
-      `summary 写的是「eligible」，但有 ${blockingUnknown} 条排除标准是「未知」——任何一条排除标准未知，整体就不能判为「符合」（AC-14）。`,
-      { path: VCR_MATCHING_FILE, check: 'vcr-matching-state-shape' }))
-  }
-  return {
-    issues,
-    metrics: {
-      vcrJudgments: judgments.length, vcrJudgmentsUnanchored: unanchored,
-      vcrJudgmentsBadState: badState, vcrBlockingUnknowns: blockingUnknown,
-      vcrMatchingSummary: assessment.summary ?? null,
-    },
-  }
 }

@@ -140,6 +140,7 @@ export {
   OPENVIKING_MEMORY_TOOL_NAMES,
   KERNEL_MOUNTED_TOOL_NAMES,
   MOUNTED_TOOL_NAMES,
+  PATIENT_MATCHING_TOOL_NAMES,
   PLATFORM_CHOREOGRAPHY_TOOL_NAMES,
   RETIRED_MCP_TOOL_NAMES,
   RETIRED_SOCKET_TOOL_NAMES,
@@ -471,7 +472,7 @@ export {
   transcriptMessageText,
 } from './src/trajectoryDigest.mjs'
 export { scopeRunTranscript } from './src/runTurnScope.mjs'
-export { methodSourceIdentifierShapesIn } from './src/methodSourcePrivacy.mjs'
+export { maskOutboundIdentifiers, methodSourceIdentifierShapesIn } from './src/methodSourcePrivacy.mjs'
 
 // learningEvidence — one reaction of the researcher to a run, as the feedback ledger keeps it (steer, follow-up, result-corrected, silent, used)
 export {
@@ -1840,6 +1841,7 @@ export {
   VCR_INTERVAL_KINDS,
   VCR_INTERVAL_KIND_LABELS_ZH,
   VCR_JOB_KINDS,
+  VCR_RETIRED_JOB_KINDS,
   VCR_JOB_STATES,
   VCR_JOB_STATE_LABELS_ZH,
   VCR_JOB_WAIT_LABELS_ZH,
@@ -1982,6 +1984,20 @@ export {
   VCR_RUN_PLACEMENTS,
   VCR_JOB_KIND_STEPS,
   vcrVisibleQuestion,
+  VCR_MATCH_FIT_LEVELS,
+  VCR_MATCH_FIT_LEVEL_LABELS_ZH,
+  vcrMatchFitLevel,
+  vcrMatchConfidenceLevel,
+  VCR_MATCH_CONFIDENCE_LABELS_ZH,
+  VCR_MATCH_STANCES,
+  VCR_MATCH_STANCE_LABELS_ZH,
+  VCR_MATCH_REASON_GROUP_LABELS_ZH,
+  VCR_MATCH_NO_ELIGIBILITY_ZH,
+  VCR_MATCH_EXPORT_FORMATS,
+  VCR_MATCH_EXPORT_KINDS,
+  VCR_MATCH_FAILURE_REASONS_ZH,
+  VCR_MATCH_FAILURE_FALLBACK_ZH,
+  vcrMatchFailureReason,
 } from './src/vcrVocabulary.mjs'
 export {
   VCR_APPLICABILITY_LIMITS,
@@ -2172,10 +2188,11 @@ export {
   soaWindowText,
 } from './src/vcrSchedule.mjs'
 
-// vcrSuppression — 2 exports: small-cell suppression for everything a model may read: every people-count
+// vcrSuppression — 3 exports: small-cell suppression for everything a model may read: every people-count
 // below the floor, in any shape the stores produce
 export {
   VCR_CELL_IDENTITY_KEYS,
+  hiddenSet,
   suppressForModel,
 } from './src/vcrSuppression.mjs'
 
@@ -2407,7 +2424,6 @@ export {
   VCR_BACKSTAGE_FILES,
   VCR_CHECK_IDS,
   VCR_CRITERIA_FILE,
-  VCR_MATCHING_FILE,
   VCR_PACKAGE_FILE,
   VCR_RESULTS_FILE,
   VCR_SIMULATION_FILE,
@@ -2415,7 +2431,6 @@ export {
   resultNumbers,
   vcrCohortFindings,
   vcrComparatorFindings,
-  vcrMatchingFindings,
   vcrSimulationReportFindings,
   vcrStudyPackageFindings,
 } from './src/vcrContracts.mjs'
@@ -2571,6 +2586,8 @@ export {
   DATA_TRANSFORM_KINDS,
   DATA_TRANSFORM_KIND_LABELS_ZH,
   DATA_VALUE_SOURCES,
+  DATA_VALUE_STATES,
+  DATA_VALUE_STATE_LABELS_ZH,
   DATA_VARIABLE_FACETS,
   DATA_VARIABLE_ROLES,
   DATA_VARIABLE_ROLE_LABELS_ZH,
@@ -2796,18 +2813,37 @@ export {
 } from './src/clinicalUnits.mjs'
 
 export {
-  VCR_MATCH_BATCH_SCHEMA,
   VCR_MATCH_BATCH_METHODS,
   VCR_MATCH_BATCH_JOBS,
   VCR_SLOW_LOCAL_METHODS,
-  VCR_MATCH_BATCH_LIMITS,
+  VCR_MATCH_JUDGE_LIMITS,
+  VCR_RECORDS_IMPORT_INPUTS,
   VCR_MATCH_BATCH_DEFAULT_MODEL,
   validateMatchBatchScenario,
-  matchBatchUnitKey,
-  planMatchExtraction,
-  matchBatchStatement,
-  acceptExtractedFacts,
 } from './src/vcrMatchBatch.mjs'
+
+export {
+  VCR_JUDGMENT_PROMPT_VERSIONS,
+  VCR_CRITERION_LABELS,
+  VCR_TRIAL_VERDICT_LABELS_ZH,
+  VCR_FIT_BANDS,
+  segmentSentences,
+  segmentCriteria,
+  fitMessages,
+  criteriaMessages,
+  parseFitAnswer,
+  parseCriteriaAnswer,
+  reasonList,
+  criterionDisplay,
+  trialVerdict,
+  rankJudgments,
+  splitNoteParts,
+  mergeFitAnswers,
+  mergeCriteriaAnswers,
+} from './src/vcrTrialJudgment.mjs'
+
+export { vcrSubjectLabel, vcrSubjectLabels } from './src/vcrSubjectLabel.mjs'
+
 
 export { VCR_LONGITUDINAL_SCHEMA, VCR_LONGITUDINAL_ERROR_CODES, VCR_LONGITUDINAL_SCHEMAS, VCR_LONGITUDINAL_METHODS, VCR_LONGITUDINAL_JOBS, VCR_PREDICTION_TYPES,
   VCR_FORECAST_UNCERTAINTY, VCR_LONGITUDINAL_LIMITS, longitudinalNumber, longitudinalInstant, longitudinalMean,

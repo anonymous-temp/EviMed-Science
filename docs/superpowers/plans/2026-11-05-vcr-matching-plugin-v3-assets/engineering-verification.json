@@ -1,0 +1,87 @@
+{
+  "kind": "patient-matching-engineering-closeout",
+  "recordedAt": "2026-11-05T16:26:35.267791+00:00",
+  "scope": "Offline and isolated engineering checks only. All remaining paid evaluation is owner-skipped.",
+  "nativeCandidate": {
+    "version": "0.1.1",
+    "sha256": "5dc7fdad212913b026ef31ce22af251681a275b11ad820b54f06da3569e13b96",
+    "kernel": "0.2.1-rc.5",
+    "qualification": "Synthetic installation/status/managed-child/failure-checkpoint/cancel/disposal/disabled-conversation",
+    "paidCalls": 0
+  },
+  "checks": {
+    "workspacePackages": {
+      "status": "passed",
+      "tests": 2484,
+      "passed": 2469,
+      "skipped": 15,
+      "failures": 0,
+      "includes": "domain, harness-port, socket, contracts, matching-core23, matching-plugin35, matching-worker8"
+    },
+    "focusedOffline": {
+      "status": "passed",
+      "tests": 123,
+      "passed": 88,
+      "skipped": 35,
+      "failures": 0,
+      "scope": "matching server modules, campaign/acceptance offline tests and saved-result exporter; database suites skipped here and qualified separately"
+    },
+    "isolatedPostgresFailureIsolation": {
+      "status": "passed",
+      "tests": 11,
+      "scope": "actual isolated PostgreSQL; canonical bundle mismatch, valid siblings, checkpoints, explicit resume, erasure, rollback and source/cancel fences"
+    },
+    "frozenDependencyInstall": {
+      "status": "passed",
+      "scripts": "ignored",
+      "network": "disabled"
+    },
+    "canonicalLintAndTypecheck": {
+      "status": "passed",
+      "scope": "server, domain and harness-port"
+    },
+    "localFullServerDiagnostic": {
+      "status": "not-fully-green",
+      "observation": "Earlier full macOS run:14086 tests,10269 passed,34 failed,3783 skipped; source assertions corrected since that run. Linux-specific process/proc/Bash behavior and unrelated baseline issues are not weakened. This is not a current all-green full-suite claim."
+    },
+    "review": {
+      "codeQuality": "approved; zero remaining findings, including final source-audit alignment and documentation claims",
+      "typescript": "approved; canonical bundle fix, dynamic release identities, native/MCP roster, controller audit and export assertion"
+    },
+    "extendedMatchingLint": {
+      "status": "passed",
+      "scope": "matching-core/plugin/worker, deploy and evaluation scripts"
+    },
+    "offlineEvaluationTooling": {
+      "status": "passed",
+      "tests": 36,
+      "failures": 0,
+      "paidCalls": 0,
+      "overlap": "Included in the focused checks above; not an additional independent acceptance count."
+    },
+    "hostedComplianceAudit": {
+      "status": "passed",
+      "checks": 78,
+      "failures": 0,
+      "warnings": 0,
+      "scope": "Verified matching generation and image binding, exact disjoint native/MCP inventories and negative controls preserved."
+    },
+    "stagedSecretScan": {
+      "status": "passed",
+      "gitleaksFindings": 0,
+      "actualProviderKeyValuesChecked": 3,
+      "actualKeyMatches": 0,
+      "privatePathMatches": 0
+    }
+  },
+  "evidenceBoundary": "No current clinical accuracy, leaderboard rank, latency target or hosted customer acceptance is claimed. Historical0.1.0 clinical observations remain version-bound.",
+  "paidExecution": {
+    "status": "owner-stopped",
+    "allowProviderCalls": false,
+    "automaticResume": false
+  },
+  "publication": "not-performed",
+  "mainIntegration": "not-performed",
+  "deployment": "not-performed",
+  "sourceCloseout": "Engineering implementation, scoped verification and reviews complete. Delivery is source commit/push only; the pushed revision full Linux CI remains a separate reported gate."
+}

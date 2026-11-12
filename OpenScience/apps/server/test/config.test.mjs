@@ -253,22 +253,34 @@ test("the number of candidate trials a study holds has a key, a default and boun
     ["vcrPassagesMinChars", "1000", "OPEN_SCIENCE_VCR_PASSAGES_MIN_CHARS"], ["vcrPassagesMinChars", "2000000", "OPEN_SCIENCE_VCR_PASSAGES_MIN_CHARS"]]) {
     assert.throws(() => loadConfig({ rootDir: repoRoot, [key]: value }), new RegExp(name));
   }
-  assert.equal(loadConfig({ rootDir: repoRoot }).vcrCandidateTrialsMax, 60);
-  assert.equal(loadConfig({ rootDir: repoRoot, vcrCandidateTrialsMax: "120" }).vcrCandidateTrialsMax, 120);
-  for (const value of ["0", "501", "many"]) {
-    assert.throws(() => loadConfig({ rootDir: repoRoot, vcrCandidateTrialsMax: value }), /OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX/);
+});
+
+test("the registry watch and the ChiCTR page reader are on, bounded, and each limit has a name", () => {
+  const config = loadConfig({ rootDir: repoRoot });
+  assert.deepEqual([config.vcrRegistryWatchEnabled, config.vcrRegistryWatchBatch, config.vcrRegistryWatchHours, config.vcrRegistryWatchRetryHours, config.vcrRegistryWatchReadTimeoutMs], [true, 20, 168, 6, 60_000]);
+  assert.deepEqual([config.vcrRegistryPagesEnabled, config.vcrRegistryPageDays, config.vcrRegistryPageFailureHours, config.vcrRegistryPageTimeoutMs], [true, 7, 6, 45_000]);
+  const set = loadConfig({ rootDir: repoRoot, vcrRegistryWatchEnabled: false, vcrRegistryWatchBatch: "200", vcrRegistryWatchHours: "1", vcrRegistryPagesEnabled: false, vcrRegistryPageDays: "365" });
+  assert.deepEqual([set.vcrRegistryWatchEnabled, set.vcrRegistryWatchBatch, set.vcrRegistryWatchHours, set.vcrRegistryPagesEnabled, set.vcrRegistryPageDays], [false, 200, 1, false, 365]);
+  for (const [bad, name] of [[{ vcrRegistryWatchBatch: "0" }, "OPEN_SCIENCE_VCR_REGISTRY_WATCH_BATCH"], [{ vcrRegistryWatchBatch: "201" }, "OPEN_SCIENCE_VCR_REGISTRY_WATCH_BATCH"],
+    [{ vcrRegistryWatchHours: "0" }, "OPEN_SCIENCE_VCR_REGISTRY_WATCH_HOURS"], [{ vcrRegistryWatchRetryHours: "169" }, "OPEN_SCIENCE_VCR_REGISTRY_WATCH_RETRY_HOURS"],
+    [{ vcrRegistryWatchReadTimeoutMs: "1000" }, "OPEN_SCIENCE_VCR_REGISTRY_WATCH_READ_TIMEOUT_MS"], [{ vcrRegistryPageDays: "0" }, "OPEN_SCIENCE_VCR_REGISTRY_PAGE_DAYS"],
+    [{ vcrRegistryPageFailureHours: "0" }, "OPEN_SCIENCE_VCR_REGISTRY_PAGE_FAILURE_HOURS"], [{ vcrRegistryPageTimeoutMs: "151000" }, "OPEN_SCIENCE_VCR_REGISTRY_PAGE_TIMEOUT_MS"]]) {
+    assert.throws(() => loadConfig({ rootDir: repoRoot, ...bad }), new RegExp(name), JSON.stringify(bad));
   }
 });
 
-test("batch matching has a bound on its size, on its concurrency and on one record's call", () => {
+test("batch matching has a bound on one table-code call and on judging", () => {
   const config = loadConfig({ rootDir: repoRoot });
-  assert.deepEqual([config.vcrMatchBatchMaxSubjects, config.vcrMatchExtractConcurrency, config.vcrMatchExtractTimeoutMs], [300, 3, 90_000]);
-  const set = loadConfig({ rootDir: repoRoot, vcrMatchBatchMaxSubjects: "50", vcrMatchExtractConcurrency: "1", vcrMatchExtractTimeoutMs: "20000" });
-  assert.deepEqual([set.vcrMatchBatchMaxSubjects, set.vcrMatchExtractConcurrency, set.vcrMatchExtractTimeoutMs], [50, 1, 20_000]);
-  for (const [key, value, name] of [["vcrMatchBatchMaxSubjects", "0", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS"], ["vcrMatchBatchMaxSubjects", "5001", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS"],
-    ["vcrMatchExtractConcurrency", "9", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_CONCURRENCY"], ["vcrMatchExtractTimeoutMs", "5000", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_TIMEOUT_MS"]]) {
-    assert.throws(() => loadConfig({ rootDir: repoRoot, [key]: value }), new RegExp(name));
+  assert.deepEqual([config.vcrMatchExtractTimeoutMs], [90_000]);
+  assert.deepEqual([config.vcrMatchJudgeTopK, config.vcrMatchJudgeThinking, config.vcrMatchJudgeOutputTokens], [20, "off", 32_000]);
+  const judged = loadConfig({ rootDir: repoRoot, vcrMatchJudgeTopK: "all", vcrMatchJudgeThinking: "off", vcrMatchJudgeOutputTokens: "2000" });
+  assert.deepEqual([judged.vcrMatchJudgeTopK, judged.vcrMatchJudgeThinking, judged.vcrMatchJudgeOutputTokens], ["all", "off", 2_000]);
+  assert.equal(loadConfig({ rootDir: repoRoot, vcrMatchJudgeTopK: "0" }).vcrMatchJudgeTopK, 0);
+  for (const bad of [{ vcrMatchJudgeTopK: "some" }, { vcrMatchJudgeTopK: "501" }, { vcrMatchJudgeThinking: "low" }, { vcrMatchJudgeOutputTokens: "1000" }]) {
+    assert.throws(() => loadConfig({ rootDir: repoRoot, ...bad }), /OPEN_SCIENCE_VCR_MATCH_JUDGE_/, JSON.stringify(bad));
   }
+  assert.equal(loadConfig({ rootDir: repoRoot, vcrMatchExtractTimeoutMs: "20000" }).vcrMatchExtractTimeoutMs, 20_000);
+  assert.throws(() => loadConfig({ rootDir: repoRoot, vcrMatchExtractTimeoutMs: "5000" }), /OPEN_SCIENCE_VCR_MATCH_EXTRACT_TIMEOUT_MS/);
 });
 
 test("memory extraction is given longer than one extraction actually takes", () => {
@@ -412,6 +424,7 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS: ["eq", "managedBrowserMaxContexts", "browser capacity"],
   OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS_PER_USER: ["eq", "managedBrowserMaxContextsPerUser", "browser capacity"],
   EVIMED_PHARMACY_REFERENCE_SEARCH_URL: ["deployment", "url"],
+  EVIMED_TERMINOLOGY_SEARCH_URL: ["deployment", "url"],
   EVIMED_ADR_CASE_QUERY_URL: ["deployment", "url"],
   EVIMED_ADR_SIGNAL_ANALYSIS_URL: ["deployment", "url"],
   EVIMED_OFFLABEL_EVIDENCE_PACKET_URL: ["deployment", "url"],

@@ -1279,6 +1279,26 @@ the backup), add `OPEN_SCIENCE_OPENVIKING_MODEL_KEY_HOST_FILE` to `.env`, delete
 `pnpm configure:production-state` (it renders the new configuration and generates the model key), then recreate
 `evimed-openviking-init`, `evimed-openviking` and `open-science-web`.
 
+### The terminology file (`term_normalize`)
+
+`term_normalize` meets a Chinese diagnosis in a record and an English one in a trial's criteria at the same entity when the deployment holds a
+terminology file; without it the tool keeps its built-in table and says so in its answer, so the file is optional and nothing fails for its
+absence. It is built once from public sources (pins and digests in `deps-version.json` `terminology`) and the operator's own vocabularies, outside
+the repository, and then put into the data volume:
+
+```bash
+node scripts/ops/build-terminology.mjs --out /var/lib/evimed/terminology.sqlite --public-dir DIR --fetch --lexicon-dir DIR ...   # inputs: the script's header
+node scripts/ops/install-terminology.mjs --file /var/lib/evimed/terminology.sqlite --dry-run                                     # inspect: release, entities, digest
+node scripts/ops/install-terminology.mjs --file /var/lib/evimed/terminology.sqlite --container <open-science-web container>      # into open-science-data:/data
+node scripts/ops/install-terminology.mjs --status --adapter-url http://127.0.0.1:8026                                              # is it loaded?
+```
+
+The install copies through the web container (which writes the volume) beside the name, compares the digest that arrived with the digest sent and
+renames; it never makes a hard link. The evidence adapter mounts the volume read-only and reads `/data/terminology.sqlite`
+(`EVIMED_TERMINOLOGY_DB`), so it needs no restart. Whether the file is loaded is a readiness fact, `checks.terminology`
+(`loaded`, `release`, `entities`, or `reason`; the adapter's `/health` carries the same under `terminology`); it is always `ok`, because a deployment
+without the file serves every other workflow. A host runtime reads the file by `OPEN_SCIENCE_TERMINOLOGY_DB` instead (development only).
+
 ## Data Backup and Restore
 
 For the current single-node hosted slice, all durable server state is under

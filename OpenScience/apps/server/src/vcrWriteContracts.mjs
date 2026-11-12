@@ -39,11 +39,18 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "line",
     "biomarker"
   ],
-  "candidate_trial": [
+  "trial_judgment": [
+    "subjectKey",
     "registry",
     "registryId",
+    "collection",
+    "collectionRevision",
+    "protocolVersionId",
+    "fit",
+    "confidence",
+    "reasons",
     "criteria",
-    "subjectKeys"
+    "documentHash"
   ],
   "evidence_item": [
     "registry",
@@ -224,7 +231,6 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "subjectKey",
     "criterionKey",
     "protocolVersionId",
-    "candidateTrialId",
     "state",
     "evidence"
   ],
@@ -301,9 +307,11 @@ export const VCR_WRITE_EXAMPLES = Object.freeze({
     comparisonGoal: { text: '比较样本量、把握度和 I 类错误' },
   }),
   plan: Object.freeze({ analysis: { primary: '单侧 α 0.025 的 log-rank 检验' }, sensitivity: { cases: ['HR 0.80', '年脱落率 10%'] }, sealedFields: [] }),
-  candidate_trial: Object.freeze({
-    registry: 'clinicaltrials.gov', registryId: 'NCT06927986',
-    criteria: [{ kind: 'inclusion', criterionType: 'biomarker', sourceText: 'Presence of at least one EGFR-sensitive mutation', requirement: { op: 'present', variable: 'egfr_exon19_deletion' } }],
+  trial_judgment: Object.freeze({
+    subjectKey: '<the pseudonym>', registryId: 'NCT06927986', fit: 70, confidence: 0.6,
+    reasons: { eligible: ['肺腺癌 IV 期，符合入组人群'], ineligible: [], missing: ['EGFR 检测结果'], rationale: '诊断和分期符合，缺驱动基因结果' },
+    criteria: [{ number: 1, reason: '病历写 62 岁', sentenceIds: [0], label: 'included' }, { number: 5, reason: '病历未提脑转移；好的病历通常会写', sentenceIds: [], label: 'not excluded' }],
+    documentHash: '<from the sentences read>',
   }),
 });
 
@@ -318,7 +326,16 @@ export function vcrWriteContracts(kind = null) {
       envelope: 'data is one object whose action names its fields; items is refused', additionalProperties: false,
       detail: 'dataIntake in this read gives each action\'s required fields and the sequence' },
     task_context: { fields: ['title'], required: [], title: 'optional, in data: a short name for the research question (at most 40 characters); never a person, and no identifier', creates: 'owned hidden conversation scope only' },
-    patient_context: { fields: ['messageSeq', 'sourceId'], oneOf: ['authenticated human message sequence', 'owned uploaded source id'], automatedMessages: 'never admitted as human' },
+    patient_context: { fields: ['messageSeq', 'sourceId', 'generation', 'sha256', 'subjectKey'], additionalProperties: false,
+      oneOf: [
+        { required: ['messageSeq'], from: 'authenticated human message candidates in patient_context' },
+        { required: ['sourceId', 'generation', 'sha256'], from: 'exact original attachment handle in patient_context uploads (text, PDF, Word, a scan)' },
+        { required: ['sourceId'], from: 'owned knowledge-base document in patient_context knowledgeDocuments' },
+      ],
+      subjectKey: 'optional: the person this is about, from patients in the read or an earlier answer, when it is the same person. It joins their record and re-judges their trials; leave it out for a new patient.',
+      envelope: 'data is one object; pass only the fields of the selected original',
+      discovery: 'Read patient_context and follow nextUploadRead for more attachments, nextKnowledgeRead for more knowledge-base documents or nextBeforeSeq for earlier messages.',
+      automatedMessages: 'never admitted as human' },
     patient_set: { ...contracts.patient_set, anyOf: ['nonempty scenario', 'populationId', 'modelId'], scenario: 'when supplied, use vcr_simulate action=shape kind=generate_patients or supported variant gives exact keys' },
     decision: { ...contracts.decision, required: ['question', 'chosen', 'rationale'], chosen: 'nonempty structured choice', rationale: 'nonempty scientific basis; schema discovery uses contracts reads' },
     population: { ...contracts.population, kind: VCR_POPULATION_KINDS, real: 'snapshotId from freeze and definition rules, or fromProtocol=true with snapshotId' },
@@ -335,7 +352,10 @@ export function vcrWriteContracts(kind = null) {
       rule: 'then vcr_simulate start kind=design_analytic|design_simulation|assurance with subjectId = the id and no scenario: the platform builds it from this object. A number of the configuration you read in a paper: sources [{ field: \'truth.controlMedian\', publication: \'PMID 37676259\', quote: \'<the sentence that prints it>\' }]' },
     design_grid: { ...contracts.design_grid, example: VCR_WRITE_EXAMPLES.design_grid, rule: 'labels are for the page; start kind=design_grid with subjectId = the id and no scenario' },
     plan: { ...contracts.plan, example: VCR_WRITE_EXAMPLES.plan, rule: 'analysis and sensitivity are objects; a list or a sentence is kept as it was written (under items or text)' },
-    candidate_trial: { ...contracts.candidate_trial, words: wordsOf('criterion'), example: VCR_WRITE_EXAMPLES.candidate_trial },
+    trial_judgment: { ...contracts.trial_judgment, example: VCR_WRITE_EXAMPLES.trial_judgment,
+      target: 'registryId for a registry trial or protocolVersionId for a protocol version of this study, one of them',
+      criteria: 'number is the clause number trial_registry_record or matching gives; sentenceIds are ids from vcr_read what:subject_document filter.kind=sentences; label is one of included, not included, excluded, not excluded, not applicable, not enough information',
+      documentHash: 'the documentHash that read returned, so numbers that no longer match the record come back as a notice' },
   });
   return kind ? { [kind]: Object.hasOwn(contracts, kind) ? contracts[kind] : null } : contracts;
 }

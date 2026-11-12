@@ -7,7 +7,7 @@ import test from "node:test";
 import { VCR_WORKER_LOOPS, VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "../src/vcrWorker.mjs";
 
 test("the seven loops, their cadences and which of them are leased", () => {
-  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "localJobs", "slowJobs", "completions", "orchestrator", "recompute", "recheck", "frontierEvents", "packSources", "drafts"]);
+  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "localJobs", "slowJobs", "completions", "orchestrator", "recompute", "recheck", "frontierEvents", "registryWatch", "packSources", "drafts"]);
   const packs = VCR_WORKER_LOOPS.find((loop) => loop.name === "packSources");
   assert.deepEqual([packs?.leased, packs?.optional], [true, true], "a platform pack is watched once, by whichever control plane sees it first, and only while the switch is on");
   const events = VCR_WORKER_LOOPS.find((loop) => loop.name === "frontierEvents");
@@ -18,6 +18,15 @@ test("the seven loops, their cadences and which of them are leased", () => {
   assert.equal(recheck?.every, 15 * 60_000);
   assert.equal(recheck?.leased, true, "one due date is one job, whichever control plane sees it first");
   assert.equal(VCR_WORKER_LOOPS.find((loop) => loop.name === "jobs")?.leased, undefined, "claiming is already exclusive in the database");
+});
+
+test("the registry watch loop is hourly and leased, the watch's own tick, and absent while it is off", async () => {
+  const watch = VCR_WORKER_LOOPS.find((loop) => loop.name === "registryWatch");
+  assert.deepEqual([watch?.every, watch?.leased, watch?.optional], [60 * 60_000, true, true], "one trial is read once, whichever control plane sees it first, and the switch may be off");
+  const loops = createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null, registryWatch: { async tick() { return { due: 3, checked: 2, changed: 1, marked: 4, failed: 1, deferred: 0 }; } } });
+  assert.deepEqual(await loops.registryWatch?.(), { due: 3, checked: 2, changed: 1, marked: 4, failed: 1, deferred: 0 });
+  assert.equal(createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null }).registryWatch, null);
+  assert.equal(createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null, registryWatch: {} }).registryWatch, null);
 });
 
 test("the recheck loop is the matching package's own function, and absent when matching is not composed", async () => {
@@ -102,7 +111,7 @@ test("P2-9 the slow lane starts a batch and does not wait for it: another accoun
   /** @type {string[]} */ const finishedHooks = [];
   const queue = [[{ id: "job_a" }], [{ id: "job_b" }], [], []];
   const jobs = {
-    owner: "me", config: { vcrLocalConcurrency: 2 }, localExecutors: { "matching.extract": () => null },
+    owner: "me", config: { vcrLocalConcurrency: 2 }, localExecutors: { "matching.judge": () => null },
     async claim() { return queue.shift() ?? []; },
     advance(/** @type {{ id: string }} */ job) {
       advanced.push(job.id);
@@ -111,7 +120,7 @@ test("P2-9 the slow lane starts a batch and does not wait for it: another accoun
     takeReaped() { return []; },
   };
   // the store reports what this process holds as running, as the database does while a batch is out
-  const store = { async rows() { return [...release.keys()].map((id) => ({ id, method: "matching.extract", kind: "match_extract" })); } };
+  const store = { async rows() { return [...release.keys()].map((id) => ({ id, method: "matching.judge", kind: "match_judge" })); } };
   const orchestrator = { async onJobFinished(/** @type {{ job: { id: string } }} */ outcome) { finishedHooks.push(outcome.job.id); } };
   const loops = createVcrWorkerLoops({ jobs, orchestrator, store });
   const slow = /** @type {() => Promise<any>} */ (loops.slowJobs);
@@ -156,4 +165,36 @@ test("P2-9 the engine and the local lanes still wait for the jobs they start", a
   const result = await /** @type {() => Promise<any>} */ (loops.jobs)();
   assert.deepEqual(order, ["advanced", "hook"], "the tick returned after the job did");
   assert.equal(result.finished, 1);
+});
+
+test("the worker's slow lane lets a long job give its turn back, and no other lane does", async () => {
+  const asked = [];
+  const rows = [{ id: "job_slow", method: "matching.judge" }, { id: "job_short", method: "matching.evaluate" }];
+  const jobs = { owner: "w", config: { vcrLocalConcurrency: 2 }, maxConcurrent: 1, localExecutors: { "matching.judge": () => {}, "matching.evaluate": () => {} },
+    async claim({ lane }) { return lane === "slow" ? [{ id: "job_slow" }] : lane === "local" ? [{ id: "job_short" }] : []; },
+    async advance(job, options) { asked.push([job.id, options?.mayYield === true]); return { action: "yielded" }; }, takeReaped() { return []; } };
+  const loops = createVcrWorkerLoops({ jobs, orchestrator: null, store: { rows: async () => rows.slice(0, 0) } });
+  await loops.slowJobs();
+  await loops.localJobs();
+  await new Promise((resolve) => { setTimeout(resolve, 5); });
+  assert.deepEqual(asked.sort(), [["job_short", false], ["job_slow", true]]);
+});
+
+test("the short local lane sweeps jobs of a retired kind before it claims, and a sweep that fails is reported and does not stop the lane", async () => {
+  /** @type {string[]} */ const order = [];
+  /** @type {string[]} */ const reported = [];
+  const jobs = {
+    owner: "me", config: {}, localExecutors: {},
+    async retireRetiredKinds() { order.push("retire"); return []; },
+    async claim() { order.push("claim"); return []; },
+    takeReaped() { return []; },
+    report(/** @type {string} */ code) { reported.push(code); },
+  };
+  const store = { async rows() { return []; } };
+  await createVcrWorkerLoops({ jobs, orchestrator: null, store }).localJobs();
+  assert.deepEqual(order, ["retire", "claim"]);
+  order.length = 0;
+  jobs.retireRetiredKinds = async () => { throw Object.assign(new Error("down"), { code: "db_down" }); };
+  await createVcrWorkerLoops({ jobs, orchestrator: null, store }).localJobs();
+  assert.deepEqual([order, reported], [["claim"], ["db_down"]]);
 });

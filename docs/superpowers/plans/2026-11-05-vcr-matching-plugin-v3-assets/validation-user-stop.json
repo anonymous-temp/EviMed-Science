@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1",
+  "kind": "owner-stopped-native-matching-validation-closeout",
+  "observedAt": "2026-11-05T15:58:13.033667+00:00",
+  "ownerDecision": {
+    "leaderboardEvaluation": "stopped",
+    "trecRemainder": "user-skipped",
+    "sigirRemainder": "user-skipped",
+    "paidResumeAuthorized": false,
+    "automaticResume": false,
+    "officialNewScore": null,
+    "commitAndPushAuthorized": true,
+    "deploymentAuthorized": false
+  },
+  "measuredArtifact": {
+    "version": "0.1.0",
+    "sha256": "33fa64d754ac018816e80826f786b35def898062f7a16cfcd2486dbb38284d59",
+    "kernel": "0.2.1-rc.5",
+    "clinicalServedModel": "deepseek-flash",
+    "scope": "Native managed clinical child and production PostgreSQL host adapter in an isolated reference host. Not deployed SaaS acceptance or clinical validation.",
+    "doesNotValidateFutureVersion": "0.1.1"
+  },
+  "sigir": {
+    "language": "original-English",
+    "originalQueries": 59,
+    "requestedTopics": 58,
+    "requestedPairs": 3835,
+    "startedTopics": 32,
+    "topicsWithSavedProjection": 31,
+    "completeTopics": 3,
+    "cachedFullPoolQwenOrders": 32,
+    "savedProjectionRows": 2156,
+    "currentValidClinicalPairs": 686,
+    "pendingPairs": 1470,
+    "missingPairs": 1679,
+    "failedSavedRows": 0,
+    "unsupportedSavedRows": 0,
+    "staleSavedRows": 0,
+    "postgresCurrentPairCountVerified": 686,
+    "confirmedNativeFlashHttp200Requests": 918,
+    "confirmedNativeFlashCostCny": 28.21640212,
+    "noOfficialScoreRun": true
+  },
+  "trec": {
+    "status": "user-skipped",
+    "requestedTopics": 165,
+    "freshNativeClinicalDecisions": 0,
+    "freshNativeRetrievalRuns": 0,
+    "freshPerformanceScore": null,
+    "index2021And2022": {
+      "state": "building",
+      "ready": false,
+      "indexedRecords": 232180,
+      "expectedRecords": 375580
+    },
+    "index2023": {
+      "state": "not-started",
+      "expectedRecords": 451538
+    },
+    "indexSettledCny": 24.834598,
+    "indexUncertainUpperBoundCny": 0.060305,
+    "interpretation": "Partial indexing is an engineering stage fact, not a model-performance failure or zero score."
+  },
+  "financialClosure": {
+    "capCny": 500,
+    "allProviderActualSettledCny": 53.39247588,
+    "allProviderUncertainUpperBoundCny": 15.151263,
+    "committedUpperBoundCny": 68.54373888,
+    "remainingConservativeCny": 431.45626112,
+    "openReservedRows": 0,
+    "uncertainNativeReservationsAfterCancellation": 23,
+    "uncertainNativeUpperBoundCny": 15.090958,
+    "historicalQualificationRequestsIncluded": 7,
+    "providerCallsForCloseout": 0,
+    "guessedRefunds": false
+  },
+  "sourcePhases": [
+    {
+      "phase": 1,
+      "files": 376,
+      "digest": "sha256:82c584aca86ef6e8d09acfe0cfbd4e26c2400284d23d90428d1d45a28a9354c1"
+    },
+    {
+      "phase": 2,
+      "files": 377,
+      "digest": "sha256:8c00d5e6e7935c1a8fa324ed58570b6500d8b1610439e05d28110ce8b62e469f",
+      "repairReceiptDigest": "sha256:fb3779aa49a42a2bb8317dfea35d2da08c7e3e1dd761e49efa58002e4b01908c"
+    },
+    {
+      "phase": 3,
+      "files": 377,
+      "digest": "sha256:e5a3ef9eb52b34874e5538b4906cbc5a4d2f5f3638fca9926fc070fb74d5f437",
+      "repairReceiptDigest": "sha256:8cdbd61844bf556ebcd894f4c7e8f9b325bf3530208122e652d10319ee41a63a",
+      "archivedBytesVerified": 377,
+      "archiveMismatches": 0
+    }
+  ],
+  "shutdown": {
+    "activeCampaignProcesses": 0,
+    "activeOwnedCurlProcesses": 0,
+    "runLockPresent": false,
+    "paidCallsEnabledInActiveConfiguration": false
+  },
+  "engineeringFindings": [
+    "A native structured-output failure can terminate a patient before later selected pairs are attempted; pending work must not be presented as a clinical verdict.",
+    "Closing an HTTP socket does not await its asynchronous billing finalizer; the offline follow-up tracks handlers, aborts and awaits owned curl processes before database closure."
+  ],
+  "qualificationBoundary": "These are stop/coverage/accounting facts. No accuracy, ranking level, release-readiness or new 0.1.1 clinical-performance claim is made."
+}

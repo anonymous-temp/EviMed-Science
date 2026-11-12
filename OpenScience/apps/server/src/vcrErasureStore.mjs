@@ -29,7 +29,8 @@ import { languageInput } from "./vcrMatchingSnapshot.mjs";
 import { factOf } from "./vcrMatchStore.mjs";
 import { VCR_BASIS_CAUSES } from "./vcrErasureSchema.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
-import { VcrStoreBase } from "./vcrStoreBase.mjs";
+import { WITHDRAWN_SUBJECT_MARK } from "./vcrMatchJudgmentStore.mjs";
+import { VcrStoreBase, lockSubject } from "./vcrStoreBase.mjs";
 
 /** @param {unknown} text */
 const sha256 = (text) => createHash("sha256").update(String(text ?? ""), "utf8").digest("hex");
@@ -154,6 +155,11 @@ export class VcrErasureStore extends VcrStoreBase {
    *   cause: "withdrawn" | "projection", reason?: string }} input
    */
   async #erase(client, { studyId, userId, actor, fileIds = [], projectionIds = [], subjectKey = null, cause, reason = "" }) {
+    // Whoever these words are about, before any row is locked (a withdrawal takes the same two in this order): a judgment being saved for them waits, and then finds what this leaves. The order
+    // is a person's key, so two erasures never wait on each other.
+    const owners = (await client.query(`SELECT DISTINCT f.detail->>'subjectKey' AS subject_key FROM ${VCR_SCHEMA}.source_files f WHERE f.study_id=$1 AND f.role='document'
+        AND (f.id = ANY($2::text[]) OR f.id IN (SELECT p.document_id FROM ${VCR_SCHEMA}.document_projections p WHERE p.study_id=$1 AND p.id = ANY($3::text[])))`, [studyId, fileIds, projectionIds])).rows.map((/** @type {any} */ row) => row.subject_key).filter(Boolean);
+    for (const owner of [...new Set([...owners, ...(subjectKey ? [subjectKey] : [])])].map(String).sort()) await lockSubject(client, studyId, owner);
     const files = fileIds.length ? (await client.query(
       `SELECT * FROM ${VCR_SCHEMA}.source_files WHERE study_id=$1 AND role='document' AND id = ANY($2::text[]) FOR UPDATE`, [studyId, fileIds])).rows : [];
     const projections = (await client.query(
@@ -230,21 +236,16 @@ export class VcrErasureStore extends VcrStoreBase {
       }
       if (changed || subjectKey != null) touched.set(String(row.assessment_id), String(row.subject_key));
     }
-    // The trials a patient was judged against (「给患者找试验」) store quotes of the same kind: their judgments are redacted the same way,
-    // for a withdrawn subject and for whatever cites what was erased.
-    const candidateRows = (await client.query(
-      `SELECT cj.id, cj.evidence FROM ${VCR_SCHEMA}.candidate_trial_judgments cj
-         JOIN ${VCR_SCHEMA}.candidate_trial_assessments a ON a.id = cj.assessment_id
-        WHERE a.study_id=$1 AND (($3::text IS NOT NULL AND a.subject_key=$3)
-          OR EXISTS (SELECT 1 FROM jsonb_array_elements(cj.evidence) e WHERE e->'locator'->>'documentId' = ANY($2::text[]) OR e->>'factId' = ANY($4::text[])))
-        FOR UPDATE OF cj`, [studyId, documentIds, subjectKey, factIds])).rows;
-    let candidateQuotes = 0;
-    for (const row of candidateRows) {
-      const { evidence, changed } = redactedEvidence(row.evidence, (/** @type {any} */ item) => documentIds.includes(String(item.locator?.documentId ?? "")) || factIds.includes(String(item.factId ?? ""))
-        || (subjectKey != null && item.quoteKind === "verbatim"));
-      if (!changed) continue;
-      await client.query(`UPDATE ${VCR_SCHEMA}.candidate_trial_judgments SET evidence=$2::jsonb WHERE id=$1`, [row.id, JSON.stringify(evidence)]);
-      candidateQuotes += 1;
+    // A model's judgments of this person, or that read what was erased: nothing is frozen on them and their reasons may repeat the record, so they go.
+    const judgedGone = (await client.query(`DELETE FROM ${VCR_SCHEMA}.match_judgments WHERE study_id=$1 AND (($2::text IS NOT NULL AND subject_key=$2) OR document_ids ?| $3::text[])`,
+      [studyId, subjectKey, documentIds])).rowCount ?? 0;
+    if (subjectKey != null) {
+      // What was searched for them holds their age, sex, condition and the words of the search; and a judging job's frozen roster stops naming them. A position in that roster still means
+      // the same pair, so the place stays, with a mark any job takes as someone who withdrew.
+      await client.query(`DELETE FROM ${VCR_SCHEMA}.candidate_searches WHERE study_id=$1 AND subject_key=$2`, [studyId, subjectKey]);
+      await client.query(`UPDATE ${VCR_SCHEMA}.jobs j SET scenario = jsonb_set(j.scenario, '{subjects}', (SELECT jsonb_agg(CASE WHEN e.subject = to_jsonb($2::text) THEN to_jsonb($3::text) ELSE e.subject END ORDER BY e.position)
+          FROM jsonb_array_elements(j.scenario->'subjects') WITH ORDINALITY e(subject, position)))
+        WHERE j.study_id=$1 AND j.kind='match_judge' AND j.scenario->'subjects' @> to_jsonb($2::text)`, [studyId, subjectKey, WITHDRAWN_SUBJECT_MARK]);
     }
     // A withdrawn subject's assessments are all marked, with or without a quote in them; any other assessment that rests on what
     // was erased is marked too.
@@ -271,10 +272,11 @@ export class VcrErasureStore extends VcrStoreBase {
         detail: { documentId: row.document_id, projectionHash: row.projection_hash, manifestHash: row.manifest_hash, reason } });
     }
     return {
-      files: files.map((/** @type {any} */ file) => ({ id: String(file.id), location: String(file.location), originalLocation: file.detail?.original?.location ? String(file.detail.original.location) : null })),
+      files: files.map((/** @type {any} */ file) => ({ id: String(file.id), location: String(file.location), originalLocation: file.detail?.original?.location ? String(file.detail.original.location) : null,
+        uploadedSha256: file.detail?.originalSha256 ? String(file.detail.originalSha256) : null })),
       projections: projections.map((/** @type {any} */ row) => ({ id: String(row.id), location: String(row.location) })),
       counts: { files: files.length, projections: projections.length, factsRemoved, factsRedacted: redactedFacts.length,
-        judgmentsRemoved, judgmentsRedacted: redactedJudgments.length, assessmentQuotesRedacted: judgmentQuotes + candidateQuotes, assessmentsMarked: assessments.length },
+        judgmentsRemoved, judgmentsRedacted: redactedJudgments.length, assessmentQuotesRedacted: judgmentQuotes, assessmentsMarked: assessments.length, matchJudgmentsRemoved: judgedGone },
     };
   }
 
@@ -286,6 +288,8 @@ export class VcrErasureStore extends VcrStoreBase {
    */
   async withdrawSubject({ studyId, userId, actor, subjectKey, reason = "" }) {
     return this.transaction(async (client) => {
+      // Before the list of what they hold: a document being stored for them is either in it, or finds the withdrawal.
+      await lockSubject(client, studyId, subjectKey);
       const files = (await client.query(
         `SELECT id FROM ${VCR_SCHEMA}.source_files WHERE study_id=$1 AND role='document' AND detail->>'subjectKey'=$2`, [studyId, subjectKey])).rows;
       const known = await this.#holdsSubject(client, studyId, subjectKey, files.length);
@@ -316,6 +320,7 @@ export class VcrErasureStore extends VcrStoreBase {
       `SELECT (EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_facts WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND subject_key=$2)
+        OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.match_judgments WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_candidates WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.followup_episodes WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals WHERE study_id=$1 AND subject_key=$2)) AS held`, [studyId, subjectKey])).rows[0];
@@ -375,6 +380,8 @@ export class VcrErasureStore extends VcrStoreBase {
       await this.#mark(client, studyId, "fact", facts, cause, causeId);
       await this.#mark(client, studyId, "language_judgment", judgments, cause, causeId);
       await this.#mark(client, studyId, "assessment", assessments, cause, causeId);
+      // A model's judgment carries its own label: a reader says its record has changed, and a new judgment of the new text has a new key.
+      await client.query(`UPDATE ${VCR_SCHEMA}.match_judgments SET basis_changed=$3 WHERE study_id=$1 AND document_ids ?| $2::text[]`, [studyId, documentIds, cause]);
       return { facts: facts.length, languageJudgments: judgments.length, assessments: assessments.length };
     });
   }
@@ -388,8 +395,21 @@ export class VcrErasureStore extends VcrStoreBase {
     return this.transaction(async (client) => {
       const assessments = (await client.query(`SELECT id, subject_key FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id=$1 AND subject_key=$2`, [studyId, subjectKey])).rows
         .map((/** @type {any} */ row) => ({ id: String(row.id), subjectKey: String(row.subject_key) }));
+      await client.query(`UPDATE ${VCR_SCHEMA}.match_judgments SET basis_changed=$3 WHERE study_id=$1 AND subject_key=$2`, [studyId, subjectKey, cause]);
       return this.#mark(client, studyId, "assessment", assessments, cause, causeId);
     });
+  }
+
+  /**
+   * People have new structured data (a snapshot was frozen): the finished judgments they hold rested on less. Each is marked as a new document marks it, keeping its verdict; a mark the
+   * registry watch or an earlier change wrote is left as it is. Only the people who hold a verdict are touched, in one statement.
+   * @param {{ studyId: string, subjectKeys: readonly string[] }} input @returns {Promise<number>}
+   */
+  async markSubjectsChanged({ studyId, subjectKeys }) {
+    if (!subjectKeys.length) return 0;
+    const result = await this.query(`UPDATE ${VCR_SCHEMA}.match_judgments SET basis_changed='document'
+      WHERE study_id=$1 AND subject_key=ANY($2::text[]) AND status='done' AND basis_changed IS NULL`, [studyId, [...subjectKeys]]);
+    return result.rowCount ?? 0;
   }
 
   /**

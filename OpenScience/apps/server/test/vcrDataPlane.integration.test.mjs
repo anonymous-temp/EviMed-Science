@@ -665,6 +665,20 @@ test("selected table-cell evidence is source-bound, grant-aware and recorded as 
   assert.equal(local.value, cell.value, "page access uses the actual viewer's grant and never claims cloud permission");
 });
 
+test("the codes of a table go to the model only on the source's cloud basis, audited with the columns and no value", options, async () => {
+  const studyId = await seedStudy();
+  const { source, snapshot } = await seedSnapshot(studyId);
+  const cloud = new VcrDataPlane({ store, access, config: { vcrDataPlaneDir: dataPlaneDir, deepseekBaseUrl: "https://api.example.org", vcrProviderAgreements: true } });
+  assert.deepEqual(await cloud.authorizeSubjectTableCloudRead({ studyId, snapshotId: snapshot.id, principal: OWNER, fields: ["age", "sex"] }), { basis: "deployment_agreements" });
+  const audit = await q("SELECT detail FROM evimed_vcr.audit WHERE study_id=$1 AND action='table.cloud_read'", [studyId]);
+  assert.deepEqual([audit[0].detail.fields, audit[0].detail.use, audit[0].detail.basis], [["age", "sex"], "column_meaning", "deployment_agreements"]);
+  assert.equal(JSON.stringify(audit).includes("value"), false);
+  await assert.rejects(plane.authorizeSubjectTableCloudRead({ studyId, snapshotId: snapshot.id, principal: OWNER, fields: ["age"] }), { code: "vcr_cloud_processing_not_authorized" }, "no agreement and no permission: nothing leaves");
+  await assert.rejects(cloud.authorizeSubjectTableCloudRead({ studyId: await seedStudy(), snapshotId: snapshot.id, principal: OWNER, fields: ["age"] }), "another study's snapshot is not this study's");
+  await cloud.setCloudPermission({ studyId, sourceId: source.id, actor: OWNER, permission: { status: "revoked" } });
+  await assert.rejects(cloud.authorizeSubjectTableCloudRead({ studyId, snapshotId: snapshot.id, principal: OWNER, fields: ["age"] }), { code: "vcr_cloud_processing_not_authorized" });
+});
+
 test('selected table evidence authorizes and parses a snapshot once per request, audits all fields once, and rechecks withdrawal',options,async()=>{
  const studyId=await seedStudy();const {snapshot}=await seedSnapshot(studyId);
  const cloud=new VcrDataPlane({store,access,config:{vcrDataPlaneDir:dataPlaneDir,deepseekBaseUrl:'https://api.example.org',vcrProviderAgreements:true}});

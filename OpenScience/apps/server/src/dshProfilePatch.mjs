@@ -31,6 +31,8 @@ import { MCP_SERVER_NAME, RESEARCH_NATIVE_BUNDLES, nativeResearchToolProfileHold
 
 /** The reference name the kernel resolves the workload token through. */
 export const WORKLOAD_TOKEN_REF = "EVIMED_WORKLOAD_TOKEN";
+/** The provider id the `llm-deepseek` row registers in the kernel: a child or agent that names a provider must name this one. */
+export const KERNEL_DEEPSEEK_PROVIDER = "deepseek-official";
 
 /** The one composition. */
 export const EVIMED_PRESET = "evimed-universal";
@@ -92,6 +94,7 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} [extensionProjectionFile]
  * @property {string} [vcrGatewayUrl]
  * @property {string} [extensionGatewayUrl]
+ * @property {{entrypoint:string,endpoint:string,tokenFile:string}} [patientMatching]
  * @property {string} capsuleGatewayUrl
  * @property {string} [revisionGatewayUrl]
  * @property {{revision:number,enabled:boolean,settings:{timeoutMs:number}}} [pluginConfig]
@@ -240,7 +243,7 @@ export function renderProfilePatch(input) {
     "",
     "- id: agent-default-model",
     "  config:",
-    "    provider: deepseek-official",
+    `    provider: ${KERNEL_DEEPSEEK_PROVIDER}`,
     `    model: ${yamlScalar(input.model)}`,
     "",
     "# Session logs live on the project's own data volume, so they are backed up,",
@@ -349,9 +352,20 @@ export function renderProfilePatch(input) {
     ...presetRows(input),
     ...hostedBrowserPanelRows(input),
     ...clientBundleRows(input),
+    ...patientMatchingRows(input),
     ...nativeResearchRows(input),
   ];
   return `${rows.join("\n")}\n`;
+}
+
+/** First-party native code is a verified read-only mount selected before boot. No package-provided patch is evaluated.
+ * @param {ProfilePatchInput} input @returns {string[]} */
+function patientMatchingRows(input) {
+  if (!input.patientMatching) return [];
+  const { entrypoint, endpoint, tokenFile } = input.patientMatching;
+  if (entrypoint !== '/opt/evimed/patient-matching/package/index.mjs' || !endpoint || !tokenFile) throw new TypeError('Invalid patient matching native projection.');
+  return ['- insert:', '    - id: evimed-patient-matching', `      name: ${yamlScalar(entrypoint)}`, '      config:', '        enabled: true',
+    `        endpoint: ${yamlScalar(endpoint)}`, `        tokenFile: ${yamlScalar(tokenFile)}`];
 }
 
 /**

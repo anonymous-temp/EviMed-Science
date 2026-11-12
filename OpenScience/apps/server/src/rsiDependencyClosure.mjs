@@ -7,10 +7,10 @@ import { rsiDigest } from './rsiCampaignBundle.mjs'
 
 /**
  * The module policies a campaign can change (evals/rsi-campaigns/module_campaign.mjs): what the prompt under test runs in, from the class that sends it. security.mjs's filesystem
- * helpers read caller-owned workspace files, never an executable or configuration input to a decision: the editor is handed its input. Re-audit when the digest moves.
+ * helpers read caller-owned workspace files, never an executable or configuration input to a decision: the editor is handed its input. Re-audit when the digest moves (2026-11-10: `cloneFileNoFollow` added for patient-record copies; the helpers the editor uses are unchanged).
  */
 const moduleResources = Object.freeze(['apps/server/package.json', 'packages/domain/package.json', 'pnpm-lock.yaml'])
-const securityFiles = Object.freeze({ 'apps/server/src/security.mjs': { sourceDigest: 'f8c3dcffa6309eb9529a31c5b1f7d2e89c4df24e978eb27bcc0dd7a3601d8582', resources: [] } })
+const securityFiles = Object.freeze({ 'apps/server/src/security.mjs': { sourceDigest: 'be1a1a2166fb6d68c9da6eced79c9e311a1f3bb447f21308ef1af570c4371761', resources: [] } })
 const frontierEditorProfile = Object.freeze({ roots: ['apps/server/src/frontierEditor.mjs'], resources: moduleResources, requiredSettings: ['model', 'provider'], requiredPins: [], runtimeFileDependencies: securityFiles })
 /** The registry is deployment code, never campaign input. Runtime surfaces remain unqualified until their complete kernel profile is registered. */
 export const RSI_DEPENDENCY_PROFILES = Object.freeze({

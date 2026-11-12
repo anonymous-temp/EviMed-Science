@@ -60,6 +60,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { parse as parseYaml } from "yaml";
+import { TOOL_MANIFEST } from "../../packages/patient-matching-plugin/src/manifest.mjs";
 
 import {
   KERNEL_MOUNTED_TOOL_NAMES,
@@ -668,6 +669,9 @@ export function buildCapabilityGraph(options) {
   /** @type {import('@evimed/domain').ToolGraphNode[]} */
   const nodes = [];
   for (const tool of [...new Set(tools)].sort()) {
+    const native=TOOL_MANIFEST.find(entry=>entry.name===tool);
+    if(native){nodes.push(buildNode(tool,"kernel",native.description,native.parameters,tool));continue;}
+
     const base = mcpToolBaseName(tool);
     if (!base) {
       failures.push(`${capability}: tools[] names ${JSON.stringify(tool)}, which is not an EviMed research tool`);

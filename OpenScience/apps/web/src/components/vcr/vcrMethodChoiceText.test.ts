@@ -17,7 +17,7 @@ function choices(node: Schema, path = ""): Choice[] {
   return rows;
 }
 it("covers all declared choices and authored examples of all preserved method-form choices", () => {
-  const methods = Object.values(VCR_JOB_METHODS).filter(method => !method.startsWith("forecast.") && !method.startsWith("model.") && method !== "matching.extract");
+  const methods = Object.values(VCR_JOB_METHODS).filter(method => !method.startsWith("forecast.") && !method.startsWith("model.") && method !== "matching.extract" && method !== "matching.judge" && method !== "matching.import_records");
   expect(methods).toHaveLength(45);
   let count = 0; const values = new Set<string>();
   for (const method of methods) {

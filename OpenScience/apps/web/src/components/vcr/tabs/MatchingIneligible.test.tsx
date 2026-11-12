@@ -40,23 +40,11 @@ describe("患者匹配 — a person judged not eligible is reachable", () => {
     expect(screen.getByText("不符合：I2 不满足")).toBeInTheDocument();
   });
 
-  it("opens a person from 待复核排除 instead of leaving their name as a label", async () => {
-    const payload = fixture("ev201/matching.json");
-    payload.pendingReview = { count: 1, subjects: ["P-0240"] };
-    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => (query.get("candidate") === "P-0240" ? fixture("ev201/matching-p0240.json") : payload) });
-    draw();
-    await screen.findByRole("heading", { name: "P-0201" });
-    const zone = document.querySelector("[data-vcr-pending-review]") as HTMLElement;
-    await userEvent.click(within(zone).getByRole("button", { name: "P-0240" }));
-    expect(await screen.findByRole("heading", { name: "P-0240" })).toBeInTheDocument();
-    expect(screen.getByText("不符合：I2 不满足")).toBeInTheDocument();
-  });
-
   it("does not say the evaluation was not generated when every assessed person is on the list's far side of the funnel", async () => {
     // What the page used to be given when everybody assessed was not eligible: the tally had them, the list did not.
     const payload = fixture("ev201/matching.json");
     Object.assign(payload, {
-      candidates: [], selected: null, gaps: [], timeline: [], comparisons: [], pendingReview: null,
+      candidates: [], selected: null, gaps: [], timeline: [], comparisons: [],
       funnel: [{ key: "candidates", label: "已评估", count: 2, note: null, tone: "neutral" }, { key: "insufficient", label: "可能符合 · 待补证", count: 0, note: null, tone: "attention" },
         { key: "eligible", label: "符合", count: 0, note: null, tone: "accent" }, { key: "ineligible", label: "不符合", count: 2, note: null, tone: "neutral" }],
     });

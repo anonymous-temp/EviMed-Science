@@ -73,7 +73,7 @@ const list = (value) => (Array.isArray(value) ? value : []);
  */
 export const VCR_RESULT_KINDS = Object.freeze([
   "population", "patient_set", "comparator", "trial_scenario", "design_grid", "model_fit", "model_prediction",
-  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal", "population_quality", "population_check", "match_extract", "design_confirmatory", "design_dose", "design_bayesian", "design_win_ratio",
+  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal", "population_quality", "population_check", "match_extract", "match_judge", "design_confirmatory", "design_dose", "design_bayesian", "design_win_ratio",
   "network_meta", "dose_response_meta", "effect_shrinkage", "prognostic_training", "progression_simulation",
   // one evaluation of one candidate of a design-search campaign (`vcrExperiments.mjs`), screening or final; read by its campaign only
   "experiment_candidate",
@@ -161,7 +161,7 @@ const VCR_CONVERSATION_STUDY_CONTENT = Object.freeze([
   ["patients", ["patient_sets"]],
   ["comparator", ["comparator_designs"]],
   ["trial", ["trial_scenarios", "design_grids", "forecasts"]],
-  ["matching", ["protocol_versions", "criteria", "matching_candidates", "matching_assessments", "candidate_trials", "candidate_trial_assessments"]],
+  ["matching", ["protocol_versions", "criteria", "matching_candidates", "matching_assessments", "match_judgments"]],
   ["data", ["study_definitions", "study_precedents", "evidence_items", "curve_extractions", "assumptions", "sources",
     "source_files", "snapshots", "analysis_tables", "study_packs"]],
 ]);
@@ -512,6 +512,9 @@ export class VcrStore extends VcrStoreBase {
     if (![userId, projectId, rootSessionId].every(value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(value))) {
       throw new TypeError('Invalid conversation research scope.');
     }
+    // A project study's own conversation is that study's context (gate G1: its matching runs on the plugin in that conversation).
+    const own = await this.one(`SELECT * FROM ${VCR_SCHEMA}.studies WHERE user_id=$1 AND project_id=$2 AND scope<>'conversation' AND conversation_session_id=$3 AND deleted_at IS NULL ORDER BY created_at LIMIT 1`,[userId,projectId,rootSessionId]);
+    if (own) return vcrStudyFromRow(own);
     const existing = await this.one(`SELECT * FROM ${VCR_SCHEMA}.studies WHERE user_id=$1 AND project_id=$2 AND scope='conversation' AND conversation_session_id=$3`,[userId,projectId,rootSessionId]);
     if (existing?.deleted_at) throw new HttpError(410,'vcr_task_context_deleted','This conversation research context was deleted.');
     if (existing) return vcrStudyFromRow(existing);

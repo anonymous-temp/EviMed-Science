@@ -117,7 +117,9 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
       experiments: { async list() { return []; }, async view(/** @type {any} */ _study, /** @type {string} */ id) { return { id }; },
         async cancel(/** @type {any} */ _study, /** @type {string} */ id) { calls.push(["experiments.cancel", id]); return { id, status: "stopped" }; } },
       matchStore: { async candidateSubjects() { return ["P-0192"]; } },
-      patientTrials: { counters: { searches: 0 }, async evaluate(/** @type {any} */ _study, /** @type {any} */ input) { calls.push(["patientTrials.evaluate", ...input.subjectKeys]); return { evaluated: [{}, {}], unavailable: [], notes: [] }; } },
+      matchJudgments: { async staleTargets() { return ["NCT00000001"]; } },
+      // Whoever the study holds (a document, a table row or a judgment says so), as the composition attaches it.
+      async subjectKnown(/** @type {any} */ _study, /** @type {string} */ subjectKey) { return subjectKey === "P-0192"; },
     },
     allows: (/** @type {any} */ user) => vcrAudienceAllows(config, user),
     isOperator: (/** @type {any} */ user) => operators.includes(String(user?.id)),
@@ -153,15 +155,11 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
     store: /** @type {any} */ (platformStore({ calls, who: () => current })),
     vcrStore, service, config: { ...config, ...settings }, maxJsonBytes: 65_536,
     audit: async (event, status, details) => { audits.push([event, status, details.code ?? null]); auditLines.push({ event, status, ...details }); },
-    // The matching seam's two person-only acts, keyed to the session's account.
+    // The matching seam's person-only act, keyed to the session's account.
     assessments: {
       async overrideJudgment(/** @type {any} */ user, /** @type {any} */ found, /** @type {any} */ input) {
         calls.push(["assessment.override", String(user.id), found.id, input.criterionId, input.state]);
         return { assessmentId: input.assessmentId, criterionId: input.criterionId, overrideState: input.state, overriddenBy: String(user.id) };
-      },
-      async reviewAssessment(/** @type {any} */ user, /** @type {any} */ found, /** @type {any} */ input) {
-        calls.push(["assessment.review", String(user.id), found.id, input.assessmentId]);
-        return { id: input.assessmentId, reviewedBy: String(user.id) };
       },
     },
     ...overrides,
@@ -169,7 +167,7 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
   return { calls, audits, auditLines, service, vcrStore, routes, as(/** @type {string} */ id) { current = id; } };
 }
 
-test("a person re-judges a criterion and countersigns an assessment as themselves; a state outside the vocabulary is refused by name", async () => {
+test("a person re-judges a criterion as themselves; a state outside the vocabulary is refused by name", async () => {
   const { calls, routes } = fixture();
   const overridden = response();
   await routes(request("POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_2/override", { state: "not_satisfied", note: "病历写明曾用过该药" }), overridden);
@@ -177,10 +175,6 @@ test("a person re-judges a criterion and countersigns an assessment as themselve
   assert.deepEqual(calls.find((call) => call[0] === "assessment.override")?.slice(1), [OWNER, "std_1", "crt_2", "not_satisfied"]);
   await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_2/override", { state: "maybe" }), response()),
     { status: 400, code: "vcr_criterion_state_invalid" });
-  const reviewed = response();
-  await routes(request("POST", "/api/vcr/studies/std_1/assessments/asm_1/review", {}), reviewed);
-  assert.equal(reviewed.status, 201);
-  assert.deepEqual(calls.find((call) => call[0] === "assessment.review")?.slice(1), [OWNER, "std_1", "asm_1"]);
 });
 
 test("a cancel holds the programme before it stops the run — the run's end advances the programme — then stops every open job, and says what it did", async () => {
@@ -491,6 +485,9 @@ const REQUESTS = {
   "GET /studies/:id/patients/:patient": ["GET", "/api/vcr/studies/std_1/patients/vp_1?result=res_1", undefined],
   "GET /studies/:id/population/rows": ["GET", "/api/vcr/studies/std_1/population/rows?result=res_1", undefined],
   "POST /studies/:id/trial-search": ["POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-0192" }],
+  "GET /studies/:id/matching/judged": ["GET", "/api/vcr/studies/std_1/matching/judged?direction=patient_to_trial&subjectKey=P-0192", undefined],
+  "POST /studies/:id/matching/judge": ["POST", "/api/vcr/studies/std_1/matching/judge", { direction: "trial_to_patient", protocolVersionId: "prt_1" }],
+  "GET /studies/:id/matching/export": ["GET", "/api/vcr/studies/std_1/matching/export?direction=patient_to_trial&subjectKey=P-0192&kind=pairs&format=csv", undefined],
   "GET /studies/:id/jobs": ["GET", "/api/vcr/studies/std_1/jobs", undefined],
   "GET /studies/:id/jobs/:job": ["GET", "/api/vcr/studies/std_1/jobs/job_1", undefined],
   "GET /studies/:id/jobs/:job/result": ["GET", "/api/vcr/studies/std_1/jobs/job_1/result", undefined],
@@ -525,7 +522,6 @@ const REQUESTS = {
   "POST /studies/:id/members": ["POST", "/api/vcr/studies/std_1/members", { userId: "newcomer", role: "viewer" }],
   "DELETE /studies/:id/members/:user": ["DELETE", "/api/vcr/studies/std_1/members/newcomer", undefined],
   "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": ["POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_1/override", { state: "not_satisfied" }],
-  "POST /studies/:id/assessments/:assessment/review": ["POST", "/api/vcr/studies/std_1/assessments/asm_1/review", {}],
   "POST /studies/:id/pack": ["POST", "/api/vcr/studies/std_1/pack", { use: "nsclc" }],
   "POST /studies/:id/pack/promote": ["POST", "/api/vcr/studies/std_1/pack/promote", {}],
   "POST /studies/:id/pack/platform": ["POST", "/api/vcr/studies/std_1/pack/platform", {}],
@@ -555,6 +551,10 @@ function composedHooks() {
   const ok = async () => ({ ok: true, released: [], removed: 1, job: { id: "job_1" }, created: true, export: { id: "exp_1" } });
   return {
     corrections: { exportDataset: ok, readDataset: ok, replay: ok },
+    // What the judging job saved, read for the matching page, and the start of that job from it.
+    matchResults: { latest: async () => null, forPatient: async () => ({ trials: [] }), forProtocol: async () => ({ people: [] }), resumeSelection: async () => ({ ids: ["NCT00000001"], settings: {} }),
+      exporter: async () => ({ filename: "matching.csv", contentType: "text/csv; charset=utf-8", rows: 1, run: async (/** @type {any} */ sink) => { await sink.write("a,b\r\n"); } }) },
+    matchJudge: { start: ok },
     longitudinal: {view: async () => ({records:[],providers:[]}), subjectPage: async () => ({lines:[]}), freezeHistory:ok, importPrediction:ok, importBenchmark:ok},
     evidence: { curves: { recordSelection: async () => ({ id: "curve", origin: "human_click" }), receipts: async () => [] } },
     startStudy: ok,
@@ -619,7 +619,9 @@ test("CS-7 every route in the ability table is driven as every role, and 403 fal
     for (const [key, abilities] of Object.entries(VCR_ROUTE_ABILITIES)) {
       const [method, path, body] = REQUESTS[key];
       const has = ability => held.some(each => roleAllows(each, roleFor(ability)) || roleAllows(each, ability));
-      const allowed = key === "POST /studies/:id/start" ? abilities.every(has) : abilities.some(has);
+      // Starting the judging job and downloading its rows also read patient-level data, which the handler asks for beside the ability the table names.
+      const patientLevel = key === "POST /studies/:id/matching/judge" || key === "GET /studies/:id/matching/export";
+      const allowed = (key === "POST /studies/:id/start" ? abilities.every(has) : abilities.some(has)) && (!patientLevel || has("read_patient_level"));
       const res = response();
       let status = 0;
       try { await routes(request(method, path, body), res); status = res.status; } catch (error) { status = error instanceof HttpError ? error.status : 500; }
@@ -647,18 +649,17 @@ test("the protected document comes with the identifiers of closed formats in it 
   assert.ok(!document.suggestions.some((/** @type {any} */ span) => "text" in span || "replacement" in span), "spans only: the reviewer decides, and the projection is built from what was accepted");
 });
 
-test("「为该患者找试验」 asks the orchestrator for the run, judges the trials the study already holds for the patient at once, and refuses a patient the study does not hold", async () => {
+test("「为该患者找试验」 asks the orchestrator for the run and refuses a patient the study does not hold", async () => {
   /** @type {any[]} */
   const asked = [];
   const overrides = { ...composedHooks(), orchestrator: { runStep: async () => ({}), recomputeAfterChange: async () => ({}),
     requestTrialSearch: async (/** @type {any} */ user, /** @type {any} */ study, /** @type {any} */ request) => { asked.push([user.id, study.id, request]); return { sessionId: "ses_9", runId: "run_9", deferred: null }; } } };
-  const { routes, calls, audits } = fixture({ overrides });
+  const { routes, audits } = fixture({ overrides });
   const ok = response();
   assert.equal(await routes(request("POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-0192" }), ok), true);
   assert.equal(ok.status, 200);
-  assert.deepEqual(ok.json().data, { sessionId: "ses_9", runId: "run_9", deferred: null, evaluated: 2 }, "the run, and how many verdicts the trials already held now have for this patient");
+  assert.deepEqual(ok.json().data, { sessionId: "ses_9", runId: "run_9", deferred: null }, "the run, and nothing else");
   assert.deepEqual(asked, [[OWNER, "std_1", { subjectKey: "P-0192" }]]);
-  assert.deepEqual(calls.filter((call) => call[0] === "patientTrials.evaluate"), [["patientTrials.evaluate", "P-0192"]]);
   assert.ok(audits.some((line) => line[0] === "vcr.trial_search.request" && line[1] === "completed"), "the request is audited");
 
   // A patient the study does not hold, and a key that is not one, are refused by name before anything is asked.

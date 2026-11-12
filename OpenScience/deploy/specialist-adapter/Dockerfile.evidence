@@ -8,6 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HOME=/tmp \
     EVIMED_PUBLIC_CONNECTORS_ENABLED=true \
     EVIMED_PHARMACY_REFERENCE_DB=/data/pharmacy-reference.sqlite \
+    EVIMED_TERMINOLOGY_DB=/data/terminology.sqlite \
     EVIMED_DRUG_LABEL_DB=/data/drug-label-index.sqlite
 
 WORKDIR /adapter

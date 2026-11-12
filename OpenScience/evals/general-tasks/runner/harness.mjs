@@ -31,6 +31,7 @@ const SEED = `${TREE}/dsh-seed`;
 const SOCK = `${TREE}/opt/socket`;
 const PERSONA = process.env.EVAL_PERSONA ?? '';
 const FAULT = process.env.EVAL_FAULT ?? '';
+const CAPTURE_REQUEST_BODIES = process.env.EVAL_CAPTURE_REQUEST_BODIES !== 'false';
 const log = (...parts) => process.stderr.write(`${new Date().toISOString()} harness ${parts.join(' ')}\n`);
 
 // --- secrets (random, scratch) and the operator's DeepSeek key file (read by config only, never printed) -----------------
@@ -61,7 +62,8 @@ Object.assign(process.env, {
 {
   const realFetch = globalThis.fetch;
   const requestLog = `${DATA}/model-requests.jsonl`;
-  fsSync.mkdirSync(`${DATA}/first-requests`, { recursive: true });
+  fsSync.mkdirSync(DATA, { recursive: true });
+  if (CAPTURE_REQUEST_BODIES) fsSync.mkdirSync(`${DATA}/first-requests`, { recursive: true });
   let seq = 0;
   globalThis.fetch = async (input, init) => {
     try {
@@ -88,9 +90,10 @@ if (/\/(chat\/completions|messages)$/.test(new URL(url).pathname) && typeof init
         const row = { at: new Date().toISOString(), seq: seq += 1, path: new URL(url).pathname, model: body.model, bytes: Buffer.byteLength(init.body), messages: messages.length,
           systemChars: systemText.length, tools: tools.length, toolsChars: JSON.stringify(tools).length, first,
           toolNames: first ? tools.map((t) => t?.function?.name ?? t?.name) : undefined,
-          userChars: messages.filter((m) => m.role === 'user').map((m) => text(m.content)).join('\n').length, maxTokens: body.max_tokens ?? null, thinking: body.thinking ?? null };
+          userChars: messages.filter((m) => m.role === 'user').map((m) => text(m.content)).join('\n').length, maxTokens: body.max_tokens ?? null, thinking: body.thinking ?? null,
+          effort: body.reasoning_effort ?? body.output_config?.effort ?? body.reasoning?.effort ?? null };
         fsSync.appendFileSync(requestLog, `${JSON.stringify(row)}\n`);
-        if (first && tools.length > 0) fsSync.writeFileSync(`${DATA}/first-requests/${String(row.seq).padStart(4, '0')}.json`, JSON.stringify({ at: row.at, path: row.path, model: body.model, system: body.system ?? null, messages, tools }, null, 1));
+        if (CAPTURE_REQUEST_BODIES && first && tools.length > 0) fsSync.writeFileSync(`${DATA}/first-requests/${String(row.seq).padStart(4, '0')}.json`, JSON.stringify({ at: row.at, path: row.path, model: body.model, system: body.system ?? null, messages, tools }, null, 1));
       }
     } catch { /* measurement only */ }
     return realFetch(input, init);
@@ -162,7 +165,12 @@ class HostKernelProvider extends rm.DockerRuntimeProvider {
     const result = await super.bootstrap(project, plan, options);
     const patchFile = path.join(plan.dshHomeDir, 'control-plane-patch.yml');
     const text = await fs.readFile(patchFile, 'utf8');
-    await fs.writeFile(patchFile, plan.hostMap.text(text) + `\n- insert:\n    - id: eval-memory-observer\n      name: ${JSON.stringify(`${SOCK}/eval-memory-observer.mjs`)}\n`, { mode: 0o600 });
+    // The image's custom Landlock executable is Linux-only. A host-local
+    // macOS run uses the pinned kernel's native Seatbelt implementation,
+    // retaining workspace-write confinement rather than requesting escalation.
+    const nativeSandbox = process.platform === 'darwin'
+      ? '\n- id: sandbox\n  config:\n    runnerCommand: []\n    runnerFailureSignatures: []\n' : '';
+    await fs.writeFile(patchFile, plan.hostMap.text(text) + nativeSandbox + `\n- insert:\n    - id: eval-memory-observer\n      name: ${JSON.stringify(`${SOCK}/eval-memory-observer.mjs`)}\n`, { mode: 0o600 });
     return result;
   }
   async launch(project, plan, { port }) {
@@ -238,8 +246,14 @@ const overrides = {
 };
 const { createMethodSimilarity } = await import(`${OS}/apps/server/src/methodSimilarity.mjs`);
 const { KbEmbedder } = await import(`${OS}/apps/server/src/kbEmbedding.mjs`);
+let verifiedConfiguration = null;
+export const harnessConfiguration = () => verifiedConfiguration;
 const app = createWebApiApp(overrides, {
   runtimeManagerFactory: (config, hooks) => {
+    verifiedConfiguration = Object.fromEntries(['production', 'runtimeMode', 'deepseekModel', 'memoryEnabled', 'memoryRecallEnabled',
+      'nativeMemoryTurnCommitEnabled', 'learningEnabled', 'evolutionEnabled', 'autopilotEnabled', 'loopxEnabled',
+      'vcrEnabled', 'vcrTrialCorpusManifest', 'userDailySpendLimit', 'userRunSpendLimit', 'selfRegistrationEnabled', 'devAuth', 'runtimeUiProxyEnabled']
+      .map(key => [key, config[key]]));
     const manager = new rm.RuntimeManager(config, hooks);
     manager.provider = new HostKernelProvider(manager);
     // The product currently creates this ranker only with learning on. L3 B must still rank official methods.
@@ -254,6 +268,13 @@ const app = createWebApiApp(overrides, {
 await app.openVikingEngine?.check();
 if (app.learningWorker && process.env.EVAL_DEFER_LEARNING === '1') app.learningWorker.enabled = false;
 if (app.learningWorker && process.env.EVAL_ADD_ONLY === '1') app.learningWorker.kinds = app.learningWorker.kinds.filter(kind => kind !== 'consolidate');
+let benchmarkBudget = null;
+if (process.env.VCR_BENCHMARK_BUDGET_FILE) {
+  const { installBudgetGuard } = await import('../../vcr-platform-comparison/budget-guard.mjs');
+  benchmarkBudget = await installBudgetGuard(app.usageLedger, { file: process.env.VCR_BENCHMARK_BUDGET_FILE,
+    totalLimit: Number(process.env.VCR_BENCHMARK_BUDGET_CNY ?? 200), accountLimit: 5 });
+}
+if (process.env.VCR_BENCHMARK_INSTANCE) app.server.prependListener('request', (_req, res) => res.setHeader('x-evimed-benchmark-instance', process.env.VCR_BENCHMARK_INSTANCE));
 const address = await app.listen(PORT, '127.0.0.1');
 log('listening', `http://127.0.0.1:${address.port}`);
 // An optional test-only hook (LIVE_HOOK=<module>): seeds what an import would have written, through the app's own stores.
@@ -266,5 +287,11 @@ process.on('message', async message => {
     process.send?.({ id: message.id, value });
   } catch (error) { process.send?.({ id: message.id, error: String(error?.message ?? error) }); }
 });
-const stop = async () => { log('stopping'); setTimeout(() => process.exit(0), 8000).unref(); try { await app.close(); } finally { process.exit(0); } };
+let stopping = null;
+const stop = () => stopping ??= (async () => {
+  log('stopping');const timer=setTimeout(()=>process.exit(1),benchmarkBudget?30000:8000);timer.unref();let code=0;
+  try {await app.close();}catch {code=1;log('control-plane shutdown failed');}
+  try {await benchmarkBudget?.close();}catch {code=1;log('benchmark journal shutdown failed');}
+  clearTimeout(timer);process.exit(code);
+})();
 process.on('SIGTERM', stop); process.on('SIGINT', stop);

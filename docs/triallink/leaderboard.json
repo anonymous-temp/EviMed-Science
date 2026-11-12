@@ -1,0 +1,778 @@
+{
+ "system": {
+  "name": "Linemach",
+  "version": "triallink-3",
+  "date": "2026-11",
+  "components": [
+   "Qwen3.7 text embedding",
+   "Qwen3.7 text rerank",
+   "Jev 1.14",
+   "DeepSeek V4.1 Flash"
+  ]
+ },
+ "protocol": "Comparator values are copied from the cited sources; TrialGPT 2.0 values are read from its figure bar labels. Each panel compares systems on one test set, one candidate pool and one scorer; the two ranking protocols (every judged trial, as in TrialGPT 2.0; the judged trials in TrialGPT-Retrieval's top 500, as in TrialGPT 1.0) are separate panels. 95% intervals are patient-level percentile bootstraps (10,000 resamples). No Linemach component was trained on any benchmark.",
+ "capabilities": [
+  {
+   "id": "ranking-ndcg",
+   "title": "Patient-to-trial ranking · nDCG@10",
+   "subtitle": "SIGIR 2016 + TREC 2021/2022 · 183 patients · every judged trial ranked (TrialGPT 2.0 protocol, official evaluator)",
+   "metric": "nDCG@10",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 0.792,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.762,
+      0.822
+     ]
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.76,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · Gemini-3.1-pro",
+     "value": 0.76,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.74,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.72,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · Gemini-3.1-pro",
+     "value": 0.72,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.68,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ],
+   "short": "nDCG@10",
+   "title_zh": "患者–试验排序 · nDCG@10",
+   "subtitle_zh": "SIGIR 2016 + TREC 2021/2022，183 位患者，对全部已评判试验排序（TrialGPT 2.0 协议与官方评分脚本）"
+  },
+  {
+   "id": "ranking-p10",
+   "title": "Patient-to-trial ranking · P@10",
+   "title_zh": "患者–试验排序 · P@10",
+   "short": "P@10",
+   "metric": "P@10 (graded)",
+   "scale": 1,
+   "subtitle": "same 183 patients · graded P@10 (an excluded or potentially eligible trial counts half), official evaluator",
+   "subtitle_zh": "同一批 183 位患者，分级 P@10（被排除或可能符合的试验计半分），官方评分脚本",
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 0.724,
+     "ci95": [
+      0.692,
+      0.756
+     ],
+     "source": "this report",
+     "kind": "ours"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.7,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · Gemini-3.1-pro",
+     "value": 0.69,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.67,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · Gemini-3.1-pro",
+     "value": 0.67,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.66,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.63,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ]
+  },
+  {
+   "id": "ranking-mrr",
+   "title": "Patient-to-trial ranking · MRR",
+   "title_zh": "患者–试验排序 · MRR",
+   "short": "MRR",
+   "metric": "MRR",
+   "scale": 1,
+   "subtitle": "same 183 patients · reciprocal rank of the first eligible trial, official evaluator",
+   "subtitle_zh": "同一批 183 位患者，第一个符合试验的倒数排名，官方评分脚本",
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 0.849,
+     "ci95": [
+      0.806,
+      0.889
+     ],
+     "source": "this report",
+     "kind": "ours"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.85,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · Gemini-3.1-pro",
+     "value": 0.84,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.84,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.8,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · Gemini-3.1-pro",
+     "value": 0.78,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.73,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ]
+  },
+  {
+   "id": "ranking-map",
+   "title": "Patient-to-trial ranking · MAP",
+   "subtitle": "same 183 patients · graded MAP, official evaluator",
+   "metric": "MAP",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 0.637,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.608,
+      0.666
+     ]
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.6,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · Gemini-3.1-pro",
+     "value": 0.56,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.55,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · Gemini-3.1-pro",
+     "value": 0.55,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.54,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.49,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ],
+   "short": "MAP",
+   "title_zh": "患者–试验排序 · MAP",
+   "subtitle_zh": "同一批 183 位患者，分级 MAP（官方评分脚本）"
+  },
+  {
+   "id": "ranking500-ndcg",
+   "title": "Patient-to-trial ranking · top-500 · nDCG@10",
+   "subtitle": "SIGIR 2016 + TREC 2021/2022 · 183 patients · the judged trials among TrialGPT-Retrieval's top 500 (TrialGPT 1.0 protocol) · mean of the three cohorts",
+   "metric": "nDCG@10",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 0.796,
+     "ci95": [
+      0.765,
+      0.824
+     ],
+     "source": "this report",
+     "kind": "ours"
+    },
+    {
+     "label": "SciFive (NLI-trained)",
+     "value": 0.4271,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "BioBERT (NLI-trained)",
+     "value": 0.4091,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "PubMedBERT (NLI-trained)",
+     "value": 0.4327,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "SapBERT (NLI-trained)",
+     "value": 0.4148,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "BioLinkBERT (NLI-trained)",
+     "value": 0.4797,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-3.5",
+     "value": 0.5395,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4",
+     "value": 0.7275,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    }
+   ],
+   "short": "nDCG@10 (top-500)",
+   "title_zh": "患者–试验排序 · 检索前 500 · nDCG@10",
+   "subtitle_zh": "SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中已评判的试验（TrialGPT 1.0 协议），三个队列取平均",
+   "note": "Scored with the same official script as the panels above, restricted to the candidates TrialGPT 1.0 released (its retrieved_trials.json: 3,141 / 15,437 / 12,682 judged pairs); Linemach's ranking of all judged trials is restricted to them. The script's nDCG@10 (linear gain) and P@10 (sum of grades / (2 × 10)) are the definitions TrialGPT 1.0 gives. The five encoders were trained on natural-language-inference data and applied to the cohorts without cohort training, as in the source. TrialGPT 1.0 · GPT-4 is its feature combination, the paper's headline configuration (its best single features reach 0.7281 nDCG@10 and 0.6724 P@10). Not placed on these axes: TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only relevance, and LLM-Match (2025) reports only AUROC on these pairs.",
+   "note_zh": "与上方各面板使用同一官方评分脚本，只保留 TrialGPT 1.0 公开的候选（其 retrieved_trials.json：3,141 / 15,437 / 12,682 个已评判配对）；Linemach 对全部已评判试验的排序限定到这些候选上。脚本的 nDCG@10（线性增益）与 P@10（等级之和 / (2 × 10)）与 TrialGPT 1.0 给出的定义一致。五个编码器模型在自然语言推理数据上训练，未在这些队列上训练，与原文一致。TrialGPT 1.0 · GPT-4 取其特征组合，即论文的主配置（其最佳单一特征为 nDCG@10 0.7281、P@10 0.6724）。未放进这两张图：TrialMatchAI（Nat Commun 2026）在一个 TREC 年度的全部已评判试验中排序且只把\"符合\"计为相关，LLM-Match（2025）在这些配对上只报告 AUROC，度量不同。"
+  },
+  {
+   "id": "ranking500-p10",
+   "title": "Patient-to-trial ranking · top-500 · P@10",
+   "subtitle": "SIGIR 2016 + TREC 2021/2022 · 183 patients · the judged trials among TrialGPT-Retrieval's top 500 (TrialGPT 1.0 protocol) · mean of the three cohorts",
+   "metric": "P@10 (graded)",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 0.72,
+     "ci95": [
+      0.688,
+      0.752
+     ],
+     "source": "this report",
+     "kind": "ours"
+    },
+    {
+     "label": "SciFive (NLI-trained)",
+     "value": 0.3787,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "BioBERT (NLI-trained)",
+     "value": 0.3746,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "PubMedBERT (NLI-trained)",
+     "value": 0.3874,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "SapBERT (NLI-trained)",
+     "value": 0.3738,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "BioLinkBERT (NLI-trained)",
+     "value": 0.4281,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-3.5",
+     "value": 0.5115,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4",
+     "value": 0.6688,
+     "source": "Jin et al., Nat Commun 2024, Table 2",
+     "kind": "published"
+    }
+   ],
+   "short": "P@10 (top-500)",
+   "title_zh": "患者–试验排序 · 检索前 500 · P@10",
+   "subtitle_zh": "SIGIR 2016 + TREC 2021/2022，183 位患者，只排 TrialGPT 检索前 500 中已评判的试验（TrialGPT 1.0 协议），三个队列取平均",
+   "note": "Scored with the same official script as the panels above, restricted to the candidates TrialGPT 1.0 released (its retrieved_trials.json: 3,141 / 15,437 / 12,682 judged pairs); Linemach's ranking of all judged trials is restricted to them. The script's nDCG@10 (linear gain) and P@10 (sum of grades / (2 × 10)) are the definitions TrialGPT 1.0 gives. The five encoders were trained on natural-language-inference data and applied to the cohorts without cohort training, as in the source. TrialGPT 1.0 · GPT-4 is its feature combination, the paper's headline configuration (its best single features reach 0.7281 nDCG@10 and 0.6724 P@10). Not placed on these axes: TrialMatchAI (Nat Commun 2026) ranks every judged trial of a TREC year with eligible-only relevance, and LLM-Match (2025) reports only AUROC on these pairs.",
+   "note_zh": "与上方各面板使用同一官方评分脚本，只保留 TrialGPT 1.0 公开的候选（其 retrieved_trials.json：3,141 / 15,437 / 12,682 个已评判配对）；Linemach 对全部已评判试验的排序限定到这些候选上。脚本的 nDCG@10（线性增益）与 P@10（等级之和 / (2 × 10)）与 TrialGPT 1.0 给出的定义一致。五个编码器模型在自然语言推理数据上训练，未在这些队列上训练，与原文一致。TrialGPT 1.0 · GPT-4 取其特征组合，即论文的主配置（其最佳单一特征为 nDCG@10 0.7281、P@10 0.6724）。未放进这两张图：TrialMatchAI（Nat Commun 2026）在一个 TREC 年度的全部已评判试验中排序且只把\"符合\"计为相关，LLM-Match（2025）在这些配对上只报告 AUROC，度量不同。"
+  },
+  {
+   "id": "cohort-sigir",
+   "title": "SIGIR cohort · nDCG@10",
+   "subtitle": "58 patients · every judged trial ranked · nDCG@10",
+   "metric": "nDCG@10",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 0.663,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.604,
+      0.72
+     ]
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.66,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.64,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.62,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.58,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ],
+   "short": "SIGIR",
+   "title_zh": "SIGIR 队列 · nDCG@10",
+   "subtitle_zh": "58 位患者，对全部已评判试验排序，nDCG@10"
+  },
+  {
+   "id": "cohort-trec2021",
+   "title": "TREC 2021 cohort · nDCG@10",
+   "subtitle": "75 patients · every judged trial ranked · nDCG@10",
+   "metric": "nDCG@10",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 0.89,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.853,
+      0.923
+     ]
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.84,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.83,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.79,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.76,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ],
+   "short": "TREC 2021",
+   "title_zh": "TREC 2021 队列 · nDCG@10",
+   "subtitle_zh": "75 位患者，对全部已评判试验排序，nDCG@10"
+  },
+  {
+   "id": "cohort-trec2022",
+   "title": "TREC 2022 cohort · nDCG@10",
+   "subtitle": "50 patients · every judged trial ranked · nDCG@10",
+   "metric": "nDCG@10",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 0.824,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.761,
+      0.88
+     ]
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-5.4",
+     "value": 0.78,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-5.4",
+     "value": 0.75,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Supp. Fig. 3c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 2.0 · GPT-4.1",
+     "value": 0.72,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4.1",
+     "value": 0.7,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5d",
+     "kind": "published"
+    }
+   ],
+   "short": "TREC 2022",
+   "title_zh": "TREC 2022 队列 · nDCG@10",
+   "subtitle_zh": "50 位患者，对全部已评判试验排序，nDCG@10"
+  },
+  {
+   "id": "nih-trialbench",
+   "title": "NIH-TrialBench · Recall@10 (%)",
+   "subtitle": "126 vignettes · target trial in top 10 · % (institute macro)",
+   "metric": "Recall@10 (%)",
+   "scale": 100,
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 95.9,
+     "source": "this report",
+     "kind": "ours",
+     "note": "88.1% over all 126 cases (81.7–93.7)"
+    },
+    {
+     "label": "TrialGPT 2.0",
+     "value": 70,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
+     "kind": "published"
+    },
+    {
+     "label": "TrialGPT 1.0",
+     "value": 54,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
+     "kind": "published"
+    },
+    {
+     "label": "GPT-5.5",
+     "value": 43,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
+     "kind": "published"
+    },
+    {
+     "label": "Gemini 3.5 Flash",
+     "value": 21,
+     "source": "TrialGPT 2.0, arXiv 2609.01202v2, Fig. 5c",
+     "kind": "published"
+    }
+   ],
+   "short": "NIH-TrialBench",
+   "title_zh": "NIH-TrialBench · 前 10 召回（%）",
+   "subtitle_zh": "126 个病例，病例对应的试验进入前 10 的比例，按 11 个研究所宏平均（与 TrialGPT 2.0 口径一致）",
+   "note_zh": "TrialGPT 2.0 论文只用默认底座 GPT-4.1 报告了 NIH-TrialBench（原文：\"Unless otherwise specified, all main analyses used GPT-4.1\"）；GPT-5.4 和 Gemini 只跑了三个公开队列。Linemach 按全部 126 例计算为 88.1%（81.7–93.7）。候选：在 1,373 个试验的 NIH 试验库上先做一次相关性重排，取前 300 个代替检索；Linemach 再按产品中的方式排序。",
+   "note": "TrialGPT 2.0 reports NIH-TrialBench only with its default backbone, GPT-4.1 (\"Unless otherwise specified, all main analyses used GPT-4.1\"); its GPT-5.4 and Gemini runs cover the three public cohorts only. Linemach over all 126 cases: 88.1% (81.7–93.7). Candidates: the 300 trials of the 1,373-trial NIH corpus a relevance rerank of the whole corpus put first stand in for retrieval; Linemach ranks them as in the product."
+  },
+  {
+   "id": "n2c2",
+   "title": "n2c2 cohort selection · micro-F1",
+   "subtitle": "official test · 86 patients × 13 criteria · micro-F1",
+   "metric": "Micro-F1",
+   "scale": 1,
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 0.927,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      0.913,
+      0.940
+     ]
+    },
+    {
+     "label": "Hybrid NLP, post-challenge",
+     "value": 0.9111,
+     "source": "Vydiswaran et al., JAMIA 2019 (reimplemented system)",
+     "kind": "published"
+    },
+    {
+     "label": "Rule-based (challenge #1)",
+     "value": 0.91,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "Hybrid NLP (MetaMap + cTAKES)",
+     "value": 0.9075,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "Rules + semi-supervised",
+     "value": 0.9069,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "Three-stage rule-based",
+     "value": 0.9028,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "cTAKES + regex hybrid",
+     "value": 0.9026,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "Rules + word2vec",
+     "value": 0.9003,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "280-rule system",
+     "value": 0.8913,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published"
+    },
+    {
+     "label": "MedGemma-27b + RAG + LoRA",
+     "value": 0.8905,
+     "source": "Chen et al., arXiv 2604.05190, Table 3",
+     "kind": "published"
+    },
+    {
+     "label": "Rules + CNN-highway-LSTM",
+     "value": 0.8855,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published",
+     "figure": false
+    },
+    {
+     "label": "Trie rule processor",
+     "value": 0.8837,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published",
+     "figure": false
+    },
+    {
+     "label": "Rules + SVM",
+     "value": 0.8765,
+     "source": "Stubbs et al., JAMIA 2019, Table 2",
+     "kind": "published",
+     "figure": false
+    },
+    {
+     "label": "Llama-3.1-8b + LoRA",
+     "value": 0.8671,
+     "source": "Chen et al., arXiv 2604.05190, Table 3 (full context)",
+     "kind": "published"
+    },
+    {
+     "label": "47-team median",
+     "value": 0.8227,
+     "source": "Stubbs et al., JAMIA 2019",
+     "kind": "reference"
+    }
+   ],
+   "short": "n2c2",
+   "title_zh": "n2c2 队列筛选 · micro-F1",
+   "subtitle_zh": "官方测试集，86 位患者 × 13 条标准，micro-F1",
+   "note": "Official evaluator (track1_eval.py), Linemach given the n2c2 annotation guidelines. An answer neither met nor not met is read as the guidelines label an unmentioned criterion: not met, except ENGLISH and MAKES-DECISIONS (met). One complete pass of the final code over all 86 patients (the test set had been read in earlier rounds, so this is a re-run, not a held-out result); macro-F1 0.825. The challenge systems and the LoRA models were built on the n2c2 training split; no Linemach component was trained on it. Challenge systems are named by method (Stubbs et al., Table 2); the figure shows the first seven, the table all ten.",
+   "note_zh": "官方评分脚本（track1_eval.py），Linemach 使用 n2c2 官方标注指南。既非\"符合\"也非\"不符合\"的回答，按指南对未提及标准的标注方式计：不符合，ENGLISH 和 MAKES-DECISIONS 两条计为符合。最终代码对全部 86 位患者一次跑完（测试集在之前几轮已读过，因此这是重跑结果，不是留出集结果）；macro-F1 0.825。挑战赛各系统和 LoRA 模型都在 n2c2 训练集上构建，Linemach 没有任何部件在其上训练。挑战赛系统按方法命名（Stubbs 等，表 2）；图中列出前七名，表格列出全部前十。",
+   "span": 2
+  },
+  {
+   "id": "criterion-decided",
+   "title": "Criterion-level · physician-decided criteria (%)",
+   "title_zh": "逐条判断 · 医生给出明确结论的标准（%）",
+   "short": "Criterion-level",
+   "subtitle": "TrialGPT annotations · the 722 of 1,015 criteria the physicians decided (included, not included, excluded, not excluded, not applicable) · accuracy % · Linemach given TrialGPT's own task definition",
+   "subtitle_zh": "TrialGPT 标注集中医生给出明确结论的 722 条（共 1,015 条），一致率（%）；Linemach 使用 TrialGPT 自己的任务定义",
+   "metric": "Accuracy (%)",
+   "scale": 100,
+   "note": "Paired difference Linemach − GPT-4: +5.1 points (+0.9 to +9.8, patient bootstrap). GPT-4 is scored from TrialGPT's released predictions on the same rows. Each physician's accuracy on these rows is rebuilt from that physician's confusion matrices in TrialGPT 1.0 (proportions per gold label, two decimals) weighted by the released gold counts; the same rebuild gives GPT-4 87.7% against its exact 87.4%, and reproduces the paper's whole-set range (88.6–90.1% against 88.7–90.0%).",
+   "note_zh": "配对差值 Linemach − GPT-4：+5.1 个百分点（+0.9 至 +9.8，按患者自助法）。GPT-4 的成绩由 TrialGPT 公开的预测在同一批条目上计算。每位医生在这批条目上的一致率，由 TrialGPT 1.0 论文中该医生的混淆矩阵（按金标准标签的比例，两位小数）乘以公开的金标准条目数还原；同样的还原对 GPT-4 得到 87.7%（精确值 87.4%），对全部条目得到 88.6–90.1%（论文为 88.7–90.0%）。",
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 92.5,
+     "ci95": [
+      89.8,
+      94.8
+     ],
+     "source": "this report",
+     "kind": "ours"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4",
+     "value": 87.4,
+     "ci95": [
+      82.6,
+      91.3
+     ],
+     "source": "TrialGPT released predictions (Jin et al., Nat Commun 2024), scored on the same rows",
+     "kind": "published"
+    },
+    {
+     "label": "Physician A",
+     "value": 93.1,
+     "source": "Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point)",
+     "kind": "human"
+    },
+    {
+     "label": "Physician C",
+     "value": 90.7,
+     "source": "Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point)",
+     "kind": "human"
+    },
+    {
+     "label": "Physician B",
+     "value": 89.0,
+     "source": "Jin et al., Nat Commun 2024, Fig. 3c–d (the physician's per-label matrix weighted by the released gold counts, ±0.5 point)",
+     "kind": "human"
+    }
+   ]
+  },
+  {
+   "id": "criterion",
+   "title": "Criterion-level · all criteria (%)",
+   "subtitle": "TrialGPT annotations · 1,015 criteria · 53 patients · label agreement %",
+   "metric": "Accuracy (%)",
+   "scale": 100,
+   "note": "On the 293 criteria the gold labels \"not enough information\", 255 labels are GPT-4's own answer kept by the annotators, who labelled with GPT-4's predictions in view; GPT-4 matches 87.0% of those rows, Linemach 41.0%. Linemach was given TrialGPT's own task definition (which asks for as few \"not enough information\" answers as possible).",
+   "rows": [
+    {
+     "label": "Linemach",
+     "value": 77.6,
+     "source": "this report",
+     "kind": "ours",
+     "ci95": [
+      73.0,
+      81.9
+     ],
+     "note": "same run as the panel above"
+    },
+    {
+     "label": "TrialGPT 1.0 · GPT-4",
+     "value": 87.3,
+     "source": "Jin et al., Nat Commun 2024",
+     "kind": "published"
+    },
+    {
+     "label": "Physician (highest)",
+     "value": 90.0,
+     "source": "Jin et al., Nat Commun 2024",
+     "kind": "human"
+    },
+    {
+     "label": "Physician (lowest)",
+     "value": 88.7,
+     "source": "Jin et al., Nat Commun 2024",
+     "kind": "human"
+    }
+   ],
+   "short": "Criterion-level",
+   "title_zh": "逐条判断 · 全部标准（%）",
+   "subtitle_zh": "TrialGPT 标注集，1,015 条标准，53 位患者，标签一致率（%）",
+   "note_zh": "金标准标为\"信息不足\"的 293 条中，有 255 条就是 GPT-4 自己的回答被标注员保留下来（标注员是看着 GPT-4 的预测做标注的）；在这些条目上 GPT-4 吻合 87.0%，Linemach 41.0%。Linemach 使用的是 TrialGPT 自己的任务定义（要求尽量少答\"信息不足\"）。",
+   "figure": false
+  }
+ ],
+ "final": {
+  "id": "relative",
+  "title": "Linemach vs strongest listed system (= 100)",
+  "title_zh": "Linemach 相对所列最强系统（= 100）",
+  "subtitle": "",
+  "subtitle_zh": ""
+ }
+}

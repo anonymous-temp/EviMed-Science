@@ -1,0 +1,220 @@
+{
+ "title": "Board E: TREC CT 2023 full corpus (451,538 trials), all topics; official measures, unjudged = not relevant",
+ "patients": 37,
+ "groups": {
+  "2023": 37
+ },
+ "arms": [
+  {
+   "name": "EviMed rrf-qwen-jev-v1 (Jev 1.13)",
+   "type": "same, Jev 1.13",
+   "backbone": "Qwen3.7 embed+rerank, Jev 1.13",
+   "point": {
+    "ndcg": 0.5109659625995895,
+    "ep10": 0.4594594594594595,
+    "mrr": 0.7673540423540424,
+    "j10": 0.5405405405405406,
+    "cndcg": 0.8859541912178375
+   },
+   "byGroup": {
+    "2023": {
+     "ndcg": 0.5109659625995895,
+     "ep10": 0.4594594594594595,
+     "mrr": 0.7673540423540424,
+     "j10": 0.5405405405405406,
+     "cndcg": 0.8859541912178375
+    }
+   },
+   "ci": [
+    0.43663987562917544,
+    0.5828724063380765
+   ],
+   "best": 1,
+   "worst": 4
+  },
+  {
+   "name": "EviMed rrf-qwen-jev-v1 (Jev 1.14)",
+   "type": "hybrid recall → Qwen3.7 rerank ⊕ Jev, RRF",
+   "backbone": "Qwen3.7 embed+rerank, Jev 1.14",
+   "point": {
+    "ndcg": 0.5043129660815845,
+    "ep10": 0.45135135135135135,
+    "mrr": 0.7781970281970282,
+    "j10": 0.5243243243243243,
+    "cndcg": 0.8716978726859881
+   },
+   "byGroup": {
+    "2023": {
+     "ndcg": 0.5043129660815845,
+     "ep10": 0.45135135135135135,
+     "mrr": 0.7781970281970282,
+     "j10": 0.5243243243243243,
+     "cndcg": 0.8716978726859881
+    }
+   },
+   "ci": [
+    0.4325536602103706,
+    0.5734012477577497
+   ],
+   "best": 1,
+   "worst": 4
+  },
+  {
+   "name": "Hybrid recall → Qwen3.7 rerank (V3 policy)",
+   "type": "rerank only",
+   "backbone": "Qwen3.7 embed+rerank",
+   "point": {
+    "ndcg": 0.49835674327660817,
+    "ep10": 0.37027027027027026,
+    "mrr": 0.5827005577005576,
+    "j10": 0.6054054054054053,
+    "cndcg": 0.7735037738658959
+   },
+   "byGroup": {
+    "2023": {
+     "ndcg": 0.49835674327660817,
+     "ep10": 0.37027027027027026,
+     "mrr": 0.5827005577005576,
+     "j10": 0.6054054054054053,
+     "cndcg": 0.7735037738658959
+    }
+   },
+   "ci": [
+    0.42716281528291283,
+    0.5691211514522874
+   ],
+   "best": 1,
+   "worst": 4
+  },
+  {
+   "name": "Hybrid recall only (lexical ⊕ dense, RRF)",
+   "type": "first stage",
+   "backbone": "FTS5 BM25 + Qwen3.7 embedding",
+   "point": {
+    "ndcg": 0.3800723547972844,
+    "ep10": 0.2648648648648649,
+    "mrr": 0.459013209013209,
+    "j10": 0.5351351351351351,
+    "cndcg": 0.6961946510641829
+   },
+   "byGroup": {
+    "2023": {
+     "ndcg": 0.3800723547972844,
+     "ep10": 0.2648648648648649,
+     "mrr": 0.459013209013209,
+     "j10": 0.5351351351351351,
+     "cndcg": 0.6961946510641829
+    }
+   },
+   "ci": [
+    0.32381818437896526,
+    0.436640242589083
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "Lexical recall only (product FTS5, condition + ranked English terms)",
+   "type": "first stage",
+   "backbone": "FTS5 BM25",
+   "point": {
+    "ndcg": 0.2748947052798905,
+    "ep10": 0.24054054054054055,
+    "mrr": 0.42601457337466314,
+    "j10": 0.3162162162162162,
+    "cndcg": 0.7788945718650329
+   },
+   "byGroup": {
+    "2023": {
+     "ndcg": 0.2748947052798905,
+     "ep10": 0.24054054054054055,
+     "mrr": 0.42601457337466314,
+     "j10": 0.3162162162162162,
+     "cndcg": 0.7788945718650329
+    }
+   },
+   "ci": [
+    0.20193973402409546,
+    0.3564423470108821
+   ],
+   "best": 4,
+   "worst": 5
+  }
+ ],
+ "reported": [
+  {
+   "name": "CSIROmed qe_prr_ft (query expansion + fine-tuned GPT-3.5 rerank)",
+   "type": "official TREC 2023",
+   "backbone": "GPT-3.5 fine-tuned",
+   "scores": {
+    "ndcg": 0.738,
+    "ep10": 0.527,
+    "mrr": 0.667
+   },
+   "source": "CSIROmed TREC 2023 notebook, Table 1"
+  },
+  {
+   "name": "IELAB GPT-4 rerank of top 20",
+   "type": "official TREC 2023",
+   "backbone": "GPT-4 + cross-encoder",
+   "scores": {
+    "ndcg": 0.7363,
+    "ep10": 0.5108
+   },
+   "source": "IELAB TREC 2023 notebook, Table 2"
+  },
+  {
+   "name": "DoSSIER_3",
+   "type": "official TREC 2023",
+   "backbone": "-",
+   "scores": {
+    "ndcg": 0.6837,
+    "ep10": 0.5838,
+    "mrr": 0.6421
+   },
+   "source": "DoSSIER TREC 2023 notebook, Table 2"
+  },
+  {
+   "name": "IELAB CE_weighted",
+   "type": "official TREC 2023",
+   "backbone": "cross-encoder",
+   "scores": {
+    "ndcg": 0.6716,
+    "ep10": 0.4432
+   },
+   "source": "IELAB notebook"
+  },
+  {
+   "name": "CSIROmed bm25_bsln",
+   "type": "official TREC 2023 baseline",
+   "backbone": "BM25",
+   "scores": {
+    "ndcg": 0.619,
+    "ep10": 0.33,
+    "mrr": 0.563
+   },
+   "source": "CSIROmed notebook"
+  },
+  {
+   "name": "IELAB dense retrieval only",
+   "type": "official TREC 2023",
+   "backbone": "dense retriever",
+   "scores": {
+    "ndcg": 0.5768,
+    "ep10": 0.3243
+   },
+   "source": "IELAB notebook"
+  },
+  {
+   "name": "TREC 2023 median",
+   "type": "track median",
+   "backbone": "-",
+   "scores": {
+    "ndcg": 0.6484,
+    "ep10": 0.3937,
+    "mrr": 0.5381
+   },
+   "source": "DoSSIER / CSIROmed notebooks"
+  }
+ ]
+}

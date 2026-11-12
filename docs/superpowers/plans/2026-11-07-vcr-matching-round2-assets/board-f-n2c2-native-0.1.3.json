@@ -1,0 +1,340 @@
+{
+  "completion": {
+    "pairsFailedByCode": {
+      "patient_matching_native_decision_failed": 4
+    },
+    "patients": 86,
+    "patientsComplete": 82,
+    "patientsWithRecord": 86,
+    "statusCounts": {
+      "complete": 82,
+      "failed": 4
+    },
+    "usage": {
+      "costCny": 24.79220000000001,
+      "inputTokens": 7458815,
+      "outputTokens": 1158240
+    }
+  },
+  "provenance": {
+    "casesSha256": "03f001cc20141e7031b833ce070fad429caa583ec9bfd270b97d2479fa8b07be",
+    "devDigest": "abf3d52129f817e06fec1cfb54554133a579681a4c76270f869e5fb74963652c",
+    "heldoutDigest": "966c56cf8596a1291afdf38b2b2b78785eaf49e01143d605a8148ce4fcdb5905",
+    "scorerSha256": "f453505c44af2eb0fd807c5f031e72f2041299a5244c05b8d4c598de84fe3a2a",
+    "testSealed": false
+  },
+  "score": {
+    "accuracyA": {
+      "interval": [
+        0.7021466905187835,
+        0.7844364937388193
+      ],
+      "point": 0.7450805008944544
+    },
+    "baseline": {
+      "accuracy": 0.7647584973166368,
+      "learntFrom": "the 202 training patients outside the split",
+      "macroF1": 0.4269626682752027,
+      "microF1": 0.7608458895056833,
+      "perTag": {
+        "ABDOMINAL": {
+          "accuracy": 0.6511627906976745,
+          "f1": 0.3943661971830986,
+          "goldMet": 30,
+          "predictedMet": 0
+        },
+        "ADVANCED-CAD": {
+          "accuracy": 0.5232558139534884,
+          "f1": 0.3435114503816794,
+          "goldMet": 45,
+          "predictedMet": 86
+        },
+        "ALCOHOL-ABUSE": {
+          "accuracy": 0.9651162790697675,
+          "f1": 0.49112426035502965,
+          "goldMet": 3,
+          "predictedMet": 0
+        },
+        "ASP-FOR-MI": {
+          "accuracy": 0.7906976744186046,
+          "f1": 0.44155844155844154,
+          "goldMet": 68,
+          "predictedMet": 86
+        },
+        "CREATININE": {
+          "accuracy": 0.7209302325581395,
+          "f1": 0.4189189189189189,
+          "goldMet": 24,
+          "predictedMet": 0
+        },
+        "DIETSUPP-2MOS": {
+          "accuracy": 0.5116279069767442,
+          "f1": 0.3384615384615385,
+          "goldMet": 44,
+          "predictedMet": 86
+        },
+        "DRUG-ABUSE": {
+          "accuracy": 0.9651162790697675,
+          "f1": 0.49112426035502965,
+          "goldMet": 3,
+          "predictedMet": 0
+        },
+        "ENGLISH": {
+          "accuracy": 0.8488372093023255,
+          "f1": 0.4591194968553459,
+          "goldMet": 73,
+          "predictedMet": 86
+        },
+        "HBA1C": {
+          "accuracy": 0.5930232558139535,
+          "f1": 0.3722627737226277,
+          "goldMet": 35,
+          "predictedMet": 0
+        },
+        "KETO-1YR": {
+          "accuracy": 1.0,
+          "f1": 0.5,
+          "goldMet": 0,
+          "predictedMet": 0
+        },
+        "MAJOR-DIABETES": {
+          "accuracy": 0.5,
+          "f1": 0.3333333333333333,
+          "goldMet": 43,
+          "predictedMet": 86
+        },
+        "MAKES-DECISIONS": {
+          "accuracy": 0.9651162790697675,
+          "f1": 0.49112426035502965,
+          "goldMet": 83,
+          "predictedMet": 86
+        },
+        "MI-6MOS": {
+          "accuracy": 0.9069767441860465,
+          "f1": 0.475609756097561,
+          "goldMet": 8,
+          "predictedMet": 0
+        }
+      }
+    },
+    "pairs": 1118,
+    "patientsInSplit": 86,
+    "patientsScored": 86,
+    "perCriterion": {
+      "ABDOMINAL": {
+        "accuracyA": 0.8604651162790697,
+        "accuracyB": 0.9069767441860465,
+        "accuracyC": 0.9069767441860465,
+        "accuracyD": 0.872093023255814,
+        "f1B": 0.8991202346041056,
+        "f1C": 0.8991202346041056,
+        "f1D": 0.8655294953802416,
+        "goldMet": 30,
+        "unknownShare": 0.05813953488372093
+      },
+      "ADVANCED-CAD": {
+        "accuracyA": 0.6627906976744186,
+        "accuracyB": 0.686046511627907,
+        "accuracyC": 0.686046511627907,
+        "accuracyD": 0.686046511627907,
+        "f1B": 0.666139468008627,
+        "f1C": 0.666139468008627,
+        "f1D": 0.6570669029685423,
+        "goldMet": 45,
+        "unknownShare": 0.046511627906976744
+      },
+      "ALCOHOL-ABUSE": {
+        "accuracyA": 0.8372093023255814,
+        "accuracyB": 0.9883720930232558,
+        "accuracyC": 0.9883720930232558,
+        "accuracyD": 0.8372093023255814,
+        "f1B": 0.9255411255411256,
+        "f1C": 0.9255411255411256,
+        "f1D": 0.6039473684210526,
+        "goldMet": 3,
+        "unknownShare": 0.1511627906976744
+      },
+      "ASP-FOR-MI": {
+        "accuracyA": 0.813953488372093,
+        "accuracyB": 0.8372093023255814,
+        "accuracyC": 0.8372093023255814,
+        "accuracyD": 0.8372093023255814,
+        "f1B": 0.7173708920187793,
+        "f1C": 0.7173708920187793,
+        "f1D": 0.6828240252897787,
+        "goldMet": 68,
+        "unknownShare": 0.046511627906976744
+      },
+      "CREATININE": {
+        "accuracyA": 0.6046511627906976,
+        "accuracyB": 0.8604651162790697,
+        "accuracyC": 0.8604651162790697,
+        "accuracyD": 0.6395348837209303,
+        "f1B": 0.8266129032258065,
+        "f1C": 0.8266129032258065,
+        "f1D": 0.6311055763110558,
+        "goldMet": 24,
+        "unknownShare": 0.29069767441860467
+      },
+      "DIETSUPP-2MOS": {
+        "accuracyA": 0.47674418604651164,
+        "accuracyB": 0.8023255813953488,
+        "accuracyC": 0.8023255813953488,
+        "accuracyD": 0.5348837209302325,
+        "f1B": 0.8016551349884683,
+        "f1C": 0.8016551349884683,
+        "f1D": 0.42204301075268824,
+        "goldMet": 44,
+        "unknownShare": 0.38372093023255816
+      },
+      "DRUG-ABUSE": {
+        "accuracyA": 0.8488372093023255,
+        "accuracyB": 0.9883720930232558,
+        "accuracyC": 0.9883720930232558,
+        "accuracyD": 0.8488372093023255,
+        "f1B": 0.9255411255411256,
+        "f1C": 0.9255411255411256,
+        "f1D": 0.6154110767113863,
+        "goldMet": 3,
+        "unknownShare": 0.13953488372093023
+      },
+      "ENGLISH": {
+        "accuracyA": 0.7674418604651163,
+        "accuracyB": 0.7674418604651163,
+        "accuracyC": 0.9767441860465116,
+        "accuracyD": 0.9767441860465116,
+        "f1B": 0.6946022727272727,
+        "f1C": 0.9546891464699684,
+        "f1D": 0.9546891464699684,
+        "goldMet": 73,
+        "unknownShare": 0.20930232558139536
+      },
+      "HBA1C": {
+        "accuracyA": 0.4418604651162791,
+        "accuracyB": 0.9418604651162791,
+        "accuracyC": 0.9418604651162791,
+        "accuracyD": 0.46511627906976744,
+        "f1B": 0.9381739755571531,
+        "f1C": 0.9381739755571531,
+        "f1D": 0.4199413489736071,
+        "goldMet": 35,
+        "unknownShare": 0.5232558139534884
+      },
+      "KETO-1YR": {
+        "accuracyA": 0.9302325581395349,
+        "accuracyB": 0.9883720930232558,
+        "accuracyC": 0.9883720930232558,
+        "accuracyD": 0.9302325581395349,
+        "f1B": 0.49707602339181284,
+        "f1C": 0.49707602339181284,
+        "f1D": 0.4819277108433735,
+        "goldMet": 0,
+        "unknownShare": 0.05813953488372093
+      },
+      "MAJOR-DIABETES": {
+        "accuracyA": 0.686046511627907,
+        "accuracyB": 0.8023255813953488,
+        "accuracyC": 0.8023255813953488,
+        "accuracyD": 0.7674418604651163,
+        "f1B": 0.8016551349884683,
+        "f1C": 0.8016551349884683,
+        "f1D": 0.7628240485383342,
+        "goldMet": 43,
+        "unknownShare": 0.19767441860465115
+      },
+      "MAKES-DECISIONS": {
+        "accuracyA": 0.8604651162790697,
+        "accuracyB": 0.8837209302325582,
+        "accuracyC": 0.9418604651162791,
+        "accuracyD": 0.9418604651162791,
+        "f1B": 0.655448717948718,
+        "f1C": 0.6277056277056278,
+        "f1D": 0.6277056277056278,
+        "goldMet": 83,
+        "unknownShare": 0.10465116279069768
+      },
+      "MI-6MOS": {
+        "accuracyA": 0.8953488372093024,
+        "accuracyB": 0.9418604651162791,
+        "accuracyC": 0.9418604651162791,
+        "accuracyD": 0.9186046511627907,
+        "f1B": 0.8368121442125238,
+        "f1C": 0.8368121442125238,
+        "f1D": 0.8243361540706158,
+        "goldMet": 8,
+        "unknownShare": 0.06976744186046512
+      }
+    },
+    "readings": {
+      "b": {
+        "accuracy": 0.8765652951699463,
+        "accuracyInterval": [
+          0.853309481216458,
+          0.8980322003577818
+        ],
+        "macroF1": 0.7835191655964604,
+        "microF1": 0.8722273016377803,
+        "microF1Interval": [
+          0.847485330994119,
+          0.8950649607271648
+        ],
+        "official": {
+          "macroF1": 0.7835,
+          "microF1": 0.8722
+        }
+      },
+      "c": {
+        "accuracy": 0.8971377459749553,
+        "accuracyInterval": [
+          0.8792486583184258,
+          0.9141323792486583
+        ],
+        "macroF1": 0.8013917643271995,
+        "microF1": 0.8944315669074943,
+        "microF1Interval": [
+          0.875543914217893,
+          0.9116362150914795
+        ],
+        "official": {
+          "macroF1": 0.8014,
+          "microF1": 0.8944
+        }
+      },
+      "d": {
+        "accuracy": 0.7889087656529516,
+        "accuracyInterval": [
+          0.7584973166368515,
+          0.8166368515205724
+        ],
+        "macroF1": 0.6576424224950979,
+        "microF1": 0.7888918759761374,
+        "microF1Interval": [
+          0.7584200063384137,
+          0.816633183961264
+        ],
+        "official": {
+          "macroF1": 0.6576,
+          "microF1": 0.7889
+        }
+      }
+    },
+    "split": "test",
+    "unknownShare": {
+      "byKind": {
+        "no answer": 52,
+        "not applicable": 2,
+        "not enough information": 142
+      },
+      "interval": [
+        0.13416815742397137,
+        0.22003577817531306
+      ],
+      "point": 0.17531305903398928
+    },
+    "yesNoBasis": {
+      "inferred": 346,
+      "silent": 212,
+      "stated": 364
+    }
+  }
+}

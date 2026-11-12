@@ -1,0 +1,19 @@
+{
+  "kind": "contained-worker-runtime",
+  "imageDigest": "sha256:8460aaf89a8f65b07c4a8a03a0cd18dc10623b6d3a99802aa23b79283be0c96d",
+  "nodeVersion": "v22.22.3",
+  "pythonVersion": "3.11.2",
+  "network": "none",
+  "rootFilesystem": "readonly",
+  "capabilities": "all-dropped",
+  "noNewPrivileges": true,
+  "sourceAssembly": "public-system-runtime-only",
+  "calculation": {
+    "id": "bmi",
+    "status": "success",
+    "value": 20,
+    "inputs": "public synthetic: weight 80 kg; height 2 m"
+  },
+  "restartOnPrivateLinuxSocketVolume": "passed",
+  "providerKeys": "none"
+}

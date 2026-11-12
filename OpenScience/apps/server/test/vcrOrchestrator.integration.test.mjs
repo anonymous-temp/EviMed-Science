@@ -24,6 +24,8 @@ import { VcrStore, vcrObjectNode } from "../src/vcrStore.mjs";
 import { vcrComputedOutputHash } from "../src/vcrEngineClient.mjs";
 import { VcrJobs, vcrScenarioHash } from "../src/vcrJobs.mjs";
 import { VcrOrchestrator } from "../src/vcrOrchestrator.mjs";
+import { judgmentTargets } from "../src/vcrMatchJudge.mjs";
+import { requiresLanguageJudgment } from "../src/vcrMatching.mjs";
 import { VcrService, seedVcrCatalogue } from "../src/vcrService.mjs";
 import { createVcrNotifier } from "../src/vcrNotify.mjs";
 import { createVcrSeal } from "../src/vcrSeal.mjs";
@@ -1260,21 +1262,21 @@ test("P1-5 on the programme path a design whose hazard ratio changes over time q
   assert.match(trial.designs[0].note, /没有解析结果/);
 });
 
-test("P2-10 a batch reading and a population check that a conversation asked for end in the inbox as well as in the conversation", options, async () => {
+test("P2-10 a judging job and a population check that a conversation asked for end in the inbox as well as in the conversation", options, async () => {
   const module = compose({ dispatch: false });
   const study = await makeStudy("noticekinds");
   const finished = (/** @type {string} */ kind, /** @type {string} */ method, /** @type {Record<string, any>} */ result, /** @type {Record<string, any>} */ checkpoint = {}) =>
     module.orchestrator.onJobFinished({ job: { id: `job_${kind}`, studyId: study.id, kind, method, state: "succeeded", checkpoint: { origin: "runtime", resultKind: kind, ...checkpoint } },
       result: { id: `res_${kind}`, kind, ...result } });
-  await finished("match_extract", "matching.extract", { conclusion: "estimable", measures: [{ name: "records_read", value: 25 }], diagnostics: { remaining: 0 } });
+  await finished("match_judge", "matching.judge", { conclusion: "estimable", measures: [{ name: "pairs_finished", value: 25 }, { name: "pairs_total", value: 25 }] });
   await finished("population_check", "population.check", { conclusion: "estimable", measures: [{ name: "variables_compared", value: 4 }, { name: "variables_apart", value: 1 }] });
   const titles = notices_of(module).map((notice) => notice.title);
-  assert.ok(titles.includes("病历阅读完成：读完 25 份病历"), titles.join(" | "));
+  assert.ok(titles.includes("患者与试验判定完成：判定了 25/25 对"), titles.join(" | "));
   assert.ok(titles.includes("人群核对完成：比较了 4 个变量，1 个有差异"), titles.join(" | "));
   // a computation nobody in a conversation asked for stays quiet, as the programme's own stages do
   const before = notices_of(module).length;
-  await module.orchestrator.onJobFinished({ job: { id: "job_quiet", studyId: study.id, kind: "match_extract", method: "matching.extract", state: "succeeded", checkpoint: { resultKind: "match_extract" } },
-    result: { id: "res_quiet", kind: "match_extract", measures: [{ name: "records_read", value: 5 }] } });
+  await module.orchestrator.onJobFinished({ job: { id: "job_quiet", studyId: study.id, kind: "match_judge", method: "matching.judge", state: "succeeded", checkpoint: { resultKind: "match_judge" } },
+    result: { id: "res_quiet", kind: "match_judge", measures: [{ name: "pairs_finished", value: 5 }, { name: "pairs_total", value: 5 }] } });
   assert.equal(notices_of(module).length, before);
 });
 
@@ -1835,6 +1837,65 @@ test("above T0 the matching step is sent a run once the criteria exist, and a ru
   assert.equal(module.dispatched.length, 4);
   assert.equal(module.dispatched[3].capabilityId, "vcr-matching");
   assert.ok(asked.runId, "the answer names the run it started");
+});
+
+test("above T0 a judging job holds the matching step, and what it saved finishes it, with no run sent meanwhile", options, async () => {
+  const module = compose();
+  const study = await makeStudy("matchjudge", { dataTier: "T1" });
+  const matching = async () => (await store.studyById(study.id)).steps.matching.status;
+  const protocol = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "protocol", items: null,
+    data: { title: "EV-201 v1.0", criteria: [{ kind: "inclusion", criterionType: "diagnosis", requirement: { op: "present", variable: "nsclc" }, sourceText: "经组织学确诊的非小细胞肺癌" }] } });
+  assert.deepEqual(protocol.issues, []);
+  await store.setStep(study.id, "matching", { requested: true });
+  const version = (await store.one("SELECT id FROM evimed_vcr.protocol_versions WHERE study_id = $1 ORDER BY version DESC LIMIT 1", [study.id])).id;
+
+  // A person (or the conversation) starts the job while no run is out for the step.
+  const job = { id: `job_${randomUUID()}` };
+  await store.query("INSERT INTO evimed_vcr.jobs (id, study_id, user_id, kind, method, state) VALUES ($1, $2, $3, 'match_judge', 'matching.judge', 'running')", [job.id, study.id, study.userId]);
+  await module.orchestrator.advance(study.id);
+  assert.equal(await matching(), "running", "a job of the step's own under way reads running");
+  const sent = module.dispatched.filter((/** @type {any} */ input) => input.capabilityId === "vcr-matching").length;
+  assert.equal(sent, 0, "and the matching run is not sent on top of it");
+
+  // It ends having judged someone against the protocol as it stands: the step is done, with no rule assessment anywhere.
+  await store.query("UPDATE evimed_vcr.jobs SET state = 'succeeded', finished_at = now() WHERE id = $1", [job.id]);
+  const judgment = (/** @type {string} */ targetKind, /** @type {string} */ targetId, /** @type {string} */ status) => store.query(`INSERT INTO evimed_vcr.match_judgments
+    (id, study_id, user_id, subject_key, target_kind, target_id, mode, prompt_version, producer, status) VALUES ($1, $2, $3, $1, $4, $5, 'fit', 'fit-3', 'job', $6)`,
+  [`jud_${randomUUID()}`, study.id, study.userId, targetKind, targetId, status]);
+  await judgment("protocol_version", "protocol-of-an-earlier-version", "done");
+  await judgment("protocol_version", version, "failed");
+  await module.orchestrator.advance(study.id);
+  assert.notEqual(await matching(), "done", "a failure, or the answer to an earlier version of the protocol, finishes nothing");
+  await judgment("protocol_version", version, "done");
+  await module.orchestrator.advance(study.id);
+  assert.equal(await matching(), "done");
+
+  // The other direction, in a study with no protocol: a patient's trials judged is the step's work too.
+  const other = await makeStudy("matchjudgetrial", { dataTier: "T1" });
+  await store.setStep(other.id, "matching", { requested: true });
+  await store.query(`INSERT INTO evimed_vcr.match_judgments (id, study_id, user_id, subject_key, target_kind, target_id, mode, prompt_version, producer, status)
+    VALUES ($1, $2, $3, 'sub_1', 'candidate_trial', 'ClinicalTrials.gov:NCT00000001', 'fit', 'fit-3', 'job', 'done')`, [`jud_${randomUUID()}`, other.id, other.userId]);
+  await module.orchestrator.advance(other.id);
+  assert.equal((await store.studyById(other.id)).steps.matching.status, "done");
+});
+
+test("a protocol pasted as text is saved through the tool path and reads back as the clauses a job judges", options, async () => {
+  const module = compose();
+  const study = await makeStudy("protocoltext", { dataTier: "T1" });
+  const text = "Inclusion and Exclusion Criteria:\n\nInclusion Criteria:\n1. ECOG 0, 1, or 2.\n2. Adenocarcinoma, or\n3. Squamous cell carcinoma\n\nExclusion Criteria:\n* Pregnancy";
+  const written = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "protocol", items: null, data: { title: "EV-201", protocolText: text } });
+  assert.deepEqual(written.issues, []);
+  const version = await store.one("SELECT id, title FROM evimed_vcr.protocol_versions WHERE study_id = $1", [study.id]);
+  assert.equal(version.title, "EV-201");
+  const rows = await store.rows("SELECT kind, source_text, requirement, ordinal FROM evimed_vcr.criteria WHERE protocol_version_id = $1 ORDER BY ordinal", [version.id]);
+  assert.deepEqual(rows.map((row) => row.requirement.op), ["language", "language", "not"]);
+  const targets = judgmentTargets({ matchStore: {
+    listCriteria: async () => rows.map((row) => ({ id: String(row.ordinal), ordinal: row.ordinal, kind: row.kind, sourceText: row.source_text, requirement: row.requirement })),
+    protocols: async () => [version] } });
+  const target = await targets.protocol({ study: { id: study.id }, protocolVersionId: version.id });
+  assert.deepEqual(target.clauses.map((/** @type {any} */ clause) => [clause.number, clause.kind, clause.text]), [[1, "inclusion", "ECOG 0, 1, or 2."], [2, "inclusion", "Adenocarcinoma, or 3. Squamous cell carcinoma"], [3, "exclusion", "Pregnancy"]]);
+  // A study whose protocol is words reads running while judged, and the rule evaluation is still there for a table.
+  assert.ok(requiresLanguageJudgment(rows[0].requirement));
 });
 
 test("R3 a person's cancel holds the programme: the run's end is not followed by the next step, and asking for a step takes it and what it needs out of the hold", options, async () => {
@@ -2513,11 +2574,9 @@ test("the 15 refused calls of the two live conversations of 2026-11-01, replayed
   // c1: the matching write that was refused on nineteen lines (the first item's eleven are replayed: the second item's criteria were not recorded)
   const { vcrRuntimeWrite: write } = await import("../src/vcrGateway.mjs");
   const item = fixture.c1.item;
-  const trial = { registry: "clinicaltrials.gov", registryId: item.registryId, recordHash: "fixture", eligibilityText: item.criteria.map((/** @type {any} */ criterion) => criterion.sourceText).join("\n") };
   /** @type {any[]} */ const written = [];
-  const answer = await write({ store: {}, service: {}, orchestrator: null, study: { id: "std_c1", userId: "u_c1", projectId: "default", scope: "conversation" }, what: "candidate_trial", items: [item], data: null,
-    evidence: { async candidateRecord() { return { status: "ok", trial }; } },
-    patientTrials: { async holds() { return true; }, async writeTrial(/** @type {any} */ _study, /** @type {any} */ input) { written.push(input); return { trial: { id: "ctr_1" }, created: true, criteria: input.criteria, evaluation: { evaluated: [] } }; } } });
+  const store = { async latestProtocolVersion() { return null; }, async saveProtocolVersion(/** @type {any} */ input) { written.push(input); return { id: "prt_1", version: 1 }; } };
+  const answer = await write({ store, service: {}, orchestrator: null, study: { id: "std_c1", userId: "u_c1", projectId: "default", scope: "conversation" }, what: "criteria", items: [{ title: "v1", criteria: item.criteria }], data: null });
   assert.deepEqual(answer.issues.filter((/** @type {any} */ entry) => /criterionType/.test(entry.field)), [], "no line is refused for a type");
   assert.equal(answer.ok, true, JSON.stringify(answer.issues));
   assert.equal(written[0].criteria.length, 15, "all fifteen criteria are written");

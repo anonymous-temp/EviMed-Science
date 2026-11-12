@@ -1,0 +1,431 @@
+{
+  "kind": "one-case-real-native-clinical-reference",
+  "scope": "Public synthetic fixture only; not a benchmark score, clinical validation, deployment or SaaS customer acceptance.",
+  "artifact": "evimed-dsh-patient-matching-0.1.0.tgz",
+  "sha256": "33fa64d754ac018816e80826f786b35def898062f7a16cfcd2486dbb38284d59",
+  "kernel": "0.2.1-rc.5",
+  "patient": {
+    "ageYears": 62,
+    "weightKg": 80,
+    "heightM": 2
+  },
+  "protocol": [
+    "Age >= 18 years",
+    "BMI < 25 kg/m2"
+  ],
+  "boundaries": {
+    "maxChildren": 1,
+    "maxProviderCalls": 16,
+    "maxCumulativeOutputTokens": 16000,
+    "retries": 0,
+    "providerKeyInRuntime": false,
+    "authorization": "Fixed public fixture reference host; SaaS pending invocation authorization is covered separately."
+  },
+  "exitCode": 0,
+  "status": "complete",
+  "servedModel": "deepseek-flash",
+  "actualNativeTools": [
+    {
+      "tool": "match_evidence",
+      "ok": true
+    },
+    {
+      "tool": "match_evidence",
+      "ok": true
+    },
+    {
+      "tool": "match_evidence",
+      "ok": true
+    },
+    {
+      "tool": "match_compute",
+      "ok": true
+    },
+    {
+      "tool": "structured_output",
+      "ok": true
+    }
+  ],
+  "computation": {
+    "calculator": {
+      "id": "bmi",
+      "version": "source-f023be0ac877acf2",
+      "digest": "sha256:f023be0ac877acf246dedb32e7fcb0b8ed9484386b7aaaf8239c16240d9488eb"
+    },
+    "value": 20,
+    "unit": "kg/m2",
+    "exactCheck": "verified",
+    "operandsSourceBound": true
+  },
+  "sourceBinding": {
+    "literalPatientPassagesVerified": 4,
+    "protocolDigestAndSpansVerified": true,
+    "patientOriginalDigest": "sha256:3788e8b16d383977b79d93ab647f520667be9fbaf8a019554ddf3d770e6ec39a",
+    "trialSourceRefs": [
+      {
+        "kind": "protocol",
+        "digest": "sha256:8f6a58461468e5ed53f8a1d905f2bd7778135d31999fbb829539b986e37f8e79",
+        "revision": "4bf381081e63225ce5e924804ee8e65f1e0c8b044eacf0429fcbc7ba67607a6a",
+        "sourceId": "protocol:prt_202f1fa3ee824044a546d9"
+      }
+    ],
+    "allCriterionEvidenceIds": [
+      {
+        "id": "crt_11cdd2019c8f43518f3c33",
+        "evidenceIds": [
+          "e:e4f12367e67f1b621385fe85c60cb1113844f2a518b4e73c3608facfb0482d09"
+        ]
+      },
+      {
+        "id": "crt_c54479bc89bf460087a17f",
+        "evidenceIds": [
+          "e:f9c11aa15e61b946e01eef71fb2266a82171684f906316b6cee15d015241617c",
+          "e:0fba58d20ed56edd056b7e96aca547ad784821843379807d9cb20629b8d3f97b"
+        ]
+      }
+    ]
+  },
+  "clinicalDecision": {
+    "eligibility": "eligible",
+    "criteria": [
+      {
+        "kind": "inclusion",
+        "basis": "stated",
+        "reason": "The protocol requires age at least 18 years. The preserved patient passage states 'Age 62 years.', so the subject is 44 years above the threshold and the criterion is satisfied on stated evidence with no inference required.",
+        "verdict": "satisfied",
+        "assumptions": [],
+        "criterionId": "crt_11cdd2019c8f43518f3c33",
+        "evidenceIds": [
+          "e:e4f12367e67f1b621385fe85c60cb1113844f2a518b4e73c3608facfb0482d09"
+        ]
+      },
+      {
+        "kind": "inclusion",
+        "basis": "computed",
+        "reason": "The protocol requires BMI less than 25 kg/m2. The registered BMI calculator (Quetelet, WHO adult categories) computed 80 kg / (2 m)^2 = 20.0 kg/m2 (unrounded 20, category normal weight), with both operands linked to their exact patient evidence passages. The exact calculated value 20.0 kg/m2 is below 25 kg/m2, so the criterion is satisfied on a computed basis.",
+        "verdict": "satisfied",
+        "assumptions": [
+          "The preserved anthropometrics (weight 80 kg, height 2 m) are treated as valid adult measurements as recorded; no re-measurement or height correction was available in the evidence bundle."
+        ],
+        "criterionId": "crt_c54479bc89bf460087a17f",
+        "evidenceIds": [
+          "e:f9c11aa15e61b946e01eef71fb2266a82171684f906316b6cee15d015241617c",
+          "e:0fba58d20ed56edd056b7e96aca547ad784821843379807d9cb20629b8d3f97b"
+        ]
+      }
+    ],
+    "priority": null
+  },
+  "readback": {
+    "actualIsolatedPostgres": true,
+    "persistedResultId": "pm_result_af3d05f675a644f596b925e0e8659a3d",
+    "replyEqualsSaved": true,
+    "pageEqualsSaved": true,
+    "jsonReportEqualsSaved": true,
+    "markdownEqualsSavedRenderer": true,
+    "legacyPageVerdict": "eligible",
+    "files": [
+      "native-clinical-report.md",
+      "native-clinical-report.json"
+    ],
+    "fileDigests": {
+      "native-clinical-report.md": "165b3d45e7a97fa1566dd7f59c9e111807d4bbfd209397442fea7254f55c6bbb",
+      "native-clinical-report.json": "ad0516535beacb5b7f2cbc427e9f42a6cf8903d15f8ce0f54989c87ae9e9686f",
+      "native-clinical-result.json": "3c2e8afb18b3ea8687088264c20b9a7c66723fdeee56c93e515eb6961d4bbc98"
+    }
+  },
+  "durationMs": 113093,
+  "providerCalls": [
+    {
+      "number": 1,
+      "requestedModel": "deepseek-flash",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "requestedMaxOutputTokens": 16000,
+      "httpStatus": 200,
+      "durationMs": 4377,
+      "servedModel": "deepseek-flash",
+      "usage": {
+        "input_tokens": 5418,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "output_tokens": 494,
+        "service_tier": "standard"
+      }
+    },
+    {
+      "number": 2,
+      "requestedModel": "deepseek-flash",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "requestedMaxOutputTokens": 15506,
+      "httpStatus": 200,
+      "durationMs": 2900,
+      "servedModel": "deepseek-flash",
+      "usage": {
+        "input_tokens": 849,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 5888,
+        "output_tokens": 349,
+        "service_tier": "standard"
+      }
+    },
+    {
+      "number": 3,
+      "requestedModel": "deepseek-flash",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "requestedMaxOutputTokens": 15157,
+      "httpStatus": 200,
+      "durationMs": 9164,
+      "servedModel": "deepseek-flash",
+      "usage": {
+        "input_tokens": 1136,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 7040,
+        "output_tokens": 1844,
+        "service_tier": "standard"
+      }
+    }
+  ],
+  "cumulativeOutputTokens": 2687,
+  "errors": [],
+  "hostOperations": [
+    {
+      "tool": "match_context",
+      "port": "IdentityPort",
+      "operation": "resolve",
+      "phase": null,
+      "callId": "reference-root-call-0",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": 200
+    },
+    {
+      "tool": "match_context",
+      "port": "IdentityPort",
+      "operation": "authorize",
+      "phase": null,
+      "callId": "reference-root-call-0",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": 200
+    },
+    {
+      "tool": "match_context",
+      "port": "PatientDataPort",
+      "operation": "context",
+      "phase": null,
+      "callId": "reference-root-call-0",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": "complete"
+    },
+    {
+      "tool": "match_context",
+      "port": "IdentityPort",
+      "operation": "resolve",
+      "phase": null,
+      "callId": "reference-root-call-1",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": 200
+    },
+    {
+      "tool": "match_context",
+      "port": "IdentityPort",
+      "operation": "authorize",
+      "phase": null,
+      "callId": "reference-root-call-1",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": 200
+    },
+    {
+      "tool": "match_context",
+      "port": "PatientDataPort",
+      "operation": "context",
+      "phase": null,
+      "callId": "reference-root-call-1",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": "complete"
+    },
+    {
+      "tool": "match_assess",
+      "port": "IdentityPort",
+      "operation": "resolve",
+      "phase": null,
+      "callId": "reference-root-call-2",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": 200
+    },
+    {
+      "tool": "match_assess",
+      "port": "IdentityPort",
+      "operation": "authorize",
+      "phase": null,
+      "callId": "reference-root-call-2",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": 200
+    },
+    {
+      "tool": "match_assess",
+      "port": "ExecutionPort",
+      "operation": "assess",
+      "phase": "prepare",
+      "callId": "reference-root-call-2",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": "complete"
+    },
+    {
+      "tool": "match_evidence",
+      "port": "IdentityPort",
+      "operation": "resolve",
+      "phase": null,
+      "callId": "call_00_ET_cOL4iFnDJz9aNTm4x6Ls0425",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "status": 200
+    },
+    {
+      "tool": "match_evidence",
+      "port": "IdentityPort",
+      "operation": "authorize",
+      "phase": null,
+      "callId": "call_00_ET_cOL4iFnDJz9aNTm4x6Ls0425",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "status": 200
+    },
+    {
+      "tool": "match_evidence",
+      "port": "PatientDataPort",
+      "operation": "read",
+      "phase": null,
+      "callId": "call_00_ET_cOL4iFnDJz9aNTm4x6Ls0425",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "status": "complete"
+    },
+    {
+      "tool": "match_evidence",
+      "port": "IdentityPort",
+      "operation": "resolve",
+      "phase": null,
+      "callId": "call_01_ET_3G4qJ5RUAWQqyE32Li0c0971",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "status": 200
+    },
+    {
+      "tool": "match_evidence",
+      "port": "IdentityPort",
+      "operation": "authorize",
+      "phase": null,
+      "callId": "call_01_ET_3G4qJ5RUAWQqyE32Li0c0971",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "status": 200
+    },
+    {
+      "tool": "match_evidence",
+      "port": "PatientDataPort",
+      "operation": "read",
+      "phase": null,
+      "callId": "call_01_ET_3G4qJ5RUAWQqyE32Li0c0971",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "status": "complete"
+    },
+    {
+      "tool": "match_evidence",
+      "port": "IdentityPort",
+      "operation": "resolve",
+      "phase": null,
+      "callId": "call_02_ET_eHSljJzZUjwYvplKZ2J36728",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "status": 200
+    },
+    {
+      "tool": "match_evidence",
+      "port": "IdentityPort",
+      "operation": "authorize",
+      "phase": null,
+      "callId": "call_02_ET_eHSljJzZUjwYvplKZ2J36728",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "status": 200
+    },
+    {
+      "tool": "match_evidence",
+      "port": "PatientDataPort",
+      "operation": "read",
+      "phase": null,
+      "callId": "call_02_ET_eHSljJzZUjwYvplKZ2J36728",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "status": "complete"
+    },
+    {
+      "tool": "match_compute",
+      "port": "IdentityPort",
+      "operation": "resolve",
+      "phase": null,
+      "callId": "call_00_WCyHuNrakXsrlbUtO7JB3030",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "status": 200
+    },
+    {
+      "tool": "match_compute",
+      "port": "IdentityPort",
+      "operation": "authorize",
+      "phase": null,
+      "callId": "call_00_WCyHuNrakXsrlbUtO7JB3030",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "status": 200
+    },
+    {
+      "tool": "match_compute",
+      "port": "ExecutionPort",
+      "operation": "compute",
+      "phase": null,
+      "callId": "call_00_WCyHuNrakXsrlbUtO7JB3030",
+      "sessionId": "d40c4341-bea1-4527-aa43-6ea1f4237cc1",
+      "status": "complete"
+    },
+    {
+      "tool": "match_assess",
+      "port": "IdentityPort",
+      "operation": "authorize",
+      "phase": null,
+      "callId": "reference-root-call-2",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": 200
+    },
+    {
+      "tool": "match_assess",
+      "port": "ExecutionPort",
+      "operation": "assess",
+      "phase": "refresh",
+      "callId": "reference-root-call-2",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": "complete"
+    },
+    {
+      "tool": "match_assess",
+      "port": "IdentityPort",
+      "operation": "authorize",
+      "phase": null,
+      "callId": "reference-root-call-2",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": 200
+    },
+    {
+      "tool": "match_assess",
+      "port": "ResultPort",
+      "operation": "save",
+      "phase": "commit",
+      "callId": "reference-root-call-2",
+      "sessionId": "session-941de5df-5794-4e20-9725-57487b8d17b3",
+      "status": "complete"
+    }
+  ],
+  "tokenUsage": {
+    "inputTokens": 7403,
+    "cacheReadTokens": 12928,
+    "cacheCreationTokens": 0,
+    "outputTokens": 2687,
+    "providerDurationMs": 16441
+  },
+  "referenceHarness": "OpenScience/evals/patient-matching-plugin/reference-host.mjs",
+  "harnessProvenance": "Executed private reference harness promoted to CLI arguments after the recorded run; no second paid clinical child.",
+  "evidenceFiles": [
+    "native-clinical-report.md",
+    "native-clinical-report.json",
+    "native-clinical-result.json"
+  ]
+}

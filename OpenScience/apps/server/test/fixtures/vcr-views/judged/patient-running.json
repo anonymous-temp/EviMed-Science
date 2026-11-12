@@ -1,0 +1,365 @@
+{
+  "available": true,
+  "direction": "patient_to_trial",
+  "subjectKey": "P-0192",
+  "label": "P-0192",
+  "held": true,
+  "progress": {
+    "total": 8,
+    "finished": 5,
+    "failed": 2,
+    "waiting": 1,
+    "state": "running",
+    "clauses": {
+      "wanted": 3,
+      "done": 3,
+      "left": 0
+    },
+    "jobId": "job_fixed",
+    "startedAt": "2026-11-04T08:00:00.000Z",
+    "cost": {
+      "ceiling": 1.5,
+      "spent": 0.125,
+      "currency": "CNY"
+    }
+  },
+  "trials": [
+    {
+      "rank": 1,
+      "kind": "registry",
+      "id": "NCT05000001",
+      "registry": "clinicaltrials.gov",
+      "registryId": "NCT05000001",
+      "title": "EGFR 19del 阳性晚期非小细胞肺癌一线治疗",
+      "url": "https://clinicaltrials.gov/study/NCT05000001",
+      "phase": "III 期",
+      "status": "招募中",
+      "statusAsOf": "2026-11-04",
+      "subjectKey": "P-0192",
+      "label": "P-0192",
+      "verdict": "possible",
+      "verdictLabel": "可能符合",
+      "fit": 92,
+      "fitLevel": "high",
+      "fitLabel": "高",
+      "confidence": 0.85,
+      "confidenceLabel": "较高",
+      "why": "近 4 周内是否接受过化疗",
+      "counts": {
+        "support": 4,
+        "against": 0,
+        "silent": 1,
+        "open": 1,
+        "notApplicable": 1
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "rank": 2,
+      "kind": "protocol",
+      "id": "prt_screen",
+      "registry": null,
+      "registryId": null,
+      "title": "EV-201 方案 v1",
+      "url": null,
+      "phase": "",
+      "status": "",
+      "statusAsOf": null,
+      "subjectKey": "P-0192",
+      "label": "P-0192",
+      "verdict": "possible",
+      "verdictLabel": "可能符合",
+      "fit": 91,
+      "fitLevel": "high",
+      "fitLabel": "高",
+      "confidence": 0.8,
+      "confidenceLabel": "较高",
+      "why": "近 4 周内是否化疗",
+      "counts": {
+        "support": 3,
+        "against": 0,
+        "silent": 3,
+        "open": 1,
+        "notApplicable": 1
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "rank": 3,
+      "kind": "registry",
+      "id": "NCT05000007",
+      "registry": "clinicaltrials.gov",
+      "registryId": "NCT05000007",
+      "title": "晚期肺腺癌的真实世界研究",
+      "url": "https://clinicaltrials.gov/study/NCT05000007",
+      "phase": "不适用",
+      "status": "进行中，不再招募",
+      "statusAsOf": "2026-11-04",
+      "subjectKey": "P-0192",
+      "label": "P-0192",
+      "verdict": "eligible",
+      "verdictLabel": "符合",
+      "fit": 88,
+      "fitLevel": "high",
+      "fitLabel": "高",
+      "confidence": 0.8,
+      "confidenceLabel": "较高",
+      "why": "62 岁",
+      "counts": {
+        "support": 3,
+        "against": 0,
+        "silent": 0,
+        "open": 0,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    },
+    {
+      "rank": 4,
+      "kind": "registry",
+      "id": "NCT05000003",
+      "registry": "clinicaltrials.gov",
+      "registryId": "NCT05000003",
+      "title": "晚期肺癌的观察性研究",
+      "url": "https://clinicaltrials.gov/study/NCT05000003",
+      "phase": "不适用",
+      "status": "尚未开始招募",
+      "statusAsOf": "2026-11-04",
+      "subjectKey": "P-0192",
+      "label": "P-0192",
+      "verdict": "possible",
+      "verdictLabel": "可能符合",
+      "fit": 61,
+      "fitLevel": "medium",
+      "fitLabel": "中",
+      "confidence": 0.4,
+      "confidenceLabel": "较低",
+      "why": "题目和疾病方向相合，但没有入排原文可核对。",
+      "counts": null,
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job",
+      "eligibilityNote": "未取到入排原文，依据标题和疾病判断"
+    },
+    {
+      "rank": 5,
+      "kind": "registry",
+      "id": "NCT05000002",
+      "registry": "clinicaltrials.gov",
+      "registryId": "NCT05000002",
+      "title": "既往未用过 EGFR-TKI 的晚期肺腺癌",
+      "url": "https://clinicaltrials.gov/study/NCT05000002",
+      "phase": "II 期",
+      "status": "招募中",
+      "statusAsOf": "2026-11-04",
+      "subjectKey": "P-0192",
+      "label": "P-0192",
+      "verdict": "ineligible",
+      "verdictLabel": "不符合",
+      "fit": 12,
+      "fitLevel": "minimal",
+      "fitLabel": "很低",
+      "confidence": 0.9,
+      "confidenceLabel": "较高",
+      "why": "2025 年 4 月起服用奥希替尼",
+      "counts": {
+        "support": 1,
+        "against": 1,
+        "silent": 0,
+        "open": 0,
+        "notApplicable": 0
+      },
+      "judgedAt": "2026-11-04T08:00:00.000Z",
+      "producer": "job"
+    }
+  ],
+  "failed": {
+    "count": 2,
+    "reasons": [
+      {
+        "reason": "模型回答超时",
+        "count": 1
+      },
+      {
+        "reason": "登记库里没有这个登记号",
+        "count": 1
+      }
+    ],
+    "listed": [
+      {
+        "subjectKey": "P-0192",
+        "label": "P-0192",
+        "kind": "registry",
+        "id": "NCT05000004",
+        "registryId": "NCT05000004",
+        "title": "PD-1 联合化疗的随机对照研究",
+        "reason": "模型回答超时",
+        "at": "2026-11-04T08:00:00.000Z"
+      },
+      {
+        "subjectKey": "P-0192",
+        "label": "P-0192",
+        "kind": "registry",
+        "id": "NCT05000005",
+        "registryId": "NCT05000005",
+        "title": null,
+        "reason": "登记库里没有这个登记号",
+        "at": "2026-11-04T08:00:00.000Z"
+      }
+    ]
+  },
+  "selected": {
+    "kind": "registry",
+    "id": "NCT05000001",
+    "registry": "clinicaltrials.gov",
+    "registryId": "NCT05000001",
+    "title": "EGFR 19del 阳性晚期非小细胞肺癌一线治疗",
+    "url": "https://clinicaltrials.gov/study/NCT05000001",
+    "phase": "III 期",
+    "status": "招募中",
+    "statusAsOf": "2026-11-04",
+    "subjectKey": "P-0192",
+    "label": "P-0192",
+    "verdict": "possible",
+    "verdictLabel": "可能符合",
+    "fit": 92,
+    "fitLevel": "high",
+    "fitLabel": "高",
+    "confidence": 0.85,
+    "confidenceLabel": "较高",
+    "why": "近 4 周内是否接受过化疗",
+    "counts": {
+      "support": 4,
+      "against": 0,
+      "silent": 1,
+      "open": 1,
+      "notApplicable": 1
+    },
+    "judgedAt": "2026-11-04T08:00:00.000Z",
+    "producer": "job",
+    "groups": {
+      "support": [
+        "确诊 EGFR 19del 阳性的肺腺癌，ECOG 1 分",
+        "肌酐和肝功能正常"
+      ],
+      "open": [
+        "近 4 周内是否接受过化疗"
+      ]
+    },
+    "summary": null,
+    "clauses": [
+      {
+        "number": 1,
+        "kind": "inclusion",
+        "clause": "病理确诊的非小细胞肺癌",
+        "label": "included",
+        "basis": "stated",
+        "display": "符合",
+        "stance": "support",
+        "reason": "病历记录为肺腺癌",
+        "evidence": [
+          {
+            "sentenceId": 0,
+            "text": "患者男，62岁，2025年3月确诊肺腺癌，EGFR 19del 阳性。",
+            "documentId": "sfl_fixed",
+            "start": 0,
+            "end": 35
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "kind": "inclusion",
+        "clause": "EGFR 19del 或 L858R 突变",
+        "label": "included",
+        "basis": "stated",
+        "display": "符合",
+        "stance": "support",
+        "reason": "EGFR 19del 阳性",
+        "evidence": [
+          {
+            "sentenceId": 0,
+            "text": "患者男，62岁，2025年3月确诊肺腺癌，EGFR 19del 阳性。",
+            "documentId": "sfl_fixed",
+            "start": 0,
+            "end": 35
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "kind": "inclusion",
+        "clause": "ECOG 评分 0–1 分",
+        "label": "included",
+        "basis": "stated",
+        "display": "符合",
+        "stance": "support",
+        "reason": "ECOG 1 分",
+        "evidence": [
+          {
+            "sentenceId": 1,
+            "text": "ECOG 评分 1 分。",
+            "documentId": "sfl_fixed",
+            "start": 36,
+            "end": 48
+          }
+        ]
+      },
+      {
+        "number": 4,
+        "kind": "exclusion",
+        "clause": "未控制的糖尿病",
+        "label": "not_excluded",
+        "basis": "stated",
+        "display": "未符合排除条件",
+        "stance": "support",
+        "reason": "既往无糖尿病史",
+        "evidence": [
+          {
+            "sentenceId": 3,
+            "text": "既往无糖尿病史，无药物过敏史。",
+            "documentId": "sfl_fixed",
+            "start": 79,
+            "end": 94
+          }
+        ]
+      },
+      {
+        "number": 5,
+        "kind": "exclusion",
+        "clause": "间质性肺病史",
+        "label": "not_excluded",
+        "basis": "silent",
+        "display": "未见记载，按未排除",
+        "stance": "silent",
+        "reason": "病历没有间质性肺病的记载，按未排除",
+        "evidence": []
+      },
+      {
+        "number": 6,
+        "kind": "exclusion",
+        "clause": "近 4 周内接受过化疗",
+        "label": "not_enough_information",
+        "basis": "silent",
+        "display": "未见记载，需确认",
+        "stance": "open",
+        "reason": "病历没有写近期是否化疗，需要确认",
+        "evidence": []
+      },
+      {
+        "number": 7,
+        "kind": "exclusion",
+        "clause": "妊娠或哺乳期",
+        "label": "not_applicable",
+        "basis": "silent",
+        "display": "不适用",
+        "stance": "not_applicable",
+        "reason": "62 岁男性，不适用",
+        "evidence": []
+      }
+    ],
+    "withheld": 0
+  }
+}

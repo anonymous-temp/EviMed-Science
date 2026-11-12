@@ -102,9 +102,10 @@ export async function apply(ctx, config) {
     runPolicyEnabled: config.runPolicyEnabled !== false,
     capsuleToolEnabled: config.capsuleEnabled !== false && config.capsuleMemoryEnabled !== false,
     openVikingMemory: config.openVikingMemory === true,
-    memorySearchHint: config.memorySearchHint === true,
-    memoryForgetToolHint: config.memoryForgetToolHint === true,
-    memoryForgetTargets: config.memoryForgetTargets === true,
+    // Wording switches use the launch environment without changing the recorded preset composition.
+    memorySearchHint: config.memorySearchHint === true || process.env.EVIMED_MEMORY_SEARCH_HINT_ENABLED === '1',
+    memoryForgetToolHint: config.memoryForgetToolHint === true || process.env.EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED === '1',
+    memoryForgetTargets: config.memoryForgetTargets === true || process.env.EVIMED_MEMORY_FORGET_TARGETS_ENABLED === '1',
     // Read the launch environment here: adding a preset config key would change the image's recorded composition,
     // even with the switch off. Like memory-bridge's runtime-lock switch, this changes only the plugin's behavior.
     memoryStandingInstructions: config.memoryStandingInstructions === true || process.env.EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED === '1',

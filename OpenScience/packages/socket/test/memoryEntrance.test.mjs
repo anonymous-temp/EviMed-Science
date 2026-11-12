@@ -158,10 +158,6 @@ test('search hint is an independent opt-in sentence, only on a native account, a
   assert.equal(buildGuidanceText([], { ...options, memorySearchHint: false }), baseline)
   assert.equal(buildGuidanceText([], { ...options, memorySearchHint: true }), baseline.replace('不在此列。）', `不在此列。）${hint}`))
   assert.equal(buildGuidanceText([], { ...options, openVikingMemory: false, memorySearchHint: true }), buildGuidanceText([], { ...options, openVikingMemory: false }))
-  const preset = await readFile(new URL('../presets/evimed-universal/agent.cordis.yml', import.meta.url), 'utf8')
-  assert.ok(preset.includes("memorySearchHint: !!js process.env.EVIMED_MEMORY_SEARCH_HINT_ENABLED === '1'"))
-  const baselineConfig = await readFile(new URL('../../../deploy/runtime-dsh/dump-config.baseline.json', import.meta.url), 'utf8')
-  assert.ok(baselineConfig.includes("memorySearchHint: !!js process.env.EVIMED_MEMORY_SEARCH_HINT_ENABLED === '1'"), 'the image snapshot declares the same default-off expression')
   const { apply: applyGuidance } = await import('../plugins/guidance.mjs')
   const sections = []
   await applyGuidance({
@@ -181,7 +177,7 @@ test('forget guidance defaults off and requires confirmed removal before claimin
   assert.equal(buildGuidanceText([], { openVikingMemory: false, memoryForgetToolHint: true }), buildGuidanceText([], { openVikingMemory: false }));
   for (const presetPath of ['../presets/evimed-universal/agent.cordis.yml', '../presets/evimed-universal.patch.yml']) {
     const preset = await readFile(new URL(presetPath, import.meta.url), 'utf8');
-    assert.ok(preset.includes("memoryForgetToolHint: !!js process.env.EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED === '1'"), presetPath);
+    assert.doesNotMatch(preset, /memoryForgetToolHint|EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED/, presetPath);
   }
   const { apply: applyGuidance } = await import('../plugins/guidance.mjs');
   for (const memoryForgetToolHint of [false, true]) {
@@ -245,7 +241,44 @@ test('all three memory wording switches compose without changing other guidance 
     }
     for (const presetPath of ['../presets/evimed-universal/agent.cordis.yml', '../presets/evimed-universal.patch.yml']) {
       const preset = await readFile(new URL(presetPath, import.meta.url), 'utf8');
-      assert.ok(preset.includes("memoryForgetTargets: !!js process.env.EVIMED_MEMORY_FORGET_TARGETS_ENABLED === '1'"), presetPath);
+      assert.doesNotMatch(preset, /memoryForgetTargets|EVIMED_MEMORY_FORGET_TARGETS_ENABLED/, presetPath);
     }
   } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
+});
+
+
+test('all four launch wording switches reach guidance without changing recorded composition', async () => {
+  const switches = {
+    memorySearchHint: 'EVIMED_MEMORY_SEARCH_HINT_ENABLED',
+    memoryForgetToolHint: 'EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED',
+    memoryForgetTargets: 'EVIMED_MEMORY_FORGET_TARGETS_ENABLED',
+    memoryStandingInstructions: 'EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED',
+  };
+  const saved = Object.fromEntries(Object.values(switches).map(key => [key, process.env[key]]));
+  try {
+    for (const relative of ['../presets/evimed-universal/agent.cordis.yml', '../presets/evimed-universal.patch.yml', '../../../deploy/runtime-dsh/dump-config.baseline.json']) {
+      const source = await readFile(new URL(relative, import.meta.url), 'utf8');
+      for (const [option, key] of Object.entries(switches)) {
+        assert.ok(!source.includes(option) && !source.includes(key), `${relative}: ${option} changes the recorded composition`);
+      }
+    }
+    for (let mask = 0; mask < 16; mask++) {
+      /** @type {Record<string, boolean>} */
+      const options = { openVikingMemory: true, capsuleToolEnabled: false };
+      Object.entries(switches).forEach(([option, key], bit) => {
+        options[option] = Boolean(mask & (1 << bit));
+        process.env[key] = options[option] ? '1' : '0';
+      });
+      const sections = [];
+      await applyGuidance({
+        get: () => undefined, provide: () => {}, on: () => () => {}, effect: fn => fn(),
+        systemPrompt: { section: section => { sections.push(section); return () => {} } },
+      }, { openVikingMemory: true, capsuleEnabled: false, capabilitiesDir: '' });
+      assert.equal(sections[0].text, buildGuidanceText([], options), `launch switch combination ${mask}`);
+    }
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
 });

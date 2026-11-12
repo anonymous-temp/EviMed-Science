@@ -1,0 +1,26 @@
+{
+  "artifact": "evimed-dsh-patient-matching-0.1.1.tgz",
+  "sha256": "5dc7fdad212913b026ef31ce22af251681a275b11ad820b54f06da3569e13b96",
+  "kernel": "0.2.1-rc.5",
+  "endpoint": "patientMatching/status",
+  "authentication": "passed",
+  "noArgumentInjection": "passed",
+  "cancelWireArguments": "passed",
+  "actualTools": [
+    "match_context",
+    "match_discover",
+    "match_evidence",
+    "match_compute",
+    "match_assess",
+    "match_job",
+    "match_results",
+    "match_correct",
+    "match_report"
+  ],
+  "actualLoadableSkill": "patient-matching",
+  "disabledServiceAbsent": "passed",
+  "modelCalls": 0,
+  "paidModelCalls": 0,
+  "version": "0.1.1",
+  "evidenceScope": "Synthetic runtime compatibility only; no paid or clinical evaluation."
+}

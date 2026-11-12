@@ -9,6 +9,7 @@
  */
 import { createHash, createHmac } from 'node:crypto';
 import { HttpError } from './security.mjs';
+import { patientMatchingConfiguration } from './patientMatchingConfiguration.mjs';
 
 /** @param {string} text */
 export const projectionHash = text => createHash('sha256').update(text, 'utf8').digest('hex');
@@ -167,8 +168,38 @@ export function originalProjectionSpan(projection, original, span) {
   return { start, end, quote: original.slice(start, end), sourceHash: projection.sourceHash, offsetUnit: 'utf16' };
 }
 
-/** @param {any} config */
+/** The reranker's origin where the deployment asks DashScope to reorder candidate trials, else null. @param {any} config */
+const rerankOrigin = (config) => {
+  if (config.vcrMatchRerankEnabled === false || !config.dashscopeApiKey) return null;
+  const endpoint = (config.patientMatchingProfile ?? patientMatchingConfiguration(config)).rerankApiBase;
+  return endpoint ? cloudOrigin(endpoint) : null;
+};
+
+/**
+ * Where a study's data may be sent once its source permits the cloud. DashScope (the reranker of the patient-matching search) is one of them: what it is
+ * sent is the run's own summary of one patient with identifier shapes masked, and the text of registry trials, never a record
+ * (`vcrCloudDestinationNotes` says so on the page that records a permission).
+ * @param {any} config
+ */
+const matchingEmbeddingOrigin = config => config.patientMatchingTrialIndexManifest && config.dashscopeApiKey
+  ? cloudOrigin((config.patientMatchingProfile ?? patientMatchingConfiguration(config)).embeddingApiBase) : null;
 export function vcrCloudDestinations(config) {
   // All configured model reviewers are included: a projected report may reach them too.
-  return [...new Set([config.deepseekBaseUrl, config.reviewApiBase, config.reviewJevApiBase].filter(Boolean).map(cloudOrigin))].filter((/** @type {any} */ v) => v !== null);
+  return [...new Set([config.deepseekBaseUrl, config.reviewApiBase, config.reviewJevApiBase, rerankOrigin(config), matchingEmbeddingOrigin(config)].filter(Boolean).map(cloudOrigin))].filter((/** @type {any} */ v) => v !== null);
+}
+
+/**
+ * What a destination is sent when it is not a record's text, by origin: the page that records a permission says it beside the list.
+ * @param {any} config @returns {Record<string, string>}
+ */
+export function vcrCloudDestinationNotes(config) {
+  const origin = rerankOrigin(config), embedding=matchingEmbeddingOrigin(config);
+  const matchingNote='患者匹配的检索和排序：与问题相关的病例片段及试验登记文本，按来源授权发送。';
+  const parser = config.documentParserUrl ? cloudOrigin(config.documentParserUrl) : null;
+  return {
+    ...(origin ? { [origin]: config.patientMatchingCataloguePath ? matchingNote : '候选试验的排序：模型写的病例摘要（已遮盖身份标识）和登记库的试验文本，不含病历原文。' } : {}),
+    ...(embedding ? {[embedding]:matchingNote} : {}),
+    // Not one of the destinations a permission lists, and held to the same permission: a source the cloud may not read sends it nothing.
+    ...(parser ? { [parser]: '扫描件和图片的文字识别（院内解析服务）：文件本身，用中性的文件名发送，只取回文字。' } : {}),
+  };
 }

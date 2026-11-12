@@ -148,7 +148,7 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "", 
       { kind: "inclusion", criterionType: "prior_treatment", sourceText: "一线接受过含铂双药化疗，可联合 PD-1/PD-L1 抑制剂", sourceLocator: { page: 12, section: "3.1" },
         requirement: { op: "present", variable: "first_line_platinum" }, evidenceNeeded: ["一线治疗记录"] },
       { kind: "exclusion", criterionType: "comorbidity", sourceText: "活动性脑转移", sourceLocator: { page: 13, section: "3.2" },
-        requirement: { op: "absent", variable: "active_brain_metastasis", window: { days: 84 } }, evidenceNeeded: ["申请近 4 周头颅 MRI"] },
+        requirement: { op: "absent", variable: "active_brain_metastasis" }, evidenceNeeded: ["申请近 4 周头颅 MRI"] },
       { kind: "exclusion", criterionType: "time_window", sourceText: "末次免疫治疗距今不足 28 天", sourceLocator: { page: 13, section: "3.2" },
         requirement: { op: "elapsed_since", variable: "last_immunotherapy", days: 28 }, evidenceNeeded: ["末次免疫治疗日期"] },
       { kind: "exclusion", criterionType: "pregnancy", sourceText: "妊娠或哺乳期", sourceLocator: { page: 13, section: "3.2" },
@@ -567,7 +567,7 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "", 
   for (const subject of subjects) {
     const assessment = assessSubject({
       studyId, protocolVersionId: protocol.id, subjectKey: subject.key, direction: "trial_to_patient", criteria: criterionRows,
-      facts: factsFor(subject), asOf, priority: subject.key === "P-0192" ? { score: 0.8, rationale: "ECOG 1，一线含铂后进展" } : undefined,
+      facts: factsFor(subject), asOf,
     });
     assessments[subject.key] = await matchStore.saveAssessment({ assessment, userId });
   }
@@ -609,62 +609,4 @@ export async function seedEv201({ store, matchStore, evidenceStore, plane = "", 
 
   await fixClock(store);
   return { study, empty, protocol, population, criteria, scenarios, packageId: packageRow.id, owner };
-}
-
-/**
- * A third study, another account's, for 「给患者找试验」: the study's own trial (a protocol of two lines, judged for one patient), three
- * trials a registry lists that a run found for her — one she meets in full, one that waits on a biomarker report, one that excludes
- * her — and a second patient nobody has found anything for. Another account's, so the owner's home list and every fixture written
- * before this one stay as they were.
- *
- * @param {{ store: any, matchStore: any, patientTrials: any }} parts
- */
-export async function seedPatientTrials({ store, matchStore, patientTrials }) {
-  const userId = "u_trials";
-  const study = await store.createStudy({
-    userId, projectId: "prj_trials", name: "EV-201 患者找试验", question: "晚期肺腺癌患者 P-0192 现在有哪些试验可以去问？", dataTier: "T1", intendedUse: "exploratory",
-  });
-  const protocol = await store.saveProtocolVersion({
-    studyId: study.id, userId, title: "EV-201 方案 v1",
-    criteria: [
-      { kind: "inclusion", criterionType: "demographic", sourceText: "年龄 ≥ 18 岁", sourceLocator: { page: 12 },
-        requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" }, evidenceNeeded: ["出生日期或年龄"] },
-      { kind: "inclusion", criterionType: "performance_status", sourceText: "ECOG 体能评分 0–1", sourceLocator: { page: 12 },
-        requirement: { op: "compare", variable: "ecog", comparator: "lte", value: 1 }, evidenceNeeded: ["近 4 周内的体能评分"] },
-    ],
-  });
-  const fact = (/** @type {string} */ subjectKey, /** @type {string} */ variable, /** @type {any} */ value, /** @type {Record<string, any>} */ extra = {}) => matchStore.saveFact({
-    studyId: study.id, userId, fact: { subjectKey, variable, value, unit: null, polarity: "affirmed", occurredAt: "2026-09-10T00:00:00.000Z", recordedAt: null,
-      visibleAt: "2026-09-10T00:00:00.000Z", surface: "", source: null, extractedBy: "code", ...extra } });
-  // Each fact is visible a minute after the one before, so the chart reads in one order whichever ids the rows were given.
-  const at = (/** @type {number} */ minute) => ({ occurredAt: `2026-09-10T00:0${minute}:00.000Z`, visibleAt: `2026-09-10T00:0${minute}:00.000Z` });
-  await fact("P-0192", "age", 63, { unit: "year", ...at(0) });
-  await fact("P-0192", "ecog", 1, at(1));
-  await fact("P-0192", "active_brain_metastasis", false, { polarity: "negated", ...at(2) });
-  await fact("P-0201", "age", 58, { unit: "year", ...at(0) });
-
-  const criterion = (/** @type {string} */ kind, /** @type {string} */ criterionType, /** @type {string} */ sourceText, /** @type {any} */ requirement, /** @type {string[]} */ evidenceNeeded = []) =>
-    ({ kind, criterionType, sourceText, requirement, applicability: null, sourceLocator: {}, evidenceNeeded, reviewState: "ai_set" });
-  const age = criterion("inclusion", "demographic", "Age >= 18 years", { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" });
-  const ecog = criterion("inclusion", "performance_status", "ECOG performance status 0 or 1", { op: "compare", variable: "ecog", comparator: "lte", value: 1 });
-  const brain = criterion("exclusion", "comorbidity", "Active brain metastases", { op: "absent", variable: "active_brain_metastasis" }, ["申请近 4 周头颅 MRI"]);
-  const egfr = criterion("inclusion", "biomarker", "Documented EGFR exon 19 deletion or L858R mutation", { op: "present", variable: "egfr_mutation" }, ["EGFR 突变检测报告"]);
-  const elderly = criterion("inclusion", "demographic", "Age >= 70 years", { op: "compare", variable: "age", comparator: "gte", value: 70, unit: "year" });
-  const trial = (/** @type {string} */ registryId, /** @type {string} */ title, /** @type {string} */ phase, /** @type {string} */ status, /** @type {number} */ sites, /** @type {{sourceText:string}[]} */ sourceCriteria) => ({
-    registry: "clinicaltrials.gov", registryId, title, phase, status, conditions: ["Non-small Cell Lung Cancer"],
-    locations: { total: sites, countries: ["China"], sites: [{ facility: "Beijing Cancer Hospital", city: "Beijing", state: "", country: "China", status: "RECRUITING" }] },
-    url: `https://clinicaltrials.gov/study/${registryId}`, recordHash: createHash("sha256").update(registryId).digest("hex"), retrievedAt: "2026-09-28T08:00:00.000Z", eligibilityText: sourceCriteria.map(entry => entry.sourceText).join("\n"),
-  });
-  const first = await patientTrials.writeTrial(study, { trial: trial("NCT05000001", "EV-201 plus docetaxel versus docetaxel in previously treated NSCLC", "PHASE3", "RECRUITING", 14, [age, ecog, brain]),
-    criteria: [age, ecog, brain], subjectKeys: ["P-0192"] });
-  const second = await patientTrials.writeTrial(study, { trial: trial("NCT05000002", "A phase 2 study of EV-201 in EGFR-mutant NSCLC after osimertinib", "PHASE2", "NOT_YET_RECRUITING", 3, [age, egfr, brain]),
-    criteria: [age, egfr, brain], subjectKeys: ["P-0192"] });
-  const third = await patientTrials.writeTrial(study, { trial: trial("NCT05000003", "EV-201 in elderly patients with advanced NSCLC", "PHASE2", "RECRUITING", 5, [elderly, ecog]),
-    criteria: [elderly, ecog], subjectKeys: ["P-0192"] });
-  // The study's own protocol has judged her too.
-  const ownCriteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id });
-  await matchStore.saveAssessment({ userId, assessment: assessSubject({
-    studyId: study.id, protocolVersionId: protocol.id, subjectKey: "P-0192", direction: "patient_to_trial", criteria: ownCriteria,
-    facts: await matchStore.listFacts({ studyId: study.id, subjectKey: "P-0192" }), asOf: SEED_NOW }) });
-  return { study, userId, protocol, trials: { full: first.trial, waiting: second.trial, excluded: third.trial } };
 }

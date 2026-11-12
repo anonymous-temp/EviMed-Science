@@ -17,6 +17,16 @@ Code
   are adapted from an MIT-licensed project; the attribution is in each file's
   header comment.
 
+- OpenScience/packages/domain/src/vcrTrialJudgment.mjs adapts the matching prompts of TrialGPT 2.0
+  (github.com/TrialGPT2/TrialGPT2.0, commit 1c5f9ebc3b98) and TrialGPT 1.0 (github.com/ncbi-nlp/TrialGPT,
+  commit 1b3242cd), works of the US National Library of Medicine in the public domain.
+- OpenScience/apps/server/src/vcrCandidateSearch.mjs applies the reciprocal-rank fusion of TrialGPT 1.0's trial retrieval
+  (trialgpt_retrieval/hybrid_fusion_retrieval.py): a constant of 20 and a weight by the priority of the keyword that found the trial.
+- OpenScience/runtime/mcp/evimed-research/clinical_score_formulas.py carries the Pooled Cohort Equation coefficients, the
+  FIB-4 cut-offs and the albumin-corrected calcium constant as published in open-medicine 0.12.0
+  (github.com/RamosFBC/openmedicine, MIT License, Copyright (c) 2026 RamosFBC); the formulas are the cited papers'
+  and are checked in the tests, and the open-medicine copyright notice is kept here.
+
 Skills
 ------
 - OpenScience/runtime/skills/curated-scientific/ derives from K-Dense's
@@ -66,6 +76,14 @@ Data
   manifest.json; the abstracts belong to their publishers.
 - 项目代码/knowledge-plugin/tests/fixtures/: captured public web pages and feeds,
   kept only to test parsing; their content belongs to the publishers.
+- OpenScience/runtime/mcp/evimed-research/data/clinical-scales.json: the wording of the ECOG, Karnofsky, NYHA, Child-Pugh and
+  Glasgow Coma scales as the CDISC SDTM Controlled Terminology prints it (distributed by NCI EVS, which states it may be used
+  without licensing restrictions), with the NCI Thesaurus (CC BY 4.0, National Cancer Institute). The ECOG scale is in the
+  public domain (ECOG-ACRIN Cancer Research Group; Oken MM et al., Am J Clin Oncol 1982;5:649-655).
+- The terminology file that OpenScience/scripts/ops/build-terminology.mjs builds (outside this repository; the public inputs are
+  pinned in OpenScience/deps-version.json under `terminology`) is made from the NCI Thesaurus (CC BY 4.0), the Human Phenotype
+  Ontology and its Chinese translation by the CHPO consortium (HPO licence: the consortium is acknowledged and the version is
+  shown with every answer), HGNC (CC0) and CIViC (CC0), and from vocabularies the operator supplies.
 
 - OpenScience/packages/domain/src/vendor/tldts-6.1.86.mjs is derived from the official
   tldts 6.1.86 ESM bundle, Copyright (c) 2017 Thomas Parisot, 2018 Rémi

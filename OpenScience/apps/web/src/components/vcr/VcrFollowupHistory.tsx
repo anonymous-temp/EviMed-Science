@@ -1,3 +1,4 @@
+import { vcrSubjectLabel } from "@evimed/domain";
 import { useState } from "react";
 import { downloadVcrFollowupHistory, getVcrFollowupHistory, type VcrFollowupHistory as History } from "@/lib/vcrClient";
 import { formatDateTime } from "@/lib/format";
@@ -49,7 +50,7 @@ const time = (value: string | null) => {
 const valueText = (value: string | number | boolean | null) => value === null ? "未记录" : typeof value === "boolean" ? value ? "是" : "否" : String(value);
 function Episode({ episode }: { episode: History["episodes"][number] }) {
   return <Section title={episode.label || "历史观察"} level="sub">
-    <FactList rows={[{ label: "患者编号", value: episode.subjectKey }, { label: "观察窗口", value: `${time(episode.windowStart)} 至 ${time(episode.windowEnd)}` }, ...(episode.exitDate ? [{ label: "退出日期", value: time(episode.exitDate) }] : []), ...(episode.exitReason ? [{ label: "退出原因", value: episode.exitReason }] : [])]} />
+    <FactList rows={[{ label: "患者编号", value: vcrSubjectLabel(episode.subjectKey) }, { label: "观察窗口", value: `${time(episode.windowStart)} 至 ${time(episode.windowEnd)}` }, ...(episode.exitDate ? [{ label: "退出日期", value: time(episode.exitDate) }] : []), ...(episode.exitReason ? [{ label: "退出原因", value: episode.exitReason }] : [])]} />
     {episode.measurements.length > 0 && <DataTable label="保留的历史观察值" rows={episode.measurements.map((row, index) => ({ ...row, key: `${episode.id}:${index}` }))} rowKey={row => row.key} columns={[
       { key: "label", header: "观察项", rowHeader: true, cell: row => row.label },
       { key: "value", header: "取值", cell: row => `${valueText(row.value)}${row.unit ? ` ${row.unit}` : ""}` },

@@ -34,7 +34,8 @@ import { VCR_INTAKE_LONG_KINDS } from "./vcrIntakeLayout.mjs";
 // cross the socket; the controller derives every storage path itself.
 // The start field `platformSkillGeneration` and the `evolution-admission` operation were removed with published-tool serving (2026-11-09)
 // without a version of their own: the field was sent only for a published generation, and none exists.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 18;
+// Version 19 adds the start field `patientMatchingGeneration`: the selected patient-matching plugin generation the controller verifies and mounts.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 19;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -305,6 +306,10 @@ export class RuntimeControllerClient {
     return this.request("GET", "/v1/docker/info");
   }
 
+  inspectPatientMatchingWorker() {
+    return this.request("GET", "/v1/patient-matching/worker");
+  }
+
   inspectRuntimeImage() {
     return this.request("GET", "/v1/docker/runtime-image");
   }
@@ -313,9 +318,9 @@ export class RuntimeControllerClient {
    * @param {string} [revisionGatewayUrl] @param {string} [publicSourceGatewayUrl] @param {any} [pluginConfig]
    * @param {any} [personalSkillGeneration] @param {any} [extensionGeneration]
    * @param {string} [memoryGatewayUrl] @param {boolean} [geoSkills] @param {string} [modelGatewayProfile]
-   * @param {any} [contextGeneration] @param {string} [attendancePublicKey]
+   * @param {any} [contextGeneration] @param {string} [attendancePublicKey] @param {any} [patientMatchingGeneration]
    * The controller gets only an Ed25519 public verifier; the API's signing secret stays in the API process. */
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = undefined, contextGeneration = null, attendancePublicKey = "") {
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = undefined, contextGeneration = null, attendancePublicKey = "", patientMatchingGeneration = null) {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -327,6 +332,7 @@ export class RuntimeControllerClient {
       pluginConfig,
       ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
       ...(extensionGeneration ? { extensionGeneration } : {}),
+      ...(patientMatchingGeneration ? { patientMatchingGeneration } : {}),
       ...(contextGeneration ? { contextGeneration } : {}),
       // Protocol 13: the account's memory engine, as the memory gateway's base for one on the native engine. Sent only
       // then; absent, the runtime is launched for the legacy path.

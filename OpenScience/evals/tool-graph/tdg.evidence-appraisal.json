@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "evidence-appraisal",
-  "version": "sha256:5a3b932326745fba1579b0561535216778cb881d5af398431f6a770a39db0f77",
+  "version": "sha256:b29f9000de3813f51bbcbe23975541968a4a72571fb42171553ff241aba8a58e",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 32,
@@ -1373,7 +1373,7 @@
     {
       "name": "mcp__evimed__term_normalize",
       "source": "mcp",
-      "description": "Normalize a medical term using a deterministic bilingual vocabulary. Deterministic and offline by default; set annotate to also look the term up in PubTator3 and return its concept identifiers, which is what a relation query in literature_search is addressed with. An annotation is an identifier, not a normalization. Set mesh to map an English term to its MeSH descriptor: entry terms, tree numbers, narrower descriptors and a PubMed query that searches them.",
+      "description": "Normalize a medical term, Chinese or English. With the deployment's terminology file, `matches` give the entities the term names: English and Chinese names, synonyms, codes (ICD-10, MeSH, NCIt, HPO, HGNC, CIViC) and their source and version; without it a short built-in table answers and the answer says so. A match is a name and its codes, not a finding about a patient. scale returns the wording of a scale the term names (ECOG, Karnofsky, NYHA, Child-Pugh, Glasgow Coma). annotate adds PubTator3 concept identifiers, which a relation query in literature_search is addressed with; mesh maps an English term to its MeSH descriptor (entry terms, tree numbers, a PubMed query).",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1396,6 +1396,42 @@
             "type": "boolean"
           },
           "mesh": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "zh",
+              "en"
+            ]
+          },
+          "kinds": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "type": "string",
+              "enum": [
+                "disease",
+                "finding",
+                "drug",
+                "chemical",
+                "gene",
+                "variant",
+                "procedure",
+                "lab",
+                "anatomy",
+                "organism",
+                "phenotype",
+                "other"
+              ]
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "scale": {
             "type": "boolean"
           }
         },

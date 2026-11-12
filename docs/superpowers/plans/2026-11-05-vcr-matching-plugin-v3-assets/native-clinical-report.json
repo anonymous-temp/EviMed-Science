@@ -1,0 +1,142 @@
+{
+  "schemaVersion": "1",
+  "projectionVersion": "1",
+  "resultId": "pm_result_af3d05f675a644f596b925e0e8659a3d",
+  "revision": "1",
+  "taskId": "matchTask_f4da9501241645038d8f643ae047c40c",
+  "direction": "protocol-to-patients",
+  "scope": {
+    "actorId": "fixture-owner",
+    "tenantId": "fixture-owner",
+    "projectId": "fixture-project",
+    "conversationId": "session-941de5df-5794-4e20-9725-57487b8d17b3"
+  },
+  "pluginGeneration": "reference-33fa64d754ac018816e80826f786b35def898062f7a16cfcd2486dbb38284d59",
+  "profileDigest": "sha256:a569f3ec77bdf98fe1ae06ddc25eaf1fc6c2c9bb1e66083937a4570f568becbf",
+  "currentSources": [
+    {
+      "sourceId": "sfl_119151ef894d4ee387e2ac",
+      "revision": "90534e3ef09f593fb7b965f5e2269f1fec58e1b064a1595ccb6b6b9894d07ea2",
+      "digest": "sha256:3788e8b16d383977b79d93ab647f520667be9fbaf8a019554ddf3d770e6ec39a",
+      "kind": "patient"
+    },
+    {
+      "sourceId": "protocol:prt_202f1fa3ee824044a546d9",
+      "revision": "4bf381081e63225ce5e924804ee8e65f1e0c8b044eacf0429fcbc7ba67607a6a",
+      "digest": "sha256:8f6a58461468e5ed53f8a1d905f2bd7778135d31999fbb829539b986e37f8e79",
+      "kind": "protocol"
+    }
+  ],
+  "frozenSources": [
+    {
+      "kind": "patient",
+      "digest": "sha256:3788e8b16d383977b79d93ab647f520667be9fbaf8a019554ddf3d770e6ec39a",
+      "revision": "90534e3ef09f593fb7b965f5e2269f1fec58e1b064a1595ccb6b6b9894d07ea2",
+      "sourceId": "sfl_119151ef894d4ee387e2ac"
+    },
+    {
+      "kind": "protocol",
+      "digest": "sha256:8f6a58461468e5ed53f8a1d905f2bd7778135d31999fbb829539b986e37f8e79",
+      "revision": "4bf381081e63225ce5e924804ee8e65f1e0c8b044eacf0429fcbc7ba67607a6a",
+      "sourceId": "protocol:prt_202f1fa3ee824044a546d9"
+    }
+  ],
+  "affectedPairs": [],
+  "selectedPairs": [
+    {
+      "trialId": "prt_202f1fa3ee824044a546d9",
+      "subjectKey": "P3077400b23eef602"
+    }
+  ],
+  "rows": [
+    {
+      "trialId": "prt_202f1fa3ee824044a546d9",
+      "subjectKey": "P3077400b23eef602",
+      "decisionId": "matchTask_f4da9501241645038d8f643ae047c40c:prt_202f1fa3ee824044a546d9:P3077400b23eef602",
+      "decisionRevision": "90534e3ef09f593fb7b965f5e2269f1fec58e1b064a1595ccb6b6b9894d07ea2",
+      "state": "complete",
+      "current": true,
+      "clinicalEligibility": "eligible",
+      "recommendation": {
+        "priority": null,
+        "rationale": "Both supplied protocol criteria are satisfied on preserved evidence: age 62 years (>= 18) and BMI 20.0 kg/m2 (< 25), the latter from the registered exact BMI calculation on weight 80 kg and height 2 m. Eligibility is therefore met. No prioritization or ranking criterion (e.g., competing-trial preference, biomarker, or urgency rule) was supplied in the frozen protocol, so recommendation priority is left unset rather than inferred; eligibility must not be read as a priority score."
+      },
+      "criteria": [
+        {
+          "kind": "inclusion",
+          "basis": "stated",
+          "reason": "The protocol requires age at least 18 years. The preserved patient passage states 'Age 62 years.', so the subject is 44 years above the threshold and the criterion is satisfied on stated evidence with no inference required.",
+          "verdict": "satisfied",
+          "assumptions": [],
+          "criterionId": "crt_11cdd2019c8f43518f3c33",
+          "evidenceIds": [
+            "e:e4f12367e67f1b621385fe85c60cb1113844f2a518b4e73c3608facfb0482d09"
+          ]
+        },
+        {
+          "kind": "inclusion",
+          "basis": "computed",
+          "reason": "The protocol requires BMI less than 25 kg/m2. The registered BMI calculator (Quetelet, WHO adult categories) computed 80 kg / (2 m)^2 = 20.0 kg/m2 (unrounded 20, category normal weight), with both operands linked to their exact patient evidence passages. The exact calculated value 20.0 kg/m2 is below 25 kg/m2, so the criterion is satisfied on a computed basis.",
+          "verdict": "satisfied",
+          "assumptions": [
+            "The preserved anthropometrics (weight 80 kg, height 2 m) are treated as valid adult measurements as recorded; no re-measurement or height correction was available in the evidence bundle."
+          ],
+          "criterionId": "crt_c54479bc89bf460087a17f",
+          "evidenceIds": [
+            "e:f9c11aa15e61b946e01eef71fb2266a82171684f906316b6cee15d015241617c",
+            "e:0fba58d20ed56edd056b7e96aca547ad784821843379807d9cb20629b8d3f97b"
+          ]
+        }
+      ],
+      "sourceRefs": [
+        {
+          "kind": "patient",
+          "digest": "sha256:3788e8b16d383977b79d93ab647f520667be9fbaf8a019554ddf3d770e6ec39a",
+          "revision": "90534e3ef09f593fb7b965f5e2269f1fec58e1b064a1595ccb6b6b9894d07ea2",
+          "sourceId": "sfl_119151ef894d4ee387e2ac"
+        },
+        {
+          "kind": "protocol",
+          "digest": "sha256:8f6a58461468e5ed53f8a1d905f2bd7778135d31999fbb829539b986e37f8e79",
+          "revision": "4bf381081e63225ce5e924804ee8e65f1e0c8b044eacf0429fcbc7ba67607a6a",
+          "sourceId": "protocol:prt_202f1fa3ee824044a546d9"
+        }
+      ],
+      "staleReasons": [],
+      "unresolvedFacts": [],
+      "assumptions": [
+        "Only the two supplied protocol criteria (age >= 18 years, BMI < 25 kg/m2) were assessed; no disease, recruitment, or other requirements were added, and no protocol exclusions were present to evaluate.",
+        "Patient coverage was reported complete with no limitations, so the absence of further patient facts was not treated as a negative finding."
+      ],
+      "profileDigest": "sha256:a569f3ec77bdf98fe1ae06ddc25eaf1fc6c2c9bb1e66083937a4570f568becbf",
+      "producer": {
+        "kind": "model",
+        "executionId": "pm_exec_ab7df783b6e345d994215ca57bb079a5",
+        "modelProfileDigest": "sha256:a569f3ec77bdf98fe1ae06ddc25eaf1fc6c2c9bb1e66083937a4570f568becbf"
+      },
+      "evidenceBundleId": "bundle:63088283b9399a9d1e9931ca2cf304712347c735677ffa523d2a73754f1a3e1a"
+    }
+  ],
+  "finalOrder": [
+    "[\"P3077400b23eef602\",\"prt_202f1fa3ee824044a546d9\",null]"
+  ],
+  "stageOrders": {},
+  "ranking": {
+    "order": "input"
+  },
+  "counts": {
+    "requested": 1,
+    "complete": 1,
+    "pending": 0,
+    "failed": 0,
+    "unsupported": 0,
+    "stale": 0,
+    "eligible": 1,
+    "ineligible": 0,
+    "uncertain": 0,
+    "notAssessed": 0
+  },
+  "state": "complete",
+  "reportRefs": [],
+  "invalidationPrecision": "exact"
+}

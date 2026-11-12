@@ -1,0 +1,26 @@
+{
+  "name": "@evimed/patient-matching-worker",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Contained exact calculation and ranking operations for the patient matching plugin.",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "files": [
+    "index.mjs",
+    "src",
+    "python",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./index.mjs",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node scripts/build-calculators.mjs",
+    "prepack": "node scripts/build-calculators.mjs",
+    "test": "node scripts/build-calculators.mjs && node --import ../../scripts/test/localhostProbeGuard.mjs --test test/*.test.mjs",
+    "start": "node src/server.mjs"
+  }
+}

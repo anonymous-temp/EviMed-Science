@@ -311,10 +311,7 @@ export const VCR_MATCHING_EMPTY_T0 = "逐条可判定的入排标准；接入你
  */
 export const VCR_PATIENT_TRIALS_CHOOSE = "选一位患者，看有哪些试验可以参加。";
 export const VCR_PATIENT_TRIALS_NOBODY = "还没有登记患者，有了患者资料才能为患者找试验。";
-export const VCR_PATIENT_TRIALS_OFF = "给患者找试验在本部署尚未接入。";
 export const VCR_TRIAL_SEARCH_FAILED = "暂时无法开始查找，请稍后重试。";
-/** The patient has no trial the study has judged them against yet. */
-export const patientTrialsNoneSentence = (subject: string): string => `还没有为 ${subject} 找过试验。`;
 
 /** What a tab says when the study has no definition yet: the programme is not waiting for anything, the study is waiting to be described. */
 export const VCR_NO_DEFINITION = "先在对话里说一句要研究什么";

@@ -41,6 +41,11 @@ const NOT_CODES = new Map([
   ["vcr_grants_active_roles", "PostgreSQL constraint identity, never an application error code"],
   // `trialRegistryClient.mjs` labels a table row `kind: "registry_field"`.
   ["registry_field", "a row kind in the registry record's table, never emitted as an error"],
+  ["registry_pages", "the table of ChiCTR pages read"],
+  ["registry_pages_total", "a metric family's name"],
+  ["registry_watch_total", "a metric family's name"],
+  ["registry_record", "what a changed verdict's basis says changed, never emitted as an error"],
+  ["registry_unknown", "a check's recorded status, kept on the row and never emitted as an error"],
 ]);
 
 /** The pattern is the brief's; a code is a snake_case word starting `vcr_` or `registry_`. */

@@ -1,11 +1,11 @@
 # Capability contract; conversation-native VCR reset, 2026-10-26.
 # Module workflows are explicit specialists; ordinary conversation can load their skills and call shared tools.
 id: vcr-matching
-version: 1.6.2
+version: 1.10.0
 title: Virtual Clinical Research — Patient Matching
 category: Clinical Research
 description: |
-  Assess eligibility in either direction using original case records and source-bound trial criteria. Preserve unknown states, criterion evidence and recheck needs; no recruitment operations.
+  Use the installed patient-matching plugin for source-backed eligibility assessment in either direction, native evidence and calculation, saved results and reports. Clinical eligibility and recommendation remain separate; missing evidence remains explicit.
 whenToUse: |
   Virtual Clinical Research (虚拟临床研究): Use for a requested eligibility assessment deliverable, protocol-to-patient matching or patient-to-trial matching. A single case can start from the original human message or attachment in global conversation. No study form, full protocol or PICO is required for patient-to-trial search.
 persona: |
@@ -13,13 +13,20 @@ persona: |
 safetyClass: clinical
 skills:
 - vcr-matching
-- citation-integrity
 tools:
+- match_context
+- match_discover
+- match_evidence
+- match_compute
+- match_assess
+- match_job
+- match_results
+- match_correct
+- match_report
 - mcp__evimed__dataset_semantics
 - mcp__evimed__vcr_read
 - mcp__evimed__vcr_write
 - mcp__evimed__vcr_simulate
-- mcp__evimed__locate_quote
 - mcp__evimed__clinical_trial_search
 - mcp__evimed__trial_registry_record
 - mcp__evimed__term_normalize
@@ -31,18 +38,11 @@ produces:
   outputs:
   - path: matching-assessment.md
     role: report
-    required: true
-  - path: matching.json
-    role: data
-    required: true
-  - path: criterion-funnel.md
-    role: document
     required: false
   - path: revision-notes.md
     role: work
     required: false
   checks:
-  - requiredOutputsExist
   - skillsLoaded
 inputs:
   required:
@@ -65,7 +65,7 @@ starterPrompts:
 display:
   title: "患者匹配"
   category: "虚拟临床研究"
-  description: 把病例或患者队列与试验条件逐条核对，保留原文依据、未知项与排除原因。
+  description: 把病例或患者队列与试验条件逐条判断，保留病历依据，没写的条款标明怎么判的。
   listed: false
   starterPrompts:
   - "把这份方案的入排条件结构化，然后对知识库里的 20 份病历跑一遍预筛。"
@@ -81,5 +81,5 @@ display:
   - "待补证据清单"
   - "入排条件漏斗；一位患者可参加的试验及排序"
   knownLimits:
-  - "资格判定由平台代码计算，不设统一准确率门槛，也不引用外部产品的准确率。"
-  - "缺证据一律记「未知」，不会替患者补全；任一排除标准未知时整体不判为「符合」。"
+  - "结论由模型逐条判断，证据句由平台核对；不设统一准确率门槛，也不引用外部产品的准确率。"
+  - "病历没写的条款会标明「未见记载，按未排除」或「未见记载，需确认」：这是判断，不是病历的记载。"

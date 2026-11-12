@@ -13,6 +13,7 @@ import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { composeVcr } from "../src/vcrComposition.mjs";
 import { tableView } from "../src/vcrDataPlane.mjs";
+import { noteStatement } from "../src/vcrRecordsImport.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { streamOf } from "./helpers/vcrIntakeData.mjs";
 import { MCP_DIR, localIntakeController, pythonCan } from "./helpers/vcrIntakeLocal.mjs";
@@ -105,6 +106,33 @@ test("a FHIR export is imported, confirmed, frozen and derived into the subject 
   // Nothing of the staging is left in the plane; the original upload was never kept.
   const scratch = await fs.readdir(path.join(plane, "studies", study.id, ".intake")).catch(() => []);
   assert.deepEqual(scratch, []);
+});
+
+test("the notes of a hospital's FHIR export are stored as documents of their patients, once, and the statement says how many and what was left", options, async () => {
+  const study = await seedStudy();
+  const source = await vcr.dataPlane.registerSource({ userId: OWNER, studyId: study.id, name: "医院 FHIR 导出", ownerParty: "合作医院", allowedUses: ["vcr"], valueSource: "observed" });
+  const bytes = await smart();
+  const imported = await vcr.dataPlane.importStandard({ actor: OWNER, studyId: study.id, sourceId: source.id, name: "export.zip", format: "fhir", stream: streamOf(bytes), declaredLength: bytes.length });
+  // The sample's 413 DocumentReferences each hold one inline plain-text note (jq over the export).
+  assert.deepEqual([imported.notes.read, imported.notes.stored, imported.notes.repeated, imported.notes.failed], [413, 413, 0, {}]);
+  const documents = (await vcr.dataPlane.listDocuments({ studyId: study.id, principal: OWNER }));
+  assert.equal(documents.length, 413);
+  const keys = new Set(documents.map((file) => file.subjectKey));
+  assert.equal(keys.size, 11, "eleven patients wrote the notes; each is a pseudonym, never the id the export used");
+  assert.ok(documents.every((file) => file.subjectKey && !String(file.subjectKey).includes("-")));
+  assert.match(noteStatement({ coverage: imported.coverage, notes: imported.notes }), /^；病历文本收下 413 份$/u);
+  // The same file again lands on the same documents: nothing is stored twice.
+  const again = await vcr.dataPlane.importStandard({ actor: OWNER, studyId: study.id, sourceId: source.id, name: "export.zip", format: "fhir", stream: streamOf(bytes), declaredLength: bytes.length });
+  assert.deepEqual([again.notes.stored, again.notes.repeated], [0, 413]);
+  assert.equal((await vcr.dataPlane.listDocuments({ studyId: study.id, principal: OWNER })).length, 413);
+});
+
+test("what a statement says of notes: the arrived, and each reason a note was left unread", () => {
+  assert.equal(noteStatement({ coverage: { inputs: [{ kind: "Patient" }] } }), "");
+  assert.equal(noteStatement({
+    coverage: { inputs: [{ kind: "DocumentReference", skipped: { attachment_url_only: 3, attachment_not_plain_text: 1 } }, { kind: "note", skipped: { missing_person_id: 1 } }] },
+    notes: { stored: 4, repeated: 1, failed: { vcr_subject_withdrawn: 2 } },
+  }), "；病历文本收下 5 份，7 份没读到（只给了链接，没有读取 3 份、已撤回同意 2 份、不是纯文本（PDF、网页等） 1 份、看不出是哪位患者 1 份）");
 });
 
 test("a person's edit of the imported map keeps every column's source, and a re-import replaces its own tables only", options, async () => {

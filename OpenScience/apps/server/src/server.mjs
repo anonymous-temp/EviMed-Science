@@ -26,6 +26,21 @@ import { jevTransport } from "./jevTransport.mjs";
 import { createJudgeService } from './judgeService.mjs';
 import { createJudgeGatewayHandler, JUDGE_GATEWAY_PATH } from './judgeGateway.mjs';
 import { createVcrCloudEgress, createVcrSessionResolver } from './vcrCloudEgress.mjs';
+import { createPatientMatchingHostAdapter } from './patientMatchingHostAdapter.mjs';
+import { createPatientMatchingGatewayHandler, PATIENT_MATCHING_GATEWAY_PATH } from './patientMatchingGateway.mjs';
+import { verifyPatientMatchingInvocation } from './patientMatchingInvocation.mjs';
+import { installPatientMatchingLegacyBridge } from './patientMatchingLegacyBridge.mjs';
+import { createPatientMatchingModelPorts } from './patientMatchingModels.mjs';
+import { createPatientMatchingDiscovery } from './patientMatchingDiscovery.mjs';
+import { createPatientMatchingTrialResource } from './patientMatchingTrialResource.mjs';
+import { createPatientMatchingKnowledge } from './patientMatchingKnowledge.mjs';
+import { createPatientMatchingWorkerClient } from './patientMatchingWorkerClient.mjs';
+import { PatientMatchingContinuation } from './patientMatchingContinuation.mjs';
+import { patientMatchingDispatchDescriptor, patientMatchingContinuationOptions } from './patientMatchingRuntimeBinding.mjs';
+import { PatientMatchingLifecycleService, PatientMatchingLifecycleWorker } from './patientMatchingLifecycle.mjs';
+import { loadPatientMatchingDeployment } from './patientMatchingDeployment.mjs';
+import { createPatientMatchingRoutes } from './patientMatchingRoutes.mjs';
+
 import { VcrStore } from './vcrStore.mjs';
 import { deploymentCloudPermission, vcrCloudDestinations } from './vcrCloudProjection.mjs';
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
@@ -442,6 +457,7 @@ import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } fro
 import { VcrOrchestrator, vcrBriefBlock, vcrRunId, vcrStoppedBlock } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
 import { createVcrDataIntake } from './vcrDataIntake.mjs';
+import { readinessTerminology } from './terminologyReadiness.mjs';
 import { createVcrUploadReceipts } from './vcrUploadReceipts.mjs';
 import { recordNativeUploadAttempt } from "./nativeUploadActivity.mjs";
 import { createVcrDraftSweeper, createVcrDraftUsage } from "./vcrDrafts.mjs";
@@ -529,6 +545,7 @@ import {
   assertSameSiteBrowserRequest,
   assertString,
   clearSessionCookie,
+  cloneFileNoFollow,
   directorySize,
   mimeFor,
   normalizeRoot,
@@ -2821,10 +2838,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A record document to text and a figure to curve points run in the runtime
     // controller's disposable container, like a document export does.
     intakeController,
+    // A scan or a picture of a record is read by the in-house parser (owner decision 2026-11-04); the plane's own conversion handles a document with a text layer.
+    documentParser,
     entityVocabulary,
     sourceChanges,
     // The batch reading of patient records calls the model through the same usage ledger every control-plane call goes through (purpose vcr).
     usageLedger,
+    // What a table's codes mean is kept in the project's dataset-semantics record (built below, hence a function); off, the codes stay unread.
+    dataSemantics: () => dataSemantics,
+    // The web reader is built further down; a ChiCTR record's page (its eligibility text, vcrRegistryPages) is read through it, with every check it makes.
+    webReader: { read: (/** @type {string} */ url, /** @type {any} */ options) => webReader.read(url, options) },
     officialZoneForKeys: productDatabase ? createOfficialZoneLookup({ database: productDatabase }) : null,
     // The learning package's prediction registry (flywheel F25) is given here when it exists; without one the filing route is absent.
     // The prediction registry is composed with the evolution module, after this: the filing route asks for it when a prediction is filed.
@@ -5402,6 +5425,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     attributeRun,
     runPurpose,
     serviceCaller: openVikingModelCaller,
+    onModelCall: typeof overrides.modelGatewayOnCall === 'function' ? overrides.modelGatewayOnCall : null,
   });
   // A specialist engine's spend, reported by its adapter when a job ends (X1
   // purpose `engine`): the runtime calls engines directly, so this is the one
@@ -5561,21 +5585,106 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // 「虚拟临床研究」's runtime channel: the token decides the account and the study,
   // a read answers aggregates and structure only, and a write refuses item by
   // item (build plan §11.2 layer 3).
-  const vcrUploadReceipts = vcr && productDocuments ? createVcrUploadReceipts({ documents: productDocuments, sources: sourceService,
+  const vcrUploadReceipts = vcr && productDocuments ? createVcrUploadReceipts({ documents: productDocuments, sources: sourceService, resolveProject: sourceProject,
     write: (project, relative, bytes) => withProjectStorageMutation(project, async () => {
       const full = resolveScopedPath(project.baseDir, relative);
       await assertProjectCapacity(project, full, bytes.length, config);
       await writeFileAtomicNoFollow(project.baseDir, full, bytes, { mode: 0o600 });
+    }),
+    // The original of a large binary record is a clone of the file the upload just wrote (copy-on-write where the filesystem has it); the storage quota counts it as a file of its own.
+    clone: (project, relative, source, size) => withProjectStorageMutation(project, async () => {
+      const full = resolveScopedPath(project.baseDir, relative);
+      await assertProjectCapacity(project, full, size, config);
+      await cloneFileNoFollow(project.baseDir, source, full);
     }) }) : null;
+  if (vcr?.recordsOriginals) vcr.recordsOriginals.receipts = vcrUploadReceipts;
   if (vcr && vcrUploadReceipts) vcr.dataIntake = createVcrDataIntake({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane,
-    sources: vcrUploadReceipts, resolveProject: sourceProject,
+    sources: vcrUploadReceipts, resolveProject: sourceProject, recordsImport: vcr.recordsImport,
     sourceScope: origin => conversationSourceScope(origin, origin.rootSessionId) });
   if (vcr) vcr.patientContext = createVcrPatientContext({ store:vcr.store,dataStore:vcr.dataStore,dataPlane:vcr.dataPlane,documents:vcr.documents,
-    sources:sourceService,
+    sources:sourceService, uploadReceipts:vcrUploadReceipts, documentJobs:vcr.patientDocuments, subjectKnown:vcr.subjectKnown,
     isHumanMessage: async (origin,message) => (await agentRuns.list(await sourceProject(origin))).some(run => run.sessionId === origin.rootSessionId
       && run.automated !== true && (Number.isSafeInteger(message.turnStartSeq) && run.nativeTurn?.startSeq === message.turnStartSeq
         || message.sourceRequestId && run.kernelRequestIds?.includes(message.sourceRequestId))),
     transcript:async (origin,options={}) => runtimeManager.sessionTranscript(await sourceProject(origin),origin.rootSessionId,{wake:false,...options}) });
+  // A deployment owns the exact first-party release. An absent optional catalogue leaves generic work usable.
+  let patientMatchingCatalogue = [];
+  try { patientMatchingCatalogue = overrides.patientMatchingCatalogue ?? loadPatientMatchingDeployment(config); }
+  catch { process.stderr.write('patient matching: patient_matching_catalogue_unavailable\n'); }
+  const patientMatchingLifecycle = vcr && productDatabase && pluginService && patientMatchingCatalogue.length ? new PatientMatchingLifecycleService(productDatabase, {
+    config, catalogue: patientMatchingCatalogue, runtime: runtimeManager, plugins: pluginService,
+    access: (user, projectId, options) => extensionAccess.project(user, projectId, options),
+    ledgerBusy: async project => (await agentRuns.list(project)).some(run => ['running','queued'].includes(run.status))
+      || (await productDatabase.query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND project_id=$2 AND kind='patient-matching-continuation' AND status IN ('queued','running') LIMIT 1",[project.userId,project.id])).rows.length>0,
+    workerImageIdentity: async () => (await runtimeManager.inspectPatientMatchingWorker()).imageId,
+  }) : null;
+  const patientMatchingLifecycleWorker = patientMatchingLifecycle ? new PatientMatchingLifecycleWorker({service:patientMatchingLifecycle}) : null;
+  // A runtime's start is where a project first meets matching: a project whose owner never chose gets the default release queued here
+  // (applied once the project is idle), and this start mounts only what was already proven.
+  const patientMatchingInternal = (/** @type {any} */ project) => isInternalProjectOf(config, project.userId, project.id);
+  const ensurePatientMatchingDefault = (/** @type {any} */ project) => patientMatchingLifecycle?.ensureDefault(project, { internal: patientMatchingInternal })
+    .catch((/** @type {any} */ error) => { process.stderr.write(`patient matching: default install ${error?.code ?? 'failed'}\n`); return false; }) ?? Promise.resolve(false);
+  runtimeManager.patientMatchingGenerationResolver = patientMatchingLifecycle ? project => { void ensurePatientMatchingDefault(project); return patientMatchingLifecycle.selectForRuntime(project); } : null;
+  /** @type {any} */ let patientMatchingAdapter = null;
+  /** @type {PatientMatchingContinuation|null} */ let patientMatchingContinuation = null;
+  const patientMatchingModels = createPatientMatchingModelPorts({config,usageLedger,
+    authorize: async (envelope, action) => {
+      if(!patientMatchingAdapter) throw new HttpError(503,'patient_matching_unavailable','Patient matching is unavailable.');
+      const actor=await patientMatchingAdapter.authorizeModel(envelope,action);
+      await assertVcrCloudAccess?.({...actor,sessionId:envelope.origin.rootSessionId},{input:envelope.input});
+      await createVcrCloudEgress({store:vcr.store,resolveSession:async()=>envelope.origin.rootSessionId,destinations:()=>[action.destination],deployment:()=>deploymentCloudPermission(config)})({...actor,sessionId:envelope.origin.rootSessionId},{input:envelope.input});
+      return actor;
+    } });
+  let patientMatchingIndex = overrides.patientMatchingIndex ?? null;
+  if(!patientMatchingIndex && productDatabase && config.patientMatchingTrialIndexManifest) {
+    const resourceReady=createPatientMatchingTrialResource({manifestPath:config.patientMatchingTrialIndexManifest,database:productDatabase,models:patientMatchingModels,
+      authorize:envelope=>patientMatchingAdapter.authorizeModel(envelope)}).catch(()=>{process.stderr.write('patient matching: patient_matching_index_resource_unavailable\n');return null;});
+    patientMatchingIndex={query:async envelope=>(await resourceReady)?.query(envelope)??{status:'unsupported',summary:'The matching index resource is unavailable.',data:{code:'patient_matching_index_resource_unavailable'},artifacts:[]}};
+  }
+  if(vcr && productDocuments) {
+    const calculate=createPatientMatchingWorkerClient({socketPath:config.patientMatchingWorkerSocket,tokenFile:config.patientMatchingWorkerTokenFile});
+    patientMatchingAdapter=createPatientMatchingHostAdapter({vcr,documents:productDocuments,config,modelPorts:patientMatchingModels,indexPorts:patientMatchingIndex,
+      calculate:async(input,options)=>{await runtimeManager.inspectPatientMatchingWorker();return calculate(input,options);},
+      knowledge:createPatientMatchingKnowledge({sources:sourceService,index:kbIndex,sourceScope:origin=>conversationSourceScope(origin,origin.rootSessionId)}),
+      discover:createPatientMatchingDiscovery({vcr,models:patientMatchingModels,index:patientMatchingIndex,jevEnabled:config.patientMatchingJevEnabled,depth:config.patientMatchingDiscoveryDepth,jevDepth:config.patientMatchingJevDepth,rankView:config.patientMatchingRankView,assertCurrent:envelope=>patientMatchingAdapter.authorizeModel(envelope)}),
+      onPending:(origin,taskId)=>patientMatchingContinuation?.enqueue(origin,taskId),
+      onCancel:async(origin,taskId)=>runtimeManager.cancelPatientMatchingTask(await sourceProject(origin),taskId) });
+    patientMatchingContinuation=new PatientMatchingContinuation({jobs:productJobs,documents:productDocuments,adapter:patientMatchingAdapter,
+      allowed:async origin => {
+        const project=await sourceProject(origin),descriptor=await patientMatchingDispatchDescriptor({lifecycle:patientMatchingLifecycle,runtime:runtimeManager,project});
+        return descriptor?.generation===origin.pluginGeneration;
+      },
+      resolve:async origin=>{
+        const user=await store.userById(origin.userId),project=await sourceProject(origin);
+        if(!user || !await researchSessions.get(project,origin.rootSessionId))throw new HttpError(404,'patient_matching_origin_unavailable','The original conversation is unavailable.');
+        return {user,project,sessionId:origin.rootSessionId};
+      },runs:project=>agentRuns.list(project),
+      dispatch:async(continuationContext,request)=>{
+        const continuation=patientMatchingContinuationOptions({runs:await agentRuns.list(continuationContext.project),conversation:await researchSessions.get(continuationContext.project,request.sessionId),
+          sessionId:request.sessionId,originRunId:request.options.originRunId,text:request.text});
+        return dispatchChannelRun(continuationContext.user,continuationContext.project,request.sessionId,request.dispatchId,request.text,{...request.options,...continuation});
+      },notify:async(origin,taskId)=>{await notificationService?.create(origin.userId,{noticeType:'notify',projectId:origin.projectId,title:'患者匹配需要继续',body:'已保存当前结果，可回到原对话继续。',source:{type:'thread',id:origin.rootSessionId},idempotencyKey:`matching-attention:${taskId}`});},
+      report:code=>process.stderr.write(`patient matching continuation: ${code}\n`),
+    });
+    // Gate G1 (2026-11-08): a project-scoped study's matching runs on the plugin in the study's own conversation, as a conversation study's
+    // does; only a deployment without the plugin's catalogue (no dispatch descriptor) keeps the batch judge.
+    installPatientMatchingLegacyBridge({vcr,adapter:patientMatchingAdapter,documents:productDocuments,resolveOrigin:async study=>{
+      const sessionId=study.scope==='conversation'?study.conversationSessionId:(await resolveStudyConversation(study,{create:true}).catch(()=>null))?.sessionId;
+      if(!sessionId)return null;
+      const project=await sourceProject({userId:study.userId,projectId:study.projectId});
+      await ensurePatientMatchingDefault(project);
+      const descriptor=await patientMatchingDispatchDescriptor({lifecycle:patientMatchingLifecycle,runtime:runtimeManager,project});
+      const original=(await agentRuns.list(project)).find(run=>run.sessionId===sessionId);
+      return descriptor?{userId:study.userId,projectId:study.projectId,rootSessionId:sessionId,pluginGeneration:descriptor.generation,runId:study.executionOrigin?.runId??original?.id??null}:null;
+    }});
+  }
+  const patientMatchingGatewayHandler=createPatientMatchingGatewayHandler(config,runtimeManager,{vcr,adapter:patientMatchingAdapter,
+    resolveInvocation:async(identity,request)=>{
+      const project=await sourceProject(identity);return verifyPatientMatchingInvocation({request,project,runtimeManager,
+        resolveSession:(ownedProject,id)=>runtimeEventPump.sessionOwner(ownedProject,id),runs:async()=>(await agentRuns.list(project)).filter(run=>run.status==='running'),
+        resolveTool:async(ownedProject,name)=>patientMatchingLifecycle?.resolveTool(ownedProject,name),authenticatedUserId:String(identity.userId),adoptionWaitMs:config.vcrRunAdoptionWaitMs});
+    },report:code=>process.stderr.write(`patient matching gateway: ${code}\n`)});
+  const patientMatchingRoutes=createPatientMatchingRoutes({store,lifecycle:patientMatchingLifecycle,access:(user,projectId,options)=>extensionAccess.project(user,projectId,options)});
   const vcrGatewayHandler = createVcrGatewayHandler(config, runtimeManager, {
     vcr,
     resolveStudyConversation,
@@ -5879,7 +5988,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: (/** @type {string} */ loop, /** @type {string} */ code) => process.stderr.write(`vcr ${loop}: ${code}\n`),
       // `matching` is the deferral recheck loop: a washout that ends is re-judged on
       // its own day, not when someone next opens the study.
-      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge, drafts: vcr.drafts, completions: vcr.completions, experiments: vcr.experiments }),
+      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge, drafts: vcr.drafts, completions: vcr.completions, experiments: vcr.experiments, registryWatch: vcr.registryWatch }),
     });
     // The catalogue the 模型与方法 page reads: three reference simulators and
     // the engine's own method list, seeded once, idempotently.
@@ -6212,6 +6321,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           notificationRun,
           capsuleCleanupRun,
           pluginApplyWorker?.running,
+          patientMatchingLifecycleWorker?.running,
+          patientMatchingContinuation?.ticking,
           personalSkillWorker?.running,
           hostedExtensions?.preparation.running,
           hostedExtensions?.worker.running,
@@ -6606,6 +6717,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         requestId,
         truncated: failure?.truncated === true,
         upstream: failure?.upstream ?? null,
+        modelUpstream: pathname.startsWith('/internal/model/') ? safeModelUpstreamFailure(failure) : null,
+        modelActivity: pathname.startsWith('/internal/model/') ? safeModelActivity(failure) : null,
       });
     };
     const gateway = pathname.startsWith(`${RESULT_GATEWAY_PATH}/`)
@@ -6646,6 +6759,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
                   ? reviewGatewayHandler
                   : pathname.startsWith(`${GEO_GATEWAY_PATH}/`)
                     ? geoGatewayHandler
+                    : pathname === PATIENT_MATCHING_GATEWAY_PATH
+                      ? patientMatchingGatewayHandler
                     : pathname.startsWith(`${VCR_GATEWAY_PATH}/`)
                       ? vcrGatewayHandler
                       : pathname.startsWith(`${EXTENSION_GATEWAY_PATH}/`)
@@ -6775,6 +6890,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await resultSourceUpdatesRoutes(req, res)) return;
       if (await resultReplayRoutes(req, res)) return;
       if (await availability.routes(req, res)) return;
+      if (await patientMatchingRoutes(req, res)) return;
       if (await vcrRoutes(req, res)) return;
       if (await im.routes(req, res)) return;
       if (await routingDecisionRoutes(req, res)) return;
@@ -8446,8 +8562,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const encoding = args.encoding === "base64" ? "base64" : "utf8";
         const buffer = encoding === "base64" ? Buffer.from(data, "base64") : Buffer.from(data, "utf8");
         const registered = await writeProjectUpload(ctx, { root, rel, buffer });
-        const vcrInput = !registered ? await vcrUploadReceipts?.record(ctx.project, { name: rel, bytes: buffer }) : null;
-        sendJson(res, 200, { data: { path: rel, ...(vcrInput ? { vcrInput } : {}), ...(registered
+        let vcrInputWarning;
+        const vcrInput = !registered ? await vcrUploadReceipts?.record(ctx.project, { name: rel, bytes: buffer, cloneFrom: resolveScopedPath(root === "base" ? ctx.project.baseDir : ctx.project.workspaceDir, rel) }).catch(async error => {
+          vcrInputWarning = { code: 'vcr_upload_original_unavailable', message: 'The file was uploaded. Virtual clinical research could not retain its original; upload it again to retry.' };
+          await audit(ctx, 'vcr.upload_original.record', 'failed', { error: error?.code ?? vcrInputWarning.code }).catch(() => {});
+          return null;
+        }) : null;
+        sendJson(res, 200, { data: { path: rel, ...(vcrInput ? { vcrInput } : {}), ...(vcrInputWarning ? { vcrInputWarning } : {}), ...(registered
           ? { ...registered, source: projectSourceManifestRecord(registered.source) } : {}) } });
         return;
       }
@@ -8829,7 +8950,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     void Promise.resolve(managedBrowser.pause?.()).catch(() => {
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
-    for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, nativeMemoryWorker, sourceDeletion, sourceWorker, knowledgePagesWorker, sourceSyncWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
+    for (const worker of [patientMatchingLifecycleWorker, patientMatchingContinuation, pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, nativeMemoryWorker, sourceDeletion, sourceWorker, knowledgePagesWorker, sourceSyncWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
       geo?.worker, vcr?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
@@ -8942,6 +9063,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await initializeRsiOnline().catch(() => { process.stderr.write("rsi: rsi_online_initialization_failed\n"); });
       managedBrowser.start?.();
       pluginApplyWorker?.start();
+      patientMatchingLifecycleWorker?.start();
+      patientMatchingContinuation?.start();
       if (config.runtimeMode === "kernel") personalSkillWorker?.start();
       hostedExtensions?.preparation.start();
       hostedExtensions?.worker.start();
@@ -9072,6 +9195,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   return {
     config,
     store,
+    drainModelCalls: modelGatewayHandler.drainModelCalls,
     runtimeManager,
     memorySettings,
     memoryIndexProvider,
@@ -9134,6 +9258,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // 「虚拟临床研究」, on the same terms.
     vcr,
     vcrService: vcr?.service ?? null,
+    patientMatchingAdapter,
+    patientMatchingLifecycle,
+    patientMatchingLifecycleWorker,
+    patientMatchingContinuation,
     capsuleService,
     officialPacks,
     packOutcomes,
@@ -9226,7 +9354,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await startRecurringWork();
       return address;
     },
-    async close() {
+    async close({ modelCallDrainTimeoutMs = 0 } = {}) {
       // First, so a job the shutdown ends is handed back as a restart and not
       // counted against its three attempts.
       learningWorker?.interrupt();
@@ -9240,6 +9368,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await researchDbCleanupRun;
       // The pass that publishes the official packs at start writes into the database and the data directory: let it end first.
       await officialPacks?.idle();
+      await patientMatchingContinuation?.stop();
+      await patientMatchingLifecycleWorker?.close();
       await pluginApplyWorker?.close();
       await personalSkillWorker?.close();
       await hostedExtensions?.preparation.close();
@@ -9263,6 +9393,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       jevTransport.close();
       await geo?.worker?.close?.();
       await vcr?.worker?.close?.();
+      await vcr?.evidence?.closeTrialCorpus?.();
       await documentExportWorker?.close();
       await resultReplayWorker?.close();
       await availability.close();
@@ -9309,8 +9440,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await new Promise((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
       });
+      // Explicit benchmark shutdown: after admission closes, keep the ledger
+      // alive until in-flight model callbacks and accounting have finished.
+      // Ordinary production shutdown retains its existing behavior.
+      const modelCallDrain = modelCallDrainTimeoutMs > 0
+        ? await modelGatewayHandler.drainModelCalls({ timeoutMs: modelCallDrainTimeoutMs }).catch(() => ({ drained: false, pending: null })) : null;
       await flushLedgerWrites();
       await store.close();
+      return { modelCallDrain };
     },
   };
 
@@ -9903,9 +10040,30 @@ function safeLogId(value) {
   return typeof value === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(value) ? value : null;
 }
 
-async function appendErrorRecord(config, req, pathname, { status, code, requestId = null, truncated = false, upstream = null, cause = null }) {
+export function safeModelUpstreamFailure(failure) {
+  const status = failure?.upstreamStatus;
+  if (!Number.isInteger(status) || status < 400 || status > 599) return null;
+  const id = failure?.providerRequestId;
+  return { status, ...(typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? { requestId: id } : {}) };
+}
+
+export function safeModelActivity(failure) {
+  const projectId = safeLogId(failure?.verifiedProjectId);
+  const run = failure?.verifiedRunId;
+  const runId = typeof run === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(run) ? run : null;
+  const value = failure?.progress;
+  const valid = value && ['heartbeats', 'text', 'reasoning', 'tools'].every(key => Number.isSafeInteger(value[key]) && value[key] >= 0)
+    && ['firstMs', 'lastMs'].every(key => value[key] === null || Number.isSafeInteger(value[key]) && value[key] >= 0)
+    && ((value.firstMs === null && value.lastMs === null) || (Number.isSafeInteger(value.firstMs) && Number.isSafeInteger(value.lastMs) && value.firstMs <= value.lastMs))
+    && (value.finishReason === null || ['stop', 'length', 'tool_calls', 'content_filter', 'insufficient_system_resource', 'end_turn', 'max_tokens', 'tool_use', 'stop_sequence'].includes(value.finishReason));
+  if (!projectId && !runId && !valid) return null;
+  return { ...(projectId ? { projectId } : {}), ...(runId ? { runId } : {}), ...(valid ? { progress: Object.fromEntries(['heartbeats', 'text', 'reasoning', 'tools', 'firstMs', 'lastMs', 'finishReason'].map(key => [key, value[key]])) } : {}) };
+}
+
+async function appendErrorRecord(config, req, pathname, { status, code, requestId = null, truncated = false, upstream = null, modelUpstream = null, modelActivity = null, cause = null }) {
   const projectHeader = req.headers["x-open-science-project"];
-  const projectId = safeLogId(Array.isArray(projectHeader) ? projectHeader[0] : projectHeader);
+  const projectId = pathname.startsWith('/internal/model/') ? modelActivity?.projectId ?? null
+    : safeLogId(Array.isArray(projectHeader) ? projectHeader[0] : projectHeader);
   const record = {
     createdAt: new Date().toISOString(),
     requestId,
@@ -9923,6 +10081,8 @@ async function appendErrorRecord(config, req, pathname, { status, code, requestI
     ...(upstream && typeof upstream.host === "string" && /^[a-z0-9.-]{1,253}$/i.test(upstream.host)
       && Number.isSafeInteger(upstream.status)
       ? { upstream: { host: upstream.host.toLowerCase(), status: upstream.status } } : {}),
+    ...(modelUpstream ? { modelUpstream } : {}),
+    ...(modelActivity ? { modelActivity } : {}),
     // What an unclassified failure was underneath (`errorCause`): only a code, never a message.
     ...(cause ? { cause } : {}),
   };
@@ -10886,6 +11046,7 @@ async function readinessStatus(config, store, runtimeManager, memorySettings = n
     inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
     documentParser: await readinessCheck(async () => readinessDocumentParser(config, documentParser)),
     openList: await readinessCheck(async () => readinessOpenList(config, openList)),
+    terminology: await readinessCheck(() => readinessTerminology(config)),
     relationalIntegrity: await readinessCheck(async () => readinessRelationalIntegrity(config, productDatabase)),
     security: await readinessCheck(() => readinessSecurity(config)),
     observability: await readinessCheck(() => readinessObservability(config)),

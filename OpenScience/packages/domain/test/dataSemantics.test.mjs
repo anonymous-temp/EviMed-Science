@@ -13,8 +13,13 @@ import {
   DATA_CHECK_NOT_CHECKED_REASON_IDS,
   DATA_CHECK_OUTCOMES,
   DATA_DRIFT_BOUNDS,
+  DATA_FACET_LABELS_ZH,
   DATA_SEMANTICS_LIMITS,
   DATA_VALUE_SOURCES,
+  DATA_VALUE_STATES,
+  DATA_VALUE_STATE_LABELS_ZH,
+  DATA_VARIABLE_FACETS,
+  DATA_TABLE_FACETS,
   SEMANTIC_BASES,
   SEMANTIC_BASIS_LABELS_ZH,
   VCR_COLUMN_SOURCES,
@@ -414,4 +419,75 @@ test("the same code list written in another order, or the same missing tokens, i
   // Not a disagreement with the researcher's statement, so nothing is "kept_stronger" and nothing is contested.
   assert.deepEqual(again.outcomes.map((outcome) => outcome.outcome), ["unchanged", "unchanged"]);
   assert.equal(again.changed, false);
+});
+
+// ---------------------------------------------------------------------------
+// What a code means, and which variable a column answers (G7, G21)
+// ---------------------------------------------------------------------------
+
+const yesNo = { values: { 1: "present", 0: "absent", "N/A": "unknown" }, measurement: false };
+
+test("a value map is a fact of the variable: codes mapped to present, absent or unknown, and whether the column is a measurement", () => {
+  const written = applySemanticsPatch(null, { datasetId: "d", ...inferred, variables: [{ table: "subjects", name: "DIABETES", concept: "diabetes", valueMap: yesNo }] }, { now: T0, via: "conversation" });
+  assert.deepEqual(written.issues, []);
+  assert.deepEqual(factAt(written.asset, "variable:subjects/DIABETES:valueMap")?.value, { values: { 0: "absent", 1: "present", "N/A": "unknown" }, measurement: false });
+  assert.equal(factAt(written.asset, "variable:subjects/DIABETES:valueMap")?.basis, "model_inferred");
+  assert.equal(factAt(written.asset, "variable:subjects/DIABETES:concept")?.value, "diabetes");
+  assert.deepEqual([...DATA_VALUE_STATES], ["present", "absent", "unknown"]);
+  for (const facet of ["concept", "valueMap", "askedConcepts"]) assert.ok(/** @type {Record<string, string>} */ (DATA_FACET_LABELS_ZH)[facet], facet);
+  for (const state of DATA_VALUE_STATES) assert.ok(/** @type {Record<string, string>} */ (DATA_VALUE_STATE_LABELS_ZH)[state], state);
+  assert.ok(DATA_VARIABLE_FACETS.includes("valueMap") && DATA_TABLE_FACETS.includes("askedConcepts"));
+  // the same map in another order is the same fact; a measurement flag alone is a map
+  const again = applySemanticsPatch(written.asset, { ...inferred, variables: [{ table: "subjects", name: "DIABETES", valueMap: { values: { "N/A": "unknown", 0: "absent", 1: "present" }, measurement: false } }] }, { now: T1, via: "conversation" });
+  assert.equal(again.changed, false);
+  const measure = applySemanticsPatch(null, { datasetId: "d", ...inferred, variables: [{ table: "subjects", name: "hb", valueMap: { measurement: true } }] }, { now: T0, via: "conversation" });
+  assert.deepEqual(factAt(measure.asset, "variable:subjects/hb:valueMap")?.value, { values: {}, measurement: true });
+});
+
+test("a value map is refused, item by item, when it is not a vocabulary: too many codes, a state out of vocabulary, a code that means two things, a long code", () => {
+  const many = Object.fromEntries(Array.from({ length: DATA_DRIFT_BOUNDS.vocabularyMax + 1 }, (_, index) => [`c${index}`, "present"]));
+  const exactly = Object.fromEntries(Array.from({ length: DATA_DRIFT_BOUNDS.vocabularyMax }, (_, index) => [`c${index}`, "present"]));
+  const refused = (/** @type {unknown} */ valueMap) => applySemanticsPatch(null, { datasetId: "d", ...inferred, variables: [{ table: "t", name: "x", valueMap }] }, { now: T0, via: "conversation" }).issues.map((issue) => issue.code);
+  assert.deepEqual(refused({ values: many }), ["valueMap_invalid"], "a column with more distinct codes than a vocabulary may have gets no map");
+  assert.deepEqual(refused({ values: exactly }), []);
+  assert.deepEqual(refused(many), ["valueMap_invalid"], "codes are the map's values, not its keys");
+  assert.deepEqual(refused({ values: { 1: "yes" } }), ["valueMap_invalid"]);
+  assert.deepEqual(refused({ values: { a: "present", " a ": "absent" } }), ["valueMap_invalid"], "a code is one thing once it is trimmed");
+  assert.deepEqual(refused({ values: { ["x".repeat(41)]: "present" } }), ["valueMap_invalid"]);
+  assert.deepEqual(refused({ values: [] }), ["valueMap_invalid"]);
+  assert.deepEqual(refused({ measurement: "yes" }), ["valueMap_invalid"]);
+  assert.deepEqual(refused({ values: {}, label: "x" }), ["valueMap_invalid"]);
+  assert.deepEqual(refused({ values: { constructor: "present", __proto__: "absent" } }), [], "codes named like properties are codes");
+  // one bad item costs only itself
+  const mixed = applySemanticsPatch(null, { datasetId: "d", ...inferred, variables: [{ table: "t", name: "x", valueMap: { values: many }, concept: "ok" }] }, { now: T0, via: "conversation" });
+  assert.equal(factAt(mixed.asset, "variable:t/x:concept")?.value, "ok");
+  assert.equal(factAt(mixed.asset, "variable:t/x:valueMap"), undefined);
+});
+
+test("a researcher's value map outranks the model's and a later model proposal is kept beside it, never over it", () => {
+  const proposed = applySemanticsPatch(null, { datasetId: "d", ...inferred, variables: [{ table: "subjects", name: "DIABETES", valueMap: yesNo }] }, { now: T0, via: "conversation" });
+  const corrected = applySemanticsPatch(proposed.asset, {
+    ...confirmed("2 也是有"), variables: [{ table: "subjects", name: "DIABETES", valueMap: { values: { 0: "absent", 1: "present", 2: "present" }, measurement: false } }],
+  }, { now: T1, via: "conversation" });
+  assert.equal(corrected.outcomes[0].outcome, "applied");
+  assert.equal(factAt(corrected.asset, "variable:subjects/DIABETES:valueMap")?.basis, "researcher_confirmed");
+  assert.deepEqual(factAt(corrected.asset, "variable:subjects/DIABETES:valueMap")?.supersedes?.value, { values: { 0: "absent", 1: "present", "N/A": "unknown" }, measurement: false });
+  const later = applySemanticsPatch(corrected.asset, { ...inferred, variables: [{ table: "subjects", name: "DIABETES", valueMap: { values: { 0: "present", 1: "absent" }, measurement: false } }] }, { now: T2, via: "conversation" });
+  assert.equal(later.outcomes[0].outcome, "kept_stronger");
+  const kept = factAt(later.asset, "variable:subjects/DIABETES:valueMap");
+  assert.deepEqual(kept?.value, { values: { 0: "absent", 1: "present", 2: "present" }, measurement: false });
+  assert.equal(kept?.contested?.length, 1, "the disagreement is visible");
+  // and the page's confirm button turns the model's own proposal into the researcher's, value unchanged
+  const confirmedOnPage = applySemanticsPatch(proposed.asset, { datasetId: "d", ...confirmationPatch(proposed.asset, ["variable:subjects/DIABETES:valueMap"]).patch }, { now: T1, via: "page" });
+  assert.equal(factAt(confirmedOnPage.asset, "variable:subjects/DIABETES:valueMap")?.basis, "researcher_confirmed");
+  assert.deepEqual(factAt(confirmedOnPage.asset, "variable:subjects/DIABETES:valueMap")?.value, factAt(proposed.asset, "variable:subjects/DIABETES:valueMap")?.value);
+});
+
+test("the asked-concepts list is a set of names, and nothing in a value map or the list is a person's row", () => {
+  const written = applySemanticsPatch(null, { datasetId: "d", ...inferred, tables: [{ name: "subjects", askedConcepts: ["pregnancy", "egfr", "pregnancy"] }], variables: [{ table: "subjects", name: "DIABETES", valueMap: yesNo }] }, { now: T0, via: "conversation" });
+  assert.deepEqual(factAt(written.asset, "table:subjects:askedConcepts")?.value, ["egfr", "pregnancy"]);
+  assert.deepEqual(applySemanticsPatch(null, { datasetId: "d", ...inferred, tables: [{ name: "subjects", askedConcepts: [] }] }, { now: T0, via: "conversation" }).issues.map((issue) => issue.code), ["askedConcepts_invalid"]);
+  // the asset holds the codes of a column and what they mean: no key, no per-person value, no list the size of the table
+  const text = JSON.stringify(written.asset);
+  assert.equal(/USUBJID|subjectKey":"P/.test(text), false);
 });

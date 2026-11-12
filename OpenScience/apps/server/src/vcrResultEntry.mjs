@@ -42,14 +42,15 @@ export function vcrResultAddress(publicUrl, studyId, tab, object = null) {
  * computed for one comparison links that comparison, so a later sensitivity analysis written in the same study does not change the
  * number the reader finds (2026-11-02: the reply said an E-value of 3.0 and the page 2.22). `object` is that comparison's id. The trial tab
  * reads one too (2026-11-04): a page of four designs and a re-estimation had a first sentence about the first three and premises about the
- * last, so a link names the design the reply is about; no other tab reads one.
+ * last, so a link names the design the reply is about. The matching tab reads one too:
+ * a patient's key, and the page opens on that patient's trials (2026-11-04); no other tab reads one.
  * @param {{ studyId: unknown, tab: unknown, publicUrl?: unknown, object?: unknown }} input
  * @returns {{ studyId: string, tab: string, label: string, url?: string, object?: string } | null}
  */
 export function vcrResultEntry({ studyId, tab, publicUrl = null, object = null }) {
   if (typeof studyId !== "string" || !STUDY_ID.test(studyId) || typeof tab !== "string" || !/** @type {readonly string[]} */ (VCR_TABS).includes(tab)) return null;
   // (the key of a card's subject is not an id: `cd:` + design + endpoint + a digest, `wr:` + a digest; the trial tab reads it)
-  const saved = (tab === "comparator" || tab === "trial") && typeof object === "string" && (tab === "trial" ? TRIAL_OBJECT : STUDY_ID).test(object) ? object : null;
+  const saved = (tab === "comparator" || tab === "trial" || tab === "matching") && typeof object === "string" && (tab === "trial" ? TRIAL_OBJECT : STUDY_ID).test(object) ? object : null;
   const url = vcrResultAddress(publicUrl, studyId, tab, saved);
   return { studyId, tab, label: `在“${/** @type {Record<string, string>} */ (VCR_TAB_LABELS_ZH)[tab]}”页查看`, ...(saved ? { object: saved } : {}), ...(url ? { url } : {}) };
 }
@@ -81,6 +82,7 @@ export function withJobEntry(answer, { study, resultKind, publicUrl = null, obje
  */
 export function withWriteEntry(what, answer, { study, publicUrl = null }) {
   if (!answer || answer.ok !== true || !/** @type {readonly string[]} */ (VCR_MATCHING_WRITE_WHATS).includes(what)) return answer;
-  const entry = study?.completionOrigin ? vcrResultEntry({ studyId: study.id, tab: "matching", publicUrl }) : null;
+  // The patient the write is about, so that the link opens on that person.
+  const entry = study?.completionOrigin ? vcrResultEntry({ studyId: study.id, tab: "matching", publicUrl, object: typeof answer.subjectKey === "string" ? answer.subjectKey : null }) : null;
   return entry ? { ...answer, resultEntry: entry } : answer;
 }
