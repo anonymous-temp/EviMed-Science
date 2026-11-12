@@ -178,6 +178,9 @@ const dispatchStatuses = new Set(["dispatching", "accepted", "unknown", "rejecte
 const originCardIdPattern = /^ec_[A-Za-z0-9]{8,64}$/;
 const defaultMaxRuns = 1000;
 const defaultMaxBytes = 1024 * 1024;
+// Derived prefix state only: bounded across projects, including unusually large histories.
+const maxLedgerPrefixProjects = 8;
+const maxLedgerPrefixBytes = 16 * 1024 * 1024;
 // How many gate issues one deliverable frame carries. The repair loop sends the
 // whole list to the run; a reader needs the shape of the problem, not 300 lines.
 const maxDeliverableIssues = 40;
@@ -565,18 +568,57 @@ async function readLedgerSegment(project, file, maxBytes, allowMissing = false) 
   }
 }
 
-async function readLedgerText(project, maxBytes) {
-  const files = await ledgerSegments(project);
+async function readLedgerText(project, maxBytes, files = null) {
+  files ??= await ledgerSegments(project);
   const texts = [];
   for (const file of files) texts.push(await readLedgerSegment(project, file, maxBytes, files.length === 1));
   return texts.map(text => text && !text.endsWith("\n") ? `${text}\n` : text).join("");
+}
+
+/** Metadata is read through the same scoped, no-follow handles as the bytes.
+ * ctime additionally detects same-size in-place edits whose mtime was restored.
+ * A new tail changes the ordered names and makes the former tail part of this key. */
+async function ledgerPrefixSignature(project, files, maxBytes) {
+  const rows = [];
+  for (const file of files.slice(0, -1)) {
+    const opened = await openScopedFileNoFollow(project.rootDir, file);
+    try {
+      const info = await opened.handle.stat({ bigint: true });
+      if (!info.isFile() || info.size > BigInt(maxBytes)) throw corrupt("Agent run prefix metadata is invalid.");
+      rows.push([path.basename(file), String(info.size), String(info.mtimeNs), String(info.ctimeNs), String(info.ino), String(info.dev)]);
+    } finally { await opened.handle.close(); }
+  }
+  return JSON.stringify([files.map(file => path.basename(file)), rows]);
+}
+
+/** Derived diagnostic and input-deduplication state, never retained raw events. */
+function ledgerPrefixState(events, runs) {
+  const grouped = new Map();
+  const inputKeys = new Set(), correctionKeys = new Set();
+  for (const event of events) {
+    const own = grouped.get(event.id) ?? [];
+    own.push(event); grouped.set(event.id, own);
+    if (event.event !== "kernel-request") continue;
+    if (event.steerRequestId !== undefined) inputKeys.add(JSON.stringify([event.id, event.steerRequestId]));
+    if (event.kind === "steer") {
+      for (const id of [event.steerRequestId, ...(Array.isArray(event.requestIds) ? event.requestIds : [])]) {
+        if (id !== undefined) correctionKeys.add(JSON.stringify([event.id, id]));
+      }
+    }
+  }
+  const phases = new Map([...grouped].map(([id, rows]) => [id, foldRunPhaseHistory(rows, id)]));
+  // UTF-16 strings plus a conservative per-entry allowance for maps, sets and objects.
+  // This is an estimate, not a V8 heap measurement; both bytes and project count are capped.
+  const bytes = 2 * Buffer.byteLength(JSON.stringify([[...runs], [...phases], [...inputKeys], [...correctionKeys]]))
+    + 512 * (runs.size + phases.size + inputKeys.size + correctionKeys.size);
+  return { runs, phases, inputKeys, correctionKeys, bytes };
 }
 
 /** All callers hold the process-local project storage mutation lock.
  * A rollover exclusively publishes a new segment; another process winning that
  * filename makes us reread the tail instead of replacing its events.
  * `pending` is the adopted placeholder's cancellation, committed with its replacement start. */
-async function writeNextLedger(project, event, maxBytes, rotationEnabled = false, pending = []) {
+async function writeNextLedger(project, event, maxBytes, rotationEnabled = false, pending = [], invalidatePrefix = (..._files) => {}) {
   for (;;) {
     const files = await ledgerSegments(project);
     const tail = files.at(-1);
@@ -590,6 +632,7 @@ async function writeNextLedger(project, event, maxBytes, rotationEnabled = false
       text = serializeNext(pending, event, maxBytes);
       if (files.length > 999999) throw corrupt("Agent run ledger has too many segments.");
       const next = path.join(project.metaDir, `runs.${String(files.length).padStart(6, "0")}.jsonl`);
+      invalidatePrefix(); // Includes a failed/conflicting publication and its retry.
       try {
         await writeFileExclusiveNoFollow(project.rootDir, next, text, { encoding: "utf8", mode: 0o600 });
       } catch (conflict) {
@@ -598,6 +641,7 @@ async function writeNextLedger(project, event, maxBytes, rotationEnabled = false
       }
       return;
     }
+    invalidatePrefix(tail); // Drop any snapshot containing the segment we are about to rewrite.
     await writeFileAtomicNoFollow(project.rootDir, tail, text, { encoding: "utf8", mode: 0o600 });
     return;
   }
@@ -629,8 +673,10 @@ function storedTimestamp(value, label) {
   return value;
 }
 
-function foldEvents(events) {
-  const runs = new Map();
+// Rows are replaced, never mutated: a shallow map copy resumes the exact same fold.
+// Prefix snapshots skip final presentation, which must run only after the tail.
+function foldEvents(events, prefix = new Map(), finalize = true) {
+  const runs = new Map(prefix);
   for (const event of events) {
     if (event.event === "started") {
       const id = safeStoredId(event.id, "id");
@@ -975,9 +1021,14 @@ function foldEvents(events) {
     }
     throw corrupt("Agent run ledger contains an unsupported event.");
   }
+  if (!finalize) return runs;
   // Every run has a name (C3). One nobody gave a title is called by what it
   // asked; that is `question`, the source an automatic title may replace.
-  for (const [id, run] of runs) {
+  for (const [id, folded] of runs) {
+    // A public result must not expose nested objects held by the cache. Detach
+    // the presentation, not the saved state used to continue folding events.
+    const run = prefix.size ? Object.freeze(structuredClone(folded)) : folded;
+    if (prefix.size) runs.set(id, run);
     if (run.titleSource === "auto" || run.titleSource === "user") continue;
     runs.set(id, Object.freeze({ ...run, title: derivedRunTitle(run), titleSource: "question" }));
   }
@@ -1244,16 +1295,23 @@ function isLegalRunPhaseMove(from, to) {
  * fields phase computation needs, rather than reusing a function that is
  * strict on purpose.
  *
- * @param {readonly Record<string, any>[]} events @param {string} runId
+ * @param {readonly Record<string, any>[]} events @param {string} runId @param {any} [prefix]
  * @returns {{ phase: string, illegalTransitions: number, notices: string[] }}
  */
-function runPhaseHistory(events, runId) {
+function runPhaseHistory(events, runId, prefix = undefined) {
+  const { phase, illegalTransitions, notices } = foldRunPhaseHistory(events, runId, prefix);
+  return { phase, illegalTransitions, notices };
+}
+
+/** The diagnostic's resumable state includes its last record, not just its displayed phase.
+ * @param {readonly Record<string, any>[]} events @param {string} runId @param {any} [prefix] */
+function foldRunPhaseHistory(events, runId, prefix = undefined) {
   /** @type {Record<string, any> | null} */
-  let record = null
-  let phase = "reserved"
-  let illegalTransitions = 0
+  let record = prefix?.record ?? null
+  let phase = prefix?.phase ?? "reserved"
+  let illegalTransitions = prefix?.illegalTransitions ?? 0
   /** @type {string[]} */
-  const notices = []
+  const notices = [...(prefix?.notices ?? [])]
   for (const event of events) {
     if (event?.id !== runId) continue
     if (event.event === "started") {
@@ -1287,7 +1345,7 @@ function runPhaseHistory(events, runId) {
     }
     phase = next
   }
-  return { phase, illegalTransitions, notices }
+  return { record, phase, illegalTransitions, notices }
 }
 
 /**
@@ -4488,6 +4546,8 @@ export class AgentRunStore {
     this.maxRuns = options.maxRuns ?? defaultMaxRuns;
     this.maxBytes = options.maxBytes ?? defaultMaxBytes;
     this.ledgerRotationEnabled = options.ledgerRotationEnabled === true;
+    this.ledgerPrefixes = new Map();
+    this.ledgerPrefixBytes = 0;
     this.promptStops=options.promptStops ?? new RuntimePromptStops({maxBytes:this.maxBytes});
     this.withPromptAdmission=options.withPromptAdmission ?? ((_project,_session,operation)=>operation());
     this.now = options.now ?? (() => new Date());
@@ -4635,6 +4695,83 @@ export class AgentRunStore {
     // could have written.
     this.dispatchedBriefs = new Map();
     if (!this.model) throw new Error("AgentRunStore requires a configured model.");
+  }
+
+  invalidateLedgerPrefix(project, rewrittenFile = null) {
+    const key = JSON.stringify([project.rootDir, project.metaDir]);
+    const previous = this.ledgerPrefixes.get(key);
+    // An ordinary writable-tail rewrite does not touch the cached prefix.
+    if (rewrittenFile && !previous?.files.includes(rewrittenFile)) return;
+    if (previous) this.ledgerPrefixBytes -= previous.bytes;
+    this.ledgerPrefixes.delete(key);
+  }
+
+  async writeLedger(project, event, pending = []) {
+    return writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled, pending,
+      (file = null) => this.invalidateLedgerPrefix(project, file));
+  }
+
+  /** Only a stable sealed prefix is cached. Revalidate around the body read so
+   * a concurrent rollover/erasure cannot pair old prefix state with a newer tail.
+   * Any uncertain metadata/order falls back to the original full reader, whose
+   * missing-segment and corruption errors remain authoritative. */
+  async readLedger(project) {
+    const full = async (files = null) => ({ events: parseEvents(await readLedgerText(project, this.maxBytes, files)), prefix: undefined });
+    if (!this.ledgerRotationEnabled) {
+      this.invalidateLedgerPrefix(project);
+      return full();
+    }
+    let files, signature;
+    try {
+      files = await ledgerSegments(project);
+      if (files.length === 1) {
+        this.invalidateLedgerPrefix(project);
+        return full(files);
+      }
+      signature = await ledgerPrefixSignature(project, files, this.maxBytes);
+    } catch {
+      this.invalidateLedgerPrefix(project);
+      return full();
+    }
+    const key = JSON.stringify([project.rootDir, project.metaDir]);
+    let prefix = this.ledgerPrefixes.get(key);
+    if (prefix?.signature !== signature || prefix?.maxBytes !== this.maxBytes) {
+      this.invalidateLedgerPrefix(project);
+      const events = [];
+      for (const file of files.slice(0, -1)) events.push(...parseEvents(await readLedgerSegment(project, file, this.maxBytes)));
+      prefix = { ...ledgerPrefixState(events, foldEvents(events, undefined, false)), signature, maxBytes: this.maxBytes, files: files.slice(0, -1) };
+      prefix.bytes += 2 * (Buffer.byteLength(signature) + Buffer.byteLength(key) + Buffer.byteLength(JSON.stringify(prefix.files)));
+    }
+    let events;
+    try {
+      events = parseEvents(await readLedgerSegment(project, files.at(-1), this.maxBytes));
+      const currentFiles = await ledgerSegments(project);
+      if (await ledgerPrefixSignature(project, currentFiles, this.maxBytes) !== signature) {
+        this.invalidateLedgerPrefix(project);
+        return full();
+      }
+    } catch {
+      this.invalidateLedgerPrefix(project);
+      // Retry through the full reader, including its normal per-segment errors.
+      return full();
+    }
+    // Touch LRU only after validation. Oversized derived entries remain uncached.
+    this.invalidateLedgerPrefix(project);
+    if (prefix.bytes <= maxLedgerPrefixBytes) {
+      while (this.ledgerPrefixes.size >= maxLedgerPrefixProjects || this.ledgerPrefixBytes + prefix.bytes > maxLedgerPrefixBytes) {
+        const oldest = this.ledgerPrefixes.keys().next().value;
+        this.ledgerPrefixBytes -= this.ledgerPrefixes.get(oldest).bytes;
+        this.ledgerPrefixes.delete(oldest);
+      }
+      this.ledgerPrefixes.set(key, prefix);
+      this.ledgerPrefixBytes += prefix.bytes;
+    }
+    return { events, prefix };
+  }
+
+  async readRuns(project) {
+    const { events, prefix } = await this.readLedger(project);
+    return foldEvents(events, prefix?.runs);
   }
 
   /** Announce a committed state change. Isolated: a listener must never be able
@@ -4790,7 +4927,7 @@ export class AgentRunStore {
     const deletedSources = new Set(this.sourceDeletion ? await this.sourceDeletion.ledger.deletedIds(project) : []);
     let latest = null;
     let at = "";
-    for (const run of foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()) {
+    for (const run of (await this.readRuns(project)).values()) {
       if (!isResearcherRun(run) || deletedSources.has(run.sessionId)) continue;
       const moved = [run.lastProgressAt, run.finishedAt, run.startedAt].filter((value) => typeof value === "string").sort().at(-1) ?? "";
       if (moved > at) {
@@ -4812,7 +4949,7 @@ export class AgentRunStore {
    */
   async researcherRuns(project, { includeManaged = false } = {}) {
     const deletedSources = new Set(this.sourceDeletion ? await this.sourceDeletion.ledger.deletedIds(project) : []);
-    return [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()]
+    return [...(await this.readRuns(project)).values()]
       .filter(includeManaged ? isResearcherOwnedWork : isResearcherRun).filter(run => !deletedSources.has(run.sessionId));
   }
 
@@ -4825,7 +4962,7 @@ export class AgentRunStore {
    * @param {any} project @returns {Promise<{ id: string, sessionId: string, nativeTurn?: { startSeq: number, userSeq: number } }[]>}
    */
   async activeRuns(project) {
-    const runs = foldEvents(parseEvents(await readLedgerText(project, this.maxBytes)));
+    const runs = await this.readRuns(project);
     return [...runs.values()].filter((run) => run.status === "running").map((run) => ({
       id: run.id, sessionId: run.sessionId, ...(run.nativeTurn ? { nativeTurn: run.nativeTurn } : {}),
     }));
@@ -4840,7 +4977,7 @@ export class AgentRunStore {
   async conversationRuns(project, sessionId) {
     const id = typeof sessionId === "string" ? sessionId.trim() : "";
     if (!id) return [];
-    return [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()]
+    return [...(await this.readRuns(project)).values()]
       .filter((run) => run.sessionId === id)
       .sort((left, right) => String(right.startedAt ?? "").localeCompare(String(left.startedAt ?? "")));
   }
@@ -4853,7 +4990,7 @@ export class AgentRunStore {
   async conversationIndex(project) {
     /** @type {Map<string, Record<string, any>[]>} */
     const index = new Map();
-    for (const run of foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()) {
+    for (const run of (await this.readRuns(project)).values()) {
       if (typeof run.sessionId !== "string" || !run.sessionId) continue;
       const runs = index.get(run.sessionId);
       if (runs) runs.push(run); else index.set(run.sessionId, [run]);
@@ -4891,7 +5028,7 @@ export class AgentRunStore {
    * @param {any} project @returns {Promise<{ runCount: number, lastActivityAt: string | null }>}
    */
   async activitySummary(project) {
-    const runs = [...foldEvents(parseEvents(await readLedgerText(project, this.maxBytes))).values()];
+    const runs = [...(await this.readRuns(project)).values()];
     let last = null;
     for (const run of runs) {
       for (const at of [run.finishedAt, run.lastProgressAt, run.startedAt]) {
@@ -4933,20 +5070,22 @@ export class AgentRunStore {
       foldEvents([...cleaned, ...notices]); // Validate before replacing any segment's bytes.
       // Preserve segment boundaries and event order. Source deletion's durable
       // fence already hides the source while its files and receipts are scrubbed.
+      this.invalidateLedgerPrefix(project);
       const files = await ledgerSegments(project);
       for (const file of files) {
         const rows = clean(parseEvents(await readLedgerSegment(project, file, this.maxBytes, files.length === 1)));
         const text = rows.map(event => JSON.stringify(event)).join('\n') + (rows.length ? '\n' : '');
+        this.invalidateLedgerPrefix(project); // Also drop state before a partial erasure fails.
         await writeFileAtomicNoFollow(project.rootDir, file, text, { encoding: 'utf8', mode: 0o600 });
       }
-      for (const notice of notices) await writeNextLedger(project, notice, this.maxBytes, this.ledgerRotationEnabled);
+      for (const notice of notices) await this.writeLedger(project, notice);
       return [...ids];
     });
   }
 
   async list(project) {
-    const events = parseEvents(await readLedgerText(project, this.maxBytes));
-    const runs = [...foldEvents(events).values()];
+    const { events, prefix } = await this.readLedger(project);
+    const runs = [...foldEvents(events, prefix?.runs).values()];
     const deletedSources = new Set(this.sourceDeletion ? await this.sourceDeletion.ledger.deletedIds(project) : []);
     // `phase` is a projection, never a stored field (§7.1.1): computed fresh on
     // every read from the same four ledger values every other reader already
@@ -4954,7 +5093,7 @@ export class AgentRunStore {
     // illegal phase sequence rather than ever refusing to return the run.
     return runs
       .map((run) => {
-        const history = runPhaseHistory(events, run.id);
+        const history = runPhaseHistory(events, run.id, prefix?.phases.get(run.id));
         if (deletedSources.has(run.sessionId)) return { ...run, deleted: true, question: null, title: 'Conversation removed',
           steers: [], goal: null, nativeWorkflow: null, deliverables: [], progress: undefined, qualityNotices: [], transcript: undefined };
         return {
@@ -4976,8 +5115,8 @@ export class AgentRunStore {
   async refreshArtifacts(project, rawRunId, options) {
     const runId = safeId(rawRunId, "agent run id");
     return withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const run = foldEvents(events).get(runId);
+      const { events, prefix } = await this.readLedger(project);
+      const run = foldEvents(events, prefix?.runs).get(runId);
       if (!run) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
       if (run.status === "running") throw new HttpError(409, "agent_run_not_finished", "The run is still working.");
       const stored = await readVerifiedRunTranscript(project, run, options.expectedTranscriptSha256);
@@ -5040,8 +5179,8 @@ export class AgentRunStore {
       if (options.dryRun) return plan;
       if (run.artifactRefresh?.inventorySha256 === inventorySha256) return run;
       const event = { event: "artifacts-refreshed", id: runId, at: this.now().toISOString(), ...plan };
-      const refreshed = foldEvents([...events, event]).get(runId);
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
+      const refreshed = foldEvents([...events, event], prefix?.runs).get(runId);
+      await this.writeLedger(project, event);
       this.notifyState(project, refreshed);
       return refreshed;
     });
@@ -5164,9 +5303,9 @@ export class AgentRunStore {
   } = {}) {
     await this.authorizeReservation(project, { sessionId: session.sessionId, dispatchId, dispatchFingerprint });
     return withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const { events, prefix } = await this.readLedger(project);
       const persistedEventCount = events.length;
-      const runs = foldEvents(events);
+      const runs = foldEvents(events, prefix?.runs);
       if (nativeTurn) {
         kernelRequestIds = (kernelRequestIds ?? []).map(storedKernelRequestId);
         nativeTurn = validateNativeTurn(nativeTurn);
@@ -5180,8 +5319,8 @@ export class AgentRunStore {
         if (legacy && !legacy.nativeTurn && legacy.sessionId === session.sessionId
           && String(legacy.effectiveRouteReason ?? "").startsWith(adoptedRouteReason)) {
           const event = { event: "runtime-turn", id: legacy.id, nativeTurn, requestIds: kernelRequestIds ?? [] };
-          await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-          return { run: foldEvents([...events, event]).get(legacy.id), owner: false };
+          await this.writeLedger(project, event);
+          return { run: foldEvents([...events, event], prefix?.runs).get(legacy.id), owner: false };
         }
       }
       const duplicate = dispatchId == null
@@ -5274,12 +5413,12 @@ export class AgentRunStore {
       if (beforeReserve) await beforeReserve({runs:[...runs.values()]});
       if (dispatchId) this.dispatchOwners.add(id);
       try {
-        await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled, events.slice(persistedEventCount));
+        await this.writeLedger(project, event, events.slice(persistedEventCount));
       } catch (error) {
         this.dispatchOwners.delete(id);
         throw error;
       }
-      const run = foldEvents([...events, event]).get(id);
+      const run = foldEvents([...events, event], prefix?.runs).get(id);
       this.notifyState(project, run);
       if (run.originCardId && this.onOriginCardRun) {
         // Counted behind the run, never in front of it, and tracked like the label writes so a close waits for it.
@@ -5422,8 +5561,8 @@ export class AgentRunStore {
     const normalized = normalizeQualityNotices(notices);
     if (normalized.length === 0) return null;
     return withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const current = foldEvents(events).get(runId);
+      const { events, prefix } = await this.readLedger(project);
+      const current = foldEvents(events, prefix?.runs).get(runId);
       if (!current) return null;
       // Only what the run does not already carry (see the fold): an unchanged notice is not a new event. A stall is the
       // exception -- its event's time is what `lastStallAt` reads, so a run that stalls again must say so again.
@@ -5438,8 +5577,8 @@ export class AgentRunStore {
         qualityNotices: fresh,
         ...(unchecked ? { verification: "unchecked" } : {}),
       };
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-      const noticed = foldEvents([...events, event]).get(runId);
+      await this.writeLedger(project, event);
+      const noticed = foldEvents([...events, event], prefix?.runs).get(runId);
       this.notifyState(project, noticed);
       return noticed;
     });
@@ -5465,8 +5604,8 @@ export class AgentRunStore {
     if (deleted !== undefined && deleted !== true) throw new HttpError(400, "invalid_payload", "deleted can only be set.");
     const asked = question === undefined ? null : questionPreview(question);
     return withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const current = foldEvents(events).get(runId);
+      const { events, prefix } = await this.readLedger(project);
+      const current = foldEvents(events, prefix?.runs).get(runId);
       if (!current) throw new HttpError(404, "agent_run_not_found", "The run is unavailable.");
       const retitle = named && (current.titleSource !== "user" || titleSource === "user")
         && !(current.title === named && current.titleSource === titleSource);
@@ -5484,8 +5623,8 @@ export class AgentRunStore {
         ...(shelve ? { archived } : {}),
         ...(remove ? { deleted: true } : {}),
       };
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-      const labelled = foldEvents([...events, event]).get(runId);
+      await this.writeLedger(project, event);
+      const labelled = foldEvents([...events, event], prefix?.runs).get(runId);
       this.notifyState(project, labelled);
       return labelled;
     });
@@ -5568,8 +5707,8 @@ export class AgentRunStore {
   async recordLearning(project, rawRunId, patch) {
     const runId = safeId(rawRunId, "agent run id");
     return withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const current = foldEvents(events).get(runId);
+      const { events, prefix } = await this.readLedger(project);
+      const current = foldEvents(events, prefix?.runs).get(runId);
       if (!current) return null;
       const compaction = patch.appendCompaction
         ? [...(current.compaction ?? []), patch.appendCompaction]
@@ -5628,8 +5767,8 @@ export class AgentRunStore {
       };
       // Nothing but the timestamp to write means nothing to write.
       if (Object.keys(event).length <= 3) return current;
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-      const updated = foldEvents([...events, event]).get(runId);
+      await this.writeLedger(project, event);
+      const updated = foldEvents([...events, event], prefix?.runs).get(runId);
       this.notifyState(project, updated);
       return updated;
     });
@@ -5741,14 +5880,14 @@ export class AgentRunStore {
     const runId = safeId(rawRunId, "agent run id");
     if (!["accepted", "unknown", "rejected"].includes(status)) throw new Error("Invalid dispatch status.");
     return withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const runs = foldEvents(events);
+      const { events, prefix } = await this.readLedger(project);
+      const runs = foldEvents(events, prefix?.runs);
       const current = runs.get(runId);
       if (!current) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
       if (current.status !== "running" || current.dispatchStatus !== "dispatching") return current;
       const event = { event: "dispatch", id: runId, status };
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-      const dispatched = foldEvents([...events, event]).get(runId);
+      await this.writeLedger(project, event);
+      const dispatched = foldEvents([...events, event], prefix?.runs).get(runId);
       this.notifyState(project, dispatched);
       return dispatched;
     });
@@ -6245,8 +6384,8 @@ export class AgentRunStore {
     const facts = await this.finalRunFacts(project, runId, normalized).catch(() => null);
     if (facts?.tracker && facts.progress) this.publishProgress(project, runId, facts.tracker, facts.progress, { force: true });
     const outcome = await withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const runs = foldEvents(events);
+      const { events, prefix } = await this.readLedger(project);
+      const runs = foldEvents(events, prefix?.runs);
       const current = runs.get(runId);
       if (!current) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
       if (current.status !== "running") return { run: current, transitioned: false };
@@ -6263,8 +6402,8 @@ export class AgentRunStore {
         ...(facts?.claimSummary ? { claimSummary: facts.claimSummary } : {}),
         ...(facts?.snapshot ? { snapshot: facts.snapshot } : {}),
       };
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-      const finished = foldEvents([...events, event]).get(runId);
+      await this.writeLedger(project, event);
+      const finished = foldEvents([...events, event], prefix?.runs).get(runId);
       this.notifyState(project, finished);
       return { run: finished, transitioned: true };
     });
@@ -6430,8 +6569,8 @@ export class AgentRunStore {
     if (this.closing) return null;
     let targetRunId = runId;
     if (!targetRunId) {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      targetRunId = [...foldEvents(events).values()].find((candidate) => (
+      const { events, prefix } = await this.readLedger(project);
+      targetRunId = [...foldEvents(events, prefix?.runs).values()].find((candidate) => (
         candidate.sessionId === sessionId && candidate.status === "running"
       ))?.id ?? null;
     }
@@ -6448,12 +6587,11 @@ export class AgentRunStore {
   }
 
   async reconcileSessionOnce(project, sessionId, runId = null) {
-    const events = parseEvents(await readLedgerText(project, this.maxBytes));
-    const runs = foldEvents(events);
+    const { events, prefix } = await this.readLedger(project);
+    const runs = foldEvents(events, prefix?.runs);
     let run = [...runs.values()].find((item) => item.sessionId === sessionId && item.status === "running" && (!runId || item.id === runId));
     if (!run) return null;
-    const started = events.find((event) => event.event === "started" && event.id === run.id);
-    const baselineCursor = started?.baselineCursor ?? null;
+    const baselineCursor = run.baselineCursor ?? null;
     let history;
     try {
       history = await this.readSessionHistory(project, sessionId, { wake: false });
@@ -7662,8 +7800,8 @@ export class AgentRunStore {
     if (runSide.unreadable && stillByHistory && stillByKernel) return null;
     if (stillByHistory && stillByRunSide && stillByKernel) return false;
     await withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const current = foldEvents(events).get(run.id);
+      const { events, prefix } = await this.readLedger(project);
+      const current = foldEvents(events, prefix?.runs).get(run.id);
       if (!current || current.status !== "running") return;
       const event = {
         event: "progress",
@@ -7682,9 +7820,9 @@ export class AgentRunStore {
       };
       // Superseded gauges leave the writable segment on every append path.
       // Earlier segments remain intact; their later gauges still fold last.
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
+      await this.writeLedger(project, event);
       if (runIsStalled(current) && (!stillByHistory || !stillByKernel)) {
-        const resumed = foldEvents([...events, event]).get(run.id);
+        const resumed = foldEvents([...events, event], prefix?.runs).get(run.id);
         if (resumed) this.notifyState(project, resumed);
       }
     });
@@ -7979,8 +8117,8 @@ export class AgentRunStore {
    */
   async recordCorrection(project, runId, requestId, text = "") {
     return withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const run = foldEvents(events).get(runId);
+      const { events, prefix } = await this.readLedger(project);
+      const run = foldEvents(events, prefix?.runs).get(runId);
       if (!run || run.status !== "running") {
         throw new HttpError(409, "agent_run_not_running", "The run is no longer accepting corrections.");
       }
@@ -7989,8 +8127,8 @@ export class AgentRunStore {
       }
       const event = { event: "kernel-request", id: runId, kind: "steer", requestIds: [storedKernelRequestId(requestId)],
         ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-      const updated = foldEvents([...events, event]).get(runId);
+      await this.writeLedger(project, event);
+      const updated = foldEvents([...events, event], prefix?.runs).get(runId);
       this.notifyState(project, updated);
       return updated;
     });
@@ -8034,19 +8172,19 @@ export class AgentRunStore {
   async recordSteeredInput(project, sessionId, requestId, text = "") {
     if (typeof sessionId !== "string" || !sessionId || typeof requestId !== "string" || !requestId) return null;
     return withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const running = [...foldEvents(events).values()]
+      const { events, prefix } = await this.readLedger(project);
+      const running = [...foldEvents(events, prefix?.runs).values()]
         .filter((run) => run.sessionId === sessionId && run.status === "running")
         .sort((left, right) => String(right.startedAt).localeCompare(String(left.startedAt)));
       const run = running[0];
       if (!run) return null;
-      const counted = events.some((event) => event.event === "kernel-request" && event.id === run.id && event.kind === "steer"
+      const counted = prefix?.correctionKeys.has(JSON.stringify([run.id, requestId])) || events.some((event) => event.event === "kernel-request" && event.id === run.id && event.kind === "steer"
         && (event.steerRequestId === requestId || (Array.isArray(event.requestIds) && event.requestIds.includes(requestId))));
       if (counted || (run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) return run;
       const event = { event: "kernel-request", id: run.id, kind: "steer", source: "runtime-ui", steerRequestId: storedKernelRequestId(requestId),
         ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-      const updated = foldEvents([...events, event]).get(run.id);
+      await this.writeLedger(project, event);
+      const updated = foldEvents([...events, event], prefix?.runs).get(run.id);
       this.notifyState(project, updated);
       return updated;
     });
@@ -8054,9 +8192,10 @@ export class AgentRunStore {
 
   async recordConsumedInput(project, runId, input, parts) {
     return withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const run = foldEvents(events).get(runId);
+      const { events, prefix } = await this.readLedger(project);
+      const run = foldEvents(events, prefix?.runs).get(runId);
       if (!run || run.automated || !run.inputAttribution?.inputs?.some(item => item.referenceId === input.referenceId && item.inputSeq === input.inputSeq)
+        || prefix?.inputKeys.has(JSON.stringify([runId, input.sourceRequestId]))
         || events.some(event => event.event === "kernel-request" && event.id === runId && event.steerRequestId === input.sourceRequestId)
         || (run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) return run;
       const text = parts.slice(0, input.originalParts).filter(part => part.type === "text").map(part => part.text).join("\n");
@@ -8064,19 +8203,19 @@ export class AgentRunStore {
       const event = { event: "kernel-request", id: runId, kind: "steer", source: "native-consumed", steerRequestId: storedKernelRequestId(input.sourceRequestId),
         inputReceipt: {referenceId:input.referenceId,actor:input.actor,inputSeq:input.inputSeq,turnStartSeq:run.nativeTurn.startSeq,originalTextDigest:input.originalTextDigest},
         ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-      return foldEvents([...events, event]).get(runId);
+      await this.writeLedger(project, event);
+      return foldEvents([...events, event], prefix?.runs).get(runId);
     });
   }
   /** Persist a repair's native request identity before sending it. */
   async recordKernelRequest(project, runId, requestId) {
     return withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const run = foldEvents(events).get(runId);
+      const { events, prefix } = await this.readLedger(project);
+      const run = foldEvents(events, prefix?.runs).get(runId);
       if (!run || run.status !== "running") throw new HttpError(409, "agent_run_active", "The run is no longer accepting repair prompts.");
       const event = { event: "kernel-request", id: runId, requestIds: [storedKernelRequestId(requestId)] };
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-      const updated = foldEvents([...events, event]).get(runId);
+      await this.writeLedger(project, event);
+      const updated = foldEvents([...events, event], prefix?.runs).get(runId);
       this.notifyState(project, updated);
       return updated;
     });
@@ -8085,12 +8224,12 @@ export class AgentRunStore {
   /** A captured legacy baseline identifies its first consumed user input. */
   async bindLegacyKernelRequests(project, runId, requestIds) {
     return withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const run = foldEvents(events).get(runId);
+      const { events, prefix } = await this.readLedger(project);
+      const run = foldEvents(events, prefix?.runs).get(runId);
       if (!run || run.kernelRequestIds?.length) return run;
       const event = { event: "kernel-request", id: runId, requestIds: requestIds.map(storedKernelRequestId) };
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-      const updated = foldEvents([...events, event]).get(runId);
+      await this.writeLedger(project, event);
+      const updated = foldEvents([...events, event], prefix?.runs).get(runId);
       this.notifyState(project, updated);
       return updated;
     });
@@ -8117,16 +8256,16 @@ export class AgentRunStore {
       if (current && !(await verifiedReceiptArtifacts(project, current)).mismatched.length) evidence.kernelRunId = current.runId;
     }
     return withProjectStorageMutation(project, async () => {
-      const events = parseEvents(await readLedgerText(project, this.maxBytes));
-      const current = foldEvents(events).get(run.id);
+      const { events, prefix } = await this.readLedger(project);
+      const current = foldEvents(events, prefix?.runs).get(run.id);
       if (!current || current.status !== "running") return current ?? run;
       const previousSeq = current.nativeWorkflow?.throughSeq
         ?? Number(current.nativeWorkflow?.throughMessage?.replace(/^seq_/, ""));
       if (Number.isFinite(previousSeq) && evidence.throughSeq <= previousSeq) return current;
       if (JSON.stringify(current.nativeWorkflow) === JSON.stringify(evidence)) return current;
       const event = { event: "native-workflow", id: run.id, evidence };
-      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-      return foldEvents([...events, event]).get(run.id);
+      await this.writeLedger(project, event);
+      return foldEvents([...events, event], prefix?.runs).get(run.id);
     });
   }
 
@@ -8165,14 +8304,14 @@ export class AgentRunStore {
         && (run.nativeTurn.startSeq !== turn.startSeq || run.nativeTurn.userSeq !== first.seq)) {
         const ownedId = run.id;
         run = await withProjectStorageMutation(project, async () => {
-          const events = parseEvents(await readLedgerText(project, this.maxBytes));
-          const current = foldEvents(events).get(ownedId);
+          const { events, prefix } = await this.readLedger(project);
+          const current = foldEvents(events, prefix?.runs).get(ownedId);
           if (!current || !requestIds.some((id) => current.kernelRequestIds?.includes(id))) {
             throw new HttpError(409, "runtime_input_changed", "The migrated turn no longer has its recorded request identity.");
           }
           const event = { event: "runtime-turn", id: ownedId, nativeTurn: { startSeq: turn.startSeq, userSeq: first.seq }, requestIds, rebased: true };
-          await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-          return foldEvents([...events, event]).get(ownedId);
+          await this.writeLedger(project, event);
+          return foldEvents([...events, event], prefix?.runs).get(ownedId);
         });
         knownRuns[knownRuns.findIndex((item) => item.id === ownedId)] = run;
       }
@@ -8283,13 +8422,13 @@ export class AgentRunStore {
       // never binds a future message to this run.
       if (requestIds.some(requestId => !run.kernelRequestIds?.includes(requestId))) {
         run = await withProjectStorageMutation(project, async () => {
-          const events = parseEvents(await readLedgerText(project, this.maxBytes));
-          const current = foldEvents(events).get(run.id);
+          const { events, prefix } = await this.readLedger(project);
+          const current = foldEvents(events, prefix?.runs).get(run.id);
           const missing = requestIds.filter(requestId => !current?.kernelRequestIds?.includes(requestId));
           if (!current || !missing.length) return current ?? run;
           const event = { event: "kernel-request", id: current.id, requestIds: missing };
-          await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
-          return foldEvents([...events, event]).get(current.id);
+          await this.writeLedger(project, event);
+          return foldEvents([...events, event], prefix?.runs).get(current.id);
         });
       }
       if (this.nativeInputs) {

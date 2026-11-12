@@ -7769,6 +7769,275 @@ async function rotationFixture(t, options = {}) {
   return { project, binding, createStore, file, fill };
 }
 
+// Count actual file-body reads and JSONL parsing, independently of cache internals.
+function observeLedgerIO(t) {
+  const reads = [], parsed = [];
+  const open = fsPromises.open, parse = JSON.parse;
+  t.mock.method(fsPromises, "open", async (...args) => {
+    const handle = await open(...args);
+    if (/runs(?:\.\d{6})?\.jsonl$/.test(String(args[0]))) {
+      const read = handle.readFile.bind(handle);
+      handle.readFile = async (...readArgs) => {
+        const text = await read(...readArgs);
+        reads.push({ file: path.basename(String(args[0])), bytes: Buffer.byteLength(text) });
+        return text;
+      };
+    }
+    return handle;
+  });
+  t.mock.method(JSON, "parse", (text, ...args) => {
+    const value = parse(text, ...args);
+    if (value?.event && value?.id) parsed.push(Buffer.byteLength(text) + 1);
+    return value;
+  });
+  return { reads, parsed, reset() { reads.length = 0; parsed.length = 0; } };
+}
+
+async function assertLedgerReadersEqual(warm, cold, project, sessionId) {
+  for (const method of ["list", "activeRuns", "conversationIndex", "researcherRuns", "lastSessionId", "activitySummary"]) {
+    assert.deepEqual(await warm[method](project), await cold[method](project), method);
+  }
+  assert.deepEqual(await warm.researcherRuns(project, { includeManaged: true }), await cold.researcherRuns(project, { includeManaged: true }));
+  assert.deepEqual(await warm.conversationRuns(project, sessionId), await cold.conversationRuns(project, sessionId));
+  assert.equal(warm.runIdForSession(sessionId, await warm.activeRuns(project)), cold.runIdForSession(sessionId, await cold.activeRuns(project)));
+}
+
+test("LG3 warm progress and list read and parse only the tail after seven full segments", async t => {
+  let messages = 1;
+  const { project, binding, createStore, file, fill } = await rotationFixture(t, {
+    readSessionHistory: async () => Array.from({ length: messages }, (_, i) => ({ info: { id: `m${i}`, role: "assistant" }, parts: [] })),
+  });
+  const store = createStore();
+  const run = (await store.reserveRun(project, binding("cache-hot"))).run;
+  for (let i = 0; i < 7; i++) {
+    await fill(i, run.id);
+    await writeFile(file(i + 1), JSON.stringify({ event: "notice", id: run.id, qualityNotices: [] }) + "\n");
+  }
+  const warm = (await store.list(project))[0];
+  const io = observeLedgerIO(t);
+  await store.list(project);
+  assert.deepEqual(io.reads.map(row => row.file), [path.basename(file(7))]);
+  assert.equal(io.parsed.reduce((a, b) => a + b, 0), io.reads[0].bytes);
+  io.reset(); messages = 2;
+  await store.recordProgress(project, warm);
+  assert.ok(io.reads.length > 0);
+  assert.ok(io.reads.every(row => row.file === path.basename(file(7))), JSON.stringify(io.reads));
+  assert.equal(io.parsed.reduce((a, b) => a + b, 0), io.reads.reduce((n, row) => n + row.bytes, 0));
+  await assertLedgerReadersEqual(store, createStore(), project, "cache-hot");
+});
+
+test("LG3 every reader agrees warm and cold across rotations, duplicate terminals and erasure", async t => {
+  let messages = 1;
+  const { project, binding, createStore, file, fill } = await rotationFixture(t, {
+    readSessionHistory: async () => Array.from({ length: messages }, (_, i) => ({ info: { id: `m${i}`, role: "assistant" }, parts: [] })),
+  });
+  const warm = createStore(), other = createStore();
+  const run = (await warm.reserveRun(project, binding("cache-equality"), { question: "Private words", baselineCursor: "baseline" })).run;
+  const check = async () => {
+    await assertLedgerReadersEqual(warm, createStore(), project, run.sessionId);
+    await assertLedgerReadersEqual(warm, createStore({ ledgerRotationEnabled: false }), project, run.sessionId);
+  };
+  await fill(0, run.id);
+  await warm.appendQualityNotices(project, run.id, ["First notice"]);
+  await check();
+  await fill(1, run.id); messages = 2;
+  await warm.recordProgress(project, (await warm.list(project))[0]);
+  await check();
+  await fill(2, run.id);
+  await other.finishInternal(project, run.id, { status: "succeeded", artifacts: [] });
+  assert.deepEqual(await warm.activeRuns(project), [], "another writer's terminal must end the cached active run");
+  await check();
+  const terminal = JSON.parse((await readFile(file(3), "utf8")).trim());
+  await writeFile(file(3), JSON.stringify(terminal) + "\n" + JSON.stringify({ ...terminal, status: "failed" }) + "\n");
+  await check();
+  await fill(3, run.id);
+  await other.appendQualityNotices(project, run.id, ["Second writer"]);
+  await check();
+  await warm.removeConversationSource(project, [run.sessionId]);
+  await check();
+  assert.equal((await warm.list(project))[0].question, null);
+  assert.equal((await warm.list(project))[0].ignoredTerminalEvents, 1);
+});
+
+test("LG3 same-size prefix rewrites, inode replacements and gaps never reuse stale state", async t => {
+  const { project, binding, createStore, file } = await rotationFixture(t);
+  const store = createStore();
+  const run = (await store.reserveRun(project, binding("cache-stat"), { question: "Before" })).run;
+  await writeFile(file(1), "");
+  await store.list(project);
+  const before = await readFile(file(), "utf8"), prior = await stat(file());
+  await writeFile(file(), before.replace('"Before"', '"After!"'));
+  // Restored mtime cannot hide a rewrite: ctime is part of the signature too.
+  await utimes(file(), prior.atime, prior.mtime);
+  assert.equal((await store.list(project))[0].question, "After!");
+  const replacement = path.join(project.metaDir, "replacement.jsonl");
+  await writeFile(replacement, before.replace('"Before"', '"Newest"'));
+  await utimes(replacement, prior.atime, prior.mtime);
+  await rename(replacement, file());
+  assert.equal((await store.list(project))[0].question, "Newest");
+  await rename(file(1), file(2));
+  await assert.rejects(store.list(project), error => error.code === "agent_runs_corrupt");
+  await rename(file(2), file(1));
+  await assertLedgerReadersEqual(store, createStore(), project, run.sessionId);
+});
+
+test("LG3 a metadata error drops the cache and a rotation during the tail read uses a full read", async t => {
+  const { project, binding, createStore, file, fill } = await rotationFixture(t);
+  const store = createStore(), other = createStore();
+  const run = (await store.reserveRun(project, binding("cache-race"))).run;
+  await fill(0, run.id);
+  await store.appendQualityNotices(project, run.id, ["First notice"]);
+  await store.list(project);
+  const open = fsPromises.open;
+  let failStat = true, rotate = false;
+  t.mock.method(fsPromises, "open", async (...args) => {
+    const handle = await open(...args);
+    const originalStat = handle.stat.bind(handle), read = handle.readFile.bind(handle);
+    handle.stat = async (...statArgs) => {
+      if (failStat && statArgs[0]?.bigint && String(args[0]).endsWith("runs.jsonl")) {
+        failStat = false;
+        throw Object.assign(new Error("injected metadata error"), { code: "EIO" });
+      }
+      return originalStat(...statArgs);
+    };
+    handle.readFile = async (...readArgs) => {
+      const text = await read(...readArgs);
+      if (rotate && String(args[0]).endsWith("runs.000001.jsonl")) {
+        rotate = false;
+        await other.finishInternal(project, run.id, { status: "succeeded", artifacts: [] });
+      }
+      return text;
+    };
+    return handle;
+  });
+  const io = observeLedgerIO(t);
+  await store.list(project);
+  assert.equal(failStat, false);
+  assert.deepEqual(io.reads.map(row => row.file), ["runs.jsonl", "runs.000001.jsonl"]);
+  io.reset();
+  await store.list(project);
+  assert.ok(io.reads.some(row => row.file === "runs.jsonl"), "metadata failure must discard the old entry");
+  await fill(1, run.id);
+  rotate = true;
+  assert.deepEqual(await store.activeRuns(project), []);
+  assert.equal(rotate, false);
+  await assertLedgerReadersEqual(store, createStore({ ledgerRotationEnabled: false }), project, run.sessionId);
+});
+
+test("LG3 phase diagnostics, correction deduplication and multiple run indexes resume across a prefix", async t => {
+  const { project, binding, createStore, file, fill } = await rotationFixture(t);
+  const store = createStore();
+  const first = (await store.reserveRun(project, binding("cache-human"), { dispatchId: "dispatch-cache", baselineCursor: "baseline" })).run;
+  await store.finishInternal(project, first.id, { status: "succeeded", artifacts: [] });
+  const current = (await store.reserveRun(project, binding("cache-human"), { nativeTurn: { startSeq: 10, userSeq: 11 } })).run;
+  await store.recordSteeredInput(project, current.sessionId, "request-cache", "Use the new input");
+  await store.recordCorrection(project, current.id, "request-legacy", "Use the updated table");
+  await fill(0, first.id);
+  await store.reserveRun(project, binding("cache-automated"), { automated: true });
+  const snapshot = await store.list(project);
+  assert.equal(snapshot.find(row => row.id === first.id).phaseIllegalTransitions, 1);
+  assert.equal(snapshot.find(row => row.id === current.id).corrections, 2);
+  assert.equal((await store.recordSteeredInput(project, current.sessionId, "request-cache", "Duplicate")).corrections, 2);
+  assert.equal((await store.recordSteeredInput(project, current.sessionId, "request-legacy", "Duplicate")).corrections, 2);
+  await assertLedgerReadersEqual(store, createStore({ ledgerRotationEnabled: false }), project, current.sessionId);
+  assert.equal(JSON.stringify(await store.list(project)), JSON.stringify(await createStore({ ledgerRotationEnabled: false }).list(project)), "serialized public rows stay byte-identical");
+  assert.equal((await store.conversationIndex(project)).get(current.sessionId).length, 2);
+  assert.equal((await store.conversationRuns(project, current.sessionId)).find(row => row.id === first.id).baselineCursor, "baseline");
+  // The prior raw-event deduplication must survive cache eviction and restart too.
+  assert.equal((await createStore().recordSteeredInput(project, current.sessionId, "request-cache", "Duplicate")).corrections, 2);
+  assert.ok((await readFile(file(1), "utf8")).includes("cache-automated"));
+});
+
+test("LG3 LRU evicts old projects and returned rows cannot mutate the cached prefix", async t => {
+  const { project, binding, createStore, file } = await rotationFixture(t);
+  const store = createStore();
+  const run = (await store.reserveRun(project, binding("cache-lru"))).run;
+  await store.finishInternal(project, run.id, { status: "succeeded", artifacts: ["report.md"] });
+  await writeFile(file(1), "");
+  const original = await store.list(project);
+  original[0].artifacts.push("caller-only.md");
+  assert.deepEqual((await store.list(project))[0].artifacts, ["report.md"]);
+  const base = await readFile(file(), "utf8");
+  const projectAt = i => ({ ...project, id: `project-${i}`, metaDir: path.join(project.rootDir, `project-${i}`) });
+  const add = async i => {
+    const next = projectAt(i);
+    await mkdir(next.metaDir);
+    await writeFile(path.join(next.metaDir, "runs.jsonl"), base);
+    await writeFile(path.join(next.metaDir, "runs.000001.jsonl"), "");
+    await store.list(next);
+  };
+  for (let i = 0; i < 7; i++) await add(i);
+  await store.list(project); // Touch the original: project-0 is now least recently used.
+  await add(7);
+  const io = observeLedgerIO(t);
+  await store.list(project);
+  assert.deepEqual(io.reads.map(row => row.file), ["runs.000001.jsonl"], "a recently used project must survive eviction");
+  io.reset();
+  await store.list(projectAt(0));
+  assert.ok(io.reads.some(row => row.file === "runs.jsonl"), "the least recently used prefix must have been evicted");
+  io.reset();
+  await store.list(projectAt(0));
+  assert.deepEqual(io.reads.map(row => row.file), ["runs.000001.jsonl"]);
+  await assertLedgerReadersEqual(store, createStore(), project, run.sessionId);
+  await assertLedgerReadersEqual(store, createStore(), projectAt(0), run.sessionId);
+});
+
+test("LG3 the byte estimate evicts a large prefix before the project capacity is reached", async t => {
+  const { project, binding, createStore, file } = await rotationFixture(t, { maxBytes: 2 * 1024 * 1024 });
+  const store = createStore();
+  const run = (await store.reserveRun(project, binding("cache-bytes"), { nativeTurn: { startSeq: 10, userSeq: 11 } })).run;
+  const base = await readFile(file(), "utf8") + JSON.stringify({ event: "native-workflow", id: run.id,
+    evidence: { turnStartSeq: 10, detail: "x".repeat(1536 * 1024) } }) + "\n";
+  await writeFile(file(), base);
+  await writeFile(file(1), "");
+  await store.list(project);
+  // Six projects fit the eight-project cap, but their retained estimates exceed 16 MiB.
+  for (let i = 0; i < 5; i++) {
+    const next = { ...project, id: `large-${i}`, metaDir: path.join(project.rootDir, `large-${i}`) };
+    await mkdir(next.metaDir);
+    await writeFile(path.join(next.metaDir, "runs.jsonl"), base);
+    await writeFile(path.join(next.metaDir, "runs.000001.jsonl"), "");
+    await store.list(next);
+  }
+  const io = observeLedgerIO(t);
+  const rows = await store.list(project);
+  assert.ok(io.reads.some(row => row.file === "runs.jsonl"), "byte pressure must evict before eight projects");
+  assert.deepEqual(rows, await createStore({ ledgerRotationEnabled: false }).list(project));
+});
+
+test("LG3 consumed-input attribution and deduplication survive a cached prefix", async t => {
+  const { project, binding, createStore, fill } = await rotationFixture(t);
+  const store = createStore();
+  const run = (await store.reserveRun(project, binding("cache-input"), { nativeTurn: { startSeq: 10, userSeq: 11 } })).run;
+  const text = "Use the supplied measurements";
+  const input = { referenceId: `gni_${"a".repeat(64)}`, sourceRequestId: "request-consumed", originalParts: 1,
+    originalTextDigest: createHash("sha256").update(JSON.stringify(text)).digest("hex"), inputSeq: 11,
+    actor: { kind: "human", id: "researcher", createdAt: "2026-11-12T00:00:00.000Z" } };
+  await store.recordLearning(project, run.id, { inputAttribution: { version: 1, namespaceId: "ordinary", policyRef: "test",
+    count: 1, throughSeq: 11, digest: "b".repeat(64), inputs: [input], complete: true } });
+  assert.equal((await store.recordConsumedInput(project, run.id, input, [{ type: "text", text }])).corrections, 1);
+  await fill(0, run.id);
+  await store.appendQualityNotices(project, run.id, ["After attribution"]);
+  await store.list(project);
+  assert.equal((await store.recordConsumedInput(project, run.id, input, [{ type: "text", text }])).corrections, 1);
+  await assertLedgerReadersEqual(store, createStore({ ledgerRotationEnabled: false }), project, run.sessionId);
+});
+
+test("LG3 rotation disabled or a lone base ledger keeps the uncached read path", async t => {
+  const { project, binding, createStore, file } = await rotationFixture(t);
+  const store = createStore();
+  await store.reserveRun(project, binding("cache-off"));
+  const io = observeLedgerIO(t);
+  await store.list(project); await store.list(project);
+  assert.deepEqual(io.reads.map(row => row.file), ["runs.jsonl", "runs.jsonl"]);
+  await writeFile(file(1), "");
+  const disabled = createStore({ ledgerRotationEnabled: false });
+  await disabled.list(project);
+  io.reset();
+  await disabled.list(project);
+  assert.deepEqual(io.reads.map(row => row.file), ["runs.jsonl", "runs.000001.jsonl"]);
+});
+
 test("independent writers retry an exclusive rotation conflict without losing either terminal", async t => {
   const { project, binding, createStore, file, fill } = await rotationFixture(t);
   const left = createStore(), right = createStore();
@@ -7810,6 +8079,7 @@ for (const tombstoneSegment of [0, 1]) test(`source erasure retains an earlier d
   const base = await readFile(file(), "utf8");
   await writeFile(file(), base + (tombstoneSegment === 0 ? JSON.stringify(notice) + "\n" : ""));
   await writeFile(file(1), JSON.stringify(tombstoneSegment === 1 ? notice : { ...notice, deleted: false }) + "\n");
+  await store.list(project);
   const renameFile = fsPromises.rename;
   t.mock.method(fsPromises, "rename", async (source, target) => {
     await renameFile(source, target);
