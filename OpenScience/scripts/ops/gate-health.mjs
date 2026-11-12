@@ -121,7 +121,11 @@ function ledgerHealth(root) {
   const noticeCodes = new Map();
   for (const file of ledgers) {
     let text;
-    try { text = readFileSync(file, "utf8"); } catch { continue; }
+    try {
+      const dir = path.dirname(file);
+      const segments = readdirSync(dir).filter(name => /^runs\.\d{6}\.jsonl$/.test(name)).sort();
+      text = [file, ...segments.map(name => path.join(dir, name))].map(part => readFileSync(part, "utf8")).join("\n");
+    } catch { continue; }
     for (const line of text.split("\n")) {
       if (!line) continue;
       let event;

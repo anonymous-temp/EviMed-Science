@@ -138,6 +138,9 @@ export { runPhaseHistory };
 // what a future kernel change would break.
 export { readRequiredFile as readRequiredFileForTest };
 export { serializeNext as ledgerTextForTest };
+// The offline UI fixture writes a synthetic terminal event under the same
+// project lock; it must follow the ledger's segment and byte-budget rules too.
+export { writeNextLedger as appendRunLedgerEvent };
 // A notice the platform raises about a run, for the composition root's own
 // notices (memory extraction) — one constructor, so a notice raised there is
 // shaped like every other one.
@@ -527,12 +530,28 @@ function normalizeArtifacts(value) {
   return [...new Set(normalized)].sort();
 }
 
-async function readLedgerText(project, maxBytes) {
+// The byte budget belongs to a segment, not to a project's lifetime. Sealed
+// prefixes remain ordinary JSONL; every reader folds the concatenated events.
+async function ledgerSegments(project) {
+  await assertNoSymlinkPath(project.rootDir, project.metaDir, { allowMissingTail: true });
+  let names;
+  try { names = await readdir(project.metaDir); }
+  catch (error) { if (error?.code === "ENOENT") return [ledgerFile(project)]; throw error; }
+  const tails = names.filter(name => /^runs\.\d{6}\.jsonl$/.test(name)).sort();
+  if (tails.some((name, index) => name !== `runs.${String(index + 1).padStart(6, "0")}.jsonl`)
+    || (tails.length && !names.includes(ledgerFileName))) throw corrupt("Agent run ledger has missing segments.");
+  return [ledgerFile(project), ...tails.map(name => path.join(project.metaDir, name))];
+}
+
+async function readLedgerSegment(project, file, maxBytes, allowMissing = false) {
   let opened;
   try {
-    opened = await openScopedFileNoFollow(project.rootDir, ledgerFile(project));
+    opened = await openScopedFileNoFollow(project.rootDir, file);
   } catch (error) {
-    if (error?.code === "ENOENT" || error?.code === "file_not_found") return "";
+    if (error?.code === "ENOENT" || error?.code === "file_not_found") {
+      if (allowMissing) return "";
+      throw corrupt("Agent run ledger has a missing segment.");
+    }
     throw error;
   }
   try {
@@ -544,6 +563,35 @@ async function readLedgerText(project, maxBytes) {
   } finally {
     await opened.handle.close();
   }
+}
+
+async function readLedgerText(project, maxBytes) {
+  const files = await ledgerSegments(project);
+  const texts = [];
+  for (const file of files) texts.push(await readLedgerSegment(project, file, maxBytes, files.length === 1));
+  return texts.map(text => text && !text.endsWith("\n") ? `${text}\n` : text).join("");
+}
+
+/** All callers hold the project storage mutation lock. A rollover writes only
+ * the new segment, so a crash cannot lose or duplicate the previous prefix.
+ * `pending` is the adopted placeholder's cancellation, committed with its replacement start. */
+async function writeNextLedger(project, event, maxBytes, pending = []) {
+  const files = await ledgerSegments(project);
+  const tail = files.at(-1);
+  const events = parseEvents(await readLedgerSegment(project, tail, maxBytes, files.length === 1));
+  let text;
+  try { text = serializeNext([...events, ...pending], event, maxBytes); }
+  catch (error) {
+    if (!(error instanceof HttpError) || error.code !== "agent_runs_too_large") throw error;
+    // Validate the whole batch before publishing a new filename. An individual
+    // oversized event still fails without partially mutating the ledger.
+    text = serializeNext(pending, event, maxBytes);
+    if (files.length > 999999) throw corrupt("Agent run ledger has too many segments.");
+    const next = path.join(project.metaDir, `runs.${String(files.length).padStart(6, "0")}.jsonl`);
+    await writeFileAtomicNoFollow(project.rootDir, next, text, { encoding: "utf8", mode: 0o600 });
+    return;
+  }
+  await writeFileAtomicNoFollow(project.rootDir, tail, text, { encoding: "utf8", mode: 0o600 });
 }
 
 function corrupt(message) {
@@ -4849,20 +4897,28 @@ export class AgentRunStore {
         'model','accountCreatedAt','automated','kernelRequestIds','requestIds','nativeTurn','kind','messages','toolCalls','lastProgressAt',
         'artifacts','unverifiedArtifacts','outputFiles','presentedFiles','errorCode','errorSubCode','canceledBy','verification','usage',
         'transcriptSha256','inventorySha256']);
-      const cleaned = events.filter(event => !ids.has(event.id) || !['native-workflow','notice'].includes(event.event)).map(event => !ids.has(event.id) ? event
+      const clean = rows => rows.filter(event => !ids.has(event.id) || !['native-workflow','notice'].includes(event.event)).map(event => !ids.has(event.id) ? event
         : Object.fromEntries(Object.entries(event).filter(([key]) => keep.has(key))));
+      const cleaned = clean(events);
+      const notices = [];
       for (const run of targets) {
         const file = transcriptPath(project, run.id);
         await assertNoSymlinkPath(project.rootDir, file, { allowMissingTail: true });
         await rm(file, { force: true });
         this.dispatchedBriefs.delete(run.id); this.progressTrackers.delete(run.id);
         const previous = events.find(event => event.id === run.id && event.event === 'notice' && event.deleted === true);
-        cleaned.push({ event: 'notice', id: run.id, at: previous?.at ?? this.now().toISOString(), qualityNotices: [], deleted: true });
+        notices.push({ event: 'notice', id: run.id, at: previous?.at ?? this.now().toISOString(), qualityNotices: [], deleted: true });
       }
-      foldEvents(cleaned); // Validate the rewritten ledger before replacing its bytes.
-      const text = cleaned.map(event => JSON.stringify(event)).join('\n') + (cleaned.length ? '\n' : '');
-      if (Buffer.byteLength(text) > this.maxBytes) throw new HttpError(413, 'agent_runs_too_large', 'The source ledger exceeds its size limit.');
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: 'utf8', mode: 0o600 });
+      foldEvents([...cleaned, ...notices]); // Validate before replacing any segment's bytes.
+      // Preserve segment boundaries and event order. Source deletion's durable
+      // fence already hides the source while its files and receipts are scrubbed.
+      const files = await ledgerSegments(project);
+      for (const file of files) {
+        const rows = clean(parseEvents(await readLedgerSegment(project, file, this.maxBytes, files.length === 1)));
+        const text = rows.map(event => JSON.stringify(event)).join('\n') + (rows.length ? '\n' : '');
+        await writeFileAtomicNoFollow(project.rootDir, file, text, { encoding: 'utf8', mode: 0o600 });
+      }
+      for (const notice of notices) await writeNextLedger(project, notice, this.maxBytes);
       return [...ids];
     });
   }
@@ -4964,7 +5020,7 @@ export class AgentRunStore {
       if (run.artifactRefresh?.inventorySha256 === inventorySha256) return run;
       const event = { event: "artifacts-refreshed", id: runId, at: this.now().toISOString(), ...plan };
       const refreshed = foldEvents([...events, event]).get(runId);
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      await writeNextLedger(project, event, this.maxBytes);
       this.notifyState(project, refreshed);
       return refreshed;
     });
@@ -5088,6 +5144,7 @@ export class AgentRunStore {
     await this.authorizeReservation(project, { sessionId: session.sessionId, dispatchId, dispatchFingerprint });
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
+      const persistedEventCount = events.length;
       const runs = foldEvents(events);
       if (nativeTurn) {
         kernelRequestIds = (kernelRequestIds ?? []).map(storedKernelRequestId);
@@ -5102,7 +5159,7 @@ export class AgentRunStore {
         if (legacy && !legacy.nativeTurn && legacy.sessionId === session.sessionId
           && String(legacy.effectiveRouteReason ?? "").startsWith(adoptedRouteReason)) {
           const event = { event: "runtime-turn", id: legacy.id, nativeTurn, requestIds: kernelRequestIds ?? [] };
-          await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+          await writeNextLedger(project, event, this.maxBytes);
           return { run: foldEvents([...events, event]).get(legacy.id), owner: false };
         }
       }
@@ -5194,10 +5251,9 @@ export class AgentRunStore {
       // The caller's final admission check sees the same immutable ledger
       // snapshot that this reservation owns under the project storage lock.
       if (beforeReserve) await beforeReserve({runs:[...runs.values()]});
-      const text = serializeNext(events, event, this.maxBytes);
       if (dispatchId) this.dispatchOwners.add(id);
       try {
-        await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+        await writeNextLedger(project, event, this.maxBytes, events.slice(persistedEventCount));
       } catch (error) {
         this.dispatchOwners.delete(id);
         throw error;
@@ -5361,8 +5417,7 @@ export class AgentRunStore {
         qualityNotices: fresh,
         ...(unchecked ? { verification: "unchecked" } : {}),
       };
-      const text = serializeNext(events, event, this.maxBytes);
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+      await writeNextLedger(project, event, this.maxBytes);
       const noticed = foldEvents([...events, event]).get(runId);
       this.notifyState(project, noticed);
       return noticed;
@@ -5408,8 +5463,7 @@ export class AgentRunStore {
         ...(shelve ? { archived } : {}),
         ...(remove ? { deleted: true } : {}),
       };
-      const text = serializeNext(events, event, this.maxBytes);
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+      await writeNextLedger(project, event, this.maxBytes);
       const labelled = foldEvents([...events, event]).get(runId);
       this.notifyState(project, labelled);
       return labelled;
@@ -5553,8 +5607,7 @@ export class AgentRunStore {
       };
       // Nothing but the timestamp to write means nothing to write.
       if (Object.keys(event).length <= 3) return current;
-      const text = serializeNext(events, event, this.maxBytes);
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+      await writeNextLedger(project, event, this.maxBytes);
       const updated = foldEvents([...events, event]).get(runId);
       this.notifyState(project, updated);
       return updated;
@@ -5673,8 +5726,7 @@ export class AgentRunStore {
       if (!current) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
       if (current.status !== "running" || current.dispatchStatus !== "dispatching") return current;
       const event = { event: "dispatch", id: runId, status };
-      const text = serializeNext(events, event, this.maxBytes);
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+      await writeNextLedger(project, event, this.maxBytes);
       const dispatched = foldEvents([...events, event]).get(runId);
       this.notifyState(project, dispatched);
       return dispatched;
@@ -6190,8 +6242,7 @@ export class AgentRunStore {
         ...(facts?.claimSummary ? { claimSummary: facts.claimSummary } : {}),
         ...(facts?.snapshot ? { snapshot: facts.snapshot } : {}),
       };
-      const text = serializeNext(events, event, this.maxBytes);
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+      await writeNextLedger(project, event, this.maxBytes);
       const finished = foldEvents([...events, event]).get(runId);
       this.notifyState(project, finished);
       return { run: finished, transitioned: true };
@@ -7608,12 +7659,11 @@ export class AgentRunStore {
         ...(progress.deliverables.length ? { deliverables: progress.deliverables } : {}),
         snapshot: withoutDeliverables(progress),
       };
-      // Superseded progress rows go, for every run rather than only this one:
-      // `serializeNext` holds that rule now, so the terminal path drops them too.
-      const text = serializeNext(events, event, this.maxBytes);
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), text, { encoding: "utf8", mode: 0o600 });
+      // Superseded gauges leave the writable segment on every append path.
+      // Earlier segments remain intact; their later gauges still fold last.
+      await writeNextLedger(project, event, this.maxBytes);
       if (runIsStalled(current) && (!stillByHistory || !stillByKernel)) {
-        const resumed = foldEvents(parseEvents(text)).get(run.id);
+        const resumed = foldEvents([...events, event]).get(run.id);
         if (resumed) this.notifyState(project, resumed);
       }
     });
@@ -7918,7 +7968,7 @@ export class AgentRunStore {
       }
       const event = { event: "kernel-request", id: runId, kind: "steer", requestIds: [storedKernelRequestId(requestId)],
         ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      await writeNextLedger(project, event, this.maxBytes);
       const updated = foldEvents([...events, event]).get(runId);
       this.notifyState(project, updated);
       return updated;
@@ -7974,7 +8024,7 @@ export class AgentRunStore {
       if (counted || (run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) return run;
       const event = { event: "kernel-request", id: run.id, kind: "steer", source: "runtime-ui", steerRequestId: storedKernelRequestId(requestId),
         ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      await writeNextLedger(project, event, this.maxBytes);
       const updated = foldEvents([...events, event]).get(run.id);
       this.notifyState(project, updated);
       return updated;
@@ -7993,7 +8043,7 @@ export class AgentRunStore {
       const event = { event: "kernel-request", id: runId, kind: "steer", source: "native-consumed", steerRequestId: storedKernelRequestId(input.sourceRequestId),
         inputReceipt: {referenceId:input.referenceId,actor:input.actor,inputSeq:input.inputSeq,turnStartSeq:run.nativeTurn.startSeq,originalTextDigest:input.originalTextDigest},
         ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      await writeNextLedger(project, event, this.maxBytes);
       return foldEvents([...events, event]).get(runId);
     });
   }
@@ -8004,7 +8054,7 @@ export class AgentRunStore {
       const run = foldEvents(events).get(runId);
       if (!run || run.status !== "running") throw new HttpError(409, "agent_run_active", "The run is no longer accepting repair prompts.");
       const event = { event: "kernel-request", id: runId, requestIds: [storedKernelRequestId(requestId)] };
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      await writeNextLedger(project, event, this.maxBytes);
       const updated = foldEvents([...events, event]).get(runId);
       this.notifyState(project, updated);
       return updated;
@@ -8018,7 +8068,7 @@ export class AgentRunStore {
       const run = foldEvents(events).get(runId);
       if (!run || run.kernelRequestIds?.length) return run;
       const event = { event: "kernel-request", id: runId, requestIds: requestIds.map(storedKernelRequestId) };
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      await writeNextLedger(project, event, this.maxBytes);
       const updated = foldEvents([...events, event]).get(runId);
       this.notifyState(project, updated);
       return updated;
@@ -8054,7 +8104,7 @@ export class AgentRunStore {
       if (Number.isFinite(previousSeq) && evidence.throughSeq <= previousSeq) return current;
       if (JSON.stringify(current.nativeWorkflow) === JSON.stringify(evidence)) return current;
       const event = { event: "native-workflow", id: run.id, evidence };
-      await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+      await writeNextLedger(project, event, this.maxBytes);
       return foldEvents([...events, event]).get(run.id);
     });
   }
@@ -8100,7 +8150,7 @@ export class AgentRunStore {
             throw new HttpError(409, "runtime_input_changed", "The migrated turn no longer has its recorded request identity.");
           }
           const event = { event: "runtime-turn", id: ownedId, nativeTurn: { startSeq: turn.startSeq, userSeq: first.seq }, requestIds, rebased: true };
-          await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+          await writeNextLedger(project, event, this.maxBytes);
           return foldEvents([...events, event]).get(ownedId);
         });
         knownRuns[knownRuns.findIndex((item) => item.id === ownedId)] = run;
@@ -8217,7 +8267,7 @@ export class AgentRunStore {
           const missing = requestIds.filter(requestId => !current?.kernelRequestIds?.includes(requestId));
           if (!current || !missing.length) return current ?? run;
           const event = { event: "kernel-request", id: current.id, requestIds: missing };
-          await writeFileAtomicNoFollow(project.rootDir, ledgerFile(project), serializeNext(events, event, this.maxBytes), { encoding: "utf8", mode: 0o600 });
+          await writeNextLedger(project, event, this.maxBytes);
           return foldEvents([...events, event]).get(current.id);
         });
       }
