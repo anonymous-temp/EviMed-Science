@@ -53,6 +53,8 @@ import { frontierTagSeedRows, tagKey } from "./frontierTags.mjs";
  */
 
 const migrations = new WeakMap();
+/** @type {WeakMap<object, Promise<void>>} the reader-ready backfill started by this process, per database */
+const readerReadyBackfills = new WeakMap();
 
 /** The schema name, written once. */
 export const FRONTIER_SCHEMA = "evimed_frontier";
@@ -835,6 +837,45 @@ ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_basis text;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_version text;
 ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_at timestamptz(3);
 
+-- db-load 2026-11-12: the pipeline's claim queries asked, every five seconds and per worker, which items' settled reader text is
+-- the best text they hold. Answering from item_texts meant reading its 500 MB of TOAST (body_text, reader_tidy) for every row, six
+-- queries over: the host's CPU. The answer is now two small columns kept by a trigger whenever one of the six inputs is written:
+-- reader_ready_source is reader_tidy->>'source' when that is the best reader text (frontierReaderText's order), else NULL, and
+-- reader_ready_sha is reader_tidy->>'sha' under the same condition; a row with a tidy that is not for its best text holds '' there, so
+-- the start-up backfill (rows that predate the trigger: reader_tidy set, reader_ready_sha NULL) never takes it again. No query writes them.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_ready_source text;
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_ready_sha text;
+CREATE OR REPLACE FUNCTION evimed_frontier.item_texts_reader_ready() RETURNS trigger AS $fn$
+DECLARE best text;
+BEGIN
+  best := CASE WHEN btrim(coalesce(NEW.body_text, '')) <> '' THEN 'body' WHEN btrim(coalesce(NEW.abstract_raw, '')) <> '' THEN 'abstract'
+    WHEN btrim(coalesce(NEW.body_excerpt, '')) <> '' THEN 'excerpt' WHEN btrim(coalesce(NEW.reader_summary, '')) <> '' THEN 'summary'
+    WHEN btrim(coalesce(NEW.reader_reports, '')) <> '' THEN 'reports' END;
+  IF NEW.reader_tidy IS NOT NULL AND NEW.reader_tidy->>'source' = best THEN
+    NEW.reader_ready_source := best;
+    NEW.reader_ready_sha := NEW.reader_tidy->>'sha';
+  ELSE
+    NEW.reader_ready_source := NULL;
+    NEW.reader_ready_sha := CASE WHEN NEW.reader_tidy IS NULL THEN NULL ELSE '' END;
+  END IF;
+  RETURN NEW;
+END
+$fn$ LANGUAGE plpgsql;
+DO $fn$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'item_texts_reader_ready' AND tgrelid = 'evimed_frontier.item_texts'::regclass) THEN
+    CREATE TRIGGER item_texts_reader_ready BEFORE INSERT OR UPDATE OF body_text, abstract_raw, body_excerpt, reader_summary, reader_reports, reader_tidy
+      ON evimed_frontier.item_texts FOR EACH ROW EXECUTE FUNCTION evimed_frontier.item_texts_reader_ready();
+  END IF;
+END $fn$;
+-- The tidy step's claim looks for texts with no verdict; the older partial index above never matched its predicate.
+CREATE INDEX IF NOT EXISTS frontier_item_texts_untidied_idx ON evimed_frontier.item_texts (item_id) WHERE reader_tidy IS NULL;
+-- Every item's text and genre is read through its entry (the pipeline's item context, once per processing step): an item's newest entry.
+CREATE INDEX IF NOT EXISTS frontier_entries_item_idx ON evimed_frontier.entries (item_id, revision DESC, id DESC) WHERE item_id IS NOT NULL;
+-- The owed-edit claim: the few published items no edit has been written for.
+CREATE INDEX IF NOT EXISTS frontier_items_owed_edit_idx ON evimed_frontier.items (id) WHERE state = 'published' AND editor_version IS NULL;
+-- The zones' incremental scan admits an item that became visible OR changed since its last look; the second leg had no index.
+CREATE INDEX IF NOT EXISTS frontier_items_updated_idx ON evimed_frontier.items (updated_at) WHERE state = 'published';
+
 ${FRONTIER_INTERACTIONS_SQL}
 `;
 }
@@ -993,6 +1034,25 @@ export async function backfillTimelineRule(client) {
 }
 
 /**
+ * Rows written before the `item_texts_reader_ready` trigger existed: the tidied rows the trigger never computed (`reader_ready_sha`
+ * NULL), a thousand at a time, each its own statement. Every row it touches leaves with a sha or '', so a later start finds none.
+ * @param {any} database
+ */
+async function backfillReaderReady(database) {
+  let after = 0;
+  for (;;) {
+    const done = await database.query(`WITH batch AS (
+        SELECT item_id FROM evimed_frontier.item_texts
+        WHERE item_id > $1 AND reader_tidy IS NOT NULL AND reader_ready_sha IS NULL
+        ORDER BY item_id LIMIT 1000)
+      UPDATE evimed_frontier.item_texts t SET reader_tidy = t.reader_tidy FROM batch WHERE t.item_id = batch.item_id
+      RETURNING t.item_id`, [after]);
+    if (!done.rows.length) return;
+    after = done.rows.reduce((/** @type {number} */ top, /** @type {any} */ row) => Math.max(top, Number(row.item_id)), after);
+  }
+}
+
+/**
  * Create or bring up to date the frontier schema, and say which search legs it
  * supports.
  *
@@ -1036,9 +1096,23 @@ export async function migrateFrontier(database, { dimension }) {
     };
   });
   migrations.set(database, { dimension, attempt });
-  try { return await attempt; }
+  let capabilities;
+  try { capabilities = await attempt; }
   catch (error) { migrations.delete(database); throw error; }
+  // The backfill runs after the schema transaction (which holds item_texts exclusively) and behind it: the first start after the trigger
+  // reads the settled texts once (tens of seconds on production's 500 MB), and no page waits for that. Until a row is filled the
+  // pipeline's claims pass it by, as they pass by an item whose text is not settled; a failed backfill is retried at the next start.
+  if (!readerReadyBackfills.has(database)) {
+    readerReadyBackfills.set(database, backfillReaderReady(database).catch((/** @type {any} */ error) => {
+      process.stderr.write(`frontier reader-ready backfill: ${String(error?.code ?? error?.message ?? error).slice(0, 120)}\n`);
+    }));
+  }
+  return capabilities;
 }
+
+/** The start-up backfill of the reader-ready columns for this database, once it has settled (for tests and operators).
+ * @param {any} database */
+export async function frontierReaderReadyBackfilled(database) { await readerReadyBackfills.get(database); }
 
 /**
  * A `meta` counter as a number, whatever shape an older writer left it in: a

@@ -54,12 +54,8 @@ import { trimToWholeSentences, verifyWriting } from "./frontierEditor.mjs";
 
 const HOUR = 3_600_000;
 const DAY_MS = 24 * HOUR;
-/** The best reader text's name in SQL over `item_texts t` — the same order as `frontierReaderText` (and the pipeline's own constant). */
-const READER_BEST_SOURCE_SQL = `(CASE WHEN btrim(coalesce(t.body_text, '')) <> '' THEN 'body' WHEN btrim(coalesce(t.abstract_raw, '')) <> '' THEN 'abstract'
-  WHEN btrim(coalesce(t.body_excerpt, '')) <> '' THEN 'excerpt' WHEN btrim(coalesce(t.reader_summary, '')) <> '' THEN 'summary' END)`;
-
 /** A recap is written from this many items of the day, refreshed at most this often, and needs at least this many. */
-export const FRONTIER_RECAP_LIMITS = Object.freeze({ items: 12, refreshMs: 3 * HOUR, minItems: 2, min: 90, max: 460, refs: 8, perRound: 2, summary: 300 });
+export const FRONTIER_RECAP_LIMITS = Object.freeze({ items: 12, refreshMs: 3 * HOUR, lookMs: 10 * 60_000, minItems: 2, min: 90, max: 460, refs: 8, perRound: 2, summary: 300 });
 const RECAP_MAX_TOKENS = 900;
 const RECAP_TIMEOUT_MS = 90_000;
 /** How many items a congress hub lists (the newest days first; its count says how many it holds, 2026-10-27). */
@@ -215,7 +211,7 @@ export async function frontierWriteCongressRecap(editor, { congress, refs }) {
 // ───────────────────────── the module ─────────────────────────
 
 /**
- * @typedef {{ database: any, now?: () => Date, timeZone?: string, calendar?: readonly import("@evimed/domain").FrontierCongress[], readCacheMs?: number, hubItemLimit?: number }} FrontierTrackOptions
+ * @typedef {{ database: any, now?: () => Date, timeZone?: string, calendar?: readonly import("@evimed/domain").FrontierCongress[], readCacheMs?: number, hubItemLimit?: number, recapLookMs?: number }} FrontierTrackOptions
  * @typedef {{ editor: any, workerId: string, leaseMs: number, now: Date, budget: { state: string },
  *   providerPaused: () => boolean, onProviderRefused: (code: string) => void, providerUnavailable?: (code: string) => boolean,
  *   readerText: (texts: any) => ({ source: string, text: string } | null), itemGenre: (item: any) => string,
@@ -237,7 +233,7 @@ const encodeCursor = (at, id) => Buffer.from(JSON.stringify({ at, id }), "utf8")
 
 export class FrontierTrack {
   /** @param {FrontierTrackOptions} options */
-  constructor({ database, now = () => new Date(), timeZone = "Asia/Shanghai", calendar = FRONTIER_CONGRESSES, readCacheMs = 0, hubItemLimit = HUB_ITEM_LIMIT }) {
+  constructor({ database, now = () => new Date(), timeZone = "Asia/Shanghai", calendar = FRONTIER_CONGRESSES, readCacheMs = 0, hubItemLimit = HUB_ITEM_LIMIT, recapLookMs = 0 }) {
     if (!database) throw new TypeError("The tracker needs a database.");
     this.database = database;
     this.now = now;
@@ -252,6 +248,10 @@ export class FrontierTrack {
     this.hubItemLimit = Math.max(1, Math.trunc(Number(hubItemLimit)) || HUB_ITEM_LIMIT);
     /** @type {Map<string, { at: number, value: any, pending: Promise<any> | null }>} */
     this.readCache = new Map();
+    /** @type {Map<string, number>} when the recap round last looked for a congress day's items (`FRONTIER_RECAP_LIMITS.lookMs`) */
+    this.recapLooked = new Map();
+    /** How long the recap round leaves a day alone once it looked and found nothing to write; 0 (the tests) looks every round. */
+    this.recapLookMs = Math.max(0, Math.trunc(Number(recapLookMs)) || 0);
     this.counters = {
       rounds: 0, asked: 0, approvals: 0, guidelines: 0, none: 0, failed: 0, droppedFields: /** @type {Record<string, number>} */ ({}),
       recapsAsked: 0, recapsWritten: 0, recapsEmpty: 0, recapsDropped: 0, recapsFailed: 0,
@@ -278,8 +278,8 @@ export class FrontierTrack {
         SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.genre IN ('approval', 'guideline') AND i.visible_at > $2
           AND (i.lease_until IS NULL OR i.lease_until <= $1)
-          AND t.reader_tidy IS NOT NULL AND t.reader_tidy->>'source' = ${READER_BEST_SOURCE_SQL}
-          AND (i.track_facts IS NULL OR i.track_facts_version IS DISTINCT FROM $3 OR i.track_facts->>'basis' IS DISTINCT FROM t.reader_tidy->>'sha')
+          AND t.reader_ready_source IS NOT NULL AND t.reader_ready_source <> 'reports'
+          AND (i.track_facts IS NULL OR i.track_facts_version IS DISTINCT FROM $3 OR i.track_facts->>'basis' IS DISTINCT FROM t.reader_ready_sha)
         ORDER BY i.visible_at DESC, i.id DESC
         LIMIT $4
         FOR UPDATE OF i SKIP LOCKED)
@@ -572,12 +572,18 @@ export class FrontierTrack {
       const matched = congressItemsSql(congress, this.timeZone, 2);
       for (const day of days) {
         if (asked >= FRONTIER_RECAP_LIMITS.perRound || round.providerPaused()) return written;
+        // The day's items are found by a pattern over every item's text in the window (a scan of the window, each time): once the answer was
+        // "nothing to write", it is not asked again for `recapLookMs`; the round runs every few seconds and the day's items move in minutes.
+        const lookKey = `${congress.id}:${day}`;
+        const looked = this.recapLooked.get(lookKey);
+        if (looked !== undefined && now.getTime() - looked < this.recapLookMs && now.getTime() >= looked) continue;
         const items = (await this.database.query(`SELECT i.id, i.public_id, i.published_at, i.primary_source_id, s.name AS source_name, s.owner_entity,
             coalesce(nullif(i.title_zh, ''), i.title_raw) AS title, coalesce(nullif(i.lead_zh, ''), i.summary_zh) AS summary
           FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id AND s.enabled
           WHERE ${matched.sql} AND ${ITEM_DAY_SQL("$2")} = $1::date
           ORDER BY i.selected DESC, i.safety_alert DESC, i.score_total DESC NULLS LAST, i.id DESC LIMIT ${FRONTIER_RECAP_LIMITS.items}`,
         [day, ...matched.params])).rows;
+        this.recapLooked.set(lookKey, now.getTime());
         if (items.length < FRONTIER_RECAP_LIMITS.minItems) continue;
         const ids = items.map((/** @type {any} */ item) => String(item.id)).sort();
         const existing = (await this.database.query("SELECT item_ids, generated_at FROM evimed_frontier.congress_recaps WHERE congress_id = $1 AND day = $2::date", [congress.id, day])).rows[0];
@@ -592,6 +598,7 @@ export class FrontierTrack {
         const summary = frontierCongressSummary(congress, today);
         const result = await frontierWriteCongressRecap(editor, { congress: { name: summary.name, code: summary.code }, refs });
         if (result.error && result.verification === "pending") {
+          this.recapLooked.delete(lookKey);
           this.counters.recapsFailed += 1;
           this.lastError = result.error;
           if (!["usage_budget_exceeded", "frontier_editor_unavailable"].includes(result.error)) round.onProviderRefused(result.error);

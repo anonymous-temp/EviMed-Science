@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FrontierGlossary } from "../src/frontierGlossary.mjs";
-import { migrateFrontier } from "../src/frontierPersistence.mjs";
+import { migrateFrontier, frontierReaderReadyBackfilled } from "../src/frontierPersistence.mjs";
 import { FrontierPipeline } from "../src/frontierPipeline.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 
@@ -19,6 +19,8 @@ before(async () => {
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 4, databaseConnectionTimeoutMs: 2_000 });
   await migrateUsageLedger(database);
   await migrateFrontier(database, { dimension: 1024 });
+  // The reader-ready backfill runs behind the migration; settle it so no batch races it.
+  await frontierReaderReadyBackfilled(database);
 });
 after(async () => { await database?.close?.(); });
 
@@ -27,7 +29,7 @@ function pipelineWith(extra) {
   let scans = 0;
   let time = new Date("2026-10-31T12:00:00Z").getTime();
   const counted = { ...database, query: (/** @type {string} */ sql, /** @type {any[]} */ params) => {
-    if (/lead_basis IS DISTINCT FROM t\.reader_tidy/.test(sql)) scans += 1;
+    if (/lead_basis IS DISTINCT FROM t\.reader_ready_sha/.test(sql)) scans += 1;
     return database.query(sql, params);
   }, transaction: (/** @type {any} */ work) => database.transaction(work), withTransactionClient: (/** @type {any} */ c, /** @type {any} */ w) => database.withTransactionClient(c, w) };
   const editor = { available: true, screen: async () => ({}), edit: async () => ({}), writeJson: async () => ({}), callJson: async () => ({}) };
