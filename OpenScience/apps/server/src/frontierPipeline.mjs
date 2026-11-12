@@ -1193,7 +1193,7 @@ export class FrontierPipeline {
         summary.eventPrimary += picked["event-primary"] ?? 0;
       }
       await this.#stage("full-text", context, () => this.#fullText(context));
-      await this.#readerSummaries(context);
+      await this.#stage("reader-summaries", context, () => this.#readerSummaries(context));
       await this.#stage("tidy", context, () => this.#tidy(context));
       await this.#stage("study-facts", context, () => this.#studyFacts(context));
       await this.#stage("faith-summary", context, () => this.#faithSummary(context));
@@ -3102,7 +3102,7 @@ export class FrontierPipeline {
     const claimed = (await this.database.query(`WITH picked AS (
         SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.visible_at > $2 AND (i.lease_until IS NULL OR i.lease_until <= $1)
-          AND (i.selected OR i.safety_alert OR i.score_total >= $3) AND btrim(coalesce(t.body_text, '')) = ''
+          AND (i.selected OR i.safety_alert OR i.score_total >= $3) AND t.reader_best_source <> 'body'
           AND t.enrichment->>'oa_pdf_url' ~* '^https?://' AND t.oa_pdf_tried_at IS NULL
         ORDER BY i.selected DESC, i.score_total DESC NULLS LAST, i.visible_at DESC
         LIMIT $4
@@ -3204,9 +3204,7 @@ export class FrontierPipeline {
     const claimed = await this.#claimItems(now, `i.state IN ('screened', 'scored', 'failed') AND i.doi IS NOT NULL
       AND s.source_type = 'journal' AND s.authority >= $5 AND i.first_seen_at > $6 AND (i.primary_checked_at IS NULL OR i.primary_checked_at <= $7)
       AND (i.state <> 'failed' OR i.editor_diagnostics->>'giveUp' = 'no-text')
-      AND NOT EXISTS (SELECT 1 FROM evimed_frontier.item_texts t WHERE t.item_id = i.id AND (btrim(coalesce(t.body_text, '')) <> ''
-        OR btrim(coalesce(t.abstract_raw, '')) <> '' OR btrim(coalesce(t.body_excerpt, '')) <> '' OR btrim(coalesce(t.reader_summary, '')) <> ''
-        OR btrim(coalesce(t.reader_reports, '')) <> ''))`,
+      AND NOT EXISTS (SELECT 1 FROM evimed_frontier.item_texts t WHERE t.item_id = i.id AND coalesce(t.reader_best_source, 'unknown') <> '')`,
     [limits.authority, new Date(now.getTime() - limits.windowMs), new Date(now.getTime() - limits.checkEveryMs)], limits.batch);
     for (const item of claimed) {
       let checked = true;
@@ -3321,12 +3319,13 @@ export class FrontierPipeline {
    * text is the source's own, and what is written from it is the 导读 and 要点 steps'. Newest first, `SUMMARY_BATCH` a round. Written
    * only while the row still has no other text and no summary; the item's text hash and content version are untouched.
    * @param {any} context
+   * @returns {Promise<number>} the rows it looked at (0 lets the stage rest)
    */
   async #readerSummaries(context) {
     const { now } = context;
+    // `reader_best_source` (kept by the item_texts trigger) says the row has no full text, abstract or excerpt without reading them.
     const rows = (await this.database.query(`SELECT i.id, i.primary_source_id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
-      WHERE i.state = 'published' AND i.visible_at > $1 AND t.reader_summary IS NULL AND btrim(coalesce(t.body_text, '')) = ''
-        AND btrim(coalesce(t.abstract_raw, '')) = '' AND btrim(coalesce(t.body_excerpt, '')) = ''
+      WHERE i.state = 'published' AND i.visible_at > $1 AND t.reader_summary IS NULL AND t.reader_best_source IN ('reports', '')
       ORDER BY i.visible_at DESC, i.id DESC LIMIT $2`, [new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), SUMMARY_BATCH])).rows;
     for (const row of rows) {
       try {
@@ -3341,6 +3340,7 @@ export class FrontierPipeline {
         this.lastError = codeOf(error);
       }
     }
+    return rows.length;
   }
 
   /**
@@ -3837,8 +3837,7 @@ export class FrontierPipeline {
     const { now, budget, glossary } = context;
     if (typeof this.editor.translateBody !== "function" || !this.editor.available || budget.state === "exhausted" || this.#providerPause(now)) return 0;
     const rank = (/** @type {string} */ column) => `CASE ${FRONTIER_READER_SOURCES.map((source, index) => `WHEN t.${column} = '${source}' THEN ${FRONTIER_READER_SOURCES.length - index}`).join(" ")} ELSE 0 END`;
-    const best = `CASE WHEN btrim(coalesce(t.body_text, '')) <> '' THEN 3 WHEN btrim(coalesce(t.abstract_raw, '')) <> '' THEN 2
-      WHEN btrim(coalesce(t.body_excerpt, '')) <> '' THEN 1 ELSE 0 END`;
+    const best = "CASE t.reader_best_source WHEN 'body' THEN 3 WHEN 'abstract' THEN 2 WHEN 'excerpt' THEN 1 ELSE 0 END";
     const claimed = (await this.database.query(`WITH picked AS (
         SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.editor_version IS NOT NULL AND (i.lease_until IS NULL OR i.lease_until <= $1)

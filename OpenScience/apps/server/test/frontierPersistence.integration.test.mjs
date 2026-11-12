@@ -352,12 +352,20 @@ test(
       await database.query(`INSERT INTO evimed_frontier.item_texts (item_id, model_input, model_input_sha256, ${texts[0]}, reader_tidy)
         VALUES ($1, 'm', repeat('a', 64), 'some text', $2::jsonb)`, [item.rows[0].id, JSON.stringify({ source: texts[1], sha: `sha-${index}` })]);
     }
-    const read = async () => (await database.query(`SELECT item_id, reader_ready_source AS source, reader_ready_sha AS sha FROM evimed_frontier.item_texts
+    const read = async () => (await database.query(`SELECT item_id, reader_ready_source AS source, reader_ready_sha AS sha, reader_best_source AS best FROM evimed_frontier.item_texts
       WHERE item_id = ANY($1::bigint[]) ORDER BY item_id`, [ids])).rows;
     assert.deepEqual((await read()).map((row) => [row.source, row.sha]), [["abstract", "sha-0"], ["body", "sha-1"]]);
+    assert.deepEqual((await read()).map((row) => row.best), ["abstract", "body"], "the best text is kept whether or not it was tidied");
     // A longer text arrives: the settled text is no longer the best one, so the item reads as not ready until it is settled again.
     await database.query("UPDATE evimed_frontier.item_texts SET body_text = 'the full text' WHERE item_id = $1", [ids[0]]);
     assert.deepEqual((await read()).map((row) => [row.source, row.sha]), [[null, ""], ["body", "sha-1"]]);
+    assert.equal((await read())[0].best, "body");
+    // Only reports, then nothing at all: the best text is 'reports', then '' (never NULL once seen).
+    await database.query("UPDATE evimed_frontier.item_texts SET body_text = NULL, abstract_raw = '  ', reader_reports = 'r' WHERE item_id = $1", [ids[0]]);
+    assert.equal((await read())[0].best, "reports");
+    await database.query("UPDATE evimed_frontier.item_texts SET reader_reports = NULL WHERE item_id = $1", [ids[0]]);
+    assert.equal((await read())[0].best, "");
+    await database.query("UPDATE evimed_frontier.item_texts SET body_text = 'the full text' WHERE item_id = $1", [ids[0]]);
     // A row the trigger computed is never rewritten by a later start, whether or not its settled text is the best one.
     const versions = async () => (await database.query("SELECT xmin::text AS v FROM evimed_frontier.item_texts WHERE item_id = ANY($1::bigint[]) ORDER BY item_id", [ids])).rows.map((row) => row.v);
     const before = await versions();
@@ -368,11 +376,11 @@ test(
     await database.query("UPDATE evimed_frontier.item_texts SET reader_tidy = jsonb_build_object('source', 'body', 'sha', 'sha-2') WHERE item_id = $1", [ids[0]]);
     assert.deepEqual((await read()).map((row) => [row.source, row.sha]), [["body", "sha-2"], ["body", "sha-1"]]);
     // Rows that predate the trigger (its columns unset): a fresh start fills them.
-    await database.query("UPDATE evimed_frontier.item_texts SET reader_ready_source = NULL, reader_ready_sha = NULL WHERE item_id = ANY($1::bigint[])", [ids]);
+    await database.query("UPDATE evimed_frontier.item_texts SET reader_ready_source = NULL, reader_ready_sha = NULL, reader_best_source = NULL WHERE item_id = ANY($1::bigint[])", [ids]);
     const later = open();
     await migrateFrontier(later, { dimension: 1024 });
     await frontierReaderReadyBackfilled(later);
-    assert.deepEqual((await read()).map((row) => [row.source, row.sha]), [["body", "sha-2"], ["body", "sha-1"]]);
+    assert.deepEqual((await read()).map((row) => [row.source, row.sha, row.best]), [["body", "sha-2", "body"], ["body", "sha-1", "body"]]);
     await database.query("DELETE FROM evimed_frontier.items WHERE id = ANY($1::bigint[])", [ids]);
   },
 );
