@@ -83,8 +83,11 @@ export function engineShard(userKey, count) {
 export function assertResumeCompatible(previous, facts) {
   if (!previous) return;
   if (previous.arm !== facts.arm || previous.set !== facts.set || previous.split !== facts.split) throw new Error(`the run directory holds a ${previous.set}/${previous.split} ${previous.arm} run: use another --out`);
-  if ((previous.options?.liveTurns ?? "") !== (facts.options?.liveTurns ?? facts.liveTurns ?? "")) throw new Error("cannot resume with different live turns");
-  if ((previous.options?.questionCategory ?? "") !== (facts.options?.questionCategory ?? facts.questionCategory ?? "")) throw new Error("cannot resume with different question category");
+  // An answers-only pass cannot ingest, so live turns and the question filter no longer shape memory: it may ask the questions a
+  // live-turn run left out of the memory that run finished (only final-checkpoint questions; earlier ones are recorded stale).
+  const answersOnly = Boolean(facts.options?.answersOnly ?? facts.answersOnly);
+  if (!answersOnly && (previous.options?.liveTurns ?? "") !== (facts.options?.liveTurns ?? facts.liveTurns ?? "")) throw new Error("cannot resume with different live turns");
+  if (!answersOnly && (previous.options?.questionCategory ?? "") !== (facts.options?.questionCategory ?? facts.questionCategory ?? "")) throw new Error("cannot resume with different question category");
   if ((previous.engine?.templates === "stock") !== Boolean(facts.stockEngine)) throw new Error("cannot resume with different engine templates");
   const urls = (record) => record.engine?.urls ?? record.engineUrls ?? (record.engine?.url ? engineUrlsOf(record.engine.url) : []);
   if (JSON.stringify(urls(previous)) !== JSON.stringify(urls(facts))) throw new Error("cannot resume with a different engine URL list (including order)");

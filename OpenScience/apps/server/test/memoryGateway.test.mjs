@@ -333,6 +333,17 @@ test("the model sees five tools with this platform's descriptions, and a call of
   assert.equal((await mcp({ jsonrpc: "2.0", method: "notifications/initialized" })).status, 202);
 });
 
+test('forget receipts use the admitted session only when the settle check is enabled', async t => {
+  for (const enabled of [false, true]) {
+    let options;
+    const f = await fixture(t, { config: { memoryForgetRequestCheckEnabled: enabled }, admission: fixedAdmission({ sessionId: 'session_receipt' }),
+      memoryTool: { forget: async (_user, _project, _uri, value) => { options = value; return { removed: true }; } } });
+    const uri = f.stub.seedMemory(OV_USER, 'notes/receipt.md', 'A fact.');
+    await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: { uri } } });
+    assert.deepEqual(options, enabled ? { engineSession: 'dsh-session_receipt' } : undefined);
+  }
+});
+
 test("tool arguments are held to the caller's own memories: pinned targets, no recursion, no file outside memories", async (t) => {
   const forgotten = [];
   const { stub, mcp } = await fixture(t, { memoryTool: { forget: async (_user, _project, uri) => { forgotten.push(uri); return { removed: true }; } } });

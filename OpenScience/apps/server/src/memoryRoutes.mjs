@@ -156,6 +156,17 @@ export function createMemoryRoutes({
       return true;
     }
 
+    if (pathname.startsWith('/api/memory/forget-requests/') && req.method === 'POST') {
+      const ctx = await context(req, res);
+      const id = decodeRouteComponent(pathname.slice('/api/memory/forget-requests/'.length), 'forget request');
+      const body = assertObject(await readJson(req, config.maxJsonBytes), 'forget confirmation');
+      if (Object.keys(body).some(field => !['action', 'choices'].includes(field))) throw new HttpError(400, 'memory_payload_invalid', 'Only action and choices are accepted.');
+      const result = await engine().resolveForgetRequest(ctx.user.id, id, { action: body.action, choices: body.choices });
+      await audit(ctx, 'memory.forget-request.resolve', 'completed', { target: id, action: body.action });
+      sendJson(res, 200, { data: result });
+      return true;
+    }
+
     // 「记住这一条」 from the page: the person's words go to the engine as a conversation of one message, and appear when it has
     // written them (about twelve seconds); the answer is what the page shows as pending until then.
     if (pathname === "/api/memory/remember" && req.method === "POST") {

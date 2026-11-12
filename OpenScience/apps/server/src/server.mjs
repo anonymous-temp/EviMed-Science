@@ -1,4 +1,5 @@
 import { MethodCorrectionJudge, correctionSources, judgeCorrection } from './methodCorrectionJudge.mjs';
+import { createForgetRequestJudge } from './nativeMemoryForgetRequests.mjs';
 import { finished } from 'node:stream/promises';
 import { createPersonalLibraryRoutes, createPersonalLibraryWriter } from "./personalLibraryIntake.mjs";
 import {RuntimePromptStops} from './runtimePromptStops.mjs';
@@ -1378,6 +1379,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The registered memory namespaces of an account: its own, and each shared GEO project's (`geoNativeMemoryContext.mjs`).
   const nativeMemoryContexts = productDatabase && sharedContextPolicies ? new GeoNativeMemoryContext({ database: productDatabase,
     documents: productDocuments, policies: sharedContextPolicies, sessions: openVikingSessions,
+    allowLiteralPercentPaths: config.memoryForgetRequestCheckEnabled === true,
     proveCapture: (memoryContext, sessionId) => proveGeoCapture({ userId: memoryContext.ownerId, id: memoryContext.projectId }, platformSessionOf(sessionId)),
     settingsForOwner: userId => memorySettings.settings(userId) }) : null;
   const nativeRememberJournal = nativeMemoryContexts ? new GeoNativeMemoryRemember({ contexts: nativeMemoryContexts, overlay: nativeMemoryOverlay }) : null;
@@ -1393,6 +1395,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const nativeMemoryWorker = new NativeMemoryWorker({
     config, memorySettings, sessions: openVikingSessions, overlay: nativeMemoryOverlay, nativeMemory, memoryContexts: nativeMemoryContexts,
     rejectionJudge,
+    forgetRequestJudge: createForgetRequestJudge({ config, usageLedger }),
     pastedInstructionJudge: createPastedInstructionJudge({ config, usageLedger }),
     report: (line) => process.stderr.write(`${line}\n`),
   });

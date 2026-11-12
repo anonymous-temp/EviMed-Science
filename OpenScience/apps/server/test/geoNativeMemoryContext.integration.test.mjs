@@ -14,7 +14,7 @@ import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposable PostgreSQL required' };
 const refused = error => error.code === 'memory_scope_denied';
-async function setup(t, { runtimeLockIsolation = false } = {}) {
+async function setup(t, { runtimeLockIsolation = false, allowLiteralPercentPaths = false } = {}) {
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'geomemorycontext');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'geo-memory-context-'));
   const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: 1 }));
@@ -32,6 +32,7 @@ async function setup(t, { runtimeLockIsolation = false } = {}) {
   const sessions = new OpenVikingSessions({ configured: true, account: 'fixture', request: async input => { requests.push(input); return { status: 'ok' }; } });
   let proof = { rootSessionId: 'root', rootProofRefs: ['primary-fixture'], runtimeGeneration: 'generation-1' };
   const contexts = new GeoNativeMemoryContext({ database: accounts.database, documents, policies, sessions,
+    allowLiteralPercentPaths,
     proveCapture: async (_context, session) => ['dsh-root', 'dsh-child'].includes(session) ? proof : null });
   return { accounts, documents, policies, contexts, sessions, requests, owner, a, b, normal, setProof: value => { proof = value; } };
 }
@@ -140,6 +141,20 @@ test('memory paths with spaces remain canonical while encoded traversal and cont
   for (const suffix of ['memories/%2e%2e/profile.md', 'memories/bad%0aname.md', 'memories/bad%2fname.md', 'memories/bad%252fname.md']) {
     await assert.rejects(f.contexts.forUri(f.owner.id, `${context.userRoot}/${suffix}`), refused);
   }
+});
+
+test('opt-in literal percentages do not weaken namespace, traversal, control or archive checks', options, async t => {
+  const f = await setup(t, { allowLiteralPercentPaths: true }), context = await f.contexts.forProject(f.a);
+  const uri = `${context.userRoot}/memories/notes/prevalence 0.47% pending.md`;
+  assert.equal(f.contexts.assertUri(context, uri), uri);
+  assert.equal((await f.contexts.forUri(f.owner.id, uri)).namespaceId, context.namespaceId);
+  const defaultContext = new GeoNativeMemoryContext({ database: f.accounts.database, documents: f.documents, policies: f.contexts.policies, sessions: f.sessions });
+  assert.throws(() => defaultContext.assertUri(context, uri), refused);
+  for (const suffix of ['memories/%2e%2e/profile.md', 'memories/bad%0aname.md', 'memories/bad%2fname.md', 'memories/bad%252fname.md',
+    'memories/bad%ffname.md', 'sessions/100%/history/archive_001']) {
+    await assert.rejects(f.contexts.forUri(f.owner.id, `${context.userRoot}/${suffix}`), refused);
+  }
+  assert.throws(() => f.contexts.assertUri(context, uri.replace(context.userRoot, `${context.userRoot}-other`)), refused);
 });
 
 

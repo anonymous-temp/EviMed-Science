@@ -1097,7 +1097,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         }
         if (ctx.shared && await ctx.hidden(target)) { local.push(rpcError(message.id, -32602, 'This file is not a project memory.')); continue; }
         if (memoryTool) {
-          const outcome = await memoryTool.forget(ctx.user, ctx.project, target, ctx.shared ? { context: ctx.memoryContext } : undefined);
+          const outcome = await memoryTool.forget(ctx.user, ctx.project, target, config.memoryForgetRequestCheckEnabled === true
+            ? { ...(ctx.shared ? { context: ctx.memoryContext } : {}), engineSession: admitted.sessionId ? `dsh-${admitted.sessionId}` : null }
+            : ctx.shared ? { context: ctx.memoryContext } : undefined);
           local.push(toolText(message.id, outcome.removed ? `Deleted: ${target}` : `Not found: ${target}`));
         } else {
           if (ctx.shared) throw new HttpError(503, 'memory_scope_denied', 'Project memory deletion is unavailable.');

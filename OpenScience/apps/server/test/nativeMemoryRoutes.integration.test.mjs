@@ -97,6 +97,24 @@ test("the list, the profile and the settings come from the engine's files in the
   assert.equal(found.json.data.items.length, 1);
 });
 
+test('pending forget confirmations are visible on the page and accept only explicit resolution payloads', options, async t => {
+  const f = await fixture(t);
+  const archiveUri = `${f.sessions.userRoot(f.userId)}/sessions/dsh-session_confirm/history/archive_001`;
+  await f.overlay.recordCommit({ userId: f.userId, archiveUri, engineSession: 'dsh-session_confirm', origin: 'gateway' });
+  await f.overlay.setForgetRequests(f.userId, archiveUri, { state: 'completed', requests: [{ quote: 'Forget that.', status: 'pending', candidates: [], removed: 0 }] });
+  await f.overlay.completeCommit(f.userId, archiveUri);
+  const profile = await f.call('GET', '/api/memory/profile');
+  const [pending] = profile.json.data.pending;
+  assert.equal(pending.state, 'confirmation');
+  const path = `/api/memory/forget-requests/${pending.id}`;
+  assert.equal((await f.call('POST', path, { action: 'confirm', choices: [] })).status, 400);
+  assert.equal((await f.call('POST', path, { action: 'dismiss', choices: [], userId: 'other' })).status, 400);
+  assert.equal((await f.call('POST', path, { action: 'dismiss', choices: [] })).status, 200);
+  assert.equal((await f.call('GET', '/api/memory/profile')).json.data.pending.length, 0);
+  assert.equal((await f.call('POST', path, { action: 'dismiss', choices: [] })).status, 404);
+  assert.ok(f.audits.some(row => row.action === 'memory.forget-request.resolve'));
+});
+
 test("an edit under the version, a stale edit, a field a memory file has no place for, and a delete", options, async (t) => {
   const { call, seed, sessions, userId, audits } = await fixture(t);
   const uri = seed("preferences/format.md", "Short answers.", { type: "preferences" });

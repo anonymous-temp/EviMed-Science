@@ -148,7 +148,7 @@ export class MemoryHistory {
   /** Resolve the removed line's origins before syncOrigins drops them; legacy
    * remember writes without conversation provenance search the owner's history.
    * Persist message hashes activated by the rejection: undo lifts the fence, and a repeated forget reinstates it. */
-  async rejectRemoved(context, file, removed, judge) {
+  async rejectRemoved(context, file, removed, judge, { archiveUri: requestArchive = null } = {}) {
     if (!removed.length) return;
     if (!context.ownerCreatedAt) context = {...context,ownerCreatedAt:(await this.ledger.database.query(
       'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[context.ownerId])).rows[0]?.stamp};
@@ -157,7 +157,7 @@ export class MemoryHistory {
     const type = nativeMemoryRejectionType(file.type,context.kind === 'geo-project' ? context.namespaceId : null);
     for (const text of removed) {
       const fingerprint = lineFingerprint(text), origin = origins?.get(fingerprint);
-      const archives = [...new Set([origin?.archiveUri,...(origin?.sources ?? []).map(source=>source.archiveUri)].filter(Boolean))];
+      const archives = [...new Set([origin?.archiveUri,...(origin?.sources ?? []).map(source=>source.archiveUri),requestArchive].filter(Boolean))];
       const messages = [];
       for (const archiveUri of archives) {
         const archive = parseArchiveUri(archiveUri);
@@ -178,7 +178,7 @@ export class MemoryHistory {
         }
       }
       const tokens = hardTokens(normalisedStatement(text));
-      const hasConversation = archives.some(uri=>parseArchiveUri(uri)?.session.startsWith('dsh-'));
+      const hasConversation = archives.some(uri=>uri!==requestArchive && parseArchiveUri(uri)?.session.startsWith('dsh-'));
       if (!hasConversation && context.kind !== 'geo-project' && this.enabled) {
         // Internal source lookup uses the same product history search and all its
         // account/incarnation/source proofs. Rejected text is inspected only to
@@ -197,13 +197,36 @@ export class MemoryHistory {
   }
 
   async matchRemoved(context,text,messages,judge,tokens=hardTokens(normalisedStatement(text))) {
-    if(tokens.length)return messages.filter(message=>tokens.every(token=>sourceHasToken(token,message)));
+    if(tokens.length)return messages.filter(message=>tokens.every(token=>sourceHasToken(token,message,{ignoreWhitespace:this.config.memoryForgetRequestCheckEnabled === true})));
     if(!messages.length)return [];
     if(!judge?.same)throw new Error('memory_history_privacy_unavailable');
     const fingerprint=lineFingerprint(text);
     const verdict=await judge.same({userId:context.ownerId,originMessages:true,
       candidates:messages.map(message=>({text:message.text,removed:[{fingerprint,text}]}))});
     return messages.filter((_message,index)=>verdict?.same.has(index));
+  }
+
+  /** A model-validated withdrawal can name only part of its target ("forget that badminton arrangement").
+   * Fence that exact exchange as recall material, using the target's existing undoable rejection authority.
+   * The conversation itself is unchanged; the next user's exchange gets no rejection. */
+  async rejectRequestExchange(context, archiveUri, request, removals) {
+    if (!removals.length) return;
+    const archive = parseArchiveUri(archiveUri);
+    if (!archive || archive.userRoot !== context.userRoot || archive.rest) throw new Error('memory_history_privacy_unavailable');
+    if (!context.ownerCreatedAt) context = { ...context, ownerCreatedAt: (await this.ledger.database.query(
+      'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1', [context.ownerId])).rows[0]?.stamp };
+    const raw = await context.sessions.read(context.ownerId, `${archiveUri}/messages.jsonl`);
+    if (raw === null || Buffer.byteLength(raw) > MAX_ARCHIVE_BYTES) throw new Error('memory_history_privacy_unavailable');
+    const messages = []; let inExchange = false;
+    for (const line of raw.split('\n').filter(entry => entry.trim())) {
+      const body = JSON.parse(line);
+      if (body.role === 'user') inExchange = messageText(body) === request.text && (!request.at || body.created_at === request.at);
+      if (!inExchange || !['user', 'assistant'].includes(body.role)) continue;
+      const text = messageText(body, this.secretRedaction);
+      if (text) messages.push({ archiveUri, text });
+    }
+    if (!messages.length) throw new Error('memory_history_privacy_unavailable');
+    for (const row of removals) await this.ledger.rejectMessages(context, row.memoryType, row.fingerprint, messages);
   }
 
   /** One-shot write sessions are source copies, never conversations to retain.

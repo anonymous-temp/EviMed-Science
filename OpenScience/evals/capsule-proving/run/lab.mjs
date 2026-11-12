@@ -1,3 +1,4 @@
+import { createForgetRequestJudge } from '../../../apps/server/src/nativeMemoryForgetRequests.mjs';
 // The product's memory stack, in process, against the lab engine and the lab PostgreSQL: the engine-layer half of the
 // capsule proving runner (contract "Lab surface").
 //
@@ -502,12 +503,14 @@ export async function openLab({
     const admission = createMemoryAdmission({ config, memorySettings });
     const contexts = new GeoNativeMemoryContext({
       database, documents: null, sessions, proveCapture: null, settingsForOwner: (userId) => memorySettings.settings(userId),
+      allowLiteralPercentPaths: config.memoryForgetRequestCheckEnabled === true,
       // Every project of a lab account is an ordinary owned one: no shared GEO namespace exists here.
       policies: { forProject: async () => ({ kind: "owned" }), policiesForOwner: async () => [], read: () => { throw new Error("no shared namespace in the lab"); } },
     });
     const productRejectionJudge = createRejectionJudge({ config: rejectionJudge ? config : { ...config, deepseekApiKey: "", nativeMemoryRejectionJudgeEnabled: false } });
     const nativeMemory = new NativeMemoryStore({ sessions, overlay, memoryContexts: contexts, rejectionJudge: productRejectionJudge, ...(now ? { now } : {}), report: say });
     const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay, nativeMemory, memoryContexts: contexts, rejectionJudge: productRejectionJudge,
+      forgetRequestJudge: createForgetRequestJudge({ config }),
       pastedInstructionJudge: createPastedInstructionJudge({ config }), now, report: say });
     const resources = new OpenVikingResources({ client });
     const profilesFor = (selectedConfig) => createLabResidentProfiles({ config: selectedConfig, memorySettings, nativeMemory });
@@ -809,7 +812,7 @@ export async function openLab({
           commit: { taskId: last?.taskId ?? null, status: String(last?.task?.status ?? last?.outcome ?? "none"), outcome: last?.outcome ?? "none", archiveUri: last?.archiveUri ?? null },
           ...(commits.length > 1 ? { commits: commits.map((commit, index) => ({ taskId: commit.taskId, status: String(commit.task?.status ?? commit.outcome), outcome: commit.outcome, usage: extractionTokens.perCommit[index] })) } : {}),
           operations, observations, usage,
-          ledger: ledger ? { state: ledger.state, operations: ledger.operations, error: ledger.error ? scrub(ledger.error).slice(0, 200) : "" } : null,
+          ledger: ledger ? { forgetRequests: ledger.extraction?.forgetRequests ?? null, state: ledger.state, operations: ledger.operations, error: ledger.error ? scrub(ledger.error).slice(0, 200) : "" } : null,
           refused: Object.fromEntries(refusals.map((row) => [String(row.reason || "unspecified"), Number(row.n)])),
           settle: settled,
           history: historyRow ? { state: historyRow.state, reason: historyRow.reason, chunks: Number(historyRow.indexed_chunks) || 0 } : null,

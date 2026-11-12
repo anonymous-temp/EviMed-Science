@@ -10,6 +10,7 @@ import { GeoSharedContext } from '../src/geoSharedContext.mjs';
 import { GeoNativeMemoryContext } from '../src/geoNativeMemoryContext.mjs';
 import { contentHash, NativeMemoryOverlay } from '../src/nativeMemoryOverlay.mjs';
 import { NativeMemoryWorker } from '../src/nativeMemoryWorker.mjs';
+import { NativeMemoryStore } from '../src/nativeMemoryStore.mjs';
 import { OpenVikingSessions } from '../src/openVikingSessions.mjs';
 import { OpenVikingClient } from '../src/openVikingClient.mjs';
 import { loadConfig } from '../src/config.mjs';
@@ -64,6 +65,29 @@ test('archive scan and ingestion keep personal plus two equal-session project na
   }
   assert.equal((await f.overlay.file(f.owner.id, f.file(f.personal))).projectId, null);
   for (const request of f.stub.sent('GET', '/api/v1/content/read')) assert.ok(request.query.uri.startsWith(`viking://user/${request.user}/`));
+});
+
+test('forget confirmation offers and removes only lines in its original shared namespace', options, async t => {
+  const f = await fixture(t);
+  for (const context of [f.personal, f.a, f.b]) await f.archive(context);
+  await f.worker.scanArchives(f.owner.id);
+  await f.worker.processCommits({ userId: f.owner.id });
+  const store = new NativeMemoryStore({ sessions: f.personal.sessions, overlay: f.overlay, memoryContexts: f.contexts });
+  f.worker.nativeMemory = store;
+  f.worker.config.memoryForgetRequestCheckEnabled = true;
+  f.worker.forgetRequestJudge = { check: async ({ candidates, conversation }) => {
+    assert.ok(candidates.every(candidate => candidate.uri.startsWith(f.a.userRoot)));
+    const message = conversation.findIndex(entry => entry.text === 'Forget that.');
+    return { requests: [{ message, quote: 'Forget that.', decision: 'uncertain', targets: [0], intents: [] }], claims: [] };
+  } };
+  await f.archive(f.a, 'Forget that.');
+  await f.worker.scanArchives(f.owner.id);
+  await f.worker.processCommits({ userId: f.owner.id });
+  const [pending] = await store.pending(f.owner.id);
+  assert.equal(pending.state, 'confirmation');
+  await store.resolveForgetRequest(f.owner.id, pending.id, { action: 'confirm', choices: [0] });
+  assert.equal(await f.a.sessions.read(f.owner.id, f.file(f.a)), null);
+  for (const context of [f.personal, f.b]) assert.ok(await context.sessions.read(f.owner.id, f.file(context)));
 });
 
 test('failed extraction replay and completion retain the original namespace and register only the internal replay', options, async t => {

@@ -483,6 +483,46 @@ export class NativeMemoryOverlay {
     return result.rows.map(publicCommit);
   }
 
+  /** Advisory checks retry independently after the commit has settled; they never hold delivery. */
+  async retryableForgetChecks({ userId = null, limit = 20 } = {}) {
+    const result = await this.#query(`SELECT * FROM evimed_memory.native_commits WHERE ($1::text IS NULL OR user_id=$1)
+      AND state='completed' AND extraction->'forgetRequests'->>'state'='failed'
+      AND COALESCE((extraction->'forgetRequests'->>'attempts')::int,0)<3
+      AND updated_at<clock_timestamp()-interval '1 minute' ORDER BY updated_at LIMIT $2`, [userId, limit]);
+    return result.rows.map(publicCommit);
+  }
+
+  /** Successful conversation-tool removals since this session's preceding commit. */
+  async forgetToolRevisions(userId, engineSession, archiveUri) {
+    const result = await this.#query(`SELECT r.* FROM evimed_memory.native_revisions r
+      JOIN evimed_memory.native_commits c ON c.user_id=r.user_id AND c.archive_uri=$3
+      WHERE r.user_id=$1 AND r.engine_session=$2 AND r.actor='conversation' AND r.reason LIKE 'forgotten in a conversation%'
+      AND split_part(r.uri,'/memories/',1)=split_part(c.archive_uri,'/sessions/',1)
+      AND r.changed_at<=c.created_at AND r.changed_at>COALESCE((SELECT max(p.created_at) FROM evimed_memory.native_commits p
+        WHERE p.user_id=c.user_id AND p.engine_session=c.engine_session AND p.created_at<c.created_at
+        AND split_part(p.archive_uri,'/sessions/',1)=split_part(c.archive_uri,'/sessions/',1)),'-infinity'::timestamptz)`, [owner(userId), engineSession, archiveUri]);
+    return result.rows.map(publicRevision);
+  }
+
+  /** Stable request keys prevent retained commit context and retries from executing the same human request twice. */
+  async forgetRequestKeys(userId, userRoot) {
+    const result = await this.#query(`SELECT extraction->'forgetRequests' AS result FROM evimed_memory.native_commits
+      WHERE user_id=$1 AND archive_uri LIKE $2 || '/sessions/%' AND extraction ? 'forgetRequests'`, [owner(userId), scopedRoot(userRoot)]);
+    return new Set(result.rows.flatMap(row => [...(row.result?.requests ?? []), ...(row.result?.claims ?? [])].map(item => item.key).filter(Boolean)));
+  }
+
+  /** Pending confirmations live with their settled commit, not in the extraction queue. */
+  async forgetRequestCommits(userId) {
+    const result = await this.#query(`SELECT * FROM evimed_memory.native_commits WHERE user_id=$1
+      AND state='completed' AND extraction->'forgetRequests'->'requests' @> '[{"status":"pending"}]'::jsonb ORDER BY created_at DESC`, [owner(userId)]);
+    return result.rows.map(publicCommit);
+  }
+
+  async setForgetRequests(userId, archiveUri, result) {
+    await this.#query(`UPDATE evimed_memory.native_commits SET extraction=jsonb_set(COALESCE(extraction,'{}'::jsonb),'{forgetRequests}',$3::jsonb), updated_at=clock_timestamp()
+      WHERE user_id=$1 AND archive_uri=$2`, [owner(userId), archiveUri, JSON.stringify(result)]);
+  }
+
   /**
    * @param {string} userId @param {string} archiveUri
    * @param {{ operations?: number, extraction?: Record<string, any> | null }} [outcome] `extraction`: what the engine said the
@@ -490,7 +530,7 @@ export class NativeMemoryOverlay {
    */
   async completeCommit(userId, archiveUri, { operations = 0, extraction = null } = {}) {
     await this.#query(`UPDATE evimed_memory.native_commits SET state='completed', operations=$3, error='', next_attempt_at=NULL, pending_text=NULL,
-      extraction=COALESCE($4::jsonb, extraction), ingested_at=clock_timestamp(), updated_at=clock_timestamp()
+      extraction=COALESCE($4::jsonb, extraction) || CASE WHEN extraction ? 'forgetRequests' THEN jsonb_build_object('forgetRequests',extraction->'forgetRequests') ELSE '{}'::jsonb END, ingested_at=clock_timestamp(), updated_at=clock_timestamp()
       WHERE user_id=$1 AND archive_uri=$2 AND state IN ('pending', 'failed')`,
     [owner(userId), String(archiveUri), Math.max(0, Math.trunc(Number(operations)) || 0), extraction ? JSON.stringify(extraction) : null]);
   }
@@ -603,7 +643,8 @@ export class NativeMemoryOverlay {
   async forgottenRevisions(userId, { limit = 300 } = {}) {
     const result = await this.#query(`SELECT * FROM evimed_memory.native_revisions
       WHERE user_id=$1 AND undone_at IS NULL AND actor IN ('user', 'conversation') AND before IS NOT NULL
-        AND ((change = 'deleted') OR (change = 'updated' AND after IS NOT NULL AND reason LIKE 'forgotten on the memory page%'))
+        AND ((change = 'deleted') OR (change = 'updated' AND after IS NOT NULL
+          AND (reason LIKE 'forgotten on the memory page%' OR reason LIKE 'forgotten by conversation request%')))
       ORDER BY id DESC LIMIT $2`, [owner(userId), Math.max(1, Math.min(1_000, Math.trunc(Number(limit)) || 300))]);
     return this.protectRevisions(userId,result.rows.map(publicRevision));
   }

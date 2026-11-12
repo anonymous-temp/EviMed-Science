@@ -120,3 +120,13 @@ test('search hint is an independent opt-in sentence, only on a native account, a
   }, { ...options, capabilitiesDir: '', memorySearchHint: true })
   assert.ok(sections.some(section => section.text.includes(hint)), 'plugin forwards the pure option')
 })
+
+test('forget guidance defaults off and requires confirmed removal before claiming completion', async () => {
+  const options = { openVikingMemory: true, capsuleToolEnabled: false };
+  assert.equal(buildGuidanceText([], options), buildGuidanceText([], { ...options, memoryForgetToolHint: false }));
+  const enabled = buildGuidanceText([], { ...options, memoryForgetToolHint: true });
+  assert.match(enabled, /mcp__openviking__forget/);
+  assert.match(enabled, /只有工具确认移除后才说已忘记/);
+  assert.match(enabled, /不要删掉无关内容/);
+  assert.equal(buildGuidanceText([], { openVikingMemory: false, memoryForgetToolHint: true }), buildGuidanceText([], { openVikingMemory: false }));
+});

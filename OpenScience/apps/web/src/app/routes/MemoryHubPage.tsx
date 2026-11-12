@@ -5,7 +5,7 @@ import { useCapsuleData } from "@/components/capsule/useCapsuleData";
 import { usePageScroll } from "@/lib/pageScroll";
 import { Brain } from "lucide-react";
 import { searchMemories, type WebStructuredMemory } from "@/lib/apiClient";
-import type { ReceivedCapsule } from "@/lib/memoryClient";
+import { resolveForgetRequest, type ReceivedCapsule } from "@/lib/memoryClient";
 import { SELF_SECTIONS } from "@/lib/memoryGroups";
 import { useProjectLabels } from "@/lib/projectNames";
 import { useProjectStore } from "@/lib/projects";
@@ -293,7 +293,7 @@ function MemoryHub() {
     </List>
   );
   // Waiting words head the list of memories, but not a search: that is a list of hits.
-  const waiting = pending.length > 0 && !query.trim() ? <PendingMemoryRows items={pending} slow={pendingState.slow} stalled={pendingState.stalled} /> : null;
+  const waiting = pending.length > 0 && !query.trim() ? <PendingMemoryRows onResolve={resolveForgetRequest} onResolved={reload} items={pending} slow={pendingState.slow} stalled={pendingState.stalled} /> : null;
   // An empty list says what will be here and gives the one thing to do about it — or, where nothing can be done (a practice is learned,
   // never typed), why there is no button. A search with no hit has the box's own 「清除搜索」 over it, and says only that.
   const empty = (title: string, description: string, action?: { label: string; onPress: (() => void) | undefined }) => (

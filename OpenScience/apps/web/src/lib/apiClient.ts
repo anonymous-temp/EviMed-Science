@@ -709,7 +709,8 @@ export interface WebPendingMemory {
   id: string;
   text: string;
   at: string;
-  state: "pending" | "retrying";
+  state: "pending" | "retrying" | "confirmation";
+  choices?: Array<{ index: number; text: string }>;
 }
 
 /** The memory page's search: keyword over everything stored, unioned with the

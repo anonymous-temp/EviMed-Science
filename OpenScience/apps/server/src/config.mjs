@@ -2956,6 +2956,8 @@ export function loadConfig(overrides = {}) {
     // (`open_science_native_memory_rejection_judge_total`); off, only a verbatim repeat and a line that contains a removed one are met.
     nativeMemoryRejectionJudgeEnabled: overrides.nativeMemoryRejectionJudgeEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED", true),
     // Experimental attribution check after extraction; a failed check keeps the written line.
+    memoryForgetRequestCheckEnabled: overrides.memoryForgetRequestCheckEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_FORGET_REQUEST_CHECK_ENABLED", false),
+    memoryForgetToolHintEnabled: overrides.memoryForgetToolHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_FORGET_TOOL_HINT_ENABLED", false),
     memoryPastedInstructionCheckEnabled: overrides.memoryPastedInstructionCheckEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED", false),
     // The page's import of what another assistant remembered (`nativeMemoryImport.mjs`): one Flash call splits the pasted text, the person
     // reviews the list, the engine writes what they keep. The offers an account may ask for in an hour are the bound on that call

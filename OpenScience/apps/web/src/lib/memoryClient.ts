@@ -207,3 +207,8 @@ export function disableCapsule(id: string) {
 export function startCapsuleTrial(id: string, sessionId: string) {
   return productRequest<{ capsuleId: string; sessionId: string }>(`/capsules/${encodeURIComponent(id)}/trial`, "POST", { sessionId });
 }
+
+/** Resolve an ambiguous forget request using only the exact choices shown on the memory page. */
+export function resolveForgetRequest(id: string, action: "confirm" | "dismiss", choices: number[]) {
+  return productRequest<{ resolved: boolean }>(`/memory/forget-requests/${encodeURIComponent(id)}`, "POST", { action, choices });
+}

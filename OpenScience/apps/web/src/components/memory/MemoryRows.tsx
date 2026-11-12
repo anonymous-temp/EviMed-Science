@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import type { WebPendingMemory } from "@/lib/apiClient";
 import { List, ListRow } from "@/components/ui/ListRow";
 
@@ -58,10 +60,12 @@ export function GroupSection({ title, children }: { title: ReactNode; children: 
  * What 「记住这一条」 asked and the memory has not written yet: the words, marked 「正在记住」, at the head of the list. A row of
  * its own kind, because there is nothing to open yet; when the memory is slow it says so instead of spinning for ever, and when the page has stopped waiting it says the memory is not finished.
  */
-export function PendingMemoryRows({ items, slow, stalled = false }: { items: readonly WebPendingMemory[]; slow: boolean; /** The page has stopped reading: it says the memory is not finished and can be looked at later. */ stalled?: boolean }) {
+type ResolveForget = (id: string, action: "confirm" | "dismiss", choices: number[]) => Promise<unknown>;
+
+export function PendingMemoryRows({ items, slow, stalled = false, onResolved, onResolve }: { onResolve?: ResolveForget; onResolved?: () => void; items: readonly WebPendingMemory[]; slow: boolean; /** The page has stopped reading: it says the memory is not finished and can be looked at later. */ stalled?: boolean }) {
   return (
-    <List label="正在记住的内容">
-      {items.map((item) => (
+    <List label="待处理的记忆">
+      {items.map((item) => item.state === "confirmation" ? <ForgetConfirmationRow key={item.id} item={item} onResolved={onResolved} onResolve={onResolve} /> : (
         <ListRow
           key={item.id}
           chevron={false}
@@ -71,4 +75,49 @@ export function PendingMemoryRows({ items, slow, stalled = false }: { items: rea
       ))}
     </List>
   );
+}
+
+/**
+ * Component: ForgetConfirmationRow; owner: H; rules: DS21, AT48/49.
+ * Anatomy: original request, explicit choices, confirm/dismiss actions and inline failure.
+ * Variants: available candidates or an unresolved reference with no candidates.
+ * States: idle, selected, saving, failed with selection retained, resolved.
+ * Hit area: shared Checkbox and Button controls.
+ * Keyboard: native checkbox and button activation, no automatic selection.
+ * Long content: full wrapping candidate text, no clipped destructive choice.
+ * Theme: existing text and error tokens; no new surfaces.
+ * Responsive: wrapping actions and full-width text within the existing list.
+ * Verification: MemoryRows.forget.test.tsx; desktop/mobile Chromium and keyboard activation checked; screen reader check pending.
+ */
+function ForgetConfirmationRow({ item, onResolved, onResolve }: { item: WebPendingMemory; onResolved?: () => void; onResolve?: ResolveForget }) {
+  const [selected, setSelected] = useState<number[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resolved, setResolved] = useState(false);
+  const saving = useRef(false);
+  const submit = async (action: "confirm" | "dismiss") => {
+    if (!onResolve || saving.current || action === "confirm" && !selected.length) return;
+    saving.current = true; setBusy(true); setError(null);
+    try {
+      await onResolve(item.id, action, selected);
+      setResolved(true); onResolved?.();
+    } catch {
+      setError("没有完成。可以重试，或在记忆列表中找到内容后选择“忘记”。");
+    } finally { saving.current = false; setBusy(false); }
+  };
+  if (resolved) return <ListRow title="已处理" chevron={false} />;
+  return <ListRow chevron={false} title={<span className="break-words">{item.text}</span>} meta={
+    <div className="space-y-2">
+      <p>请确认要忘记的内容。确认前，这些记忆仍会保留。</p>
+      {item.choices?.length ? item.choices.map(choice => <Checkbox key={choice.index} label={<span className="break-words">{choice.text}</span>}
+        checked={selected.includes(choice.index)} disabled={busy} onChange={event => setSelected(previous => event.target.checked
+          ? [...previous, choice.index] : previous.filter(index => index !== choice.index))} />)
+        : <p>暂时无法确定是哪一条。请在对话中说明具体内容，或在记忆列表中找到后选择“忘记”。</p>}
+      <div className="flex flex-wrap gap-2">
+        {!!item.choices?.length && <Button size="sm" loading={busy} disabled={!onResolve || !selected.length} onClick={() => void submit("confirm")}>忘记选中的内容</Button>}
+        <Button size="sm" variant="text" disabled={busy || !onResolve} onClick={() => void submit("dismiss")}>保留记忆，关闭此项</Button>
+      </div>
+      {error && <p role="alert" className="text-error">{error}</p>}
+    </div>
+  } />;
 }

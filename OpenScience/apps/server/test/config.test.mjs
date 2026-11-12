@@ -11,6 +11,20 @@ import { parseByteSize } from "../src/runtimeManager.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
+for (const [key, property] of [
+  ['OPEN_SCIENCE_MEMORY_FORGET_REQUEST_CHECK_ENABLED', 'memoryForgetRequestCheckEnabled'],
+  ['OPEN_SCIENCE_MEMORY_FORGET_TOOL_HINT_ENABLED', 'memoryForgetToolHintEnabled'],
+]) test(`${key} defaults off and supports explicit override`, () => {
+  const saved = process.env[key];
+  try {
+    delete process.env[key];
+    assert.equal(loadConfig({ rootDir: repoRoot })[property], false);
+    process.env[key] = 'true';
+    assert.equal(loadConfig({ rootDir: repoRoot })[property], true);
+    assert.equal(loadConfig({ rootDir: repoRoot, [property]: false })[property], false);
+  } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
+});
+
 test("the pasted-instruction attribution experiment defaults off and supports environment and explicit overrides", () => {
   const key = "OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED";
   const saved = process.env[key];
