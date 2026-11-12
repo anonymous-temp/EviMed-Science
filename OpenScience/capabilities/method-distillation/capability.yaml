@@ -34,11 +34,12 @@ produces:
   - requiredOutputsExist
   - skillsLoaded
 # The first step of a two-stage distillation (`OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED`, off by default): the frame, before any method.
+# Name/instructions live in variants/two-stage.md. Keep the new inventory output optional until delivery is measured.
 - contractKind: method-frame
   outputs:
   - path: method-frame.json
     role: work
-    required: true
+    required: false
   checks:
   - requiredOutputsExist
   - skillsLoaded
