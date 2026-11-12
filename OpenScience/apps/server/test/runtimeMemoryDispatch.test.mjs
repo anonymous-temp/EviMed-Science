@@ -1,5 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { AgentRunStore } from '../src/agentRuns.mjs';
+import { HttpError } from '../src/security.mjs';
 import { RuntimeManager } from '../src/runtimeManager.mjs';
 import { withProjectStorageMutation } from '../src/security.mjs';
 import { withSessionPromptAdmission } from '../src/runtimePromptAdmission.mjs';
@@ -72,4 +77,42 @@ test('isolation off retains the previous acknowledgement fence; rejected final c
   await assert.rejects(manager.dispatchAdmittedPrompt(project, 'root', { text: 'Hello', unattended: false,
     beforePrompt: async () => { throw new Error('superseded'); } }), /superseded/);
   assert.equal(prompts, 1, 'failed final checks still precede every wire send');
+  // This same case must also prove that switching on releases the ledger.
+  manager.callKernel = async (_runtime, _project, method) => {
+    if (method === 'session/prompt') await withProjectStorageMutation(project, async () => { receiptWritten = true; });
+    return {};
+  };
+  receiptWritten = false;
+  await manager.dispatchAdmittedPrompt(project, 'next', { text: 'Hello', unattended: false });
+  assert.equal(receiptWritten, true);
+
+});
+
+
+for (const code of ['runtime_prompt_admission_busy', 'memory_context_publication_busy']) test(`${code} rejects the real run immediately and releases its session for retry`, async t => {
+  const { manager, project } = fixture();
+  const root = await mkdtemp(path.join(tmpdir(), 'dispatch-refusal-'));
+  Object.assign(project, { rootDir: root, workspaceDir: path.join(root, 'workspace'), metaDir: path.join(root, 'meta') });
+  await mkdir(project.workspaceDir); await mkdir(project.metaDir);
+  const binding = { sessionId: 'root', mode: 'open-domain', agentId: null, agentVersion: null, runtimeAgent: null };
+  const ledger = new AgentRunStore({ get: async () => binding }, { model: 'fixture', readSessionHistory: async () => [] });
+  ledger.scheduleMonitor = () => {};
+  t.after(async () => { await ledger.closeProject(project); await rm(root, { recursive: true, force: true }); });
+  let busy = true, sent = 0;
+  manager.ensureContextPolicyGeneration = async () => {
+    if (busy && code === 'memory_context_publication_busy') throw new HttpError(409, code, 'Busy');
+    return { pending: false };
+  };
+  manager.pluginService = { withAdmission: async (_project, operation) => {
+    if (busy && code === 'runtime_prompt_admission_busy') throw new HttpError(409, code, 'Busy');
+    return operation();
+  } };
+  manager.callKernel = async () => { sent++; return {}; };
+  const dispatch = dispatchId => ledger.dispatch(project, { sessionId: 'root', dispatchId }, () => manager.dispatchPrompt(project, 'root', { text: 'Hello' }));
+  await assert.rejects(dispatch('first'), { code, definitivelyRejected: true });
+  const [failed] = await ledger.list(project);
+  assert.equal(failed.status, 'failed'); assert.equal(failed.dispatchStatus, 'rejected'); assert.equal(sent, 0);
+  busy = false;
+  const retry = await dispatch('retry');
+  assert.equal(retry.dispatchStatus, 'accepted'); assert.notEqual(retry.id, failed.id);
 });

@@ -4237,7 +4237,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return dataAnalysisService.authorizeReservation(project, input);
     },
     promptStops:new RuntimePromptStops({database:productDatabase}),
-    withPromptAdmission:(project,sessionId,operation)=>withSessionPromptAdmission(runtimeManager,project,sessionId,operation),
+    // This hook is used only by AgentRuns.noteStopRequest, never by a prompt.
+    withPromptAdmission:(project,sessionId,operation)=>withSessionPromptAdmission(runtimeManager,project,sessionId,operation,{stop:true}),
     nativeInputs: geoNativeInputs,
     judgeService,
     agentRegistry,
@@ -10568,6 +10569,10 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
     ],
   );
   const promptAdmission=runtimeStats.promptAdmissions ?? {};
+  addMetric(lines,"open_science_runtime_prompt_admission_permits","Outer prompt database permits held or waiting.","gauge",[
+    {labels:{state:"held"},value:promptAdmission.permitsHeld??0},
+    {labels:{state:"waiting"},value:promptAdmission.permitsWaiting??0},
+  ]);
   addMetric(lines,"open_science_runtime_prompt_admission_active","Same-session prompt admission RPCs in flight.","gauge",{value:promptAdmission.active ?? 0});
   addMetric(lines,"open_science_runtime_prompt_admission_total","Same-session prompt admission outcomes.","counter",['attempted','queued','admitted','failed','timedOut'].map(outcome=>({labels:{outcome},value:promptAdmission[outcome] ?? 0})));
   addMetric(lines, "open_science_runtime_proxy_active", "Active runtime proxy requests and streams.", "gauge", {

@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { GeoSharedContext } from '../src/geoSharedContext.mjs';
 import { PluginService } from '../src/pluginService.mjs';
-import { withSessionPromptAdmission } from '../src/runtimePromptAdmission.mjs';
+import { withSessionPromptAdmission, runtimePromptAdmissionStatus } from '../src/runtimePromptAdmission.mjs';
 
 const project = { userId: 'owner', id: 'project' };
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
-function fixture({ conflict = false, poolMax = 3 } = {}) {
+function fixture({ conflict = false, poolMax = 4 } = {}) {
   const scope = new AsyncLocalStorage(), rows = new Map(), queries = [];
   let open = 0, peak = 0;
   const database = {
@@ -70,7 +70,7 @@ test('publication uses a bounded independent transaction under the real plugin a
 test('publication maps lock timeout to a named retryable refusal without poisoning the caller', async () => {
   const f = fixture({ conflict: true });
   await f.plugins.withAdmission(project, async () => {
-    await assert.rejects(f.policies.forProject(project), { code: 'memory_context_publication_busy', status: 409 });
+    await assert.rejects(f.policies.forProject(project), { code: 'memory_context_publication_busy', status: 409, definitivelyRejected: true });
     assert.ok(f.database.transactionScope());
   });
 });
@@ -88,7 +88,8 @@ test('different sessions under separate plugin admissions both reach acknowledge
 });
 
 test('a second real plugin admission cannot consume the spare connection before the session limiter runs', async () => {
-  const f = fixture({ poolMax: 2 }), ready = deferred(), publish = deferred(), ack = deferred();
+  const f = fixture({ poolMax: 4 }), ready = deferred(), publish = deferred(), ack = deferred();
+  f.manager.pluginService = f.plugins;
   let secondEntered = false;
   const first = f.plugins.withAdmission(project, async () => {
     ready.resolve(); await publish.promise;
@@ -99,6 +100,8 @@ test('a second real plugin admission cannot consume the spare connection before 
   try {
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(secondEntered, false, 'pool capacity is reserved before the outer plugin transaction');
+    assert.equal(runtimePromptAdmissionStatus(f.manager).permitsHeld, 1);
+    assert.equal(runtimePromptAdmissionStatus(f.manager).permitsWaiting, 1);
     publish.resolve();
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(f.rows.size, 1, 'first publication can use the reserved spare');
@@ -106,7 +109,7 @@ test('a second real plugin admission cannot consume the spare connection before 
 });
 
 test('capacity wait expires without a leaked slot and nested admissions reuse their already-held client', async () => {
-  const f = fixture({ poolMax: 2 }), ready = deferred(), ack = deferred();
+  const f = fixture({ poolMax: 4 }), ready = deferred(), ack = deferred();
   f.plugins.admissionWaitMs = 20;
   const pending = f.plugins.withAdmission(project, async () => {
     await f.plugins.withAdmission({ ...project, id: 'another' }, async () => {
@@ -116,22 +119,23 @@ test('capacity wait expires without a leaked slot and nested admissions reuse th
   });
   try {
     await ready.promise;
-    await assert.rejects(f.plugins.withAdmission(project, async () => { throw new Error('expired admission ran'); }), { code: 'runtime_prompt_admission_busy' });
+    await assert.rejects(f.plugins.withAdmission(project, async () => { throw new Error('expired admission ran'); }), { code: 'runtime_prompt_admission_busy', definitivelyRejected: true });
   } finally { ack.resolve(); await pending; }
   assert.equal(await f.plugins.withAdmission(project, async () => 'next'), 'next');
   assert.equal(f.plugins.admissionClients, 0);
 });
 
-test('a dedicated stop and a plugin start share the same pool reservation before either holds a client', async () => {
-  const f = fixture({ poolMax: 2 }), ready = deferred(), ack = deferred();
+test('a stop bypasses every held plugin permit and reaches the kernel before prompt acknowledgement', async () => {
+  const f = fixture({ poolMax: 4 }), ready = deferred(), ack = deferred();
   f.manager.pluginService = f.plugins;
+  f.plugins.admissionClientLimit = 1;
   let stopped = false;
   const start = f.plugins.withAdmission(project, async () => { ready.resolve(); await ack.promise; });
   await ready.promise;
-  const stop = withSessionPromptAdmission(f.manager, project, 'stop', async () => { stopped = true; await ack.promise; });
+  const stop = withSessionPromptAdmission(f.manager, project, 'stop', async () => { stopped = true; }, { stop: true });
   try {
     await new Promise(resolve => setImmediate(resolve));
-    assert.equal(stopped, false, 'the independent session fence must not consume the gateway spare');
+    assert.equal(stopped, true, 'a stop cannot queue behind prompt permits');
     assert.equal((await f.policies.forProject(project)).kind, 'geo-project');
   } finally { ack.resolve(); await Promise.all([start, stop]); }
   assert.equal(stopped, true);

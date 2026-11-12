@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {withSessionPromptAdmission,withPromptAdmissionReceipt,runtimePromptAdmissionStatus} from '../src/runtimePromptAdmission.mjs';
+import {withSessionPromptAdmission,runtimePromptAdmissionStatus} from '../src/runtimePromptAdmission.mjs';
+import { RuntimePromptStops } from '../src/runtimePromptStops.mjs';
+import { ExtensionActorBindings } from '../src/extensionActorBindings.mjs';
+import { migrateProductStore } from '../src/productPersistence.mjs';
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return{promise,resolve};};
 test('same-session admission excludes a competing human through proof and RPC acknowledgement while other sessions proceed',async()=>{
  const manager={config:{runtimePromptAdmissionTimeoutMs:2000}},project={userId:'owner',id:'project'},proof=deferred(),ack=deferred(),entered=deferred();const events=[];
@@ -70,17 +73,26 @@ test('isolated stop and actor receipts get the remaining admission deadline on t
   withTransactionClient: (client, work) => scope.run({ client }, work),
   withoutTransactionClient: work => scope.run(undefined, work),
   transaction: async work => {
+   if (scope.getStore()) return work(scope.getStore().client);
    const id = ++sequence;
-   const client = { query: async (sql, values) => { statements.push({ id, sql, values }); return { rows: [] }; } };
+   const client = { query: async (sql, values) => { statements.push({ id, sql, values }); return { rows: [{ count: 0 }] }; } };
    const result = await work(client); statements.push({ id, sql: 'COMMIT' }); return result;
   },
   query: (sql, values) => scope.getStore().client.query(sql, values),
  };
  const manager = { config: { memoryRuntimeLockIsolationEnabled: true, runtimePromptAdmissionTimeoutMs: 2000 }, promptAdmissionDatabase: database };
- await withSessionPromptAdmission(manager, { userId: 'owner', id: 'project' }, 'root', async () => {
-  for (const receipt of ['stop', 'actor']) await withPromptAdmissionReceipt(database, () => database.query(receipt));
-  for (const receipt of ['stop', 'actor']) {
-   const write = statements.find(item => item.sql === receipt);
+ await migrateProductStore(database); statements.length = 0; sequence = 0;
+ const project = { userId: 'owner', id: 'project', projectCreatedAt: 'today' };
+ const stops = new RuntimePromptStops({ database });
+ const actors = new ExtensionActorBindings({ database, secret: 'fixture'.repeat(8), runtimeManager: { runtimeGeneration: () => 'generation' },
+  access: { account: async () => 'today', project: async () => project } });
+ actors.documents.get = async () => null;
+ actors.documents.put = async (_owner, _kind, _id, _body, { transactionClient }) => transactionClient.query('actor receipt');
+ await withSessionPromptAdmission(manager, project, 'root', async () => {
+  await stops.record(project, 'root', ['run']);
+  await actors.accept({ id: 'owner', accountCreatedAt: 'today' }, project, { sessionId: 'root', requestId: 'request' });
+  for (const receipt of ['INSERT INTO evimed_product.prompt_stop_intents', 'actor receipt']) {
+   const write = statements.find(item => item.sql.startsWith(receipt));
    assert.notEqual(write.id, 1, 'receipt cannot retain the session admission transaction');
    const bound = statements.find(item => item.id === write.id && item.sql.includes("set_config('lock_timeout'"));
    assert.ok(bound.sql.includes("set_config('statement_timeout'"));
@@ -98,12 +110,15 @@ test('an expired isolated admission cannot start a late receipt on an unbounded 
  const database = { transactionScope: () => scope.getStore(),
   withTransactionClient: (client, work) => scope.run({ client }, work),
   withoutTransactionClient: work => scope.run(undefined, work),
+  query: async () => { writes++; return { rows: [] }; },
   transaction: work => work({ query: async () => ({ rows: [] }) }),
  };
  const manager = { config: { memoryRuntimeLockIsolationEnabled: true, runtimePromptAdmissionTimeoutMs: 20 }, promptAdmissionDatabase: database };
+ await migrateProductStore(database);
+ const stops = new RuntimePromptStops({ database });
  const pending = withSessionPromptAdmission(manager, { userId: 'owner', id: 'project' }, 'late', async () => {
   await resume.promise;
-  try { await withPromptAdmissionReceipt(database, async () => { writes++; }); }
+  try { await stops.record({ userId: 'owner', id: 'project' }, 'late', ['run']); }
   catch (error) { finished.resolve(error.code); return; }
   finished.resolve('written');
  });

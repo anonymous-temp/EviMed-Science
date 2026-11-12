@@ -14,10 +14,10 @@ import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposable PostgreSQL required' };
 // A shared project: one with a member. A one-person GEO project keeps its owner's own context (owner ruling 2026-10-25).
-async function setup(t, { shared = true, runtimeLockIsolation = false, poolMax = 3 } = {}) {
+async function setup(t, { shared = true, runtimeLockIsolation = false, poolMax = 4 } = {}) {
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'geocontext');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'geo-context-'));
-  const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: runtimeLockIsolation ? poolMax : 1 }));
+  const accounts = new PostgresStore(loadConfig({ memoryRuntimeLockIsolationEnabled: runtimeLockIsolation, dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: runtimeLockIsolation ? poolMax : 1 }));
   t.after(async () => { await accounts.database.close(); await isolated.drop(); await rm(dataDir, { recursive: true, force: true }); });
   for (const id of ['owner', 'editor']) await accounts.createUser(id, 'local-fixture-password', id);
   const owner = await accounts.userById('owner'), editor = await accounts.userById('editor');
@@ -175,9 +175,9 @@ test('publication refuses a lock retained by its own outer transaction within th
 });
 
 
-test('two outer plugin callers on a two-connection pool leave room for first publication', options, async t => {
-  const f = await setup(t, { runtimeLockIsolation: true, poolMax: 2 }), database = f.accounts.database;
-  const plugins = new PluginService(database, { runtimeLockIsolation: true, databasePoolMax: 2 });
+test('two outer plugin callers on a four-connection pool leave room for first publication', options, async t => {
+  const f = await setup(t, { runtimeLockIsolation: true, poolMax: 4 }), database = f.accounts.database;
+  const plugins = new PluginService(database, { runtimeLockIsolation: true, databasePoolMax: 4 });
   let enter, publish, release, published, secondEntered = false;
   const ready = new Promise(resolve => { enter = resolve; }), start = new Promise(resolve => { publish = resolve; });
   const ack = new Promise(resolve => { release = resolve; }), done = new Promise(resolve => { published = resolve; });
@@ -187,12 +187,12 @@ test('two outer plugin callers on a two-connection pool leave room for first pub
   await ready;
   const second = plugins.withAdmission(f.project, async () => { secondEntered = true; await ack; }, { prompt: true });
   let stopped = false;
-  const manager = { config: { memoryRuntimeLockIsolationEnabled: true, databasePoolMax: 2, runtimePromptAdmissionTimeoutMs: 10000 }, promptAdmissionDatabase: database, pluginService: plugins };
-  const stop = withSessionPromptAdmission(manager, f.project, 'root', async () => { stopped = true; await ack; });
+  const manager = { config: { memoryRuntimeLockIsolationEnabled: true, databasePoolMax: 4, runtimePromptAdmissionTimeoutMs: 10000 }, promptAdmissionDatabase: database, pluginService: plugins };
+  const stop = withSessionPromptAdmission(manager, f.project, 'root', async () => { stopped = true; }, { stop: true });
   try {
     publish();
     const policy = await Promise.race([done, first.then(() => { throw new Error('first admission ended early'); })]);
-    assert.equal(policy.kind, 'geo-project'); assert.equal(secondEntered, false); assert.equal(stopped, false);
+    assert.equal(policy.kind, 'geo-project'); assert.equal(secondEntered, false); assert.equal(stopped, true);
     assert.deepEqual(await f.policies.forProject(f.project), policy);
   } finally { release(); await Promise.all([first, second, stop]); }
   assert.equal(stopped, true);

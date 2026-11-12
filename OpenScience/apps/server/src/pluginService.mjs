@@ -346,7 +346,10 @@ export class PluginService {
     this.database = database;
     // Reserve capacity before opening the outer transaction. The session
     // limiter runs too late: its caller already owns this pooled connection.
-    this.admissionClientLimit = runtimeLockIsolation ? Math.max(1, Math.floor(databasePoolMax / 2)) : Infinity;
+    if (runtimeLockIsolation && (!Number.isSafeInteger(databasePoolMax) || databasePoolMax < 4)) {
+      throw new HttpError(503, 'database_pool_invalid', 'Memory runtime lock isolation requires OPEN_SCIENCE_DATABASE_POOL_MAX >= 4 (prompt, publication, gateway and stop receipt).');
+    }
+    this.admissionClientLimit = runtimeLockIsolation ? Math.min(Math.floor(databasePoolMax / 2), databasePoolMax - 3) : Infinity;
     this.admissionClients = 0;
     this.admissionClientWaiters = [];
     /** How long `withAdmission` waits for an apply on the project; zero refuses at once. */
@@ -551,8 +554,8 @@ export class PluginService {
     current.borrowers.add(borrowed);
     return borrowed.finally(() => current.borrowers.delete(borrowed));
   }
-  /** @param {AbortSignal|null} [signal] */
-  async acquireAdmissionClient(signal = null) {
+  /** @param {AbortSignal|null} [signal] @param {number} [timeoutMs] */
+  async acquireAdmissionClient(signal = null, timeoutMs = this.admissionWaitMs) {
     signal?.throwIfAborted();
     if (this.admissionClients < this.admissionClientLimit) { this.admissionClients++; return; }
     await new Promise((resolve, reject) => {
@@ -565,7 +568,7 @@ export class PluginService {
         reject(error);
       };
       const abort = () => fail(signal.reason);
-      const timer = setTimeout(() => fail(new HttpError(409, 'runtime_prompt_admission_busy', 'Prompt admission is busy. Retry shortly.')), this.admissionWaitMs);
+      const timer = setTimeout(() => fail(Object.assign(new HttpError(409, 'runtime_prompt_admission_busy', 'Prompt admission is busy. Retry shortly.'), { definitivelyRejected: true })), Math.max(0, timeoutMs));
       this.admissionClientWaiters.push(grant);
       signal?.addEventListener('abort', abort, { once: true });
     });
@@ -625,7 +628,7 @@ export class PluginService {
     const deadline = Date.now() + this.admissionWaitMs;
     for (let asked = 0; ; asked++) {
       const borrowedClient = Boolean(this.database.transactionScope?.());
-      if (!borrowedClient) await this.acquireAdmissionClient();
+      if (!borrowedClient) await this.acquireAdmissionClient(null, Math.max(0, deadline - Date.now()));
       const outcome = await this.database.transaction(async client => {
         const lock = await client.query("SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1,0)) AS acquired", [`plugin-project:${projectKey}`]);
         // Not an error yet: an apply holds the project, and it ends.

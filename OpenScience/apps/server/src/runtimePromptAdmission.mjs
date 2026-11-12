@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {HttpError} from './security.mjs';
 import pg from 'pg';
 const admissions=new WeakMap(),held=new AsyncLocalStorage();
-const busy=()=>new HttpError(409,'runtime_prompt_admission_busy','This conversation is admitting another input. Retry shortly.');
+const busy=()=>Object.assign(new HttpError(409,'runtime_prompt_admission_busy','This conversation is admitting another input. Retry shortly.'),{definitivelyRejected:true});
 function stateFor(manager) {
  let state=admissions.get(manager);
  if(!state){state={pending:new Map(),clients:{held:0,waiters:[]},counters:{attempted:0,queued:0,admitted:0,failed:0,timedOut:0,active:0,waitingForClient:0}};admissions.set(manager,state);}
@@ -27,15 +27,15 @@ function acquireClient(state,limit,signal){
 }
 /** A released permit passes straight to the oldest waiter, so `held` counts only real holders. */
 function releaseClient(state){const next=state.clients.waiters.shift();if(next)next.grant();else state.clients.held--;}
-export function runtimePromptAdmissionStatus(manager){return{...stateFor(manager).counters};}
+export function runtimePromptAdmissionStatus(manager){return{...stateFor(manager).counters,permitsHeld:manager.pluginService?.admissionClients??0,permitsWaiting:manager.pluginService?.admissionClientWaiters?.length??0};}
 /** @template T @param {any} manager @param {any} project @param {string} sessionId
  * @param {(signal:AbortSignal)=>Promise<T>} operation
- * @param {{timeoutMs?:number}} [options] `timeoutMs` for an operation whose acknowledgement takes longer than a prompt's, up to the same ceiling
+ * @param {{timeoutMs?:number,stop?:boolean}} [options] `timeoutMs` for an operation whose acknowledgement takes longer than a prompt's, up to the same ceiling
  * @returns {Promise<T>} */
-export function withSessionPromptAdmission(manager,project,sessionId,operation,{timeoutMs}={}) {
+export function withSessionPromptAdmission(manager,project,sessionId,operation,{timeoutMs,stop=false}={}) {
  if(typeof sessionId!=='string'||!/^[A-Za-z0-9_-]{1,160}$/.test(sessionId))throw new HttpError(400,'runtime_ui_prompt_invalid','A native prompt must name its session.');
  const key=JSON.stringify([project.userId,project.id,sessionId]),parent=held.getStore();
- if(parent?.manager===manager&&parent.key===key&&parent.open){parent.signal.throwIfAborted();return operation(parent.signal);}
+ if(!stop&&parent?.manager===manager&&parent.key===key&&parent.open){parent.signal.throwIfAborted();return operation(parent.signal);}
  const state=stateFor(manager),timeout=Number(timeoutMs??manager.config?.runtimePromptAdmissionTimeoutMs??30000);
  if(!Number.isSafeInteger(timeout)||timeout<1||timeout>60000)throw new HttpError(500,'runtime_prompt_admission_invalid','The prompt admission deadline is invalid.');
  const controller=new AbortController(),deadline=performance.now()+timeout;let entered=false;
@@ -94,13 +94,14 @@ export function withSessionPromptAdmission(manager,project,sessionId,operation,{
    return{error};
   }
  }).finally(()=>releaseClient(state))).then(outcome=>{if(outcome.error)throw outcome.error;return outcome.value;});
- // Dedicated stop/cancel must share the outer plugin admission's capacity
- // budget, acquired before the session permit. Otherwise a start and a stop
- // can each retain one client and both wait for the gateway's last connection.
- const plugins=manager.config?.memoryRuntimeLockIsolationEnabled===true && database && !database.transactionScope()
+ // Standalone prompts share the outer plugin capacity budget before taking
+ // a session permit. Stops bypass both reservations below.
+ const plugins=!stop && manager.config?.memoryRuntimeLockIsolationEnabled===true && database && !database.transactionScope()
   ? manager.pluginService : null;
- const owned=database ? (plugins?.acquireAdmissionClient
-  ? plugins.acquireAdmissionClient(controller.signal).then(()=>admit().finally(()=>plugins.releaseAdmissionClient()))
+ // Cancellation cannot wait for the input it cancels, at either semaphore or
+ // session fence. Its intent/actor writes still get short bounded receipts.
+ const owned=stop ? Promise.resolve().then(()=>database ? database.withoutTransactionClient(operate) : operate()) : database ? (plugins?.acquireAdmissionClient
+  ? plugins.acquireAdmissionClient(controller.signal, Math.max(0, deadline-performance.now())).then(()=>admit().finally(()=>plugins.releaseAdmissionClient()))
   : admit()) : queued(null);
  // Public timeout never releases or reuses an active client. The owned task
  // drains/rolls back independently and checks abort before any late submission.

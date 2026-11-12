@@ -51,7 +51,7 @@ export class GeoSharedContext {
     // when a prompt, adoption or runtime launch owns an outer transaction.
     try { return await this.database.withoutTransactionClient(() => this.resolveProject(project)); }
     catch (error) {
-      if (error?.code === '55P03') throw new HttpError(409, 'memory_context_publication_busy', 'The project memory context is being published. Retry shortly.');
+      if (error?.code === '55P03') throw Object.assign(new HttpError(409, 'memory_context_publication_busy', 'The project memory context is being published. Retry shortly.'), { definitivelyRejected: true });
       throw error;
     }
   }

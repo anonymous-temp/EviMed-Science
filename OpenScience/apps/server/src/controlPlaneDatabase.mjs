@@ -201,6 +201,9 @@ export class ControlPlaneDatabase {
     if (!Number.isSafeInteger(max) || max < 1 || max > 100) {
       throw configurationError("database_pool_invalid", "The PostgreSQL pool size is invalid.");
     }
+    if (config.memoryRuntimeLockIsolationEnabled === true && max < 4) {
+      throw configurationError("database_pool_invalid", "Memory runtime lock isolation requires OPEN_SCIENCE_DATABASE_POOL_MAX >= 4 (prompt, publication, gateway and stop receipt).");
+    }
     if (!Number.isSafeInteger(connectionTimeoutMillis) || connectionTimeoutMillis < 100 || connectionTimeoutMillis > 120_000) {
       throw configurationError("database_timeout_invalid", "The PostgreSQL connection timeout is invalid.");
     }

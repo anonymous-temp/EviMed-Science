@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { HttpError } from "../src/security.mjs";
+import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { PluginService } from "../src/pluginService.mjs";
 
 /** A database whose shared project lock is refused for the first `busyFor` asks. */
@@ -119,4 +120,28 @@ test('a normal prompt waits for account-native source maintenance without duplic
   const database=lockedDatabase(0,2);let ran=0;
   await serviceOn(database,5000).withAdmission(project,async()=>{ran++;},{prompt:true});
   assert.equal(database.state.nativeAsked,3);assert.equal(database.state.inserted,1);assert.equal(ran,1);
+});
+
+
+test('isolation requires four connections and reserves publication, gateway and stop capacity', () => {
+  for (const databasePoolMax of [1, 2, 3]) {
+    assert.throws(() => new PluginService({}, { runtimeLockIsolation: true, databasePoolMax }), { code: 'database_pool_invalid' });
+    assert.doesNotThrow(() => new PluginService({}, { runtimeLockIsolation: false, databasePoolMax }));
+    const config = { databasePoolMax, databaseConnectionTimeoutMs: 1000 }, pool = { on: () => {} };
+    assert.throws(() => new ControlPlaneDatabase({ ...config, memoryRuntimeLockIsolationEnabled: true }, { pool }), { code: 'database_pool_invalid' });
+    assert.doesNotThrow(() => new ControlPlaneDatabase({ ...config, memoryRuntimeLockIsolationEnabled: false }, { pool }));
+  }
+  for (const databasePoolMax of [4, 5, 6, 10]) {
+    const service = new PluginService({}, { runtimeLockIsolation: true, databasePoolMax });
+    assert.ok(service.admissionClientLimit <= databasePoolMax - 3);
+  }
+});
+
+test('a permit retry receives only the remaining admission deadline', async () => {
+  const service = serviceOn(lockedDatabase(1), 150), remaining = [];
+  service.acquireAdmissionClient = async (_signal, timeoutMs) => { remaining.push(timeoutMs); };
+  service.releaseAdmissionClient = () => {};
+  await service.withAdmission(project, async () => {});
+  assert.equal(remaining.length, 2);
+  assert.ok(remaining[0] <= 150 && remaining[1] < 100, JSON.stringify(remaining));
 });
