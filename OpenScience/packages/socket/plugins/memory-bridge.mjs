@@ -14,6 +14,7 @@
  * @module @evimed/dsh-socket/plugins/memory-bridge
  */
 
+import process from 'node:process'
 import { MEMORY_BRIDGE_PORT, configSchema, registerMemoryBridge } from '@evimed/harness-port'
 
 const Schema = await configSchema()
