@@ -1,0 +1,22 @@
+{
+  "id": "P03",
+  "learning": {
+    "initial": "Write a flowing release note for the volunteer rota editor: coordinators can now duplicate a weekly rota; verify by copying a draft and comparing the shift count. Reply here.",
+    "correction": "The flowing prose makes our release-note review slow. For my short release notes I want exactly three nonempty lines, starting Audience:, Change:, Check: in that order. Each line should carry only the corresponding supplied information. Rewrite it, and use that format for my later short release notes."
+  },
+  "exam": "Write a short release note for the museum catalogue tool. Archivists can now restore an accidentally hidden collection; verify by hiding a test collection, restoring it, and checking that the original item count is unchanged. Reply here.",
+  "behavior": {
+    "principle": "Exactly three nonempty lines prefixed Audience:, Change:, Check:, with no preamble or closing.",
+    "positive": "Audience: Archivists\nChange: Restore hidden collections.\nCheck: Hide and restore a test collection; compare item counts.",
+    "negative": "Extra title, bullets, or omission of the verification step."
+  },
+  "quality": "Audience archivists, restoring hidden collections, and the hide/restore/count comparison are preserved. No invented feature or data.",
+  "code": {
+    "type": "prefix_lines",
+    "expected": [
+      "Audience:",
+      "Change:",
+      "Check:"
+    ]
+  }
+}

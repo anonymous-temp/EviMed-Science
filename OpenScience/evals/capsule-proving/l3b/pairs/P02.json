@@ -1,0 +1,22 @@
+{
+  "id": "P02",
+  "learning": {
+    "initial": "Write a narrative handoff note for the print workshop. Completed: rollers cleaned. Blocked: ink delivery pending. Next: Mara checks the stockroom on Thursday. Reply here.",
+    "correction": "The narrative mixes work that is done with work that cannot proceed. For my operational handoff notes, use exactly three level-two headings: Ready, Blocked, Next, in that order. Keep the supplied next-action owner and timing. If an owner is missing, do not guess. Rewrite this note and keep this convention for future handoffs."
+  },
+  "exam": "Prepare an operational handoff note for the costume room. Completed: capes labelled. Blocked: zip fasteners have not arrived. Next: Ivo checks the delivery desk on Tuesday. Reply here.",
+  "behavior": {
+    "principle": "Use exactly the level-two headings Ready, Blocked, Next in order.",
+    "positive": "## Ready\nCapes labelled.\n## Blocked\nFasteners missing.\n## Next\nIvo checks Tuesday.",
+    "negative": "A chronological paragraph or a to-do list that presents the blocked delivery as completed."
+  },
+  "quality": "Capes labelled is complete; zip fasteners missing is blocked; Ivo checks delivery desk Tuesday. No invented owner or resolution.",
+  "code": {
+    "type": "headings",
+    "expected": [
+      "Ready",
+      "Blocked",
+      "Next"
+    ]
+  }
+}

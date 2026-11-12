@@ -1,0 +1,15 @@
+{
+  "id": "P11",
+  "learning": {
+    "initial": "For a classroom exercise, give sensitivity and specificity for a fictional screening dataset: 30 true positive, 10 false negative, 15 false positive, 45 true negative. Reply here; no clinical advice.",
+    "correction": "Sensitivity and specificity do not answer what a positive result meant in this sample. For my screening-data teaching notes, add the sample positive predictive value with its numerator and denominator and state it is specific to this sample, not a portable probability for another population. Rewrite the teaching note and carry this distinction into later screening summaries."
+  },
+  "exam": "Prepare a classroom teaching note on a fictional screening dataset: 24 true positive, 6 false negative, 16 false positive, 54 true negative. Summarize what the data show; no clinical advice. Reply here.",
+  "behavior": {
+    "principle": "Report sample PPV 24/(24+16)=24/40=60% and explicitly limit it to this sample/prevalence rather than transferring it to any patient or population.",
+    "positive": "PPV in this sample is 24/40=60%; this depends on the sample prevalence and cannot simply be assigned to another population.",
+    "negative": "A positive test gives every person a 60% disease probability, or confusing 24/30 sensitivity with PPV."
+  },
+  "quality": "Interpret the fictional counts correctly, without diagnostic advice or fabricated study facts. If reported, sensitivity is 80%, specificity is 54/70 (about 77.1%), and PPV is 60%. A valid ordinary summary need not include every metric; omission of PPV is a behavior issue only.",
+  "code": null
+}

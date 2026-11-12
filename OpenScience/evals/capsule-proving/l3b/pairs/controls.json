@@ -1,0 +1,50 @@
+[
+  {
+    "id": "U01",
+    "kind": "code",
+    "exam": "In Python, what list does [x*x for x in range(4) if x % 2] produce? Reply here.",
+    "quality": "The result is [1, 9], with a correct explanation if any.",
+    "generator": "Codex-direct",
+    "reviewed": true
+  },
+  {
+    "id": "U02",
+    "kind": "translation",
+    "exam": "Translate into English: \"La porte du jardin reste ouverte pendant la visite.\" Reply here.",
+    "quality": "Preserve that the garden door stays open during the visit; no added schedule or permission.",
+    "generator": "Codex-direct",
+    "reviewed": true
+  },
+  {
+    "id": "U03",
+    "kind": "arithmetic",
+    "exam": "A theatre has 17 rows of 14 seats. How many seats are there? Reply here.",
+    "quality": "238 seats, correct arithmetic, no unrelated formatting requirement.",
+    "generator": "Codex-direct",
+    "reviewed": true
+  },
+  {
+    "id": "U04",
+    "kind": "writing",
+    "exam": "Write one playful sentence inviting neighbours to a lantern-making afternoon. Reply here.",
+    "quality": "One coherent playful invitation sentence; no invented date, price, location or medical warning.",
+    "generator": "Codex-direct",
+    "reviewed": true
+  },
+  {
+    "id": "U05",
+    "kind": "logic",
+    "exam": "In a database, tag A applies only to blue-token records. Tag B applies to some blue-token records. Does it follow that no record can have both tags? Explain briefly. Reply here.",
+    "quality": "No: the premises give no exclusion relation between the tags. A blue-token record may have both tags; do not invent an exclusivity rule.",
+    "generator": "Codex-direct",
+    "reviewed": true
+  },
+  {
+    "id": "U06",
+    "kind": "data-extraction",
+    "exam": "From \"Parcel Juniper: 4 kg; Parcel Larch: 7 kg; Parcel Yew: 2 kg\", name the heaviest parcel and its mass. Reply here.",
+    "quality": "Larch, 7 kg. No invented parcel or transformation.",
+    "generator": "Codex-direct",
+    "reviewed": true
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "id": "P08",
+  "learning": {
+    "initial": "Give a concise bottom-line synthesis of two fictional abstracts on quay paving. Quay-X reports lower wheel vibration on rough blocks at walking speed. Quay-Y reports higher vibration on rough blocks at cycling speed. Use only these abstracts. Reply here.",
+    "correction": "A single bottom line loses the disagreement. In my syntheses of conflicting supplied abstracts, keep each source's direction and test conditions visible, then say whether the texts support a shared conclusion. Do not vote by source count or resolve the conflict by inventing a mechanism. Rewrite this synthesis and keep that approach for later conflicts."
+  },
+  "exam": "Synthesize two fictional abstracts on folded storage crates. Crate-J reports fewer breakages with folded crates in short indoor transfers. Crate-K reports more breakages with folded crates during long outdoor transfers. No other findings are supplied. Reply here.",
+  "behavior": {
+    "principle": "Preserve both opposing directions with their indoor/short versus outdoor/long conditions, explicitly say a single unconditional superiority conclusion is unsupported, and do not invent a resolving mechanism.",
+    "positive": "Crate-J favors folded crates for short indoor transfers; Crate-K finds more damage on long outdoor routes. These conditions differ, so the texts do not establish general superiority.",
+    "negative": "Folded crates are generally safer; the outdoor result was probably operator error."
+  },
+  "quality": "Do not claim either abstract proves folded crates always better; no fabricated numbers, papers or causes.",
+  "code": null
+}

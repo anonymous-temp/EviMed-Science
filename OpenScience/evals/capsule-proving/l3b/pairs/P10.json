@@ -1,0 +1,15 @@
+{
+  "id": "P10",
+  "learning": {
+    "initial": "For a research-methods classroom, summarize the relative effect in a fictional trial: 6 of 120 in the support arm and 12 of 120 in control had the prespecified event by 8 weeks. Do not give clinical recommendations. Reply here.",
+    "correction": "The relative effect alone hides the baseline risk. For my classroom trial summaries, put each arm's events/total and follow-up time before the relative effect, then show the absolute percentage-point difference. Keep this as fictional study interpretation, never treatment advice. Rewrite this summary and use the same reporting order for later classroom trial summaries."
+  },
+  "exam": "For a research-methods classroom, summarize a fictional trial: the prespecified event occurred in 9 of 150 in the coaching arm and 18 of 150 in control by 12 weeks. No other outcomes were reported. Do not give clinical recommendations. Reply here.",
+  "behavior": {
+    "principle": "Show 9/150 (6%) and 18/150 (12%) at 12 weeks before any relative effect; absolute decrease 6 percentage points, relative risk 0.5 or relative reduction 50%.",
+    "positive": "At 12 weeks: coaching 9/150 (6%); control 18/150 (12%). Absolute difference -6 percentage points; risk ratio 0.50.",
+    "negative": "Coaching cuts risk in half, without denominators or follow-up; or a clinical recommendation based on fictional data."
+  },
+  "quality": "Correct arithmetic, retain fictional educational context, no patient-level recommendation or invented outcomes.",
+  "code": null
+}

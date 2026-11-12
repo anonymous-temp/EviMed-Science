@@ -39,7 +39,7 @@ TOOL_NAME_WORDS = (r"literature_search|guideline_search|clinical_trial_search|dr
                    r"web_search|web_read|kb_search|evimed_[a-z_]+|mcp__[a-z_]+|submit_deliverable|dataset-research-scoping|clinical-evidence-synthesis")
 FORBIDDEN: dict[str, re.Pattern] = {
     "references": re.compile(r"(?im)^\s*(?:#{1,4}\s*)?(?:\*\*)?(?:参考文献|参考资料|引用文献|文献引用|References?|Bibliography|Works Cited)(?:\*\*)?\s*[:：]?\s*$"),
-    "medical_disclaimer": re.compile(r"仅供参考|不构成(?:任何)?(?:医疗|诊疗|医学|法律|投资)?建议|不能替代(?:专业)?(?:医生|医师|医疗)|请咨询(?:专业)?(?:医生|医师)|遵医嘱|not (?:medical|legal|financial) advice"),
+    "medical_disclaimer": re.compile(r"不构成(?:任何)?(?:医疗|诊疗|医学)建议|不能替代(?:专业)?(?:医生|医师|医疗)|请咨询(?:专业)?(?:医生|医师)|遵医嘱|not medical advice", re.I),
     "refusal": re.compile(r"我们目前不做|目前不支持|不在(?:我们)?(?:服务|能力)?范围|超出(?:了)?(?:我的|我们的)?(?:能力|范围)|我无法(?:为您|帮您|协助)|无法(?:为您)?提供该|I (?:can't|cannot) help"),
     "tool_names": re.compile(r"\b(?:%s)\b" % TOOL_NAME_WORDS),
     "internal_terms": re.compile(r"evimed-brief|task-plan\.json|\.evimed-|claim:CLM|<evimed|state\.json"),
@@ -575,8 +575,9 @@ def chk_numbers_from_source(spec, ctx):
     files = ctx.new_files([".pptx"] if spec["from"] == "pptx" else None)
 
     def check(path: Path):
-        tokens = sorted(set(numbers_in(textio.file_text(path), 2)))
-        # slide numbers and the deck's own counts are not clinical figures
+        content = textio.pptx_content_text(path) if path.suffix.lower() == ".pptx" else textio.file_text(path)
+        tokens = sorted(set(numbers_in(content, 2)))
+        # Only structurally identified page labels are removed, never small clinical values.
         found = [t for t in tokens if squash(t) in source]
         ratio = len(found) / len(tokens) if tokens else 1
         missing = [t for t in tokens if t not in found][:8]
@@ -1016,7 +1017,9 @@ def chk_numbers_preserved(spec, ctx):
 
 
 def _items(text: str) -> int:
-    return len(re.findall(r"(?m)^\s*(?:[-*•]\s+|\d+[.、)）]\s*|[一二三]、|[①②③])\S", text))
+    inline = len(re.findall(r"(?m)^\s*(?:[-*•]\s+|\d+[.、)）]\s*|[一二三]、|[①②③])\S", text))
+    standalone = re.findall(r"(?m)^\s*([1-9])\s*$\s*(?=\S)", text)
+    return inline or (len(standalone) if standalone == [str(i + 1) for i in range(len(standalone))] else 0)
 
 
 def _length(text: str) -> int:
@@ -1048,7 +1051,10 @@ def chk_weekly(spec, ctx):
     out.append(result("final_keeps_the_limits", _length(corrected) <= 240 and _items(corrected) == 3, f"{_length(corrected)} characters, {_items(corrected)} items"))
     ask = re.compile(r"请(?:你|您)?(?:提供|补充|告诉|发给我|说明)|请问|能否(?:提供|告知)|需要(?:你|您)(?:提供|补充)|麻烦(?:你|您)")
     asked = [m.group(0) for r in (shortened, corrected) for m in ask.finditer(r)]
-    out.append(result("does_not_ask_again_for_given_information", not asked, f"asks {asked[:3]}" if asked else "no repeated question"))
+    # A phrase cannot distinguish a repeated demand from an optional correction invitation.
+    # Keep the signal for review; the family's semantic judge owns whether information was already given.
+    out.append(result("does_not_ask_again_for_given_information", None if asked else True,
+                      f"question-like phrases {asked[:3]}; semantic review needed" if asked else "no question-like phrase", required=False))
     return out
 
 

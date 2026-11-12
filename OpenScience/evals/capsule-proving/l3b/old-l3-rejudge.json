@@ -1,0 +1,585 @@
+{
+  "arms": {
+    "A": {
+      "n": 40,
+      "oldComposite": 30,
+      "newComposite": 30,
+      "oldDeterministic": 31,
+      "newDeterministic": 31,
+      "flips": [],
+      "changed": [
+        {
+          "name": "exam-G21-r2",
+          "old": "fail",
+          "new": "fail",
+          "oldComposite": false,
+          "newComposite": false,
+          "removedFailures": [
+            "numbers_from_source"
+          ],
+          "remainingFailures": [
+            "run_succeeded"
+          ],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "assistant reply text is empty (run canceled/timed out)",
+            "3 numbers in deck ('04','05','08') not found in source PDF per automatic check",
+            "slide numbers like '02'–'05' may have been misidentified as data by the checker"
+          ],
+          "replacements": [
+            {
+              "id": "numbers_from_source",
+              "ok": true,
+              "detail": "YS-200_渠道商介绍_6页.pptx: 45/46 numbers in the deck are in the PDF; not found ['08']",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    "B": {
+      "n": 40,
+      "oldComposite": 30,
+      "newComposite": 32,
+      "oldDeterministic": 34,
+      "newDeterministic": 36,
+      "flips": [
+        {
+          "name": "exam-G21-r1",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "numbers_from_source"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [],
+          "replacements": [
+            {
+              "id": "numbers_from_source",
+              "ok": true,
+              "detail": "YS-200血糖监测系统_渠道销售6页.pptx: 44/45 numbers in the deck are in the PDF; not found ['08']",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "exam-G21-r2",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "numbers_from_source"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "numbers_from_source check failed for '04','05','08' (likely slide-number artifacts, not invented clinical data)"
+          ],
+          "replacements": [
+            {
+              "id": "numbers_from_source",
+              "ok": true,
+              "detail": "YS-200_渠道商销售演示_6页.pptx: 39/40 numbers in the deck are in the PDF; not found ['08']",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "changed": [
+        {
+          "name": "exam-G21-r1",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "numbers_from_source"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [],
+          "replacements": [
+            {
+              "id": "numbers_from_source",
+              "ok": true,
+              "detail": "YS-200血糖监测系统_渠道销售6页.pptx: 44/45 numbers in the deck are in the PDF; not found ['08']",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "exam-G21-r2",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "numbers_from_source"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "numbers_from_source check failed for '04','05','08' (likely slide-number artifacts, not invented clinical data)"
+          ],
+          "replacements": [
+            {
+              "id": "numbers_from_source",
+              "ok": true,
+              "detail": "YS-200_渠道商销售演示_6页.pptx: 39/40 numbers in the deck are in the PDF; not found ['08']",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    "D": {
+      "n": 40,
+      "oldComposite": 27,
+      "newComposite": 28,
+      "oldDeterministic": 31,
+      "newDeterministic": 33,
+      "flips": [
+        {
+          "name": "exam-G15-r1",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "forbidden:medical_disclaimer"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "Included unrequested '不构成投资建议' disclaimer flagged by automatic check",
+            "Added unrequested risk/conclusion section beyond the three requested topics"
+          ],
+          "replacements": [
+            {
+              "id": "forbidden:medical_disclaimer",
+              "ok": true,
+              "detail": "none found",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "exam-G19-r1",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": false,
+          "removedFailures": [
+            "does_not_ask_again_for_given_information"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "not_satisfied",
+          "semanticIssues": [
+            "Asks again for information already given (conversion rate was provided in turn 1)",
+            "Exceeds 200-character limit in final turn (214 chars)",
+            "Includes unrequested '待补' section and meta-commentary about the edit"
+          ],
+          "replacements": [
+            {
+              "id": "shortened_to_200_chars_and_three_items",
+              "ok": true,
+              "detail": "138 characters, 3 items",
+              "required": true
+            },
+            {
+              "id": "final_contains_37_percent",
+              "ok": true,
+              "detail": "37% present",
+              "required": true
+            },
+            {
+              "id": "final_keeps_the_limits",
+              "ok": true,
+              "detail": "214 characters, 3 items",
+              "required": true
+            },
+            {
+              "id": "does_not_ask_again_for_given_information",
+              "ok": null,
+              "detail": "question-like phrases ['请告诉']; semantic review needed",
+              "required": false
+            }
+          ]
+        }
+      ],
+      "changed": [
+        {
+          "name": "exam-G15-r1",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "forbidden:medical_disclaimer"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "Included unrequested '不构成投资建议' disclaimer flagged by automatic check",
+            "Added unrequested risk/conclusion section beyond the three requested topics"
+          ],
+          "replacements": [
+            {
+              "id": "forbidden:medical_disclaimer",
+              "ok": true,
+              "detail": "none found",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "exam-G19-r1",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": false,
+          "removedFailures": [
+            "does_not_ask_again_for_given_information"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "not_satisfied",
+          "semanticIssues": [
+            "Asks again for information already given (conversion rate was provided in turn 1)",
+            "Exceeds 200-character limit in final turn (214 chars)",
+            "Includes unrequested '待补' section and meta-commentary about the edit"
+          ],
+          "replacements": [
+            {
+              "id": "shortened_to_200_chars_and_three_items",
+              "ok": true,
+              "detail": "138 characters, 3 items",
+              "required": true
+            },
+            {
+              "id": "final_contains_37_percent",
+              "ok": true,
+              "detail": "37% present",
+              "required": true
+            },
+            {
+              "id": "final_keeps_the_limits",
+              "ok": true,
+              "detail": "214 characters, 3 items",
+              "required": true
+            },
+            {
+              "id": "does_not_ask_again_for_given_information",
+              "ok": null,
+              "detail": "question-like phrases ['请告诉']; semantic review needed",
+              "required": false
+            }
+          ]
+        }
+      ]
+    },
+    "E": {
+      "n": 40,
+      "oldComposite": 31,
+      "newComposite": 33,
+      "oldDeterministic": 34,
+      "newDeterministic": 36,
+      "flips": [
+        {
+          "name": "exam-G15-r1",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "forbidden:medical_disclaimer"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "Included unrequested investment disclaimer ('不构成投资建议')"
+          ],
+          "replacements": [
+            {
+              "id": "forbidden:medical_disclaimer",
+              "ok": true,
+              "detail": "none found",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "exam-G21-r2",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "numbers_from_source"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "Slide numbers (02/06, 03/06…) and '96%' flagged as not in source PDF, though they are cosmetic or derived from slide-4 data"
+          ],
+          "replacements": [
+            {
+              "id": "numbers_from_source",
+              "ok": true,
+              "detail": "YS-200-渠道销售PPT.pptx: 44/46 numbers in the deck are in the PDF; not found ['08', '96%']",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "changed": [
+        {
+          "name": "exam-G15-r1",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "forbidden:medical_disclaimer"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "Included unrequested investment disclaimer ('不构成投资建议')"
+          ],
+          "replacements": [
+            {
+              "id": "forbidden:medical_disclaimer",
+              "ok": true,
+              "detail": "none found",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "exam-G21-r2",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "numbers_from_source"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "Slide numbers (02/06, 03/06…) and '96%' flagged as not in source PDF, though they are cosmetic or derived from slide-4 data"
+          ],
+          "replacements": [
+            {
+              "id": "numbers_from_source",
+              "ok": true,
+              "detail": "YS-200-渠道销售PPT.pptx: 44/46 numbers in the deck are in the PDF; not found ['08', '96%']",
+              "required": true
+            }
+          ]
+        }
+      ]
+    },
+    "F": {
+      "n": 40,
+      "oldComposite": 27,
+      "newComposite": 29,
+      "oldDeterministic": 29,
+      "newDeterministic": 32,
+      "flips": [
+        {
+          "name": "exam-G15-r2",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": false,
+          "removedFailures": [
+            "forbidden:medical_disclaimer"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "not_satisfied",
+          "semanticIssues": [
+            "Fabricated 2026 data and events presented as fact (e.g., Starbucks China 60% stake sale to Boyu, Q3 2026 financials)",
+            "Report dated November 2026 with future statistics that cannot have been looked up from real sources",
+            "Links likely point to non-existent future press releases despite passing reachability checks"
+          ],
+          "replacements": [
+            {
+              "id": "forbidden:medical_disclaimer",
+              "ok": true,
+              "detail": "none found",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "exam-G19-r2",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "shortened_to_200_chars_and_three_items",
+            "final_keeps_the_limits",
+            "does_not_ask_again_for_given_information"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "Added unrequested meta-commentary explaining the edit",
+            "Ended with '请告诉我', re-asking for information already provided"
+          ],
+          "replacements": [
+            {
+              "id": "shortened_to_200_chars_and_three_items",
+              "ok": true,
+              "detail": "106 characters, 3 items",
+              "required": true
+            },
+            {
+              "id": "final_contains_37_percent",
+              "ok": true,
+              "detail": "37% present",
+              "required": true
+            },
+            {
+              "id": "final_keeps_the_limits",
+              "ok": true,
+              "detail": "164 characters, 3 items",
+              "required": true
+            },
+            {
+              "id": "does_not_ask_again_for_given_information",
+              "ok": null,
+              "detail": "question-like phrases ['请告诉']; semantic review needed",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "exam-G21-r2",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "numbers_from_source"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "Three numbers ('04','05','08') flagged as not in source PDF, but these are slide/page references or hematocrit range bounds (30–55%), not invented clinical data"
+          ],
+          "replacements": [
+            {
+              "id": "numbers_from_source",
+              "ok": true,
+              "detail": "YS-200血糖监测系统_渠道销售资料_6页.pptx: 38/39 numbers in the deck are in the PDF; not found ['08']",
+              "required": true
+            }
+          ]
+        }
+      ],
+      "changed": [
+        {
+          "name": "exam-G15-r2",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": false,
+          "removedFailures": [
+            "forbidden:medical_disclaimer"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "not_satisfied",
+          "semanticIssues": [
+            "Fabricated 2026 data and events presented as fact (e.g., Starbucks China 60% stake sale to Boyu, Q3 2026 financials)",
+            "Report dated November 2026 with future statistics that cannot have been looked up from real sources",
+            "Links likely point to non-existent future press releases despite passing reachability checks"
+          ],
+          "replacements": [
+            {
+              "id": "forbidden:medical_disclaimer",
+              "ok": true,
+              "detail": "none found",
+              "required": true
+            }
+          ]
+        },
+        {
+          "name": "exam-G19-r2",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "shortened_to_200_chars_and_three_items",
+            "final_keeps_the_limits",
+            "does_not_ask_again_for_given_information"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "Added unrequested meta-commentary explaining the edit",
+            "Ended with '请告诉我', re-asking for information already provided"
+          ],
+          "replacements": [
+            {
+              "id": "shortened_to_200_chars_and_three_items",
+              "ok": true,
+              "detail": "106 characters, 3 items",
+              "required": true
+            },
+            {
+              "id": "final_contains_37_percent",
+              "ok": true,
+              "detail": "37% present",
+              "required": true
+            },
+            {
+              "id": "final_keeps_the_limits",
+              "ok": true,
+              "detail": "164 characters, 3 items",
+              "required": true
+            },
+            {
+              "id": "does_not_ask_again_for_given_information",
+              "ok": null,
+              "detail": "question-like phrases ['请告诉']; semantic review needed",
+              "required": false
+            }
+          ]
+        },
+        {
+          "name": "exam-G21-r2",
+          "old": "fail",
+          "new": "pass",
+          "oldComposite": false,
+          "newComposite": true,
+          "removedFailures": [
+            "numbers_from_source"
+          ],
+          "remainingFailures": [],
+          "semanticVerdict": "satisfied",
+          "semanticIssues": [
+            "Three numbers ('04','05','08') flagged as not in source PDF, but these are slide/page references or hematocrit range bounds (30–55%), not invented clinical data"
+          ],
+          "replacements": [
+            {
+              "id": "numbers_from_source",
+              "ok": true,
+              "detail": "YS-200血糖监测系统_渠道销售资料_6页.pptx: 38/39 numbers in the deck are in the PDF; not found ['08']",
+              "required": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "modelCalls": 0,
+  "note": "Old Qwen verdicts retained, including possible influence from old automatic-check context. New deterministic passes do not override a semantic failure. Question phrases are advisory; no new semantic verdict fabricated."
+}

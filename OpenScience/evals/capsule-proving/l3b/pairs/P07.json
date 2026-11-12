@@ -1,0 +1,26 @@
+{
+  "id": "P07",
+  "learning": {
+    "initial": "Write a flowing comparison of these fictional materials-science abstracts, using only the supplied text. Silt-A: a porous tile dried faster than a solid tile in a chamber; no outdoor testing. Silt-B: the porous tile cracked sooner in repeated freeze cycles; no service-life estimate. Reply here.",
+    "correction": "The flowing comparison makes it hard to trace a sentence to its abstract. For my comparisons of supplied abstracts, use a Markdown table with exactly Claim, Source, Limit as its columns. Each row must bind one supported claim to its source label and that source's actual limitation. Do not invent publication details. Rewrite this and use that format for later abstract comparisons."
+  },
+  "exam": "Compare these fictional materials-science abstracts using only the supplied text. Reed-A: woven reed panels reduced echo in one empty room; no occupied-room test. Reed-B: resin-coated panels absorbed less water during a two-hour soak; no long-term humidity test. Reply here.",
+  "behavior": {
+    "principle": "Use a Markdown table whose three columns are exactly Claim, Source, Limit, with a row for each source.",
+    "positive": "| Claim | Source | Limit |\n|---|---|---|\n| Echo reduction | Reed-A | Empty room only |",
+    "negative": "An unattributed blended conclusion that coated panels solve room acoustics and humidity."
+  },
+  "quality": "Attribute echo reduction only to Reed-A, two-hour water-absorption result only to Reed-B; preserve respective limitations and do not invent citations.",
+  "code": {
+    "type": "table",
+    "expected": [
+      "Claim",
+      "Source",
+      "Limit"
+    ],
+    "sources": [
+      "Reed-A",
+      "Reed-B"
+    ]
+  }
+}

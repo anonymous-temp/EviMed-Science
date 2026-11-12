@@ -37,11 +37,13 @@ async function readSelection(projectDir) {
 
 /**
  * @param {{ api: any, userId: string, projectId: string, projectName?: string, sessionId: string, first: string, next: (turn: any, index: number) => Promise<string|null>|string|null,
- *   dataDir: string, outDir: string, timeoutMs: number, log: (m: string) => void, observeMethods?: (identity: any) => Promise<any>, waitMemoryTools?: boolean, maxTurns?: number }} o
+ *   dataDir: string, outDir: string, timeoutMs: number, log: (m: string) => void, observeMethods?: (identity: any) => Promise<any>, waitMemoryTools?: boolean, maxTurns?: number,
+ *   resumeRecord?: any, onTurn?: (record: any) => Promise<void> }} o
  */
-export async function runConversation({ api, userId, projectId, projectName, sessionId, first, next, dataDir, outDir, timeoutMs, log, observeMethods = null, waitMemoryTools = true, maxTurns = 8 }) {
+export async function runConversation({ api, userId, projectId, projectName, sessionId, first, next, dataDir, outDir, timeoutMs, log, observeMethods = null, waitMemoryTools = true, maxTurns = 8, resumeRecord = null, onTurn = null }) {
   const t0 = Date.now();
-  const record = { schema: 'lx-conversation/1', projectId, sessionId, startedAt: new Date().toISOString(), turns: [] };
+  if (resumeRecord && (resumeRecord.projectId !== projectId || resumeRecord.sessionId !== sessionId)) throw new Error('Conversation checkpoint identity mismatch');
+  const record = resumeRecord ?? { schema: 'lx-conversation/1', projectId, sessionId, startedAt: new Date().toISOString(), turns: [] };
   api.project = projectId;
   record.project = await ensureProject(api, projectId, projectName);
   const projectDir = `${dataDir}/users/${userId}/projects/${projectId}`;
@@ -55,8 +57,8 @@ export async function runConversation({ api, userId, projectId, projectName, ses
   }
   const session = await api.call('PUT', `/api/research-sessions/${encodeURIComponent(sessionId)}`, { mode: 'open-domain' });
   if (session.status >= 400) throw new Error(`session ${sessionId}: ${session.status} ${session.raw.slice(0, 200)}`);
-  let text = first;
-  for (let index = 0; text && index < maxTurns; index += 1) {
+  let text = record.turns.at(-1)?.timedOut ? null : record.turns.length ? await next(record.turns.at(-1), record.turns.length - 1) : first;
+  for (let index = record.turns.length; text && index < maxTurns; index += 1) {
     const turn = { index, text, startedAt: new Date().toISOString() };
     const t1 = Date.now();
     const dispatchId = `d_${sessionId}_${index}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120);
@@ -88,6 +90,7 @@ export async function runConversation({ api, userId, projectId, projectName, ses
     }
     turn.finishedAt = new Date().toISOString();
     record.turns.push(turn);
+    if (onTurn) await onTurn(record);
     log(`    turn ${index}: ${run.status} route=${run.effectiveAgentId}/${run.effectiveRouteReason} tools=${turn.tools.map(t => t.name).join('>') || '-'} wall=${Math.round(turn.wallMs / 1000)}s`);
     if (turn.timedOut) break;
     text = await next(turn, index);
