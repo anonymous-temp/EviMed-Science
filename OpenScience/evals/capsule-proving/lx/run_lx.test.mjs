@@ -73,7 +73,7 @@ test('L2: the simulated person hints first and is clear after; leaks count only 
   assert.equal(correctionFor(person, checks, '你好', ['r1']).level, 'clear');
   const s = l2Summary({ sessions: [{ first: [{ pass: true }], corrections: [] }, { first: [{ pass: false }], corrections: [{}] }],
     frozen: [{ results: [{ pass: true }, { pass: false }] }],
-    probes: [{ index: 0, results: [{ ruleId: 'r1', kind: 'startsWith', unnatural: true, pass: true }, { ruleId: 'r2', kind: 'maxChars', unnatural: true, pass: true }] }] });
+    probes: [{ index: 0, results: [{ ruleId: 'r1', kind: 'startsWith', scope: 'project', unnatural: true, pass: true }, { ruleId: 'r2', kind: 'maxChars', scope: 'project', unnatural: true, pass: true }] }] });
   assert.equal(s.firstTimeRight, 0.5);
   assert.equal(s.frozenCompliance, 0.5);
   assert.equal(s.probeLeaks.length, 1);
@@ -81,4 +81,13 @@ test('L2: the simulated person hints first and is clear after; leaks count only 
     { runId: 'lx', commit: 'c', flags: {}, rawPath: '/x', wallSeconds: 1, tokens: { prompt: 1, completion: 1, cached: 0, costCny: 0 } });
   assert.equal(rows.length, 4);
   assert.ok(rows.every(r => r.set === 'l2' && r.split === 'dev' && Number.isInteger(r.n)));
+});
+
+test('L2 separates scope leakage from personal preferences and reports legacy unknown scope', () => {
+  const result = scope => ({ ruleId: 'date', kind: 'pattern', unnatural: true, pass: true, scope });
+  const s = l2Summary({ sessions: [], frozen: [], probes: [{ index: 0, results: [result('personal'), result('project'), result(undefined)] }] });
+  assert.equal(s.probeLeaks.length, 1);
+  assert.equal(s.probePositiveChecks, 1);
+  assert.equal(s.probePersonalChecks, 1);
+  assert.equal(s.probeScopeUnknown, 1);
 });

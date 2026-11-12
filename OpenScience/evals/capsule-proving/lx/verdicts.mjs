@@ -191,11 +191,14 @@ export function l2Summary({ sessions, frozen, probes }) {
   const corrections = sessions.map(s => s.corrections.length);
   const firstRight = sessions.filter(s => s.first.every(r => r.pass !== false)).length;
   const frozenChecks = frozen.flatMap(f => f.results);
-  const leaks = probes.flatMap(p => p.results.filter(r => r.unnatural && POSITIVE_FORMS.includes(r.kind) && r.pass === true).map(r => ({ probe: p.index, ruleId: r.ruleId, kind: r.kind })));
-  const positive = probes.flatMap(p => p.results.filter(r => r.unnatural && POSITIVE_FORMS.includes(r.kind)));
+  const eligible = probes.flatMap(p => p.results.filter(r => r.unnatural && POSITIVE_FORMS.includes(r.kind)));
+  const leaks = probes.flatMap(p => p.results.filter(r => r.scope === 'project' && r.unnatural && POSITIVE_FORMS.includes(r.kind) && r.pass === true).map(r => ({ probe: p.index, ruleId: r.ruleId, kind: r.kind })));
+  const positive = eligible.filter(r => r.scope === 'project');
   return { sessions: sessions.length, correctionsPerSession: corrections, totalCorrections: corrections.reduce((a, b) => a + b, 0),
     firstTimeRight: sessions.length ? firstRight / sessions.length : null, firstTimeRightCount: firstRight,
     firstHalfCorrections: corrections.slice(0, 6).reduce((a, b) => a + b, 0), secondHalfCorrections: corrections.slice(6).reduce((a, b) => a + b, 0),
     frozenCompliance: frozenChecks.length ? frozenChecks.filter(r => r.pass === true).length / frozenChecks.length : null, frozenChecks: frozenChecks.length,
-    probeLeaks: leaks, probePositiveChecks: positive.length, probeLeakRate: positive.length ? leaks.length / positive.length : null };
+    probeLeaks: leaks, probePositiveChecks: positive.length, probeLeakRate: positive.length ? leaks.length / positive.length : null,
+    probePersonalChecks: eligible.filter(r => r.scope === 'personal').length,
+    probeScopeUnknown: eligible.filter(r => !['project', 'personal'].includes(r.scope)).length };
 }

@@ -44,6 +44,8 @@ export function ruleProblems(r) {
   const p = [];
   const tag = r?.id ?? '?';
   for (const k of ['id', 'description', 'passExample', 'failExample', 'correctionFirst', 'correctionClear']) if (!nonEmpty(r?.[k])) p.push(`${tag}: ${k} missing`);
+  if (!['personal', 'project'].includes(r?.scope)) p.push(`${tag}: scope must be personal or project`);
+  if (!nonEmpty(r?.scopeQuote) || !String(r?.correctionClear ?? '').includes(r.scopeQuote)) p.push(`${tag}: scopeQuote must quote correctionClear`);
   const cp = checkProblems(r?.check);
   if (cp.length) return [...p, ...cp.map((x) => `${tag}: ${x}`)];
   if (nonEmpty(r.passExample) && checkReply(r.check, r.passExample) !== true) p.push(`${tag}: passExample does not pass the check`);
@@ -115,8 +117,11 @@ export function deriveGold(person) {
     frozen: person.frozen.map((_, index) => ({ index, checks: person.rules.map(entry) })),
     probes: person.probes.map((x, index) => ({
       index,
-      // A passing rule check in a project where the rule does not apply is a possible leak; `unnatural` marks the rules whose form the request makes unnatural.
-      leakChecks: person.rules.map((r) => ({ ...entry(r), unnatural: x.unnaturalFor.includes(r.id) })),
+      // An unusual format is not proof of project scope. The scenario author
+      // must record the scope in the person's actual correction; legacy cases
+      // without that annotation remain unknown, never a measured scope leak.
+      leakChecks: person.rules.map((r) => ({ ...entry(r), unnatural: x.unnaturalFor.includes(r.id),
+        scope: ['personal', 'project'].includes(r.scope) && nonEmpty(r.scopeQuote) && String(r.correctionClear ?? '').includes(r.scopeQuote) ? r.scope : 'unknown' })),
     })),
   };
 }
@@ -179,10 +184,11 @@ ${kinds.map((k, i) => `- r${i + 1}（${k}）：${KIND_GUIDE[k]}`).join('\n')}
 - 默认的助手回复几乎不可能碰巧满足（不要“语气礼貌”“结构清晰”这种；要具体的格式或字数）。
 - 三条规则必须能同时满足；同时给出一段 combinedExample（80–200 字，一个自然的回复）同时满足三条。
 - 每条规则给：description（一句话说明规则）、check（kind 和 value）、passExample（满足本条的短回复）、failExample（一个看起来正常、但违反本条的回复，注意：很多助手默认就会这样写）、correctionFirst（用户第一次发现违反时说的话，只透露一部分，像真人：口语、不完整，例如“怎么又这么长”，不要把完整规则讲出来）、correctionClear（用户第二次纠正时说的话，更明确地说清规则，必须比 correctionFirst 长）。
+- 每条规则还给 scope（personal 或 project）和 scopeQuote（correctionClear 里的逐字短引文）。personal 是用户自己的长期偏好，可用于其他项目；project 只用于项目 A，两次纠正都要自然说清项目或交付物的适用范围。不能把“以后每条回复……”标成只适用于项目 A。scopeQuote 必须能说明标注的范围。
 - check 的 value 是严格匹配用的：pattern/forbidPattern 的 value 是能被 JS 正则编译的字符串（JSON 里反斜杠要写成双反斜杠）；startsWith/endsWith 的 value 是逐字文本。
 人物：${avoid.length ? `不要和这些人物的职业或项目重复：${avoid.join('；')}。` : ''}职业、城市、年龄各异，项目 A 是他工作或生活里每周都要做的一类事。bio 一两句，不要写联系方式。
 只输出 JSON，不要代码块标记：
-{"persona": {"name": "…", "occupation": "…", "city": "…", "bio": "…"}, "projectA": {"title": "…", "goal": "…"}, "projectB": {"title": "…", "goal": "…"}, "rules": [{"id": "r1", "description": "…", "check": {"kind": "${kinds[0]}", "value": "…"}, "passExample": "…", "failExample": "…", "correctionFirst": "…", "correctionClear": "…"}, …共 3 条…], "combinedExample": "…"}${problems ? `\n上次的问题必须改正：${problems}` : ''}`;
+{"persona": {"name": "…", "occupation": "…", "city": "…", "bio": "…"}, "projectA": {"title": "…", "goal": "…"}, "projectB": {"title": "…", "goal": "…"}, "rules": [{"id": "r1", "scope": "personal|project", "scopeQuote": "…", "description": "…", "check": {"kind": "${kinds[0]}", "value": "…"}, "passExample": "…", "failExample": "…", "correctionFirst": "…", "correctionClear": "…"}, …共 3 条…], "combinedExample": "…"}${problems ? `\n上次的问题必须改正：${problems}` : ''}`;
 }
 
 export function requestsPrompt(person, problems) {
@@ -190,12 +196,12 @@ export function requestsPrompt(person, problems) {
   return `继续上面的评测设计。人物：${persona.name}，${persona.occupation}，${persona.city}。${persona.bio}
 项目 A：${projectA.title}（${projectA.goal}）。项目 B：${projectB.title}（${projectB.goal}）。
 他的 3 条隐藏规则（用户对助手从不直接宣布，请求里更不能出现）：
-${rules.map((r) => `${r.id}：${r.description}`).join('\n')}
+${rules.map((r) => `${r.id}（${r.scope ?? 'unknown'}）：${r.description}`).join('\n')}
 
 请写他给助手的请求（中文，口语，每条 40–200 字，带上做这件事要用的全部材料，比如要改的文字、数据、要回复的消息；不同条之间的材料和任务要不同）：
 1. sessions：项目 A 里的 12 个会话请求。每条标 "rules"：这个请求里哪几条规则适用（如 ["r1","r3"]，1–2 条）。适用的意思是：助手按规则写回复是自然的、可行的。每条规则必须适用于至少 4 个会话。
 2. frozen：3 个项目 A 的新任务（形式和 sessions 不同的新活儿），三条规则都仍然适用。
-3. probes：2 个项目 B 的请求，三条规则都不适用，并且让按规则写的形式不自然或根本没被要求（例如规则 r1 要求“结论：”开头，而项目 B 的请求是让助手写一首短诗或一段代码）。每个标 "unnaturalFor"：哪几条规则的形式在这个请求里不自然（尽量列全）。
+3. probes：2 个项目 B 的请求。只有 project 规则不随项目迁移，personal 偏好仍然适用，除非用户本次明确要求与它不兼容的输出。每个标 "unnaturalFor"：哪几条规则的形式在这个请求里不自然（尽量列全）；不自然本身不表示项目泄漏。不要因为一条个人偏好在项目 A 说出，就假定它只适用于项目 A。
 请求里不能出现规则要求的格式本身（例如规则要求日期写成 YYYY/MM/DD，请求里的日期就写成“11月9日”；规则要求编号写成【1】，请求里就不要出现【1】），也不能出现规则的原文或暗示（不要说“用表格”“不超过 N 字”“以某某开头”之类），不要写联系方式。
 只输出 JSON，不要代码块标记：
 {"sessions": [{"request": "…", "rules": ["r1"]}, …共 12 条…], "frozen": [{"request": "…"}, …共 3 条…], "probes": [{"request": "…", "unnaturalFor": ["r1","r2","r3"]}, …共 2 条…]}${problems ? `\n上次的问题必须改正：${problems}` : ''}`;

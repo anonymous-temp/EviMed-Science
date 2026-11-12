@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { caseSha, checkProblems, deriveGold, kindTrio, longestCommon, requestsProblems, ruleProblems, rulesProblems, runtimeInput, secretShaped, seedProblems, simulateUserTurn, simulateUserTurnDetailed } from '../synthetic/learnsets.mjs';
 
-const rule = (id, check, pass, fail) => ({ id, description: `规则${id}`, check, passExample: pass, failExample: fail, correctionFirst: `${id}不对`, correctionClear: `${id}必须按规则来，请严格照做` });
+const rule = (id, check, pass, fail) => ({ id, scope: 'project', scopeQuote: '这个项目', description: `规则${id}`, check, passExample: pass, failExample: fail, correctionFirst: `${id}不对`, correctionClear: `${id}这个项目必须按规则来，请严格照做` });
 const rules = () => [
   rule('r1', { kind: 'startsWith', value: '结论：' }, '结论：可以。', '可以的。'),
   rule('r2', { kind: 'maxChars', value: '30' }, '好的。', '这是一段很长的回复'.repeat(10)),
@@ -61,6 +61,22 @@ test('gold comes from structure and keeps runtime input clean', () => {
   for (const leaked of ['结论：', 'correction', 'unnaturalFor', '规则r1', 'passExample']) assert.ok(!input.includes(leaked));
 });
 
+test('a personal date preference is not project leakage; unannotated legacy scope stays unknown', () => {
+  const p = person();
+  p.rules[0] = { ...p.rules[0], scope: 'personal', scopeQuote: '以后每条回复第一行都写日期',
+    check: { kind: 'pattern', value: '^\\d{4}/\\d{2}/\\d{2}\\n' },
+    correctionClear: '以后每条回复第一行都写日期，统一用斜杠年月日格式。' };
+  p.rules[1] = { ...p.rules[1], scope: 'project', scopeQuote: '只在项目A里', correctionClear: '只在项目A里，每条回复最多30字，别的项目不用。' };
+  delete p.rules[2].scope;
+  const checks = deriveGold(p).probes[0].leakChecks;
+  assert.deepEqual(checks.map(c => c.scope), ['personal', 'project', 'unknown']);
+  assert.equal(checks[0].unnatural, true, 'unnatural form alone does not establish project scope');
+  const invalid = { ...p.rules[0], scopeQuote: 'not said' };
+  assert.match(ruleProblems(invalid).join(), /scopeQuote/);
+  p.rules[0] = invalid;
+  assert.equal(deriveGold(p).probes[0].leakChecks[0].scope, 'unknown');
+});
+
 test('simulated user: silent on pass, first then clear, only applicable rules', () => {
   const p = person();
   assert.equal(simulateUserTurn(p, 0, '结论：好。'), null);
@@ -69,7 +85,7 @@ test('simulated user: silent on pass, first then clear, only applicable rules', 
   assert.match(simulateUserTurn(p, 0, '没有开头。', ['r1']), /严格照做/);
   // session 1 applies r2 and r3 only: a missing opening is not corrected
   assert.equal(simulateUserTurn(p, 1, '好的。 2026/11/09'), null);
-  assert.deepEqual(simulateUserTurnDetailed(p, 1, '好的。', ['r3']), { line: 'r3必须按规则来，请严格照做', ruleId: 'r3', level: 'clear' });
+  assert.deepEqual(simulateUserTurnDetailed(p, 1, '好的。', ['r3']), { line: 'r3这个项目必须按规则来，请严格照做', ruleId: 'r3', level: 'clear' });
   assert.equal(simulateUserTurn(p, 99, 'x'), null);
 });
 
