@@ -481,6 +481,7 @@ services:
       # The medical-search homepage topics: the web API serves them and the controller reads the image's version label.
       OPEN_SCIENCE_SEARCH_TOPICS_ENABLED:
       OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT:
+      OPEN_SCIENCE_AGENT_RUN_LEDGER_ROTATION_ENABLED:
       # The run monitor's window and stall notice, and how long a starting
       # runtime is waited for.
       OPEN_SCIENCE_AGENT_RUN_MONITOR_TIMEOUT_MS:

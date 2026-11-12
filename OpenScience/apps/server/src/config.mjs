@@ -2400,6 +2400,8 @@ export function loadConfig(overrides = {}) {
     runtimeQuotaCheckIntervalMs: Number(
       overrides.runtimeQuotaCheckIntervalMs ?? process.env.OPEN_SCIENCE_RUNTIME_QUOTA_CHECK_INTERVAL_MS ?? 30_000,
     ),
+    // Readers always accept segments; publish them only after every web instance can read them.
+    agentRunLedgerRotationEnabled: overrides.agentRunLedgerRotationEnabled ?? boolEnv("OPEN_SCIENCE_AGENT_RUN_LEDGER_ROTATION_ENABLED", false),
     // A systematic review screens and extracts hundreds of records, so the run
     // monitor has to outlast the specialist rather than the other way round.
     // Twenty-four hours since 2026-09-21 (was four): the owner ruled that no

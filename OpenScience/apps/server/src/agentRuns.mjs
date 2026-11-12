@@ -572,26 +572,35 @@ async function readLedgerText(project, maxBytes) {
   return texts.map(text => text && !text.endsWith("\n") ? `${text}\n` : text).join("");
 }
 
-/** All callers hold the project storage mutation lock. A rollover writes only
- * the new segment, so a crash cannot lose or duplicate the previous prefix.
+/** All callers hold the process-local project storage mutation lock.
+ * A rollover exclusively publishes a new segment; another process winning that
+ * filename makes us reread the tail instead of replacing its events.
  * `pending` is the adopted placeholder's cancellation, committed with its replacement start. */
-async function writeNextLedger(project, event, maxBytes, pending = []) {
-  const files = await ledgerSegments(project);
-  const tail = files.at(-1);
-  const events = parseEvents(await readLedgerSegment(project, tail, maxBytes, files.length === 1));
-  let text;
-  try { text = serializeNext([...events, ...pending], event, maxBytes); }
-  catch (error) {
-    if (!(error instanceof HttpError) || error.code !== "agent_runs_too_large") throw error;
-    // Validate the whole batch before publishing a new filename. An individual
-    // oversized event still fails without partially mutating the ledger.
-    text = serializeNext(pending, event, maxBytes);
-    if (files.length > 999999) throw corrupt("Agent run ledger has too many segments.");
-    const next = path.join(project.metaDir, `runs.${String(files.length).padStart(6, "0")}.jsonl`);
-    await writeFileAtomicNoFollow(project.rootDir, next, text, { encoding: "utf8", mode: 0o600 });
+async function writeNextLedger(project, event, maxBytes, rotationEnabled = false, pending = []) {
+  for (;;) {
+    const files = await ledgerSegments(project);
+    const tail = files.at(-1);
+    const events = parseEvents(await readLedgerSegment(project, tail, maxBytes, files.length === 1));
+    let text;
+    try { text = serializeNext([...events, ...pending], event, maxBytes); }
+    catch (error) {
+      if (!rotationEnabled || !(error instanceof HttpError) || error.code !== "agent_runs_too_large") throw error;
+      // Validate the whole batch before publishing a new filename. An individual
+      // oversized event still fails without partially mutating the ledger.
+      text = serializeNext(pending, event, maxBytes);
+      if (files.length > 999999) throw corrupt("Agent run ledger has too many segments.");
+      const next = path.join(project.metaDir, `runs.${String(files.length).padStart(6, "0")}.jsonl`);
+      try {
+        await writeFileExclusiveNoFollow(project.rootDir, next, text, { encoding: "utf8", mode: 0o600 });
+      } catch (conflict) {
+        if (conflict?.code === "EEXIST") continue;
+        throw conflict;
+      }
+      return;
+    }
+    await writeFileAtomicNoFollow(project.rootDir, tail, text, { encoding: "utf8", mode: 0o600 });
     return;
   }
-  await writeFileAtomicNoFollow(project.rootDir, tail, text, { encoding: "utf8", mode: 0o600 });
 }
 
 function corrupt(message) {
@@ -794,8 +803,15 @@ function foldEvents(events) {
     if (event.event === "finished") {
       const id = safeStoredId(event.id, "id");
       const current = runs.get(id);
-      if (!current || current.status !== "running") throw corrupt("Agent run ledger contains an invalid terminal event.");
+      if (!current) throw corrupt("Agent run ledger contains an invalid terminal event.");
       if (!terminalStatuses.has(event.status)) throw corrupt("Agent run terminal status is invalid.");
+      // A pre-segment writer can finish a run whose continuation it cannot see.
+      // Keep the first outcome and expose a diagnostic count instead of taking
+      // every read and admission in this project down with that duplicate.
+      if (terminalStatuses.has(current.status)) {
+        runs.set(id, Object.freeze({ ...current, ignoredTerminalEvents: (current.ignoredTerminalEvents ?? 0) + 1 }));
+        continue;
+      }
       if (!Number.isSafeInteger(event.durationMs) || event.durationMs < 0) throw corrupt("Agent run duration is invalid.");
       const artifacts = normalizeStoredArtifacts(event.artifacts);
       const errorCode = event.errorCode == null ? null : String(event.errorCode);
@@ -1249,6 +1265,7 @@ function runPhaseHistory(events, runId) {
     } else if (event.event === "progress") {
       record = { ...record, hasProgressEvent: true }
     } else if (event.event === "finished") {
+      if (terminalStatuses.has(record.status)) continue;
       record = { ...record, status: event.status, verification: event.verification ?? record.verification }
     } else {
       continue
@@ -4470,6 +4487,7 @@ export class AgentRunStore {
     this.model = String(options.model ?? "").trim();
     this.maxRuns = options.maxRuns ?? defaultMaxRuns;
     this.maxBytes = options.maxBytes ?? defaultMaxBytes;
+    this.ledgerRotationEnabled = options.ledgerRotationEnabled === true;
     this.promptStops=options.promptStops ?? new RuntimePromptStops({maxBytes:this.maxBytes});
     this.withPromptAdmission=options.withPromptAdmission ?? ((_project,_session,operation)=>operation());
     this.now = options.now ?? (() => new Date());
@@ -4896,8 +4914,11 @@ export class AgentRunStore {
         'sessionId','mode','agentId','agentVersion','runtimeAgent','effectiveAgentId','effectiveAgentVersion','effectiveRuntimeAgent','effectiveRouteReason',
         'model','accountCreatedAt','automated','kernelRequestIds','requestIds','nativeTurn','kind','messages','toolCalls','lastProgressAt',
         'artifacts','unverifiedArtifacts','outputFiles','presentedFiles','errorCode','errorSubCode','canceledBy','verification','usage',
-        'transcriptSha256','inventorySha256']);
-      const clean = rows => rows.filter(event => !ids.has(event.id) || !['native-workflow','notice'].includes(event.event)).map(event => !ids.has(event.id) ? event
+        'transcriptSha256','inventorySha256','deleted']);
+      // A prior deletion is an irreversible fence, including between segment rewrites.
+      // Keep its flag and timestamp while stripping all source-only notice text.
+      const clean = rows => rows.filter(event => !ids.has(event.id) || !['native-workflow','notice'].includes(event.event)
+        || (event.event === 'notice' && event.deleted === true)).map(event => !ids.has(event.id) ? event
         : Object.fromEntries(Object.entries(event).filter(([key]) => keep.has(key))));
       const cleaned = clean(events);
       const notices = [];
@@ -4918,7 +4939,7 @@ export class AgentRunStore {
         const text = rows.map(event => JSON.stringify(event)).join('\n') + (rows.length ? '\n' : '');
         await writeFileAtomicNoFollow(project.rootDir, file, text, { encoding: 'utf8', mode: 0o600 });
       }
-      for (const notice of notices) await writeNextLedger(project, notice, this.maxBytes);
+      for (const notice of notices) await writeNextLedger(project, notice, this.maxBytes, this.ledgerRotationEnabled);
       return [...ids];
     });
   }
@@ -5020,7 +5041,7 @@ export class AgentRunStore {
       if (run.artifactRefresh?.inventorySha256 === inventorySha256) return run;
       const event = { event: "artifacts-refreshed", id: runId, at: this.now().toISOString(), ...plan };
       const refreshed = foldEvents([...events, event]).get(runId);
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       this.notifyState(project, refreshed);
       return refreshed;
     });
@@ -5159,7 +5180,7 @@ export class AgentRunStore {
         if (legacy && !legacy.nativeTurn && legacy.sessionId === session.sessionId
           && String(legacy.effectiveRouteReason ?? "").startsWith(adoptedRouteReason)) {
           const event = { event: "runtime-turn", id: legacy.id, nativeTurn, requestIds: kernelRequestIds ?? [] };
-          await writeNextLedger(project, event, this.maxBytes);
+          await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
           return { run: foldEvents([...events, event]).get(legacy.id), owner: false };
         }
       }
@@ -5253,7 +5274,7 @@ export class AgentRunStore {
       if (beforeReserve) await beforeReserve({runs:[...runs.values()]});
       if (dispatchId) this.dispatchOwners.add(id);
       try {
-        await writeNextLedger(project, event, this.maxBytes, events.slice(persistedEventCount));
+        await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled, events.slice(persistedEventCount));
       } catch (error) {
         this.dispatchOwners.delete(id);
         throw error;
@@ -5417,7 +5438,7 @@ export class AgentRunStore {
         qualityNotices: fresh,
         ...(unchecked ? { verification: "unchecked" } : {}),
       };
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       const noticed = foldEvents([...events, event]).get(runId);
       this.notifyState(project, noticed);
       return noticed;
@@ -5463,7 +5484,7 @@ export class AgentRunStore {
         ...(shelve ? { archived } : {}),
         ...(remove ? { deleted: true } : {}),
       };
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       const labelled = foldEvents([...events, event]).get(runId);
       this.notifyState(project, labelled);
       return labelled;
@@ -5607,7 +5628,7 @@ export class AgentRunStore {
       };
       // Nothing but the timestamp to write means nothing to write.
       if (Object.keys(event).length <= 3) return current;
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       const updated = foldEvents([...events, event]).get(runId);
       this.notifyState(project, updated);
       return updated;
@@ -5726,7 +5747,7 @@ export class AgentRunStore {
       if (!current) throw new HttpError(404, "agent_run_not_found", "Agent run not found.");
       if (current.status !== "running" || current.dispatchStatus !== "dispatching") return current;
       const event = { event: "dispatch", id: runId, status };
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       const dispatched = foldEvents([...events, event]).get(runId);
       this.notifyState(project, dispatched);
       return dispatched;
@@ -6242,7 +6263,7 @@ export class AgentRunStore {
         ...(facts?.claimSummary ? { claimSummary: facts.claimSummary } : {}),
         ...(facts?.snapshot ? { snapshot: facts.snapshot } : {}),
       };
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       const finished = foldEvents([...events, event]).get(runId);
       this.notifyState(project, finished);
       return { run: finished, transitioned: true };
@@ -7661,7 +7682,7 @@ export class AgentRunStore {
       };
       // Superseded gauges leave the writable segment on every append path.
       // Earlier segments remain intact; their later gauges still fold last.
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       if (runIsStalled(current) && (!stillByHistory || !stillByKernel)) {
         const resumed = foldEvents([...events, event]).get(run.id);
         if (resumed) this.notifyState(project, resumed);
@@ -7968,7 +7989,7 @@ export class AgentRunStore {
       }
       const event = { event: "kernel-request", id: runId, kind: "steer", requestIds: [storedKernelRequestId(requestId)],
         ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       const updated = foldEvents([...events, event]).get(runId);
       this.notifyState(project, updated);
       return updated;
@@ -8024,7 +8045,7 @@ export class AgentRunStore {
       if (counted || (run.corrections ?? 0) >= MAX_RUN_CORRECTIONS) return run;
       const event = { event: "kernel-request", id: run.id, kind: "steer", source: "runtime-ui", steerRequestId: storedKernelRequestId(requestId),
         ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       const updated = foldEvents([...events, event]).get(run.id);
       this.notifyState(project, updated);
       return updated;
@@ -8043,7 +8064,7 @@ export class AgentRunStore {
       const event = { event: "kernel-request", id: runId, kind: "steer", source: "native-consumed", steerRequestId: storedKernelRequestId(input.sourceRequestId),
         inputReceipt: {referenceId:input.referenceId,actor:input.actor,inputSeq:input.inputSeq,turnStartSeq:run.nativeTurn.startSeq,originalTextDigest:input.originalTextDigest},
         ...(steerTextOf(text) ? { steerText: steerTextOf(text), steerAt: new Date().toISOString() } : {}) };
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       return foldEvents([...events, event]).get(runId);
     });
   }
@@ -8054,7 +8075,7 @@ export class AgentRunStore {
       const run = foldEvents(events).get(runId);
       if (!run || run.status !== "running") throw new HttpError(409, "agent_run_active", "The run is no longer accepting repair prompts.");
       const event = { event: "kernel-request", id: runId, requestIds: [storedKernelRequestId(requestId)] };
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       const updated = foldEvents([...events, event]).get(runId);
       this.notifyState(project, updated);
       return updated;
@@ -8068,7 +8089,7 @@ export class AgentRunStore {
       const run = foldEvents(events).get(runId);
       if (!run || run.kernelRequestIds?.length) return run;
       const event = { event: "kernel-request", id: runId, requestIds: requestIds.map(storedKernelRequestId) };
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       const updated = foldEvents([...events, event]).get(runId);
       this.notifyState(project, updated);
       return updated;
@@ -8104,7 +8125,7 @@ export class AgentRunStore {
       if (Number.isFinite(previousSeq) && evidence.throughSeq <= previousSeq) return current;
       if (JSON.stringify(current.nativeWorkflow) === JSON.stringify(evidence)) return current;
       const event = { event: "native-workflow", id: run.id, evidence };
-      await writeNextLedger(project, event, this.maxBytes);
+      await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
       return foldEvents([...events, event]).get(run.id);
     });
   }
@@ -8150,7 +8171,7 @@ export class AgentRunStore {
             throw new HttpError(409, "runtime_input_changed", "The migrated turn no longer has its recorded request identity.");
           }
           const event = { event: "runtime-turn", id: ownedId, nativeTurn: { startSeq: turn.startSeq, userSeq: first.seq }, requestIds, rebased: true };
-          await writeNextLedger(project, event, this.maxBytes);
+          await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
           return foldEvents([...events, event]).get(ownedId);
         });
         knownRuns[knownRuns.findIndex((item) => item.id === ownedId)] = run;
@@ -8267,7 +8288,7 @@ export class AgentRunStore {
           const missing = requestIds.filter(requestId => !current?.kernelRequestIds?.includes(requestId));
           if (!current || !missing.length) return current ?? run;
           const event = { event: "kernel-request", id: current.id, requestIds: missing };
-          await writeNextLedger(project, event, this.maxBytes);
+          await writeNextLedger(project, event, this.maxBytes, this.ledgerRotationEnabled);
           return foldEvents([...events, event]).get(current.id);
         });
       }

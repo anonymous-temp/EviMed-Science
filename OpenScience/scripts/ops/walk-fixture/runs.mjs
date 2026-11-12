@@ -53,7 +53,7 @@ export async function furnishRuns(app, user, { log }) {
     finishedAt: new Date(started + 47 * 60_000).toISOString(), durationMs: 47 * 60_000,
     deliverables: [{ id: DELIVERABLE, title: "急性胸部压迫感的证据评价", capability: "clinical-evidence-synthesis", status: "accepted", attempts: 1, lastVerdict: "pass" }],
   };
-  await withProjectStorageMutation(project, () => appendRunLedgerEvent(project, finished, app.agentRuns.maxBytes));
+  await withProjectStorageMutation(project, () => appendRunLedgerEvent(project, finished, app.agentRuns.maxBytes, app.agentRuns.ledgerRotationEnabled));
   log(`runs: ${run.id} delivered a package of ${pack.matrix.claims.length} claims`);
 
   // ---- a month of use: spend on the kernel and on titles, a few days apart

@@ -159,3 +159,18 @@ test("a deployment with no refusals says nothing rather than printing an empty t
   assert.doesNotMatch(out, /HTTP refusals/);
   assert.match(out, /1 finished runs/);
 });
+
+test("an unreadable continuation fails the report and names the segment", async t => {
+  const root = await mkdtemp(path.join(tmpdir(), "gate-health-unreadable-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const meta = path.join(root, ".openscience");
+  await mkdir(meta, { recursive: true });
+  await writeFile(path.join(meta, "runs.jsonl"), finished({ id: "base" }));
+  // A directory is unreadable as JSONL even when the test user can bypass permissions.
+  await mkdir(path.join(meta, "runs.000001.jsonl"));
+  assert.throws(() => run(root), error => {
+    assert.equal(error.status, 2);
+    assert.match(String(error.stderr), /unreadable run ledger segment.*runs\.000001\.jsonl/);
+    return true;
+  });
+});
