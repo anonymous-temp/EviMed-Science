@@ -147,18 +147,22 @@ export class MemoryHistory {
 
   /** Resolve the removed line's origins before syncOrigins drops them; legacy
    * remember writes without conversation provenance search the owner's history.
-   * Persist message hashes activated by the rejection: undo lifts the fence, and a repeated forget reinstates it. */
-  async rejectRemoved(context, file, removed, judge, { archiveUri: requestArchive = null } = {}) {
-    if (!removed.length) return;
+   * Scan every line before activating any rejection. The parent rejection and its
+   * message hashes commit together, satisfying the deployed foreign key without
+   * holding a database transaction across engine reads or model calls.
+   * Undo lifts the fence, and a repeated forget reinstates it. */
+  async rejectRemoved(context, file, removed, judge, { archiveUri: requestArchive = null, activate = async () => {} } = {}) {
+    if (!removed.length) { await activate(); return; }
     if (!context.ownerCreatedAt) context = {...context,ownerCreatedAt:(await this.ledger.database.query(
       'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[context.ownerId])).rows[0]?.stamp};
     await this.ensureSourceCopies(context);
     const origins = (await this.ledger.overlay.originsOf(context.ownerId,[file.uri])).get(file.uri);
     const type = nativeMemoryRejectionType(file.type,context.kind === 'geo-project' ? context.namespaceId : null);
+    const prepared = [];
     for (const text of removed) {
       const fingerprint = lineFingerprint(text), origin = origins?.get(fingerprint);
       const archives = [...new Set([origin?.archiveUri,...(origin?.sources ?? []).map(source=>source.archiveUri),requestArchive].filter(Boolean))];
-      const messages = [];
+      const messages = [], obligations = [];
       for (const archiveUri of archives) {
         const archive = parseArchiveUri(archiveUri);
         if (!archive || archive.userRoot !== context.userRoot || archive.rest) throw new Error('memory_history_privacy_unavailable');
@@ -166,7 +170,7 @@ export class MemoryHistory {
         if (platformSessionOf(binding?.sourceSession)) {
           // The conversation may not have archived its current turn yet. Keep a
           // session-bound obligation so its later archive fences the actual words.
-          await this.ledger.rejectMessages(context,type,fingerprint,[{archiveUri:`${context.userRoot}/sessions/${binding.sourceSession}`,text:''}]);
+          obligations.push({archiveUri:`${context.userRoot}/sessions/${binding.sourceSession}`,text:''});
         }
         const raw = await context.sessions.read(context.ownerId,`${archiveUri}/messages.jsonl`);
         if (raw === null) continue; // An absent archive has no original words to return.
@@ -192,8 +196,12 @@ export class MemoryHistory {
       }
       const unique=[...new Map(messages.map(message=>[JSON.stringify([message.archiveUri,message.messageHash??lineFingerprint(message.text)]),message])).values()];
       const matched=await this.matchRemoved(context,text,unique,judge,tokens);
-      await this.ledger.rejectMessages(context,type,fingerprint,matched);
+      prepared.push({ fingerprint, messages: [...obligations, ...matched] });
     }
+    await this.ledger.database.transaction(client => this.ledger.database.withTransactionClient(client, async () => {
+      await activate();
+      for (const row of prepared) await this.ledger.rejectMessages(context, type, row.fingerprint, row.messages);
+    }));
   }
 
   async matchRemoved(context,text,messages,judge,tokens=hardTokens(normalisedStatement(text))) {

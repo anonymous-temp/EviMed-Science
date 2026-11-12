@@ -955,3 +955,31 @@ test('the tool can reject an unstored statement from raw history and the page ca
   await f.store.undo(f.userId, forgotten[0].id);
   assert.ok(JSON.stringify(await search(f)).includes('M-41633'));
 });
+
+for (const mode of ['file', 'line', 'statement']) test(`history fence write failure rolls back rejection activation before ${mode} removal and can retry`, options, async t => {
+  const f = await setup(t), statement = 'My old project is M-41633.';
+  const body = `- ${statement}\n- Independent plan.`;
+  const uri = f.seed('notes/retry.md', body);
+  f.stub.files.set(`${f.commit.archiveUri}/messages.jsonl`, JSON.stringify({ role: 'user', content: statement }));
+  await f.service.ingestArchive(f.commit, f.context);
+  f.store.history = f.service; f.store.forgetTargetsEnabled = true;
+  const rejectMessages = f.ledger.rejectMessages.bind(f.ledger);
+  let fail = true;
+  f.ledger.rejectMessages = async (...args) => {
+    await rejectMessages(...args);
+    if (fail && args[3].length) throw new Error('history write unavailable');
+  };
+  const forget = () => f.store.forget({ id: f.userId }, { id: 'default', userId: f.userId }, mode === 'statement' ? null : uri,
+    mode === 'statement' ? { statement } : mode === 'line' ? { lines: [statement] } : {});
+  await assert.rejects(forget(), /history write unavailable/);
+  assert.equal(await f.sessions.read(f.userId, uri), body);
+  assert.deepEqual(await f.overlay.removals(f.userId), []);
+  assert.deepEqual(await f.overlay.revisionsOf(f.userId, uri), []);
+  assert.equal((await f.database.query('SELECT * FROM evimed_memory.history_message_rejections WHERE owner_id=$1', [f.userId])).rows.length, 0);
+  fail = false;
+  const result = await forget();
+  assert.ok(result.removed || result.historyRejected);
+  assert.ok((await f.overlay.removals(f.userId)).length > 0);
+  assert.ok(!JSON.stringify(await search(f)).includes('M-41633'));
+  assert.equal(await f.sessions.read(f.userId, uri), mode === 'statement' ? body : mode === 'line' ? '- Independent plan.' : null);
+});

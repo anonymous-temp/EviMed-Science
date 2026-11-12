@@ -51,7 +51,8 @@ test('forget origin lookup uses the verified owner namespace without inventing a
   const service = new MemoryHistory({ config: { memoryHistorySearchEnabled: true },
     contexts: { forProject: async () => { throw new Error('memory_scope_denied: no default project'); },
       forUri: async (owner, target) => { assert.equal(owner, 'u1'); assert.equal(target, uri); return context; } },
-    ledger: { overlay: { originsOf: async () => new Map() }, rejectMessages: async (...args) => fenced.push(args) },
+    ledger: { database: { transaction: async run => run({}), withTransactionClient: async (_client, run) => run() },
+      overlay: { originsOf: async () => new Map() }, rejectMessages: async (...args) => fenced.push(args) },
     resolveSource: async () => { throw new Error('no fabricated project source'); },
     resourcesFor: () => ({ searchHistory: async (_owner, root) => { searched.push(root); return []; } }) });
   service.ensureSourceCopies = async () => {};

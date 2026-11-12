@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { NativeMemoryStore } from '../src/nativeMemoryStore.mjs';
 import { contentHash, lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
+import { MemoryHistory, MemoryHistoryLedger } from '../src/memoryHistory.mjs';
 
 const user = { id: 'u1' }, project = { id: 'named', userId: user.id };
 const root = 'viking://user/u1', uri = `${root}/memories/preferences/format.md`;
@@ -10,23 +11,63 @@ const body = '- Use metric units.\n- Keep answers short.';
 // The same in-memory sessions/overlay boundary as nativeMemoryReads; no database or model.
 function fixture(enabled = true) {
   const files = new Map([[uri, body]]), rejections = [], revisions = [], historyCalls = [];
-  let historyFailure = false;
+  const historyRows = [];
+  let historyFailure = false, historyWriteFailure = false, inTransaction = false, failScan = 1;
+  const database = {
+    query: async (sql, values) => {
+      assert.match(sql, /INSERT INTO evimed_memory.history_message_rejections/);
+      const [owner, , , type, fingerprint] = values;
+      // Model the deployed composite FK, including the parent owner and type.
+      if (!rejections.some(row => row.owner === owner && row.type === type && row.lines.some(line => lineFingerprint(line) === fingerprint))) {
+        throw Object.assign(new Error('history_message_rejections foreign key'), { code: '23503' });
+      }
+      historyRows.push(values);
+      if (historyWriteFailure) throw new Error('history write unavailable');
+      return { rows: [] };
+    },
+    transaction: async operation => {
+      const savedRejections = structuredClone(rejections), savedRows = structuredClone(historyRows);
+      inTransaction = true;
+      try { return await operation(database); }
+      catch (error) {
+        rejections.splice(0, rejections.length, ...savedRejections);
+        historyRows.splice(0, historyRows.length, ...savedRows);
+        throw error;
+      } finally { inTransaction = false; }
+    },
+    withTransactionClient: async (_client, operation) => operation(),
+  };
   const sessions = { configured: true, engineUser: () => 'u1', userRoot: () => root, memoryRoot: () => `${root}/memories`,
-    read: async (_owner, target) => files.get(target) ?? null,
+    read: async (_owner, target) => { assert.equal(inTransaction, false, 'engine reads stay outside the rejection transaction'); return files.get(target) ?? null; },
     replace: async (_owner, target, text) => { files.set(target, text); return true; },
     remove: async (_owner, target) => files.delete(target), rebuildMemoryDirectory: async () => {} };
   const overlay = { configured: true, files: async () => new Map(), originsOf: async () => new Map(),
-    reject: async (_owner, type, target, lines, options) => rejections.push({ type, uri: target, lines, options }),
+    reject: async (owner, type, target, lines, options) => rejections.push({ owner, type, uri: target, lines, options }),
     addRevision: async row => { revisions.push(row); return { ...row, id: 'revision', changedAt: '2026-11-12' }; },
     queueSummaryInvalidation: async () => [], completeSummaryInvalidation: async () => {},
     upsertFile: async () => {}, setSources: async () => {}, syncOrigins: async () => {}, removeFile: async () => {} };
   const store = new NativeMemoryStore({ sessions, overlay, forgetTargetsEnabled: enabled });
-  store.files = async () => [...files].map(([target, text]) => ({ uri: target, body: text, hash: contentHash(text), type: 'preferences', projectId: null }));
-  store.history = {
-    rejectRemoved: async (_context, file, lines) => { if (historyFailure) throw new Error('history unavailable'); historyCalls.push({ file, lines }); },
-    retireWriteSessions: async () => {}, drainDeletes: async () => {},
+  store.files = async () => [...files].filter(([target]) => target.startsWith(`${root}/memories/`)).map(([target, text]) => ({ uri: target, body: text, hash: contentHash(text), type: 'preferences', projectId: null }));
+  const ledger = new MemoryHistoryLedger({ database, overlay });
+  ledger.migrate = async () => {};
+  const history = new MemoryHistory({ config: { memoryHistorySearchEnabled: true }, ledger });
+  history.ensureSourceCopies = async context => { context.ownerCreatedAt = '2026-01-01'; };
+  // The store's legacy context has no owner stamp; model that lookup separately.
+  const query = database.query;
+  database.query = async (sql, values) => sql.startsWith('SELECT created_at') ? { rows: [{ stamp: '2026-01-01' }] } : query(sql, values);
+  history.search = async ({ query: text }) => {
+    assert.equal(inTransaction, false, 'history scanning stays outside the rejection transaction');
+    historyCalls.push({ lines: [text] });
+    if (historyFailure && historyCalls.length === failScan) throw new Error('history unavailable');
+    return [{ origin: { archiveUri: `${root}/sessions/dsh-original/history/archive_001` },
+      originalMessages: [{ sourceRole: 'user', text }] }];
   };
-  return { store, files, rejections, revisions, historyCalls, failHistory: value => { historyFailure = value; } };
+  history.retireWriteSessions = async () => {};
+  history.drainDeletes = async () => {};
+  store.history = history;
+  store.rejectionJudge = { same: async ({ candidates }) => ({ same: new Set(candidates.map((_row, index) => index)) }) };
+  return { store, files, rejections, revisions, historyCalls, historyRows, ledger,
+    failHistory: (value, scan = 1) => { historyFailure = value; failScan = scan; }, failHistoryWrite: value => { historyWriteFailure = value; } };
 }
 
 test('a failed history scan activates no rejection and leaves a whole-file forget retryable', async () => {
@@ -128,4 +169,57 @@ test('history-only forget cannot claim success without the history service', asy
   const f = fixture(); f.store.history = null;
   await assert.rejects(f.store.forget(user, project, null, { statement: 'Old project.' }), error => error.code === 'memory_engine_unavailable');
   assert.deepEqual(f.rejections, []); assert.deepEqual(f.revisions, []);
+});
+
+
+test('the history fake refuses a child hash without its exact rejection parent', async () => {
+  const f = fixture();
+  await assert.rejects(f.ledger.rejectMessages({ ownerId: user.id, ownerCreatedAt: '2026-01-01', namespaceId: 'u1' },
+    'preferences', lineFingerprint('Use metric units.'), [{ archiveUri: `${root}/sessions/dsh-original/history/archive_001`, text: 'Use metric units.' }]),
+  error => error.code === '23503');
+  assert.deepEqual(f.historyRows, []);
+});
+
+test('a later-line scan failure leaves no earlier hash or active rejection, and retry completes', async () => {
+  const f = fixture(); f.failHistory(true, 2);
+  await assert.rejects(f.store.forget(user, project, uri), /history unavailable/);
+  assert.equal(f.historyCalls.length, 2);
+  assert.equal(f.files.get(uri), body);
+  assert.deepEqual(f.rejections, []); assert.deepEqual(f.historyRows, []); assert.deepEqual(f.revisions, []);
+  f.failHistory(false);
+  assert.equal((await f.store.forget(user, project, uri)).removed, true);
+  assert.equal(f.historyRows.length, 2);
+});
+
+for (const [label, target, options] of [
+  ['file', uri, {}], ['line', uri, { lines: ['Use metric units.'] }], ['statement', null, { statement: 'Old project.' }],
+]) test(`a failed history hash write rolls back its rejection and leaves ${label} forgetting retryable`, async () => {
+  const f = fixture(); f.failHistoryWrite(true);
+  await assert.rejects(f.store.forget(user, project, target, options), /history write unavailable/);
+  assert.equal(f.files.get(uri), body);
+  assert.deepEqual(f.rejections, []); assert.deepEqual(f.historyRows, []); assert.deepEqual(f.revisions, []);
+  f.failHistoryWrite(false);
+  const result = await f.store.forget(user, project, target, options);
+  assert.ok(result.removed || result.historyRejected);
+  assert.ok(f.historyRows.length > 0); assert.equal(f.revisions.length, 1);
+});
+
+test('a heading-only file uses the same fingerprint for its parent rejection and history hashes', async () => {
+  const f = fixture(); f.files.set(uri, '# Use metric units.');
+  assert.equal((await f.store.forget(user, project, uri)).removed, true);
+  assert.ok(f.historyRows.every(row => row[4] === lineFingerprint('Use metric units.')));
+});
+
+test('session obligations stay unpersisted on an archive failure and are written with their parent on retry', async () => {
+  const f = fixture(), archiveUri = `${root}/sessions/mcp-store-original/history/archive_001`;
+  f.ledger.overlay.originsOf = async () => new Map([[uri, new Map([[lineFingerprint('Use metric units.'), { archiveUri }]])]]);
+  f.ledger.overlay.commit = async () => ({ sourceSession: 'dsh-source' });
+  f.files.set(`${archiveUri}/messages.jsonl`, 'invalid JSON');
+  await assert.rejects(f.store.forget(user, project, uri), SyntaxError);
+  assert.deepEqual(f.rejections, []); assert.deepEqual(f.historyRows, []); assert.deepEqual(f.revisions, []);
+  assert.equal(f.files.get(uri), body);
+  f.files.set(`${archiveUri}/messages.jsonl`, JSON.stringify({ role: 'user', content: 'Use metric units.' }));
+  assert.equal((await f.store.forget(user, project, uri)).removed, true);
+  assert.ok(f.historyRows.some(row => row[5] === `${root}/sessions/dsh-source` && row[6] === lineFingerprint('')));
+  assert.ok(f.historyRows.some(row => row[5] === archiveUri && row[6] === lineFingerprint('Use metric units.')));
 });

@@ -1320,10 +1320,10 @@ export class NativeMemoryStore {
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
     if (actor === "user" || actor === "conversation" || reason === "source conversation deleted") {
       // A deleted source already has its own history fence; recognizing its wording is not a second admission gate.
-      if (actor === "user" || actor === "conversation") await this.history?.rejectRemoved(context,file,removed,this.rejectionJudge);
-      // History hashes are inert until the rejection exists. A failed scan must
-      // leave the file readable so a retry can finish before enforcement edits it.
-      await this.overlay.reject(userId, rejectionType, file.uri, removed, { origin });
+      const activate = async () => { await this.overlay.reject(userId, rejectionType, file.uri, removed, { origin }); };
+      if (this.history && (actor === "user" || actor === "conversation")) {
+        await this.history.rejectRemoved(context, file, removed, this.rejectionJudge, { activate });
+      } else await activate();
     }
     await this.history?.retireWriteSessions(context,oldOrigins,removed);
     const oldUri = file.uri, source = await this.#bodySource(userId,file);
@@ -1494,8 +1494,9 @@ export class NativeMemoryStore {
   async recordForgetIntent(userId, context, archiveUri, lines, { act = null, engineSession = null } = {}) {
     const uri = `${context.sessions.memoryRoot(userId)}/notes/forget-${contentHash(JSON.stringify([archiveUri, lines])).slice(0, 24)}.md`;
     const actual = await this.#fileContext(userId, uri);
-    await this.history?.rejectRemoved(actual, { uri, type: 'notes' }, lines, this.rejectionJudge, { archiveUri });
-    await this.overlay.reject(userId, this.#rejectionType(actual, 'notes'), uri, lines);
+    const activate = async () => { await this.overlay.reject(userId, this.#rejectionType(actual, 'notes'), uri, lines); };
+    if (this.history) await this.history.rejectRemoved(actual, { uri, type: 'notes' }, lines, this.rejectionJudge, { archiveUri, activate });
+    else await activate();
     await this.overlay.addRevision({ userId, uri, memoryType: 'notes', change: 'deleted', actor: 'conversation',
       reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, before: lines.join('\n'), after: null, archiveUri, engineSession });
     this.#touch(userId);
@@ -1614,9 +1615,10 @@ export class NativeMemoryStore {
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
     const names = [...new Set([titleOf(file.type, file.uri, file.body), ...memoryNameVariants(file.uri)])].filter(name => hardTokens(name).length);
     const removedLines = [...new Set([...removalLines(file.body), ...names])];
-    if (actor !== "platform") await this.history?.rejectRemoved(context,file,
-      [...new Map([...statements(file.body), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge);
-    await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, removedLines);
+    const activate = async () => { await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, removedLines); };
+    if (this.history && actor !== "platform") await this.history.rejectRemoved(context,file,
+      [...new Map([...statements(file.body).map(removalText), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge, { activate });
+    else await activate();
     await this.history?.retireWriteSessions(context,oldOrigins,statements(file.body));
     const removed = await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.remove(userId, file.uri)));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),
