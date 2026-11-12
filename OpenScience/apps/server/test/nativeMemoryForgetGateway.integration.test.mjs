@@ -112,7 +112,7 @@ const examinationStatement = 'The earlier examination result was benign.';
 
 // The lab's optional rejection judge has a per-day budget shared with extraction.
 // Exhausting that budget must not refuse a person's explicit privacy operation.
-test('P07 token-free statement crosses HTTP with an exhausted maintenance judge budget', options, async t => {
+for (const availability of ['available', 'provider off', 'invalid answer', 'provider exception', 'timeout']) test(`P07 token-free statement crosses HTTP with exhausted maintenance budget (${availability})`, options, async t => {
   const f = await setup(t);
   const original = 'The previous examination was benign.';
   const archive = await f.commitConversation('p07', [{ role: 'user', text: original }], { projectId: f.project.id });
@@ -123,22 +123,45 @@ test('P07 token-free statement crosses HTTP with an exhausted maintenance judge 
   assert.equal(before[0].messages[0].text, original);
   assert.deepEqual(hardTokens(examinationStatement), []);
   assert.deepEqual(hardTokens(original), []);
-  let calls = 0;
-  f.store.rejectionJudge = createRejectionJudge({ config: { deepseekProviderEnabled: true, deepseekApiKey: 'fixture',
-    deepseekModel: 'fixture', nativeMemoryRejectionJudgeDailyCalls: 0 }, callModel: async (_deps, call) => {
-      calls++;
-      const shown = JSON.parse(call.body.messages[1].content);
-      assert.deepEqual(shown.candidates.map(candidate => candidate.text), [original]);
-      assert.deepEqual(shown.removed, [examinationStatement]);
-      return { choices: [{ message: { content: JSON.stringify({ same: [{ candidate: 0, removed: 0 }], stated: [] }) } }] };
-    } });
+  const calls = [];
+  let failure = availability;
+  const judgeConfig = { deepseekProviderEnabled: availability !== 'provider off', deepseekApiKey: 'fixture',
+    deepseekModel: 'fixture', nativeMemoryRejectionJudgeDailyCalls: 0 };
+  f.store.rejectionJudge = createRejectionJudge({ config: judgeConfig, callModel: async (_deps, call) => {
+    calls.push(JSON.parse(call.body.messages[1].content));
+    if (failure === 'provider exception') throw new Error('private provider detail');
+    if (failure === 'timeout') throw new DOMException('private deadline detail', 'AbortError');
+    if (failure === 'invalid answer') return { choices: [{ message: { content: 'not JSON' } }] };
+    return { choices: [{ message: { content: JSON.stringify({ same: [{ candidate: 0, removed: 0 }], stated: [] }) } }] };
+  } });
   const maintenance = () => f.store.rejectionJudge.same({ userId: f.userId,
     candidates: [{ text: original, removed: [{ text: examinationStatement, fingerprint: lineFingerprint(examinationStatement) }] }] });
   assert.equal((await maintenance()).same.size, 0);
-  assert.equal(calls, 0, 'the maintenance allowance is already exhausted');
+  assert.equal(calls.length, 0, 'the maintenance allowance is already exhausted');
+  if (availability !== 'available') {
+    const refused = await f.memory.callTool('forget', { statement: examinationStatement });
+    assert.equal(refused.isError, true);
+    assert.match(refused.blocks.join('\n'), /memory_history_privacy_unavailable:.*earlier conversations.*temporarily unavailable.*Retry/s);
+    assert.match(refused.blocks.join('\n'), /Do not claim.*complete.*automatic retry/s);
+    assert.doesNotMatch(refused.blocks.join('\n'), /private provider|private deadline/);
+    assert.deepEqual(await f.overlay.removals(f.userId), [], 'fallback refuses before rejection activation');
+    assert.deepEqual(await f.store.forgotten(f.userId), [], 'no undo revision falsely claims a recorded intent');
+    assert.deepEqual((await f.database.query('SELECT message_hash FROM evimed_memory.history_message_rejections WHERE owner_id=$1', [f.userId])).rows, []);
+    assert.equal((await search()).length, 1, 'the refused operation cannot claim history was fenced');
+    assert.equal((await f.overlay.retryableForgetChecks({ userId: f.userId })).length, 0, 'a tool call has no archived retry plan');
+    assert.equal(calls.length, availability === 'provider off' ? 0 : 1);
+    failure = 'available';
+    judgeConfig.deepseekProviderEnabled = true;
+  }
+  // An explicit retry completes after recovery; no background completion is claimed.
   const answer = await f.memory.callTool('forget', { statement: examinationStatement });
   assert.equal(answer.isError, false, answer.blocks.join('\n'));
-  assert.equal(calls, 1);
+  assert.equal(calls.length, ['available', 'provider off'].includes(availability) ? 1 : 2);
+  // Assert outside callModel: an assertion inside that boundary is caught as a provider failure.
+  for (const shown of calls) {
+    assert.deepEqual(shown.candidates, [{ candidate: 0, text: original, options: [0] }]);
+    assert.deepEqual(shown.removed, [{ removed: 0, text: examinationStatement }]);
+  }
   assert.match(answer.blocks.join('\n'), /Recorded a history recall rejection.*conversation text is unchanged/s);
   const removals = await f.overlay.removals(f.userId);
   assert.equal(removals.length, 1);
@@ -149,7 +172,7 @@ test('P07 token-free statement crosses HTTP with an exhausted maintenance judge 
   assert.deepEqual(await f.history.search({ user: f.user, project: f.project, query: original }), []);
   assert.match(await f.sessions.read(f.userId, `${archive.archive_uri}/messages.jsonl`), /previous examination/);
   assert.equal((await maintenance()).same.size, 0, 'privacy work does not replenish the maintenance allowance');
-  assert.equal(calls, 1);
+  assert.equal(calls.length, ['available', 'provider off'].includes(availability) ? 1 : 2);
   await f.store.undo(f.userId, (await f.store.forgotten(f.userId))[0].id);
   assert.equal((await search()).length, 1, 'undo restores the semantically matched original');
 });

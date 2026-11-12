@@ -57,11 +57,11 @@ export function createForgetRequestJudge({ config, usageLedger = null, fetchImpl
     async check({ userId, projectId = null, candidates, conversation, documents = [] }) {
       if (!config.memoryForgetRequestCheckEnabled) return null;
       const model = config.memoryExtractionModel || config.deepseekModel;
-      if (!model || !config.deepseekApiKey || config.deepseekProviderEnabled === false) throw new Error('forget_request_judge_unavailable');
+      if (!model || !config.deepseekApiKey || config.deepseekProviderEnabled === false) throw Object.assign(new Error('forget_request_judge_unavailable'), { code: 'forget_request_judge_unavailable' });
       const input = JSON.stringify({ documents: documents.map(({ document, title }) => ({ document, title })),
         candidates: candidates.map((row, candidate) => ({ candidate, document: row.document ?? null, text: row.text, removed: row.removed === true })),
         conversation: conversation.map((row, message) => ({ message, role: row.role, text: row.text })) });
-      if (input.length > 240_000) throw new Error('forget_request_input_limit');
+      if (input.length > 240_000) throw Object.assign(new Error('forget_request_input_limit'), { code: 'forget_request_input_limit' });
       const judgeRequest = { userId, projectId: projectId || 'default', purpose: 'memory-extraction',
         signal: AbortSignal.timeout(Math.min(120_000, Math.max(1000, config.memoryExtractionTimeoutMs || 30_000))),
         body: { model, thinking: { type: 'disabled' }, temperature: 0, max_tokens: 4096, response_format: { type: 'json_object' },
@@ -77,7 +77,7 @@ export function createForgetRequestJudge({ config, usageLedger = null, fetchImpl
             { role: 'user', content: 'Your JSON failed validation. Every quote must be a verbatim contiguous substring of its referenced conversation message, not a paraphrase or a candidate\'s text. Candidate targets identify stored lines; retain an intent only when its exact quote is available in the conversation. Re-read the provided data and return a complete corrected JSON object with the required shape and offered indexes. Do not add or broaden deletion targets to repair formatting.' }] } });
         result = parseForgetRequestJudgement(repaired?.choices?.[0]?.message?.content, candidates, conversation);
       }
-      if (!result) throw new Error('forget_request_judge_invalid');
+      if (!result) throw Object.assign(new Error('forget_request_judge_invalid'), { code: 'forget_request_judge_invalid' });
       const offered = result.requests.flatMap((row, request) => row.decision !== 'remove' ? [] : [
         ...row.targets.map(candidate => ({ request, candidate, requestQuote: row.quote,
           kind: 'stored', document: candidates[candidate].document ?? null, text: candidates[candidate].text })),
@@ -86,13 +86,13 @@ export function createForgetRequestJudge({ config, usageLedger = null, fetchImpl
       ]);
       if (offered.length) {
         const reviewInput = JSON.stringify({ targets: offered, conversation, documents: documents.filter(doc => offered.some(row => row.document === doc.document)) });
-        if (reviewInput.length > 240_000) throw new Error('forget_request_input_limit');
+        if (reviewInput.length > 240_000) throw Object.assign(new Error('forget_request_input_limit'), { code: 'forget_request_input_limit' });
         const reviewResponse = await callModel({ config, usageLedger, fetchImpl }, { userId, projectId: projectId || 'default', purpose: 'memory-extraction',
           signal: AbortSignal.timeout(Math.min(120_000, Math.max(1000, config.memoryExtractionTimeoutMs || 30_000))),
           body: { model, thinking: { type: 'enabled' }, temperature: 0, max_tokens: 8192, response_format: { type: 'json_object' },
             messages: [{ role: 'system', content: REVIEW_INSTRUCTION }, { role: 'user', content: reviewInput }] } });
         const reviewed = parseForgetTargetReview(reviewResponse?.choices?.[0]?.message?.content, offered);
-        if (!reviewed) throw new Error('forget_request_review_invalid');
+        if (!reviewed) throw Object.assign(new Error('forget_request_review_invalid'), { code: 'forget_request_review_invalid' });
         for (const [request, row] of result.requests.entries()) {
           const reviews = reviewed.filter(item => item.request === request);
           if (!reviews.length) continue;
@@ -122,7 +122,7 @@ export async function checkForgetRequests({ commit, context, overlay, store, jud
     const source = origins.find(row => platformSessionOf(row.engineSession));
     if (!source) return { state: 'ineligible', requests: [], claims: [], falseClaims: 0 };
     const raw = await context.sessions.read(userId, `${source.archiveUri}/messages.jsonl`);
-    if (!raw || raw.length > 1_048_576) throw new Error('forget_request_messages_unavailable');
+    if (!raw || raw.length > 1_048_576) throw Object.assign(new Error('forget_request_messages_unavailable'), { code: 'forget_request_messages_unavailable' });
     const conversation = [];
     for (const line of raw.split('\n').filter(entry => entry.trim())) {
       const message = JSON.parse(line);
@@ -137,7 +137,7 @@ export async function checkForgetRequests({ commit, context, overlay, store, jud
     const removals = await overlay.removals(userId, context.kind === 'geo-project' ? context.namespaceId : null);
     candidates.push(...removals.filter(row => row.text).map(row => ({ text: row.text, removed: true, toolRemoved: toolPrints.has(row.fingerprint) })));
     const judged = await judge.check({ userId, projectId: commit.projectId, candidates, conversation, documents });
-    if (!judged) throw new Error('forget_request_judge_unavailable');
+    if (!judged) throw Object.assign(new Error('forget_request_judge_unavailable'), { code: 'forget_request_judge_unavailable' });
     const priorKeys = await overlay.forgetRequestKeys(userId, context.userRoot);
     // Quote boundaries are model choices; the original message owns request identity.
     const keyOf = row => contentHash(JSON.stringify([source.engineSession, conversation[row.message]?.at, conversation[row.message]?.role, conversation[row.message]?.text]));

@@ -2,7 +2,7 @@ import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { historySearchText } from './memoryHistory.mjs';
 import { openingProfileRead, selectOpeningEntries } from './memoryOpeningByUse.mjs';
 import { isMemorySummary } from './nativeMemorySummaries.mjs';
-import { carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
+import { ALL_ERROR_CODES, carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
 import { withoutResearchGoalGesture } from "./researchGoal.mjs";
 
 import {
@@ -1313,6 +1313,20 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       recordGatewayRequest(route, answer.outcome);
       send(answer);
     } catch (error) {
+      // These internal privacy failures are safe to name, but their raw messages
+      // may contain provider/source details. A retry is explicit, never a claim
+      // that the tool queued work: statement-only calls have no archived commit.
+      const privacyCode = String(/** @type {any} */ (error)?.code ?? '');
+      if (/^(?:memory_history_|forget_request_)/.test(privacyCode) && ALL_ERROR_CODES.includes(privacyCode)) {
+        recordGatewayRefusal(privacyCode);
+        recordGatewayRequest(route, 'refused');
+        onFailure?.({ code: privacyCode, status: 503 });
+        const message = privacyCode === 'memory_history_privacy_unavailable'
+          ? 'The privacy check of earlier conversations is temporarily unavailable. Retry this operation later. Do not claim forgetting is complete or that an automatic retry was scheduled.'
+          : 'The memory privacy operation could not complete. Do not claim completion; retry after the named condition is resolved.';
+        if (!res.headersSent) send({ status: 503, json: refusal(privacyCode, message) });
+        return;
+      }
       const own = error instanceof HttpError && (/^memory_gateway_/.test(error.code) || error.code === 'memory_scope_denied'
         || (error.code === 'memory_payload_invalid' && error.status === 400));
       if (own) {

@@ -140,3 +140,33 @@ test('an explicit origin privacy check is independent of the background judgemen
   assert.equal(calls.length, 1);
   assert.equal((await judge.same(request())).same.size, 0, 'background work remains budgeted');
 });
+
+for (const [label, config] of [
+  ['judge disabled', { nativeMemoryRejectionJudgeEnabled: false }],
+  ['provider disabled', { deepseekProviderEnabled: false }],
+  ['no model', { deepseekModel: '' }],
+  ['no credential', { deepseekApiKey: '' }],
+]) test(`origin privacy check has a stable retryable code: ${label}`, async () => {
+  const { judge, calls } = judgeWith([], config);
+  await assert.rejects(judge.same(request({ originMessages: true })), { code: 'memory_history_privacy_unavailable' });
+  assert.equal(calls.length, 0);
+});
+
+for (const answer of ['not JSON', {}, new Error('provider detail'), new DOMException('deadline', 'AbortError')]) {
+  test(`origin privacy check names an unusable model answer: ${String(answer)}`, async () => {
+    const { judge } = judgeWith([answer]);
+    await assert.rejects(judge.same(request({ originMessages: true })), { code: 'memory_history_privacy_unavailable' });
+  });
+}
+
+test('P07 fixture assertion errors are judge failures; the wire uses indexed removed objects', async () => {
+  const calls = [];
+  const judge = createRejectionJudge({ config: { deepseekApiKey: 'fixture', deepseekModel: 'fixture' },
+    callModel: async (_deps, call) => {
+      const shown = JSON.parse(call.body.messages[1].content);
+      calls.push(shown);
+      assert.deepEqual(shown.removed, ['prefers tables for comparisons']);
+    } });
+  await assert.rejects(judge.same(request({ originMessages: true })), { code: 'memory_history_privacy_unavailable' });
+  assert.deepEqual(calls[0].removed[0], { removed: 0, text: 'prefers tables for comparisons' });
+});

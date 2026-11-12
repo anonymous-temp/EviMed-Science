@@ -155,7 +155,7 @@ export function createRejectionJudge({ config, usageLedger = null, fetchImpl = g
       const nothing = { same: /** @type {Map<number, string>} */ (new Map()), stated: /** @type {Set<number>} */ (new Set()) };
       const shown = originMessages ? candidates : candidates.slice(0, MAX_CANDIDATES);
       if (!shown.length) return nothing;
-      if (!this.available) { recordRejectionJudge("unavailable"); recordRejectionLines("judge_failed", shown.length); if(originMessages) throw new Error("memory_history_privacy_unavailable"); return nothing; }
+      if (!this.available) { recordRejectionJudge("unavailable"); recordRejectionLines("judge_failed", shown.length); if(originMessages) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' }); return nothing; }
       const day = now().toISOString().slice(0, 10);
       const held = spent.get(userId);
       const calls = held && held.day === day ? held.calls : 0;
@@ -186,7 +186,7 @@ export function createRejectionJudge({ config, usageLedger = null, fetchImpl = g
           body: judgeRequestBody(model, { candidates: offered, removed: removedTexts, said: said.slice(0, MAX_SAID).map((text) => String(text).slice(0, 300)) }),
         });
         const judged = parseJudgement(body?.choices?.[0]?.message?.content, offered, removedTexts.length);
-        if (!judged) { recordRejectionJudge("failed"); recordRejectionLines("judge_failed", shown.length); if(originMessages) throw new Error("memory_history_privacy_unavailable"); return nothing; }
+        if (!judged) { recordRejectionJudge("failed"); recordRejectionLines("judge_failed", shown.length); if(originMessages) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' }); return nothing; }
         const result = { same: /** @type {Map<number, string>} */ (new Map()), stated: judged.stated };
         for (const [candidate, removed] of judged.same) result.same.set(candidate, removedPrints[removed]);
         recordRejectionLines("judged_same", result.same.size);
@@ -195,7 +195,7 @@ export function createRejectionJudge({ config, usageLedger = null, fetchImpl = g
       } catch {
         recordRejectionJudge("failed");
         recordRejectionLines("judge_failed", shown.length);
-        if(originMessages) throw new Error("memory_history_privacy_unavailable");
+        if(originMessages) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
         return nothing;
       } finally {
         clearTimeout(timeout);

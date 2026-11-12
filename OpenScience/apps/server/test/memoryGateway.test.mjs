@@ -1183,3 +1183,15 @@ test('unexpected gateway failures retain only their stable diagnostic in the ser
     assert.deepEqual(f.failures, [{ code, status: 502 }]);
   }
 });
+
+test('history privacy refusal names its retry without exposing provider details or promising background work', async t => {
+  const error = Object.assign(new Error('private provider response'), { code: 'memory_history_privacy_unavailable' });
+  const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async () => { throw error; } } });
+  const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: { statement: 'Old fact.' } } });
+  assert.equal(answer.status, 503);
+  assert.equal(answer.json.error.code, error.code);
+  assert.match(answer.json.error.message, /earlier conversations.*temporarily unavailable.*Retry/s);
+  assert.match(answer.json.error.message, /Do not claim.*complete.*automatic retry/s);
+  assert.doesNotMatch(answer.json.error.message, /private provider response/);
+  assert.deepEqual(f.failures, [{ code: error.code, status: 503 }]);
+});
