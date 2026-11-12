@@ -376,3 +376,12 @@ test('baseline arms accept answer-only variants and reject product gateway overr
     assert.throws(() => parseArguments([...args, '--answer-variant', 'bad:memoryOpeningIndexEnabled=true']), /gateway variants/);
   }
 });
+
+test('ingest-only preserves temporal snapshots when requested and never calls the answer model', async t => {
+  const f = await runnerFixture(t);
+  const totals = await main([...f.args, '--ingest-only', '--snapshot-checkpoints'], f.dependencies);
+  assert.equal(totals.answers, 0);
+  assert.deepEqual(f.events, ['ingest:s1', 'snapshot', 'ingest:s2', 'snapshot']);
+  assert.equal((await json(path.join(f.out, 'cases/U01/snapshots/1.json'))).afterSession, 1);
+  assert.equal((await json(path.join(f.out, 'cases/U01/snapshots/2.json'))).afterSession, 2);
+});

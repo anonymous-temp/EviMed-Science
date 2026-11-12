@@ -44,13 +44,15 @@ async function rebuild(sessions, userId, directories) {
  * @template T
  * @param {any} sessions @param {any} overlay @param {string} userId @param {string} uri
  * @param {() => Promise<T>} operation
+ * @param {(() => Promise<void>) | null} [afterMutation]
  * @returns {Promise<T>}
  */
-export async function withMemorySummaryInvalidation(sessions, overlay, userId, uri, operation) {
+export async function withMemorySummaryInvalidation(sessions, overlay, userId, uri, operation, afterMutation = null) {
   return withNativeMemoryWrite(overlay.database, userId, async () => {
     const directories = memorySummaryDirectories(uri, sessions.memoryRoot(userId));
     const tickets = await overlay.queueSummaryInvalidation(userId, directories);
     const result = await operation();
+    if (afterMutation) await afterMutation();
     await rebuild(sessions, userId, directories);
     await overlay.completeSummaryInvalidation(userId, tickets);
     return result;

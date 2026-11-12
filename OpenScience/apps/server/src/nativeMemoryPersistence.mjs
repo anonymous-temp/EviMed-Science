@@ -287,6 +287,15 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_markers (
   name text PRIMARY KEY,
   done_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
+
+-- Attribution receipts contain hashes, source identities and verdicts, never conversation or memory text.
+CREATE TABLE IF NOT EXISTS evimed_memory.native_instruction_checks (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  fingerprint text NOT NULL,
+  result jsonb NOT NULL,
+  checked_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (user_id, fingerprint)
+);
 -- Writer leases of the owner fence (nativeMemoryWriteFence.mjs): held as rows, never as a transaction across an engine call.
 CREATE TABLE IF NOT EXISTS evimed_memory.native_writer_leases (
   user_id text NOT NULL,

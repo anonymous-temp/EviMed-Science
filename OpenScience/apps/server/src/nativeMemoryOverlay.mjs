@@ -129,6 +129,24 @@ function publicFile(row) {
   };
 }
 
+/** Query-only original-authorship resolver, shared by the worker ledger and read-only archive replay. */
+export async function readNativeMemoryOriginalSources(query, userId, archiveUris) {
+    if (!archiveUris.length) return [];
+    const result = await query(`WITH RECURSIVE edges AS (
+      SELECT replayed_as AS child,archive_uri AS parent FROM evimed_memory.native_commits WHERE user_id=$1 AND replayed_as IS NOT NULL
+      UNION SELECT copy_archive_uri,source_archive_uri FROM evimed_memory.native_source_copies WHERE user_id=$1
+    ), lineage(uri) AS (
+      SELECT unnest($2::text[]) UNION SELECT e.parent FROM edges e JOIN lineage l ON e.child=l.uri
+    ) SELECT l.uri AS archive_uri,c.engine_session,c.project_id,c.project_created_at FROM lineage l
+      LEFT JOIN evimed_memory.native_commits c ON c.user_id=$1 AND c.archive_uri=l.uri
+      WHERE NOT EXISTS(SELECT 1 FROM edges e WHERE e.child=l.uri)
+      AND COALESCE(c.origin,'') NOT IN ('promotion','replay')
+      AND NOT EXISTS(SELECT 1 FROM evimed_memory.native_admissions a WHERE a.user_id=$1
+        AND (a.archive_uri=l.uri OR a.engine_session=c.engine_session))`, [owner(userId), archiveUris]);
+    return result.rows.map(row => ({ archiveUri: row.archive_uri, engineSession: row.engine_session,
+      projectId: row.project_id, projectCreatedAt: row.project_created_at }));
+}
+
 export class NativeMemoryOverlay {
   /** @param {{ database?: any }} dependencies */
   constructor({ database = null } = {}) {
@@ -440,20 +458,7 @@ export class NativeMemoryOverlay {
    * Promotion and outside-agent candidates are not statements by the person.
    * @param {string} userId @param {string[]} archiveUris */
   async removalOrigins(userId, archiveUris) {
-    if (!archiveUris.length) return [];
-    const result = await this.#query(`WITH RECURSIVE edges AS (
-      SELECT replayed_as AS child,archive_uri AS parent FROM evimed_memory.native_commits WHERE user_id=$1 AND replayed_as IS NOT NULL
-      UNION SELECT copy_archive_uri,source_archive_uri FROM evimed_memory.native_source_copies WHERE user_id=$1
-    ), lineage(uri) AS (
-      SELECT unnest($2::text[]) UNION SELECT e.parent FROM edges e JOIN lineage l ON e.child=l.uri
-    ) SELECT l.uri AS archive_uri,c.engine_session,c.project_id,c.project_created_at FROM lineage l
-      LEFT JOIN evimed_memory.native_commits c ON c.user_id=$1 AND c.archive_uri=l.uri
-      WHERE NOT EXISTS(SELECT 1 FROM edges e WHERE e.child=l.uri)
-      AND COALESCE(c.origin,'') NOT IN ('promotion','replay')
-      AND NOT EXISTS(SELECT 1 FROM evimed_memory.native_admissions a WHERE a.user_id=$1
-        AND (a.archive_uri=l.uri OR a.engine_session=c.engine_session))`, [owner(userId), archiveUris]);
-    return result.rows.map(row => ({ archiveUri: row.archive_uri, engineSession: row.engine_session,
-      projectId: row.project_id, projectCreatedAt: row.project_created_at }));
+    return readNativeMemoryOriginalSources((text, values) => this.#query(text, values), userId, archiveUris);
   }
 
   /** The archives of one account the ledger already holds. @param {string} userId @returns {Promise<Set<string>>} */
@@ -606,6 +611,37 @@ export class NativeMemoryOverlay {
   }
 
   // --------------------------------------------------------------- revisions
+
+  /** A content/source-bound receipt makes retries auditable without spending the judging budget again. */
+  async instructionCheck(userId, fingerprint) {
+    const result = await this.#query('SELECT result FROM evimed_memory.native_instruction_checks WHERE user_id=$1 AND fingerprint=$2', [owner(userId), fingerprint]);
+    return result.rows[0]?.result ?? null;
+  }
+
+  /** Instruction review must not share the settlement queue's page limit: an older broken summary can strand later writes. */
+  async instructionCommits(userId) {
+    const result = await this.#query("SELECT * FROM evimed_memory.native_commits WHERE user_id=$1 AND state='pending' ORDER BY created_at,archive_uri", [owner(userId)]);
+    return result.rows.map(publicCommit);
+  }
+
+  async recordInstructionCheck(userId, fingerprint, result) {
+    await this.#query(`INSERT INTO evimed_memory.native_instruction_checks(user_id,fingerprint,result) VALUES($1,$2,$3::jsonb)
+      ON CONFLICT(user_id,fingerprint) DO NOTHING`, [owner(userId), fingerprint, JSON.stringify(result)]);
+  }
+
+  /** Disputed lines stay outside active recall, with the same recoverable revision authority as Undo. */
+  async pendingInstructionRevisions(userId) {
+    const rows = await this.#query(`SELECT r.* FROM evimed_memory.native_revisions r WHERE user_id=$1 AND actor='platform'
+      AND reason LIKE '%pasted_instruction_pending%' AND undone_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM evimed_memory.native_revisions newer WHERE newer.user_id=r.user_id AND newer.uri=r.uri
+        AND newer.id>r.id AND newer.actor='user') ORDER BY id DESC LIMIT 100`, [owner(userId)]);
+    const checks = await this.#query("SELECT result->'pendingKeys' AS keys FROM evimed_memory.native_instruction_checks WHERE user_id=$1 AND result ? 'pendingKeys'", [owner(userId)]);
+    const prints = new Map();
+    for (const row of checks.rows) for (const key of row.keys ?? []) {
+      const held = prints.get(key.uri) ?? new Set(); held.add(key.fingerprint); prints.set(key.uri, held);
+    }
+    return (await this.protectRevisions(userId, rows.rows.map(publicRevision))).map(row => ({ ...row, pendingFingerprints: prints.get(row.uri) ?? null }));
+  }
 
   /**
    * One change of one file. A change read from an archive's diff is written once however often the diff is read.

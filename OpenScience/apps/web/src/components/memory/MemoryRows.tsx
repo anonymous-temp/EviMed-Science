@@ -58,19 +58,22 @@ export function GroupSection({ title, children }: { title: ReactNode; children: 
 
 /**
  * What 「记住这一条」 asked and the memory has not written yet: the words, marked 「正在记住」, at the head of the list. A row of
- * its own kind, because there is nothing to open yet; when the memory is slow it says so instead of spinning for ever, and when the page has stopped waiting it says the memory is not finished.
+ * Anatomy: text and status in the existing ListRow; variants: writing or held for review; states: pending, slow, stalled.
+ * Hit area: static row, no action; keyboard: readable in document order; long content: two-line clamp;
+ * theme: shared semantic tokens; responsive: shared ListRow; verification: usePendingMemory tests and server pending integration.
+ * Its own kind, because there is nothing to open yet; when the memory is slow it says so instead of spinning for ever, and when the page has stopped waiting it says the memory is not finished.
  */
 type ResolveForget = (id: string, action: "confirm" | "dismiss", choices: number[]) => Promise<unknown>;
 
 export function PendingMemoryRows({ items, slow, stalled = false, onResolved, onResolve }: { onResolve?: ResolveForget; onResolved?: () => void; items: readonly WebPendingMemory[]; slow: boolean; /** The page has stopped reading: it says the memory is not finished and can be looked at later. */ stalled?: boolean }) {
   return (
-    <List label="待处理的记忆">
+    <List label={items.some(item => item.state === "confirmation" || item.reason === "instruction_origin_uncertain") ? "待处理的记忆" : "正在记住的内容"}>
       {items.map((item) => item.state === "confirmation" ? <ForgetConfirmationRow key={item.id} item={item} onResolved={onResolved} onResolve={onResolve} /> : (
         <ListRow
           key={item.id}
           chevron={false}
           title={<span className="line-clamp-2 max-w-measure">{item.text}</span>}
-          trailing={<span role="status" className="text-caption text-text-3">{stalled ? "还没写完，可以稍后再看" : slow ? "还在记，比平时慢一些" : "正在记住"}</span>}
+          trailing={<span role="status" className="text-caption text-text-3">{item.reason === "instruction_origin_uncertain" ? "待核对，尚未作为偏好使用" : stalled ? "还没写完，可以稍后再看" : slow ? "还在记，比平时慢一些" : "正在记住"}</span>}
         />
       ))}
     </List>

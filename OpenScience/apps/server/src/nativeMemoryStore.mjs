@@ -422,6 +422,8 @@ export class NativeMemoryStore {
     this.memoryContexts = memoryContexts;
     /** Durable raw-history lifecycle fences, set by the composition root. */
     this.history = null;
+    /** Composed by the native worker: every direct page edit and restore shares instruction attribution. @type {any} */
+    this.instructionWriteCheck = null;
     /** @type {any} */ this.sourceDeletion = null;
     this.now = now;
     this.conversationTitles = conversationTitles;
@@ -842,9 +844,10 @@ export class NativeMemoryStore {
     const groups = {};
     for (const kind of new Set(Object.values(PAGE_KIND_OF_TYPE))) groups[kind] = [];
     for (const record of records) (groups[record.kind] ??= []).push(record);
+    const pending = await this.pending(userId);
     return {
-      ...(holder ? { holder } : {}), records, groups, activeCount: active.length, pendingCount: 0, episodeCount: 0,
-      conversations: titles, usage: {}, pending: await this.pending(userId),
+      ...(holder ? { holder } : {}), records, groups, activeCount: active.length, pendingCount: this.instructionWriteCheck ? pending.length : 0, episodeCount: 0,
+      conversations: titles, usage: {}, pending,
     };
   }
 
@@ -864,7 +867,15 @@ export class NativeMemoryStore {
           ? [{ index: choice, text: candidate.text }] : []),
       }]);
     });
-    return [...confirmations, ...writes];
+    if (!this.instructionWriteCheck) return [...confirmations, ...writes];
+    const held = await this.overlay.pendingInstructionRevisions(userId);
+    const files = await this.overlay.files(userId);
+    return [...confirmations, ...writes, ...held.flatMap(revision => {
+      const kept = new Set([...removalLines(revision.after ?? ''), ...removalLines(files.get(revision.uri)?.body ?? '')].map(lineFingerprint));
+      return removalLines(revision.before ?? '').filter(text => !kept.has(lineFingerprint(text)) && (!revision.pendingFingerprints || revision.pendingFingerprints.has(lineFingerprint(text)))).map(text => ({
+        id: `instruction:${revision.id}:${lineFingerprint(text)}`, text, at: revision.changedAt, state: 'pending', reason: 'instruction_origin_uncertain',
+      }));
+    })];
   }
 
   /** Confirm only the exact offered lines; stale or foreign candidates never broaden the removal. */
@@ -1267,7 +1278,10 @@ export class NativeMemoryStore {
       await this.#write(userId, file, next, { actor: "user", reason: "edited on the memory page", origin: "edit" });
     }
     return this.getRecord(userId, line ? `${nativeFileId(file.uri)}_${lineFingerprint(String(value ?? "").trim().replace(AS_OF, "")).slice(0, 12)}` : nativeFileId(file.uri))
-      .catch(() => this.getRecord(userId, nativeFileId(file.uri)));
+      .catch(() => this.getRecord(userId, nativeFileId(file.uri))).catch(error => {
+        if (!this.instructionWriteCheck || error?.code !== 'memory_not_found') throw error;
+        return { id: nativeFileId(file.uri), status: 'pending', value: String(value ?? ''), pending: true };
+      });
   }
 
   /** A user forget/undo preserves the scope of its before-image; a file label never reassigns another incarnation's lines. */
@@ -1317,8 +1331,16 @@ export class NativeMemoryStore {
       .some(token => !nextTokens.has(token) && memoryNameVariants(oldUri).some(name => tokenPresent(token, name))));
     if (pathRemoved) file.uri = await neutralMemoryUri({ userId, overlay: this.overlay, uri: oldUri, projectId: file.projectId,
       namespaceId: context.kind === 'geo-project' ? context.namespaceId : null, judge: this.rejectionJudge });
-    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.replace(userId, file.uri, next)));
-    const revision = await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId,...source });
+    let revision;
+    const record = () => this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId,...source });
+    const review = this.instructionWriteCheck && actor === 'user' ? async () => {
+      revision = await record();
+      next = await this.instructionWriteCheck(userId, file, next, context);
+    } : null;
+    // Attribution runs after the bytes change and before summary maintenance can throw.
+    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.replace(userId, file.uri, next), review));
+    if (!review) revision = await record();
+    if (next === null) return;
     await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, body: next, projectId: file.projectId, sensitive: file.sensitive });
     await this.overlay.setSources(userId, file.uri, sourcesNamedIn(next));
     // A line the person took out leaves the index of origins with it; one they wrote names no conversation.
@@ -1675,10 +1697,14 @@ export class NativeMemoryStore {
     const had = new Set(statements(before).map(lineFingerprint));
     await this.overlay.reject(userId, rejectionType, uri, statements(live.body).filter((text) => !had.has(lineFingerprint(text))));
     await this.overlay.unreject(userId, rejectionType, removalLines(before));
-    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, before)));
+    let checkedBefore = before;
+    const review = this.instructionWriteCheck ? async () => { checkedBefore = await this.instructionWriteCheck(userId, { ...live, uri, type: memoryType }, before, context); } : null;
+    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, before), review));
     await this.overlay.addRevision({ userId, uri, memoryType, change: "updated", actor: "user", reason: "undo", before: live.body, after: before, projectId: live.projectId,sourceProjectId:last.sourceProjectId??last.projectId,sourceProjectCreatedAt:last.sourceProjectCreatedAt??null });
-    await this.overlay.upsertFile({ userId, uri, memoryType, body: before, projectId });
-    await this.overlay.syncOrigins(userId, uri, { after: before });
+    if (checkedBefore !== null) {
+      await this.overlay.upsertFile({ userId, uri, memoryType, body: checkedBefore, projectId });
+      await this.overlay.syncOrigins(userId, uri, { after: checkedBefore });
+    }
     await this.overlay.markUndone(userId, last.id);
     // A line forgotten together with others that said the same: the undo of one is the undo of the act.
     const act = actOf(last.reason);
@@ -1699,7 +1725,9 @@ export class NativeMemoryStore {
   async #restoreText(userId, { uri, text, memoryType, projectId = null, revisionId, reason }) {
     const context = await this.#fileContext(userId, uri);
     if (context.kind === 'geo-project') projectId = context.projectId;
-    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, text)));
+    const review = this.instructionWriteCheck ? async () => { text = await this.instructionWriteCheck(userId, { uri, body: '', type: memoryType, projectId }, text, context); } : null;
+    await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, text), review));
+    if (text === null) return;
     await this.overlay.unreject(userId, this.#rejectionType(context, memoryType), [...removalLines(text), titleOf(memoryType, uri, text), ...memoryNameVariants(uri)]);
     await this.overlay.upsertFile({ userId, uri, memoryType, body: text, projectId: projectId ?? undefined });
     if (projectId) await this.#engine(() => context.sessions.setTags(userId, uri, [`project=${projectId}`])).catch(() => {});
