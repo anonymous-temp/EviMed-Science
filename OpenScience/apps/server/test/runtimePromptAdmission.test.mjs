@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {withSessionPromptAdmission,runtimePromptAdmissionStatus} from '../src/runtimePromptAdmission.mjs';
+import {withSessionPromptAdmission,withPromptAdmissionReceipt,runtimePromptAdmissionStatus} from '../src/runtimePromptAdmission.mjs';
 const deferred=()=>{let resolve;const promise=new Promise(done=>{resolve=done;});return{promise,resolve};};
 test('same-session admission excludes a competing human through proof and RPC acknowledgement while other sessions proceed',async()=>{
  const manager={config:{runtimePromptAdmissionTimeoutMs:2000}},project={userId:'owner',id:'project'},proof=deferred(),ack=deferred(),entered=deferred();const events=[];
@@ -59,4 +59,55 @@ test('isolated admission keeps its database session fence without exposing its t
   assert.equal(database.transactionScope(), undefined, 'memory proof reads cannot retain locks on the admission client');
  });
  assert.equal(clientHeld, false);
+});
+
+
+test('isolated stop and actor receipts get the remaining admission deadline on their own committed transactions', async () => {
+ const { AsyncLocalStorage } = await import('node:async_hooks');
+ const scope = new AsyncLocalStorage(), statements = [];
+ let sequence = 0;
+ const database = { transactionScope: () => scope.getStore(),
+  withTransactionClient: (client, work) => scope.run({ client }, work),
+  withoutTransactionClient: work => scope.run(undefined, work),
+  transaction: async work => {
+   const id = ++sequence;
+   const client = { query: async (sql, values) => { statements.push({ id, sql, values }); return { rows: [] }; } };
+   const result = await work(client); statements.push({ id, sql: 'COMMIT' }); return result;
+  },
+  query: (sql, values) => scope.getStore().client.query(sql, values),
+ };
+ const manager = { config: { memoryRuntimeLockIsolationEnabled: true, runtimePromptAdmissionTimeoutMs: 2000 }, promptAdmissionDatabase: database };
+ await withSessionPromptAdmission(manager, { userId: 'owner', id: 'project' }, 'root', async () => {
+  for (const receipt of ['stop', 'actor']) await withPromptAdmissionReceipt(database, () => database.query(receipt));
+  for (const receipt of ['stop', 'actor']) {
+   const write = statements.find(item => item.sql === receipt);
+   assert.notEqual(write.id, 1, 'receipt cannot retain the session admission transaction');
+   const bound = statements.find(item => item.id === write.id && item.sql.includes("set_config('lock_timeout'"));
+   assert.ok(bound.sql.includes("set_config('statement_timeout'"));
+   assert.ok(parseInt(bound.values[0]) > 0 && parseInt(bound.values[0]) <= 2000);
+   assert.ok(statements.some(item => item.id === write.id && item.sql === 'COMMIT'), 'receipt is committed before acknowledgement');
+  }
+  assert.equal(statements.some(item => item.id === 1 && item.sql === 'COMMIT'), false);
+ });
+});
+
+test('an expired isolated admission cannot start a late receipt on an unbounded connection', async () => {
+ const { AsyncLocalStorage } = await import('node:async_hooks');
+ const scope = new AsyncLocalStorage(), resume = deferred(), finished = deferred();
+ let writes = 0;
+ const database = { transactionScope: () => scope.getStore(),
+  withTransactionClient: (client, work) => scope.run({ client }, work),
+  withoutTransactionClient: work => scope.run(undefined, work),
+  transaction: work => work({ query: async () => ({ rows: [] }) }),
+ };
+ const manager = { config: { memoryRuntimeLockIsolationEnabled: true, runtimePromptAdmissionTimeoutMs: 20 }, promptAdmissionDatabase: database };
+ const pending = withSessionPromptAdmission(manager, { userId: 'owner', id: 'project' }, 'late', async () => {
+  await resume.promise;
+  try { await withPromptAdmissionReceipt(database, async () => { writes++; }); }
+  catch (error) { finished.resolve(error.code); return; }
+  finished.resolve('written');
+ });
+ await assert.rejects(pending, { code: 'runtime_prompt_acceptance_unknown' });
+ resume.resolve();
+ assert.equal(await finished.promise, 'runtime_prompt_acceptance_unknown'); assert.equal(writes, 0);
 });

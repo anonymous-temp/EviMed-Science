@@ -6211,10 +6211,13 @@ export class RuntimeManager {
           // Bind the authenticated actor under the same fence as native input.
           if(recordPromptActor) await recordPromptActor(promptRequest);
           signal.throwIfAborted();
+          let acknowledgement;
           await withProjectStorageMutation(project,async()=>{
             signal.throwIfAborted();
-            // Proof reads precede the final ledger read. The project ledger and
-            // session admission stay excluded until this short RPC acknowledges.
+            // Proof reads precede the final ledger read. Session admission stays
+            // excluded through acknowledgement. With memory isolation the project
+            // ledger is released after initiating the RPC: gateway source receipts
+            // append there before returning recall to that same kernel.
             if(runId && this.readPromptStop && await this.readPromptStop(project,sessionId,runId)) {
               throw Object.assign(new HttpError(409,'runtime_prompt_rejected','The researcher stopped this pending input.'),{definitivelyRejected:true});
             }
@@ -6224,13 +6227,18 @@ export class RuntimeManager {
             }
             signal.throwIfAborted();
             promptSent=true;
-            await this.withRuntimeDeadline(
+            const pending = this.withRuntimeDeadline(
               // main's guarded `send` keeps the context-policy generation check on the admitted path.
               wireSignal=>send("session/prompt",{request:promptRequest},AbortSignal.any([wireSignal,signal])),
               "runtime_prompt_acceptance_unknown",
               "Runtime prompt acceptance could not be confirmed.",
             );
+            if (this.config.memoryRuntimeLockIsolationEnabled === true) {
+              acknowledgement = pending;
+              void pending.catch(() => {});
+            } else await pending;
           });
+          if (acknowledgement) await acknowledgement;
         });
       } catch(error) {
         if(!promptSent) error.definitivelyRejected=true;

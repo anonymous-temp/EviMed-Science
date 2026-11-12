@@ -1,3 +1,4 @@
+import { withPromptAdmissionReceipt } from './runtimePromptAdmission.mjs';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { canonicalJson } from '@evimed/domain';
 import { ProductDocuments } from './productStore.mjs';
@@ -34,7 +35,7 @@ export class ExtensionActorBindings {
     const runtimeGeneration = this.runtime.runtimeGeneration(project);
     if (!runtimeGeneration) throw denied();
     await migrateProductStore(this.database);
-    return this.database.transaction(client => this.database.withTransactionClient(client, async () => {
+    return withPromptAdmissionReceipt(this.database, () => this.database.transaction(client => this.database.withTransactionClient(client, async () => {
       const accountCreatedAt = await this.access.account(user, client), current = await this.access.project(user, project.id, { client });
       if (current.userId !== user.id || this.runtime.runtimeGeneration(project) !== runtimeGeneration) throw denied();
       const body = { schemaVersion: 1, recordType: 'accepted-extension-actor', userId: user.id, projectId: current.id,
@@ -50,7 +51,7 @@ export class ExtensionActorBindings {
       if (count >= 10000) throw denied();
       await this.documents.put(user.id, 'extension-resource', id, { body, signature: this.sign(body) }, { expectedRevision: 0, projectId: current.id, transactionClient: client });
       return body;
-    }));
+    })));
   }
   /** The native pending call must belong to an input the platform accepted.
    * @param {any} auth @param {any} invocation @param {any} message @param {any} transcript */

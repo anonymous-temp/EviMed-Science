@@ -45,7 +45,7 @@ export function withSessionPromptAdmission(manager,project,sessionId,operation,{
  state.counters.attempted++;
  const operate=async()=>{
   controller.signal.throwIfAborted();entered=true;
-  const scope={manager,key,signal:controller.signal,open:true};
+  const scope={manager,key,signal:controller.signal,deadline,open:true};
   const work=held.run(scope,()=>Promise.resolve().then(()=>operation(controller.signal)));
   try{return await Promise.race([work,canceled]);}
   finally{scope.open=false;void work.catch(()=>{});}
@@ -67,6 +67,8 @@ export function withSessionPromptAdmission(manager,project,sessionId,operation,{
     try{
      // The dedicated transaction owns only the session fence. Proofs/receipts
      // use short transactions, never its client, while the kernel acknowledges.
+     // Prompt/dispatch callers borrow PluginService.withAdmission, so this
+     // dedicated branch serves stop/cancel, not their prompt RPCs.
      // A borrowed native-input transaction keeps its atomic journal; policy
      // lookups release their read fences before returning to that caller.
      value=manager.config?.memoryRuntimeLockIsolationEnabled===true&&!borrowed
@@ -82,7 +84,7 @@ export function withSessionPromptAdmission(manager,project,sessionId,operation,{
  // A pool waiter owns no local fence: a prompt borrowing the sole plugin
  // client must be able to reach its wire and release that client first.
  const database=manager.promptAdmissionDatabase;
- const owned=database?acquireClient(state,clientLimit(manager),controller.signal).then(()=>database.transaction(async client=>{
+ const admit=()=>acquireClient(state,clientLimit(manager),controller.signal).then(()=>database.transaction(async client=>{
   try{return{value:await queued(client)};}
   catch(error){
    // Stop intent/actor receipts describe an authenticated request, not a
@@ -91,7 +93,15 @@ export function withSessionPromptAdmission(manager,project,sessionId,operation,{
    if(error instanceof pg.DatabaseError)throw error;
    return{error};
   }
- }).finally(()=>releaseClient(state))).then(outcome=>{if(outcome.error)throw outcome.error;return outcome.value;}):queued(null);
+ }).finally(()=>releaseClient(state))).then(outcome=>{if(outcome.error)throw outcome.error;return outcome.value;});
+ // Dedicated stop/cancel must share the outer plugin admission's capacity
+ // budget, acquired before the session permit. Otherwise a start and a stop
+ // can each retain one client and both wait for the gateway's last connection.
+ const plugins=manager.config?.memoryRuntimeLockIsolationEnabled===true && database && !database.transactionScope()
+  ? manager.pluginService : null;
+ const owned=database ? (plugins?.acquireAdmissionClient
+  ? plugins.acquireAdmissionClient(controller.signal).then(()=>admit().finally(()=>plugins.releaseAdmissionClient()))
+  : admit()) : queued(null);
  // Public timeout never releases or reuses an active client. The owned task
  // drains/rolls back independently and checks abort before any late submission.
  void owned.catch(()=>{});
@@ -100,4 +110,22 @@ export function withSessionPromptAdmission(manager,project,sessionId,operation,{
   if(controller.signal.aborted||['55P03','57014'].includes(error?.code)){state.counters.timedOut++;throw timeoutError();}
   throw error;
  }).finally(()=>clearTimeout(timer));
+}
+
+
+/** Bound independent stop/actor receipt transactions by the admission's remaining
+ * deadline. Borrowed prompt journals keep their existing atomic transaction and
+ * bounds; only the isolated stop/cancel path needs a new short transaction. */
+export function withPromptAdmissionReceipt(database, operation) {
+ const scope=held.getStore();
+ if(!scope || scope.manager.promptAdmissionDatabase!==database
+  || scope.manager.config?.memoryRuntimeLockIsolationEnabled!==true)return operation();
+ scope.signal.throwIfAborted();
+ if(!scope.open || database.transactionScope())return operation();
+ return database.transaction(client=>database.withTransactionClient(client,async()=>{
+  scope.signal.throwIfAborted();
+  const remaining=Math.max(1,Math.ceil(scope.deadline-performance.now()));
+  await client.query("SELECT set_config('lock_timeout',$1,true),set_config('statement_timeout',$1,true)",[`${remaining}ms`]);
+  return operation();
+ }));
 }

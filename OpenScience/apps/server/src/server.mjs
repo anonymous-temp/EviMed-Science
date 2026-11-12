@@ -1167,7 +1167,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: code => { void securityAudit(config, "source.change", "failed", { code }).catch(() => {}); } })
     : null;
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
-  const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
+  const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs,
+    runtimeLockIsolation: config.memoryRuntimeLockIsolationEnabled === true, databasePoolMax: config.databasePoolMax }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
   const inventoryRoutes = createInventoryRoutes({ store, pluginService, config, builtinSettings: (user, project) => skillLibraryService?.projectBuiltins(user, project) ?? null,
     searchTopicsAvailable: (_user, project) => runtimeManager.searchTopicsAvailable(project) });
