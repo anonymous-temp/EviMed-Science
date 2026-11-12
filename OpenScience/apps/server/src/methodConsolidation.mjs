@@ -58,7 +58,7 @@
  */
 
 import { callModelForControlPlane } from "./modelGateway.mjs";
-import { distillationSkillVariants } from "./methodDistillationRuns.mjs";
+import { distillationSkillVariants } from "./methodDistillationVariants.mjs";
 import { createHash } from "node:crypto";
 
 import {

@@ -40,8 +40,8 @@ import { scopedMethodName } from "./geoContextProvenance.mjs";
  */
 
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { distillationSkillVariants } from "./methodDistillationVariants.mjs";
+export { DISTILLATION_SKILL_VARIANTS, distillationSkillVariants } from "./methodDistillationVariants.mjs";
 
 import {
   METHOD_EVIDENCE_QUOTE_LENGTH, METHOD_OPERATIONS, METHOD_ROLES, TRAJECTORY_ANCHOR_RADIUS, isMcpToolName, isPlatformChoreographyTool, mcpToolBaseName, methodContentDigest, methodScientific,
@@ -98,27 +98,6 @@ export const METHOD_FRAME_CONTRACT = "method-frame";
 /** How many details one frame may set going (the contract's own bound on `newSkills`, and two amendments). */
 const TWO_STAGE_MAX_NEW = 5;
 const TWO_STAGE_MAX_AMEND = 2;
-
-/** The capability's switchable sections (`capabilities/method-distillation/variants/<name>.md`): beside SKILL.md, which stays byte-identical. */
-const SKILL_VARIANT_DIR = fileURLToPath(new URL("../../../capabilities/method-distillation/variants/", import.meta.url));
-export const DISTILLATION_SKILL_VARIANTS = Object.freeze(["camp", "two-stage", "concise"]);
-/** @type {Map<string, Promise<string>>} */
-const variantTexts = new Map();
-
-/**
- * The text of the switched-on sections of the method-distillation skill, in the order named; empty when none is, so a step with every switch
- * off is sent exactly what it was.
- * @param {readonly string[]} names @returns {Promise<string>}
- */
-export async function distillationSkillVariants(names) {
-  const texts = [];
-  for (const name of names) {
-    if (!DISTILLATION_SKILL_VARIANTS.includes(name)) throw new TypeError(`Unknown method-distillation skill variant ${name}.`);
-    if (!variantTexts.has(name)) variantTexts.set(name, readFile(`${SKILL_VARIANT_DIR}${name}.md`, "utf8"));
-    texts.push(String(await /** @type {Promise<string>} */ (variantTexts.get(name))).trim());
-  }
-  return texts.join("\n\n");
-}
 
 /** The dispatch question with the switched-on skill sections after it; the question itself when there are none. @param {string} question @param {string} variants */
 function withSkillVariants(question, variants) {

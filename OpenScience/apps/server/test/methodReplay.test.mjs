@@ -4,6 +4,7 @@
 // the model call, the accepted-run query and the trajectory reader are stubbed. What is asserted is what the job wrote, what it counted, and
 // that a judge which fails, or a quotation that is not there, changes nothing.
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 import { METHOD_SKILL_SCHEMA, trajectoryDigest } from "@evimed/domain";
@@ -14,6 +15,20 @@ import {
   MethodReplay, MethodReplayJudge, REPLAY_MAX_RUNS, REPLAY_REGRESSION_AT, createTrajectoryReader, methodReplayText, replayVerdictFrom, trajectoryReplayText,
 } from "../src/methodReplay.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
+
+test("method services initialize from every independent entry point", () => {
+  // A warm module cache hides cycles: correction extends replay's judge at evaluation time.
+  for (const name of [
+    "methodReplay", "methodCorrectionJudge", "methodConsolidation", "methodDistillationRuns",
+    "methodFeedback", "learningMetrics", "feedbackEvents", "learningWorker", "server",
+  ]) {
+    const entry = new URL(`../src/${name}.mjs`, import.meta.url).href;
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e", `await import(${JSON.stringify(entry)})`], {
+      encoding: "utf8", timeout: 30_000,
+    });
+    assert.equal(result.status, 0, `${name}: ${result.error?.message ?? ""}\n${result.stderr}`);
+  }
+});
 
 const NOW = new Date("2026-10-25T10:00:00.000Z");
 
