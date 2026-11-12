@@ -628,3 +628,8 @@ test('the memory-search hint reaches socket guidance through the runtime environ
   assert.equal(runtimeEnvironment(input).EVIMED_MEMORY_SEARCH_HINT_ENABLED, '0');
   assert.equal(runtimeEnvironment({ ...input, flags: { ...input.flags, memorySearchHint: true } }).EVIMED_MEMORY_SEARCH_HINT_ENABLED, '1');
 });
+
+test('standing reply instructions reach socket guidance and default off', () => {
+  assert.equal(runtimeEnvironment(input).EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED, '0');
+  assert.equal(runtimeEnvironment({ ...input, flags: { ...input.flags, memoryStandingInstructions: true } }).EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED, '1');
+});

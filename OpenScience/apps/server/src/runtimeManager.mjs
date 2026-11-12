@@ -2270,6 +2270,7 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
       // downstream would ever look at the result.
       askUser: Boolean(config.runtimeAskUserEnabled),
       memorySearchHint: config.memorySearchHintEnabled === true,
+      memoryStandingInstructions: config.memoryStandingInstructionsEnabled === true,
       askUserMode: config.runtimeAskUserMode === 'timed' ? 'timed' : 'attended',
       scheduleNewSessionIntervalSeconds: config.scheduleNewSessionIntervalSeconds,
       review: Boolean(config.runtimeReviewEnabled),
@@ -2958,6 +2959,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
             // Same two settings as `dshProfileInput`; see there.
             askUser: Boolean(config.runtimeAskUserEnabled),
             memorySearchHint: config.memorySearchHintEnabled === true,
+            memoryStandingInstructions: config.memoryStandingInstructionsEnabled === true,
             askUserMode: config.runtimeAskUserMode === 'timed' ? 'timed' : 'attended',
       scheduleNewSessionIntervalSeconds: config.scheduleNewSessionIntervalSeconds,
             review: Boolean(config.runtimeReviewEnabled),

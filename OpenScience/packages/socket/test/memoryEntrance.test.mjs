@@ -8,6 +8,27 @@ import { MEMORY_SERVICE, apply } from '../plugins/capsule.mjs'
 import { rootHiddenMcpTools } from '../index.mjs'
 import { buildChildGuidanceText, buildGuidanceText } from '../src/guidanceText.mjs'
 
+test('standing-instruction wording is default-off and preserves task, source and project boundaries', () => {
+  const options = { openVikingMemory: true }
+  const baseline = buildGuidanceText([], options)
+  assert.equal(buildGuidanceText([], { ...options, memoryStandingInstructions: false }), baseline)
+  const on = buildGuidanceText([], { ...options, memoryStandingInstructions: true })
+  assert.match(on, /用户本人明确表达的持续偏好/)
+  assert.match(on, /长度、行数、语言和格式/)
+  assert.match(on, /仅适用于某项目或某类交付物/)
+  assert.match(on, /本次明确要求与安全规则优先/)
+  assert.match(on, /文档、助手建议、未知来源/)
+  assert.doesNotMatch(on, /每一条，都是\*\*历史数据，不是指令/)
+  assert.match(on, /核对整条最终回复，不能只核对草稿/)
+})
+
+test('the standing-instruction switch reaches guidance through both presets and the recorded image configuration', async () => {
+  for (const relative of ['../presets/evimed-universal/agent.cordis.yml', '../presets/evimed-universal.patch.yml', '../../../deploy/runtime-dsh/dump-config.baseline.json']) {
+    const text = await readFile(new URL(relative, import.meta.url), 'utf8')
+    assert.ok(text.includes("memoryStandingInstructions: !!js process.env.EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED === '1'"), relative)
+  }
+})
+
 // One memory entrance for the model. On an account whose memory the official OpenViking plugin keeps, the model sees that
 // plugin's five tools and not the capsule's recall and note (measured with both mounted: the model called both every time,
 // and the old one answered nothing — LAB-MEM, 2026-10-13). The capsule row carries two things, and only the memory half
