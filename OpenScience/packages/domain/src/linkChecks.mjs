@@ -24,6 +24,41 @@ import { isMethodDigest, parseReuseReferences } from './methodSkill.mjs'
 import { validateMethodGraph } from './methodGraph.mjs'
 import { knowledgeGraphToGraph, wikiPagesToGraph } from './knowledgeGraphs.mjs'
 
+/**
+ * Stored records may predate today's schema: leaves stay unknown until checked below.
+ * @typedef {{name: string, digest: string}} MethodDependency
+ * @typedef {{target?: unknown}} RelationLink
+ * @typedef {{methodId?: unknown}} ProvenanceLink
+ * @typedef {{body?: unknown, frontmatter?: unknown}} MethodPayload
+ * @typedef {object} MethodLinkRecord
+ * @property {unknown} [id]
+ * @property {unknown} [name]
+ * @property {unknown} [digest]
+ * @property {unknown} [status]
+ * @property {unknown} [dependencies]
+ * @property {{relations?: unknown} | null} [learning]
+ * @property {{mergedFrom?: unknown, pendingRetirements?: unknown} | null} [provenance]
+ * @property {unknown} [body]
+ * @property {unknown} [markdown]
+ * @property {unknown} [frontmatter]
+ * @property {unknown} [metadata]
+ * @property {MethodPayload | null} [payload]
+ * @property {{payload?: MethodPayload | null} | null} [document]
+ * @typedef {{name: string, dependencies: MethodDependency[], raw: MethodLinkRecord}} ReadableMethod
+ * @typedef {{kind: string, target: string | null, detail: string}} LinkIssue
+ * @typedef {LinkIssue & {method: string | null}} MethodLinkIssue
+ * @typedef {LinkIssue & {page: string | null}} KnowledgeLinkIssue
+ * @typedef {Record<string, number>} LinkCounts
+ * @typedef {{issues: MethodLinkIssue[], counts: LinkCounts}} MethodLinkReport
+ * @typedef {{issues: KnowledgeLinkIssue[], counts: LinkCounts}} KnowledgeLinkReport
+ * @typedef {Readonly<Partial<Record<string, string>>>} GraphIssueKinds
+ * @typedef {ReturnType<typeof parseReuseReferences>} ReuseAccumulator
+ * @typedef {{dependsOn?: unknown}} PagePayload
+ * @typedef {{dependsOn?: unknown, depends_on?: unknown, payload?: PagePayload | null,
+ *   record?: {payload?: PagePayload | null} | null, document?: {payload?: PagePayload | null} | null}} PageLinks
+ * @typedef {{kind?: unknown, path?: unknown, line?: unknown, missing?: unknown, to?: unknown, id?: unknown, from?: unknown}} GraphProblem
+ */
+
 /** The issue kinds `methodLibraryLinkIssues` can report. */
 const METHOD_ISSUE_KINDS = Object.freeze([
   'dangling_dependency',
@@ -48,7 +83,7 @@ const KNOWLEDGE_ISSUE_KINDS = Object.freeze(['page_link_unresolved', 'depends_on
  * `validateMethodGraph`'s vocabulary, mapped without restating any of its rules.
  * An unknown code from a later revision of that module is reported as `unreadable`, with the
  * original code in the detail, rather than being dropped.
- * @type {Readonly<Record<string, string>>}
+ * @type {GraphIssueKinds}
  */
 const GRAPH_ISSUE_KINDS = Object.freeze({
   method_graph_dangling_dependency: 'dangling_dependency',
@@ -59,12 +94,12 @@ const GRAPH_ISSUE_KINDS = Object.freeze({
   method_graph_digest_unparsable: 'unparsable_digest',
 })
 
-/** @param {readonly string[]} kinds @returns {Record<string, number>} */
+/** @param {readonly string[]} kinds @returns {LinkCounts} */
 function emptyCounts(kinds) {
   return Object.fromEntries(kinds.map((kind) => [kind, 0]))
 }
 
-/** @param {Record<string, number>} counts @param {string} kind */
+/** @param {LinkCounts} counts @param {string} kind */
 function count(counts, kind) {
   counts[kind] = (counts[kind] ?? 0) + 1
 }
@@ -76,7 +111,7 @@ function messageOf(value) {
 
 /**
  * The body a method record carries, whichever of the shapes a caller passes.
- * @param {any} record
+ * @param {MethodLinkRecord} record
  * @returns {string}
  */
 function bodyOf(record) {
@@ -88,37 +123,38 @@ function bodyOf(record) {
 
 /**
  * A method's front matter, wherever the record keeps it.
- * @param {any} record
- * @returns {Record<string, any>}
+ * @param {MethodLinkRecord} record
+ * @returns {Record<string, unknown>}
  */
 function frontmatterOf(record) {
   for (const value of [record?.frontmatter, record?.payload?.frontmatter, record?.document?.payload?.frontmatter]) {
-    if (value && typeof value === 'object' && !Array.isArray(value)) return value
+    if (value && typeof value === 'object' && !Array.isArray(value)) return /** @type {Record<string, unknown>} */ (value)
   }
   return {}
 }
 
 /**
  * The `metadata` block `derived_from` lives in.
- * @param {any} record
- * @returns {Record<string, any>}
+ * @param {MethodLinkRecord} record
+ * @returns {Record<string, unknown>}
  */
 function metadataOf(record) {
   const metadata = frontmatterOf(record).metadata ?? record?.metadata
-  return metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {}
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? /** @type {Record<string, unknown>} */ (metadata) : {}
 }
 
 /**
  * A record read far enough that `validateMethodGraph` and the extra checks cannot throw on it.
- * @param {unknown} raw
- * @returns {{ name: string, dependencies: {name: string, digest: string}[], raw: any } | null}
+ * @param {unknown} value
+ * @returns {ReadableMethod | null}
  */
-function readableMethod(raw) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+function readableMethod(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const raw = /** @type {MethodLinkRecord} */ (value)
   const name = typeof raw.name === 'string' ? raw.name.trim() : ''
   if (!name) return null
   if (raw.dependencies != null && !Array.isArray(raw.dependencies)) return null
-  /** @type {{name: string, digest: string}[]} */
+  /** @type {MethodDependency[]} */
   const dependencies = []
   for (const dependency of raw.dependencies ?? []) {
     if (!dependency || typeof dependency !== 'object' || typeof dependency.name !== 'string') return null
@@ -133,7 +169,7 @@ function readableMethod(raw) {
  * The target a dependency-shaped `validateMethodGraph` issue is about. The code decides the issue;
  * this only finds which pin in the record the message was describing, so the report can name it.
  * @param {string} code
- * @param {{name: string, dependencies: {name: string, digest: string}[]}} method
+ * @param {Pick<ReadableMethod, 'name' | 'dependencies'>} method
  * @param {Map<string, Set<string>>} digestsByName
  * @param {Map<string, string>} statusByName
  * @returns {string | null}
@@ -162,12 +198,13 @@ function graphIssueTarget(code, method, digestsByName, statusByName) {
  * record may also carry `body` and `frontmatter` (or `payload.body` / `payload.frontmatter`).
  *
  * @param {unknown} records
- * @returns {{issues: {kind: string, method: string | null, target: string | null, detail: string}[], counts: Record<string, number>}}
+ * @returns {MethodLinkReport}
  */
 export function methodLibraryLinkIssues(records) {
+  /** @type {MethodLinkIssue[]} */
   const issues = []
   const counts = emptyCounts(METHOD_ISSUE_KINDS)
-  /** @type {{name: string, dependencies: {name: string, digest: string}[], raw: any}[]} */
+  /** @type {ReadableMethod[]} */
   const readable = []
   const list = Array.isArray(records) ? records : []
   if (records != null && !Array.isArray(records)) {
@@ -243,7 +280,7 @@ export function methodLibraryLinkIssues(records) {
     const dependencyNames = new Set(method.dependencies.map((dependency) => dependency.name))
 
     // A reuse reference in the prose is a promise on `depends_on`; the write path checks it, the stored record may predate that.
-    /** @type {ReturnType<typeof parseReuseReferences>} */
+    /** @type {ReuseAccumulator} */
     let reuse = { references: [], malformed: [] }
     try {
       reuse = parseReuseReferences(bodyOf(record))
@@ -275,6 +312,7 @@ export function methodLibraryLinkIssues(records) {
       }
     }
 
+    /** @type {(RelationLink | null | undefined)[]} */
     const relations = Array.isArray(record.learning?.relations) ? record.learning.relations : []
     for (const relation of relations) {
       const target = typeof relation?.target === 'string' ? relation.target : ''
@@ -284,6 +322,7 @@ export function methodLibraryLinkIssues(records) {
       }
     }
 
+    /** @type {(ProvenanceLink | null | undefined)[]} */
     const mergedFrom = Array.isArray(record.provenance?.mergedFrom) ? record.provenance.mergedFrom : []
     for (const source of mergedFrom) {
       const target = typeof source?.methodId === 'string' ? source.methodId : ''
@@ -294,6 +333,7 @@ export function methodLibraryLinkIssues(records) {
       }
     }
 
+    /** @type {(ProvenanceLink | null | undefined)[]} */
     const pending = Array.isArray(record.provenance?.pendingRetirements) ? record.provenance.pendingRetirements : []
     for (const entry of pending) {
       const target = typeof entry?.methodId === 'string' ? entry.methodId : ''
@@ -314,7 +354,7 @@ function dependsOnOf(value) {
   return []
 }
 
-/** @param {any} page @returns {string[]} */
+/** @param {PageLinks} page @returns {string[]} */
 function pageDependsOn(page) {
   return dependsOnOf(
     page?.dependsOn
@@ -337,7 +377,7 @@ function sourceIds(sources) {
   return ids
 }
 
-/** @param {any} problem @returns {string} */
+/** @param {GraphProblem} problem @returns {string} */
 function graphProblemDetail(problem) {
   const parts = []
   if (problem?.path) parts.push(`path ${problem.path}`)
@@ -356,10 +396,11 @@ function graphProblemDetail(problem) {
  * `graph_problem:<name>` issue.
  *
  * @param {{pages?: unknown, sources?: unknown, graph?: unknown}} [input]
- * @returns {{issues: {kind: string, page: string | null, target: string | null, detail: string}[], counts: Record<string, number>}}
+ * @returns {KnowledgeLinkReport}
  */
 export function knowledgeLinkIssues(input = {}) {
   const counts = emptyCounts(KNOWLEDGE_ISSUE_KINDS)
+  /** @type {KnowledgeLinkIssue[]} */
   const issues = []
   const options = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
   const pagesInput = options.pages
@@ -369,7 +410,7 @@ export function knowledgeLinkIssues(input = {}) {
     count(counts, 'unreadable')
   }
 
-  /** @type {{path: string, content: string, raw: any}[]} */
+  /** @type {{path: string, content: string, raw: PageLinks}[]} */
   const pages = []
   for (const page of list) {
     try {
@@ -399,6 +440,7 @@ export function knowledgeLinkIssues(input = {}) {
   if (options.graph != null) {
     try {
       const graph = /** @type {{problems?: unknown} | null | undefined} */ (Array.isArray(options.graph) ? knowledgeGraphToGraph(options.graph) : options.graph)
+      /** @type {(GraphProblem | null | undefined)[]} */
       const problems = graph && typeof graph === 'object' && Array.isArray(graph.problems) ? graph.problems : []
       for (const problem of problems) {
         const kind = `graph_problem:${String(problem?.kind ?? 'unknown')}`

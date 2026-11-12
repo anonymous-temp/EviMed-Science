@@ -1462,10 +1462,10 @@ function checkMethodFrame(value) {
     if (value[field].length > max) errors.push(`${field} lists ${value[field].length} entries; at most ${max}.`)
     return value[field]
   }
-  /** @param {unknown} text @param {string} at */
-  const line = (text, at) => {
-    if (!nonEmptyText(text)) errors.push(`${at} must be one line saying it.`)
-    else if (String(text).length > METHOD_FRAME_LINE_CHARS) errors.push(`${at} is longer than ${METHOD_FRAME_LINE_CHARS} characters; one line.`)
+  /** @param {unknown} valueText @param {string} at */
+  const line = (valueText, at) => {
+    if (!nonEmptyText(valueText)) errors.push(`${at} must be one line saying it.`)
+    else if (String(valueText).length > METHOD_FRAME_LINE_CHARS) errors.push(`${at} is longer than ${METHOD_FRAME_LINE_CHARS} characters; one line.`)
   }
   for (const [index, entry] of list('reuses', METHOD_FRAME_MAX_REUSES).entries()) {
     if (!isRecord(entry) || !nonEmptyText(entry.methodId) || !pinsRevision(entry.digest)) {

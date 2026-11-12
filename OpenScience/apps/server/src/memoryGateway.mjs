@@ -176,7 +176,8 @@ const NOT_KEPT = Object.freeze({
   other: "这段对话不写入长期记忆：这条没有记下。",
 });
 
-const ok = (/** @type {unknown} */ result) => ({ status: "ok", result, error: null });
+/** @template T @param {T} result */
+const ok = (result) => ({ status: "ok", result, error: null });
 const refusal = (/** @type {string} */ code, /** @type {string} */ message) => ({ status: "error", result: null, error: { code, message } });
 
 /** Only the native memory tree belongs to this gateway; knowledge resources have their own scoped service.
@@ -229,6 +230,8 @@ async function scopedListSearch(sessions, ctx, given) {
   return ok(result);
 }
 
+/** @typedef {{uri: string, isDir: boolean, name?: string, rel_path?: string, size?: number, modTime?: string}} NativeMemoryEntry */
+
 /** Structured native listing, with no parent summaries or raw engine metadata crossing the memory boundary.
  * @param {any} sessions @param {any} ctx @param {string} requested @param {Record<string,string>} query */
 async function scopedMemoryList(sessions, ctx, requested, query = {}) {
@@ -240,6 +243,7 @@ async function scopedMemoryList(sessions, ctx, requested, query = {}) {
   catch (error) { if (error.code === "memory_index_not_found") return { ...ok([]), has_more: false }; throw error; }
   if (!Array.isArray(body?.result)) throw new HttpError(502, "memory_gateway_upstream_invalid", "Native listing did not return structured entries.");
   const hidden = await ctx.hiddenSet();
+  /** @type {NativeMemoryEntry[]} */
   const entries = body.result.filter(entry => {
     const uri = typeof entry?.uri === "string" ? entry.uri : "";
     return !isMemorySummary(uri) && uri === absolute(uri, ctx.userRoot) && insideNativeMemories(uri, ctx.userRoot) && (uri === target || uri.startsWith(`${target}/`))
@@ -450,8 +454,11 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       ]);
       // Rank before the engine's 512-node page cut too. Bound traversal at the same 10,000-file limit as privacy metadata;
       // a server without pagination support is detected by repeated pages. No unfiltered metadata crosses this boundary.
+      /** @param {'preferences' | 'entities'} directory
+       * @param {Awaited<ReturnType<typeof scopedMemoryList>>} first
+       * @returns {Promise<NativeMemoryEntry[]>} */
       const complete = async (directory, first) => {
-        const entries = new Map(first.result.map(entry => [entry.uri, entry]));
+        const entries = new Map(/** @type {[string, NativeMemoryEntry][]} */ (first.result.map(entry => [entry.uri, entry])));
         let page = first;
         for (let offset = 512; page.has_more !== false && offset < 10_000; offset += 512) {
           page = await scopedMemoryList(ctx.sessions, ctx, `${root}/${directory}`, { ...query, offset: String(offset) });
@@ -1093,17 +1100,17 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         }
         // A targeted request must never fall back to a whole-file engine delete.
         const targeted = args.lines !== undefined || args.statement !== undefined;
-        const enabled = config.memoryForgetTargetsEnabled === true;
+        const targetsEnabled = config.memoryForgetTargetsEnabled === true;
         const target = typeof args.uri === 'string' && args.uri ? absolute(args.uri, ctx.userRoot) : null;
         const invalidLines = args.lines !== undefined && (!target || !Array.isArray(args.lines) || args.lines.length > 100
           || args.lines.some(line => typeof line !== 'string' || !line.trim() || /[\r\n]/.test(line) || line.length > 6000));
         const invalidStatement = args.statement !== undefined && (args.uri !== undefined || args.lines !== undefined
           || typeof args.statement !== 'string' || !args.statement.trim() || args.statement.length > 6000);
-        if (targeted && (!enabled || !memoryTool) || invalidLines || invalidStatement) {
+        if (targeted && (!targetsEnabled || !memoryTool) || invalidLines || invalidStatement) {
           local.push(rpcError(message.id, -32602, 'Name a memory file and exact lines, or a history statement without a URI; targeted forgetting must be enabled.'));
           continue;
         }
-        if (args.recursive === true || (target ? !nativeMemoryFile(target, `${ctx.userRoot}/memories`) : !enabled || args.statement === undefined)) {
+        if (args.recursive === true || (target ? !nativeMemoryFile(target, `${ctx.userRoot}/memories`) : !targetsEnabled || args.statement === undefined)) {
           recordGatewayRefusal("memory_gateway_uri_refused");
           local.push(rpcError(message.id, -32602, "Only one memory file of the user can be forgotten at a time."));
           continue;
@@ -1117,9 +1124,9 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         if (memoryTool) {
           const options = {
             ...(ctx.shared ? { context: ctx.memoryContext } : {}),
-            ...(config.memoryForgetRequestCheckEnabled === true || enabled ? { engineSession: admitted.sessionId ? `dsh-${admitted.sessionId}` : null } : {}),
-            ...(enabled && args.lines !== undefined ? { lines: args.lines } : {}),
-            ...(enabled && args.statement !== undefined ? { statement: args.statement } : {}),
+            ...(config.memoryForgetRequestCheckEnabled === true || targetsEnabled ? { engineSession: admitted.sessionId ? `dsh-${admitted.sessionId}` : null } : {}),
+            ...(targetsEnabled && args.lines !== undefined ? { lines: args.lines } : {}),
+            ...(targetsEnabled && args.statement !== undefined ? { statement: args.statement } : {}),
           };
           const outcome = await memoryTool.forget(ctx.user, ctx.project, target, Object.keys(options).length ? options : undefined);
           const text = outcome.missingLines ? `No lines removed. Unmatched lines: ${JSON.stringify(outcome.missingLines)}. Available lines: ${JSON.stringify(outcome.availableLines)}. Retry with exact complete lines.`

@@ -10,11 +10,12 @@ const DIGEST_A = `sha256:${"a".repeat(64)}`;
 const DIGEST_B = `sha256:${"b".repeat(64)}`;
 const DIGEST_C = `sha256:${"c".repeat(64)}`;
 
+/** @param {import("../src/methodGraph.mjs").MethodRelation[]} [relations] */
 const learning = (relations = []) => ({ digest: DIGEST_A, counts: {}, observations: [], relations, level: 0 });
 
 /**
  * @param {string} name
- * @param {{id?: string, digest?: string, status?: string, dependencies?: {name: string, digest: string}[], relations?: any[], provenance?: any, body?: string, frontmatter?: any}} [options]
+ * @param {{id?: string, digest?: string, status?: string, dependencies?: {name: string, digest: string}[], relations?: import("../src/methodGraph.mjs").MethodRelation[], provenance?: import("../src/methodGraph.mjs").MethodProvenance & {pendingRetirements?: {methodId: string, baseDigest: string}[]}, body?: string, frontmatter?: Record<string, unknown>}} [options]
  */
 const method = (name, options = {}) => ({
   id: options.id ?? `method:learned:${name}`,
@@ -28,7 +29,7 @@ const method = (name, options = {}) => ({
   ...(options.frontmatter ? { frontmatter: options.frontmatter } : {}),
 });
 
-/** @param {ReturnType<typeof methodLibraryLinkIssues>} result @param {string} kind */
+/** @param {import("../src/linkChecks.mjs").MethodLinkReport | import("../src/linkChecks.mjs").KnowledgeLinkReport} result @param {string} kind */
 function assertKind(result, kind) {
   assert.ok(result.issues.some((issue) => issue.kind === kind), `expected ${kind}: ${JSON.stringify(result.issues)}`);
   assert.equal(result.counts[kind], 1, `one ${kind}`);
@@ -112,7 +113,7 @@ test("a reuse reference naming a method the library does not hold is missing", (
     }),
   ]);
   assertKind(result, "reuse_reference_missing");
-  assert.equal(result.issues.find((issue) => issue.kind === "reuse_reference_missing").target, "ghost-step");
+  assert.equal(result.issues.find((issue) => issue.kind === "reuse_reference_missing")?.target, "ghost-step");
 });
 
 test("an abstract method derived from a method the library does not hold is missing", () => {
