@@ -3317,6 +3317,8 @@ export function loadConfig(overrides = {}) {
     // pins what it builds on. Off, a lesson is the one step it was and the skill text is byte-identical.
     methodCorrectionPrecedenceEnabled: overrides.methodCorrectionPrecedenceEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_CORRECTION_PRECEDENCE_ENABLED", false),
     methodTwoStageDistillationEnabled: overrides.methodTwoStageDistillationEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED", false),
+    // Short method cards with optional detail attachments; existing methods change only through ordinary revisions.
+    methodConciseDistillationEnabled: overrides.methodConciseDistillationEnabled ?? boolEnv("OPEN_SCIENCE_METHOD_CONCISE_DISTILLATION_ENABLED", false),
     transcriptRetentionDays: Number(overrides.transcriptRetentionDays
       ?? process.env.OPEN_SCIENCE_TRANSCRIPT_RETENTION_DAYS ?? 90),
     // The context window the kernel is told it has.

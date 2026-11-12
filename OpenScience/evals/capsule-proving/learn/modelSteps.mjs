@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import { runGate, METHOD_SKILL_SCHEMA } from "@evimed/domain";
 import { decodeLearningOutput, learningInputFile } from "../../../apps/server/src/learningRuntime.mjs";
 import { learnedMethodId } from "../../../apps/server/src/learningService.mjs";
+import { distillationSkillVariants } from "../../../apps/server/src/methodDistillationRuns.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CAPABILITIES = path.resolve(here, "../../../capabilities");
@@ -117,9 +118,9 @@ async function completeWithRetry(model, messages) {
 
 /**
  * @param {{ model: { complete: (request: { messages: any[] }) => Promise<{ message: any, usage: any, model?: string }> }, cacheDir?: string | null,
- *   callsLog?: string | null, label?: string, maxAttempts?: number }} options
+ *   callsLog?: string | null, label?: string, maxAttempts?: number, concise?: boolean }} options
  */
-export function createModelSteps({ model, cacheDir = null, callsLog = null, label = "", maxAttempts = 3 }) {
+export function createModelSteps({ model, cacheDir = null, callsLog = null, label = "", maxAttempts = 3, concise = false }) {
   /** @type {Map<string, any>} */
   const results = new Map();
   const usage = { calls: 0, cacheHits: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, steps: 0, rejected: 0, failed: 0 };
@@ -133,9 +134,13 @@ export function createModelSteps({ model, cacheDir = null, callsLog = null, labe
   /** One step: the model asked, the package gated, repaired until it passes or the attempts are spent. @param {any} request */
   async function run(request) {
     const capability = await learningCapability(request.capabilityId);
+    // Native runs read the base skill as a tool result; this adapter flattens it into system text. A switched-on skill section must
+    // have the same authority as that base text, including its extension of the base code-only attachment instruction.
+    const system = concise && (request.capabilityId === "method-distillation" || request.capabilityId === "method-relations" && request.input?.action === "build")
+      ? `${capability.system}\n\n${await distillationSkillVariants(["concise"])}` : capability.system;
     const contract = contractOf(capability, request.contractKind);
     const user = stepMessage(request, contract.outputs);
-    const key = sha256(JSON.stringify({ capabilityId: request.capabilityId, version: capability.version, system: capability.system, user }));
+    const key = sha256(JSON.stringify({ capabilityId: request.capabilityId, version: capability.version, system, user }));
     const cached = cacheDir ? await readFile(path.join(cacheDir, `${key}.json`), "utf8").then(JSON.parse).catch(() => null) : null;
     if (cached) {
       usage.cacheHits += 1;
@@ -143,7 +148,7 @@ export function createModelSteps({ model, cacheDir = null, callsLog = null, labe
       return cached;
     }
     /** @type {any[]} */
-    const messages = [{ role: "system", content: capability.system }, { role: "user", content: user }];
+    const messages = [{ role: "system", content: system }, { role: "user", content: user }];
     /** @type {any} */
     let outcome = { ok: false, attempts: 0, files: null, issues: [] };
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {

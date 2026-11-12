@@ -49,9 +49,9 @@ function embedder(options = {}) {
 
 /**
  * A ledger and a consolidation over it. `decide(input)` and `build(input)` answer the two model steps by what they were asked.
- * @param {{decide?: (input: any) => any, build?: (input: any) => any, similarity?: any, audit?: any, unusedAfterLoads?: number, now?: () => Date, jobs?: any, replay?: any, linkCheckEnabled?: boolean, pyramid?: boolean, officialMethods?: any}} [options]
+ * @param {{decide?: (input: any) => any, build?: (input: any) => any, similarity?: any, audit?: any, unusedAfterLoads?: number, now?: () => Date, jobs?: any, replay?: any, linkCheckEnabled?: boolean, pyramid?: boolean, concise?: boolean, officialMethods?: any}} [options]
  */
-function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisions: [] }), similarity = undefined, audit = null, unusedAfterLoads = undefined, now = () => NOW, jobs = null, replay = null, linkCheckEnabled = false, pyramid = undefined, officialMethods = undefined } = {}) {
+function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisions: [] }), similarity = undefined, audit = null, unusedAfterLoads = undefined, now = () => NOW, jobs = null, replay = null, linkCheckEnabled = false, pyramid = undefined, concise = false, officialMethods = undefined } = {}) {
   const documents = productDocumentsDouble();
   const learning = new LearningService({ documents, now });
   /** @type {any[]} */
@@ -74,6 +74,7 @@ function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisi
     },
     similarity: sim, audit, jobs, replay,
     linkCheckEnabled,
+    concise,
     onNoop: (reason, count) => noops.push([reason, count ?? 1]),
     onRelation: (type, count) => relations.push([type, count ?? 1]),
     onRetirement: (code) => stops.push(code),
@@ -96,6 +97,23 @@ function harness({ decide = () => ({ assignments: [] }), build = () => ({ revisi
 
 /** @param {any} input a decide input @returns {string[]} the ids of its methods */
 const idsOf = (input) => input.methods.map((/** @type {any} */ method) => method.id).sort();
+
+test("concise consolidation selects the variant only for BUILD and preserves an amended card's attached detail", async () => {
+  for (const concise of [false, true]) {
+    const h = harness({ concise, build: input => ({ revisions: [{ assignment: "A1", operation: "amend",
+      methodId: input.methods[0].id, baseDigest: input.methods[0].digest,
+      skill: renderMethodSkill(input.methods[0].frontmatter, sections("- Keep the observations.")) }] }) });
+    const first = await h.make("detail-one", "axis-a", { files: { "scripts/detail.md": "A preserved recovery example." } });
+    const second = await h.make("detail-two", "axis-a");
+    const result = await h.consolidation.buildGroup({ id: "j_detail", userId: "u1", projectId: "p1", payload: {} }, [first, second],
+      { assignments: [{ ASSIGNMENT: "A1", SKILLS: [first.id, second.id], RELATION_TYPE: "shared_part", REASON: "A shared operation." }] });
+    assert.equal(result.applied, 1);
+    assert.equal(h.builds()[0].question.includes("## Variant: a short method card"), concise);
+    const amended = await h.learning.getMethod("u1", first.id);
+    if (concise) assert.deepEqual(amended.payload.files, first.payload.files);
+    assert.ok(amended.revision > first.revision, "the earlier method remains a restorable revision");
+  }
+});
 
 test("an unchanged library is read once: the second pass skips its groups, dispatches nothing and says why; a changed method is one new DECIDE", async () => {
   const h = harness({ decide: (input) => ({ assignments: [{ ASSIGNMENT: "A1", SKILLS: idsOf(input), RELATION_TYPE: "shared_part", REASON: "They share a step." }] }) });

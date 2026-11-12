@@ -1103,6 +1103,7 @@ services:
       OPEN_SCIENCE_METHOD_CONSOLIDATION_MODEL_CALLS:
       OPEN_SCIENCE_METHOD_PENDING_RETIREMENT_MOUNT_ENABLED:
       OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED:
+      OPEN_SCIENCE_METHOD_CONCISE_DISTILLATION_ENABLED:
       OPEN_SCIENCE_MODEL_GATEWAY_SIGNING_SECRET_FILE: /run/secrets/model-gateway-signing-key
       OPEN_SCIENCE_EVIMED_API_KEY_FILE: /run/secrets/evimed-api-key
       # The remaining public-source credentials the server resolves. Without

@@ -61,6 +61,7 @@ export const LESSON_GATES = Object.freeze(["every-success", "product"]);
  * @property {boolean} officialInLoop  `OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`, with `officialSet` as the account's official methods
  * @property {boolean} [camp]  the training camp (`OPEN_SCIENCE_LEARNING_CAMP_ENABLED`): every finished episode is a `camp` lesson (`campLesson`)
  * @property {boolean} [twoStage]  `OPEN_SCIENCE_METHOD_TWO_STAGE_DISTILLATION_ENABLED`: frame, then one method per new sub-skill
+ * @property {boolean} [concise] `OPEN_SCIENCE_METHOD_CONCISE_DISTILLATION_ENABLED`: short cards, optional detail attachments
  * Absent `camp` and `twoStage` are off, so a library saved before they existed reopens under the policy it was built with.
  */
 
@@ -94,9 +95,9 @@ export function libraryDocuments(saved) {
  * body, depends_on) plus why each was mounted. `level` is `abstract` for an abstract method (role, or level 2 and above) and `atomic`
  * otherwise; `role` and `levelNumber` are the product's own.
  * @param {{ library: readonly any[], taskText: string, mode: "flat" | "pyramid", similarity: any, removeRoles?: readonly string[],
- *   visibleBefore?: string | null, minSimilarity?: number, cardEvidence?: boolean }} input
+ *   visibleBefore?: string | null, minSimilarity?: number, cardEvidence?: boolean, detailAttachments?: boolean }} input
  */
-export async function selectCards({ library, taskText, mode, similarity, removeRoles = [], visibleBefore = null, minSimilarity = 0, cardEvidence = false,
+export async function selectCards({ library, taskText, mode, similarity, removeRoles = [], visibleBefore = null, minSimilarity = 0, cardEvidence = false, detailAttachments = false,
   maxBytes = MAX_MOUNTED_CAPSULE_METHOD_BYTES }) {
   const removed = new Set(removeRoles);
   const documents = library.filter((document) => !removed.has(String(document.payload?.frontmatter?.metadata?.role ?? ""))
@@ -110,7 +111,8 @@ export async function selectCards({ library, taskText, mode, similarity, removeR
     return {
       name: card.name, level: role === "abstract" || card.level >= 2 ? "abstract" : "atomic", role, levelNumber: card.level,
       when: String(payload.frontmatter?.whenToUse ?? ""), description: String(payload.frontmatter?.description ?? ""),
-      body: String(payload.body ?? ""), depends_on: (payload.dependencies ?? []).map((/** @type {any} */ dependency) => String(dependency.name)),
+      body: String(payload.body ?? ""),
+      ...(detailAttachments && payload.files?.["scripts/detail.md"] ? { detail: String(payload.files["scripts/detail.md"]) } : {}), depends_on: (payload.dependencies ?? []).map((/** @type {any} */ dependency) => String(dependency.name)),
       reason: card.reason, digest: card.digest,
     };
   });
@@ -182,7 +184,7 @@ export class OfflineLoop {
     const official = this.policy.officialInLoop ? async () => this.officialSet : null;
     if (official) this.learning.officialMethods = official;
     this.similarity = createMethodSimilarity({ embed: this.embed, logger: { warn: (message) => process.stderr.write(`${message}\n`) } });
-    this.steps = createModelSteps({ model: this.model, cacheDir: this.cacheDir, callsLog: path.join(this.dir, "calls.jsonl"), label: `${this.env}/${this.variant}`, maxAttempts: this.maxAttempts });
+    this.steps = createModelSteps({ model: this.model, cacheDir: this.cacheDir, callsLog: path.join(this.dir, "calls.jsonl"), label: `${this.env}/${this.variant}`, maxAttempts: this.maxAttempts, concise: this.policy.concise === true });
     const jobs = { enqueue: async (/** @type {string} */ userId, /** @type {string} */ kind, /** @type {any} */ payload, /** @type {any} */ opts = {}) => {
       this.queue.push({ userId, kind, payload, idempotencyKey: opts.idempotencyKey ?? null });
       return { id: `job-${this.queue.length}` };
@@ -196,11 +198,11 @@ export class OfflineLoop {
       dispatch: this.steps.dispatch, readResult: this.steps.readResult, learning: distillerLearning, jobs, similarity: this.similarity,
       resolveRun: async (_project, runId) => this.state.runs[runId] ?? null,
       officialMethods: this.policy.related === "empty" ? null : official,
-      camp: this.policy.camp === true, twoStage: this.policy.twoStage === true,
+      camp: this.policy.camp === true, twoStage: this.policy.twoStage === true, concise: this.policy.concise === true,
     });
     this.consolidation = new MethodConsolidation({
       dispatch: this.steps.dispatch, readResult: this.steps.readResult, learning, jobs, similarity: this.similarity, now,
-      wait: async () => {}, pyramid: this.policy.pyramid === true, officialMethods: official,
+      wait: async () => {}, concise: this.policy.concise === true, pyramid: this.policy.pyramid === true, officialMethods: official,
     });
     this.project = { id: `c1-${this.env}`, userId: OFFLINE_USER, rootDir: path.join(this.dir, "project"),
       metaDir: path.join(this.dir, "project", ".openscience"), workspaceDir: path.join(this.dir, "project", "workspace") };
@@ -389,7 +391,7 @@ export class OfflineLoop {
 
   /** @param {{ taskText: string, mode?: "flat" | "pyramid", removeRoles?: string[] }} input */
   async select({ taskText, mode = "pyramid", removeRoles = [] }) {
-    return selectCards({ library: await this.methods(), taskText, mode, similarity: this.similarity, removeRoles,
+    return selectCards({ library: await this.methods(), taskText, mode, similarity: this.similarity, removeRoles, detailAttachments: this.policy.concise === true,
       visibleBefore: this.policy.approve === "after-consolidation" ? (this.state.lastConsolidatedAt ?? "") : null });
   }
 
@@ -502,14 +504,15 @@ function parseArgs(argv) {
 
 /** A library file read for selection, reloaded when it changes on disk (the evolving arm). @param {string} file @param {any} similarity */
 function libraryReader(file) {
-  /** @type {{ mtimeMs: number, documents: any[], visibleBefore: string | null } | null} */
+  /** @type {{ mtimeMs: number, documents: any[], visibleBefore: string | null, detailAttachments: boolean } | null} */
   let held = null;
   return async () => {
     const info = await stat(file);
     if (!held || held.mtimeMs !== info.mtimeMs) {
       const saved = JSON.parse(await readFile(file, "utf8"));
       const approve = saved.policy?.approve ?? "immediate";
-      held = { mtimeMs: info.mtimeMs, documents: libraryDocuments(saved), visibleBefore: approve === "after-consolidation" ? (saved.lastConsolidatedAt ?? "") : null };
+      held = { mtimeMs: info.mtimeMs, documents: libraryDocuments(saved), visibleBefore: approve === "after-consolidation" ? (saved.lastConsolidatedAt ?? "") : null,
+        detailAttachments: saved.policy?.concise === true };
     }
     return held;
   };
@@ -524,9 +527,9 @@ async function main(argv = process.argv.slice(2)) {
     const read = libraryReader(String(options.library));
     /** @param {any} request */
     const answer = async (request) => {
-      const { documents, visibleBefore } = await read();
+      const { documents, visibleBefore, detailAttachments } = await read();
       const result = await selectCards({ library: documents, taskText: String(request.taskText ?? ""), mode: request.mode === "flat" ? "flat" : "pyramid",
-        similarity, removeRoles: Array.isArray(request.removeRoles) ? request.removeRoles : [], visibleBefore });
+        similarity, removeRoles: Array.isArray(request.removeRoles) ? request.removeRoles : [], visibleBefore, detailAttachments });
       return { ...result, similarityMode: result.mode, embedModel: embedder?.model ?? null };
     };
     if (command === "select") {

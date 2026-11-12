@@ -7,9 +7,9 @@ import path from "node:path";
 import test from "node:test";
 
 import { OfflineLoop, selectCards, libraryDocuments } from "../learn/offlineLoop.mjs";
-import { createModelSteps, fakeLearningModel, filesOfReply } from "../learn/modelSteps.mjs";
+import { createModelSteps, fakeLearningModel, filesOfReply, learningCapability } from "../learn/modelSteps.mjs";
 import { decisiveAnchors, episodeAsRun, episodeOutcome, toolNameOf } from "../learn/gameTranscript.mjs";
-import { buildDistillationInput } from "../../../apps/server/src/methodDistillationRuns.mjs";
+import { buildDistillationInput, distillationSkillVariants } from "../../../apps/server/src/methodDistillationRuns.mjs";
 import { createMethodSimilarity } from "../../../apps/server/src/methodSimilarity.mjs";
 import { learnFrom } from "../c1/build_library.mjs";
 
@@ -37,6 +37,19 @@ function recordingModel() {
 }
 
 const HEAT = ["go to countertop 1", "take apple 1 from countertop 1", "go to microwave 1", "heat apple 1 with microwave 1", "go to fridge 1", "put apple 1 in/on fridge 1"];
+
+test("the offline concise section has the base skill's system authority; off keeps the original system bytes", async () => {
+  const base = await learningCapability("method-distillation");
+  for (const concise of [false, true]) {
+    const seen = [];
+    const inner = fakeLearningModel();
+    const steps = createModelSteps({ concise, model: { complete: async request => { seen.push(request.messages[0]); return inner.complete(request); } } });
+    await steps.dispatch({ capabilityId: "method-distillation", contractKind: "method-frame", dispatchId: "frame",
+      question: "Write the frame.", input: { stage: "frame", relatedMethods: [], trajectory: { requests: [] } } });
+    assert.equal(seen[0].role, "system");
+    assert.equal(seen[0].content, concise ? `${base.system}\n\n${await distillationSkillVariants(["concise"])}` : base.system);
+  }
+});
 
 test("a game episode is a product run: one request, game commands as tool calls by verb, nothing the game says read as a correction", () => {
   assert.equal(toolNameOf("go to fridge 1"), "go to");

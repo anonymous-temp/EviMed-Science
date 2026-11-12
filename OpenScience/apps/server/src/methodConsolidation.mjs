@@ -58,6 +58,7 @@
  */
 
 import { callModelForControlPlane } from "./modelGateway.mjs";
+import { distillationSkillVariants } from "./methodDistillationRuns.mjs";
 import { createHash } from "node:crypto";
 
 import {
@@ -339,7 +340,7 @@ export class MethodConsolidation {
    *          replay?: { run: (request: { job: any }) => Promise<any> } | null,
    *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>,
    *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null,
-   *          queueEnabled?: boolean, recallEnabled?: boolean, modelCalls?: number, linkCheckEnabled?: boolean, pyramid?: boolean, officialMethods?: ((userId: string) => Promise<readonly any[]>) | null}} dependencies
+   *          queueEnabled?: boolean, recallEnabled?: boolean, modelCalls?: number, linkCheckEnabled?: boolean, pyramid?: boolean, concise?: boolean, officialMethods?: ((userId: string) => Promise<readonly any[]>) | null}} dependencies
    *   `pyramid` (`OPEN_SCIENCE_METHOD_PYRAMID_ENABLED`, off by default): the levels the pass stores count an abstract method's members
    *   (`metadata.derived_from`, `methodRecordFrom`'s `libraryNames`), so an abstract method sits one above them instead of at 0.
    *   `officialMethods` (`OPEN_SCIENCE_METHOD_OFFICIAL_IN_LOOP_ENABLED`; absent, the default, is none): the account's official methods join the
@@ -353,7 +354,7 @@ export class MethodConsolidation {
     describe = null, judgeService = null, screenBaseline = null,
     unusedAfterLoads = undefined, onRetirement = null, similarity = null, onNoop = null, onRelation = null, replay = null, contextProvenance = null,
     linkCheckEnabled = false,
-    pyramid = false, officialMethods = null, queueEnabled = false, recallEnabled = false, modelCalls = 12,
+    pyramid = false, concise = false, officialMethods = null, queueEnabled = false, recallEnabled = false, modelCalls = 12,
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
@@ -365,6 +366,7 @@ export class MethodConsolidation {
     this.dispatch = dispatch;
     this.readResult = readResult;
     this.learning = learning;
+    this.concise = concise === true;
     this.jobs = jobs;
     // Optional, and optional on purpose: a consolidation pass that cannot write
     // an audit line still has to finish, because the line is a record of what
@@ -442,7 +444,8 @@ export class MethodConsolidation {
       capabilityId: "method-relations",
       contractKind: "method-relations",
       input,
-      question,
+      question: this.concise && input.action === "build"
+        ? `${question}\n\n${await distillationSkillVariants(["concise"])}` : question,
     });
     if (!identity?.runId) return null;
     const deadline = this.now().getTime() + this.stepWaitMs;
@@ -1467,6 +1470,7 @@ export class MethodConsolidation {
         expectedRevision: fresh.revision,
         frontmatter: parsed.frontmatter,
         body: parsed.body,
+        ...(this.concise && target.payload.files ? { files: target.payload.files } : {}),
         dependencies: rewrite.dependencies ?? target.payload.dependencies ?? [],
         provenance: { ...target.payload.provenance, ...generated, consolidatedBy: `consolidate:${job.id}` },
       }).catch(() => null);
@@ -1505,6 +1509,7 @@ export class MethodConsolidation {
         const kept=bodyPreservation({body:target.payload.body,provenance:target.payload.provenance},parsed.body);
         if(!kept.ok){refusals.push({assignment:String(rewrite.assignment),methodId:target.id,code:'preservation',dropped:kept.dropped.length,quotesDropped:kept.quotesDropped.length});continue;}
         plans.push({operation:'amend',id:target.id,input:{expectedRevision:target.revision,frontmatter:parsed.frontmatter,body:parsed.body,
+          ...(this.concise&&target.payload.files?{files:target.payload.files}:{}),
           dependencies:rewrite.dependencies??target.payload.dependencies??[],provenance:{...target.payload.provenance,generationInputRef:binding.generationInputRef,consolidatedBy:`consolidate:${job.id}`}}});
       }
     }
