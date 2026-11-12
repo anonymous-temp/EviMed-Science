@@ -91,6 +91,17 @@ test('the control-plane search-hint switch reaches the socket environment throug
   }
 });
 
+test('the standing-instruction switch reaches both profile input and the container launch environment', () => {
+  const config = { production: false, modelGatewayInternalUrl: 'http://gateway:8787/internal/model/v1', runtimeSandboxEnforcement: 'partial', runtimeSandboxMode: 'docker', runtimeContainerImage: 'evimed-runtime-dsh:test', runtimeNetworkMode: 'bridge' };
+  const plan = { sandboxMode: 'docker', dshHomeDir: '/runtime/dsh-home', capsuleMethodCount: 0 };
+  for (const enabled of [undefined, false, true]) {
+    const input = dshProfileInput({ ...config, memoryStandingInstructionsEnabled: enabled }, project, plan, 'deepseek-flash', '/runtime/workload-token');
+    assert.equal(runtimeEnvironment(input).EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED, enabled ? '1' : '0');
+    const launch = buildRuntimeLaunchPlan({ ...config, memoryStandingInstructionsEnabled: enabled }, project, 49152);
+    assert.ok(launch.args.includes(`EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED=${enabled ? '1' : '0'}`));
+  }
+});
+
 test("a session that has chosen no thinking intensity starts from the deployment's configured one", () => {
   // The composer's thinking-intensity seat reads the session's own choice, else the model's default effort -- which the adapter takes from this
   // row. So the profile has to carry the deployment's effort, and a session that picked one keeps its own (the kernel stores that per session).

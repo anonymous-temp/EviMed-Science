@@ -49,6 +49,7 @@ export const inject = ['systemPrompt']
  * @property {boolean} [memoryForgetToolHint]
  * @property {boolean} [memoryForgetTargets]
  * @property {boolean} [memorySearchHint]
+ * @property {boolean} [memoryStandingInstructions]
  */
 
 export const Config = Schema.object({
@@ -80,6 +81,8 @@ export const Config = Schema.object({
   memoryForgetTargets: Schema.boolean().default(false).description('Support exact-line and history-only forget targets.'),
   memorySearchHint: Schema.boolean().default(false)
     .description('Explain the partial memory opening and search before claiming absence (EVIMED_MEMORY_SEARCH_HINT_ENABLED).'),
+  memoryStandingInstructions: Schema.boolean().default(false)
+    .description('Apply the person\'s standing reply preferences within their stated scope (EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED).'),
   openVikingMemory: Schema.boolean().default(false)
     .description('Whether this account\'s memory is kept by the official OpenViking plugin (EVIMED_MEMORY_GATEWAY_URL is set); the guidance then says how to read what the plugin injects and returns.'),
 })
@@ -102,6 +105,9 @@ export async function apply(ctx, config) {
     memorySearchHint: config.memorySearchHint === true,
     memoryForgetToolHint: config.memoryForgetToolHint === true,
     memoryForgetTargets: config.memoryForgetTargets === true,
+    // Read the launch environment here: adding a preset config key would change the image's recorded composition,
+    // even with the switch off. Like memory-bridge's runtime-lock switch, this changes only the plugin's behavior.
+    memoryStandingInstructions: config.memoryStandingInstructions === true || process.env.EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED === '1',
   })
   ctx.provide('evimedCapabilities', capabilities, true)
   ctx.effect(() => registerSection(ctx, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text }))

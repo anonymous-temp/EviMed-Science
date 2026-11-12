@@ -21,6 +21,7 @@ import { ensurePostgres, ensureDatabase, startHarness, stopHarness } from '../..
 import { runConversation } from './conversation.mjs';
 import { parseSkillFrontmatter } from '../../../packages/domain/src/methodSkill.mjs';
 import { l1Ring, l10Family, l5Item, l2Summary, ruleResults, correctionFor, followUpOf, methodById, countsOf, mountOf, toolChainOf, nonZero } from './verdicts.mjs';
+import { deriveGold } from '../synthetic/learnsets.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OS = path.resolve(HERE, '../../..');
@@ -30,7 +31,7 @@ export const EXPERIMENTS = { l1: ['tc-off', 'tc-on'], l10: ['tc-off', 'tc-on'], 
 const ACCEPTS = ['好的，可以。', '行，就这样。', '收到，没问题。'];
 const REPLAY_WHEN = '用户给出本周项目进展的零散记录，要求整理成可直接发到项目群的周报时。';
 const PASSWORD = 'eval-pass-1';
-export const SCORER = 'lx/1';
+export const SCORER = 'lx/2';
 
 export function argsOf(argv) {
   const out = { port: 48852, pgPort: 55682, timeoutMin: 15, learningTimeoutMin: 45, data: '/srv/evimed/data/memdata-data' };
@@ -400,16 +401,17 @@ async function l2Unit(ctx, person, gold) {
     frozen.push({ index: i, results: ruleResults(gold.frozen[i].checks, record.turns[0]?.reply), status: record.turns[0]?.run?.status });
   }
   const probes = [];
+  const probeGold = deriveGold(person).probes;
   for (const [i, entry] of person.probes.entries()) {
     const request = textOf(entry);
     const name = `conv-p${i + 1}`;
     await u.conversation(name, { api, userId, projectId: projectB, projectName: person.projectB.title, first: request, next: () => null, maxTurns: 1 });
     const record = await u.record(name);
-    probes.push({ index: i, status: record.turns[0]?.run?.status, results: gold.probes[i].leakChecks.map(c => ({ ruleId: c.ruleId, kind: c.check.kind, unnatural: c.unnatural, pass: ruleResults([c], record.turns[0]?.reply)[0].pass })) });
+    probes.push({ index: i, status: record.turns[0]?.run?.status, results: probeGold[i].leakChecks.map(c => ({ ruleId: c.ruleId, kind: c.check.kind, scope: c.scope, unnatural: c.unnatural, pass: ruleResults([c], record.turns[0]?.reply)[0].pass })) });
   }
   const state = await ipc(ctx.h, 'lxState', { userId });
   await atomic(`${u.dir}/state-final.json`, state);
-  const verdict = { id: person.id, arm, ...l2Summary({ sessions, frozen, probes }), sessionsDetail: sessions, frozen, probes, interrupted: u.p.interrupted ?? [],
+  const verdict = { id: person.id, arm, scorer: SCORER, ...l2Summary({ sessions, frozen, probes }), sessionsDetail: sessions, frozen, probes, interrupted: u.p.interrupted ?? [],
     methods: state.methods.map(m => ({ name: m.payload?.frontmatter?.name, status: m.payload?.status, counts: countsOf(m), trigger: m.payload?.provenance?.trigger ?? null })),
     lessons: state.jobs.filter(j => j.kind === 'distill').map(j => ({ trigger: j.payload?.trigger, status: j.status, operation: j.result?.operation ?? null })),
     verdictsRecorded: state.events.filter(e => e.detail?.evidence === 'follow-up').map(e => e.detail.verdict), counters: nonZero(state.counters),
@@ -436,7 +438,8 @@ export function summarizeExp(exp, arm, verdicts) {
     return { exp, arm, items: verdicts.length, badStopped: bad.filter(v => v.stopped).length, bad: bad.length, goodFalseStops: good.filter(v => v.falseStop).length, good: good.length,
       table: verdicts.map(v => ({ id: v.id, class: v.class, shouldStop: v.shouldStop, stopped: v.stopped, after: v.stoppedAfterTask, final: v.finalStatus, verdicts: v.verdicts.join(','), counts: `clean=${v.counts.appliedClean ?? 0} corrected=${v.counts.appliedCorrected ?? 0} invoked=${v.counts.invoked ?? 0}` })) };
   }
-  return { exp, arm, people: verdicts.length, table: verdicts.map(v => ({ id: v.id, corrections: v.correctionsPerSession, firstTimeRight: v.firstTimeRight, frozenCompliance: v.frozenCompliance, probeLeaks: v.probeLeaks.length, probePositiveChecks: v.probePositiveChecks })) };
+  return { exp, arm, people: verdicts.length, table: verdicts.map(v => ({ id: v.id, corrections: v.correctionsPerSession, firstTimeRight: v.firstTimeRight, frozenCompliance: v.frozenCompliance, probeLeaks: v.probeLeaks.length, probePositiveChecks: v.probePositiveChecks,
+    probePersonalChecks: v.probePersonalChecks ?? 0, probeScopeUnknown: v.probeScopeUnknown ?? null })) };
 }
 
 /** Account usage of every unit (the product's own usage ledger: settled model calls, learning included). */
@@ -463,7 +466,7 @@ export function ledgerRows(sum, { runId, commit, flags, rawPath, wallSeconds, to
   if (sum.exp === 'l5') return [row('bad_methods_stopped', sum.bad, sum.bad ? sum.badStopped / sum.bad : 0, 'harmful/outdated/safety-conflict methods not approved after the 4 tasks'),
     row('good_methods_false_stopped', sum.good, sum.good ? sum.goodFalseStops / sum.good : 0, 'good methods stopped')];
   return sum.table.flatMap(p => [row('first_time_right', 12, p.firstTimeRight ?? 0, `person ${p.id}`), row('corrections_total', 12, p.corrections.reduce((a, b) => a + b, 0), `person ${p.id}; per session ${p.corrections.join(',')}`),
-    row('frozen_compliance', 9, p.frozenCompliance ?? 0, `person ${p.id}; 3 frozen tasks x 3 rules`), row('probe_leaks', p.probePositiveChecks, p.probeLeaks, `person ${p.id}; positive-form rule satisfied where unnatural (project B)`)]);
+    row('frozen_compliance', 9, p.frozenCompliance ?? 0, `person ${p.id}; 3 frozen tasks x 3 rules`), row('probe_leaks', p.probePositiveChecks, p.probeLeaks, `person ${p.id}; project-scoped positive form satisfied where unnatural (project B); personal=${p.probePersonalChecks ?? 0}, scope-unknown=${p.probeScopeUnknown ?? 'unrecorded'}`)]);
 }
 
 function markdown(sum) {
