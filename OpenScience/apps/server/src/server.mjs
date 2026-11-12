@@ -4229,6 +4229,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /** 主动科研's long research goals (`researchGoalService.mjs`); composed further down, once what it acts through exists. @type {ResearchGoals | null} */
   let researchGoals = null;
   agentRuns = new AgentRunStore(researchSessions, {
+    ledgerRotationEnabled: config.agentRunLedgerRotationEnabled,
     authorizeReservation: (project, input) => {
       if (!isDataAnalysisProject(project)) return;
       if (!dataAnalysisService) throw new HttpError(503, "product_state_unavailable", "Analysis admission is unavailable.");

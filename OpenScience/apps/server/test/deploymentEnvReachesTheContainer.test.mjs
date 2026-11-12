@@ -84,6 +84,7 @@ const operatorLevers = {
   OPEN_SCIENCE_METHOD_CONSOLIDATION_RECALL_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_METHOD_CONSOLIDATION_MODEL_CALLS: ["open-science-web"],
   OPEN_SCIENCE_METHOD_PENDING_RETIREMENT_MOUNT_ENABLED: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_AGENT_RUN_LEDGER_ROTATION_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED: ["open-science-web", "open-science-runtime-controller"],
   // Both launch paths must install the optional MCP; its private token stays on web.
   OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL: ["open-science-web", "open-science-runtime-controller"],

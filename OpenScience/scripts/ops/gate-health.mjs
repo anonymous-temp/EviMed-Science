@@ -120,8 +120,22 @@ function ledgerHealth(root) {
   /** @type {Map<string, {count: number, blocked: number, lastMs: number}>} */
   const noticeCodes = new Map();
   for (const file of ledgers) {
-    let text;
-    try { text = readFileSync(file, "utf8"); } catch { continue; }
+    const dir = path.dirname(file);
+    let segments;
+    try { segments = readdirSync(dir).filter(name => /^runs\.\d{6}\.jsonl$/.test(name)).sort(); }
+    catch (error) {
+      console.error(`unreadable run ledger directory ${dir}: ${error.message}`);
+      process.exit(2);
+    }
+    const texts = [];
+    for (const part of [file, ...segments.map(name => path.join(dir, name))]) {
+      try { texts.push(readFileSync(part, "utf8")); }
+      catch (error) {
+        console.error(`unreadable run ledger segment ${part}: ${error.message}`);
+        process.exit(2);
+      }
+    }
+    const text = texts.join("\n");
     for (const line of text.split("\n")) {
       if (!line) continue;
       let event;
