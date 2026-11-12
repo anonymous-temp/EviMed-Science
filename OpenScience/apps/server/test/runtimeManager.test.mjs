@@ -4916,3 +4916,23 @@ test("a warm start answers with the runtime registered when its plugin admission
   manager.pluginService = { withAdmission: async (_p, operation) => { manager.runtimes.delete(key); return operation(); } };
   await assert.rejects(manager.start(project), (error) => /** @type {any} */ (error).code === "runtime_busy", "a runtime stopped meanwhile is a retry, never the stopped record");
 });
+
+test('the three memory guidance switches stay independent in both launch paths', () => {
+  const config = { production: false, modelGatewayInternalUrl: 'http://gateway:8787/internal/model/v1', runtimeSandboxEnforcement: 'partial', runtimeSandboxMode: 'docker', runtimeContainerImage: 'evimed-runtime-dsh:test', runtimeNetworkMode: 'bridge' };
+  const plan = { sandboxMode: 'docker', dshHomeDir: '/runtime/dsh-home', capsuleMethodCount: 0 };
+  const switches = [
+    ['memoryForgetToolHintEnabled', 'EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED'],
+    ['memoryForgetTargetsEnabled', 'EVIMED_MEMORY_FORGET_TARGETS_ENABLED'],
+    ['memoryStandingInstructionsEnabled', 'EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED'],
+  ];
+  for (let mask = 0; mask < 8; mask++) {
+    const values = Object.fromEntries(switches.map(([property], index) => [property, Boolean(mask & (1 << index))]));
+    const input = dshProfileInput({ ...config, ...values }, project, plan, 'deepseek-flash', '/runtime/workload-token');
+    const env = runtimeEnvironment(input);
+    const launch = buildRuntimeLaunchPlan({ ...config, ...values }, project, 49152);
+    for (const [property, key] of switches) {
+      assert.equal(env[key], values[property] ? '1' : '0');
+      assert.ok(launch.args.includes(`${key}=${env[key]}`));
+    }
+  }
+});

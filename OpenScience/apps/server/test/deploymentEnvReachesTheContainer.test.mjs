@@ -1032,3 +1032,17 @@ test("the research-database keyring is a read-only file mount of the web service
   const example = await readFile(path.join(deployDir, ".env.example"), "utf8");
   for (const name of ["OPEN_SCIENCE_RESEARCH_DB_ALLOW", "OPEN_SCIENCE_RESEARCH_DB_KEYRING_HOST_FILE"]) assert.match(example, new RegExp(`^${name}=$`, "m"));
 });
+
+test('MG3 capsule switches are documented once with their default off', async () => {
+  const example = await readFile(path.join(deployDir, '.env.example'), 'utf8');
+  const config = await readFile(path.join(repoRoot, 'apps/server/src/config.mjs'), 'utf8');
+  for (const name of [
+    'MEMORY_FORGET_REQUEST_CHECK', 'MEMORY_FORGET_TOOL_HINT', 'MEMORY_FORGET_TARGETS',
+    'MEMORY_STANDING_INSTRUCTIONS', 'MEMORY_PASTED_INSTRUCTION_ROBUST',
+    'METHOD_CONCISE_DISTILLATION', 'AGENT_RUN_LEDGER_ROTATION',
+  ]) {
+    const key = `OPEN_SCIENCE_${name}_ENABLED`;
+    assert.equal(example.split(`${key}=false`).length - 1, 1, key);
+    assert.equal(config.split(`boolEnv("${key}", false)`).length - 1, 1, key);
+  }
+});

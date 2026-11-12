@@ -202,3 +202,50 @@ test('targeted forget guidance names exact lines and history statements only whe
   assert.match(enabled, /history recall rejection/); assert.doesNotMatch(enabled, /一个文件还含有用户要保留的内容时，先澄清/);
   assert.equal(buildGuidanceText([], { openVikingMemory: false, memoryForgetTargets: true }), buildGuidanceText([], { openVikingMemory: false }));
 });
+
+test('all three memory wording switches compose without changing other guidance sections', async () => {
+  const options = { openVikingMemory: true, capsuleToolEnabled: false };
+  const split = text => {
+    const start = text.indexOf('## 注入的上下文怎么用');
+    const end = text.indexOf('## 追问', start);
+    assert.ok(start >= 0 && end > start);
+    return { before: text.slice(0, start), context: text.slice(start, end), after: text.slice(end) };
+  };
+  const baseline = split(buildGuidanceText([], options));
+  const key = 'EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED', saved = process.env[key];
+  try {
+    for (const memoryForgetToolHint of [false, true]) for (const memoryForgetTargets of [false, true]) {
+      const contexts = [];
+      for (const memoryStandingInstructions of [false, true]) {
+        const config = { ...options, memoryForgetToolHint, memoryForgetTargets, memoryStandingInstructions };
+        const text = buildGuidanceText([], config), parts = split(text);
+        assert.equal(parts.before, baseline.before);
+        assert.equal(parts.after, baseline.after);
+        assert.equal(parts.context.includes('用户本人明确表达的持续偏好'), memoryStandingInstructions);
+        assert.equal(parts.context.includes('`lines`'), memoryForgetTargets);
+        assert.equal(parts.context.includes('`statement`'), memoryForgetTargets);
+        assert.equal(parts.context.includes('只有工具确认移除后才说已忘记'), memoryForgetToolHint && !memoryForgetTargets);
+        assert.equal(parts.context.includes('Claim completion only after the tool confirms'), memoryForgetTargets);
+        // The targeted mode replaces the whole-file hint, preserving the lane's precedence.
+        assert.equal(parts.context.includes('一个文件还含有用户要保留的内容时，先澄清'), memoryForgetToolHint && !memoryForgetTargets);
+        contexts.push(parts.context);
+        process.env[key] = memoryStandingInstructions ? '1' : '0';
+        const sections = [];
+        await applyGuidance({
+          get: () => undefined, provide: () => {}, on: () => () => {}, effect: fn => fn(),
+          systemPrompt: { section: section => { sections.push(section); return () => {} } },
+        }, { ...config, capabilitiesDir: '', memoryStandingInstructions: false });
+        assert.equal(sections[0].text, text, 'the launch environment and preset options compose in the registered prompt');
+      }
+      // Standing preferences must never rewrite the independently chosen forget instructions.
+      const forgetStart = memoryForgetTargets ? 'When the user asks to forget' : '用户要求忘掉';
+      if (memoryForgetTargets || memoryForgetToolHint) {
+        assert.equal(contexts[0].slice(contexts[0].indexOf(forgetStart)), contexts[1].slice(contexts[1].indexOf(forgetStart)));
+      }
+    }
+    for (const presetPath of ['../presets/evimed-universal/agent.cordis.yml', '../presets/evimed-universal.patch.yml']) {
+      const preset = await readFile(new URL(presetPath, import.meta.url), 'utf8');
+      assert.ok(preset.includes("memoryForgetTargets: !!js process.env.EVIMED_MEMORY_FORGET_TARGETS_ENABLED === '1'"), presetPath);
+    }
+  } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
+});
