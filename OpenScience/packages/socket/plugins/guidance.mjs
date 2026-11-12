@@ -15,7 +15,6 @@
  * @module @evimed/dsh-socket/plugins/guidance
  */
 
-import process from 'node:process'
 import { errorMessage } from '../src/runPolicy.mjs'
 import { validateCapabilityManifest } from '@evimed/domain'
 import {
