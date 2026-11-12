@@ -361,6 +361,7 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     // Raw history is appended only to an explicit memory search, never a profile.
     memoryHistorySecretRedactionEnabled: overrides.memoryHistorySecretRedactionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_ENABLED", false),
     memoryHistorySecretRedactionDailyCalls: boundedInteger(overrides.memoryHistorySecretRedactionDailyCalls ?? process.env.OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS, 120, 0, 10_000, "OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS"),
+    memorySharedCaptureProofEnabled: overrides.memorySharedCaptureProofEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SHARED_CAPTURE_PROOF_ENABLED", false),
     memoryRuntimeLockIsolationEnabled: overrides.memoryRuntimeLockIsolationEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED", false),
     memoryHistorySearchEnabled: overrides.memoryHistorySearchEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED", true),
     memoryHistoryRetrievalV2Enabled: overrides.memoryHistoryRetrievalV2Enabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_RETRIEVAL_V2_ENABLED", false),

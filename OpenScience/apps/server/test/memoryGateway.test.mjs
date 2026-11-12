@@ -40,7 +40,7 @@ test('opening promotion does not bypass hidden-file filtering in REST or MCP rea
 /** An admission that says what the test wants, and records what it was asked. */
 function fixedAdmission(answer = {}) {
   const asked = [];
-  const base = { native: true, learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null };
+  const base = { learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null };
   return { asked, admit: async (caller) => { asked.push(caller.engineSessionId ?? null); return { ...base, ...(typeof answer === "function" ? answer(caller) : answer) }; } };
 }
 
@@ -1155,7 +1155,7 @@ for (const enabled of [false, true]) test(`unsupported or malformed forget targe
 
 test('isolation health bypasses a forbidden policy but reads still fail closed', async t => {
   let looked = 0;
-  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true }, memoryContexts: {
+  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true }, memoryContexts: {
     forProject: async () => { looked++; const { HttpError } = await import('../src/security.mjs'); throw new HttpError(403, 'memory_scope_denied', 'Forbidden project'); },
   } });
   assert.equal((await f.call('GET', '/health')).status, 200); assert.equal(looked, 0);
@@ -1166,7 +1166,7 @@ test('isolation health bypasses a forbidden policy but reads still fail closed',
 test('shared capture proves production admission decisions without a legacy native flag and recovers a skipped session creation', async t => {
   let proven = false, proofs = 0;
   const f = await fixture(t, {
-    config: { memoryRuntimeLockIsolationEnabled: true },
+    config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true },
     admission: { admit: async () => ({ learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null }) },
     memoryContexts: sessions => ({
       forProject: async () => ({ kind: 'geo-project', ownerId: USER, namespaceId: OV_USER, userRoot: ROOT, sessions }),
@@ -1187,11 +1187,11 @@ test('shared capture proves production admission decisions without a legacy nati
 
 test('owned and shared remember are explicit workload operations, not unproven session capture', async t => {
   const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'remember', arguments: { messages: [{ role: 'user', content: 'Keep this project fact' }] } } };
-  const owned = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true } });
+  const owned = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true } });
   assert.equal((await owned.mcp(request)).status, 200);
   assert.equal(owned.stub.sent('POST', '/mcp').length, 1);
   let journaled = 0, proofs = 0;
-  const shared = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true },
+  const shared = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true },
     memoryContexts: sessions => ({
       forProject: async () => ({ kind: 'geo-project', ownerId: USER, namespaceId: OV_USER, userRoot: ROOT, sessions }),
       configure: async () => sessions.register(USER),
@@ -1204,4 +1204,23 @@ test('owned and shared remember are explicit workload operations, not unproven s
   });
   assert.equal((await shared.mcp(request)).status, 200); assert.equal(journaled, 1); assert.equal(proofs, 0);
   assert.equal(shared.stub.sent('POST', '/mcp').length, 0, 'shared remember must use the namespace journal');
+  await shared.call('POST', '/api/v1/sessions', { session_id: SESSION });
+  assert.equal(proofs, 1, 'named capture requires proof even though explicit remember does not');
+  assert.equal(shared.stub.sent('POST', '/api/v1/sessions').length, 0);
+
+});
+
+
+for (const isolation of [false, true]) for (const proof of [false, true]) test(`shared capture authorization is independent (isolation=${isolation}, proof=${proof})`, async t => {
+  let proofs = 0;
+  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: isolation, memorySharedCaptureProofEnabled: proof },
+    admission: { admit: async () => ({ learn: true, recall: true, sessionId: null }) },
+    memoryContexts: sessions => ({
+      forProject: async () => ({ kind: 'geo-project', ownerId: USER, namespaceId: OV_USER, userRoot: ROOT, sessions }),
+      configure: async () => sessions.register(USER), noteCapture: async () => { proofs++; return null; },
+    }),
+  });
+  await f.call('POST', '/api/v1/sessions', { session_id: SESSION });
+  assert.equal(proofs, proof ? 1 : 0);
+  assert.equal(f.stub.sent('POST', '/api/v1/sessions').length, proof ? 0 : 1);
 });

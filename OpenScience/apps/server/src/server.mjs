@@ -4065,6 +4065,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const direct = await proveGeoRootCapture(identity, canonicalProject, launched, sessionId, primary, snapshot);
         if (direct) return direct;
       }
+      // A newly opened secondary conversation already has a committed exact
+      // association, but no run until the first prompt is acknowledged. Prove
+      // that association and current inventory without waiting for a run row.
+      if (config.memorySharedCaptureProofEnabled === true && sessionId !== primary) {
+        let associated = false;
+        try { await geoNativeAuthority.proveSession(identity, sessionId, snapshot); associated = true; }
+        catch (error) { if (error?.status !== 404) throw error; }
+        if (associated) {
+          const direct = await proveGeoRootCapture(identity, canonicalProject, launched, sessionId, sessionId, snapshot);
+          if (direct) return direct;
+        }
+      }
       const roots = new Set((await geoNativeAuthority.runsInSnapshot(identity, snapshot)).map(run => run.sessionId));
       roots.delete(primary);
       // An exact historical root need not wait behind unrelated conversations.

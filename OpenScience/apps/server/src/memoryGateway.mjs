@@ -691,10 +691,10 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
   async function scopedAdmission(user, project, engineSessionId, at, context, given = null) {
     const decision = given ?? await admission.admit({ user, project, engineSessionId, at });
     // Current MemoryAdmission decisions have no legacy `native` discriminator.
-    // With isolation enabled every named shared capture needs its live proof;
+    // With shared capture proof enabled every named shared capture needs its live proof;
     // session-free recall and explicit remember still use workload authority.
     if (context?.kind !== 'geo-project' || !engineSessionId
-      || config.memoryRuntimeLockIsolationEnabled !== true && !decision.native) return decision;
+      || config.memorySharedCaptureProofEnabled !== true) return decision;
     const proof = await memoryContexts.noteCapture(context, engineSessionId);
     return proof ? decision : { ...decision, learn: false, recall: false, learnReason: 'unproven_session', recallReason: 'unproven_session' };
   }
