@@ -159,9 +159,11 @@ export function createRejectionJudge({ config, usageLedger = null, fetchImpl = g
       const day = now().toISOString().slice(0, 10);
       const held = spent.get(userId);
       const calls = held && held.day === day ? held.calls : 0;
-      if (calls >= dailyCalls) { recordRejectionJudge("over_budget"); recordRejectionLines("judge_failed", shown.length); if(originMessages) throw new Error("memory_history_privacy_unavailable"); return nothing; }
-      // Counted before the call: a model that keeps failing is asked a bounded number of times a day, not without end.
-      spent.set(userId, { day, calls: calls + 1 });
+      if (!originMessages && calls >= dailyCalls) { recordRejectionJudge("over_budget"); recordRejectionLines("judge_failed", shown.length); return nothing; }
+      // Background checks are counted before the call, including failed calls.
+      // Explicit privacy work cannot depend on the allowance for optional extraction checks.
+      // It still uses the same authenticated provider, deadline and strict response validation.
+      if (!originMessages) spent.set(userId, { day, calls: calls + 1 });
       // The removed lines the call is shown, once each, and each candidate's own shortlist as indexes into them.
       /** @type {string[]} */
       const removedTexts = [];

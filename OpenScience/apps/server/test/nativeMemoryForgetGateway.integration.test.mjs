@@ -3,7 +3,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { nativeIntegration } from './helpers/nativeFixture.mjs';
+import { NativeMemoryWorker } from '../src/nativeMemoryWorker.mjs';
 import { NativeMemoryStore, nativeFileId } from '../src/nativeMemoryStore.mjs';
+import { checkForgetRequests } from '../src/nativeMemoryForgetRequests.mjs';
+import { createRejectionJudge } from '../src/nativeMemoryRejections.mjs';
 import { removalText } from '../src/nativeMemoryRejections.mjs';
 import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { GeoNativeMemoryContext } from '../src/geoNativeMemoryContext.mjs';
@@ -101,4 +104,90 @@ test('statement without uri crosses HTTP and store validation; history recall is
   await f.store.undo(f.userId, forgotten[0].id);
   assert.match(JSON.stringify(await search()), /M-41633/);
   assert.equal((await f.overlay.rejectedFingerprints(f.userId, 'notes')).has(lineFingerprint(statement)), false);
+});
+
+const requestStatement = '之前说过的既往检查经历别记了，也不要写进任何材料。';
+
+// The lab's optional rejection judge has a per-day budget shared with extraction.
+// Exhausting that budget must not refuse a person's explicit privacy operation.
+test('P07 token-free statement crosses HTTP with an exhausted maintenance judge budget', options, async t => {
+  const f = await setup(t);
+  const original = 'The previous examination was benign.';
+  const archive = await f.commitConversation('p07', [{ role: 'user', text: original }], { projectId: f.project.id });
+  await f.history.ingestArchive({ userId: f.userId, projectId: f.project.id, engineSession: archive.session, archiveUri: archive.archive_uri }, f.context);
+  let calls = 0;
+  f.store.rejectionJudge = createRejectionJudge({ config: { deepseekProviderEnabled: true, deepseekApiKey: 'fixture',
+    deepseekModel: 'fixture', nativeMemoryRejectionJudgeDailyCalls: 0 }, callModel: async () => {
+      calls++;
+      return { choices: [{ message: { content: JSON.stringify({ same: [{ candidate: 0, removed: 0 }], stated: [] }) } }] };
+    } });
+  const answer = await f.memory.callTool('forget', { statement: requestStatement });
+  assert.equal(answer.isError, false, answer.blocks.join('\n'));
+  assert.equal(calls, 1);
+  assert.equal((await f.overlay.removals(f.userId)).length, 1);
+  assert.doesNotMatch(JSON.stringify(await f.history.search({ user: f.user, project: f.project, query: original })), /previous examination/);
+});
+
+for (const order of ['tool-first', 'settle-first', 'overlap']) test(`statement and request settlement are idempotent (${order})`, options, async t => {
+  const f = await setup(t), statement = 'My old project is M-41633.';
+  const archive = await f.commitConversation('intent-order', [{ role: 'user', text: statement }], { projectId: f.project.id });
+  const commit = { userId: f.userId, projectId: f.project.id, engineSession: archive.session, archiveUri: archive.archive_uri };
+  await f.history.ingestArchive(commit, f.context);
+  // Persist the already-reviewed plan exactly as checkForgetRequests does before mutation.
+  await f.overlay.setForgetRequests(f.userId, commit.archiveUri, { state: 'applying', sourceArchive: commit.archiveUri,
+    requests: [{ key: 'a'.repeat(64), message: 0, status: 'applying', decision: 'remove', candidates: [], intents: [statement], removed: 0, requestMessage: { role: 'user', text: statement } }], claims: [] });
+  const settle = () => checkForgetRequests({ commit, context: f.context, overlay: f.overlay, store: f.store, judge: null });
+  const tool = async () => {
+    const answer = await f.memory.callTool('forget', { statement });
+    assert.equal(answer.isError, false, answer.blocks.join('\n'));
+  };
+  if (order === 'tool-first') { await tool(); await settle(); }
+  if (order === 'settle-first') { await settle(); await tool(); }
+  if (order === 'overlap') await Promise.all([tool(), settle()]);
+  const first = await f.overlay.removals(f.userId);
+  await tool();
+  assert.deepEqual(await f.overlay.removals(f.userId), first, 'a retry does not move the rejection date');
+  const revisions = await f.database.query("SELECT * FROM evimed_memory.native_revisions WHERE user_id=$1 AND change='deleted'", [f.userId]);
+  assert.equal(revisions.rows.length, 1, 'one undoable intent, independent of order and retry');
+  const forgotten = await f.store.forgotten(f.userId);
+  assert.equal(forgotten.length, 1);
+  await f.store.undo(f.userId, forgotten[0].id);
+  assert.equal((await f.overlay.removals(f.userId)).length, 0);
+});
+
+test('two forget calls during a pending commit retain both independent removals', options, async t => {
+  const f = await setup(t), first = 'Project M-41633.', second = 'Project N-49223.';
+  const uri = f.seed('notes/two-calls.md', `${first}\n${retained}`, { type: 'notes' });
+  const archive = await f.commitConversation('pending-forget', [{ role: 'user', text: `${first} ${second}`, at: '2026-01-01T00:00:00Z' }], { projectId: f.project.id });
+  const commit = { userId: f.userId, projectId: f.project.id, engineSession: archive.session, archiveUri: archive.archive_uri };
+  assert.equal((await f.overlay.commit(f.userId, commit.archiveUri)).state, 'pending');
+  assert.equal((await f.memory.callTool('forget', { uri, lines: [first] })).isError, false);
+  assert.equal((await f.memory.callTool('forget', { statement: second })).isError, false);
+  // The external engine finishes its already-pending extraction after both calls.
+  const resurrected = `${first}\n${second}\n${retained}`;
+  f.stub.files.set(uri, resurrected);
+  f.stub.files.set(`${commit.archiveUri}/memory_diff.json`, JSON.stringify({ archive_uri: commit.archiveUri,
+    operations: { adds: [], updates: [{ uri, memory_type: 'notes', before: retained, after: resurrected }], deletes: [] } }));
+  await f.overlay.setForgetRequests(f.userId, commit.archiveUri, { state: 'applying', sourceArchive: commit.archiveUri,
+    requests: [{ key: 'b'.repeat(64), message: 0, status: 'applying', decision: 'remove', candidates: [], intents: [first, second], removed: 0 }], claims: [] });
+  const worker = new NativeMemoryWorker({ config: { ...f.config, memoryForgetRequestCheckEnabled: true },
+    sessions: f.sessions, overlay: f.overlay, memorySettings: f.memorySettings, nativeMemory: f.store, memoryContexts: f.store.memoryContexts });
+  worker.history = f.history;
+  worker.verification.history = f.history;
+  await worker.processCommits({ userId: f.userId });
+  assert.equal((await f.overlay.commit(f.userId, commit.archiveUri)).state, 'completed');
+  await f.history.ingestArchive(commit, f.context);
+  const prints = new Set((await f.overlay.removals(f.userId)).map(row => row.fingerprint));
+  assert.ok(prints.has(lineFingerprint(first))); assert.ok(prints.has(lineFingerprint(second)));
+  assert.equal(await f.sessions.read(f.userId, uri), retained);
+  assert.doesNotMatch(JSON.stringify(await f.history.search({ user: f.user, project: f.project, query: second })), /N-49223|M-41633/);
+});
+
+
+test('a statement upgrades an edit rejection to undoable forgetting exactly once', options, async t => {
+  const f = await setup(t), statement = 'My old project is M-41633.';
+  await f.overlay.reject(f.userId, 'notes', `${f.context.userRoot}/memories/notes/edit.md`, [statement], { origin: 'edit' });
+  for (let repeat = 0; repeat < 2; repeat++) assert.equal((await f.memory.callTool('forget', { statement })).isError, false);
+  assert.equal((await f.overlay.rejectedLines(f.userId, 'notes'))[0].origin, 'forget');
+  assert.equal((await f.store.forgotten(f.userId)).length, 1);
 });

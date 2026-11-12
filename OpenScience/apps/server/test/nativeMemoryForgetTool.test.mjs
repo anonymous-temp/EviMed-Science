@@ -26,12 +26,13 @@ function fixture(enabled = true) {
       return { rows: [] };
     },
     transaction: async operation => {
-      const savedRejections = structuredClone(rejections), savedRows = structuredClone(historyRows);
+      const savedRejections = structuredClone(rejections), savedRows = structuredClone(historyRows), savedRevisions = structuredClone(revisions);
       inTransaction = true;
       try { return await operation(database); }
       catch (error) {
         rejections.splice(0, rejections.length, ...savedRejections);
         historyRows.splice(0, historyRows.length, ...savedRows);
+        revisions.splice(0, revisions.length, ...savedRevisions);
         throw error;
       } finally { inTransaction = false; }
     },
@@ -43,6 +44,11 @@ function fixture(enabled = true) {
     remove: async (_owner, target) => files.delete(target), rebuildMemoryDirectory: async () => {} };
   const overlay = { configured: true, files: async () => new Map(), originsOf: async () => new Map(),
     reject: async (owner, type, target, lines, options) => rejections.push({ owner, type, uri: target, lines, options }),
+    claimForgetIntent: async (owner, type, target, lines) => {
+      const fresh = lines.filter(line => !rejections.some(row => row.owner === owner && row.type === type && row.lines.some(prior => lineFingerprint(prior) === lineFingerprint(line))));
+      if (fresh.length) rejections.push({ owner, type, uri: target, lines: fresh });
+      return fresh;
+    },
     addRevision: async row => { revisions.push(row); return { ...row, id: 'revision', changedAt: '2026-11-12' }; },
     queueSummaryInvalidation: async () => [], completeSummaryInvalidation: async () => {},
     upsertFile: async () => {}, setSources: async () => {}, syncOrigins: async () => {}, removeFile: async () => {} };
@@ -222,4 +228,23 @@ test('session obligations stay unpersisted on an archive failure and are written
   assert.equal((await f.store.forget(user, project, uri)).removed, true);
   assert.ok(f.historyRows.some(row => row[5] === `${root}/sessions/dsh-source` && row[6] === lineFingerprint('')));
   assert.ok(f.historyRows.some(row => row[5] === archiveUri && row[6] === lineFingerprint('Use metric units.')));
+});
+
+
+test('a repeated statement and overlapping settle batch record each fingerprint only once', async () => {
+  const f = fixture();
+  await f.store.forget(user, project, null, { statement: 'My old project is M-41633.' });
+  await f.store.forget(user, project, null, { statement: 'My old project is M-41633.' });
+  await f.store.recordForgetIntent(user.id, { sessions: { memoryRoot: () => `${root}/memories` } }, null,
+    ['My old project is M-41633.', 'The other project is N-49223.']);
+  assert.equal(f.revisions.length, 2);
+  assert.deepEqual(f.revisions.map(row => row.before), ['My old project is M-41633.', 'The other project is N-49223.']);
+  assert.equal(f.rejections.flatMap(row => row.lines).length, 2);
+});
+
+
+test('formatting-only statements are rejected before any privacy mutation', async () => {
+  const f = fixture();
+  await assert.rejects(f.store.forget(user, project, null, { statement: '# (as of 2026-11-12)' }), error => error.code === 'memory_payload_invalid');
+  assert.deepEqual(f.rejections, []); assert.deepEqual(f.revisions, []); assert.deepEqual(f.historyCalls, []);
 });

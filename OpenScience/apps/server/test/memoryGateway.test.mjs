@@ -1170,3 +1170,16 @@ test('gateway preserves a safe store argument diagnostic, but hides unexpected e
     assert.equal(answer.json.error.message, error instanceof HttpError ? error.message : 'The memory gateway could not answer.');
   }
 });
+
+
+test('unexpected gateway failures retain only their stable diagnostic in the server log callback', async t => {
+  for (const [error, code] of [[new Error('memory_history_privacy_unavailable'), 'memory_history_privacy_unavailable'],
+    [Object.assign(new Error('private SQL and content'), { code: '23503' }), '23503'],
+    [new Error('private SQL and content'), 'memory_gateway_failed']]) {
+    const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async () => { throw error; } } });
+    const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: { statement: 'Old fact.' } } });
+    assert.equal(answer.json.error.code, 'memory_gateway_failed');
+    assert.equal(answer.json.error.message, 'The memory gateway could not answer.');
+    assert.deepEqual(f.failures, [{ code, status: 502 }]);
+  }
+});

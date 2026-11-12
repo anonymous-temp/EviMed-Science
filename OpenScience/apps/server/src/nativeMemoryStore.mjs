@@ -12,7 +12,7 @@ import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhe
 import { recordForgetDuplicates, recordMapReplaced } from "./nativeMemoryMetrics.mjs";
 import { freshnessOf } from "./memoryMapSources/common.mjs";
 import { replacedStatements, statementForgotten } from "./memoryMapSources/replacedStatements.mjs";
-import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType, originalSources } from "./nativeMemoryOverlay.mjs";
+import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType, normalisedStatement, originalSources } from "./nativeMemoryOverlay.mjs";
 import { OPENVIKING_KNOWN_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from "./openVikingLayout.mjs";
 import { MEMORY_SEGMENT_OF_TYPE, OBSERVATIONS_SEGMENT, PROJECT_MEMORY_TYPES, nativeMemoryFile, observationFile, parseArchiveUri, platformSessionOf, unfinishedArchives } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
@@ -1492,13 +1492,18 @@ export class NativeMemoryStore {
 
   /** An unstored fact can still be withdrawn. The synthetic URI has no engine file, only undoable removal authority. */
   async recordForgetIntent(userId, context, archiveUri, lines, { act = null, engineSession = null } = {}) {
+    lines = [...new Map(lines.map(text => removalText(text).replace(/\s+/g, ' ')).filter(text => normalisedStatement(text))
+      .map(text => [lineFingerprint(text), text])).values()];
+    if (!lines.length) throw new HttpError(400, 'memory_payload_invalid', 'statement must contain text after formatting is removed.');
     const uri = `${context.sessions.memoryRoot(userId)}/notes/forget-${contentHash(JSON.stringify([archiveUri, lines])).slice(0, 24)}.md`;
     const actual = await this.#fileContext(userId, uri);
-    const activate = async () => { await this.overlay.reject(userId, this.#rejectionType(actual, 'notes'), uri, lines); };
+    const activate = async () => {
+      const fresh = await this.overlay.claimForgetIntent(userId, this.#rejectionType(actual, 'notes'), uri, lines);
+      if (fresh.length) await this.overlay.addRevision({ userId, uri, memoryType: 'notes', change: 'deleted', actor: 'conversation',
+        reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, before: fresh.join('\n'), after: null, archiveUri, engineSession });
+    };
     if (this.history) await this.history.rejectRemoved(actual, { uri, type: 'notes' }, lines, this.rejectionJudge, { archiveUri, activate });
-    else await activate();
-    await this.overlay.addRevision({ userId, uri, memoryType: 'notes', change: 'deleted', actor: 'conversation',
-      reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, before: lines.join('\n'), after: null, archiveUri, engineSession });
+    else await this.overlay.database.transaction(client => this.overlay.database.withTransactionClient(client, activate));
     this.#touch(userId);
   }
 

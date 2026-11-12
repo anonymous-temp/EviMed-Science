@@ -302,10 +302,11 @@ export function createMemoryClient({ base, token, readOnly = true, executeForget
 
 /**
  * The gateway handler served on a loopback port, as the plugin's bridge reaches it. `base` ends in `/internal/memory/v1`.
- * @param {(req: any, res: any) => Promise<void>} handler
+ * @param {(req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>} handler
+ * @param {((failure: any) => void) | undefined} [onFailure]
  */
-export async function startGatewayServer(handler) {
-  const server = createServer((req, res) => { void handler(req, res); });
+export async function startGatewayServer(handler, onFailure) {
+  const server = createServer((req, res) => { void handler(req, res, onFailure); });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = /** @type {import("node:net").AddressInfo} */ (server.address());
@@ -326,7 +327,7 @@ export async function startLabGateways(shared, config, variants = []) {
       const handler = createMemoryGatewayHandler({ ...shared, config: merged,
         ...(shared.historySearchFor ? { historySearch:shared.historySearchFor(merged) } : {}),
         admission: entry.name && shared.admissionFor ? shared.admissionFor(merged) : shared.admission });
-      gateways.set(entry.name, { ...await startGatewayServer(handler), handler, config: merged });
+      gateways.set(entry.name, { ...await startGatewayServer(handler, shared.onFailure), handler, config: merged });
     }
   } catch (error) {
     await Promise.all([...gateways.values()].map((gateway) => gateway.close()));
@@ -554,7 +555,7 @@ export async function openLab({
     /** Conversation metadata for raw history, by `${userId}\0${engineSession}`. @type {Map<string, { title: string, at: string }>} */
     const conversations = new Map();
     const history = new MemoryHistory({
-      config, ledger: new MemoryHistoryLedger({ database, overlay, client }), contexts,
+      config, ledger: new MemoryHistoryLedger({ database, overlay, client }), contexts, rejectionJudge: productRejectionJudge,
       resolveSource: async (commit, memoryContext) => {
         if (memoryContext?.kind !== "owned") return null;
         const ownerId = memoryContext.ownerId;
@@ -618,6 +619,7 @@ export async function openLab({
       },
     };
     const gatewayGroup = await startLabGateways({
+      onFailure: failure => say(`memory gateway: ${failure.code} (${failure.status})`),
       runtimeManager, store, sessions, admission, overlay, memoryContexts: contexts, memoryTool: nativeMemory,
       admissionFor: (merged) => createMemoryAdmission({ config: merged, memorySettings }),
       historySecrets: history.secrets,

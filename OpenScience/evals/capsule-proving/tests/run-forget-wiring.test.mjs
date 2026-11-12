@@ -10,3 +10,9 @@ for (const path of ['../run/lab.mjs', '../../../apps/server/src/server.mjs']) {
     assert.match(constructor, /forgetTargetsEnabled:\s*config\.memoryForgetTargetsEnabled/);
   });
 }
+
+
+test('lab history ingestion uses the same privacy judge as the store and worker', async () => {
+  const source = await readFile(new URL('../run/lab.mjs', import.meta.url), 'utf8');
+  assert.match(source.match(/new MemoryHistory\(\{([\s\S]*?)resolveSource/)?.[1], /rejectionJudge: productRejectionJudge/);
+});

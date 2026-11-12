@@ -131,3 +131,12 @@ test("a commit with more near lines than one call carries is asked about the fir
   assert.equal(calls[0].projectId, "default", "no project: the account's own");
   assert.deepEqual([...answer.same.keys()], [0]);
 });
+
+
+test('an explicit origin privacy check is independent of the background judgement budget', async () => {
+  const { judge, calls } = judgeWith([{ same: [{ candidate: 0, removed: 0 }], stated: [] }], { nativeMemoryRejectionJudgeDailyCalls: 0 });
+  assert.equal((await judge.same(request())).same.size, 0);
+  assert.equal((await judge.same(request({ originMessages: true }))).same.size, 1);
+  assert.equal(calls.length, 1);
+  assert.equal((await judge.same(request())).same.size, 0, 'background work remains budgeted');
+});

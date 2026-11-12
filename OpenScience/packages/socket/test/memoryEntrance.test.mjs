@@ -198,6 +198,7 @@ test('targeted forget guidance names exact lines and history statements only whe
   const options = { openVikingMemory: true, capsuleToolEnabled: false, memoryForgetToolHint: true };
   assert.equal(buildGuidanceText([], options), buildGuidanceText([], { ...options, memoryForgetTargets: false }));
   const enabled = buildGuidanceText([], { ...options, memoryForgetTargets: true });
+  assert.match(enabled, /fact to forget in the person’s words, without the forget instruction/);
   assert.match(enabled, /`lines`/); assert.match(enabled, /`statement`/); assert.match(enabled, /exact complete lines/);
   assert.match(enabled, /history recall rejection/); assert.match(enabled, /no memory file holds it, still call/); assert.match(enabled, /Tell the user/); assert.doesNotMatch(enabled, /一个文件还含有用户要保留的内容时，先澄清/);
   assert.equal(buildGuidanceText([], { openVikingMemory: false, memoryForgetTargets: true }), buildGuidanceText([], { openVikingMemory: false }));

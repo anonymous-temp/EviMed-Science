@@ -141,7 +141,7 @@ export const MEMORY_GATEWAY_TOOLS = Object.freeze({
   },
 });
 export const TARGETED_FORGET_TOOL = Object.freeze({
-  description: "Forget only what the user asked to remove. For a stored fact, read the file and pass its URI plus exact complete lines in `lines`; unrelated lines remain. Matching ignores Markdown decoration, case, whitespace and trailing as-of dates, never meaning or keywords. A mismatch returns available lines for retry. Omit lines (or select every line) only to forget the whole file. If no memory file holds the fact, still call forget without URI, passing the person's statement in `statement` so earlier conversations do not bring it back. After confirmation, tell the user that history recall was blocked; the conversation itself is unchanged. Removals can be restored on the memory page.",
+  description: "Forget only what the user asked to remove. For a stored fact, read the file and pass its URI plus exact complete lines in `lines`; unrelated lines remain. Matching ignores Markdown decoration, case, whitespace and trailing as-of dates, never meaning or keywords. A mismatch returns available lines for retry. Omit lines (or select every line) only to forget the whole file. If no memory file holds the fact, still call forget without URI, passing the fact to forget in the person's words, without the forget instruction, in `statement` so earlier conversations do not bring it back. After confirmation, tell the user that history recall was blocked; the conversation itself is unchanged. Removals can be restored on the memory page.",
   inputSchema: { type: 'object', properties: {
     uri: { type: 'string', description: 'The viking:// URI of one memory file; omit for a history-only statement.' },
     lines: { type: 'array', maxItems: 100, items: { type: 'string', maxLength: 6000 }, description: 'Exact complete lines to forget, copied from read. Omitted or empty means the entire file.' },
@@ -1333,7 +1333,11 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // Not the engine's and not this gateway's: the project is gone, a store could not be read, or a defect here.
       const status = error instanceof HttpError ? error.status : 502;
       recordGatewayRequest(route, "failed");
-      onFailure?.({ code: code || "memory_gateway_failed", status });
+      // Keep stable internal codes (including SQLSTATE) in the existing server error ledger,
+      // never raw messages, SQL, source text or provider details in either surface.
+      const diagnostic = String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? '');
+      const logCode = /^(?:[a-z][a-z0-9]*_[a-z0-9_]{1,100}|[0-9A-Z]{5})$/.test(diagnostic) ? diagnostic : 'memory_gateway_failed';
+      onFailure?.({ code: code || logCode, status });
       if (!res.headersSent) send({ status, json: refusal(code || "memory_gateway_failed", "The memory gateway could not answer.") });
     }
   };
