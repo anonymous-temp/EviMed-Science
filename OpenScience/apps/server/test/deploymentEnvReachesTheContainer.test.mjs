@@ -75,6 +75,7 @@ const hostSideOnly = {
  *  does nothing and says nothing. */
 const operatorLevers = {
   OPEN_SCIENCE_METHOD_CONCISE_DISTILLATION_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_LEARNING_CAMP_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_ROBUST_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_FORGET_REQUEST_CHECK_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_FORGET_TOOL_HINT_ENABLED: ["open-science-web", "open-science-runtime-controller"],
