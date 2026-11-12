@@ -147,18 +147,22 @@ export class MemoryHistory {
 
   /** Resolve the removed line's origins before syncOrigins drops them; legacy
    * remember writes without conversation provenance search the owner's history.
-   * Persist message hashes activated by the rejection: undo lifts the fence, and a repeated forget reinstates it. */
-  async rejectRemoved(context, file, removed, judge, { archiveUri: requestArchive = null } = {}) {
-    if (!removed.length) return;
+   * Scan every line before activating any rejection. The parent rejection and its
+   * message hashes commit together, satisfying the deployed foreign key without
+   * holding a database transaction across engine reads or model calls.
+   * Undo lifts the fence, and a repeated forget reinstates it. */
+  async rejectRemoved(context, file, removed, judge, { archiveUri: requestArchive = null, activate = async () => {} } = {}) {
+    if (!removed.length) { await activate(); return; }
     if (!context.ownerCreatedAt) context = {...context,ownerCreatedAt:(await this.ledger.database.query(
       'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[context.ownerId])).rows[0]?.stamp};
     await this.ensureSourceCopies(context);
     const origins = (await this.ledger.overlay.originsOf(context.ownerId,[file.uri])).get(file.uri);
     const type = nativeMemoryRejectionType(file.type,context.kind === 'geo-project' ? context.namespaceId : null);
+    const prepared = [];
     for (const text of removed) {
       const fingerprint = lineFingerprint(text), origin = origins?.get(fingerprint);
       const archives = [...new Set([origin?.archiveUri,...(origin?.sources ?? []).map(source=>source.archiveUri),requestArchive].filter(Boolean))];
-      const messages = [];
+      const messages = [], obligations = [];
       for (const archiveUri of archives) {
         const archive = parseArchiveUri(archiveUri);
         if (!archive || archive.userRoot !== context.userRoot || archive.rest) throw new Error('memory_history_privacy_unavailable');
@@ -166,7 +170,7 @@ export class MemoryHistory {
         if (platformSessionOf(binding?.sourceSession)) {
           // The conversation may not have archived its current turn yet. Keep a
           // session-bound obligation so its later archive fences the actual words.
-          await this.ledger.rejectMessages(context,type,fingerprint,[{archiveUri:`${context.userRoot}/sessions/${binding.sourceSession}`,text:''}]);
+          obligations.push({archiveUri:`${context.userRoot}/sessions/${binding.sourceSession}`,text:''});
         }
         const raw = await context.sessions.read(context.ownerId,`${archiveUri}/messages.jsonl`);
         if (raw === null) continue; // An absent archive has no original words to return.
@@ -183,8 +187,8 @@ export class MemoryHistory {
         // Internal source lookup uses the same product history search and all its
         // account/incarnation/source proofs. Rejected text is inspected only to
         // locate the original message; it is never returned to a caller.
-        const hits=await this.search({user:{id:context.ownerId},project:{id:'default',userId:context.ownerId},query:text,limit:8},
-          {includeOrigins:true,forRemoval:true});
+        const hits=await this.search({user:{id:context.ownerId},project:null,query:text,limit:8},
+          {includeOrigins:true,forRemoval:true,removalUri:file.uri});
         const discovered=hits.flatMap(hit=>(hit.originalMessages??[]).filter(message=>message.sourceRole==='user')
           .map(message=>({archiveUri:hit.origin.archiveUri,text:message.text,messageHash:message.messageHash,created_at:message.date})));
         const copies=discovered.filter(message=>messages.some(source=>lineFingerprint(source.text)===lineFingerprint(message.text)));
@@ -192,8 +196,12 @@ export class MemoryHistory {
       }
       const unique=[...new Map(messages.map(message=>[JSON.stringify([message.archiveUri,message.messageHash??lineFingerprint(message.text)]),message])).values()];
       const matched=await this.matchRemoved(context,text,unique,judge,tokens);
-      await this.ledger.rejectMessages(context,type,fingerprint,matched);
+      prepared.push({ fingerprint, messages: [...obligations, ...matched] });
     }
+    await this.ledger.database.transaction(client => this.ledger.database.withTransactionClient(client, async () => {
+      await activate();
+      for (const row of prepared) await this.ledger.rejectMessages(context, type, row.fingerprint, row.messages);
+    }));
   }
 
   async matchRemoved(context,text,messages,judge,tokens=hardTokens(normalisedStatement(text))) {
@@ -394,18 +402,21 @@ export class MemoryHistory {
   async coverage(ownerId) { return this.ledger.archiveCoverage(ownerId); }
   status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill } }; }
 
-  async search({ user, project, query, limit = 5 }, { includeOrigins = false, forRemoval = false, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
+  async search({ user, project, query, limit = 5 }, { includeOrigins = false, forRemoval = false, removalUri = null, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
     if (!this.enabled || !query?.trim()) return [];
     // Leave time for the gateway to render already verified hits. A slow tail
     // must not turn a useful prefix into an empty history block at its deadline.
     const deadline=retrievalV2 ? Date.now()+Math.max(250,Number(this.config.memoryGatewayTimeoutMs)||4000)-150 : Infinity;
-    const context = await this.contexts.forProject(project);
+    // Removal is an internal owner-namespace lookup, not a conversation in a
+    // fabricated default project. Re-resolve its URI to prove the live owner.
+    const removal = forRemoval && removalUri !== null;
+    const context = removal ? await this.contexts.forUri(user.id, removalUri) : await this.contexts.forProject(project);
     if (context.ownerId !== user.id || context.kind === 'geo-project') return [];
-    const source = await this.resolveSource({ userId: user.id, projectId: project.id, engineSession: null }, context);
-    if (!source?.projectCreatedAt || source.projectId !== project.id) return [];
+    const source = removal ? null : await this.resolveSource({ userId: user.id, projectId: project.id, engineSession: null }, context);
+    if (!removal && (!source?.projectCreatedAt || source.projectId !== project.id)) return [];
     // Only the verified ordinary default conversation expands to the account's
     // personal namespace. A named or shared project remains its exact scope.
-    const account = project.id === 'default' && context.kind === 'owned';
+    const account = removal || project.id === 'default' && context.kind === 'owned';
     const root = account ? `${context.userRoot}/resources/history/${hash(context.ownerCreatedAt).slice(0,24)}` : this.root(context,source);
     const resources = this.resourcesFor(context);
     const asked = Math.max(1, Math.min(retrievalV2 ? 20 : 8, Math.trunc(Number(limit)) || 5));

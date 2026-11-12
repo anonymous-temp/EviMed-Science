@@ -1108,3 +1108,45 @@ for (const unavailable of [false, true]) {
     assert.match(relearned.json.result.memories[0].abstract, /M-41633/, 'a live later statement remains recallable');
   });
 }
+
+test('targeted forget advertises and forwards exact lines or an unstored statement only when enabled', async t => {
+  const calls = [], target = `${ROOT}/memories/preferences/format.md`;
+  const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async (...args) => {
+    calls.push(args);
+    return args[3]?.statement ? { removed: false, historyRejected: true } : { removed: true, removedLines: 1 };
+  } } });
+  const listed = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+  const tool = listed.messages[0].result.tools.find(row => row.name === 'forget');
+  assert.ok(tool.inputSchema.properties.lines); assert.ok(tool.inputSchema.properties.statement);
+  for (const args of [{ uri: target, lines: ['Use metric units.'] }, { statement: 'Old project M-41633.' }]) {
+    const result = await f.mcp({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'forget', arguments: args } });
+    assert.equal(result.status, 200); assert.ok(!result.messages[0].error);
+    assert.match(result.messages[0].result.content[0].text, args.uri ? /Removed 1 line/ : /history.*rejection|rejection.*history/i);
+  }
+  assert.deepEqual(calls[0][3].lines, ['Use metric units.']);
+  assert.equal(calls[1][2], null); assert.equal(calls[1][3].statement, 'Old project M-41633.');
+});
+
+test('line mismatch reports existing lines without claiming a deletion', async t => {
+  const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: {
+    forget: async () => ({ removed: false, missingLines: ['short'], availableLines: ['Keep answers short.'] }) } });
+  const result = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: {
+    uri: `${ROOT}/memories/preferences/format.md`, lines: ['short'],
+  } } });
+  const text = result.messages[0].result.content[0].text;
+  assert.match(text, /Keep answers short/); assert.match(text, /No lines removed/);
+});
+
+for (const enabled of [false, true]) test(`unsupported or malformed forget targets never fall back to engine deletion (enabled=${enabled})`, async t => {
+  const calls = [];
+  const f = await fixture(t, { config: { memoryForgetTargetsEnabled: enabled }, memoryTool: { forget: async (...args) => { calls.push(args); return { removed: true }; } } });
+  const target = `${ROOT}/memories/preferences/format.md`;
+  const invalid = enabled ? [{ uri: target, lines: 'wrong' }, { statement: '' }, { lines: ['orphan'] }, { uri: target, lines: [42] }, { uri: target, statement: 'ambiguous' }]
+    : [{ uri: target, lines: ['Use metric units.'] }, { statement: 'Old project.' }];
+  for (const args of invalid) {
+    const result = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: args } });
+    assert.ok(result.messages[0].error, JSON.stringify(result.messages));
+  }
+  assert.deepEqual(calls, []);
+  assert.equal(f.stub.sent('DELETE', '/api/v1/fs').length, 0);
+});

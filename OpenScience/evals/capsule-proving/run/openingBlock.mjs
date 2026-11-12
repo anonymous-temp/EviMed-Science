@@ -166,6 +166,7 @@ export function buildSystemPrompt({ model = "deepseek-flash", config = {} } = {}
     askUserEnabled: true, capsuleActive: false, reviewEnabled: false, runPolicyEnabled: true,
     capsuleToolEnabled: false, openVikingMemory: true, memorySearchHint: config.memorySearchHintEnabled === true,
     memoryForgetToolHint: config.memoryForgetToolHintEnabled === true,
+    memoryForgetTargets: config.memoryForgetTargetsEnabled === true,
   });
   const rows = parse(readFileSync(path.join(root, "packages/socket/presets/evimed-universal/agent.cordis.yml"), "utf8"), quiet);
   const prefix = String(rows.find((row) => row?.id === "persona")?.config?.prefix ?? "").replace(/\s+/g, " ").trim();

@@ -14,6 +14,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 for (const [key, property] of [
   ['OPEN_SCIENCE_MEMORY_FORGET_REQUEST_CHECK_ENABLED', 'memoryForgetRequestCheckEnabled'],
   ['OPEN_SCIENCE_MEMORY_FORGET_TOOL_HINT_ENABLED', 'memoryForgetToolHintEnabled'],
+  ['OPEN_SCIENCE_MEMORY_FORGET_TARGETS_ENABLED', 'memoryForgetTargetsEnabled'],
 ]) test(`${key} defaults off and supports explicit override`, () => {
   const saved = process.env[key];
   try {

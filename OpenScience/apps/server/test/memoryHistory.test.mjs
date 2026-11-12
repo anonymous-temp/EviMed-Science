@@ -43,3 +43,21 @@ test('source-count, fragment and chunk capacity failures have a dedicated local 
   assert.throws(() => historyChunks(Array.from({length:1000},(_,index)=>({role:index%2?'assistant':'user',content:'A normal message.'}))),isLimit('chunks'));
   assert.ok(!(new Error('memory_history_archive_too_large') instanceof MemoryHistoryLimitError));
 });
+
+test('forget origin lookup uses the verified owner namespace without inventing a default project', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const context = { kind: 'owned', ownerId: 'u1', ownerCreatedAt: '2026-01-01', namespaceId: 'u1', userRoot: 'viking://user/u1' };
+  const uri = `${context.userRoot}/memories/preferences/format.md`, searched = [], fenced = [];
+  const service = new MemoryHistory({ config: { memoryHistorySearchEnabled: true },
+    contexts: { forProject: async () => { throw new Error('memory_scope_denied: no default project'); },
+      forUri: async (owner, target) => { assert.equal(owner, 'u1'); assert.equal(target, uri); return context; } },
+    ledger: { database: { transaction: async run => run({}), withTransactionClient: async (_client, run) => run() },
+      overlay: { originsOf: async () => new Map() }, rejectMessages: async (...args) => fenced.push(args) },
+    resolveSource: async () => { throw new Error('no fabricated project source'); },
+    resourcesFor: () => ({ searchHistory: async (_owner, root) => { searched.push(root); return []; } }) });
+  service.ensureSourceCopies = async () => {};
+  await service.rejectRemoved(context, { uri, type: 'preferences' }, ['Use metric units.'], null);
+  assert.equal(searched.length, 1); assert.equal(fenced.length, 1);
+  assert.match(searched[0], /^viking:\/\/user\/u1\/resources\/history\/[a-f0-9]{24}$/);
+  await assert.rejects(service.search({ user: { id: 'u1' }, project: { id: 'missing', userId: 'u1' }, query: 'units' }), /memory_scope_denied/);
+});

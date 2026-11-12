@@ -405,15 +405,16 @@ export class NativeMemoryStore {
    *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
    *   now?: () => Date, conversationTitles?: ConversationTitles | null,
    *   rejectionJudge?: { same: (request: any) => Promise<{ same: Map<number, string>, stated: Set<number> }> } | null,
-   *   report?: (line: string) => void, settleExtractionsMs?: number, replacedDeadlineMs?: number }} dependencies
+   *   report?: (line: string) => void, settleExtractionsMs?: number, forgetTargetsEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
    *   `conversationTitles` names the conversations a memory came out of (the run ledger knows them; this store does not). `rejectionJudge` is the
    *   rejection list's own judge (`nativeMemoryRejections.mjs`), asked which other lines say what a forgotten one said
    *   (`nativeMemoryForgetEverywhere.mjs`); absent, only the lines that contain a forgotten line's words go with it. `memoryContexts` names
    *   the registered namespaces (the account's own and each shared GEO project's, `geoNativeMemoryContext.mjs`).
    */
   constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, report = () => {},
-    settleExtractionsMs = 20_000, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
+    settleExtractionsMs = 20_000, forgetTargetsEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
     this.sessions = sessions;
+    this.forgetTargetsEnabled = forgetTargetsEnabled === true;
     /** How long the map waits for its grey marks before drawing without them (`MAP_REPLACED_DEADLINE_MS`). */
     this.replacedDeadlineMs = replacedDeadlineMs;
     /** How long an account deletion waits for the account's running extractions before it is refused as in progress. */
@@ -1297,7 +1298,7 @@ export class NativeMemoryStore {
    * Replace a file's text as `actor`, keep what it said before as a revision, and keep the rejection list in step: lines the
    * person removed are rejected (the engine writing them back verbatim removes them again), lines the person wrote are theirs.
    * `origin` is how the lines taken out are rejected (`overlay.reject`): `edit` for the person's own edit of the file, `forget` for the rest.
-   * @param {string} userId @param {any} file @param {string} next @param {{ actor: string, reason: string, change?: string, origin?: "edit" | "forget", neutralizeRemovedPath?: boolean }} how
+   * @param {string} userId @param {any} file @param {string} next @param {{ actor: string, reason: string, change?: string, origin?: "edit" | "forget", neutralizeRemovedPath?: boolean, engineSession?: string | null }} how
    */
   async #write(userId, file, next, how) {
     return withNativeMemoryWrite(this.overlay.database,userId,async()=>{
@@ -1307,8 +1308,8 @@ export class NativeMemoryStore {
       return this.#writeOwned(userId,file,next,how);
     });
   }
-  /** @param {string} userId @param {any} file @param {string} next @param {{actor:string,reason:string,change?:string,origin?:"edit"|"forget",neutralizeRemovedPath?:boolean}} how */
-  async #writeOwned(userId, file, next, { actor, reason, change = "updated", origin = "forget", neutralizeRemovedPath = false }) {
+  /** @param {string} userId @param {any} file @param {string} next @param {{actor:string,reason:string,change?:string,origin?:"edit"|"forget",neutralizeRemovedPath?:boolean,engineSession?:string|null}} how */
+  async #writeOwned(userId, file, next, { actor, reason, change = "updated", origin = "forget", neutralizeRemovedPath = false, engineSession = null }) {
     const context = await this.#fileContext(userId, file.uri);
     const rejectionType = this.#rejectionType(context, file.type);
     this.#touch(userId);
@@ -1318,9 +1319,11 @@ export class NativeMemoryStore {
     const removed = before.filter(text=>!kept.has(lineFingerprint(text)));
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
     if (actor === "user" || actor === "conversation" || reason === "source conversation deleted") {
-      await this.overlay.reject(userId, rejectionType, file.uri, removed, { origin });
       // A deleted source already has its own history fence; recognizing its wording is not a second admission gate.
-      if (actor === "user" || actor === "conversation") await this.history?.rejectRemoved(context,file,removed,this.rejectionJudge);
+      const activate = async () => { await this.overlay.reject(userId, rejectionType, file.uri, removed, { origin }); };
+      if (this.history && (actor === "user" || actor === "conversation")) {
+        await this.history.rejectRemoved(context, file, removed, this.rejectionJudge, { activate });
+      } else await activate();
     }
     await this.history?.retireWriteSessions(context,oldOrigins,removed);
     const oldUri = file.uri, source = await this.#bodySource(userId,file);
@@ -1332,7 +1335,7 @@ export class NativeMemoryStore {
     if (pathRemoved) file.uri = await neutralMemoryUri({ userId, overlay: this.overlay, uri: oldUri, projectId: file.projectId,
       namespaceId: context.kind === 'geo-project' ? context.namespaceId : null, judge: this.rejectionJudge });
     let revision;
-    const record = () => this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId,...source });
+    const record = () => this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, engineSession, before: file.body, after: next, projectId: file.projectId,...source });
     const review = this.instructionWriteCheck && actor === 'user' ? async () => {
       revision = await record();
       next = await this.instructionWriteCheck(userId, file, next, context);
@@ -1477,24 +1480,25 @@ export class NativeMemoryStore {
   }
 
   /** Remove exactly the judged lines through the same revision/rejection/history path as the tool. */
-  async forgetLines(userId, file, lines, { act = null } = {}) {
-    const prints = new Set(lines.map(lineFingerprint));
+  async forgetLines(userId, file, lines, { act = null, engineSession = null } = {}) {
+    const prints = new Set(lines.map(removalText).map(lineFingerprint));
     const removed = removalLines(file.body).filter(text => prints.has(lineFingerprint(text)));
     if (!removed.length) return 0;
     const next = file.body.split('\n').filter(line => !prints.has(lineFingerprint(removalText(line)))).join('\n');
-    if (!removalLines(next).length) await this.forgetFile(userId, file, { keepText: true, actor: 'conversation', reason: `forgotten by conversation request${actSuffix(act)}` });
-    else await this.#write(userId, file, next, { actor: 'conversation', reason: `forgotten by conversation request${actSuffix(act)}`, neutralizeRemovedPath: true });
+    if (!removalLines(next).length) await this.forgetFile(userId, file, { keepText: true, actor: 'conversation', reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, engineSession });
+    else await this.#write(userId, file, next, { actor: 'conversation', reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, neutralizeRemovedPath: true, engineSession });
     return removed.length;
   }
 
   /** An unstored fact can still be withdrawn. The synthetic URI has no engine file, only undoable removal authority. */
-  async recordForgetIntent(userId, context, archiveUri, lines, { act = null } = {}) {
+  async recordForgetIntent(userId, context, archiveUri, lines, { act = null, engineSession = null } = {}) {
     const uri = `${context.sessions.memoryRoot(userId)}/notes/forget-${contentHash(JSON.stringify([archiveUri, lines])).slice(0, 24)}.md`;
     const actual = await this.#fileContext(userId, uri);
-    await this.overlay.reject(userId, this.#rejectionType(actual, 'notes'), uri, lines);
-    await this.history?.rejectRemoved(actual, { uri, type: 'notes' }, lines, this.rejectionJudge, { archiveUri });
+    const activate = async () => { await this.overlay.reject(userId, this.#rejectionType(actual, 'notes'), uri, lines); };
+    if (this.history) await this.history.rejectRemoved(actual, { uri, type: 'notes' }, lines, this.rejectionJudge, { archiveUri, activate });
+    else await activate();
     await this.overlay.addRevision({ userId, uri, memoryType: 'notes', change: 'deleted', actor: 'conversation',
-      reason: `forgotten by conversation request${actSuffix(act)}`, before: lines.join('\n'), after: null, archiveUri });
+      reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, before: lines.join('\n'), after: null, archiveUri, engineSession });
     this.#touch(userId);
   }
 
@@ -1611,9 +1615,10 @@ export class NativeMemoryStore {
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
     const names = [...new Set([titleOf(file.type, file.uri, file.body), ...memoryNameVariants(file.uri)])].filter(name => hardTokens(name).length);
     const removedLines = [...new Set([...removalLines(file.body), ...names])];
-    await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, removedLines);
-    if (actor !== "platform") await this.history?.rejectRemoved(context,file,
-      [...new Map([...statements(file.body), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge);
+    const activate = async () => { await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, removedLines); };
+    if (this.history && actor !== "platform") await this.history.rejectRemoved(context,file,
+      [...new Map([...statements(file.body).map(removalText), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge, { activate });
+    else await activate();
     await this.history?.retireWriteSessions(context,oldOrigins,statements(file.body));
     const removed = await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, file.uri, () => context.sessions.remove(userId, file.uri)));
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change: "deleted", actor: /** @type {any} */ (actor),
@@ -1628,10 +1633,17 @@ export class NativeMemoryStore {
   /**
    * The conversation's `forget` tool, through the memory gateway (`memoryTool.forget`): the same forget as the page's, by URI,
    * with its undo — what the person asked a conversation to forget they can bring back from the page.
-   * @param {any} user @param {any} project @param {string} uri @param {{ context?: any,uris?:string[]|null,engineSession?:string|null }} [options]
+   * @param {any} user @param {any} project @param {string | null} uri @param {{ context?: any,lines?:string[],statement?:string,engineSession?:string|null }} [options]
    */
-  async forget(user, project, uri, { context = null, engineSession = null } = {}) {
-    const actual = await this.#fileContext(String(user.id), uri);
+  async forget(user, project, uri, { context = null, engineSession = null, lines, statement } = {}) {
+    const targeted = lines !== undefined || statement !== undefined;
+    const invalid = () => new HttpError(400, 'memory_payload_invalid', 'Name a file and exact lines, or a statement without a file.');
+    if (targeted && !this.forgetTargetsEnabled) throw invalid();
+    if (lines !== undefined && (!uri || !Array.isArray(lines) || lines.length > 100
+      || lines.some(line => typeof line !== 'string' || !line.trim() || /[\r\n]/.test(line) || line.length > 6000))) throw invalid();
+    if (statement !== undefined && (uri || lines !== undefined || typeof statement !== 'string' || !statement.trim() || statement.length > 6000)) throw invalid();
+    if (!uri && statement === undefined) throw invalid();
+    const actual = uri ? await this.#fileContext(String(user.id), uri) : await this.#projectContext(String(user.id), project?.id);
     if (context) {
       if (!this.memoryContexts || context.ownerId !== user.id || project?.userId !== user.id || context.projectId !== project.id) {
         throw new HttpError(403, 'memory_scope_denied', 'The conversation memory context does not match.');
@@ -1642,9 +1654,23 @@ export class NativeMemoryStore {
       const selected = await this.#projectContext(String(user.id), project?.id);
       if (selected.namespaceId !== actual.namespaceId) throw new HttpError(403, 'memory_scope_denied', 'The file is outside this conversation.');
     }
+    if (!uri) {
+      if (!this.history) throw new HttpError(503, 'memory_engine_unavailable', 'History rejection is unavailable.');
+      await withNativeMemoryWrite(this.overlay.database, String(user.id), () =>
+        this.recordForgetIntent(String(user.id), actual, null, [removalText(statement).replace(/\s+/g, ' ')], { engineSession }));
+      return { removed: false, historyRejected: true };
+    }
     const files = await this.files(String(user.id), { context: this.memoryContexts ? actual : null });
     const file = files.find((candidate) => candidate.uri === uri);
     if (!file) return { removed: false };
+    if (lines?.length) {
+      const availableLines = removalLines(file.body);
+      const available = new Set(availableLines.map(lineFingerprint));
+      const missingLines = lines.filter(line => !available.has(lineFingerprint(removalText(line))));
+      if (missingLines.length) return { removed: false, missingLines, availableLines };
+      const removedLines = await this.forgetLines(String(user.id), file, lines, { engineSession });
+      return { removed: removedLines > 0, removedLines, fileRemoved: removedLines === availableLines.length };
+    }
     const plan = await this.#duplicatesPlan(String(user.id), statements(file.body), file);
     const act = plan.size ? newAct() : null;
     await this.forgetFile(String(user.id), file, { keepText: true, actor: "conversation", reason: `forgotten in a conversation${actSuffix(act)}`, engineSession });

@@ -27,7 +27,7 @@ async function setup(t, retrievalV2 = false) {
   const context = { kind: 'owned', ownerId: f.userId, ownerCreatedAt: stamp, namespaceId: f.engineUser, userRoot: f.sessions.userRoot(f.userId), projectId: 'default', sessions: f.sessions };
   const ledger = new MemoryHistoryLedger({ database: f.database, overlay: f.overlay });
   ledger.removeResource = row => resources.removeSource(row.owner_id, row.uri);
-  const service = new MemoryHistory({ config: { memoryHistorySearchEnabled: true, memoryHistoryRetrievalV2Enabled:retrievalV2 }, ledger, contexts: { async forProject(p) { return { ...context, projectId: p.id }; } },
+  const service = new MemoryHistory({ config: { memoryHistorySearchEnabled: true, memoryHistoryRetrievalV2Enabled:retrievalV2 }, ledger, contexts: { async forUri() { return context; }, async forProject(p) { return { ...context, projectId: p.id }; } },
     resourcesFor: () => resources, resolveSource: async (c, _ctx) => ({ projectId: c.projectId, projectCreatedAt: '2026-01-01T00:00:00Z', sessionId: c.engineSession?.slice(4), conversationTitle: 'Kidney trial', conversationUrl: '/app/projects/default?session=session_a' }),
     eligible: async () => true, admitMessage: async () => true,
   });
@@ -910,4 +910,83 @@ for (const restoreIntent of [false, true]) test(`forgetting a dated paraphrase f
   assert.ok((await f.sessions.read(f.userId, uri)).includes(wrapped));
   assert.equal(await f.ledger.rejected(f.context, [original], archive.archive_uri), false);
   assert.equal((await f.overlay.removals(f.userId)).length, 0);
+});
+
+test('the tool removes one stored fact while preserving another file line and its independent raw history', options, async t => {
+  const f = await setup(t), first = 'My old project is M-41633.', second = 'My other project is N-49223.';
+  const archives = [];
+  for (const [name, text] of [['forget-line', first], ['keep-line', second]]) {
+    const archive = await f.commitConversation(name, [{ role: 'user', text }], { projectId: 'default' });
+    await f.service.ingestArchive({ ...f.commit, archiveUri: archive.archive_uri, engineSession: archive.session }, f.context);
+    archives.push(archive);
+  }
+  const uri = f.seed('notes/tool-lines.md', `- ${first}\n- ${second}`);
+  await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: 'notes', body: `- ${first}\n- ${second}` });
+  await f.overlay.syncOrigins(f.userId, uri, { after: first, origin: { archiveUri: archives[0].archive_uri, engineSession: archives[0].session, projectId: 'default' } });
+  f.store.history = f.service; f.store.forgetTargetsEnabled = true;
+  await f.store.forget({ id: f.userId }, { id: 'default', userId: f.userId }, uri, { lines: [first], engineSession: 'dsh-tool-lines' });
+  assert.equal(await f.sessions.read(f.userId, uri), `- ${second}`);
+  const removals = await f.overlay.removals(f.userId);
+  assert.ok(removals.some(row => row.fingerprint === lineFingerprint(first)));
+  assert.ok(!removals.some(row => row.fingerprint === lineFingerprint(second)));
+  const hits = JSON.stringify(await search(f));
+  assert.ok(!hits.includes('M-41633')); assert.ok(hits.includes('N-49223'));
+  const revision = (await f.overlay.revisionsOf(f.userId, uri))[0];
+  assert.equal(revision.engineSession, 'dsh-tool-lines');
+  await f.store.undo(f.userId, nativeFileId(uri));
+  assert.match(await f.sessions.read(f.userId, uri), /M-41633/);
+  assert.ok(JSON.stringify(await search(f)).includes('M-41633'));
+});
+
+test('the tool can reject an unstored statement from raw history and the page can undo the rejection', options, async t => {
+  const f = await setup(t);
+  const statement = 'My old project is M-41633.';
+  f.stub.files.set(`${f.commit.archiveUri}/messages.jsonl`, JSON.stringify({ role: 'user', content: statement, created_at: '2026-01-01T00:00:00Z' }));
+  await f.service.ingestArchive(f.commit, f.context);
+  assert.ok(JSON.stringify(await search(f)).includes('M-41633'));
+  f.store.history = f.service; f.store.forgetTargetsEnabled = true;
+  const result = await f.store.forget({ id: f.userId }, { id: 'default', userId: f.userId }, null,
+    { statement, engineSession: 'dsh-tool-history' });
+  assert.deepEqual(result, { removed: false, historyRejected: true });
+  assert.ok(!JSON.stringify(await search(f)).includes('M-41633'));
+  assert.ok((await f.sessions.read(f.userId, `${f.commit.archiveUri}/messages.jsonl`)).includes('M-41633'), 'the archive itself is retained');
+  const forgotten = await f.store.forgotten(f.userId);
+  assert.equal(forgotten.length, 1);
+  await f.store.undo(f.userId, forgotten[0].id);
+  assert.ok(JSON.stringify(await search(f)).includes('M-41633'));
+});
+
+for (const mode of ['file', 'line', 'statement']) test(`history fence write failure rolls back rejection activation before ${mode} removal and can retry`, options, async t => {
+  const f = await setup(t), statement = 'My old project is M-41633.';
+  // Give each line a distinct hard token so the file scan needs no semantic judge
+  // before it reaches the injected history write failure.
+  const independent = 'Independent plan N-49223.';
+  const body = `- ${statement}\n- ${independent}`;
+  const uri = f.seed('notes/retry.md', body);
+  f.stub.files.set(`${f.commit.archiveUri}/messages.jsonl`, JSON.stringify({ role: 'user', content: statement }));
+  await f.service.ingestArchive(f.commit, f.context);
+  f.store.history = f.service; f.store.forgetTargetsEnabled = true;
+  const rejectMessages = f.ledger.rejectMessages.bind(f.ledger);
+  let fail = true, injectedFailures = 0;
+  f.ledger.rejectMessages = async (...args) => {
+    await rejectMessages(...args);
+    if (fail && args[3].length) {
+      injectedFailures++;
+      throw new Error('history write unavailable');
+    }
+  };
+  const forget = () => f.store.forget({ id: f.userId }, { id: 'default', userId: f.userId }, mode === 'statement' ? null : uri,
+    mode === 'statement' ? { statement } : mode === 'line' ? { lines: [statement] } : {});
+  await assert.rejects(forget(), /history write unavailable/);
+  assert.equal(injectedFailures, 1, 'the failure occurs after a history fence write');
+  assert.equal(await f.sessions.read(f.userId, uri), body);
+  assert.deepEqual(await f.overlay.removals(f.userId), []);
+  assert.deepEqual(await f.overlay.revisionsOf(f.userId, uri), []);
+  assert.equal((await f.database.query('SELECT * FROM evimed_memory.history_message_rejections WHERE owner_id=$1', [f.userId])).rows.length, 0);
+  fail = false;
+  const result = await forget();
+  assert.ok(result.removed || result.historyRejected);
+  assert.ok((await f.overlay.removals(f.userId)).length > 0);
+  assert.ok(!JSON.stringify(await search(f)).includes('M-41633'));
+  assert.equal(await f.sessions.read(f.userId, uri), mode === 'statement' ? body : mode === 'line' ? `- ${independent}` : null);
 });
