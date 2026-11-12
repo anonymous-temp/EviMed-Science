@@ -214,3 +214,14 @@ test('settlement polls transient engine summary conflicts and waits for the next
   assert.ok(drains > 1);
   assert.equal(passes, 2);
 });
+
+test('the switched lab catalogue offers lines and statement without requiring uri', () => {
+  const config = { memoryForgetTargetsEnabled: true };
+  const tool = memoryTools(config).find(row => row.name === 'forget');
+  assert.equal(tool.inputSchema.properties.lines.type, 'array');
+  assert.equal(tool.inputSchema.properties.statement.type, 'string');
+  assert.equal(tool.inputSchema.required, undefined);
+  assert.match(tool.description, /no memory file/);
+  assert.deepEqual(createMemoryClient({ base: 'http://unused', token: 'test', config }).tools, memoryTools(config));
+  assert.deepEqual(memoryTools({ memoryForgetTargetsEnabled: false }), memoryTools());
+});

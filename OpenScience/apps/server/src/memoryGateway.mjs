@@ -2,7 +2,7 @@ import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { historySearchText } from './memoryHistory.mjs';
 import { openingProfileRead, selectOpeningEntries } from './memoryOpeningByUse.mjs';
 import { isMemorySummary } from './nativeMemorySummaries.mjs';
-import { carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
+import { ALL_ERROR_CODES, carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
 import { withoutResearchGoalGesture } from "./researchGoal.mjs";
 
 import {
@@ -140,8 +140,8 @@ export const MEMORY_GATEWAY_TOOLS = Object.freeze({
     inputSchema: { type: "object", required: ["uri"], properties: { uri: { type: "string", description: "The viking:// URI of one memory file." } } },
   },
 });
-const TARGETED_FORGET_TOOL = Object.freeze({
-  description: "Forget only what the user asked to remove. For a stored fact, read the file and pass its URI plus exact complete lines in `lines`; unrelated lines remain. Matching ignores Markdown decoration, case, whitespace and trailing as-of dates, never meaning or keywords. A mismatch returns available lines for retry. Omit lines (or select every line) only to forget the whole file. For a fact found only in conversation history, omit URI and pass `statement`: this records a recall rejection, without deleting the conversation. Removals can be restored on the memory page.",
+export const TARGETED_FORGET_TOOL = Object.freeze({
+  description: "Forget only what the user asked to remove. For a stored fact, read the file and pass its URI plus exact complete lines in `lines`; unrelated lines remain. Matching ignores Markdown decoration, case, whitespace and trailing as-of dates, never meaning or keywords. A mismatch returns available lines for retry. Omit lines (or select every line) only to forget the whole file. If no memory file holds the fact, still call forget without URI, passing the fact to forget in the person's words, without the forget instruction, in `statement` so earlier conversations do not bring it back. After confirmation, tell the user that history recall was blocked; the conversation itself is unchanged. Removals can be restored on the memory page.",
   inputSchema: { type: 'object', properties: {
     uri: { type: 'string', description: 'The viking:// URI of one memory file; omit for a history-only statement.' },
     lines: { type: 'array', maxItems: 100, items: { type: 'string', maxLength: 6000 }, description: 'Exact complete lines to forget, copied from read. Omitted or empty means the entire file.' },
@@ -1111,12 +1111,15 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         const invalidStatement = args.statement !== undefined && (args.uri !== undefined || args.lines !== undefined
           || typeof args.statement !== 'string' || !args.statement.trim() || args.statement.length > 6000);
         if (targeted && (!targetsEnabled || !memoryTool) || invalidLines || invalidStatement) {
-          local.push(rpcError(message.id, -32602, 'Name a memory file and exact lines, or a history statement without a URI; targeted forgetting must be enabled.'));
+          const reason = !targetsEnabled || !memoryTool ? 'lines and statement require targeted forgetting to be enabled.'
+            : invalidStatement ? 'statement must be 1 to 6000 characters and cannot be combined with uri or lines.'
+            : 'lines requires uri and an array of at most 100 non-empty complete lines, each at most 6000 characters without line breaks.';
+          local.push(rpcError(message.id, -32602, reason));
           continue;
         }
         if (args.recursive === true || (target ? !nativeMemoryFile(target, `${ctx.userRoot}/memories`) : !targetsEnabled || args.statement === undefined)) {
           recordGatewayRefusal("memory_gateway_uri_refused");
-          local.push(rpcError(message.id, -32602, "Only one memory file of the user can be forgotten at a time."));
+          local.push(rpcError(message.id, -32602, "uri must name one memory file of the user; recursive deletion is not supported."));
           continue;
         }
         if (admitted.learnReason === "memory_off" || admitted.learnReason === "internal_project" || admitted.learnReason === "trial") {
@@ -1321,7 +1324,22 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       recordGatewayRequest(route, answer.outcome);
       send(answer);
     } catch (error) {
-      const own = error instanceof HttpError && (/^memory_gateway_/.test(error.code) || error.code === 'memory_scope_denied');
+      // These internal privacy failures are safe to name, but their raw messages
+      // may contain provider/source details. A retry is explicit, never a claim
+      // that the tool queued work: statement-only calls have no archived commit.
+      const privacyCode = String(/** @type {any} */ (error)?.code ?? '');
+      if (/^(?:memory_history_|forget_request_)/.test(privacyCode) && ALL_ERROR_CODES.includes(privacyCode)) {
+        recordGatewayRefusal(privacyCode);
+        recordGatewayRequest(route, 'refused');
+        onFailure?.({ code: privacyCode, status: 503 });
+        const message = privacyCode === 'memory_history_privacy_unavailable'
+          ? 'The privacy check of earlier conversations is temporarily unavailable. Retry this operation later. Do not claim forgetting is complete or that an automatic retry was scheduled.'
+          : 'The memory privacy operation could not complete. Do not claim completion; retry after the named condition is resolved.';
+        if (!res.headersSent) send({ status: 503, json: refusal(privacyCode, message) });
+        return;
+      }
+      const own = error instanceof HttpError && (/^memory_gateway_/.test(error.code) || error.code === 'memory_scope_denied'
+        || (error.code === 'memory_payload_invalid' && error.status === 400));
       if (own) {
         recordGatewayRefusal(/** @type {HttpError} */ (error).code);
         recordGatewayRequest(route, "refused");
@@ -1340,7 +1358,11 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       // Not the engine's and not this gateway's: the project is gone, a store could not be read, or a defect here.
       const status = error instanceof HttpError ? error.status : 502;
       recordGatewayRequest(route, "failed");
-      onFailure?.({ code: code || "memory_gateway_failed", status });
+      // Keep stable internal codes (including SQLSTATE) in the existing server error ledger,
+      // never raw messages, SQL, source text or provider details in either surface.
+      const diagnostic = String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? '');
+      const logCode = /^(?:[a-z][a-z0-9]*_[a-z0-9_]{1,100}|[0-9A-Z]{5})$/.test(diagnostic) ? diagnostic : 'memory_gateway_failed';
+      onFailure?.({ code: code || logCode, status });
       if (!res.headersSent) send({ status, json: refusal(code || "memory_gateway_failed", "The memory gateway could not answer.") });
     }
   };

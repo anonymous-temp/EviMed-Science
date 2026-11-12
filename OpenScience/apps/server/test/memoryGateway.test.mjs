@@ -1232,3 +1232,48 @@ for (const isolation of [false, true]) for (const proof of [false, true]) test(`
   assert.equal(f.stub.sent('GET', `/api/v1/sessions/${SESSION}`).length, proof ? 0 : 1);
   assert.equal(f.stub.sent('POST', `/api/v1/sessions/${SESSION}/commit`).length, proof ? 0 : 1);
 });
+
+for (const [args, reason] of [
+  [{ uri: `${ROOT}/memories/notes/a.md`, lines: 'wrong' }, /lines/],
+  [{ statement: '' }, /statement/],
+  [{ uri: `${ROOT}/memories/notes/a.md`, statement: 'ambiguous' }, /statement.*uri/],
+]) test(`forget validation names the invalid argument: ${JSON.stringify(args)}`, async t => {
+  const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async () => assert.fail('invalid call reached store') } });
+  const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: args } });
+  assert.equal(answer.messages[0].error.code, -32602);
+  assert.match(answer.messages[0].error.message, reason);
+});
+
+test('gateway preserves a safe store argument diagnostic, but hides unexpected errors', async t => {
+  const { HttpError } = await import('../src/security.mjs');
+  for (const error of [new HttpError(400, 'memory_payload_invalid', 'lines requires targeted forgetting to be enabled.'), new Error('private database detail')]) {
+    const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async () => { throw error; } } });
+    const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: { uri: `${ROOT}/memories/notes/a.md`, lines: ['A fact.'] } } });
+    assert.equal(answer.json.error.message, error instanceof HttpError ? error.message : 'The memory gateway could not answer.');
+  }
+});
+
+
+test('unexpected gateway failures retain only their stable diagnostic in the server log callback', async t => {
+  for (const [error, code] of [[new Error('memory_history_privacy_unavailable'), 'memory_history_privacy_unavailable'],
+    [Object.assign(new Error('private SQL and content'), { code: '23503' }), '23503'],
+    [new Error('private SQL and content'), 'memory_gateway_failed']]) {
+    const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async () => { throw error; } } });
+    const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: { statement: 'Old fact.' } } });
+    assert.equal(answer.json.error.code, 'memory_gateway_failed');
+    assert.equal(answer.json.error.message, 'The memory gateway could not answer.');
+    assert.deepEqual(f.failures, [{ code, status: 502 }]);
+  }
+});
+
+test('history privacy refusal names its retry without exposing provider details or promising background work', async t => {
+  const error = Object.assign(new Error('private provider response'), { code: 'memory_history_privacy_unavailable' });
+  const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async () => { throw error; } } });
+  const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: { statement: 'Old fact.' } } });
+  assert.equal(answer.status, 503);
+  assert.equal(answer.json.error.code, error.code);
+  assert.match(answer.json.error.message, /earlier conversations.*temporarily unavailable.*Retry/s);
+  assert.match(answer.json.error.message, /Do not claim.*complete.*automatic retry/s);
+  assert.doesNotMatch(answer.json.error.message, /private provider response/);
+  assert.deepEqual(f.failures, [{ code: error.code, status: 503 }]);
+});

@@ -30,7 +30,7 @@ import { createServer } from "node:http";
 import { ControlPlaneDatabase } from "../../../apps/server/src/controlPlaneDatabase.mjs";
 import { GeoNativeMemoryContext } from "../../../apps/server/src/geoNativeMemoryContext.mjs";
 import { createMemoryAdmission } from "../../../apps/server/src/memoryAdmission.mjs";
-import { MEMORY_GATEWAY_PATH, MEMORY_GATEWAY_TOOLS, createMemoryGatewayHandler, filterCapturedMessage, parseEventStream } from "../../../apps/server/src/memoryGateway.mjs";
+import { MEMORY_GATEWAY_PATH, MEMORY_GATEWAY_TOOLS, TARGETED_FORGET_TOOL, createMemoryGatewayHandler, filterCapturedMessage, parseEventStream } from "../../../apps/server/src/memoryGateway.mjs";
 import { MemoryHistory, MemoryHistoryLedger, historyTitle } from "../../../apps/server/src/memoryHistory.mjs";
 import { MemorySettingsStore } from "../../../apps/server/src/memorySettings.mjs";
 import { migrateMemorySettings } from "../../../apps/server/src/memorySettingsPersistence.mjs";
@@ -218,8 +218,9 @@ export class LabClockSessions extends OpenVikingSessions {
 }
 
 /** The five tools as `[{ name, description, inputSchema }]`, the product's own text and schemas. */
-export function memoryTools() {
-  return Object.entries(MEMORY_GATEWAY_TOOLS).map(([name, tool]) => ({ name, description: tool.description, inputSchema: structuredClone(tool.inputSchema) }));
+export function memoryTools(config = {}) {
+  const tools = config.memoryForgetTargetsEnabled === true ? { ...MEMORY_GATEWAY_TOOLS, forget: TARGETED_FORGET_TOOL } : MEMORY_GATEWAY_TOOLS;
+  return Object.entries(tools).map(([name, tool]) => ({ name, description: tool.description, inputSchema: structuredClone(tool.inputSchema) }));
 }
 
 /**
@@ -251,13 +252,13 @@ export function toolAnswer({ status, contentType, text }, id) {
  * The model-facing half of the lab surface over one bearer: `tools`, `callTool` (real JSON-RPC `tools/call` to the
  * gateway's `/mcp`) and `fetchJSON` (the gateway's REST routes, answering as the plugin's own `createOvHttp` does:
  * `{ ok, status, result, error }`, never throwing).
- * @param {{ base: string, token: string, readOnly?: boolean, executeForget?: boolean, ready?: Promise<unknown> | null, fetchImpl?: typeof fetch, timeoutMs?: number }} options
+ * @param {{ base: string, token: string, readOnly?: boolean, executeForget?: boolean, ready?: Promise<unknown> | null, fetchImpl?: typeof fetch, timeoutMs?: number, config?: Record<string, any> }} options
  */
-export function createMemoryClient({ base, token, readOnly = true, executeForget = false, ready = null, fetchImpl = globalThis.fetch, timeoutMs = 60_000 }) {
+export function createMemoryClient({ base, token, readOnly = true, executeForget = false, ready = null, fetchImpl = globalThis.fetch, timeoutMs = 60_000, config = {} }) {
   let rpcId = 0;
   const auth = { authorization: `Bearer ${token}` };
   return {
-    tools: memoryTools(),
+    tools: memoryTools(config),
     executeForget,
     /** @param {string} name @param {Record<string, any>} [args] @returns {Promise<{ blocks: string[], isError: boolean }>} */
     async callTool(name, args = {}) {
@@ -301,10 +302,11 @@ export function createMemoryClient({ base, token, readOnly = true, executeForget
 
 /**
  * The gateway handler served on a loopback port, as the plugin's bridge reaches it. `base` ends in `/internal/memory/v1`.
- * @param {(req: any, res: any) => Promise<void>} handler
+ * @param {(req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>} handler
+ * @param {((failure: any) => void) | undefined} [onFailure]
  */
-export async function startGatewayServer(handler) {
-  const server = createServer((req, res) => { void handler(req, res); });
+export async function startGatewayServer(handler, onFailure) {
+  const server = createServer((req, res) => { void handler(req, res, onFailure); });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = /** @type {import("node:net").AddressInfo} */ (server.address());
@@ -325,7 +327,7 @@ export async function startLabGateways(shared, config, variants = []) {
       const handler = createMemoryGatewayHandler({ ...shared, config: merged,
         ...(shared.historySearchFor ? { historySearch:shared.historySearchFor(merged) } : {}),
         admission: entry.name && shared.admissionFor ? shared.admissionFor(merged) : shared.admission });
-      gateways.set(entry.name, { ...await startGatewayServer(handler), handler, config: merged });
+      gateways.set(entry.name, { ...await startGatewayServer(handler, shared.onFailure), handler, config: merged });
     }
   } catch (error) {
     await Promise.all([...gateways.values()].map((gateway) => gateway.close()));
@@ -508,7 +510,7 @@ export async function openLab({
       policies: { forProject: async () => ({ kind: "owned" }), policiesForOwner: async () => [], read: () => { throw new Error("no shared namespace in the lab"); } },
     });
     const productRejectionJudge = createRejectionJudge({ config: rejectionJudge ? config : { ...config, deepseekApiKey: "", nativeMemoryRejectionJudgeEnabled: false } });
-    const nativeMemory = new NativeMemoryStore({ sessions, overlay, memoryContexts: contexts, rejectionJudge: productRejectionJudge, ...(now ? { now } : {}), report: say });
+    const nativeMemory = new NativeMemoryStore({ forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions, overlay, memoryContexts: contexts, rejectionJudge: productRejectionJudge, ...(now ? { now } : {}), report: say });
     const worker = new NativeMemoryWorker({ config, memorySettings, sessions, overlay, nativeMemory, memoryContexts: contexts, rejectionJudge: productRejectionJudge,
       forgetRequestJudge: createForgetRequestJudge({ config }),
       pastedInstructionJudge: createPastedInstructionJudge({ config }), now, report: say });
@@ -553,7 +555,7 @@ export async function openLab({
     /** Conversation metadata for raw history, by `${userId}\0${engineSession}`. @type {Map<string, { title: string, at: string }>} */
     const conversations = new Map();
     const history = new MemoryHistory({
-      config, ledger: new MemoryHistoryLedger({ database, overlay, client }), contexts,
+      config, ledger: new MemoryHistoryLedger({ database, overlay, client }), contexts, rejectionJudge: productRejectionJudge,
       resolveSource: async (commit, memoryContext) => {
         if (memoryContext?.kind !== "owned") return null;
         const ownerId = memoryContext.ownerId;
@@ -617,6 +619,7 @@ export async function openLab({
       },
     };
     const gatewayGroup = await startLabGateways({
+      onFailure: failure => say(`memory gateway: ${failure.code} (${failure.status})`),
       runtimeManager, store, sessions, admission, overlay, memoryContexts: contexts, memoryTool: nativeMemory,
       admissionFor: (merged) => createMemoryAdmission({ config: merged, memorySettings }),
       historySecrets: history.secrets,
@@ -870,7 +873,7 @@ export async function openLab({
         const projectId = named?.id ?? DEFAULT_PROJECT_ID;
         const ready = ensureProject(user.userId, named);
         ready.catch(() => {});
-        const memoryClient = createMemoryClient({ base: selected.base, token: tokenFor(user.userId, projectId), readOnly, executeForget, ready, timeoutMs: engineTimeoutMs * 2 });
+        const memoryClient = createMemoryClient({ base: selected.base, token: tokenFor(user.userId, projectId), readOnly, executeForget, ready, config: selected.config, timeoutMs: engineTimeoutMs * 2 });
         return {
           ...memoryClient,
           config: selected.config,

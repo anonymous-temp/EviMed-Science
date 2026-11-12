@@ -1280,6 +1280,24 @@ export class NativeMemoryOverlay {
     return prints.length;
   }
 
+  /** Claim only new intent fingerprints inside the caller's rejection/history transaction.
+   * The unique key serializes concurrent tool/settlement calls without holding locks during scans.
+   * Existing removals retain their date and undo authority; RETURNING owns the revision's before-image.
+   * @param {string} userId @param {string} memoryType @param {string} uri @param {readonly string[]} lines */
+  async claimForgetIntent(userId, memoryType, uri, lines) {
+    const unique = new Map(lines.map(line => [lineFingerprint(line), line]));
+    const prints = [...unique.keys()].sort();
+    if (!prints.length) return [];
+    const result = await this.#query(`INSERT INTO evimed_memory.native_rejections (user_id,memory_type,fingerprint,uri,text,origin)
+      SELECT $1,$2,print,$3,text,'forget' FROM unnest($4::text[],$5::text[]) AS rejected(print,text)
+      ON CONFLICT (user_id,memory_type,fingerprint) DO UPDATE SET origin='forget', uri=EXCLUDED.uri,
+        text=EXCLUDED.text, rejected_at=clock_timestamp()
+      WHERE evimed_memory.native_rejections.origin='edit' RETURNING fingerprint`,
+    [owner(userId), String(memoryType), uri, prints, prints.map(print => normalisedStatement(unique.get(print)))]);
+    const inserted = new Set(result.rows.map(row => row.fingerprint));
+    return [...unique].filter(([print]) => inserted.has(print)).map(([, line]) => line);
+  }
+
   /** The person wrote these lines themselves: they are no longer something to remove. */
   async unreject(userId, memoryType, lines) {
     const prints = [...new Set(lines.map(lineFingerprint))];
