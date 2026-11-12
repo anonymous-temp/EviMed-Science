@@ -1002,6 +1002,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
       return runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       admissionSignal,
+      controlOnly: method === 'session/cancel' || loopxBody?.payload.op === 'pause',
       uiBasePath: frame.prefix,
       revalidate: async () => { await revalidate(); await assertSourceAvailable(); },
       ...(scoped?.nativeInputs && nativeInputRequest ? {
@@ -1094,21 +1095,25 @@ export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBar
       if (authorizeMutation) await authorizeMutation(forwardPrompt);
       else await forwardPrompt();
     } else if(method==='session/cancel' && stopBody) {
-      await runtimeManager.start(project);
-      await withSessionPromptAdmission(runtimeManager,project,stopBody.payload?.args?.request?.sessionId ?? stopBody.payload?.args?.sessionId,async signal=>{
-        admissionSignal=signal;await recordStop(project,stopBody.payload);signal.throwIfAborted();return forward();
-      });
+      // Record intent even if there is no registered kernel yet. A stop does
+      // not enter prompt admission, and receipt failure never prevents cancel.
+      await recordStop(project,stopBody.payload);
+      await forward();
     } else if (method === "session/selectModel") {
       const select = async () => { await authorizePromptSession(project, modelBody?.payload); return forward(); };
       if (authorizeMutation) await authorizeMutation(select); else await select();
-    } else if (['start','pause'].includes(loopxBody?.payload.op)) {
+    } else if (loopxBody?.payload.op === 'pause') {
+      await recordStop(project,{args:{request:{sessionId:loopxBody.payload.sessionId}}});
+      admissionSignal=AbortSignal.timeout(config.runtimeGoalBarActionTimeoutMs);
+      await forward();
+    } else if (loopxBody?.payload.op === 'start') {
       const start = async () => {
         const current = await resolveFrame(snapshot, null);
         await runtimeManager.start(project);
         return withSessionPromptAdmission(runtimeManager,project,loopxBody.payload.sessionId,async signal=>{
           admissionSignal=signal;
           await recordNativeActor(current.user,current.project,{args:{request:{sessionId:loopxBody.payload.sessionId}}});
-          if(loopxBody.payload.op==='pause')await recordStop(project,{args:{request:{sessionId:loopxBody.payload.sessionId}}});signal.throwIfAborted();return forward();
+          signal.throwIfAborted();return forward();
         },{timeoutMs:config.runtimeGoalBarActionTimeoutMs});
       };
       const admitted = () => runtimeManager.pluginService

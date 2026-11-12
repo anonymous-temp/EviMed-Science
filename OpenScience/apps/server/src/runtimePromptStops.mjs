@@ -1,6 +1,7 @@
 /** Monotonic stop intent, distinct from the kernel's cancellation outcome.
  * Immutable owner-local receipts are fsynced before wire admission; the PG set
  * provides the cross-controller index without sharing mutable learning gauges. */
+import {withPromptAdmissionReceipt} from './runtimePromptAdmission.mjs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {migrateProductStore} from './productPersistence.mjs';
@@ -23,8 +24,8 @@ export class RuntimePromptStops {
    try{await writeFileExclusiveNoFollow(project.rootDir,this.file(project,sessionId,runId),text,{encoding:'utf8',mode:0o600});}
    catch(error){if(error?.code!=='EEXIST'||!await this.local(project,sessionId,runId))throw error;}
   }
-  if(this.database){await migrateProductStore(this.database);await this.database.query(`INSERT INTO evimed_product.prompt_stop_intents(user_id,project_id,session_id,run_id)
-   SELECT $1,$2,$3,id FROM unnest($4::text[]) AS id ON CONFLICT DO NOTHING`,[project.userId,project.id,sessionId,ids]);}
+  if(this.database){await migrateProductStore(this.database);await withPromptAdmissionReceipt(this.database,()=>this.database.query(`INSERT INTO evimed_product.prompt_stop_intents(user_id,project_id,session_id,run_id)
+   SELECT $1,$2,$3,id FROM unnest($4::text[]) AS id ON CONFLICT DO NOTHING`,[project.userId,project.id,sessionId,ids]));}
  }
  async has(project,sessionId,runId){
   if(await this.local(project,sessionId,runId))return true;

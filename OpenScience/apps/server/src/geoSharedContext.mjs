@@ -49,12 +49,18 @@ export class GeoSharedContext {
     if (current) return current;
     // Only first publication needs exclusion. Commit it before returning even
     // when a prompt, adoption or runtime launch owns an outer transaction.
-    return this.database.withoutTransactionClient(() => this.resolveProject(project));
+    try { return await this.database.withoutTransactionClient(() => this.resolveProject(project)); }
+    catch (error) {
+      if (error?.code === '55P03') throw Object.assign(new HttpError(409, 'memory_context_publication_busy', 'The project memory context is being published. Retry shortly.'), { definitivelyRejected: true });
+      throw error;
+    }
   }
 
   async resolveProject(project, { readOnly = false } = {}) {
     if (!project || typeof project.userId !== 'string' || typeof project.id !== 'string') throw refused();
     return this.database[readOnly ? 'readFence' : 'transaction'](client => this.database.withTransactionClient(client, async () => {
+      // Like native writer leases, publication must never wait on its own outer admission indefinitely.
+      if (this.runtimeLockIsolation && !readOnly) await client.query("SET LOCAL lock_timeout = '3s'");
       const identity = (await client.query(`SELECT u.id AS "ownerId",u.created_at::text AS "ownerCreatedAt",
         p.id AS "projectId",p.created_at::text AS "projectCreatedAt"
         FROM evimed_control.users u JOIN evimed_control.projects p ON p.user_id=u.id

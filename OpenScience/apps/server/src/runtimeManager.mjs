@@ -6159,7 +6159,7 @@ export class RuntimeManager {
       return this.pluginService ? await this.pluginService.withAdmission(project, () => this.dispatchAdmittedPrompt(project, sessionId, input), { prompt: true })
         : await this.dispatchAdmittedPrompt(project, sessionId, input);
     } catch (error) {
-      if (error?.code === "plugin_apply_in_progress") error.definitivelyRejected = true;
+      if (["plugin_apply_in_progress", "runtime_prompt_admission_busy", "memory_context_publication_busy"].includes(error?.code)) error.definitivelyRejected = true;
       throw error;
     }
   }
@@ -6268,10 +6268,15 @@ export class RuntimeManager {
           // Bind the authenticated actor under the same fence as native input.
           if(recordPromptActor) await recordPromptActor(promptRequest);
           signal.throwIfAborted();
+          let acknowledgement;
           await withProjectStorageMutation(project,async()=>{
             signal.throwIfAborted();
-            // Proof reads precede the final ledger read. The project ledger and
-            // session admission stay excluded until this short RPC acknowledges.
+            // Proof reads precede the final ledger read. Session admission stays
+            // excluded through acknowledgement. With memory isolation the project
+            // ledger protects the final stop/continuation checks, then releases
+            // before send's async context/source authorization and wire submission.
+            // The session fence remains held through acknowledgement; gateway
+            // source receipts can append without waiting for that acknowledgement.
             if(runId && this.readPromptStop && await this.readPromptStop(project,sessionId,runId)) {
               throw Object.assign(new HttpError(409,'runtime_prompt_rejected','The researcher stopped this pending input.'),{definitivelyRejected:true});
             }
@@ -6281,13 +6286,18 @@ export class RuntimeManager {
             }
             signal.throwIfAborted();
             promptSent=true;
-            await this.withRuntimeDeadline(
+            const pending = this.withRuntimeDeadline(
               // main's guarded `send` keeps the context-policy generation check on the admitted path.
               wireSignal=>send("session/prompt",{request:promptRequest},AbortSignal.any([wireSignal,signal])),
               "runtime_prompt_acceptance_unknown",
               "Runtime prompt acceptance could not be confirmed.",
             );
+            if (this.config.memoryRuntimeLockIsolationEnabled === true) {
+              acknowledgement = pending;
+              void pending.catch(() => {});
+            } else await pending;
           });
+          if (acknowledgement) await acknowledgement;
         });
       } catch(error) {
         if(!promptSent) error.definitivelyRejected=true;
@@ -8306,7 +8316,7 @@ export class RuntimeManager {
   /**
    * @param {any} req @param {any} res @param {Record<string, any>} project @param {string} suffix
    * @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void>, uiAssetPrefix?: string | null,
-   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null, admissionSignal?: AbortSignal | null,
+   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null, admissionSignal?: AbortSignal | null, controlOnly?: boolean,
    *           observeResponse?: ((input:{body:Buffer,status:number,contentType:string})=>Promise<void>) | null,
    *           observeFailure?: ((input:{status:number|null,errorCode:string})=>Promise<void>) | null,
    *           transformResponse?: ((input:{body:Buffer,status:number,contentType:string})=>Promise<Buffer>) | null }} [options]
@@ -8316,7 +8326,7 @@ export class RuntimeManager {
    *   `fileBody` says the request carries a file, not an RPC: it is held to
    *   `maxFileBytes` instead of the JSON ceiling, and never parsed as JSON.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null, transformResponse = null, observeResponse = null, observeFailure = null, admissionSignal = null } = {}) {
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null, transformResponse = null, observeResponse = null, observeFailure = null, admissionSignal = null, controlOnly = false } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -8347,7 +8357,11 @@ export class RuntimeManager {
         sendJson(res, noWake.status, noWake.body);
         return;
       }
-      let runtime = await this.start(project);
+      // A cancellation uses the registered runtime, never a prompt/start permit.
+      // If a cold start has not registered yet, its durable stop intent is read
+      // by the final prompt checks before anything can be sent.
+      let runtime = controlOnly ? this.runtimes.get(this.key(project)) : await this.start(project);
+      if (!runtime) throw new HttpError(409, 'runtime_unavailable', 'No runtime is available for cancellation.');
       if (revalidate) await revalidate();
       await this.enforceRuntimeProxyPolicy(req, suffix, runtime);
       if (beforeForward) await beforeForward();
@@ -9033,7 +9047,7 @@ export class RuntimeManager {
           if(!['session/prompt','session/cancel'].includes(endpoint)) return operation();
           const sessionId=payload?.args?.request?.sessionId ?? payload?.args?.sessionId;
           if(endpoint==='session/cancel' && typeof sessionId!=='string') return operation();
-          return withSessionPromptAdmission(this,project,sessionId,operation);
+          return withSessionPromptAdmission(this,project,sessionId,operation,{stop:endpoint==='session/cancel'});
         },
         admit: (endpoint, operation, payload) => {
           if (endpoint !== "session/prompt") return policy.admitOperation ? policy.admitOperation(endpoint, payload, operation) : policy.withAuthority ? policy.withAuthority(operation) : operation();

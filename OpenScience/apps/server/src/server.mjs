@@ -1184,7 +1184,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: code => { void securityAudit(config, "source.change", "failed", { code }).catch(() => {}); } })
     : null;
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
-  const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
+  const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs,
+    runtimeLockIsolation: config.memoryRuntimeLockIsolationEnabled === true, databasePoolMax: config.databasePoolMax }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
   const inventoryRoutes = createInventoryRoutes({ store, pluginService, config, builtinSettings: (user, project) => skillLibraryService?.projectBuiltins(user, project) ?? null,
     searchTopicsAvailable: (_user, project) => runtimeManager.searchTopicsAvailable(project) });
@@ -4087,6 +4088,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const direct = await proveGeoRootCapture(identity, canonicalProject, launched, sessionId, primary, snapshot);
         if (direct) return direct;
       }
+      // A newly opened secondary conversation already has a committed exact
+      // association, but no run until the first prompt is acknowledged. Prove
+      // that association and current inventory without waiting for a run row.
+      if (config.memorySharedCaptureProofEnabled === true && sessionId !== primary) {
+        let associated = false;
+        try { await geoNativeAuthority.proveSession(identity, sessionId, snapshot); associated = true; }
+        catch (error) { if (error?.status !== 404) throw error; }
+        if (associated) {
+          const direct = await proveGeoRootCapture(identity, canonicalProject, launched, sessionId, sessionId, snapshot);
+          if (direct) return direct;
+        }
+      }
       const roots = new Set((await geoNativeAuthority.runsInSnapshot(identity, snapshot)).map(run => run.sessionId));
       roots.delete(primary);
       // An exact historical root need not wait behind unrelated conversations.
@@ -4259,7 +4272,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return dataAnalysisService.authorizeReservation(project, input);
     },
     promptStops:new RuntimePromptStops({database:productDatabase}),
-    withPromptAdmission:(project,sessionId,operation)=>withSessionPromptAdmission(runtimeManager,project,sessionId,operation),
+    // This hook is used only by AgentRuns.noteStopRequest, never by a prompt.
+    withPromptAdmission:(project,sessionId,operation)=>withSessionPromptAdmission(runtimeManager,project,sessionId,operation,{stop:true}),
     nativeInputs: geoNativeInputs,
     judgeService,
     agentRegistry,
@@ -10727,6 +10741,10 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
     ],
   );
   const promptAdmission=runtimeStats.promptAdmissions ?? {};
+  addMetric(lines,"open_science_runtime_prompt_admission_permits","Outer prompt database permits held or waiting.","gauge",[
+    {labels:{state:"held"},value:promptAdmission.permitsHeld??0},
+    {labels:{state:"waiting"},value:promptAdmission.permitsWaiting??0},
+  ]);
   addMetric(lines,"open_science_runtime_prompt_admission_active","Same-session prompt admission RPCs in flight.","gauge",{value:promptAdmission.active ?? 0});
   addMetric(lines,"open_science_runtime_prompt_admission_total","Same-session prompt admission outcomes.","counter",['attempted','queued','admitted','failed','timedOut'].map(outcome=>({labels:{outcome},value:promptAdmission[outcome] ?? 0})));
   addMetric(lines, "open_science_runtime_proxy_active", "Active runtime proxy requests and streams.", "gauge", {

@@ -412,6 +412,8 @@ services:
       OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED:
       OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_ROBUST_ENABLED:
       OPEN_SCIENCE_MEMORY_FORGET_REQUEST_CHECK_ENABLED:
+      # Independent default-off authorization check for named shared GEO captures.
+      OPEN_SCIENCE_MEMORY_SHARED_CAPTURE_PROOF_ENABLED:
       OPEN_SCIENCE_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED:
       OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_MODE:
       OPEN_SCIENCE_NATIVE_MEMORY_VERIFY_DAILY_CALLS:
@@ -2364,6 +2366,8 @@ services:
       # And the socket plugins it launches every runtime without.
       OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS:
       # Read where runtimes are launched: the kernel-side memory bridge and the guidance preset take these from the launch environment.
+      # Independent default-off authorization check for named shared GEO captures.
+      OPEN_SCIENCE_MEMORY_SHARED_CAPTURE_PROOF_ENABLED:
       OPEN_SCIENCE_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED:
       OPEN_SCIENCE_MEMORY_SEARCH_HINT_ENABLED:
       OPEN_SCIENCE_MEMORY_FORGET_TOOL_HINT_ENABLED:

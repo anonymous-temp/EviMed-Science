@@ -11,6 +11,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import { allowanceRefusalSentence } from "@evimed/domain";
 import { FRAME_VOCABULARY } from "@evimed/harness-port/runtime-ui-frame";
 import { HttpError } from "../src/security.mjs";
+import { PluginService } from '../src/pluginService.mjs';
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { loadConfig } from "../src/config.mjs";
 import { MODEL_REASONING_EFFORTS } from "../src/modelReasoningPolicy.mjs";
@@ -2736,4 +2737,36 @@ test('raw native upload repeats its source fence after runtime startup even with
   let reached=0;f.upstream.on('request',(req,res)=>{reached++;req.resume();res.writeHead(200,{'content-type':'application/json'});res.end('{"ok":true}');});
   const response=await fetch(`${f.base}/api/session/uploadFileBinary?sessionId=a&name=test.txt`,{method:'POST',headers:{cookie:f.cookie,Origin:UI_ORIGIN,'content-type':'application/octet-stream'},body:'source bytes'});
   assert.equal(response.status,404);assert.equal(reached,0);
+});
+
+
+test('HTTP and mux stops bypass saturated prompt permits and forward despite receipt failure', { timeout: 5000 }, async t => {
+  let intents = 0;
+  const f = await fixture(t, { memoryRuntimeLockIsolationEnabled: true, databasePoolMax: 10 }, {}, {
+    agentRuns: { noteStopRequest: async () => { intents++; throw new Error('receipt unavailable'); } },
+  });
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  const database = { transactionScope: () => null, withoutTransactionClient: work => work(),
+    transaction: async () => { throw new Error('stop must not take a prompt transaction'); } };
+  const plugins = new PluginService(database, { runtimeLockIsolation: true, databasePoolMax: 10 });
+  f.manager.pluginService = plugins; f.manager.promptAdmissionDatabase = database;
+  for (let index = 0; index < plugins.admissionClientLimit; index++) await plugins.acquireAdmissionClient();
+  // HTTP cancellation must not call start(), which also takes a plugin permit.
+  f.manager.start = async () => { throw new Error('stop tried to start behind pending prompts'); };
+  const realProxy = f.manager.proxy;
+  f.manager.proxy = (...args) => { assert.equal(args[4].controlOnly, true); return realProxy(...args); };
+  try {
+    c.send(open('saturated-stop', 'session/cancel', { request: { sessionId: 'pending-prompt' } }));
+    const wire = await Promise.race([c.next(), new Promise((_, reject) => setTimeout(() => reject(new Error('cancel waited behind prompt permits')), 250))]);
+    assert.equal(wire.value.reached, 'session/cancel'); assert.equal((await c.next()).type, 'end');
+    const http = await fetch(`${f.base}/api/session/cancel`, { method: 'POST',
+      headers: { cookie: f.cookie, origin: UI_ORIGIN, 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'client-request', rpcId: 'stop-http', method: 'session/cancel', payload: { args: { request: { sessionId: 'pending-prompt' } } } }) });
+    assert.equal(http.status, 200); assert.equal(intents, 2);
+    database.withoutTransactionClient = () => { throw new HttpError(409, 'runtime_prompt_admission_busy', 'Local admission failed'); };
+    c.send(open('failed-admission-stop', 'session/cancel', { request: { sessionId: 'pending-prompt' } }));
+    assert.equal((await c.next()).value.reached, 'session/cancel'); assert.equal((await c.next()).type, 'end');
+    assert.equal(intents, 3, 'admission failure still records the stop and forwards it once');
+    assert.equal(plugins.admissionClientWaiters.length, 0);
+  } finally { while (plugins.admissionClients) plugins.releaseAdmissionClient(); }
 });

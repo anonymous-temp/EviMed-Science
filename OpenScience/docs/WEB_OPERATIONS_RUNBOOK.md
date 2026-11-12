@@ -2324,3 +2324,20 @@ A failed result notification stays pending and reuses its notification identity.
 `OPEN_SCIENCE_RUNTIME_PROMPT_ADMISSION_TIMEOUT_MS` (default 30000, range 500–60000) bounds final session checks and the short prompt acceptance RPC. The database client is obtained before the local session queue; a live plugin transaction is borrowed, including with a one-connection pool. Native HTTP/mux inputs and managed continuations share the session advisory lock, while model generation and event streams remain outside it. `open_science_runtime_prompt_admission_active` and `open_science_runtime_prompt_admission_total` expose occupancy and outcomes.
 
 An authenticated stop records a monotonic set of existing run IDs in `evimed_product.prompt_stop_intents`, scoped to owner/project/session and deleted with the project. It suppresses subsequent automatic admission for those runs, survives restarts and cannot be overwritten by run-learning gauges. A future explicit human request is independent. This is stop intent; it does not claim that a kernel stop RPC succeeded.
+
+
+`OPEN_SCIENCE_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED` defaults to false. When enabled,
+`OPEN_SCIENCE_DATABASE_POOL_MAX` must be at least 4: one outer prompt transaction
+plus capacity for floor publication, gateway work and a stop receipt. Prompt permits
+are capped at the smaller of half the pool and pool size minus three; held/waiting
+counts appear in `open_science_runtime_prompt_admission_permits`.
+
+`OPEN_SCIENCE_MEMORY_SHARED_CAPTURE_PROOF_ENABLED` is an independent, default-off
+authorization switch. When enabled, named engine sessions in a shared GEO namespace
+need a current kernel inventory and a durable programme conversation association
+before recall or capture. Session-free opening recall and explicit workload remember
+keep their existing project scope. Opening a shared conversation creates its kernel
+session and commits the association before its first prompt, so proof does not wait
+for prompt acknowledgement. The proof checks an exact registered secondary
+conversation before falling back to historical run roots. Evaluate this authorization change separately from lock
+isolation; either switch may be enabled without the other.
