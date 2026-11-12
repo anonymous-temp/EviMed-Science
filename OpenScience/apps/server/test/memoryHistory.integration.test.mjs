@@ -37,6 +37,32 @@ async function setup(t, retrievalV2 = false) {
 }
 const search = f => f.service.search({ user: { id: f.userId }, project: { id: 'default', userId: f.userId }, query: 'trial', limit: 5 });
 
+test('account erasure drops history matching metadata but retains physical cleanup obligations', options, async t => {
+  const f = await setup(t);
+  await f.service.ingestArchive(f.commit, f.context);
+  const values = [f.userId, f.context.ownerCreatedAt, f.context.namespaceId, f.commit.archiveUri];
+  await f.database.query(`INSERT INTO evimed_memory.history_message_rejections
+    (owner_id,owner_created_at,namespace_id,memory_type,fingerprint,archive_uri,message_hash)
+    VALUES($1,$2,$3,'notes','fingerprint',$4,'message')`, values);
+  await f.database.query(`INSERT INTO evimed_memory.history_write_messages
+    (owner_id,owner_created_at,namespace_id,archive_uri,message_hash) VALUES($1,$2,$3,$4,'message')`, values);
+  await f.database.query(`INSERT INTO evimed_memory.history_secret_salts(owner_id,owner_created_at,salt)
+    VALUES($1,$2,'synthetic-test-salt')`, values.slice(0, 2));
+  await f.database.query(`INSERT INTO evimed_memory.history_secrets(owner_id,owner_created_at,archive_uri,fingerprint,length)
+    VALUES($1,$2,$3,'synthetic-fingerprint',10)`, [f.userId, f.context.ownerCreatedAt, f.commit.archiveUri]);
+  await f.ledger.queueWriteSession(f.context, `${f.context.userRoot}/sessions/evimed-page-erased`);
+  await f.service.eraseAccount(f.userId);
+  await f.database.query('DELETE FROM evimed_control.users WHERE id=$1', [f.userId]);
+  for (const table of ['history_message_rejections', 'history_write_messages', 'history_secret_salts', 'history_secrets']) {
+    assert.equal((await f.database.query(`SELECT count(*)::int AS n FROM evimed_memory.${table} WHERE owner_id=$1`, [f.userId])).rows[0].n, 0, table);
+  }
+  for (const table of ['history_fences', 'history_chunks', 'history_archives', 'history_write_session_deletes']) {
+    assert.ok((await f.database.query(`SELECT count(*)::int AS n FROM evimed_memory.${table} WHERE owner_id=$1`, [f.userId])).rows[0].n > 0, table);
+  }
+  await assert.rejects(f.database.query(`INSERT INTO evimed_memory.history_write_messages
+    (owner_id,owner_created_at,namespace_id,archive_uri,message_hash) VALUES($1,$2,$3,$4,'late')`, values), { code: '23503' });
+});
+
 test('V2 search honors requested limits through the registry, diversifies and removes repeated source messages; off is identical', options, async t => {
   const f=await setup(t);
   const ingest=async (id,messages)=>{

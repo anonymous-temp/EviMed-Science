@@ -9551,6 +9551,7 @@ function projectArchivePathType(relative) {
   if (relative.startsWith("workspace/")) return "content";
   if (relative === ".openscience") return "directory";
   if (/^\.openscience\/(?:runs|provenance|tasks|audit|usage)\.jsonl(?:\.[1-9]\d*)?$/.test(relative)
+    || /^\.openscience\/runs\.\d{6}\.jsonl$/.test(relative)
     || relative === ".openscience/research-sessions.json"
     || relative === ".openscience/tasks-state.json") return "file";
 

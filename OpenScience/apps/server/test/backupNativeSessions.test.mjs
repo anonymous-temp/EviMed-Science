@@ -30,6 +30,9 @@ async function fixture(t) {
 async function roundTrip(t, encrypted) {
   const { root, data, put } = await fixture(t);
   const retained = new Map([
+    ["users/u/projects/p/.openscience/runs.jsonl", '{"id":"run-one","event":"started"}\n'],
+    ["users/u/projects/p/.openscience/runs.000001.jsonl", '{"id":"run-one","event":"finished"}\n'],
+    ["users/u/projects/p/.openscience/runs.000002.jsonl", '{"id":"run-one","event":"notice","deleted":true}\n'],
     [`${native}/dsh-home/sessions/session-one.jsonl`, '{"seq":1,"type":"user","text":"Synthetic research question"}\n{"seq":2,"type":"assistant","text":"Synthetic answer"}\n'],
     [`${native}/dsh-home/sessions/session-two/log.jsonl`, '{"seq":1,"type":"user","text":"Another retained session"}\n'],
     [`${native}/dsh-home/sessions/session-two/metadata.json`, '{"name":"Synthetic session"}\n'],

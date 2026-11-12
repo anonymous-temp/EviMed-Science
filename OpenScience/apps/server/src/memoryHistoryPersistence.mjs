@@ -82,6 +82,19 @@ CREATE TABLE IF NOT EXISTS evimed_memory.history_secrets (
   fingerprint text NOT NULL, length integer NOT NULL CHECK(length>0), count integer NOT NULL DEFAULT 1,
   PRIMARY KEY(owner_id,owner_created_at,archive_uri,fingerprint)
 );
+-- Matching metadata has no post-erasure cleanup duty. Keep the address outbox
+-- and fences above independent; only these hashes/salts go with the owner.
+-- NOT VALID admits legacy orphan rows without scanning at startup, while new
+-- writes and deletion of every existing owner obey the cascade immediately.
+DO $$ DECLARE held text; constraint_name text; BEGIN
+  FOREACH held IN ARRAY ARRAY['history_message_rejections','history_write_messages','history_secret_salts','history_secrets'] LOOP
+    constraint_name := held || '_owner_fk';
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid=to_regclass('evimed_memory.' || held) AND conname=constraint_name) THEN
+      EXECUTE format('ALTER TABLE evimed_memory.%I ADD CONSTRAINT %I FOREIGN KEY(owner_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID', held, constraint_name);
+    END IF;
+  END LOOP;
+END $$;
+
 `;
 
 /** Exact URI authority and durable cleanup obligations, never raw messages. */
