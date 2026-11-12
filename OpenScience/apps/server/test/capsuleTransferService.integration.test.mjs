@@ -458,10 +458,12 @@ test("people are selectable per share by full-body digest, survive import as per
   assert.equal(PAGE_KIND_OF_TYPE.notes, "note");
   const root = nativeMemoryRoot(owner);
   const bodies = new Map([[`${root}/people/a.md`, "Patient A: penicillin allergy"], [`${root}/people/b.md`, "Patient B: follow-up"], [`${root}/notes/topic.md`, "An ordinary useful note"], [`${root}/preferences/style.md`, "Use concise replies"]]);
+  const rebuilt = [];
   const overlay = new NativeMemoryOverlay({ database });
   const nativeMemory = new NativeMemoryStore({ sessions: { configured: true, memoryRoot: () => root, engineUser: openVikingUserId, userRoot: userRootUri,
     tree: async () => [...bodies].map(([uri, body]) => ({ uri, isDir: false, size: body.length, modTime: "2026-11-05", tags: [] })), read: async (_user, uri) => bodies.get(uri) ?? null,
-    replace: async (_user, uri, body) => { bodies.set(uri, body); }, remove: async (_user, uri) => bodies.delete(uri) }, overlay });
+    replace: async (_user, uri, body) => { bodies.set(uri, body); }, remove: async (_user, uri) => bodies.delete(uri),
+    rebuildMemoryDirectory: async (userId, uri) => { assert.equal(userId, owner); rebuilt.push(uri); } }, overlay });
   const service = new CapsuleTransferService({ documents, capsules, identities, dataDir: directory, nativeMemory });
   const capsule = await makeCapsule(capsules, owner, { title: "People consent" });
   const scopes = ["workstyle", "+knowledge"];
@@ -508,6 +510,7 @@ test("people are selectable per share by full-body digest, survive import as per
   const current = (await nativeMemory.records(owner)).find(row => row.kind === "person" && row.value.includes("Patient A"));
   const edited = await nativeMemory.update(owner, current.id, { value: "Patient A: corrected allergy", expectedVersion: current.version });
   assert.equal(edited.value, "Patient A: corrected allergy");
+  assert.deepEqual(rebuilt, [`${root}/people`, root], "editing rebuilds the same ancestor summaries as the production sessions client");
   const forgotten = await nativeMemory.update(owner, edited.id, { status: "archived", expectedVersion: edited.version });
   assert.ok((await nativeMemory.forgotten(owner)).some(row => row.id === edited.id && row.kind === "person"));
   const restored = await nativeMemory.undo(owner, edited.id, { expectedVersion: forgotten.version });
@@ -515,6 +518,7 @@ test("people are selectable per share by full-body digest, survive import as per
   await nativeMemory.remove(owner, edited.id, { keepText: false });
   assert.ok(!(await nativeMemory.records(owner)).some(row => row.id === edited.id));
   assert.ok(!(await nativeMemory.forgotten(owner)).some(row => row.id === edited.id), "hard delete retains no restorable person body");
+  assert.deepEqual(await overlay.pendingSummaryInvalidations(owner), [], "every mutation completes its summary maintenance");
 
 });
 

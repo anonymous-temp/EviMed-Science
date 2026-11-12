@@ -375,6 +375,15 @@ test("the boot proof boots under the environment production actually emits", asy
   assert.equal(optionalShell.status, 0, optionalShell.stderr);
   assert.deepEqual(optionalShell.stdout.split("\n").slice(0, -1), optionalNames.map(name => defaults[name]),
     "the boot proof uses the ordinary optional roots with no selected generation or gateway");
+  const memoryNames = ["EVIMED_MEMORY_FORGET_TARGETS_ENABLED", "EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED",
+    "EVIMED_MEMORY_SEARCH_HINT_ENABLED", "EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED"];
+  const memoryExport = smoke.split("\n").filter(line => /^export\s.*EVIMED_MEMORY_/.test(line)).join("\n");
+  const memoryShell = spawnSync("bash", ["-c", `${memoryExport}\nfor name in ${memoryNames.join(" ")}; do printenv "$name"; done`], {
+    encoding: "utf8", env: { PATH: process.env.PATH, ...Object.fromEntries(memoryNames.map(name => [name, "1"])) },
+  });
+  assert.equal(memoryShell.status, 0, memoryShell.stderr);
+  assert.deepEqual(memoryShell.stdout.trim().split("\n"), memoryNames.map(name => defaults[name]),
+    "the boot proof resets every optional memory hint to its shipped default, even under an opted-in build environment");
   const commented = exportedNames(smoke.replace(citeExport, `# ${citeExport}`));
   for (const name of citeNames) assert.equal(commented.has(name), false, "commented settings must not count as a boot environment");
   assert.ok(produced.length >= 10, `expected a real environment surface, got ${produced.length} names`);

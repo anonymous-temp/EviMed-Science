@@ -335,7 +335,7 @@ test("a stop reads the bounded run it releases, and the counters reach the metri
   assert.match(serverSource, /learningMetricFamilies\(Boolean\(learning\?\.enabled\), learningLedger, learning\?\.counters \?\? null\)/);
   assert.match(serverSource, /runtimeManager\.learningMetrics = learningMetrics;/);
   assert.match(serverSource, /learningMetrics\.observeRun\(\{ loaded: derived\.methodsLoaded\.length, invoked: derived\.methodsInvoked\.length \}\)/);
-  assert.match(serverSource, /summary: productDatabase && config\.learningEnabled \? \(userId\) => learningSummary\(productDatabase, userId\) : null/);
+  assert.match(serverSource, /summary: productDatabase && config\.learningEnabled \? \(userId\) => learningSummary\(productDatabase, userId, \{ consolidationQueue: config\.methodConsolidationQueueEnabled \}\) : null/);
   // L-G7: a run's attributions are read against the methods its runtime carried.
   assert.match(serverSource, /const family = learnedMethodFamilyForRuntime\(\{ projectId: String\(project\.id\), boundedRunId: run\.automated === true \? run\.dispatchId \?\? null : null \}\);/);
 });

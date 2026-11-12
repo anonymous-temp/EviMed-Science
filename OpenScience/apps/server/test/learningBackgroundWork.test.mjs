@@ -67,12 +67,21 @@ test("every harness in the repository that dispatches a run says it is automated
     ["evals/general-tasks/runner/cell.mjs", "evals/general-tasks/runner/run.mjs"],
     // Plan L1/L2 must exercise learning, which automated runs deliberately cannot.
     ["evals/capsule-proving/lx/conversation.mjs", "evals/general-tasks/runner/run.mjs"],
+    // L3B learns from attended corrections before paired exams through the same LX helper.
+    ["evals/capsule-proving/l3b/run_l3b.mjs", "evals/general-tasks/runner/run.mjs"],
   ]);
   const lx = await readFile(path.join(openScience, "evals/capsule-proving/lx/run_lx.mjs"), "utf8");
   assert.match(lx, /const api = new Api\(this\.ctx\.h\.base\)/, "LX uses its own harness, never a serving account");
   assert.match(lx, /await registerAccount\(api, username\)/, "LX registers each throwaway identity");
   assert.match(lx, /await startHarness\(\{ args, treeOs, treeDir, dataDir/);
   assert.doesNotMatch(lx, /--base\b|OPEN_SCIENCE_PUBLIC_URL|https:\/\//);
+  const l3b = await readFile(path.join(openScience, "evals/capsule-proving/l3b/run_l3b.mjs"), "utf8");
+  assert.match(l3b, /const api = new Api\(h\.base\)/, "L3B registers and resumes only against its own harness");
+  assert.match(l3b, /await registerAccount\(api, `l3b/);
+  assert.match(l3b, /await startHarness\(\{ args, treeOs, treeDir, dataDir/);
+  assert.match(l3b, /import \{ runConversation \} from '\.\.\/lx\/conversation\.mjs'/);
+  assert.match(l3b, /await runConversation\(\{ api, userId/);
+  assert.doesNotMatch(l3b, /--base\b|OPEN_SCIENCE_PUBLIC_URL|https:\/\//);
   for (const [, starter] of attendedByDesign) {
     const text = await readFile(path.join(openScience, starter), "utf8");
     assert.match(text, /const base = `http:\/\/127\.0\.0\.1:\$\{args\.port\}`/, `${starter} must only ever address the control plane it starts`);
