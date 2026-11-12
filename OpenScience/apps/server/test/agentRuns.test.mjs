@@ -7886,7 +7886,7 @@ test("LG3 same-size prefix rewrites, inode replacements and gaps never reuse sta
 });
 
 test("LG3 a metadata error drops the cache and a rotation during the tail read uses a full read", async t => {
-  const { project, binding, createStore, file, fill } = await rotationFixture(t);
+  const { project, binding, createStore, fill } = await rotationFixture(t);
   const store = createStore(), other = createStore();
   const run = (await store.reserveRun(project, binding("cache-race"))).run;
   await fill(0, run.id);
