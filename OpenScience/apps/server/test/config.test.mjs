@@ -11,6 +11,21 @@ import { parseByteSize } from "../src/runtimeManager.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
+test("run-ledger rotation defaults off and supports environment and explicit overrides", () => {
+  const key = "OPEN_SCIENCE_AGENT_RUN_LEDGER_ROTATION_ENABLED";
+  const saved = process.env[key];
+  try {
+    delete process.env[key];
+    assert.equal(loadConfig({ rootDir: repoRoot }).agentRunLedgerRotationEnabled, false);
+    process.env[key] = "true";
+    assert.equal(loadConfig({ rootDir: repoRoot }).agentRunLedgerRotationEnabled, true);
+    assert.equal(loadConfig({ rootDir: repoRoot, agentRunLedgerRotationEnabled: false }).agentRunLedgerRotationEnabled, false);
+    process.env[key] = "false";
+    assert.equal(loadConfig({ rootDir: repoRoot }).agentRunLedgerRotationEnabled, false);
+    assert.equal(loadConfig({ rootDir: repoRoot, agentRunLedgerRotationEnabled: true }).agentRunLedgerRotationEnabled, true);
+  } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
+});
+
 test("the pasted-instruction attribution experiment defaults off and supports environment and explicit overrides", () => {
   const key = "OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED";
   const saved = process.env[key];
