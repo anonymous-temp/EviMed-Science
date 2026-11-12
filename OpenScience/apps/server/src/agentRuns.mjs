@@ -5176,8 +5176,10 @@ export class AgentRunStore {
       // Keep its flag and timestamp while stripping all source-only notice text.
       const clean = rows => rows.filter(event => !ids.has(event.id) || !['native-workflow','notice'].includes(event.event)
         || (event.event === 'notice' && event.deleted === true)).map(event => !ids.has(event.id) ? event
-        : { ...Object.fromEntries(Object.entries(event).filter(([key]) => keep.has(key))),
-          ...(event.event === 'notice' && event.deleted === true ? { qualityNotices: [] } : {}) });
+        // A kept deletion notice is rebuilt in the order it is first written (below), so a repeated cleanup leaves its bytes unchanged.
+        : event.event === 'notice' && event.deleted === true
+          ? { event: 'notice', id: event.id, at: event.at, qualityNotices: [], deleted: true }
+          : Object.fromEntries(Object.entries(event).filter(([key]) => keep.has(key))));
       const cleaned = clean(events);
       const notices = [];
       for (const run of targets) {
