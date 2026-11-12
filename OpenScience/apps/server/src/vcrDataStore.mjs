@@ -348,18 +348,34 @@ export class VcrDataStore extends VcrStoreBase {
   /** An egress dependency stays after a document is deleted so cached sessions cannot resend it.
    * @param {string} studyId @param {string} projectionId @param {any} context */
   async recordCloudRead(studyId, projectionId, context) {
+    // One row per study, conversation and document, read by every passage a run is served. A row that exists is found by a snapshot
+    // read, which never waits: `ON CONFLICT` alone waits for any open transaction on that row, and concurrent evidence searches of one
+    // conversation queued on it past the statement timeout (production 2026-11-11, Postgres 57014 on 35 of 111 searches).
     await this.rows(`INSERT INTO ${this.schema}.cloud_reads(study_id,session_id,run_id,projection_id)
-      VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`, [studyId,context.sessionId,context.runId,projectionId]);
+      SELECT $1::text,$2::text,$3::text,$4::text WHERE NOT EXISTS (SELECT 1 FROM ${this.schema}.cloud_reads
+        WHERE study_id=$1::text AND session_id=$2::text AND projection_id=$4::text)
+      ON CONFLICT DO NOTHING`, [studyId,context.sessionId,context.runId,projectionId]);
   }
 
   /** @param {string} studyId @param {string} projectionId @param {any} context @param {any} window */
   async recordCloudWindow(studyId, projectionId, context, window) {
+    await this.recordCloudWindows(studyId, projectionId, context, [window]);
+  }
+
+  /**
+   * The windows one read served of a document, in one statement. A read that served only windows already recorded takes no row
+   * lock: the row is skipped on its snapshot (the keys are only ever added), so repeated searches of one record never queue.
+   * @param {string} studyId @param {string} projectionId @param {any} context @param {any[]} windows
+   */
+  async recordCloudWindows(studyId, projectionId, context, windows) {
     // Keyed by the range as well as the text's hash: two stretches of a note that read alike are two stretches, and keyed by the
     // text alone the second replaced the first and the document read as less covered than it was.
-    const key = `${window.served?.[0]}-${window.served?.[1]}:${window.hash}`;
+    const entries = Object.fromEntries(windows.map(window => [`${window.served?.[0]}-${window.served?.[1]}:${window.hash}`, { ...window, runId: context.runId }]));
+    const keys = Object.keys(entries);
+    if (!keys.length) return;
     await this.rows(`UPDATE ${this.schema}.cloud_reads SET windows=windows || $4::jsonb
-      WHERE study_id=$1 AND session_id=$2 AND projection_id=$3`,
-    [studyId,context.sessionId,projectionId,JSON.stringify({[key]:{...window,runId:context.runId}})]);
+      WHERE study_id=$1 AND session_id=$2 AND projection_id=$3 AND NOT (windows ?& $5::text[])`,
+    [studyId,context.sessionId,projectionId,JSON.stringify(entries),keys]);
   }
 
   /**

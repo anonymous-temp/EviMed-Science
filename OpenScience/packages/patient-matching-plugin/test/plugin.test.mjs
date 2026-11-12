@@ -48,6 +48,12 @@ test('one manifest owns nine bounded tools and rejects caller authority', () => 
   }
   assert.throws(() => validateArguments('match_discover', { taskId: 't', query: 'x', limit: 10000 }))
   assert.throws(() => validateArguments('match_assess', { taskId: 't', pairIds: Array(101).fill('x') }))
+  // A refusal names the argument and the bound in the schema's words, never the value given.
+  assert.throws(() => validateArguments('match_evidence', { taskId: 't', action: 'search', source: 'patient', query: 'egfr', queries: Array.from({ length: 9 }, (_, at) => `secret phrase ${at}`) }),
+    error => error.code === 'invalid_arguments' && /match_evidence: queries: must NOT have more than 8 items$/.test(error.message) && !/secret/.test(error.message))
+  assert.throws(() => validateArguments('match_evidence', { taskId: 't', action: 'lookup' }), /action: must be equal to one of the allowed values \(search, read\)/)
+  assert.throws(() => validateArguments('match_discover', { taskId: 't', query: 'x', pages: 2 }), /match_discover: pages: must NOT have additional properties/)
+  assert.throws(() => validateArguments('match_discover', { taskId: 't' }), /match_discover: query: must have required property 'query'/)
 })
 test('actual native call and original arguments are preserved while ports bind scope', async () => {
   const s = setup(), args = { taskId: 'task-a' }

@@ -1162,6 +1162,11 @@ function vcrSettings(overrides) {
     patientMatchingReasoningEffort: overrides.patientMatchingReasoningEffort ?? (process.env.OPEN_SCIENCE_PATIENT_MATCHING_REASONING_EFFORT?.trim() === "low" ? "low" : "high"),
     patientMatchingJevEnabled: overrides.patientMatchingJevEnabled ?? boolEnv("OPEN_SCIENCE_PATIENT_MATCHING_JEV_ENABLED", true),
     patientMatchingDiscoveryDepth: integer("patientMatchingDiscoveryDepth", "OPEN_SCIENCE_PATIENT_MATCHING_DISCOVERY_DEPTH", 300, 20, 500),
+    // A discovery runs once per task and request, detached from the call that started it (`joinableDiscovery`): a call waits at most
+    // WAIT_MS (below the plugin's 110 s host call) and then answers `pending` with the same call to make again, which joins the search;
+    // RUN_MS bounds the search itself. Each pending and joined answer is a `patient matching discovery: <outcome>` line in the web log.
+    patientMatchingDiscoveryWaitMs: integer("patientMatchingDiscoveryWaitMs", "OPEN_SCIENCE_PATIENT_MATCHING_DISCOVERY_WAIT_MS", 90000, 1000, 100000),
+    patientMatchingDiscoveryRunMs: integer("patientMatchingDiscoveryRunMs", "OPEN_SCIENCE_PATIENT_MATCHING_DISCOVERY_RUN_MS", 600000, 60000, 1800000),
     patientMatchingRankView: ["balanced", "trial-record"].includes(String(overrides.patientMatchingRankView ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_RANK_VIEW ?? "").trim()) ? String(overrides.patientMatchingRankView ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_RANK_VIEW).trim() : "trial-record",
     patientMatchingJevDepth: integer("patientMatchingJevDepth", "OPEN_SCIENCE_PATIENT_MATCHING_JEV_DEPTH", 300, 0, 500),
     patientMatchingTrialIndexManifest: String(overrides.patientMatchingTrialIndexManifest ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_TRIAL_INDEX_MANIFEST ?? ''),
