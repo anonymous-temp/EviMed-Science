@@ -48,6 +48,7 @@ const KNOWLEDGE_ISSUE_KINDS = Object.freeze(['page_link_unresolved', 'depends_on
  * `validateMethodGraph`'s vocabulary, mapped without restating any of its rules.
  * An unknown code from a later revision of that module is reported as `unreadable`, with the
  * original code in the detail, rather than being dropped.
+ * @type {Readonly<Record<string, string>>}
  */
 const GRAPH_ISSUE_KINDS = Object.freeze({
   method_graph_dangling_dependency: 'dangling_dependency',
@@ -217,7 +218,7 @@ export function methodLibraryLinkIssues(records) {
     })))
     for (const issue of graph.issues) {
       const kind = GRAPH_ISSUE_KINDS[issue.code] ?? 'unreadable'
-      const method = byName.get(issue.method)
+      const method = typeof issue.method === 'string' ? byName.get(issue.method) : undefined
       const target = method ? graphIssueTarget(issue.code, method, digestsByName, statusByName) : null
       issues.push({
         kind,
@@ -242,6 +243,7 @@ export function methodLibraryLinkIssues(records) {
     const dependencyNames = new Set(method.dependencies.map((dependency) => dependency.name))
 
     // A reuse reference in the prose is a promise on `depends_on`; the write path checks it, the stored record may predate that.
+    /** @type {ReturnType<typeof parseReuseReferences>} */
     let reuse = { references: [], malformed: [] }
     try {
       reuse = parseReuseReferences(bodyOf(record))
@@ -396,7 +398,7 @@ export function knowledgeLinkIssues(input = {}) {
 
   if (options.graph != null) {
     try {
-      const graph = Array.isArray(options.graph) ? knowledgeGraphToGraph(options.graph) : options.graph
+      const graph = /** @type {{problems?: unknown} | null | undefined} */ (Array.isArray(options.graph) ? knowledgeGraphToGraph(options.graph) : options.graph)
       const problems = graph && typeof graph === 'object' && Array.isArray(graph.problems) ? graph.problems : []
       for (const problem of problems) {
         const kind = `graph_problem:${String(problem?.kind ?? 'unknown')}`

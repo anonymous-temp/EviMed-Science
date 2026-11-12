@@ -9,6 +9,7 @@ import {
   defineTool,
   injectContext,
   isSubagentSession,
+  isLaunchFlagEnabled,
   loadHarnessModule,
   onPreStep,
   onPromptAssemble,
@@ -40,6 +41,21 @@ import {
   toUsage,
   withdrawPromptSection,
 } from "../index.mjs";
+
+test("launch flags are opt-in booleans read by the port at the time of use", () => {
+  const key = "EVIMED_MEMORY_SEARCH_HINT_ENABLED";
+  const saved = process.env[key];
+  try {
+    for (const value of [undefined, "", "0", "true", "false", "1", " 1 "]) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+      assert.equal(isLaunchFlagEnabled(key), value === "1", `launch flag ${String(value)}`);
+    }
+  } finally {
+    if (saved === undefined) delete process.env[key];
+    else process.env[key] = saved;
+  }
+});
 
 /**
  * Session format 4's admission rule for a message source, as the kernel ships
