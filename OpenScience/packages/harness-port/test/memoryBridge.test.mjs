@@ -393,7 +393,7 @@ test('a single forward that hangs for the whole window and then fails is an outa
 
 
 test('an isolated health timeout leaves immediate profile reads and remember available; transport failure still cools down', async () => {
-  const gateway = await fakeGateway(req => req.url.endsWith('/health') ? { hang: true } : { body: '{"status":"ok"}' })
+  const gateway = await fakeGateway(req => String(req.url).endsWith('/health') ? { hang: true } : { body: '{"status":"ok"}' })
   let forwards = 0
   const { bridge, call } = await startBridge({ gatewayUrl: gateway.url, retryHealthTimeout: true, deadlines: { healthMs: 30 },
     fetchImpl: (input, init) => { forwards++; return globalThis.fetch(input, init) } })
@@ -412,7 +412,7 @@ test('an isolated health timeout leaves immediate profile reads and remember ava
 
 test('a second health timeout in a row brings the cooldown back, and an answer from the gateway resets the count', async () => {
   let hangHealth = true
-  const gateway = await fakeGateway(req => req.url.endsWith('/health') && hangHealth ? { hang: true } : { body: '{"status":"ok"}' })
+  const gateway = await fakeGateway(req => String(req.url).endsWith('/health') && hangHealth ? { hang: true } : { body: '{"status":"ok"}' })
   let forwards = 0
   const { bridge, call } = await startBridge({ gatewayUrl: gateway.url, retryHealthTimeout: true, cooldownMs: 120, deadlines: { healthMs: 30 },
     fetchImpl: (input, init) => { forwards++; return globalThis.fetch(input, init) } })
