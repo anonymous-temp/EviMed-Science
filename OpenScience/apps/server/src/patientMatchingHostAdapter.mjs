@@ -37,6 +37,10 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
   const repository = new PatientMatchingRepository(documents);
   const targets = judgmentTargets({ evidence: vcr.evidence, matchStore: vcr.matchStore, pages: vcr.registryPages });
   const modelProfile = config.patientMatchingProfile ?? patientMatchingConfiguration(config);
+  // How long a commit waits for the task's commit lock (`OPEN_SCIENCE_PATIENT_MATCHING_COMMIT_LOCK_WAIT_MS`): commits of one task take
+  // turns, and the wait used to be bounded by the store's 5 s statement timeout, so a queued commit was cancelled (Postgres 57014) and its
+  // lane's decisions were not saved (production 2026-11-12). Kept below the plugin's 110 s host call.
+  const commitLockWaitMs = Number.isSafeInteger(config.patientMatchingCommitLockWaitMs) ? config.patientMatchingCommitLockWaitMs : 60_000;
   if(modelProfile.reasoningModel!=='deepseek-flash'||modelProfile.proEscalation!==false)throw new HttpError(503,'patient_matching_flash_required','Patient matching requires DeepSeek V4.1 Flash.');
   // The managed child names the provider the production kernel mounts; `deepseek` had no adapter there (replay, 2026-11-08: NO_ADAPTER).
   // Thinking effort of the clinical child: the provider accepts low, high and max; high unless the deployment sets low.
@@ -284,7 +288,9 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
   }
   async function commit(origin, input) {
     return vcr.store.transaction(client => vcr.store.database.withTransactionClient(client, async () => {
+      await client.query(`SET LOCAL statement_timeout = ${commitLockWaitMs}`);
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`patient-matching-commit:${origin.userId}:${input.taskId}`]);
+      await client.query(`SET LOCAL statement_timeout = ${vcr.store.statementTimeoutMs}`);
       return commitInside(origin, input);
     }));
   }

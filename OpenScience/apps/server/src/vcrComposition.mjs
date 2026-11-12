@@ -1236,6 +1236,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   }, { fetchImpl: call, report });
   const evidence = createVcrEvidencePipeline({
     store: evidenceStore, registry, jobs, trialCorpus, reranker: candidateReranker, searches: candidateSearches, meter: rerankMeter,
+    judgmentCacheMs: Number.isSafeInteger(config.vcrJudgmentRecordCacheMs) ? config.vcrJudgmentRecordCacheMs : 0,
     summaryCloudAllowed: dataPlane ? (/** @type {{ studyId: string, subjectKey?: string | null }} */ entry) => dataPlane.subjectCloudAllowed(entry) : null,
     retrieval: { retrieveMax: config.vcrCandidateRetrieveMax, deadlineMs: config.vcrCandidateRetrieveDeadlineMs, concurrency: config.vcrCandidateRetrieveConcurrency },
   });

@@ -153,6 +153,33 @@ test('real owned context prepares sources, commits native decisions and reads on
   await assert.rejects(invoke('ResultPort','get',{taskId:p.task.taskId},{...origin,rootSessionId:'another-root'}));
 });
 
+test('a commit queued behind its task\'s commit lock waits its own bound, not the store\'s statement timeout', options, async () => {
+  const pg = (await import('pg')).default;
+  const holder = new pg.Client({ connectionString: isolated.url });
+  await holder.connect();
+  /** @type {Promise<unknown>[]} */ const releases = [];
+  try {
+    const p = await preparedTask();
+    const key = `patient-matching-commit:${origin.userId}:${p.task.taskId}`;
+    const hold = async ms => { await holder.query('SELECT pg_advisory_lock(hashtext($1))', [key]);
+      releases.push(new Promise(resolve => setTimeout(resolve, ms)).then(() => holder.query('SELECT pg_advisory_unlock(hashtext($1))', [key]))); };
+    // The store bounds a statement at 1 s here; the lock is held 2.5 s.
+    const { VcrStore } = await import('../src/vcrStore.mjs');
+    const store = new VcrStore({ database, statementTimeoutMs: 1000 });
+    await store.ready();
+    const short = createPatientMatchingHostAdapter({ vcr: { ...vcr, store }, documents, config: { ...config, patientMatchingCommitLockWaitMs: 1000 } });
+    await hold(2500);
+    await assert.rejects(short.dispatch({ port: 'ResultPort', operation: 'save', origin, input: { phase: 'commit', taskId: p.task.taskId, executionId: p.executionId, profileDigest: p.profileDigest,
+      decisions: [decisionOf(p)], native: { childId: 'native-child', messageId: 'native-message', stopReason: 'completed' }, diagnostics: [] } }), error => error?.code === '57014');
+    await Promise.all(releases);
+    const patient = createPatientMatchingHostAdapter({ vcr: { ...vcr, store }, documents, config: { ...config, patientMatchingCommitLockWaitMs: 10000 } });
+    await hold(2500);
+    const saved = await patient.dispatch({ port: 'ResultPort', operation: 'save', origin, input: { phase: 'commit', taskId: p.task.taskId, executionId: p.executionId, profileDigest: p.profileDigest,
+      decisions: [decisionOf(p)], native: { childId: 'native-child', messageId: 'native-message', stopReason: 'completed' }, diagnostics: [] } });
+    assert.equal(saved.status, 'complete');
+  } finally { await Promise.allSettled(releases); await holder.end(); }
+});
+
 test('prepare refresh uses frozen identities, altered source, forged evidence and cross-task commit are denied', options, async () => {
   const p = await preparedTask();
   const fresh = await invoke('ExecutionPort','assess',{phase:'refresh',taskId:p.task.taskId,executionId:p.executionId});
