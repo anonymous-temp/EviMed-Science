@@ -156,7 +156,7 @@ function readableMethod(value) {
   if (raw.dependencies != null && !Array.isArray(raw.dependencies)) return null
   /** @type {MethodDependency[]} */
   const dependencies = []
-  for (const dependency of raw.dependencies ?? []) {
+  for (const dependency of Array.isArray(raw.dependencies) ? raw.dependencies : []) {
     if (!dependency || typeof dependency !== 'object' || typeof dependency.name !== 'string') return null
     dependencies.push({ name: dependency.name, digest: typeof dependency.digest === 'string' ? dependency.digest : String(dependency.digest ?? '') })
   }

@@ -460,7 +460,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const complete = async (directory, first) => {
         const entries = new Map(/** @type {[string, NativeMemoryEntry][]} */ (first.result.map(entry => [entry.uri, entry])));
         let page = first;
-        for (let offset = 512; page.has_more !== false && offset < 10_000; offset += 512) {
+        for (let offset = 512; ('has_more' in page ? page.has_more : undefined) !== false && offset < 10_000; offset += 512) {
           page = await scopedMemoryList(ctx.sessions, ctx, `${root}/${directory}`, { ...query, offset: String(offset) });
           let added = 0;
           for (const entry of page.result) if (!entries.has(entry.uri)) { entries.set(entry.uri, entry); added++; }
