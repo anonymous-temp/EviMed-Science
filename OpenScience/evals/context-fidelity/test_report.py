@@ -50,6 +50,16 @@ def write_ledger(directory, events):
 
 
 class LedgerFoldTests(unittest.TestCase):
+    def test_rotated_segments_fold_in_order_and_share_one_content_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = write_ledger(directory, [started("run_1", "2026-09-01T09:00:00Z")])
+            tail = path.with_name("runs.000001.jsonl")
+            tail.write_text(json.dumps(finished("run_1", "2026-09-01T10:00:00Z")) + "\n", encoding="utf-8")
+            runs, receipt = report.read_ledger(path)
+            self.assertEqual(runs["run_1"]["status"], "succeeded")
+            self.assertEqual(receipt["bytes"], path.stat().st_size + tail.stat().st_size)
+            self.assertEqual(receipt["sha256"], report.sha256_bytes(path.read_bytes() + tail.read_bytes()))
+
     def test_the_last_learning_row_wins_because_the_receipt_is_a_gauge(self):
         runs, _problems = report.fold_ledger([
             json.dumps(started("run_1", "2026-09-01T09:00:00Z")),

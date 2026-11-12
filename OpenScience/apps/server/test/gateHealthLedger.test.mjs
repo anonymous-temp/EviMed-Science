@@ -85,6 +85,20 @@ test("a scan that found nothing fails instead of reporting a clean bill of healt
   });
 });
 
+test("a rotated ledger includes terminal records from every continuation segment", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "gate-health-segments-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const meta = path.join(root, ".openscience");
+  await mkdir(meta, { recursive: true });
+  await writeFile(path.join(meta, "runs.jsonl"), finished({ id: "r1" }));
+  await writeFile(path.join(meta, "runs.000001.jsonl"), finished({ id: "r2", errorCode: "runtime_canceled" }));
+  await writeFile(path.join(meta, "runs.000002.jsonl"), finished({ id: "r3", status: "succeeded" }));
+  const out = run(root);
+  assert.match(out, /from 1 run ledger\(s\)/);
+  assert.match(out, /3 finished runs/);
+  assert.match(out, /runtime_canceled/);
+});
+
 test("the two review flags are the ones principle #4 asks for", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "gate-health-flags-"));
   t.after(() => rm(root, { recursive: true, force: true }));

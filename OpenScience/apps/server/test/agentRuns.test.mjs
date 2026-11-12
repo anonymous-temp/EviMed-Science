@@ -7659,9 +7659,9 @@ test("a terminal row still fits when the ledger is full of other runs' progress"
   );
 });
 
-test("a ledger that is genuinely too large is still refused", () => {
-  // The cap is not removed, only stopped from being reached by a gauge. A
-  // ledger of history alone that exceeds it must still fail loudly.
+test("an individual ledger segment that is too large is still refused", () => {
+  // Serialization still enforces the per-segment cap. The shared writer
+  // rotates history rather than increasing this bound.
   const history = [];
   for (let index = 0; index < 40_000; index += 1) {
     history.push({ event: "started", id: `run_${index}`, at: "2026-09-04T00:00:00.000Z" });
@@ -7670,6 +7670,105 @@ test("a ledger that is genuinely too large is still refused", () => {
     () => ledgerTextForTest(history, { event: "finished", id: "run_0", status: "succeeded" }, 1024 * 1024),
     /agent run ledger exceeds its size limit/i,
   );
+});
+
+for (const ending of ["succeeded", "canceled"]) test(`a full history rotates for ${ending}, preserving readers and source erasure`, async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-run-ledger-rotation-"));
+  const project = { id: "long-lived", userId: "researcher", rootDir: root,
+    workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  const binding = sessionId => ({ sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null });
+  const completed = [];
+  const createStore = () => new AgentRunStore({ get: async (_project, sessionId) => binding(sessionId) }, {
+    model: "deepseek/deepseek-v4-flash", readSessionHistory: async () => [],
+    onRunFinished: async (_project, run) => completed.push(run.id),
+  });
+  const store = createStore();
+  const restarted = createStore();
+  const limit = 1024 * 1024;
+  const fill = async (file, id) => {
+    const text = await readFile(file, "utf8");
+    const padding = { event: "notice", id, qualityNotices: [], padding: "" };
+    padding.padding = "x".repeat(limit - Buffer.byteLength(text + JSON.stringify(padding) + "\n"));
+    await writeFile(file, text + JSON.stringify(padding) + "\n");
+    assert.equal((await stat(file)).size, limit);
+  };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  try {
+    assert.deepEqual(await store.removeConversationSource(project, ["ses_missing"]), []);
+    const first = (await store.reserveRun(project, binding("ses_end"))).run;
+    const second = (await store.reserveRun(project, binding("ses_cancel"))).run;
+    const base = path.join(project.metaDir, "runs.jsonl");
+    await fill(base, first.id);
+    const before = await readFile(base, "utf8");
+    const finish = () => ending === "canceled" ? store.cancelRun(project, first.id, { by: "user" })
+      : store.finishInternal(project, first.id, { status: "succeeded", artifacts: [] });
+    assert.equal((await finish()).status, ending);
+    assert.equal(await readFile(base, "utf8"), before, "rotation must preserve the full prefix, including unsettled runs");
+    assert.deepEqual((await restarted.activeRuns(project)).map(run => run.id), [second.id]);
+    const tail = path.join(project.metaDir, "runs.000001.jsonl");
+    await fill(tail, second.id);
+    assert.equal((await store.cancelRun(project, second.id, { by: "user" })).status, "canceled");
+    const next = (await store.reserveRun(project, binding("ses_end"))).run;
+    await store.cancelRun(project, next.id);
+
+    const runs = await restarted.list(project);
+    assert.equal(runs.find(run => run.id === first.id).status, ending);
+    assert.equal(runs.find(run => run.id === second.id).canceledBy, "user");
+    assert.equal((await restarted.conversationRuns(project, "ses_end")).length, 2);
+    assert.equal((await restarted.conversationIndex(project)).size, 2);
+    assert.equal((await restarted.activitySummary(project)).runCount, 3);
+    assert.equal((await restarted.researcherRuns(project)).length, 3);
+    assert.deepEqual(await restarted.activeRuns(project), []);
+    assert.ok(await restarted.lastSessionId(project));
+    assert.deepEqual(new Set(completed), new Set([first.id, second.id, next.id]), "terminal hooks must run after rollover");
+    await restarted.recordRunLabels(project, first.id, { title: "A preserved title", titleSource: "user" });
+    assert.equal((await store.list(project)).find(run => run.id === first.id).title, "A preserved title");
+    await restarted.removeConversationSource(project, ["ses_end"]);
+    assert.equal((await store.list(project)).find(run => run.id === first.id).deleted, true);
+    assert.equal((await store.list(project)).find(run => run.id === second.id).status, "canceled");
+    for (const name of (await readdir(project.metaDir)).filter(name => /^runs(?:\.\d{6})?\.jsonl$/.test(name))) {
+      assert.ok((await stat(path.join(project.metaDir, name))).size <= limit, name);
+    }
+  } finally {
+    await Promise.allSettled([store.closeProject(project), restarted.closeProject(project)]);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("rotation commits an adopted cancellation and replacement together and tolerates a prefix without a final newline", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-run-ledger-batch-"));
+  const project = { id: "adopted", userId: "researcher", rootDir: root,
+    workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  const binding = { sessionId: "ses_adopted", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+  const store = new AgentRunStore({ get: async () => binding }, { model: "deepseek/deepseek-v4-flash", maxBytes: 4096 });
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  try {
+    const adopted = (await store.reserveRun(project, binding, { effectiveRouteReason: "adopted:runtime-ui" })).run;
+    const file = path.join(project.metaDir, "runs.jsonl");
+    const text = await readFile(file, "utf8");
+    const filler = { event: "notice", id: adopted.id, qualityNotices: [], padding: "" };
+    filler.padding = "x".repeat(4096 - Buffer.byteLength(text + JSON.stringify(filler)));
+    await writeFile(file, text + JSON.stringify(filler));
+    const replacement = (await store.reserveRun(project, binding)).run;
+    const runs = await store.list(project);
+    assert.equal(runs.find(run => run.id === adopted.id).errorCode, "superseded_by_dispatch");
+    assert.equal(runs.find(run => run.id === replacement.id).status, "running");
+    const tail = await readFile(path.join(project.metaDir, "runs.000001.jsonl"), "utf8");
+    assert.deepEqual(tail.trim().split("\n").map(line => JSON.parse(line).event), ["finished", "started"]);
+    await store.cancelRun(project, replacement.id);
+    await writeFile(path.join(project.metaDir, "runs.000003.jsonl"), "");
+    await assert.rejects(store.list(project), error => error.code === "agent_runs_corrupt");
+    await rm(path.join(project.metaDir, "runs.000003.jsonl"));
+    const link = path.join(project.metaDir, "runs.000002.jsonl");
+    await symlink(file, link);
+    await assert.rejects(store.list(project), /symlink|symbolic/i);
+    await rm(link);
+  } finally {
+    await store.closeProject(project).catch(() => {});
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 

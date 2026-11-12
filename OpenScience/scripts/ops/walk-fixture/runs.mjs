@@ -7,9 +7,11 @@
  *    evidence matrix are drawn from a package and not from an empty list;
  *  - the account's spend over the month (the usage ledger's own rows), so that 设置 → 用量 draws a chart and a table.
  */
-import { mkdir, writeFile, appendFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { appendRunLedgerEvent } from "../../../apps/server/src/agentRuns.mjs";
+import { withProjectStorageMutation } from "../../../apps/server/src/security.mjs";
 
 const server = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "apps", "server");
 
@@ -51,7 +53,7 @@ export async function furnishRuns(app, user, { log }) {
     finishedAt: new Date(started + 47 * 60_000).toISOString(), durationMs: 47 * 60_000,
     deliverables: [{ id: DELIVERABLE, title: "急性胸部压迫感的证据评价", capability: "clinical-evidence-synthesis", status: "accepted", attempts: 1, lastVerdict: "pass" }],
   };
-  await appendFile(path.join(project.metaDir, "runs.jsonl"), `${JSON.stringify(finished)}\n`);
+  await withProjectStorageMutation(project, () => appendRunLedgerEvent(project, finished, app.agentRuns.maxBytes));
   log(`runs: ${run.id} delivered a package of ${pack.matrix.claims.length} claims`);
 
   // ---- a month of use: spend on the kernel and on titles, a few days apart

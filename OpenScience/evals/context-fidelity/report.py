@@ -242,8 +242,11 @@ def fold_ledger(lines: Iterable[str]) -> tuple[dict[str, dict[str, Any]], dict[s
 
 
 def read_ledger(path: Path) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
-    payload = path.read_bytes()
-    runs, problems = fold_ledger(payload.decode("utf-8", "replace").splitlines())
+    segments = sorted(part for part in path.parent.glob("runs.??????.jsonl")
+                      if part.name[5:11].isascii() and part.name[5:11].isdigit()) if path.name == LEDGER_NAME else []
+    parts = [part.read_bytes() for part in [path, *segments]]
+    payload = b"".join(parts)
+    runs, problems = fold_ledger(line for part in parts for line in part.decode("utf-8", "replace").splitlines())
     receipt = {
         "path": str(path),
         "bytes": len(payload),
