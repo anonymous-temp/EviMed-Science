@@ -18,14 +18,24 @@ import { createMemoryGatewayHandler, MEMORY_GATEWAY_PATH } from '../src/memoryGa
 import { withSessionPromptAdmission } from '../src/runtimePromptAdmission.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
-import { startOpenVikingStub } from './helpers/openVikingStub.mjs';
+import { OpenVikingStub } from './helpers/openVikingStub.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposable PostgreSQL required' };
-async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000 } = {}) {
+async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000, config = {} } = {}) {
+  const cleanup = [];
+  t.after(async () => {
+    const errors = [];
+    for (const close of cleanup.reverse()) {
+      try { await close(); } catch (error) { errors.push(error); }
+    }
+    if (errors.length) throw new AggregateError(errors, 'Memory gateway fixture cleanup failed');
+  });
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'memorygatewaycontext');
+  cleanup.push(() => isolated.drop());
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'memory-gateway-context-'));
+  cleanup.push(() => rm(dataDir, { recursive: true, force: true }));
   const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: config.memoryRuntimeLockIsolationEnabled ? 6 : 1 }));
-  t.after(async () => { await accounts.database.close(); await isolated.drop(); await rm(dataDir, { recursive: true, force: true }); });
+  cleanup.push(() => accounts.database.close());
   await accounts.createUser('owner', 'fixture-password', 'Owner'); await accounts.createUser('editor', 'fixture-password', 'Editor');
   const owner = await accounts.userById('owner');
   await accounts.createProject(owner, 'project-b', 'B'); await accounts.createProject(owner, 'ordinary', 'Ordinary'); await accounts.createProject(owner, 'solo', 'Solo');
@@ -39,7 +49,9 @@ async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000 } = {}
   }
   const soloGeo = await geo.createProject({ userId: owner.id, projectId: solo.id, engines: ['deepseek'], coverageDays: 30 });
   const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents, runtimeLockIsolation: config.memoryRuntimeLockIsolationEnabled });
-  const stub = await startOpenVikingStub(t);
+  const stub = new OpenVikingStub();
+  cleanup.push(() => stub.close());
+  await stub.start();
   const sessions = new OpenVikingSessions(new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: 'evimed' }));
   const contexts = new GeoNativeMemoryContext({ database: accounts.database, documents, policies, sessions,
     proveCapture: async (_context, session) => session === 'dsh-root' ? { rootSessionId: 'root', rootProofRefs: ['trusted-primary'], runtimeGeneration: 'generation-1' } : null });
@@ -55,8 +67,9 @@ async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000 } = {}
     }, runtimeGeneration: () => 'generation-1' }, store: accounts,
     memoryContexts: contexts, rememberJournal: journal, capsuleSearch,
     memoryTool: { forget: async (user, project, uri, options) => { forgotten.push({ user, project, uri, options }); return { removed: true }; } } });
-  const server = createServer((req, res) => { void handler(req, res); }); server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  t.after(() => new Promise(resolve => { server.closeAllConnections?.(); server.close(resolve); }));
+  const server = createServer((req, res) => { void handler(req, res); });
+  cleanup.push(() => new Promise(resolve => { server.closeAllConnections?.(); server.close(resolve); }));
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const base = `http://127.0.0.1:${server.address().port}${MEMORY_GATEWAY_PATH}`;
   const call = async (project, method, path, body) => {
     const result = await fetch(`${base}${path}`, { method, headers: { authorization: `Bearer ${project.id}`, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
