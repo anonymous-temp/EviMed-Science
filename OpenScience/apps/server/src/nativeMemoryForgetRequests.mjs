@@ -133,7 +133,7 @@ export async function checkForgetRequests({ commit, context, overlay, store, jud
     const documents = files.map((file, document) => ({ document, title: file.uri.split('/memories/').at(-1), body: file.body }));
     const candidates = files.flatMap((file, document) => removalLines(file.body).map(text => ({ uri: file.uri, hash: file.hash, type: file.type, document, text })));
     const toolRevisions = await overlay.forgetToolRevisions(userId, source.engineSession, source.archiveUri);
-    const toolPrints = new Set(toolRevisions.flatMap(row => removalLines(row.before ?? '').map(lineFingerprint)));
+    const toolPrints = new Set(toolRevisions.flatMap(row => removalLines(row.before ?? '', row.after ?? '').map(lineFingerprint)));
     const removals = await overlay.removals(userId, context.kind === 'geo-project' ? context.namespaceId : null);
     candidates.push(...removals.filter(row => row.text).map(row => ({ text: row.text, removed: true, toolRemoved: toolPrints.has(row.fingerprint) })));
     const judged = await judge.check({ userId, projectId: commit.projectId, candidates, conversation, documents });

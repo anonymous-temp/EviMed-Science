@@ -130,3 +130,12 @@ test('forget guidance defaults off and requires confirmed removal before claimin
   assert.match(enabled, /不要删掉无关内容/);
   assert.equal(buildGuidanceText([], { openVikingMemory: false, memoryForgetToolHint: true }), buildGuidanceText([], { openVikingMemory: false }));
 });
+
+test('targeted forget guidance names exact lines and history statements only when enabled', () => {
+  const options = { openVikingMemory: true, capsuleToolEnabled: false, memoryForgetToolHint: true };
+  assert.equal(buildGuidanceText([], options), buildGuidanceText([], { ...options, memoryForgetTargets: false }));
+  const enabled = buildGuidanceText([], { ...options, memoryForgetTargets: true });
+  assert.match(enabled, /`lines`/); assert.match(enabled, /`statement`/); assert.match(enabled, /exact complete lines/);
+  assert.match(enabled, /history recall rejection/); assert.doesNotMatch(enabled, /一个文件还含有用户要保留的内容时，先澄清/);
+  assert.equal(buildGuidanceText([], { openVikingMemory: false, memoryForgetTargets: true }), buildGuidanceText([], { openVikingMemory: false }));
+});

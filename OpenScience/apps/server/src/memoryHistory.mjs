@@ -183,8 +183,8 @@ export class MemoryHistory {
         // Internal source lookup uses the same product history search and all its
         // account/incarnation/source proofs. Rejected text is inspected only to
         // locate the original message; it is never returned to a caller.
-        const hits=await this.search({user:{id:context.ownerId},project:{id:'default',userId:context.ownerId},query:text,limit:8},
-          {includeOrigins:true,forRemoval:true});
+        const hits=await this.search({user:{id:context.ownerId},project:null,query:text,limit:8},
+          {includeOrigins:true,forRemoval:true,removalUri:file.uri});
         const discovered=hits.flatMap(hit=>(hit.originalMessages??[]).filter(message=>message.sourceRole==='user')
           .map(message=>({archiveUri:hit.origin.archiveUri,text:message.text,messageHash:message.messageHash,created_at:message.date})));
         const copies=discovered.filter(message=>messages.some(source=>lineFingerprint(source.text)===lineFingerprint(message.text)));
@@ -394,18 +394,21 @@ export class MemoryHistory {
   async coverage(ownerId) { return this.ledger.archiveCoverage(ownerId); }
   status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill } }; }
 
-  async search({ user, project, query, limit = 5 }, { includeOrigins = false, forRemoval = false, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
+  async search({ user, project, query, limit = 5 }, { includeOrigins = false, forRemoval = false, removalUri = null, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
     if (!this.enabled || !query?.trim()) return [];
     // Leave time for the gateway to render already verified hits. A slow tail
     // must not turn a useful prefix into an empty history block at its deadline.
     const deadline=retrievalV2 ? Date.now()+Math.max(250,Number(this.config.memoryGatewayTimeoutMs)||4000)-150 : Infinity;
-    const context = await this.contexts.forProject(project);
+    // Removal is an internal owner-namespace lookup, not a conversation in a
+    // fabricated default project. Re-resolve its URI to prove the live owner.
+    const removal = forRemoval && removalUri !== null;
+    const context = removal ? await this.contexts.forUri(user.id, removalUri) : await this.contexts.forProject(project);
     if (context.ownerId !== user.id || context.kind === 'geo-project') return [];
-    const source = await this.resolveSource({ userId: user.id, projectId: project.id, engineSession: null }, context);
-    if (!source?.projectCreatedAt || source.projectId !== project.id) return [];
+    const source = removal ? null : await this.resolveSource({ userId: user.id, projectId: project.id, engineSession: null }, context);
+    if (!removal && (!source?.projectCreatedAt || source.projectId !== project.id)) return [];
     // Only the verified ordinary default conversation expands to the account's
     // personal namespace. A named or shared project remains its exact scope.
-    const account = project.id === 'default' && context.kind === 'owned';
+    const account = removal || project.id === 'default' && context.kind === 'owned';
     const root = account ? `${context.userRoot}/resources/history/${hash(context.ownerCreatedAt).slice(0,24)}` : this.root(context,source);
     const resources = this.resourcesFor(context);
     const asked = Math.max(1, Math.min(retrievalV2 ? 20 : 8, Math.trunc(Number(limit)) || 5));

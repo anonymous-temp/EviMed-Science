@@ -98,3 +98,22 @@ test('P31 literal matching ignores token spacing only when enabled and keeps num
     assert.equal(tokenPresent('12 mg', source, { ignoreWhitespace: true }), false);
   }
 });
+
+test('settlement attributes a partial tool revision only to the lines it actually removed', async () => {
+  const { checkForgetRequests } = await import('../src/nativeMemoryForgetRequests.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const archiveUri = 'viking://user/u1/sessions/dsh-session_a/history/archive_001';
+  const overlay = {
+    commit: async () => ({}), removalOrigins: async () => [{ archiveUri, engineSession: 'dsh-session_a' }],
+    forgetToolRevisions: async () => [{ before: 'Removed fact.\nKept fact.', after: 'Kept fact.' }],
+    removals: async () => ['Removed fact.', 'Kept fact.'].map(text => ({ text, fingerprint: lineFingerprint(text) })),
+    forgetRequestKeys: async () => new Set(), setForgetRequests: async () => {},
+  };
+  await checkForgetRequests({ commit: { userId: 'u1', archiveUri },
+    context: { userRoot: 'viking://user/u1', sessions: { read: async () => JSON.stringify({ role: 'user', content: 'Forget the removed fact.' }) } },
+    overlay, store: { rawFiles: async () => [] }, judge: { check: async ({ candidates }) => {
+      assert.equal(candidates.find(row => row.text === 'Removed fact.').toolRemoved, true);
+      assert.equal(candidates.find(row => row.text === 'Kept fact.').toolRemoved, false);
+      return { requests: [], claims: [] };
+    } } });
+});

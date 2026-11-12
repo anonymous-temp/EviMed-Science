@@ -49,7 +49,7 @@ test('line forget reuses the edit revision and rejects only exact normalized rem
   assert.deepEqual(f.rejections.flatMap(row => row.lines).map(lineFingerprint), [lineFingerprint('Use metric units.')]);
   assert.deepEqual(f.historyCalls[0].lines, ['Use metric units.']);
   assert.equal(f.revisions[0].before, body); assert.equal(f.revisions[0].after, '- Keep answers short.');
-  assert.equal(f.revisions[0].actor, 'conversation'); assert.equal(f.revisions[0].engineSession, 'dsh-turn');
+  assert.match(f.revisions[0].reason, /^forgotten in a conversation/); assert.equal(f.revisions[0].actor, 'conversation'); assert.equal(f.revisions[0].engineSession, 'dsh-turn');
 });
 
 test('one missing line refuses the entire selection and returns available lines for retry', async () => {
@@ -85,7 +85,7 @@ test('a history-only statement gets the existing rejection and revision, without
   assert.deepEqual([...f.files], [[uri, body]]);
   assert.deepEqual(f.rejections[0].lines, ['My old project is M-41633.']);
   assert.equal(f.historyCalls.length, 1); assert.equal(f.revisions[0].engineSession, 'dsh-turn');
-  assert.equal(f.revisions[0].change, 'deleted');
+  assert.equal(f.revisions[0].change, 'deleted'); assert.match(f.revisions[0].reason, /^forgotten in a conversation/);
 });
 
 test('a history-only failure is retryable without an active rejection or a success revision', async () => {
@@ -103,4 +103,29 @@ test('targeted forgetting is opt-in and refuses unsupported arguments rather tha
   }
   assert.equal(f.files.get(uri), body); assert.deepEqual(f.rejections, []);
   assert.deepEqual(await f.store.forget(user, project, uri), { removed: true });
+});
+
+test('targeted forget keeps the existing namespace and live-context checks for files and history statements', async () => {
+  const f = fixture();
+  const owned = { kind: 'owned', ownerId: user.id, namespaceId: 'own', projectId: project.id };
+  const shared = { ...owned, kind: 'geo-project', namespaceId: 'shared', projectId: 'shared' };
+  f.store.memoryContexts = { forUri: async () => owned, forProject: async () => shared,
+    assertLive: async () => { throw Object.assign(new Error('revoked'), { code: 'memory_scope_denied' }); } };
+  owned.sessions = { memoryRoot: () => `${root}/memories` };
+  await assert.rejects(f.store.forget(user, { id: 'shared', userId: user.id }, uri, { lines: ['Use metric units.'] }), error => error.code === 'memory_scope_denied');
+  await assert.rejects(f.store.forget(user, { id: 'shared', userId: user.id }, null, { statement: 'Old project.', context: shared }), error => error.code === 'memory_scope_denied');
+  assert.equal(f.files.get(uri), body); assert.deepEqual(f.rejections, []);
+});
+
+test('a wrapped or decorated history statement retains one undoable rejection fingerprint', async () => {
+  const f = fixture();
+  await f.store.forget(user, project, null, { statement: '- My old\n  project is M-41633.' });
+  assert.deepEqual(f.rejections[0].lines, ['My old project is M-41633.']);
+  assert.equal(f.revisions[0].before, 'My old project is M-41633.');
+});
+
+test('history-only forget cannot claim success without the history service', async () => {
+  const f = fixture(); f.store.history = null;
+  await assert.rejects(f.store.forget(user, project, null, { statement: 'Old project.' }), error => error.code === 'memory_engine_unavailable');
+  assert.deepEqual(f.rejections, []); assert.deepEqual(f.revisions, []);
 });

@@ -633,3 +633,9 @@ test('forget tool hint reaches runtime guidance and defaults off', () => {
   assert.equal(runtimeEnvironment(input).EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED, '0');
   assert.equal(runtimeEnvironment({ ...input, flags: { ...input.flags, memoryForgetToolHint: true } }).EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED, '1');
 });
+
+
+test('targeted forget reaches runtime guidance and defaults off', () => {
+  assert.equal(runtimeEnvironment(input).EVIMED_MEMORY_FORGET_TARGETS_ENABLED, '0');
+  assert.equal(runtimeEnvironment({ ...input, flags: { ...input.flags, memoryForgetTargets: true } }).EVIMED_MEMORY_FORGET_TARGETS_ENABLED, '1');
+});

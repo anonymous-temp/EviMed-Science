@@ -47,6 +47,7 @@ export const inject = ['systemPrompt']
  * @property {boolean} [capsuleMemoryEnabled]
  * @property {boolean} [openVikingMemory]
  * @property {boolean} [memoryForgetToolHint]
+ * @property {boolean} [memoryForgetTargets]
  * @property {boolean} [memorySearchHint]
  */
 
@@ -76,6 +77,7 @@ export const Config = Schema.object({
   capsuleMemoryEnabled: Schema.boolean().default(true)
     .description('Whether the capsule row\'s recall and note tools are mounted (EVIMED_CAPSULE_MEMORY_ENABLED, and not an account on the native memory engine); off, the guidance does not name them.'),
   memoryForgetToolHint: Schema.boolean().default(false).description('Act on explicit forget requests before claiming completion.'),
+  memoryForgetTargets: Schema.boolean().default(false).description('Support exact-line and history-only forget targets.'),
   memorySearchHint: Schema.boolean().default(false)
     .description('Explain the partial memory opening and search before claiming absence (EVIMED_MEMORY_SEARCH_HINT_ENABLED).'),
   openVikingMemory: Schema.boolean().default(false)
@@ -99,6 +101,7 @@ export async function apply(ctx, config) {
     openVikingMemory: config.openVikingMemory === true,
     memorySearchHint: config.memorySearchHint === true,
     memoryForgetToolHint: config.memoryForgetToolHint === true,
+    memoryForgetTargets: config.memoryForgetTargets === true,
   })
   ctx.provide('evimedCapabilities', capabilities, true)
   ctx.effect(() => registerSection(ctx, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text }))

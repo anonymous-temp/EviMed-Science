@@ -140,6 +140,14 @@ export const MEMORY_GATEWAY_TOOLS = Object.freeze({
     inputSchema: { type: "object", required: ["uri"], properties: { uri: { type: "string", description: "The viking:// URI of one memory file." } } },
   },
 });
+const TARGETED_FORGET_TOOL = Object.freeze({
+  description: "Forget only what the user asked to remove. For a stored fact, read the file and pass its URI plus exact complete lines in `lines`; unrelated lines remain. Matching ignores Markdown decoration, case, whitespace and trailing as-of dates, never meaning or keywords. A mismatch returns available lines for retry. Omit lines (or select every line) only to forget the whole file. For a fact found only in conversation history, omit URI and pass `statement`: this records a recall rejection, without deleting the conversation. Removals can be restored on the memory page.",
+  inputSchema: { type: 'object', properties: {
+    uri: { type: 'string', description: 'The viking:// URI of one memory file; omit for a history-only statement.' },
+    lines: { type: 'array', maxItems: 100, items: { type: 'string', maxLength: 6000 }, description: 'Exact complete lines to forget, copied from read. Omitted or empty means the entire file.' },
+    statement: { type: 'string', minLength: 1, maxLength: 6000, description: 'The fact to exclude from history recall, only when no memory file is the target. Do not combine with uri or lines.' },
+  }, anyOf: [{ required: ['uri'] }, { required: ['statement'] }] },
+});
 const TOOL_NAMES = Object.freeze(Object.keys(MEMORY_GATEWAY_TOOLS));
 const PROJECT_MEMORY_TOOLS = Object.freeze({ ...MEMORY_GATEWAY_TOOLS,
   search: { ...MEMORY_GATEWAY_TOOLS.search, description: 'Search this project\'s shared long-term facts, decisions and corrections. Read a returned URI for the full file.' },
@@ -364,7 +372,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   sourceReceipt?: ((request:any)=>Promise<void>) | null,
  *   sourceReceiptFailed?: ((request:any)=>Promise<void>) | null,
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
- *   memoryTool?: { forget: (user: any, project: any, uri: string, options?: any) => Promise<{ removed: boolean }> } | null,
+ *   memoryTool?: { forget: (user: any, project: any, uri: string | null, options?: any) => Promise<{ removed: boolean, removedLines?: number, fileRemoved?: boolean, historyRejected?: boolean, missingLines?: string[], availableLines?: string[] }> } | null,
  *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
  *   historySecrets?: import("./memoryHistorySecrets.mjs").MemoryHistorySecrets | null,
  *   historySearch?: ((request: any) => Promise<any[]>) | null,
@@ -1083,9 +1091,19 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           });
           continue;
         }
-        // forget: one memory file of the caller, never a directory, never the derived index or anything outside `memories/`.
-        const target = absolute(String(args.uri ?? ""), ctx.userRoot);
-        if (args.recursive === true || !nativeMemoryFile(target, `${ctx.userRoot}/memories`)) {
+        // A targeted request must never fall back to a whole-file engine delete.
+        const targeted = args.lines !== undefined || args.statement !== undefined;
+        const enabled = config.memoryForgetTargetsEnabled === true;
+        const target = typeof args.uri === 'string' && args.uri ? absolute(args.uri, ctx.userRoot) : null;
+        const invalidLines = args.lines !== undefined && (!target || !Array.isArray(args.lines) || args.lines.length > 100
+          || args.lines.some(line => typeof line !== 'string' || !line.trim() || /[\r\n]/.test(line) || line.length > 6000));
+        const invalidStatement = args.statement !== undefined && (args.uri !== undefined || args.lines !== undefined
+          || typeof args.statement !== 'string' || !args.statement.trim() || args.statement.length > 6000);
+        if (targeted && (!enabled || !memoryTool) || invalidLines || invalidStatement) {
+          local.push(rpcError(message.id, -32602, 'Name a memory file and exact lines, or a history statement without a URI; targeted forgetting must be enabled.'));
+          continue;
+        }
+        if (args.recursive === true || (target ? !nativeMemoryFile(target, `${ctx.userRoot}/memories`) : !enabled || args.statement === undefined)) {
           recordGatewayRefusal("memory_gateway_uri_refused");
           local.push(rpcError(message.id, -32602, "Only one memory file of the user can be forgotten at a time."));
           continue;
@@ -1095,12 +1113,20 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           local.push(toolText(message.id, NOT_READ.other));
           continue;
         }
-        if (ctx.shared && await ctx.hidden(target)) { local.push(rpcError(message.id, -32602, 'This file is not a project memory.')); continue; }
+        if (target && ctx.shared && await ctx.hidden(target)) { local.push(rpcError(message.id, -32602, 'This file is not a project memory.')); continue; }
         if (memoryTool) {
-          const outcome = await memoryTool.forget(ctx.user, ctx.project, target, config.memoryForgetRequestCheckEnabled === true
-            ? { ...(ctx.shared ? { context: ctx.memoryContext } : {}), engineSession: admitted.sessionId ? `dsh-${admitted.sessionId}` : null }
-            : ctx.shared ? { context: ctx.memoryContext } : undefined);
-          local.push(toolText(message.id, outcome.removed ? `Deleted: ${target}` : `Not found: ${target}`));
+          const options = {
+            ...(ctx.shared ? { context: ctx.memoryContext } : {}),
+            ...(config.memoryForgetRequestCheckEnabled === true || enabled ? { engineSession: admitted.sessionId ? `dsh-${admitted.sessionId}` : null } : {}),
+            ...(enabled && args.lines !== undefined ? { lines: args.lines } : {}),
+            ...(enabled && args.statement !== undefined ? { statement: args.statement } : {}),
+          };
+          const outcome = await memoryTool.forget(ctx.user, ctx.project, target, Object.keys(options).length ? options : undefined);
+          const text = outcome.missingLines ? `No lines removed. Unmatched lines: ${JSON.stringify(outcome.missingLines)}. Available lines: ${JSON.stringify(outcome.availableLines)}. Retry with exact complete lines.`
+            : outcome.historyRejected ? 'Recorded a history recall rejection for the statement. No memory file was deleted; the conversation text is unchanged.'
+            : outcome.removedLines ? `Removed ${outcome.removedLines} line(s) from: ${target}. ${outcome.fileRemoved ? "The empty file was deleted." : "Other lines were kept."}`
+            : outcome.removed ? `Deleted: ${target}` : `Not found: ${target}`;
+          local.push(toolText(message.id, text));
         } else {
           if (ctx.shared) throw new HttpError(503, 'memory_scope_denied', 'Project memory deletion is unavailable.');
           forward.push({ ...message, params: { ...message.params, arguments: { uri: target } } });
@@ -1125,7 +1151,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       for (const message of messages) {
         if (toolListIds.has(message?.id) && Array.isArray(message?.result?.tools)) {
           message.result.tools = message.result.tools.filter((/** @type {any} */ tool) => TOOL_NAMES.includes(tool?.name))
-            .map((/** @type {any} */ tool) => ({ name: tool.name, ...(ctx.shared ? PROJECT_MEMORY_TOOLS : MEMORY_GATEWAY_TOOLS)[/** @type {keyof typeof MEMORY_GATEWAY_TOOLS} */ (tool.name)] }));
+            .map((/** @type {any} */ tool) => ({ name: tool.name, ...(tool.name === 'forget' && config.memoryForgetTargetsEnabled === true && memoryTool ? TARGETED_FORGET_TOOL
+              : (ctx.shared ? PROJECT_MEMORY_TOOLS : MEMORY_GATEWAY_TOOLS)[/** @type {keyof typeof MEMORY_GATEWAY_TOOLS} */ (tool.name)]) }));
         }
         const after = afterCall.get(message?.id);
         if (after) await after(message).catch(error => {if(error instanceof HttpError&&error.code==="memory_scope_denied")throw error;});

@@ -78,6 +78,7 @@ const operatorLevers = {
   OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_ROBUST_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_FORGET_REQUEST_CHECK_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_FORGET_TOOL_HINT_ENABLED: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_MEMORY_FORGET_TARGETS_ENABLED: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_METHOD_CONSOLIDATION_QUEUE_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_METHOD_CONSOLIDATION_RECALL_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_METHOD_CONSOLIDATION_MODEL_CALLS: ["open-science-web"],
