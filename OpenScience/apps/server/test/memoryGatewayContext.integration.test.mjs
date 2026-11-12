@@ -145,12 +145,14 @@ test('unnamed startup recall uses the project namespace and initializes six type
   assert.equal((await f.call(f.b, 'GET', '/api/v1/system/status')).json.result.user, b.namespaceId);
 });
 
-test('capture proof precedes engine writes and equal engine ids in two projects never enter the legacy session ledger', options, async t => {
-  const f = await fixture(t), a = await f.contexts.forProject(f.a), b = await f.contexts.forProject(f.b);
-  await f.call(f.a, 'POST', '/api/v1/sessions', { session_id: 'dsh-unknown' });
-  await f.call(f.a, 'POST', '/api/v1/sessions/dsh-unknown/messages', { role: 'user', content: 'Not associated' });
-  assert.equal(f.stub.sent('POST', '/api/v1/sessions').length, 0);
-  assert.equal((await f.call(f.a, 'GET', '/api/v1/sessions/dsh-unknown')).json.result.message_count, 0);
+for (const isolation of [false, true]) for (const proof of [false, true]) test(`shared capture ${proof ? 'requires proof before engine writes' : 'bypasses proof in production with the switch off'}; equal ids remain project scoped (isolation=${isolation}, proof=${proof})`, options, async t => {
+  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: isolation, memorySharedCaptureProofEnabled: proof } });
+  const a = await f.contexts.forProject(f.a), b = await f.contexts.forProject(f.b);
+  assert.equal((await f.call(f.a, 'POST', '/api/v1/sessions', { session_id: 'dsh-unknown' })).status, 200);
+  assert.equal((await f.call(f.a, 'POST', '/api/v1/sessions/dsh-unknown/messages', { role: 'user', content: 'Not associated' })).status, 200);
+  assert.equal(f.stub.sent('POST', '/api/v1/sessions').length, proof ? 0 : 2, 'switch-off capture forwards creation and the message without a proof');
+  assert.equal((await f.call(f.a, 'GET', '/api/v1/sessions/dsh-unknown')).json.result.message_count, proof ? 0 : 1);
+  assert.equal(await f.contexts.session(a, 'dsh-unknown'), null);
   for (const project of [f.a, f.b]) {
     assert.equal((await f.call(project, 'POST', '/api/v1/sessions', { session_id: 'dsh-root' })).status, 200);
     assert.equal((await f.call(project, 'POST', '/api/v1/sessions/dsh-root/messages', { role: 'user', content: project.id })).status, 200);
@@ -158,7 +160,11 @@ test('capture proof precedes engine writes and equal engine ids in two projects 
   }
   assert.equal(f.noted.length, 0); assert.equal(f.commits.length, 2);
   assert.deepEqual(new Set(f.commits.map(row => row.archiveUri.split('/sessions/')[0])), new Set([a.userRoot, b.userRoot]));
-  assert.equal((await f.contexts.session(a, 'dsh-root')).payload.namespaceId, a.namespaceId);
+  for (const context of [a, b]) {
+    const association = await f.contexts.session(context, 'dsh-root');
+    if (proof) assert.equal(association.payload.namespaceId, context.namespaceId);
+    else assert.equal(association, null, 'switch-off capture creates no verified association even for a provable root');
+  }
   const count = f.stub.requests.length;
   await assert.rejects(f.handler.commitSession({ user: f.owner, project: f.b, engineSessionId: 'dsh-root', context: a }), error => error.code === 'memory_scope_denied');
   assert.equal(f.stub.requests.length, count);
@@ -181,8 +187,9 @@ test('shared reads and forget validate canonical namespace before using the exis
   assert.equal(f.forgotten[0].project.id, f.a.id);
 });
 
-test('shared native remember uses the verified journal and duplicate client ids cannot overwrite each other', options, async t => {
-  const f = await fixture(t), a = await f.contexts.forProject(f.a);
+for (const isolation of [false, true]) for (const proof of [false, true]) test(`shared native remember journals duplicate client ids independently; guessed tool-session capture ${proof ? 'requires proof' : 'bypasses proof with the switch off'} (isolation=${isolation}, proof=${proof})`, options, async t => {
+  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: isolation, memorySharedCaptureProofEnabled: proof } });
+  const a = await f.contexts.forProject(f.a);
   const request = text => ({ jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: 'remember', arguments: { messages: [{ role: 'user', content: text }] } } });
   const result = await f.call(f.a, 'POST', '/mcp', [request('Remember the first project fact'), request('Remember the second project fact')]);
   assert.equal(result.status, 200); assert.deepEqual(result.json.map(item => item.id), [8, 8]);
@@ -192,8 +199,11 @@ test('shared native remember uses the verified journal and duplicate client ids 
   assert.equal(f.commits.length, 2); assert.equal(f.commits.every(row => row.archiveUri.startsWith(`${a.userRoot}/`)), true);
   const remembered = rows[0].payload.sessionId;
   const before = f.stub.sent('POST', `/api/v1/sessions/${remembered}/messages`).length;
-  await f.call(f.a, 'POST', `/api/v1/sessions/${remembered}/messages`, { role: 'user', content: 'Cannot append by guessing the tool session' });
-  assert.equal(f.stub.sent('POST', `/api/v1/sessions/${remembered}/messages`).length, before);
+  const appended = await f.call(f.a, 'POST', `/api/v1/sessions/${remembered}/messages`, { role: 'user', content: 'Capture by guessing the tool session' });
+  assert.equal(appended.status, 200);
+  assert.equal(f.stub.sent('POST', `/api/v1/sessions/${remembered}/messages`).length, before + (proof ? 0 : 1), 'only the proof switch prevents appending to a guessed tool session');
+  const messages = f.stub.sessions.get(`${a.namespaceId}/${remembered}`).messages;
+  assert.equal(messages.some(message => message.parts?.some(part => part.text === 'Capture by guessing the tool session')), !proof);
 });
 
 test('required project privacy filters cannot be displaced and native list does not reveal excluded filenames', options, async t => {

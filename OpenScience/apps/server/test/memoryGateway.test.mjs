@@ -1220,7 +1220,15 @@ for (const isolation of [false, true]) for (const proof of [false, true]) test(`
       configure: async () => sessions.register(USER), noteCapture: async () => { proofs++; return null; },
     }),
   });
-  await f.call('POST', '/api/v1/sessions', { session_id: SESSION });
-  assert.equal(proofs, proof ? 1 : 0);
-  assert.equal(f.stub.sent('POST', '/api/v1/sessions').length, proof ? 0 : 1);
+  assert.equal((await f.call('POST', '/api/v1/sessions', { session_id: SESSION })).status, 200);
+  assert.equal((await f.call('POST', `/api/v1/sessions/${SESSION}/messages`, { role: 'user', content: 'An unproven shared input' })).status, 200);
+  const read = await f.call('GET', `/api/v1/sessions/${SESSION}`);
+  assert.equal(read.status, 200); assert.equal(read.json.result.message_count, proof ? 0 : 1);
+  const committed = await f.call('POST', `/api/v1/sessions/${SESSION}/commit`, {});
+  assert.equal(committed.status, 200); assert.equal(committed.json.result.status, proof ? 'skipped' : 'accepted');
+  assert.equal(proofs, proof ? 4 : 0);
+  assert.equal(f.stub.sent('POST', '/api/v1/sessions').filter(row => row.path === '/api/v1/sessions').length, proof ? 0 : 1);
+  assert.equal(f.stub.sent('POST', `/api/v1/sessions/${SESSION}/messages`).length, proof ? 0 : 1);
+  assert.equal(f.stub.sent('GET', `/api/v1/sessions/${SESSION}`).length, proof ? 0 : 1);
+  assert.equal(f.stub.sent('POST', `/api/v1/sessions/${SESSION}/commit`).length, proof ? 0 : 1);
 });
