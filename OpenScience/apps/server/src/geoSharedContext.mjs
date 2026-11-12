@@ -15,7 +15,9 @@ const keyOf = namespace => `gncp_${createHash('sha256').update(namespace.id).dig
  * product document ledger; it stores no memory text.
  */
 export class GeoSharedContext {
-  constructor({ database, documents }) { this.database = database; this.documents = documents; }
+  constructor({ database, documents, runtimeLockIsolation = false }) {
+    this.database = database; this.documents = documents; this.runtimeLockIsolation = runtimeLockIsolation;
+  }
 
   read(row, ownerId, expected = null) {
     const payload = row?.payload;
@@ -33,17 +35,33 @@ export class GeoSharedContext {
       policyVersion: 1, revision: row.revision, referenceId: row.id, namespace });
   }
 
-  /** Caller already resolved a real owned project or authenticated workload. */
+  /** Caller already resolved a real owned project or authenticated workload.
+   * Invariant when isolation is enabled: a runtime memory request never waits
+   * for a policy lock retained by a caller that can await that runtime.
+   * This entry is shared by prompt admission, session adoption, startup and
+   * gateway reads; no caller can carry the creation lock beyond its return.
+   */
   async forProject(project) {
+    if (!this.runtimeLockIsolation) return this.resolveProject(project);
+    // Read fences roll back their savepoint under an enclosing admission, so
+    // identity row locks cannot escape into a later kernel/network wait.
+    const current = await this.resolveProject(project, { readOnly: true });
+    if (current) return current;
+    // Only first publication needs exclusion. Commit it before returning even
+    // when a prompt, adoption or runtime launch owns an outer transaction.
+    return this.database.withoutTransactionClient(() => this.resolveProject(project));
+  }
+
+  async resolveProject(project, { readOnly = false } = {}) {
     if (!project || typeof project.userId !== 'string' || typeof project.id !== 'string') throw refused();
-    return this.database.transaction(client => this.database.withTransactionClient(client, async () => {
+    return this.database[readOnly ? 'readFence' : 'transaction'](client => this.database.withTransactionClient(client, async () => {
       const identity = (await client.query(`SELECT u.id AS "ownerId",u.created_at::text AS "ownerCreatedAt",
         p.id AS "projectId",p.created_at::text AS "projectCreatedAt"
         FROM evimed_control.users u JOIN evimed_control.projects p ON p.user_id=u.id
         WHERE u.id=$1 AND p.id=$2 AND p.archived_at IS NULL FOR SHARE OF u,p`, [project.userId, project.id])).rows[0];
       if (!identity) throw refused();
       const namespace = projectNativeMemoryNamespace(identity), id = keyOf(namespace);
-      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [id]);
+      if (!readOnly) await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [id]);
       const saved = await this.documents.get(project.userId, KIND, id, { includeDeleted: true });
       // A saved floor is checked whatever the membership says: a changed or removed one is refused, never read as personal.
       const policy = saved ? this.read(saved, project.userId, namespace) : null;
@@ -60,6 +78,7 @@ export class GeoSharedContext {
       if (geo.length > 1) throw refused();
       if (!geo[0]?.live || !geo[0].shared) return owned;
       if (policy) return policy;
+      if (readOnly) return null;
       const row = await this.documents.put(project.userId, KIND, id, { recordType: RECORD_TYPE, policyVersion: 1,
         geoProjectId: geo[0].id, namespace }, { projectId: project.id, expectedRevision: 0, transactionClient: client });
       return this.read(row, project.userId, namespace);

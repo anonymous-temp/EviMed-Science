@@ -390,3 +390,22 @@ test('a single forward that hangs for the whole window and then fails is an outa
     await gateway.close()
   }
 })
+
+
+test('an isolated health timeout leaves immediate profile reads and remember available; transport failure still cools down', async () => {
+  const gateway = await fakeGateway(req => req.url.endsWith('/health') ? { hang: true } : { body: '{"status":"ok"}' })
+  let forwards = 0
+  const { bridge, call } = await startBridge({ gatewayUrl: gateway.url, retryHealthTimeout: true, deadlines: { healthMs: 30 },
+    fetchImpl: (input, init) => { forwards++; return globalThis.fetch(input, init) } })
+  try {
+    assert.equal((await call('/health')).status, 503)
+    assert.equal((await call('/api/v1/content/read?uri=profile')).status, 200)
+    assert.equal((await call('/mcp', { method: 'POST', body: JSON.stringify({ method: 'tools/call', params: { name: 'remember' } }) })).status, 200)
+    assert.equal(gateway.seen.length, 3)
+    await gateway.close()
+    assert.equal((await call('/health')).status, 503)
+    assert.equal(forwards, 4)
+    assert.match((await call('/api/v1/content/read?uri=profile')).text, /unreachable/)
+    assert.equal(forwards, 4, 'the real transport outage prevents another forward during cooldown')
+  } finally { await bridge.close(); await gateway.close() }
+})

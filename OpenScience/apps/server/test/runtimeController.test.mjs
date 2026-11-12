@@ -1704,6 +1704,11 @@ test("release gate profile crosses the actual controller socket and changes only
     assert.ok(normalProfile[field]?.startsWith('http://open-science-web:8787/'), field);
     assert.equal(gateProfile[field], normalProfile[field], field);
   }
+  const isolatedPlan = buildRuntimeLaunchPlan({ ...postgres, memoryRuntimeLockIsolationEnabled: true }, project, 49152, { memoryGatewayUrl });
+  const isolationEnv = isolatedPlan.args.indexOf('EVIMED_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED=1');
+  assert.ok(isolationEnv > 0);
+  assert.equal(isolatedPlan.args[isolationEnv - 1], '--env');
+  assert.ok(ancillaryOrdinary.args.includes('EVIMED_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED=0'));
   assert.equal(ancillaryOrdinary.memoryGatewayUrl, memoryGatewayUrl);
   assert.ok(ancillaryOrdinary.args.includes(`EVIMED_MEMORY_GATEWAY_URL=${memoryGatewayUrl}`));
   assert.equal(ancillaryGate.memoryGatewayUrl, memoryGatewayUrl);

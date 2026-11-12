@@ -15,6 +15,7 @@ import { OpenVikingSessions } from '../src/openVikingSessions.mjs';
 import { OpenVikingClient } from '../src/openVikingClient.mjs';
 import { OPENVIKING_PROJECT_MEMORY_TYPES } from '../src/openVikingLayout.mjs';
 import { createMemoryGatewayHandler, MEMORY_GATEWAY_PATH } from '../src/memoryGateway.mjs';
+import { withSessionPromptAdmission } from '../src/runtimePromptAdmission.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 import { startOpenVikingStub } from './helpers/openVikingStub.mjs';
@@ -23,7 +24,7 @@ const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposab
 async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000 } = {}) {
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'memorygatewaycontext');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'memory-gateway-context-'));
-  const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: 1 }));
+  const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: config.memoryRuntimeLockIsolationEnabled ? 6 : 1 }));
   t.after(async () => { await accounts.database.close(); await isolated.drop(); await rm(dataDir, { recursive: true, force: true }); });
   await accounts.createUser('owner', 'fixture-password', 'Owner'); await accounts.createUser('editor', 'fixture-password', 'Editor');
   const owner = await accounts.userById('owner');
@@ -37,7 +38,7 @@ async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000 } = {}
     await geo.addMember({ geoId: row.id, userId: 'editor', role: 'editor', invitedBy: owner.id });
   }
   const soloGeo = await geo.createProject({ userId: owner.id, projectId: solo.id, engines: ['deepseek'], coverageDays: 30 });
-  const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents });
+  const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents, runtimeLockIsolation: config.memoryRuntimeLockIsolationEnabled });
   const stub = await startOpenVikingStub(t);
   const sessions = new OpenVikingSessions(new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: 'evimed' }));
   const contexts = new GeoNativeMemoryContext({ database: accounts.database, documents, policies, sessions,
@@ -336,4 +337,36 @@ test('optional scoped capsule timeout retains native project search results and 
   assert.ok(Date.now()-started<2000);
   await f.call(f.a,'POST','/api/v1/search/search',{mode:'context',query:'PROJECT',target_uri:`${context.userRoot}/memories/project_facts`});
   assert.equal(calls,1);
+});
+
+
+for (const borrowed of [false, true]) test(`pending admission answers health and same-project reads before kernel acknowledgement (borrowed=${borrowed})`, options, async t => {
+  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true } });
+  const database = f.accounts.database;
+  const manager = { config: { memoryRuntimeLockIsolationEnabled: true, databasePoolMax: 6, runtimePromptAdmissionTimeoutMs: 5000 }, promptAdmissionDatabase: database };
+  for (const project of [f.ordinary, f.a]) {
+    const context = await f.contexts.forProject(project);
+    const uri = f.stub.seedMemory(context.namespaceId, context.kind === 'owned' ? 'profile.md' : 'project_facts/start.md', 'STARTUP MEMORY');
+    let acknowledge, entered, acknowledged = false;
+    const ack = new Promise(resolve => { acknowledge = resolve; });
+    const ready = new Promise(resolve => { entered = resolve; });
+    const admit = () => withSessionPromptAdmission(manager, project, 'pending', async () => {
+      await f.contexts.forProject(project);
+      entered();
+      await ack;
+      acknowledged = true;
+    });
+    const pending = borrowed ? database.transaction(client => database.withTransactionClient(client, admit)) : admit();
+    try {
+      await ready;
+      // These real HTTP requests run outside admission's async transaction scope.
+      const results = await Promise.all([
+        f.call(project, 'GET', '/health'),
+        f.call(project, 'GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}`),
+      ]);
+      assert.deepEqual(results.map(result => result.status), [200, 200]);
+      assert.match(results[1].text, /STARTUP MEMORY/);
+      assert.equal(acknowledged, false, 'gateway answers while the kernel acknowledgement is still withheld');
+    } finally { acknowledge(); await pending; }
+  }
 });

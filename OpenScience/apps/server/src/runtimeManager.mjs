@@ -2929,6 +2929,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         // failed to find.
         "--env",
         `${MEMORY_GATEWAY_URL_ENV}=${memoryGatewayUrl}`,
+        "--env",
+        `EVIMED_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED=${config.memoryRuntimeLockIsolationEnabled === true ? "1" : "0"}`,
         ...(sharedPaths ? ["--env", `OPENVIKING_PENDING_DIR=${sharedPaths.pendingDirectory}`] : []),
         // Every deployment-owned setting of the plugins the preset
         // mounts. A profile patch cannot reach a preset's rows —

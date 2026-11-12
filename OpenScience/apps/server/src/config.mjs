@@ -370,6 +370,7 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     // chooses how the capsule's facts are ranked and has no say over where an account's memory lives.
     memoryEngineEnabled: overrides.memoryEngineEnabled ?? engineConfigured,
     // Raw history is appended only to an explicit memory search, never a profile.
+    memoryRuntimeLockIsolationEnabled: overrides.memoryRuntimeLockIsolationEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED", false),
     memoryHistorySearchEnabled: overrides.memoryHistorySearchEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED", true),
   };
 }

@@ -28,11 +28,14 @@ export const inject = ['skills']
  * @property {string} gatewayUrl
  * @property {string} tokenFile
  * @property {number} port
+ * @property {boolean} retryHealthTimeout
  */
 
 export const Config = Schema.object({
   enabled: Schema.boolean().default(false)
     .description('Whether this session uses the native memory engine. Off registers nothing and listens on nothing.'),
+  retryHealthTimeout: Schema.boolean().default(false)
+    .description('Keep a slow health probe from suppressing subsequent memory reads and tools.'),
   gatewayUrl: Schema.string().default('')
     .description('Control-plane memory gateway. The runtime never names a host of its own; this is injected by the deployment.'),
   tokenFile: Schema.string().default('')

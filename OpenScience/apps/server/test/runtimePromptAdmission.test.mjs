@@ -43,3 +43,20 @@ test('an admission that times out waiting for a client never takes one later',as
  release.resolve();await first;await new Promise(resolve=>setTimeout(resolve,10));
  assert.equal(transactions,1);assert.equal(runtimePromptAdmissionStatus(manager).waitingForClient,0);
 });
+
+
+test('isolated admission keeps its database session fence without exposing its transaction to kernel callbacks', async () => {
+ const { AsyncLocalStorage } = await import('node:async_hooks');
+ const scope = new AsyncLocalStorage();
+ let clientHeld = false;
+ const database = { transactionScope: () => scope.getStore(),
+  withTransactionClient: (client, operation) => scope.run(client, operation),
+  withoutTransactionClient: operation => scope.run(undefined, operation),
+  transaction: async work => { clientHeld = true; try { return await work({ query: async () => ({ rows: [] }) }); } finally { clientHeld = false; } } };
+ const manager = { config: { memoryRuntimeLockIsolationEnabled: true }, promptAdmissionDatabase: database };
+ await withSessionPromptAdmission(manager, { userId: 'owner', id: 'project' }, 'session', async () => {
+  assert.equal(clientHeld, true, 'the cross-process session exclusion is still held');
+  assert.equal(database.transactionScope(), undefined, 'memory proof reads cannot retain locks on the admission client');
+ });
+ assert.equal(clientHeld, false);
+});

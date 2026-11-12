@@ -51,10 +51,14 @@ export class GeoNativeMemoryContext {
   }
 
   async forProject(project) {
+    // Materialize a missing floor before borrowing the owner read's client.
+    // Existing floors use a rollback-only read fence under an outer admission.
+    const selected = this.policies.runtimeLockIsolation ? await this.policies.forProject(project) : null;
     return this.withOwner(project?.userId, async (created,client) => {
       const row=(await client.query('SELECT created_at::text AS created FROM evimed_control.projects WHERE user_id=$1 AND id=$2 FOR SHARE',[project.userId,project.id])).rows[0];
       if(!row)throw refused();
-      const policy = await this.policies.forProject(project);
+      const policy = selected ?? await this.policies.forProject(project);
+      if (selected?.kind === 'geo-project' && (selected.ownerCreatedAt !== created || selected.projectCreatedAt !== row.created)) throw refused();
       return this.view(project.userId, created, policy.kind === 'geo-project' ? policy : null, project.id,row.created);
     });
   }
