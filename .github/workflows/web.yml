@@ -52,8 +52,9 @@ jobs:
   web:
     runs-on: ubuntu-22.04
     # A hang guard, not a target: the job ran ~75 min on 2026-10-27 once the RSI and evolution integration suites joined the
-    # durable product-state step (20 → 34 min) and was cut off in the frontend tests; 105 leaves the same margin as before.
-    timeout-minutes: 105
+    # durable product-state step (20 → 34 min) and was cut off in the frontend tests; 105 left the same margin then. By 2026-11-11 it
+    # ran 99 min (that step 40 min), and on 2026-11-12 it was cut off at 105 in the frontend tests again (the step 46 min): 130.
+    timeout-minutes: 130
     services:
       postgres:
         # The production image (deps-version.json `pgvector`), so the
