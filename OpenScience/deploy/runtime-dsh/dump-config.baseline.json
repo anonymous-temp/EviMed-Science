@@ -1469,7 +1469,6 @@
                 (process.env.EVIMED_MEMORY_GATEWAY_URL || '') === ''
               openVikingMemory: !!js (process.env.EVIMED_MEMORY_GATEWAY_URL || '') !== ''
               memorySearchHint: !!js process.env.EVIMED_MEMORY_SEARCH_HINT_ENABLED === '1'
-              memoryStandingInstructions: !!js process.env.EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED === '1'
             name: '@evimed/dsh-socket/plugins/guidance'
           - id: evimed-run-policy
             config:

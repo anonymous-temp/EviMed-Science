@@ -5,6 +5,7 @@ import test from 'node:test'
 import { OPENVIKING_MEMORY_TOOL_NAMES } from '@evimed/domain'
 
 import { MEMORY_SERVICE, apply } from '../plugins/capsule.mjs'
+import { apply as applyGuidance } from '../plugins/guidance.mjs'
 import { rootHiddenMcpTools } from '../index.mjs'
 import { buildChildGuidanceText, buildGuidanceText } from '../src/guidanceText.mjs'
 
@@ -22,10 +23,38 @@ test('standing-instruction wording is default-off and preserves task, source and
   assert.match(on, /核对整条最终回复，不能只核对草稿/)
 })
 
-test('the standing-instruction switch reaches guidance through both presets and the recorded image configuration', async () => {
+test('standing-instruction wording does not change either preset or the recorded image configuration', async () => {
   for (const relative of ['../presets/evimed-universal/agent.cordis.yml', '../presets/evimed-universal.patch.yml', '../../../deploy/runtime-dsh/dump-config.baseline.json']) {
     const text = await readFile(new URL(relative, import.meta.url), 'utf8')
-    assert.ok(text.includes("memoryStandingInstructions: !!js process.env.EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED === '1'"), relative)
+    assert.doesNotMatch(text, /memoryStandingInstructions|EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED/, relative)
+  }
+})
+
+test('guidance reads standing instructions from the launch environment without preset configuration', async () => {
+  const key = 'EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED'
+  const saved = process.env[key]
+  const config = { capabilitiesDir: '', openVikingMemory: true, memoryStandingInstructions: false }
+  try {
+    for (const value of [undefined, '0', '1', 'true']) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+      /** @type {{ text: string }[]} */ const sections = []
+      const ctx = {
+        get: () => undefined,
+        provide: () => {},
+        effect: (/** @type {() => unknown} */ fn) => fn(),
+        on: () => () => {},
+        systemPrompt: { section: (/** @type {{ text: string }} */ section) => { sections.push(section); return () => {} } },
+      }
+      await applyGuidance(ctx, config)
+      assert.equal(sections.length, 1)
+      assert.equal(sections[0].text, buildGuidanceText([], {
+        ...config, memoryStandingInstructions: value === '1',
+      }), `environment ${String(value)} reaches the registered prompt, even with the schema default false`)
+    }
+  } finally {
+    if (saved === undefined) delete process.env[key]
+    else process.env[key] = saved
   }
 })
 

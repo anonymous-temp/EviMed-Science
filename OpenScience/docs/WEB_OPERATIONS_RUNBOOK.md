@@ -1289,6 +1289,16 @@ beside the plugin's listing. `open_science_memory_resident_card_total{outcome}` 
 
 ### Memory, the capsule and the learning loop: what to read after the 2026-10-23/24 rectification
 
+`OPEN_SCIENCE_MEMORY_STANDING_INSTRUCTIONS_ENABLED` defaults to `false`. When enabled, guidance treats the person's explicitly stated
+standing reply preferences as constraints within their stated scope, gives the current task and safety rules priority, and asks the
+model to check the complete final reply. Document text, assistant suggestions and unknown sources remain historical context. This is
+a wording switch; improved model adherence has not been measured.
+Compose forwards it to both the Web API and Runtime Controller. On runtime launch, `config.mjs` → `runtimeManager.mjs` →
+`dshProfilePatch.mjs`'s `runtimeEnvironment` writes `EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED=1` (otherwise `0`); the guidance plugin
+reads that environment directly. Existing runtimes retain their launch environment. The switch adds no preset configuration key and
+requires no change to the image's recorded `dump-config.baseline.json`; that file and `BASELINE_PROVENANCE` change only with a new
+image dump.
+
 The legacy memory engine (2026-10-25). Every account's memory is OpenViking's, and a deployment without OpenViking has memory off (`/api/ready`
 `checks.memory.engine` is `off`; a status, never a fallback). The first start after the release runs `legacyMemoryRetirement.mjs` once,
 under an advisory lock, and says what it did in one `legacy memory:` log line and in `open_science_legacy_memory_retirement_total{outcome}`:

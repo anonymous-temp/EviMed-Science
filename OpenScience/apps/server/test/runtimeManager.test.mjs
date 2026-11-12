@@ -91,12 +91,14 @@ test('the control-plane search-hint switch reaches the socket environment throug
   }
 });
 
-test('the standing-instruction switch reaches the runtime environment through profile input', () => {
-  const config = { production: false, modelGatewayInternalUrl: 'http://gateway:8787/internal/model/v1', runtimeSandboxEnforcement: 'partial' };
+test('the standing-instruction switch reaches both profile input and the container launch environment', () => {
+  const config = { production: false, modelGatewayInternalUrl: 'http://gateway:8787/internal/model/v1', runtimeSandboxEnforcement: 'partial', runtimeSandboxMode: 'docker', runtimeContainerImage: 'evimed-runtime-dsh:test', runtimeNetworkMode: 'bridge' };
   const plan = { sandboxMode: 'docker', dshHomeDir: '/runtime/dsh-home', capsuleMethodCount: 0 };
-  for (const enabled of [false, true]) {
+  for (const enabled of [undefined, false, true]) {
     const input = dshProfileInput({ ...config, memoryStandingInstructionsEnabled: enabled }, project, plan, 'deepseek-flash', '/runtime/workload-token');
     assert.equal(runtimeEnvironment(input).EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED, enabled ? '1' : '0');
+    const launch = buildRuntimeLaunchPlan({ ...config, memoryStandingInstructionsEnabled: enabled }, project, 49152);
+    assert.ok(launch.args.includes(`EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED=${enabled ? '1' : '0'}`));
   }
 });
 

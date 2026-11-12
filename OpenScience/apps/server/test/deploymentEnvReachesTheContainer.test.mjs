@@ -129,6 +129,8 @@ const operatorLevers = {
   // projects from extraction all did nothing from .env. The last one reached
   // production only through a private override's environment map.
   OPEN_SCIENCE_MEMORY_ENABLED: ["open-science-web"],
+  // The controller builds the same runtime launch environment as the API; both must receive the default-off wording switch.
+  OPEN_SCIENCE_MEMORY_STANDING_INSTRUCTIONS_ENABLED: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED: ["open-science-web"],
   // The standing profile a conversation is handed up front and the recall tool's answer size (review M6, 2026-10-10): limits on what
   // reaches the model, which an operator tunes and which must not fall back to the default unseen.

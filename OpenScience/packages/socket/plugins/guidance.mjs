@@ -99,7 +99,9 @@ export async function apply(ctx, config) {
     capsuleToolEnabled: config.capsuleEnabled !== false && config.capsuleMemoryEnabled !== false,
     openVikingMemory: config.openVikingMemory === true,
     memorySearchHint: config.memorySearchHint === true,
-    memoryStandingInstructions: config.memoryStandingInstructions === true,
+    // Read the launch environment here: adding a preset config key would change the image's recorded composition,
+    // even with the switch off. Like memory-bridge's runtime-lock switch, this changes only the plugin's behavior.
+    memoryStandingInstructions: config.memoryStandingInstructions === true || process.env.EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED === '1',
   })
   ctx.provide('evimedCapabilities', capabilities, true)
   ctx.effect(() => registerSection(ctx, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text }))

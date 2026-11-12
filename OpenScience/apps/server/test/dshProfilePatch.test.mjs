@@ -188,6 +188,8 @@ test("every deployment value the preset reads is a value the container is given"
   const sources = await Promise.all([
     readFile(new URL("../../../packages/socket/presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8"),
     readFile(new URL("../../../packages/socket/cordis.patch.yml", import.meta.url), "utf8"),
+    // Guidance reads its wording switch directly, keeping the recorded preset composition unchanged.
+    readFile(new URL("../../../packages/socket/plugins/guidance.mjs", import.meta.url), "utf8"),
   ]);
   const provided = runtimeEnvironment(input);
   const read = new Set(sources.flatMap((text) => [...text.matchAll(/(?:process\.env\.|os\.environ\[')([A-Z0-9_]+)/g)].map((match) => match[1])));
@@ -631,5 +633,7 @@ test('the memory-search hint reaches socket guidance through the runtime environ
 
 test('standing reply instructions reach socket guidance and default off', () => {
   assert.equal(runtimeEnvironment(input).EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED, '0');
-  assert.equal(runtimeEnvironment({ ...input, flags: { ...input.flags, memoryStandingInstructions: true } }).EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED, '1');
+  const enabled = { ...input, flags: { ...input.flags, memoryStandingInstructions: true } };
+  assert.equal(runtimeEnvironment(enabled).EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED, '1');
+  assert.equal(renderProfilePatch(enabled), renderProfilePatch(input), 'only the launch environment changes; a host patch cannot address agent-scoped guidance');
 });

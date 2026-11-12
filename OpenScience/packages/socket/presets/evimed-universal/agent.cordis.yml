@@ -106,7 +106,6 @@
         capsuleMemoryEnabled: !!js process.env.EVIMED_CAPSULE_MEMORY_ENABLED !== '0' && (process.env.EVIMED_MEMORY_GATEWAY_URL || '') === ''
         openVikingMemory: !!js (process.env.EVIMED_MEMORY_GATEWAY_URL || '') !== ''
         memorySearchHint: !!js process.env.EVIMED_MEMORY_SEARCH_HINT_ENABLED === '1'
-        memoryStandingInstructions: !!js process.env.EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED === '1'
       name: '@evimed/dsh-socket/plugins/guidance'
 
     # "When is a run finished, and when is it acceptable" — the plan, the
