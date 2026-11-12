@@ -2,7 +2,7 @@ import { awaitBackgroundMonitor } from "./helpers/awaitBackgroundMonitor.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, constants as fsConstants } from "node:fs";
 import fsPromises from "node:fs/promises";
 import { mkdir, mkdtemp, readdir, readFile, rename, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
@@ -7794,6 +7794,10 @@ function observeLedgerIO(t) {
 }
 
 async function assertLedgerReadersEqual(warm, cold, project, sessionId) {
+  assert.equal(warm.ledgerRotationEnabled, true, "the warm control must enable caching");
+  const first = await warm.readLedger(project);
+  assert.ok(first.prefix, "the equality check needs a segmented prefix");
+  assert.equal((await warm.readLedger(project)).prefix, first.prefix, "the warm reader must reuse the cached entry");
   for (const method of ["list", "activeRuns", "conversationIndex", "researcherRuns", "lastSessionId", "activitySummary"]) {
     assert.deepEqual(await warm[method](project), await cold[method](project), method);
   }
@@ -7822,7 +7826,7 @@ test("LG3 warm progress and list read and parse only the tail after seven full s
   await store.recordProgress(project, warm);
   assert.ok(io.reads.length > 0);
   assert.ok(io.reads.every(row => row.file === path.basename(file(7))), JSON.stringify(io.reads));
-  assert.equal(io.parsed.reduce((a, b) => a + b, 0), io.reads.reduce((n, row) => n + row.bytes, 0));
+  assert.ok(io.parsed.reduce((a, b) => a + b, 0) <= io.reads.reduce((n, row) => n + row.bytes, 0), "tail race validation reads bytes without parsing twice");
   await assertLedgerReadersEqual(store, createStore(), project, "cache-hot");
 });
 
@@ -7856,7 +7860,7 @@ test("LG3 every reader agrees warm and cold across rotations, duplicate terminal
   await warm.removeConversationSource(project, [run.sessionId]);
   await check();
   assert.equal((await warm.list(project))[0].question, null);
-  assert.equal((await warm.list(project))[0].ignoredTerminalEvents, 1);
+  assert.equal((await warm.list(project))[0].terminalConflict, true);
 });
 
 test("LG3 same-size prefix rewrites, inode replacements and gaps never reuse stale state", async t => {
@@ -8047,21 +8051,26 @@ test("independent writers retry an exclusive rotation conflict without losing ei
   const prefix = await readFile(file(), "utf8");
   let arrivals = 0, conflicts = 0, release;
   const both = new Promise(resolve => { release = resolve; });
-  // Synchronize publication, after both processes have read the same full tail.
-  for (const method of ["link", "rename"]) {
-    const original = fsPromises[method];
-    t.mock.method(fsPromises, method, async (source, target) => {
-      if (path.basename(target) === "runs.000001.jsonl") {
-        if (++arrivals === 2) release();
-        await both;
-      }
-      try { return await original(source, target); }
-      catch (error) { if (error.code === "EEXIST") conflicts++; throw error; }
-    });
-  }
+  const open = fsPromises.open;
+  t.mock.method(fsPromises, "open", async (...args) => {
+    let handle;
+    try { handle = await open(...args); }
+    catch (error) { if (error.code === "EEXIST") conflicts++; throw error; }
+    if (String(args[0]).endsWith("/runs.jsonl")) {
+      const read = handle.readFile.bind(handle);
+      handle.readFile = async (...readArgs) => {
+        const text = await read(...readArgs);
+        if (arrivals < 2) { if (++arrivals === 2) release(); await both; }
+        return text;
+      };
+    }
+    return handle;
+  });
+  const terminal = (id, status) => ({ event: "finished", id, status, artifacts: [], errorCode: null,
+    finishedAt: "2026-11-12T01:00:00.000Z", durationMs: 1000 });
   await Promise.all([
-    left.finishInternal(project, first.id, { status: "succeeded", artifacts: [] }),
-    right.finishInternal({ ...project, id: "independent-process-lock" }, second.id, { status: "failed", artifacts: [], errorCode: "runtime_error" }),
+    left.writeLedger(project, terminal(first.id, "succeeded")),
+    right.writeLedger({ ...project, id: "independent-process-lock" }, terminal(second.id, "failed")),
   ]);
   assert.equal(conflicts, 1, "one exclusive create must conflict and retry after rereading the tail");
   assert.equal(await readFile(file(), "utf8"), prefix);
@@ -8105,7 +8114,7 @@ test("rotation is opt-in while segment readers work with rotation disabled", asy
   assert.equal((await stat(file(1))).size, 4096);
 });
 
-test("a duplicate terminal from an older writer is counted and ignored without changing the first outcome", async t => {
+test("a conflicting terminal with the same timestamp retains file order and flags the run", async t => {
   const { project, binding, createStore, file, fill } = await rotationFixture(t);
   const store = createStore();
   const run = (await store.reserveRun(project, binding("mixed-version"))).run;
@@ -8117,7 +8126,7 @@ test("a duplicate terminal from an older writer is counted and ignored without c
   const folded = (await store.list(project))[0];
   assert.equal(folded.status, "succeeded");
   assert.equal(folded.errorCode, null);
-  assert.equal(folded.ignoredTerminalEvents, 1);
+  assert.equal(folded.terminalConflict, true);
   assert.equal(folded.phase, originalPhase);
   assert.deepEqual(await store.activeRuns(project), []);
   await store.reserveRun(project, binding("next"));
@@ -9807,4 +9816,176 @@ test("two independently ledgered overlapping runs retain only their own planned 
     await store.closeProject(project);
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("LG4 publication stays readable before its atomic commit and recovers abandoned temp files", async t => {
+  const { project, binding, createStore, file, fill } = await rotationFixture(t);
+  const store = createStore();
+  const run = (await store.reserveRun(project, binding("publication"))).run;
+  await fill(0, run.id);
+  const link = fsPromises.link, renameFile = fsPromises.rename;
+  let observed = false;
+  for (const [method, original] of [["link", link], ["rename", renameFile]]) {
+    t.mock.method(fsPromises, method, async (source, target) => {
+      if (path.basename(target) !== "runs.000001.jsonl") return original(source, target);
+      if (method === "link") await original(source, target);
+      observed = true;
+      assert.equal((await store.list(project))[0].status, "running");
+      assert.equal((await store.activeRuns(project)).length, 1);
+      assert.equal((await stat(file(1))).nlink, 1);
+      if (method === "rename") return original(source, target);
+    });
+  }
+  await store.finishInternal(project, run.id, { status: "succeeded", artifacts: [] });
+  assert.equal(observed, true);
+  assert.equal((await store.list(project))[0].status, "succeeded");
+  await writeFile(file(2), ""); // A crash after the exclusive empty claim.
+  const abandoned = path.join(project.metaDir, ".runs.000002.jsonl.123.crashed.tmp_example");
+  await writeFile(abandoned, "partial bytes");
+  assert.equal((await createStore().list(project))[0].status, "succeeded");
+  await createStore().appendQualityNotices(project, run.id, ["Recovered"]);
+  assert.equal((await readdir(project.metaDir)).some(name => name.startsWith(".runs.")), false);
+});
+
+test("LG4 earliest terminal wins across segments with both conflicting outcomes retained", async t => {
+  const { project, binding, createStore, file } = await rotationFixture(t);
+  const store = createStore();
+  const run = (await store.reserveRun(project, binding("terminal-conflict"))).run;
+  const base = await readFile(file(), "utf8");
+  const canceled = { event: "finished", id: run.id, status: "canceled", errorCode: "runtime_stopped",
+    finishedAt: "2026-11-12T02:00:00.000Z", durationMs: 2000, artifacts: [], canceledBy: "platform" };
+  const succeeded = { ...canceled, status: "succeeded", errorCode: null, finishedAt: "2026-11-12T01:00:00.000Z",
+    artifacts: ["report.md"], canceledBy: undefined, deliverables: [{ id: "report", title: "Report", status: "accepted", path: "report.md" }] };
+  await writeFile(file(), base + JSON.stringify(canceled) + "\n");
+  await writeFile(file(1), JSON.stringify(succeeded) + "\n");
+  const row = (await store.list(project))[0];
+  assert.equal(row.status, "succeeded");
+  assert.equal(row.terminalConflict, true);
+  assert.deepEqual(row.terminalOutcomes.map(outcome => outcome.status), ["canceled", "succeeded"]);
+  assert.deepEqual(row.artifacts, ["report.md"]);
+  assert.equal(row.canceledBy, undefined);
+  assert.equal(row.deliverables[0].id, "report");
+  await writeFile(file(1), [succeeded, canceled, succeeded].map(event => JSON.stringify(event) + "\n").join(""));
+  assert.equal((await store.list(project))[0].terminalOutcomes.length, 2, "duplicates of either outcome remain silent");
+  await assertLedgerReadersEqual(store, createStore({ ledgerRotationEnabled: false }), project, run.sessionId);
+  await writeFile(file(), base + JSON.stringify(succeeded) + "\n");
+  await writeFile(file(1), JSON.stringify(succeeded) + "\n");
+  const duplicate = (await store.list(project))[0];
+  assert.equal(duplicate.terminalConflict, undefined);
+  assert.equal(duplicate.ignoredTerminalEvents, undefined);
+});
+
+test("LG4 concurrent cold readers share a prefix fold and cache rows are deeply frozen", async t => {
+  const { project, binding, createStore, file } = await rotationFixture(t);
+  const store = createStore();
+  const run = (await store.reserveRun(project, binding("single-flight"))).run;
+  await store.finishInternal(project, run.id, { status: "succeeded", artifacts: ["report.md"] });
+  await writeFile(file(1), "");
+  const io = observeLedgerIO(t);
+  await Promise.all([store.list(project), store.list(project), store.activeRuns(project)]);
+  assert.equal(io.reads.filter(row => row.file === "runs.jsonl").length, 1);
+  const prefix = [...store.ledgerPrefixes.values()][0];
+  assert.throws(() => prefix.runs.get(run.id).artifacts.push("mutated.md"), TypeError);
+  const [left, right] = await Promise.all([store.readLedger(project), store.readLedger(project)]);
+  assert.notEqual(left.events, right.events);
+  left.events.push({ event: "pending", id: run.id });
+  assert.equal(right.events.length, 0, "single-flight callers own their pending event arrays");
+  io.reset();
+  await store.list(project);
+  assert.deepEqual(io.reads.map(row => row.file), ["runs.000001.jsonl"], "equality must exercise a real hit");
+});
+
+test("LG4 ctime alone invalidates a same-inode same-size prefix with exact restored mtimeNs", async t => {
+  const { project, binding, createStore, file } = await rotationFixture(t);
+  const store = createStore();
+  await store.reserveRun(project, binding("ctime-only"), { question: "Before" });
+  await writeFile(file(1), "");
+  // Integer seconds are exactly representable through fs.utimes on both calls.
+  const seconds = 1_700_000_000;
+  await utimes(file(), seconds, seconds);
+  const prior = await stat(file(), { bigint: true });
+  await store.list(project);
+  const io = observeLedgerIO(t);
+  await store.list(project);
+  assert.deepEqual(io.reads.map(row => row.file), ["runs.000001.jsonl"]);
+  const before = await readFile(file(), "utf8");
+  await writeFile(file(), before.replace('"Before"', '"After!"'));
+  await utimes(file(), seconds, seconds);
+  const after = await stat(file(), { bigint: true });
+  for (const key of ["size", "ino", "dev", "mtimeNs"]) assert.equal(after[key], prior[key], key);
+  assert.notEqual(after.ctimeNs, prior.ctimeNs);
+  io.reset();
+  assert.equal((await store.list(project))[0].question, "After!");
+  assert.ok(io.reads.some(row => row.file === "runs.jsonl"));
+});
+
+test("LG4 one oversized entry is retained and alternating large misses do no extra body work", async t => {
+  const { project, binding, createStore, file } = await rotationFixture(t, { maxBytes: 2 * 1024 * 1024 });
+  const warm = createStore(), cold = createStore({ ledgerRotationEnabled: false });
+  const run = (await warm.reserveRun(project, binding("oversized"), { nativeTurn: { startSeq: 10, userSeq: 11 } })).run;
+  const base = await readFile(file(), "utf8");
+  const large = JSON.stringify({ event: "native-workflow", id: run.id,
+    evidence: { turnStartSeq: 10, detail: "x".repeat(1536 * 1024) } }) + "\n";
+  for (let i = 0; i < 3; i++) await writeFile(file(i), (i ? "" : base) + large);
+  await writeFile(file(3), "");
+  const other = { ...project, id: "other-large", metaDir: path.join(project.rootDir, "other-large") };
+  await mkdir(other.metaDir);
+  for (let i = 0; i < 4; i++) await writeFile(path.join(other.metaDir, path.basename(file(i))), await readFile(file(i)));
+  const io = observeLedgerIO(t);
+  let stringifies = 0, clones = 0;
+  const stringify = JSON.stringify, clone = globalThis.structuredClone;
+  t.mock.method(JSON, "stringify", (...args) => { stringifies++; return stringify(...args); });
+  t.mock.method(globalThis, "structuredClone", (...args) => { clones++; return clone(...args); });
+  const measure = async (store, target) => {
+    io.reset(); stringifies = 0; clones = 0;
+    const rows = await store.list(target);
+    return { rows, reads: io.reads.length, parses: io.parsed.length, stringifies, clones };
+  };
+  for (const target of [project, project, other, project, other]) {
+    const cached = await measure(warm, target), baseline = await measure(cold, target);
+    assert.deepEqual(cached.rows, baseline.rows);
+    for (const key of ["reads", "parses", "stringifies", "clones"]) assert.ok(cached[key] <= baseline[key], `${key}: ${cached[key]} > ${baseline[key]}`);
+    assert.equal(warm.ledgerPrefixes.size, 1);
+    assert.ok(warm.ledgerPrefixBytes > 16 * 1024 * 1024);
+    const hit = await measure(warm, target);
+    assert.equal(hit.reads, 1, "an oversized project must actually hit on its next call");
+    assert.equal(hit.parses, 0);
+  }
+});
+
+for (const stage of ["claim", "rename", "cleanup"]) test(`LG4 publication failure at ${stage} leaves a readable ledger and recovers on write`, async t => {
+  const { project, binding, createStore, file, fill } = await rotationFixture(t);
+  const store = createStore();
+  const run = (await store.reserveRun(project, binding(`failure-${stage}`))).run;
+  await fill(0, run.id);
+  const open = fsPromises.open, renameFile = fsPromises.rename, remove = fsPromises.rm;
+  let failed = false;
+  t.mock.method(fsPromises, "open", async (...args) => {
+    const handle = await open(...args);
+    if (stage === "claim" && String(args[0]).endsWith("/runs.000001.jsonl") && (Number(args[1]) & fsConstants.O_EXCL)) {
+      handle.sync = async () => { failed = true; throw new Error("injected claim crash"); };
+    }
+    return handle;
+  });
+  t.mock.method(fsPromises, "rename", async (source, target) => {
+    if (!failed && stage !== "claim" && path.basename(target) === "runs.000001.jsonl") {
+      failed = true;
+      if (stage === "cleanup") await renameFile(source, target);
+      throw new Error("injected publication crash");
+    }
+    return renameFile(source, target);
+  });
+  t.mock.method(fsPromises, "rm", async (target, ...args) => {
+    if (String(target).includes(".runs.000001.jsonl.")) throw new Error("injected unlink failure");
+    return remove(target, ...args);
+  });
+  await assert.rejects(store.finishInternal(project, run.id, { status: "succeeded", artifacts: [] }), /injected/);
+  assert.equal(failed, true);
+  assert.equal((await stat(file(1))).nlink, 1);
+  const rows = await createStore().list(project);
+  assert.equal(rows.length, 1);
+  t.mock.restoreAll();
+  await createStore().appendQualityNotices(project, run.id, ["Recovered after crash"]);
+  assert.equal((await readdir(project.metaDir)).some(name => name.startsWith(".runs.")), false);
+  assert.equal((await createStore().list(project))[0].qualityNotices.length, 1);
 });

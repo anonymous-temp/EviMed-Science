@@ -109,6 +109,7 @@ function ledgerHealth(root) {
   }
 
   let finished = 0;
+  let terminalConflicts = 0;
   let emptyArtifacts = 0;
   const now = Date.now();
   /** @type {Map<string, {count: number, lastMs: number}>} */
@@ -136,11 +137,22 @@ function ledgerHealth(root) {
       }
     }
     const text = texts.join("\n");
+    const outcomes = new Map(), conflicts = new Set();
     for (const line of text.split("\n")) {
       if (!line) continue;
       let event;
       try { event = JSON.parse(line); } catch { continue; }
       if (event.event !== "finished") continue;
+      event.errorCode = event.errorCode == null ? null : String(event.errorCode);
+      const previous = outcomes.get(event.id);
+      if (previous) {
+        if (previous.status !== event.status || (previous.errorCode ?? null) !== (event.errorCode ?? null)) conflicts.add(event.id);
+        if (Date.parse(event.finishedAt) >= Date.parse(previous.finishedAt)) continue;
+      }
+      outcomes.set(event.id, event);
+    }
+    terminalConflicts += conflicts.size;
+    for (const event of outcomes.values()) {
       finished += 1;
       if (!Array.isArray(event.artifacts) || event.artifacts.length === 0) emptyArtifacts += 1;
       // What a check said on a run it did not withhold.
@@ -221,13 +233,14 @@ function ledgerHealth(root) {
     daysSinceLast: v.lastMs ? Math.floor((now - v.lastMs) / 86_400_000) : null,
   })).sort((a, b) => b.count - a.count);
 
-  return { ledgers: ledgers.length, finished, emptyArtifacts, rows, notices, errorLedgers: errorLedgers.length, refusalRows, refusals: refusalList };
+  return { ledgers: ledgers.length, terminalConflicts, finished, emptyArtifacts, rows, notices, errorLedgers: errorLedgers.length, refusalRows, refusals: refusalList };
 }
 
 if (ledgerRoot) {
   const health = ledgerHealth(ledgerRoot);
   console.log(`gate health from ${health.ledgers} run ledger(s) under ${ledgerRoot}`);
   console.log(`${health.finished} finished runs, ${health.emptyArtifacts} recorded no artifacts`);
+  console.log(`${health.terminalConflicts} terminal conflict(s)`);
   if (!health.rows.length) console.log("no non-succeeded runs recorded");
   for (const row of health.rows) {
     const flag = row.review ? `  <-- ${row.review}` : "";

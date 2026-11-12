@@ -174,3 +174,18 @@ test("an unreadable continuation fails the report and names the segment", async 
     return true;
   });
 });
+
+test("LG4 terminal conflicts count runs and select the earliest outcome across segments", async t => {
+  const root = await mkdtemp(path.join(tmpdir(), "gate-health-conflict-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const project = path.join(root, "p", ".openscience");
+  await mkdir(project, { recursive: true });
+  const success = finished({ status: "succeeded", errorCode: null, artifacts: ["report.md"], finishedAt: "2026-11-12T01:00:00.000Z" });
+  await writeFile(path.join(project, "runs.jsonl"), finished({ status: "canceled", errorCode: "runtime_stopped", finishedAt: "2026-11-12T02:00:00.000Z" }));
+  await writeFile(path.join(project, "runs.000001.jsonl"), success + success);
+  const output = run(root);
+  assert.match(output, /1 terminal conflict/);
+  assert.match(output, /1 finished runs, 0 recorded no artifacts/);
+  await writeFile(path.join(project, "runs.jsonl"), success);
+  assert.match(run(root), /0 terminal conflict/);
+});
