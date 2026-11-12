@@ -74,6 +74,7 @@ const hostSideOnly = {
  *  written to prove: a documented lever that no service receives is a knob that
  *  does nothing and says nothing. */
 const operatorLevers = {
+  OPEN_SCIENCE_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_RUNTIME_UI_PROXY_ENABLED: ["open-science-web", "open-science-runtime-controller"],
   // Both launch paths must install the optional MCP; its private token stays on web.
   OPEN_SCIENCE_TOOLUNIVERSE_MCP_URL: ["open-science-web", "open-science-runtime-controller"],

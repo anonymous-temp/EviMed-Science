@@ -396,6 +396,7 @@ services:
       OPEN_SCIENCE_MEMORY_RECALL_ENABLED:
       # Raw-history search over the person's own conversations (config.mjs, default on). Value-less: unset keeps that default.
       OPEN_SCIENCE_MEMORY_HISTORY_SEARCH_ENABLED:
+      OPEN_SCIENCE_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED:
       # The memory dashboard's document (总览): the read-only map of what is remembered (unset follows OPEN_SCIENCE_MEMORY_ENABLED), and
       # the topics a model groups an account's memories into (switch, groupings per account per day, memories needed before there is
       # anything to group).
@@ -2329,6 +2330,8 @@ services:
       OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES: ${OPEN_SCIENCE_MODEL_GATEWAY_MAX_BODY_BYTES:-12582912}
       # And the socket plugins it launches every runtime without.
       OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS:
+      # Read where runtimes are launched: the kernel-side memory bridge takes this from the launch environment.
+      OPEN_SCIENCE_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED:
       # And every other setting the launch plan reads, as the web API has it.
       # Until 2026-09-23 these four reached only the web API, so every runtime
       # started with EVIMED_REVIEW_ENABLED=0 — a submission never asked for the
