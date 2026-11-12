@@ -129,4 +129,17 @@ test('forget guidance defaults off and requires confirmed removal before claimin
   assert.match(enabled, /只有工具确认移除后才说已忘记/);
   assert.match(enabled, /不要删掉无关内容/);
   assert.equal(buildGuidanceText([], { openVikingMemory: false, memoryForgetToolHint: true }), buildGuidanceText([], { openVikingMemory: false }));
+  for (const presetPath of ['../presets/evimed-universal/agent.cordis.yml', '../presets/evimed-universal.patch.yml']) {
+    const preset = await readFile(new URL(presetPath, import.meta.url), 'utf8');
+    assert.ok(preset.includes("memoryForgetToolHint: !!js process.env.EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED === '1'"), presetPath);
+  }
+  const { apply: applyGuidance } = await import('../plugins/guidance.mjs');
+  for (const memoryForgetToolHint of [false, true]) {
+    const sections = [];
+    await applyGuidance({
+      get: () => undefined, provide: () => {}, on: () => () => {}, effect: fn => fn(),
+      systemPrompt: { section: section => { sections.push(section); return () => {} } },
+    }, { ...options, capabilitiesDir: '', memoryForgetToolHint });
+    assert.equal(sections.some(section => section.text.includes('只有工具确认移除后才说已忘记')), memoryForgetToolHint);
+  }
 });
