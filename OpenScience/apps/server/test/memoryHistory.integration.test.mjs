@@ -958,20 +958,27 @@ test('the tool can reject an unstored statement from raw history and the page ca
 
 for (const mode of ['file', 'line', 'statement']) test(`history fence write failure rolls back rejection activation before ${mode} removal and can retry`, options, async t => {
   const f = await setup(t), statement = 'My old project is M-41633.';
-  const body = `- ${statement}\n- Independent plan.`;
+  // Give each line a distinct hard token so the file scan needs no semantic judge
+  // before it reaches the injected history write failure.
+  const independent = 'Independent plan N-49223.';
+  const body = `- ${statement}\n- ${independent}`;
   const uri = f.seed('notes/retry.md', body);
   f.stub.files.set(`${f.commit.archiveUri}/messages.jsonl`, JSON.stringify({ role: 'user', content: statement }));
   await f.service.ingestArchive(f.commit, f.context);
   f.store.history = f.service; f.store.forgetTargetsEnabled = true;
   const rejectMessages = f.ledger.rejectMessages.bind(f.ledger);
-  let fail = true;
+  let fail = true, injectedFailures = 0;
   f.ledger.rejectMessages = async (...args) => {
     await rejectMessages(...args);
-    if (fail && args[3].length) throw new Error('history write unavailable');
+    if (fail && args[3].length) {
+      injectedFailures++;
+      throw new Error('history write unavailable');
+    }
   };
   const forget = () => f.store.forget({ id: f.userId }, { id: 'default', userId: f.userId }, mode === 'statement' ? null : uri,
     mode === 'statement' ? { statement } : mode === 'line' ? { lines: [statement] } : {});
   await assert.rejects(forget(), /history write unavailable/);
+  assert.equal(injectedFailures, 1, 'the failure occurs after a history fence write');
   assert.equal(await f.sessions.read(f.userId, uri), body);
   assert.deepEqual(await f.overlay.removals(f.userId), []);
   assert.deepEqual(await f.overlay.revisionsOf(f.userId, uri), []);
@@ -981,5 +988,5 @@ for (const mode of ['file', 'line', 'statement']) test(`history fence write fail
   assert.ok(result.removed || result.historyRejected);
   assert.ok((await f.overlay.removals(f.userId)).length > 0);
   assert.ok(!JSON.stringify(await search(f)).includes('M-41633'));
-  assert.equal(await f.sessions.read(f.userId, uri), mode === 'statement' ? body : mode === 'line' ? '- Independent plan.' : null);
+  assert.equal(await f.sessions.read(f.userId, uri), mode === 'statement' ? body : mode === 'line' ? `- ${independent}` : null);
 });
