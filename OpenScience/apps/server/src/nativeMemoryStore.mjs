@@ -1637,12 +1637,12 @@ export class NativeMemoryStore {
    */
   async forget(user, project, uri, { context = null, engineSession = null, lines, statement } = {}) {
     const targeted = lines !== undefined || statement !== undefined;
-    const invalid = () => new HttpError(400, 'memory_payload_invalid', 'Name a file and exact lines, or a statement without a file.');
-    if (targeted && !this.forgetTargetsEnabled) throw invalid();
+    const invalid = message => new HttpError(400, 'memory_payload_invalid', message);
+    if (targeted && !this.forgetTargetsEnabled) throw invalid('lines and statement require targeted forgetting to be enabled.');
     if (lines !== undefined && (!uri || !Array.isArray(lines) || lines.length > 100
-      || lines.some(line => typeof line !== 'string' || !line.trim() || /[\r\n]/.test(line) || line.length > 6000))) throw invalid();
-    if (statement !== undefined && (uri || lines !== undefined || typeof statement !== 'string' || !statement.trim() || statement.length > 6000)) throw invalid();
-    if (!uri && statement === undefined) throw invalid();
+      || lines.some(line => typeof line !== 'string' || !line.trim() || /[\r\n]/.test(line) || line.length > 6000))) throw invalid('lines requires uri and an array of at most 100 non-empty complete lines, each at most 6000 characters without line breaks.');
+    if (statement !== undefined && (uri || lines !== undefined || typeof statement !== 'string' || !statement.trim() || statement.length > 6000)) throw invalid('statement must be 1 to 6000 characters and cannot be combined with uri or lines.');
+    if (!uri && statement === undefined) throw invalid('uri or statement is required.');
     const actual = uri ? await this.#fileContext(String(user.id), uri) : await this.#projectContext(String(user.id), project?.id);
     if (context) {
       if (!this.memoryContexts || context.ownerId !== user.id || project?.userId !== user.id || context.projectId !== project.id) {

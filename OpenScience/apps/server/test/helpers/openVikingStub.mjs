@@ -280,7 +280,7 @@ export class OpenVikingStub {
       if (!within(target)) return send(403, fail("PERMISSION_DENIED", "Access denied"));
       const words = String(body?.query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
       const hits = [...this.files.entries()]
-        .filter(([uri]) => uri.startsWith(`${target}/`) && uri.includes("/memories/") && !exclude.some((prefix) => uri === prefix || uri.startsWith(`${prefix}/`)))
+        .filter(([uri]) => uri.startsWith(`${target}/`) && (uri.includes("/memories/") || uri.includes("/resources/history/")) && !exclude.some((prefix) => uri === prefix || uri.startsWith(`${prefix}/`)))
         .filter(([uri, text]) => words.length === 0 || words.some((word) => `${uri}\n${text}`.toLowerCase().includes(word)))
         .filter(([uri]) => !(body?.tags ?? []).length || (body.tags).every((tag) => (this.tags.get(uri) ?? []).includes(tag)))
         .map(([uri, text], index) => ({ context_type: "memory", uri, level: 2, score: 0.9 - index * 0.01, abstract: text, tags: this.tags.get(uri) ?? [] }))
@@ -289,7 +289,7 @@ export class OpenVikingStub {
         const entries = hits.map((hit) => ({ uri: hit.uri, category: "memories", score: hit.score, detail: "abstract", text: hit.abstract, origin: "self" }));
         return send(200, ok({ entries, rendered: entries.map((entry) => `<memory uri="${entry.uri}">\n${entry.text}\n</memory>`).join("\n"), digest: "" }));
       }
-      return send(200, ok({ memories: hits, resources: [], skills: [], total: hits.length }));
+      return send(200, ok({ memories: hits.filter(hit => hit.uri.includes("/memories/")), resources: hits.filter(hit => hit.uri.includes("/resources/history/")), skills: [], total: hits.length }));
     }
     if (path === "/api/v1/pack/export" && req.method === "POST") {
       res.writeHead(200, { "content-type": "application/zip" });

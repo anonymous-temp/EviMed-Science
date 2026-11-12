@@ -140,8 +140,8 @@ export const MEMORY_GATEWAY_TOOLS = Object.freeze({
     inputSchema: { type: "object", required: ["uri"], properties: { uri: { type: "string", description: "The viking:// URI of one memory file." } } },
   },
 });
-const TARGETED_FORGET_TOOL = Object.freeze({
-  description: "Forget only what the user asked to remove. For a stored fact, read the file and pass its URI plus exact complete lines in `lines`; unrelated lines remain. Matching ignores Markdown decoration, case, whitespace and trailing as-of dates, never meaning or keywords. A mismatch returns available lines for retry. Omit lines (or select every line) only to forget the whole file. For a fact found only in conversation history, omit URI and pass `statement`: this records a recall rejection, without deleting the conversation. Removals can be restored on the memory page.",
+export const TARGETED_FORGET_TOOL = Object.freeze({
+  description: "Forget only what the user asked to remove. For a stored fact, read the file and pass its URI plus exact complete lines in `lines`; unrelated lines remain. Matching ignores Markdown decoration, case, whitespace and trailing as-of dates, never meaning or keywords. A mismatch returns available lines for retry. Omit lines (or select every line) only to forget the whole file. If no memory file holds the fact, still call forget without URI, passing the person's statement in `statement` so earlier conversations do not bring it back. After confirmation, tell the user that history recall was blocked; the conversation itself is unchanged. Removals can be restored on the memory page.",
   inputSchema: { type: 'object', properties: {
     uri: { type: 'string', description: 'The viking:// URI of one memory file; omit for a history-only statement.' },
     lines: { type: 'array', maxItems: 100, items: { type: 'string', maxLength: 6000 }, description: 'Exact complete lines to forget, copied from read. Omitted or empty means the entire file.' },
@@ -1100,12 +1100,15 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         const invalidStatement = args.statement !== undefined && (args.uri !== undefined || args.lines !== undefined
           || typeof args.statement !== 'string' || !args.statement.trim() || args.statement.length > 6000);
         if (targeted && (!enabled || !memoryTool) || invalidLines || invalidStatement) {
-          local.push(rpcError(message.id, -32602, 'Name a memory file and exact lines, or a history statement without a URI; targeted forgetting must be enabled.'));
+          const reason = !enabled || !memoryTool ? 'lines and statement require targeted forgetting to be enabled.'
+            : invalidStatement ? 'statement must be 1 to 6000 characters and cannot be combined with uri or lines.'
+            : 'lines requires uri and an array of at most 100 non-empty complete lines, each at most 6000 characters without line breaks.';
+          local.push(rpcError(message.id, -32602, reason));
           continue;
         }
         if (args.recursive === true || (target ? !nativeMemoryFile(target, `${ctx.userRoot}/memories`) : !enabled || args.statement === undefined)) {
           recordGatewayRefusal("memory_gateway_uri_refused");
-          local.push(rpcError(message.id, -32602, "Only one memory file of the user can be forgotten at a time."));
+          local.push(rpcError(message.id, -32602, "uri must name one memory file of the user; recursive deletion is not supported."));
           continue;
         }
         if (admitted.learnReason === "memory_off" || admitted.learnReason === "internal_project" || admitted.learnReason === "trial") {
@@ -1310,7 +1313,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       recordGatewayRequest(route, answer.outcome);
       send(answer);
     } catch (error) {
-      const own = error instanceof HttpError && (/^memory_gateway_/.test(error.code) || error.code === 'memory_scope_denied');
+      const own = error instanceof HttpError && (/^memory_gateway_/.test(error.code) || error.code === 'memory_scope_denied'
+        || (error.code === 'memory_payload_invalid' && error.status === 400));
       if (own) {
         recordGatewayRefusal(/** @type {HttpError} */ (error).code);
         recordGatewayRequest(route, "refused");

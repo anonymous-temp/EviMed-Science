@@ -1150,3 +1150,23 @@ for (const enabled of [false, true]) test(`unsupported or malformed forget targe
   assert.deepEqual(calls, []);
   assert.equal(f.stub.sent('DELETE', '/api/v1/fs').length, 0);
 });
+
+for (const [args, reason] of [
+  [{ uri: `${ROOT}/memories/notes/a.md`, lines: 'wrong' }, /lines/],
+  [{ statement: '' }, /statement/],
+  [{ uri: `${ROOT}/memories/notes/a.md`, statement: 'ambiguous' }, /statement.*uri/],
+]) test(`forget validation names the invalid argument: ${JSON.stringify(args)}`, async t => {
+  const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async () => assert.fail('invalid call reached store') } });
+  const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: args } });
+  assert.equal(answer.messages[0].error.code, -32602);
+  assert.match(answer.messages[0].error.message, reason);
+});
+
+test('gateway preserves a safe store argument diagnostic, but hides unexpected errors', async t => {
+  const { HttpError } = await import('../src/security.mjs');
+  for (const error of [new HttpError(400, 'memory_payload_invalid', 'lines requires targeted forgetting to be enabled.'), new Error('private database detail')]) {
+    const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async () => { throw error; } } });
+    const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: { uri: `${ROOT}/memories/notes/a.md`, lines: ['A fact.'] } } });
+    assert.equal(answer.json.error.message, error instanceof HttpError ? error.message : 'The memory gateway could not answer.');
+  }
+});
