@@ -22,6 +22,7 @@ import {
   safeId,
   withProjectStorageMutation,
   writeFileAtomicNoFollow,
+  writeFileExclusiveNoFollow,
 } from "./security.mjs";
 import {
   citationIntegrityIssues,
