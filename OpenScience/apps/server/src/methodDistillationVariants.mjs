@@ -22,4 +22,3 @@ export async function distillationSkillVariants(names) {
   }
   return texts.join("\n\n");
 }
-
