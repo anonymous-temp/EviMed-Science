@@ -135,6 +135,27 @@ test('a history-only statement gets the existing rejection and revision, without
   assert.equal(f.revisions[0].change, 'deleted'); assert.match(f.revisions[0].reason, /^forgotten in a conversation/);
 });
 
+for (const statement of ['The previous examination was benign.', 'My old project is M-41633.']) {
+  test(`an empty history search still activates the undoable statement rejection (${statement})`, async () => {
+    const f = fixture();
+    f.store.history.search = async ({ query }) => {
+      assert.equal(query, statement);
+      f.historyCalls.push({ lines: [query] });
+      return [];
+    };
+    f.store.rejectionJudge = { same: async () => { assert.fail('no candidate needs a semantic judgement'); } };
+    const result = await f.store.forget(user, project, null, { statement });
+    assert.deepEqual(result, { removed: false, historyRejected: true });
+    assert.equal(f.historyCalls.length, 1);
+    assert.deepEqual(f.rejections[0].lines, [statement]);
+    assert.equal(f.revisions.length, 1);
+    assert.equal(f.revisions[0].before, statement);
+    assert.equal(f.revisions[0].change, 'deleted');
+    assert.deepEqual(f.historyRows, [], 'an empty result does not invent a source-message hash');
+    assert.deepEqual([...f.files], [[uri, body]]);
+  });
+}
+
 test('a history-only failure is retryable without an active rejection or a success revision', async () => {
   const f = fixture(); f.failHistory(true);
   await assert.rejects(f.store.forget(user, project, null, { statement: 'Old project.' }), /history unavailable/);

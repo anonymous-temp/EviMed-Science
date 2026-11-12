@@ -9,6 +9,7 @@ import { checkForgetRequests } from '../src/nativeMemoryForgetRequests.mjs';
 import { createRejectionJudge } from '../src/nativeMemoryRejections.mjs';
 import { removalText } from '../src/nativeMemoryRejections.mjs';
 import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
+import { hardTokens } from '../src/nativeMemoryHardTokens.mjs';
 import { GeoNativeMemoryContext } from '../src/geoNativeMemoryContext.mjs';
 import { MemoryHistory, MemoryHistoryLedger } from '../src/memoryHistory.mjs';
 import { createMemoryAdmission } from '../src/memoryAdmission.mjs';
@@ -106,7 +107,8 @@ test('statement without uri crosses HTTP and store validation; history recall is
   assert.equal((await f.overlay.rejectedFingerprints(f.userId, 'notes')).has(lineFingerprint(statement)), false);
 });
 
-const requestStatement = '之前说过的既往检查经历别记了，也不要写进任何材料。';
+// Pass the fact, without a withdrawal instruction, as the targeted tool contract requires.
+const examinationStatement = 'The earlier examination result was benign.';
 
 // The lab's optional rejection judge has a per-day budget shared with extraction.
 // Exhausting that budget must not refuse a person's explicit privacy operation.
@@ -115,17 +117,78 @@ test('P07 token-free statement crosses HTTP with an exhausted maintenance judge 
   const original = 'The previous examination was benign.';
   const archive = await f.commitConversation('p07', [{ role: 'user', text: original }], { projectId: f.project.id });
   await f.history.ingestArchive({ userId: f.userId, projectId: f.project.id, engineSession: archive.session, archiveUri: archive.archive_uri }, f.context);
+  const search = () => f.history.search({ user: f.user, project: f.project, query: examinationStatement });
+  const before = await search();
+  assert.equal(before.length, 1, 'the real registry and engine search must supply a candidate before forgetting');
+  assert.equal(before[0].messages[0].text, original);
+  assert.deepEqual(hardTokens(examinationStatement), []);
+  assert.deepEqual(hardTokens(original), []);
   let calls = 0;
   f.store.rejectionJudge = createRejectionJudge({ config: { deepseekProviderEnabled: true, deepseekApiKey: 'fixture',
-    deepseekModel: 'fixture', nativeMemoryRejectionJudgeDailyCalls: 0 }, callModel: async () => {
+    deepseekModel: 'fixture', nativeMemoryRejectionJudgeDailyCalls: 0 }, callModel: async (_deps, call) => {
       calls++;
+      const shown = JSON.parse(call.body.messages[1].content);
+      assert.deepEqual(shown.candidates.map(candidate => candidate.text), [original]);
+      assert.deepEqual(shown.removed, [examinationStatement]);
       return { choices: [{ message: { content: JSON.stringify({ same: [{ candidate: 0, removed: 0 }], stated: [] }) } }] };
     } });
-  const answer = await f.memory.callTool('forget', { statement: requestStatement });
+  const maintenance = () => f.store.rejectionJudge.same({ userId: f.userId,
+    candidates: [{ text: original, removed: [{ text: examinationStatement, fingerprint: lineFingerprint(examinationStatement) }] }] });
+  assert.equal((await maintenance()).same.size, 0);
+  assert.equal(calls, 0, 'the maintenance allowance is already exhausted');
+  const answer = await f.memory.callTool('forget', { statement: examinationStatement });
   assert.equal(answer.isError, false, answer.blocks.join('\n'));
   assert.equal(calls, 1);
-  assert.equal((await f.overlay.removals(f.userId)).length, 1);
-  assert.doesNotMatch(JSON.stringify(await f.history.search({ user: f.user, project: f.project, query: original })), /previous examination/);
+  assert.match(answer.blocks.join('\n'), /Recorded a history recall rejection.*conversation text is unchanged/s);
+  const removals = await f.overlay.removals(f.userId);
+  assert.equal(removals.length, 1);
+  assert.equal(removals[0].fingerprint, lineFingerprint(examinationStatement));
+  const hashes = await f.database.query('SELECT message_hash FROM evimed_memory.history_message_rejections WHERE owner_id=$1', [f.userId]);
+  assert.deepEqual(hashes.rows.map(row => row.message_hash), [lineFingerprint(original)]);
+  assert.deepEqual(await search(), []);
+  assert.deepEqual(await f.history.search({ user: f.user, project: f.project, query: original }), []);
+  assert.match(await f.sessions.read(f.userId, `${archive.archive_uri}/messages.jsonl`), /previous examination/);
+  assert.equal((await maintenance()).same.size, 0, 'privacy work does not replenish the maintenance allowance');
+  assert.equal(calls, 1);
+  await f.store.undo(f.userId, (await f.store.forgotten(f.userId))[0].id);
+  assert.equal((await search()).length, 1, 'undo restores the semantically matched original');
+});
+
+for (const visibility of ['delayed indexing', 'later search']) test(`an empty history search still records a statement rejection before ${visibility}`, options, async t => {
+  const f = await setup(t), statement = 'The previous examination was benign.';
+  // Exercise both an archive not indexed yet and an indexed resource absent from search.
+  const archive = await f.commitConversation('delayed-index', [{ role: 'user', text: statement, at: '2026-01-01T00:00:00Z' }], { projectId: f.project.id });
+  const commit = { userId: f.userId, projectId: f.project.id, engineSession: archive.session, archiveUri: archive.archive_uri };
+  const search = () => f.history.search({ user: f.user, project: f.project, query: statement });
+  let hiddenResource;
+  if (visibility === 'later search') {
+    await f.history.ingestArchive(commit, f.context);
+    assert.equal((await search()).length, 1);
+    hiddenResource = [...f.stub.files].find(([uri]) => uri.includes('/resources/history/'));
+    assert.ok(hiddenResource);
+    f.stub.files.delete(hiddenResource[0]);
+  }
+  assert.deepEqual(await search(), []);
+  f.store.rejectionJudge = { same: async () => { assert.fail('no original candidate needs semantic matching'); } };
+  const answer = await f.memory.callTool('forget', { statement });
+  assert.equal(answer.isError, false, answer.blocks.join('\n'));
+  assert.match(answer.blocks.join('\n'), /Recorded a history recall rejection.*No memory file was deleted; the conversation text is unchanged/s);
+  const removals = await f.overlay.removals(f.userId);
+  assert.equal(removals.length, 1);
+  assert.equal(removals[0].fingerprint, lineFingerprint(statement));
+  const hashes = await f.database.query('SELECT message_hash FROM evimed_memory.history_message_rejections WHERE owner_id=$1', [f.userId]);
+  assert.deepEqual(hashes.rows, [], 'the statement fence does not fabricate an original-message match');
+  if (hiddenResource) f.stub.files.set(hiddenResource[0], hiddenResource[1]);
+  else {
+    await f.history.ingestArchive(commit, f.context);
+    const progress = await f.database.query('SELECT state,reason,indexed_chunks FROM evimed_memory.history_archives WHERE owner_id=$1 AND archive_uri=$2', [f.userId, archive.archive_uri]);
+    assert.deepEqual(progress.rows, [{ state: 'partial', reason: 'removed_content', indexed_chunks: 0 }]);
+  }
+  assert.deepEqual(await search(), []);
+  assert.match(await f.sessions.read(f.userId, `${archive.archive_uri}/messages.jsonl`), /previous examination/);
+  await f.store.undo(f.userId, (await f.store.forgotten(f.userId))[0].id);
+  await f.history.ingestArchive(commit, f.context);
+  assert.equal((await search()).length, 1, 'the same archive is indexable after undo, proving it was fenced by the statement');
 });
 
 for (const order of ['tool-first', 'settle-first', 'overlap']) test(`statement and request settlement are idempotent (${order})`, options, async t => {
@@ -133,6 +196,8 @@ for (const order of ['tool-first', 'settle-first', 'overlap']) test(`statement a
   const archive = await f.commitConversation('intent-order', [{ role: 'user', text: statement }], { projectId: f.project.id });
   const commit = { userId: f.userId, projectId: f.project.id, engineSession: archive.session, archiveUri: archive.archive_uri };
   await f.history.ingestArchive(commit, f.context);
+  const search = () => f.history.search({ user: f.user, project: f.project, query: statement });
+  assert.equal((await search()).length, 1, 'the ordering case starts with recallable history');
   // Persist the already-reviewed plan exactly as checkForgetRequests does before mutation.
   await f.overlay.setForgetRequests(f.userId, commit.archiveUri, { state: 'applying', sourceArchive: commit.archiveUri,
     requests: [{ key: 'a'.repeat(64), message: 0, status: 'applying', decision: 'remove', candidates: [], intents: [statement], removed: 0, requestMessage: { role: 'user', text: statement } }], claims: [] });
@@ -151,8 +216,10 @@ for (const order of ['tool-first', 'settle-first', 'overlap']) test(`statement a
   assert.equal(revisions.rows.length, 1, 'one undoable intent, independent of order and retry');
   const forgotten = await f.store.forgotten(f.userId);
   assert.equal(forgotten.length, 1);
+  assert.deepEqual(await search(), []);
   await f.store.undo(f.userId, forgotten[0].id);
   assert.equal((await f.overlay.removals(f.userId)).length, 0);
+  assert.equal((await search()).length, 1);
 });
 
 test('two forget calls during a pending commit retain both independent removals', options, async t => {
@@ -161,6 +228,7 @@ test('two forget calls during a pending commit retain both independent removals'
   const archive = await f.commitConversation('pending-forget', [{ role: 'user', text: `${first} ${second}`, at: '2026-01-01T00:00:00Z' }], { projectId: f.project.id });
   const commit = { userId: f.userId, projectId: f.project.id, engineSession: archive.session, archiveUri: archive.archive_uri };
   assert.equal((await f.overlay.commit(f.userId, commit.archiveUri)).state, 'pending');
+  assert.deepEqual(await f.history.search({ user: f.user, project: f.project, query: second }), [], 'pending history is intentionally not indexed');
   assert.equal((await f.memory.callTool('forget', { uri, lines: [first] })).isError, false);
   assert.equal((await f.memory.callTool('forget', { statement: second })).isError, false);
   // The external engine finishes its already-pending extraction after both calls.
@@ -177,6 +245,8 @@ test('two forget calls during a pending commit retain both independent removals'
   await worker.processCommits({ userId: f.userId });
   assert.equal((await f.overlay.commit(f.userId, commit.archiveUri)).state, 'completed');
   await f.history.ingestArchive(commit, f.context);
+  const progress = await f.database.query('SELECT state,reason,indexed_chunks FROM evimed_memory.history_archives WHERE owner_id=$1 AND archive_uri=$2', [f.userId, archive.archive_uri]);
+  assert.deepEqual(progress.rows, [{ state: 'partial', reason: 'removed_content', indexed_chunks: 0 }], 'the pending archive is suppressed by the removals, not an unrelated indexing failure');
   const prints = new Set((await f.overlay.removals(f.userId)).map(row => row.fingerprint));
   assert.ok(prints.has(lineFingerprint(first))); assert.ok(prints.has(lineFingerprint(second)));
   assert.equal(await f.sessions.read(f.userId, uri), retained);
