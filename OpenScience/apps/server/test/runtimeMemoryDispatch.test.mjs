@@ -116,3 +116,17 @@ for (const code of ['runtime_prompt_admission_busy', 'memory_context_publication
   const retry = await dispatch('retry');
   assert.equal(retry.dispatchStatus, 'accepted'); assert.notEqual(retry.id, failed.id);
 });
+
+
+test('a stop admission failure still writes the real durable intent before cancellation can proceed', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'stop-admission-failure-'));
+  const project = { userId: 'owner', id: 'project', rootDir: root, workspaceDir: path.join(root, 'workspace'), metaDir: path.join(root, 'meta') };
+  await mkdir(project.workspaceDir); await mkdir(project.metaDir);
+  const binding = { sessionId: 'root', mode: 'open-domain', agentId: null, agentVersion: null, runtimeAgent: null };
+  const ledger = new AgentRunStore({ get: async () => binding }, { model: 'fixture', readSessionHistory: async () => [],
+    withPromptAdmission: async () => { throw new HttpError(409, 'runtime_prompt_admission_busy', 'Admission unavailable'); } });
+  t.after(async () => { await ledger.closeProject(project); await rm(root, { recursive: true, force: true }); });
+  const { run } = await ledger.reserveRun(project, binding, { baselineCursor: null });
+  assert.equal(await ledger.noteStopRequest(project, { sessionId: binding.sessionId }), run.id);
+  assert.equal(await ledger.promptStopRequested(project, binding.sessionId, run.id), true);
+});

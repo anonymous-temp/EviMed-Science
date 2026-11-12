@@ -6592,7 +6592,7 @@ export class AgentRunStore {
     if(!wanted&&!session)return null;
     const known=await this.list(project),target=wanted?known.find(run=>run.id===wanted):null;
     const scope=session ?? target?.sessionId;if(!scope)return null;
-    return this.withPromptAdmission(project,scope,async()=>{
+    const record = async()=>{
       const runs=await this.list(project),selected=runs.filter(run=>wanted?run.id===wanted:run.sessionId===scope);
       // Exact existing IDs make stop intent monotonic without suppressing a
       // later explicit human request or depending on wall-clock comparisons.
@@ -6600,7 +6600,16 @@ export class AgentRunStore {
       const active=selected.find(run=>run.status==='running');
       if(active)this.stopRequests.set(active.id,this.now().getTime());
       return active?.id ?? null;
-    });
+    };
+    let entered = false;
+    try { return await this.withPromptAdmission(project,scope,()=>{entered=true;return record();}); }
+    catch(error) {
+      // Admission sequences an already authenticated stop; it is not its
+      // authority. Preserve the monotonic local intent even if that lane fails.
+      // Once recording began, never replay its database/observer failure.
+      if(entered)throw error;
+      return record();
+    }
   }
   async promptStopRequested(project,sessionId,runId){return this.promptStops.has(project,sessionId,runId);}
 
