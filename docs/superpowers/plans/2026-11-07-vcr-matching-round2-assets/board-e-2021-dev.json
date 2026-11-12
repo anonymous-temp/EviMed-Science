@@ -1,0 +1,145 @@
+{
+ "title": "Board E: TREC CT 2021 full corpus (375,580 trials), dev topics; official measures, unjudged = not relevant",
+ "patients": 10,
+ "groups": {
+  "2021": 10
+ },
+ "arms": [
+  {
+   "name": "Hybrid recall only (lexical ⊕ dense, RRF)",
+   "type": "first stage",
+   "backbone": "FTS5 BM25 + Qwen3.7 embedding",
+   "point": {
+    "ndcg": 0.6006062926732793,
+    "ep10": 0.42000000000000004,
+    "mrr": 0.6916666666666667,
+    "j10": 0.82,
+    "cndcg": 0.7274858248016485
+   },
+   "byGroup": {
+    "2021": {
+     "ndcg": 0.6006062926732793,
+     "ep10": 0.42000000000000004,
+     "mrr": 0.6916666666666667,
+     "j10": 0.82,
+     "cndcg": 0.7274858248016485
+    }
+   },
+   "ci": [
+    0.46936394966079914,
+    0.7312108569840571
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "EviMed rrf-qwen-jev-v1 (Jev 1.13)",
+   "type": "same, Jev 1.13",
+   "backbone": "Qwen3.7 embed+rerank, Jev 1.13",
+   "point": {
+    "ndcg": 0.5758979713632928,
+    "ep10": 0.47000000000000003,
+    "mrr": 0.8158986175115208,
+    "j10": 0.64,
+    "cndcg": 0.7877687414240304
+   },
+   "byGroup": {
+    "2021": {
+     "ndcg": 0.5758979713632928,
+     "ep10": 0.47000000000000003,
+     "mrr": 0.8158986175115208,
+     "j10": 0.64,
+     "cndcg": 0.7877687414240304
+    }
+   },
+   "ci": [
+    0.41368859596446866,
+    0.7208463515326281
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "EviMed rrf-qwen-jev-v1 (Jev 1.14)",
+   "type": "hybrid recall → Qwen3.7 rerank ⊕ Jev, RRF",
+   "backbone": "Qwen3.7 embed+rerank, Jev 1.14",
+   "point": {
+    "ndcg": 0.5628388936142593,
+    "ep10": 0.45999999999999996,
+    "mrr": 0.7663690476190477,
+    "j10": 0.62,
+    "cndcg": 0.7926804699983467
+   },
+   "byGroup": {
+    "2021": {
+     "ndcg": 0.5628388936142593,
+     "ep10": 0.45999999999999996,
+     "mrr": 0.7663690476190477,
+     "j10": 0.62,
+     "cndcg": 0.7926804699983467
+    }
+   },
+   "ci": [
+    0.39260326426980907,
+    0.7113463167092628
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "Hybrid recall → Qwen3.7 rerank (V3 policy)",
+   "type": "rerank only",
+   "backbone": "Qwen3.7 embed+rerank",
+   "point": {
+    "ndcg": 0.5492640112527757,
+    "ep10": 0.41,
+    "mrr": 0.5555,
+    "j10": 0.76,
+    "cndcg": 0.7390917931727478
+   },
+   "byGroup": {
+    "2021": {
+     "ndcg": 0.5492640112527757,
+     "ep10": 0.41,
+     "mrr": 0.5555,
+     "j10": 0.76,
+     "cndcg": 0.7390917931727478
+    }
+   },
+   "ci": [
+    0.38977181900054864,
+    0.7015095563662259
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "Lexical recall only (product FTS5, condition + ranked English terms)",
+   "type": "first stage",
+   "backbone": "FTS5 BM25",
+   "point": {
+    "ndcg": 0.43746869357844986,
+    "ep10": 0.28,
+    "mrr": 0.5077946127946128,
+    "j10": 0.61,
+    "cndcg": 0.6678373551712915
+   },
+   "byGroup": {
+    "2021": {
+     "ndcg": 0.43746869357844986,
+     "ep10": 0.28,
+     "mrr": 0.5077946127946128,
+     "j10": 0.61,
+     "cndcg": 0.6678373551712915
+    }
+   },
+   "ci": [
+    0.3013423909986557,
+    0.5637826456008133
+   ],
+   "best": 1,
+   "worst": 5
+  }
+ ],
+ "reported": []
+}

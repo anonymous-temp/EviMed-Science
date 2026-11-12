@@ -394,10 +394,11 @@ export class DocumentParserClient {
    * Parse bytes that never became a file — the entry point for a caller that
    * holds a download in memory (contract X2), and the one path the knowledge base
    * and the public-page reader share. `engine` as for `parse`.
-   * @param {{bytes:Uint8Array,filename:string,mediaType?:string,sha256?:string,signal?:AbortSignal,
+   * `textOnly` asks for the text and not the bibliographic metadata a model writes over its first and last pages: what a patient's record is read with.
+   * @param {{bytes:Uint8Array,filename:string,mediaType?:string,sha256?:string,signal?:AbortSignal,textOnly?:boolean,
    *   engine?:((file:{name:string,bytes:Buffer,signal?:AbortSignal})=>Promise<{text?:string}>)|null}} input
    */
-  async parseBytes({ bytes, filename, mediaType = "application/octet-stream", sha256 = "", signal: callerSignal = undefined, engine = null }) {
+  async parseBytes({ bytes, filename, mediaType = "application/octet-stream", sha256 = "", signal: callerSignal = undefined, engine = null, textOnly = false }) {
     if (callerSignal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
     if (!(bytes instanceof Uint8Array)) throw new TypeError("Document bytes are required.");
     const name = path.basename(String(filename ?? "")).trim();
@@ -421,7 +422,7 @@ export class DocumentParserClient {
     /** @type {any} */
     let failure;
     try {
-      return await this.#remote(request, callerSignal);
+      return await this.#remote(request, callerSignal, textOnly);
     } catch (error) {
       if (callerSignal?.aborted) throw parserError(409, "source_parser_canceled", "Document parsing was canceled.");
       failure = error;
@@ -445,8 +446,8 @@ export class DocumentParserClient {
   }
 
   /** One request to the configured engine, with its retries and the one metadata fallback.
-   * @param {any} request @param {AbortSignal | undefined} callerSignal */
-  async #remote(request, callerSignal) {
+   * @param {any} request @param {AbortSignal | undefined} callerSignal @param {boolean} [textOnly] the text alone, never the metadata request */
+  async #remote(request, callerSignal, textOnly = false) {
     if (!this.baseUrl) throw parserError(503, "source_parser_unconfigured", "Document parsing is not configured for this deployment.");
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -454,7 +455,7 @@ export class DocumentParserClient {
     const signal = callerSignal ? AbortSignal.any([callerSignal, controller.signal]) : controller.signal;
     try {
       let answer;
-      let metadataAsked = this.now() >= this.metadataDeniedUntil;
+      let metadataAsked = !textOnly && this.now() >= this.metadataDeniedUntil;
       try {
         answer = await this.#withRetries(request, metadataAsked, signal);
       } catch (error) {

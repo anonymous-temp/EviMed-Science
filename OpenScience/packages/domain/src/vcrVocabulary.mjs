@@ -34,6 +34,8 @@
  */
 
 import { WORK_STATE_LABEL, workStateLabel } from './workState.mjs'
+import { VCR_FIT_BANDS } from './vcrTrialJudgment.mjs'
+import { vcrSubjectLabel } from './vcrSubjectLabel.mjs'
 
 /** @param {readonly string[]} list */
 const frozen = (list) => Object.freeze([...list])
@@ -530,7 +532,7 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
 export const VCR_RESULT_KIND_TABS = Object.freeze({
   population: 'population', patient_set: 'patients', comparator: 'comparator', trial_scenario: 'trial', design_grid: 'trial',
   prognostic_training: 'comparator', progression_simulation: 'patients', model_fit: 'patients',
-  accrual_forecast: 'trial', design_confirmatory: 'trial', design_dose: 'trial', design_bayesian: 'trial', design_win_ratio: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
+  accrual_forecast: 'trial', design_confirmatory: 'trial', design_dose: 'trial', design_bayesian: 'trial', design_win_ratio: 'trial', matching: 'matching', match_extract: 'matching', match_judge: 'matching', records_import: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
   network_meta: 'data', dose_response_meta: 'data', effect_shrinkage: 'data',
   // a design-search campaign's candidate evaluations (screening and final) belong to no card of their own; the lab reads them by campaign
   experiment_candidate: 'trial',
@@ -539,7 +541,7 @@ export const VCR_RESULT_KIND_TABS = Object.freeze({
  * The writes that put a patient's matching on the matching tab. A matching is judged at the write -- there is no job to finish -- so
  * the answer to each carries the entry to the tab (a job's answer carries the tab of its result's kind).
  */
-export const VCR_MATCHING_WRITE_WHATS = frozen(['patient_context', 'protocol', 'criteria', 'fact', 'language_judgment', 'candidate_trial'])
+export const VCR_MATCHING_WRITE_WHATS = frozen(['patient_context', 'protocol', 'criteria', 'fact', 'language_judgment', 'trial_judgment'])
 
 /**
  * What each step's run is called to a person: one verb and one object. The button that starts the step says it, the run's own
@@ -581,7 +583,7 @@ export function vcrVisibleQuestion({ purpose = null, steps = [], exportKind = nu
     const label = (exportKind && kinds[exportKind]) || '研究包'
     return revision ? `${VCR_RUN_PURPOSE_PHRASES_ZH.review_repair}${label}` : `生成${label}`
   }
-  if (purpose === 'trial_search') return subjectKey ? `为 ${subjectKey} ${VCR_RUN_PURPOSE_PHRASES_ZH.trial_search}` : '为患者找试验'
+  if (purpose === 'trial_search') return subjectKey ? `为 ${vcrSubjectLabel(subjectKey)} ${VCR_RUN_PURPOSE_PHRASES_ZH.trial_search}` : '为患者找试验'
   if (purpose === 'evidence_refresh') return VCR_RUN_PURPOSE_PHRASES_ZH.evidence_refresh
   const named = VCR_STEPS.filter((step) => steps.includes(step)).map((step) => actions[step])
   if (named.length) return named.join('、')
@@ -916,10 +918,17 @@ export const VCR_JOB_KINDS = frozen([
   'borrowing_prior',
   // --- appended (2026-11-03): a prognostic model trained on the person's own historical table (algorithm round P3) and a population-level disease-progression simulator (P4) ---
   'train_prognostic_model', 'generate_progression',
-  // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
+  // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4); retired, see VCR_RETIRED_JOB_KINDS ---
   'match_extract',
+  // --- appended (2026-11-04): patient and trial judged by the model, pair by pair (owner decisions 2026-11-04) ---
+  'match_judge',
+  // --- appended (2026-11-04): many patients' records taken in as a job ---
+  'records_import',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
 ])
+
+/** Kinds that rows already stored carry and that nothing starts any more: they stay in `VCR_JOB_KINDS` so those rows keep reading. */
+export const VCR_RETIRED_JOB_KINDS = frozen(['match_extract'])
 /**
  * Which of the seven steps an engine job belongs to, by its kind: the step bar's dot and the activity strip say "the patients are
  * being generated", not "generate_patients_continuous". A kind with no step of its own (a forecast, a benchmark, an E-value that a
@@ -938,7 +947,7 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   covariate_set_comparator: 'comparator', negative_control_comparator: 'comparator', tipping_point: 'comparator',
   prognostic_adjustment_comparator: 'comparator', bias_analysis: 'comparator', stc_comparator: 'comparator', target_trial_emulation: 'comparator', borrowing_prior: 'comparator', train_prognostic_model: 'comparator', generate_progression: 'patients',
   design_analytic: 'trial', design_simulation: 'trial', design_confirmatory: 'trial', design_dose: 'trial', design_bayesian: 'trial', design_win_ratio: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
-  match_criteria: 'matching', match_extract: 'matching',
+  match_criteria: 'matching', match_extract: 'matching', match_judge: 'matching', records_import: 'matching',
 })
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({
@@ -1415,4 +1424,77 @@ export const VCR_ASSUMPTION_KEY = new RegExp(VCR_ASSUMPTION_KEY_PATTERN)
  */
 export function vcrKnown(vocabulary, value) {
   return typeof value === 'string' && vocabulary.includes(value)
+}
+
+// ---------------------------------------------------------------------------
+// What a person reads of a judged pair (patient matching results, 2026-11-04)
+// ---------------------------------------------------------------------------
+
+/** The match level a trial-level score reads as: a plain word on the bands of `VCR_FIT_BANDS`, never a probability. */
+export const VCR_MATCH_FIT_LEVELS = frozen(['high', 'medium', 'low', 'minimal'])
+export const VCR_MATCH_FIT_LEVEL_LABELS_ZH = Object.freeze({ high: '高', medium: '中', low: '低', minimal: '很低' })
+/**
+ * The level of a 0-100 score; null when there is no score. The edges are the bands the verdict is read on, so a level and a verdict
+ * never disagree about where a score falls.
+ * @param {unknown} fit @returns {'high' | 'medium' | 'low' | 'minimal' | null}
+ */
+export function vcrMatchFitLevel(fit) {
+  if (fit === null || fit === undefined || !Number.isFinite(Number(fit))) return null
+  const score = Number(fit)
+  return score >= VCR_FIT_BANDS.eligible ? 'high' : score >= VCR_FIT_BANDS.possible ? 'medium' : score >= VCR_FIT_BANDS.insufficient ? 'low' : 'minimal'
+}
+/**
+ * How sure the model said it was, as a word: the secondary figure of a row, never its headline.
+ * @param {unknown} confidence 0-1 @returns {'high' | 'medium' | 'low' | null}
+ */
+export function vcrMatchConfidenceLevel(confidence) {
+  if (confidence === null || confidence === undefined || !Number.isFinite(Number(confidence))) return null
+  const value = Number(confidence)
+  return value >= 0.8 ? 'high' : value >= 0.5 ? 'medium' : 'low'
+}
+export const VCR_MATCH_CONFIDENCE_LABELS_ZH = Object.freeze({ high: '较高', medium: '一般', low: '较低' })
+
+/** Where a clause stands for a person, in code: what a clause table and a funnel count. A clause the note is silent on is `silent`, whatever side the model read it to. */
+export const VCR_MATCH_STANCES = frozen(['support', 'against', 'silent', 'open', 'not_applicable'])
+export const VCR_MATCH_STANCE_LABELS_ZH = Object.freeze({ support: '满足', against: '不满足', silent: '未见记载', open: '待查', not_applicable: '不适用' })
+/** The three groups of reasons a trial opens with. */
+export const VCR_MATCH_REASON_GROUP_LABELS_ZH = Object.freeze({ support: '支持的依据', against: '排除的依据', open: '待查的信息' })
+/** A trial judged without its eligibility text, said where the verdict is. */
+export const VCR_MATCH_NO_ELIGIBILITY_ZH = '未取到入排原文，依据标题和疾病判断'
+
+/** The formats and the two shapes a matching export takes: a row for each pair, or a row for each clause of each pair. */
+export const VCR_MATCH_EXPORT_FORMATS = frozen(['csv', 'json'])
+export const VCR_MATCH_EXPORT_KINDS = frozen(['pairs', 'clauses'])
+
+/**
+ * Why a pair was not judged, in a sentence a person reads. The code is the ledger's; the words are these, and an unlisted code reads as the
+ * general one — an internal name never reaches a page.
+ */
+export const VCR_MATCH_FAILURE_REASONS_ZH = Object.freeze({
+  vcr_match_answer_unreadable: '模型的回答读不出结论',
+  vcr_match_judge_cut_off: '模型的回答被截断',
+  vcr_match_judge_incomplete: '模型没有把回答写完',
+  vcr_match_judge_timeout: '模型回答超时',
+  vcr_match_judge_network: '连不上模型服务',
+  model_gateway_upstream_error: '模型服务暂时没有回答',
+  registry_not_found: '登记库里没有这个登记号',
+  registry_unavailable: '没能取回这条登记记录',
+  vcr_criteria_missing: '这个方案版本没有入排条件',
+  vcr_match_no_patient_text: '这位患者没有可读的病历',
+  vcr_projection_unavailable: '这位患者的病历现在不能交给云端模型读取',
+  vcr_document_withdrawn: '这位患者已撤回同意',
+  vcr_cloud_processing_not_authorized: '这份病历没有适用的云端处理授权，在数据来源里开启后可继续',
+  vcr_projection_permission_changed: '这份病历的云端处理授权在判定中途变了，确认授权后可继续',
+  vcr_source_withdrawn: '这份病历的来源已撤回，不再判定',
+  vcr_match_record_changed: '判定过程中病历又有更新，继续判定会按新的病历重来',
+  vcr_match_judge_failed: '模型这次没有给出可用的回答，可继续判定再试一次',
+  usage_budget_exceeded: '额度用完了',
+  insufficient_quota: '额度用完了',
+  model_gateway_payment_required: '额度用完了',
+  usage_ledger_unavailable: '用量账本暂时不可用',
+})
+export const VCR_MATCH_FAILURE_FALLBACK_ZH = '这一对没有判成'
+/** @param {unknown} code @returns {string} */
+export function vcrMatchFailureReason(code) {
+  return /** @type {Record<string, string>} */ (VCR_MATCH_FAILURE_REASONS_ZH)[String(code ?? '')] ?? VCR_MATCH_FAILURE_FALLBACK_ZH
 }

@@ -139,7 +139,54 @@ export function clinicalConventionalUnit(variable, value) {
   if (!row || value < row.printed.min || value > row.printed.max) return null;
   return { unit: row.unit, basis: row.basis, version: table.version };
 }
-/** Original values are immutable; the result is a derived comparison value.
+/** A name as the table keys it: lower case, the spaces and hyphens of a typed name folded to the underscores a variable id uses. @param {unknown} name */
+const analyteKey = (name) => String(name ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+
+/** analyte id or alias -> the analyte's row, built once from the table */
+const ANALYTES = new Map(table.analytes.flatMap(/** @param {any} row */ row => [row.id, ...row.aliases].map(name => [analyteKey(name), row])));
+/** scalar quantity analyte name -> its row (weight, height, temperature, pressure) */
+const SCALARS = new Map(table.scalarQuantities.flatMap(/** @param {any} row */ row => row.analytes.map(/** @param {string} name */ name => [analyteKey(name), row])));
+const MASS = /** @type {Record<string, number>} */ (table.massConcentration.sizes);
+const MOLAR = /** @type {Record<string, number>} */ (table.molarConcentration.sizes);
+
+/** The unit of a quantity row, from any of its listed spellings (case-insensitive inside one quantity: `m` is a metre here and nothing else).
+ * @param {any} row @param {string} unit @returns {[string, {scale:number, offset:number}] | null} */
+function scalarUnit(row, unit) {
+  const folded = String(unit ?? '').trim().toLowerCase();
+  for (const [name, entry] of Object.entries(row.units)) {
+    if (entry.spellings.some(/** @param {string} spelling */ spelling => spelling.toLowerCase() === folded)) return [name, entry];
+  }
+  return null;
+}
+
+/** A derived value to twelve significant digits, so that a cut-off written in another unit (100.4 degF for 38 degC) lands on the cut-off and not on the rounding error beside it. @param {number} value */
+const settle = (value) => Number(value.toPrecision(12));
+
+/** @param {number} value @param {string} a @param {string} b the table's tokens @param {any} analyte @returns {{ value: number, basis: string } | null} */
+function derivedConversion(value, a, b, analyte) {
+  const aMass = MASS[a], bMass = MASS[b], aMolar = MOLAR[a], bMolar = MOLAR[b];
+  if (aMass && bMass) return { value: value * aMass / bMass, basis: 'Mass concentrations differ only by their size (g/L as the base)' };
+  if (aMolar && bMolar) return { value: value * aMolar / bMolar, basis: 'Molar concentrations differ only by their size (mol/L as the base)' };
+  if ((aMass && bMolar) || (aMolar && bMass)) {
+    // mass per volume x (1 / molar mass) = moles per volume, the conversion ucum-lhc makes when it is given a molecular weight
+    if (!(analyte.molarMass > 0)) return null;
+    const grams = aMass ? value * aMass : value * aMolar * analyte.molarMass;
+    return { value: aMass ? grams / analyte.molarMass / bMolar : grams / bMass, basis: `${analyte.id}: ${analyte.basis}` };
+  }
+  const equivalent = (/** @type {string} */ unit) => unit === 'mEq/L' || unit === 'meq/L';
+  const aEq = equivalent(a), bEq = equivalent(b);
+  if ((aEq && bMolar) || (bEq && aMolar)) {
+    // mEq/L is mmol/L times the valence of the ion
+    if (!(analyte.valence > 0)) return null;
+    const mmol = aEq ? value / analyte.valence : value * aMolar / MOLAR['mmol/L'];
+    return { value: aEq ? mmol * MOLAR['mmol/L'] / bMolar : mmol * analyte.valence, basis: `${analyte.id}: ${analyte.basis}` };
+  }
+  return null;
+}
+
+/** Original values are immutable; the result is a derived comparison value. The four explicit rows of `conversions` answer first, with
+ * the factors they have always had; any other pair of an analyte the table knows is derived (`derivation` in the table says how), a quantity
+ * with an offset (a temperature) through its own scale and offset, and anything else is `null`.
  * @param {number} value @param {string} from @param {string} to @param {string} analyte
  * @returns {{value:number,version:string,from:string,to:string,basis:string}|null} */
 export function convertClinicalUnit(value, from, to, analyte) {
@@ -150,5 +197,15 @@ export function convertClinicalUnit(value, from, to, analyte) {
     const factor = row.from === a && row.to === b ? row.factor : row.from === b && row.to === a ? 1 / row.factor : null;
     if (factor != null && Number.isFinite(value * factor)) return { value: value * factor, version: table.version, from: a, to: b, basis: row.basis };
   }
-  return null;
+  const scalar = SCALARS.get(analyteKey(analyte));
+  if (scalar) {
+    const source = scalarUnit(scalar, from), target = scalarUnit(scalar, to);
+    if (!source || !target) return null;
+    const converted = settle((value * source[1].scale + source[1].offset - target[1].offset) / target[1].scale);
+    return Number.isFinite(converted) ? { value: converted, version: table.version, from: source[0], to: target[0], basis: scalar.basis } : null;
+  }
+  const known = ANALYTES.get(analyteKey(analyte));
+  if (!known) return null;
+  const derived = derivedConversion(value, a, b, known);
+  return derived && Number.isFinite(derived.value) ? { value: settle(derived.value), version: table.version, from: a, to: b, basis: derived.basis } : null;
 }

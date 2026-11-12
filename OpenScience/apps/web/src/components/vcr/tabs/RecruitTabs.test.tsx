@@ -47,8 +47,9 @@ async function chooseFrom(chip: string | RegExp, item: string | RegExp) {
   await userEvent.click(await screen.findByRole("menuitemradio", { name: item }));
 }
 
+/** The reads of the tab's own payload; what the model judged is read from `matching/judged`, which these are not. */
 const matchingReads = (server: ReturnType<typeof installVcrServer>) =>
-  server.calls.filter((call) => call.method === "GET" && call.path.startsWith(MATCHING)).map((call) => new URL(call.path, "http://x").searchParams);
+  server.calls.filter((call) => call.method === "GET" && call.path.startsWith(MATCHING) && !call.path.startsWith(`${MATCHING}/`)).map((call) => new URL(call.path, "http://x").searchParams);
 
 let server: ReturnType<typeof installVcrServer>;
 let restoreRoom: () => void;
@@ -111,15 +112,6 @@ describe("患者匹配 — choosing a person", () => {
     expect(reads.at(-1)?.get("direction")).toBe("trial_to_patient");
   });
 
-  // The ranking hint orders a coordinator's work; it is never a probability.
-  it("carries the clinical priority under its own label, with no number that reads as a probability", async () => {
-    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
-    await screen.findByRole("heading", { name: "P-0201" });
-    const priority = (screen.getByRole("button", { name: /^P-0192/ }).closest("li") as HTMLElement).querySelector("[data-vcr-priority]") as HTMLElement;
-    expect(priority).toHaveTextContent("临床优先级（不是获益概率） · ECOG 1，一线含铂后进展");
-    expect(priority.textContent).not.toMatch(/0\.8|80\s*%|%/);
-    expect(document.body.textContent).not.toMatch(/获益概率\s*[\d.]/);
-  });
 });
 
 
@@ -149,17 +141,6 @@ describe("患者匹配 — what a rule says about a person", () => {
     expect(row).not.toHaveTextContent("未知");
     // The rule that is unknown stays unknown.
     expect(document.querySelector("[data-vcr-criterion='E1']")).toHaveTextContent("未知");
-  });
-
-  it("shows who waits in 待复核排除 when the server sends them", async () => {
-    const payload = fixture("ev201/matching.json");
-    payload.pendingReview = { count: 2, subjects: ["P-0300", "P-0301"] };
-    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: payload });
-    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
-    expect(await screen.findByText("待复核排除")).toBeInTheDocument();
-    const zone = document.querySelector("[data-vcr-pending-review]") as HTMLElement;
-    expect(within(zone).getByText("P-0300")).toBeInTheDocument();
-    expect(screen.getByText("2 人")).toBeInTheDocument();
   });
 
   it("says 已撤回 beside a person whose consent was withdrawn, and nothing beside the others", async () => {
@@ -208,17 +189,17 @@ describe("患者匹配 — a study with protocol versions and nothing evaluated 
   const idle = (raw: any) => { raw.steps.matching = { status: "none", requested: false }; };
   const unevaluated = (change?: (page: any) => void) => {
     const page = fixture("ev201/matching.json");
-    Object.assign(page, { candidates: [], selected: null, funnel: [], gaps: [], comparisons: [], timeline: [], forecast: null, pendingReview: null, ledger: [],
+    Object.assign(page, { candidates: [], selected: null, funnel: [], gaps: [], comparisons: [], timeline: [], forecast: null, ledger: [],
       sites: [], followup: [], headline: null, partner: null, counts: null, candidateRoster: ["P-0300", "P-0301"] });
     change?.(page);
     return page;
   };
-  const JOBS = `POST /vcr/studies/${STUDY_ID}/jobs`;
+  const JUDGE = `POST /vcr/studies/${STUDY_ID}/matching/judge`;
 
   it("is the step's recipe and one 开始评估 — no toolbar, no controls over it — and the button queues the protocol in view for the registered people", async () => {
     server = installVcrServer(network.productRequest, {
       [`GET ${MATCHING}`]: unevaluated(),
-      [JOBS]: { jobs: [{ jobId: "job_1", state: "queued" }], unavailable: [] },
+      [JUDGE]: { jobId: "job_1", state: "queued", estimate: { pairs: 2, cost: 0.5, currency: "CNY" } },
     });
     const { container } = drawTab(<MatchingTab studyId={STUDY_ID} study={study(idle)} />);
     const start = await screen.findByRole("button", { name: "开始评估" });
@@ -227,22 +208,22 @@ describe("患者匹配 — a study with protocol versions and nothing evaluated 
     expect(container.querySelector("[data-page-chrome]")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "让 AI 匹配患者" })).toBeNull();
     await userEvent.click(start);
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/jobs`, "POST",
-      { kind: "match_criteria", selection: { protocolVersionIds: ["prt_1"], direction: "trial_to_patient" } }));
-    expect(await screen.findByText("已提交 1 项评估。")).toBeInTheDocument();
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/matching/judge`, "POST",
+      { direction: "trial_to_patient", protocolVersionId: "prt_1" }));
+    expect(await screen.findByText("已开始 1 项评估，共 2 对，预计最多 0.50 灵豆；随时可以停止，判完的会保留。")).toBeInTheDocument();
     // The job runs on its own time, and the page reads itself when it moves: there is no button to ask for the answer.
     expect(screen.queryByRole("button", { name: "刷新结果" })).toBeNull();
     await waitFor(() => expect(matchingReads(server).length).toBeGreaterThan(1));
   });
 
-  it("says nothing was submitted, and why, when the evaluation could not be queued", async () => {
+  it("says nothing was started, and why, when the evaluation could not be queued", async () => {
     server = installVcrServer(network.productRequest, {
       [`GET ${MATCHING}`]: unevaluated(),
-      [JOBS]: { jobs: [], unavailable: [{ code: "vcr_criteria_missing" }] },
+      [JUDGE]: () => { throw new WebApiError("x", { status: 409, code: "vcr_match_judge_nothing_to_read" }); },
     });
     drawTab(<MatchingTab studyId={STUDY_ID} study={study(idle)} />);
     await userEvent.click(await screen.findByRole("button", { name: "开始评估" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("没有提交评估。方案还没有结构化的入排条件，无法匹配。");
+    expect(await screen.findByRole("alert")).toHaveTextContent("没有开始评估。没有可判定的内容：先写入病历或入排条件，再判定。");
   });
 
   it("keeps the step's own ask when nobody is registered to evaluate — there is nothing for 开始评估 to work on", async () => {
@@ -290,49 +271,6 @@ function addressed(payload: any) {
 }
 const P0192 = `GET ${MATCHING}?view=matching&direction=trial_to_patient&candidate=P-0192`;
 const criterionRow = (code: string) => document.querySelector(`[data-vcr-criterion='${code}']`) as HTMLElement;
-
-describe("patient matching scientific evidence requests", () => {
-  async function open(abilities?: string[], write?: () => unknown) {
-    server = installVcrServer(network.productRequest, {
-      [P0192]: addressed(fixture("ev201/matching-p0192.json")),
-      ...(write ? { [`POST /vcr/studies/${STUDY_ID}/decisions`]: write } : {}),
-    });
-    drawTab(<MatchingTab studyId={STUDY_ID} study={study(raw => { if (abilities) raw.abilities = abilities; })} />);
-    await screen.findByRole("heading", { name: "P-0201" });
-    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
-    await screen.findByRole("heading", { name: "P-0192" });
-  }
-
-  it("records the exact subject, assessment and open criteria without recruitment side effects", async () => {
-    await open();
-    await userEvent.click(screen.getByRole("button", { name: "记录待补证项" }));
-    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已记录补证请求。"));
-    const writes = server.calls.filter(call => call.method === "POST");
-    expect(writes).toHaveLength(1);
-    expect(writes[0].path).toBe(`/vcr/studies/${STUDY_ID}/decisions`);
-    expect(writes[0].body).toMatchObject({ chosen: { kind: "evidence_request", subject: "P-0192", assessmentId: "asm_192", criteria: ["E1", "E2"], criterionIds: ["crt_E1", "crt_E2"] } });
-  });
-
-  it("offers no scientific decision write to a reader without write permission", async () => {
-    await open(["read", "review_clinical"]);
-    const button = screen.getByRole("button", { name: "记录待补证项" });
-    expect(button).toBeDisabled();
-    await userEvent.click(button);
-    expect(server.calls.filter(call => call.method === "POST")).toHaveLength(0);
-  });
-
-  it("keeps one pending decision write and releases the controls when it settles", async () => {
-    let finish!: (value: object) => void;
-    await open(undefined, () => new Promise(resolve => { finish = resolve; }));
-    const button = screen.getByRole("button", { name: "记录待补证项" });
-    await userEvent.click(button);
-    await userEvent.click(button);
-    expect(button).toHaveAttribute("aria-disabled", "true");
-    expect(server.calls.filter(call => call.method === "POST")).toHaveLength(1);
-    await act(async () => finish({}));
-    await waitFor(() => expect(button).toBeEnabled());
-  });
-});
 
 describe("患者匹配 — 改判, a person's hand on a rule", () => {
   async function open(change?: (payload: any) => void, reader: VcrStudy = study()) {
@@ -394,81 +332,45 @@ describe("患者匹配 — 改判, a person's hand on a rule", () => {
     expect(criterionRow("E2").querySelector("[data-vcr-overridden]")).toBeNull();
   });
 
-  it("offers no 改判 or 复核 for a panel that does not name its assessment", async () => {
+  it("offers no 改判 for a panel that does not name its assessment", async () => {
     await open((payload) => { delete payload.selected.assessmentId; });
     expect(screen.queryByRole("button", { name: "改判" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "复核这份评估" })).toBeNull();
   });
 
   it("offers no 改判 on a rule that does not name itself", async () => {
     await open((payload) => { for (const row of payload.selected.criteria) delete row.criterionId; });
     expect(screen.queryByRole("button", { name: "改判" })).toBeNull();
-    expect(screen.getByRole("button", { name: "复核这份评估" })).toBeEnabled();
   });
 
   it("offers none to a reader who may neither write the ledger nor review", async () => {
     await open(undefined, study((raw) => { raw.abilities = ["read", "write", "contact_patients"]; }));
     expect(screen.queryByRole("button", { name: "改判" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "复核这份评估" })).toBeNull();
   });
 
 
 });
 
-describe("患者匹配 — 复核这份评估, a reviewer's countersignature", () => {
-  async function open(change?: (payload: any) => void, reader: VcrStudy = study()) {
+describe("患者匹配 — an assessment reviewed before", () => {
+  async function open(change?: (payload: any) => void) {
     const payload = addressed(fixture("ev201/matching-p0192.json"));
     change?.(payload);
     server = installVcrServer(network.productRequest, { [P0192]: payload });
-    drawTab(<MatchingTab studyId={STUDY_ID} study={reader} />);
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
     await screen.findByRole("heading", { name: "P-0201" });
     await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
     await screen.findByRole("heading", { name: "P-0192" });
   }
 
-  it("countersigns the assessment named in the path, once, and re-reads the person", async () => {
-    await open();
-    const reads = matchingReads(server).length;
-    await userEvent.click(screen.getByRole("button", { name: "复核这份评估" }));
-    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/assessments/asm_192/review`, "POST", {}));
-    expect(server.calls.filter((call) => call.method === "POST")).toHaveLength(1);
-    expect(toasts.success).toHaveBeenCalledWith("已记录复核。");
-    await waitFor(() => expect(matchingReads(server).length).toBeGreaterThan(reads));
-  });
-
-  it("is one signature however often it is pressed while the first is in flight", async () => {
-    let finish: (value: unknown) => void = () => undefined;
-    await open();
-    server = installVcrServer(network.productRequest, {
-      [P0192]: addressed(fixture("ev201/matching-p0192.json")),
-      [`POST /vcr/studies/${STUDY_ID}/assessments/asm_192/review`]: () => new Promise((resolve) => { finish = resolve; }),
-    });
-    const sign = screen.getByRole("button", { name: "复核这份评估" });
-    await userEvent.click(sign);
-    await userEvent.click(sign);
-    expect(server.calls.filter((call) => call.method === "POST")).toHaveLength(1);
-    await act(async () => { finish({}); });
-    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已记录复核。"));
-  });
-
-  it("says who signed an assessment that is reviewed, and offers no second signature", async () => {
+  it("says who signed it", async () => {
     await open((payload) => { payload.selected.reviewedBy = "reviewer-1"; payload.selected.reviewedByName = "赵复核"; });
     expect(document.querySelector("[data-vcr-reviewed-by]")).toHaveTextContent("已复核 · 赵复核");
     expect(document.querySelector("[data-vcr-reviewed-by]")).not.toHaveTextContent("reviewer-1");
-    expect(screen.queryByRole("button", { name: "复核这份评估" })).toBeNull();
   });
 
   it("never prints the account id of whoever signed: with no name it says nothing of them", async () => {
     await open((payload) => { payload.selected.reviewedBy = "usr_3f9a"; payload.selected.reviewedByName = null; });
     expect(document.querySelector("[data-vcr-reviewed-by]")).toHaveTextContent("已复核");
     expect(document.querySelector("[data-vcr-reviewed-by]")).not.toHaveTextContent("usr_3f9a");
-    expect(screen.queryByRole("button", { name: "复核这份评估" })).toBeNull();
-  });
-
-  it("is a clinical reviewer's, not a coordinator's", async () => {
-    await open(undefined, study((raw) => { raw.abilities = ["read", "review_clinical"]; }));
-    expect(screen.getByRole("button", { name: "复核这份评估" })).toBeEnabled();
-    expect(within(criterionRow("E1")).getByRole("button", { name: "改判" })).toBeEnabled();
   });
 });
 

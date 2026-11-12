@@ -94,7 +94,7 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
   const what = resultKind === "trial_scenario"
     ? (/** @type {Record<string, string>} */ ({ analytic: "方案计算", simulation: "方案模拟", assurance: "成功把握计算" })[String(stage)] ?? "方案模拟")
     : (/** @type {Record<string, string>} */ ({ population: "人群生成", patient_set: "虚拟患者生成", comparator: "对照分析", design_grid: "设计网格",
-      accrual_forecast: "入组预测", matching: "匹配评估", match_extract: "病历阅读", population_check: "人群核对", design_confirmatory: "确认性设计", design_dose: "剂量探索设计", design_bayesian: "贝叶斯设计", design_win_ratio: "胜率比设计",
+      accrual_forecast: "入组预测", matching: "匹配评估", match_judge: "患者与试验判定", records_import: "导入病历", population_check: "人群核对", design_confirmatory: "确认性设计", design_dose: "剂量探索设计", design_bayesian: "贝叶斯设计", design_win_ratio: "胜率比设计",
       network_meta: "网络荟萃分析", dose_response_meta: "剂量反应荟萃分析", effect_shrinkage: "已发表效应的收缩", prognostic_training: "预后模型训练", progression_simulation: "疾病进展模拟" })[resultKind] ?? "计算");
   const name = clip(String(label ?? "").replace(/^[A-Z]\d*\s+/, ""), 24);
   if (state === "failed") {
@@ -109,6 +109,8 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
   if (result?.conclusion === "not_estimable" && resultKind === "comparator") return null;
   const measure = (/** @type {string} */ wanted) => list(result?.measures).map((entry) => /** @type {any} */ (entry))
     .find((entry) => entry && entry.name === wanted && finiteNumber(entry.value) !== null);
+  // A job that reads record by record or pair by pair ends `limited` when it stopped before the end, which a reader must hear; an engine's limited estimate is a finished result.
+  const stopped = result?.conclusion === "limited" && ["match_judge", "records_import"].includes(resultKind);
   /** @type {string | null} */
   let headline = null;
   if (resultKind === "trial_scenario") {
@@ -133,11 +135,19 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
     const generated = finiteNumber(result?.counts?.generatedRecords);
     const real = finiteNumber(result?.counts?.realPatients);
     headline = generated !== null && generated > 0 ? `${count(generated)} 条生成记录` : real !== null && real > 0 ? `${count(real)} 人` : null;
-  } else if (resultKind === "match_extract") {
-    // The reading of patient records is the one computation that takes hours: the person is told it is over, and how much of it was read.
-    const read = measure("records_read");
-    const left = finiteNumber(result?.diagnostics?.remaining) ?? 0;
-    headline = read && read.value > 0 ? (left > 0 ? `读了 ${count(read.value)} 份病历，中途停下，还有 ${count(left)} 份没读` : `读完 ${count(read.value)} 份病历`) : null;
+  } else if (resultKind === "match_judge") {
+    const finished = measure("pairs_finished");
+    const total = measure("pairs_total");
+    const failed = measure("pairs_failed");
+    const clauses = measure("criteria_pairs_finished");
+    const clauseTotal = measure("criteria_pairs_total");
+    // A comparison over part of the pairs is not what a stopped job has to say first.
+    const changed = !stopped && typeof result?.diagnostics?.changes?.sentence === "string" ? result.diagnostics.changes.sentence.replace(/。$/u, "") : "";
+    const unread = !stopped ? "" : result?.diagnostics?.clausesNotReached ? "，逐条判定没有开始"
+      : clauseTotal && clauseTotal.value > (clauses?.value ?? 0) ? `，逐条判了 ${count(clauses?.value ?? 0)}/${count(clauseTotal.value)} 对` : "";
+    headline = changed ? changed : finished && total ? `判定了 ${count(finished.value)}/${count(total.value)} 对${failed && failed.value > 0 ? `，${count(failed.value)} 对没判成` : ""}${unread}` : null;
+  } else if (resultKind === "records_import") {
+    headline = typeof result?.diagnostics?.statement === "string" ? result.diagnostics.statement.replace(/。$/u, "") : null;
   } else if (resultKind === "population_check") {
     const compared = measure("variables_compared");
     const apart = measure("variables_apart");
@@ -148,8 +158,8 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
     headline = /** @type {Record<string, string>} */ ({ estimable: "可以估计", limited: "有限制地估计", benchmark_only: "仅基准" })[String(word)] ?? null;
   }
   return {
-    title: `${what}完成${headline ? `：${headline}` : ""}`,
-    body: `结果在「${tabLabel(tab)}」页上，对话里也可以接着问。`,
+    title: `${what}${stopped ? "没有做完" : "完成"}${headline ? `：${headline}` : ""}`,
+    body: stopped ? `已做完的保留在「${tabLabel(tab)}」页上，那里可以继续；对话里也可以接着问。` : `结果在「${tabLabel(tab)}」页上，对话里也可以接着问。`,
     tab,
   };
 }

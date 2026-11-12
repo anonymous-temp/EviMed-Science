@@ -1,0 +1,298 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import test from "node:test";
+import { deflateSync } from "node:zlib";
+
+import { VcrCandidateRerank } from "../src/vcrCandidateRerank.mjs";
+import { createVcrEvidencePipeline } from "../src/vcrEvidence.mjs";
+import { VcrService } from "../src/vcrService.mjs";
+import { createVcrTrialCorpus } from "../src/vcrTrialCorpus.mjs";
+
+const hash = (value) => createHash("sha256").update(value).digest("hex");
+const trialId = (number) => `NCT${String(number).padStart(8, "0")}`;
+
+async function fixture(t) {
+  const path = await mkdtemp(join(tmpdir(), "vcr-trial-corpus-"));
+  const manifestPath = join(path, "manifest.json");
+  const databasePath = join(path, "trials.sqlite");
+  t.after(() => rm(path, { recursive: true, force: true }));
+  const db = new DatabaseSync(databasePath);
+  db.exec(`
+    CREATE TABLE documents (id INTEGER PRIMARY KEY, nct_id TEXT UNIQUE, xml_sha256 TEXT, payload_sha256 TEXT, payload BLOB, archive TEXT);
+    CREATE VIRTUAL TABLE terms USING fts5(title,condition,summary,description,eligibility,content='',tokenize='porter unicode61');
+    BEGIN;
+  `);
+  const document = db.prepare("INSERT INTO documents VALUES (?, ?, ?, ?, ?, ?)");
+  const terms = db.prepare("INSERT INTO terms(rowid, title, condition, summary, description, eligibility) VALUES (?, ?, ?, ?, ?, ?)");
+  for (let n = 1; n <= 600; n += 1) {
+    const title = n === 101 ? "Diabetes Biomarker" : "Diabetes Study";
+    const payload = {
+      nct_id: trialId(n), title, condition: "Diabetes", eligibility: "Inclusion Criteria:\nAge 18 years or older.",
+      summary: "Frozen summary", detailed_description: "Frozen detailed description",
+      minimum_age: "18 Years", gender: "All", overall_status: "Completed", xml_sha256: hash(`xml ${n}`),
+      qrels: "REFERENCE LABEL", contact_email: "private@example.test",
+    };
+    const bytes = Buffer.from(JSON.stringify(payload));
+    document.run(n, payload.nct_id, payload.xml_sha256, hash(bytes), deflateSync(bytes), "private-archive.zip");
+    terms.run(n, title, payload.condition, "", "", payload.eligibility);
+  }
+  db.exec("COMMIT");
+  db.close();
+  const manifest = { version: 1, id: "snapshot-1", sourceVersion: "release-1", snapshotDate: "2021-04-27",
+    databasePath: "trials.sqlite", databaseSha256: hash(await readFile(databasePath)) };
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  return { manifest, manifestPath };
+}
+
+test("frozen product evidence reads 500 deterministically ranked unique IDs in ten pages and resolves its exact original record", async (t) => {
+  const { manifest, manifestPath } = await fixture(t);
+  const trialCorpus = createVcrTrialCorpus(manifestPath);
+  t.after(() => trialCorpus.close());
+  let liveCalls = 0;
+  const liveRegistry = { async record() { liveCalls += 1; }, async search() { liveCalls += 1; } };
+  const pipeline = createVcrEvidencePipeline({ store: {}, registry: liveRegistry, trialCorpus });
+  const filter = { collection: manifest.id, condition: "diabetes", terms: ["biomarker", "unmatched", "other", "unused"], limit: 500 };
+  const service = new VcrService({ store: {}, config: { vcrCandidateSearchMax: 20 }, evidence: pipeline });
+  const first = await service.runtimeRead({}, "candidates", filter);
+  assert.equal(first.status, "ok");
+  assert.equal(first.asOf, manifest.snapshotDate);
+  assert.deepEqual(first.collection, { id: manifest.id, sourceVersion: manifest.sourceVersion,
+    snapshotDate: manifest.snapshotDate, sourceFormat: "clinicaltrials-xml", databaseSha256: manifest.databaseSha256, revision: trialCorpus.revision });
+  assert.equal(first.retrieval.totalMatched, 600);
+  assert.equal(first.retrieval.truncated, true);
+  assert.equal(first.retrieval.retrievedIds.length, 500);
+  // TrialGPT's fusion weighs the run's first phrase most: the trial at the head of "diabetes" leads, and the one both phrases find is still kept.
+  assert.equal(first.candidates[0].registryId, trialId(1));
+  assert.ok(first.retrieval.retrievedIds.includes(trialId(101)));
+  const ids = [];
+  let page = first;
+  for (let n = 0; n < 10; n += 1) {
+    assert.equal(page.candidates.length, 50);
+    ids.push(...page.candidates.map(({ registryId, rank }, offset) => {
+      assert.equal(rank, n * 50 + offset + 1);
+      return registryId;
+    }));
+    if (n < 9) page = await service.runtimeRead({}, "candidates", { ...filter, cursor: page.nextCursor });
+  }
+  assert.deepEqual(ids, first.retrieval.retrievedIds);
+  assert.equal(new Set(ids).size, 500);
+  assert.equal(page.nextCursor, null);
+  assert.deepEqual((await pipeline.candidatesFor({}, filter)).retrieval, first.retrieval);
+  for (const override of [{ terms: ["unrelated"] }, { limit: 450 }, { status: "open" }]) {
+    assert.equal((await pipeline.candidatesFor({}, { ...filter, ...override, cursor: first.nextCursor })).reason, "trial_collection_cursor_invalid");
+  }
+  assert.equal((await pipeline.candidatesFor({}, { ...filter, collection: "different" })).reason, "trial_collection_unavailable");
+  assert.equal((await pipeline.candidatesFor({}, { ...filter, limit: 501 })).code, "vcr_read_filter_invalid");
+  const { collection, collectionRevision, registry, registryId } = first.candidates[0];
+  const record = await pipeline.registryRecord({}, { collection, collectionRevision, registry, registryId: registryId.toLowerCase() });
+  const exact = await pipeline.judgmentRecord({ collection, collectionRevision, registry, registryId });
+  assert.equal(record.record.registryId, exact.trial.registryId);
+  assert.equal(record.record.eligibilityText, exact.trial.eligibility);
+  assert.equal(record.sources[0].recordHash, exact.trial.recordHash);
+  assert.equal(record.collection.databaseSha256, manifest.databaseSha256);
+  assert.equal(record.collection.sourceSha256, record.collection.xmlSha256);
+  assert.deepEqual(record.record.description, { briefSummary: "Frozen summary", detailedDescription: "Frozen detailed description" });
+  assert.doesNotMatch(JSON.stringify(record), /qrels|REFERENCE LABEL|private@example\.test|private-archive\.zip|trials\.sqlite/);
+  assert.equal((await pipeline.registryRecord({}, { collection, collectionRevision, registryId: trialId(1000) })).status, "registry_not_found");
+  assert.equal((await pipeline.judgmentRecord({ collection, collectionRevision, registryId: trialId(1000) })).status, "registry_not_found");
+  assert.equal(liveCalls, 0);
+
+  await writeFile(manifestPath, JSON.stringify({ ...manifest, sourceVersion: "release-2", sourceFormat: "trialgpt-json" }));
+  const newer = createVcrTrialCorpus(manifestPath);
+  t.after(() => newer.close());
+  const newerPipeline = createVcrEvidencePipeline({ store: {}, trialCorpus: newer });
+  const oldCursor = await newerPipeline.candidatesFor({}, { ...filter, cursor: first.nextCursor });
+  assert.equal(oldCursor.reason, "trial_collection_cursor_invalid");
+  const wrongRevision = await newerPipeline.judgmentRecord({ collection, collectionRevision, registry, registryId });
+  assert.equal(wrongRevision.reason, "trial_collection_revision_mismatch");
+  const noRevision = await pipeline.registryRecord({}, { collection, registry, registryId });
+  assert.equal(noRevision.reason, "trial_collection_revision_mismatch");
+  const newerRecord = await newerPipeline.judgmentRecord({ collection, collectionRevision: newer.revision, registry, registryId });
+  assert.notEqual(newerRecord.trial.recordHash, exact.trial.recordHash);
+  assert.equal(newerRecord.trial.collection.sourceSha256, record.collection.sourceSha256);
+  assert.equal(newerRecord.trial.collection.xmlSha256, undefined);
+});
+
+test("frozen evidence refuses a wrong manifest version or database hash", async (t) => {
+  const { manifest, manifestPath } = await fixture(t);
+  await writeFile(manifestPath, JSON.stringify({ ...manifest, version: 2 }));
+  assert.throws(() => createVcrTrialCorpus(manifestPath), { code: "trial_collection_manifest_invalid" });
+  await writeFile(manifestPath, JSON.stringify({ ...manifest, databaseSha256: "a".repeat(64) }));
+  const trialCorpus = createVcrTrialCorpus(manifestPath);
+  t.after(() => trialCorpus.close());
+  await assert.rejects(trialCorpus.record(trialId(1)), { code: "trial_collection_index_hash_mismatch" });
+});
+
+test("frozen worker caps pending calls and removes aborted queued requests without interrupting active work", async (t) => {
+  const { manifestPath } = await fixture(t);
+  const corpus = createVcrTrialCorpus(manifestPath);
+  t.after(() => corpus.close());
+  const queueAbort = new AbortController();
+  const records = Array.from({ length: 8 }, (_, index) => corpus.record(trialId(index + 1), index === 7 ? queueAbort.signal : undefined));
+  const settled = Promise.allSettled(records);
+  await assert.rejects(corpus.record(trialId(9)), { code: "trial_collection_busy" });
+  queueAbort.abort();
+  const replacement = corpus.record(trialId(9));
+  const results = await settled;
+  assert.ok(results.slice(0, 7).every(({ status }) => status === "fulfilled"));
+  assert.equal(results[7].reason.code, "trial_collection_read_aborted");
+  assert.equal((await replacement).precedent.registryId, trialId(9));
+});
+
+test("aborting active work retires its worker, settles queued calls, and lets later calls reopen the index", async (t) => {
+  const { manifestPath } = await fixture(t);
+  const corpus = createVcrTrialCorpus(manifestPath);
+  t.after(() => corpus.close());
+  const activeAbort = new AbortController();
+  const active = corpus.record(trialId(1), activeAbort.signal);
+  const queued = corpus.record(trialId(2));
+  const rejected = Promise.all([
+    assert.rejects(active, { code: "trial_collection_read_aborted" }),
+    assert.rejects(queued, { code: "trial_collection_read_aborted" }),
+  ]);
+  activeAbort.abort();
+  await rejected;
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      assert.equal((await corpus.record(trialId(3))).precedent.registryId, trialId(3));
+      return;
+    } catch (error) {
+      assert.equal(error.code, "trial_collection_busy");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  assert.fail("Retired corpus worker did not release admission");
+});
+
+test("frozen worker enforces its deadline and closes with all pending callers settled", async (t) => {
+  const { manifestPath } = await fixture(t);
+  const timed = createVcrTrialCorpus(manifestPath, { timeoutMs: 1 });
+  t.after(() => timed.close());
+  await assert.rejects(timed.record(trialId(1)), { code: "trial_collection_read_timeout" });
+
+  const corpus = createVcrTrialCorpus(manifestPath);
+  const pending = Promise.all([
+    assert.rejects(corpus.record(trialId(1)), { code: "trial_collection_worker_closed" }),
+    assert.rejects(corpus.record(trialId(2)), { code: "trial_collection_worker_closed" }),
+  ]);
+  await corpus.close();
+  await pending;
+  await assert.rejects(corpus.record(trialId(3)), { code: "trial_collection_worker_closed" });
+});
+
+test("a frozen collection takes the same reranker and receipt as the live registries: the whole list is read, reordered against the summary, kept, and paged by searchId (G11)", async (t) => {
+  const { manifest, manifestPath } = await fixture(t);
+  const trialCorpus = createVcrTrialCorpus(manifestPath);
+  t.after(() => trialCorpus.close());
+  /** @type {any[]} */
+  const bodies = [];
+  const fetchImpl = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    bodies.push(body);
+    // The biomarker trial (the 101st) reads best against the summary; the rest by their position from the end.
+    return new Response(JSON.stringify({ results: body.documents.map((document, index) => ({ index, relevance_score: document.includes("Biomarker") ? 0.99 : 0.5 / (1 + index) })) }), { status: 200 });
+  };
+  const reranker = new VcrCandidateRerank({ apiKey: "k", model: "qwen3-rerank", apiBase: "https://dashscope.example.org/compatible-api/v1/reranks", batchSize: 100 }, { fetchImpl, report: () => {} });
+  const held = new Map();
+  const searches = {
+    async save(study, entry) { const id = `cns_${held.size + 1}`; held.set(id, { id, studyId: study.id, createdAt: "2026-11-04T08:00:00.000Z", ...entry }); return id; },
+    async get(study, id) { const row = held.get(id); return row?.studyId === study.id ? row : null; },
+  };
+  const pipeline = createVcrEvidencePipeline({ store: {}, trialCorpus, reranker, searches });
+  const study = { id: "std_1", userId: "u" };
+  const filter = { collection: manifest.id, condition: "diabetes", terms: ["biomarker"], limit: 120, summary: "type 2 diabetes with a biomarker of interest" };
+  const answer = await pipeline.candidatesFor(study, filter, 20);
+  assert.equal(answer.available, true);
+
+  assert.equal(answer.candidates.length, 50, "a frozen list shows its page of fifty");
+  assert.equal(answer.candidates[0].registryId, trialId(101), "the trial that reads best against the summary leads");
+  assert.deepEqual([answer.rerank.state, answer.rerank.applied, answer.rerank.batches], ["ranked", true, 2]);
+  assert.match(bodies[0].documents[0], /^title: Diabetes /);
+  assert.match(bodies[0].documents[0], /eligibility: Inclusion Criteria: Age 18 years or older\./, "the head of the eligibility text came from the collection's record");
+  assert.ok(bodies[0].documents.every((document) => !/qrels|REFERENCE LABEL|private@example\.test/.test(document)));
+  assert.equal(answer.candidates[0].collection, manifest.id);
+  assert.deepEqual([answer.retrieved, answer.more, answer.nextOffset, answer.nextCursor], [120, true, 50, null]);
+  assert.ok(answer.searchId);
+  assert.deepEqual(held.get(answer.searchId).collection, { ...answer.collection });
+  const second = await pipeline.candidatesFor(study, { searchId: answer.searchId, offset: 50, limit: 50 }, 50);
+  assert.deepEqual([second.candidates.length, second.candidates[0].rank, second.collection.revision], [50, 51, trialCorpus.revision]);
+  // Without a reranker, or a summary, or with a cursor, the collection answers as it always did.
+  const plain = await createVcrEvidencePipeline({ store: {}, trialCorpus }).candidatesFor(study, { ...filter, summary: undefined }, 20);
+  assert.equal(plain.searchId, undefined);
+  assert.notEqual(plain.candidates[0].registryId, trialId(101));
+  assert.ok(plain.nextCursor);
+  // The summary is not a term of the search: the same terms with and without it are one cached list, so a cursor from one is valid for the other.
+  const paged = await pipeline.candidatesFor(study, { ...filter, summary: undefined, cursor: plain.nextCursor }, 20);
+  assert.equal(paged.candidates[0].rank, 51);
+});
+
+/** Three trials: the first states diabetes only as an exclusion, the second as an inclusion, the third is about something else. */
+async function layeredFixture(t, { layered }) {
+  const path = await mkdtemp(join(tmpdir(), "vcr-trial-corpus-r3-"));
+  t.after(() => rm(path, { recursive: true, force: true }));
+  const databasePath = join(path, "trials.sqlite");
+  const db = new DatabaseSync(databasePath);
+  db.exec(`
+    CREATE TABLE documents (id INTEGER PRIMARY KEY, nct_id TEXT UNIQUE, xml_sha256 TEXT, payload_sha256 TEXT, payload BLOB, archive TEXT);
+    CREATE VIRTUAL TABLE terms USING fts5(title,condition,summary,description,eligibility,content='',tokenize='porter unicode61');
+    ${layered ? `
+    CREATE VIRTUAL TABLE terms_b USING fts5(title,condition,summary,description,inclusion,content='',tokenize='porter unicode61');
+    CREATE TABLE criteria(id INTEGER PRIMARY KEY, doc INTEGER NOT NULL);
+    CREATE VIRTUAL TABLE terms_c USING fts5(text,content='',tokenize='porter unicode61');` : ""}
+  `);
+  const trials = [
+    { title: "Melanoma Study", condition: "Melanoma", inclusion: ["Stage III melanoma"], exclusion: ["Uncontrolled diabetes"] },
+    { title: "Kidney Study", condition: "Kidney disease", inclusion: ["Type 2 diabetes with kidney disease", "Age 18 or older"], exclusion: ["Pregnancy"] },
+    { title: "Asthma Study", condition: "Asthma", inclusion: ["Persistent asthma"], exclusion: [] },
+  ];
+  let criterion = 0;
+  for (const [index, trial] of trials.entries()) {
+    const id = index + 1;
+    const eligibility = `Inclusion Criteria:\n${trial.inclusion.map((line) => `- ${line}`).join("\n")}\n\nExclusion Criteria:\n${trial.exclusion.map((line) => `- ${line}`).join("\n")}`;
+    const payload = { nct_id: trialId(id), title: trial.title, condition: trial.condition, eligibility, summary: "", detailed_description: "",
+      minimum_age: "18 Years", gender: "All", overall_status: "Completed", xml_sha256: hash(`xml ${id}`) };
+    const bytes = Buffer.from(JSON.stringify(payload));
+    db.prepare("INSERT INTO documents VALUES (?, ?, ?, ?, ?, ?)").run(id, payload.nct_id, payload.xml_sha256, hash(bytes), deflateSync(bytes), "a.zip");
+    db.prepare("INSERT INTO terms(rowid, title, condition, summary, description, eligibility) VALUES (?, ?, ?, ?, ?, ?)").run(id, trial.title, trial.condition, "", "", eligibility);
+    if (layered) {
+      db.prepare("INSERT INTO terms_b(rowid, title, condition, summary, description, inclusion) VALUES (?, ?, ?, ?, ?, ?)").run(id, trial.title, trial.condition, "", "", trial.inclusion.join("\n"));
+      for (const line of trial.inclusion) {
+        criterion += 1;
+        db.prepare("INSERT INTO criteria VALUES (?, ?)").run(criterion, id);
+        db.prepare("INSERT INTO terms_c(rowid, text) VALUES (?, ?)").run(criterion, `${trial.title} | ${trial.condition} | ${line}`);
+      }
+    }
+  }
+  db.close();
+  const manifestPath = join(path, "manifest.json");
+  await writeFile(manifestPath, JSON.stringify({ version: 1, id: "layered-1", sourceVersion: "release-1", snapshotDate: "2023-05-08",
+    databasePath: "trials.sqlite", databaseSha256: hash(await readFile(databasePath)) }));
+  return manifestPath;
+}
+
+const frozenRequest = (condition) => ({ condition, terms: [], summary: null, age: null, sex: null, region: null, scope: "any", limit: 10 });
+
+test("a collection with the inclusion and criterion tables searches both and leaves out exclusion text; one without them reads as before", async (t) => {
+  const layered = createVcrTrialCorpus(await layeredFixture(t, { layered: true }));
+  t.after(() => layered.close());
+  const plain = createVcrTrialCorpus(await layeredFixture(t, { layered: false }));
+  t.after(() => plain.close());
+
+  const rich = await layered.collect(frozenRequest("diabetes"));
+  assert.equal(rich.retrieval.index, "inclusion-trial+criterion");
+  assert.deepEqual(rich.retrieval.retrievedIds, [trialId(2)]);
+
+  const old = await plain.collect(frozenRequest("diabetes"));
+  assert.equal(old.retrieval.index, "full-record");
+  assert.deepEqual([...old.retrieval.retrievedIds].sort(), [trialId(1), trialId(2)]);
+
+  // Exclusion-only wording finds nothing, and phrases of the run still fuse across the two indexes.
+  const byCriterion = await layered.collect(frozenRequest("pregnancy"));
+  assert.deepEqual(byCriterion.retrieval.retrievedIds, []);
+  const both = await layered.collect({ ...frozenRequest("kidney"), terms: ["asthma"] });
+  assert.deepEqual(both.retrieval.retrievedIds.slice(0, 2), [trialId(2), trialId(3)]);
+});

@@ -45,6 +45,11 @@ const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "kn
  * and a kind nothing here decided is no longer an outage: the export carries
  * what it has a contract for and states the rest in its own `omissions`. */
 export const UNEXPORTED_DOCUMENT_KINDS = Object.freeze({
+  "method-consolidation": "derived pair fingerprints, scheduling order, leases and retry checkpoints for method consolidation; deployment-local queue state rebuilt from the methods that the archive exports",
+  "patient-matching-task": "source- and conversation-bound matching coordination references; clinical results leave through authenticated saved-result reports, not reusable task authority",
+  "patient-matching-continuation": "deployment-local native continuation dispatch references and retry epochs; these cannot authorize work after an account archive is imported",
+  "patient-matching-lifecycle": "deployment-owned package admission, prepared generation manifests and runtime authority; independent release artifacts are distributed separately",
+
   "geo-plan-context": "deployment-bound GEO conversation records: project context policies, native session identities, accepted-request bindings and staging receipts are runtime authority, not portable content; selected analysis pages and source-input snapshots share this kind and require their parent context to interpret, so they leave through the existing selected-analysis export rather than this account archive",
   "geo-signal": "GEO observation and handling records tied to this deployment's question selections, source versions, run requests and paged event materials; this account archive does not export the related GEO schema, so these records would be incomplete outside it; the existing selected-history analysis exports their preserved observations and handling state, without transferring request authority",
   "research-goal": "the control plane's own note of where a long research goal stands between its rounds; the rounds and their files are the run ledger's and the workspace's, which the export carries",
@@ -152,6 +157,27 @@ export function accountExportTables(source = queries) {
  * the next migration into an outage for every export until someone edited this
  * file, and the export is not where that should be discovered. */
 export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
+  "evimed_memory.native_accounts": "engine registration, scan and consolidation scheduling state; the account's memory files leave through memory/native-memory.zip, not the engine's maintenance authority",
+  "evimed_memory.native_summary_invalidations": "generation tickets for rebuilding engine directory summaries after writes; an operational outbox, not authored memory content",
+  "evimed_memory.native_source_copies": "derived archive-to-copy bindings used to prevent a synthetic memory write from manufacturing new source authority; not portable customer content",
+  "evimed_memory.native_sessions": "deployment-local engine session and project-incarnation bindings; the owned native conversation journals leave through the project archive",
+  "evimed_memory.native_files": "the overlay's cached memory bodies, source labels and derived recall/use counters; the current memory files themselves leave through memory/native-memory.zip",
+  "evimed_memory.native_sources": "derived knowledge-source and DOI status links used to label native memory files; the labelled memory content itself leaves through memory/native-memory.zip",
+  "evimed_memory.native_rejections": "private removal fingerprints and matching text retained only to prevent forgotten information from returning; exporting that text would disclose the information the person removed",
+  "evimed_memory.native_line_origins": "derived line fingerprints and engine archive/revision bindings used for provenance checks; deployment-specific authority rather than portable memory content",
+  "evimed_memory.native_reset_tombstones": "outstanding cleanup authority for engine extractions accepted before a memory reset; importing it would not identify work in another deployment",
+  "evimed_memory.native_instruction_checks": "content-hash attribution verdicts, source identities and pending line fingerprints; derived retry receipts without conversation or memory text",
+  "evimed_memory.native_writer_leases": "short-lived ownership leases preventing concurrent engine writes and erasure; operational locking state that cannot transfer to another deployment",
+  "evimed_memory.history_message_rejections": "message hashes linked to removal fingerprints so rejected source text stays unavailable; derived privacy enforcement state, not raw conversation content",
+  "evimed_memory.history_write_messages": "whole-message hashes used to recognize synthetic copies of original conversations; derived attribution evidence without message text",
+  "evimed_memory.history_write_session_deletes": "durable exact-address engine session cleanup obligations, retained after account deletion until the worker acknowledges removal; operational outbox state",
+  "evimed_memory.history_chunks": "derived raw-history resource addresses, hashes and cleanup obligations; the person's original runtime conversations are exported through their project journals",
+  "evimed_memory.history_fences": "incarnation-bound privacy fences that keep deleted or reset history unavailable, including while asynchronous engine removal remains owed; not portable content",
+  "evimed_memory.history_archives": "history indexing discovery, coverage and retry checkpoints over original conversation archives; derived queue state without message text",
+  "evimed_memory.history_secret_salts": "private per-account salts used only to recognize secret fingerprints during history redaction; security material must not leave in an account archive",
+  "evimed_memory.history_secrets": "salted fingerprints and lengths of detected secrets used to redact history; derived security state, never the original secret or portable memory",
+  "evimed_source_deletion.conversations": "incarnation-bound source deletion receipts and cleanup obligations that survive account erasure; session identities, hashes and frozen runtime authority are not portable conversation content",
+
   "evimed_control.auth_sessions": "browser sessions: an exported session hash and CSRF token are credentials, not content, and the rows expire on their own",
   "evimed_product.jobs": "queue bookkeeping for work whose result is the exported documents; a queued or failed job is the platform's state, not the researcher's",
   "evimed_product.prompt_stop_intents": "operational run/session cancellation receipts; opaque internal identifiers suppress unsent automation and are not portable customer content or permission",

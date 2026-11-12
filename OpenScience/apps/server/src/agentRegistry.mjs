@@ -2,7 +2,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { parse } from "yaml";
-import { MCP_TOOL_BASE_NAMES, validateCapabilityManifest } from "@evimed/domain";
+import { MCP_TOOL_BASE_NAMES, PATIENT_MATCHING_TOOL_NAMES, validateCapabilityManifest } from "@evimed/domain";
 
 const idPattern = /^[a-z0-9][a-z0-9-]{1,62}$/;
 // The server publishes bare names; a kernel adds its own prefix when it
@@ -49,7 +49,7 @@ const optionalManifestFields = new Set(["companionSkills", "visibility"]);
  * `health` is excluded because it is an operator probe, not something an agent
  * asks for.
  */
-export const EVIMED_AGENT_TOOL_IDS = new Set(MCP_TOOL_BASE_NAMES.filter((name) => name !== "health"));
+export const EVIMED_AGENT_TOOL_IDS = new Set([...MCP_TOOL_BASE_NAMES.filter((name) => name !== "health"), ...PATIENT_MATCHING_TOOL_NAMES]);
 
 export const EVIMED_AGENT_DATA_SOURCES = new Set([
   "faers",
@@ -512,8 +512,8 @@ export async function loadAgentRegistry({
         starterPrompts: source.starterPrompts,
         requiredInputs: source.inputs.required,
         optionalInputs: source.inputs.optional,
-        requiredTools: tools,
-        optionalTools: [],
+        requiredTools: tools.filter(tool=>!PATIENT_MATCHING_TOOL_NAMES.includes(tool)),
+        optionalTools: tools.filter(tool=>PATIENT_MATCHING_TOOL_NAMES.includes(tool)),
         dataSources: source.dataSources,
         outputs,
         completionChecks: checks,

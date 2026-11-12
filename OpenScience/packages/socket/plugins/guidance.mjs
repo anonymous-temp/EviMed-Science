@@ -19,6 +19,7 @@ import { errorMessage } from '../src/runPolicy.mjs'
 import { validateCapabilityManifest } from '@evimed/domain'
 import {
   configSchema,
+  isLaunchFlagEnabled,
   isSubagentSession,
   listDirAt,
   onSessionStart,
@@ -102,12 +103,11 @@ export async function apply(ctx, config) {
     runPolicyEnabled: config.runPolicyEnabled !== false,
     capsuleToolEnabled: config.capsuleEnabled !== false && config.capsuleMemoryEnabled !== false,
     openVikingMemory: config.openVikingMemory === true,
-    memorySearchHint: config.memorySearchHint === true,
-    memoryForgetToolHint: config.memoryForgetToolHint === true,
-    memoryForgetTargets: config.memoryForgetTargets === true,
-    // Read the launch environment here: adding a preset config key would change the image's recorded composition,
-    // even with the switch off. Like memory-bridge's runtime-lock switch, this changes only the plugin's behavior.
-    memoryStandingInstructions: config.memoryStandingInstructions === true || process.env.EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED === '1',
+    // Wording switches use the launch environment without changing the recorded preset composition.
+    memorySearchHint: config.memorySearchHint === true || isLaunchFlagEnabled('EVIMED_MEMORY_SEARCH_HINT_ENABLED'),
+    memoryForgetToolHint: config.memoryForgetToolHint === true || isLaunchFlagEnabled('EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED'),
+    memoryForgetTargets: config.memoryForgetTargets === true || isLaunchFlagEnabled('EVIMED_MEMORY_FORGET_TARGETS_ENABLED'),
+    memoryStandingInstructions: config.memoryStandingInstructions === true || isLaunchFlagEnabled('EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED'),
   })
   ctx.provide('evimedCapabilities', capabilities, true)
   ctx.effect(() => registerSection(ctx, { name: GUIDANCE_SECTION_NAME, order: GUIDANCE_SECTION_ORDER, text }))

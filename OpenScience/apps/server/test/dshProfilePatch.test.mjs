@@ -188,11 +188,11 @@ test("every deployment value the preset reads is a value the container is given"
   const sources = await Promise.all([
     readFile(new URL("../../../packages/socket/presets/evimed-universal/agent.cordis.yml", import.meta.url), "utf8"),
     readFile(new URL("../../../packages/socket/cordis.patch.yml", import.meta.url), "utf8"),
-    // Guidance reads its wording switch directly, keeping the recorded preset composition unchanged.
+    // Guidance asks the port for its launch flags (`isLaunchFlagEnabled`), keeping the recorded preset composition unchanged.
     readFile(new URL("../../../packages/socket/plugins/guidance.mjs", import.meta.url), "utf8"),
   ]);
   const provided = runtimeEnvironment(input);
-  const read = new Set(sources.flatMap((text) => [...text.matchAll(/(?:process\.env\.|os\.environ\[')([A-Z0-9_]+)/g)].map((match) => match[1])));
+  const read = new Set(sources.flatMap((text) => [...text.matchAll(/(?:process\.env\.|os\.environ\['|isLaunchFlagEnabled\(')([A-Z0-9_]+)/g)].map((match) => match[1])));
 
   assert.ok(read.size >= 10, `the rows read ${read.size} names; this test expected them to be bound`);
   // Read by a row and not part of this mapping, each for a reason:

@@ -1,0 +1,369 @@
+{
+  "date": "2026-11-02",
+  "source_base": "964a3b48f5ff433da01691e74ca710ef791cbad6",
+  "upstream_commit": "1b3242cd50c153a9c324661d4a0bd94fc68a4226",
+  "scope": "Previously used public synthetic regression; original prompt and full background with annotation-aligned units, not exact original corpus segmentation or a clinical validation",
+  "cohort": {
+    "patients": 53,
+    "annotations": 1015,
+    "pairs": 105,
+    "requests_per_arm": 210,
+    "development_patients": 10,
+    "evaluation_patients": 43,
+    "development_annotations": 178,
+    "evaluation_annotations": 837,
+    "unmapped_annotations": [
+      883,
+      886,
+      912
+    ]
+  },
+  "historical_gpt4": {
+    "all": {
+      "accuracy": 0.8729064039408867,
+      "correct": 886,
+      "denominator": 1015,
+      "evidence_exact_over_all": 0.941871921182266,
+      "false_favorable_count": 16
+    },
+    "dev": {
+      "accuracy": 0.9157303370786517,
+      "correct": 163,
+      "denominator": 178,
+      "evidence_exact_over_all": 0.9606741573033708,
+      "false_favorable_count": 3
+    },
+    "evaluation": {
+      "accuracy": 0.8637992831541219,
+      "correct": 723,
+      "denominator": 837,
+      "evidence_exact_over_all": 0.937873357228196,
+      "false_favorable_count": 13
+    }
+  },
+  "primary": {
+    "original_flash": {
+      "all": {
+        "accuracy": 0.7389162561576355,
+        "correct": 750,
+        "denominator": 1015,
+        "valid_predictions": 1010,
+        "unknown_predictions": 114,
+        "false_favorable_count": 152,
+        "evidence_exact_over_all": 0.7369458128078817,
+        "wire_schema_compliant_predictions": 1010,
+        "equivalent_shape_predictions": 0
+      },
+      "dev": {
+        "accuracy": 0.7528089887640449,
+        "correct": 134,
+        "denominator": 178,
+        "valid_predictions": 178,
+        "unknown_predictions": 19,
+        "false_favorable_count": 25,
+        "evidence_exact_over_all": 0.7752808988764045,
+        "wire_schema_compliant_predictions": 178,
+        "equivalent_shape_predictions": 0
+      },
+      "evaluation": {
+        "accuracy": 0.7359617682198327,
+        "correct": 616,
+        "denominator": 837,
+        "valid_predictions": 832,
+        "unknown_predictions": 95,
+        "false_favorable_count": 127,
+        "evidence_exact_over_all": 0.7287933094384708,
+        "wire_schema_compliant_predictions": 832,
+        "equivalent_shape_predictions": 0
+      },
+      "requests": {
+        "attempted": 210,
+        "expected": 210,
+        "failed": 0,
+        "cost_cny": 0.7584740799999996,
+        "billing_unknown": 0,
+        "served_models": [
+          "deepseek-flash"
+        ]
+      }
+    },
+    "original_pro": {
+      "all": {
+        "accuracy": 0.7310344827586207,
+        "correct": 742,
+        "denominator": 1015,
+        "valid_predictions": 1012,
+        "unknown_predictions": 108,
+        "false_favorable_count": 131,
+        "evidence_exact_over_all": 0.7458128078817734,
+        "wire_schema_compliant_predictions": 825,
+        "equivalent_shape_predictions": 187
+      },
+      "dev": {
+        "accuracy": 0.7471910112359551,
+        "correct": 133,
+        "denominator": 178,
+        "valid_predictions": 178,
+        "unknown_predictions": 18,
+        "false_favorable_count": 17,
+        "evidence_exact_over_all": 0.7808988764044944,
+        "wire_schema_compliant_predictions": 142,
+        "equivalent_shape_predictions": 36
+      },
+      "evaluation": {
+        "accuracy": 0.7275985663082437,
+        "correct": 609,
+        "denominator": 837,
+        "valid_predictions": 834,
+        "unknown_predictions": 90,
+        "false_favorable_count": 114,
+        "evidence_exact_over_all": 0.7383512544802867,
+        "wire_schema_compliant_predictions": 683,
+        "equivalent_shape_predictions": 151
+      },
+      "requests": {
+        "attempted": 210,
+        "expected": 210,
+        "failed": 0,
+        "cost_cny": 3.158533800000001,
+        "billing_unknown": 0,
+        "served_models": [
+          "deepseek-v4-pro"
+        ]
+      }
+    },
+    "strict_flash": {
+      "all": {
+        "accuracy": 0.5566502463054187,
+        "correct": 565,
+        "denominator": 1015,
+        "valid_predictions": 1012,
+        "unknown_predictions": 643,
+        "false_favorable_count": 21,
+        "evidence_exact_over_all": 0.7635467980295566,
+        "wire_schema_compliant_predictions": 1012,
+        "equivalent_shape_predictions": 0
+      },
+      "dev": {
+        "accuracy": 0.5,
+        "correct": 89,
+        "denominator": 178,
+        "valid_predictions": 178,
+        "unknown_predictions": 127,
+        "false_favorable_count": 4,
+        "evidence_exact_over_all": 0.8146067415730337,
+        "wire_schema_compliant_predictions": 178,
+        "equivalent_shape_predictions": 0
+      },
+      "evaluation": {
+        "accuracy": 0.5686977299880526,
+        "correct": 476,
+        "denominator": 837,
+        "valid_predictions": 834,
+        "unknown_predictions": 516,
+        "false_favorable_count": 17,
+        "evidence_exact_over_all": 0.7526881720430108,
+        "wire_schema_compliant_predictions": 834,
+        "equivalent_shape_predictions": 0
+      },
+      "requests": {
+        "attempted": 210,
+        "expected": 210,
+        "failed": 0,
+        "cost_cny": 0.6154284800000002,
+        "billing_unknown": 0,
+        "served_models": [
+          "deepseek-flash"
+        ]
+      }
+    },
+    "strict_pro": {
+      "all": {
+        "accuracy": 0.5192118226600986,
+        "correct": 527,
+        "denominator": 1015,
+        "valid_predictions": 1011,
+        "unknown_predictions": 678,
+        "false_favorable_count": 14,
+        "evidence_exact_over_all": 0.7773399014778325,
+        "wire_schema_compliant_predictions": 1008,
+        "equivalent_shape_predictions": 3
+      },
+      "dev": {
+        "accuracy": 0.4887640449438202,
+        "correct": 87,
+        "denominator": 178,
+        "valid_predictions": 178,
+        "unknown_predictions": 122,
+        "false_favorable_count": 2,
+        "evidence_exact_over_all": 0.8314606741573034,
+        "wire_schema_compliant_predictions": 178,
+        "equivalent_shape_predictions": 0
+      },
+      "evaluation": {
+        "accuracy": 0.5256869772998806,
+        "correct": 440,
+        "denominator": 837,
+        "valid_predictions": 833,
+        "unknown_predictions": 556,
+        "false_favorable_count": 12,
+        "evidence_exact_over_all": 0.7658303464755077,
+        "wire_schema_compliant_predictions": 830,
+        "equivalent_shape_predictions": 3
+      },
+      "requests": {
+        "attempted": 210,
+        "expected": 210,
+        "failed": 0,
+        "cost_cny": 2.4260717999999994,
+        "billing_unknown": 0,
+        "served_models": [
+          "deepseek-v4-pro"
+        ]
+      }
+    }
+  },
+  "reasoned_pro": {
+    "all": {
+      "accuracy": 0.6502463054187192,
+      "correct": 660,
+      "denominator": 1015,
+      "valid_predictions": 899,
+      "unknown_predictions": 58,
+      "false_favorable_count": 100,
+      "evidence_exact_over_all": 0.5802955665024631,
+      "wire_schema_compliant_predictions": 899,
+      "equivalent_shape_predictions": 0
+    },
+    "dev": {
+      "accuracy": 0.7528089887640449,
+      "correct": 134,
+      "denominator": 178,
+      "valid_predictions": 174,
+      "unknown_predictions": 15,
+      "false_favorable_count": 15,
+      "evidence_exact_over_all": 0.702247191011236,
+      "wire_schema_compliant_predictions": 174,
+      "equivalent_shape_predictions": 0
+    },
+    "evaluation": {
+      "accuracy": 0.6284348864994026,
+      "correct": 526,
+      "denominator": 837,
+      "valid_predictions": 725,
+      "unknown_predictions": 43,
+      "false_favorable_count": 85,
+      "evidence_exact_over_all": 0.5543608124253285,
+      "wire_schema_compliant_predictions": 725,
+      "equivalent_shape_predictions": 0
+    },
+    "requests": {
+      "attempted": 210,
+      "expected": 210,
+      "failed": 0,
+      "cost_cny": 19.341237599999992,
+      "billing_unknown": 0,
+      "served_models": [
+        "deepseek-v4-pro"
+      ]
+    },
+    "truncated_requests": 12
+  },
+  "reasoned_offline_flash_fallback": {
+    "all": {
+      "accuracy": 0.716256157635468,
+      "correct": 727,
+      "denominator": 1015,
+      "valid_predictions": 1012,
+      "unknown_predictions": 74,
+      "false_favorable_count": 135,
+      "evidence_exact_over_all": 0.6620689655172414,
+      "wire_schema_compliant_predictions": 1012,
+      "equivalent_shape_predictions": 0
+    },
+    "dev": {
+      "accuracy": 0.7528089887640449,
+      "correct": 134,
+      "denominator": 178,
+      "valid_predictions": 178,
+      "unknown_predictions": 15,
+      "false_favorable_count": 15,
+      "evidence_exact_over_all": 0.7134831460674157,
+      "wire_schema_compliant_predictions": 178,
+      "equivalent_shape_predictions": 0
+    },
+    "evaluation": {
+      "accuracy": 0.7084826762246117,
+      "correct": 593,
+      "denominator": 837,
+      "valid_predictions": 834,
+      "unknown_predictions": 59,
+      "false_favorable_count": 120,
+      "evidence_exact_over_all": 0.6511350059737157,
+      "wire_schema_compliant_predictions": 834,
+      "equivalent_shape_predictions": 0
+    }
+  },
+  "calibrated_flash": {
+    "all": {
+      "accuracy": 0.7467980295566502,
+      "correct": 758,
+      "denominator": 1015,
+      "valid_predictions": 1011,
+      "unknown_predictions": 116,
+      "false_favorable_count": 140,
+      "evidence_exact_over_all": 0.7339901477832512,
+      "wire_schema_compliant_predictions": 1011,
+      "equivalent_shape_predictions": 0
+    },
+    "dev": {
+      "accuracy": 0.8146067415730337,
+      "correct": 145,
+      "denominator": 178,
+      "valid_predictions": 178,
+      "unknown_predictions": 31,
+      "false_favorable_count": 18,
+      "evidence_exact_over_all": 0.7808988764044944,
+      "wire_schema_compliant_predictions": 178,
+      "equivalent_shape_predictions": 0
+    },
+    "evaluation": {
+      "accuracy": 0.7323775388291517,
+      "correct": 613,
+      "denominator": 837,
+      "valid_predictions": 833,
+      "unknown_predictions": 85,
+      "false_favorable_count": 122,
+      "evidence_exact_over_all": 0.7240143369175627,
+      "wire_schema_compliant_predictions": 833,
+      "equivalent_shape_predictions": 0
+    },
+    "requests": {
+      "attempted": 210,
+      "cost_cny": 0.7006252800000001,
+      "failed": 0
+    },
+    "designation": "Post-primary supervised diagnostic, six deterministic development-only examples; rejected because evaluation gain did not transfer"
+  },
+  "engineering": {
+    "method": "matching.extract 1.1.0",
+    "prompt": "match-extract-4",
+    "metrics_version": 2,
+    "native_chinese_synthetic_checks": 9,
+    "product_and_pg_tests": 104,
+    "related_tests_including_n2c2": 62,
+    "domain_tests": 11,
+    "registered_error_tests": 4,
+    "reproduction_tests": 21,
+    "prior_comparison_tests": 31,
+    "product_defaults_model_changed": false,
+    "deployment": false
+  },
+  "remaining": [
+    "Historical GPT4 label agreement not matched",
+    "Independent clinical accuracy not established",
+    "No full native DSH/browser conversation acceptance in this turn",
+    "Existing historical wrongly shifted fact timestamps not rewritten",
+    "Language conditions remain explicit conversation work after batch extraction"
+  ]
+}

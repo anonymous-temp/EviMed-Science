@@ -1,5 +1,5 @@
 /** Frozen matching inputs contain references, not a second copy of patient text. */
-import { matchingInputDigest } from './vcrMatching.mjs';
+import { ambiguousCriterionLanguageKeys, criterionLanguageKeys, matchingInputDigest, VCR_MATCHING_EVALUATOR_VERSION } from './vcrMatching.mjs';
 import { HttpError } from './security.mjs';
 
 export const MATCHING_SNAPSHOT_PREFIX = 'matching:snapshot:';
@@ -40,11 +40,49 @@ export function languageCriterionHash(criteria, key) {
     requirement: c.requirement, applicability: c.applicability ?? null, sourceText: c.sourceText ?? '' })) });
 }
 
+/** Every unambiguous language key and the criteria hashed for its answers. @param {readonly any[]} criteria */
+export function languageCriteriaByKey(criteria) {
+  const ambiguous = ambiguousCriterionLanguageKeys(criteria);
+  /** @type {Map<string, any[]>} */
+  const bindings = new Map();
+  for (const criterion of criteria) {
+    for (const key of criterionLanguageKeys(criterion)) {
+      if (ambiguous.has(key)) continue;
+      const bound = bindings.get(key) ?? [];
+      bound.push(criterion);
+      bindings.set(key, bound);
+    }
+  }
+  return bindings;
+}
+
+/** Keep both sets of quotations in the existing withdrawal-aware evidence column. @param {any} judgment */
+export function storedCriterionEvaluation(judgment) {
+  const evidence = [...(judgment.evidence ?? []),
+    ...(judgment.applicabilityEvidence ?? []).map(item => ({ ...item, evaluationAxis: 'applicability' }))];
+  const evaluation = judgment.applicabilityState == null ? null : {
+    applicabilityState: judgment.applicabilityState, requirementState: judgment.requirementState,
+    applicabilityMissing: judgment.applicabilityMissing, applicabilityRecheckAt: judgment.applicabilityRecheckAt,
+    requirementMissing: judgment.requirementMissing,
+    missing: judgment.missing,
+  };
+  return { evidence: JSON.stringify(evidence), evaluation: evaluation && JSON.stringify(evaluation) };
+}
+
+/** Historical rows carry their original evidence and do not acquire inferred axes. @param {any} row */
+export function readCriterionEvaluation(row) {
+  const evidence = Array.isArray(row.evidence) ? row.evidence : [];
+  if (!row.evaluation) return { evidence };
+  const applicabilityEvidence = evidence.filter(item => item?.evaluationAxis === 'applicability')
+    .map(({ evaluationAxis: _axis, ...item }) => item);
+  return { ...row.evaluation, evidence: evidence.filter(item => item?.evaluationAxis !== 'applicability'), applicabilityEvidence };
+}
+
 /** @param {{studyId:string, protocolVersionId:string, asOf:string, criteria:any[], facts:any[], languages:Map<string,Record<string,any>>, subjects:string[], direction?:string, offset?:number, limit?:number}} input */
 export function freezeMatchingInputs(input) {
   const { studyId, protocolVersionId, asOf, criteria, facts, languages } = input;
   const payload = {
-    schema: 1, studyId, protocolVersionId, asOf,
+    schema: 1, studyId, protocolVersionId, asOf, matchingEvaluatorVersion: VCR_MATCHING_EVALUATOR_VERSION,
     direction: input.direction === 'patient_to_trial' ? 'patient_to_trial' : 'trial_to_patient',
     offset: input.offset ?? 0, limit: input.limit ?? 5000,
     criteria, subjects: [...new Set(input.subjects)].sort(),

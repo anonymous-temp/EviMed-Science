@@ -22,7 +22,7 @@ import {
   verifyModelGatewayRuntimeToken,
 } from "../src/runtimeManager.mjs";
 import { FRONTIER_LANES, FRONTIER_SPECIALTIES, GEO_ENGINES, GEO_POOLS, GEO_READ_WHATS, GEO_SOCIAL_PLATFORMS, GEO_SOCIAL_SORTS, GEO_WRITE_WHATS,
-  MCP_SERVER_NAME, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX } from "@evimed/domain";
+  MCP_SERVER_NAME, MCP_TOOL_BASE_NAMES, MCP_TOOL_PREFIX, PATIENT_MATCHING_TOOL_NAMES } from "@evimed/domain";
 import { GEO_ANALYSIS_REGISTRY } from "../src/geoAnalysisRegistry.mjs";
 import { GEO_READ_FILTER_FIELDS } from "../src/geoGateway.mjs";
 import { GEO_READ_MAX_ITEMS } from "../src/geoService.mjs";
@@ -591,6 +591,35 @@ test("host runtimes bind the local MetaAgent, and the MCP reads the gateway from
 });
 
 
+test("host runtimes are given the terminology file, docker runtimes the adapter's address, and a file that is not usable stops nothing", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-terminology-"));
+  try {
+    const { project, plan } = await fixture(tmp);
+    const terminologyDb = path.join(tmp, "terminology.sqlite");
+    await writeFile(terminologyDb, "bounded test database fixture");
+    await syncRuntimeDshProfile(dshConfig({ terminologyDb }), project, plan);
+    assert.equal(mcpEnvironment(await readPatch(plan)).EVIMED_TERMINOLOGY_DB, terminologyDb);
+
+    // Not there, empty or relative: the runtime starts without the variable and term_normalize says it has no terminology file.
+    for (const unusable of [path.join(tmp, "absent.sqlite"), "relative.sqlite", tmp]) {
+      await syncRuntimeDshProfile(dshConfig({ terminologyDb: unusable }), project, plan);
+      assert.equal(mcpEnvironment(await readPatch(plan)).EVIMED_TERMINOLOGY_DB, undefined, unusable);
+    }
+
+    const dockerPlan = { ...plan, sandboxMode: "docker", proxyWorkspaceDir: "/workspace" };
+    await syncRuntimeDshProfile(
+      dshConfig({ terminologyDb, evimedAdapterUrls: { terminologyLookup: "https://evidence.internal/terminology-lookup" } }),
+      project,
+      dockerPlan,
+    );
+    const environment = mcpEnvironment(await readPatch(dockerPlan));
+    assert.equal(environment.EVIMED_TERMINOLOGY_SEARCH_URL, "https://evidence.internal/terminology-lookup");
+    assert.equal(environment.EVIMED_TERMINOLOGY_DB, undefined);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("host runtimes bind a bounded pharmacy reference while docker requires its HTTP adapter", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-pharmacy-"));
   try {
@@ -1037,6 +1066,7 @@ test("hosted deployment exposes only MCP source and non-secret adapter URL setti
   }
   for (const [name, servicePath] of Object.entries({
     EVIMED_PHARMACY_REFERENCE_SEARCH_URL: "pharmacy-reference-search",
+    EVIMED_TERMINOLOGY_SEARCH_URL: "terminology-lookup",
     EVIMED_ADR_CASE_QUERY_URL: "adr-cases",
     EVIMED_ADR_SIGNAL_ANALYSIS_URL: "adr-signal",
     EVIMED_OFFLABEL_EVIDENCE_PACKET_URL: "offlabel-evidence-packet",
@@ -1184,16 +1214,18 @@ test("the GEO tools offer exactly the domain's vocabularies and the gateway's ow
   assert.equal(social.properties.query.maxLength, SOCIAL_MAX_QUERY_LENGTH);
 });
 
-// The other half: what an agent package may ask for has to be something the
-// server offers. The registry used to keep its own copy of the list, which is
-// how a manifest could name a tool nobody publishes.
-test("every tool an agent package may declare is one the server publishes", async () => {
+// Declarable MCP tools must be published; optional native tools must belong to
+// their own manifest. Neither inventory can silently admit or shadow the other.
+test("every declarable tool belongs to the published MCP roster or the exact native manifest", async () => {
   const { EVIMED_AGENT_TOOL_IDS } = await import("../src/agentRegistry.mjs");
+  const { TOOL_MANIFEST } = await import("../../../packages/patient-matching-plugin/src/manifest.mjs");
+  const native = new Set(TOOL_MANIFEST.map(tool => tool.name));
   const published = new Set(await publishedToolNames());
-  for (const tool of EVIMED_AGENT_TOOL_IDS) {
-    assert.ok(published.has(tool), `agent packages may declare "${tool}", which the MCP server does not publish`);
-  }
-  // `health` is an operator probe, so it is published but not declarable.
+  assert.deepEqual([...PATIENT_MATCHING_TOOL_NAMES], [...native], "native admission data must match the owning manifest");
+  assert.deepEqual([...native].filter(tool => published.has(tool)), [], "native names cannot shadow MCP tools");
+  assert.deepEqual([...EVIMED_AGENT_TOOL_IDS].filter(tool => !native.has(tool)).sort(), [...published].filter(tool => tool !== "health").sort(), "the declarable MCP subset must equal its published roster without the operator probe");
+  assert.deepEqual([...EVIMED_AGENT_TOOL_IDS].filter(tool => native.has(tool)).sort(), [...native].sort(), "every native manifest tool must be admitted");
+  // `health` remains an operator probe, published but never declarable.
   assert.equal(EVIMED_AGENT_TOOL_IDS.has("health"), false);
   assert.equal(published.has("health"), true);
 });

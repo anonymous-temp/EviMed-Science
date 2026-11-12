@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
+import { builtinModules } from "node:module";
 import test from "node:test";
 
 import { SEAMS } from "@evimed/harness-port";
@@ -314,14 +315,20 @@ test("the seam manifest names only the kernel's own services, so a third-party o
 });
 
 test("no plugin imports a harness package or a node builtin directly", async () => {
-  const files = (await readdir(new URL("../plugins/", import.meta.url))).filter((name) => name.endsWith(".mjs"));
-  const srcFiles = (await readdir(new URL("../src/", import.meta.url))).filter((name) => name.endsWith(".mjs"));
+  const files = (await readdir(new URL("../plugins/", import.meta.url), { recursive: true })).filter((name) => name.endsWith(".mjs"));
+  const srcFiles = (await readdir(new URL("../src/", import.meta.url), { recursive: true })).filter((name) => name.endsWith(".mjs"));
   for (const [dir, list] of [["plugins", files], ["src", srcFiles]]) {
     for (const file of list) {
       const source = await readFile(new URL(`../${dir}/${file}`, import.meta.url), "utf8");
       assert.ok(!/from\s+['"]@deepseek-ai\//.test(source), `${dir}/${file} imports a harness package directly`);
       assert.ok(!/import\(['"]@deepseek-ai\//.test(source), `${dir}/${file} names a harness package in a JSDoc import`);
       assert.ok(!/from\s+['"]node:/.test(source), `${dir}/${file} imports a node builtin`);
+      for (const [, specifier] of source.matchAll(/(?:from\s*|import\s*\(\s*|import\s*)['"]([^'"]+)/g)) {
+        assert.ok(!specifier.startsWith("node:") && !builtinModules.includes(specifier), `${dir}/${file} imports builtin ${specifier}`);
+      }
+      // The sandbox has no Node process, including through globalThis. Launch settings belong to the port.
+      const body = source.split("\n").filter((line) => !/^\s*(?:\*|\/\/)/.test(line)).join("\n");
+      assert.doesNotMatch(body, /\bprocess\b/, `${dir}/${file} reads the Node process outside the port`);
     }
   }
 });

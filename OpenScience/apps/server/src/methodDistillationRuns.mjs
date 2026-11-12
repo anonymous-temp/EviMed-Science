@@ -1239,7 +1239,9 @@ export class MethodDistillationRuns {
       ...(candidate?.risk?.touchesSafety ? { safetyRelated: true } : {}),
       ...(context.step ? { distillationStep: context.step } : {}),
     };
-    const pinned = context.dependenciesFromFrontmatter ? parseDependsOn(parsed.frontmatter?.metadata?.depends_on).dependencies : [];
+    const metadata = parsed.frontmatter?.metadata;
+    const pinned = context.dependenciesFromFrontmatter
+      ? parseDependsOn(metadata && typeof metadata === 'object' && 'depends_on' in metadata ? metadata.depends_on : undefined).dependencies : [];
     // Only the externally queued correction and its researcher signal grant precedence. Candidate output cannot
     // claim it, and a consolidation copying provenance cannot inherit it for another body.
     const personCorrection = job.payload?.trigger === 'correction' && signal === 'researcher';

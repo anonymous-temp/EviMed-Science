@@ -1,0 +1,66 @@
+{
+ "writtenAt": "2026-11-07T14:32Z",
+ "readOnly": "dev topics only (78: SIGIR 58, TREC 2021 10, TREC 2022 10)",
+ "rule": "highest dev macro nDCG@10; a candidate within 0.01 of a better one wins if it has fewer paid stages; then the newer model",
+ "spec": {
+  "kind": "single",
+  "a": "rrf(jev113.fit+qwen)"
+ },
+ "label": "EviMed: RRF(Qwen3.7 rerank, Jev 1.13 5-level fit)",
+ "baselines": [
+  "ds_fc",
+  "ds",
+  "qwen",
+  "jev113.fit",
+  "jev114.fit"
+ ],
+ "alternatives": {
+  "rrf(qwen,jev114.fit)": {
+   "kind": "single",
+   "a": "rrf(jev114.fit+qwen)"
+  },
+  "rrf(qwen,jev113)->flash top10": {
+   "kind": "cascade",
+   "a": "rrf(jev113.fit+qwen)",
+   "b": "ds",
+   "k": 10
+  },
+  "rrf(qwen,jev113)->flash top20": {
+   "kind": "cascade",
+   "a": "rrf(jev113.fit+qwen)",
+   "b": "ds",
+   "k": 20
+  },
+  "rrf(qwen,jev114)->flash top20": {
+   "kind": "cascade",
+   "a": "rrf(jev114.fit+qwen)",
+   "b": "ds",
+   "k": 20
+  },
+  "jev113 top20 -> flash (11-05)": {
+   "kind": "cascade",
+   "a": "jev113.fit",
+   "b": "ds",
+   "k": 20
+  },
+  "zfuse qwen+jev114+flash(all)": {
+   "kind": "zfuse",
+   "w": {
+    "qwen": 1,
+    "jev114.fit": 0.5,
+    "ds": 2
+   }
+  },
+  "rrf(jev114.fit,jev114.rel)": {
+   "kind": "single",
+   "a": "rrf(jev114.fit+jev114.rel)"
+  }
+ },
+ "devScores": {
+  "chosen": 0.8024,
+  "rrf(qwen,jev113)->flash top10": 0.8054,
+  "rrf(qwen,jev114.fit)": 0.7916,
+  "flash fit only": 0.7892,
+  "TG2.0 method": 0.7622
+ }
+}

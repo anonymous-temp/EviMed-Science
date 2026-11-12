@@ -1462,6 +1462,27 @@ def _preserve_guideline_text(identifier, title, record):
         # isolated: evimed_guideline_preservation_failures_total
         return None
 
+# The EviMed index timed out on 3 of 10 live guideline calls and its text-block endpoint timed out too (2026-11-04): a slow answer is common and a
+# second ask usually gets it. One more ask, after a short pause, and no more: a refusal (HTTP 4xx), a missing key or an unreadable answer is not asked again.
+EVIMED_RETRY_PAUSE_SECONDS = 0.5
+
+
+def _evimed_post_retrying(path, body):
+    """`_evimed_post`, asked once more when the index timed out, could not be reached or answered 429/5xx. A second failure is the error, marked
+    `retried` so the answer can say the call was made twice."""
+    try:
+        return _evimed_post(path, body)
+    except PublicSourceError as error:
+        if not error.retryable or error.code not in ("public_source_unavailable", "public_source_http_error"):
+            raise
+    time.sleep(EVIMED_RETRY_PAUSE_SECONDS)
+    try:
+        return _evimed_post(path, body)
+    except PublicSourceError as error:
+        error.retried = True
+        raise
+
+
 def _evimed_guidelines(arguments):
     mode = arguments.get("mode", "records")
     body = {"query": arguments["query"][:512]}
@@ -1474,13 +1495,13 @@ def _evimed_guidelines(arguments):
     if publisher:
         body["publisher" if mode == "blocks" else "publishers"] = publisher if mode == "blocks" else [publisher]
     if mode == "blocks":
-        data, endpoint = _evimed_post("review/api/guide-block", body)
+        data, endpoint = _evimed_post_retrying("review/api/guide-block", body)
         records = _list(data.get("guides"))
         limit = min(arguments.get("limit", 10), 100)
     else:
         limit = min(arguments.get("limit", 10), 100)
         body["count"] = _evimed_candidate_limit(arguments, limit)
-        data, endpoint = _evimed_post("review/api/guide", body)
+        data, endpoint = _evimed_post_retrying("review/api/guide", body)
         records = _list(data.get("list"))
     records, filtered_count = _filter_evimed_records(records, arguments.get("requiredConcepts"))
     items, sources, artifact_sha256s = [], [], {}
@@ -2000,7 +2021,11 @@ def _guideline(arguments, left_out):
             left_out.append(error)
             evimed_warning = "%s PubMed guideline records are returned instead." % error
         else:
-            evimed_warning = "EviMed guideline search was unavailable: %s" % error
+            # A failed index is a status, not the end of the turn: the PubMed guideline records below stand in, and the answer says which it was.
+            evimed_warning = "EviMed guideline %s was unavailable%s: %s. PubMed guideline records are returned instead%s." % (
+                "text blocks" if arguments.get("mode") == "blocks" else "search",
+                " after one retry" if getattr(error, "retried", False) else "", error,
+                " (records, not guideline passages)" if arguments.get("mode") == "blocks" else "")
     query = arguments["query"]
     if arguments.get("jurisdiction"):
         query = "%s AND %s" % (query, arguments["jurisdiction"])

@@ -437,32 +437,6 @@ These are readings of the first measurement, not patches. Nothing in the skill o
 
 ## Running it
 
-Everything runs from `OpenScience/` with the data unpacked under the data root (`EVIMED_N2C2_ROOT`, default `.evimed-local/acceptance/n2c2-2018-t1` in the workspace root) and the DeepSeek key in a file
-named by `--key-file`, `OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE`, or `<data root>/../../secrets/deepseek.api-key`.
-
-```
-node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split dev --run <name> [--max-seconds N]   # resumes from the cache
-node evals/vcr-matching/n2c2/run_n2c2.mjs report-dev --run <name>                              # aggregates + official scorer cross-check
-node evals/vcr-matching/n2c2/run_n2c2.mjs freeze --dev-run <name> --rounds <n>                 # writes FROZEN.json, once
-node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split test --run <name>                    # refuses without a matching FROZEN.json
-node evals/vcr-matching/n2c2/run_n2c2.mjs score-test --run <name>                              # opens the sealed gold, once
-node --test evals/vcr-matching/n2c2/n2c2.test.mjs                                              # fabricated notes only; data tests skip without the data
-# the second measurement: the 162 training patients outside the development split
-node evals/vcr-matching/n2c2/run_n2c2.mjs freeze --manifest 2 --dev-run <name> --rounds <n>    # writes FROZEN-2.json, once
-node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --run <name>                 # refuses without a matching FROZEN-2.json
-node evals/vcr-matching/n2c2/run_n2c2.mjs score-heldout --run <name> [--control-run <name>]    # scores once; the control run holds the first pipeline's predictions
-# the third run, a regression check on the same patients
-node evals/vcr-matching/n2c2/run_n2c2.mjs freeze --manifest 3 --dev-run <name> --rounds <n> --control-run <name> --previous-run <name> --replay-run <name>
-node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --manifest 3 --run <name>                       # a fresh model sample
-node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --manifest 3 --run <replay> --reuse-run <second>  # the second run's answers, no model call
-node evals/vcr-matching/n2c2/run_n2c2.mjs score-heldout --manifest 3 --run <name> --control-run <name> --previous-run <name> --replay-run <replay>
-# the fourth run: the record header dates a fact (the run names are fixed in the manifest before anything is predicted)
-node evals/vcr-matching/n2c2/run_n2c2.mjs freeze --manifest 4 --dev-run <name> --rounds <n> --control-run <name> --second-run <name> --previous-run <name> --prior-replay-run <name> --fresh-run <name> --replay-run <name> --literal-run <name>
-node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --manifest 4 --run <replay> --reuse-run <second>                  # the second run's answers through the new writer, no model call
-node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --manifest 4 --run <fresh> --budget-cny <N>                       # a fresh model sample (--budget-cny: the most this call may add to the ledger)
-node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --manifest 4 --run <literal> --reuse-run <fresh> --no-past-guard    # the same answers under the literal ruling, no model call
-node evals/vcr-matching/n2c2/run_n2c2.mjs score-heldout --manifest 4 --run <fresh> --control-run <name> --second-run <name> --previous-run <name> --prior-replay-run <name> --replay-run <replay> --literal-run <literal>
-node evals/vcr-matching/n2c2/header_risk.mjs --run <fresh> --split heldout                                                         # after the scoring: how often the header is not the dataset's own record line
-```
+The runner, the prompt, the assessor and the scorer glue that produced these runs were deleted with the retired fact-extraction path (2026-11-05); the frozen manifests and `results/` stay as the record of what was measured, and the sources they name are in the repository's history at the commits they were written at. `criteria.mjs`, `data.mjs`, `gold.mjs` and `run_official_scorer.py` are read by `evals/vcr-matching-boards/`.
 
 The tests also run with the server's (`apps/server/test/vcrN2c2Eval.test.mjs`); the data-dependent ones skip when the data is absent.

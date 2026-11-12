@@ -1,0 +1,157 @@
+{
+  "schemaVersion": "1",
+  "plugin": {
+    "id": "patient-matching",
+    "version": "0.1.1"
+  },
+  "artifacts": {
+    "core": {
+      "package": "@evimed/patient-matching-core",
+      "version": "0.1.1",
+      "integrity": "sha512-eQLfBB1rEa2Fzb5enzRHY75J69fizhmwwedNQ6X071MbV5CAmbn8hCrsUOgMGs/sGsgQYMawdA93RhdR3mtiAg=="
+    },
+    "bundle": {
+      "package": "@evimed/dsh-patient-matching",
+      "version": "0.1.1",
+      "integrity": "sha512-ZKvOdQ+Dq83wB0bLVW/nuRKOvFz2sa9l9a7Ngjn/EKy2JFhEqJmGvgGDLV07VOgiNAQRZwgyChunJ99QzU87CA=="
+    },
+    "worker": {
+      "image": "ghcr.io/anonymous-temp/evimed-patient-matching-worker@sha256:8460aaf89a8f65b07c4a8a03a0cd18dc10623b6d3a99802aa23b79283be0c96d"
+    },
+    "resources": []
+  },
+  "host": {
+    "abi": "patient-matching.host.v1",
+    "ports": {
+      "IdentityPort": [
+        "resolve",
+        "authorize"
+      ],
+      "PatientDataPort": [
+        "read",
+        "context",
+        "correct"
+      ],
+      "KnowledgePort": [
+        "search",
+        "read"
+      ],
+      "RegistryPort": [
+        "search",
+        "read"
+      ],
+      "IndexPort": [
+        "query",
+        "build"
+      ],
+      "ModelPort": [
+        "embed",
+        "rerank",
+        "priority"
+      ],
+      "ExecutionPort": [
+        "assess",
+        "compute",
+        "report",
+        "cancel"
+      ],
+      "JobPort": [
+        "get",
+        "cancel",
+        "continue"
+      ],
+      "ResultPort": [
+        "get",
+        "save",
+        "history"
+      ],
+      "ExtensionPort": [
+        "describe"
+      ]
+    }
+  },
+  "kernel": {
+    "version": "0.2.1-rc.5",
+    "seamDigest": "sha256:18d03b0b8d35925934a4a45c38ca7612c04f9cf672dd8a84e2d7d8faaabe296b"
+  },
+  "schemas": {
+    "task": "1",
+    "context": "1",
+    "trial": "1",
+    "evidence": "1",
+    "calculation": "1",
+    "assessment": "1",
+    "decision": "1",
+    "result": "1",
+    "report": "1"
+  },
+  "profiles": {
+    "reasoning": {
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "revision": "flash-only-1",
+      "digest": "sha256:3f03eb352f44ce35309553a7f5e39d916bf4e872025b80047b5b8f0bde1c8e12",
+      "efforts": [
+        "high"
+      ]
+    },
+    "embedding": {
+      "provider": "bailian",
+      "model": "qwen3.7-text-embedding",
+      "revision": "flash-only-1",
+      "digest": "sha256:0e51b66b79d6e8b53632eaadd5f3d669074665637cb3c2cc6b6276fe0e5ec1be",
+      "dimensions": 1024
+    },
+    "rerank": {
+      "provider": "bailian",
+      "model": "qwen3.7-text-rerank",
+      "revision": "flash-only-1",
+      "digest": "sha256:2a40926e9c81f979bbac266d236f98a7e3fa04e394ee36192158daab9a8fe572"
+    },
+    "priority": {
+      "provider": "typesafe",
+      "model": "jev-1.14.0",
+      "revision": "flash-only-1",
+      "digest": "sha256:070dbd053e1998810a8883b4eb3c8a27b3f43ef648f2a7bbbadd676116f58fea"
+    },
+    "algorithm": {
+      "id": "patient-matching-balanced",
+      "version": "0.1.0",
+      "digest": "sha256:10355364ef29175c9fe24de22e049cdfa0b41eabeb02febf61414a0e47fc4faf"
+    },
+    "skill": {
+      "id": "patient-matching",
+      "version": "0.1.1",
+      "digest": "sha256:9f4f11d8e388452ea97931d895eb21a487736a939dc5c6b0c5f876cb791a19a8"
+    }
+  },
+  "resources": {
+    "trialIndex": null,
+    "knowledgeRequired": false
+  },
+  "verification": {
+    "receipts": [
+      {
+        "kind": "package",
+        "artifactDigest": "sha256:5dc7fdad212913b026ef31ce22af251681a275b11ad820b54f06da3569e13b96",
+        "artifactId": "patient-matching-native-package"
+      },
+      {
+        "kind": "runtime",
+        "artifactDigest": "sha256:5dc7fdad212913b026ef31ce22af251681a275b11ad820b54f06da3569e13b96",
+        "artifactId": "patient-matching-native-status"
+      },
+      {
+        "kind": "runtime",
+        "artifactDigest": "sha256:5dc7fdad212913b026ef31ce22af251681a275b11ad820b54f06da3569e13b96",
+        "artifactId": "patient-matching-native-runtime"
+      }
+    ]
+  },
+  "upgrade": {
+    "readableSchemaVersions": [
+      "1"
+    ],
+    "rollbackGenerations": []
+  }
+}

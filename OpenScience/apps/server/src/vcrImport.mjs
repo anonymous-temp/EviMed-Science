@@ -52,6 +52,10 @@ const SOURCES = Object.freeze(['observed', 'extracted', 'calculated', 'imputed']
 const FIELD_MAP_ENTRIES = 500;
 const DICTIONARY_ENTRIES = 500;
 const COVERAGE_ITEMS = 200;
+/** The notes file a conversion may leave: one line per document of a person, bounded the way the converter bounds it. */
+const NOTES_FILE = 'notes.jsonl';
+const MAX_NOTES = 5000;
+const MAX_NOTES_BYTES = 40 * 1024 * 1024;
 
 /** The reader-facing refusals: status, code, sentence, counter. */
 const REFUSALS = Object.freeze({
@@ -126,6 +130,7 @@ export function normalizeCoverage(raw) {
  * @returns {{ ok: true, standard: Record<string, string>, converter: Record<string, any>,
  *   tables: { name: string, file: string, rows: number, bytes: number, sha256: string, skipped: Record<string, number>,
  *     columns: { name: string, valueSource: string, label: string, unit: string, codingSystem: string }[] }[],
+ *   notes: { file: string, count: number, bytes: number, sha256: string } | null,
  *   fieldMap: Record<string, any>[], dictionary: { column: string, label: string, unit: string }[], coverage: ReturnType<typeof normalizeCoverage> }
  *   | { ok: false, verdict: keyof typeof REFUSALS, reason: string }}
  */
@@ -169,6 +174,11 @@ export function decideImport({ format, result, limits }) {
   const dictionary = (Array.isArray(result.dictionary) ? result.dictionary : []).slice(0, DICTIONARY_ENTRIES).map((/** @type {any} */ entry) => ({
     column: word(entry?.column, 120), label: word(entry?.label, 120), unit: word(entry?.unit, 32),
   })).filter((/** @type {{ column: string }} */ entry) => entry.column);
+  // The hospital's narrative notes, when the export had any the converter could read: a file of documents, never a table.
+  const noted = result.notes && typeof result.notes === 'object' ? result.notes : null;
+  const notes = noted && noted.file === NOTES_FILE && count(noted.count) !== null && noted.count >= 1 && noted.count <= MAX_NOTES
+    && count(noted.bytes) !== null && noted.bytes >= 1 && noted.bytes <= MAX_NOTES_BYTES && SHA256.test(String(noted.sha256 ?? ''))
+    ? { file: NOTES_FILE, count: Number(noted.count), bytes: Number(noted.bytes), sha256: String(noted.sha256) } : null;
   const extractor = result.converter && typeof result.converter === 'object' ? result.converter : {};
   const standard = result.standard && typeof result.standard === 'object' ? result.standard : {};
   return {
@@ -178,7 +188,7 @@ export function decideImport({ format, result, limits }) {
       name: word(extractor.name, 60), version: word(extractor.version, 20),
       libraries: Object.fromEntries(Object.entries(extractor.libraries ?? {}).slice(0, 8).map(([key, value]) => [word(key, 30), word(value, 20)])),
     },
-    tables, fieldMap, dictionary, coverage: normalizeCoverage(result.coverage),
+    tables, notes, fieldMap, dictionary, coverage: normalizeCoverage(result.coverage),
   };
 }
 
@@ -221,6 +231,7 @@ export function createVcrImporter({ config, controller = null, counters = {}, re
      * @param {{ root: string, studyId: string, format: string, extension: string, stream: AsyncIterable<Buffer | Uint8Array>, signal?: AbortSignal }} input
      * @param {(done: Extract<ReturnType<typeof decideImport>, { ok: true }> & {
      *   table: (name: string) => Promise<{ stream: () => AsyncIterable<Buffer>, bytes: number, close: () => Promise<unknown> }>,
+     *   openNotes: () => Promise<{ stream: () => AsyncIterable<Buffer>, bytes: number, close: () => Promise<unknown> }>,
      *   input: { sha256: string, bytes: number } }) => Promise<T>} consume
      * @returns {Promise<T>}
      */
@@ -250,6 +261,18 @@ export function createVcrImporter({ config, controller = null, counters = {}, re
               const opened = await attempt.openTable(table.file, table.bytes);
               try {
                 if (await opened.sha256() !== table.sha256) throw refuse('failed', 'table_changed');
+              } catch (error) {
+                await opened.close();
+                throw error;
+              }
+              return opened;
+            },
+            /** The notes file, verified the same way: the size and the SHA-256 the result named. */
+            openNotes: async () => {
+              if (!decided.notes) throw refuse('failed', 'notes_unknown');
+              const opened = await attempt.openTable(decided.notes.file, decided.notes.bytes);
+              try {
+                if (await opened.sha256() !== decided.notes.sha256) throw refuse('failed', 'notes_changed');
               } catch (error) {
                 await opened.close();
                 throw error;

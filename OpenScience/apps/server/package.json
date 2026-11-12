@@ -39,6 +39,8 @@
     "ws": "8.21.3",
     "wuying-agentbay-sdk": "0.22.0",
     "yaml": "2.8.3",
+    "@evimed/patient-matching-core": "workspace:^0.1.0",
+    "@evimed/patient-matching-worker": "workspace:^0.1.0",
     "@evimed/research-plugin-runtime": "workspace:^0.1.0"
   },
   "devDependencies": {

@@ -1,6 +1,7 @@
 {
   "view": "matching",
   "available": true,
+  "evaluateBy": "model",
   "protocols": [
     {
       "id": "prt_1",
@@ -80,15 +81,13 @@
       "id": "P-0201",
       "summary": "6 条满足 · 0 条未知 · 0 条待复评",
       "eligibility": "eligible",
-      "open": [],
-      "priority": null
+      "open": []
     },
     {
       "id": "P-0207",
       "summary": "6 条满足 · 0 条未知 · 0 条待复评",
       "eligibility": "eligible",
-      "open": [],
-      "priority": null
+      "open": []
     },
     {
       "id": "P-0192",
@@ -105,12 +104,7 @@
           "state": "pending_recheck",
           "note": "10 月 18 日 复评"
         }
-      ],
-      "priority": {
-        "label": "临床优先级（不是获益概率）",
-        "score": 0.8,
-        "rationale": "ECOG 1，一线含铂后进展"
-      }
+      ]
     },
     {
       "id": "P-0233",
@@ -132,8 +126,7 @@
           "state": "unknown",
           "note": null
         }
-      ],
-      "priority": null
+      ]
     },
     {
       "id": "P-0240",
@@ -145,8 +138,7 @@
           "code": "I2",
           "state": "not_satisfied"
         }
-      ],
-      "priority": null
+      ]
     },
     {
       "id": "P-0251",
@@ -158,10 +150,16 @@
           "code": "I1",
           "state": "not_satisfied"
         }
-      ],
-      "priority": null
+      ]
     }
   ],
+  "people": {
+    "total": 6,
+    "offset": 0,
+    "limit": 25,
+    "more": false,
+    "verdict": null
+  },
   "selected": {
     "candidate": {
       "id": "P-0192",
@@ -178,12 +176,7 @@
           "state": "pending_recheck",
           "note": "10 月 18 日 复评"
         }
-      ],
-      "priority": {
-        "label": "临床优先级（不是获益概率）",
-        "score": 0.8,
-        "rationale": "ECOG 1，一线含铂后进展"
-      }
+      ]
     },
     "assessmentId": "mas_2",
     "facts": [
@@ -223,6 +216,10 @@
         "applicable": true,
         "evidence": null,
         "evidenceItems": [],
+        "applicabilityState": "satisfied",
+        "applicabilityEvidenceItems": [],
+        "applicabilityReason": null,
+        "applicabilityRequestNote": null,
         "request": null,
         "reason": null,
         "requestNote": null,
@@ -238,6 +235,10 @@
         "applicable": true,
         "evidence": null,
         "evidenceItems": [],
+        "applicabilityState": "satisfied",
+        "applicabilityEvidenceItems": [],
+        "applicabilityReason": null,
+        "applicabilityRequestNote": null,
         "request": null,
         "reason": null,
         "requestNote": null,
@@ -253,6 +254,10 @@
         "applicable": true,
         "evidence": null,
         "evidenceItems": [],
+        "applicabilityState": "satisfied",
+        "applicabilityEvidenceItems": [],
+        "applicabilityReason": null,
+        "applicabilityRequestNote": null,
         "request": null,
         "reason": null,
         "requestNote": null,
@@ -268,8 +273,12 @@
         "applicable": true,
         "evidence": null,
         "evidenceItems": [],
+        "applicabilityState": "satisfied",
+        "applicabilityEvidenceItems": [],
+        "applicabilityReason": null,
+        "applicabilityRequestNote": null,
         "request": "申请近 4 周头颅 MRI",
-        "reason": null,
+        "reason": "未记录",
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false
@@ -283,6 +292,10 @@
         "applicable": true,
         "evidence": null,
         "evidenceItems": [],
+        "applicabilityState": "satisfied",
+        "applicabilityEvidenceItems": [],
+        "applicabilityReason": null,
+        "applicabilityRequestNote": null,
         "request": "末次免疫治疗日期",
         "reason": null,
         "requestNote": "10 月 18 日 起可复评",
@@ -298,6 +311,10 @@
         "applicable": true,
         "evidence": null,
         "evidenceItems": [],
+        "applicabilityState": "satisfied",
+        "applicabilityEvidenceItems": [],
+        "applicabilityReason": null,
+        "applicabilityRequestNote": null,
         "request": null,
         "reason": null,
         "requestNote": null,
@@ -308,11 +325,6 @@
     "verdict": {
       "text": "不能判为符合：排除标准 E1 未知",
       "note": "E2 待复评"
-    },
-    "priority": {
-      "label": "临床优先级（不是获益概率）",
-      "score": 0.8,
-      "rationale": "ECOG 1，一线含铂后进展"
     },
     "reviewedBy": null,
     "reviewedByName": null
@@ -337,7 +349,6 @@
       "count": 1
     }
   ],
-  "pendingReview": null,
   "protocol": {
     "version": 1,
     "title": "EV-201 方案 v1"

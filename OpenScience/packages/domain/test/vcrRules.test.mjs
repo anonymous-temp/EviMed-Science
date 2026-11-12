@@ -16,6 +16,14 @@ import {
 
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/vcr-row-rules.json", import.meta.url), "utf8"));
 
+test("language requirements preserve whole clauses up to 4000 Unicode code points", () => {
+  for (const text of ["a".repeat(500), "a".repeat(4000), "🧬".repeat(4000)]) {
+    assert.deepEqual(validateRequirement({ op: "language", text }), []);
+  }
+  assert.equal(validateRequirement({ op: "language", text: "🧬".repeat(4001) })[0].field, "text");
+  assert.ok(validateRequirement({ op: "compare", variable: "stage", comparator: "eq", value: "a".repeat(201) }).length);
+});
+
 // --- the parity fixture ------------------------------------------------------
 // The same file is read by the engine's N00 case. If the two sides ever
 // disagree about what a rule means, one of the two runs goes red on the same
@@ -244,7 +252,7 @@ test("a malformed requirement is refused with a named code and the path of the d
     ["an anchorDate that is not a date", { op: "present", variable: "a", window: { months: 6, anchorDate: "last spring" } }, ["rule_shape_invalid@window.anchorDate"]],
     ["language without text", { op: "language" }, ["rule_shape_invalid@text"]],
     ["language with empty text", { op: "language", text: "" }, ["rule_shape_invalid@text"]],
-    ["language with 501 characters", { op: "language", text: "x".repeat(501) }, ["rule_shape_invalid@text"]],
+    ["language with 4001 characters", { op: "language", text: "x".repeat(4001) }, ["rule_shape_invalid@text"]],
     ["a stray key", { op: "absent", variable: "a", note: "x" }, ["rule_shape_invalid@note"]],
     ["a defect deep in the tree", { op: "all", operands: [{ op: "present", variable: "a" }, { op: "not", operand: { op: "compare", variable: "b", comparator: "gt", value: "x" } }] }, ["rule_shape_invalid@operands[1].operand.value"]],
   ]);

@@ -5176,7 +5176,10 @@ export class AgentRunStore {
       // Keep its flag and timestamp while stripping all source-only notice text.
       const clean = rows => rows.filter(event => !ids.has(event.id) || !['native-workflow','notice'].includes(event.event)
         || (event.event === 'notice' && event.deleted === true)).map(event => !ids.has(event.id) ? event
-        : Object.fromEntries(Object.entries(event).filter(([key]) => keep.has(key))));
+        // A kept deletion notice is rebuilt in the order it is first written (below), so a repeated cleanup leaves its bytes unchanged.
+        : event.event === 'notice' && event.deleted === true
+          ? { event: 'notice', id: event.id, at: event.at, qualityNotices: [], deleted: true }
+          : Object.fromEntries(Object.entries(event).filter(([key]) => keep.has(key))));
       const cleaned = clean(events);
       const notices = [];
       for (const run of targets) {
@@ -5185,7 +5188,7 @@ export class AgentRunStore {
         await rm(file, { force: true });
         this.dispatchedBriefs.delete(run.id); this.progressTrackers.delete(run.id);
         const previous = events.find(event => event.id === run.id && event.event === 'notice' && event.deleted === true);
-        notices.push({ event: 'notice', id: run.id, at: previous?.at ?? this.now().toISOString(), qualityNotices: [], deleted: true });
+        if (!previous) notices.push({ event: 'notice', id: run.id, at: this.now().toISOString(), qualityNotices: [], deleted: true });
       }
       foldEvents([...cleaned, ...notices]); // Validate before replacing any segment's bytes.
       // Preserve segment boundaries and event order. Source deletion's durable
@@ -5193,8 +5196,10 @@ export class AgentRunStore {
       this.invalidateLedgerPrefix(project);
       const files = await ledgerSegments(project);
       for (const file of files) {
-        const rows = clean(parseEvents(await readLedgerSegment(project, file, this.maxBytes, files.length === 1)));
+        const previous = await readLedgerSegment(project, file, this.maxBytes, files.length === 1);
+        const rows = clean(parseEvents(previous));
         const text = rows.map(event => JSON.stringify(event)).join('\n') + (rows.length ? '\n' : '');
+        if (text === previous) continue;
         this.invalidateLedgerPrefix(project); // Also drop state before a partial erasure fails.
         await writeFileAtomicNoFollow(project.rootDir, file, text, { encoding: 'utf8', mode: 0o600 });
       }
@@ -6592,7 +6597,7 @@ export class AgentRunStore {
     if(!wanted&&!session)return null;
     const known=await this.list(project),target=wanted?known.find(run=>run.id===wanted):null;
     const scope=session ?? target?.sessionId;if(!scope)return null;
-    return this.withPromptAdmission(project,scope,async()=>{
+    const record = async()=>{
       const runs=await this.list(project),selected=runs.filter(run=>wanted?run.id===wanted:run.sessionId===scope);
       // Exact existing IDs make stop intent monotonic without suppressing a
       // later explicit human request or depending on wall-clock comparisons.
@@ -6600,7 +6605,16 @@ export class AgentRunStore {
       const active=selected.find(run=>run.status==='running');
       if(active)this.stopRequests.set(active.id,this.now().getTime());
       return active?.id ?? null;
-    });
+    };
+    let entered = false;
+    try { return await this.withPromptAdmission(project,scope,()=>{entered=true;return record();}); }
+    catch(error) {
+      // Admission sequences an already authenticated stop; it is not its
+      // authority. Preserve the monotonic local intent even if that lane fails.
+      // Once recording began, never replay its database/observer failure.
+      if(entered)throw error;
+      return record();
+    }
   }
   async promptStopRequested(project,sessionId,runId){return this.promptStops.has(project,sessionId,runId);}
 

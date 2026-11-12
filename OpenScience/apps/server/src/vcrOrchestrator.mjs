@@ -263,8 +263,8 @@ export function vcrExportBriefLines(kind) {
 
 /**
  * The brief of a run sent to find trials for one patient (「给患者找试验」, `requestTrialSearch`): the study it is in, the patient by the
- * study's own pseudonym, and where the way of doing it is written. How — the registries to search, what to write, how the trials are
- * judged and listed — is the matching skill's section, not a second copy here.
+ * study's own pseudonym, and the three calls the way goes through (search, the judging job, read back). How to search and what to say is the
+ * matching skill's, not a second copy here.
  * @param {{ study: any, subjectKey: string }} input
  */
 export function vcrTrialSearchBrief({ study, subjectKey }) {
@@ -272,8 +272,8 @@ export function vcrTrialSearchBrief({ study, subjectKey }) {
     `研究：${study.name}。`,
     study.question ? `研究问题：${study.question}` : "",
     `数据档位：${study.dataTier}；预期用途：${study.intendedUse}。`,
-    `这次的任务是「给患者找试验」：为受试者 ${subjectKey} 找适合参加的试验，按 vcr-matching 技能里「给患者找试验」一节做。`,
-    "用 vcr_read 读这位受试者已有的事实和本研究已有的候选试验；候选试验由 vcr_write 写入，平台判定并排序，结果用 vcr_read 读回，不要自己下判定。",
+    `这次的任务是「给患者找试验」：为受试者 ${subjectKey} 找适合参加的试验，按 vcr-matching 技能做。`,
+    "用 vcr_read 的 what=candidates 检索登记库，用 vcr_simulate 启动 kind=match_judge，selection 带这位受试者的 subjectKey 和检索得到的 searchId；判定保存后用 vcr_read 的 what=candidate_trials 读回，只报告读到的。",
   ].filter(Boolean).join("\n");
 }
 
@@ -2625,6 +2625,9 @@ export class VcrOrchestrator {
     // nobody had been judged against the criteria the study holds (`protocol_version_id` is that version).
     const assessments = read.protocol ? Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.matching_assessments
       WHERE study_id = $1 AND protocol_version_id = $2`, [study.id, read.protocol.id]))?.n ?? 0) : 0;
+    // The model's judgments finish the step just the same, under the same rule: a pair against the protocol as it stands, or a patient against a registry trial.
+    const judged = Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.match_judgments
+      WHERE study_id = $1 AND status = 'done' AND (target_kind = 'candidate_trial' OR target_id = $2)`, [study.id, read.protocol?.id ?? ""]))?.n ?? 0);
 
     const objects = this.#objectStates(read);
     /** @param {string} step */
@@ -2668,7 +2671,7 @@ export class VcrOrchestrator {
     //
     // Structuring the eligibility criteria is what step 7 is at T0, where
     // nobody's records exist to match (plan §3.2); above T0 it is done when
-    // patients have been judged. The criteria are one object two steps may
+    // patients have been judged, by a rule evaluation or by the model. The criteria are one object two steps may
     // write — the protocol run structures them from the protocol it reads, the
     // matching run when it finds none — and the plan's own T0 timeline (§10.3)
     // has no matching run: reading step 7 done on criteria that exist is the
@@ -2680,8 +2683,8 @@ export class VcrOrchestrator {
       ["patients", aggregate("patients")],
       ["comparator", aggregate("comparator")],
       ["trial", aggregate("trial")],
-      ["matching", simple("matching", { kinds: ["match_criteria"],
-        complete: criteria > 0 && (study.dataTier === "T0" || assessments > 0) })],
+      ["matching", simple("matching", { kinds: ["match_criteria", "match_judge"],
+        complete: judged > 0 || (criteria > 0 && (study.dataTier === "T0" || assessments > 0)) })],
     ]);
     // The runs out for this study now, by the steps they cover: what 「进行中」 is checked against.
     const flying = vcrStepsInFlight(await this.store.rows(`SELECT detail FROM ${VCR_SCHEMA}.schedule_marks
@@ -3217,7 +3220,7 @@ export class VcrOrchestrator {
     if (!conversation && named.asked !== true) return;
     if (named.recompute === true) return;
     const resultKind = String(named.resultKind || vcrResultKindFor(String(job.kind)));
-    if (!VCR_SUBJECT_KINDS.includes(resultKind) && !["accrual_forecast", "matching", "match_extract", "population_check", "design_confirmatory", "design_dose", "design_bayesian", "design_win_ratio", "network_meta", "dose_response_meta", "effect_shrinkage", "prognostic_training", "progression_simulation"].includes(resultKind)) return;
+    if (!VCR_SUBJECT_KINDS.includes(resultKind) && !["accrual_forecast", "matching", "match_judge", "records_import", "population_check", "design_confirmatory", "design_dose", "design_bayesian", "design_win_ratio", "network_meta", "dose_response_meta", "effect_shrinkage", "prognostic_training", "progression_simulation"].includes(resultKind)) return;
     const stage = named.stage ? String(named.stage) : null;
     // The check that follows a result is not the object's last stage: the researcher is told when the result has landed, and the
     // check says how it went on the page, beside the figure it is for.

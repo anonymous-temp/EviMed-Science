@@ -1,5 +1,6 @@
 import { CLINICAL_FACT_CONTRACT, FACT_EVIDENCE_RULE, VCR_REQUIREMENT_CONTRACT, VCR_CRITERION_TYPES, clinicalTerminologyContext } from '@evimed/domain';
 import { clinicalSemanticFields } from '@evimed/domain';
+import { patientMatchingConfiguration } from './patientMatchingConfiguration.mjs';
 import { clinicalDocumentWindow } from './vcrDocumentWindow.mjs';
 import { locatePassages, passageWindow } from './vcrPassages.mjs';
 /**
@@ -21,8 +22,10 @@ import { locatePassages, passageWindow } from './vcrPassages.mjs';
  *   the seam is named and kept here, where a mismatch is one function wide.
  * - **One boundary for what a model reads, and it is not here.** Small-cell
  *   suppression is the service's `runtimeRead` applying the domain's
- *   `suppressForModel` once, to every `what`; nothing in this file suppresses
- *   anything, and nothing a seam returns reaches a model without passing it.
+ *   `suppressForModel` once, to every `what` (but for the study owner's own
+ *   conversation, which the gateway marks `ownerView` and which reads exact
+ *   counts); nothing in this file suppresses anything, and nothing a seam
+ *   returns reaches a model without passing the service's boundary.
  * - **Matching is a flow, and this file joins its ends.** A run writes located
  *   facts and answers to language-only criteria; the platform freezes the
  *   protocol's criteria and the instant into a `match_criteria` job; a local
@@ -75,19 +78,19 @@ import { VcrErasureStore } from "./vcrErasureStore.mjs";
 import { createVcrEngineClient } from "./vcrEngineClient.mjs";
 import { createVcrEngineProbe } from "./vcrEngineProbe.mjs";
 import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
+import { ensureTableMeaning, readTableMeaning, tableMeaningDatasetId } from "./vcrTableMeaning.mjs";
+import { createVcrTrialCorpus } from "./vcrTrialCorpus.mjs";
 import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
 import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
 import { createVcrCurveEvidence } from "./vcrCurveEvidence.mjs";
 import { createVcrPublicationSources } from "./vcrPublicationSources.mjs";
-import { createIntakeCounters, createVcrRecordExtractor } from "./vcrRecordExtract.mjs";
+import { createIntakeCounters, createVcrRecordExtractor, createVcrScanReader } from "./vcrRecordExtract.mjs";
 import { createVcrCurveDigitizer } from "./vcrCurveDigitizer.mjs";
 import { VcrEvidenceStore } from "./vcrEvidenceStore.mjs";
 import { VcrJobs } from "./vcrJobs.mjs";
 import { VcrKnowledge } from "./vcrKnowledge.mjs";
 import { VcrKnowledgeStore } from "./vcrKnowledgeStore.mjs";
 import { VcrMatchStore } from "./vcrMatchStore.mjs";
-import { VcrCandidateTrialStore } from "./vcrCandidateTrialStore.mjs";
-import { createPatientTrials } from "./vcrPatientTrials.mjs";
 import { matchingAssessmentEvidence } from "./vcrMatchingEvidence.mjs";
 import { VcrMembers } from "./vcrMembers.mjs";
 import { createVcrModelPlans } from "./vcrModelDocuments.mjs";
@@ -103,14 +106,23 @@ import { createVcrImporter } from "./vcrImport.mjs";
 import { parseProbabilityByMonth, readAccrualForecast } from "./vcrAccrual.mjs";
 import { matchingCandidates } from "./vcrMatchingCandidates.mjs";
 import {
-  VCR_MATCHING_VOCABULARY_VERSION, matchingInputDigest, assessSubject, eligibilityCounts, frozenAsOf, languageKeysOf, requiresLanguageJudgment,
+  VCR_MATCHING_VOCABULARY_VERSION, VCR_MATCHING_EVALUATOR_VERSION, matchingInputDigest, assessSubject, eligibilityCounts, frozenAsOf, criterionLanguageKeys, requiresLanguageJudgment,
 } from "./vcrMatching.mjs";
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
-import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor } from "./vcrMatchBatch.mjs";
+import { matchBatchMinCell } from "./vcrMatchBatch.mjs";
+import { createRecordsImport, createRecordsImportExecutor } from "./vcrRecordsImport.mjs";
+import { createPatientDocumentRead } from "./vcrPatientContext.mjs";
+import { createLongTableReader } from "./vcrLongTables.mjs";
+import { VcrCandidateRerank, createRerankMeter } from "./vcrCandidateRerank.mjs";
+import { VcrCandidateSearchStore } from "./vcrCandidateSearchStore.mjs";
+import { createMatchJudgmentReads, judgmentTargets, tableFieldsOf } from "./vcrMatchJudge.mjs";
+import { VcrMatchJudgmentStore } from "./vcrMatchJudgmentStore.mjs";
+import { VcrRegistryPageStore, createRegistryPageCounters, createRegistryPages } from "./vcrRegistryPages.mjs";
+import { createRegistryWatch, createRegistryWatchCounters } from "./vcrRegistryWatch.mjs";
+import { VcrMatchResults } from "./vcrMatchResults.mjs";
+import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, languageCriteriaByKey, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
 import { createSecondReader } from "./vcrEvidenceSecondRead.mjs";
 import { KbEmbedder } from "./kbEmbedding.mjs";
-import { vcrRuntimeWrite } from "./vcrGateway.mjs";
-import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
 
 /**
  * The data-plane seam the service reads through: the page's tab, the one-line
@@ -182,17 +194,18 @@ export function vcrDataPlaneSeam({ dataPlane, access }) {
      * What a model may read of a snapshot — or, before there is one, of a
      * source: structure, quality, the dictionary; never a row. Bound to the
      * study that asks (a snapshot or source of another study does not exist
-     * here), judged for the study's owner and audited (CS-5).
-     * @param {any} study @param {any} filter
+     * here), judged for the study's owner and audited (CS-5). `options.exact` is the owner's own conversation: the row and fill counts
+     * are printed whatever their size (the service passes it from the gateway's decision, never from the filter).
+     * @param {any} study @param {any} filter @param {{ exact?: boolean }} [options]
      */
-    async runtimeProfile(study, filter) {
+    async runtimeProfile(study, filter, { exact = false } = {}) {
       const snapshotId = String(filter?.snapshotId ?? "");
       const sourceId = String(filter?.sourceId ?? "");
       if (snapshotId) {
-        return { available: true, ...await dataPlane.snapshotProfileForModel({ studyId: study.id, snapshotId, principal: study.userId }) };
+        return { available: true, ...await dataPlane.snapshotProfileForModel({ studyId: study.id, snapshotId, principal: study.userId, exact }) };
       }
       if (sourceId) {
-        return { available: true, ...await dataPlane.sourceProfileForModel({ studyId: study.id, sourceId, principal: study.userId }) };
+        return { available: true, ...await dataPlane.sourceProfileForModel({ studyId: study.id, sourceId, principal: study.userId, exact }) };
       }
       return { available: false, code: "vcr_snapshot_not_named" };
     },
@@ -264,7 +277,7 @@ export function matchingContextOf(inputs) {
  *
  * @param {{ matchStore: VcrMatchStore, store: VcrStore,
  *   documents?: { read: (study: any, input: { subjectKey: string, documentId: string }) => Promise<{ text: string } | null> } | null,
- *   subjectTable?: { read: (study: any) => Promise<any> } | null }} parts
+ *   subjectTable?: { read: (study: any, options?: { variables?: readonly string[] | null, propose?: boolean }) => Promise<any> } | null }} parts
  */
 export function vcrMatchingExecutor({ matchStore, store, documents = null, subjectTable = null }) {
   /** @param {{ job: Record<string, any>, onProgress: (progress: { done: number, total: number }) => Promise<unknown> }} input */
@@ -278,6 +291,7 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
     const snapshotId = list(job.inputs).map(input => String(input.id ?? '')).find(id => id.startsWith(MATCHING_SNAPSHOT_PREFIX))?.slice(MATCHING_SNAPSHOT_PREFIX.length);
     if (!snapshotId) throw new HttpError(409, 'vcr_matching_snapshot_missing', 'This older job has no frozen matching inputs. Queue a new evaluation.');
     const snapshot = verifyMatchingSnapshot(await matchStore.matchingSnapshot(studyId, snapshotId), studyId, snapshotId);
+    if (snapshot.matchingEvaluatorVersion !== VCR_MATCHING_EVALUATOR_VERSION) throw new HttpError(409, 'vcr_matching_evaluator_changed', 'The matching evaluator changed. Queue a new evaluation.');
     if (snapshot.protocolVersionId !== protocolVersionId || snapshot.asOf !== asOf) throw new HttpError(409, 'vcr_matching_input_changed', 'The job and its frozen inputs disagree.');
     const frozenIds = list(object(job?.scenario).criteria).map((criterion) => String(object(criterion).id ?? ''));
     const criteria = snapshot.criteria;
@@ -299,7 +313,8 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
     /** @type {any} */
     let tableRead = null;
     if (subjectTable) {
-      try { tableRead = await subjectTable.read(study); }
+      // What the table's codes mean was settled when the inputs were frozen; a running job reads it and never asks the model.
+      try { tableRead = await subjectTable.read(study, { variables: matchingVariablesOf(criteria), propose: false }); }
       catch (error) { tableRead = { available: false, reason: String(/** @type {any} */ (error)?.code ?? "vcr_subject_table_unreadable") }; }
     }
     if (snapshot.subjectTable && tableRead?.available && matchingTableIdentity(tableRead) !== snapshot.subjectTable.identity) {
@@ -391,7 +406,9 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
         // The subject table, by what it was and what of it answered: names and counts, never a cell.
         ...(subjectTable ? { subjectTable: tableFacts
           ? { snapshotId: tableRead.snapshotId, rows: tableFacts.rows, subjects: tableFacts.subjects.length, notEvaluated: tableFacts.notEvaluated,
-            variablesMapped: tableFacts.mapped, variablesUnmapped: tableFacts.unmapped, variablesAmbiguous: tableFacts.ambiguous, withheld: tableRead.withheld }
+            variablesMapped: tableFacts.mapped, variablesUnmapped: tableFacts.unmapped, variablesAmbiguous: tableFacts.ambiguous, withheld: tableRead.withheld,
+            // Whether the meaning of the table's codes could be proposed when the inputs were frozen (`vcrTableMeaning.mjs`).
+            ...(snapshot.subjectTable?.meaning ? { meaning: snapshot.subjectTable.meaning } : {}) }
           : { available: false, reason: String(tableRead?.reason ?? "unavailable"), ...(tableRead?.fields?.length ? { fields: tableRead.fields } : {}) } } : {}),
       },
       tables: [],
@@ -442,14 +459,36 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
     /**
      * Every record of the study with its owner and length, no text: what the batch reading plans from (D4). A record whose person
      * the plane did not note is not a record of anyone and is left out.
-     * @param {any} study
+     * @param {any} study @param {string | null} [subjectKey] one person's, when a job has to read them again
      * @returns {Promise<Array<{ id: string, subjectKey: string, chars: number | null }>>}
      */
-    async roster(study) {
+    async roster(study, subjectKey = null) {
       if (!dataPlane) return [];
-      const listed = await dataPlane.listDocuments({ studyId: study.id, principal: study.userId });
+      const listed = await dataPlane.listDocuments({ studyId: study.id, principal: study.userId, subjectKey });
       return listed.filter((/** @type {any} */ entry) => entry.subjectKey)
-        .map((/** @type {any} */ entry) => ({ id: String(entry.id), subjectKey: String(entry.subjectKey), chars: Number.isFinite(Number(entry.chars)) ? Number(entry.chars) : null }));
+        .map((/** @type {any} */ entry) => ({ id: String(entry.id), subjectKey: String(entry.subjectKey), chars: Number.isFinite(Number(entry.chars)) ? Number(entry.chars) : null, visibleAt: entry.visibleAt ?? null }));
+    },
+    /** What this study's long tables say, for reading as lines, or null when it has none. @param {any} study */
+    async longTables(study) {
+      const opened = await dataPlane?.openLongTables?.({ studyId: study.id, principal: study.userId, purpose: VCR_JOB_PURPOSE, cloudContext: study.cloudContext ?? null });
+      return opened ? createLongTableReader(opened) : null;
+    },
+    /** Whether what was read of this person may still go to a model: null when it may, otherwise why not (`VcrDataPlane.recordStands`).
+     * @param {any} study @param {{ subjectKey: string, documentIds?: readonly string[], snapshotIds?: readonly string[] }} input */
+    async recordStands(study, input) {
+      return dataPlane ? dataPlane.recordStands({ studyId: study.id, ...input }) : null;
+    },
+    /** What this reader may see of saved judgments, by what each read (`VcrDataPlane.judgeRecordReads`).
+     * @param {any} study @param {{ id: string } | null} viewer @param {ReadonlyArray<{ documentIds?: readonly string[], snapshots?: ReadonlyArray<{ id: string, fields?: readonly string[] }> }>} records */
+    async judgeReads(study, viewer, records) {
+      if (!dataPlane || !viewer) return { patientLevel: false, permitted: records.map(() => false) };
+      return dataPlane.judgeRecordReads({ studyId: study.id, principal: viewer.id, records, purpose: VCR_JOB_PURPOSE });
+    },
+    /** What a run was shown of a document, for the reading it has been through: the same record a window read writes.
+     * @param {any} study @param {string} documentId @param {string} text @param {number} start @param {number} end */
+    async recordWindow(study, documentId, text, start, end) {
+      if (!study.cloudContext || !dataPlane?.recordDocumentWindow) return;
+      await dataPlane.recordDocumentWindow(study.id, documentId, study.cloudContext, clinicalDocumentWindow(text, start, Math.max(1, end - start)));
     },
     /** The only document reader used by a cloud run. @param {any} study @param {any} input */
     async runtimeRead(study, { subjectKey, documentId }) {
@@ -475,6 +514,12 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
       const result = [];
       for (const entry of entries) {
         const source = entry.source ?? entry.locator ?? entry;
+        if (source.snapshotId && source.long && dataPlane?.longEvidenceAllowed) {
+          const key = `long:${source.snapshotId}`;
+          if (!decisions.has(key)) decisions.set(key, await dataPlane.longEvidenceAllowed({ studyId: study.id, snapshotId: source.snapshotId, subjectKey, principal: viewer?.id ?? study.userId, purpose: VCR_JOB_PURPOSE, external: !viewer }).catch(() => false));
+          if (decisions.get(key)) result.push(entry);
+          continue;
+        }
         if (source.snapshotId && source.field && dataPlane?.subjectTableEvidenceBatch) {
           const key = `snapshot:${source.snapshotId}`;
           if (!decisions.has(key)) {
@@ -482,7 +527,7 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
               .filter(item => item.snapshotId === source.snapshotId && item.field).map(item => String(item.field)))];
             decisions.set(key, await dataPlane.subjectTableEvidenceBatch({ studyId: study.id, snapshotId: source.snapshotId,
               fields, subjectKey, principal: viewer?.id ?? study.userId, purpose: VCR_JOB_PURPOSE,
-              external: !viewer, cloudContext: viewer ? null : study.cloudContext }).catch(() => ({})));
+              external: !viewer, cloudContext: viewer ? null : study.cloudContext, session: study.tableSession ?? null }).catch(() => ({})));
           }
           const cell = decisions.get(key)?.[source.field];
           if (cell && (!source.sourceHash || source.sourceHash === cell.locator.sourceHash)) result.push({ ...entry, ...cell, quoteKind: "snapshot_cell" });
@@ -565,14 +610,35 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
  * The subject-table seam of the matching flow: the plane's judged read of the study's subject table for the study's
  * owner, and the identity (snapshot and hash) a job freezes so a changed table is a different job. A refusal is an
  * answer — `{ available: false, reason }` — never an error that stops the other sources.
- * @param {{ dataPlane: VcrDataPlane | null }} parts
+ *
+ * Asked for the `variables` of a set of criteria, a read also carries what the table's columns mean for them (`meaning`, its
+ * `meaningDigest` and `meaningStatus`; `vcrTableMeaning.mjs`): what is recorded, and with `propose` one model call for what is
+ * not. `semantics` is the dataset-semantics service, given as a function because it is built after this module.
+ * @param {{ dataPlane: VcrDataPlane | null, semantics?: (() => any) | null, config?: Record<string, any>, usageLedger?: any, fetchImpl?: typeof fetch, callModel?: typeof import('./modelGateway.mjs').callModelForControlPlane }} parts
  */
-export function vcrSubjectTableSeam({ dataPlane }) {
+export function vcrSubjectTableSeam({ dataPlane, semantics = null, config = {}, usageLedger = null, fetchImpl = undefined, callModel = undefined }) {
   return {
-    /** @param {any} study */
-    async read(study) {
+    /** @param {any} study @param {{ variables?: readonly string[] | null, propose?: boolean }} [options] */
+    async read(study, { variables = null, propose = false } = {}) {
       if (!dataPlane) return { available: false, reason: "vcr_data_plane_unavailable" };
-      return dataPlane.subjectTableForMatching({ studyId: study.id, principal: study.userId, purpose: VCR_JOB_PURPOSE });
+      const table = await dataPlane.subjectTableForMatching({ studyId: study.id, principal: study.userId, purpose: VCR_JOB_PURPOSE });
+      if (!table.available || !variables?.length) return table;
+      const found = await ensureTableMeaning({
+        study, table, variables, semantics: semantics?.() ?? null, config, usageLedger, fetchImpl, callModel, propose,
+        authorizeCloud: ({ fields }) => dataPlane.authorizeSubjectTableCloudRead({ studyId: study.id, snapshotId: table.snapshotId, principal: study.userId, fields }),
+      });
+      return { ...table, meaning: found.meaning, meaningDigest: found.digest,
+        meaningStatus: { status: found.status, ...(found.code ? { code: found.code } : {}), ...(found.message ? { message: found.message } : {}) } };
+    },
+    /** What the table's codes were read to mean, and how to correct one: a correction outranks the model's reading, and screening reads it next time. @param {any} study */
+    async meaningRead(study) {
+      const table = dataPlane ? await dataPlane.subjectTableForMatching({ studyId: study.id, principal: study.userId, purpose: VCR_JOB_PURPOSE }).catch(() => null) : null;
+      if (!table?.available || !table.snapshotId) return { available: false, note: "这个研究没有受试者表。" };
+      const datasetId = tableMeaningDatasetId(String(table.snapshotId));
+      const record = await semantics?.()?.get(String(study.userId), String(study.projectId), datasetId).catch(() => null);
+      const meaning = readTableMeaning(record?.asset);
+      return { available: true, datasetId, columns: list(table.columns).filter((column) => column?.name && column.name !== "USUBJID").map((column) => ({ name: String(column.name), ...(meaning.columns[column.name] ?? {}) })),
+        correct: { tool: "dataset_semantics", action: "write", datasetId, note: "A code read wrongly, or a column with no map: write the variable's valueMap as the researcher states it, basis statement." } };
     },
     /** @param {any} study */
     async identity(study) {
@@ -584,7 +650,8 @@ export function vcrSubjectTableSeam({ dataPlane }) {
 
 /** A table version includes the field definitions used to interpret its cells, never the cells themselves. @param {any} table */
 function matchingTableIdentity(table) {
-  return matchingInputDigest({snapshotId:table.snapshotId,sha256:table.sha256??null,header:table.header,columns:table.columns,withheld:table.withheld??[]});
+  // What the columns' codes mean joins the identity only when a meaning is recorded for the criteria's variables: a study without one keeps the identity it had.
+  return matchingInputDigest({snapshotId:table.snapshotId,sha256:table.sha256??null,header:table.header,columns:table.columns,withheld:table.withheld??[],...(table.meaningDigest?{meaning:table.meaningDigest}:{})});
 }
 
 /** The frozen inputs of one matching job, and the facts token that keeps two runs of different facts apart. */
@@ -626,7 +693,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
   /** @param {any} study */
   const languageKeys = async (study, /** @type {string|null} */ protocolVersionId = null) => {
     const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId }).catch(() => []);
-    return [...new Set(criteria.flatMap((criterion) => languageKeysOf(criterion.requirement, criterion.id)))];
+    return [...languageCriteriaByKey(criteria).keys()];
   };
 
   const seam = {
@@ -688,6 +755,8 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
      * @param {any} study @param {Record<string, any>} filter
      */
     async runtimeRead(study, filter) {
+      // What a study's table means, under its own name: the dataset's id, each column's concept and codes, and how to correct one.
+      if(filter.kind==='table_meaning') return subjectTable?.meaningRead ? subjectTable.meaningRead(study) : {available:false,note:'这个研究没有受试者表。'};
       if(filter.kind==='contract') return {
         factContract:clinicalEnabled(study) ? CLINICAL_FACT_CONTRACT : null,
         // The rule holds for every fact, whether or not the clinical metadata is on for this study.
@@ -696,10 +765,12 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         writeEnvelope: 'Single: {what,data:<one object>}; batch: {what,items:[<object>]}. Never nest items inside data; never use writes as schema probes.',
         note:'Examples describe syntax only. Use only criteria and facts supported by the supplied protocol and preserved patient material. Do not guess internal message sequence numbers.',
         patientContext:{tool:'vcr_write',what:'patient_context',data:{}},
+        protocolTextWrite:{tool:'vcr_write',what:'protocol',data:{title:'Protocol title',protocolText:'The eligibility section as written; the platform numbers its clauses'},note:'Enough for judging. A criterion always has sourceText; requirement is for screening a table.'},
         protocolWrite:{tool:'vcr_write',what:'protocol',data:{criteria:[{kind:'inclusion',criterionType:'demographic',sourceText:'Exact protocol wording',requirement:{op:'compare',variable:'age',comparator:'between',value:18,highValue:65,unit:'year'}}]}},
         factWrite:{tool:'vcr_write',what:'fact',items:[{subjectKey:'returned subjectKey',documentId:'returned documentId',variable:'age',value:45,unit:'year',surface:'45 years',quote:'Exact preserved original quote'}]},
         evaluate:{tool:'vcr_simulate',action:'start',kind:'match_criteria'},
         terminologyRead:{what:'matching',filter:{kind:'terminology'}},
+        tableMeaningRead:{what:'matching',filter:{kind:'table_meaning'}},
       };
       if (filter.snapshotId) {
         const snapshot = await matchStore.matchingSnapshot(study.id, String(filter.snapshotId));
@@ -718,6 +789,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         return {protocol:null,criteria:[],subjects:[],contractRead:{what:'matching',filter:{kind:'contract'}},note:'No criteria are saved. Read the contract, then structure only the supplied protocol with vcr_write; a separate study-definition workflow is not required.'};
       }
       const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id });
+      const validLanguageKeys = languageCriteriaByKey(criteria);
       const subjectKey = filter?.subjectKey ? String(filter.subjectKey) : null;
       const withdrawn = await matchStore.withdrawnSubjects?.(study.id) ?? new Set();
       const view = {
@@ -726,8 +798,8 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
         criteria: criteria.map((criterion) => ({
           id: criterion.id, ordinal: criterion.ordinal, kind: criterion.kind, criterionType: criterion.criterionType,
           sourceText: criterion.sourceText, requirement: criterion.requirement, applicability: criterion.applicability,
-          decidedBy: requiresLanguageJudgment(criterion.requirement) ? "model" : "code",
-          languageKeys: languageKeysOf(criterion.requirement, criterion.id),
+          decidedBy: requiresLanguageJudgment(criterion.requirement) || requiresLanguageJudgment(criterion.applicability) ? "model" : "code",
+          languageKeys: criterionLanguageKeys(criterion).filter(key => validLanguageKeys.has(key)),
         })),
       };
       if(filter.kind==='terminology') return {protocol,terminology:clinicalEnabled(study) ? await clinicalContext(study,criteria).catch(()=>null) : null};
@@ -798,7 +870,8 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
     async matchScenario(study, selection = {}) {
       selection = matchingSelection(selection);
       if (selection.snapshotId) {
-        const previous = await matchStore.matchingSnapshot(study.id, selection.snapshotId);
+        const previous = verifyMatchingSnapshot(await matchStore.matchingSnapshot(study.id, selection.snapshotId), study.id, selection.snapshotId);
+        if (previous?.matchingEvaluatorVersion !== VCR_MATCHING_EVALUATOR_VERSION) throw new HttpError(409, 'vcr_matching_evaluator_changed', 'The matching evaluator changed. Queue a new evaluation.');
         const offset = selection.offset ?? previous.offset;
         if (offset < 0 || offset >= previous.subjects.length) throw new HttpError(400, 'vcr_matching_selection_invalid', 'Offset is outside the frozen candidate roster.');
         const payload = { ...previous, offset };
@@ -824,12 +897,13 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       let frozenTable = null;
       const tableIdentity = subjectTable?.identity ? await subjectTable.identity(study).catch(() => null) : null;
       if (subjectTable?.read) {
-        const table = await subjectTable.read(study).catch(() => null);
+        // Freezing is where the meaning of the table's codes is settled: asked once, recorded, and the job runs on what was recorded.
+        const table = await subjectTable.read(study, { variables: matchingVariablesOf(criteria), propose: true }).catch(() => null);
         if (table?.available) {
           const candidates = subjectTableFacts({...table,variables:[],limit:Number.POSITIVE_INFINITY}).subjects.map(row=>row.subjectKey);
           const withdrawn = await matchStore.withdrawnSubjects?.(study.id) ?? new Set();
           roster.push(...candidates.filter(key=>!roster.includes(key) && !withdrawn.has(key)));
-          frozenTable = {snapshotId:table.snapshotId,sha256:table.sha256??null,identity:matchingTableIdentity(table),subjects:candidates};
+          frozenTable = {snapshotId:table.snapshotId,sha256:table.sha256??null,identity:matchingTableIdentity(table),subjects:candidates,...(table.meaningStatus?{meaning:table.meaningStatus}:{})};
         }
       }
       if (selection.subjectKeys?.some(key => !roster.includes(key))) throw new HttpError(404, 'vcr_subject_not_found', 'A requested subject is not in this study at this time.');
@@ -899,7 +973,7 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
             assessment: {
               studyId: study.id, protocolVersionId: assessment.protocolVersionId ?? diagnostics.protocolVersionId ?? null,
               subjectKey: assessment.subjectKey, direction: assessment.direction, asOf: assessment.asOf, summary: assessment.summary,
-              counts: assessment.counts, priority: null, evidenceGaps: assessment.evidenceGaps, judgments: assessment.judgments, provenance: assessment.provenance,
+              counts: assessment.counts, evidenceGaps: assessment.evidenceGaps, judgments: assessment.judgments, provenance: assessment.provenance,
             },
           }));
         } catch (error) {
@@ -956,16 +1030,6 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
       });
       if (!judgment) throw new HttpError(404, "vcr_assessment_not_found", "这个评估不属于本研究。");
       return judgment;
-    },
-
-    /**
-     * Countersign an assessment, by the session's account (a signature, not a gate).
-     * @param {{ id: string | number }} user @param {any} study @param {{ assessmentId: string }} input
-     */
-    async reviewAssessment(user, study, input) {
-      const assessment = await matchStore.reviewAssessment({ id: String(input.assessmentId), reviewedBy: String(user.id), userId: study.userId, studyId: study.id });
-      if (!assessment) throw new HttpError(404, "vcr_assessment_not_found", "这个评估不属于本研究。");
-      return assessment;
     },
 
     /**
@@ -1066,10 +1130,13 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   officialZoneForKeys?: ((keys: string[]) => Promise<string | null>) | null,
  *   predictionRegistry?: { register: (prediction: Record<string, any>) => Promise<any> } | null,
  *   usageLedger?: any,
+ *   dataSemantics?: (() => any) | null,
+ *   webReader?: { read: (url: string, options?: any) => Promise<{ text: string }> } | null,
+ *   documentParser?: { configured: boolean, parseBytes: Function } | null,
  *   embedder?: { configured?: boolean, modelKey?: string, embedDocuments: (texts: string[]) => Promise<number[][]> } | null,
- * }} input
+ * }} input `dataSemantics`: the dataset-semantics service, as a function (it is built after this module); where it is off, the codes of a table stay unread.
  */
-export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null, usageLedger = null, embedder = null }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null, usageLedger = null, dataSemantics = null, documentParser = null, webReader = null, embedder = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
   // The shared entity vocabulary tags a study with what it is about (`entityVocabulary.mjs`).
@@ -1078,8 +1145,6 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const matchStore = new VcrMatchStore({ database: productDatabase });
   // Withdrawal, the retirement of a projection, and the marks on what was derived from a basis that has since changed.
   const erasure = new VcrErasureStore({ database: productDatabase, matchStore });
-  // The trials a run found for a patient (「给患者找试验」): their own tables, never the study's protocol versions.
-  const candidateStore = new VcrCandidateTrialStore({ database: productDatabase });
   const evidenceStore = new VcrEvidenceStore({ database: productDatabase });
 
   const access = new VcrAccess({ store: dataStore });
@@ -1094,7 +1159,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // A source held in FHIR, OMOP or ADaM is converted in the same container (operation `convert`).
   const importer = createVcrImporter({ config, controller: intakeController, counters: intakeCounters, report });
   const dataPlane = String(config.vcrDataPlaneDir ?? "").trim()
-    ? new VcrDataPlane({ store: dataStore, config, access, extractor, importer, erasure })
+    ? new VcrDataPlane({ store: dataStore, config, access, extractor, importer, erasure, scanReader: createVcrScanReader({ parser: documentParser, counters: intakeCounters, report }) })
     : null;
 
   const engineStatus = vcrEngineStatus(config);
@@ -1116,7 +1181,15 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // Patient documents are read through the plane's own judged, audited reader;
   // with no plane there are none, and a fact a run wrote about a document is void.
   const documents = vcrDocumentsSeam({ dataPlane, passagesMinChars: Number(config.vcrPassagesMinChars) > 0 ? Number(config.vcrPassagesMinChars) : undefined });
-  const subjectTable = dataPlane ? vcrSubjectTableSeam({ dataPlane }) : null;
+  const subjectTable = dataPlane ? vcrSubjectTableSeam({ dataPlane, semantics: dataSemantics, config, usageLedger, fetchImpl }) : null;
+  // A frozen snapshot is new structured data for the people it names: those who already hold a verdict have it marked as resting on an older record, as a new document does.
+  if (dataPlane && subjectTable) {
+    dataPlane.afterSnapshotFrozen = async (/** @type {{ studyId: string, userId: string }} */ { studyId, userId }) => {
+      const study = await store.getStudy(userId, studyId);
+      const people = (await tableFieldsOf(subjectTable, study))?.subjects ?? [];
+      if (people.length) await erasure.markSubjectsChanged({ studyId, subjectKeys: people });
+    };
+  }
   const jobs = new VcrJobs({
     store, config, engine, report, dataPlane, engineObserver: engineProbe,
     localExecutors: { "matching.evaluate": vcrMatchingExecutor({ matchStore, store, documents, subjectTable }) },
@@ -1140,8 +1213,27 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     fetchImpl: call,
     timeoutMs: Number(config.vcrRegistryTimeoutMs) > 0 ? Number(config.vcrRegistryTimeoutMs) : 20_000,
     chictrAdapter: vcrChictrAdapter({ config, fetchImpl: call, connectorCredentials }),
+    // The registries' public interfaces limit a caller's rate, and one search asks one of them dozens of times.
+    paceMs: Number(config.vcrRegistryPaceMs) >= 0 ? Number(config.vcrRegistryPaceMs) : 250,
   });
-  const evidence = createVcrEvidencePipeline({ store: evidenceStore, registry, jobs });
+  const trialCorpus = createVcrTrialCorpus(String(config.vcrTrialCorpusManifest ?? ""), { timeoutMs: Number(config.vcrRegistryTimeoutMs) || 20_000 });
+  // A list of trials found for a patient is reordered against the run's summary of the patient (DashScope's reranker, the memory reranker's key and model; on where
+  // the key exists) and kept as a receipt a judging job reads its trials from.
+  const candidateSearches = new VcrCandidateSearchStore({ database: productDatabase });
+  // Its spend is the platform's key's and is booked to the study's owner under purpose `vcr`, at the provider's own token count; where the deployment requires a durable ledger and
+  // has none, the reranker is left off (the registries' order stands) rather than spending where nobody records it.
+  const rerankMeter = createRerankMeter(usageLedger);
+  const rerankAllowed = rerankMeter !== null || config.requireDurableUsageLedger !== true;
+  const matchingProfile = config.patientMatchingProfile ?? patientMatchingConfiguration(config);
+  const candidateReranker = new VcrCandidateRerank({
+    apiKey: config.dashscopeApiKey, model: matchingProfile.rerankModel, apiBase: matchingProfile.rerankApiBase, enabled: rerankAllowed && (config.vcrMatchRerankEnabled ?? Boolean(config.dashscopeApiKey)),
+    timeoutMs: config.vcrMatchRerankTimeoutMs, budgetMs: config.vcrMatchRerankBudgetMs, batchSize: config.vcrMatchRerankBatchSize,
+  }, { fetchImpl: call, report });
+  const evidence = createVcrEvidencePipeline({
+    store: evidenceStore, registry, jobs, trialCorpus, reranker: candidateReranker, searches: candidateSearches, meter: rerankMeter,
+    summaryCloudAllowed: dataPlane ? (/** @type {{ studyId: string, subjectKey?: string | null }} */ entry) => dataPlane.subjectCloudAllowed(entry) : null,
+    retrieval: { retrieveMax: config.vcrCandidateRetrieveMax, deadlineMs: config.vcrCandidateRetrieveDeadlineMs, concurrency: config.vcrCandidateRetrieveConcurrency },
+  });
   // A number read out of a preserved text is read a second time, blind to the first reading, and the two are compared in code (E1).
   evidence.attachSecondReader(createSecondReader({ config, usageLedger, fetchImpl: call }));
   // The precedents a search finds are ranked by their words and by their meaning, through the knowledge base's embedder (same key, same pin) where
@@ -1179,9 +1271,8 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   jobs.addFinishHook((done) => matching.onJobFinished(done),'matching');
   const dataPlaneSeam = dataPlane ? vcrDataPlaneSeam({ dataPlane, dataStore, access }) : null;
 
-  const patientTrials = createPatientTrials({ candidateStore, matchStore, documents, subjectTable, config, report });
   const service = new VcrService({
-    store, config, engine, access, dataPlane: dataPlaneSeam, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, patientTrials,
+    store, config, engine, access, dataPlane: dataPlaneSeam, evidence, matching, jobs, seal, matchStore, evidenceStore, documents,
   });
 
   const longitudinal = createVcrLongitudinal({store,dataStore,dataPlane,matchStore,access,jobs,config,fetchImpl});
@@ -1190,16 +1281,37 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     service.attach({longitudinal});
   }
 
-  // Batch matching (D4): the patient records of a roster read for the criteria's facts, a record at a time, in a job on the slow local
-  // lane. The model is the control plane's own client (purpose `vcr` in the usage ledger); a fact it proposes is written by the same
-  // writer a conversation's facts go through.
-  const matchBatchCounters = createMatchBatchCounters();
-  jobs.localExecutors["matching.extract"] = createMatchExtractExecutor({
-    store, matchStore, documents, config, report, counters: matchBatchCounters,
-    extractor: createFactExtractor({ config, usageLedger, fetchImpl: call }),
-    writeFacts: ({ study, items, documents: held, caller }) => vcrRuntimeWrite({ store, service: null, orchestrator: null, study, what: "fact", items, data: null, matchStore, documents: held, report, caller }),
-  });
-  const matchBatch = createMatchBatch({ jobs, matchStore, documents, subjectTable, config, counters: matchBatchCounters });
+  // Judging patients against trials (owner decisions 2026-11-04): one job and one record for both directions; a conversation writes the same record through `trial_judgment`.
+  const matchJudgments = new VcrMatchJudgmentStore({ database: productDatabase });
+  // A ChiCTR listing carries no eligibility text; its page is read through the platform's web reader (vcrRegistryPages), and a page that gives nothing is a pair judged on the listing.
+  const registryPageCounters = createRegistryPageCounters();
+  const registryPages = config.vcrRegistryPagesEnabled !== false && webReader
+    ? createRegistryPages({ store: new VcrRegistryPageStore({ database: productDatabase }), webReader, config, report, counters: registryPageCounters }) : null;
+  const judgeTargets = judgmentTargets({ evidence, matchStore, pages: registryPages });
+  /** @type {ReturnType<typeof createPatientDocumentRead> | null} */
+  const patientDocuments = dataPlane ? createPatientDocumentRead({ store, dataStore, dataPlane, jobs, receipts: () => recordsOriginals.receipts }) : null;
+  // Many patients' records taken in as a job. The originals are the upload receipts', which the server builds after this module: until it says so, nothing can be located.
+  const recordsOriginals = { receipts: /** @type {any} */ (null) };
+  if (dataPlane) {
+    dataPlane.attach({ originals: { forget: (/** @type {{ userId: string, projectId: string }} */ owner, /** @type {readonly string[]} */ digests) => recordsOriginals.receipts?.forgetOriginals?.(owner, digests) ?? 0 } });
+    const importRecords = createRecordsImportExecutor({ store, dataStore, dataPlane, config, usageLedger, fetchImpl: call, report,
+      locate: async (owner, handle) => recordsOriginals.receipts?.locate(owner, handle) ?? null });
+    // One conversation's attachment rides the same job kind: same queue, same notice, same way back to the conversation.
+    jobs.localExecutors["matching.import_records"] = (/** @type {any} */ work) => (work?.job?.scenario?.mode === "document" ? patientDocuments?.run(work) : importRecords(work));
+  }
+  const recordsImport = dataPlane ? createRecordsImport({ jobs, receipts: () => recordsOriginals.receipts }) : null;
+  // Whether a pseudonym is a person of this study who may be added to: a document, a table row or a judgment says they are, and a withdrawal says they are not any more.
+  const subjectKnown = async (/** @type {any} */ study, /** @type {string} */ subjectKey) => {
+    if ((await matchStore.withdrawnSubjects?.(study.id) ?? new Set()).has(subjectKey)) return false;
+    if ((await documents.roster(study)).some((/** @type {any} */ row) => row.subjectKey === subjectKey)) return true;
+    if ((await tableFieldsOf(subjectTable, study))?.subjects.includes(subjectKey)) return true;
+    return (await matchJudgments.list({ studyId: study.id, subjectKey, limit: 1 })).length > 0;
+  };
+  const matchJudgmentReads = createMatchJudgmentReads({ judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, matchStore });
+  // The trials a person holds a verdict about, read again a few at a time; a verdict made of a record that has since changed is marked (G15).
+  const registryWatchCounters = createRegistryWatchCounters();
+  const registryWatch = config.vcrRegistryWatchEnabled !== false
+    ? createRegistryWatch({ judgments: matchJudgments, targets: judgeTargets, config, report, counters: registryWatchCounters }) : null;
 
   const corrections = createVcrCorrectionCases({ store, matchStore, dataPlane, access });
   // The disease packs and the account's library of population definitions: read and written by the study's pages,
@@ -1209,7 +1321,9 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     // Platform packs (flywheel F26): off, no platform row is read and the request is a 404 by its own code.
     platform: { enabled: Boolean(config.vcrPlatformPacksEnabled), publisherId: PLATFORM_PUBLISHER_USER_ID, sourceChanges, entityVocabulary, officialZoneForKeys,
       people: (ids) => store.personNames(ids) } });
-  service.attach({ corrections, knowledge, engineProbe, erasure });
+  // The matching page's reader of the saved judgments, and the start of the judging job from the page.
+  const matchResults = new VcrMatchResults({ database: productDatabase, judgments: matchJudgments, documents, matchStore, searches: candidateSearches, minCell: matchBatchMinCell(config) });
+  service.attach({ corrections, knowledge, engineProbe, erasure, matchJudgments: matchJudgmentReads, matchResults, subjectKnown });
   // The study's project carries the study's name: the first definition names a draft, and the sidebar lists projects. A project the
   // researcher renamed since is left alone, like GEO's — the old name is the study's own, or one nobody gave.
   if (projectStore?.renameProject) {
@@ -1243,8 +1357,8 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters,
-    access, members, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
+    store, dataStore, matchStore, erasure, candidateSearches, candidateReranker, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals, patientDocuments,
+    access, members, dataPlane, dataPlaneSeam, documents, subjectTable, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
     notifier: null, orchestrator: null, worker: null, exporter: null, review: null,
@@ -1362,8 +1476,9 @@ export async function vcrMetricsSnapshot(vcr) {
     evidence: vcr.evidence?.counters ? { ...vcr.evidence.counters } : null,
     publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
     predictions: vcr.predictions ? { ...vcr.predictions.counters } : null,
-    patientTrials: vcr.patientTrials?.counters ? { ...vcr.patientTrials.counters } : null,
-    matchBatch: vcr.matchBatchCounters ? { ...vcr.matchBatchCounters } : null,
+    candidateRerank: vcr.candidateReranker ? vcr.candidateReranker.counts() : null,
+    registryWatch: vcr.registryWatch ? { ...vcr.registryWatchCounters } : null,
+    registryPages: vcr.registryPages ? { ...vcr.registryPageCounters } : null,
     frontierEvents: vcr.frontierEvents ? { ...vcr.frontierEvents.counters } : null,
     platformPacks: vcr.knowledge?.platform?.enabled
       ? Object.fromEntries(Object.entries(vcr.knowledge.counters).filter(([kind]) => kind.startsWith("platform"))) : null,
@@ -1456,13 +1571,19 @@ export function vcrMetricFamilies(enabled, snapshot) {
     add("predictions_total", "Predictions of a registered trial's primary endpoint filed with the registry from a study's trial scenario (flywheel F25): filed, asked again, refused, and filings the registry did not take.", "counter",
       Object.entries(snapshot.predictions).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
   }
-  if (snapshot.patientTrials) {
-    add("patient_trials_total", "What 「给患者找试验」 did since this process started: candidate trials written and updated, writes refused, and writes refused because the study already holds the most it may (OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX); patients evaluated against a trial, evaluations that could not be made, the searches the page asked for, and the parses kept for an account (parsedKept) and read again by a later study (parsedReused).", "counter",
-      Object.entries(snapshot.patientTrials).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  if (snapshot.candidateRerank) {
+    add("candidate_rerank_total", "What the reordering of a candidate list against the run's patient summary did since this process started (G11): batches that scored, documents scored, tokens booked to the usage ledger under purpose vcr, requests that came back with no token count, bookings that failed, and batches that failed by code (the list then keeps the registries' order).", "counter", [
+      { labels: { kind: "batches" }, value: snapshot.candidateRerank.succeeded }, { labels: { kind: "documents" }, value: snapshot.candidateRerank.documents },
+      { labels: { kind: "billed_tokens" }, value: snapshot.candidateRerank.billedTokens ?? 0 }, { labels: { kind: "unmetered_requests" }, value: snapshot.candidateRerank.unmetered ?? 0 }, { labels: { kind: "billing_failed" }, value: snapshot.candidateRerank.billingFailed ?? 0 },
+      ...Object.entries(snapshot.candidateRerank.failed).map(([code, value]) => ({ labels: { kind: `failed:${code}` }, value: Number(value) }))]);
   }
-  if (snapshot.matchBatch) {
-    add("match_batch_total", "What the batch reading of patient records did since this process started: batches started, records read, facts kept and facts the writer or the closed vocabulary refused, records that failed or could not be read (and are read again by the next start), and batches canceled.", "counter",
-      Object.entries(snapshot.matchBatch).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  if (snapshot.registryWatch) {
+    add("registry_watch_total", "What the registry watch did since this process started (G15): ticks, trials read again, trials whose record had changed, verdicts marked and marks cleared (the record went back), records the registry no longer has, reads that failed, and trials left for the next tick.", "counter",
+      Object.entries(snapshot.registryWatch).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.registryPages) {
+    add("registry_pages_total", "What the reading of ChiCTR record pages did since this process started (G10): pages read and their eligibility text kept, answers from the kept text, pages read that held no eligibility section, reads that failed, attempts not repeated because a recent one gave nothing, and old text kept when a new read failed.", "counter",
+      Object.entries(snapshot.registryPages).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.platformPacks) {
     add("platform_packs_total", "What the platform knowledge packs did since this process started (flywheel F26): packs that passed the re-check and were copied, requests that failed it, authors who took their name off, and platform packs labelled 来源有变更.", "counter",

@@ -180,7 +180,8 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // bundles) and one COPY of packages/research-plugin-runtime into the final stage. 2026-11-07: the two merged; this digest is the merged recipe's.
 // 2026-11-09: main merged into the online cut of 循证进化 (branch), whose final stage dropped the COPY lines for evals/paper-gold and the four case files the deleted
 // module loops read at run time. Stages, commands, secrets and build arguments are unchanged.
-export const WEB_DOCKERFILE_SHA256 = "sha256:0b996f93607f2b4ff7148a97543135c90600a82f628bcd251c5f497b894e0016";
+// 2026-11-10: main merged into the patient-matching delivery: its three manifest COPY lines and the worker build join the research-plugin lines.
+export const WEB_DOCKERFILE_SHA256 = "sha256:5454ab76d8ec28a9f9c3b77db46b6650ec86c18aba5dc3165e3acf394fc4b412";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

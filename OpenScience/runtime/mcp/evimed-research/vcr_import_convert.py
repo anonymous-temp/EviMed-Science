@@ -32,12 +32,21 @@ Hidden knowledge:
   again, and passes every field-map entry through the plane's own validation.
 - **Identifiers stay as received and nothing is looked up.** A subject's key is
   the id the source system used (a pseudonym is derived from it by the plane);
-  names, addresses, telephone numbers, national and medical-record numbers, free
-  text, the date of birth and the date of death are never carried -- the date of
+  names, addresses, telephone numbers, national and medical-record numbers, the
+  free text of a table's cells, the date of birth and the date of death are never
+  carried (a hospital's narrative notes are the one free text that travels, and as
+  documents: ``notes.jsonl``, below) -- the date of
   birth enters only as the year and as the age this script computes from it, the
   death only as a flag and as the follow-up time. A date that tells who a person
   is, once carried, is a column the plane has to exclude from its analysis tables
   by name. Nothing is enriched from outside the file.
+- **Notes arrive as documents of the person.** A FHIR ``DocumentReference`` whose
+  attachment holds plain text inline (or as base64) and an OMOP ``note`` row are written
+  to ``notes.jsonl`` -- one line, one document: the subject id as the tables use it, the
+  note's date, its title, its text -- and the control plane stores each through the path a
+  pasted note takes. An attachment that is only a URL, a PDF or HTML, text that does not
+  decode, a note past the bounds: each is a named reason with a count, never a silent loss.
+  The container has no network, so nothing behind a URL is fetched.
 - **A derived value says so.** Age and the all-cause follow-up (days from the
   first dated record to death, or to the last dated record when no death is
   recorded) are computed here and are ``calculated``; the follow-up's end is the
@@ -57,6 +66,7 @@ Hidden knowledge:
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import hashlib
 import io
@@ -94,6 +104,13 @@ DEFAULT_MAX_ROWS = 2_000_000
 DEFAULT_MAX_COLUMNS = 500
 # A text cell is one value: control characters are a space, and a cell is cut here.
 MAX_CELL_CHARS = 2000
+# A hospital's narrative notes (FHIR DocumentReference, OMOP note) leave as ``notes.jsonl``, one document of a person per line, for the control plane to
+# store through the path every note takes. One note is at most a document's characters; one import carries at most this many, and the rest is counted.
+MAX_NOTE_CHARS = 300_000
+MAX_NOTES = 5000
+MAX_NOTES_BYTES = 40 * 1024 * 1024
+NOTES_FILE = "notes.jsonl"
+PLAIN_TEXT_TYPES = ("text/plain", "text/markdown", "text/x-markdown")
 
 
 
@@ -317,6 +334,43 @@ def completed_years(born: date, at: date) -> int:
     return years
 
 
+class NoteOut:
+    """The notes of an import, one JSON line each: ``{"subject", "date", "title", "text"}``. Bounded by count and bytes; what is over is counted, never cut."""
+
+    def __init__(self, directory: Path) -> None:
+        self.directory = directory
+        self.count = 0
+        self.bytes = 0
+        self._path = directory / (NOTES_FILE + ".part")
+        self._handle = None
+
+    def add(self, subject: str, when: str, title: str, text: str) -> str | None:
+        """Write one note; the reason it was not taken, or None."""
+        text = text.replace("\x00", " ").strip()
+        if not text:
+            return "empty_note"
+        if len(text) > MAX_NOTE_CHARS:
+            return "note_too_long"
+        line = json.dumps({"subject": subject, "date": when, "title": cell(title), "text": text}, ensure_ascii=False) + "\n"
+        size = len(line.encode("utf-8"))
+        if self.count >= MAX_NOTES or self.bytes + size > MAX_NOTES_BYTES:
+            return "over_note_limit"
+        if self._handle is None:
+            self._handle = open(self._path, "w", encoding="utf-8", newline="")  # noqa: SIM115 - closed in finish()
+        self._handle.write(line)
+        self.count += 1
+        self.bytes += size
+        return None
+
+    def finish(self) -> dict | None:
+        if self._handle is None:
+            return None
+        self._handle.close()
+        final = self.directory / NOTES_FILE
+        os.replace(self._path, final)
+        return {"file": NOTES_FILE, "count": self.count, "bytes": self.bytes, "sha256": hashlib.sha256(final.read_bytes()).hexdigest()}
+
+
 class Coverage:
     """What was read, imported and skipped, counted. The control plane prints it next to the tables."""
 
@@ -325,6 +379,7 @@ class Coverage:
         self.skipped_tables: list[dict] = []
         self.notices: Counter = Counter()
         self.notice_detail: dict[str, list[str]] = defaultdict(list)
+        self.notes: NoteOut | None = None
 
     def add_input(self, kind: str, records: int | None, imported: int, status: str, reason: str | None = None, skipped: Counter | None = None,
                   into: str | None = None) -> None:
@@ -388,7 +443,7 @@ def dictionary_of(table: str, spec: dict) -> dict:
 # HL7 FHIR R4
 # ---------------------------------------------------------------------------
 
-FHIR_SUPPORTED = ("Patient", "Condition", "Observation", "MedicationRequest", "MedicationStatement", "Procedure", "Encounter")
+FHIR_SUPPORTED = ("Patient", "Condition", "Observation", "MedicationRequest", "MedicationStatement", "Procedure", "Encounter", "DocumentReference")
 FHIR_TABLE_OF = {
     "Condition": "fhir_condition", "Observation": "fhir_observation", "MedicationRequest": "fhir_medication",
     "MedicationStatement": "fhir_medication", "Procedure": "fhir_procedure", "Encounter": "fhir_encounter",
@@ -749,6 +804,53 @@ class FhirImport:
         counter["imported"] += 1
         self.seen(patient, day(begins), day(ends))
 
+    def _documentreference(self, item: dict, patient: str, counter: Counter) -> None:
+        """A note: the inline plain text (or base64 of it) of its attachments is one document of the person. A URL alone is listed as not read."""
+        notes = self.coverage.notes
+        when = date_cell(item.get("date"), self.date_notices) if isinstance(item.get("date"), str) else ""
+        types = item.get("type") or []
+        _, type_code, type_display = first_coding(types[0]) if types and isinstance(types[0], dict) else ("", "", "")
+        klass = item.get("class") if isinstance(item.get("class"), dict) else {}
+        self.table("fhir_encounter").write([
+            cell(item.get("id")), patient, cell(klass.get("code")), type_code, type_display, cell(item.get("status")), begins, ends,
+        ])
+        counter["imported"] += 1
+        self.seen(patient, day(begins), day(ends))
+
+    def _documentreference(self, item: dict, patient: str, counter: Counter) -> None:
+        """A note: the inline plain text (or base64 of it) of its attachments is one document of the person. A URL alone is listed as not read."""
+        notes = self.coverage.notes
+        when = date_cell(item.get("date") or (item.get("context") or {}).get("period", {}).get("start") if isinstance(item.get("context"), dict) else item.get("date"), self.date_notices)
+        types = item.get("type") if isinstance(item.get("type"), dict) else {}
+        _, _, title = first_coding(types)
+        contents = [entry for entry in (item.get("content") or []) if isinstance(entry, dict)]
+        if not contents:
+            counter["skipped"] += 1
+            self.skipped["DocumentReference"]["no_attachment"] += 1
+            return
+        taken = 0
+        for entry in contents:
+            attachment = entry.get("attachment") if isinstance(entry.get("attachment"), dict) else {}
+            kind = str(attachment.get("contentType") or "").split(";")[0].strip().lower()
+            data = attachment.get("data")
+            if not isinstance(data, str) or not data.strip():
+                self.skipped["DocumentReference"]["attachment_url_only" if attachment.get("url") else "no_attachment"] += 1
+                continue
+            if kind and kind not in PLAIN_TEXT_TYPES:
+                self.skipped["DocumentReference"]["attachment_not_plain_text"] += 1
+                continue
+            try:
+                text = base64.b64decode(data, validate=True).decode("utf-8")
+            except (ValueError, UnicodeDecodeError):
+                self.skipped["DocumentReference"]["attachment_not_readable"] += 1
+                continue
+            reason = notes.add(patient, when, title or cell(attachment.get("title")), text) if notes is not None else "over_note_limit"
+            if reason:
+                self.skipped["DocumentReference"][reason] += 1
+            else:
+                taken += 1
+        counter["imported" if taken else "skipped"] += 1
+
     # -- the members of the upload -----------------------------------------
 
     def member(self, archive: Archive, member: dict) -> None:
@@ -905,6 +1007,7 @@ OMOP_REQUIRED = {
     "condition_occurrence": ("person_id", "condition_concept_id", "condition_start_date"),
     "drug_exposure": ("person_id", "drug_concept_id", "drug_exposure_start_date"),
     "measurement": ("person_id", "measurement_concept_id", "measurement_date"),
+    "note": ("person_id", "note_text"),
 }
 OMOP_CODING = "OMOP concept_id"
 OMOP_TYPE = "OMOP Type Concept"
@@ -1046,9 +1149,9 @@ class CsvTable:
         self.archive = archive
         self.member = member
 
-    def rows(self):
+    def rows(self, field_limit: int = MAX_CELL_CHARS * 64):
         """Yield (header, row) pairs; raise `Refusal("text_encoding")` on bytes that are not UTF-8."""
-        csv.field_size_limit(MAX_CELL_CHARS * 64)
+        csv.field_size_limit(field_limit)
         with self.archive.open(self.member) as stream:
             wrapper = io.TextIOWrapper(stream, encoding="utf-8-sig", newline="")
             reader = csv.reader(wrapper)
@@ -1226,6 +1329,24 @@ class OmopImport:
             self.kept[name] += 1
             self.seen(person_id, *stamps)
 
+    def read_notes(self, csv_table: CsvTable) -> None:
+        """The note table, row by row: each row's text is one document of its person. A note never reaches a flat table."""
+        counter = self.skipped["note"]
+        notes = self.coverage.notes
+        for names, row in csv_table.rows(field_limit=MAX_NOTE_CHARS * 8):
+            self.read["note"] += 1
+            at = {key: names.index(key) for key in ("person_id", "note_text", "note_date", "note_title") if key in names}
+            pick = lambda key: row[at[key]] if key in at and at[key] < len(row) else ""  # noqa: E731
+            person_id = cell(pick("person_id"))
+            if not person_id:
+                counter["missing_person_id"] += 1
+                continue
+            reason = notes.add(person_id, omop_date(pick("note_date"), self.dates), pick("note_title"), pick("note_text")) if notes is not None else "over_note_limit"
+            if reason:
+                counter[reason] += 1
+            else:
+                self.kept["note"] += 1
+
     # -- the roll-up -------------------------------------------------------
 
     def finish_persons(self) -> None:
@@ -1341,6 +1462,14 @@ class OmopImport:
         for name in ("visit_occurrence", "condition_occurrence", "drug_exposure", "measurement"):
             if name in usable:
                 self.guarded(name, lambda csv_table, key=name: self.read_long(key, csv_table), archive, by_name[name])
+        if "note" in by_name:
+            header = self.usable("note", CsvTable(archive, by_name["note"]))
+            if header is not None:
+                self.guarded("note", self.read_notes, archive, by_name["note"])
+                if "note" not in self.failed:
+                    produced = self.kept["note"]
+                    reason = None if produced else ("empty_table" if not self.read["note"] else "all_rows_skipped")
+                    self.coverage.add_input("note", self.read["note"], produced, "imported" if produced else "skipped", reason, self.skipped.get("note"))
         if "person" in by_name and "person" in usable and self.persons:
             self.finish_persons()
         elif "person" not in usable:
@@ -1365,7 +1494,7 @@ class OmopImport:
             reason = None if produced else ("empty_table" if not self.read[name] else "all_rows_skipped")
             self.coverage.add_input(name, self.read[name], produced, "imported" if produced else "skipped", reason, self.skipped.get(name), into=into)
         for name, member in sorted(by_name.items()):
-            if name in OMOP_SUPPORTED or name == "concept" or name == "cdm_source":
+            if name in OMOP_SUPPORTED or name in ("concept", "cdm_source", "note"):
                 continue
             rows = self.count_rows(archive, member)
             # An empty table has nothing in it to skip: it is not listed.
@@ -1872,7 +2001,9 @@ def build_result(form: str, archive: Archive, tables: list[TableOut], standard: 
                 entries.append(entry_of(table.file, spec))
     if not kept:
         raise Refusal("nothing_to_import")
+    notes = coverage.notes.finish() if coverage.notes is not None else None
     return {
+        **({"notes": notes} if notes else {}),
         "protocol": PROTOCOL, "outcome": "converted",
         "converter": {"name": NAME, "version": VERSION, "libraries": _libraries()},
         "format": form, "standard": standard, "input": input_meta,
@@ -1893,6 +2024,7 @@ def run(request: dict, source: Path, output_dir: Path) -> dict:
                     int(limits_in.get("maxColumns", DEFAULT_MAX_COLUMNS)))
     archive = Archive(data, extension)
     coverage = Coverage()
+    coverage.notes = NoteOut(output_dir)
     if archive.ignored:
         coverage.notice("archive_metadata_ignored", archive.ignored)
     tables, standard = CONVERTERS[form](archive, output_dir, limits, coverage)
@@ -1943,7 +2075,7 @@ def main(argv: list[str] | None = None) -> int:
             signal.alarm(0)
     if result.get("outcome") == "refused":
         # A refused import leaves no table behind: nothing partial is for the control plane to read.
-        for leftover in output_dir.glob("*.csv*"):
+        for leftover in [*output_dir.glob("*.csv*"), *output_dir.glob(NOTES_FILE + "*")]:
             leftover.unlink(missing_ok=True)
     _write_result(output_dir, result)
     return 0

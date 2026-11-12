@@ -1,0 +1,86 @@
+{
+  "status": "remaining-trec-skipped-by-owner",
+  "stoppedAt": "2026-11-05T15:04:42.307Z",
+  "historical": {
+    "source": "2026-11-04-vcr-matching-delivery-assets/scores/board-e-end2end.json",
+    "sourceSha256": "86d93936f8a8e1743d27d05db98b382e14cb708cf8e3a014b3556be5ff6b447c",
+    "scoredRevision": "a2d109cf5",
+    "rows": [
+      {
+        "year": 2021,
+        "officialScorableTopics": 65,
+        "incomingNdcg10": 0.46396972805662284,
+        "finalNdcg10": 0.47495774868735363,
+        "deltaNdcg10": 0.010988020630730788,
+        "incomingEligibleP10": 0.35230769230769227,
+        "finalEligibleP10": 0.4338461538461538,
+        "judgedTop10Fraction": 0.5307692307692308,
+        "condensedNdcg10Auxiliary": 0.8191895680189001
+      },
+      {
+        "year": 2022,
+        "officialScorableTopics": 40,
+        "incomingNdcg10": 0.4743410686739586,
+        "finalNdcg10": 0.5285506178622442,
+        "deltaNdcg10": 0.05420954918828563,
+        "incomingEligibleP10": 0.39,
+        "finalEligibleP10": 0.48250000000000004,
+        "judgedTop10Fraction": 0.675,
+        "condensedNdcg10Auxiliary": 0.7408256078262676
+      },
+      {
+        "year": 2023,
+        "officialScorableTopics": 28,
+        "incomingNdcg10": 0.4753005308170106,
+        "finalNdcg10": 0.36627877328490765,
+        "deltaNdcg10": -0.10902175753210297,
+        "incomingEligibleP10": 0.3071428571428571,
+        "finalEligibleP10": 0.3464285714285714,
+        "judgedTop10Fraction": 0.4035714285714286,
+        "condensedNdcg10Auxiliary": 0.854759015135199
+      }
+    ],
+    "pooledNdcg10": 0.46819612053492604,
+    "pooledEligibleP10": 0.43007518796992483,
+    "yearMacroNdcg10": 0.45659571327816845,
+    "yearMacroEligibleP10": 0.42092490842490843,
+    "totalScorableTopics": 133
+  },
+  "currentCandidate": {
+    "nativeArtifactSha256": "33fa64d754ac018816e80826f786b35def898062f7a16cfcd2486dbb38284d59",
+    "newTrecClinicalTopics": 0,
+    "newOfficialTrecScore": null,
+    "indices": [
+      {
+        "years": [
+          2021,
+          2022
+        ],
+        "indexed": 232180,
+        "expected": 375580,
+        "percentage": 61.82,
+        "state": "building-user-stopped"
+      },
+      {
+        "years": [
+          2023
+        ],
+        "indexed": 0,
+        "expected": 451538,
+        "percentage": 0,
+        "state": "not-started-user-skipped"
+      }
+    ],
+    "readyIndexCount": 0,
+    "embeddingDimensions": 1024,
+    "settledRequests": 11609,
+    "settledInputTokens": 49669196,
+    "settledCostCny": 24.834598,
+    "uncertainExposureCny": 0.060305,
+    "totalCommittedExposureCny": 24.894903,
+    "exitCode": 130,
+    "automaticContinuation": false,
+    "preserved": "PostgreSQL, frozen sources, manifests, hashes, vectors, usage and resume metadata",
+    "boundary": "No new TREC retrieval/ranking/clinical score; source/index preparation is not benchmark performance."
+  }
+}

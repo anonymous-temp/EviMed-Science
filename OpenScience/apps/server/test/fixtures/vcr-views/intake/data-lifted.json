@@ -237,7 +237,8 @@
             ],
             "maxBytes": null,
             "maxText": null,
-            "converter": false
+            "converter": false,
+            "scans": false
           },
           "imports": {
             "available": false,
@@ -694,7 +695,8 @@
             ],
             "maxBytes": null,
             "maxText": null,
-            "converter": false
+            "converter": false,
+            "scans": false
           },
           "imports": {
             "available": false,

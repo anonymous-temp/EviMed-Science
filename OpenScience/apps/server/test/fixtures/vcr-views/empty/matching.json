@@ -1,6 +1,7 @@
 {
   "view": "matching",
   "available": true,
+  "evaluateBy": "model",
   "protocols": [],
   "protocolVersionId": null,
   "candidateRoster": [],
@@ -15,9 +16,15 @@
   ],
   "funnel": [],
   "candidates": [],
+  "people": {
+    "total": 0,
+    "offset": 0,
+    "limit": 25,
+    "more": false,
+    "verdict": null
+  },
   "selected": null,
   "gaps": [],
-  "pendingReview": null,
   "protocol": null,
   "counts": null
 }

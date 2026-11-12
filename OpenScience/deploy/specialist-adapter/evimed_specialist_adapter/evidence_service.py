@@ -19,6 +19,7 @@ if str(MCP_ROOT) not in sys.path:
 
 import drug_label_index  # noqa: E402
 import public_sources  # noqa: E402
+import terminology  # noqa: E402
 
 
 ENDPOINTS = {
@@ -32,6 +33,9 @@ ENDPOINTS = {
     # label by labelId; without the file it answers from the public label
     # connectors, as the runtime would.
     "/api/v1/evimed/drug-label-search": "drug_label_search",
+    # Looks a term up in the terminology file mounted at EVIMED_TERMINOLOGY_DB (term_normalize); without the file it answers a warning, and the
+    # runtime goes on with its built-in table.
+    "/api/v1/evimed/terminology-lookup": "terminology_lookup",
 }
 
 
@@ -78,6 +82,8 @@ def _call(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="request contains too many fields")
     if len(json.dumps(arguments, ensure_ascii=False).encode("utf-8")) > 64 * 1024:
         raise HTTPException(status_code=422, detail="request body is too large")
+    if tool_name == "terminology_lookup":
+        return terminology.adapter_result(arguments)
     try:
         return public_sources.call(tool_name, arguments)
     except public_sources.PublicSourceError as error:
@@ -102,6 +108,8 @@ def _create_app() -> FastAPI:
             # label index still serves every other workflow, and label search
             # falls back to the public connectors.
             "drugLabelIndex": drug_label_index.status(),
+            # Reported, never required, for the same reason: without the file term_normalize keeps its built-in table.
+            "terminology": terminology.status(),
         }
 
     def route_for(tool_name: str):

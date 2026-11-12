@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { freezeMatchingInputs, hydrateMatchingInputs, languageCriterionHash, languageInput, MATCHING_SNAPSHOT_PREFIX, verifyMatchingSnapshot } from '../src/vcrMatchingSnapshot.mjs';
+import { freezeMatchingInputs, hydrateMatchingInputs, languageCriterionHash, languageInput, MATCHING_SNAPSHOT_PREFIX, readCriterionEvaluation, storedCriterionEvaluation, verifyMatchingSnapshot } from '../src/vcrMatchingSnapshot.mjs';
 import { vcrMatchingExecutor } from '../src/vcrComposition.mjs';
+import { matchingInputDigest, VCR_MATCHING_EVALUATOR_VERSION } from '../src/vcrMatching.mjs';
+import { redactedEvidence } from '../src/vcrErasureStore.mjs';
+import { vcrSchemaSql } from '../src/vcrPersistence.mjs';
 
 const asOf = '2026-10-09T00:00:00.000Z';
 const criteria = [{ id: 'crt_age', kind: 'inclusion', criterionType: 'demographic', requirement: { op: 'compare', variable: 'age', comparator: 'gte', value: 18 } }];
@@ -12,6 +15,10 @@ const freeze = (overrides = {}) => freezeMatchingInputs({ studyId: 'std_1', prot
 
 test('frozen references retain no patient text and reject changed facts, protocol, scope and manifest', () => {
   const snapshot = freeze();
+  const { matchingEvaluatorVersion, ...legacy } = snapshot.payload;
+  assert.equal(matchingEvaluatorVersion, VCR_MATCHING_EVALUATOR_VERSION);
+  assert.notEqual(matchingInputDigest(legacy), snapshot.id);
+  assert.equal(verifyMatchingSnapshot(legacy, 'std_1', matchingInputDigest(legacy)), legacy, 'historical manifests remain readable');
   assert.equal(verifyMatchingSnapshot(snapshot.payload, 'std_1', snapshot.id), snapshot.payload);
   assert.throws(() => verifyMatchingSnapshot(snapshot.payload, 'std_other', snapshot.id), { code: 'vcr_matching_snapshot_unavailable' });
   assert.throws(() => verifyMatchingSnapshot({ ...snapshot.payload, subjects: [] }, 'std_1', snapshot.id), { code: 'vcr_matching_snapshot_unavailable' });
@@ -22,6 +29,33 @@ test('frozen references retain no patient text and reject changed facts, protoco
   assert.throws(() => hydrateMatchingInputs(snapshot.payload, [{ ...fact, value: 17 }], [judgment]), { code: 'vcr_matching_input_changed' });
   assert.throws(() => hydrateMatchingInputs(snapshot.payload, [fact], [{ ...judgment, protocolVersionId: 'prt_other' }]), { code: 'vcr_matching_input_changed' });
   assert.notEqual(languageCriterionHash(criteria, 'consent'), languageCriterionHash([{ ...criteria[0], requirement: { op: 'language', text: 'new condition' } }], 'consent'));
+});
+
+test('applicability wording belongs to the language answer binding independently of ordinal', () => {
+  const withPremise = [{ ...criteria[0], ordinal: 1, applicability: { op: 'language', key: 'premise', text: 'Has the subtype been established?' } }];
+  const binding = languageCriterionHash(withPremise, 'premise');
+  assert.equal(languageCriterionHash([{ ...withPremise[0], ordinal: 2 }], 'premise'), binding);
+  assert.notEqual(languageCriterionHash([{ ...withPremise[0], applicability: { ...withPremise[0].applicability, text: 'Is the subtype suspected?' } }], 'premise'), binding);
+});
+
+test('persisted judgment axes preserve legacy rows and applicability citations obey withdrawal', () => {
+  const sql = vcrSchemaSql();
+  assert.ok(sql.includes('ALTER TABLE evimed_vcr.criterion_judgments ADD COLUMN IF NOT EXISTS evaluation jsonb;'));
+  const evidence = [{ quote: 'Requirement evidence', locator: { documentId: 'requirement' } }];
+  const applicabilityEvidence = [{ quote: 'Premise evidence', locator: { documentId: 'premise' } }];
+  const axes = { requirementState: 'not_satisfied', applicabilityState: 'unknown',
+    requirementMissing: [], applicabilityMissing: [{ variable: 'subtype', reason: 'not_recorded' }],
+    missing: [{ variable: 'subtype', reason: 'not_recorded' }] };
+  const stored = storedCriterionEvaluation({ evidence, applicabilityEvidence, ...axes });
+  assert.deepEqual(readCriterionEvaluation({ evidence, evaluation: null }), { evidence });
+  assert.deepEqual(readCriterionEvaluation({ evidence: JSON.parse(stored.evidence), evaluation: JSON.parse(stored.evaluation) }),
+    { ...axes, evidence, applicabilityEvidence });
+  const withdrawn = redactedEvidence(JSON.parse(stored.evidence), item => item.locator.documentId === 'premise');
+  const restored = readCriterionEvaluation({ evidence: withdrawn.evidence, evaluation: JSON.parse(stored.evaluation) });
+  assert.deepEqual(restored.evidence, evidence);
+  assert.equal(restored.applicabilityEvidence[0].quote, '');
+  assert.equal(restored.applicabilityEvidence[0].withdrawn, true);
+  assert.doesNotMatch(stored.evaluation, /Premise evidence/);
 });
 
 test('executor accounts for an empty extraction, uses frozen facts and exposes continuation', async () => {

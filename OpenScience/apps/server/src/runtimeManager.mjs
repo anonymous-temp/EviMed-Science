@@ -39,6 +39,8 @@ import { canonicalJson } from "@evimed/domain";
 import { CITE_VERSION } from "./pinnedVersions.mjs";
 import { SEARCH_TOPICS_RUNTIME_DIR, SEARCH_TOPICS_TOKEN_FILE, SEARCH_TOPICS_NATIVE_PATH, SEARCH_TOPICS_MAX_BYTES,
   searchTopicsSource, searchTopicsImageVersion, projectSearchTopics, supportsSearchTopicRecommendations } from './searchTopicsRuntime.mjs';
+import { inspectPatientMatchingWorker } from "./patientMatchingLifecycleWorkerIdentity.mjs";
+import { patientMatchingGenerationRoot, validatePatientMatchingReference, verifyPatientMatchingGeneration, PATIENT_MATCHING_RUNTIME_ROOT, PATIENT_MATCHING_TOOLS } from "./patientMatchingLifecycleArtifacts.mjs";
 import { extensionGenerationRoot, validateExtensionGenerationReference, verifyExtensionGeneration } from "./extensionGenerationService.mjs";
 import { PERSONAL_SKILLS_RUNTIME_DIR, personalGenerationRoot, samePersonalPackages, validatePersonalGenerationReference, verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 // Knowledge-base search reaches the MCP server by this one variable (2026-09-20).
@@ -1320,6 +1322,7 @@ const evimedAdapterEnvironment = Object.freeze({
   clinicalTrialSearch: "EVIMED_CLINICAL_TRIAL_SEARCH_URL",
   patentSearch: "EVIMED_PATENT_SEARCH_URL",
   pharmacyReferenceSearch: "EVIMED_PHARMACY_REFERENCE_SEARCH_URL",
+  terminologyLookup: "EVIMED_TERMINOLOGY_SEARCH_URL",
   drugLabelSearch: "EVIMED_DRUG_LABEL_SEARCH_URL",
   adrCaseQuery: "EVIMED_ADR_CASE_QUERY_URL",
   adrSignalAnalysis: "EVIMED_ADR_SIGNAL_ANALYSIS_URL",
@@ -1830,6 +1833,17 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
       environment.EVIMED_PHARMACY_REFERENCE_DB = pharmacyReferenceDb;
     }
   }
+  // The terminology file, for a runtime that can read it. A Docker runtime reaches it through the adapter URL above and is given no path. A file
+  // that is not there, or not a bounded regular file, is not an error: term_normalize says it has no terminology file and keeps its built-in table.
+  const terminologyDb = String(config.terminologyDb ?? "").trim();
+  if (terminologyDb && !containerized && path.isAbsolute(terminologyDb) && !/[\r\n\0]/.test(terminologyDb)) {
+    try {
+      const metadata = lstatSync(terminologyDb);
+      if (!metadata.isSymbolicLink() && metadata.isFile() && metadata.size > 0 && metadata.size <= 1024 * 1024 * 1024) environment.EVIMED_TERMINOLOGY_DB = terminologyDb;
+    } catch {
+      // not there: the tool reports it
+    }
+  }
   const metaAgentRoot = String(config.metaAgentRoot ?? "").trim();
   if (metaAgentRoot) {
     if (!path.isAbsolute(metaAgentRoot) || /[\r\n\0]/.test(metaAgentRoot)) {
@@ -1940,7 +1954,8 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   const vcrEngineComposed = config.vcrEngineConfigured ?? Boolean(String(config.vcrEngineUrl ?? "").trim());
   const vcrDisabled = !environment.EVIMED_VCR_GATEWAY_URL
     ? [...VCR_RUNTIME_TOOLS]
-    // The digitizer runs in the intake container, not on the engine: it stays offered without one.
+    // The digitizer runs in the intake container, not on the engine, and judging patients and reading records are local jobs (`vcr_simulate`): they stay offered without one. A computation that does need
+    // the engine ends at once saying so (`engine_unavailable`).
     : vcrEngineComposed ? [] : [...VCR_ENGINE_TOOLS];
   if (vcrDisabled.length) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...vcrDisabled])].join(",");
@@ -2082,7 +2097,7 @@ export function webSearchGatewayProviderUrl(config) {
 export const GEO_RUNTIME_TOOLS = Object.freeze(["geo_read", "geo_write", "social_posts_search"]);
 export const VCR_RUNTIME_TOOLS = Object.freeze(["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool"]);
 /** The 虚拟临床研究 tools that need the deterministic engine itself, not only the gateway. */
-export const VCR_ENGINE_TOOLS = Object.freeze(["vcr_simulate", "evidence_pool"]);
+export const VCR_ENGINE_TOOLS = Object.freeze(["evidence_pool"]);
 
 export function publicSourceGatewayProviderUrl(config) {
   const value = String(config.publicSourceGatewayInternalUrl ?? "").trim();
@@ -2234,6 +2249,10 @@ export function dshProfileInput(config, project, plan, model, workloadTokenPath)
     nativeResearchPlugins: plan.extensionGeneration?.projection?.plugins?.filter(plugin => plugin.executionClass === "managed-native") ?? [],
     extensionProjectionFile: plan.extensionGeneration?.reference ? "/opt/evimed/extensions/projection.json" : "",
     extensionGatewayUrl: plan.extensionGeneration?.reference ? extensionGatewayEndpointUrl(config) : "",
+    // The matching port authenticates like every runtime gateway (`assertActiveModelGatewayToken`), so the bundle reads the
+    // model-gateway token; the MCP workload token is another credential and was refused 401 (2026-11-10, first production turn).
+    ...(plan.patientMatchingGeneration ? { patientMatching: { entrypoint: `${PATIENT_MATCHING_RUNTIME_ROOT}/package/index.mjs`, endpoint: new URL("/internal/patient-matching/v1/port", plan.modelGatewayUrl ?? modelGatewayProviderUrl(config)).href,
+      tokenFile: plan.sandboxMode === "docker" ? `${runtimeDshHome}/${modelGatewayTokenFileName}` : path.join(plan.dshHomeDir, modelGatewayTokenFileName) } } : {}),
     personalSkillsDir: plan.personalSkillsRuntimeDir ?? PERSONAL_SKILLS_RUNTIME_DIR,
     disabledPlatformSkills: plan.personalSkillGeneration?.platformSkills?.disabled ?? [],
     capsuleGatewayUrl,
@@ -2632,7 +2651,7 @@ export function pluginUpstreamHealth(value) {
 /** @param {any} config @param {any} project @param {number} port
  * @param {{modelGatewayProfile?:string,contextGeneration?:any,disabledPlatformSkills?:string[],disabledClientBundles?:string[],capsuleGatewayUrl?:string,revisionGatewayUrl?:string,publicSourceGatewayUrl?:string,webSearchGatewayUrl?:string,memoryGatewayUrl?:string,
  *   attendancePublicKey?:string,geoSkills?:boolean,pluginConfig?:any,personalSkillGeneration?:any,
- *   personalSkillImageId?:string|null,extensionGeneration?:any,extensionImageId?:string|null,installedSearchTopicsVersion?:string}} [options]
+ *   personalSkillImageId?:string|null,extensionGeneration?:any,extensionImageId?:string|null,patientMatchingGeneration?:any,installedSearchTopicsVersion?:string}} [options]
  * `attendancePublicKey` is a public Ed25519 verifier, never a runtime signing key. */
 export function buildRuntimeLaunchPlan(config, project, port, {
   modelGatewayProfile = "",
@@ -2656,6 +2675,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
   disabledClientBundles = [],
   extensionGeneration = null,
   extensionImageId = null,
+  patientMatchingGeneration = null,
   contextGeneration = null,
   installedSearchTopicsVersion = undefined,
 } = {}) {
@@ -2724,6 +2744,8 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     const capsuleMethodsLive = capsuleMethodsDirectoryPresent(capsuleMethodsDir);
     const capsuleMethodsRuntimeDir = capsuleMethodsRuntimePath({ capsuleMethodCount, capsuleMethodsLive });
     if (sharedPaths && (personalSkillGeneration || extensionGeneration)) throw new HttpError(409, "runtime_context_unverified", "Shared runtimes cannot mount personal extension generations.");
+    if (sharedPaths && patientMatchingGeneration) throw new HttpError(409, "runtime_context_unverified", "Shared runtimes cannot mount matching code.");
+    const matchingReference = patientMatchingGeneration ? validatePatientMatchingReference(project, patientMatchingGeneration.reference) : null;
     const extensionReference = extensionGeneration ? validateExtensionGenerationReference(project, extensionGeneration) : null;
     if (extensionReference && !/^sha256:[a-f0-9]{64}$/.test(String(extensionImageId))) throw new HttpError(400, "extension_contract_invalid", "An immutable extension runtime image is required.");
     if (extensionImageId && personalSkillImageId && extensionImageId !== personalSkillImageId) throw new HttpError(400, "extension_contract_invalid", "Runtime generation images must agree.");
@@ -2812,6 +2834,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
               `${dockerRuntimeMount(config, capsuleMethodsDir, runtimeCapsuleMethodsDir)},readonly`,
             ]
           : []),
+        ...(matchingReference ? ["--mount", `${dockerRuntimeMount(config, path.join(patientMatchingGenerationRoot(config, matchingReference), "selected"), PATIENT_MATCHING_RUNTIME_ROOT)},readonly`] : []),
         ...(extensionReference ? ["--mount", `${dockerRuntimeMount(config, path.join(extensionGenerationRoot(config, extensionReference), "selected"), "/opt/evimed/extensions")},readonly`] : []),
         ...(personalReference ? ["--mount", `${dockerRuntimeMount(config, path.join(personalGenerationRoot(config, personalReference), 'skills'), PERSONAL_SKILLS_RUNTIME_DIR)},readonly`] : []),
         ...(isolatedControlMount
@@ -3338,7 +3361,7 @@ export function runtimeNetworkRequiresEgressOptIn(mode, internalNetworkName = ""
  *
  * @typedef {object} RuntimeProvider
  * @property {'docker'|'agentbay'} name
- * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?: any, extensionGeneration?: any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }) => Promise<Record<string, any>>} prepare
+ * @property {(project: Record<string, any>, input: { port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?: any, extensionGeneration?: any, patientMatchingGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }) => Promise<Record<string, any>>} prepare
  *   the launch plan: `sandboxMode`, `runtimeUrl`, `socketPath`, `proxyWorkspaceDir`, `containerName`, …
  * @property {(project: Record<string, any>, plan: Record<string, any>, options: { budgetScope?: any }) => Promise<Record<string, any>>} bootstrap
  *   writes the profile patch, the credentials and the tokens where the kernel reads them
@@ -3400,8 +3423,8 @@ export class DockerRuntimeProvider {
     if (checked.status !== 0 || checked.stdout.trim() !== imageId) throw new HttpError(503, 'runtime_image_unavailable', 'The pinned personal-skill runtime image is unavailable.');
   }
 
-  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?:any, extensionGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }} input */
-  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration = null, extensionGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = "", contextGeneration = null }) {
+  /** @param {Record<string, any>} project @param {{ port: number, pluginConfig: any, capsuleMethodsMounted: number, personalSkillGeneration?:any, extensionGeneration?:any, patientMatchingGeneration?:any, memoryGatewayUrl?: string, geoSkills?: boolean, modelGatewayProfile?: string, contextGeneration?:any }} input */
+  async prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration = null, extensionGeneration = null, patientMatchingGeneration = null, memoryGatewayUrl = "", geoSkills = false, modelGatewayProfile = "", contextGeneration = null }) {
     const manager = this.manager;
     if (contextGeneration) contextGeneration = await verifyContextGeneration(this.config, project, contextGeneration.reference);
     // Before the plan, for the same reason as the capsule methods: the
@@ -3413,16 +3436,18 @@ export class DockerRuntimeProvider {
     // an entry that later applies reaches a runtime that is already up. A shared context never mounts one.
     if (!contextGeneration) await manager.ensureLibraryView(project);
     if (extensionGeneration) await manager.prepareGeneration(project, extensionGeneration);
+    if (patientMatchingGeneration) await manager.preparePatientMatchingGeneration(project, patientMatchingGeneration);
     const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference,
       personalSkillGeneration.identity.baseRuntimeImageDigest) : null;
     if (personal) await this.assertPersonalImage(personal.identity.baseRuntimeImageDigest);
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, personalSkillGeneration: personal?.reference ?? null,
       personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, disabledPlatformSkills: personal?.platformSkills?.disabled ?? [], disabledClientBundles: personal?.platformSkills?.disabledPlugins ?? [], extensionGeneration: extensionGeneration?.reference ?? null,
-      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration,
+      extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null, patientMatchingGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration,
       ...(this.config.searchTopicsEnabled === true && manager.runtimeController
         ? { installedSearchTopicsVersion: String((await manager.inspectRuntimeImage())?.searchTopicsVersion ?? '') } : {}) });
     plan.personalSkillGeneration = personal ? { ...personalSkillGeneration, platformSkills: personal.platformSkills } : personalSkillGeneration;
     plan.extensionGeneration = extensionGeneration;
+    plan.patientMatchingGeneration = patientMatchingGeneration;
     plan.pluginConfig = pluginConfig;
     if (plan.releaseProvenance) await manager.recordUnverifiedRelease(project, plan.releaseProvenance);
     await Promise.all(plan.runtimeDirs.map((dir) => fs.mkdir(dir, { recursive: true, mode: 0o700 })));
@@ -3499,6 +3524,7 @@ export class DockerRuntimeProvider {
         plan.modelGatewayProfile,
         plan.contextGeneration?.reference ?? null,
         String(plan.attendancePublicKey ?? ""),
+        plan.patientMatchingGeneration?.reference ?? null,
       );
       child = new RemoteRuntimeProcess(
         manager.runtimeController,
@@ -3636,6 +3662,8 @@ export class RuntimeManager {
     this.personalSkillOverrides = new Map();
     /** @type {any} Cold selection reauthorizes current account/project/config state in the composition root. */
     this.extensionGenerationResolver = null;
+    this.patientMatchingGenerationResolver = null;
+    this.patientMatchingGenerationOverrides = new Map();
     this.extensionGenerationOverrides = new Map();
     /** Deployment-owned descriptor tuples; no development artifact defaults. */
     this.extensionArtifacts = new Map();
@@ -4565,6 +4593,10 @@ export class RuntimeManager {
     return this.inspectRuntimeImage();
   }
 
+  async inspectPatientMatchingWorker() {
+    return this.runtimeController ? this.runtimeController.inspectPatientMatchingWorker() : inspectPatientMatchingWorker(this.config);
+  }
+
   async inspectRuntimeImage() {
     if (this.runtimeController) return this.runtimeController.inspectRuntimeImage();
     if (this.config.runtimeSandboxMode !== 'docker') return null;
@@ -4898,7 +4930,25 @@ export class RuntimeManager {
       const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
         let runtime;
-        try { runtime = await this.startKernel(project, modelGatewayScope, modelGatewayProfile); }
+        const boot = async () => {
+          const candidate = await this.startKernel(project, modelGatewayScope, modelGatewayProfile);
+          this.runtimes.set(key, candidate);
+          try { if (candidate.patientMatchingGeneration) await this.probePatientMatchingGeneration(project, candidate.patientMatchingGeneration); }
+          catch (error) { await this.closeRejectedStart(project, candidate, error); throw error; }
+          return candidate;
+        };
+        try { runtime = await boot(); }
+        catch (error) {
+          // A failed optional native bundle cannot take the ordinary assistant away. Explicit lifecycle applies
+          // own their rollback and do not enter this fallback.
+          const matching = !this.patientMatchingGenerationOverrides.has(key) && this.patientMatchingGenerationResolver
+            ? await this.patientMatchingGenerationResolver(project).catch(() => null) : null;
+          if (!matching) throw error;
+          this.noteStartFinding(project, 'patient_matching_start_failed', error);
+          this.patientMatchingGenerationOverrides.set(key, null);
+          try { runtime = await boot(); }
+          finally { this.patientMatchingGenerationOverrides.delete(key); }
+        }
         finally { if (!runtime) this.startingWorkloads.delete(key); }
         if (attempt) { attempt.runtime = runtime; attempt.generation = typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null; }
         created = runtime;
@@ -5118,7 +5168,12 @@ export class RuntimeManager {
     // And whether the project is a 「循证 GEO」 one: the method pack is mounted for it alone (`geoSkillsFor`).
     const geoSkills = await this.geoSkillsFor(project);
     const remediation = contextGeneration ? await remediateStartupContext(this.config, project, contextPolicy) : [];
-    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration, extensionGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration });
+    let patientMatchingGeneration = this.patientMatchingGenerationOverrides.get(key) ?? null;
+    if (!contextGeneration && !this.patientMatchingGenerationOverrides.has(key) && this.patientMatchingGenerationResolver) {
+      try { patientMatchingGeneration = await this.patientMatchingGenerationResolver(project); if (patientMatchingGeneration) await this.preparePatientMatchingGeneration(project, patientMatchingGeneration); }
+      catch (error) { this.noteStartFinding(project, "patient_matching_generation_unavailable", error); patientMatchingGeneration = null; }
+    }
+    const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, personalSkillGeneration, extensionGeneration, patientMatchingGeneration, memoryGatewayUrl, geoSkills, modelGatewayProfile, contextGeneration });
 
     // Nothing is copied into a project any more: the image carries the skill
     // roots and the agent packages read-only, shared across every project. The
@@ -5270,6 +5325,8 @@ export class RuntimeManager {
       builtinPlugins: { annotation: this.config.runtimeAnnotationEnabled !== false && !(personalSkillGeneration?.platformSkills?.disabledPlugins ?? []).includes('annotation'),
         mermaid: this.config.runtimeMermaidEnabled !== false && !(personalSkillGeneration?.platformSkills?.disabledPlugins ?? []).includes('mermaid') },
       extensionGeneration,
+      patientMatchingGeneration,
+      patientMatchingProven: false,
       // The memory gateway address this runtime was launched with (empty when the deployment has no memory engine).
       memoryGatewayUrl: String(plan.memoryGatewayUrl ?? ""),
       // Whether it was launched with the GEO method pack mounted.
@@ -6102,7 +6159,7 @@ export class RuntimeManager {
       return this.pluginService ? await this.pluginService.withAdmission(project, () => this.dispatchAdmittedPrompt(project, sessionId, input), { prompt: true })
         : await this.dispatchAdmittedPrompt(project, sessionId, input);
     } catch (error) {
-      if (error?.code === "plugin_apply_in_progress") error.definitivelyRejected = true;
+      if (["plugin_apply_in_progress", "runtime_prompt_admission_busy", "memory_context_publication_busy"].includes(error?.code)) error.definitivelyRejected = true;
       throw error;
     }
   }
@@ -6211,10 +6268,15 @@ export class RuntimeManager {
           // Bind the authenticated actor under the same fence as native input.
           if(recordPromptActor) await recordPromptActor(promptRequest);
           signal.throwIfAborted();
+          let acknowledgement;
           await withProjectStorageMutation(project,async()=>{
             signal.throwIfAborted();
-            // Proof reads precede the final ledger read. The project ledger and
-            // session admission stay excluded until this short RPC acknowledges.
+            // Proof reads precede the final ledger read. Session admission stays
+            // excluded through acknowledgement. With memory isolation the project
+            // ledger protects the final stop/continuation checks, then releases
+            // before send's async context/source authorization and wire submission.
+            // The session fence remains held through acknowledgement; gateway
+            // source receipts can append without waiting for that acknowledgement.
             if(runId && this.readPromptStop && await this.readPromptStop(project,sessionId,runId)) {
               throw Object.assign(new HttpError(409,'runtime_prompt_rejected','The researcher stopped this pending input.'),{definitivelyRejected:true});
             }
@@ -6224,13 +6286,18 @@ export class RuntimeManager {
             }
             signal.throwIfAborted();
             promptSent=true;
-            await this.withRuntimeDeadline(
+            const pending = this.withRuntimeDeadline(
               // main's guarded `send` keeps the context-policy generation check on the admitted path.
               wireSignal=>send("session/prompt",{request:promptRequest},AbortSignal.any([wireSignal,signal])),
               "runtime_prompt_acceptance_unknown",
               "Runtime prompt acceptance could not be confirmed.",
             );
+            if (this.config.memoryRuntimeLockIsolationEnabled === true) {
+              acknowledgement = pending;
+              void pending.catch(() => {});
+            } else await pending;
           });
+          if (acknowledgement) await acknowledgement;
         });
       } catch(error) {
         if(!promptSent) error.definitivelyRejected=true;
@@ -7325,6 +7392,57 @@ export class RuntimeManager {
     }
   }
   currentGeneration(project) { return this.runtimes.get(this.key(project))?.extensionGeneration ?? null; }
+  /** First-party projection, deliberately separate from third-party doc bridge admission. */
+  currentPatientMatchingGeneration(project) { const runtime = this.runtimes.get(this.key(project)); return runtime?.patientMatchingProven ? runtime.patientMatchingGeneration ?? null : null; }
+  /** Cancel only a task already authorized by the matching host, without stopping unrelated conversation work.
+   * @param {any} project @param {string} taskId */
+  async cancelPatientMatchingTask(project, taskId) {
+    if (!/^matchTask_[A-Za-z0-9]{1,100}$/.test(taskId)) throw new HttpError(400, 'patient_matching_task_invalid', 'Invalid matching task.');
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime || !this.currentPatientMatchingGeneration(project)) return { cancelled: false };
+    return this.callKernel(runtime, project, 'patientMatching/cancel', { taskId }, AbortSignal.timeout(10000));
+  }
+  async preparePatientMatchingGeneration(project, candidate) {
+    if (this.config.runtimeProvider === 'agentbay' || this.config.runtimeSandboxMode !== 'docker') throw new HttpError(503, 'patient_matching_unavailable', 'Patient matching requires an immutable native code mount.');
+    const manifest = await verifyPatientMatchingGeneration(this.config, project, candidate.reference);
+    if (canonicalJson(manifest) !== canonicalJson(candidate) || (await this.inspectRuntimeImage())?.imageId !== manifest.runtimeImageDigest) throw new HttpError(409, 'patient_matching_release_invalid', 'Patient matching runtime identity changed.');
+    return manifest;
+  }
+  /** Only the lifecycle worker holding the exclusive idle project fence calls replacement. */
+  async replacePatientMatchingGeneration(project, candidate) {
+    if (candidate) await this.preparePatientMatchingGeneration(project, candidate);
+    if (await this.pluginRuntimeBusy(project)) throw new HttpError(409, 'plugin_runtime_busy', 'The runtime has active or queued native work.');
+    const key = this.key(project); this.patientMatchingGenerationOverrides.set(key, candidate);
+    try { await this.startAdmitted(project, { replaceRuntime: async () => { if (this.runtimes.has(key)) await this.stop(project); } }); return { joined: true }; }
+    finally { this.patientMatchingGenerationOverrides.delete(key); }
+  }
+  /** The kernel's web host answers before an enabled bundle has registered its route: on the pinned kernel the status route is 404 for
+   * about 0.2 s after the first HTTP answer, and the one immediate call of the first production install (2026-11-10) landed there and
+   * rolled the plugin back. Only a 404 from the same runtime generation is waited out, for at most `waitMs`.
+   * @param {any} runtime @param {any} project @param {string} generation @param {number} [waitMs] */
+  async patientMatchingStatus(runtime, project, generation, waitMs = 15000) {
+    const deadline = Date.now() + waitMs;
+    for (;;) {
+      try { return await this.callKernel(runtime, project, 'patientMatching/status', {}, AbortSignal.timeout(10000)); }
+      catch (error) {
+        if (/** @type {any} */ (error)?.wire?.kernelCode !== 'http_404' || Date.now() >= deadline || this.runtimeGeneration(project) !== generation) throw error;
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    }
+  }
+  async probePatientMatchingGeneration(project, expected) {
+    const runtime = this.runtimes.get(this.key(project)), generation = this.runtimeGeneration(project);
+    if (!runtime || !generation || canonicalJson(runtime.patientMatchingGeneration?.reference ?? null) !== canonicalJson(expected?.reference ?? null)) throw new HttpError(409, 'patient_matching_release_invalid', 'The native matching runtime changed.');
+    if (expected) {
+      await this.preparePatientMatchingGeneration(project, expected);
+      const proof = await this.patientMatchingStatus(runtime, project, generation);
+      if (proof?.enabled !== true || proof.skill !== 'patient-matching' || canonicalJson(proof.tools) !== canonicalJson(PATIENT_MATCHING_TOOLS)) throw new HttpError(502, 'patient_matching_probe_failed', 'The native matching inventory did not match.');
+    }
+    if (this.runtimeGeneration(project) !== generation) throw new HttpError(409, 'patient_matching_release_invalid', 'The native matching runtime changed.');
+    runtime.patientMatchingProven = true;
+    return { runtimeGeneration: generation, reference: expected?.reference ?? null };
+  }
+
   /** Factual target registry lookup, always bound to the same live runtime epoch. @param {any} project @param {string} sessionId */
   async extensionInvocationFacts(project, sessionId) {
     const runtime = this.runtimes.get(this.key(project)), generation = this.runtimeGeneration(project);
@@ -8198,7 +8316,7 @@ export class RuntimeManager {
   /**
    * @param {any} req @param {any} res @param {Record<string, any>} project @param {string} suffix
    * @param {{ surface?: string, uiBasePath?: string, revalidate?: () => Promise<void>, uiAssetPrefix?: string | null,
-   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null, admissionSignal?: AbortSignal | null,
+   *           immutable?: boolean, rebaseDocument?: boolean, fileBody?: boolean, beforeForward?: (() => Promise<void>) | null, admissionSignal?: AbortSignal | null, controlOnly?: boolean,
    *           observeResponse?: ((input:{body:Buffer,status:number,contentType:string})=>Promise<void>) | null,
    *           observeFailure?: ((input:{status:number|null,errorCode:string})=>Promise<void>) | null,
    *           transformResponse?: ((input:{body:Buffer,status:number,contentType:string})=>Promise<Buffer>) | null }} [options]
@@ -8208,7 +8326,7 @@ export class RuntimeManager {
    *   `fileBody` says the request carries a file, not an RPC: it is held to
    *   `maxFileBytes` instead of the JSON ceiling, and never parsed as JSON.
    */
-  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null, transformResponse = null, observeResponse = null, observeFailure = null, admissionSignal = null } = {}) {
+  async proxy(req, res, project, suffix, { surface = "runtime", uiBasePath = "/api/runtime-ui/", revalidate = undefined, uiAssetPrefix = null, immutable = false, rebaseDocument = true, fileBody = false, beforeForward = null, transformResponse = null, observeResponse = null, observeFailure = null, admissionSignal = null, controlOnly = false } = {}) {
     const startedAt = Date.now();
     const method = req.method ?? "GET";
     const target = surface === "ui" ? uiProxyAuditTarget(suffix) : proxyAuditTarget(suffix);
@@ -8239,7 +8357,11 @@ export class RuntimeManager {
         sendJson(res, noWake.status, noWake.body);
         return;
       }
-      let runtime = await this.start(project);
+      // A cancellation uses the registered runtime, never a prompt/start permit.
+      // If a cold start has not registered yet, its durable stop intent is read
+      // by the final prompt checks before anything can be sent.
+      let runtime = controlOnly ? this.runtimes.get(this.key(project)) : await this.start(project);
+      if (!runtime) throw new HttpError(409, 'runtime_unavailable', 'No runtime is available for cancellation.');
       if (revalidate) await revalidate();
       await this.enforceRuntimeProxyPolicy(req, suffix, runtime);
       if (beforeForward) await beforeForward();
@@ -8925,7 +9047,7 @@ export class RuntimeManager {
           if(!['session/prompt','session/cancel'].includes(endpoint)) return operation();
           const sessionId=payload?.args?.request?.sessionId ?? payload?.args?.sessionId;
           if(endpoint==='session/cancel' && typeof sessionId!=='string') return operation();
-          return withSessionPromptAdmission(this,project,sessionId,operation);
+          return withSessionPromptAdmission(this,project,sessionId,operation,{stop:endpoint==='session/cancel'});
         },
         admit: (endpoint, operation, payload) => {
           if (endpoint !== "session/prompt") return policy.admitOperation ? policy.admitOperation(endpoint, payload, operation) : policy.withAuthority ? policy.withAuthority(operation) : operation();

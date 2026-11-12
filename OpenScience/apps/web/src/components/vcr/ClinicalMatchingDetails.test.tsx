@@ -1,14 +1,14 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ClinicalTimeline, useMatchingControls } from './ClinicalMatchingDetails';
+import { ClinicalTimeline, CriterionTable, useMatchingControls } from './ClinicalMatchingDetails';
 import { Toolbar } from '@/components/ui/Toolbar';
 import { VcrToolbarActions } from './VcrToolbarActions';
 import { CloudDocuments, reviewedSpans } from './data/CloudDocuments';
 import type { VcrIntakeSource, VcrMatchingTab } from '@/lib/vcrClient';
 import { WebApiError } from '@/lib/apiClient';
-const api = vi.hoisted(() => ({ enqueue:vi.fn(),quote:vi.fn(),permission:vi.fn(),document:vi.fn(),projection:vi.fn(),retire:vi.fn() }));
-vi.mock('@/lib/vcrClient',()=>({enqueueVcrMatching:api.enqueue,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection,retireVcrProjection:api.retire}));
+const api = vi.hoisted(() => ({ judge:vi.fn(),enqueue:vi.fn(),quote:vi.fn(),permission:vi.fn(),document:vi.fn(),projection:vi.fn(),retire:vi.fn() }));
+vi.mock('@/lib/vcrClient',()=>({startVcrJudge:api.judge,enqueueVcrMatching:api.enqueue,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection,retireVcrProjection:api.retire}));
 beforeEach(()=>vi.clearAllMocks());
 
 /**
@@ -31,38 +31,132 @@ const choose = async (chip: string | RegExp, item: string | RegExp) => {
   await userEvent.click(await screen.findByRole('menuitemradio', { name: item }));
 };
 
+it('shows all distinct citations for a criterion, including a later deciding branch', () => {
+  const evidenceItems = ['记录一', '记录二', '记录三', '决定结论的记录'].map(quote => ({ quote, source: '病历原文' }));
+  render(<CriterionTable label="条件判断" rows={[{
+    code: 'I1', kind: 'inclusion', text: '存在一个风险因素', state: 'satisfied',
+    evidence: evidenceItems[0], evidenceItems,
+  }]} />);
+  for (const item of evidenceItems) expect(screen.getByText(`“${item.quote}”`)).toBeVisible();
+});
+
+it('on a phone the rules are cards, not a table that scrolls sideways: each keeps its code, state and the columns that have something to say', () => {
+  const original = window.matchMedia;
+  window.matchMedia = ((query: string) => ({ matches: query === '(max-width: 639px)', media: query, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, onchange: null, dispatchEvent: () => false })) as typeof window.matchMedia;
+  try {
+    render(<CriterionTable label="条件判断" rows={[
+      { code: 'I1', kind: 'inclusion', text: '年龄 ≥ 18 岁', state: 'satisfied', evidence: { quote: '患者 62 岁', source: '病历原文' } },
+      { code: 'E1', kind: 'exclusion', text: '活动性脑转移', state: 'unknown', request: '申请头颅 MRI', reason: '未记录' },
+    ]} />);
+    expect(screen.queryByRole('table')).toBeNull();
+    const cards = screen.getByRole('list', { name: '条件判断' });
+    expect(cards.querySelectorAll('li')).toHaveLength(2);
+    const first = cards.querySelector("[data-vcr-criterion='I1']") as HTMLElement;
+    expect(first).toHaveAttribute('data-vcr-criterion-state', 'satisfied');
+    expect(first).toHaveTextContent('规则 I1');
+    expect(first).toHaveTextContent('年龄 ≥ 18 岁');
+    expect(first).toHaveTextContent('“患者 62 岁”');
+    expect(first).not.toHaveTextContent('补证建议');
+    const second = cards.querySelector("[data-vcr-criterion='E1']") as HTMLElement;
+    expect(second).toHaveTextContent('申请头颅 MRI');
+    expect(second).toHaveTextContent('未记录');
+    expect(second).not.toHaveTextContent('患者证据');
+  } finally { window.matchMedia = original; }
+});
+
+it('distinguishes an unknown applicability premise from its requirement and shows both evidence axes', () => {
+  const premise = { quote: '肾病状态待查', source: '病历一' };
+  const requirement = { quote: '未接受过该治疗', source: '病历二' };
+  render(<CriterionTable label="条件判断" rows={[{
+    code: 'I1', kind: 'inclusion', text: '仅肾病患者需要既往治疗', state: 'unknown',
+    applicabilityState: 'unknown', applicabilityReason: '未记录', applicabilityEvidenceItems: [premise],
+    evidence: requirement, evidenceItems: [requirement],
+  }]} />);
+  expect(screen.getByText('适用范围待核实')).toBeVisible();
+  expect(screen.getByText('适用范围依据')).toBeVisible();
+  expect(screen.getByText('条件依据')).toBeVisible();
+  expect(screen.getByText('“肾病状态待查”')).toBeVisible();
+  expect(screen.getByText('“未接受过该治疗”')).toBeVisible();
+  expect(screen.getByText('适用范围：未记录')).toBeVisible();
+});
+
+it('shows a pending applicability recheck even when the requirement has no other gap', () => {
+  render(<CriterionTable label="条件判断" rows={[{
+    code: 'I1', kind: 'inclusion', text: '条件文本', state: 'unknown',
+    applicabilityState: 'pending_recheck', applicabilityRequestNote: '11月15日 起可复评',
+  }]} />);
+  expect(screen.getByText('适用范围待复评')).toBeVisible();
+  expect(screen.getByText('适用范围：11月15日 起可复评')).toBeVisible();
+});
+
 
 describe('evaluating from the controls',()=>{
   const page=(extra:Record<string,unknown>={})=>({protocols:[{id:'p1',version:1,title:'方案一'},{id:'p2',version:2,title:'方案二'}],protocolVersionId:'p2',direction:'trial_to_patient',candidateRoster:['P-001'],...extra}) as unknown as VcrMatchingTab;
   const controls=(data=page(),extra:Partial<ControlsProps>={})=>render(<Controls data={data} {...extra}/>);
   // Review V-M5: 开始评估所选方案 and 刷新结果 were inside 比较多个方案, so running one protocol meant finding a section named "compare several".
   it('starts the protocol in view without opening 比较多个方案 — and there is no 刷新结果: the page reads itself when the job moves',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
+    api.judge.mockResolvedValue({jobId:'job',state:'queued',alreadyRunning:false,pairs:6,ceiling:1.5,currency:'CNY'});
     controls();
     const start=screen.getByRole('button',{name:'开始评估'});
     expect(start.closest('details')).toBeNull();
     expect(screen.queryByRole('button',{name:'刷新结果'})).toBeNull();
     fireEvent.click(start);
+    // The judging job of the protocol in view is what starts, and the job's own ceiling is said with it.
+    await waitFor(()=>expect(api.judge).toHaveBeenCalledWith('s1',{direction:'trial_to_patient',protocolVersionId:'p2'}));
+    expect(await screen.findByRole('status')).toHaveTextContent('已开始 1 项评估，共 6 对，预计最多 1.50 灵豆；随时可以停止，判完的会保留。');
+  });
+  it('a study with no records screens by its rules: 开始评估 starts the rule evaluation, and says how many started',async()=>{
+    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
+    controls(page({evaluateBy:'rules'}));
+    fireEvent.click(screen.getByRole('button',{name:'开始评估'}));
     await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p2'],direction:'trial_to_patient'}));
-    expect(await screen.findByRole('status')).toHaveTextContent('已提交 1 项评估。');
+    expect(api.judge).not.toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent('已开始 1 项按规则筛选');
+  });
+  it('a rule evaluation nothing could start says why, as a problem',async()=>{
+    api.enqueue.mockResolvedValue({jobs:[],unavailable:[{code:'vcr_matching_no_subjects'}]});
+    controls(page({evaluateBy:'rules'}));
+    fireEvent.click(screen.getByRole('button',{name:'开始评估'}));
+    expect(await screen.findByRole('alert')).toHaveTextContent('没有开始评估');
   });
   it('says nothing was submitted, and why, when no job was queued — as a problem, not as a success with a zero in it',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[],unavailable:[{code:'vcr_criteria_missing'}]});
+    api.judge.mockRejectedValue(new WebApiError('x',{status:409,code:'vcr_match_judge_nothing_to_read'}));
     controls();
     fireEvent.click(screen.getByRole('button',{name:'开始评估'}));
     const alert=await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('没有提交评估。方案还没有结构化的入排条件，无法匹配。');
-    expect(alert).not.toHaveTextContent('已提交');
+    expect(alert).toHaveTextContent('没有开始评估。没有可判定的内容：先写入病历或入排条件，再判定。');
+    expect(alert).not.toHaveTextContent('已开始');
   });
-  it('says what was queued and what was not when only some of the protocols could be',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[{code:'vcr_criteria_missing'}]});
+  it('says what was started and what was not when only some of the protocols could be',async()=>{
+    api.judge.mockResolvedValueOnce({jobId:'job',state:'queued',alreadyRunning:false,pairs:6,ceiling:1.5,currency:'CNY'}).mockRejectedValueOnce(new WebApiError('x',{status:409,code:'vcr_match_judge_nothing_to_read'}));
     controls();
-    fireEvent.click(screen.getByRole('button',{name:'开始评估'}));
-    expect(await screen.findByRole('status')).toHaveTextContent('已提交 1 项评估，1 项暂不可用。');
+    fireEvent.click(screen.getByText('比较多个方案'));
+    for(const box of within(screen.getByRole('group',{name:'选择方案（最多 10 项）'})).getAllByRole('checkbox'))fireEvent.click(box);
+    fireEvent.click(screen.getByRole('button',{name:'开始评估所选方案'}));
+    expect(await screen.findByRole('status')).toHaveTextContent('已开始 1 项评估，共 6 对，预计最多 1.50 灵豆；随时可以停止，判完的会保留。1 项暂不可用。');
     expect(screen.queryByRole('alert')).toBeNull();
   });
+  it('offers one start for one meaning: the several protocols ticked are started by the same button, and a patient\'s judged page has its own search and no second start in the band',async()=>{
+    controls();
+    expect(screen.getAllByRole('button',{name:/^开始评估/})).toHaveLength(1);
+    fireEvent.click(screen.getByText('比较多个方案'));
+    expect(screen.queryByRole('button',{name:'开始评估所选方案'})).toBeNull();
+    for(const box of within(screen.getByRole('group',{name:'选择方案（最多 10 项）'})).getAllByRole('checkbox'))fireEvent.click(box);
+    expect(screen.getAllByRole('button',{name:/^开始评估/})).toHaveLength(1);
+    expect(screen.getByRole('button',{name:'开始评估所选方案'})).toBeInTheDocument();
+  });
+  it('a patient page of judged trials has no 开始评估 in the band: 开始为该患者找试验 on the page is its start',()=>{
+    controls(page({direction:'patient_to_trial'}),{judged:true,subjectKey:'P-001'});
+    expect(screen.queryByRole('button',{name:/^开始评估/})).toBeNull();
+  });
+  it('says a batch already out is that batch, and not a second one',async()=>{
+    api.judge.mockResolvedValue({jobId:'job',state:'running',alreadyRunning:true,pairs:6,ceiling:1.5,currency:'CNY'});
+    controls();
+    fireEvent.click(screen.getByRole('button',{name:'开始评估'}));
+    expect(await screen.findByRole('status')).toHaveTextContent('这批判定已经在进行。');
+  });
   it('runs the protocol the reader chose, for the patient the reader chose, in the direction the reader chose — and offers no run until there is a patient to run it for',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
+    api.judge.mockResolvedValue({jobId:'job',state:'queued',alreadyRunning:false,pairs:6,ceiling:1.5,currency:'CNY'});
     controls(page({direction:'trial_to_patient'}),{direction:'patient_to_trial',protocolId:'p1'});
     // 给患者找试验 starts from a person: with none chosen there is no button that would be grey — the patient's chip is the way to one.
     expect(screen.queryByRole('button',{name:'开始评估'})).toBeNull();
@@ -70,7 +164,8 @@ describe('evaluating from the controls',()=>{
     const start=await screen.findByRole('button',{name:'开始评估'});
     expect(start).toBeEnabled();
     fireEvent.click(start);
-    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1'],subjectKeys:['P-001'],direction:'patient_to_trial'}));
+    // The study's protocol, judged for this one patient.
+    await waitFor(()=>expect(api.judge).toHaveBeenCalledWith('s1',{direction:'trial_to_patient',protocolVersionId:'p1',subjectKeys:['P-001']}));
   });
   it('shows the protocol in view in the band, and tells the page which one the reader chose',async()=>{
     const onProtocol=vi.fn();
@@ -81,12 +176,12 @@ describe('evaluating from the controls',()=>{
   });
   // Per-source reprocessing (E-13): what an evaluation rested on has changed, so the page says so and offers the evaluation that exists.
   it('says how many evaluations rest on a basis that has changed, and evaluates those people again with the existing trigger',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
+    api.judge.mockResolvedValue({jobId:'job',state:'queued',alreadyRunning:false,pairs:6,ceiling:1.5,currency:'CNY'});
     controls(page({basisUpdated:{count:2,subjects:['P-001','P-002']}}));
     expect(screen.getByText('2 人的评估依据已更新')).toBeVisible();
     fireEvent.click(screen.getByRole('button',{name:'重新开始评估'}));
-    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p2'],subjectKeys:['P-001','P-002'],direction:'trial_to_patient'}));
-    expect(await screen.findByText('已提交 1 项评估。')).toBeVisible();
+    await waitFor(()=>expect(api.judge).toHaveBeenCalledWith('s1',{direction:'trial_to_patient',protocolVersionId:'p2',subjectKeys:['P-001','P-002']}));
+    expect(await screen.findByText(/^已开始 1 项评估/)).toBeVisible();
   });
   it('says nothing about a basis when nothing changed, and offers the evaluation only to a reader who may run it',()=>{
     controls();
@@ -428,13 +523,14 @@ describe('choosing the protocols to compare',()=>{
     for(const box of boxes())expect(box.closest('label')).toHaveClass('min-h-form-primary');
   });
   it('picks several with plain clicks and sends exactly those',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[{jobId:'a'},{jobId:'b'}],unavailable:[]});
+    api.judge.mockResolvedValue({jobId:'job',state:'queued',alreadyRunning:false,pairs:6,ceiling:1.5,currency:'CNY'});
     controls(3);
     const [first,second,third]=boxes();
     fireEvent.click(first);fireEvent.click(third);
     expect([first,second,third].map(box=>box.checked)).toEqual([true,false,true]);
     fireEvent.click(screen.getByRole('button',{name:'开始评估所选方案'}));
-    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1','p3'],direction:'trial_to_patient'}));
+    await waitFor(()=>expect(api.judge).toHaveBeenCalledTimes(2));
+    expect(api.judge.mock.calls).toEqual([['s1',{direction:'trial_to_patient',protocolVersionId:'p1'}],['s1',{direction:'trial_to_patient',protocolVersionId:'p3'}]]);
   });
   it('stops at ten and says why, and lets another be chosen once one is let go',()=>{
     controls(12);
@@ -452,18 +548,18 @@ describe('choosing the protocols to compare',()=>{
 
 describe('clinical matching controls',()=>{
   it('keeps a patient-to-trial request unsubmitted until both patient and protocols are selected',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[{id:'job'}],unavailable:[]});
+    api.judge.mockResolvedValue({jobId:'job',state:'queued',alreadyRunning:false,pairs:6,ceiling:1.5,currency:'CNY'});
     const data={protocols:[{id:'p1',version:1,title:'方案一'},{id:'p2',version:2,title:'方案二'}],direction:'patient_to_trial',candidateRoster:['P-001']} as unknown as VcrMatchingTab;
     render(<Controls data={data}/>);
     fireEvent.click(screen.getByText('比较多个方案'));
-    const button=screen.getByRole('button',{name:'开始评估所选方案'});
-    expect(button).toBeDisabled();
+    // An action that cannot work is not offered: with no patient chosen there is no start, whatever is ticked.
     for(const box of within(screen.getByRole('group',{name:'选择方案（最多 10 项）'})).getAllByRole('checkbox'))fireEvent.click(box);
-    expect(button).toBeDisabled();
+    expect(screen.queryByRole('button',{name:/^开始评估/})).toBeNull();
     await choose('患者','P-001');
-    fireEvent.click(button);
-    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1','p2'],subjectKeys:['P-001'],direction:'patient_to_trial'}));
-    expect(await screen.findByRole('status')).toHaveTextContent('已提交 1 项评估');
+    fireEvent.click(screen.getByRole('button',{name:'开始评估所选方案'}));
+    await waitFor(()=>expect(api.judge).toHaveBeenCalledTimes(2));
+    expect(api.judge.mock.calls).toEqual([['s1',{direction:'trial_to_patient',protocolVersionId:'p1',subjectKeys:['P-001']}],['s1',{direction:'trial_to_patient',protocolVersionId:'p2',subjectKeys:['P-001']}]]);
+    expect(await screen.findByRole('status')).toHaveTextContent('已开始 2 项评估');
   });
   it('shows conflicts and sourced corrections while opening originals only through the protected resolver',async()=>{
     api.quote.mockResolvedValue({evidence:{quote:'受保护的合成原文'}});
@@ -480,6 +576,12 @@ describe('clinical matching controls',()=>{
     const data={timeline:[{id:'f1',variable:'creatinine',at:null,assertion:'affirmed',experiencer:'patient',quote:'肌酐 2.4 mg/dL',locator:null}]} as unknown as VcrMatchingTab;
     render(<ClinicalTimeline studyId="s1" data={data} mayReadOriginal={false} subject="P-0192"/>);
     expect(screen.getByText('P-0192 的临床记录与更正')).toBeInTheDocument();
+  });
+  it('names a person by the short name every page uses, never by the key',()=>{
+    const data={timeline:[{id:'f1',variable:'creatinine',at:null,assertion:'affirmed',experiencer:'patient',quote:'肌酐 2.4 mg/dL',locator:null}]} as unknown as VcrMatchingTab;
+    render(<ClinicalTimeline studyId="s1" data={data} mayReadOriginal={false} subject="P4c1b0f11aaaaaaaa"/>);
+    expect(screen.getByText('P-4C1B0F 的临床记录与更正')).toBeInTheDocument();
+    expect(screen.queryByText(/P4c1b0f11aaaaaaaa/)).toBeNull();
   });
   it('says 患者, once and the same, where the controls ask for the person',async()=>{
     render(<Controls data={{protocols:[{id:'p1',version:1,title:'方案一'}],direction:'patient_to_trial',candidateRoster:['P-001']} as unknown as VcrMatchingTab}/>);

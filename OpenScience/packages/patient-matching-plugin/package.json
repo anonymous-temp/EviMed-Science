@@ -1,0 +1,48 @@
+{
+  "name": "@evimed/dsh-patient-matching",
+  "version": "0.1.14",
+  "type": "module",
+  "description": "Independent native DSH professional patient matching bundle with authenticated scoped host ports.",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.mjs",
+    "./handler": "./src/handler.mjs",
+    "./transport": "./src/transport.mjs",
+    "./manifest": "./src/manifest.mjs",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "src",
+    "skills",
+    "cordis.patch.yml",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./cordis.patch.yml"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "dependencies": {
+    "@evimed/harness-port": "workspace:^0.1.0",
+    "@evimed/patient-matching-core": "workspace:^0.1.0",
+    "ajv": "8.20.0"
+  },
+  "bundledDependencies": [
+    "@evimed/harness-port",
+    "@evimed/patient-matching-core",
+    "ajv"
+  ],
+  "scripts": {
+    "test": "node --import ../../scripts/test/localhostProbeGuard.mjs --test test/*.test.mjs",
+    "pack:plugin": "node scripts/pack.mjs",
+    "smoke:native": "node test/native-smoke.mjs",
+    "build:inventory": "node scripts/build-inventory.mjs",
+    "smoke:status": "node test/native-status-smoke.mjs"
+  }
+}

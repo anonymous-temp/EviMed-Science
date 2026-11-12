@@ -1,0 +1,366 @@
+{
+  "schema": "evimed-clinical-scales-v1",
+  "note": "Wording of the scales as the CDISC and NCI terminologies print it, so a criterion that names a level can be read against it. It defines a scale; it does not say what a patient's score is or that a person has a disease.",
+  "scales": [
+    {
+      "id": "ecog",
+      "name": "ECOG Performance Status",
+      "aliases": [
+        "ECOG",
+        "ECOG PS",
+        "Zubrod",
+        "Eastern Cooperative Oncology Group Performance Status",
+        "ECOG评分",
+        "ECOG体能状态",
+        "东部肿瘤协作组体能状态",
+        "体力状态评分"
+      ],
+      "kind": "ordinal grades 0-5 (higher is more limited)",
+      "levels": [
+        {
+          "value": 0,
+          "text": "Fully active, able to carry on all pre-disease performance without restriction"
+        },
+        {
+          "value": 1,
+          "text": "Restricted in physically strenuous activity but ambulatory and able to carry out work of a light or sedentary nature, e.g., light house work, office work"
+        },
+        {
+          "value": 2,
+          "text": "Ambulatory and capable of all selfcare but unable to carry out any work activities. Up and about more than 50% of waking hours"
+        },
+        {
+          "value": 3,
+          "text": "Capable of only limited selfcare, confined to bed or chair more than 50% of waking hours"
+        },
+        {
+          "value": 4,
+          "text": "Completely disabled. Cannot carry on any selfcare. Totally confined to bed or chair"
+        },
+        {
+          "value": 5,
+          "text": "Dead"
+        }
+      ],
+      "source": {
+        "name": "CDISC SDTM Controlled Terminology (NCI EVS)",
+        "version": "2026-09-25",
+        "license": "NCI states CDISC Terminology may be used for free, without licensing restrictions",
+        "codelist": "C179943 (original results for ECOG101)",
+        "ncit": "C105721",
+        "citation": "Oken MM et al. Am J Clin Oncol 1982;5(6):649-655 (PMID 7165009); ECOG-ACRIN Cancer Research Group"
+      },
+      "license": "ECOG-ACRIN states the scale is in the public domain; show the citation and the credit line when it is printed"
+    },
+    {
+      "id": "karnofsky",
+      "name": "Karnofsky Performance Status",
+      "aliases": [
+        "Karnofsky",
+        "KPS",
+        "KPS Scale",
+        "Karnofsky Performance Status Scale",
+        "卡氏评分",
+        "卡劳夫斯基评分",
+        "Karnofsky评分",
+        "KPS评分"
+      ],
+      "kind": "ordinal score 0-100 in steps of 10 (higher is better function)",
+      "levels": [
+        {
+          "value": 100,
+          "text": "Normal no complaints; no evidence of disease"
+        },
+        {
+          "value": 90,
+          "text": "Able to carry on normal activity; minor signs or symptoms of disease"
+        },
+        {
+          "value": 80,
+          "text": "Normal activity with effort; some signs or symptoms of disease"
+        },
+        {
+          "value": 70,
+          "text": "Cares for self; unable to carry on normal activity or to do active work"
+        },
+        {
+          "value": 60,
+          "text": "Requires occasional assistance, but is able to care for most of his personal needs"
+        },
+        {
+          "value": 50,
+          "text": "Requires considerable assistance and frequent medical care"
+        },
+        {
+          "value": 40,
+          "text": "Disabled; requires special care and assistance"
+        },
+        {
+          "value": 30,
+          "text": "Severely disabled; hospital admission is indicated although death not imminent"
+        },
+        {
+          "value": 20,
+          "text": "Very sick; hospital admission necessary; active supportive treatment necessary"
+        },
+        {
+          "value": 10,
+          "text": "Moribund; fatal processes progressing rapidly"
+        },
+        {
+          "value": 0,
+          "text": "Dead"
+        }
+      ],
+      "source": {
+        "name": "CDISC SDTM Controlled Terminology (NCI EVS)",
+        "version": "2026-09-25",
+        "license": "NCI states CDISC Terminology may be used for free, without licensing restrictions",
+        "codelist": "C182507 (standardized results for KPSS0101)",
+        "ncit": "C28013",
+        "citation": "Karnofsky DA et al. Cancer 1948;1:634-656"
+      },
+      "license": "NCI states CDISC Terminology may be used for free, without licensing restrictions"
+    },
+    {
+      "id": "nyha",
+      "name": "New York Heart Association (NYHA) functional classification",
+      "aliases": [
+        "NYHA",
+        "NYHA class",
+        "NYHA classification",
+        "New York Heart Association",
+        "NYHA心功能分级",
+        "纽约心脏病学会心功能分级",
+        "心功能分级",
+        "心功能Ⅰ-Ⅳ级"
+      ],
+      "kind": "ordinal classes I-IV (higher is more limited)",
+      "levels": [
+        {
+          "value": "I",
+          "text": "Without limitations of physical activity. Ordinary physical activity does not cause undue fatigue, palpitations, or dyspnea."
+        },
+        {
+          "value": "II",
+          "text": "Slight limitation of physical activity. The patient is comfortable at rest. Ordinary physical activity results in fatigue, palpitations, or dyspnea."
+        },
+        {
+          "value": "III",
+          "text": "Marked limitation of physical activity. The patient is comfortable at rest. Less than ordinary activity causes fatigue, palpitations, or dyspnea."
+        },
+        {
+          "value": "IV",
+          "text": "Inability to carry on any physical activity without discomfort. Heart failure symptoms are present even at rest or with minimal exertion."
+        }
+      ],
+      "source": {
+        "name": "CDISC SDTM Controlled Terminology (NCI EVS)",
+        "version": "2026-09-25",
+        "license": "NCI states CDISC Terminology may be used for free, without licensing restrictions",
+        "codelist": "C101839 (New York Heart Association Classification)",
+        "ncit": "C66904, C66905, C66907, C66908",
+        "citation": "The Criteria Committee of the New York Heart Association. Nomenclature and Criteria for Diagnosis of Diseases of the Heart and Great Vessels. 9th ed. 1994:253-256"
+      },
+      "license": "NCI states CDISC Terminology may be used for free, without licensing restrictions"
+    },
+    {
+      "id": "child-pugh",
+      "name": "Child-Pugh classification",
+      "aliases": [
+        "Child-Pugh",
+        "Child Pugh",
+        "Child-Pugh score",
+        "Child-Pugh class",
+        "Child-Turcotte-Pugh",
+        "CTP",
+        "Child-Pugh分级",
+        "Child-Pugh评分",
+        "肝功能Child-Pugh分级"
+      ],
+      "kind": "five components scored 1-3 points each, summed (5-15), then graded A, B or C",
+      "components": [
+        {
+          "name": "Encephalopathy grade (CPS0101)",
+          "points": [
+            {
+              "value": 1,
+              "text": "None"
+            },
+            {
+              "value": 2,
+              "text": "1 or 2"
+            },
+            {
+              "value": 3,
+              "text": "3 or 4"
+            }
+          ]
+        },
+        {
+          "name": "Ascites (CPS0102)",
+          "points": [
+            {
+              "value": 1,
+              "text": "Absent"
+            },
+            {
+              "value": 2,
+              "text": "Slight"
+            },
+            {
+              "value": 3,
+              "text": "Moderate"
+            }
+          ]
+        },
+        {
+          "name": "Serum bilirubin, mg/dL (CPS0103)",
+          "points": [
+            {
+              "value": 1,
+              "text": "<2"
+            },
+            {
+              "value": 2,
+              "text": "2 to 3"
+            },
+            {
+              "value": 3,
+              "text": ">3"
+            }
+          ]
+        },
+        {
+          "name": "Serum albumin, g/dL (CPS0104)",
+          "points": [
+            {
+              "value": 1,
+              "text": ">3.5"
+            },
+            {
+              "value": 2,
+              "text": "2.8 to 3.5"
+            },
+            {
+              "value": 3,
+              "text": "<2.8"
+            }
+          ]
+        },
+        {
+          "name": "Prothrombin time, seconds prolonged (CPS0105A)",
+          "points": [
+            {
+              "value": 1,
+              "text": "<4"
+            },
+            {
+              "value": 2,
+              "text": "4 to 6"
+            },
+            {
+              "value": 3,
+              "text": ">6"
+            }
+          ]
+        },
+        {
+          "name": "Prothrombin time, INR (CPS0105B), used where seconds prolonged is not",
+          "points": [
+            {
+              "value": 1,
+              "text": "<1.7"
+            },
+            {
+              "value": 2,
+              "text": "1.7-2.3"
+            },
+            {
+              "value": 3,
+              "text": ">2.3"
+            }
+          ]
+        }
+      ],
+      "grades": [
+        {
+          "value": "A",
+          "text": "5-6 points (NCIt: Grade A, well compensated disease)"
+        },
+        {
+          "value": "B",
+          "text": "7-9 points (NCIt: Grade B, significant functional compromise)"
+        },
+        {
+          "value": "C",
+          "text": "10-15 points"
+        }
+      ],
+      "source": {
+        "name": "CDISC SDTM Controlled Terminology (NCI EVS)",
+        "version": "2026-09-25",
+        "license": "NCI states CDISC Terminology may be used for free, without licensing restrictions",
+        "codelist": "C208383-C208389 (ORRES for CPS0101-CPS0107), C208390-C208396 (STRESC)",
+        "ncit": "C113691, C113692",
+        "citation": "Pugh RNH et al. Br J Surg 1973;60:646-649 (PMID 4541913)"
+      },
+      "license": "NCI states CDISC Terminology may be used for free, without licensing restrictions",
+      "limits": "Grade C (10-15 points) is the complement of the NCIt grades A and B over the 5-15 range; the sources name the grade as 'C or severe'."
+    },
+    {
+      "id": "gcs",
+      "name": "Glasgow Coma Scale",
+      "aliases": [
+        "GCS",
+        "Glasgow Coma Scale",
+        "Glasgow coma score",
+        "GCS评分",
+        "格拉斯哥昏迷评分",
+        "格拉斯哥昏迷量表",
+        "昏迷指数"
+      ],
+      "kind": "three components summed (3-15; higher is more responsive)",
+      "components": [
+        {
+          "name": "Best eye response (GCS0101)",
+          "range": [
+            1,
+            4
+          ]
+        },
+        {
+          "name": "Motor response (GCS0102)",
+          "range": [
+            1,
+            6
+          ]
+        },
+        {
+          "name": "Verbal response (GCS0103)",
+          "range": [
+            1,
+            5
+          ]
+        }
+      ],
+      "total": {
+        "name": "Total score (GCS0104)",
+        "range": [
+          3,
+          15
+        ]
+      },
+      "source": {
+        "name": "CDISC SDTM Controlled Terminology (NCI EVS)",
+        "version": "2026-09-25",
+        "license": "NCI states CDISC Terminology may be used for free, without licensing restrictions",
+        "codelist": "C124682 (Glasgow Coma Scale NINDS Version 1.0 test codes)",
+        "ncit": "",
+        "citation": "Teasdale G, Jennett B. Lancet 1974;2(7872):81-84 (PMID 4136544); components and ranges as stated on glasgowcomascale.org"
+      },
+      "license": "NCI states CDISC Terminology may be used for free, without licensing restrictions",
+      "limits": "Only the component names and the score ranges are given here, not the wording of each response level."
+    }
+  ]
+}

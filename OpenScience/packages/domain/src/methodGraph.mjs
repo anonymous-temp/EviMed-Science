@@ -1127,6 +1127,11 @@ export function bodyPreservation(source, afterBody) {
 /* -------------------------------------------------------------- the graph */
 
 /**
+ * Graph checks read only identity, status and edges, not a record's learning or provenance.
+ * @typedef {Pick<MethodRecord, 'name' | 'digest' | 'status' | 'dependencies' | 'derivedFrom'>} MethodGraphNode
+ */
+
+/**
  * @typedef {object} MethodGraphIssue
  * @property {string} code
  * @property {string} message
@@ -1172,11 +1177,11 @@ export function abstractMembersOf(frontmatter, names) {
  *
  * Not read from `metadata.role`. The role is a label a model writes; the level
  * is a fact about the graph, and when the two disagree the graph is right.
- * @param {readonly MethodRecord[]} methods
+ * @param {readonly MethodGraphNode[]} methods
  * @returns {{levels: Map<string, number>, cycles: string[][]}}
  */
 export function computeMethodLevels(methods) {
-  /** @type {Map<string, MethodRecord>} */
+  /** @type {Map<string, MethodGraphNode>} */
   const byName = new Map()
   for (const method of methods ?? []) byName.set(method.name, method)
   /** @type {Map<string, number>} */
@@ -1221,14 +1226,14 @@ export function methodLevel(method, methods) {
  * Multiple parents are legal — a shared atomic method reused by four functional
  * ones is the whole point of extracting it — so this checks for cycles and
  * dangling pins, not for a tree.
- * @param {readonly MethodRecord[]} methods
+ * @param {readonly MethodGraphNode[]} methods
  * @returns {{ok: boolean, issues: MethodGraphIssue[], levels: Map<string, number>}}
  */
 export function validateMethodGraph(methods) {
   /** @type {MethodGraphIssue[]} */
   const issues = []
   const list = methods ?? []
-  /** @type {Map<string, MethodRecord>} */
+  /** @type {Map<string, MethodGraphNode>} */
   const byName = new Map()
   for (const method of list) {
     if (byName.has(method.name)) {

@@ -6,16 +6,18 @@ import os from 'node:os';
 import { PostgresStore } from '../src/store.mjs';
 import { ProductDocuments } from '../src/productStore.mjs';
 import { GeoStore } from '../src/geoStore.mjs';
+import { withSessionPromptAdmission } from '../src/runtimePromptAdmission.mjs';
+import { PluginService } from '../src/pluginService.mjs';
 import { GeoSharedContext } from '../src/geoSharedContext.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposable PostgreSQL required' };
 // A shared project: one with a member. A one-person GEO project keeps its owner's own context (owner ruling 2026-10-25).
-async function setup(t, { shared = true, runtimeLockIsolation = false } = {}) {
+async function setup(t, { shared = true, runtimeLockIsolation = false, poolMax = 4 } = {}) {
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'geocontext');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'geo-context-'));
-  const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: runtimeLockIsolation ? 4 : 1 }));
+  const accounts = new PostgresStore(loadConfig({ memoryRuntimeLockIsolationEnabled: runtimeLockIsolation, dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: runtimeLockIsolation ? poolMax : 1 }));
   t.after(async () => { await accounts.database.close(); await isolated.drop(); await rm(dataDir, { recursive: true, force: true }); });
   for (const id of ['owner', 'editor']) await accounts.createUser(id, 'local-fixture-password', id);
   const owner = await accounts.userById('owner'), editor = await accounts.userById('editor');
@@ -133,4 +135,66 @@ test('isolated policy creation serializes writers and commits before an outer ad
       (await other.query('SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired', [policy.referenceId])).rows[0].acquired));
     assert.equal(contender, true, 'read policy selection retains no creation lock in its caller');
   }));
+});
+
+
+test('first floor publication inside real plugin admission uses the spare connection and is durable before acknowledgement', options, async t => {
+  const f = await setup(t, { runtimeLockIsolation: true }), database = f.accounts.database;
+  const plugins = new PluginService(database);
+  let release, entered;
+  const ack = new Promise(resolve => { release = resolve; });
+  const ready = new Promise(resolve => { entered = resolve; });
+  let policy;
+  assert.equal((await f.documents.list(f.owner.id, 'geo-plan-context')).items.length, 0);
+  const pending = plugins.withAdmission(f.project, async () => {
+    assert.ok(database.transactionScope(), 'the real plugin caller lends its transaction');
+    policy = await f.policies.forProject(f.project);
+    entered(); await ack;
+  }, { prompt: true });
+  try {
+    await Promise.race([ready, pending.then(() => { throw new Error('admission ended early'); })]);
+    const saved = await f.documents.get(f.owner.id, 'geo-plan-context', policy.referenceId);
+    assert.equal(saved.revision, 1);
+    assert.deepEqual(await f.policies.forProject(f.project), policy);
+  } finally { release(); await pending; }
+});
+
+test('publication refuses a lock retained by its own outer transaction within the three second lease convention', options, async t => {
+  const f = await setup(t, { runtimeLockIsolation: true }), database = f.accounts.database;
+  // Discover the deterministic key without publishing a floor.
+  let key;
+  f.documents.get = async (_owner, _kind, id) => { key = id; return null; };
+  assert.equal(await f.policies.resolveProject(f.project, { readOnly: true }), null);
+  const started = Date.now();
+  await new PluginService(database).withAdmission(f.project, async () => {
+    await database.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [key]);
+    await assert.rejects(f.policies.forProject(f.project), { status: 409, code: 'memory_context_publication_busy' });
+    assert.equal((await database.query('SELECT 1 AS alive')).rows[0].alive, 1, 'the outer transaction remains usable');
+  });
+  assert.ok(Date.now() - started < 8000, 'publication does not wait for the 120 second idle transaction bound');
+});
+
+
+test('two outer plugin callers on a four-connection pool leave room for first publication', options, async t => {
+  const f = await setup(t, { runtimeLockIsolation: true, poolMax: 4 }), database = f.accounts.database;
+  const plugins = new PluginService(database, { runtimeLockIsolation: true, databasePoolMax: 4 });
+  let enter, publish, release, published, secondEntered = false;
+  const ready = new Promise(resolve => { enter = resolve; }), start = new Promise(resolve => { publish = resolve; });
+  const ack = new Promise(resolve => { release = resolve; }), done = new Promise(resolve => { published = resolve; });
+  const first = plugins.withAdmission(f.project, async () => {
+    enter(); await start; published(await f.policies.forProject(f.project)); await ack;
+  }, { prompt: true });
+  await ready;
+  const second = plugins.withAdmission(f.project, async () => { secondEntered = true; await ack; }, { prompt: true });
+  let stopped = false;
+  const manager = { config: { memoryRuntimeLockIsolationEnabled: true, databasePoolMax: 4, runtimePromptAdmissionTimeoutMs: 10000 }, promptAdmissionDatabase: database, pluginService: plugins };
+  const stop = withSessionPromptAdmission(manager, f.project, 'root', async () => { stopped = true; }, { stop: true });
+  try {
+    publish();
+    const policy = await Promise.race([done, first.then(() => { throw new Error('first admission ended early'); })]);
+    assert.equal(policy.kind, 'geo-project'); assert.equal(secondEntered, false); assert.equal(stopped, true);
+    assert.deepEqual(await f.policies.forProject(f.project), policy);
+  } finally { release(); await Promise.all([first, second, stop]); }
+  assert.equal(stopped, true);
+  assert.equal(secondEntered, true, 'the queued caller proceeds after the first acknowledgement');
 });

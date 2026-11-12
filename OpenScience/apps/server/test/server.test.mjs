@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { gunzipSync } from "node:zlib";
-import { createWebApiApp } from "../src/server.mjs";
+import { createWebApiApp, safeModelActivity, safeModelUpstreamFailure } from "../src/server.mjs";
 import { HttpError, hashPassword } from "../src/security.mjs";
 import { dshProductionReleaseConfig, productionReleaseConfig, releaseManifestFixture } from "./releaseFixture.mjs";
 
@@ -19,6 +19,63 @@ const productionReadinessReady = {
   requireDocumentParser: false,
   ...productionReleaseConfig,
 };
+
+test("model upstream ledger fields reject untrusted text and invalid status", () => {
+  assert.deepEqual(safeModelUpstreamFailure({ upstreamStatus: 503, providerRequestId: "01234567-89ab-cdef-0123-456789abcdef" }),
+    { status: 503, requestId: "01234567-89ab-cdef-0123-456789abcdef" });
+  assert.deepEqual(safeModelUpstreamFailure({ upstreamStatus: 429, providerRequestId: "patient secret" }), { status: 429 });
+  assert.equal(safeModelUpstreamFailure({ upstreamStatus: 200, providerRequestId: "patient secret" }), null);
+});
+
+test("model activity ledger retains only verified safe identity and numerical progress", () => {
+  const progress = { heartbeats: 3, text: 0, reasoning: 2, tools: 0, firstMs: 15, lastMs: 25, finishReason: null, patient: "secret" };
+  assert.deepEqual(safeModelActivity({ verifiedProjectId: "project-1", verifiedRunId: "run-1", progress }),
+    { projectId: "project-1", runId: "run-1", progress: { heartbeats: 3, text: 0, reasoning: 2, tools: 0, firstMs: 15, lastMs: 25, finishReason: null } });
+  assert.equal(safeModelActivity({ verifiedProjectId: "patient secret", verifiedRunId: "bad id", progress: { ...progress, firstMs: 50 } }), null);
+});
+
+test("opt-in server close drains model accounting and receipts before closing the store", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'os-model-drain-'));
+  let finishBody;
+  let settleStarted = false, releaseSettlement, storeClosed = false, settledBeforeClose = false;
+  const settlement = new Promise(resolve => { releaseSettlement = resolve; });
+  const receipts = [];
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: 'mock', devAuth: true,
+    deepseekApiKey: 'test-key', deepseekBaseUrl: 'https://api.deepseek.com', deepseekModel: 'deepseek-flash',
+    usageLedger: { reserveModel: async () => ({ id: 'reservation' }), settleModel: async () => { settleStarted = true; await settlement; settledBeforeClose = !storeClosed; },
+      reconcileExpiredReservations: async () => ({}) },
+    modelGatewayOnCall: value => receipts.push(value),
+    modelGatewayFetch: async () => new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":1}}\n\ndata: [DONE]\n\n'));
+      finishBody = () => controller.close();
+    } }), { headers: { 'content-type': 'text/event-stream' } }),
+  });
+  const closeStore = app.store.close.bind(app.store);
+  app.store.close = async () => { storeClosed = true; return closeStore(); };
+  app.runtimeManager.assertActiveModelGatewayToken = () => ({ userId: 'u1', projectId: 'p1' });
+  const address = await app.listen(0, '127.0.0.1');
+  let closed = false;
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/internal/model/v1/chat/completions`, { method: 'POST',
+      headers: { authorization: 'Bearer token', 'content-type': 'application/json' }, body: JSON.stringify({ messages: [{ role: 'user', content: 'x' }], stream: true }) });
+    await response.text();
+    const closing = app.close({ modelCallDrainTimeoutMs: 3000 });
+    finishBody();
+    for (let i = 0; !settleStarted && i < 200; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(settleStarted, true);
+    assert.equal(receipts.length, 0);
+    releaseSettlement();
+    const result = await closing; closed = true;
+    assert.deepEqual(result.modelCallDrain, { drained: true, pending: 0 });
+    assert.equal(receipts.length, 1);
+    assert.equal(settledBeforeClose, true);
+    assert.equal(storeClosed, true);
+  } finally {
+    releaseSettlement();
+    if (!closed) await app.close().catch(() => {});
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
 
 async function fakeDockerBin(root) {
   const bin = path.join(root, "fake-docker.mjs");
@@ -3722,6 +3779,8 @@ for (const scope of ["project", "account"]) {
         "workspace/artifacts/evidence.json": '{"claim":"customer evidence"}',
         "workspace/knowledge-base/source.md": "customer knowledge source",
         ".openscience/runs.jsonl": '{"id":"customer-run","sessionId":"native-session"}\n',
+        ".openscience/runs.000001.jsonl": '{"id":"customer-run","event":"notice","deleted":true}\n',
+        ".openscience/runs.000002.jsonl": '{"id":"customer-second-run","sessionId":"second-session"}\n',
         ".openscience/provenance.jsonl": '{"id":"customer-provenance"}\n',
         ".openscience/provenance.jsonl.1": '{"id":"earlier-provenance"}\n',
         ".openscience/research-sessions.json": '{"version":1,"sessions":[]}',
@@ -3740,6 +3799,9 @@ for (const scope of ["project", "account"]) {
         "runtime/container-runtime/xdg-data/cache.bin",
         "runtime/container-runtime/home/.env",
         "runtime/container-runtime/control/dsh.sock",
+        ".openscience/runs.000001.jsonl.tmp",
+        ".openscience/runs.00001.jsonl",
+        ".openscience/runs.0000001.jsonl",
         ".openscience/runtime-state.json",
         ".openscience/private-api-key",
         "provider-api-key",

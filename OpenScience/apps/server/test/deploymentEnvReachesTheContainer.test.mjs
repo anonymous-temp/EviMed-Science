@@ -512,6 +512,7 @@ const notForTheContainer = {
   OPEN_SCIENCE_DRUG_SAFETY_AGENT_ROOT: "development",
   OPEN_SCIENCE_DRUG_SAFETY_AGENT_PYTHON: "development",
   OPEN_SCIENCE_PHARMACY_REFERENCE_DB: "development",
+  OPEN_SCIENCE_TERMINOLOGY_DB: "development",
   // The desktop-era file stores, under OPEN_SCIENCE_DATA_DIR (which the image
   // sets); a hosted deployment keeps users and sessions in PostgreSQL.
   OPEN_SCIENCE_USERS_FILE: "development",
@@ -1044,5 +1045,20 @@ test('MG3 capsule switches are documented once with their default off', async ()
     const key = `OPEN_SCIENCE_${name}_ENABLED`;
     assert.equal(example.split(`${key}=false`).length - 1, 1, key);
     assert.equal(config.split(`boolEnv("${key}", false)`).length - 1, 1, key);
+  }
+});
+
+test('method consolidation controls are documented with the defaults read by config', async () => {
+  const example = await readFile(path.join(deployDir, '.env.example'), 'utf8');
+  const config = await readFile(path.join(repoRoot, 'apps/server/src/config.mjs'), 'utf8');
+  for (const [name, fallback] of [
+    ['METHOD_CONSOLIDATION_QUEUE_ENABLED', 'false'],
+    ['METHOD_CONSOLIDATION_RECALL_ENABLED', 'false'],
+    ['METHOD_PENDING_RETIREMENT_MOUNT_ENABLED', 'false'],
+    ['METHOD_CONSOLIDATION_MODEL_CALLS', '12'],
+  ]) {
+    const key = `OPEN_SCIENCE_${name}`;
+    assert.equal(example.split(`${key}=${fallback}`).length - 1, 1, key);
+    assert.match(config, new RegExp(`"${key}", ${fallback}\\)`), `${key}: documentation and config defaults agree`);
   }
 });

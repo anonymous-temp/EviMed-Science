@@ -65,7 +65,7 @@ export function historyChunks(input, { sourceIndices = null, semanticSecrets = f
   const messages = [];
   for (const [position, body] of input.entries()) {
     const index = sourceIndices ? sourceIndices[position] : position;
-    if (!Number.isSafeInteger(index) || index < 0) throw new Error('memory_history_source_invalid');
+    if (!Number.isSafeInteger(index) || index < 0) throw Object.assign(new Error('memory_history_source_invalid'), { code: 'memory_history_source_invalid' });
     if (index >= MAX_MESSAGES) throw new MemoryHistoryLimitError('source_messages');
     const decision = filterCapturedMessage(body,{ semanticSecrets });
     if (!('forward' in decision)) continue;
@@ -137,7 +137,7 @@ export class MemoryHistory {
       [context.ownerId,context.ownerCreatedAt,context.namespaceId,context.userRoot])).rows;
     for (const row of rows.slice(0,100)) {
       const raw = await context.sessions.read(context.ownerId,`${row.archive_uri}/messages.jsonl`);
-      if (raw !== null && Buffer.byteLength(raw)>MAX_ARCHIVE_BYTES) throw new Error('memory_history_privacy_unavailable');
+      if (raw !== null && Buffer.byteLength(raw)>MAX_ARCHIVE_BYTES) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
       const texts = raw === null ? [] : raw.split('\n').filter(entry=>entry.trim()).map(entry=>JSON.parse(entry))
         .filter(message=>message.role==='user').map(message=>messageText(message,this.secretRedaction)).filter(Boolean);
       await this.ledger.registerWriteMessages(context,row.archive_uri,texts);
@@ -165,7 +165,7 @@ export class MemoryHistory {
       const messages = [], obligations = [];
       for (const archiveUri of archives) {
         const archive = parseArchiveUri(archiveUri);
-        if (!archive || archive.userRoot !== context.userRoot || archive.rest) throw new Error('memory_history_privacy_unavailable');
+        if (!archive || archive.userRoot !== context.userRoot || archive.rest) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
         const binding=await this.ledger.overlay.commit(context.ownerId,archiveUri);
         if (platformSessionOf(binding?.sourceSession)) {
           // The conversation may not have archived its current turn yet. Keep a
@@ -207,7 +207,7 @@ export class MemoryHistory {
   async matchRemoved(context,text,messages,judge,tokens=hardTokens(normalisedStatement(text))) {
     if(tokens.length)return messages.filter(message=>tokens.every(token=>sourceHasToken(token,message,{ignoreWhitespace:this.config.memoryForgetRequestCheckEnabled === true})));
     if(!messages.length)return [];
-    if(!judge?.same)throw new Error('memory_history_privacy_unavailable');
+    if(!judge?.same)throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
     const fingerprint=lineFingerprint(text);
     const verdict=await judge.same({userId:context.ownerId,originMessages:true,
       candidates:messages.map(message=>({text:message.text,removed:[{fingerprint,text}]}))});
@@ -220,11 +220,11 @@ export class MemoryHistory {
   async rejectRequestExchange(context, archiveUri, request, removals) {
     if (!removals.length) return;
     const archive = parseArchiveUri(archiveUri);
-    if (!archive || archive.userRoot !== context.userRoot || archive.rest) throw new Error('memory_history_privacy_unavailable');
+    if (!archive || archive.userRoot !== context.userRoot || archive.rest) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
     if (!context.ownerCreatedAt) context = { ...context, ownerCreatedAt: (await this.ledger.database.query(
       'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1', [context.ownerId])).rows[0]?.stamp };
     const raw = await context.sessions.read(context.ownerId, `${archiveUri}/messages.jsonl`);
-    if (raw === null || Buffer.byteLength(raw) > MAX_ARCHIVE_BYTES) throw new Error('memory_history_privacy_unavailable');
+    if (raw === null || Buffer.byteLength(raw) > MAX_ARCHIVE_BYTES) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
     const messages = []; let inExchange = false;
     for (const line of raw.split('\n').filter(entry => entry.trim())) {
       const body = JSON.parse(line);
@@ -233,7 +233,7 @@ export class MemoryHistory {
       const text = messageText(body, this.secretRedaction);
       if (text) messages.push({ archiveUri, text });
     }
-    if (!messages.length) throw new Error('memory_history_privacy_unavailable');
+    if (!messages.length) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
     for (const row of removals) await this.ledger.rejectMessages(context, row.memoryType, row.fingerprint, messages);
   }
 
@@ -315,16 +315,16 @@ export class MemoryHistory {
     if (!await this.eligible(context, source)) { await this.removeConversation({ ...context, projectId: source.projectId, projectCreatedAt: source.projectCreatedAt }, source.sessionId); return { state: 'withdrawn', reason: 'conversation_excluded' }; }
     if (commit.createdAt && Date.parse(commit.createdAt) < Date.parse(source.projectCreatedAt)) return { state: 'withdrawn', reason: 'project_incarnation_changed' };
     const raw = rawArchive === undefined ? await context.sessions.read(commit.userId, `${commit.archiveUri}/messages.jsonl`) : rawArchive;
-    if (raw === null) throw new Error('memory_history_archive_unavailable');
+    if (raw === null) throw Object.assign(new Error('memory_history_archive_unavailable'), { code: 'memory_history_archive_unavailable' });
     const bytes = Buffer.byteLength(raw);
-    if (!await this.ledger.bindArchive(commit, context, source, hash(raw), bytes)) throw new Error('memory_history_source_changed');
+    if (!await this.ledger.bindArchive(commit, context, source, hash(raw), bytes)) throw Object.assign(new Error('memory_history_source_changed'), { code: 'memory_history_source_changed' });
     if (bytes > MAX_ARCHIVE_BYTES) throw new MemoryHistoryLimitError('archive_bytes');
     const messages = [], sourceIndices = [];
     const sourceLines = raw.split('\n').filter(line=>line.trim());
     if (sourceLines.length > MAX_MESSAGES) throw new MemoryHistoryLimitError('source_messages');
     for (const [sourceIndex,line] of sourceLines.entries()) {
       if (!line.trim()) continue;
-      let message; try { message = JSON.parse(line); } catch { throw new Error('memory_history_archive_invalid'); }
+      let message; try { message = JSON.parse(line); } catch { throw Object.assign(new Error('memory_history_archive_invalid'), { code: 'memory_history_archive_invalid' }); }
       // An unknown timestamp cannot distinguish human and automated turns in a
       // mixed conversation. eligible() excludes any such automated conversation.
       if (await this.admitMessage(context, source, message)) { messages.push(message); sourceIndices.push(sourceIndex); }
@@ -388,7 +388,7 @@ export class MemoryHistory {
       let context;
       try {
         context = await this.contexts.forUri(row.owner_id, row.archive_uri);
-        if (context.ownerCreatedAt !== row.owner_created_at) throw new Error('memory_history_source_unproven');
+        if (context.ownerCreatedAt !== row.owner_created_at) throw Object.assign(new Error('memory_history_source_unproven'), { code: 'memory_history_source_unproven' });
         await this.ingestArchive(commit, context); processed++;
       } catch {
         failed++;
@@ -442,21 +442,21 @@ export class MemoryHistory {
       // is present. This also protects legacy chunks cut across a deletion.
       if (!originals.has(meta.archive_uri)) originals.set(meta.archive_uri,(async()=>{
         const archive = parseArchiveUri(meta.archive_uri);
-        if (!archive || archive.userRoot !== context.userRoot || archive.session !== `dsh-${meta.session_id}` || archive.rest) throw new Error('memory_history_privacy_unavailable');
+        if (!archive || archive.userRoot !== context.userRoot || archive.session !== `dsh-${meta.session_id}` || archive.rest) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
         const expected = await this.ledger.archiveSourceHash(context,meta.archive_uri);
         const raw = await context.sessions.read(user.id,`${meta.archive_uri}/messages.jsonl`);
-        if (!expected || raw === null || Buffer.byteLength(raw)>MAX_ARCHIVE_BYTES || hash(raw)!==expected) throw new Error('memory_history_privacy_unavailable');
+        if (!expected || raw === null || Buffer.byteLength(raw)>MAX_ARCHIVE_BYTES || hash(raw)!==expected) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
         const archiveMessages = [];
         for (const line of raw.split('\n').filter(entry=>entry.trim())) {
-          let message; try { message=JSON.parse(line); } catch { throw new Error('memory_history_privacy_unavailable'); }
+          let message; try { message=JSON.parse(line); } catch { throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' }); }
           archiveMessages.push(message);
-          if (archiveMessages.length>MAX_MESSAGES) throw new Error('memory_history_privacy_unavailable');
+          if (archiveMessages.length>MAX_MESSAGES) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
         }
         return archiveMessages;
       })());
       const original = await originals.get(meta.archive_uri);
       const touched = [...new Set(messages.map(message=>message.index))].map(index=>original[index]);
-      if (touched.some(message=>!message)) throw new Error('memory_history_privacy_unavailable');
+      if (touched.some(message=>!message)) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
       const originalTexts = touched.map(message=>messageText(message,this.secretRedaction)).filter(Boolean);
       const proven = messages.every(message => {
         const own = original[message.index];
@@ -513,7 +513,7 @@ export class MemoryHistory {
 
   async removeConversation(context, sessionId) {
     // Only a first-party caller holding a resolved context may fence a source.
-    if (!context?.ownerId || !context.ownerCreatedAt || !context.projectId || !/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) throw new Error('memory_history_scope_denied');
+    if (!context?.ownerId || !context.ownerCreatedAt || !context.projectId || !/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) throw Object.assign(new Error('memory_history_scope_denied'), { code: 'memory_history_scope_denied' });
     await this.ledger.fence(context.ownerId, { ownerCreatedAt: context.ownerCreatedAt, projectId: context.projectId, projectCreatedAt: context.projectCreatedAt ?? context.policy?.projectCreatedAt, sessionId, permanent: true });
   }
   async reset(userId) { await this.ledger.fence(userId, { permanent: false }); }

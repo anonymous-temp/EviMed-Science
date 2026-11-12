@@ -107,6 +107,8 @@ import { constants as fsConstants, createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -116,7 +118,7 @@ import {
 } from "@evimed/domain";
 
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
-import { DEPLOYMENT_PERMISSION_HASH, buildCloudProjection, cloudAuthorization, cloudPermission, cloudState, deploymentCloudPermission, originalProjectionSpan, projectionHash, vcrCloudDestinations } from "./vcrCloudProjection.mjs";
+import { DEPLOYMENT_PERMISSION_HASH, buildCloudProjection, cloudAuthorization, cloudPermission, cloudState, deploymentCloudPermission, originalProjectionSpan, projectionHash, vcrCloudDestinations, vcrCloudDestinationNotes } from "./vcrCloudProjection.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
 import { documentReading } from "./vcrDocumentWindow.mjs";
 import { VCR_IMPORT_FORMATS, VCR_INTAKE_SCRATCH, VCR_TABLE_LIMITS, isVcrIntakeScratchLocation } from "./vcrIntakeLayout.mjs";
@@ -1177,7 +1179,7 @@ export const VCR_UPLOAD_FORMATS = Object.freeze({
   // the matching step reads, is the text either way.
   document: Object.freeze({ txt: "txt", md: "txt", pdf: "pdf", docx: "docx" }),
 });
-/** Extensions of a document that is a picture: it has no text to extract, and says so by name. */
+/** Extensions of a document that is a picture of a page: it has no text layer, so the in-house parser reads it. */
 const IMAGE_DOCUMENT_EXTENSIONS = Object.freeze(["png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic", "heif"]);
 /** The formats a record document is converted from rather than read. */
 const CONVERTED_DOCUMENT_FORMATS = Object.freeze(["pdf", "docx"]);
@@ -1217,9 +1219,9 @@ export function safeUploadName(raw, role) {
   }
   const formats = /** @type {Record<string, string>} */ (/** @type {any} */ (VCR_UPLOAD_FORMATS)[role] ?? {});
   if (role === "document" && IMAGE_DOCUMENT_EXTENSIONS.includes(ext)) {
-    // A picture of a record has no text layer: it is refused for that, by name, and
-    // the reader is told what to bring instead (never sent anywhere to be read).
-    throw refuse(422, VCR_DATA_PLANE_CODES.documentNeedsText, "A picture has no text to extract; supply a text version.", { ext });
+    // A picture of a record has no text layer: the in-house parser reads it (`#storeChecked`), and a deployment without one says so there.
+    const shownPicture = cleaned.length > 100 ? `${cleaned.slice(0, 100 - ext.length - 1)}.${ext}` : cleaned;
+    return { name: shownPicture, ext, format: "image" };
   }
   if (!Object.hasOwn(formats, ext)) {
     const hint = /** @type {Record<string, string>} */ (VCR_UNSUPPORTED_FORMAT_HINTS)[ext];
@@ -1751,16 +1753,25 @@ export async function runSnapshotProfiler(input) {
 export async function convertWorkbook(input) {
   const target = `${input.file}.converted.csv`;
   try {
-    const args = [input.script ?? VCR_PROFILER_SCRIPT, `--convert-xlsx=${input.file}`, `--to=${target}`, ...(input.sheet ? [`--sheet=${input.sheet}`] : [])];
-    const { code, out, err } = await runPython(args, "", input);
-    if (code !== 0) {
-      throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, err.replace(/^xlsx:\s*/, "").trim().slice(0, 300) || "The workbook could not be read.");
-    }
-    const info = JSON.parse(out || "{}");
-    return { csv: await fs.readFile(target, "utf8"), sheets: Array.isArray(info.sheets) ? info.sheets : [], used: String(info.used ?? "") };
+    const converted = await convertWorkbookToFile({ ...input, target });
+    return { csv: await fs.readFile(target, "utf8"), sheets: converted.sheets, used: converted.used };
   } finally {
     await fs.rm(target, { force: true }).catch(() => {});
   }
+}
+
+/**
+ * One worksheet of a workbook, as a CSV file beside it, for a reader that streams it. What the workbook is called and where the CSV lands are the caller's, and both must be places a run cannot plant
+ * a link in: the converter opens the target by its path. The refusal says the workbook could not be read and nothing the converter printed, which may quote a cell.
+ * @param {{ file: string, target: string, sheet?: string | null, python?: string, script?: string }} input
+ * @returns {Promise<{ file: string, sheets: string[], used: string }>}
+ */
+export async function convertWorkbookToFile(input) {
+  const args = [input.script ?? VCR_PROFILER_SCRIPT, `--convert-xlsx=${input.file}`, `--to=${input.target}`, ...(input.sheet ? [`--sheet=${input.sheet}`] : [])];
+  const { code, out, err } = await runPython(args, "", input);
+  if (code !== 0) throw refuse(422, VCR_DATA_PLANE_CODES.fileUnreadable, err.replace(/^xlsx:\s*/, "").trim().slice(0, 300) || "The workbook could not be read.");
+  const info = JSON.parse(out || "{}");
+  return { file: input.target, sheets: Array.isArray(info.sheets) ? info.sheets : [], used: String(info.used ?? "") };
 }
 
 /**
@@ -1935,6 +1946,7 @@ export class VcrDataPlane {
    *   access?: VcrAccess | null, seal?: { recordOutcomeAccess?: (input: any) => Promise<unknown> } | null,
    *   extractor?: { available: boolean, counters?: Record<string, number>, describe?: () => any, extract: (input: { root: string, studyId: string, path: string, format: string, signal?: AbortSignal }) => Promise<{ text: string, extraction: Record<string, any> }> } | null,
    *   importer?: { available: boolean, counters?: Record<string, number>, describe?: () => any, run: (input: any, consume: (done: any) => Promise<any>) => Promise<any> } | null,
+   *   scanReader?: { available: boolean, read: (input: { path: string, ext: string, signal?: AbortSignal }) => Promise<{ text: string, extraction: Record<string, any> }> } | null,
    *   erasure?: import("./vcrErasureStore.mjs").VcrErasureStore | null,
    *   now?: () => Date }} options
    *   `access` judges every operation (one is made from the store when none is
@@ -1945,7 +1957,7 @@ export class VcrDataPlane {
    *   held in FHIR, OMOP or ADaM (`importStandard`); without one the import is
    *   refused by name and ordinary uploads are unaffected.
    */
-  constructor({ store, config, profiler = null, access = null, seal = null, extractor = null, importer = null, erasure = null, now = () => new Date() }) {
+  constructor({ store, config, profiler = null, access = null, seal = null, extractor = null, importer = null, erasure = null, scanReader = null, now = () => new Date() }) {
     if (!store) throw new TypeError("The VCR data plane needs its store.");
     this.store = store;
     this.config = config ?? {};
@@ -1958,6 +1970,10 @@ export class VcrDataPlane {
     this.seal = seal;
     this.extractor = extractor;
     this.importer = importer;
+    /** Called after a snapshot is frozen, to label the verdicts of the people it names (a label, never a condition). @type {((input: { studyId: string, userId: string }) => Promise<void>) | null} */
+    this.afterSnapshotFrozen = null;
+    /** Reads a scan or a picture of a record with the in-house parser (`createVcrScanReader`); none, and such a file answers that it has no text. */
+    this.scanReader = scanReader;
     /** Withdrawals, retirements and the marks on what was derived from a changed basis (`vcrErasureStore.mjs`); without it the plane only deletes. */
     this.erasure = erasure;
     /** What the plane did for the cloud since this process started: reads by the basis they stood on, and reads it refused; and what it erased. */
@@ -1967,9 +1983,11 @@ export class VcrDataPlane {
     };
   }
 
-  /** Attach a package composed after the plane (the seal). @param {{ seal?: any }} packages */
+  /** Attach a package composed after the plane (the seal, the upload receipts). @param {{ seal?: any, originals?: { forget: (owner: { userId: string, projectId: string }, digests: readonly string[]) => any } }} packages */
   attach(packages) {
     if (packages?.seal) this.seal = packages.seal;
+    // The upload receipts, which the server builds after this: what a withdrawal takes out of a project besides the plane.
+    if (packages?.originals) this.originals = packages.originals;
     return this;
   }
 
@@ -1990,12 +2008,15 @@ export class VcrDataPlane {
    */
   documentUpload() {
     const converter = Boolean(this.extractor?.available);
+    // The in-house parser reads what the container cannot (a scan, a picture) and takes a PDF or Word file when there is no container: with it, pictures are taken too.
+    const scans = Boolean(this.scanReader?.available);
     const configured = Number(this.config.vcrIntakeMaxBytes);
     return {
-      formats: converter ? Object.keys(VCR_UPLOAD_FORMATS.document) : Object.keys(VCR_UPLOAD_FORMATS.document).filter((format) => !CONVERTED_DOCUMENT_FORMATS.includes(format)),
+      formats: converter || scans ? Object.keys(VCR_UPLOAD_FORMATS.document) : Object.keys(VCR_UPLOAD_FORMATS.document).filter((format) => !CONVERTED_DOCUMENT_FORMATS.includes(format)),
       textMaxBytes: Math.min(this.maxBytes, VCR_UPLOAD_ROLE_CAPS.document),
-      convertedMaxBytes: converter ? Math.min(this.maxBytes, configured > 0 ? configured : 25 * 1024 * 1024) : null,
+      convertedMaxBytes: converter || scans ? Math.min(this.maxBytes, configured > 0 ? configured : 25 * 1024 * 1024) : null,
       converter,
+      scans,
     };
   }
 
@@ -2127,7 +2148,7 @@ export class VcrDataPlane {
    * upload (`uploadAuditDetail`), since it may not say the file's name.
    *
    * @param {{ actor: string, studyId: string, sourceId: string, name: string, role?: string,
-   *   stream: AsyncIterable<Buffer | Uint8Array>, declaredLength?: number | null, subject?: string | null,
+   *   stream: AsyncIterable<Buffer | Uint8Array>, declaredLength?: number | null, subject?: string | null, subjectKey?: string | null,
    *   visibleAt?: string | null, sheet?: string | null, importedFrom?: Record<string, any> | null }} entry
    */
   async storeUpload(entry) {
@@ -2149,7 +2170,8 @@ export class VcrDataPlane {
     const role = entry.role == null ? "data" : entry.role;
     if (!VCR_SOURCE_FILE_ROLES.includes(role)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, `role is one of: ${VCR_SOURCE_FILE_ROLES.join(", ")}.`);
     const named = safeUploadName(entry.name, role);
-    const needsConversion = role === "document" && CONVERTED_DOCUMENT_FORMATS.includes(named.format);
+    const isPicture = role === "document" && named.format === "image";
+    const needsConversion = role === "document" && (CONVERTED_DOCUMENT_FORMATS.includes(named.format) || isPicture);
     // A PDF or Word file is bigger than the text in it: it has its own ceiling
     // (`vcrIntakeMaxBytes`), and the text that comes out is held to the document cap below.
     const cap = needsConversion
@@ -2161,6 +2183,12 @@ export class VcrDataPlane {
       countTooLarge();
       throw refuse(413, VCR_DATA_PLANE_CODES.fileTooLarge, `A ${role} file is at most ${cap} bytes.`, { cap });
     }
+
+    // Whose it is comes first: nothing of someone who withdrew is read, sent to a parser or kept. The pseudonym is deterministic per study, so an import of the same ID finds them here; the store
+    // says it again under the withdrawal's own lock for whatever was in flight.
+    const subjectKey = role !== "document" ? null : entry.subjectKey != null && entry.subjectKey !== "" ? String(entry.subjectKey)
+      : entry.subject != null && entry.subject !== "" ? pseudonymOf(await studyPseudonymKey(root, entry.studyId), entry.subject) : null;
+    if (subjectKey && await this.store.isSubjectWithdrawn(entry.studyId, subjectKey)) throw refuse(409, "vcr_subject_withdrawn", "This person has withdrawn consent; nothing more of theirs is stored.");
 
     const incoming = path.join(root, studyRelative(entry.studyId), "incoming");
     await fs.mkdir(incoming, { recursive: true, mode: 0o755 });
@@ -2203,20 +2231,29 @@ export class VcrDataPlane {
         /** @type {string} */
         let documentText;
         if (needsConversion) {
-          // Converted inside the deployment, never sent to the external parsing
-          // service: the original goes to a container with no network and comes back
-          // as text (vcrRecordExtract.mjs). The original's bytes stay here, in the
+          // A document with a text layer is converted inside the deployment: the original goes to a container with no network and comes back as text. A scan or a picture has no
+          // such layer and goes to the in-house parser (vcrRecordExtract.mjs; owner decision 2026-11-04), and so does any PDF or Word file on a deployment with no converter composed. The
+          // parser is outside this deployment, so what goes to it goes under the source's cloud permission, like every other patient text that leaves. The original's bytes stay here, in the
           // plane, beside the text — provenance, never read by a runtime.
-          if (!this.extractor?.available) {
+          if (!isPicture && !this.extractor?.available && !this.scanReader) {
             throw refuse(503, VCR_DATA_PLANE_CODES.documentConverterUnavailable, "This deployment cannot convert PDF or Word files; supply a text version.");
           }
-          const got = await this.extractor.extract({ root, studyId: entry.studyId, path: raw, format: named.format });
-          documentText = got.text;
+          if (isPicture && !this.scanReader) throw refuse(422, VCR_DATA_PLANE_CODES.documentNeedsText, "A picture has no text to extract; supply a text version.", { ext: named.ext });
+          /** @type {{ text: string, extraction: Record<string, any> } | null} */
+          let got = null;
+          if (!isPicture && this.extractor?.available) {
+            try { got = await this.extractor.extract({ root, studyId: entry.studyId, path: raw, format: named.format }); }
+            catch (error) { if (/** @type {any} */ (error)?.code !== VCR_DATA_PLANE_CODES.documentNeedsText || !this.scanReader) throw error; }
+          }
+          if (!got && this.scanReader?.available !== false) this.#cloudBasis(source);
+          got ??= await /** @type {any} */ (this.scanReader).read({ path: raw, ext: named.ext });
+          const read = /** @type {{ text: string, extraction: Record<string, any> }} */ (got);
+          documentText = read.text;
           const originalBytes = await fs.readFile(raw);
-          const original = await writeContentAddressed(root, path.posix.join(studyRelative(entry.studyId), "documents"), named.format, originalBytes);
+          const original = await writeContentAddressed(root, path.posix.join(studyRelative(entry.studyId), "documents"), named.ext, originalBytes);
           originalLocation = original.location;
-          detail.original = { sha256: original.sha256, bytes: original.bytes, format: named.format, location: original.location };
-          detail.extraction = got.extraction;
+          detail.original = { sha256: original.sha256, bytes: original.bytes, format: isPicture ? named.ext : named.format, location: original.location };
+          detail.extraction = read.extraction;
         } else {
           const decoded = decodeUploadText(await fs.readFile(raw));
           documentText = decoded.text;
@@ -2228,9 +2265,8 @@ export class VcrDataPlane {
         bytes = Buffer.from(documentText, "utf8");
         extension = "txt";
         detail.chars = documentText.length;
-        if (entry.subject != null && entry.subject !== "") {
-          detail.subjectKey = pseudonymOf(await studyPseudonymKey(root, entry.studyId), entry.subject);
-        }
+        // A later document of someone the study already has joins them by their pseudonym; the caller has judged that they are the study's.
+        if (subjectKey) detail.subjectKey = subjectKey;
         if (entry.visibleAt != null && entry.visibleAt !== "") {
           const stamp = Date.parse(String(entry.visibleAt));
           if (!Number.isFinite(stamp)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "visibleAt is a date.");
@@ -2360,7 +2396,42 @@ export class VcrDataPlane {
     if (!erased.counts) throw refuse(404, "vcr_subject_not_found", "Subject not found.");
     this.counters.withdrawals += 1;
     this.counters.documentsErased += erased.counts.files;
-    return { subjectKey, ...erased.report };
+    const traces = await this.#forgetTraces(entry.studyId, subjectKey, erased.files);
+    return { subjectKey, ...erased.report, ...traces };
+  }
+
+  /**
+   * What a withdrawal leaves outside the rows: an upload whose bytes were this person's document alone, with its receipt (its file name is theirs more often than not), and the lines of a job's
+   * list that name them. A table or an archive that holds other people too stays as an upload; an import of it again refuses this person (`#storeChecked`). A failure here is counted and never
+   * undoes the withdrawal, which is committed; asked again, it does this again.
+   * @param {string} studyId @param {string} subjectKey @param {Array<{ uploadedSha256?: string | null }>} files
+   */
+  async #forgetTraces(studyId, subjectKey, files) {
+    let originalsRemoved = 0;
+    const digests = [...new Set(files.map((file) => file.uploadedSha256).filter(Boolean))];
+    if (digests.length && this.originals?.forget) {
+      try {
+        const study = await this.store.studyForAccess(studyId);
+        if (study?.projectId) originalsRemoved = Number(await this.originals.forget({ userId: String(study.userId), projectId: String(study.projectId) }, digests)) || 0;
+      } catch { this.counters.overwriteFailures += 1; }
+    }
+    await this.#scrubJobReports(studyId, subjectKey).catch(() => { this.counters.overwriteFailures += 1; });
+    return originalsRemoved ? { originalsRemoved } : {};
+  }
+
+  /** The lines of a study's job lists that name this person go from the files themselves. @param {string} studyId @param {string} subjectKey */
+  async #scrubJobReports(studyId, subjectKey) {
+    const directory = path.join(this.root(), studyRelative(studyId), "job-reports");
+    for (const name of await fs.readdir(directory).catch(() => [])) {
+      if (!name.endsWith(".jsonl")) continue;
+      const file = path.join(directory, name);
+      const lines = (await fs.readFile(file, "utf8")).split("\n").filter(Boolean);
+      const kept = lines.filter((line) => { try { return JSON.parse(line).subjectKey !== subjectKey; } catch { return false; } });
+      if (kept.length === lines.length) continue;
+      const fresh = `${file}.${randomUUID()}`;
+      await fs.writeFile(fresh, kept.map((line) => `${line}\n`).join(""), { mode: 0o600, flag: "wx" });
+      await fs.rename(fresh, file);
+    }
   }
 
   /**
@@ -2408,7 +2479,7 @@ export class VcrDataPlane {
     await this.erasure?.markPurged(studyId, purged).catch(() => { failed += 1; });
     this.counters.filesOverwritten += overwritten;
     this.counters.overwriteFailures += failed;
-    return { counts: done.counts, report: { ...done.counts, filesOverwritten: overwritten, ...(failed ? { filesFailed: failed } : {}) } };
+    return { counts: done.counts, files: done.files, report: { ...done.counts, filesOverwritten: overwritten, ...(failed ? { filesFailed: failed } : {}) } };
   }
 
   /** @param {string} studyId @param {string} subjectKey @param {string} causeId */
@@ -2519,14 +2590,56 @@ export class VcrDataPlane {
         actor, studyId: entry.studyId, sourceId: entry.sourceId, columns: merged.columns, by: "import",
         reason: `Generated from ${done.standard.name ?? format} ${done.standard.release ?? done.standard.version ?? ""}`.trim(),
       });
+      const notes = done.notes ? await this.#storeImportedNotes(entry, source, done, format) : null;
       return {
         format, standard: done.standard, converter: done.converter, input: { ...done.input, format },
+        ...(notes ? { notes } : {}),
         tables, files: stored.map((result) => result.file), created: stored.filter((result) => result.created).length,
         fieldMap: { hash: proposed.hash, state: proposed.source.fieldMapState, entries: merged.columns.length, trimmed: merged.trimmed,
           columnSourcesDeclared: merged.sourcesDeclared, entryIssues: proposed.entryIssues, mapIssues: proposed.mapIssues },
         coverage: done.coverage,
       };
     });
+  }
+
+  /**
+   * The narrative notes of a standard-format import (FHIR DocumentReference, OMOP note), each stored as a document of its person through the one path every note takes: the pseudonym,
+   * the original's retention and the audit are the ones a pasted or imported note gets. One that cannot be stored is counted by its code and the rest go on.
+   * @param {{ actor: string, studyId: string, sourceId: string }} entry @param {any} source @param {{ openNotes: () => Promise<any>, input: { sha256: string } }} done @param {string} format
+   * @returns {Promise<{ read: number, stored: number, repeated: number, failed: Record<string, number> }>}
+   */
+  async #storeImportedNotes(entry, source, done, format) {
+    const opened = await done.openNotes();
+    const counts = { read: 0, stored: 0, repeated: 0, /** @type {Record<string, number>} */ failed: {} };
+    try {
+      const lines = createInterface({ input: Readable.from(opened.stream()), crlfDelay: Infinity });
+      for await (const line of lines) {
+        if (!line.trim()) continue;
+        counts.read += 1;
+        const failed = (/** @type {string} */ code) => { counts.failed[code] = (counts.failed[code] ?? 0) + 1; };
+        /** @type {any} */
+        let note;
+        try { note = JSON.parse(line); } catch { failed("note_unreadable"); continue; }
+        const subject = typeof note?.subject === "string" ? note.subject.trim() : "";
+        const body = typeof note?.text === "string" ? note.text : "";
+        if (!subject || !body.trim()) { failed("note_unreadable"); continue; }
+        const stamp = /^\d{4}-\d{2}-\d{2}$/u.test(String(note.date ?? "")) ? `${note.date}T00:00:00.000Z` : null;
+        try {
+          const result = await this.#storeChecked({
+            actor: entry.actor, studyId: entry.studyId, sourceId: entry.sourceId, name: "note.txt", role: "document", subject, ...(stamp && Number.isFinite(Date.parse(stamp)) ? { visibleAt: stamp } : {}),
+            importedFrom: { kind: "standard_import", format, uploadSha256: done.input.sha256, note: counts.read },
+            stream: (async function* () { yield Buffer.from(body, "utf8"); })(),
+          }, source);
+          if (result.created === false) counts.repeated += 1; else counts.stored += 1;
+        } catch (error) {
+          if (!(error instanceof HttpError) || error.status >= 500) throw error;
+          failed(String(error.code));
+        }
+      }
+    } finally {
+      await opened.close();
+    }
+    return counts;
   }
 
   /**
@@ -2730,6 +2843,8 @@ export class VcrDataPlane {
           throw error;
         });
     }
+    // New structured data for people who already hold verdicts: what was concluded rested on less, and says so. A label, never a condition of the snapshot.
+    try { await this.afterSnapshotFrozen?.({ studyId: entry.studyId, userId: entry.userId }); } catch { this.counters.marksFailed += 1; }
     return { snapshot, profile, tables };
   }
 
@@ -2926,9 +3041,10 @@ export class VcrDataPlane {
    *
    * @param {{ studyId: string, snapshotId: string, principal: string, purpose?: string | null, fields?: string[] | null,
    *   kind?: string | null, jobKind?: string | null, method?: string | null, endpointType?: string | null,
-   *   parameterCode?: string | null, outcomeParameter?: string | null, include?: ("subject" | "longitudinal" | "events" | "files")[] | null }} input
+   *   parameterCode?: string | null, outcomeParameter?: string | null, include?: ("subject" | "longitudinal" | "events" | "files")[] | null,
+   *   columnLabels?: boolean, timeColumns?: boolean }} input `columnLabels` asks what each view column was called; `timeColumns` keeps the columns the field map says are times, for the matching reader
    * @returns {Promise<{ snapshotId: string,
-   *   inputs: { kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string> }[],
+   *   inputs: { kind: string, id: string, shape?: string, location: string, hash: string, valueSource: string, columnSources?: Record<string, string>, columnLabels?: Record<string, string> }[],
    *   withheld: { id: string, kind: string, shape?: string, reason: string, fields: string[] }[],
    *   outcomeFieldsRead: string[], grantId: string | null }>}
    */
@@ -2971,8 +3087,11 @@ export class VcrDataPlane {
       (snapshot.profile?.tables ?? []).flatMap((/** @type {any} */ table) => (table.columns ?? [])
         .filter((/** @type {any} */ column) => column?.vocabulary?.identifying === true).map((/** @type {any} */ column) => String(column.name))));
     const identifierNames = new Set(entries.filter((entry) => entry.identifier || entry.role === "subject_key").map((entry) => entry.column));
+    // A date looks identifying to the profile, and an engine does not need one to the day. A person's record read for matching does: "diagnosed in 2019" is what a criterion asks, the same dates
+    // their notes state, and the field map says this column is a time. Asked for by that reader alone; the column names a time, never a person.
+    const timeColumns = new Set(input.timeColumns === true ? entries.filter((entry) => entry.timeKind && !entry.identifier && entry.role !== "subject_key").map((entry) => entry.column) : []);
     /** @param {string} name */
-    const judgeable = (name) => !identifierNames.has(name) && !identifyingNames.has(name);
+    const judgeable = (name) => !identifierNames.has(name) && (!identifyingNames.has(name) || timeColumns.has(name));
 
     /** @type {{ table: any }[]} */
     const wantedTables = tables.filter((table) => wants.includes(/** @type {any} */ (table.shape))).map((table) => ({ table }));
@@ -3064,14 +3183,14 @@ export class VcrDataPlane {
         // A replay's raw files are cut like its derived tables: the rows the
         // platform could see then, and no others.
         const parsed = frozen.asOf && derivesRows(own) ? tableVisibleAsOf({ name: file.name, ...whole }, entries, frozen.asOf).table : whole;
-        const { rename } = rawInputColumns(parsed.header, keep, own);
+        const { rename, columnLabels } = rawInputColumns(parsed.header, keep, own);
         const projection = projectTable(parsed, { keep, rename, keyColumn: keyEntry?.column ?? null, key });
         const written = await writeContentAddressed(root, path.posix.join(studyRelative(studyId), "views", snapshot.id), "csv", toCsv(projection.header, projection.rows));
         const viewSource = weakestSource(keep.map((name) => columnSourceOf(own.find((entry) => entry.column === name), snapshot.valueSource)), snapshot.valueSource);
         // each kept column is named in the view as the view renamed it
         const heldSources = Object.fromEntries(keep.map((name) => [rename[name] ?? name, columnSourceOf(own.find((entry) => entry.column === name), snapshot.valueSource)]));
         const labels = engineColumnSources(heldSources, Object.keys(heldSources), viewSource);
-        inputs.push({ kind: "snapshot_file", id, location: written.location, hash: written.sha256, valueSource: viewSource,
+        inputs.push({ kind: "snapshot_file", id, location: written.location, hash: written.sha256, valueSource: viewSource, ...(input.columnLabels === true ? { columnLabels } : {}),
           ...(labels ? { columnSources: labels } : {}), ...(needsScientificUnits ? { columnUnits: Object.fromEntries(keep.map(name => [rename[name] ?? name, sourceUnit(name, file.name)])) } : {}) });
         for (const name of keep) if (outcomeColumns.has(name)) outcomeRead.add(name);
       }
@@ -3183,8 +3302,10 @@ export class VcrDataPlane {
    * rate — identifying columns carry no vocabulary, a vocabulary is levels of at
    * least the floor, and a count that would give a small group away is withheld.
    * With `principal`, the read is judged and audited first; the snapshot must be
-   * the study's either way.
-   * @param {{ studyId: string, snapshotId: string, principal?: string | null }} entry
+   * the study's either way. `exact` (the owner's own conversation, set by the
+   * gateway) prints the row and fill counts whatever their size; the levels of
+   * a vocabulary stay as the profiler stored them.
+   * @param {{ studyId: string, snapshotId: string, principal?: string | null, exact?: boolean }} entry
    */
   async snapshotProfileForModel(entry) {
     const studyId = String(entry.studyId ?? "");
@@ -3199,7 +3320,7 @@ export class VcrDataPlane {
     const sealed = new Set(snapshot.sealedFields);
     const now = this.now().getTime();
     const sealActive = sealed.size > 0 && (!snapshot.sealedUntil || Date.parse(snapshot.sealedUntil) > now);
-    const floor = VCR_MIN_CELL_SIZE;
+    const floor = entry.exact === true ? 0 : VCR_MIN_CELL_SIZE;
     const tables = Array.isArray(snapshot.profile?.tables) ? snapshot.profile.tables : [];
     // The field map is the study's own declaration of which columns identify a
     // person, and it wins over the profiler's name and value heuristics: a
@@ -3246,8 +3367,9 @@ export class VcrDataPlane {
   /**
    * What a model may be told about a source that has no snapshot yet: its files'
    * columns as profiled at upload, the data dictionary, and where the field map
-   * stands — enough to propose the map from. The same rules as a snapshot's.
-   * @param {{ studyId: string, sourceId: string, principal?: string | null }} entry
+   * stands — enough to propose the map from. The same rules as a snapshot's,
+   * `exact` included.
+   * @param {{ studyId: string, sourceId: string, principal?: string | null, exact?: boolean }} entry
    */
   async sourceProfileForModel(entry) {
     const studyId = String(entry.studyId ?? "");
@@ -3255,7 +3377,7 @@ export class VcrDataPlane {
     if (entry.principal != null) {
       await this.access.require({ actor: String(entry.principal), studyId, ability: "read", sourceId: source.id, note: "source profile" });
     }
-    const floor = VCR_MIN_CELL_SIZE;
+    const floor = entry.exact === true ? 0 : VCR_MIN_CELL_SIZE;
     const files = await this.store.listSourceFiles(source.id);
     const declared = new Set(source.fieldMap.columns.filter((column) => column.identifier || column.role === "subject_key").map((column) => column.column));
     return {
@@ -3290,6 +3412,8 @@ export class VcrDataPlane {
     if (!file || file.role !== "document") throw refuse(404, VCR_DATA_PLANE_CODES.documentNotFound, "Document not found.");
     // A withdrawn document has no text to read; its row, its hashes and the evaluations frozen on it stay.
     if (file.erasedAt) throw refuse(410, VCR_DATA_PLANE_CODES.documentWithdrawn, "This document was withdrawn.");
+    // So does a document of someone who has withdrawn, however it got here.
+    if (file.detail?.subjectKey && await this.store.isSubjectWithdrawn(studyId, String(file.detail.subjectKey))) throw refuse(410, VCR_DATA_PLANE_CODES.documentWithdrawn, "This document was withdrawn.");
     await this.access.require({ actor: String(entry.principal), studyId, ability: "read_patient_level", sourceId: file.sourceId, purpose: entry.purpose ?? null, note: "document" });
     const opened = await openScopedFileNoFollow(root, assertDataPlaneLocation(root, file.location));
     let body;
@@ -3299,7 +3423,7 @@ export class VcrDataPlane {
       body = (await readStableFileHandle(opened.handle, opened.stat)).toString('utf8');
     } finally { await opened.handle.close(); }
     if (sha256OfBytes(body) !== file.sha256) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, "The document's bytes are not the ones that were uploaded.");
-    return { id: file.id, name: file.name, text: body, subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null };
+    return { id: file.id, name: file.name, text: body, subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null, ...(file.detail?.extraction?.pageMap ? { pageMap: file.detail.extraction.pageMap } : {}) };
   }
 
   /** @param {{studyId:string,sourceId:string,actor:string,permission:any}} entry */
@@ -3439,7 +3563,7 @@ export class VcrDataPlane {
       detail: { sourceHash, ...this.#basisDetail(authorization) } });
     if (entry.cloudContext) await this.store.recordCloudRead(entry.studyId, file.id, entry.cloudContext);
     return { id: file.id, text: document.text, subjectKey: document.subjectKey, visibleAt: document.visibleAt,
-      projectionHash: null, sourceHash, offsetUnit: 'utf16' };
+      projectionHash: null, sourceHash, offsetUnit: 'utf16', ...(document.pageMap ? { pageMap: document.pageMap } : {}) };
   }
 
   /** Record served geometry, never a clinical completeness assertion or patient text.
@@ -3550,7 +3674,9 @@ export class VcrDataPlane {
 
   /** A request-local read of the selected subject's fields from one authorized immutable snapshot.
    * The table is authorized, verified and parsed once; no rows or cached authorization escape the request.
-   * @param {{studyId:string,snapshotId:string,subjectKey:string,fields:string[],principal:string,purpose?:string|null,external?:boolean,cloudContext?:any}} entry
+   * `session` is a job's own holder for one batch of thousands of people: the table is read and parsed once for the batch and not once per person (a 5,000-row table read
+   * 5,000 times is what a run spent its time on). The person's own checks, the source's cloud basis, the withdrawal and the audit row, stay per person.
+   * @param {{studyId:string,snapshotId:string,subjectKey:string,fields:string[],principal:string,purpose?:string|null,external?:boolean,cloudContext?:any,session?:Map<string,any>|null}} entry
    */
   async subjectTableEvidenceBatch(entry) {
     const snapshot = await this.#snapshot(entry.studyId, entry.snapshotId);
@@ -3558,10 +3684,21 @@ export class VcrDataPlane {
     if (!source || source.status === "withdrawn") throw refuse(403, "vcr_source_withdrawn", "The source is unavailable.");
     if ((await this.erasure?.matchStore?.withdrawnSubjects?.(entry.studyId) ?? new Set()).has(entry.subjectKey)) return {};
     const authorization = entry.external === false ? null : this.#cloudBasis(source);
-    const table = await this.subjectTableForMatching(entry);
+    const sessionKey = `${entry.snapshotId}\u0000${entry.principal}\u0000${entry.purpose ?? ""}`;
+    /** @type {any} */
+    let held = entry.session?.get(sessionKey);
+    if (!held) {
+      const read = await this.subjectTableForMatching(entry);
+      held = { table: read, rowsOf: new Map() };
+      if (read.available) {
+        const at = read.header.indexOf("USUBJID");
+        if (at >= 0) for (const row of read.rows) { const own = held.rowsOf.get(row[at]); if (own) own.push(row); else held.rowsOf.set(row[at], [row]); }
+      }
+      entry.session?.set(sessionKey, held);
+    }
+    const table = held.table;
     if (!table.available) return {};
-    const keyAt = table.header.indexOf("USUBJID");
-    const selected = keyAt < 0 ? [] : table.rows.filter(row => row[keyAt] === entry.subjectKey);
+    const selected = held.rowsOf.get(entry.subjectKey) ?? [];
     if (selected.length !== 1) return {};
     const original = (await this.store.listAnalysisTables({ studyId: entry.studyId, snapshotId: snapshot.id })).find(item => item.shape === "subject");
     if (!original) return {};
@@ -3593,15 +3730,257 @@ export class VcrDataPlane {
   }
 
   /**
+   * Whether the codes of a snapshot's subject table may go to the configured model providers, on the same basis every other patient
+   * text goes under: the source's cloud permission, or the deployment's agreements. A refusal is `vcr_cloud_processing_not_authorized`
+   * and a withdrawn source is refused. Audited like a cell read (`table.cloud_read`), with the columns named and no value in the record.
+   * @param {{studyId:string,snapshotId:string,principal:string,fields:readonly string[]}} entry
+   * @returns {Promise<{ basis: string }>}
+   */
+  async authorizeSubjectTableCloudRead(entry) {
+    const snapshot = await this.#snapshot(entry.studyId, entry.snapshotId);
+    const source = await this.store.sourceInStudy(entry.studyId, snapshot.sourceId);
+    if (!source || source.status === "withdrawn") throw refuse(403, "vcr_source_withdrawn", "The source is unavailable.");
+    const authorization = this.#cloudBasis(source);
+    await this.store.audit({ studyId: entry.studyId, userId: entry.principal, actor: entry.principal, action: "table.cloud_read", object: snapshot.id,
+      detail: { fields: [...entry.fields].slice(0, 300), use: "column_meaning", ...this.#basisDetail(authorization) } });
+    return { basis: authorization.basis };
+  }
+
+  /**
+   * What a study's long tables are, for matching to read as lines: the newest snapshot of each source, through the same judgment every read of patient-level data gets (`resolveSnapshotInputs`:
+   * identifying columns gone, key pseudonymised, sealed columns withheld), and only from sources the cloud may read now. A snapshot this reader may not have is left out. Null when there is nothing.
+   * @param {{ studyId: string, principal: string, purpose?: string | null, cloudContext?: any }} entry
+   * @returns {Promise<{ tables: Array<{ id: string, snapshotId: string, file: string, name: string, columnLabels?: Record<string, string> | null }>, withdrawn: Set<string>, noteRead: (snapshotId: string) => Promise<void> } | null>}
+   */
+  async openLongTables(entry) {
+    this.root();
+    const studyId = String(entry.studyId ?? "");
+    const snapshots = await this.store.listSnapshots({ studyId });
+    if (!snapshots.length) return null;
+    /** @type {Map<string, any>} newest first, as the store lists them */
+    const newest = new Map();
+    for (const snapshot of snapshots) if (!newest.has(snapshot.sourceId)) newest.set(snapshot.sourceId, snapshot);
+    /** @type {Array<{ id: string, snapshotId: string, file: string, name: string, columnLabels?: Record<string, string> | null }>} */
+    const tables = [];
+    /** @type {Map<string, any>} */
+    const opened = new Map();
+    for (const snapshot of newest.values()) {
+      const source = await this.store.sourceInStudy(studyId, snapshot.sourceId);
+      if (!source || source.status === "withdrawn") continue;
+      try {
+        const authorization = this.#cloudBasis(source);
+        const resolved = await this.resolveSnapshotInputs({ studyId, snapshotId: snapshot.id, principal: String(entry.principal), purpose: entry.purpose ?? null, include: ["files", "longitudinal"], kind: "match_criteria", columnLabels: true, timeColumns: true });
+        const dataFiles = snapshot.fileHashes.filter((/** @type {any} */ file) => file.role === "data");
+        for (const input of resolved.inputs) {
+          // A converted table's name says it is the converter's: `snapshot_file` inputs are numbered in the order of the snapshot's data files.
+          const position = input.kind === "snapshot_file" ? Number(String(input.id).split(":").pop()) : 0;
+          tables.push({ id: String(input.id), snapshotId: snapshot.id, file: this.resolve(input.location), name: input.kind === "snapshot_file" ? String(dataFiles[position - 1]?.name ?? "") : String(input.shape ?? ""), columnLabels: input.columnLabels ?? null });
+        }
+        opened.set(snapshot.id, { authorization, fileIds: snapshot.fileHashes.filter((/** @type {any} */ file) => file.role === "data").map((/** @type {any} */ file) => file.id) });
+      } catch (error) {
+        if (!(error instanceof HttpError)) throw error;
+      }
+    }
+    if (!tables.length) return null;
+    return { tables, withdrawn: await this.erasure?.matchStore?.withdrawnSubjects?.(studyId) ?? new Set(),
+      // What a person's lines were read under, once a person, the same record a subject table's cells leave.
+      noteRead: async (snapshotId) => {
+        const held = opened.get(snapshotId);
+        if (!held) return;
+        await this.store.audit({ studyId, userId: String(entry.principal), actor: String(entry.principal), action: "table.cloud_read", object: snapshotId, detail: { longTables: true, ...this.#basisDetail(held.authorization) } });
+        if (entry.cloudContext) for (const id of held.fileIds) await this.store.recordCloudRead(studyId, id, entry.cloudContext);
+      } };
+  }
+
+  /**
+   * Whether a line read from a long table may be shown or sent again: the line itself is on the judgment, so what is judged here is who is asking now and whether the source still allows it.
+   * @param {{ studyId: string, snapshotId: string, subjectKey: string, principal: string, purpose?: string | null, external?: boolean }} entry
+   */
+  async longEvidenceAllowed(entry) {
+    const snapshot = await this.#snapshot(entry.studyId, entry.snapshotId);
+    const source = await this.store.sourceInStudy(entry.studyId, snapshot.sourceId);
+    if (!source || source.status === "withdrawn") return false;
+    if ((await this.erasure?.matchStore?.withdrawnSubjects?.(entry.studyId) ?? new Set()).has(entry.subjectKey)) return false;
+    await this.access.require({ actor: String(entry.principal), studyId: entry.studyId, ability: "read_patient_level", sourceId: source.id, purpose: entry.purpose ?? "vcr", note: "long table evidence" });
+    if (entry.external !== false) this.#cloudBasis(source);
+    return true;
+  }
+
+  /**
+   * Whether this source's patient text may go to the configured model now, for a caller that sends something other than a document read (a sample of a table's cells, the names of
+   * files), judged and audited like a read. Throws the refusal a read would.
+   * @param {{ studyId: string, sourceId: string, principal: string, note?: string }} entry
+   */
+  async assertCloudRead(entry) {
+    await this.access.require({ actor: String(entry.principal), studyId: entry.studyId, ability: "read_patient_level", sourceId: entry.sourceId, purpose: "vcr", note: entry.note ?? "cloud sample" });
+    const source = await this.store.sourceInStudy(entry.studyId, entry.sourceId);
+    const authorization = this.#cloudBasis(source);
+    await this.store.audit({ studyId: entry.studyId, userId: entry.principal, actor: entry.principal, action: "source.cloud_sample", object: entry.sourceId, detail: this.#basisDetail(authorization) });
+    return authorization;
+  }
+
+  /** Where a job's list of what it could not read lives: names may be people's, so it stays in the plane, with the study. @param {string} studyId @param {string} jobId */
+  #jobReportPath(studyId, jobId) {
+    if (!ID_PATTERN.test(String(jobId))) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "A job id.");
+    return path.join(this.root(), studyRelative(studyId), "job-reports", `${jobId}.jsonl`);
+  }
+
+  /** Add to a job's list, up to `limit` rows; the counts in its result say the rest. @param {string} studyId @param {string} jobId @param {readonly any[]} rows @param {number} limit */
+  async appendJobReport(studyId, jobId, rows, limit) {
+    const file = this.#jobReportPath(studyId, jobId);
+    await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
+    const held = await fs.readFile(file, "utf8").then((body) => body.split("\n").filter(Boolean).length, () => 0);
+    const room = Math.max(0, limit - held);
+    if (room) await fs.appendFile(file, rows.slice(0, room).map((row) => `${JSON.stringify(row)}\n`).join(""), { mode: 0o600 });
+  }
+
+  /** A job's list, without anyone who has since withdrawn. @param {string} studyId @param {string} jobId @returns {Promise<any[]>} */
+  async readJobReport(studyId, jobId) {
+    const body = await fs.readFile(this.#jobReportPath(studyId, jobId), "utf8").catch(() => "");
+    const withdrawn = await this.erasure?.matchStore?.withdrawnSubjects?.(studyId) ?? new Set();
+    return body.split("\n").filter(Boolean).map((line) => JSON.parse(line)).filter((row) => !row.subjectKey || !withdrawn.has(row.subjectKey));
+  }
+
+  /**
    * The documents a study holds, by subject key: metadata only, no text.
    * @param {{ studyId: string, principal: string, subjectKey?: string | null }} entry
    */
   async listDocuments(entry) {
     await this.access.require({ actor: String(entry.principal), studyId: String(entry.studyId), ability: "read_patient_level", note: "document list" });
-    return (await this.store.listSourceFilesForStudy(entry.studyId))
-      .filter((file) => file.role === "document" && !file.erasedAt && (!entry.subjectKey || file.detail?.subjectKey === entry.subjectKey))
-      .map((file) => ({ id: file.id, sourceId: file.sourceId, name: file.name, chars: file.detail?.chars ?? null,
-        subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null }));
+    const withdrawn = await this.erasure?.matchStore?.withdrawnSubjects?.(entry.studyId) ?? new Set();
+    return (await this.store.listDocumentRows(entry.studyId, entry.subjectKey ?? null)).filter((file) => !file.subjectKey || !withdrawn.has(file.subjectKey));
+  }
+
+  /** The pseudonym a person's ID has in this study. @param {string} studyId @param {string} subject */
+  async subjectKeyOf(studyId, subject) {
+    return pseudonymOf(await studyPseudonymKey(this.root(), studyId), subject);
+  }
+
+  /**
+   * Whether what was read of a person may still go to a model, asked right before it does and again by whoever hands saved words to one: null when it may, otherwise why not. Reads no text and
+   * writes no audit row (the read that took the text had one).
+   * @param {{ studyId: string, subjectKey: string, documentIds?: readonly string[], snapshotIds?: readonly string[] }} entry
+   * @returns {Promise<string | null>}
+   */
+  async recordStands({ studyId, subjectKey, documentIds = [], snapshotIds = [] }) {
+    const standing = await this.store.recordStanding(studyId, subjectKey, documentIds, snapshotIds);
+    if (standing.withdrawn) return VCR_DATA_PLANE_CODES.documentWithdrawn;
+    if (standing.gone.length || standing.newer.length) return "vcr_match_record_changed";
+    const destinations = vcrCloudDestinations(this.config), at = this.now().toISOString(), deployment = deploymentCloudPermission(this.config);
+    for (const sourceId of standing.sourceIds) {
+      const source = await this.store.sourceInStudy(studyId, sourceId);
+      if (!source || source.status === "withdrawn") return "vcr_source_withdrawn";
+      if (cloudState(source.cloudPermission, destinations, at, deployment).state !== "allowed") return "vcr_cloud_processing_not_authorized";
+    }
+    return null;
+  }
+
+  /**
+   * Whether this person's records may go to the cloud at all, for something other than a record that has been read: a run's summary of them going to a reranker. Every source that holds a document of
+   * theirs has to allow it; with no person named, every source of the study that holds a document.
+   * @param {{ studyId: string, subjectKey?: string | null }} entry @returns {Promise<boolean>}
+   */
+  async subjectCloudAllowed({ studyId, subjectKey = null }) {
+    const sources = new Set((await this.store.listDocumentRows(studyId, subjectKey)).map((row) => row.sourceId));
+    const destinations = vcrCloudDestinations(this.config), at = this.now().toISOString(), deployment = deploymentCloudPermission(this.config);
+    for (const sourceId of sources) {
+      const source = await this.store.sourceInStudy(studyId, sourceId);
+      if (!source || source.status === "withdrawn" || cloudState(source.cloudPermission, destinations, at, deployment).state !== "allowed") return false;
+    }
+    return true;
+  }
+
+  /**
+   * What a reader may see of saved judgments, by what each read: the same judgment a read of those documents and columns gets (role, the source's grant, purpose, window, the seal and the fields),
+   * once per source and asked for at most what the rows named. A record whose document has gone reads as not permitted for anyone.
+   * @param {{ studyId: string, principal: string, records: ReadonlyArray<{ documentIds?: readonly string[], snapshots?: ReadonlyArray<{ id: string, fields?: readonly string[] }> }>, purpose?: string }} entry
+   * @returns {Promise<{ patientLevel: boolean, permitted: boolean[] }>}
+   */
+  async judgeRecordReads({ studyId, principal, records, purpose = "vcr" }) {
+    const actor = String(principal);
+    const role = await this.access.judge({ actor, studyId, ability: "read_patient_level", note: "saved judgments" });
+    if (!role.allowed) return { patientLevel: false, permitted: records.map(() => false) };
+    const owners = await this.store.sourcesOfDocuments(studyId, [...new Set(records.flatMap((record) => [...(record.documentIds ?? [])].map(String)))]);
+    /** @type {Map<string, Promise<boolean>>} */
+    const decided = new Map();
+    /** @param {string} key @param {Record<string, any>} request */
+    const allowed = (key, request) => {
+      if (!decided.has(key)) decided.set(key, this.access.judge({ actor, studyId, ability: "read_patient_level", purpose, note: "saved judgments", ...request }).then((decision) => decision.allowed && !decision.fields.denied.length));
+      return /** @type {Promise<boolean>} */ (decided.get(key));
+    };
+    const permitted = [];
+    for (const record of records) {
+      let may = true;
+      for (const id of record.documentIds ?? []) {
+        const sourceId = owners.get(String(id));
+        if (!sourceId || !await allowed(`source:${sourceId}`, { sourceId })) { may = false; break; }
+      }
+      for (const snapshot of may ? record.snapshots ?? [] : []) {
+        const fields = [...new Set(snapshot.fields ?? [])].map(String).sort();
+        if (!await allowed(`snapshot:${snapshot.id}:${fields.join(",")}`, { snapshotId: snapshot.id, fields })) { may = false; break; }
+      }
+      permitted.push(may);
+    }
+    return { patientLevel: true, permitted };
+  }
+
+  // -------------------------------------------------------------------------
+  // An import's originals
+  // -------------------------------------------------------------------------
+
+  /**
+   * An upload original, copied into the plane for a job that streams it. The original stands in a directory a run can write to, so a link may have been planted for it or its bytes may have
+   * been changed since the upload: it is opened without following a link anywhere on its path, and what is copied is held to the size and the digest on its receipt. Whatever the job then reads, and
+   * whatever its conversions write beside what it reads, is in the plane, which no runtime mounts. An earlier batch's copy stands for the job.
+   * @param {{ studyId: string, jobId: string, baseDir: string, file: string, size: number, sha256: string, extension: string }} entry
+   * @returns {Promise<string>} where the copy is
+   */
+  async stageOriginal({ studyId, jobId, baseDir, file, size, sha256, extension }) {
+    if (!ID_PATTERN.test(String(jobId)) || !/^[a-f0-9]{64}$/u.test(String(sha256))) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, "A job and a digest.");
+    const directory = this.#stagedDirectory(studyId, jobId);
+    await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+    const staged = path.join(directory, `${sha256}.${String(extension).replace(/[^a-z0-9]/gu, "")}`);
+    const held = await fs.lstat(staged).catch(() => null);
+    if (held?.isFile() && held.size === size) return staged;
+    const changed = () => refuse(409, "vcr_import_original_changed", "The original is not the file that was uploaded.");
+    /** @type {{ handle: import("node:fs/promises").FileHandle, stat: import("node:fs").Stats } | null} */
+    let opened = null;
+    try { opened = await openScopedFileNoFollow(baseDir, file); }
+    catch (error) {
+      if (/** @type {any} */ (error)?.code === "ENOENT") throw refuse(410, "vcr_import_original_gone", "The original is no longer there.");
+      throw changed();
+    }
+    const partial = `${staged}.${randomUUID()}.partial`;
+    try {
+      if (opened.stat.size !== size) throw changed();
+      const digest = createHash("sha256");
+      const out = await fs.open(partial, "wx", 0o600);
+      let total = 0;
+      try {
+        for await (const chunk of opened.handle.createReadStream({ autoClose: false, highWaterMark: 256 * 1024 })) {
+          total += chunk.length;
+          if (total > size) throw changed();
+          digest.update(chunk);
+          await out.write(chunk);
+        }
+      } finally { await out.close(); }
+      if (total !== size || digest.digest("hex") !== sha256) throw changed();
+      await fs.rename(partial, staged);
+      return staged;
+    } finally {
+      await opened.handle.close().catch(() => {});
+      await fs.rm(partial, { force: true }).catch(() => {});
+    }
+  }
+
+  /** What a job staged, gone when the job is. @param {string} studyId @param {string} jobId */
+  async dropStagedOriginals(studyId, jobId) {
+    await fs.rm(this.#stagedDirectory(studyId, jobId), { recursive: true, force: true });
+  }
+
+  /** @param {string} studyId @param {string} jobId */
+  #stagedDirectory(studyId, jobId) {
+    return path.join(this.root(), studyRelative(studyId), "job-originals", String(jobId));
   }
 
   // -------------------------------------------------------------------------
@@ -3762,7 +4141,7 @@ export class VcrDataPlane {
           readable, cloudPermission: source.cloudPermission ?? null, cloud: cloudState(source.cloudPermission, vcrCloudDestinations(this.config), this.now().toISOString(), deploymentCloudPermission(this.config)),
           allowedUses: source.allowedUses, visibleWindow: source.visibleWindow, retention: source.retention,
           valueSource: source.valueSource, status: source.status, createdAt: source.createdAt,
-          upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes, documents: this.documentUpload(), cloudDestinations: vcrCloudDestinations(this.config), imports: this.importUpload() },
+          upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes, documents: this.documentUpload(), cloudDestinations: vcrCloudDestinations(this.config), cloudDestinationNotes: vcrCloudDestinationNotes(this.config), imports: this.importUpload() },
           // A source the viewer holds no grant on is a name and a state: its files' names, its map and who may read it are not theirs to see.
           files: readable ? own.map(filed) : [],
           fieldMap: {

@@ -1,0 +1,19 @@
+{
+  "sha256": "5dc7fdad212913b026ef31ce22af251681a275b11ad820b54f06da3569e13b96",
+  "kernel": "0.2.1-rc.5",
+  "artifact": "evimed-dsh-patient-matching-0.1.1.tgz",
+  "installation": "passed: offline self-contained tarball",
+  "nativeTools": 9,
+  "nativeManagedChild": "passed",
+  "nativeFailureCheckpoint": "passed",
+  "nativeModelCallBudget": "passed",
+  "nativeCancelRpcAndDisposal": "passed",
+  "childEvidenceAndCompute": "passed",
+  "structuredPersistence": "passed",
+  "FlashProfileOverride": "passed (synthetic parent has a distinct model)",
+  "disabledGeneralConversation": "passed",
+  "paidModelCalls": 0,
+  "syntheticOnly": true,
+  "version": "0.1.1",
+  "evidenceScope": "Synthetic runtime compatibility only; no paid or clinical evaluation."
+}

@@ -1,7 +1,7 @@
 /** Study-local correction references and deterministic replay; patient inputs never enter global fixtures. */
 import { createHash } from 'node:crypto';
 import { HttpError } from './security.mjs';
-import { assessSubject, matchingEvaluationReport, matchingInputDigest, VCR_MATCHING_VOCABULARY_VERSION } from './vcrMatching.mjs';
+import { assessSubject, matchingEvaluationReport, matchingInputDigest, VCR_MATCHING_EVALUATOR_VERSION, VCR_MATCHING_VOCABULARY_VERSION } from './vcrMatching.mjs';
 import { vcrOutcomeReadable } from './vcrSeal.mjs';
 
 export const VCR_CORRECTION_SCHEMA = 'vcr-correction-cases-1';
@@ -106,6 +106,7 @@ export function createVcrCorrectionCases({ store, matchStore, dataPlane, access 
       const page = await matchStore.correctionCases({ studyId, after, limit });
       const { ready, withdrawn } = await settle(page.items, principal);
       const core = { schemaVersion: VCR_CORRECTION_SCHEMA, studyId, vocabularyVersion: VCR_MATCHING_VOCABULARY_VERSION,
+        matchingEvaluatorVersion: VCR_MATCHING_EVALUATOR_VERSION,
         scope: 'document-anchored deterministic correction replay', cases: ready.map(publicCorrectionCase),
         selection: { after, limit, more: page.more, nextCursor: page.nextCursor, legacyUnfrozen: page.legacyUnfrozen, ...(withdrawn ? { withdrawn } : {}) } };
       const datasetId = `eds_${correctionHash(core)}`;
@@ -138,10 +139,14 @@ export function createVcrCorrectionCases({ store, matchStore, dataPlane, access 
         pairs.push({ criterionType: item.criterion.criterionType, gold: item.expectedState, predicted });
       }
       const metrics = matchingEvaluationReport({ label: 'Held-out correction cases', criterionPairs: pairs, subjectPairs: [], synthetic: false });
+      const datasetEvaluatorVersion = manifest.matchingEvaluatorVersion ?? null;
+      const evaluatorChanged = datasetEvaluatorVersion !== VCR_MATCHING_EVALUATOR_VERSION;
       const report = { schemaVersion: VCR_CORRECTION_SCHEMA, datasetId, partition: 'held_out', vocabularyVersion: VCR_MATCHING_VOCABULARY_VERSION,
+        matchingEvaluatorVersion: VCR_MATCHING_EVALUATOR_VERSION, datasetEvaluatorVersion, evaluatorChanged,
         evaluated: cases.length, matched: cases.filter(row => row.matched).length, criterion: metrics.criterion, cases, ...(withdrawn ? { withdrawn } : {}),
         inputDigest: correctionHash(manifest.cases), extractionRerun: false,
-        note: 'Deterministic replay of frozen facts and language judgments; no clinical accuracy or independent rater agreement is inferred.' };
+        note: (evaluatorChanged ? 'The current evaluator recalculated the frozen inputs from a dataset with a different or unrecorded evaluator version. ' : '')
+          + 'Deterministic replay of frozen facts and language judgments; no clinical accuracy or independent rater agreement is inferred.' };
       await matchStore.audit({ studyId, userId: study.userId, actor: principal, action: 'vcr.evaluation.replay', object: datasetId, detail: { report } });
       return report;
     },

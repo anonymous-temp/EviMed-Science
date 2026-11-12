@@ -82,6 +82,19 @@ CREATE TABLE IF NOT EXISTS evimed_memory.history_secrets (
   fingerprint text NOT NULL, length integer NOT NULL CHECK(length>0), count integer NOT NULL DEFAULT 1,
   PRIMARY KEY(owner_id,owner_created_at,archive_uri,fingerprint)
 );
+-- Matching metadata has no post-erasure cleanup duty. Keep the address outbox
+-- and fences above independent; only these hashes/salts go with the owner.
+-- NOT VALID admits legacy orphan rows without scanning at startup, while new
+-- writes and deletion of every existing owner obey the cascade immediately.
+DO $$ DECLARE held text; constraint_name text; BEGIN
+  FOREACH held IN ARRAY ARRAY['history_message_rejections','history_write_messages','history_secret_salts','history_secrets'] LOOP
+    constraint_name := held || '_owner_fk';
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid=to_regclass('evimed_memory.' || held) AND conname=constraint_name) THEN
+      EXECUTE format('ALTER TABLE evimed_memory.%I ADD CONSTRAINT %I FOREIGN KEY(owner_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID', held, constraint_name);
+    END IF;
+  END LOOP;
+END $$;
+
 `;
 
 /** Exact URI authority and durable cleanup obligations, never raw messages. */
@@ -170,7 +183,7 @@ export class MemoryHistoryLedger {
         WHERE user_id=$1 AND memory_type=ANY($2::text[]) AND (memory_type,fingerprint)>($3,$4)
         ORDER BY memory_type,fingerprint LIMIT 500`, [context.ownerId,types,type,fingerprint]);
       for (const row of result.rows) {
-        if (++count > 10000) throw new Error('memory_history_privacy_unavailable');
+        if (++count > 10000) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
         const removed = typeof row.text === 'string' ? compact(row.text) : '';
         if ((prints.has(row.fingerprint) || removed && candidates.some(candidate => candidate.includes(removed)))
           && texts.some(text => !freshlyStated(text,row.rejected_at)
@@ -248,7 +261,7 @@ export class MemoryHistoryLedger {
       WHERE u.id=$1 LIMIT 10001`, [ownerId])).rows;
     const salt = rows[0]?.salt ?? '';
     const records = rows.filter(row=>row.fingerprint).map(row=>({fingerprint:row.fingerprint,length:row.length}));
-    if (!rows.length || records.length>10000 || records.length && !salt) throw new Error('memory_history_secret_review_unavailable');
+    if (!rows.length || records.length>10000 || records.length && !salt) throw Object.assign(new Error('memory_history_secret_review_unavailable'), { code: 'memory_history_secret_review_unavailable' });
     return { salt, records };
   }
   async secretReviewed(context, archiveUri) {

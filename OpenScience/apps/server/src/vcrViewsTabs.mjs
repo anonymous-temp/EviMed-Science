@@ -1,4 +1,4 @@
-import { vcrPredictionLimit, VCR_EFFECT_DISCOUNT_LABEL_ZH } from "@evimed/domain";
+import { vcrPredictionLimit, VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_MATCHING_GAP_REASON_LABELS_ZH } from "@evimed/domain";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
 import { presentVcrReview } from "./vcrViewsKit.mjs";
 /**
@@ -24,8 +24,7 @@ import { presentVcrReview } from "./vcrViewsKit.mjs";
  *   subtracts nothing.
  * - **Nothing here ranks patients or designs.** Candidates are listed in the
  *   deterministic order of their eligibility summary, a design is `chosen`
- *   only when a decision row says so, and a clinical priority is carried with
- *   its own label 「不是获益概率」.
+ *   only when a decision row says so.
  *
  * @module vcrViewsTabs
  */
@@ -53,8 +52,6 @@ import { bindingUseFindings, populationBindingPremises, populationBindingView } 
 import { comparatorOriginPremises, comparatorOrigins } from "./vcrComparatorOrigins.mjs";
 import { modelUseOf, modelUsePremisesOf } from "./vcrModelUsePage.mjs";
 import { vcrPopulationVariables } from "./vcrModelApplicability.mjs";
-import { decidedShare } from "./vcrMatching.mjs";
-import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
 import { finishPremises, vcrPremises } from "./vcrPremises.mjs";
 import { presentPopulationCheck } from "./vcrPopulationCheck.mjs";
@@ -1728,11 +1725,8 @@ function forecastView(forecast, now) {
   };
 }
 
-// --- 匹配与招募 ---------------------------------------------------------------------------------------------------------------------
+// --- 患者匹配 -----------------------------------------------------------------------------------------------------------------------
 
-const SUMMARY_ORDER = Object.freeze(["eligible", "insufficient_evidence", "pending", "ineligible"]);
-/** The most citations a criterion row shows under its verdict. */
-const EVIDENCE_SHOWN = 3;
 
 /**
  * The words under a citation for what it did not print: a unit read by the domain's table (`unitBasis`), a date taken from another
@@ -1758,6 +1752,9 @@ function dateNote(basis, bound) {
   return bound === "no_later_than" ? "日期取自病历抬头，事件发生不晚于这一天" : "日期取自病历抬头";
 }
 
+/** A gap's reason in words: the label it carries (the candidate-trial path writes one), else the registry of reasons' (a protocol's assessment keeps the code alone). @param {Record<string, any>} gap */
+const gapReason = (gap) => text(gap.label) ?? /** @type {Record<string, string>} */ (VCR_MATCHING_GAP_REASON_LABELS_ZH)[String(gap.reason ?? "")] ?? null;
+
 /**
  * The criterion the way a coordinator reads it: the protocol's own words, the
  * patient's own sentence, and what to ask for.
@@ -1767,7 +1764,7 @@ function judgementView(criterion, code, judgment, now, documentNames = new Map()
   // Every citation the verdict rests on, not only the first: an `unknown` that waits on a prescription also shows the administration it
   // was set against. Each says what it quotes, where (the document by the name the data tab lists it under, never a person's), and
   // when what it records happened.
-  const cited = list(judgment?.evidence).map(object).filter((item) => text(item.quote)).slice(0, EVIDENCE_SHOWN).map((evidence) => ({
+  const citationsOf = (/** @type {unknown} */ items) => list(items).map(object).filter((item) => text(item.quote)).map((evidence) => ({
     quote: String(evidence.quote), locator: evidence.locator ?? null,
     source: evidence.quoteKind === "snapshot_cell" ? `数据快照字段「${object(evidence.locator).field ?? evidence.variable}」`
       : evidence.quoteKind === "verbatim" ? (documentNames.get(String(object(evidence.locator).documentId)) ?? "病历原文") : (vcrLocatorText(evidence.locator) ?? text(evidence.source)),
@@ -1777,6 +1774,15 @@ function judgementView(criterion, code, judgment, now, documentNames = new Map()
     // What the quotation does not itself say, said beside it: a unit the domain's table supplied, a date taken from another line.
     note: evidenceNote(evidence),
   }));
+  // A Boolean rule can reuse the same source in several branches. Deduplicate
+  // only identical displayed citations, including their source location, so
+  // repeated counterevidence cannot displace the deciding quotation.
+  const distinct = (/** @type {ReturnType<typeof citationsOf>} */ citations) => [...new Map(citations.map((citation) => [JSON.stringify(citation), citation])).values()];
+  const cited = distinct(citationsOf(judgment?.evidence));
+  const applicabilityEvidence = distinct(citationsOf(judgment?.applicabilityEvidence));
+  const applicabilityMissing = object(list(judgment?.applicabilityMissing)[0]);
+  const applicabilityReason = text(applicabilityMissing.label)
+    ?? /** @type {Record<string, string>} */ (VCR_MATCHING_GAP_REASON_LABELS_ZH)[String(applicabilityMissing.reason ?? "")] ?? null;
   const state = judgment?.overrideState ?? judgment?.state ?? "unknown";
   const needed = list(criterion.evidenceNeeded).map((item) => (typeof item === "string" ? item : text(object(item).description) ?? text(object(item).text) ?? text(object(item).variable))).filter(Boolean);
   return {
@@ -1789,9 +1795,16 @@ function judgementView(criterion, code, judgment, now, documentNames = new Map()
     applicable: judgment ? judgment.applicable !== false : true,
     evidence: cited[0] ?? null,
     evidenceItems: cited,
+    ...(judgment?.applicabilityState == null ? {} : {
+      applicabilityState: judgment.applicabilityState,
+      applicabilityEvidenceItems: applicabilityEvidence,
+      applicabilityReason,
+      applicabilityRequestNote: judgment.applicabilityState === "pending_recheck" && judgment.applicabilityRecheckAt
+        ? `${zhDate(judgment.applicabilityRecheckAt, now)} 起可复评` : null,
+    }),
     request: state === "unknown" || state === "pending_recheck" ? (needed[0] ?? null) : null,
     // Why it is not decided, in the assessment's own words (缺登记原文, 单位对不上, …): the first reason the criterion's gaps give.
-    reason: state === "unknown" || state === "pending_recheck" ? (text(object(list(judgment?.missing)[0]).label) ?? null) : null,
+    reason: state === "unknown" || state === "pending_recheck" ? gapReason(object(list(judgment?.missing)[0])) : null,
     requestNote: state === "pending_recheck" && judgment?.recheckAt ? `${zhDate(judgment.recheckAt, now)} 起可复评` : null,
     decidedBy: judgment?.decidedBy ?? null,
     overridden: Boolean(judgment?.overrideState),
@@ -1815,49 +1828,8 @@ function verdictOf(summary, rows) {
 }
 
 /**
- * 「给患者找试验」: one patient's trials as the page reads them — the list in the order the platform ranked it (each with the registry id and
- * its link, the title, the phase and the status in the reader's words, the eligibility and how many criteria stand where) and the chosen
- * trial's criterion table for this patient. Nothing is ranked or judged here: the order and every state were made in code.
- * @param {Record<string, any>} bundle @param {{ available?: boolean, subjectKey: string | null, ranked: any[], detail: any }} held
- */
-function presentPatientTrials(bundle, held) {
-  const { now } = bundle;
-  const count = (/** @type {any} */ counts, /** @type {string} */ key) => Number(object(counts)[key] ?? 0);
-  const trials = held.ranked.map((entry) => {
-    const counts = {
-      satisfied: count(entry.counts, "satisfied"), unknown: count(entry.counts, "unknown"),
-      notSatisfied: count(entry.counts, "not_satisfied"), pending: count(entry.counts, "pending_recheck"),
-    };
-    const decided = entry.counts ? decidedShare(entry.counts) : null;
-    return {
-      id: String(entry.id), kind: entry.kind, rank: entry.rank,
-      registry: entry.registry ?? null, registryId: entry.registryId ?? null, url: entry.url ? String(entry.url) : null,
-      // The registry's status is as of the day its record was read (the study's own protocol has none).
-      title: String(entry.title), phase: phaseLabel(entry.phase), status: registryStatusLabel(entry.status),
-      statusAsOf: entry.kind === "registry" && entry.retrievedAt ? zhDate(entry.retrievedAt, now) : null,
-      // 已判 n/m: the criteria found satisfied or not satisfied over every one that applies; unknowns are in the m.
-      decided,
-      conditions: list(entry.conditions).map(String),
-      sites: entry.locations ? { total: numeric(entry.locations.total), countries: list(entry.locations.countries).map(String) } : null,
-      eligibility: entry.summary,
-      counts,
-      summary: [`${counts.satisfied} 条满足`, `${counts.unknown} 条未知`, `${counts.notSatisfied} 条不满足`, ...(counts.pending ? [`${counts.pending} 条待复评`] : [])].join(" · "),
-      assessedAt: zhTime(entry.asOf, now),
-    };
-  });
-  const detail = held.detail;
-  let selected = null;
-  if (detail) {
-    const codes = criterionCodes(detail.criteria);
-    const byCriterion = new Map(list(detail.judgments).map((/** @type {any} */ row) => [row.criterionId, row]));
-    const rows = detail.criteria.map((/** @type {any} */ criterion) => judgementView(criterion, codes.get(criterion.id) ?? "", byCriterion.get(criterion.id) ?? null, now));
-    selected = { id: String(detail.entry.id), criteria: rows, verdict: verdictOf(detail.entry.summary, rows), assessedAt: zhTime(detail.entry.asOf, now) };
-  }
-  return { available: held.available !== false, subject: held.subjectKey, trials, selected };
-}
-
-/**
- * `GET /api/vcr/studies/:id/matching`.
+ * `GET /api/vcr/studies/:id/matching`: the earlier path's assessments (what a patient or a protocol with nothing in the model's judgments still draws). What the model judged is
+ * read from `matching/judged` (`vcrMatchResults.mjs`).
  * @param {Record<string, any>} bundle @param {{ view?: string | null, candidate?: string | null, direction?: string | null }} [query]
  */
 export function presentMatchingTab(bundle, query = {}) {
@@ -1867,7 +1839,7 @@ export function presentMatchingTab(bundle, query = {}) {
     return { view, available: false, unavailable: { code: "vcr_matching_unavailable", message: "匹配评估在本部署尚未接入；其余步骤照常。" },
       funnel: [], candidates: [], selected: null, gaps: [], counts: null };
   }
-  const { criteria, tallies, openByAssessment, gapsByCriterion, pendingReview, subjects, protocol } = match;
+  const { criteria, tallies, openByAssessment, gapsByCriterion, subjects, protocol } = match;
   /** The names the data tab lists the reviewed documents under, by the id a citation carries (the document's own or its reviewed text's). @type {Map<string, string>} */
   const documentNames = match.documentNames instanceof Map ? match.documentNames : new Map();
   const codes = criterionCodes(criteria);
@@ -1880,11 +1852,8 @@ export function presentMatchingTab(bundle, query = {}) {
     { key: "eligible", label: "符合", count: count("eligible") ?? 0, note: null, tone: "accent" },
     { key: "ineligible", label: "不符合", count: count("ineligible") ?? 0, note: null, tone: "neutral" },
   ] : [];
-  // Everyone assessed is listed, the not-eligible after the rest: their judgement is as readable as anyone's.
-  const ordered = [...subjects].sort((a, b) =>
-    Number(a.basis === "withdrawn") - Number(b.basis === "withdrawn")
-      || SUMMARY_ORDER.indexOf(a.summary) - SUMMARY_ORDER.indexOf(b.summary) || Number(a.counts?.unknown ?? 0) - Number(b.counts?.unknown ?? 0)
-      || String(a.subjectKey).localeCompare(String(b.subjectKey)));
+  // Everyone assessed is listed, a server-cut page at a time (in the order the page was cut in: the not-eligible after the rest, their judgement as readable as anyone's).
+  const ordered = subjects;
   const candidateOf = (/** @type {any} */ row) => {
     const counts = object(row.counts);
     const judged = openByAssessment.get(row.id) ?? [];
@@ -1894,7 +1863,7 @@ export function presentMatchingTab(bundle, query = {}) {
       summary: `${Number(counts.satisfied ?? 0)} 条满足 · ${Number(counts.unknown ?? 0)} 条未知 · ${Number(counts.pending_recheck ?? 0)} 条待复评${notSatisfied > 0 ? ` · ${notSatisfied} 条不满足` : ""}`,
       eligibility: row.summary,
       // What the evaluation rested on has changed since, or was withdrawn: said as a state beside the person (依据已更新 / 已撤回).
-      ...(row.basis ? { basis: row.basis } : {}),
+      ...(row.basis ? { basis: row.basis } : {}), ...(row.evaluatorOlder === true ? { olderRules: true } : {}),
       open: judged.filter((/** @type {any} */ open) => open.state !== "not_satisfied").map((/** @type {any} */ open) => ({
         code: criterionCode(open.criterionId), state: open.state,
         note: open.recheckAt ? `${zhDate(open.recheckAt, now)} 复评` : null,
@@ -1902,14 +1871,10 @@ export function presentMatchingTab(bundle, query = {}) {
       // The rules this person fails, by code: where to look first in their rule-by-rule judgement.
       ...(judged.some((/** @type {any} */ open) => open.state === "not_satisfied")
         ? { failed: judged.filter((/** @type {any} */ open) => open.state === "not_satisfied").map((/** @type {any} */ open) => ({ code: criterionCode(open.criterionId), state: open.state })) } : {}),
-      priority: row.priority ? { label: text(object(row.priority).label) ?? "临床优先级（不是获益概率）", score: numeric(object(row.priority).score), rationale: text(object(row.priority).rationale) } : null,
     };
   };
-  const candidates = ordered.slice(0, 50).map(candidateOf);
-  // The person asked for by name is on the page even when 50 others rank before them.
-  const askedFor = query.candidate && !candidates.some((candidate) => candidate.id === query.candidate)
-    ? ordered.find((row) => String(row.subjectKey) === query.candidate) : null;
-  if (askedFor) candidates.push(candidateOf(askedFor));
+  const candidates = ordered.map(candidateOf);
+  const people = match.people ?? { total: candidates.length, offset: 0, limit: candidates.length, verdict: null };
   const chosen = candidates.find((candidate) => candidate.id === query.candidate) ?? candidates[0] ?? null;
   const selectedAssessment = match.selected ?? null;
   const selected = chosen && selectedAssessment && selectedAssessment.subjectKey === chosen.id ? (() => {
@@ -1930,7 +1895,6 @@ export function presentMatchingTab(bundle, query = {}) {
       ],
       criteria: rows,
       verdict,
-      priority: chosen.priority,
       // The id says that somebody countersigned (the page offers the countersignature only where nobody has); the name is what is shown.
       reviewedBy: selectedAssessment.reviewedBy ?? null,
       reviewedByName: personName(bundle.people, selectedAssessment.reviewedBy),
@@ -1947,9 +1911,13 @@ export function presentMatchingTab(bundle, query = {}) {
     })).filter((gap) => gap.count > 0);
   const eligible = count("eligible");
   const insufficient = (count("insufficient_evidence") ?? 0) + (count("pending") ?? 0);
+  /** Who the one 重新开始评估 is for: a basis that has changed, or rules that have. @param {any} row */
+  const evaluatedAgain = (row) => row.basis === "updated" || row.evaluatorOlder === true;
   return {
     view,
     available: true,
+    // What 开始评估 starts: a study of tables with no record to read is screened by its rules, one with records is judged by the model.
+    evaluateBy: match.hasRecords === false ? "rules" : "model",
     protocols: list(match.protocols), protocolVersionId: match.protocol?.id ?? null,
     candidateRoster: list(match.candidateRoster),
     ...(match.candidateCoverage ? {candidateCoverage: match.candidateCoverage} : {}),
@@ -1965,21 +1933,21 @@ export function presentMatchingTab(bundle, query = {}) {
     headline: total ? `${total.toLocaleString("en-US")} 人已评估，${(eligible ?? 0).toLocaleString("en-US")} 人全部满足，${insufficient.toLocaleString("en-US")} 人至少有 1 条未知或待复评。` : null,
     partner: total ? { name: null, candidates: total, tier: study.dataTier, snapshotAt: match.snapshotAt ? zhDate(match.snapshotAt, now) : null } : null,
     // Two directions, one evaluation run from either end. 「给试验找患者」 is the protocol's patients (everything below); 「给患者找试验」
-    // adds `patientTrials`: one patient's trials, ranked.
-    direction: match.patientTrials ? "patient_to_trial" : "trial_to_patient",
+    // is the patient's side, read from the saved judgments.
+    direction: "trial_to_patient",
     directions: ["trial_to_patient", "patient_to_trial"],
     // A conversation's "这位患者能入哪些试验" leaves a patient and their trials and no protocol: its result is on the patient's side, and
     // the other side would open on an empty page asking for a research question.
     ...(!list(match.protocols).length && list(match.candidateRoster).length ? { opensOnPatient: String(list(match.candidateRoster)[0]) } : {}),
-    ...(match.patientTrials ? { patientTrials: presentPatientTrials(bundle, match.patientTrials) } : {}),
     funnel,
     candidates,
+    // The table's size and the page in view; `verdict` is the narrowing the page was cut under.
+    people: { total: people.total, offset: people.offset, limit: people.limit, more: people.offset + people.limit < people.total, verdict: people.verdict },
     // The people whose evaluation rested on a basis that has since changed, for the one action the page offers: evaluate them again.
-    ...(subjects.some((row) => row.basis === "updated")
-      ? { basisUpdated: { count: subjects.filter((row) => row.basis === "updated").length, subjects: subjects.filter((row) => row.basis === "updated").slice(0, 50).map((row) => String(row.subjectKey)) } } : {}),
+    ...(subjects.some(evaluatedAgain)
+      ? { basisUpdated: { count: subjects.filter(evaluatedAgain).length, subjects: subjects.filter(evaluatedAgain).slice(0, 50).map((row) => String(row.subjectKey)) } } : {}),
     selected,
     gaps,
-    pendingReview: pendingReview.length ? { count: pendingReview.length, subjects: pendingReview.slice(0, 20) } : null,
     protocol: protocol ? { version: protocol.version, title: text(protocol.title) } : null,
     counts: total ? countsView({ realPatients: total }, { tier: study.dataTier }) : null,
   };
@@ -2336,6 +2304,7 @@ export function presentIntake(bundle) {
           maxBytes: numeric(object(upload.documents).convertedMaxBytes),
           maxText: byteText(numeric(object(upload.documents).convertedMaxBytes)),
           converter: object(upload.documents).converter === true,
+          scans: object(upload.documents).scans === true,
         },
         // A source held in FHIR, OMOP or ADaM: what this deployment converts, and what each is uploaded as.
         imports: {

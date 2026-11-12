@@ -15,6 +15,12 @@ import { OpenVikingSessions } from '../src/openVikingSessions.mjs';
 import { OpenVikingClient } from '../src/openVikingClient.mjs';
 import { OPENVIKING_PROJECT_MEMORY_TYPES } from '../src/openVikingLayout.mjs';
 import { createMemoryGatewayHandler, MEMORY_GATEWAY_PATH } from '../src/memoryGateway.mjs';
+import { RuntimeManager } from '../src/runtimeManager.mjs';
+import { AgentRunStore } from '../src/agentRuns.mjs';
+import { createMemoryAdmission } from '../src/memoryAdmission.mjs';
+import { createHash } from 'node:crypto';
+import { PluginService } from '../src/pluginService.mjs';
+import { withNativeMemoryWrite } from '../src/nativeMemoryWriteFence.mjs';
 import { withSessionPromptAdmission } from '../src/runtimePromptAdmission.mjs';
 import { loadConfig } from '../src/config.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
@@ -35,10 +41,10 @@ test('opening-by-use leaves shared GEO listing unchanged and counts explicit rea
   assert.equal(read.status, 200); assert.deepEqual([ranked, used], [0, 1]);
 });
 
-async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000, config = {} } = {}) {
+async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000, config = {}, poolMax = 4, sourceReceipt = null } = {}) {
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'memorygatewaycontext');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'memory-gateway-context-'));
-  const accounts = new PostgresStore(loadConfig({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: config.memoryRuntimeLockIsolationEnabled ? 6 : 1 }));
+  const accounts = new PostgresStore(loadConfig({ ...config, dataDir, databaseUrl: isolated.url, stateStore: 'postgres', databasePoolMax: config.memoryRuntimeLockIsolationEnabled ? poolMax : 1 }));
   t.after(async () => { await accounts.database.close(); await isolated.drop(); await rm(dataDir, { recursive: true, force: true }); });
   await accounts.createUser('owner', 'fixture-password', 'Owner'); await accounts.createUser('editor', 'fixture-password', 'Editor');
   const owner = await accounts.userById('owner');
@@ -55,19 +61,21 @@ async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000, confi
   const documents = new ProductDocuments(accounts.database), policies = new GeoSharedContext({ database: accounts.database, documents, runtimeLockIsolation: config.memoryRuntimeLockIsolationEnabled });
   const stub = await startOpenVikingStub(t);
   const sessions = new OpenVikingSessions(new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: 'evimed' }));
+  if (config.memoryRuntimeLockIsolationEnabled) sessions.rootClient.writeAdmission =
+    (userId, operation) => withNativeMemoryWrite(accounts.database, userId, operation);
   const contexts = new GeoNativeMemoryContext({ database: accounts.database, documents, policies, sessions,
     proveCapture: async (_context, session) => session === 'dsh-root' ? { rootSessionId: 'root', rootProofRefs: ['trusted-primary'], runtimeGeneration: 'generation-1' } : null });
   const commits = [], noted = [], forgotten = [];
   const overlay = { configured: true, account: async () => null, noteRegistered: async () => {}, sensitiveUris: async () => [],
     noteSession: async (...args) => { noted.push(args); }, recordCommit: async row => { commits.push(row); }, commit: async (_owner, uri) => commits.find(row => row.archiveUri === uri) ?? null };
   const journal = new GeoNativeMemoryRemember({ contexts, overlay });
-  const admission = { admit: async () => ({ native: true, learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null }) };
+  const admission = { admit: async () => ({ learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null }) };
   const handler = createMemoryGatewayHandler({ config: { memoryEngineEnabled: true, memoryEnabled: true, memoryGatewayTimeoutMs:gatewayTimeoutMs, ...config }, sessions, admission, overlay,
     runtimeManager: { assertActiveEviMedWorkloadToken: async token => {
       if (![a.id, b.id, ordinary.id, solo.id].includes(token)) throw new Error('Unknown workload');
       return { userId: owner.id, projectId: token };
     }, runtimeGeneration: () => 'generation-1' }, store: accounts,
-    memoryContexts: contexts, rememberJournal: journal, capsuleSearch,
+    memoryContexts: contexts, rememberJournal: journal, capsuleSearch, sourceReceipt,
     memoryTool: { forget: async (user, project, uri, options) => { forgotten.push({ user, project, uri, options }); return { removed: true }; } } });
   const server = createServer((req, res) => { void handler(req, res); }); server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(() => new Promise(resolve => { server.closeAllConnections?.(); server.close(resolve); }));
@@ -77,7 +85,7 @@ async function fixture(t, { capsuleSearch = null, gatewayTimeoutMs = 4000, confi
     const text = await result.text(); let json; try { json = JSON.parse(text); } catch { json = null; }
     return { status: result.status, json, text };
   };
-  return { owner, accounts, documents, contexts, sessions, a, b, ordinary, solo, soloGeo, geo, stub, handler, commits, noted, forgotten, call, overlay };
+  return { owner, accounts, documents, policies, admission, contexts, sessions, a, b, ordinary, solo, soloGeo, geo, stub, handler, commits, noted, forgotten, call, overlay };
 }
 
 test('a one-person GEO project answers from the owner\'s own memory, packs included, until a member joins', options, async t => {
@@ -137,12 +145,14 @@ test('unnamed startup recall uses the project namespace and initializes six type
   assert.equal((await f.call(f.b, 'GET', '/api/v1/system/status')).json.result.user, b.namespaceId);
 });
 
-test('capture proof precedes engine writes and equal engine ids in two projects never enter the legacy session ledger', options, async t => {
-  const f = await fixture(t), a = await f.contexts.forProject(f.a), b = await f.contexts.forProject(f.b);
-  await f.call(f.a, 'POST', '/api/v1/sessions', { session_id: 'dsh-unknown' });
-  await f.call(f.a, 'POST', '/api/v1/sessions/dsh-unknown/messages', { role: 'user', content: 'Not associated' });
-  assert.equal(f.stub.sent('POST', '/api/v1/sessions').length, 0);
-  assert.equal((await f.call(f.a, 'GET', '/api/v1/sessions/dsh-unknown')).json.result.message_count, 0);
+for (const isolation of [false, true]) for (const proof of [false, true]) test(`shared capture ${proof ? 'requires proof before engine writes' : 'bypasses proof in production with the switch off'}; equal ids remain project scoped (isolation=${isolation}, proof=${proof})`, options, async t => {
+  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: isolation, memorySharedCaptureProofEnabled: proof } });
+  const a = await f.contexts.forProject(f.a), b = await f.contexts.forProject(f.b);
+  assert.equal((await f.call(f.a, 'POST', '/api/v1/sessions', { session_id: 'dsh-unknown' })).status, 200);
+  assert.equal((await f.call(f.a, 'POST', '/api/v1/sessions/dsh-unknown/messages', { role: 'user', content: 'Not associated' })).status, 200);
+  assert.equal(f.stub.sent('POST', '/api/v1/sessions').length, proof ? 0 : 2, 'switch-off capture forwards creation and the message without a proof');
+  assert.equal((await f.call(f.a, 'GET', '/api/v1/sessions/dsh-unknown')).json.result.message_count, proof ? 0 : 1);
+  assert.equal(await f.contexts.session(a, 'dsh-unknown'), null);
   for (const project of [f.a, f.b]) {
     assert.equal((await f.call(project, 'POST', '/api/v1/sessions', { session_id: 'dsh-root' })).status, 200);
     assert.equal((await f.call(project, 'POST', '/api/v1/sessions/dsh-root/messages', { role: 'user', content: project.id })).status, 200);
@@ -150,7 +160,11 @@ test('capture proof precedes engine writes and equal engine ids in two projects 
   }
   assert.equal(f.noted.length, 0); assert.equal(f.commits.length, 2);
   assert.deepEqual(new Set(f.commits.map(row => row.archiveUri.split('/sessions/')[0])), new Set([a.userRoot, b.userRoot]));
-  assert.equal((await f.contexts.session(a, 'dsh-root')).payload.namespaceId, a.namespaceId);
+  for (const context of [a, b]) {
+    const association = await f.contexts.session(context, 'dsh-root');
+    if (proof) assert.equal(association.payload.namespaceId, context.namespaceId);
+    else assert.equal(association, null, 'switch-off capture creates no verified association even for a provable root');
+  }
   const count = f.stub.requests.length;
   await assert.rejects(f.handler.commitSession({ user: f.owner, project: f.b, engineSessionId: 'dsh-root', context: a }), error => error.code === 'memory_scope_denied');
   assert.equal(f.stub.requests.length, count);
@@ -173,8 +187,9 @@ test('shared reads and forget validate canonical namespace before using the exis
   assert.equal(f.forgotten[0].project.id, f.a.id);
 });
 
-test('shared native remember uses the verified journal and duplicate client ids cannot overwrite each other', options, async t => {
-  const f = await fixture(t), a = await f.contexts.forProject(f.a);
+for (const isolation of [false, true]) for (const proof of [false, true]) test(`shared native remember journals duplicate client ids independently; guessed tool-session capture ${proof ? 'requires proof' : 'bypasses proof with the switch off'} (isolation=${isolation}, proof=${proof})`, options, async t => {
+  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: isolation, memorySharedCaptureProofEnabled: proof } });
+  const a = await f.contexts.forProject(f.a);
   const request = text => ({ jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: 'remember', arguments: { messages: [{ role: 'user', content: text }] } } });
   const result = await f.call(f.a, 'POST', '/mcp', [request('Remember the first project fact'), request('Remember the second project fact')]);
   assert.equal(result.status, 200); assert.deepEqual(result.json.map(item => item.id), [8, 8]);
@@ -184,8 +199,11 @@ test('shared native remember uses the verified journal and duplicate client ids 
   assert.equal(f.commits.length, 2); assert.equal(f.commits.every(row => row.archiveUri.startsWith(`${a.userRoot}/`)), true);
   const remembered = rows[0].payload.sessionId;
   const before = f.stub.sent('POST', `/api/v1/sessions/${remembered}/messages`).length;
-  await f.call(f.a, 'POST', `/api/v1/sessions/${remembered}/messages`, { role: 'user', content: 'Cannot append by guessing the tool session' });
-  assert.equal(f.stub.sent('POST', `/api/v1/sessions/${remembered}/messages`).length, before);
+  const appended = await f.call(f.a, 'POST', `/api/v1/sessions/${remembered}/messages`, { role: 'user', content: 'Capture by guessing the tool session' });
+  assert.equal(appended.status, 200);
+  assert.equal(f.stub.sent('POST', `/api/v1/sessions/${remembered}/messages`).length, before + (proof ? 0 : 1), 'only the proof switch prevents appending to a guessed tool session');
+  const messages = f.stub.sessions.get(`${a.namespaceId}/${remembered}`).messages;
+  assert.equal(messages.some(message => message.parts?.some(part => part.text === 'Capture by guessing the tool session')), !proof);
 });
 
 test('required project privacy filters cannot be displaced and native list does not reveal excluded filenames', options, async t => {
@@ -354,33 +372,146 @@ test('optional scoped capsule timeout retains native project search results and 
 });
 
 
-for (const borrowed of [false, true]) test(`pending admission answers health and same-project reads before kernel acknowledgement (borrowed=${borrowed})`, options, async t => {
-  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true } });
+
+for (const poolMax of [4, 6]) test(`real plugin admission publishes a missing floor and answers all five gateway operations before acknowledgement (pool=${poolMax})`, options, async t => {
+  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true }, poolMax });
   const database = f.accounts.database;
-  const manager = { config: { memoryRuntimeLockIsolationEnabled: true, databasePoolMax: 6, runtimePromptAdmissionTimeoutMs: 5000 }, promptAdmissionDatabase: database };
+  const plugins = new PluginService(database, { runtimeLockIsolation: true, databasePoolMax: poolMax });
+  const manager = { config: { memoryRuntimeLockIsolationEnabled: true, databasePoolMax: poolMax, runtimePromptAdmissionTimeoutMs: 10000 }, promptAdmissionDatabase: database };
   for (const project of [f.ordinary, f.a]) {
-    const context = await f.contexts.forProject(project);
-    const uri = f.stub.seedMemory(context.namespaceId, context.kind === 'owned' ? 'profile.md' : 'project_facts/start.md', 'STARTUP MEMORY');
+    // Do not pre-initialize the shared floor: that was the hole in the old test.
+    assert.equal((await f.documents.list(f.owner.id, 'geo-plan-context', { filter: { recordType: 'geo-native-context-policy' } })).items.length, 0);
     let acknowledge, entered, acknowledged = false;
     const ack = new Promise(resolve => { acknowledge = resolve; });
     const ready = new Promise(resolve => { entered = resolve; });
-    const admit = () => withSessionPromptAdmission(manager, project, 'pending', async () => {
-      await f.contexts.forProject(project);
-      entered();
-      await ack;
-      acknowledged = true;
-    });
-    const pending = borrowed ? database.transaction(client => database.withTransactionClient(client, admit)) : admit();
+    const pending = plugins.withAdmission(project, () => withSessionPromptAdmission(manager, project, 'root', async () => {
+      assert.ok(database.transactionScope(), 'real prompt/dispatch borrows the plugin transaction');
+      const context = await f.contexts.forProject(project);
+      entered(context); await ack; acknowledged = true;
+    }), { prompt: true });
     try {
-      await ready;
-      // These real HTTP requests run outside admission's async transaction scope.
-      const results = await Promise.all([
-        f.call(project, 'GET', '/health'),
-        f.call(project, 'GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}`),
-      ]);
-      assert.deepEqual(results.map(result => result.status), [200, 200]);
-      assert.match(results[1].text, /STARTUP MEMORY/);
-      assert.equal(acknowledged, false, 'gateway answers while the kernel acknowledgement is still withheld');
+      const context = await Promise.race([ready, pending.then(() => { throw new Error('admission ended early'); })]);
+      const uri = f.stub.seedMemory(context.namespaceId, context.kind === 'owned' ? 'profile.md' : 'project_facts/start.md', 'STARTUP MEMORY');
+      const tool = (name, args) => f.call(project, 'POST', '/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } });
+      assert.equal((await f.call(project, 'GET', '/health')).status, 200);
+      assert.match((await f.call(project, 'GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}`)).text, /STARTUP MEMORY/);
+      assert.match((await f.call(project, 'POST', '/api/v1/search/search', { query: 'STARTUP', mode: 'context' })).text, /STARTUP MEMORY/);
+      const remembered = await tool('remember', { messages: [{ role: 'user', content: 'Remember this project fact' }] });
+      assert.equal(remembered.status, 200); assert.match(remembered.text, /Submitted/);
+      assert.equal((await tool('forget', { uri })).status, 200);
+      assert.equal(f.forgotten.at(-1).project.id, project.id);
+      // Capture of a registered shared root also works before acknowledgement;
+      // no test-only `native` field is supplied by the admission fixture.
+      assert.equal((await f.call(project, 'POST', '/api/v1/sessions', { session_id: 'dsh-root' })).status, 200);
+      assert.equal((await f.call(project, 'POST', '/api/v1/sessions/dsh-root/messages', { role: 'user', content: 'A first attended input' })).status, 200);
+      assert.ok(f.stub.sent('POST', '/api/v1/sessions/dsh-root/messages').some(row => row.user === context.namespaceId));
+      assert.equal(acknowledged, false);
+      if (context.kind === 'geo-project') assert.ok(await f.contexts.session(context, 'dsh-root'));
     } finally { acknowledge(); await pending; }
   }
+});
+
+test('health skips a forbidden project policy with isolation on while data routes still deny it', options, async t => {
+  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true } });
+  const context = await f.contexts.forProject(f.a);
+  const saved = await f.documents.get(f.owner.id, 'geo-plan-context', context.policyRef);
+  await f.documents.put(f.owner.id, 'geo-plan-context', saved.id, { ...saved.payload, policyVersion: 99 }, { projectId: f.a.id, expectedRevision: saved.revision });
+  const select = f.contexts.forProject.bind(f.contexts); let lookups = 0;
+  f.contexts.forProject = project => { lookups++; return select(project); };
+  assert.equal((await f.call(f.a, 'GET', '/health')).status, 200); assert.equal(lookups, 0);
+  const denied = await f.call(f.a, 'GET', `/api/v1/content/read?uri=${encodeURIComponent(`${context.userRoot}/memories/project_facts/start.md`)}`);
+  assert.equal(denied.status, 403); assert.equal(denied.json.error.code, 'memory_scope_denied'); assert.equal(lookups, 1);
+});
+
+test('an initially unproven shared session regains capture on its first proved message and opening recall stays project scoped', options, async t => {
+  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true } }), context = await f.contexts.forProject(f.a);
+  const prove = f.contexts.proveCapture; f.contexts.proveCapture = async () => null;
+  assert.equal((await f.call(f.a, 'POST', '/api/v1/sessions', { session_id: 'dsh-root' })).status, 200);
+  assert.equal(f.stub.sent('POST', '/api/v1/sessions').length, 0, 'unproven creation is local; it opens no engine session');
+  f.stub.seedMemory(context.namespaceId, 'project_facts/start.md', 'SHARED OPENING');
+  assert.match((await f.call(f.a, 'POST', '/api/v1/search/search', { mode: 'context', query: '' })).text, /SHARED OPENING/);
+  f.contexts.proveCapture = prove;
+  const message = await f.call(f.a, 'POST', '/api/v1/sessions/dsh-root/messages', { role: 'user', content: 'First proved input' });
+  assert.equal(message.status, 200);
+  assert.ok(f.stub.sent('POST', '/api/v1/sessions').some(row => row.body.session_id === 'dsh-root'));
+  assert.ok(f.stub.sent('POST', '/api/v1/sessions/dsh-root/messages').some(row => row.body.parts?.some(part => part.text === 'First proved input')));
+});
+
+test('two sessions in the same project reach pending acknowledgement concurrently through real plugin admission', options, async t => {
+  const poolMax = 6, f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true }, poolMax });
+  const database = f.accounts.database, plugins = new PluginService(database, { runtimeLockIsolation: true, databasePoolMax: poolMax });
+  const manager = { config: { memoryRuntimeLockIsolationEnabled: true, databasePoolMax: poolMax, runtimePromptAdmissionTimeoutMs: 5000 }, promptAdmissionDatabase: database };
+  let acknowledge; const ack = new Promise(resolve => { acknowledge = resolve; });
+  const ready = [], pending = [];
+  for (const session of ['first', 'second']) {
+    let entered; ready.push(new Promise(resolve => { entered = resolve; }));
+    pending.push(plugins.withAdmission(f.a, () => withSessionPromptAdmission(manager, f.a, session, async () => {
+      await f.contexts.forProject(f.a); entered(); await ack;
+    }), { prompt: true }));
+  }
+  try {
+    await Promise.race([Promise.all(ready), Promise.all(pending).then(() => { throw new Error('admissions ended early'); })]);
+    assert.equal((await f.call(f.a, 'GET', '/health')).status, 200);
+  } finally { acknowledge(); await Promise.all(pending); }
+});
+
+
+test('real AgentRuns dispatch and HTTP kernel acknowledgement allow gateway source receipts to reach the ledger', options, async t => {
+  let ledger, receipts = 0;
+  const poolMax = 4, f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true }, poolMax,
+    sourceReceipt: async ({ project, sessionId, uris }) => {
+      assert.equal(sessionId, 'root', 'real memory admission selects the sole running turn');
+      const active = (await ledger.list(project)).filter(run => run.sessionId === sessionId && run.status === 'running');
+      assert.equal(active.length, 1);
+      const originalSources = uris.map(uri => ({ id: uri, contentDigest: createHash('sha256').update(f.stub.files.get(uri)).digest('hex'),
+        sourcePrivacy: { schemaVersion: 1, classification: 'ordinary', reasons: [] },
+        attribution: { schemaVersion: 1, origins: ['user'], confirmed: true } }));
+      await ledger.recordLearning(project, active[0].id, { originalSources }); receipts++;
+    } });
+  const project = f.ordinary, binding = { sessionId: 'root', mode: 'open-domain', agentId: null, agentVersion: null, runtimeAgent: null };
+  ledger = new AgentRunStore({ get: async () => binding }, { model: 'fixture', readSessionHistory: async () => [] });
+  ledger.scheduleMonitor = () => {};
+  t.after(() => ledger.closeProject(project));
+  Object.assign(f.admission, createMemoryAdmission({ config: { memoryEnabled: true }, memorySettings: { configured: true },
+    conversations: { running: async target => (await ledger.list(target)).filter(run => run.status === 'running'),
+      runsOf: async (target, session) => (await ledger.list(target)).filter(run => run.sessionId === session) } }));
+  const manager = new RuntimeManager(loadConfig({ memoryRuntimeLockIsolationEnabled: true, databasePoolMax: poolMax, runtimePromptAdmissionTimeoutMs: 5000 }));
+  manager.promptAdmissionDatabase = f.accounts.database;
+  manager.pluginService = new PluginService(f.accounts.database, { runtimeLockIsolation: true, databasePoolMax: poolMax });
+  manager.contextPolicies = f.policies;
+  for (const method of ['assertInteractiveRuntimeAvailable', 'assertPersonalSkillPromptGeneration', 'refreshCapsuleMethods',
+    'writePromptAttendance', 'enforceProjectQuota', 'beginProxy', 'endProxy']) manager[method] = async () => {};
+  const context = await f.contexts.forProject(project);
+  const uri = f.stub.seedMemory(context.namespaceId, 'profile.md', 'RECEIPTED RECALL');
+  let acknowledge, recalled, failed, acknowledged = false;
+  const ack = new Promise(resolve => { acknowledge = resolve; });
+  const ready = new Promise((resolve, reject) => { recalled = resolve; failed = reject; });
+  // Exercise RuntimeManager.callKernel and its actual HTTP envelope, with the
+  // protocol peer holding the response while memory calls back into the gateway.
+  const kernel = createServer((req, res) => { void (async () => {
+    let text = ''; for await (const chunk of req) text += chunk;
+    const envelope = JSON.parse(text);
+    if (envelope.method === 'session/prompt') {
+      assert.equal(envelope.payload.args.request.sessionId, 'root');
+      const read = await f.call(project, 'GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}`);
+      assert.equal(read.status, 200); assert.match(read.text, /RECEIPTED RECALL/);
+      assert.equal(receipts, 1);
+      const [pending] = await ledger.list(project);
+      assert.equal(pending.dispatchStatus, 'dispatching');
+      assert.ok(pending.originalSources.some(source => source.id === uri), 'the real receipt is durable before acknowledgement');
+      recalled(); await ack; acknowledged = true;
+    } else assert.equal(envelope.method, 'session/create');
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ result: { ok: true, value: {} } }));
+  })().catch(error => { failed(error); res.writeHead(500); res.end(); }); });
+  kernel.listen(0, '127.0.0.1'); await once(kernel, 'listening');
+  manager.runtimes.set(manager.key(project), { url: `http://127.0.0.1:${kernel.address().port}`, modelGatewayTokenJti: 'generation-1' });
+  t.after(() => new Promise(resolve => { kernel.closeAllConnections(); kernel.close(resolve); }));
+  const pending = ledger.dispatch(project, { sessionId: 'root', dispatchId: 'first' }, () => manager.dispatchPrompt(project, 'root', { text: 'Hello', unattended: false }));
+  try {
+    await Promise.race([ready, pending.then(() => { throw new Error('dispatch acknowledged before recall'); })]);
+    assert.equal(acknowledged, false);
+  } finally { acknowledge(); await pending; }
+  assert.equal(receipts, 1);
+  assert.equal((await ledger.list(project))[0].dispatchStatus, 'accepted');
 });

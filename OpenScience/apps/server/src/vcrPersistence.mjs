@@ -87,8 +87,7 @@ export const VCR_TABLES = Object.freeze([
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
   "jobs", "conversation_completions", "executions", "results", "forecasts", "longitudinal_artifacts",
-  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "matching_extractions",
-  "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments", "parsed_trial_criteria",
+  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "match_judgments", "match_target_checks", "registry_pages", "candidate_searches",
   "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
   "model_assessments", "model_plan_versions", "published_simulations",
@@ -255,7 +254,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.criteria (
   protocol_version_id text NOT NULL REFERENCES evimed_vcr.protocol_versions(id) ON DELETE CASCADE,
   user_id             text NOT NULL,
   ordinal             integer NOT NULL,
-  kind                text NOT NULL CHECK (kind IN ('inclusion', 'exclusion')),
+  kind                text NOT NULL CHECK (kind IN ('inclusion', 'exclusion', 'unclassified')),
   criterion_type      text NOT NULL CHECK (criterion_type IN ${inList(VCR_CRITERION_TYPES)}),
   requirement         jsonb NOT NULL DEFAULT '{}'::jsonb,
   source_text         text NOT NULL DEFAULT '',
@@ -532,6 +531,9 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.source_files (
   created_at   timestamptz NOT NULL DEFAULT now(),
   UNIQUE (source_id, sha256, role)
 );
+-- Two people may have the same words in one source (a template note, 「无特殊」): each keeps their own document (2026-11-04). The same text for the same person is one file.
+ALTER TABLE evimed_vcr.source_files DROP CONSTRAINT IF EXISTS source_files_source_id_sha256_role_key;
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_source_files_identity_idx ON evimed_vcr.source_files (source_id, sha256, role, (COALESCE(detail->>'subjectKey', '')));
 CREATE INDEX IF NOT EXISTS vcr_source_files_source_idx ON evimed_vcr.source_files (source_id, created_at);
 CREATE INDEX IF NOT EXISTS vcr_source_files_study_idx ON evimed_vcr.source_files (study_id);
 
@@ -1088,6 +1090,8 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.criterion_judgments (
   UNIQUE (assessment_id, criterion_id)
 );
 
+ALTER TABLE evimed_vcr.criterion_judgments ADD COLUMN IF NOT EXISTS evaluation jsonb;
+
 -- A fact about one patient, with where it was read (plan §7.1). The subject is
 -- the study's pseudonym, never a source id. A model-read fact keeps the
 -- document, the span and the quotation so the evaluator can re-read the bytes;
@@ -1149,24 +1153,87 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.matching_producers (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(study_id,target_id,producer_hash)
 );
--- The ledger of the batch reading of patient records (remediation plan D4): one row per record read for one set of questions. It holds
--- no patient text and no fact -- the facts are matching_facts' -- only that this record was read, so a resumed, restarted or repeated
--- batch does not read, or pay for, the same record twice. A record that failed is not a row: it is read again by the next start.
-CREATE TABLE IF NOT EXISTS evimed_vcr.matching_extractions (
+-- One record of a model's judgment of a patient against a trial or a protocol version (owner decisions 2026-11-04). A job and a conversation
+-- write the same shape and the same readers read it. The key is a pair for given inputs: the words of the record and of the trial by hash, the
+-- prompt and the settings; a pair judged once under those is not paid for again, and a failed row is replaced when it is tried again. The
+-- reasons may repeat what a record says, so a withdrawal and a document's erasure take the rows: nothing freezes them (vcrErasureStore).
+CREATE TABLE IF NOT EXISTS evimed_vcr.match_judgments (
+  id text PRIMARY KEY,
   study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id text NOT NULL,
   subject_key text NOT NULL,
-  document_id text NOT NULL,
-  variables_digest text NOT NULL,
-  document_hash text,
-  facts integer NOT NULL DEFAULT 0,
-  rejected integer NOT NULL DEFAULT 0,
-  input_tokens integer,
-  output_tokens integer,
-  model text,
+  target_kind text NOT NULL CHECK (target_kind IN ('candidate_trial', 'protocol_version')),
+  target_id text NOT NULL,
+  target_hash text NOT NULL DEFAULT '',
+  document_hash text NOT NULL DEFAULT '',
+  mode text NOT NULL CHECK (mode IN ('fit', 'criteria')),
+  prompt_version text NOT NULL,
+  model text NOT NULL DEFAULT '',
+  thinking text NOT NULL DEFAULT '',
+  producer text NOT NULL CHECK (producer IN ('job', 'conversation')),
+  status text NOT NULL CHECK (status IN ('done', 'failed')),
+  error_code text,
+  fit integer CHECK (fit BETWEEN 0 AND 100),
+  confidence double precision CHECK (confidence BETWEEN 0 AND 1),
+  verdict text CHECK (verdict IN ('eligible', 'possible', 'insufficient', 'ineligible')),
+  answer jsonb NOT NULL DEFAULT '{}'::jsonb,
+  usage jsonb NOT NULL DEFAULT '{}'::jsonb,
+  document_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+  basis_changed text,
   job_id text,
   created_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY(study_id,subject_key,document_id,variables_digest)
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_match_judgments_pair_idx ON evimed_vcr.match_judgments
+  (study_id, subject_key, target_kind, target_id, target_hash, document_hash, mode, prompt_version, model, thinking, producer);
+CREATE INDEX IF NOT EXISTS vcr_match_judgments_subject_idx ON evimed_vcr.match_judgments (study_id, subject_key, updated_at DESC);
+CREATE INDEX IF NOT EXISTS vcr_match_judgments_target_idx ON evimed_vcr.match_judgments (study_id, target_kind, target_id, updated_at DESC);
+-- When a registry record that held verdicts rest on was last looked at again, and what it read as (the registry watch, vcrRegistryWatch). One row
+-- per study and trial; the watch takes the least recently checked first, so its bounded reads come round to every trial. A hash and a status,
+-- no registry text and no patient text, and it goes with its study.
+CREATE TABLE IF NOT EXISTS evimed_vcr.match_target_checks (
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  target_id text NOT NULL,
+  checked_at timestamptz NOT NULL DEFAULT now(),
+  last_hash text NOT NULL DEFAULT '',
+  last_status text NOT NULL DEFAULT '',
+  PRIMARY KEY (study_id, target_id)
+);
+CREATE INDEX IF NOT EXISTS vcr_match_target_checks_due_idx ON evimed_vcr.match_target_checks (checked_at);
+-- The eligibility text of a registry record that the registry's own listing does not carry (ChiCTR), read from the record's page (vcrRegistryPages).
+-- Public registry text, so it belongs to no account and no study; a failed or empty read is a row too, with when it was tried, so a job of thousands of
+-- pairs does not ask a browser for the same page again. Nothing here is patient data.
+CREATE TABLE IF NOT EXISTS evimed_vcr.registry_pages (
+  registry text NOT NULL,
+  registry_id text NOT NULL,
+  status text NOT NULL CHECK (status IN ('ok', 'failed')),
+  eligibility text NOT NULL DEFAULT '',
+  url text NOT NULL DEFAULT '',
+  source text NOT NULL DEFAULT 'web_read',
+  text_hash text NOT NULL DEFAULT '',
+  reason text,
+  fetched_at timestamptz,
+  attempted_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (registry, registry_id)
+);
+-- What one search for a patient's trials did (G11, G24): the request the run wrote, what each registry did with each phrase, whether the list was
+-- reordered against the run's summary, and the list itself in the order it was kept (up to 500 compact rows: registry, id, title, status, relevance).
+-- The summary the reranker read is never stored, only its hash and length; nothing here is a patient's record. A judging job reads the ids from it
+-- (selection.searchId), and a page of it is read again without asking a registry. The last twenty of a study are kept; the study's deletion takes them.
+CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_searches (
+  id          text PRIMARY KEY,
+  study_id    text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id     text NOT NULL,
+  subject_key text,
+  request     jsonb NOT NULL DEFAULT '{}'::jsonb,
+  registries  jsonb NOT NULL DEFAULT '[]'::jsonb,
+  rerank      jsonb,
+  collection  jsonb,
+  found       integer NOT NULL DEFAULT 0,
+  items       jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS vcr_candidate_searches_study_idx ON evimed_vcr.candidate_searches (study_id, created_at DESC);
 ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS cloud_permission jsonb;
 CREATE TABLE IF NOT EXISTS evimed_vcr.document_projections (
   id text PRIMARY KEY,
@@ -1218,108 +1285,6 @@ ALTER TABLE evimed_vcr.matching_inputs ADD COLUMN IF NOT EXISTS manifest_digest 
 UPDATE evimed_vcr.matching_inputs SET manifest_digest = ${matchingManifestDigestSql("manifest")} WHERE manifest_digest IS NULL;
 CREATE INDEX IF NOT EXISTS vcr_matching_inputs_digest_idx ON evimed_vcr.matching_inputs (study_id, manifest_digest);
 CREATE INDEX IF NOT EXISTS vcr_matching_inputs_protocol_idx ON evimed_vcr.matching_inputs (study_id, (manifest->>'protocolVersionId'), created_at DESC, id DESC);
-
--- 「给患者找试验」 (the patient → trials direction of matching): the trials another sponsor registered that a run found for a
--- patient. They are objects of the study and are NOT versions of its protocol — a candidate in \`protocol_versions\` would join the
--- study's own sequence, its funnel and its referral ledger — so they have tables of their own, and so do the verdicts about them.
--- The identity of a candidate (title, phase, status, conditions, sites, the record's link and hash) is read in code from the
--- registry's record when the run writes it; the criteria are the run's structuring of the record's eligibility text, in the shape a
--- protocol's criteria have, so the one evaluator reads both. Idempotent: one row per registry id in a study.
-CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trials (
-  id               text PRIMARY KEY,
-  study_id         text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
-  user_id          text NOT NULL,
-  registry         text NOT NULL,
-  registry_id      text NOT NULL,
-  title            text NOT NULL DEFAULT '',
-  phase            text NOT NULL DEFAULT '',
-  status           text NOT NULL DEFAULT '',
-  conditions       jsonb NOT NULL DEFAULT '[]'::jsonb,
-  locations        jsonb NOT NULL DEFAULT '{}'::jsonb,
-  url              text NOT NULL DEFAULT '',
-  record_hash      text,
-  retrieved_at     timestamptz,
-  eligibility_text text NOT NULL DEFAULT '',
-  criteria_hash    text NOT NULL DEFAULT '',
-  created_at       timestamptz NOT NULL DEFAULT now(),
-  updated_at       timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (study_id, registry, registry_id)
-);
-CREATE INDEX IF NOT EXISTS vcr_candidate_trials_study_idx ON evimed_vcr.candidate_trials (study_id, updated_at DESC);
-
-CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trial_criteria (
-  id                 text PRIMARY KEY,
-  study_id           text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
-  candidate_trial_id text NOT NULL REFERENCES evimed_vcr.candidate_trials(id) ON DELETE CASCADE,
-  user_id            text NOT NULL,
-  ordinal            integer NOT NULL,
-  kind               text NOT NULL CHECK (kind IN ('inclusion', 'exclusion')),
-  criterion_type     text NOT NULL CHECK (criterion_type IN ${inList(VCR_CRITERION_TYPES)}),
-  requirement        jsonb NOT NULL DEFAULT '{}'::jsonb,
-  applicability      jsonb,
-  source_text        text NOT NULL DEFAULT '',
-  source_locator     jsonb NOT NULL DEFAULT '{}'::jsonb,
-  evidence_needed    jsonb NOT NULL DEFAULT '[]'::jsonb,
-  review_state       text NOT NULL DEFAULT 'ai_set' CHECK (review_state IN ${inList(VCR_REVIEW_STATES)}),
-  created_at         timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (candidate_trial_id, ordinal)
-);
-
--- One patient judged against one candidate trial, as of one instant: the table \`matching_assessments\` is for the study's own protocol,
--- with the same columns for what it records. A new evaluation is a new row; the newest per (trial, patient) is the one a page ranks.
-CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trial_assessments (
-  id                 text PRIMARY KEY,
-  study_id           text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
-  candidate_trial_id text NOT NULL REFERENCES evimed_vcr.candidate_trials(id) ON DELETE CASCADE,
-  user_id            text NOT NULL,
-  subject_key        text NOT NULL,
-  as_of              timestamptz NOT NULL,
-  summary            text NOT NULL DEFAULT 'pending' CHECK (summary IN ${inList(VCR_ELIGIBILITY_SUMMARIES)}),
-  counts             jsonb NOT NULL DEFAULT '{}'::jsonb,
-  evidence_gaps      jsonb NOT NULL DEFAULT '[]'::jsonb,
-  provenance         jsonb NOT NULL DEFAULT '{}'::jsonb,
-  input_snapshot_id  text NOT NULL,
-  created_at         timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (candidate_trial_id, subject_key, as_of, input_snapshot_id)
-);
-CREATE INDEX IF NOT EXISTS vcr_candidate_assessments_subject_idx
-  ON evimed_vcr.candidate_trial_assessments (study_id, subject_key, candidate_trial_id, as_of DESC);
-
-CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trial_judgments (
-  id            text PRIMARY KEY,
-  assessment_id text NOT NULL REFERENCES evimed_vcr.candidate_trial_assessments(id) ON DELETE CASCADE,
-  criterion_id  text NOT NULL REFERENCES evimed_vcr.candidate_trial_criteria(id) ON DELETE CASCADE,
-  user_id       text NOT NULL,
-  state         text NOT NULL CHECK (state IN ${inList(VCR_CRITERION_STATES)}),
-  applicable    boolean NOT NULL DEFAULT true,
-  decided_by    text NOT NULL DEFAULT 'code' CHECK (decided_by IN ('code', 'model', 'human')),
-  evidence      jsonb NOT NULL DEFAULT '[]'::jsonb,
-  recheck_at    timestamptz,
-  created_at    timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (assessment_id, criterion_id)
-);
-
--- The answer to a language criterion of a candidate trial is bound to the trial, not to a protocol version.
-
--- The structuring of a registry trial's eligibility text, kept per account by the registry id and the hash of the record it was made
--- from (M2): a second study of the same account that meets the same record reads it instead of asking for the parse again, and a
--- record whose hash changed is parsed again. It belongs to the account and to no study — the criteria come from a public record, the
--- row is deleted with the account, and nobody else's lookup reaches it (every read names the user). One row per registry id: a
--- newer record replaces the older parse, which a study that holds it keeps in its own criteria.
-CREATE TABLE IF NOT EXISTS evimed_vcr.parsed_trial_criteria (
-  user_id       text NOT NULL,
-  registry      text NOT NULL,
-  registry_id   text NOT NULL,
-  record_hash   text NOT NULL,
-  criteria      jsonb NOT NULL DEFAULT '[]'::jsonb,
-  criteria_hash text NOT NULL DEFAULT '',
-  created_at    timestamptz NOT NULL DEFAULT now(),
-  updated_at    timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (user_id, registry, registry_id)
-);
-ALTER TABLE evimed_vcr.language_judgments ADD COLUMN IF NOT EXISTS candidate_trial_id text;
-CREATE INDEX IF NOT EXISTS vcr_language_candidate_idx ON evimed_vcr.language_judgments
-  (study_id, candidate_trial_id, subject_key, criterion_key, created_at DESC) WHERE candidate_trial_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.followup_episodes (
   id            text PRIMARY KEY,

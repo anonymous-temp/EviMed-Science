@@ -300,18 +300,29 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
       // is recorded first, so the run's own monitor reading the aborted turn cannot leave it unattributed. An observer
       // that fails never holds the stop back.
       const forward = async () => { await send(upstream, raw); };
-      // A stop also passes the session's prompt admission (the PR's stop intents): it waits for the kernel's acceptance, and an
-      // accepted stop invalidates a continuation reserved for the same conversation.
-      const stop = async () => submit(frame.endpoint, async signal => {
+      // Stop submission has its own lane: never wait behind the prompt it cancels.
+      // The intent invalidates an unsent continuation even if cancellation fails.
+      const stop = async () => {
+       let entered = false;
+       const cancel = async () => {
+        entered = true;
         await beforeSend(frame.endpoint, frame.payload);
-        await Promise.resolve(observe(frame.endpoint, frame.payload)).catch(() => {}); signal?.throwIfAborted();
+        await Promise.resolve(observe(frame.endpoint, frame.payload)).catch(() => {});
         const accepted = new Promise((resolve, reject) => acknowledgements.set(frame.streamId, { resolve, reject, accepted: null }));
         void accepted.catch(() => {});
-        const aborted = () => shutdown(1011, 'runtime_prompt_acceptance_unknown'); signal?.addEventListener('abort', aborted, { once: true });
+        const aborted = () => shutdown(1011, 'runtime_prompt_acceptance_unknown');
         const deadline = setTimeout(aborted, acceptanceTimeoutMs);
         try { await send(upstream, raw); await accepted; }
-        finally { clearTimeout(deadline); signal?.removeEventListener('abort', aborted); acknowledgements.delete(frame.streamId); }
-      }, frame.payload);
+        finally { clearTimeout(deadline); acknowledgements.delete(frame.streamId); }
+       };
+       try { return await submit(frame.endpoint, cancel, frame.payload); }
+       catch (error) {
+        // Local admission failure cannot erase an authenticated stop. The same
+        // beforeSend authorization still applies; never retry a submitted cancel.
+        if (entered) throw error;
+        return cancel();
+       }
+      };
       if (frame.type === 'open') await admit(frame.endpoint, async () => {
         if (frame.endpoint === 'session/cancel') await stop();
         else await forward();

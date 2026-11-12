@@ -176,3 +176,13 @@ test("a file no rule claims is reported rather than absorbed", () => {
   assert.equal(classify({ file: "OpenScience/deps-version.json", line: 4, text: '"version": "0.2.1-rc.2"' })?.kind, "pin");
   assert.ok(RULES.every((rule) => rule.why && rule.why.length > 20), "every rule states why its kind is the right one");
 });
+
+
+test("capsule measurements retain their kernel provenance without hiding runner pins", () => {
+  for (const file of [
+    "OpenScience/evals/capsule-proving/results/ledger-20261111.jsonl",
+  ]) assert.equal(classify({ file, line: 1, text: '{"kernel":"0.2.2-rc.1"}' })?.kind, "provenance");
+  const file = "OpenScience/evals/capsule-proving/c2/run_c2.mjs";
+  assert.equal(classify({ file, line: 1, text: 'text: [`C2 ${args.arm} arm on the product path (real control plane, DSH 0.2.2-rc.1,' })?.kind, "provenance");
+  assert.equal(classify({ file, line: 1, text: 'const kernelVersion = "0.2.2-rc.1";' }), null);
+});

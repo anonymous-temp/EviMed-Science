@@ -34,6 +34,17 @@ import { HOOK_SOFT_WAIT_MS, waitOnHook } from './src/hookWait.mjs'
 
 export { SEAMS }
 export { HOOK_SOFT_WAIT_MS, waitOnHook }
+
+/**
+ * A deployment opt-in without exposing the Node environment to sandboxed plugins.
+ * Read at use time, like settings supplied through a plugin row; only the literal `1` enables it.
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function isLaunchFlagEnabled(name) {
+  return globalThis.process?.env?.[name] === '1'
+}
+
 export {
   KNOWN_TURN_END_KINDS,
   toArgs,
@@ -1054,6 +1065,7 @@ export async function startSubagent(ctx, request, parent, signal) {
         prompt: [{ type: 'text', text: request.prompt }],
         parent,
         outputSchema: request.outputSchema,
+        ...(request.agentOptions === undefined ? {} : { agentOptions: { ...request.agentOptions } }),
         ...(request.maxDepth === undefined ? {} : { maxDepth: request.maxDepth }),
       },
     })
@@ -1643,3 +1655,5 @@ export {
   pinOpenVikingPluginEnvironment,
   registerMemoryBridge,
 } from './src/memoryBridge.mjs'
+
+export { registerPatientMatchingStatus } from './src/patientMatchingStatus.mjs'

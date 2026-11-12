@@ -5,6 +5,7 @@
 // The last one is the whole of principle 1 at this seam: a model that could
 // write a count or a measure could write a result nobody computed.
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
@@ -254,12 +255,95 @@ test("the registry search keys belong to what: candidates, are checked in words,
   assert.match(stray.json().error, /candidates/);
   // And the request's own findings answer in words, before the service is reached.
   const before = calls.length;
-  for (const bad of [{ condition: "x", age: 400 }, { condition: "x", sex: "unknown" }, { condition: "x", terms: ["a", "b", "c", "d"] }, { age: 50 }, { condition: "x", status: "closed" }]) {
+  for (const bad of [{ condition: "x", age: 400 }, { condition: "x", sex: "unknown" }, { condition: "x", terms: Array.from({ length: 33 }, (_, at) => `phrase ${at}`) }, { condition: "x", summary: "s".repeat(2001) }, { age: 50 }, { condition: "x", status: "closed" }]) {
     const res = await ask({ what: "candidates", filter: bad });
     assert.deepEqual([res.status, res.json().code], [400, "vcr_read_filter_invalid"], JSON.stringify(bad));
     assert.match(res.json().error, /filter\./);
   }
   assert.equal(calls.length, before, "nothing was read for a request that was refused");
+});
+
+test("a search for a patient's trials takes 32 phrases and a summary, and its saved list is read again by searchId and offset; the id belongs to candidates only (G11)", async () => {
+  const { calls, handler } = fixture();
+  const ask = async (body) => { const res = response(); await handler(request("/internal/vcr/v1/read", body), res); return res; };
+  const filter = { condition: "lung cancer", terms: Array.from({ length: 32 }, (_, at) => `phrase ${at}`), summary: "stage IV lung adenocarcinoma, EGFR positive", age: 58, limit: 20 };
+  assert.equal((await ask({ what: "candidates", filter })).status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "candidates", filter]);
+  const page = { searchId: "cns_0123456789abcdef012345", offset: 20, limit: 20 };
+  assert.equal((await ask({ what: "candidates", filter: page })).status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "candidates", page]);
+  for (const bad of [{ what: "criteria", filter: { searchId: "cns_1" } }, { what: "candidates", filter: { searchId: "has space" } }, { what: "study", filter: { summary: "x" } }]) {
+    const res = await ask(bad);
+    assert.deepEqual([res.status, res.json().code], [400, "vcr_read_filter_invalid"], JSON.stringify(bad));
+  }
+});
+
+test("a judging selection can name a saved search: the platform takes the trials from it in its order, cut to candidateLimit, and a search that is not this study's is a named refusal (G11)", async () => {
+  /** @type {any[]} */
+  const started = [];
+  const matchJudge = { async start(/** @type {any} */ _study, /** @type {any} */ selection) {
+    started.push(selection);
+    return { action: "start", kind: "match_judge", state: "queued", jobId: "job_7", statement: "这一批判定 2 对", estimate: { basis: "estimate", pairs: 2, calls: 3, cost: 0.1 }, direction: selection.direction };
+  } };
+  const asked = [];
+  const candidateSearches = { async resolveSelection(/** @type {any} */ _study, /** @type {string} */ id, /** @type {number | null} */ limit) {
+    asked.push([id, limit]);
+    if (id === "cns_other") return null;
+    return id === "cns_frozen" ? { registryIds: ["NCT00000001"], collection: "snapshot-1", collectionRevision: "a".repeat(64), available: 1 }
+      : { registryIds: ["NCT00000003", "ChiCTR2400000001"].slice(0, limit ?? 2), collection: null, collectionRevision: null, available: 2 };
+  } };
+  const { handler } = fixture({ matchJudge, candidateSearches });
+  const start = async (/** @type {Record<string, any>} */ selection) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_judge", selection }), res); return res; };
+  const best = await start({ subjectKey: "P-1", searchId: "cns_1", candidateLimit: 1, topK: 3 });
+  assert.equal(best.status, 200, best.body);
+  assert.deepEqual(started.at(-1), { direction: "patient_to_trial", subjectKey: "P-1", topK: 3, registryIds: ["NCT00000003"] }, "the search and the limit are consumed; the job sees ids");
+  assert.deepEqual(asked.at(-1), ["cns_1", 1]);
+  await start({ subjectKey: "P-1", searchId: "cns_frozen" });
+  assert.deepEqual(started.at(-1), { direction: "patient_to_trial", subjectKey: "P-1", registryIds: ["NCT00000001"], collection: "snapshot-1", collectionRevision: "a".repeat(64) });
+  const before = started.length;
+  const foreign = await start({ subjectKey: "P-1", searchId: "cns_other" });
+  assert.deepEqual([foreign.status, foreign.json().code], [400, "vcr_matching_selection_invalid"]);
+  for (const bad of [{ subjectKey: "P-1", searchId: "cns_1", registryIds: ["NCT00000001"] }, { subjectKey: "P-1", registryIds: ["NCT00000001"], candidateLimit: 0 }, { protocolVersionId: "pv_1", searchId: "cns_1" }]) {
+    assert.equal((await start(bad)).status, 400, JSON.stringify(bad));
+  }
+  assert.equal(started.length, before, "nothing refused reached the job");
+  // A list of ids is cut by the limit before the job sees it.
+  await start({ subjectKey: "P-1", registryIds: ["NCT00000001", "NCT00000002", "NCT00000003"], candidateLimit: 2 });
+  assert.deepEqual(started.at(-1).registryIds, ["NCT00000001", "NCT00000002"]);
+  assert.equal("candidateLimit" in started.at(-1), false);
+});
+
+test("frozen candidate pagination and exact reads carry the collection through the gateway", async () => {
+  const { calls, handler } = fixture();
+  const ask = async (what, filter) => {
+    const res = response();
+    await handler(request("/internal/vcr/v1/read", { what, filter }), res);
+    return res;
+  };
+  const filter = { collection: "snapshot-1", condition: "lung cancer", terms: ["nsclc", "egfr", "alk", "adenocarcinoma"], limit: 500, cursor: "opaque-cursor" };
+  assert.equal((await ask("candidates", filter)).status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "candidates", filter]);
+  const exact = { collection: filter.collection, collectionRevision: "a".repeat(64), registry: "clinicaltrials.gov", registryId: "NCT00000001" };
+  assert.equal((await ask("trial_registry_record", exact)).status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "trial_registry_record", exact]);
+  assert.equal((await ask("trial_registry_record", { ...exact, collectionRevision: undefined })).status, 400);
+  assert.equal((await ask("candidates", { ...filter, offset: 50 })).status, 400);
+  assert.equal((await ask("candidates", { ...filter, limit: 501 })).status, 400);
+  assert.equal((await ask("candidates", { condition: "lung cancer", limit: 500 })).status, 400);
+});
+
+test("disconnecting a frozen candidate read aborts the runtime request", async () => {
+  const { handler, vcr } = fixture();
+  const res = Object.assign(new EventEmitter(), response());
+  let observed = false;
+  vcr.service.runtimeRead = async (_study, _what, _filter, { signal }) => {
+    res.emit("close");
+    observed = signal.aborted;
+    return { available: false };
+  };
+  await handler(request("/internal/vcr/v1/read", { what: "candidates", filter: { collection: "snapshot-1", condition: "diabetes" } }), res);
+  assert.equal(observed, true);
+  assert.equal(res.listenerCount("close"), 0);
 });
 
 test("a runtime write may not write a number, a count or an execution record", async () => {
@@ -667,38 +751,73 @@ test("a pooling start tells the run every study it left out, not the first twent
   assert.deepEqual(data.refused[44], { id: "evd_44", reasons: ["quote_not_verified"] });
 });
 
-test("D4: a batch reading starts with a selection and no scenario, and the answer is the platform's statement of what it will read and cost", async () => {
+test("D4: the retired batch reading of records is refused by name and starts nothing", async () => {
+  const started = [];
+  const { handler } = fixture({ matchBatch: { async start(/** @type {any} */ _study, /** @type {any} */ selection) { started.push(selection); return {}; } } });
+  const res = response();
+  await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_extract", selection: { protocolVersionId: "pv_1" } }), res);
+  assert.equal(res.status, 400, res.body);
+  assert.deepEqual(started, []);
+  assert.doesNotMatch(res.body, /match_extract/);
+});
+
+test("a judging job starts with a selection and no scenario, in either direction, and answers what it will do", async () => {
   /** @type {any[]} */
   const started = [];
-  const matchBatch = { async start(/** @type {any} */ _study, /** @type {any} */ selection) {
+  const matchJudge = { async start(/** @type {any} */ _study, /** @type {any} */ selection) {
     started.push(selection);
-    return { action: "start", kind: "match_extract", state: "queued", jobId: "job_5", statement: "这一批要读 3 位病人的 3 份病历，预计最多 1 万个输入词元。",
-      plan: { toRead: 52, alreadyRead: 0, prefiltered: 3, noDocuments: 12, deferred: 0 }, estimate: { basis: "ceiling", people: 52, records: 60, cost: 0.9 } };
+    return { action: "start", kind: "match_judge", state: "queued", jobId: "job_6", statement: "这一批判定 2 对", estimate: { basis: "estimate", pairs: 2, calls: 3, cost: 0.1 }, direction: selection.direction };
   } };
-  const { handler } = fixture({ matchBatch });
-  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_extract", ...body }), res); return res; };
-  const ok = await start({ selection: { protocolVersionId: "pv_1", prefilter: false } });
-  assert.equal(ok.status, 200, ok.body);
-  assert.equal(ok.json().data.jobId, "job_5");
-  assert.match(ok.json().data.statement, /这一批要读 3 位病人/);
-  // The plan's counts are the study's people: the answer passes the boundary once, so the three the table decided against are not a number.
-  assert.deepEqual(ok.json().data.plan, { toRead: 52, alreadyRead: 0, prefiltered: null, noDocuments: 12, deferred: 0, suppressed: ["prefiltered"] });
-  assert.deepEqual(ok.json().data.estimate, { basis: "ceiling", people: 52, records: 60, cost: 0.9 });
-  assert.deepEqual(started, [{ protocolVersionId: "pv_1", prefilter: false }]);
-  // with no selection the platform takes the newest protocol and everyone
-  await start({});
-  assert.deepEqual(started.at(-1), {});
-  // a scenario, rows or a selection of the evaluation's kind are refused by name
-  for (const body of [{ scenario: { subjects: ["P-001"] } }, { inputs: [{ kind: "snapshot", id: "snp_1" }] }, { selection: { snapshotId: "a".repeat(64) } }, { selection: { direction: "patient_to_trial" } }]) {
+  const { handler } = fixture({ matchJudge });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_judge", ...body }), res); return res; };
+  const one = await start({ selection: { subjectKey: "P-1", registryIds: ["NCT00000001", "NCT00000002"], topK: "all", thinking: "off" } });
+  assert.equal(one.status, 200, one.body);
+  assert.deepEqual([one.json().data.jobId, one.json().data.estimate.pairs], ["job_6", 2], "a count of pairs is not a head count, and it reaches the answer");
+  assert.equal(started.at(-1).direction, "patient_to_trial");
+  const many = await start({ selection: { protocolVersionId: "pv_1", subjectKeys: ["P-1"] } });
+  assert.equal(many.status, 200);
+  assert.equal(started.at(-1).direction, "trial_to_patient");
+  const before = started.length;
+  for (const body of [{}, { scenario: { subjects: ["P-1"] }, selection: { protocolVersionId: "pv_1" } }, { inputs: [{ kind: "snapshot", id: "snp_1" }], selection: { protocolVersionId: "pv_1" } }, { selection: { snapshotId: "a".repeat(64) } }, { selection: { subjectKey: "P-1" } }]) {
     const refused = await start(body);
     assert.equal(refused.status, 400, JSON.stringify(body));
   }
-  assert.equal(started.length, 2, "nothing refused reached the reading");
-  // a deployment without the module's reader says so, and the other steps carry on
-  const none = fixture({ matchBatch: null });
+  assert.equal(started.length, before, "nothing refused reached the job");
+  const none = fixture({ matchJudge: null });
   const res = response();
-  await none.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_extract" }), res);
+  await none.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_judge", selection: { protocolVersionId: "pv_1" } }), res);
   assert.equal(res.status, 503);
+});
+
+test("a conversation's judgment is written item by item: a shape problem is one item's notice, the rest are saved, and nothing clinical refuses", async () => {
+  /** @type {any[]} */
+  const written = [];
+  const matchJudgmentReads = { async writeConversation(/** @type {any} */ _study, /** @type {any} */ item) {
+    written.push(item);
+    if (item.registryId === "NCT00000009") throw Object.assign(new Error("登记平台没有这个登记号的记录。"), { code: "registry_not_found" });
+    return { id: `mjd_${written.length}`, verdict: "ineligible", verdictLabel: "不符合", target: { kind: "candidate_trial", id: item.registryId }, notices: item.criteria ? [{ code: "sentence_ids_dropped", count: 1 }] : [] };
+  } };
+  const { handler } = fixture({ matchJudgmentReads });
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", { what: "trial_judgment", items: [
+    { subjectKey: "P-1", registryId: "NCT00000001", fit: 3, confidence: 0.9, reasons: { ineligible: ["妊娠"] }, criteria: [{ number: 1, reason: "r", sentenceIds: [0, 9], label: "excluded" }] },
+    { subjectKey: "P-1", registryId: "NCT00000002" },
+    { subjectKey: "P-1", registryId: "NCT00000003", fit: 300 },
+    { subjectKey: "P-1", registryId: "NCT00000004", protocolVersionId: "pv_1", fit: 1 },
+    { subjectKey: "P-1", registryId: "NCT00000009", fit: 50 },
+    { subjectKey: "P-1", protocolVersionId: "pv_1", fit: 60, nonsense: 1 },
+    { subjectKey: "P-1", protocolVersionId: "pv_1", fit: 60 },
+  ] }), res);
+  assert.equal(res.status, 200, res.body);
+  const { data } = res.json();
+  assert.deepEqual(data.ids, ["mjd_1", "mjd_3"], "the two whose shape was right and whose target answered");
+  assert.deepEqual(data.issues.map((entry) => [entry.index, entry.code]).sort((a, b) => a[0] - b[0]), [[1, "vcr_write_value_invalid"], [2, "vcr_write_value_invalid"], [3, "vcr_write_value_invalid"], [4, "registry_not_found"], [5, "vcr_write_field_forbidden"]]);
+  assert.deepEqual(data.results[0], { index: 0, id: "mjd_1", verdict: "ineligible", verdictLabel: "不符合", target: { kind: "candidate_trial", id: "NCT00000001" }, notices: [{ code: "sentence_ids_dropped", count: 1 }] });
+  assert.equal(written[0].fit, 3, "a low score and a stated exclusion are saved like anything else");
+  const off = fixture({ matchJudgmentReads: null });
+  const refused = response();
+  await off.handler(request("/internal/vcr/v1/write", { what: "trial_judgment", data: { subjectKey: "P-1", registryId: "NCT00000001", fit: 3 } }), refused);
+  assert.deepEqual(refused.json().data.issues.map((entry) => entry.code), ["vcr_write_refused"]);
 });
 
 test("a network, a dose-response and a shrinkage start through the gateway, filed under the label the call gave them; a pooled reference for the spread is a table, never typed numbers", async () => {
@@ -1650,6 +1769,136 @@ function nativeProbe() {
   return { scopes, call };
 }
 
+test("a conversation's judging job: the deployment sizes the clause stage, and a collection named alone is the one in force", async () => {
+  /** @type {any[]} */
+  const asked = [];
+  const matchJudge = { async start(/** @type {any} */ _study, /** @type {any} */ selection) { asked.push(selection); return { action: "start", kind: "match_judge", state: "queued", jobId: "job_7", direction: "patient_to_trial" }; } };
+  const REVISION = "a".repeat(64);
+  const evidence = { collectionRevision: (/** @type {string} */ id) => (id === "trec2021" ? REVISION : null) };
+  const { handler } = fixture({ matchJudge, evidence });
+  const start = async (/** @type {Record<string, any>} */ selection) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_judge", selection: { subjectKey: "P-1", registryIds: ["NCT00000001"], ...selection } }), res); return res; };
+  for (const [given, sent] of [[{ topK: "all" }, 20], [{ topK: 500 }, 20], [{ topK: 3 }, 3], [{ topK: 0 }, 0], [{}, undefined]]) {
+    assert.equal((await start(given)).status, 200);
+    assert.equal(asked.at(-1).topK, sent, JSON.stringify(given));
+  }
+  assert.equal((await start({ collection: "trec2021" })).status, 200);
+  assert.deepEqual([asked.at(-1).collection, asked.at(-1).collectionRevision], ["trec2021", REVISION]);
+  assert.equal((await start({ collection: "trec2021", collectionRevision: "b".repeat(64) })).status, 200);
+  assert.equal(asked.at(-1).collectionRevision, "b".repeat(64), "a revision named is the one that was read");
+  const unknown = await start({ collection: "nothing" });
+  assert.equal(asked.at(-1).collection === "nothing" && asked.at(-1).collectionRevision, undefined, "no revision is invented");
+  assert.equal(unknown.status, 200);
+});
+
+test("a protocol needs only its words: clause text is enough, a pasted text is numbered by code, and the grammar stays for table screening", async () => {
+  const made = fixture();
+  /** @type {any[]} */
+  const saved = [];
+  made.vcr.store.saveProtocolVersion = async (input) => { saved.push(input); return { id: "prt_1", version: saved.length, criteria: input.criteria }; };
+  const write = async (/** @type {Record<string, any>} */ data) => {
+    const res = response();
+    await made.handler(request("/internal/vcr/v1/write", { what: "protocol", data }), res);
+    return res.json().data;
+  };
+  // Clause text alone: the text is what is asked of the model, in the grammar's own shape for a question only language can answer.
+  const clauses = await write({ title: "t", criteria: [{ kind: "inclusion", sourceText: "Age >= 18 years" }, { kind: "exclusion", sourceText: "Pregnancy" }] });
+  assert.equal(clauses.ok, true, JSON.stringify(clauses.issues));
+  assert.deepEqual(saved.at(-1).criteria.map((/** @type {any} */ row) => [row.kind, row.sourceText, row.requirement.op]), [["inclusion", "Age >= 18 years", "language"], ["exclusion", "Pregnancy", "not"]]);
+  assert.equal(saved.at(-1).criteria[0].requirement.text, "Age >= 18 years");
+  assert.deepEqual(saved.at(-1).criteria[1].requirement.operand, { op: "language", text: "Pregnancy" }, "an exclusion's text is written as stated and stored as its negation, like any other");
+  // A pasted protocol: the segmenter's clauses, on their own sides, words whole, each knowing where it stood.
+  const text = "Inclusion Criteria:\n1. ECOG 0, 1, or 2.\n2. Adenocarcinoma, or\n3. Squamous cell carcinoma\nExclusion Criteria:\n- Pregnancy";
+  const pasted = await write({ title: "EV-201", protocolText: text });
+  assert.equal(pasted.ok, true, JSON.stringify(pasted.issues));
+  const rows = saved.at(-1).criteria;
+  assert.deepEqual(rows.map((/** @type {any} */ row) => [row.kind, row.sourceText]), [["inclusion", "ECOG 0, 1, or 2."], ["inclusion", "Adenocarcinoma, or 3. Squamous cell carcinoma"], ["exclusion", "Pregnancy"]]);
+  assert.equal(text.slice(rows[0].sourceLocator.start, rows[0].sourceLocator.end), "ECOG 0, 1, or 2.");
+  assert.equal(saved.at(-1).title, "EV-201");
+  assert.equal(saved.at(-1).protocolText, undefined);
+  assert.deepEqual(pasted.results?.find((/** @type {any} */ row) => row.clauses)?.clauses, { inclusion: 2, exclusion: 1, noSection: 0 });
+  // A line that names no section is a requirement as written, and the answer says so for the run to look again.
+  const none = await write({ protocolText: "Adults with asthma\n\nNo prior biologics" });
+  assert.deepEqual(saved.at(-1).criteria.map((/** @type {any} */ row) => row.kind), ['unclassified','unclassified']);
+  const said = none.results?.find((/** @type {any} */ row) => row.clauses);
+  assert.deepEqual(said.clauses, { inclusion: 0, exclusion: 0, noSection: 2 });
+  assert.match(said.note, /没有写明/);
+  // A clause longer than a language node holds keeps all its words in the source text.
+  const long = "x".repeat(6000);
+  const longWrite = await write({ criteria: [{ kind: "inclusion", sourceText: long }] });
+  assert.equal(longWrite.ok, true, JSON.stringify(longWrite.issues));
+  assert.equal(saved.at(-1).criteria[0].sourceText, long);
+  assert.equal(saved.at(-1).criteria[0].requirement.text.length, 4000);
+  // What cannot be read is named and nothing is written: no words, both forms at once, a text with no clause in it.
+  const before = saved.length;
+  for (const [data, field] of [
+    [{ criteria: [{ kind: "inclusion", requirement: { op: "present", variable: "nsclc" } }] }, "criteria[0].sourceText"],
+    [{ criteria: [{ kind: "inclusion", sourceText: "   " }] }, "criteria[0].sourceText"],
+    [{ protocolText: "x", criteria: [{ kind: "inclusion", sourceText: "y" }] }, "protocolText"],
+    [{ protocolText: "Inclusion Criteria:\n\nExclusion Criteria:" }, "protocolText"],
+    [{ protocolText: 5 }, "protocolText"],
+  ]) {
+    const refused = await write(/** @type {any} */ (data));
+    assert.equal(refused.ok, false, JSON.stringify(data));
+    assert.equal(refused.issues[0].field, field, JSON.stringify(data));
+  }
+  assert.equal(saved.length, before);
+  // The grammar is kept where a table is screened, with the words beside it.
+  const typed = await write({ criteria: [{ kind: "inclusion", sourceText: "Age >= 18", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" } }] });
+  assert.equal(typed.ok, true);
+  assert.equal(saved.at(-1).criteria[0].requirement.op, "compare");
+});
+
+test("whole language clauses survive the gateway and ambiguous language keys are refused", async () => {
+  const made = fixture();
+  const saved = [];
+  made.vcr.store.saveProtocolVersion = async (input) => { saved.push(input.criteria[0]); return { id: "prt_1", version: 1, criteria: input.criteria }; };
+  const write = async (criterion) => {
+    const res = response();
+    await made.handler(request("/internal/vcr/v1/write", { what: "protocol", data: { title: "t", criteria: [criterion] } }), res);
+    return res.json().data;
+  };
+  for (const text of ["a".repeat(500), "a".repeat(4000), "🧬".repeat(4000)]) {
+    const sourceText = text;
+    const result = await write({ kind: "inclusion", sourceText, requirement: { op: "language", text } });
+    assert.equal(result.ok, true);
+    assert.equal(saved.at(-1).sourceText, sourceText);
+    assert.equal(saved.at(-1).requirement.text, text);
+  }
+  const tooLong = "🧬".repeat(4001);
+  assert.equal((await write({ kind: "inclusion", sourceText: tooLong, requirement: { op: "language", text: tooLong } })).ok, false);
+  const clause = ` ${"🧬".repeat(3998)} `;
+  assert.equal((await write({ kind: "inclusion", sourceText: clause, requirement: { op: "present", variable: "diagnosis" },
+    applicability: { op: "language", key: "applies", text: clause } })).ok, true);
+  assert.equal(saved.at(-1).sourceText, clause);
+  assert.equal(saved.at(-1).applicability.text, clause);
+  for (const [requirement, applicability] of [
+    [{ op: "language", key: "same", text: "one" }, { op: "language", key: "same", text: "one" }],
+    [{ op: "all", operands: [{ op: "language", key: "same", text: "one" }, { op: "language", key: "same", text: "two" }] }, undefined],
+    [{ op: "language", text: "one" }, { op: "language", text: "two" }],
+  ]) {
+    assert.equal((await write({ kind: "inclusion", sourceText: "one", requirement, applicability })).ok, false);
+  }
+  assert.equal(saved.length, 4);
+});
+
+test("protocol writes reject cross-criterion key collisions as a whole set", async () => {
+  const made = fixture({});
+  const criterion = (text) => ({ kind: "inclusion", sourceText: text, requirement: { op: "language", key: "shared", text } });
+  const call = async (body) => { const res = response(); await made.handler(request("/internal/vcr/v1/write", body), res); return res.json().data; };
+  const conflicting = [criterion("First condition."), criterion("Second condition.")];
+  for (const body of [
+    { what: "protocol", data: { title: "t", criteria: conflicting } },
+    { what: "criteria", items: conflicting },
+  ]) {
+    const result = await call(body);
+    assert.equal(result.ok, false);
+    assert.equal(result.ids.length, 0);
+    assert.ok(result.issues.some(issue => issue.code === "vcr_criterion_malformed"));
+  }
+  const same = [criterion("First condition."), criterion("First condition.")];
+  assert.equal((await call({ what: "protocol", data: { title: "t", criteria: same } })).ok, true);
+});
+
 test("a write that will be refused on its shape alone opens no scope; one that can be written still does", async () => {
   const probe = nativeProbe();
   const criterion = { kind: "inclusion", criterionType: "demographic", sourceText: "Age >= 18", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" } };
@@ -1726,7 +1975,7 @@ test("a conversation's matching write and a job's status carry the entry to the 
   const { call } = conversationCalls("https://evimed.example");
   const write = await call("write", { what: "patient_context", data: { messageSeq: 1 } });
   assert.equal(write.status, 200);
-  assert.deepEqual(write.json().data.resultEntry, { studyId: "std_task", tab: "matching", label: "在“匹配”页查看", url: "https://evimed.example/app/virtual-research/std_task/matching" });
+  assert.deepEqual(write.json().data.resultEntry, { studyId: "std_task", tab: "matching", label: "在“匹配”页查看", object: "P-1", url: "https://evimed.example/app/virtual-research/std_task/matching?object=P-1" });
   const status = await call("simulate", { action: "status", jobId: "job_1" });
   assert.equal(status.status, 200);
   assert.equal(status.json().data.state, "running");
@@ -1736,7 +1985,7 @@ test("a conversation's matching write and a job's status carry the entry to the 
 test("a deployment with no public address still names the page; and a write that wrote nothing has no entry", async () => {
   const { call, made } = conversationCalls();
   const write = await call("write", { what: "patient_context", data: { messageSeq: 1 } });
-  assert.deepEqual(write.json().data.resultEntry, { studyId: "std_task", tab: "matching", label: "在“匹配”页查看" });
+  assert.deepEqual(write.json().data.resultEntry, { studyId: "std_task", tab: "matching", label: "在“匹配”页查看", object: "P-1" });
   made.vcr.patientContext = async () => ({ ok: false, issues: [{ code: "vcr_patient_context_invalid" }] });
   const refused = await call("write", { what: "patient_context", data: { messageSeq: 2 } });
   assert.equal(refused.json().data.resultEntry, undefined);
@@ -1916,6 +2165,16 @@ test("a unit the quotation does not print drops the unit and keeps the fact; a b
   // A number the quotation does not print is still refused whole.
   const invented = factWriter({ text });
   assert.equal((await invented.write(item({ variable: "hba1c", value: 7.9, unit: "%", surface: "7.9", quote: "HgbA1c 7.4 last month." }))).ok, false);
+});
+
+test("a changed read remains a retryable 409 at the gateway", async () => {
+  const made = fixture();
+  made.vcr.service.runtimeRead = async () => { throw new HttpError(409, "vcr_read_changed", "Trial assessments changed while reading; retry the list."); };
+  const res = response();
+  await made.handler(request("/internal/vcr/v1/read", { what: "candidate_trials", filter: { subjectKey: "P-1" } }), res);
+  assert.equal(res.status, 409);
+  assert.equal(res.json().code, "vcr_read_changed");
+  assert.match(res.json().error, /retry the list/);
 });
 
 test("a write of several cards waits once for the second readings, and answers inside the gateway's budget with every card saved (review RF2 P1-6)", async () => {

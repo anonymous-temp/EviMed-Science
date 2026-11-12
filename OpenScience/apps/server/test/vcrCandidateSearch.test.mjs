@@ -4,7 +4,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { REGISTRY_UNAVAILABLE, chictrPrecedent, ctisListItem } from "../src/trialRegistryClient.mjs";
+import { REGISTRY_UNAVAILABLE, chictrPrecedent, ctgovPrecedent, ctisListItem } from "../src/trialRegistryClient.mjs";
+import { FLAURA } from "./vcrEvidenceFixtures.mjs";
 import {
   CANDIDATES_NOT_COVERED, ageBands, ageFit, candidateRequest, chictrCandidate, coverageSentence, ctgovCandidate, ctisCandidate,
   filterCandidates, interleave, mergeCandidates, regionFit, registryOutcome, sexFit, sexOf,
@@ -27,14 +28,17 @@ const ctis = (number, extra = {}) => ctisListItem({ ctNumber: number, ctTitle: `
 /** A ChiCTR listing: the evidence API's list item, through the client's own builder. */
 const chictr = (number, extra = {}) => chictrPrecedent({ registrationNo: number, title: `中国 ${number}`, status: "招募中", phase: "III期临床试验", conditions: ["肺癌"], interventions: ["药物C"], url: `https://www.chictr.org.cn/showproj.html?proj=${number}`, ...extra }, { retrievedAt: AT });
 
-test("a request is the condition, up to three other phrases and what is known of the patient; anything else is refused in words", () => {
-  const good = candidateRequest({ condition: " non-small cell   lung cancer ", terms: ["NSCLC EGFR", "非小细胞肺癌", "non-small cell lung cancer"], age: 63, sex: "Female", region: "China", status: "any", limit: 5 });
+test("a request is the condition, up to 32 other phrases, a summary and what is known of the patient; anything else is refused in words", () => {
+  const good = candidateRequest({ condition: " non-small cell   lung cancer ", terms: ["NSCLC EGFR", "非小细胞肺癌", "non-small cell lung cancer"], summary: "  63-year-old woman,  stage IV NSCLC  ", age: 63, sex: "Female", region: "China", status: "any", limit: 5 });
   assert.equal(good.ok, true);
-  assert.deepEqual(good.request, { condition: "non-small cell lung cancer", terms: ["NSCLC EGFR", "非小细胞肺癌"], age: 63, sex: "female", region: "China", scope: "any", limit: 5 },
+  assert.deepEqual(good.request, { condition: "non-small cell lung cancer", terms: ["NSCLC EGFR", "非小细胞肺癌"], summary: "63-year-old woman, stage IV NSCLC", age: 63, sex: "female", region: "China", scope: "any", limit: 5 },
     "the condition said again as a phrase is not a second search");
-  assert.deepEqual(candidateRequest({ condition: "x" }).request, { condition: "x", terms: [], age: null, sex: null, region: null, scope: "open", limit: 20 });
+  assert.deepEqual(candidateRequest({ condition: "x" }).request, { condition: "x", terms: [], summary: null, age: null, sex: null, region: null, scope: "open", limit: 20 });
+  assert.equal(candidateRequest({ condition: "x", terms: Array.from({ length: 32 }, (_, at) => `phrase ${at}`) }).ok, true, "32 phrases are the cap");
+  assert.match(candidateRequest({ condition: "x", terms: Array.from({ length: 33 }, (_, at) => `phrase ${at}`) }).message, /最多 32 个/);
+  assert.equal(candidateRequest({ condition: "x", summary: "   " }).request.summary, null, "an empty summary is none");
   assert.equal(candidateRequest({ condition: "x", limit: 99 }, { limitMax: 12 }).request.limit, 12, "the list's size is the deployment's");
-  for (const bad of [{}, { condition: "" }, { condition: "x", terms: "y" }, { condition: "x", terms: ["a", "b", "c", "d"] }, { condition: "x", age: -1 }, { condition: "x", age: "old" },
+  for (const bad of [{}, { condition: "" }, { condition: "x", terms: "y" }, { condition: "x", summary: 5 }, { condition: "x", summary: "s".repeat(2001) }, { condition: "x", age: -1 }, { condition: "x", age: "old" },
     { condition: "x", sex: "other" }, { condition: "x", region: "" }, { condition: "x", status: "closed" }, { condition: "x".repeat(201) }]) {
     const answer = candidateRequest(bad);
     assert.equal(answer.ok, false, JSON.stringify(bad).slice(0, 60));
@@ -119,7 +123,10 @@ test("the list is cut to its size taking the registries in turn, and says when t
 test("a registry's searches come to a state: searched, partial, failed, or not configured; and the coverage is a sentence the run can copy", () => {
   assert.equal(registryOutcome([{ query: "a", status: "ok", found: 3, total: 9 }]).state, "searched");
   const partial = registryOutcome([{ query: "a", status: "ok", found: 3, total: 9 }, { query: "b", status: REGISTRY_UNAVAILABLE, reason: "timeout", found: 0 }]);
-  assert.deepEqual([partial.state, partial.searched, partial.failed], ["partial", [{ query: "a", found: 3, total: 9 }], [{ query: "b", reason: "timeout" }]]);
+  assert.deepEqual([partial.state, partial.searched, partial.failed], ["partial", [{ query: "a", found: 3, total: 9, pages: 1 }], [{ query: "b", reason: "timeout" }]]);
+  assert.equal(registryOutcome([{ query: "a", status: "ok", found: 150, total: 900, pages: 2 }]).searched[0].pages, 2);
+  const unreached = registryOutcome([{ query: "a", status: "ok", found: 3, total: 9 }, { query: "b", status: "not_reached", reason: "search_deadline", found: 0 }]);
+  assert.deepEqual([unreached.state, unreached.failed], ["partial", [{ query: "b", reason: "search_deadline" }]], "a phrase the deadline did not reach is said so");
   assert.equal(registryOutcome([{ query: "a", status: REGISTRY_UNAVAILABLE, reason: "timeout", found: 0 }]).state, "failed");
   assert.equal(registryOutcome([{ query: "a", status: REGISTRY_UNAVAILABLE, reason: "registry_not_configured", found: 0 }]).state, "not_configured");
   const sentence = coverageSentence([
@@ -190,6 +197,15 @@ test("the candidates of one search: three registries, merged, the duplicate once
   assert.equal(JSON.stringify(answer).includes('"score"'), false, "no candidate carries a score");
 });
 
+test("a search written only in Chinese is told the English registries could not read it, and goes on; one word of English is enough to say nothing", async () => {
+  const pipeline = createVcrEvidencePipeline({ store: {}, registry: registryDouble(), now: () => NOW });
+  const chinese = await pipeline.patientCandidates({ userId: "u1", filter: { condition: "失眠", terms: ["入睡困难", "早醒"] } });
+  assert.equal(chinese.status, "ok", "the search still runs");
+  assert.match(chinese.wordsNote, /都是中文.*写成英文/u);
+  const both = await pipeline.patientCandidates({ userId: "u1", filter: { condition: "失眠", terms: ["insomnia", "早醒"] } });
+  assert.equal(both.wordsNote, undefined);
+});
+
 test("a registry that fails costs its own results and says so; the others stand (M1)", async () => {
   const registry = registryDouble({ ctis: () => ({ status: REGISTRY_UNAVAILABLE, reason: "timeout", items: [], total: null }) });
   const pipeline = createVcrEvidencePipeline({ store: {}, registry, now: () => NOW });
@@ -232,7 +248,7 @@ test("when no registry answers the answer says so and lists nothing; a deploymen
   assert.deepEqual([refused.available, refused.code], [false, "vcr_read_filter_invalid"]);
 });
 
-test("the list is capped and says there is more; the registry is asked for twice that, and a status of any is not sent as a filter (M1)", async () => {
+test("the list is capped and says there is more; the registry is asked for a full page, and a status of any is not sent as a filter (M1)", async () => {
   const many = (prefix, n) => Array.from({ length: n }, (_, at) => ctgov(`NCT${prefix}${String(at).padStart(4, "0")}`));
   const registry = registryDouble({ ctgov: () => ({ status: "ok", total: 40, retrievedAt: AT, items: many("0731", 12) }),
     ctis: () => ({ status: "ok", total: 0, retrievedAt: AT, items: [] }), chictr: () => ({ status: "ok", total: 0, retrievedAt: AT, items: [] }) });
@@ -240,31 +256,51 @@ test("the list is capped and says there is more; the registry is asked for twice
   assert.equal(answer.candidates.length, 5);
   assert.equal(answer.more, true);
   assert.equal(answer.found, 12);
-  assert.equal(registry.asked.ctgov[0].limit, 10, "twice the list's size, never less than ten");
+  assert.equal(registry.asked.ctgov[0].limit, 100, "a page is the registry's full page: the search keeps up to 500 for the patient and shows the list's size at a time");
   assert.deepEqual(registry.asked.ctgov[0].status, []);
   assert.equal(registry.asked.ctgov[0].withLocations, false, "no country named, no sites asked for");
 });
 
 // --- the service: a read of its own that needs no study ------------------------------------------------
 
-test("candidates is a read of its own, a registry search that needs no study, and it marks the trials the account has structured before (M1, M2)", async () => {
+test("candidates is a read of its own, a registry search that needs no study, and (M1)", async () => {
   assert.ok(VCR_READ_WHATS.includes("candidates"));
   const evidence = createVcrEvidencePipeline({ store: {}, registry: registryDouble(), now: () => NOW });
-  const held = [];
-  const patientTrials = { async parsedHeld(study, trials) { held.push([study.userId, trials.map((trial) => trial.registryId)]); return new Set(["clinicaltrials.gov\u0000NCT07300001"]); } };
-  const service = new VcrService({ store: {}, config: { vcrCandidateSearchMax: 3 }, evidence, patientTrials });
+  const service = new VcrService({ store: {}, config: { vcrCandidateSearchMax: 3 }, evidence });
   const answer = await service.runtimeRead({ id: null, userId: "u1", projectId: "prj_1", scope: "conversation" }, "candidates", { condition: "lung cancer" });
   assert.equal(answer.available, true);
   assert.equal(answer.candidates.length, 3, "the deployment's size caps the list");
   assert.equal(answer.candidates[0].registryId, "NCT07300001");
-  assert.equal(answer.candidates[0].parsedBefore, true);
-  assert.ok(answer.candidates.slice(1).every((candidate) => candidate.parsedBefore === undefined));
-  assert.equal(held[0][0], "u1");
   // The registry's own figures are not this study's people, and nothing about them is a cell of a few people: the study's small-cell
   // boundary, which this read passes through like every read, leaves the answer as it was (the counts of a list of 3 or 4 are not hidden).
   assert.equal(answer.registries[0].searched[0].total, 2);
   const raw = await evidence.candidatesFor({ userId: "u1" }, { condition: "lung cancer" }, 3);
-  assert.deepEqual({ ...answer, candidates: answer.candidates.map(({ parsedBefore: _p, ...candidate }) => candidate) }, JSON.parse(JSON.stringify(raw)));
+  assert.deepEqual(answer, JSON.parse(JSON.stringify(raw)));
+  // The control plane's own discovery reads the whole kept list up to its ranking depth; the runtime's read keeps the deployment's page.
+  const whole = await service.runtimeRead({ id: null, userId: "u1", projectId: "prj_1", scope: "conversation" }, "candidates", { condition: "lung cancer", limit: 300 }, { listMax: 300 });
+  assert.equal(whole.candidates.length, whole.retrieved, "nothing the search kept is cut by the run's page size");
+  assert.ok(whole.candidates.length > 3);
   const absent = await new VcrService({ store: {}, config: {} }).runtimeRead({ id: null, userId: "u1", scope: "conversation" }, "candidates", { condition: "x" });
   assert.deepEqual([absent.available, absent.code], [false, "registry_unavailable"]);
+});
+
+test("a ranking's batch read serves the record reads that follow; a record the batch did not bring is read singly", async () => {
+  const calls = { records: [], record: [] };
+  const built = ctgovPrecedent(FLAURA, { retrievedAt: AT });
+  const registry = {
+    async records(ids) { calls.records.push(ids); return { status: "ok", items: [{ status: "ok", ...built }], missing: ids.filter((id) => id !== built.precedent.registryId) }; },
+    async record(id) { calls.record.push(id); return { status: "ok", ...built }; },
+  };
+  const pipeline = createVcrEvidencePipeline({ store: {}, registry, now: () => NOW });
+  assert.deepEqual(await pipeline.prefetchRecords(["NCT02296125", "NCT07300001", "ChiCTR2400000031", "nct02296125"]), { prefetched: 1, missing: 1 });
+  assert.deepEqual(calls.records, [["NCT02296125", "NCT07300001"]], "ClinicalTrials.gov ids only, each once");
+  const read = await pipeline.readRegistryRecord({ registry: "clinicaltrials.gov", registryId: "NCT02296125" });
+  assert.equal(read.available, true);
+  assert.equal(read.registryId, "NCT02296125");
+  assert.equal(calls.record.length, 0, "served from the batch, no request of its own");
+  await pipeline.readRegistryRecord({ registry: "clinicaltrials.gov", registryId: "NCT07300001" });
+  assert.deepEqual(calls.record, ["NCT07300001"]);
+  assert.deepEqual(await pipeline.prefetchRecords(["NCT02296125"]), { prefetched: 0, missing: 0 }, "a fresh record is not asked for again");
+  const service = new VcrService({ store: {}, config: {}, evidence: pipeline });
+  assert.deepEqual(await service.prefetchRegistryRecords(["NCT02296125"]), { prefetched: 0, missing: 0 });
 });

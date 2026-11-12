@@ -40,11 +40,11 @@ test('opening promotion does not bypass hidden-file filtering in REST or MCP rea
 /** An admission that says what the test wants, and records what it was asked. */
 function fixedAdmission(answer = {}) {
   const asked = [];
-  const base = { native: true, learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null };
+  const base = { learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null };
   return { asked, admit: async (caller) => { asked.push(caller.engineSessionId ?? null); return { ...base, ...(typeof answer === "function" ? answer(caller) : answer) }; } };
 }
 
-async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, timeoutMs = 4_000, project = {} } = {}) {
+async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, timeoutMs = 4_000, project = {}, memoryContexts = null, rememberJournal = null } = {}) {
   resetNativeMemoryMetrics();
   const stub = await startOpenVikingStub(t, stubOptions);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
@@ -52,9 +52,10 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
   const failures = [];
   const handler = createMemoryGatewayHandler({
     config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
-    runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); } },
+    runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); }, runtimeGeneration: () => "generation-1" },
     store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER, ...project }) },
     sessions, admission, overlay, memoryTool, capsuleSearch, historySearch, sourceDeletion, sourceReceipt, sourceReceiptFailed,
+    memoryContexts: typeof memoryContexts === "function" ? memoryContexts(sessions) : memoryContexts, rememberJournal,
   });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   server.listen(0, "127.0.0.1");
@@ -1149,4 +1150,130 @@ for (const enabled of [false, true]) test(`unsupported or malformed forget targe
   }
   assert.deepEqual(calls, []);
   assert.equal(f.stub.sent('DELETE', '/api/v1/fs').length, 0);
+});
+
+
+test('isolation health bypasses a forbidden policy but reads still fail closed', async t => {
+  let looked = 0;
+  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true }, memoryContexts: {
+    forProject: async () => { looked++; const { HttpError } = await import('../src/security.mjs'); throw new HttpError(403, 'memory_scope_denied', 'Forbidden project'); },
+  } });
+  assert.equal((await f.call('GET', '/health')).status, 200); assert.equal(looked, 0);
+  assert.equal((await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(`${ROOT}/memories/profile.md`)}`)).status, 403);
+  assert.equal(looked, 1);
+});
+
+test('shared capture proves production admission decisions without a legacy native flag and recovers a skipped session creation', async t => {
+  let proven = false, proofs = 0;
+  const f = await fixture(t, {
+    config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true },
+    admission: { admit: async () => ({ learn: true, recall: true, learnReason: null, recallReason: null, sessionId: null }) },
+    memoryContexts: sessions => ({
+      forProject: async () => ({ kind: 'geo-project', ownerId: USER, namespaceId: OV_USER, userRoot: ROOT, sessions }),
+      configure: async () => sessions.register(USER), assertUri: (_context, uri) => uri,
+      noteCapture: async () => { proofs++; return proven ? { id: 'verified-root' } : null; },
+    }),
+  });
+  assert.equal((await f.call('POST', '/api/v1/sessions', { session_id: SESSION })).status, 200);
+  assert.equal(f.stub.sent('POST', '/api/v1/sessions').length, 0, 'unknown shared root opens no upstream session');
+  assert.equal(proofs, 1);
+  assert.equal((await f.call('GET', `/api/v1/sessions/${SESSION}`)).json.result.message_count, 0);
+  proven = true;
+  const message = await f.call('POST', `/api/v1/sessions/${SESSION}/messages`, { role: 'user', content: 'A first proved input' });
+  assert.equal(message.status, 200);
+  assert.ok(f.stub.sent('POST', '/api/v1/sessions').some(row => row.body.session_id === SESSION), 'proved message creates the session the opening could not');
+  assert.ok(f.stub.sessions.get(`${OV_USER}/${SESSION}`).messages.some(item => item.parts.some(part => part.text === 'A first proved input')));
+});
+
+test('owned and shared remember are explicit workload operations, not unproven session capture', async t => {
+  const request = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'remember', arguments: { messages: [{ role: 'user', content: 'Keep this project fact' }] } } };
+  const owned = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true } });
+  assert.equal((await owned.mcp(request)).status, 200);
+  assert.equal(owned.stub.sent('POST', '/mcp').length, 1);
+  let journaled = 0, proofs = 0;
+  const shared = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true },
+    memoryContexts: sessions => ({
+      forProject: async () => ({ kind: 'geo-project', ownerId: USER, namespaceId: OV_USER, userRoot: ROOT, sessions }),
+      configure: async () => sessions.register(USER),
+      noteCapture: async () => { proofs++; return null; },
+    }),
+    rememberJournal: { execute: async (_context, input) => {
+      journaled++; assert.equal(input.runtimeGeneration, 'generation-1');
+      return { state: 'accepted', reply: { jsonrpc: '2.0', id: input.clientId, result: { content: [{ type: 'text', text: 'Journaled' }] } } };
+    } },
+  });
+  assert.equal((await shared.mcp(request)).status, 200); assert.equal(journaled, 1); assert.equal(proofs, 0);
+  assert.equal(shared.stub.sent('POST', '/mcp').length, 0, 'shared remember must use the namespace journal');
+  await shared.call('POST', '/api/v1/sessions', { session_id: SESSION });
+  assert.equal(proofs, 1, 'named capture requires proof even though explicit remember does not');
+  assert.equal(shared.stub.sent('POST', '/api/v1/sessions').length, 0);
+
+});
+
+
+for (const isolation of [false, true]) for (const proof of [false, true]) test(`shared capture authorization is independent (isolation=${isolation}, proof=${proof})`, async t => {
+  let proofs = 0;
+  const f = await fixture(t, { config: { memoryRuntimeLockIsolationEnabled: isolation, memorySharedCaptureProofEnabled: proof },
+    admission: { admit: async () => ({ learn: true, recall: true, sessionId: null }) },
+    memoryContexts: sessions => ({
+      forProject: async () => ({ kind: 'geo-project', ownerId: USER, namespaceId: OV_USER, userRoot: ROOT, sessions }),
+      configure: async () => sessions.register(USER), noteCapture: async () => { proofs++; return null; },
+    }),
+  });
+  assert.equal((await f.call('POST', '/api/v1/sessions', { session_id: SESSION })).status, 200);
+  assert.equal((await f.call('POST', `/api/v1/sessions/${SESSION}/messages`, { role: 'user', content: 'An unproven shared input' })).status, 200);
+  const read = await f.call('GET', `/api/v1/sessions/${SESSION}`);
+  assert.equal(read.status, 200); assert.equal(read.json.result.message_count, proof ? 0 : 1);
+  const committed = await f.call('POST', `/api/v1/sessions/${SESSION}/commit`, {});
+  assert.equal(committed.status, 200); assert.equal(committed.json.result.status, proof ? 'skipped' : 'accepted');
+  assert.equal(proofs, proof ? 4 : 0);
+  assert.equal(f.stub.sent('POST', '/api/v1/sessions').filter(row => row.path === '/api/v1/sessions').length, proof ? 0 : 1);
+  assert.equal(f.stub.sent('POST', `/api/v1/sessions/${SESSION}/messages`).length, proof ? 0 : 1);
+  assert.equal(f.stub.sent('GET', `/api/v1/sessions/${SESSION}`).length, proof ? 0 : 1);
+  assert.equal(f.stub.sent('POST', `/api/v1/sessions/${SESSION}/commit`).length, proof ? 0 : 1);
+});
+
+for (const [args, reason] of [
+  [{ uri: `${ROOT}/memories/notes/a.md`, lines: 'wrong' }, /lines/],
+  [{ statement: '' }, /statement/],
+  [{ uri: `${ROOT}/memories/notes/a.md`, statement: 'ambiguous' }, /statement.*uri/],
+]) test(`forget validation names the invalid argument: ${JSON.stringify(args)}`, async t => {
+  const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async () => assert.fail('invalid call reached store') } });
+  const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: args } });
+  assert.equal(answer.messages[0].error.code, -32602);
+  assert.match(answer.messages[0].error.message, reason);
+});
+
+test('gateway preserves a safe store argument diagnostic, but hides unexpected errors', async t => {
+  const { HttpError } = await import('../src/security.mjs');
+  for (const error of [new HttpError(400, 'memory_payload_invalid', 'lines requires targeted forgetting to be enabled.'), new Error('private database detail')]) {
+    const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async () => { throw error; } } });
+    const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: { uri: `${ROOT}/memories/notes/a.md`, lines: ['A fact.'] } } });
+    assert.equal(answer.json.error.message, error instanceof HttpError ? error.message : 'The memory gateway could not answer.');
+  }
+});
+
+
+test('unexpected gateway failures retain only their stable diagnostic in the server log callback', async t => {
+  for (const [error, code] of [[new Error('memory_history_privacy_unavailable'), 'memory_history_privacy_unavailable'],
+    [Object.assign(new Error('private SQL and content'), { code: '23503' }), '23503'],
+    [new Error('private SQL and content'), 'memory_gateway_failed']]) {
+    const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async () => { throw error; } } });
+    const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: { statement: 'Old fact.' } } });
+    assert.equal(answer.json.error.code, 'memory_gateway_failed');
+    assert.equal(answer.json.error.message, 'The memory gateway could not answer.');
+    assert.deepEqual(f.failures, [{ code, status: 502 }]);
+  }
+});
+
+test('history privacy refusal names its retry without exposing provider details or promising background work', async t => {
+  const error = Object.assign(new Error('private provider response'), { code: 'memory_history_privacy_unavailable' });
+  const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: { forget: async () => { throw error; } } });
+  const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: { statement: 'Old fact.' } } });
+  assert.equal(answer.status, 503);
+  assert.equal(answer.json.error.code, error.code);
+  assert.match(answer.json.error.message, /earlier conversations.*temporarily unavailable.*Retry/s);
+  assert.match(answer.json.error.message, /Do not claim.*complete.*automatic retry/s);
+  assert.doesNotMatch(answer.json.error.message, /private provider response/);
+  assert.deepEqual(f.failures, [{ code: error.code, status: 503 }]);
 });

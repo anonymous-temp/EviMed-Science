@@ -9,7 +9,7 @@ import { Readable } from "node:stream";
 import test from "node:test";
 
 import { createVcrRoutes } from "../src/vcrRoutes.mjs";
-import { assessmentReviewBody, judgmentBody, memberBody, modelBody, studyPatchBody } from "../../web/src/lib/vcrBodies.ts";
+import { judgmentBody, memberBody, modelBody, studyPatchBody } from "../../web/src/lib/vcrBodies.ts";
 
 /** @param {string} method @param {string} url @param {unknown} [body] */
 function request(method, url, body) {
@@ -48,7 +48,6 @@ function harness() {
     },
     assessments: {
       async overrideJudgment(/** @type {any} */ _user, /** @type {any} */ _study, /** @type {any} */ input) { seen.push(["override", input.assessmentId, input.criterionId, input.state, input.note]); return { overrideState: input.state }; },
-      async reviewAssessment(/** @type {any} */ _user, /** @type {any} */ _study, /** @type {any} */ input) { seen.push(["review", input.assessmentId]); return { id: input.assessmentId }; },
     },
     matching: {
       async listReferrals() { seen.push(["referrals"]); return { referrals: [] }; },
@@ -125,8 +124,7 @@ test("a person's re-judgment and countersignature are the routes' own bodies", a
   assert.deepEqual(body, { state: "not_satisfied", note: "病历写明有脑转移" });
   ok(await send("POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_2/override", body), "override");
   ok(await send("POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_2/override", judgmentBody({ state: "unknown", note: " " })), "override without grounds");
-  ok(await send("POST", "/api/vcr/studies/std_1/assessments/asm_1/review", assessmentReviewBody()), "review");
-  assert.deepEqual(seen, [["override", "asm_1", "crt_2", "not_satisfied", "病历写明有脑转移"], ["override", "asm_1", "crt_2", "unknown", ""], ["review", "asm_1"]]);
+  assert.deepEqual(seen, [["override", "asm_1", "crt_2", "not_satisfied", "病历写明有脑转移"], ["override", "asm_1", "crt_2", "unknown", ""]]);
   assert.deepEqual(Object.keys(judgmentBody({ state: "unknown" })), ["state"]);
 });
 

@@ -60,12 +60,14 @@ test('a stored file is audited by id, role, format, size and hash, never by its 
 test('removing a file audits its id, role and hash, and the name goes with the file', async () => {
   const row = { id: 'sfl_1', source_id: 'src_1', study_id: 'std_1', user_id: 'owner', role: 'document', name: NAME, format: 'txt', sha256: 'cd'.repeat(32), bytes: 9 };
   const { audits, database } = scripted([
+    [/SELECT detail->>'subjectKey' AS subject_key FROM evimed_vcr\.source_files/, { rows: [], rowCount: 0 }],
     [/SELECT \* FROM evimed_vcr\.source_files/, { rows: [row], rowCount: 1 }],
     [/FROM evimed_vcr\.snapshots/, { rows: [], rowCount: 0 }],
     [/FROM evimed_vcr\.document_projections/, { rows: [], rowCount: 0 }],
     [/FROM evimed_vcr\.matching_inputs/, { rows: [], rowCount: 0 }],
     [/DELETE FROM evimed_vcr\.matching_facts/, { rows: [], rowCount: 0 }],
     [/DELETE FROM evimed_vcr\.language_judgments/, { rows: [], rowCount: 0 }],
+    [/DELETE FROM evimed_vcr\.match_judgments/, { rows: [], rowCount: 0 }],
     [/DELETE FROM evimed_vcr\.source_files/, { rows: [], rowCount: 1 }],
   ]);
   const store = noMigration(new VcrDataStore({ database }));

@@ -206,6 +206,24 @@
         "listBundles"
       ],
       "serving": false
+    },
+    "patientMatchingStatus": {
+      "package": "@deepseek-ai/dsh-typert-protocol",
+      "exports": [
+        "TypertRemoteService",
+        "Remote"
+      ],
+      "service": "patientMatching",
+      "method": "status",
+      "arguments": [],
+      "proof": "Actual global matching tool definitions and the registered patient-matching skill, in the bundle manifest order. Registered only while the professional bundle is enabled; no model or tool executes.",
+      "cancellation": {
+        "method": "cancel",
+        "arguments": [
+          "taskId"
+        ],
+        "proof": "A fixed matching task cancellation callback; the control plane verifies task ownership before calling. It aborts only that task native execution and awaits normal child collection/disposal."
+      }
     }
   },
   "promptSections": {
@@ -285,6 +303,8 @@
       "evimedSkills/list",
       "evimedSkills/read",
       "evimedSkills/snapshotBuiltin",
+      "patientMatching/status",
+      "patientMatching/cancel",
       "schedule/list"
     ],
     "denied": [
@@ -515,6 +535,10 @@
       "evimedSkills/snapshotBuiltin": [
         "sessionId",
         "key"
+      ],
+      "patientMatching/status": [],
+      "patientMatching/cancel": [
+        "taskId"
       ],
       "schedule/list": [
         "request"

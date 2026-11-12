@@ -49,7 +49,6 @@ import {
   validateEngineJob,
   validateEngineResult,
   vcrCohortFindings,
-  vcrMatchingFindings,
   vcrSimulationReportFindings,
   vcrStudyPackageFindings,
   vcrTierIsSupported,
@@ -361,18 +360,6 @@ test("a cohort package states 「无法判断」 apart at every step of the wate
     waterfall: [{ step: "入组事件", kept: 400, excluded: 0 }],
   }));
   assert.ok(found.issues.some((issue) => issue.code === "vcr_waterfall_unknown_missing"));
-});
-
-test("a matching judgment that decides anything needs evidence with a locator", () => {
-  const files = new Map([["matching.json", JSON.stringify({
-    judgments: [
-      { criterionId: "crt_1", state: "satisfied", evidence: [{ quote: "ECOG 1", locator: { doc: "d1", start: 10, end: 16 } }] },
-      { criterionId: "crt_2", state: "not_satisfied", evidence: [] },
-    ],
-  })]]);
-  const found = vcrMatchingFindings({ files });
-  assert.equal(found.metrics.vcrJudgmentsUnanchored, 1);
-  assert.ok(found.issues.some((issue) => issue.code === "vcr_judgment_unanchored"));
 });
 
 test("the conclusion vocabulary keeps 「不可估计」 as a first-class result", () => {

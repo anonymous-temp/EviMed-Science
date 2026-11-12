@@ -38,6 +38,7 @@
 
 import { VCR_DESIGN_SUPPORT, VCR_SCENARIO_SCHEMAS, VCR_SINGLE_ARM_ANALYSIS_METHODS, VCR_TWO_ARM_ANALYSIS_METHODS, whenHolds } from './vcrScenarioSchemas.mjs'
 import { VCR_ENGINE_METHODS, VCR_JOB_METHODS } from './vcrEngineJob.mjs'
+import { VCR_RETIRED_JOB_KINDS } from './vcrVocabulary.mjs'
 import { VCR_LONGITUDINAL_SCHEMAS } from './vcrLongitudinal.mjs'
 import { vcrSynthpopHelpNotes } from './vcrSynthesisLimits.mjs'
 
@@ -54,8 +55,9 @@ export const VCR_SCENARIO_HELP_VERSION = 1
 export const VCR_RUN_SCENARIO_FIELDS = Object.freeze({
   pool_evidence: Object.freeze(['parameter', 'endpointKey', 'calibres', 'armRole', 'target', 'method', 'tauPrior']),
   match_criteria: Object.freeze([]),
-  // The batch reading of records takes a selection and no scenario: the platform freezes the roster, the questions and the estimate.
-  match_extract: Object.freeze([]),
+  // A judging job likewise: the pairs, the settings and the estimate are frozen from a selection.
+  match_judge: Object.freeze([]),
+  records_import: Object.freeze([]),
 })
 
 /**
@@ -894,6 +896,7 @@ export function vcrScenarioHelp() {
   /** @type {Record<string, any>} */
   const kinds = {}
   for (const [kind, method] of Object.entries(VCR_JOB_METHODS)) {
+    if (VCR_RETIRED_JOB_KINDS.includes(kind)) continue
     const platform = /** @type {Record<string, readonly string[]>} */ (VCR_RUN_SCENARIO_FIELDS)[kind]
     kinds[kind] = platform ? { method, platformBuilt: [...platform] } : { method }
   }

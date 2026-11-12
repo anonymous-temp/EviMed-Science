@@ -73,6 +73,8 @@ const MCP_NARRATION = Object.freeze({
   // One item read by its id (a conversation opened from the feed) is a reading, not a search: it has no count.
   frontier_search: (args, result) => (typeof args?.id === 'string' && args.id ? '读取前沿动态中的这条消息' : withCount(`查前沿动态${frontierSubject(args)}`, result?.data ?? result)),
   // A task made or changed from a conversation: what the researcher asked for, in their own words, and for a change what it was.
+  clinical_score: (args) => (args?.action === 'list' ? `查找临床评分${args?.filter ? `：${excerpt(args.filter)}` : ''}`
+    : args?.action === 'describe' ? `查看临床评分的定义：${excerpt(args?.id)}` : `计算临床评分：${excerpt(args?.id)}`),
   dataset_semantics: (args) => (args?.action === 'check' ? '检查数据（漂移、重复、关联、分母、时间泄漏）'
     : args?.action === 'write' ? '记录数据含义' : args?.action === 'transform' ? '记录数据变换' : '读取已记录的数据含义'),
   // 「循证 GEO」's platform tools: what was read or written, in the page's words.

@@ -121,6 +121,7 @@ export function CloudDocuments({ studyId, source, onChanged }: { studyId: string
           <option value="synthetic">人工编写的模拟病历</option><option value="public">允许此用途的公开文本</option>
         </Select>
         <p className="break-words text-caption text-text-3">{destinations.length ? `处理服务：${destinations.join('、')}` : '本部署尚未登记云端处理服务。'}</p>
+        {Object.entries(source.upload.cloudDestinationNotes ?? {}).map(([origin, note]) => <p key={origin} className="break-words text-caption text-text-3" data-vcr-cloud-note="">{origin}：{note}</p>)}
         <Input label="授权依据" value={reference} onChange={event => setReference(event.target.value)} required maxLength={500} placeholder="合作协议、公开许可或模拟数据说明" />
         <label className="flex items-start gap-2 text-caption text-text-2"><input type="checkbox" checked={terms} onChange={event => setTerms(event.target.checked)} />
           已核实服务不保留文本、不用于训练、无人工查看，且包含日志与缓存约定</label>

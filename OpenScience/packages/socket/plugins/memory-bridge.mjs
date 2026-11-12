@@ -14,7 +14,7 @@
  * @module @evimed/dsh-socket/plugins/memory-bridge
  */
 
-import { MEMORY_BRIDGE_PORT, configSchema, registerMemoryBridge } from '@evimed/harness-port'
+import { MEMORY_BRIDGE_PORT, configSchema, isLaunchFlagEnabled, registerMemoryBridge } from '@evimed/harness-port'
 
 const Schema = await configSchema()
 
@@ -50,8 +50,8 @@ export const Config = Schema.object({
  * @returns {Promise<void>}
  */
 export async function apply(ctx, config) {
-  // The deployment's switch arrives in the launch environment and is read here rather than through the plugin row: the row is part
+  // The port reads the deployment's launch switch rather than the plugin row: the row is part
   // of the kernel's recorded config dump, and a new key there would change the attested baseline for a setting that is ours alone.
-  const retryHealthTimeout = config.retryHealthTimeout === true || process.env.EVIMED_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED === '1'
+  const retryHealthTimeout = config.retryHealthTimeout === true || isLaunchFlagEnabled('EVIMED_MEMORY_RUNTIME_LOCK_ISOLATION_ENABLED')
   await registerMemoryBridge(ctx, { ...config, retryHealthTimeout })
 }

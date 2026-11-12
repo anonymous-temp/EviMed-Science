@@ -7,6 +7,7 @@
     "appraisal-table": "5 required on 2026-09-02, the contract's opening count",
     "manuscript-section": "4 required on 2026-09-02. revision-notes.md shipped `required: false` deliberately: it was proposed as required, which the ratchet counts as a new blocking point, so it goes in optional and is promoted later from an observed distribution",
     "source-understanding": "2 required on 2026-09-07, the opening contract for approved ING04/06: typed understanding and its frozen input copy. Control-plane publication independently validates against the canonical capture.",
+    "method-frame": "Optional on 2026-11-12: emitted only by the switched-on two-stage frame step; measure delivery before promoting a new required output.",
     "method-candidate": "2 required on 2026-09-07, the opening count for the distillation contract: the proposed method and the record of what it rests on. distillation-notes.md ships `required: false` deliberately — the backstage channel is where the reflection goes, and making it required would be a blocking point nobody has an observed distribution for.",
     "method-relations": "1 required on 2026-09-07, the opening count for the consolidation contract. The screen, the analyser's assignments and the builder's revisions are three actions of one file, so there is one required output and revision-notes.md stays optional.",
     "geo-content-pack": "9 required on 2026-08-30 (the measurement ledger, the monitor table, the content-block pack and its companions); 2 on 2026-09-25, when geo-content 2.0.0 stopped measuring — measurement moved to the platform's own queue (build spec 2026-09-25 §0.3) — and the pack became layered articles: geo-content.md (the reader's index) and articles.json (the index the gate reads the articles through). Every 1.x file is gone, geo-probe-log.jsonl stays optional for an ad-hoc probe.",
@@ -402,6 +403,16 @@
           "path": "meta-analysis-run.json",
           "required": true,
           "addedOn": "2026-08-30"
+        }
+      ]
+    },
+    "method-frame": {
+      "requiredCount": 0,
+      "outputs": [
+        {
+          "path": "method-frame.json",
+          "required": false,
+          "addedOn": "2026-11-12"
         }
       ]
     },

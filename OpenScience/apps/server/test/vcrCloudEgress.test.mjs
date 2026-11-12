@@ -219,3 +219,10 @@ test("a document id in a request body is a dependency like a projection id: a co
   assert.ok(store.calls.includes("cloudDependencies:ledger-session:1"), "the id was looked up");
   assert.deepEqual(inherited, [["study-1", "ledger-session", "ledger-session", documentId]]);
 });
+
+test('a matching algorithm checks its actual destination even when legacy reranking is disabled',async()=>{
+ const record=cloudPermission({status:'approved',dataClass:'clinical',destinations:[origin],purpose:'vcr',reference:'DeepSeek-only permission',retention:'none',training:'disabled',humanReview:'disabled'},'operator','2026-11-05T00:00:00.000Z');
+ const store=storeDouble({study:true,rows:[rowWith(record)]});
+ await createVcrCloudEgress({store,resolveSession:async()=>caller.sessionId,destinations:()=>[origin]})(caller,{input:'patient'});
+ await assert.rejects(createVcrCloudEgress({store,resolveSession:async()=>caller.sessionId,destinations:()=>['https://embedding.example.org']})(caller,{input:'patient'}),{code:'vcr_cloud_processing_not_authorized'});
+});

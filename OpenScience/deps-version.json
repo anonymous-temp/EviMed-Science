@@ -386,5 +386,90 @@
       "reason": "Accept the recorded tool-role activation envelope of pinned DSH 0.1.7. After a verified GoalBar pause, explain the user action to the current model step without waking an idle session.",
       "upgradePath": "Both adaptations are build-time, digest-bound edits of the pinned plugin archive (deploy/runtime-dsh/loopx-compat.mjs); a changed byte fails the image build by name. Drop the driver adaptation when the plugin pin recognizes the DSH 0.1.7 tool-role result, or when the DSH pin moves to a kernel that records the user/tool-result envelope; drop the pause adaptation when the GoalBar itself tells a busy model that its owner paused the goal. Re-record packages/contracts/loopx/goalbar-locale.json on any plugin pin change."
     }
+  },
+  "terminology": {
+    "release": "evimed-terminology-v1",
+    "notes": "The public inputs of scripts/ops/build-terminology.mjs, which fetches them into a directory outside the repository and refuses a file whose sha256 differs from the one written here. The built SQLite file is read by term_normalize (runtime/mcp/evimed-research/terminology.py) through EVIMED_TERMINOLOGY_DB, served by the evidence adapter to Docker runtimes as EVIMED_TERMINOLOGY_SEARCH_URL; private inputs (the curated zh-en lexicon, ICD and MeSH workbooks) are named by path on the command line and are never in this file. Moving a pin: fetch the new file, read its licence page again, set version/url/bytes/sha256 together, rebuild, run apps/server/test/terminologyBuild.test.mjs. The HPO licence asks that the version be shown wherever the data is shown: the tool answer carries sources[].version.",
+    "sources": {
+      "ncit": {
+        "version": "26.10d",
+        "url": "https://evs.nci.nih.gov/ftp1/NCI_Thesaurus/archive/26.10d_Release/Thesaurus_26.10d.FLAT.zip",
+        "file": "Thesaurus_26.10d.FLAT.zip",
+        "bytes": 17196433,
+        "sha256": "bbb28631799046e1227ac221636c2de6bb1d2b79bf6c8e0a1143a797176d6736",
+        "license": "CC BY 4.0",
+        "attribution": "NCI Thesaurus, National Cancer Institute (CC BY 4.0)"
+      },
+      "hpo": {
+        "version": "2026-09-01",
+        "url": "https://github.com/obophenotype/human-phenotype-ontology/releases/download/v2026-09-01/hp.json",
+        "file": "hp.json",
+        "bytes": 21915519,
+        "sha256": "a7b3a012e7b4007a35a7cf8da35f2373b54cc16907f80d13d62470d31f833501",
+        "license": "HPO licence: acknowledge the HPO Consortium, show the version, do not alter the content",
+        "attribution": "Human Phenotype Ontology, HPO Consortium (Kohler et al., NAR 2014)"
+      },
+      "hpo-zh": {
+        "version": "2026-09-01",
+        "url": "https://raw.githubusercontent.com/obophenotype/human-phenotype-ontology/v2026-09-01/src/translations/hp-zh.babelon.tsv",
+        "file": "hp-zh.babelon.tsv",
+        "bytes": 1748173,
+        "sha256": "64a30d5f065e1180fa6a30c192dd84aa403cd1b44f2b24ee883fcde948b1ca53",
+        "license": "HPO licence (Chinese translation by the CHPO consortium, an official language profile of the HPO repository)",
+        "attribution": "Chinese HPO (CHPO) consortium translation of the Human Phenotype Ontology"
+      },
+      "hgnc": {
+        "version": "2026-10-06",
+        "url": "https://storage.googleapis.com/public-download-files/hgnc/archive/archive/monthly/tsv/hgnc_complete_set_2026-10-06.tsv",
+        "file": "hgnc_complete_set_2026-10-06.tsv",
+        "bytes": 16973125,
+        "sha256": "8bf6f686e640dbc864a346484626953621b0500d900d26cd085a35c2782d725d",
+        "license": "CC0",
+        "attribution": "HGNC, HUGO Gene Nomenclature Committee (CC0)"
+      },
+      "civic-genes": {
+        "version": "2026-11-01",
+        "url": "https://civicdb.org/downloads/01-Nov-2026/01-Nov-2026-GeneSummaries.tsv",
+        "file": "01-Nov-2026-GeneSummaries.tsv",
+        "bytes": 186853,
+        "sha256": "a340fc3d4792a00c8801ffb060bf8b9934d9da81b8d299647f01877a70389bd8",
+        "license": "CC0",
+        "attribution": "CIViC, Clinical Interpretation of Variants in Cancer (CC0)"
+      },
+      "civic-variants": {
+        "version": "2026-11-01",
+        "url": "https://civicdb.org/downloads/01-Nov-2026/01-Nov-2026-VariantSummaries.tsv",
+        "file": "01-Nov-2026-VariantSummaries.tsv",
+        "bytes": 597008,
+        "sha256": "5b52465b9f6b4c4bc2083f03ed606319e0c1e0bb67cc93383627f6598c76051c",
+        "license": "CC0",
+        "attribution": "CIViC, Clinical Interpretation of Variants in Cancer (CC0)"
+      }
+    },
+    "references": {
+      "cdisc-sdtm": {
+        "version": "2026-09-25",
+        "url": "https://evs.nci.nih.gov/ftp1/CDISC/SDTM/SDTM%20Terminology.txt",
+        "file": "SDTM Terminology.txt",
+        "bytes": 13848826,
+        "sha256": "9e8117a90e28e5aade3ac2d52fe1b60adfcccc92a8894891f04ad05c7cf1f88d",
+        "license": "NCI states CDISC Terminology is free to use without licensing restrictions",
+        "attribution": "CDISC SDTM Controlled Terminology, distributed by NCI EVS",
+        "usedBy": "runtime/mcp/evimed-research/data/clinical-scales.json (read once to write the scale wording; the build does not fetch it)"
+      }
+    }
+  },
+  "patientMatching": {
+    "modelProfile": {
+      "revision": "flash-only-1",
+      "reasoningModel": "deepseek-flash",
+      "embeddingModel": "qwen3.7-text-embedding",
+      "rerankModel": "qwen3.7-text-rerank",
+      "rerankApiBase": "https://dashscope.aliyuncs.com/compatible-api/v1/reranks",
+      "triageModel": "jev-1.14.0",
+      "proEscalation": false,
+      "embeddingApiBase": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+      "embeddingDimensions": 1024
+    }
   }
 }

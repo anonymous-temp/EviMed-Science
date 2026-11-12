@@ -15,6 +15,36 @@ test('a completion waits for its original busy session and dispatches it once', 
   const f = fixture(); await f.service.deliver(); assert.equal(f.count(),0);
   f.setInbox({ running:false, queued:0 }); await f.service.deliver(); assert.equal(f.count(),1); assert.equal(f.row.state,'delivered');
 });
+test('a job that stopped short says so in the turn it starts, and a finished one says it finished', async () => {
+  /** @param {Record<string, any>} payload */
+  const sent = async (payload) => {
+    const f = fixture();
+    const texts = [];
+    const dispatch = f.service.dispatch;
+    f.service.dispatch = (...args) => { texts.push({ text: args[4], supplement: args[5].systemSupplement }); return dispatch(...args); };
+    f.row.payload = { resultId: 'r1', runId: 'run', error: null, ...payload };
+    f.setInbox({ running: false, queued: 0 });
+    await f.service.deliver();
+    return texts[0];
+  };
+  const stopped = await sent({ state: 'succeeded', partial: true, stopped: '3 对里判完 1 对，预算用完' });
+  assert.match(stopped.text, /^计算没有做完，保留了部分结果：3 对里判完 1 对，预算用完。/);
+  assert.doesNotMatch(stopped.text, /计算已完成/);
+  assert.match(stopped.text, /没做完什么/);
+  assert.match(stopped.supplement, /partial=true/);
+  const whole = await sent({ state: 'succeeded', partial: false });
+  assert.match(whole.text, /^计算已完成。/);
+  assert.match((await sent({ state: 'failed', partial: true })).text, /^计算未完成，保留了部分结果。/);
+});
+test('reconcile: a batch job that ended limited is partial with its reason, and an engine estimate that is limited is not', async () => {
+  /** @type {any[]} */
+  const inserted = [];
+  const job = (id, kind, extra) => ({ id, study_id: 's', user_id: 'u', project_id: 'p', kind, state: 'succeeded', finished_at: '2026-11-04T00:00:00Z', checkpoint: { conversationOrigin: { userId: 'u', projectId: 'p', rootSessionId: 'root', runId: 'run', callId: 'call' } }, result_id: `r_${id}`, result_version: 1, ...extra });
+  const rows = [job('a', 'match_judge', { conclusion: 'limited', stop_message: '3 对里判完 1 对' }), job('b', 'match_judge', { conclusion: 'estimable' }), job('c', 'weight_comparator', { conclusion: 'limited' }), job('d', 'records_import', { conclusion: 'limited', stop_message: '导入了一部分' })];
+  const store = { one: async () => null, rows: async (sql) => (sql.includes('FROM evimed_vcr.jobs') ? rows : []), query: async (sql, values) => { if (sql.includes('INSERT INTO evimed_vcr.conversation_completions')) inserted.push(JSON.parse(values[9])); return { rowCount: 1 }; } };
+  await new VcrConversationCompletions({ store }).reconcile();
+  assert.deepEqual(inserted.map((row) => [row.partial, row.stopped ?? null]), [[true, '3 对里判完 1 对'], [false, null], [false, null], [true, '导入了一部分']]);
+});
 test('a deleted original session is unavailable and never falls back to another', async () => {
   const f = fixture(); f.deleteSession(); await f.service.deliver(); assert.equal(f.count(),0); assert.equal(f.row.state,'unavailable');
 });

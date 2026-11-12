@@ -8,6 +8,7 @@ import { canonicalJson } from '../src/geoStore.mjs';
 import { contextPolicyIdentity } from '../src/geoContextItems.mjs';
 import { normalizeTranscript } from '../src/dshRuntimeAdapter.mjs';
 import { createWebApiApp } from '../src/server.mjs';
+import { withSessionPromptAdmission } from '../src/runtimePromptAdmission.mjs';
 import { RuntimeManager } from '../src/runtimeManager.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
@@ -15,14 +16,14 @@ const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Disposab
 
 // This protocol fixture certifies production composition and real HTTP/DB
 // identity handling. It is not a runtime launch or installed-kernel receipt.
-async function fixture(t, geoEnabled = true) {
+async function fixture(t, geoEnabled = true, overrides = {}) {
   const isolated = await createGeoTestDatabase(process.env.OPEN_SCIENCE_TEST_POSTGRES_URL, 'geocomposition');
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'geo-composition-'));
   let creates = 0;
   const sessions = new Map();
   const app = createWebApiApp({ dataDir, databaseUrl: isolated.url, stateStore: 'postgres', geoEnabled, geoAudience: 'all',
     runtimeMode: 'mock', devAuth: false, authMode: 'local', bootstrapUser: '', bootstrapPassword: '',
-    runtimeUiProxyEnabled: true, publicUrl: 'http://127.0.0.1', runtimeUiPublicOrigin: 'http://127.0.0.1:8443', databasePoolMax: 1 }, {
+    runtimeUiProxyEnabled: true, publicUrl: 'http://127.0.0.1', runtimeUiPublicOrigin: 'http://127.0.0.1:8443', databasePoolMax: 1, ...overrides }, {
     runtimeManagerFactory: (config, hooks) => {
       const manager = new RuntimeManager(config, hooks);
       manager.start = async project => {
@@ -231,4 +232,62 @@ test('HTTP composition creates one idempotent scoped conversation and pages auth
   assert.equal(secondPage.status, 200, JSON.stringify(secondPage.body));
   assert.deepEqual(new Set([...firstPage.body.data.items, ...secondPage.body.data.items].map(item => item.sessionId)), new Set([primary.body.data.sessionId, first.body.data.sessionId]));
   assert.equal((await f.call('owner', 'GET', `/api/geo/projects/${geo.id}`)).body.data.sessionId, primary.body.data.sessionId);
+});
+
+
+for (const target of ['primary', 'new']) test(`real shared ${target} capture proof succeeds on the first input before acknowledgement`, options, async t => {
+  const f = await fixture(t, true, { memoryRuntimeLockIsolationEnabled: true, memorySharedCaptureProofEnabled: true, databasePoolMax: 4 });
+  const { geo, project, open } = await geoWithEditor(f);
+  const primary = (await open('editor')).body.data;
+  const descriptor = target === 'primary' ? primary : (await f.call('editor', 'POST', `/api/geo/projects/${geo.id}/conversation/open`, { target: { kind: 'new', requestId: 'first-secondary-conversation' } })).body.data;
+  const editor = await f.app.store.userById('editor');
+  const principal = (await f.app.geoNativeAuthority.resolve(editor, descriptor.scope)).principal;
+  const request = { requestId: 'first-pending-capture', sessionId: descriptor.sessionId, mode: 'queue', content: [{ type: 'text', text: 'First shared input' }] };
+  assert.deepEqual(await f.app.agentRuns.list(project), [], 'no previous accepted turn can supply proof');
+  const memory = await f.app.nativeMemoryContexts.forProject(project);
+  if (target === 'new') {
+    f.app.config.memorySharedCaptureProofEnabled = false;
+    assert.equal(await f.app.nativeMemoryContexts.proveCapture(memory, `dsh-${descriptor.sessionId}`), null, 'the old candidate set misses an unstarted secondary conversation');
+    f.app.config.memorySharedCaptureProofEnabled = true;
+  }
+  await f.app.geoNativeSelections.prepare(editor, project, request);
+  const journal = f.app.geoNativeInputs;
+  await journal.prepare({ user: editor, project, claims: { frameId: 'first-capture-frame', delegation: principal }, request });
+  let acknowledged = false;
+  const manager = f.app.runtimeManager;
+  const result = await manager.pluginService.withAdmission(project, () => journal.execute(request,
+    operation => f.app.geoNativeAuthority.withFrame(editor, principal, operation), () =>
+      withSessionPromptAdmission(manager, project, descriptor.sessionId, async () => {
+        await journal.beforeForward(request);
+        // This is the server factory's real proveGeoCapture, not noteCapture's fake.
+        const proof = await f.app.nativeMemoryContexts.proveCapture(memory, `dsh-${descriptor.sessionId}`);
+        assert.equal(proof.rootSessionId, descriptor.sessionId);
+        assert.ok(proof.rootProofRefs.length);
+        assert.equal(proof.runtimeGeneration, 'fixture-generation');
+        assert.equal(acknowledged, false);
+        const captured = await f.app.nativeMemoryContexts.noteCapture(memory, `dsh-${descriptor.sessionId}`);
+        assert.equal(captured.payload.namespaceId, memory.namespaceId);
+        assert.equal(await f.app.nativeMemoryContexts.proveCapture(memory, 'dsh-unassociated'), null);
+        journal.observe(request, { state: 'accepted', authority: 'native-mux' });
+        acknowledged = true;
+      })), { prompt: true, promptDisposition: () => journal.disposition(request) });
+  assert.equal(result.error, null); assert.equal(acknowledged, true);
+  assert.equal(memory.policy.geoProjectId, geo.id);
+});
+
+
+test('production stop-intent composition does not re-enter the saturated prompt lane', options, async t => {
+  const f = await fixture(t, true, { memoryRuntimeLockIsolationEnabled: true, databasePoolMax: 4 });
+  const owner = await f.app.store.userById('owner'), project = await f.app.store.requireProject(owner, 'default');
+  const binding = { sessionId: 'pending-stop', mode: 'open-domain', agentId: null, agentVersion: null, runtimeAgent: null };
+  const { run } = await f.app.agentRuns.reserveRun(project, binding, { baselineCursor: null });
+  const plugins = f.app.runtimeManager.pluginService;
+  await plugins.acquireAdmissionClient();
+  let timer;
+  try {
+    const stopped = await Promise.race([f.app.agentRuns.noteStopRequest(project, { sessionId: binding.sessionId }),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('stop receipt queued behind prompts')), 1000); })]);
+    assert.equal(stopped, run.id);
+    assert.equal(await f.app.agentRuns.promptStopRequested(project, binding.sessionId, run.id), true);
+  } finally { clearTimeout(timer); plugins.releaseAdmissionClient(); }
 });

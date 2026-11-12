@@ -152,7 +152,7 @@ export function mostUsedMemos(files, config) {
     .slice(0, limit).map(file => ({
       id: `native-used:${file.uri}`, memoryType: 'native_most_used', kind: 'note', scope: file.projectId ? 'project' : 'user',
       origin: 'unknown', updatedAt: file.updatedAt ?? null,
-      content: `Most used · ${file.uri}\n${String(file.body).split('\n').filter(line => line.trim()).slice(0, 3).join('\n').slice(0, 400)}`,
+      content: `Most used · ${file.uri}\n${String(file.body).split('\n').filter(bodyLine => bodyLine.trim()).slice(0, 3).join('\n').slice(0, 400)}`,
       originalSources: file.originalSources ?? [], attribution: file.attribution, sourcePrivacy: file.sourcePrivacy,
     }));
 }

@@ -766,6 +766,40 @@ export async function writeFileAtomicNoFollow(rootDir, file, data, options = {})
   }
 }
 
+/**
+ * Give an existing scoped regular file a second, independent file in the same tree, atomically: a copy-on-write clone where the filesystem has
+ * one (Btrfs, XFS, ZFS: the bytes are stored once), an ordinary copy where it has not. Never a hard link: a workspace has no legitimate hardlinks
+ * (`assertHandleWithinRoot` refuses a file with a second name, for both names), and an edit in place through one name would change the other.
+ * A symbolic link on either path, or a source that is not a regular file, is refused. The caller checks the bytes it meant to keep afterwards.
+ * @param {string} rootDir @param {string} sourceFile @param {string} targetFile
+ * @returns {Promise<void>}
+ */
+export async function cloneFileNoFollow(rootDir, sourceFile, targetFile) {
+  const { root, target: source } = scopedParts(rootDir, sourceFile);
+  const { target } = scopedParts(rootDir, targetFile);
+  if (target === root || source === root) throw new HttpError(400, "not_a_file", "path is not a file.");
+  await assertNoSymlinkPath(root, source);
+  const info = await fs.lstat(source);
+  if (info.isSymbolicLink() || !info.isFile()) throw new HttpError(400, "not_a_file", "path is not a file.");
+  const parent = await openScopedDirectoryNoFollow(root, path.dirname(target), { create: true });
+  const tmpPath = path.join(parent.path, `.${path.basename(target)}.${process.pid}.${Date.now()}.${randomId("cln_")}`);
+  const targetPath = path.join(parent.path, path.basename(target));
+  try {
+    await fs.copyFile(source, tmpPath, fsConstants.COPYFILE_FICLONE | fsConstants.COPYFILE_EXCL);
+    await fs.chmod(tmpPath, 0o600);
+    const existing = await fs.lstat(targetPath).catch((err) => {
+      if (err?.code === "ENOENT") return null;
+      throw err;
+    });
+    if (existing?.isSymbolicLink()) throw new HttpError(403, "path_forbidden", "symbolic links are not allowed in hosted workspaces.");
+    if (existing && !existing.isFile()) throw new HttpError(400, "not_a_file", "path is not a file.");
+    await fs.rename(tmpPath, targetPath);
+  } finally {
+    await fs.rm(tmpPath, { force: true }).catch(() => {});
+    await parent.handle.close();
+  }
+}
+
 /** Atomically create a new scoped file without replacing an existing entry.
  *  A hard-link commit gives us rename-like atomic visibility plus O_EXCL
  *  semantics, which the example installer needs to preserve user edits. */

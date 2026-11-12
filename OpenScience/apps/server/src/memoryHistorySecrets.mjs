@@ -70,7 +70,7 @@ export function createHistorySecretJudge({ config, usageLedger = null, callModel
   const spent = new Map();
   return {
     async identify({ userId, projectId, messages }) {
-      const fail = () => { throw new Error('memory_history_secret_review_unavailable'); };
+      const fail = () => { throw Object.assign(new Error('memory_history_secret_review_unavailable'), { code: 'memory_history_secret_review_unavailable' }); };
       const model = config.memoryExtractionModel || config.deepseekModel;
       if (!model || config.deepseekProviderEnabled === false || !config.deepseekApiKey) return fail();
       // No clipping: an incomplete review cannot certify the archive.
@@ -101,9 +101,9 @@ export class MemoryHistorySecrets {
   async review(commit, context, messages) {
     let secrets;
     try { secrets = await this.judge.identify({ userId:context.ownerId,projectId:commit.projectId,messages }); }
-    catch { throw new Error('memory_history_secret_review_unavailable'); }
+    catch { throw Object.assign(new Error('memory_history_secret_review_unavailable'), { code: 'memory_history_secret_review_unavailable' }); }
     // Stubbed judges obey the same exact-source contract as the live parser.
-    if (!Array.isArray(secrets) || secrets.some(secret => typeof secret !== 'string' || !secret.length || !messages.some(m => m.role==='user' && m.text.includes(secret)))) throw new Error('memory_history_secret_review_unavailable');
+    if (!Array.isArray(secrets) || secrets.some(secret => typeof secret !== 'string' || !secret.length || !messages.some(m => m.role==='user' && m.text.includes(secret)))) throw Object.assign(new Error('memory_history_secret_review_unavailable'), { code: 'memory_history_secret_review_unavailable' });
     await this.ledger.recordSecrets(commit,context,[...new Set(secrets)]);
   }
   async filterFor(userId) {

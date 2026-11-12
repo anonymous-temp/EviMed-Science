@@ -20,12 +20,26 @@
  *   this module's evaluator (`vcrMatching.mjs`) that already runs it for every
  *   other source of facts: the numbers of a funnel are tallies of those verdicts.
  * - **A criterion the table cannot decide is `unknown`, by construction.** A
- *   variable maps to a column only by an exact name — the column's alias or the
- *   concept the field map gave it — and a variable no column answers to, or two
- *   columns answer to, produces no fact: the evaluator reads silence as
+ *   variable maps to a column only by an exact name — the column's alias, the
+ *   concept the field map gave it, or the concept the model recorded for it in the
+ *   dataset's meaning (`vcrTableMeaning.mjs`) — and a variable no column answers
+ *   to, or two columns answer to, produces no fact: the evaluator reads silence as
  *   `not_recorded`. A column with no unit cannot be compared to a criterion that
  *   names one (`unit_missing`), and a cell with no date cannot answer a window
- *   (`undated`). Nothing here guesses a mapping to make a criterion decidable.
+ *   (`undated`).
+ * - **A filled cell is not an affirmation.** `0`, `No`, `否`, `无` and `false` are
+ *   filled cells that say the event did not happen, and a table is the one source
+ *   in which a column of them is the usual way to record a history. What a code
+ *   MEANS is language, so it is the model's to say and the dataset's to remember
+ *   (`valueMap`, basis `model_inferred` until the researcher corrects it); this
+ *   module only applies it, exactly, cell by cell. A cell carries its reading as
+ *   `presence` — `present`, `absent`, or `unknown` — beside the value, because the
+ *   same fact serves a comparison (`ecog <= 1` reads the number and never asks what
+ *   0 means) and a presence question (`present diabetes` reads the map). Only
+ *   format is read without the map: a real date in a date column is the event's
+ *   date, a number in a column the model called a measurement is the measurement
+ *   being there. Every other code the map does not name is `unknown`, which the
+ *   evaluator answers `coding_unmapped` and never `satisfied` or `not_satisfied`.
  * - **The cells are read to judge and are never written down.** The facts live
  *   for the length of one evaluation, in memory; what is stored afterwards is the
  *   verdicts (`matching_assessments`, keyed by the pseudonym), and the evidence
@@ -87,19 +101,53 @@ function isoOf(cell) {
 }
 
 /**
+ * What the dataset's recorded meaning says about the columns of a table: the variable a column answers to and what each of its
+ * codes means (`vcrTableMeaning.mjs` reads it from the dataset-semantics asset).
+ * @typedef {{ columns: Record<string, { concept?: string, valueMap?: { values: Record<string, string>, measurement: boolean } }> }} TableMeaning
+ */
+
+/**
+ * The columns as the mapping reads them: a column the field map gave no concept takes the one the meaning recorded. The field map's
+ * word stands where it has one.
+ * @template {{ name: string, concept?: string }} C
+ * @param {readonly C[]} columns @param {TableMeaning | null | undefined} meaning @returns {C[]}
+ */
+export function columnsWithMeaning(columns, meaning) {
+  return columns.map((column) => {
+    const recorded = meaning?.columns?.[column.name]?.concept;
+    return column.concept || !recorded ? column : { ...column, concept: recorded };
+  });
+}
+
+/**
+ * Whether one filled cell says the event its column records is there, by the column's recorded value map. A real date in a date
+ * column is the event's date, and a number in a column the model called a measurement is the measurement being there: those are format.
+ * Every other code is read through the map and, when the map does not name it, is `unknown` — never taken for `present`.
+ * @param {string} cell @param {{ type?: string | null }} column @param {{ values: Record<string, string>, measurement: boolean } | null | undefined} valueMap
+ * @returns {"present" | "absent" | "unknown"}
+ */
+export function cellPresence(cell, column, valueMap) {
+  if (column.type === "date") return isoOf(cell) ? "present" : "unknown";
+  const named = valueMap && Object.hasOwn(valueMap.values, cell) ? valueMap.values[cell] : null;
+  if (named === "present" || named === "absent" || named === "unknown") return named;
+  return valueMap?.measurement === true && Number.isFinite(Number(cell)) ? "present" : "unknown";
+}
+
+/**
  * The facts of every row of a subject table, for the variables the criteria ask.
  *
  * @param {{ header: readonly string[], rows: readonly (readonly string[])[], snapshotId: string,
  *   columns: readonly { name: string, source?: string, concept?: string, unit?: string | null, type?: string | null }[],
- *   variables: readonly string[], subjectColumn?: string, limit?: number }} input
+ *   variables: readonly string[], subjectColumn?: string, limit?: number, meaning?: TableMeaning | null }} input
  *   `columns` describe the table's columns: its own name (the alias), the source column it came from, the concept
- *   and unit the field map or the dictionary gave it, and the declared type.
+ *   and unit the field map or the dictionary gave it, and the declared type. `meaning` is what the dataset recorded about
+ *   them; without it a code is `unknown` for a presence question and every comparison reads as it always did.
  * @returns {{ subjects: { subjectKey: string, facts: any[] }[], mapped: { variable: string, column: string }[],
  *   unmapped: string[], ambiguous: string[], rows: number, notEvaluated: number }}
  */
-export function subjectTableFacts({ header, rows, snapshotId, columns, variables, subjectColumn = "USUBJID", limit = Number.POSITIVE_INFINITY }) {
+export function subjectTableFacts({ header, rows, snapshotId, columns, variables, subjectColumn = "USUBJID", limit = Number.POSITIVE_INFINITY, meaning = null }) {
   const keyAt = header.indexOf(subjectColumn);
-  const present = columns.filter((column) => header.includes(column.name));
+  const present = columnsWithMeaning(columns.filter((column) => header.includes(column.name)), meaning);
   /** @type {{ variable: string, column: any, at: number }[]} */
   const mapped = [];
   /** @type {string[]} */
@@ -133,7 +181,9 @@ export function subjectTableFacts({ header, rows, snapshotId, columns, variables
       const occurredAt = column.type === "date" ? isoOf(cell) : null;
       facts.push({
         id: `tbl:${snapshotId}:${subjectKey}:${variable}`, subjectKey, variable, value: numeric ? Number(cell) : cell,
-        unit: column.unit ? String(column.unit) : null, polarity: "affirmed", occurredAt, recordedAt: null, visibleAt: null,
+        // A filled cell is a value, and says nothing yet about the event: `presence` is what the column's meaning reads from it.
+        unit: column.unit ? String(column.unit) : null, polarity: "affirmed", presence: cellPresence(cell, column, meaning?.columns?.[column.name]?.valueMap),
+        occurredAt, recordedAt: null, visibleAt: null,
         surface: "", source: null, extractedBy: "code", snapshot: { id: snapshotId, field: column.name }, hideValue: true,
       });
     }

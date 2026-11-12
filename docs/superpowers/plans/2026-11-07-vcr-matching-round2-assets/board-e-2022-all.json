@@ -1,0 +1,231 @@
+{
+ "title": "Board E: TREC CT 2022 full corpus (375,580 trials), all topics; official measures, unjudged = not relevant",
+ "patients": 50,
+ "groups": {
+  "2022": 50
+ },
+ "arms": [
+  {
+   "name": "EviMed rrf-qwen-jev-v1 (Jev 1.13)",
+   "type": "same, Jev 1.13",
+   "backbone": "Qwen3.7 embed+rerank, Jev 1.13",
+   "point": {
+    "ndcg": 0.5894824817659378,
+    "ep10": 0.532,
+    "mrr": 0.799199182460052,
+    "j10": 0.688,
+    "cndcg": 0.802429733030879
+   },
+   "byGroup": {
+    "2022": {
+     "ndcg": 0.5894824817659378,
+     "ep10": 0.532,
+     "mrr": 0.799199182460052,
+     "j10": 0.688,
+     "cndcg": 0.802429733030879
+    }
+   },
+   "ci": [
+    0.5098717158859385,
+    0.6681370982991177
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "EviMed rrf-qwen-jev-v1 (Jev 1.14)",
+   "type": "hybrid recall → Qwen3.7 rerank ⊕ Jev, RRF",
+   "backbone": "Qwen3.7 embed+rerank, Jev 1.14",
+   "point": {
+    "ndcg": 0.5845494859095003,
+    "ep10": 0.526,
+    "mrr": 0.8086517094017094,
+    "j10": 0.6759999999999999,
+    "cndcg": 0.8012277706847797
+   },
+   "byGroup": {
+    "2022": {
+     "ndcg": 0.5845494859095003,
+     "ep10": 0.526,
+     "mrr": 0.8086517094017094,
+     "j10": 0.6759999999999999,
+     "cndcg": 0.8012277706847797
+    }
+   },
+   "ci": [
+    0.5084604128104107,
+    0.660472411436925
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "Hybrid recall → Qwen3.7 rerank (V3 policy)",
+   "type": "rerank only",
+   "backbone": "Qwen3.7 embed+rerank",
+   "point": {
+    "ndcg": 0.5422724330453648,
+    "ep10": 0.46399999999999997,
+    "mrr": 0.7399930773224622,
+    "j10": 0.696,
+    "cndcg": 0.7494535704586641
+   },
+   "byGroup": {
+    "2022": {
+     "ndcg": 0.5422724330453648,
+     "ep10": 0.46399999999999997,
+     "mrr": 0.7399930773224622,
+     "j10": 0.696,
+     "cndcg": 0.7494535704586641
+    }
+   },
+   "ci": [
+    0.46376488088051987,
+    0.6203485051575591
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "Hybrid recall only (lexical ⊕ dense, RRF)",
+   "type": "first stage",
+   "backbone": "FTS5 BM25 + Qwen3.7 embedding",
+   "point": {
+    "ndcg": 0.5289382593220547,
+    "ep10": 0.436,
+    "mrr": 0.673123224728488,
+    "j10": 0.6920000000000001,
+    "cndcg": 0.7149083304631927
+   },
+   "byGroup": {
+    "2022": {
+     "ndcg": 0.5289382593220547,
+     "ep10": 0.436,
+     "mrr": 0.673123224728488,
+     "j10": 0.6920000000000001,
+     "cndcg": 0.7149083304631927
+    }
+   },
+   "ci": [
+    0.4541931505555313,
+    0.6042982618044721
+   ],
+   "best": 1,
+   "worst": 5
+  },
+  {
+   "name": "Lexical recall only (product FTS5, condition + ranked English terms)",
+   "type": "first stage",
+   "backbone": "FTS5 BM25",
+   "point": {
+    "ndcg": 0.4780170432053074,
+    "ep10": 0.408,
+    "mrr": 0.5562544631576072,
+    "j10": 0.642,
+    "cndcg": 0.678809524450418
+   },
+   "byGroup": {
+    "2022": {
+     "ndcg": 0.4780170432053074,
+     "ep10": 0.408,
+     "mrr": 0.5562544631576072,
+     "j10": 0.642,
+     "cndcg": 0.678809524450418
+    }
+   },
+   "ci": [
+    0.3964547619603758,
+    0.5599023752754648
+   ],
+   "best": 1,
+   "worst": 5
+  }
+ ],
+ "reported": [
+  {
+   "name": "Jullien et al. GPT-4-turbo coarse-grained eligibility rerank",
+   "type": "post-hoc, LLM rerank of a top-500",
+   "backbone": "GPT-4-turbo",
+   "scores": {
+    "ndcg": 0.693,
+    "ep10": 0.718,
+    "mrr": 0.769
+   },
+   "source": "arXiv 2409.18998, Table 2"
+  },
+  {
+   "name": "IELAB GPT-4 judge of CE top 20",
+   "type": "post-hoc",
+   "backbone": "GPT-4 + cross-encoder",
+   "scores": {
+    "ndcg": 0.659,
+    "ep10": 0.568
+   },
+   "source": "IELAB TREC 2023 notebook, Table 1"
+  },
+  {
+   "name": "h2oloo frocchio_monot5_e (Waterloo)",
+   "type": "official TREC 2022, best run",
+   "backbone": "T5 fine-tuned",
+   "scores": {
+    "ndcg": 0.6125,
+    "ep10": 0.508,
+    "mrr": 0.7262
+   },
+   "source": "TREC 2022 overview, Table 4"
+  },
+  {
+   "name": "Kusa et al. TCRR-Bio",
+   "type": "post-hoc",
+   "backbone": "BioBERT reranker",
+   "scores": {
+    "ndcg": 0.604,
+    "ep10": 0.482,
+    "mrr": 0.672
+   },
+   "source": "Kusa et al. JBI 2023, Table 5"
+  },
+  {
+   "name": "DoSSIER_5",
+   "type": "official TREC 2022, 2nd team",
+   "backbone": "-",
+   "scores": {
+    "ndcg": 0.5565,
+    "ep10": 0.456
+   },
+   "source": "TREC 2022 overview, Table 4"
+  },
+  {
+   "name": "Peikos et al. ChatGPT NRIEMT + RM3",
+   "type": "post-hoc",
+   "backbone": "gpt-3.5-turbo + BM25",
+   "scores": {
+    "ndcg": 0.509,
+    "ep10": 0.372,
+    "mrr": 0.623
+   },
+   "source": "Peikos et al., Table 15"
+  },
+  {
+   "name": "CSIROmed monobert500",
+   "type": "official TREC 2022",
+   "backbone": "monoBERT",
+   "scores": {
+    "ndcg": 0.4912,
+    "ep10": 0.362
+   },
+   "source": "TREC 2022 overview"
+  },
+  {
+   "name": "TREC 2022 median (two sources disagree: 0.392 / 0.498)",
+   "type": "track median",
+   "backbone": "-",
+   "scores": {
+    "ndcg": 0.392,
+    "ep10": 0.258,
+    "mrr": 0.411
+   },
+   "source": "Kusa et al. Table 5 (Jullien et al. give 0.498/0.380/0.598)"
+  }
+ ]
+}

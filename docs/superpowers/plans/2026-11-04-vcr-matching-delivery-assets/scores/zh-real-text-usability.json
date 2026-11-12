@@ -1,0 +1,38 @@
+{
+  "notes": 115,
+  "records": 90,
+  "complete": 88,
+  "pairs": 900,
+  "withFit": 900,
+  "fitQuartiles": [
+    25,
+    55,
+    62
+  ],
+  "verdicts": {
+    "possible": 409,
+    "insufficient": 268,
+    "ineligible": 204,
+    "eligible": 19
+  },
+  "clauses": 2782,
+  "labels": {
+    "not_enough_information": 844,
+    "not_excluded": 1620,
+    "included": 197,
+    "not_included": 37,
+    "excluded": 19,
+    "not_applicable": 65
+  },
+  "stated": 1448,
+  "statedWithEvidence": 1448,
+  "reasons": 2777,
+  "reasonsInChinese": 2777,
+  "failed": {},
+  "costCny": 6.55,
+  "planFailures": {
+    "search_invalid": 1
+  },
+  "boardCases": 90,
+  "jobExit": 4
+}

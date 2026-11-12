@@ -12,10 +12,102 @@ import { readFile } from "node:fs/promises";
 import {
   certifiedDeepSeekModel,
   createModelGatewayHandler,
+  createModelProgress,
   deepSeekModelDisplayName,
   pipeModelGatewayBody,
   supportedDeepSeekModels,
 } from "../src/modelGateway.mjs";
+
+test("semantic progress distinguishes heartbeat frames from text, reasoning and tool deltas", () => {
+  const progress = createModelProgress();
+  const feed = text => progress.observe(Buffer.from(text));
+  feed(': keepalive\n\n');
+  assert.deepEqual(progress.snapshot(), { heartbeats: 1, text: 0, reasoning: 0, tools: 0, firstMs: null, lastMs: null, finishReason: null });
+  feed('data: {"choices":[{"delta":{"reasoning_content":"private');
+  feed(' text"}}]}\n\ndata: {"choices":[{"delta":{"content":"secret"}}]}\n\n');
+  feed('data: {"choices":[{"delta":{"tool_calls":[{"index":0}]}}]}\n\n');
+  const seen = progress.snapshot();
+  assert.deepEqual([seen.heartbeats, seen.text, seen.reasoning, seen.tools], [1, 1, 1, 1]);
+  assert.ok(seen.firstMs <= seen.lastMs);
+  assert.doesNotMatch(JSON.stringify(seen), /private|secret/);
+  feed('event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"max_tokens"}}\n\n');
+  assert.equal(progress.snapshot().finishReason, 'max_tokens');
+});
+
+test("receipt producer drain waits past DONE and reports a bounded timeout without canceling", async (t) => {
+  let finishUpstream;
+  const upstream = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.write('data: {"choices":[],"usage":{"prompt_tokens":40,"completion_tokens":5,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":40}}\n\ndata: [DONE]\n\n');
+    finishUpstream = () => res.end();
+  });
+  const upstreamBase = await listen(upstream); t.after(() => close(upstream));
+  const receipts = [];
+  let releaseSettlement;
+  const settlement = new Promise(resolve => { releaseSettlement = resolve; });
+  let settlementStarted = false;
+  const ledger = { reserveModel: async () => ({ id: 'reservation' }), settleModel: async () => { settlementStarted = true; await settlement; } };
+  const handler = createModelGatewayHandler(config(upstreamBase), runtimeManager(), { usageLedger: ledger, onModelCall: receipt => receipts.push(receipt) });
+  const gateway = createServer(handler); const base = await listen(gateway); t.after(() => close(gateway));
+  await (await fetch(`${base}/internal/model/v1/chat/completions`, { method: 'POST', headers: { authorization: 'Bearer runtime-token', 'content-type': 'application/json' },
+    body: JSON.stringify({ messages: [{ role: 'user', content: 'x' }], stream: true }) })).text();
+  assert.deepEqual(await handler.drainModelCalls({ timeoutMs: 20 }), { drained: false, pending: 1 });
+  assert.equal(receipts.length, 0);
+  finishUpstream();
+  for (let attempt = 0; !settlementStarted && attempt < 200; attempt++) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(settlementStarted, true);
+  assert.deepEqual(await handler.drainModelCalls({ timeoutMs: 20 }), { drained: false, pending: 1 }, 'usage settlement also keeps the producer alive');
+  releaseSettlement();
+  assert.deepEqual(await handler.drainModelCalls({ timeoutMs: 1000 }), { drained: true, pending: 0 });
+  assert.equal(receipts.length, 1);
+});
+
+test("optional per-call receipts report forwarded configuration and outcomes without content", async (t) => {
+  let refused = false;
+  const upstream = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    if (refused) { res.writeHead(503); res.end('provider secret'); return; }
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.end('data: {"model":"deepseek-flash","choices":[{"delta":{"content":"patient secret"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n');
+  });
+  const upstreamBase = await listen(upstream); t.after(() => close(upstream));
+  const receipts = [];
+  const handler = createModelGatewayHandler(config(upstreamBase), runtimeManager(), { onModelCall: receipt => receipts.push(receipt) });
+  const gateway = createServer(handler); const base = await listen(gateway); t.after(() => close(gateway));
+  const call = () => fetch(`${base}/internal/model/v1/chat/completions`, { method: 'POST',
+    headers: { authorization: 'Bearer runtime-token', 'content-type': 'application/json' },
+    body: JSON.stringify({ model: 'deepseek-flash', messages: [{ role: 'user', content: 'patient secret' }], stream: true, max_tokens: 123 }) });
+  await (await call()).text();
+  refused = true; await (await call()).text();
+  assert.equal(receipts.length, 2);
+  assert.notEqual(receipts[0].callId, receipts[1].callId);
+  assert.deepEqual([receipts[0].requestedModel, receipts[0].forwardedModel, receipts[0].servedModel, receipts[0].outputLimit, receipts[0].finishReason, receipts[0].outcome],
+    ['deepseek-flash', 'deepseek-v4-pro', 'deepseek-flash', 123, 'stop', 'completed']);
+  assert.equal(receipts[1].outcome, 'failed');
+  assert.equal(receipts[1].errorCode, 'model_gateway_upstream_error');
+  assert.deepEqual(receipts.map(receipt => receipt.dispatch), ['accepted', 'rejected']);
+  assert.equal(receipts[0].upstreamStatus, null);
+  assert.equal(receipts[1].upstreamStatus, 503);
+  assert.ok(receipts.every(receipt => Date.parse(receipt.startedAt) <= Date.parse(receipt.finishedAt)));
+  assert.doesNotMatch(JSON.stringify(receipts), /patient secret|provider secret|server-only-test-secret/);
+});
+
+test("non-streaming receipts extract an allowlisted finish reason without exposing output", async (t) => {
+  const upstream = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ model: 'deepseek-flash', choices: [{ finish_reason: 'length', message: { content: 'patient secret' } }] }));
+  });
+  const upstreamBase = await listen(upstream); t.after(() => close(upstream));
+  const receipts = [];
+  const gateway = createServer(createModelGatewayHandler(config(upstreamBase), runtimeManager(), { onModelCall: value => receipts.push(value) }));
+  const base = await listen(gateway); t.after(() => close(gateway));
+  await (await fetch(`${base}/internal/model/v1/chat/completions`, { method: 'POST', headers: { authorization: 'Bearer runtime-token', 'content-type': 'application/json' },
+    body: JSON.stringify({ messages: [{ role: 'user', content: 'secret' }] }) })).text();
+  assert.equal(receipts[0].finishReason, 'length');
+  assert.doesNotMatch(JSON.stringify(receipts), /patient secret/);
+});
 
 async function listen(server) {
   server.listen(0, "127.0.0.1");
@@ -410,6 +502,57 @@ test("model gateway maps upstream errors and timeouts to redacted stable errors"
   });
 });
 
+test("provider refusal reports only a safe upstream status and opaque request id", async (t) => {
+  const failures = [];
+  let requestId = "01234567-89ab-cdef-0123-456789abcdef";
+  const upstream = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(503, { "x-request-id": requestId });
+    res.end("sensitive upstream body");
+  });
+  const upstreamBase = await listen(upstream);
+  t.after(() => close(upstream));
+  const handler = createModelGatewayHandler(config(upstreamBase), runtimeManager());
+  const gateway = createServer((req, res) => handler(req, res, (failure) => failures.push(failure)));
+  const base = await listen(gateway);
+  t.after(() => close(gateway));
+  for (const id of [requestId, "patient-name-secret"]) {
+    requestId = id;
+    const response = await fetch(`${base}/internal/model/v1/chat/completions`, {
+      method: "POST", headers: { authorization: "Bearer runtime-token", "content-type": "application/json", "x-open-science-project": "spoofed-project" },
+      body: JSON.stringify({ messages: [{ role: "user", content: "x" }] }),
+    });
+    assert.equal(response.status, 502);
+    assert.doesNotMatch(await response.text(), /sensitive|patient-name/);
+  }
+  assert.deepEqual(failures, [
+    { code: "model_gateway_upstream_error", status: 502, truncated: false, upstreamStatus: 503, providerRequestId: "01234567-89ab-cdef-0123-456789abcdef", verifiedProjectId: "paper-1" },
+    { code: "model_gateway_upstream_error", status: 502, truncated: false, upstreamStatus: 503, verifiedProjectId: "paper-1" },
+  ]);
+});
+
+test("a truncated stream reports authenticated attribution and semantic activity without payload", async (t) => {
+  const upstream = createServer(async (req, res) => {
+    for await (const _chunk of req) { /* consume */ }
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    res.write(': heartbeat\n\ndata: {"choices":[{"delta":{"reasoning_content":"patient secret"}}]}\n\n');
+    setTimeout(() => res.destroy(), 20);
+  });
+  const upstreamBase = await listen(upstream); t.after(() => close(upstream));
+  const failures = [];
+  const handler = createModelGatewayHandler(config(upstreamBase), runtimeManager(), { attributeRun: async () => "run-1" });
+  const gateway = createServer((req, res) => handler(req, res, failure => failures.push(failure)));
+  const base = await listen(gateway); t.after(() => close(gateway));
+  const response = await fetch(`${base}/internal/model/v1/chat/completions`, { method: "POST",
+    headers: { authorization: "Bearer runtime-token", "content-type": "application/json", "x-open-science-project": "spoofed-project" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "x" }], stream: true }) });
+  await assert.rejects(response.text());
+  assert.equal(failures.length, 1);
+  assert.deepEqual([failures[0].verifiedProjectId, failures[0].verifiedRunId], ["paper-1", "run-1"]);
+  assert.deepEqual([failures[0].progress.heartbeats, failures[0].progress.reasoning, failures[0].progress.text], [1, 1, 0]);
+  assert.doesNotMatch(JSON.stringify(failures), /patient secret|spoofed-project/);
+});
+
 test("production model gateway sends credentials only to the exact official DeepSeek origin", async (t) => {
   let calls = 0;
   const gateway = createServer(createModelGatewayHandler(config("https://mirror.example.com", {
@@ -562,7 +705,7 @@ test("a gateway failure is reported to the caller's ledger, including one that a
   caller.abort();
   const deadline = Date.now() + 5_000;
   while (failures.length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.deepEqual(failures, [{ code: "model_gateway_client_closed", status: 499, truncated: true }]);
+  assert.deepEqual([failures[0].code, failures[0].status, failures[0].truncated, failures[0].verifiedProjectId], ["model_gateway_client_closed", 499, true, "paper-1"]);
 });
 
 test("a provider stream that breaks off mid-answer is named as such, not as a gateway that is not configured", async (t) => {
@@ -590,7 +733,8 @@ test("a provider stream that breaks off mid-answer is named as such, not as a ga
   await assert.rejects(answer.text(), "the caller still sees a cut stream");
   const deadline = Date.now() + 5_000;
   while (failures.length === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.deepEqual(failures, [{ code: "model_gateway_upstream_interrupted", status: 502, truncated: true }]);
+  assert.deepEqual([failures[0].code, failures[0].status, failures[0].truncated, failures[0].verifiedProjectId], ["model_gateway_upstream_interrupted", 502, true, "paper-1"]);
+  assert.equal(failures[0].progress.text, 1);
 });
 
 test("a forwarded answer is counted against the account that asked for it", async (t) => {

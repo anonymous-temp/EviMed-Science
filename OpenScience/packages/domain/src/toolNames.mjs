@@ -1,3 +1,8 @@
+import patientMatchingTools from './patientMatchingTools.json' with { type: 'json' }
+
+/** Admitted first-party names; actual availability is an installed generation's native registry. */
+export const PATIENT_MATCHING_TOOL_NAMES = Object.freeze([...patientMatchingTools])
+
 /**
  * Tool names, in one place.
  *
@@ -131,6 +136,9 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'curve_digitize',
   'evidence_pool',
   'research_calculate',
+  // clinical scales and multi-step clinical formulas computed from their published definitions, deterministically — local, no
+  // gateway (clinical_scores.py, 2026-11-02)
+  'clinical_score',
   // what a project's datasets mean — the recorded interpretation, its exact source versions and the deterministic
   // data checks — through the control plane's ledger; offered to the two capabilities that start from a
   // researcher's own data (dataset_semantics, data_semantics.py; plan 2026-10-02 §11.3 N03)
@@ -252,6 +260,9 @@ export const ROOT_VISIBLE_MCP_BASE_NAMES = Object.freeze([
   // way by the wiki's contents, a page, the graph (model-chosen, never forced).
   'kb_browse',
   'research_calculate',
+  // A score or a multi-step clinical formula is arithmetic the model gets wrong by hand; the root may need one in any
+  // medical conversation, so it is not a delegate's tool (model-chosen, never forced).
+  'clinical_score',
   'vcr_read', 'vcr_write', 'vcr_simulate',
   // The evidence tools: what the evidence method names, and what a medical or
   // literature question is answered with.
@@ -385,6 +396,7 @@ export const RUNTIME_LEAKAGE_TOOL_TOKENS = Object.freeze([
   'evimed_',
   ...MCP_TOOL_NAMES,
   ...SOCKET_TOOL_NAME_LIST,
+  ...PATIENT_MATCHING_TOOL_NAMES,
 ])
 
 /**
@@ -443,6 +455,7 @@ export function isPlatformChoreographyTool(name) {
 export const MOUNTED_TOOL_NAMES = Object.freeze([
   ...KERNEL_MOUNTED_TOOL_NAMES,
   ...SOCKET_TOOL_NAME_LIST,
+  ...PATIENT_MATCHING_TOOL_NAMES,
 ])
 
 /**

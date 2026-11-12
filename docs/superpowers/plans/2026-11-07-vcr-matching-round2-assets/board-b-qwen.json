@@ -1,0 +1,218 @@
+{
+ "board": "B",
+ "official": {
+  "hit_count_at_10": 119,
+  "hit_rate_at_10": 0.944444,
+  "mrr": 0.710165,
+  "n_cases": 126,
+  "n_missing_output": 0,
+  "n_ranked_targets": 126,
+  "n_target_not_ranked": 0,
+  "rank_mean": 2.8968,
+  "rank_median": 1.0,
+  "target_trial_recall_at_10_pct": 94.44
+ },
+ "byIc": {
+  "NCI": {
+   "hit_count_at_10": 36,
+   "hit_rate_at_10": 0.878049,
+   "mrr": 0.640918,
+   "n_cases": 41,
+   "n_missing_output": 0,
+   "n_ranked_targets": 41,
+   "n_target_not_ranked": 0,
+   "rank_max": 28,
+   "rank_mean": 4.8537,
+   "rank_median": 1,
+   "rank_min": 1,
+   "target_trial_recall_at_10_pct": 87.8
+  },
+  "NEI": {
+   "hit_count_at_10": 14,
+   "hit_rate_at_10": 0.933333,
+   "mrr": 0.65735,
+   "n_cases": 15,
+   "n_missing_output": 0,
+   "n_ranked_targets": 15,
+   "n_target_not_ranked": 0,
+   "rank_max": 13,
+   "rank_mean": 2.6667,
+   "rank_median": 2,
+   "rank_min": 1,
+   "target_trial_recall_at_10_pct": 93.33
+  },
+  "NHGRI": {
+   "hit_count_at_10": 15,
+   "hit_rate_at_10": 1.0,
+   "mrr": 0.733333,
+   "n_cases": 15,
+   "n_missing_output": 0,
+   "n_ranked_targets": 15,
+   "n_target_not_ranked": 0,
+   "rank_max": 2,
+   "rank_mean": 1.5333,
+   "rank_median": 2,
+   "rank_min": 1,
+   "target_trial_recall_at_10_pct": 100.0
+  },
+  "NHLBI": {
+   "hit_count_at_10": 10,
+   "hit_rate_at_10": 1.0,
+   "mrr": 0.716667,
+   "n_cases": 10,
+   "n_missing_output": 0,
+   "n_ranked_targets": 10,
+   "n_target_not_ranked": 0,
+   "rank_max": 3,
+   "rank_mean": 1.7,
+   "rank_median": 1.5,
+   "rank_min": 1,
+   "target_trial_recall_at_10_pct": 100.0
+  },
+  "NIAID": {
+   "hit_count_at_10": 12,
+   "hit_rate_at_10": 1.0,
+   "mrr": 0.840278,
+   "n_cases": 12,
+   "n_missing_output": 0,
+   "n_ranked_targets": 12,
+   "n_target_not_ranked": 0,
+   "rank_max": 4,
+   "rank_mean": 1.5,
+   "rank_median": 1.0,
+   "rank_min": 1,
+   "target_trial_recall_at_10_pct": 100.0
+  },
+  "NICHD": {
+   "hit_count_at_10": 3,
+   "hit_rate_at_10": 1.0,
+   "mrr": 1.0,
+   "n_cases": 3,
+   "n_missing_output": 0,
+   "n_ranked_targets": 3,
+   "n_target_not_ranked": 0,
+   "rank_max": 1,
+   "rank_mean": 1.0,
+   "rank_median": 1,
+   "rank_min": 1,
+   "target_trial_recall_at_10_pct": 100.0
+  },
+  "NIDA": {
+   "hit_count_at_10": 8,
+   "hit_rate_at_10": 0.888889,
+   "mrr": 0.636243,
+   "n_cases": 9,
+   "n_missing_output": 0,
+   "n_ranked_targets": 9,
+   "n_target_not_ranked": 0,
+   "rank_max": 12,
+   "rank_mean": 3.2222,
+   "rank_median": 2,
+   "rank_min": 1,
+   "target_trial_recall_at_10_pct": 88.89
+  },
+  "NIDCR": {
+   "hit_count_at_10": 12,
+   "hit_rate_at_10": 1.0,
+   "mrr": 0.833333,
+   "n_cases": 12,
+   "n_missing_output": 0,
+   "n_ranked_targets": 12,
+   "n_target_not_ranked": 0,
+   "rank_max": 2,
+   "rank_mean": 1.3333,
+   "rank_median": 1.0,
+   "rank_min": 1,
+   "target_trial_recall_at_10_pct": 100.0
+  },
+  "NIDDK": {
+   "hit_count_at_10": 3,
+   "hit_rate_at_10": 1.0,
+   "mrr": 0.388889,
+   "n_cases": 3,
+   "n_missing_output": 0,
+   "n_ranked_targets": 3,
+   "n_target_not_ranked": 0,
+   "rank_max": 6,
+   "rank_mean": 3.3333,
+   "rank_median": 2,
+   "rank_min": 2,
+   "target_trial_recall_at_10_pct": 100.0
+  },
+  "NIEHS": {
+   "hit_count_at_10": 3,
+   "hit_rate_at_10": 1.0,
+   "mrr": 1.0,
+   "n_cases": 3,
+   "n_missing_output": 0,
+   "n_ranked_targets": 3,
+   "n_target_not_ranked": 0,
+   "rank_max": 1,
+   "rank_mean": 1.0,
+   "rank_median": 1,
+   "rank_min": 1,
+   "target_trial_recall_at_10_pct": 100.0
+  },
+  "NIMH": {
+   "hit_count_at_10": 3,
+   "hit_rate_at_10": 1.0,
+   "mrr": 0.733333,
+   "n_cases": 3,
+   "n_missing_output": 0,
+   "n_ranked_targets": 3,
+   "n_target_not_ranked": 0,
+   "rank_max": 5,
+   "rank_mean": 2.3333,
+   "rank_median": 1,
+   "rank_min": 1,
+   "target_trial_recall_at_10_pct": 100.0
+  }
+ },
+ "byStudyType": {
+  "INTERVENTIONAL": {
+   "hit_count_at_10": 101,
+   "hit_rate_at_10": 0.935185,
+   "mrr": 0.70584,
+   "n_cases": 108,
+   "n_missing_output": 0,
+   "n_ranked_targets": 108,
+   "n_target_not_ranked": 0,
+   "rank_max": 28,
+   "rank_mean": 3.0741,
+   "rank_median": 1.0,
+   "rank_min": 1,
+   "target_trial_recall_at_10_pct": 93.52
+  },
+  "OBSERVATIONAL": {
+   "hit_count_at_10": 18,
+   "hit_rate_at_10": 1.0,
+   "mrr": 0.736111,
+   "n_cases": 18,
+   "n_missing_output": 0,
+   "n_ranked_targets": 18,
+   "n_target_not_ranked": 0,
+   "rank_max": 6,
+   "rank_mean": 1.8333,
+   "rank_median": 1.0,
+   "rank_min": 1,
+   "target_trial_recall_at_10_pct": 100.0
+  }
+ },
+ "intervals": {
+  "mrr": {
+   "ci": [
+    0.6502015621063243,
+    0.7690355866943169
+   ],
+   "point": 0.7101647544107861
+  },
+  "recall@10": {
+   "ci": [
+    0.9047619047619048,
+    0.9841269841269841
+   ],
+   "point": 0.9444444444444444
+  }
+ },
+ "protocol": "official eval_nih_trialbench_target_recall_at10.py, K=10; missing output and unranked target count as misses"
+}

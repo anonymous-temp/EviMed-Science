@@ -50,6 +50,17 @@ const NOW = Date.parse("2026-09-07T00:00:00.000Z");
 /** @param {number} days @returns {string} */
 const daysAgo = (days) => new Date(NOW - days * 86_400_000).toISOString();
 
+test("graph checks accept readonly edge projections without learning records", () => {
+  const nodes = Object.freeze([
+    { name: "base-step", digest: DIGEST_A, status: "approved", dependencies: Object.freeze([]) },
+    { name: "uses-base", digest: DIGEST_B, status: "approved", dependencies: Object.freeze([{ name: "base-step", digest: DIGEST_A }]) },
+  ]);
+  const result = validateMethodGraph(nodes);
+  assert.deepEqual(result.issues, []);
+  assert.equal(result.levels.get("uses-base"), 1);
+  assert.deepEqual(computeMethodLevels(nodes).levels, result.levels);
+});
+
 /**
  * @param {Partial<import("../src/methodGraph.mjs").MethodRecord>} [options]
  * @returns {import("../src/methodGraph.mjs").MethodRecord}

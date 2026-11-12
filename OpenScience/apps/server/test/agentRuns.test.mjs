@@ -8079,9 +8079,37 @@ test("independent writers retry an exclusive rotation conflict without losing ei
   assert.equal(runs.find(run => run.id === second.id).status, "failed");
 });
 
-for (const tombstoneSegment of [0, 1]) test(`source erasure retains an earlier deletion after a segment rewrite fails (${tombstoneSegment})`, async t => {
+for (const ledgerRotationEnabled of [false, true]) for (const segmented of [false, true]) {
+  test(`source erasure is byte and write idempotent (rotation=${ledgerRotationEnabled}, segmented=${segmented})`, async t => {
+    const { project, binding, createStore, file } = await rotationFixture(t);
+    const store = createStore({ ledgerRotationEnabled });
+    const run = (await store.reserveRun(project, binding("erase-once"), { question: "Private words" })).run;
+    await store.finishInternal(project, run.id, { status: "succeeded", artifacts: ["report.txt"] });
+    if (segmented) {
+      await writeFile(file(1), JSON.stringify({ event: "notice", id: run.id, qualityNotices: ["Private middle notice"] }) + "\n");
+      await writeFile(file(2), JSON.stringify({ event: "notice", id: run.id, qualityNotices: ["Private tail notice"] }) + "\n");
+    }
+    const files = segmented ? [file(), file(1), file(2)] : [file()];
+    await store.removeConversationSource(project, [run.sessionId]);
+    const once = await Promise.all(files.map(name => readFile(name, "utf8")));
+    assert.doesNotMatch(once.join(""), /Private/);
+    const notices = once.join("").trim().split("\n").map(JSON.parse).filter(row => row.deleted === true);
+    assert.equal(notices.length, 1);
+    assert.deepEqual((await store.list(project))[0].qualityNotices, []);
+    let writes = 0;
+    const renameFile = fsPromises.rename;
+    t.mock.method(fsPromises, "rename", async (...args) => { writes++; return renameFile(...args); });
+    await store.removeConversationSource(project, [run.sessionId]);
+    assert.deepEqual(await Promise.all(files.map(name => readFile(name, "utf8"))), once);
+    assert.equal(writes, 0, "an erased source does not rewrite even unchanged segment bytes");
+    assert.equal((await store.list(project))[0].deleted, true);
+    assert.deepEqual((await store.list(project))[0].artifacts, ["report.txt"]);
+  });
+}
+
+for (const ledgerRotationEnabled of [false, true]) for (const tombstoneSegment of [0, 1]) test(`source erasure retains an earlier deletion after a segment rewrite fails (${tombstoneSegment}, rotation=${ledgerRotationEnabled})`, async t => {
   const { project, binding, createStore, file } = await rotationFixture(t);
-  const store = createStore();
+  const store = createStore({ ledgerRotationEnabled });
   const run = (await store.reserveRun(project, binding("deleted-session"), { question: "Private words" })).run;
   await store.finishInternal(project, run.id, { status: "succeeded", artifacts: [] });
   const notice = { event: "notice", id: run.id, at: "2026-11-01T00:00:00.000Z", deleted: true, question: "Private notice", qualityNotices: [] };
@@ -8096,6 +8124,9 @@ for (const tombstoneSegment of [0, 1]) test(`source erasure retains an earlier d
   });
   await assert.rejects(store.removeConversationSource(project, ["deleted-session"]), /injected crash/);
   assert.equal((await store.list(project)).find(item => item.id === run.id).deleted, true);
+  const retained = (await readFile(file(tombstoneSegment), "utf8")).trim().split("\n").map(JSON.parse)
+    .find(event => event.id === run.id && event.deleted === true);
+  assert.equal(retained.at, notice.at, "the original deletion timestamp survives the interrupted rewrite");
   if (tombstoneSegment === 0) assert.doesNotMatch(await readFile(file(), "utf8"), /Private/);
 });
 

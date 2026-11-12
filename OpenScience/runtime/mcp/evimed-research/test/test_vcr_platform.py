@@ -32,11 +32,11 @@ def load_server():
 
 
 def domain_job_kinds():
-    """The engine's job kinds as the domain publishes them: the one list the tool copies."""
+    """The job kinds a run can start as the domain publishes them, less the retired ones: the one list the tool copies."""
     node = shutil.which("node")
     assert node, "node must be installed: the tool's copy of the job kinds is held equal to the domain's"
     out = subprocess.run(
-        [node, "--input-type=module", "-e", "import('@evimed/domain').then((m) => console.log(JSON.stringify(m.VCR_JOB_KINDS)))"],
+        [node, "--input-type=module", "-e", "import('@evimed/domain').then((m) => console.log(JSON.stringify(m.VCR_JOB_KINDS.filter((kind) => !m.VCR_RETIRED_JOB_KINDS.includes(kind)))))"],
         cwd=OPEN_SCIENCE / "apps" / "server", capture_output=True, text=True, timeout=60, check=True,
     )
     return json.loads(out.stdout.strip().splitlines()[-1])
@@ -478,8 +478,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
         definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
         write = definitions["vcr_write"]["description"]
         self.assertIn("never negated", write)
-        self.assertIn("pregnancy", write)
-        self.assertIn("one trial's own eligibility lines", write)
+        # The rule that age can never settle pregnancy went with the owner decisions of 2026-11-04; a fact still says only what its quote says.
+        self.assertIn("what the text does not mention is unknown", write)
         for method in ("vcr-matching", "vcr-protocol", "vcr-evidence", "vcr-analysis", "vcr-package"):
             self.assertIn(method, write)
         self.assertIn("/opt/evimed/capability-skills/vcr-matching/SKILL.md", write)
@@ -494,6 +494,20 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertIn("matching", description)
         self.assertIn("patient_context", description)
         self.assertIn("messageSeq", description)
+
+    def test_patient_context_explains_exact_upload_handles_and_continuations(self):
+        definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
+        self.assertIn("{sourceId,generation,sha256}", definitions["vcr_write"]["description"])
+        self.assertIn("{sourceId} for a knowledge-base original", definitions["vcr_write"]["description"])
+        self.assertIn("nextUploadRead", definitions["vcr_read"]["description"])
+        data = {"uploads": [{"sourceId": "upl_fixture", "generation": 1, "sha256": "a" * 64}],
+                "candidates": [{"messageSeq": 8}], "nextBeforeSeq": 8,
+                "nextUploadRead": {"what": "patient_context", "filter": {"cursor": "more"}}}
+        with mock.patch.object(vcr_platform, "_post", return_value=data):
+            result = vcr_platform.read({"what": "patient_context"})
+        actions = " ".join(result["next_actions"])
+        for instruction in ("{sourceId,generation,sha256}", "data.nextUploadRead", "{messageSeq}", "data.nextBeforeSeq"):
+            self.assertIn(instruction, actions)
 
     def test_evidence_pool_names_a_parameter_and_never_takes_numbers(self):
         properties = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["evidence_pool"]["inputSchema"]["properties"]
@@ -730,7 +744,8 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertEqual(found["status"], "success")
         self.assertEqual(_Gateway.seen[-1]["body"], {"what": "candidates", "filter": {"condition": "lung cancer", "terms": ["NSCLC"], "age": 63, "sex": "female", "region": "China"}})
         said = " ".join(found["next_actions"])
-        for fragment in ("data.coverage", "CDE and ICTRP", "not a ranking", "unknown", "trial_registry_record", "parsedBefore"):
+        # A search now points at the judging job, not at writing the trial's criteria (owner decisions of 2026-11-04).
+        for fragment in ("data.coverage", "CDE and ICTRP", "not a ranking", "unknown", "trial_registry_record", "match_judge"):
             self.assertIn(fragment, said)
         # An unavailable registry search is a warning the run reads and moves on from, with no registry-specific advice.
         _Gateway.answers["read"] = (200, {"data": {"what": "candidates", "available": False, "code": "registry_unavailable", "message": "试验登记检索未接入"}})
@@ -738,36 +753,56 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertEqual(off["status"], "warning")
         self.assertFalse(any("CDE and ICTRP" in action for action in off["next_actions"]))
 
-    def test_the_trials_found_for_a_patient_are_a_write_and_a_read_of_their_own(self):
-        # 「给患者找试验」: a run writes the registry trial and its structured criteria, and reads them back.
-        self.assertIn("candidate_trial", vcr_platform.WRITE_WHATS)
+    def test_a_search_with_a_summary_is_reordered_kept_and_read_again_by_its_search_id(self):
+        # G11: up to 32 phrases and a summary go to the platform as the run wrote them; the answer's receipt (searchId) is how the rest of the list is read
+        # and how the best N are judged, and the next actions say so, in the words of the state the answer is in.
+        phrases = ["phrase %d" % at for at in range(32)]
+        filter_ = {"condition": "lung cancer", "terms": phrases, "summary": "stage IV lung adenocarcinoma, EGFR positive", "age": 58}
+        ranked = {"what": "candidates", "available": True, "status": "ok", "asOf": "2026-11-04T08:00:00.000Z", "searchId": "cns_1", "coverage": "已查（2026-11-04）：ClinicalTrials.gov",
+                  "retrieved": 120, "returned": 20, "offset": 0, "more": True, "nextOffset": 20, "rerank": {"state": "ranked", "applied": True, "summaryGiven": True},
+                  "retrieval": {"phrases": 33, "reachedAllPhrases": True}, "candidates": [{"registry": "clinicaltrials.gov", "registryId": "NCT00000001", "rank": 1, "relevance": 0.91}]}
+        _Gateway.answers["read"] = (200, {"data": ranked})
+        found = self.server.call_tool("vcr_read", {"what": "candidates", "filter": filter_})
+        self.assertEqual(_Gateway.seen[-1]["body"], {"what": "candidates", "filter": filter_}, "the platform gets what the run wrote, phrases and summary")
+        said = " ".join(found["next_actions"])
+        self.assertIn("filter.searchId=cns_1 and filter.offset=20", said)
+        self.assertIn("selection {subjectKey, searchId, candidateLimit}", said)
+        self.assertNotIn("Add filter.summary", said, "a list that was reordered is not told to add the summary")
+        self.assertNotIn("search deadline", said)
+        # A list not reordered because no summary was given is told how to get one; a deadline that passed is told how to go on.
+        ranked.update({"rerank": {"state": "skipped", "applied": False, "summaryGiven": False}, "retrieval": {"phrases": 33, "reachedAllPhrases": False}})
+        _Gateway.answers["read"] = (200, {"data": ranked})
+        plain = " ".join(self.server.call_tool("vcr_read", {"what": "candidates", "filter": {"condition": "lung cancer"}})["next_actions"])
+        self.assertIn("Add filter.summary", plain)
+        self.assertIn("search_deadline", plain)
+        self.assertIn("not a ranking of who fits", plain)
+        # The page read of a saved search is the same read with its id; and a frozen collection's list is judged through the same id.
+        _Gateway.answers["read"] = (200, {"data": {**ranked, "collection": {"id": "snapshot-1"}, "rerank": {"state": "ranked", "applied": True}, "more": False}})
+        frozen = " ".join(self.server.call_tool("vcr_read", {"what": "candidates", "filter": {"searchId": "cns_1", "offset": 20}})["next_actions"])
+        self.assertEqual(_Gateway.seen[-1]["body"], {"what": "candidates", "filter": {"searchId": "cns_1", "offset": 20}})
+        self.assertIn("searchId, candidateLimit", frozen)
+        self.assertIn("collection and collectionRevision", frozen)
+        # The detailed definition (the one a specialist run reads) names the new keys and the judging selection's.
+        detailed = {tool["name"]: tool for tool in vcr_platform._detailed_tool_definitions()}  # noqa: SLF001
+        filter_keys = detailed["vcr_read"]["inputSchema"]["properties"]["filter"]["properties"]
+        self.assertEqual((filter_keys["summary"]["maxLength"], filter_keys["terms"]["maxItems"], "searchId" in filter_keys), (2000, 32, True))
+        selection_keys = detailed["vcr_simulate"]["inputSchema"]["properties"]["selection"]["properties"]
+        self.assertTrue({"searchId", "candidateLimit"} <= set(selection_keys))
+        self.assertEqual(vcr_platform.CANDIDATES_TIMEOUT_SECONDS > vcr_platform.TIMEOUT_SECONDS, True, "a search that pages many registries is given the time its server-side deadline needs")
+
+    def test_the_trials_found_for_a_patient_are_a_read_of_their_own_and_no_write(self):
+        # 「给患者找试验」: the trials judged for a patient are read back; the run saves its judgment of one with trial_judgment.
+        self.assertNotIn("candidate_trial", vcr_platform.WRITE_WHATS)
+        self.assertIn("trial_judgment", vcr_platform.WRITE_WHATS)
         self.assertIn("candidate_trials", vcr_platform.READ_WHATS)
         definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
-        self.assertIn("candidate_trial", definitions["vcr_write"]["description"])
         self.assertIn("candidate_trials", definitions["vcr_read"]["description"])
-        item = {"registryId": "NCT05000001", "subjectKeys": ["P-0192"], "criteria": [
-            {"kind": "inclusion", "criterionType": "demographic", "sourceText": "Age >= 18 years",
-             "requirement": {"op": "compare", "variable": "age", "comparator": "gte", "value": 18, "unit": "year"}}]}
-        _Gateway.answers["write"] = (200, {"data": {"what": "candidate_trial", "ok": True, "ids": ["ctr_1"], "issues": [], "results": [
-            {"index": 0, "id": "ctr_1", "registryId": "NCT05000001", "created": True, "criteria": 1, "located": 1,
-             "evaluated": [{"subjectKey": "P-0192", "summary": "eligible"}]}]}})
-        written = self.server.call_tool("vcr_write", {"what": "candidate_trial", "items": [item]})
-        self.assertEqual(written["status"], "success")
-        self.assertIn("Wrote candidate_trial: 1 written", written["summary"])
-        self.assertEqual(written["data"]["results"][0]["evaluated"][0]["summary"], "eligible")
-        self.assertEqual(_Gateway.seen[0]["body"], {"what": "candidate_trial", "items": [item]})
-
+        self.assertNotIn("candidate_trial ", definitions["vcr_write"]["description"])
+        self.assertNotIn("candidateTrialId", definitions["vcr_write"]["description"])
         _Gateway.answers["read"] = (200, {"data": {"what": "candidate_trials", "trials": [{"id": "ctr_1", "registryId": "NCT05000001", "criteria": 1}], "more": False}})
         read = self.server.call_tool("vcr_read", {"what": "candidate_trials", "filter": {"registryId": "NCT05000001"}})
         self.assertEqual(read["status"], "success")
-        self.assertEqual(_Gateway.seen[1]["body"], {"what": "candidate_trials", "filter": {"registryId": "NCT05000001"}})
-
-        # A trial the registry does not have, or a criterion outside the grammar, is named on its item and the call goes on.
-        _Gateway.answers["write"] = (200, {"data": {"what": "candidate_trial", "ok": False, "ids": [], "issues": [
-            {"index": 0, "field": "registryId", "code": "registry_not_found", "message": "登记平台没有这个登记号的记录。"}]}})
-        refused = self.server.call_tool("vcr_write", {"what": "candidate_trial", "items": [{"registryId": "NCT00000000", "criteria": item["criteria"]}]})
-        self.assertEqual(refused["status"], "warning")
-        self.assertEqual(refused["warnings"], ["item 0, registryId: 登记平台没有这个登记号的记录。"])
+        self.assertEqual(_Gateway.seen[0]["body"], {"what": "candidate_trials", "filter": {"registryId": "NCT05000001"}})
 
     def test_an_answer_over_the_cap_is_refused_by_name(self):
         _Gateway.answers["read"] = (200, b'{"data": {"pad": "' + b"x" * (vcr_platform.MAX_RESPONSE_BYTES + 10) + b'"}}')
@@ -817,6 +852,30 @@ class VcrSimulateTests(_GatewayCase):
         self.assertIn("job_1 is queued", result["summary"])
         self.assertEqual(_Gateway.seen[0]["path"], "/internal/vcr/v1/simulate")
         self.assertEqual(_Gateway.seen[0]["body"], {"action": "start", "kind": "design_simulation", "scenario": scenario, "subjectId": "scn_1"})
+
+    def test_a_judging_job_is_a_kind_with_a_selection_and_a_write_of_its_own(self):
+        self.assertIn("match_judge", vcr_platform.JOB_KINDS)
+        self.assertIn("trial_judgment", vcr_platform.WRITE_WHATS)
+        definitions = {tool["name"]: tool for tool in vcr_platform._detailed_tool_definitions()}
+        selection = definitions["vcr_simulate"]["inputSchema"]["properties"]["selection"]["properties"]
+        self.assertNotIn("topK", selection, "how far the clause stage goes is the deployment's")
+        for key in ("subjectKey", "registryIds", "registry", "collection", "collectionRevision", "protocolVersionId", "subjectKeys", "fit", "thinking"):
+            self.assertIn(key, selection)
+        self.assertIn("sentences", definitions["vcr_read"]["description"])
+        answer = self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "match_judge"})
+        self.assertEqual(answer["status"], "success")
+        self.assertEqual(answer["data"]["method"], "matching.judge")
+        self.assertTrue(answer["data"]["builtByPlatform"])
+        self.assertIn("registryIds", answer["data"]["notes"][0])
+        compact = {tool["name"]: tool["description"] for tool in vcr_platform.tool_definitions()}
+        self.assertIn("trial_judgment", compact["vcr_write"])
+        self.assertIn("sentences", compact["vcr_read"])
+
+    def test_a_registry_record_keeps_its_numbered_clauses(self):
+        _Gateway.answers["read"] = (200, {"data": {"what": "trial_registry_record", "available": True, "status": "ok", "record": {"registryId": "NCT00000001"}, "clauses": [{"number": 1, "kind": "inclusion", "text": "Age >= 18"}]}})
+        answer = self.server.call_tool("trial_registry_record", {"registryId": "NCT00000001"})
+        self.assertEqual(answer["data"]["clauses"], [{"number": 1, "kind": "inclusion", "text": "Age >= 18"}])
+        self.assertEqual(answer["data"]["registryId"], "NCT00000001")
 
     def test_the_lab_actions_reach_the_platform_whole_and_are_never_waited_for(self):
         # F4: a study conversation without the native trial plugin runs a design search through this tool. The call carries the frozen
@@ -1190,6 +1249,30 @@ class VcrJobWaitTests(_GatewayCase):
             self.assertIn("look once more with status just before you answer", advice)
             self.assertNotIn("action status", advice)
 
+    def test_a_read_of_a_person_says_how_to_go_on_from_what_is_there(self):
+        _Gateway.answers["read"] = [(200, {"data": {"what": "matching", "subjectKey": "P-1", "assessment": None}})]
+        nothing = vcr_platform.read({"what": "matching", "filter": {"subjectKey": "P-1"}})
+        self.assertIn("match_judge", " ".join(nothing["next_actions"]))
+        _Gateway.answers["read"] = [(200, {"data": {"what": "matching", "subjectKey": "P-1", "assessment": None, "ranking": [{"verdictLabel": "符合"}]}})]
+        judged = vcr_platform.read({"what": "matching", "filter": {"subjectKey": "P-1"}})
+        self.assertNotIn("Nothing is saved", " ".join(judged["next_actions"]))
+
+    def test_a_judging_job_is_read_back_from_its_verdicts_and_a_stopped_one_says_so(self):
+        self.wait_for("0")
+        _Gateway.answers["simulate"] = [(200, {"data": {"action": "status", "jobId": "job_1", "kind": "match_judge", "state": "running", "progress": {"done": 1, "total": 4}}})]
+        running = vcr_platform.simulate({"action": "status", "jobId": "job_1"})
+        self.assertIn("candidate_trials", " ".join(running["next_actions"]))
+        self.assertNotIn("what: results", " ".join(running["next_actions"]))
+        _Gateway.answers["simulate"] = [(200, {"data": {"action": "status", "jobId": "job_1", "kind": "match_judge", "state": "succeeded", "result": {"conclusion": "limited"}}})]
+        stopped = vcr_platform.simulate({"action": "status", "jobId": "job_1"})
+        self.assertEqual(stopped["status"], "warning")
+        self.assertIn("stopped before the end", stopped["summary"])
+        self.assertIn("candidate_trials", " ".join(stopped["next_actions"]))
+        _Gateway.answers["simulate"] = [(200, {"data": {"action": "status", "jobId": "job_1", "kind": "weight_comparator", "state": "succeeded", "result": {"conclusion": "limited"}}})]
+        estimate = vcr_platform.simulate({"action": "status", "jobId": "job_1"})
+        self.assertEqual(estimate["status"], "success", "an engine's limited estimate is a finished result")
+        self.assertIn("what: results", " ".join(estimate["next_actions"]))
+
     def test_a_job_that_finishes_during_the_wait_comes_back_finished_from_one_start(self):
         self.wait_for("20")
         _Gateway.answers["simulate"] = [
@@ -1418,6 +1501,15 @@ class RegistryRecordTests(_GatewayCase):
         result = self.server.call_tool("trial_registry_record", {"registryId": "NCT01234567", "registry": "ctgov"})
         self.assertEqual(result["status"], "success")
         self.assertEqual(_Gateway.seen[0]["body"], {"what": "trial_registry_record", "filter": {"registryId": "NCT01234567", "registry": "ctgov"}})
+
+    def test_exact_frozen_record_keeps_the_collection_on_request_and_readback(self):
+        collection = {"id": "snapshot-1", "sourceVersion": "release-1", "snapshotDate": "2021-04-27"}
+        _Gateway.answers["read"] = (200, {"data": {"record": {"registryId": "NCT01234567"}, "collection": collection}})
+        result = self.server.call_tool("trial_registry_record", {"registryId": "NCT01234567", "collection": "snapshot-1", "collectionRevision": "a" * 64})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["data"]["collection"], collection)
+        self.assertEqual(_Gateway.seen[0]["body"]["filter"]["collection"], "snapshot-1")
+        self.assertEqual(_Gateway.seen[0]["body"]["filter"]["collectionRevision"], "a" * 64)
 
     def test_no_registry_status_and_no_unavailable_channel_is_ever_a_success(self):
         for answer in (

@@ -9,6 +9,7 @@ import {
   DELEGATION_BASE_TOOLS,
   MAX_DELEGATION_DEPTH,
   MCP_TOOL_NAMES,
+  PATIENT_MATCHING_TOOL_NAMES,
   SOCKET_TOOL_NAME_LIST,
   VCR_STEP_CAPABILITIES,
   VCR_STEP_PRODUCTS,
@@ -513,7 +514,8 @@ async function dshCapabilities() {
 
 test("a capability that writes files declares its skills, its tools and every output path", async () => {
   const catalogue = await dshCapabilities();
-  const knownTools = new Set([...MCP_TOOL_NAMES, ...SOCKET_TOOL_NAME_LIST, ...DELEGATION_BASE_TOOLS]);
+  // The patient-matching plugin's native tools are published by its installed generation, not an MCP server.
+  const knownTools = new Set([...MCP_TOOL_NAMES, ...SOCKET_TOOL_NAME_LIST, ...DELEGATION_BASE_TOOLS, ...PATIENT_MATCHING_TOOL_NAMES]);
   for (const { id, manifest } of catalogue) {
     // The shipped manifest still passes the gate that generated it. A catalogue
     // entry that no longer validates is one the build would refuse to produce

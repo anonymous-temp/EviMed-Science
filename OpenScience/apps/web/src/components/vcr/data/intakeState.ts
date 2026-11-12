@@ -147,14 +147,14 @@ const EXTENSIONS: Record<"data" | "dictionary", readonly string[]> = {
 /** A patient record is text anywhere, and PDF or Word where the deployment converts them to text itself. */
 const DOCUMENT_TEXT_EXTENSIONS: readonly string[] = ["txt", "md"];
 const DOCUMENT_CONVERTED_EXTENSIONS: readonly string[] = ["pdf", "docx"];
-/** A picture of a record has no text to read: refused for that, never sent. */
+/** A picture of a record has no text layer: the in-house parser reads it where the deployment has one (`documents.scans`), and where it has none it is refused for that, never sent. */
 const PICTURE_EXTENSIONS: readonly string[] = ["png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic", "heif"];
 /** The ceiling a dictionary or a document's text has beside the deployment's own. */
 const ROLE_CAPS: Record<"dictionary" | "document", number> = { dictionary: 2 * 1024 * 1024, document: 1024 * 1024 };
 
 /** What a source's file chooser accepts for a patient record: what this deployment would take. */
 export function documentAccept(documents: VcrIntakeSource["upload"]["documents"] | null): string {
-  return [...DOCUMENT_TEXT_EXTENSIONS, ...(documents?.converter ? DOCUMENT_CONVERTED_EXTENSIONS : [])].map((extension) => `.${extension}`).join(",");
+  return [...DOCUMENT_TEXT_EXTENSIONS, ...(documents?.converter || documents?.scans ? DOCUMENT_CONVERTED_EXTENSIONS : []), ...(documents?.scans ? PICTURE_EXTENSIONS : [])].map((extension) => `.${extension}`).join(",");
 }
 
 /** A sentence when a file would be refused, `null` when it would not. */
@@ -165,7 +165,8 @@ export function uploadProblem(
   const dot = file.name.lastIndexOf(".");
   const extension = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : "";
   if (!extension) return "文件名需要带扩展名，例如 cohort.csv。";
-  if (role === "document" && PICTURE_EXTENSIONS.includes(extension)) {
+  const picture = PICTURE_EXTENSIONS.includes(extension);
+  if (role === "document" && picture && !documents?.scans) {
     // The server's own sentence for the same refusal, so the page and the plane never say two things.
     return knownErrorCodeMessage("vcr_document_needs_text");
   }
@@ -175,8 +176,8 @@ export function uploadProblem(
   if (extension === "zip") return "请先解压，再逐个上传数据文件。";
   if (role === "document" && extension === "doc") return "旧版 .doc 不能直接转换：请另存为 .docx、可复制文字的 PDF 或 .txt 后上传。";
   if (role === "document") {
-    const converted = DOCUMENT_CONVERTED_EXTENSIONS.includes(extension);
-    const allowed = [...DOCUMENT_TEXT_EXTENSIONS, ...(documents?.converter ? DOCUMENT_CONVERTED_EXTENSIONS : [])];
+    const converted = picture || DOCUMENT_CONVERTED_EXTENSIONS.includes(extension);
+    const allowed = [...DOCUMENT_TEXT_EXTENSIONS, ...(documents?.converter || documents?.scans ? DOCUMENT_CONVERTED_EXTENSIONS : []), ...(documents?.scans ? PICTURE_EXTENSIONS : [])];
     if (!allowed.includes(extension)) {
       return converted ? "本部署暂不转换 PDF 和 Word，请先另存为 .txt 后上传。" : `这一类文件支持：${allowed.join("、")}。`;
     }

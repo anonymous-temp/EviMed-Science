@@ -1,0 +1,106 @@
+{
+  "kind": "provider-contract-smoke",
+  "scope": "public synthetic inputs only; not clinical accuracy or product acceptance",
+  "at": "2026-11-05T10:39:13.376Z",
+  "embedding": {
+    "status": "complete",
+    "model": "qwen3.7-text-embedding",
+    "dimensions": 1024
+  },
+  "rerank": {
+    "status": "complete",
+    "summary": "Matching candidate order saved.",
+    "data": {
+      "order": [
+        "NCT00000001",
+        "NCT00000002"
+      ],
+      "model": "qwen3.7-text-rerank",
+      "fallback": false
+    },
+    "artifacts": []
+  },
+  "priority": {
+    "status": "complete",
+    "summary": "Typed clinical priorities completed.",
+    "data": {
+      "model": "jev-1.14.0",
+      "scores": [
+        {
+          "registryId": "NCT00000001",
+          "score": 2.45,
+          "confidence": 0.44
+        }
+      ]
+    },
+    "artifacts": []
+  },
+  "flash": {
+    "status": 200,
+    "model": "deepseek-flash",
+    "answer": "eligible",
+    "usage": {
+      "prompt_tokens": 25,
+      "completion_tokens": 1,
+      "total_tokens": 26,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "prompt_cache_hit_tokens": 0,
+      "prompt_cache_miss_tokens": 25
+    }
+  },
+  "accounting": [
+    {
+      "kind": "reserve",
+      "model": "qwen3.7-text-embedding",
+      "estimatedCost": 0.0000905,
+      "currency": "CNY"
+    },
+    {
+      "kind": "settle",
+      "usage": {
+        "cacheHitTokens": 0,
+        "cacheMissTokens": 47,
+        "completionTokens": 0
+      },
+      "actualCost": 0.0000235,
+      "priced": true,
+      "providerRequestId": null
+    },
+    {
+      "kind": "reserve",
+      "model": "qwen3.7-text-rerank",
+      "estimatedCost": 0.000198,
+      "currency": "CNY"
+    },
+    {
+      "kind": "settle",
+      "usage": {
+        "cacheHitTokens": 0,
+        "cacheMissTokens": 91,
+        "completionTokens": 0
+      },
+      "actualCost": 0.0000455,
+      "priced": true,
+      "providerRequestId": null
+    },
+    {
+      "kind": "reserve",
+      "model": "jev-1.14.0",
+      "estimatedCost": 0.00013748,
+      "currency": "CNY"
+    },
+    {
+      "kind": "settle",
+      "usage": {
+        "cacheHitTokens": 0,
+        "cacheMissTokens": 417,
+        "completionTokens": 19
+      },
+      "actualCost": 0.0001182,
+      "priced": true,
+      "providerRequestId": null
+    }
+  ]
+}

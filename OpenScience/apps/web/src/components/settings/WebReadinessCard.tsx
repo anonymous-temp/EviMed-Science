@@ -38,6 +38,7 @@ const CHECK_LABELS: Record<string, string> = {
   inbox: "收件箱",
   documentParser: "文档解析",
   openList: "网盘接入",
+  terminology: "术语对照文件",
   relationalIntegrity: "关系完整性",
   // The checks the modules added since (`readinessStatus` in the server): each would otherwise print its camelCase key.
   publicSourceCredentials: "公共数据源密钥",
