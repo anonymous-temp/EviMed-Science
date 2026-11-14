@@ -818,7 +818,7 @@ test("a trial's record for a judgment is read like any registry read: nothing wr
   assert.equal((await unconfigured.judgmentRecord({ userId: "u1", registryId: "NCT02296125" })).reason, "registry_not_configured");
 });
 
-test("a judgment's trial record is kept per registry and id for its window: one read, a failure never kept, a frozen collection never cached", async () => {
+test("a judgment's trial record is kept per registry and id for its window: one read, a failure remembered two minutes and never as a record", async () => {
   const store = storeDouble();
   let at = new Date(AT).getTime(), reads = 0, failNext = false;
   const double = registryDouble();
@@ -826,6 +826,9 @@ test("a judgment's trial record is kept per registry and id for its window: one 
   const pipeline = createVcrEvidencePipeline({ store, registry, now: () => new Date(at), judgmentCacheMs: 60_000 });
   failNext = true;
   assert.equal((await pipeline.judgmentRecord({ userId: "u1", registryId: "NCT02296125" })).status, "registry_unavailable");
+  assert.deepEqual(await pipeline.judgmentRecord({ userId: "u1", registryId: "NCT02296125" }), { status: "registry_unavailable", reason: "ETIMEDOUT", registryId: "NCT02296125" });
+  assert.equal(reads, 1, "a record the registry did not give is not asked for again at once");
+  at += 2 * 60_000 + 1;
   const first = await pipeline.judgmentRecord({ userId: "u1", registryId: "NCT02296125" });
   assert.equal(first.status, "ok");
   first.trial.eligibility = "changed by a caller";
@@ -839,6 +842,40 @@ test("a judgment's trial record is kept per registry and id for its window: one 
   await off.judgmentRecord({ userId: "u1", registryId: "NCT02296125" });
   await off.judgmentRecord({ userId: "u1", registryId: "NCT02296125" });
   assert.equal(reads, 5, "no window, no cache");
+});
+
+// Production 2026-11-14: a discovery read the 300 records it ranked (EU CTIS: 3–25 s each from the host), and the assessment that followed asked
+// the registries for the same records again at every lane's preparation and inside every commit.
+test("a live record anything read is kept for the judgments that follow, and a read that asks no registry answers from what is kept", async () => {
+  const store = storeDouble();
+  let reads = 0;
+  const double = registryDouble();
+  const registry = { ...double, async record(/** @type {string} */ id) { reads += 1; return double.record(id); } };
+  const pipeline = createVcrEvidencePipeline({ store, registry, now: () => new Date(AT), judgmentCacheMs: 60_000 });
+  assert.deepEqual(await pipeline.judgmentRecord({ userId: "u1", registryId: "NCT02296125", cachedOnly: true }),
+    { status: "registry_unavailable", reason: "registry_record_not_held", registryId: "NCT02296125" });
+  assert.equal(reads, 0, "a read that asks no registry asked none");
+  assert.equal((await pipeline.readRegistryRecord({ userId: "u1", registryId: "NCT02296125" })).status, "ok");
+  assert.equal(reads, 1);
+  const held = await pipeline.judgmentRecord({ userId: "u1", registryId: "NCT02296125", cachedOnly: true });
+  assert.equal(held.status, "ok");
+  assert.match(held.trial.eligibility, /^Inclusion Criteria:/);
+  assert.equal((await pipeline.judgmentRecord({ userId: "u2", registryId: "nct02296125" })).status, "ok");
+  assert.equal(reads, 1, "the judgments were served by the record the first read brought");
+});
+
+test("asks for one unread record made at once share one request", async () => {
+  const store = storeDouble();
+  let reads = 0;
+  /** @type {() => void} */ let release = () => {};
+  const gate = new Promise((resolve) => { release = () => resolve(undefined); });
+  const registry = { ...registryDouble(), async record() { reads += 1; await gate; return { status: "registry_unavailable", reason: "timeout" }; } };
+  const pipeline = createVcrEvidencePipeline({ store, registry, now: () => new Date(AT), judgmentCacheMs: 60_000 });
+  const asks = Array.from({ length: 6 }, () => pipeline.judgmentRecord({ userId: "u1", registryId: "NCT02296125" }));
+  release();
+  const answers = await Promise.all(asks);
+  assert.equal(reads, 1);
+  assert.ok(answers.every((answer) => answer.status === "registry_unavailable" && answer.reason === "timeout"));
 });
 
 test("the runtime's registry read answers structure, never throws, and never writes", async () => {

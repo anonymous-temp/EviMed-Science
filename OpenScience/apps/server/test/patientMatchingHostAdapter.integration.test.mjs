@@ -428,6 +428,34 @@ test('concurrent lanes of one call hold disjoint pairs, and a lane names only a 
   assert.equal(done.kind,'saved-result');assert.equal(done.result.counts.complete,3);
  }finally{vcr.evidence.judgmentRecord=original;}
 });
+// Production 2026-11-14: one EU CTIS record the registry did not give within its deadline failed every preparation (each lane starts at the same
+// remaining pair) and every commit (each projected every selected pair by reading its trial again) of its task for twenty minutes.
+test('a trial whose record the registry does not give is passed over: the pairs behind it are prepared and saved, and a commit asks no registry for the others', options, async () => {
+  const original=vcr.evidence.judgmentRecord,ids=['2023-500001-10-00','NCT00000931','NCT00000932'],asked=[],kept=new Set();
+  vcr.evidence.judgmentRecord=async({registryId,cachedOnly=false})=>{
+    asked.push({registryId,cachedOnly});
+    if(registryId===ids[0])return {status:'registry_unavailable',reason:cachedOnly?'registry_record_not_held':'timeout',registryId};
+    if(cachedOnly&&!kept.has(registryId))return {status:'registry_unavailable',reason:'registry_record_not_held',registryId};
+    kept.add(registryId);
+    return {status:'ok',trial:{registryId,registry:'clinicaltrials.gov',title:registryId,summary:'Synthetic registration',eligibility:'Inclusion Criteria:\n'+Array.from({length:20},(_,index)=>`* Criterion ${index+1} holds.`).join('\n'),conditions:[],interventions:[]}};
+  };
+  const states=result=>Object.fromEntries(result.rows.map(row=>[row.trialId,row.state]));
+  try{
+    messages.set(++messageSeq,'A public synthetic patient for an unread trial record is 61 years old.');const context=(await invoke('PatientDataPort','context',{messageSeq})).data;
+    const first=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:context.taskId,registryIds:ids})).data;
+    assert.deepEqual(first.task.selectedPairs.map(pair=>pair.trialId),[ids[1]],'the lane took the first pair whose trial could be read');
+    asked.length=0;
+    const saved=(await save(first)).data;
+    assert.deepEqual(asked.filter(ask=>!ask.cachedOnly).map(ask=>ask.registryId),[ids[1]],'the commit read its own pair and asked no registry for the others');
+    assert.deepEqual(states(saved),{[ids[0]]:'pending',[ids[1]]:'complete',[ids[2]]:'pending'});
+    const second=(await invoke('ExecutionPort','assess',{phase:'prepare',taskId:first.task.taskId})).data;
+    assert.deepEqual(second.task.selectedPairs.map(pair=>pair.trialId),[ids[2]]);
+    await save(second);
+    await assert.rejects(invoke('ExecutionPort','assess',{phase:'prepare',taskId:first.task.taskId}),{code:'registry_unavailable'},'with nothing else left, the unread record is the answer');
+    assert.deepEqual(states((await invoke('ResultPort','get',{taskId:first.task.taskId})).data),{[ids[0]]:'pending',[ids[1]]:'complete',[ids[2]]:'complete'},'a result read is not failed by the unread trial');
+  }finally{vcr.evidence.judgmentRecord=original;}
+});
+
 test('the transport admits a lane preparation naming only its task and a bounded lane, and nothing else beside the original arguments', options, async () => {
   const handler = createPatientMatchingGatewayHandler(config,{assertActiveModelGatewayToken:()=>({userId:'owner',projectId:'project'})},{vcr,adapter:{dispatch:async()=>({status:'complete',summary:'stub',data:{kind:'busy'},artifacts:[]})},resolveInvocation:async(_identity,body)=>({...origin,tool:'match_assess',args:{taskId:'task-x'},callId:body.invocation.callId})});
   async function call(input) {

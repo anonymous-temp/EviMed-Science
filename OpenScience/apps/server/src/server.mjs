@@ -2815,11 +2815,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // 「虚拟临床研究」: one call, seven packages (vcrComposition.mjs). Null when the
   // module is off or this deployment has no product database — the schema is
   // the module, and a half-running module is worse than an absent one.
+  const vcrEdge = String(process.env.OPEN_SCIENCE_GATEWAY_FIXTURES ?? "").trim() || String(process.env.OPEN_SCIENCE_GATEWAY_RECORD ?? "").trim()
+    ? null : (overrides.edgeProxy ?? edgeProxyFromConfig(config));
   const vcr = composeVcr({
     config, productDatabase, projectStore: store,
     audit: (event, status, details) => securityAudit(config, event, status, details),
     report: (code) => process.stderr.write(`vcr: ${code}\n`),
-    fetchImpl: overrides.vcrFetch ?? globalThis.fetch,
+    // The registries' hosts the Tokyo node is configured for leave through it (EU CTIS, 2026-11-14), the rest direct as before; never in the
+    // evaluation corpus's replay or record modes.
+    fetchImpl: overrides.vcrFetch ?? (vcrEdge ? fetchWithEdge(vcrEdge, globalThis.fetch) : globalThis.fetch),
     // A researcher's own EviMed evidence key, where the deployment holds none:
     // the ChiCTR listing is theirs to enable (2026-10-04).
     connectorCredentials,
