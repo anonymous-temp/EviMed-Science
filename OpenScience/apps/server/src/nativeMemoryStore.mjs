@@ -9,7 +9,7 @@ import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWi
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
-import { neutralMemoryUri, removalLines, removalText, removalRefusals, lineDecisionKey } from './nativeMemoryRejections.mjs';
+import { neutralMemoryUri, removalLines, removalText, lineDecisionKey } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
