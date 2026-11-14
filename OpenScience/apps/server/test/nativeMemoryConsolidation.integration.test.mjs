@@ -381,5 +381,6 @@ test('extraction-v2 adds history/attribution preservation to the existing consol
   const requests = compile(f.stub);
   assert.equal(requests.length, 1);
   assert.match(requests[0].body.instruction, /An earlier:/);
-  assert.match(requests[0].body.instruction, /sensitive marker/);
+  assert.match(requests[0].body.instruction, /用户认为： \/ User believes:/);
+  assert.doesNotMatch(requests[0].body.instruction, /sensitive marker|suggestion outcome/);
 });

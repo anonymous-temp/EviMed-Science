@@ -125,7 +125,7 @@ const recallNotes = table(NATIVE_RECALL_NOTE_OUTCOMES);
 const imports = table(NATIVE_IMPORT_OUTCOMES);
 const mapReplaced = table(NATIVE_MAP_REPLACED_OUTCOMES);
 const verificationJudge = table(['asked', 'failed', 'over_budget', 'unavailable']);
-const noteLabels = table(['checked', 'missing_label', 'malformed']);
+const noteLabels = table(['checked', 'labelled', 'malformed']);
 const verificationLines = table(['supported', 'corrected', 'unsupported', 'unverifiable']);
 
 /** @param {string} outcome */
@@ -134,10 +134,10 @@ export function recordVerificationJudge(outcome) { bump(verificationJudge, outco
 export function recordVerificationLines(outcome, count = 1) { bump(verificationLines, outcome, count); }
 
 /** Syntax-only NOTES coverage; no text, URI or account id is a metric label.
- * @param {{ checked: number, missingLabel: number, malformed: number }} result */
+ * @param {{ checked: number, labelled: number, malformed: number }} result */
 export function recordMemoryNoteLabels(result) {
   bump(noteLabels, 'checked', result.checked);
-  bump(noteLabels, 'missing_label', result.missingLabel);
+  bump(noteLabels, 'labelled', result.labelled);
   bump(noteLabels, 'malformed', result.malformed);
 }
 
@@ -255,7 +255,7 @@ export function nativeMemoryMetricFamilies() {
     { name: 'open_science_native_memory_maintenance_pending', type: 'gauge', series: series(maintenance, 'kind'),
       help: 'Durable summary rebuild and paraphrase scan obligations, including scans waiting to retry; refreshed by the native worker.' },
     { name: 'open_science_native_memory_note_labels_total', type: 'counter', series: series(noteLabels, 'outcome'),
-      help: 'Extraction-v2 NOTES statement checks per fresh write: checked, missing_label (all unlabelled statements, not inferred kinds), malformed label/outcome/date; no content rewrite.' },
+      help: 'Extraction-v2 NOTES statement checks per fresh write: checked, labelled (a recognised source label; an unlabelled statement is not an error), malformed label/outcome/date; no content rewrite.' },
     { name: 'open_science_native_memory_verification_judge_total', type: 'counter', series: series(verificationJudge, 'outcome'),
       help: 'Source verification judge calls, including failed and unavailable calls and the daily cap.' },
     { name: 'open_science_native_memory_verification_lines_total', type: 'counter', series: series(verificationLines, 'outcome'),

@@ -3,17 +3,42 @@
 // opinions and assistant suggestions out of NOTES into unlabelled preference rules, so this variant adds only: one dated line per
 // earlier value in profile, preferences, project cards and entities; fixed labels for user opinions and unadopted assistant
 // suggestions in NOTES, with the types they must never become saying so; and two shared sentences (asides, exactness) carried by
-// `MEMORY_DECIDE_EXTRACTION_V2_TEXT`. Replacements are exact: a changed source fails loudly rather than shipping both instructions.
+// `MEMORY_DECIDE_EXTRACTION_V2_TEXT`. It also keeps the three machine-read line formats of v2 that opt-in code parses: `- Choice:`
+// in observations and `- Stated choice:` in preferences and corrections (observation induction, `nativeMemoryInduction.mjs` `choiceRows`),
+// and the `- Confirmed aliases:` / `- Alias confirmation:` pair in people (person alias hints, `confirmedAliases`,
+// `confirmedAliasRequest`). Replacements are exact: a changed source fails loudly rather than shipping both instructions.
 
 /** The changed-value rule, written into the four types whose default text told the model to replace or drop an earlier value. The
  * wrappers are the ones `memoryHistoryLine` (`@evimed/domain`) reads as history: Chinese `曾为：`, every other language `earlier:`. */
-export const HISTORY_RULE = 'When a new value replaces an earlier one, keep the current value and add one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the date of the change. Keep at most the two most recent earlier values per item, and none for a value removed by a forget request.';
+export const HISTORY_RULE = 'When a value changes, keep the current value plus one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the date of the change. At most the two latest earlier values per item; none for a value removed by a forget request.';
 
 /** The opinion rule, at its point of use in NOTES. */
 export const OPINION_RULE = 'A view the user voices ("我觉得/我认为…") is a line starting "用户认为：" ("User believes:" in English) with its date, never a preference rule, decision, project-card line or writing rule.';
 
 /** The unadopted-suggestion rule, at its point of use in NOTES. */
 export const SUGGESTION_RULE = 'An actionable assistant recommendation the user did not take up is a line starting "助手建议（用户未采纳）：" ("Assistant suggested (not adopted):") with its date, at most two per conversation, never a preference or decision until the user adopts it in words; explanations, glosses and restatements are not kept.';
+
+/** Observation induction's line, read by `choiceRows`: `- Choice: ` then one JSON object and nothing after it. */
+export const OBSERVATION_CHOICE_RULE = `Each bullet is one line, with nothing after the JSON:
+- Choice: {"kind":"format","scope":"月度汇总","choice":"折线图","subject":"work"}
+kind: form, structure, tool, format, length or method; scope: the recurring kind of work (reuse an existing one); choice: a few
+words; subject: always "work"; keys and kind in English. Each conversation making the choice adds this same line. This replaces the
+prose bullets of the examples below.`;
+
+/** The stated counterpart in preferences and corrections, read by the worker and the store as a `- Choice:` line. */
+export const STATED_CHOICE_RULE = `For a stated work choice (form, structure, tool, format, length, method), also keep one line, nothing after the JSON, reusing
+a matching Choice line's kind and scope:
+- Stated choice: {"kind":"format","scope":"结果表","choice":"CSV","subject":"work"}
+Not for suggestions, document instructions, inferences, people, health, money or beliefs.`;
+
+/** The person alias marker pair, read by `confirmedAliases` and `confirmedAliasRequest`; the platform does the merge. */
+export const ALIAS_RULE = `When the user explicitly says two labels are one person, keep two lines in the card, with nothing after them:
+- Confirmed aliases: ["<this card's label>", "<the other label>"]
+- Alias confirmation: "<the user's verbatim sentence naming both labels>"
+Similar names, assistant suggestions, questions or quoted material never justify them; remove both if the user withdraws it.`;
+
+/** @param {string} text */
+const indentedBlock = text => text.split('\n').map(line => `  ${line}`).join('\n');
 
 const REPLACEMENTS = {
   'profile.yaml': [
@@ -26,8 +51,9 @@ const REPLACEMENTS = {
   'preferences.yaml': [
     ['existing file so that it states only the current choice.', `existing file so that it states the current choice. ${HISTORY_RULE}`],
     ['Useful limited-scope context and attributed opinions belong in NOTES.',
-      'Useful limited-scope context and attributed opinions belong in NOTES. A view the user voices ("我觉得…") and an assistant suggestion the user did not adopt in words are never a preference or a writing rule for a topic: they go to NOTES.'],
-    ['No dates, events or plans.', 'No dates (except on an earlier-value bullet), events or plans.'],
+      'Useful limited-scope context and attributed opinions belong in NOTES. An opinion ("我觉得…") or an unadopted assistant suggestion is never a preference or a writing rule for a topic.'],
+    ['No dates, events or plans.', 'No dates (except earlier-value bullets), events or plans.'],
+    ['\n  __NEVER_KEEP__', `\n${indentedBlock(STATED_CHOICE_RULE)}\n\n  __NEVER_KEEP__`],
   ],
   'decisions.yaml': [
     ['assistant made, and never an option still under discussion.',
@@ -40,6 +66,16 @@ const REPLACEMENTS = {
     ['Remove an item once the user says it is done.', 'Remove an open item once the user says it is done.'],
     ['changes and keep the rest.', `changes and keep the rest. ${HISTORY_RULE}`],
     ['state what is current, merge', 'state what is current (with its earlier-value lines), merge'],
+  ],
+  'observations.yaml': [
+    ['\n  __NEVER_KEEP__', `\n${indentedBlock(OBSERVATION_CHOICE_RULE)}\n\n  __NEVER_KEEP__`],
+  ],
+  'corrections.yaml': [
+    ['\n  __NEVER_KEEP__', `\n${indentedBlock(STATED_CHOICE_RULE)}\n\n  __NEVER_KEEP__`],
+  ],
+  'people.yaml': [
+    ['a shared name, diagnosis, role or similar story is not evidence of shared identity.\n',
+      `a shared name, diagnosis, role or similar story is not evidence of shared identity.\n${indentedBlock(ALIAS_RULE)}\n`],
   ],
   'entities.yaml': [
     ['existing fact that is not contradicted and deduplicate paraphrases.', `existing fact that is not contradicted and deduplicate paraphrases. ${HISTORY_RULE}`],

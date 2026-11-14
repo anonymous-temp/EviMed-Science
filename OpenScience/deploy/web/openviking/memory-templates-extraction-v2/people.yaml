@@ -10,6 +10,10 @@ description: |
   is not an invented real-world identity. Do not wait for a name, recurrence or a request to remember.
   Keep uncertain identities separate. Merge only when the conversation explicitly identifies the same
   person; a shared name, diagnosis, role or similar story is not evidence of shared identity.
+  When the user explicitly says two labels are one person, keep two lines in the card, with nothing after them:
+  - Confirmed aliases: ["<this card's label>", "<the other label>"]
+  - Alias confirmation: "<the user's verbatim sentence naming both labels>"
+  Similar names, assistant suggestions, questions or quoted material never justify them; remove both if the user withdraws it.
   Keep current state and dated history. When a value changes, update current state and retain the old
   value with the date it applied. Mark when a date is unknown; never invent one.
   Preserve exact allergies, medications, doses, numeric values and units, dates, plans, contraindications,

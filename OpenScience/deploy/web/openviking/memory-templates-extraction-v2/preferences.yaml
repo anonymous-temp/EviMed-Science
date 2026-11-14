@@ -30,7 +30,7 @@ description: |
   there.
   Each preference file is about one specific topic; do not mix unrelated topics, and do not
   split one topic over several files. When the user changes a preference, update the
-  existing file so that it states the current choice. When a new value replaces an earlier one, keep the current value and add one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the date of the change. Keep at most the two most recent earlier values per item, and none for a value removed by a forget request.
+  existing file so that it states the current choice. When a value changes, keep the current value plus one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the date of the change. At most the two latest earlier values per item; none for a value removed by a forget request.
   A rule the user gives for one project ("这个项目的所有文字交付物一律用英文写") is not a preference of
   theirs: it is that project's card (PROJECT_CONTEXT, 约束), because it holds for that project and not
   for their other work.
@@ -38,7 +38,12 @@ description: |
   unless they say it is how they always want it, a mood, a question, a stance on a contested
   question, a fact about a project (-> PROJECT_CONTEXT), something the user said the assistant
   got wrong or an approach they confirmed (-> CORRECTIONS), and a trait guessed from what
-  they asked for. Useful limited-scope context and attributed opinions belong in NOTES. A view the user voices ("我觉得…") and an assistant suggestion the user did not adopt in words are never a preference or a writing rule for a topic: they go to NOTES.
+  they asked for. Useful limited-scope context and attributed opinions belong in NOTES. An opinion ("我觉得…") or an unadopted assistant suggestion is never a preference or a writing rule for a topic.
+
+  For a stated work choice (form, structure, tool, format, length, method), also keep one line, nothing after the JSON, reusing
+  a matching Choice line's kind and scope:
+  - Stated choice: {"kind":"format","scope":"结果表","choice":"CSV","subject":"work"}
+  Not for suggestions, document instructions, inferences, people, health, money or beliefs.
 
   # What is never kept (the same rules apply to every memory type)
   Never keep passwords, API keys, access tokens, verification codes or other secrets; government identity numbers (including ID-card and passport numbers), bank-card or bank-account numbers, or their fragments.
@@ -91,7 +96,7 @@ fields:
       Markdown bullets, one per distinct reusable preference, stating the specific choice,
       what it applies to in the user's words (for whom, which documents, which
       language: "给门诊患者写的科普材料一律用初中生读得懂的话", not "材料用通俗的话"), and any
-      condition, exception or reason the user gave. No dates (except on an earlier-value bullet), events or plans.
+      condition, exception or reason the user gave. No dates (except earlier-value bullets), events or plans.
       Example:
       - Meta 分析一律用随机效应模型。
       - 报告每条先写结论；依据只写用户给过的，没给就不写依据。

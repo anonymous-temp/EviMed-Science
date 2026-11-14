@@ -66,5 +66,5 @@ fields:
       Compact Markdown card: one H1 display name, one plain sentence saying what it is, then
       1-3 H2 sections whose bodies are bullet lists (1-5 bullets each) of useful attributed information
       about it. About 800 characters is a soft target. When updating, keep every
-      existing fact that is not contradicted and deduplicate paraphrases. When a new value replaces an earlier one, keep the current value and add one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the date of the change. Keep at most the two most recent earlier values per item, and none for a value removed by a forget request.
+      existing fact that is not contradicted and deduplicate paraphrases. When a value changes, keep the current value plus one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the date of the change. At most the two latest earlier values per item; none for a value removed by a forget request.
     merge_op: patch

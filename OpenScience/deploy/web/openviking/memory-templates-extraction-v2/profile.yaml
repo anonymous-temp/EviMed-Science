@@ -62,7 +62,7 @@ description: |
      rebuild the profile from only the latest conversation.
   2. Add only genuinely new facts; merge semantic duplicates into one bullet.
   3. For a changed state (role, employer, field of work, education), write the latest stated
-     value as the current bullet. When a new value replaces an earlier one, keep the current value and add one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the date of the change. Keep at most the two most recent earlier values per item, and none for a value removed by a forget request. A role or line of work
+     value as the current bullet. When a value changes, keep the current value plus one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the date of the change. At most the two latest earlier values per item; none for a value removed by a forget request. A role or line of work
      stated beside an existing one, without saying the earlier one changed or ended, is a
      second bullet, not a replacement: a person can be a nurse and also study for a master's degree.
   4. Remove any bullet that the hard boundaries exclude, even when asked to remember it.

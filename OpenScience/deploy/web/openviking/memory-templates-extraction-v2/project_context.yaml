@@ -69,7 +69,7 @@ description: |
 
   One card per project. When an existing card is about the same work, update that card
   (same project name) rather than creating another; change only the lines the conversation
-  changes and keep the rest. When a new value replaces an earlier one, keep the current value and add one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the date of the change. Keep at most the two most recent earlier values per item, and none for a value removed by a forget request.
+  changes and keep the rest. When a value changes, keep the current value plus one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the date of the change. At most the two latest earlier values per item; none for a value removed by a forget request.
 
   # What is never kept (the same rules apply to every memory type)
   Never keep passwords, API keys, access tokens, verification codes or other secrets; government identity numbers (including ID-card and passport numbers), bank-card or bank-account numbers, or their fragments.

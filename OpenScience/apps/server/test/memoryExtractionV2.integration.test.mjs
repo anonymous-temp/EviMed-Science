@@ -16,8 +16,8 @@ import { removalLines } from '../src/nativeMemoryRejections.mjs';
 
 const { options, fixture } = nativeIntegration();
 // These tests pin the worker and the readers selected with the extraction-v2 directory, not the template wording: the recorded
-// writes keep the earlier v2 NOTES labels that the worker's label metric still counts. The v2.1 templates ask for "用户认为：" and
-// "助手建议（用户未采纳）：" in NOTES and for the same 曾为： / earlier: history lines (wording pinned in memoryExtractionV2.test.mjs).
+// writes keep the earlier v2 NOTES labels, which the worker's label count still recognises beside the v2.1 labels "用户认为：" and
+// "助手建议（用户未采纳）：" (wording and reader formats pinned in memoryExtractionV2.test.mjs).
 const candidate = { memoryTemplatesDirectory: 'memory-templates-extraction-v2' };
 for (const name of ['attribution', 'history', 'numeric-choice']) test(`${name}: recorded conversations through the write ledger and real readers`, options, async t => {
   const recorded = JSON.parse(readFileSync(new URL(`./fixtures/memory-extraction-v2/${name}.json`, import.meta.url), 'utf8'));
@@ -53,7 +53,8 @@ for (const name of ['attribution', 'history', 'numeric-choice']) test(`${name}: 
   }
   const records = await f.store.records(f.userId);
   if (name === 'attribution') {
-    assert.equal(nativeMemoryCounters().noteLabels.missing_label, 0);
+    assert.equal(nativeMemoryCounters().noteLabels.labelled, 2);
+    assert.equal(nativeMemoryCounters().noteLabels.malformed, 0);
     assert.equal(nativeMemoryCounters().noteLabels.checked, 2);
     assert.match(records[0].value, /助手建议（未采纳）：/);
   } else if (name === 'history') {
@@ -81,7 +82,7 @@ for (const name of ['attribution', 'history', 'numeric-choice']) test(`${name}: 
   }
 });
 
-test('the opt-in worker counts missing labels, preserves bytes and marks sensitive files; the default does neither', options, async t => {
+test('the opt-in worker counts labelled lines, preserves bytes and marks sensitive files; the default does neither', options, async t => {
   const body = '# Notes\n- 用户观点（敏感）：某政治立场。（记录日期 2026-11-01）\n- 未标注的陈述';
   for (const enabled of [false, true]) {
     const f = await fixture(t, { config: enabled ? candidate : {}, extract: ({ user }) => ({ adds: [{ uri: `viking://user/${user}/memories/notes/stance.md`, after: body }] }) });
@@ -90,7 +91,8 @@ test('the opt-in worker counts missing labels, preserves bytes and marks sensiti
     const uri = `${f.root}/notes/stance.md`;
     assert.equal(await f.sessions.read(f.userId, uri), body);
     assert.equal((await f.overlay.file(f.userId, uri)).sensitive, enabled);
-    assert.equal(nativeMemoryCounters().noteLabels.missing_label, enabled ? 1 : 0);
+    assert.equal(nativeMemoryCounters().noteLabels.labelled, enabled ? 1 : 0, 'the unlabelled line is checked, not an error');
+    assert.equal(nativeMemoryCounters().noteLabels.malformed, 0);
     assert.equal((await f.overlay.sensitiveUris(f.userId)).includes(uri), enabled);
     await f.worker.processCommits({ userId: f.userId });
     assert.equal(nativeMemoryCounters().noteLabels.checked, enabled ? 2 : 0, 'settled writes are not counted twice');
