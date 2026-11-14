@@ -373,6 +373,22 @@ test("a day's recap is written from its best items, again only when they change 
   assert.equal(await instance.recapRound(round({ editor: empty })), 0);
 });
 
+test("with a look interval the recap round does not scan a day's items again until it is over", options, async () => {
+  const day = "2026-10-24T04:00:00Z";
+  await item({ text: "l1", publishedAt: day, title: "ESMO 2026: look one", summaryZh: "第一条。" });
+  await item({ text: "l2", publishedAt: day, title: "ESMO 2026: look two", summaryZh: "第二条。" });
+  let asked = 0;
+  const editor = { available: true, model: "m", writeJson: async () => { asked += 1; return { verification: "passed", output: { recap_zh: null } }; } };
+  const instance = new FrontierTrack({ database, now: () => NOW, timeZone: "Asia/Shanghai", recapLookMs: 600_000 });
+  await instance.recapRound(round({ editor }));
+  assert.equal(asked, 1);
+  await item({ text: "l3", publishedAt: day, title: "ESMO 2026: look three", summaryZh: "第三条。" });
+  await instance.recapRound(round({ editor }));
+  assert.equal(asked, 1, "the day was looked at a moment ago");
+  await instance.recapRound(round({ editor, now: new Date(NOW.getTime() + 600_001) }));
+  assert.equal(asked, 2, "looked at again when the interval is over, and the new item is seen");
+});
+
 test("a recap needs two items, and a failed call or an exhausted budget writes nothing", options, async () => {
   await item({ text: "only", publishedAt: "2026-10-24T04:00:00Z", title: "ESMO 2026: one item only", summaryZh: "只有一条。" });
   let asked = 0;

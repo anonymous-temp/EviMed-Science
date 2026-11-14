@@ -119,7 +119,7 @@ import { frontierTextOverlap, frontierTextTokens } from "./frontierEvents.mjs";
 import { frontierScreenExcerpt, frontierScreenSource } from "./frontierIngest.mjs";
 import { tsvectorLiteral } from "./kbChunker.mjs";
 import { recordFrontierNotices } from "./sourceChanges.mjs";
-import { FrontierTrack } from "./frontierTrack.mjs";
+import { FrontierTrack, FRONTIER_RECAP_LIMITS } from "./frontierTrack.mjs";
 
 // What decides selection lives in frontierSelection.mjs (the rsi closure of the surface); the pipeline's importers read it from here as ever.
 export { frontierJournalWithoutAbstract, frontierMixCandidate, frontierSelectThreshold, FRONTIER_SELECT_THRESHOLD_DEFAULT };
@@ -831,11 +831,6 @@ export const FRONTIER_READER_SOURCES = Object.freeze(/** @type {const} */ (["bod
  * never translated (the card's summary is already Chinese).
  */
 export const FRONTIER_READER_TEXT_SOURCES = Object.freeze(/** @type {const} */ ([...FRONTIER_READER_SOURCES, "summary", "reports"]));
-/** The best reader text's name, in SQL over `item_texts t` (`frontierReaderText`'s order); null when there is none. */
-const READER_BEST_SOURCE_SQL = `(CASE WHEN btrim(coalesce(t.body_text, '')) <> '' THEN 'body' WHEN btrim(coalesce(t.abstract_raw, '')) <> '' THEN 'abstract'
-  WHEN btrim(coalesce(t.body_excerpt, '')) <> '' THEN 'excerpt' WHEN btrim(coalesce(t.reader_summary, '')) <> '' THEN 'summary'
-  WHEN btrim(coalesce(t.reader_reports, '')) <> '' THEN 'reports' END)`;
-
 /**
  * The text a reader's full text is read from, best first: the plugin's full text (contract 1.4.0), the abstract, the page
  * excerpt; or the one a translation was made from, when `source` names it. Null when there is none. It is the settled text
@@ -1038,7 +1033,7 @@ export class FrontierPipeline {
     this.offpeak = this.config.frontierOffpeak === true;
     this.timeZone = String(this.config.frontierTimeZone || this.config.frontierTimezone || "Asia/Shanghai");
     /** 追踪 (c3-track 2026-10-25, `frontierTrack.mjs`): the approval and guideline records and the congress recaps this pipeline writes. */
-    this.track = new FrontierTrack({ database, now, timeZone: this.timeZone });
+    this.track = new FrontierTrack({ database, now, timeZone: this.timeZone, recapLookMs: FRONTIER_RECAP_LIMITS.lookMs });
     // The width the schema's vector column is created with; it must be the
     // one the server migrates with, or the migration would empty the vectors.
     this.dimension = Number(this.config.kbEmbeddingDimension) || Number(embedder?.dimension) || 1024;
@@ -2309,8 +2304,7 @@ export class FrontierPipeline {
     const general = budget.state === "ok" && !(this.offpeak && isPeak(now));
     const items = await this.#claimItems(now, `i.state = 'published' AND i.editor_version IS NULL
       AND (i.timeline_at > $5 OR (i.visible_at > $5 AND i.visible_at <= $1) OR i.text_arrived_at > $5
-        OR EXISTS (SELECT 1 FROM evimed_frontier.dailies d
-        WHERE d.generated_at > $5 AND d.generated_at <= $1 AND i.id = ANY(d.item_ids)))
+        OR i.id IN (SELECT unnest(d.item_ids) FROM evimed_frontier.dailies d WHERE d.generated_at > $5 AND d.generated_at <= $1))
       AND ($6::boolean OR s.safety_feed OR s.source_type = 'regulator' OR (s.source_type = 'journal' AND s.authority >= 5))`,
     [new Date(now.getTime() - FRONTIER_DEFERRED_EDIT_WINDOW_MS), general], DEFERRED_BATCH);
     for (const item of items) {
@@ -3364,8 +3358,8 @@ export class FrontierPipeline {
     const claimed = (await this.database.query(`WITH picked AS (
         SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.visible_at > $2 AND (i.lease_until IS NULL OR i.lease_until <= $1)
-          AND t.reader_tidy IS NOT NULL AND t.reader_tidy->>'source' = ${READER_BEST_SOURCE_SQL}
-          AND i.lead_basis IS DISTINCT FROM t.reader_tidy->>'sha' AND (NOT $3::boolean OR i.selected OR i.safety_alert)
+          AND t.reader_ready_source IS NOT NULL
+          AND i.lead_basis IS DISTINCT FROM t.reader_ready_sha AND (NOT $3::boolean OR i.selected OR i.safety_alert)
         ORDER BY i.safety_alert DESC, i.selected DESC, i.visible_at DESC, i.id DESC
         LIMIT $4
         FOR UPDATE OF i SKIP LOCKED)
@@ -3443,10 +3437,10 @@ export class FrontierPipeline {
     const claimed = (await this.database.query(`WITH picked AS (
         SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.visible_at > $2 AND (i.lease_until IS NULL OR i.lease_until <= $1)
-          AND t.reader_tidy IS NOT NULL AND t.reader_tidy->>'source' = ${READER_BEST_SOURCE_SQL} AND t.reader_tidy->>'source' <> 'reports'
+          AND t.reader_ready_source IS NOT NULL AND t.reader_ready_source <> 'reports'
           AND (i.selected OR i.safety_alert OR (NOT $3::boolean AND i.score_total >= $7))
-          AND (i.brief_basis IS NULL OR i.brief_basis NOT LIKE (t.reader_tidy->>'sha') || ':%'
-            OR (i.genre IS NOT NULL AND i.brief_basis <> (t.reader_tidy->>'sha') || ':' || i.genre))
+          AND (i.brief_basis IS NULL OR i.brief_basis NOT LIKE (t.reader_ready_sha) || ':%'
+            OR (i.genre IS NOT NULL AND i.brief_basis <> (t.reader_ready_sha) || ':' || i.genre))
         ORDER BY i.safety_alert DESC, i.selected DESC, i.visible_at DESC, i.id DESC
         LIMIT $4
         FOR UPDATE OF i SKIP LOCKED)
@@ -3526,8 +3520,8 @@ export class FrontierPipeline {
         SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.visible_at > $2 AND (i.lease_until IS NULL OR i.lease_until <= $1)
           AND i.genre = ANY($7::text[])
-          AND t.reader_tidy IS NOT NULL AND t.reader_tidy->>'source' = ${READER_BEST_SOURCE_SQL} AND t.reader_tidy->>'source' <> 'reports'
-          AND (i.study_facts IS NULL OR i.study_facts->>'basis' IS DISTINCT FROM t.reader_tidy->>'sha' OR i.study_facts_version IS DISTINCT FROM $9)
+          AND t.reader_ready_source IS NOT NULL AND t.reader_ready_source <> 'reports'
+          AND (i.study_facts IS NULL OR i.study_facts->>'basis' IS DISTINCT FROM t.reader_ready_sha OR i.study_facts_version IS DISTINCT FROM $9)
           AND (NOT $3::boolean OR i.selected OR i.safety_alert OR i.score_total >= $8)
         ORDER BY (i.selected OR i.safety_alert OR coalesce(i.score_total, 0) >= $8) DESC, i.visible_at DESC, i.id DESC
         LIMIT $4
@@ -3585,10 +3579,10 @@ export class FrontierPipeline {
     const claimed = (await this.database.query(`WITH picked AS (
         SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.visible_at > $2 AND (i.lease_until IS NULL OR i.lease_until <= $1)
-          AND i.lead_zh IS NOT NULL AND i.lead_basis = t.reader_tidy->>'sha'
-          AND t.reader_tidy IS NOT NULL AND t.reader_tidy->>'source' = ${READER_BEST_SOURCE_SQL}
+          AND i.lead_zh IS NOT NULL AND i.lead_basis = t.reader_ready_sha
+          AND t.reader_ready_source IS NOT NULL
           AND (NOT $3::boolean OR i.selected OR i.safety_alert)
-          AND (i.ask_basis IS DISTINCT FROM t.reader_tidy->>'sha' OR i.ask_version IS DISTINCT FROM $7)
+          AND (i.ask_basis IS DISTINCT FROM t.reader_ready_sha OR i.ask_version IS DISTINCT FROM $7)
         ORDER BY i.safety_alert DESC, i.selected DESC, coalesce(i.score_total >= $8, false) DESC, i.visible_at DESC, i.id DESC
         LIMIT $4
         FOR UPDATE OF i SKIP LOCKED)
@@ -3782,7 +3776,8 @@ export class FrontierPipeline {
       onProviderRefused: (code) => { if (frontierProviderUnavailable(code)) this.#pauseForProvider(now, code); },
       readerText: (texts) => frontierReaderText(texts), itemGenre: (item) => frontierItemGenre(item), sources: (ids) => this.#sources(ids) };
     try {
-      await this.track.extractRound(round);
+      // The extraction's claim scans the month's approvals and guidelines for a missing record: when it found none it rests like the other stages.
+      await this.#stage("track-facts", context, () => this.track.extractRound(round));
       await this.track.recapRound(round);
     } catch (error) {
       this.lastError = codeOf(error);
@@ -3848,7 +3843,7 @@ export class FrontierPipeline {
         SELECT i.id FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
         WHERE i.state = 'published' AND i.editor_version IS NOT NULL AND (i.lease_until IS NULL OR i.lease_until <= $1)
           AND i.visible_at > $2 AND (i.selected OR i.safety_alert OR i.score_total >= $3) AND (NOT $4::boolean OR i.safety_alert)
-          AND ${best} > ${rank("body_zh_source")} AND t.reader_tidy->>'source' = ${READER_BEST_SOURCE_SQL}
+          AND t.reader_ready_source IS NOT NULL AND ${best} > ${rank("body_zh_source")}
         ORDER BY i.safety_alert DESC, i.selected DESC, i.score_total DESC NULLS LAST, i.id DESC
         LIMIT $5
         FOR UPDATE OF i SKIP LOCKED)

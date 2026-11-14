@@ -25,9 +25,19 @@ const validators = new Map(TOOL_MANIFEST.map(entry => {
   const properties = Object.fromEntries(Object.entries(entry.parameters).map(([key, value]) => { const { required: _required, ...schema } = value; return [key, schema] }))
   return [entry.name, ajv.compile({ type: 'object', additionalProperties: false, properties, required: Object.keys(entry.parameters).filter(key => entry.parameters[key].required) })]
 }))
+/** Which argument broke which bound, in the schema's words (never the value given): a bare refusal left the model retrying blind
+ * (production 2026-11-11: 10 of about 130 calls refused, the bound never named). @param {any} issue */
+function argumentIssue(issue) {
+  if (!issue) return 'the arguments are not accepted'
+  const path = issue.instancePath ? issue.instancePath.slice(1).replaceAll('/', '.') : ''
+  const named = issue.params?.additionalProperty ?? issue.params?.missingProperty
+  const where = [path, named].filter(Boolean).join('.') || 'arguments'
+  const allowed = Array.isArray(issue.params?.allowedValues) ? ` (${issue.params.allowedValues.join(', ')})` : ''
+  return `${where}: ${issue.message}${allowed}`
+}
 export function validateArguments(name, args) {
   const validate = validators.get(name)
-  if (!validate || !validate(args)) throw Object.assign(new TypeError(`Invalid bounded arguments for ${name}`), { code: 'invalid_arguments' })
+  if (!validate || !validate(args)) throw Object.assign(new TypeError(`Invalid bounded arguments for ${name}: ${argumentIssue(validate?.errors?.[0])}`), { code: 'invalid_arguments' })
   if (name === 'match_evidence' && (args.offset !== undefined || args.maxChars !== undefined) && (args.action !== 'read' || !args.sourceId || args.source === 'patient')) throw Object.assign(new TypeError('Evidence cursors require a preserved knowledge source read'), { code: 'invalid_arguments' })
   return structuredClone(args)
 }

@@ -117,7 +117,13 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
   }
   /** Every passage the model is given is recorded as read from its document. */
   async function recordReads(study,person,passages){
-    for(const passage of passages){const record=person.note.records.find(/** @param {any} item */ item=>item.documentId===passage.source.sourceId);if(record)await vcr.documents.recordWindow?.(study,record.documentId,record.text,passage.span.start,passage.span.end);}
+    // One statement per document, not one per passage: concurrent evidence searches of one record queued on its read row (2026-11-11).
+    const spans=new Map();
+    for(const passage of passages){const record=person.note.records.find(/** @param {any} item */ item=>item.documentId===passage.source.sourceId);if(record){if(!spans.has(record))spans.set(record,[]);spans.get(record).push(passage.span);}}
+    for(const [record,list] of spans){
+      if(typeof vcr.documents.recordWindows==='function')await vcr.documents.recordWindows(study,record.documentId,record.text,list);
+      else for(const span of list)await vcr.documents.recordWindow?.(study,record.documentId,record.text,span.start,span.end);
+    }
   }
   async function materials(study, pairs, meta, scope,origin=meta.origin) {
     const people = new Map(), trials = new Map(), bundles = [];

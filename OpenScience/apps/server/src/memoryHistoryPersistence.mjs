@@ -84,13 +84,24 @@ CREATE TABLE IF NOT EXISTS evimed_memory.history_secrets (
 );
 -- Matching metadata has no post-erasure cleanup duty. Keep the address outbox
 -- and fences above independent; only these hashes/salts go with the owner.
--- NOT VALID admits legacy orphan rows without scanning at startup, while new
--- writes and deletion of every existing owner obey the cascade immediately.
+-- Install enforcement before validating existing rows. Validate once where safe;
+-- legacy orphans remain intact and NOT VALID, explicitly counted by the relational
+-- readiness audit until reviewed cleanup and validation. Never delete cleanup debt.
 DO $$ DECLARE held text; constraint_name text; BEGIN
   FOREACH held IN ARRAY ARRAY['history_message_rejections','history_write_messages','history_secret_salts','history_secrets'] LOOP
     constraint_name := held || '_owner_fk';
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid=to_regclass('evimed_memory.' || held) AND conname=constraint_name) THEN
       EXECUTE format('ALTER TABLE evimed_memory.%I ADD CONSTRAINT %I FOREIGN KEY(owner_id) REFERENCES evimed_control.users(id) ON DELETE CASCADE NOT VALID', held, constraint_name);
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid=to_regclass('evimed_memory.' || held)
+        AND conname=constraint_name AND NOT convalidated) THEN
+      BEGIN
+        EXECUTE format('ALTER TABLE evimed_memory.%I VALIDATE CONSTRAINT %I', held, constraint_name);
+      EXCEPTION WHEN foreign_key_violation THEN
+        -- Retain both legacy rows and the new-write/cascade constraint. Readiness
+        -- reports the orphan count; a migration never chooses which rows to erase.
+        NULL;
+      END;
     END IF;
   END LOOP;
 END $$;

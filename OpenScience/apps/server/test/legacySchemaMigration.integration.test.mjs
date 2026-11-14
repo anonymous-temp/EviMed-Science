@@ -6,6 +6,7 @@ import { migrateNotifications } from "../src/notificationPersistence.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { migrateMemorySettings } from "../src/memorySettingsPersistence.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
+import { MemoryHistoryLedger } from "../src/memoryHistoryPersistence.mjs";
 import { relationalIntegrity } from "../src/relationalIntegrity.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -48,6 +49,7 @@ test("legacy orphan rows do not block startup while every new foreign write is r
     // its tables: without this the audit would meet a missing table, which it
     // refuses to tolerate on purpose.
     await migrateMemorySettings(second);
+    await new MemoryHistoryLedger({ database: second, overlay: null }).migrate();
     const constraints = await second.query(`SELECT c.conname,c.convalidated FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid
       JOIN pg_namespace n ON n.oid=t.relnamespace WHERE c.contype='f' AND n.nspname IN ('evimed_product','evimed_inbox','evimed_usage')
       AND c.conname IN ('product_documents_user_fk','product_jobs_user_fk','inbox_preferences_user_fk','usage_model_requests_user_fk') ORDER BY c.conname`);

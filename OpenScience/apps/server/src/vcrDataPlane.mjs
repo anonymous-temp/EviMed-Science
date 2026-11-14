@@ -3569,10 +3569,16 @@ export class VcrDataPlane {
   /** Record served geometry, never a clinical completeness assertion or patient text.
    * @param {string} studyId @param {string} projectionId @param {any} context @param {any} window */
   async recordDocumentWindow(studyId, projectionId, context, window) {
-    await this.store.recordCloudWindow(studyId, projectionId, context, {
+    await this.recordDocumentWindows(studyId, projectionId, context, [window]);
+  }
+
+  /** The windows one read served of a document, recorded together (one statement).
+   * @param {string} studyId @param {string} projectionId @param {any} context @param {any[]} windows */
+  async recordDocumentWindows(studyId, projectionId, context, windows) {
+    await this.store.recordCloudWindows(studyId, projectionId, context, windows.map(window => ({
       // The text's own length rides with the range, so what was never served can be said without opening the document again.
       hash: window.windowHash, served: window.coverage.served, chars: window.coverage.served[1] + window.coverage.after, extraction: 'unknown',
-    });
+    })));
   }
 
   /** @param {{studyId:string,documentId:string,principal:string,span:{start:number,end:number,quote:string}}} entry */

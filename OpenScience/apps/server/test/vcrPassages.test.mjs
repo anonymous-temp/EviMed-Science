@@ -145,6 +145,7 @@ function planeWith(text) {
   const dataPlane = /** @type {any} */ ({
     async projectionText() { return { id: "doc_1", subjectKey: "P-1", text, visibleAt: "2026-09-01T00:00:00.000Z", projectionHash: "h".repeat(64) }; },
     async recordDocumentWindow(_study, _document, _context, window) { served.push(window); },
+    async recordDocumentWindows(_study, _document, _context, windows) { served.push(...windows); },
   });
   return { dataPlane, served };
 }

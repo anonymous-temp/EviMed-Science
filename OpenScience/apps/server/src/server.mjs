@@ -31,7 +31,7 @@ import { createPatientMatchingGatewayHandler, PATIENT_MATCHING_GATEWAY_PATH } fr
 import { verifyPatientMatchingInvocation } from './patientMatchingInvocation.mjs';
 import { installPatientMatchingLegacyBridge } from './patientMatchingLegacyBridge.mjs';
 import { createPatientMatchingModelPorts } from './patientMatchingModels.mjs';
-import { createPatientMatchingDiscovery } from './patientMatchingDiscovery.mjs';
+import { createPatientMatchingDiscovery, joinableDiscovery } from './patientMatchingDiscovery.mjs';
 import { createPatientMatchingTrialResource } from './patientMatchingTrialResource.mjs';
 import { createPatientMatchingKnowledge } from './patientMatchingKnowledge.mjs';
 import { createPatientMatchingWorkerClient } from './patientMatchingWorkerClient.mjs';
@@ -5660,7 +5660,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     patientMatchingAdapter=createPatientMatchingHostAdapter({vcr,documents:productDocuments,config,modelPorts:patientMatchingModels,indexPorts:patientMatchingIndex,
       calculate:async(input,options)=>{await runtimeManager.inspectPatientMatchingWorker();return calculate(input,options);},
       knowledge:createPatientMatchingKnowledge({sources:sourceService,index:kbIndex,sourceScope:origin=>conversationSourceScope(origin,origin.rootSessionId)}),
-      discover:createPatientMatchingDiscovery({vcr,models:patientMatchingModels,index:patientMatchingIndex,jevEnabled:config.patientMatchingJevEnabled,depth:config.patientMatchingDiscoveryDepth,jevDepth:config.patientMatchingJevDepth,rankView:config.patientMatchingRankView,assertCurrent:envelope=>patientMatchingAdapter.authorizeModel(envelope)}),
+      discover:joinableDiscovery(createPatientMatchingDiscovery({vcr,models:patientMatchingModels,index:patientMatchingIndex,jevEnabled:config.patientMatchingJevEnabled,depth:config.patientMatchingDiscoveryDepth,jevDepth:config.patientMatchingJevDepth,rankView:config.patientMatchingRankView,assertCurrent:envelope=>patientMatchingAdapter.authorizeModel(envelope)}),
+        {waitMs:config.patientMatchingDiscoveryWaitMs,runMs:config.patientMatchingDiscoveryRunMs,report:outcome=>process.stderr.write(`patient matching discovery: ${outcome}\n`)}),
       onPending:(origin,taskId)=>patientMatchingContinuation?.enqueue(origin,taskId),
       onCancel:async(origin,taskId)=>runtimeManager.cancelPatientMatchingTask(await sourceProject(origin),taskId) });
     patientMatchingContinuation=new PatientMatchingContinuation({jobs:productJobs,documents:productDocuments,adapter:patientMatchingAdapter,
@@ -11181,6 +11182,7 @@ async function readinessRelationalIntegrity(config, database) {
   // that exists rather than a missing table it would have to be taught to
   // tolerate — a tolerance that then hides a genuinely dropped table.
   await migrateMemorySettings(database);
+  await new MemoryHistoryLedger({ database, overlay: null }).migrate();
   const status = await relationalIntegrity(database);
   if (config.production && !status.ok) {
     throw readinessFailure("relational_integrity_unverified", {

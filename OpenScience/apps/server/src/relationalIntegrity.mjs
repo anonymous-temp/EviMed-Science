@@ -1,4 +1,9 @@
 const orphanChecks = Object.freeze([
+  ["memory_history_message_rejections_owner", "SELECT count(*)::integer AS count FROM evimed_memory.history_message_rejections h LEFT JOIN evimed_control.users u ON u.id=h.owner_id WHERE u.id IS NULL"],
+  ["memory_history_write_messages_owner", "SELECT count(*)::integer AS count FROM evimed_memory.history_write_messages h LEFT JOIN evimed_control.users u ON u.id=h.owner_id WHERE u.id IS NULL"],
+  ["memory_history_secret_salts_owner", "SELECT count(*)::integer AS count FROM evimed_memory.history_secret_salts h LEFT JOIN evimed_control.users u ON u.id=h.owner_id WHERE u.id IS NULL"],
+  ["memory_history_secrets_owner", "SELECT count(*)::integer AS count FROM evimed_memory.history_secrets h LEFT JOIN evimed_control.users u ON u.id=h.owner_id WHERE u.id IS NULL"],
+
   ["product_documents_user", "SELECT count(*)::integer AS count FROM evimed_product.documents d LEFT JOIN evimed_control.users u ON u.id=d.user_id WHERE u.id IS NULL"],
   ["product_documents_project", "SELECT count(*)::integer AS count FROM evimed_product.documents d LEFT JOIN evimed_control.projects p ON p.user_id=d.user_id AND p.id=d.project_id WHERE d.project_id IS NOT NULL AND p.id IS NULL"],
   ["product_jobs_user", "SELECT count(*)::integer AS count FROM evimed_product.jobs j LEFT JOIN evimed_control.users u ON u.id=j.user_id WHERE u.id IS NULL"],
@@ -19,6 +24,11 @@ const orphanChecks = Object.freeze([
 ]);
 
 const relationships = Object.freeze([
+  ["memory_history_message_rejections_owner", "evimed_memory", "history_message_rejections", "FOREIGN KEY (owner_id) REFERENCES evimed_control.users(id)"],
+  ["memory_history_write_messages_owner", "evimed_memory", "history_write_messages", "FOREIGN KEY (owner_id) REFERENCES evimed_control.users(id)"],
+  ["memory_history_secret_salts_owner", "evimed_memory", "history_secret_salts", "FOREIGN KEY (owner_id) REFERENCES evimed_control.users(id)"],
+  ["memory_history_secrets_owner", "evimed_memory", "history_secrets", "FOREIGN KEY (owner_id) REFERENCES evimed_control.users(id)"],
+
   ["product_documents_user", "evimed_product", "documents", "FOREIGN KEY (user_id) REFERENCES evimed_control.users(id)"],
   ["product_documents_project", "evimed_product", "documents", "FOREIGN KEY (user_id, project_id) REFERENCES evimed_control.projects(user_id, id)"],
   ["product_revisions_document", "evimed_product", "revisions", "FOREIGN KEY (user_id, kind, id) REFERENCES evimed_product.documents(user_id, kind, id)"],
@@ -46,11 +56,6 @@ function identifier(value) { return `"${String(value).replaceAll('"', '""')}"`; 
  *  list: one existed while `evimed_memory` had no migration caller here, and a
  *  registry that cannot fail on a dropped table is not a registry. */
 export async function relationalIntegrity(database, { validate = false } = {}) {
-  const counts = {};
-  for (const [name, query] of orphanChecks) {
-    counts[name] = Number((await database.query(query)).rows[0]?.count ?? 0);
-  }
-  const orphanTotal = Object.values(counts).reduce((sum, count) => sum + count, 0);
   const rows = (await database.query(`SELECT n.nspname AS schema_name,t.relname AS table_name,c.conname,c.convalidated,
     pg_get_constraintdef(c.oid) AS definition FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid
     JOIN pg_namespace n ON n.oid=t.relnamespace WHERE c.contype='f'
@@ -61,6 +66,18 @@ export async function relationalIntegrity(database, { validate = false } = {}) {
       && String(candidate.definition).startsWith(prefix));
     if (row) matched.set(name, { ...row, schema, table });
   }
+  // A validated foreign key is the database's own proof that the relationship has no orphan, so its count is 0 without reading the
+  // table; only a relationship whose key is missing or NOT VALID is counted. Every check used to be counted on every call, and
+  // /api/ready runs this six times a minute (the probe every 15 s, the health check every 30 s): thirteen anti-joins over the largest
+  // tables, the usage ledger's 840k rows twice; on production (2026-11-12) the readiness answer took 1.0-1.4 s and the ledger was the
+  // most sequentially read table of the database.
+  const counts = {};
+  /** @type {string[]} */ const proven = [];
+  for (const [name, query] of orphanChecks) {
+    if (matched.get(name)?.convalidated === true) { counts[name] = 0; proven.push(name); continue; }
+    counts[name] = Number((await database.query(query)).rows[0]?.count ?? 0);
+  }
+  const orphanTotal = Object.values(counts).reduce((sum, count) => sum + count, 0);
   const missing = relationships.map(([name]) => name).filter((name) => !matched.has(name));
   let unvalidated = [...matched].filter(([, row]) => !row.convalidated).map(([name]) => name);
   if (validate && orphanTotal === 0 && missing.length === 0 && unvalidated.length > 0) {
@@ -73,6 +90,6 @@ export async function relationalIntegrity(database, { validate = false } = {}) {
     unvalidated = [];
   }
   return { ok: orphanTotal === 0 && missing.length === 0 && unvalidated.length === 0,
-    orphanTotal, counts, missing, unvalidated,
+    orphanTotal, counts, proven, missing, unvalidated,
     validated: validate && orphanTotal === 0 && missing.length === 0 };
 }

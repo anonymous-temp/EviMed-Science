@@ -487,8 +487,13 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
     /** What a run was shown of a document, for the reading it has been through: the same record a window read writes.
      * @param {any} study @param {string} documentId @param {string} text @param {number} start @param {number} end */
     async recordWindow(study, documentId, text, start, end) {
-      if (!study.cloudContext || !dataPlane?.recordDocumentWindow) return;
-      await dataPlane.recordDocumentWindow(study.id, documentId, study.cloudContext, clinicalDocumentWindow(text, start, Math.max(1, end - start)));
+      await this.recordWindows(study, documentId, text, [{ start, end }]);
+    },
+    /** Every stretch one read served of a document, recorded in one statement (concurrent reads of one record queued on its row).
+     * @param {any} study @param {string} documentId @param {string} text @param {ReadonlyArray<{start:number,end:number}>} spans */
+    async recordWindows(study, documentId, text, spans) {
+      if (!study.cloudContext || !dataPlane?.recordDocumentWindows || !spans.length) return;
+      await dataPlane.recordDocumentWindows(study.id, documentId, study.cloudContext, spans.map(span => clinicalDocumentWindow(text, span.start, Math.max(1, span.end - span.start))));
     },
     /** The only document reader used by a cloud run. @param {any} study @param {any} input */
     async runtimeRead(study, { subjectKey, documentId }) {
@@ -570,8 +575,8 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
         if (asked && long) {
           // The passages of a long record that carry the criterion's words, each with where it stands (a retrieval hint, never a verdict).
           const found = locatePassages(document.text, asked.terms);
-          if (study.cloudContext && dataPlane.recordDocumentWindow) {
-            for (const passage of found.passages) await dataPlane.recordDocumentWindow(study.id, document.id, study.cloudContext, passageWindow(passage, chars));
+          if (study.cloudContext && dataPlane.recordDocumentWindows && found.passages.length) {
+            await dataPlane.recordDocumentWindows(study.id, document.id, study.cloudContext, found.passages.map(passage => passageWindow(passage, chars)));
           }
           return { available: true,
             document: { id: document.id, subjectKey, chars, visibleAt: document.visibleAt, offsetUnit: "utf16", projectionHash: document.projectionHash },

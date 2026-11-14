@@ -11,7 +11,7 @@
  * passage that is not found leaves the fact unknown — never negated — and the record can still be read in windows. A fact is still written
  * with a quotation the platform checks against the document at write and again at evaluation; nothing here changes that check.
  * It runs inside the deployment, over the text the plane already served to this run, and sends nothing anywhere: what the run receives is
- * the passages, and each is recorded as a window served (`recordDocumentWindow`).
+ * the passages, and each is recorded as a window served (`recordDocumentWindows`, one statement per read).
  *
  * Positions are UTF-16 offsets into the record's own text — the unit every other read of a document uses — and `text.slice(start, end)`
  * is the passage.
