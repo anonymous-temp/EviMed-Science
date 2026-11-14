@@ -427,6 +427,7 @@ export class OpenVikingClient {
       },
     });
     const result = body?.result ?? body ?? {};
+    /** @type {Array<{ uri?: string, score?: number, content?: string, overview?: string, abstract?: string, level?: number }>} */
     const memories = Array.isArray(result.memories) ? result.memories : [];
     return memorySearchHits(memories, memorySearchFloor(scoreThreshold)).map((hit) => ({
       uri: String(hit?.uri ?? ""),
