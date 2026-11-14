@@ -5199,9 +5199,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const row = forgetRecord(value), payload = forgetRecord(row.payload ?? value);
         const binding = forgetRecord(forgetRecord(payload.provenance).contextPolicy);
         // An unavailable context answers from the authority still readable, never by failing the reader (forgetAuthorityView).
-        const view = await forgetAuthorityView(() => nativeMemoryContexts.all(userId),
-          () => nativeMemoryContexts.withOwner(userId, created => [nativeMemoryContexts.view(userId, created)]), binding.kind === 'geo-project'
-          ? candidate => candidate.kind === 'geo-project' && canonicalJson(contextPolicyIdentity(candidate.policy)) === canonicalJson(binding) : null);
+        /** @typedef {Awaited<ReturnType<typeof nativeMemoryContexts.all>>[number]} ForgetView */
+        /** @type {() => Promise<ForgetView[]>} */
+        const loadViews = () => nativeMemoryContexts.all(userId);
+        /** @type {() => Promise<ForgetView[]>} */
+        const loadOwned = () => nativeMemoryContexts.withOwner(userId, created => [nativeMemoryContexts.view(userId, created)]);
+        /** @type {((candidate: ForgetView) => boolean) | null} */
+        const bound = binding.kind === 'geo-project'
+          ? candidate => candidate.kind === 'geo-project' && canonicalJson(contextPolicyIdentity(candidate.policy)) === canonicalJson(binding) : null;
+        const view = await forgetAuthorityView(loadViews, loadOwned, bound);
         if (!view || view.kind === 'geo-project') return view;
         // A project label cannot move an old personal fact into a newly shared namespace.
         const owned = view;
