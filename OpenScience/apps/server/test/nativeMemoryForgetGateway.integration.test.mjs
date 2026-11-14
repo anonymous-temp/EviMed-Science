@@ -435,3 +435,68 @@ test('FT8 a pending scan applies literal hard-token fences without a read-time j
   assert.equal(await f.ledger.rejected(f.context, ['The appointment was filed under T-92516.']), true);
   assert.equal(await f.ledger.rejected(f.context, ['The appointment was filed under T-92517.']), false);
 });
+
+test('FT8 late discovery reopens the fixed-cutoff scan before indexing, while later restatements stay authorized', options, async t => {
+  const f = await setup(t), original = 'The previous examination was benign.';
+  const ingest = async archive => f.history.ingestArchive({ userId: f.userId, projectId: f.project.id, engineSession: archive.session, archiveUri: archive.archive_uri }, f.context);
+  const first = await f.commitConversation('initial-scan', [{ role: 'user', text: original, at: '2026-01-01T00:00:00Z' }], { projectId: f.project.id });
+  await ingest(first);
+  f.store.rejectionJudge = { same: async () => { throw new Error('offline'); } };
+  assert.equal((await f.memory.callTool('forget', { statement: examinationStatement })).isError, false);
+  f.history.rejectionJudge = { same: async ({ candidates }) => ({ same: new Map(candidates.map((_candidate, index) => [index, lineFingerprint(examinationStatement)])) }) };
+  await f.history.drainForgetScans();
+  const late = await f.commitConversation('late-discovery', [{ role: 'user', text: original, at: '2026-01-02T00:00:00Z' }], { projectId: f.project.id });
+  assert.deepEqual(await ingest(late), { state: 'queued', reason: 'forget_scan_pending' });
+  assert.equal(await f.ledger.forgetArchivePending(f.context, late.archive_uri), true);
+  assert.deepEqual(await f.history.search({ user: f.user, project: f.project, query: original }), []);
+  await f.database.query("UPDATE evimed_memory.history_archives SET attempts=8 WHERE owner_id=$1 AND archive_uri=$2", [f.userId,late.archive_uri]);
+  await f.history.drainForgetScans();
+  const retry = (await f.database.query('SELECT state,attempts FROM evimed_memory.history_archives WHERE owner_id=$1 AND archive_uri=$2', [f.userId,late.archive_uri])).rows[0];
+  assert.deepEqual(retry, { state:'queued', attempts:8 }, 'privacy waiting stays queued regardless of the ordinary failure cap');
+  await ingest(late);
+  assert.equal(await f.ledger.forgetArchivePending(f.context, late.archive_uri), false);
+  assert.deepEqual(await f.history.search({ user: f.user, project: f.project, query: original }), []);
+  const fresh = await f.commitConversation('later-authorized', [{ role: 'user', text: examinationStatement, at: '2099-01-01T00:00:00Z' }], { projectId: f.project.id });
+  await ingest(fresh);
+  assert.equal(await f.ledger.forgetArchivePending(f.context, fresh.archive_uri), false);
+  assert.equal((await f.history.search({ user: f.user, project: f.project, query: examinationStatement })).length, 1);
+});
+
+test('FT8 an archive appended during a leased scan survives its older cursor acknowledgement', options, async t => {
+  const f = await setup(t), original = 'The previous examination was benign.';
+  const ingest = archive => f.history.ingestArchive({ userId:f.userId, projectId:f.project.id, engineSession:archive.session, archiveUri:archive.archive_uri }, f.context);
+  const first = await f.commitConversation('leased-first', [{ role:'user', text:original, at:'2026-01-01T00:00:00Z' }], { projectId:f.project.id });
+  await ingest(first);
+  f.store.rejectionJudge = { same:async () => { throw new Error('offline'); } };
+  assert.equal((await f.memory.callTool('forget', { statement:examinationStatement })).isError, false);
+  let entered, release, calls = 0;
+  const started = new Promise(resolve => { entered = resolve; });
+  const held = new Promise(resolve => { release = resolve; });
+  f.history.rejectionJudge = { same:async ({ candidates }) => {
+    if (++calls === 1) { entered(); await held; }
+    return { same:new Map(candidates.map((_candidate,index) => [index,lineFingerprint(examinationStatement)])) };
+  } };
+  const work = f.history.drainForgetScans();
+  await started;
+  const late = await f.commitConversation('leased-late', [{ role:'user', text:original, at:'2026-01-02T00:00:00Z' }], { projectId:f.project.id });
+  assert.equal((await ingest(late)).state, 'queued');
+  release(); await work;
+  assert.equal(calls, 2, 'the appended archive is scanned after the original lease settles');
+  assert.equal(await f.ledger.forgetArchivePending(f.context, late.archive_uri), false);
+  assert.equal(await f.ledger.rejected(f.context, [original], late.archive_uri), true);
+});
+
+test('FT8 undo releases a late archive waiting for a scan without spending the indexing retry budget', options, async t => {
+  const f = await setup(t), original = 'The previous examination was benign.';
+  const ingest = archive => f.history.ingestArchive({ userId:f.userId, projectId:f.project.id, engineSession:archive.session, archiveUri:archive.archive_uri }, f.context);
+  const first = await f.commitConversation('undo-wait-first', [{ role:'user', text:original }], { projectId:f.project.id });
+  await ingest(first);
+  f.store.rejectionJudge = { same:async () => { throw new Error('offline'); } };
+  assert.equal((await f.memory.callTool('forget', { statement:examinationStatement })).isError, false);
+  const late = await f.commitConversation('undo-wait-late', [{ role:'user', text:original, at:'2026-01-02T00:00:00Z' }], { projectId:f.project.id });
+  assert.equal((await ingest(late)).state, 'queued');
+  await f.store.undo(f.userId, (await f.store.forgotten(f.userId))[0].id);
+  assert.equal(await f.ledger.forgetArchivePending(f.context, late.archive_uri), false);
+  await ingest(late);
+  assert.equal((await f.history.search({ user:f.user, project:f.project, query:original })).length, 2);
+});

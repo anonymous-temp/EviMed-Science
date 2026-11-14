@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS evimed_memory.history_message_rejections (
   PRIMARY KEY(owner_id,owner_created_at,namespace_id,memory_type,fingerprint,archive_uri,message_hash)
 );
 -- An unarchived tool withdrawal can owe a paraphrase scan. No message text is
--- copied here: immutable source addresses and a cursor survive worker restart.
+-- copied here: a fixed cutoff, source addresses and cursor survive restart.
 -- Undo and account erasure cancel both queued and leased work by cascade.
 CREATE TABLE IF NOT EXISTS evimed_memory.history_forget_scans (
   id text PRIMARY KEY, owner_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
@@ -235,11 +235,36 @@ export class MemoryHistoryLedger {
         SELECT archive_uri FROM (
           SELECT c.archive_uri FROM evimed_memory.native_commits c WHERE c.user_id=$2 AND c.created_at<=r.rejected_at
           UNION SELECT h.archive_uri FROM evimed_memory.history_archives h
-            WHERE h.owner_id=$2 AND h.owner_created_at=$3 AND h.namespace_id=$4 AND h.commit_created_at<=r.rejected_at
+            WHERE h.owner_id=$2 AND h.owner_created_at=$3 AND h.namespace_id=$4 AND (h.commit_created_at IS NULL OR h.commit_created_at<=r.rejected_at)
         ) sources WHERE left(archive_uri,length($5)+10)=$5||'/sessions/' ORDER BY archive_uri)
       FROM evimed_memory.native_rejections r WHERE r.user_id=$2 AND r.memory_type=$6 AND r.fingerprint=$7
       ON CONFLICT(owner_id,memory_type,fingerprint) DO NOTHING`,
     [randomBytes(16).toString('hex'),context.ownerId,context.ownerCreatedAt,context.namespaceId,context.userRoot,memoryType,fingerprint]);
+  }
+
+  /** Discovery may register an old conversation after the original scan. Its
+   * message dates, never its discovery time, decide membership in the frozen
+   * withdrawal. Appending while leased cannot be acknowledged by an old cursor.
+   * @param {{ownerId:string,ownerCreatedAt:string,namespaceId:string}} context
+   * @param {string} archiveUri @param {string|null} minimumDate */
+  async queueLateForgetArchive(context, archiveUri, minimumDate) {
+    await this.migrate();
+    await this.database.query(`UPDATE evimed_memory.history_forget_scans SET
+      archives=array_append(archives,$4),state='pending',next_attempt_at=clock_timestamp(),
+      attempts=CASE WHEN state='complete' THEN 0 ELSE attempts END
+      WHERE owner_id=$1 AND owner_created_at=$2 AND namespace_id=$3
+        AND NOT ($4=ANY(archives)) AND ($5::timestamptz IS NULL OR $5::timestamptz<=cutoff)`,
+    [context.ownerId,context.ownerCreatedAt,context.namespaceId,archiveUri,minimumDate]);
+  }
+
+  /** New history chunks cannot publish an unscanned old paraphrase.
+   * @param {{ownerId:string,ownerCreatedAt:string,namespaceId:string}} context @param {string} archiveUri */
+  async forgetArchivePending(context, archiveUri) {
+    await this.migrate();
+    return Boolean((await this.database.query(`SELECT 1 FROM evimed_memory.history_forget_scans
+      WHERE owner_id=$1 AND owner_created_at=$2 AND namespace_id=$3 AND state='pending'
+        AND $4=ANY(archives) AND array_position(archives,$4)>cursor LIMIT 1`,
+    [context.ownerId,context.ownerCreatedAt,context.namespaceId,archiveUri])).rows.length);
   }
 
   /** Bounded work per pass, capped retry delay, no terminal loss of the obligation.

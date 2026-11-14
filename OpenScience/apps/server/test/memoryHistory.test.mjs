@@ -106,3 +106,21 @@ test('durable maintenance counts reach worker status and the existing metrics re
   const gauge = nativeMemoryMetricFamilies().find(family => family.name === 'open_science_native_memory_maintenance_pending');
   assert.deepEqual(Object.fromEntries(gauge.series.map(sample => [sample.labels.kind, sample.value])), maintenance);
 });
+
+test('late archive discovery is queued before indexing and an unfinished scan keeps its chunks unpublished', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const root = 'viking://user/u1', archiveUri = `${root}/sessions/dsh-late/history/archive_001`, calls = [];
+  const context = { ownerId: 'u1', ownerCreatedAt: '2026-01-01', namespaceId: 'u1', userRoot: root,
+    sessions: { read: async () => JSON.stringify({ role: 'user', content: 'An earlier fact.', created_at: '2026-01-02T00:00:00Z' }) } };
+  const ledger = {
+    registerWriteMessages: async () => {},
+    queueLateForgetArchive: async (...args) => calls.push(args), boundRejections: async () => [],
+    startArchive: async () => ({ state: 'queued' }), forgetArchivePending: async () => true,
+    finishArchive: async (_commit, _context, state, result) => calls.push({ state, ...result }),
+  };
+  const service = new MemoryHistory({ config: { memoryHistorySearchEnabled: true, memoryForgetTargetsEnabled: true }, ledger });
+  service.indexArchive = async () => { throw new Error('unscanned text must not reach indexing'); };
+  assert.deepEqual(await service.ingestArchive({ archiveUri, engineSession: 'dsh-late' }, context), { state: 'queued', reason: 'forget_scan_pending' });
+  assert.deepEqual(calls[0], [context, archiveUri, '2026-01-02T00:00:00.000Z']);
+  assert.deepEqual(calls[1], { state: 'queued', reason: 'forget_scan_pending' });
+});

@@ -215,8 +215,8 @@ export class MemoryHistory {
   }
 
   /** Four leased obligations per pass, four archives per obligation. Source
-   * addresses and cutoff are frozen when the rejection commits; a later human
-   * restatement is never swept into this old withdrawal. No read-time judge.
+   * cutoff and namespace are frozen when the rejection commits; late discovery
+   * can append old archives, but never sweep in a later human restatement. No read-time judge.
    */
   async drainForgetScans() {
     for (let batch = 0; batch < 4; batch++) {
@@ -237,7 +237,7 @@ export class MemoryHistory {
           const rows = raw.split('\n').filter(line => line.trim());
           if (rows.length > MAX_MESSAGES) throw new MemoryHistoryLimitError('source_messages');
           const messages = rows.map(line => JSON.parse(line)).filter(message => ['user','assistant'].includes(message.role)
-            && (!message.created_at || Date.parse(message.created_at) <= new Date(scan.cutoff).getTime()))
+            && (!Number.isFinite(Date.parse(message.created_at ?? '')) || Date.parse(message.created_at) <= new Date(scan.cutoff).getTime()))
             .map(message => ({archiveUri,text:messageText(message,this.secretRedaction),created_at:message.created_at})).filter(message => message.text);
           matched.push(...await this.matchRemoved(context, scan.text, messages, this.rejectionJudge));
         }
@@ -310,6 +310,12 @@ export class MemoryHistory {
         const texts = raw.split('\n').filter(entry=>entry.trim()).map(entry=>JSON.parse(entry))
           .filter(message=>message.role==='user').map(message=>messageText(message,this.secretRedaction)).filter(Boolean);
         await this.ledger.registerWriteMessages(context,commit.archiveUri,texts);
+        if (this.config.memoryForgetTargetsEnabled === true && sourceArchive.session.startsWith('dsh-') && raw !== null) {
+          const dates = raw.split('\n').filter(line => line.trim()).map(line => JSON.parse(line))
+            .filter(message => ['user','assistant'].includes(message.role)).map(message => Date.parse(message.created_at ?? ''));
+          const minimum = dates.length && dates.every(Number.isFinite) ? new Date(dates.reduce((minimum, date) => Math.min(minimum, date), Infinity)).toISOString() : null;
+          await this.ledger.queueLateForgetArchive(context, commit.archiveUri, minimum);
+        }
         if (sourceArchive.session.startsWith('dsh-') && raw !== null) {
           const owed=await this.ledger.boundRejections(context,`${context.userRoot}/sessions/${sourceArchive.session}`);
           if(owed.length) {
@@ -333,6 +339,12 @@ export class MemoryHistory {
     if (['excluded','withdrawn'].includes(progress.state) || progress.state === 'complete' && (!this.secretRedaction || progress.secret_review_version === 1)) return;
     try {
       if (this.secretRedaction && progress.secret_review_version !== 1) await this.ledger.retireSecretChunks(commit,context);
+      if (this.config.memoryForgetTargetsEnabled === true && await this.ledger.forgetArchivePending(context, commit.archiveUri)) {
+        // Waiting is queued work, not an indexing failure that spends its retry
+        // cap. Completion or undo lets the ordinary worker claim it again.
+        await this.ledger.finishArchive(commit, context, 'queued', { reason: 'forget_scan_pending' });
+        return { state: 'queued', reason: 'forget_scan_pending' };
+      }
       const outcome = await this.indexArchive(commit, context,rawArchive);
       await this.ledger.finishArchive(commit, context, outcome.state, outcome);
     } catch (error) {
