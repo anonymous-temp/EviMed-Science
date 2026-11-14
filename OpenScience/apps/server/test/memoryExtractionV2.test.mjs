@@ -16,6 +16,9 @@ test('default and extraction-v2 rendered artifacts are pinned independently', ()
   for (const text of Object.values(v2)) {
     assert.match(text, /Copy names, numbers with units, dates and identifiers exactly/);
     assert.match(text, /keep, labelled/);
+    assert.match(text, /Source labels apply in every memory type, including PREFERENCES/);
+    assert.match(text, /A suggestion proposes a concrete action or choice/);
+    assert.match(text, /Explanations, definitions and hypothetical examples are not suggestions/);
     assert.match(text, /earlier: X \(until YYYY-MM-DD\)/);
   }
   assert.doesNotMatch(v2['observations.yaml'], /no name, no number|No names, numbers/);
