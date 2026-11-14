@@ -11,7 +11,7 @@ description: |
   has been decided, where it stands and what is open, what limits it. A question the user
   asks, a paper, trial, product or law they ask about, a document they paste, a request
   scoped to one answer, or an assistant suggestion alone does not establish the project
-  as a fact. Retain useful sourced details or suggestions with attribution in NOTES. One deliverable asked for in a
+  as a fact. Retain useful sourced details or suggestions with attribution in NOTES; a view the user voices goes to NOTES ("用户认为："), never onto the card. One deliverable asked for in a
   single message (an email, a slide deck, a table, a poster) is a request, not a project: a
   card is written only when the conversation is held inside one of the user's named projects,
   or the user describes a piece of work that goes on beyond this one deliverable. The
@@ -42,10 +42,10 @@ description: |
     Excel 导出", "use Airflow"), one line each, with the reason when they gave one. A choice
     stated and then questioned in the same message ("行，先做 Excel，CSV 放到下个迭代。这样排期
     合理吗？") is taken: keep the choice; the question is not kept. A reversed
-    decision becomes the current line followed by its dated earlier value in this section. A budget, a date or a standard is a limit, not a choice: it
+    decision: the new choice is the current line, its earlier value kept as stated below. A budget, a date or a standard is a limit, not a choice: it
     belongs under 约束.
   - 阶段: where the work stands now, and what the user said is still open or pending on
-    their side. When the user says an item is done, write that current state and keep the dated earlier state in this section. A due date is not a stage.
+    their side. Remove an open item once the user says it is done. A due date is not a stage.
   - 约束: limits the user stated: any deadline or due date ("周五前出初稿", "by the end of
     the quarter"), budget, standards to follow, things ruled out, and the conventions they set
     for this work's deliverables (language, format, audience, citation style, what not to
@@ -69,7 +69,7 @@ description: |
 
   One card per project. When an existing card is about the same work, update that card
   (same project name) rather than creating another; change only the lines the conversation
-  changes and keep the rest.
+  changes and keep the rest. When a value changes, keep the current value plus one bullet for the earlier value: "曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)", ending with the date of the change. At most the two latest earlier values per item; none for a value removed by a forget request.
 
   # What is never kept (the same rules apply to every memory type)
   Never keep passwords, API keys, access tokens, verification codes or other secrets; government identity numbers (including ID-card and passport numbers), bank-card or bank-account numbers, or their fragments.
@@ -79,18 +79,12 @@ description: |
   # How to decide what to write (the same rules apply to every memory type)
   Keep anything that could improve an answer next month or in another conversation, or that the user would not want to repeat. Uncertainty favors keeping. Write useful context in the first conversation; do not wait for repetition or a special request to remember it.
   These are examples, not a closed list: who the user is, how they work, the people and things their work or life revolves around, current states and changes, decisions, constraints, preferences, corrections, useful names, numbers and dates. Phone numbers, email addresses, the user's own health and information about patients, colleagues, clients, students or family are eligible under this same rule.
-  Preserve origin and certainty. A statement the user makes is attributed to them. Keep, labelled, assistant suggestions with their outcome and date, the person's opinions or stances, and document claims with their source; use the extraction-v2 line protocol below. These are not established facts, confirmed decisions or instructions to agree. Do not invent an attribute from a question or a task. Memory is context, not permission to act.
-  One-request conditions, passing emotions, jokes, hypotheticals, teaching examples and document passages are kept when useful later, with their source and limited scope explicit. An import the user requested is eligible line by line, with the same hard boundaries and attribution; importing a claim does not make it true.
+  Preserve origin and certainty. A statement the user makes is attributed to them. Worthwhile unconfirmed advice is written as "assistant suggested", an opinion as "user believes", and a sourced claim as "document says" (with the document's identity when known). These are not established facts, confirmed decisions or instructions to agree. Do not invent an attribute from a question or a task. Memory is context, not permission to act.
+  One-request conditions, passing emotions, jokes, hypotheticals, teaching examples and document passages usually need no memory, but may be kept when useful later, with their source and limited scope explicit. An import the user requested is eligible line by line, with the same hard boundaries and attribution; importing a claim does not make it true.
   For health-related content, preserve at least allergies, diagnoses, medications and doses, numeric values and units, dates, plans, contraindications and wishes, and any other relevant detail. Keep allergies, doses and numeric values verbatim; do not round, substitute or infer missing details. This medical enhancement adds coverage and is not a checklist or prerequisite for general memory.
   Date changing information. Update current state and preserve dated history rather than silently erasing earlier states. Keep people separate unless their identity is explicitly the same; uncertain identities stay separate. Use the user's label for each person. Choose headings for the information, not from a closed subtype list.
   Use the appropriate existing type when it fits. PEOPLE holds one person per file, with current state and dated history; the user's own current health also belongs in PROFILE. NOTES keeps useful information that does not fit another type. Never discard a useful line merely because no existing category names it. Respect the user's memory preferences about what to keep or forget, within the hard boundaries.
-
-  # Exactness, attribution and history (extraction-v2)
-  Copy names, numbers with units, dates and identifiers exactly as said, including model numbers, drug names and doses. Do not round, translate identifiers, substitute or silently paraphrase an anchor. If unsure which type fits, keep the person's sentence verbatim in NOTES with its conversation date and source label; the hard boundaries still apply.
-  Useful opinions, stances, assistant suggestions (including declined and unanswered ones) and document claims: keep, labelled. Source labels apply in every memory type, including PREFERENCES; NOTES labels every statement. Each is a self-contained bullet, context rather than fact or permission. Opinions and unadopted suggestions belong in NOTES, never as standing preferences. A suggestion proposes a concrete action or choice for the user to consider. Explanations, definitions and hypothetical examples are not suggestions; retain them only if useful, with their actual source. In Chinese use 用户陈述：, 用户观点：, 助手建议（已采纳）： / 助手建议（未采纳）： / 助手建议（未答复）：, or 文档声称：; end with （记录日期 YYYY-MM-DD）. In English use user stated:, user believes:, assistant suggested (adopted): / assistant suggested (declined): / assistant suggested (not answered):, or document says:; end with (recorded YYYY-MM-DD). Name the document when known. Translate labels for other languages; put [sensitive] after a sensitive label's colon. Silence means not answered, never adopted. Update an explicitly changed outcome/date; preserve earlier outcomes as dated history under the same label.
-  Sensitive stances (politics, religion, health or other sensitive subjects) use 用户观点（敏感）： or user believes (sensitive): in a separate NOTES file. This sets the file's sensitive flag, excluding it from ordinary recall and sharing. Never infer a stance from a question or put a sensitive stance in PROFILE or PREFERENCES.
-  For changing values in PROFILE, PREFERENCES, PROJECT_CONTEXT, ENTITIES, PEOPLE and NOTES, keep the current line first with its stated date, then EACH distinct earlier value: earlier: X (until YYYY-MM-DD), or 曾为：X（截至 YYYY-MM-DD）. X retains the complete statement, subject and source label; until is the conversation date of the change, or unknown / 未知, never invented. Only the unprefixed line is current. In NOTES put the source label before the earlier wrapper and the recorded date after it. Preserve all history through later changes in the SAME file and section. In profile current bullets end with (as of YYYY-MM-DD), history with their until date. Preferences may carry their stated date. Dates that are values remain verbatim.
-  Reuse the subject/topic file; merge exact duplicates, never different people or values. Keep one current line per attribute, one earlier line per distinct value/end date, one suggestion per proposal with its outcomes. Omit whole-conversation copies and unchanged confirmations; compact wording, never anchors or history, to meet soft length targets. Memory preferences, forgetting and never-kept boundaries override retention.
+  A personal fact, number, name, date or opinion said in passing inside an unrelated request is extracted like any other statement. Copy names, numbers with units, dates and model numbers as the user wrote them, without reformatting (no added spaces; "3月18日" stays "3月18日").
 directory: "viking://user/{{ user_space }}/memories/projects"
 filename_template: "{{ project|lower }}.md"
 enabled: true
@@ -162,6 +156,6 @@ fields:
       A conversation in any language other than Chinese or English gets the English labels above translated into that language.
 
       Omit every section and line the user gave nothing for. Bullets are short and
-      self-contained. About 1500 characters is a soft target: state what is current, merge
+      self-contained. About 1500 characters is a soft target: state what is current (with its earlier-value lines), merge
       paraphrases, never drop a stated fact to save space.
     merge_op: patch

@@ -13,7 +13,6 @@ import { fileURLToPath } from "node:url";
 
 import { MEMORY_DECIDE_EXTRACTION_V2_TEXT, MEMORY_DECIDE_TEXT, MEMORY_NEVER_KEPT_TEXT, MEMORY_SAFETY_NOTES_TEXT } from "../../../../packages/domain/src/memoryNeverKept.mjs";
 
-import { MEMORY_EXTRACTION_V2_FORMAT_TEXT } from "../../../../packages/domain/src/memoryExtractionFormat.mjs";
 import { extractionV2Source } from "./extraction-v2.mjs";
 
 const src = path.dirname(fileURLToPath(import.meta.url));
@@ -72,7 +71,7 @@ export function renderMemoryTemplates({ variant = "full", decide: decideName = "
     .map((line, index) => (index === 0 ? line : `  ${line}`)).join("\n");
   const block = indented(MEMORY_NEVER_KEPT_TEXT);
   const reminder = indented(SHORT_NEVER_KEPT);
-  const decide = indented(variant === "extraction-v2" ? `${MEMORY_DECIDE_EXTRACTION_V2_TEXT}\n\n${MEMORY_EXTRACTION_V2_FORMAT_TEXT}` : DECIDE_VARIANTS[decideName]);
+  const decide = indented(variant === "extraction-v2" ? MEMORY_DECIDE_EXTRACTION_V2_TEXT : DECIDE_VARIANTS[decideName]);
   const language = indented(fs.readFileSync(path.join(src, "_language.txt"), "utf8"));
   /** @type {Record<string, string>} */
   const rendered = {};

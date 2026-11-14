@@ -2871,4 +2871,4 @@ export { RESEARCH_NATIVE_BUNDLES, researchNativeReceiptDigest, researchNativeArt
 export { nativeResearchRowIsAdmitted, nativeResearchToolProfileHolds } from './src/researchNativeBundles.mjs'
 export { privateByDefault, sourcePrivacyOf, sourceAllowsEgress } from "./src/memoryPrivacy.mjs";
 
-export { checkMemoryNoteLabels, memoryHistoryLine, MEMORY_EXTRACTION_V2_REVIEW_TEXT, MEMORY_EXTRACTION_V2_FORMAT_TEXT } from './src/memoryExtractionFormat.mjs';
+export { checkMemoryNoteLabels, memoryHistoryLine, MEMORY_EXTRACTION_V2_REVIEW_TEXT } from './src/memoryExtractionFormat.mjs';
