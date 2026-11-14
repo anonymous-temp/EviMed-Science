@@ -307,7 +307,7 @@ async function withApp(fn, overrides = {}) {
   const address = await app.listen(0, "127.0.0.1");
   const base = `http://127.0.0.1:${address.port}`;
   try {
-    await fn({ base, dataDir });
+    await fn({ app, base, dataDir });
   } finally {
     await app.close();
     // Retried: a dispatch whose browser response was dropped finishes its
