@@ -92,10 +92,15 @@ test('a failed history scan activates no rejection and leaves a whole-file forge
   assert.equal(f.revisions.length, 1);
 });
 
-test('line forget reuses the edit revision and rejects only exact normalized removed lines', async () => {
+for (const deferred of [false, true]) test(`line forget reuses the edit revision and rejects only exact normalized removed lines (deferred=${deferred})`, async () => {
   const f = fixture();
+  f.store.overlay.deferredSummaryRebuildEnabled = deferred;
+  f.store.rawFiles = f.store.files;
+  f.ledger.queueMemorySweep = async () => {};
+  f.ledger.forgetScanPending = async () => deferred;
   const result = await f.store.forget(user, project, uri, { lines: ['  * USE  metric units. (as of 2026-11-12)'] , engineSession: 'dsh-turn' });
   assert.equal(result.removed, true); assert.equal(result.removedLines, 1);
+  assert.equal(result.historyScanPending === true, deferred);
   assert.equal(f.files.get(uri), '- Keep answers short.');
   assert.deepEqual(f.rejections.flatMap(row => row.lines).map(lineFingerprint), [lineFingerprint('Use metric units.')]);
   assert.deepEqual(f.historyCalls[0].lines, ['Use metric units.']);
