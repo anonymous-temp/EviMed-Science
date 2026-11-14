@@ -158,7 +158,7 @@ import { createClinicalReuse } from "./clinicalContextReuse.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation, createMethodScreenBaseline } from "./methodConsolidation.mjs";
-import { createMemoryForgetReader, forgetRecord } from "./memoryForgetPropagation.mjs";
+import { createMemoryForgetReader, forgetAuthorityView, forgetRecord } from "./memoryForgetPropagation.mjs";
 import { MethodReplay, MethodReplayJudge, createTrajectoryReader } from "./methodReplay.mjs";
 import { ScriptLessons, ScriptUses } from "./scriptLessons.mjs";
 import { createEvolutionVerification } from "./evolutionVerification.mjs";
@@ -5198,16 +5198,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       context: async (userId, projectId, value) => {
         const row = forgetRecord(value), payload = forgetRecord(row.payload ?? value);
         const binding = forgetRecord(forgetRecord(payload.provenance).contextPolicy);
-        const views = await nativeMemoryContexts.all(userId);
-        if (binding.kind === 'geo-project') {
-          const shared = views.find(view => view.kind === 'geo-project'
-            && canonicalJson(contextPolicyIdentity(view.policy)) === canonicalJson(binding));
-          if (!shared) throw new HttpError(409, 'memory_scope_denied', 'The recorded memory namespace is unavailable.');
-          return shared;
-        }
+        // An unavailable context answers from the authority still readable, never by failing the reader (forgetAuthorityView).
+        const view = await forgetAuthorityView(() => nativeMemoryContexts.all(userId),
+          () => nativeMemoryContexts.withOwner(userId, created => [nativeMemoryContexts.view(userId, created)]), binding.kind === 'geo-project'
+          ? candidate => candidate.kind === 'geo-project' && canonicalJson(contextPolicyIdentity(candidate.policy)) === canonicalJson(binding) : null);
+        if (!view || view.kind === 'geo-project') return view;
         // A project label cannot move an old personal fact into a newly shared namespace.
-        const owned = views.find(view => view.kind === 'owned');
-        if (!owned) throw new HttpError(409, 'memory_scope_denied', 'The memory namespace is unavailable.');
+        const owned = view;
         const stamp = projectId ? (await productDatabase.query(
           'SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id=$2', [userId, projectId])).rows[0]?.stamp : null;
         return { ...owned, projectId, projectCreatedAt: stamp ?? null };
