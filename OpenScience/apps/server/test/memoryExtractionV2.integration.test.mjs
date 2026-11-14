@@ -15,6 +15,9 @@ import { replaceStatement } from '../src/nativeMemoryVerification.mjs';
 import { removalLines } from '../src/nativeMemoryRejections.mjs';
 
 const { options, fixture } = nativeIntegration();
+// These tests pin the worker and the readers selected with the extraction-v2 directory, not the template wording: the recorded
+// writes keep the earlier v2 NOTES labels that the worker's label metric still counts. The v2.1 templates ask for "用户认为：" and
+// "助手建议（用户未采纳）：" in NOTES and for the same 曾为： / earlier: history lines (wording pinned in memoryExtractionV2.test.mjs).
 const candidate = { memoryTemplatesDirectory: 'memory-templates-extraction-v2' };
 for (const name of ['attribution', 'history', 'numeric-choice']) test(`${name}: recorded conversations through the write ledger and real readers`, options, async t => {
   const recorded = JSON.parse(readFileSync(new URL(`./fixtures/memory-extraction-v2/${name}.json`, import.meta.url), 'utf8'));

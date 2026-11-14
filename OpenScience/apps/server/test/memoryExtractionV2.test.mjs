@@ -2,30 +2,99 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
 import { renderMemoryTemplates } from '../../../deploy/web/openviking/memory-templates-src/build.mjs';
+import { HISTORY_RULE, OPINION_RULE, SUGGESTION_RULE } from '../../../deploy/web/openviking/memory-templates-src/extraction-v2.mjs';
 import { checkMemoryNoteLabels, memoryHistoryLine } from '../../../packages/domain/src/memoryExtractionFormat.mjs';
+import { MEMORY_DECIDE_EXTRACTION_V2_TEXT, MEMORY_DECIDE_TEXT } from '../../../packages/domain/src/memoryNeverKept.mjs';
 import { nativeMemoryFile, observationFile } from '../src/openVikingSessions.mjs';
 
 const release = new URL('../../../deploy/web/openviking/', import.meta.url);
+const SHARED = 'A personal fact, number, name, date or opinion said in passing inside an unrelated request is extracted like any other statement. Copy names, numbers with units, dates and model numbers as the user wrote them, without reformatting (no added spaces; "3月18日" stays "3月18日").';
+const HISTORY_TYPES = ['profile.yaml', 'preferences.yaml', 'project_context.yaml', 'entities.yaml'];
+const count = (/** @type {string} */ text, /** @type {string} */ part) => text.split(part).length - 1;
+
 test('default and extraction-v2 rendered artifacts are pinned independently', () => {
   for (const [variant, directory] of [['full', 'memory-templates'], ['extraction-v2', 'memory-templates-extraction-v2']]) {
     const rendered = renderMemoryTemplates({ variant });
     assert.deepEqual(readdirSync(new URL(`${directory}/`, release)).sort(), Object.keys(rendered).sort());
     for (const [name, text] of Object.entries(rendered)) assert.equal(readFileSync(new URL(`${directory}/${name}`, release), 'utf8'), text);
   }
+});
+
+test('extraction-v2.1 is the default text plus the five additions, each in its types with exact labels', () => {
+  const defaults = renderMemoryTemplates();
   const v2 = renderMemoryTemplates({ variant: 'extraction-v2' });
-  for (const text of Object.values(v2)) {
-    assert.match(text, /Copy names, numbers with units, dates and identifiers exactly/);
-    assert.match(text, /keep, labelled/);
-    assert.match(text, /Source labels apply in every memory type, including PREFERENCES/);
-    assert.match(text, /A suggestion proposes a concrete action or choice/);
-    assert.match(text, /Explanations, definitions and hypothetical examples are not suggestions/);
-    assert.match(text, /earlier: X \(until YYYY-MM-DD\)/);
+  assert.ok(MEMORY_DECIDE_EXTRACTION_V2_TEXT.startsWith(`${MEMORY_DECIDE_TEXT}\n`), 'the default decide text is carried unchanged');
+  assert.equal(MEMORY_DECIDE_EXTRACTION_V2_TEXT, `${MEMORY_DECIDE_TEXT}\n${SHARED}`);
+  for (const [name, text] of Object.entries(v2)) {
+    // Rules 4 (asides) and 5 (exactness): once in the shared block of every type, never in the default.
+    assert.equal(count(text, SHARED), 1, name);
+    assert.equal(count(defaults[name], SHARED), 0, name);
+    // Rule 1 (changed values): only in the four types whose default text replaced or dropped the earlier value.
+    assert.equal(count(text, HISTORY_RULE), HISTORY_TYPES.includes(name) ? 1 : 0, name);
+    // Rules 2 and 3 (opinions, unadopted suggestions): stated with their labels in NOTES only.
+    assert.equal(count(text, OPINION_RULE), name === 'notes.yaml' ? 1 : 0, name);
+    assert.equal(count(text, SUGGESTION_RULE), name === 'notes.yaml' ? 1 : 0, name);
+    for (const rule of [HISTORY_RULE, OPINION_RULE, SUGGESTION_RULE]) assert.ok(!defaults[name].includes(rule), name);
+    // No wording of the earlier, broader v2 is carried over.
+    assert.doesNotMatch(text, /extraction-v2 line protocol|Source labels apply in every memory type|用户观点|助手建议（未答复）|（记录日期|Choice: \{|Stated choice:|Confirmed aliases|Inferred from behaviour|sensitive\)/, name);
   }
-  assert.doesNotMatch(v2['observations.yaml'], /no name, no number|No names, numbers/);
-  assert.doesNotMatch(v2['preferences.yaml'], /only the current choice|No dates/);
-  assert.doesNotMatch(v2['profile.yaml'], /prior states in NOTES|replace a changed state/);
-  assert.doesNotMatch(v2['project_context.yaml'], /decision replaces its line|Remove an item once/);
-  assert.doesNotMatch(v2['entities.yaml'], /fact that is not contradicted/);
+  assert.ok(HISTORY_RULE.includes('"曾为：<earlier value>（截至 YYYY-MM-DD）" in Chinese, otherwise "earlier: <earlier value> (until YYYY-MM-DD)"'));
+  assert.match(HISTORY_RULE, /at most the two most recent earlier values per item, and none for a value removed by a forget request/);
+  assert.ok(OPINION_RULE.includes('a line starting "用户认为：" ("User believes:" in English) with its date'));
+  assert.match(OPINION_RULE, /never a preference rule, decision, project-card line or writing rule/);
+  assert.ok(SUGGESTION_RULE.includes('a line starting "助手建议（用户未采纳）：" ("Assistant suggested (not adopted):") with its date, at most two per conversation'));
+  assert.match(SUGGESTION_RULE, /never a preference or decision until the user adopts it in words; explanations, glosses and restatements are not kept/);
+  // The types an opinion or a suggestion must never become say so at their point of use.
+  assert.match(v2['preferences.yaml'], /A view the user voices \("我觉得…"\) and an assistant suggestion the user did not adopt in words are never a preference or a writing rule for a topic: they go to NOTES\./);
+  assert.match(v2['decisions.yaml'], /never a view the user voices \(NOTES, "用户认为："\)/);
+  assert.match(v2['project_context.yaml'], /a view the user voices goes to NOTES \("用户认为："\), never onto the card/);
+  // The six types that carry none of rules 1-3 are the default text with only the shared sentence added.
+  const decideEnd = MEMORY_DECIDE_TEXT.split('\n').at(-1);
+  for (const name of ['corrections.yaml', 'follow_ups.yaml', 'observations.yaml', 'people.yaml', 'project_facts.yaml', 'recent_work.yaml']) {
+    assert.equal(v2[name], defaults[name].replace(decideEnd, () => `${decideEnd}\n  ${SHARED}`), name);
+  }
+});
+
+test('extraction-v2.1 removes the per-type "replace" rules that contradict a dated earlier value; the default keeps them', () => {
+  const defaults = renderMemoryTemplates();
+  const v2 = renderMemoryTemplates({ variant: 'extraction-v2' });
+  /** @type {[string, RegExp][]} */
+  const contradictions = [
+    ['profile.yaml', /replace the old bullet|prior states in NOTES|replace a changed state|Every bullet ends with the date/],
+    ['preferences.yaml', /only the current choice|No dates, events or plans/],
+    ['project_context.yaml', /decision replaces its line|Remove an item once/],
+  ];
+  for (const [name, pattern] of contradictions) {
+    assert.match(defaults[name], pattern, `${name}: the default still states it`);
+    assert.doesNotMatch(v2[name], pattern, name);
+  }
+  assert.match(v2['profile.yaml'], /Every current bullet ends with the date/);
+  assert.match(v2['profile.yaml'], /labels \(except 曾为 \/ earlier\)/);
+  assert.match(v2['preferences.yaml'], /No dates \(except on an earlier-value bullet\), events or plans\./);
+  assert.match(v2['project_context.yaml'], /decision: the new choice is the current line, its earlier value kept as stated below\./);
+  assert.match(v2['project_context.yaml'], /Remove an open item once the user says it is done\./);
+  // The two wrappers the rule asks for are exactly what the readers treat as history.
+  const filled = (/** @type {string} */ wrapper) => wrapper.replace('<earlier value>', '住在迎泽区').replace('YYYY-MM-DD', '2026-03-01');
+  for (const wrapper of HISTORY_RULE.match(/"(曾为：[^"]+|earlier: [^"]+)"/g) ?? []) {
+    const history = memoryHistoryLine(filled(wrapper.slice(1, -1)));
+    assert.ok(history, wrapper);
+    assert.equal(history.value, '住在迎泽区');
+    assert.equal(history.until, '2026-03-01');
+  }
+  assert.equal((HISTORY_RULE.match(/"(曾为：[^"]+|earlier: [^"]+)"/g) ?? []).length, 2);
+});
+
+test('extraction-v2.1 stays small: at most 13 % more characters per type and 8 % in total than the default', () => {
+  const defaults = renderMemoryTemplates();
+  const v2 = renderMemoryTemplates({ variant: 'extraction-v2' });
+  const length = (/** @type {string} */ text) => [...text].length;
+  let before = 0, after = 0;
+  for (const [name, text] of Object.entries(defaults)) {
+    before += length(text);
+    after += length(v2[name]);
+    assert.ok(length(v2[name]) <= length(text) * 1.13, `${name}: ${length(text)} -> ${length(v2[name])}`);
+  }
+  assert.ok(after <= before * 1.08, `${before} -> ${after}`);
 });
 
 test('NOTES format check counts all unlabelled statements without judging their meaning', () => {

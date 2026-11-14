@@ -29,8 +29,10 @@ export const MEMORY_SAFETY_NOTES_TEXT = `# Safety context that must survive into
 When the conversation states something that must be respected before giving a person a medicine or treatment, keep that safety history in SAFETY_NOTES, one file per person, including the user. An allergy or past reaction, a contraindication, an implant, pregnancy, a condition or current medicine that changes what is safe are examples, not a closed list: judge what could change safe advice, rather than matching those words.
 SAFETY_NOTES is the always-shown safety memory type. Put the safety facts in its content field; headings are free and no marker is required. Do not leave a safety fact only in PEOPLE, ENTITIES or PROFILE. Other personal details remain in their ordinary type. Preserve exact key terms as spoken, attribution, the user's language, uncertainty and dates; do not infer a new allergy, diagnosis or permission to treat. Each line must identify whose history it is. Keep uncertain identities separate and retain dated changes; silence does not revoke a safety fact. Respect the person's requests to edit or forget it just as for any other memory.`;
 
-/** Opt-in extraction policy; the default text above remains byte-identical. */
-export const MEMORY_DECIDE_EXTRACTION_V2_TEXT = MEMORY_DECIDE_TEXT
-  .replace('Worthwhile unconfirmed advice is written as "assistant suggested", an opinion as "user believes", and a sourced claim as "document says" (with the document\'s identity when known).',
-    'Keep, labelled, assistant suggestions with their outcome and date, the person\'s opinions or stances, and document claims with their source; use the extraction-v2 line protocol below.')
-  .replace('usually need no memory, but may be kept when useful later', 'are kept when useful later');
+/**
+ * Opt-in extraction-v2 decide block ("v2.1", 2026-11-14): the default text above, unchanged, plus two sentences, one on asides and
+ * one on exactness. The per-type additions (dated earlier values, labelled opinions and unadopted suggestions) live in
+ * `deploy/web/openviking/memory-templates-src/extraction-v2.mjs`.
+ */
+export const MEMORY_DECIDE_EXTRACTION_V2_TEXT = `${MEMORY_DECIDE_TEXT}
+A personal fact, number, name, date or opinion said in passing inside an unrelated request is extracted like any other statement. Copy names, numbers with units, dates and model numbers as the user wrote them, without reformatting (no added spaces; "3月18日" stays "3月18日").`;
