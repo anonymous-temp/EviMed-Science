@@ -31,9 +31,21 @@ for (const name of ['attribution', 'history', 'numeric-choice']) test(`${name}: 
     return { adds, updates };
   } });
   for (const session of recorded.sessions) {
-    await f.commitConversation(session.id, session.messages, { projectId: 'fern' });
+    const commit = await f.commitConversation(session.id, session.messages, { projectId: 'fern' });
     await f.worker.processCommits({ userId: f.userId });
+    assert.equal((await f.overlay.commit(f.userId, commit.archive_uri))?.state, 'completed', `${session.id}: write ledger settled`);
     for (const [path, body] of Object.entries(session.writes)) assert.equal(await f.sessions.read(f.userId, `${f.root}/${path}`), body);
+    if (name === 'history') {
+      const project = (await f.store.records(f.userId)).find(record => record.uri === `${f.root}/projects/fern.md`);
+      assert.ok(project, `${session.id}: project file reaches the real store`);
+      assert.equal(project.scopeId, 'fern');
+      assert.equal(project.value, session.writes['projects/fern.md']);
+      const rows = await f.store.projectCard(f.userId, 'fern');
+      assert.ok(rows.some(row => row.slot === 'constraints'));
+      const memo = projectCardMemo('fern', rows);
+      assert.ok(memo, `${session.id}: project card is readable`);
+      for (const line of memoryLines(session.writes['projects/fern.md'])) assert.ok(memo.content.includes(line));
+    }
     stage++;
   }
   const records = await f.store.records(f.userId);
@@ -50,6 +62,7 @@ for (const name of ['attribution', 'history', 'numeric-choice']) test(`${name}: 
     assert.ok(capsuleFactMemos([{ id: 'test', factKind: 'profile', content: body }])[0].content.includes(historical));
     assert.ok(safetyNoteLines(`## History [evimed-safety-notes]\n${body.split('\n').slice(1).join('\n')}`, 'people').includes(historical));
     const card = projectCardMemo('fern', projectCardRows(records, 'fern'));
+    assert.ok(card, 'the project reader returns a card with dated history');
     assert.ok(card.content.includes(historical));
     assert.ok(removalLines(body).includes(historical));
     assert.notEqual(lineFingerprint(historical), lineFingerprint('Greenhouse setting: 18 °C'));

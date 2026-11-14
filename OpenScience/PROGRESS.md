@@ -1517,3 +1517,4 @@ lifecycle evidence are recorded in
 Synthetic-data fidelity remains limited. Live conversation acceptance and
 exact-candidate CI have separate terminal records; no deployment, main merge,
 production migration or public package-registry publication is implied.
+2026-11-14 11:15 · AL3b: Narrow opt-in MCP read envelopes before accessing result and correct the recorded history fixture to projects/fern.md; validate every fixture path with the native readers and check ledger settlement, real store scope and project-card history at each change. Extraction format/readers and gateway checks pass locally; PostgreSQL integration and server typecheck remain with the lab.

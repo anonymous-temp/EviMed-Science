@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
 import { renderMemoryTemplates } from '../../../deploy/web/openviking/memory-templates-src/build.mjs';
 import { checkMemoryNoteLabels, memoryHistoryLine } from '../../../packages/domain/src/memoryExtractionFormat.mjs';
+import { nativeMemoryFile, observationFile } from '../src/openVikingSessions.mjs';
 
 const release = new URL('../../../deploy/web/openviking/', import.meta.url);
 test('default and extraction-v2 rendered artifacts are pinned independently', () => {
@@ -53,6 +54,8 @@ test('recorded conversations pin anchors and NOTES/history formats without prete
       assert.ok(Object.values(last).some(body => body.includes(anchor)), `${name}: ${anchor}`);
     }
     for (const session of fixture.sessions) for (const [path, body] of Object.entries(session.writes)) {
+      const root = 'viking://user/fixture/memories';
+      assert.ok(nativeMemoryFile(`${root}/${path}`, root) ?? observationFile(`${root}/${path}`, root), `${name}: unrecognized memory path ${path}`);
       if (path.startsWith('notes/')) {
         assert.equal(checkMemoryNoteLabels(body).missingLabel, 0);
         assert.equal(checkMemoryNoteLabels(body).malformed, 0);

@@ -13,7 +13,7 @@
       "writes": {
         "profile.md": "# User\n- Greenhouse setting: 18 °C (as of 2026-11-01)",
         "preferences/self/greenhouse.md": "- Greenhouse setting: 18 °C (as of 2026-11-01)",
-        "project_context/fern.md": "# Fern\n## Constraints\n- Greenhouse setting: 18 °C (as of 2026-11-01)",
+        "projects/fern.md": "# Fern\n## Constraints\n- Greenhouse setting: 18 °C (as of 2026-11-01)",
         "entities/instruments/fern.md": "# Fern controller\n## Settings\n- Greenhouse setting: 18 °C (as of 2026-11-01)"
       }
     },
@@ -29,7 +29,7 @@
       "writes": {
         "profile.md": "# User\n- Greenhouse setting: 20 °C (as of 2026-11-02)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
         "preferences/self/greenhouse.md": "- Greenhouse setting: 20 °C (as of 2026-11-02)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
-        "project_context/fern.md": "# Fern\n## Constraints\n- Greenhouse setting: 20 °C (as of 2026-11-02)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
+        "projects/fern.md": "# Fern\n## Constraints\n- Greenhouse setting: 20 °C (as of 2026-11-02)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
         "entities/instruments/fern.md": "# Fern controller\n## Settings\n- Greenhouse setting: 20 °C (as of 2026-11-02)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)"
       }
     },
@@ -45,7 +45,7 @@
       "writes": {
         "profile.md": "# User\n- Greenhouse setting: 22 °C (as of 2026-11-03)\n- earlier: Greenhouse setting: 20 °C (until 2026-11-03)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
         "preferences/self/greenhouse.md": "- Greenhouse setting: 22 °C (as of 2026-11-03)\n- earlier: Greenhouse setting: 20 °C (until 2026-11-03)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
-        "project_context/fern.md": "# Fern\n## Constraints\n- Greenhouse setting: 22 °C (as of 2026-11-03)\n- earlier: Greenhouse setting: 20 °C (until 2026-11-03)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
+        "projects/fern.md": "# Fern\n## Constraints\n- Greenhouse setting: 22 °C (as of 2026-11-03)\n- earlier: Greenhouse setting: 20 °C (until 2026-11-03)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
         "entities/instruments/fern.md": "# Fern controller\n## Settings\n- Greenhouse setting: 22 °C (as of 2026-11-03)\n- earlier: Greenhouse setting: 20 °C (until 2026-11-03)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)"
       }
     }

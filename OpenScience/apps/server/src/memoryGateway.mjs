@@ -1025,7 +1025,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
               const content = [];
               for (const uri of uris) {
                 const read = await handlers.read({ ...ctx, query: new URLSearchParams({ uri, model_use: 'true' }) });
-                if (read.status === 200) content.push(`${uri}\n${read.json.result}`);
+                if (read.status === 200 && read.json && typeof read.json === 'object'
+                  && 'result' in read.json && typeof read.json.result === 'string') content.push(`${uri}\n${read.json.result}`);
               }
               local.push(toolText(message.id, content.join('\n\n') || '没有可读取的记忆文件。'));
               continue;

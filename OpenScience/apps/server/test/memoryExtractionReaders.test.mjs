@@ -36,7 +36,7 @@ test('recorded history survives opening, capsule, safety, page statements and si
   assert.equal(openingProfileRead(body, 'viking://user/test/memories', {}), body);
   assert.ok(capsuleFactMemos([{ id: 'test', factKind: 'profile', content: body }])[0].content.includes(historical));
   assert.ok(safetyNoteLines(`## History [evimed-safety-notes]\n${body.split('\n').slice(1).join('\n')}`, 'people').includes(historical));
-  const rows = projectCardRows([{ id: 'fern', nativeType: 'project_context', scopeId: A, value: writes['project_context/fern.md'], updatedAt: null }], A);
+  const rows = projectCardRows([{ id: 'fern', nativeType: 'project_context', scopeId: A, value: writes['projects/fern.md'], updatedAt: null }], A);
   assert.ok(projectCardMemo(A, rows).content.includes(historical));
   assert.ok(removalLines(body).includes(historical));
   assert.notEqual(lineFingerprint(historical), lineFingerprint('Greenhouse setting: 18 °C'));
