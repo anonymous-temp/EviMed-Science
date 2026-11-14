@@ -79,6 +79,8 @@ const PREFLIGHT_ROW_BYTES = 32;
 /** A database double: enough PostgreSQL shape for the snapshot assembly, no more.
  * @param {any[]} usage */
 function fakeDatabase(usage, documents = [], feedbackEvents = []) {
+  /** @type {Set<unknown>} */
+  const checkedOutClients = new Set();
   const database = {
     /** @type {string[]} */ queries: [],
     /** What its pre-flight has reported in total — accumulated as it answers,
@@ -86,11 +88,22 @@ function fakeDatabase(usage, documents = [], feedbackEvents = []) {
      * holds no matter what. */
     preflightBytes: 0,
     /** @param {(client:any) => Promise<any>} operation */
-    transaction: (operation) =>
-      operation({
-        query: (/** @type {string} */ text, /** @type {any[]} */ values) =>
-          database.query(text, values),
-      }),
+    async transaction(operation) {
+      const client = {
+        query: (/** @type {string} */ text, /** @type {unknown[]} */ values = []) => {
+          assert.ok(checkedOutClients.has(client), "The database client is not owned by this transaction.");
+          return database.query(text, values);
+        },
+      };
+      checkedOutClients.add(client);
+      try { return await operation(client); }
+      finally { checkedOutClients.delete(client); }
+    },
+    /** @template T @param {unknown} client @param {() => Promise<T>} work */
+    async withTransactionClient(client, work) {
+      assert.ok(checkedOutClients.has(client), "The database client is not owned by this transaction.");
+      return work();
+    },
     /** @param {string} text @param {any[]} [values] */
     async query(text, values = []) {
       database.queries.push(text);
@@ -126,6 +139,44 @@ function fakeDatabase(usage, documents = [], feedbackEvents = []) {
   };
   return database;
 }
+
+test("the database fake refuses substituted and released transaction clients", async () => {
+  const database = fakeDatabase([]);
+  let entered = false;
+  const work = async () => { entered = true; };
+  const released = await database.transaction(async client => {
+    await assert.rejects(database.withTransactionClient({ query: client.query }, work), /not owned by this transaction/);
+    assert.equal(entered, false);
+    await database.withTransactionClient(client, work);
+    assert.equal(entered, true);
+    return client;
+  });
+  entered = false;
+  await assert.rejects(database.withTransactionClient(released, work), /not owned by this transaction/);
+  assert.equal(entered, false);
+});
+
+test("snapshot query observers preserve ownership through archive collection", async () => {
+  const database = fakeDatabase([]);
+  const observed = Object.create(database);
+  let inspected = false;
+  observed.transaction = (/** @type {Parameters<typeof database.transaction>[0]} */ operation) => database.transaction(async client => {
+    const query = client.query;
+    client.query = async (/** @type {string} */ sql, /** @type {unknown[] | undefined} */ values) => {
+      inspected = true;
+      return query.call(client, sql, values);
+    };
+    try { return await operation(client); }
+    finally { client.query = query; }
+  });
+  const exported = await withAccountExportSnapshot(observed, { id: "owner", accountCreatedAt: "2026-09-06 00:00:00+00" }, {}, async snapshot => {
+    await snapshot.withDatabaseSnapshot(async () => { assert.ok(inspected); });
+    return snapshot;
+  });
+  let entered = false;
+  await assert.rejects(exported.withDatabaseSnapshot(async () => { entered = true; }), { code: "account_export_snapshot_closed" });
+  assert.equal(entered, false);
+});
 
 test("account snapshots hydrate compact reviews into the legacy portable shape and keep unavailable records with an honest omission", async () => {
   const base = { artifactId: `ra_${"a".repeat(64)}`, versionId: `rv_${"b".repeat(64)}`, projectId: "default", path: "report.md", digest: "c".repeat(64),
@@ -353,18 +404,6 @@ const migrationSources = [
 /** The columns that make a table one account's: the owner's, a recipient's, or the plain `user_id`. */
 const ACCOUNT_COLUMN = /(?:^|,)\s*(?:user_id|owner_id|recipient_id)\s/m;
 
-// Existing personal-content gaps uncovered by the SY4 inventory (2026-11-12).
-// These were outside this guard's migration scan, not deliberately excluded data.
-// Keep this debt finite: a new native table still needs an export decision, and
-// resolving a gap removes it here. Safe projections must honor namespace access
-// and source deletion before exporting pending/forgotten/held text.
-const nativeExportGaps = new Set([
-  "evimed_memory.native_admissions",
-  "evimed_memory.native_commits",
-  "evimed_memory.native_revisions",
-  "evimed_memory.native_imports",
-]);
-
 /** Every table the migrations create, mapped to whether it is account-scoped.
  * Read as source text because that is what a migration is here: one template
  * literal per module, with `${schema}` its only substitution. */
@@ -420,16 +459,21 @@ test("the exported table list is derived from the queries, joins included", () =
     "evimed_share.link_uses",
     "evimed_share.deliveries",
     "evimed_learning.script_uses",
+    "evimed_memory.native_admissions",
+    "evimed_memory.native_commits",
+    "evimed_memory.native_revisions",
+    "evimed_memory.native_imports",
+    "evimed_control.users",
   ]) {
     assert.ok(
       exported.includes(table),
       `${table} is not read by any export query`,
     );
   }
-  assert.equal(exported.length, 22, `the export reads ${exported.join(", ")}`);
+  assert.equal(exported.length, 26, `the export reads ${exported.join(", ")}`);
 });
 
-test("every account-scoped table has an export decision apart from the recorded native content gaps", () => {
+test("every account-scoped table has an export decision", () => {
   const tables = migratedTables();
   // The scan has to prove it scanned: a regex that matched nothing would make
   // every loop below vacuously true and this guard permanently green.
@@ -477,13 +521,7 @@ test("every account-scoped table has an export decision apart from the recorded 
     accountScoped.length >= 13,
     `only ${accountScoped.length} account-scoped tables were recognized`,
   );
-  for (const table of nativeExportGaps) {
-    assert.equal(tables.get(table), true, `${table} is a real account-scoped export gap`);
-    assert.ok(!exported.includes(table) && !Object.hasOwn(UNEXPORTED_ACCOUNT_TABLES, table),
-      `${table} now has an export decision; remove the resolved gap`);
-  }
   for (const table of accountScoped) {
-    if (nativeExportGaps.has(table)) continue;
     assert.ok(
       exported.includes(table) ||
         Object.hasOwn(UNEXPORTED_ACCOUNT_TABLES, table),

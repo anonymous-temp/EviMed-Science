@@ -13,6 +13,10 @@ import { migrateCapsuleShare } from "./capsuleShareLinks.mjs";
 import { migrateScriptUses } from "./scriptLessons.mjs";
 import { senderDisplayName } from "./capsuleShareLabel.mjs";
 import { receivedPackForExport, sentSnapshotForExport } from "./capsuleSharerAccount.mjs";
+import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
+import { migrateNativeMemory } from "./nativeMemoryPersistence.mjs";
+import { userRootUri } from "./openVikingLayout.mjs";
+import { projectNativeMemoryAccountData } from "./nativeMemoryAccountExport.mjs";
 
 const MAX_ROWS = 50000;
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -65,7 +69,26 @@ export const UNEXPORTED_DOCUMENT_KINDS = Object.freeze({
  * @returns {string[]} */
 export function accountExportDocumentKinds() { return [...customerKinds]; }
 
+// These stores contain personal input alongside runtime authority. Select only the fields the projections need.
+const nativeQueries = [
+  ["nativeCommits", `SELECT created_at AS "createdAt",updated_at AS "updatedAt",extraction->'forgetRequests' AS "forgetRequests"
+    FROM evimed_memory.native_commits WHERE user_id=$1 AND extraction ? 'forgetRequests'
+      AND EXISTS(SELECT 1 FROM unnest($2::text[]) AS roots(root) WHERE starts_with(archive_uri,root||'/sessions/')) ORDER BY created_at,archive_uri`],
+  ["nativeRevisions", `SELECT id::text,uri,memory_type AS "memoryType",change,actor,reason,before,after,
+    archive_uri AS "archiveUri",engine_session AS "engineSession",project_id AS "projectId",
+    source_project_id AS "sourceProjectId",source_project_created_at AS "sourceProjectCreatedAt",undone_at AS "undoneAt",changed_at AS "changedAt"
+    FROM evimed_memory.native_revisions WHERE user_id=$1
+      AND EXISTS(SELECT 1 FROM unnest($2::text[]) AS roots(root) WHERE starts_with(uri,root||'/memories/')) ORDER BY native_revisions.id`],
+  ["nativeAdmissions", `SELECT candidate_id AS "candidateId",candidate_revision AS revision,project_id AS "projectId",state,
+    pending_text AS "pendingText",error,created_at AS "createdAt",updated_at AS "updatedAt"
+    FROM evimed_memory.native_admissions WHERE user_id=$1
+      AND account_created_at=(SELECT created_at FROM evimed_control.users WHERE id=$1) ORDER BY created_at,candidate_id,candidate_revision`],
+  ["nativeImports", `SELECT id,state,statements,saved,left_out AS "leftOut",created_at AS "createdAt",expires_at AS "expiresAt"
+    FROM evimed_memory.native_imports WHERE user_id=$1 ORDER BY created_at,id`],
+];
+
 const queries = [
+  ...nativeQueries,
   ["frontierEventReads", "SELECT * FROM evimed_frontier.event_reads WHERE user_id=$1 ORDER BY event_id"],
   ["evidenceZones", "SELECT * FROM evimed_frontier.evidence_zones WHERE user_id=$1 ORDER BY id"],
   ["evidenceCards", "SELECT * FROM evimed_frontier.evidence_cards WHERE user_id=$1 ORDER BY id"],
@@ -131,9 +154,8 @@ const queries = [
  *
  * Derived from the queries themselves rather than written down beside them: a
  * second list would be one more thing to forget, and forgetting is exactly the
- * failure this exists to catch. `evimed_control.users` is not here because the
- * account row is read by the snapshot's own locking SELECT, not by a query in
- * this list.
+ * failure this exists to catch. The account row uses its own locking SELECT;
+ * `evimed_control.users` also appears here as the admissions query's account-generation dependency.
  *
  * @param {readonly (readonly string[])[]} source
  * @returns {string[]} */
@@ -443,7 +465,9 @@ export function exportedPriceLists(usageRows) {
  * @param {any} database @param {any} user @param {Record<string,any>} config
  * @param {(snapshot:any) => Promise<any>} operation
  * @param {{maxRows?:number,maxBytes?:number,skillArtifacts?:any,report?:(line:string)=>void,
- * readResultReview?:(user:any,row:any)=>Promise<any>}} limits */
+ * readResultReview?:(user:any,row:any)=>Promise<any>,
+ * nativeMemory?: {contexts?: import("./geoNativeMemoryContext.mjs").GeoNativeMemoryContext | null,
+ * sourceDeletion?: import("./conversationSourceDeletionService.mjs").ConversationSourceDeletionService | null}}} limits */
 export async function withAccountExportSnapshot(database, user, config, operation, limits = {}) {
   // The platform's publishing account is nobody's to take a copy of (evidence-flywheel B2).
   assertNotPlatformAccount(user);
@@ -463,6 +487,8 @@ export async function withAccountExportSnapshot(database, user, config, operatio
   await migrateFrontierEventReading(database);
   await migrateCapsuleShare(database);
   await migrateScriptUses(database);
+  await migrateMemorySettings(database);
+  await migrateNativeMemory(database);
   return database.transaction(async client => {
     await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await client.query("SET LOCAL statement_timeout = '15s'");
@@ -471,6 +497,21 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       transaction_timestamp() AS "snapshotAt" FROM evimed_control.users WHERE id=$1 FOR SHARE`, [user.id, user.accountCreatedAt]);
     const owner = account.rows[0];
     if (!owner?.sameGeneration) throw new HttpError(409, "account_export_account_changed", "The authenticated account generation changed before export.");
+    // Resolve the exact registry used by NativeMemoryStore.exportPack, inside this PG snapshot.
+    // A project id on a row is a display label, never namespace authority.
+    const nativeRoots = [userRootUri(user.id)];
+    const nativeSourceDeletion = limits.nativeMemory?.sourceDeletion;
+    /** @template T @param {() => Promise<T>} work @returns {Promise<T>} */
+    const inSnapshot = work => typeof database.withTransactionClient === "function" ? database.withTransactionClient(client, work) : work();
+    await inSnapshot(async () => {
+      await nativeSourceDeletion?.assertAccountExportSafe(user.id);
+      if (limits.nativeMemory?.contexts) {
+        for (const context of await limits.nativeMemory.contexts.all(user.id)) {
+          await limits.nativeMemory.contexts.assertKnown(context);
+          if (!nativeRoots.includes(context.userRoot)) nativeRoots.push(context.userRoot);
+        }
+      }
+    });
     // A persisted kind still needs an explicit export contract, and a kind
     // without one still never leaves as stored. What changed is what happens
     // to everything else the account holds: it is exported, and the kind that
@@ -490,8 +531,15 @@ export async function withAccountExportSnapshot(database, user, config, operatio
     const tables = {};
     let rows = 0;
     let bytes = 0;
+    // Privacy enforcement data is read only to redact projections; it never becomes an archive section.
+    const privacyQuery = `SELECT memory_type AS "memoryType",fingerprint,text,origin FROM evimed_memory.native_rejections WHERE user_id=$1`;
+    const privacySize = await client.query(`SELECT count(*)::text AS rows,coalesce(sum(octet_length(row_to_json(customer_row)::text)),0)::text AS bytes FROM (${privacyQuery}) customer_row`, [user.id]);
+    rows += Number(privacySize.rows[0].rows);
+    bytes += Number(privacySize.rows[0].bytes);
+    if (!Number.isSafeInteger(rows) || !Number.isSafeInteger(bytes) || rows > maxRows || bytes > maxBytes) throw tooLarge();
+    const rejections = (await client.query(privacyQuery, [user.id])).rows;
     for (const [key, query] of queries) {
-      const values = query.includes("$2") ? [user.id, customerKinds] : [user.id];
+      const values = query.includes("$2") ? [user.id, key.startsWith("native") ? nativeRoots : customerKinds] : [user.id];
       // Preflight in the same snapshot before transferring potentially large
       // JSONB payloads. No LIMIT or list-API page can silently truncate content.
       const size = await client.query(`SELECT count(*)::text AS rows,coalesce(sum(octet_length(row_to_json(customer_row)::text)),0)::text AS bytes FROM (${query}) customer_row`, values);
@@ -533,6 +581,15 @@ export async function withAccountExportSnapshot(database, user, config, operatio
         tables[key] = projected;
       }
     }
+    // Redact source-withdrawn before-images with the same reader the memory page and Undo use.
+    if (nativeSourceDeletion) tables.nativeRevisions = await inSnapshot(() =>
+      nativeSourceDeletion.redactRevisions(user.id, tables.nativeRevisions));
+    /** @type {Map<string, Set<string>>} */
+    const sourcePrints = nativeSourceDeletion ? await inSnapshot(() => nativeSourceDeletion.historyFingerprints(user.id)) : new Map();
+    const sourceRejections = [...sourcePrints].filter(([uri]) => uri.startsWith(`${nativeRoots[0]}/`))
+      .flatMap(([, prints]) => [...prints].map(fingerprint => ({ fingerprint })));
+    const nativeMemory = projectNativeMemoryAccountData({ commits: tables.nativeCommits, revisions: tables.nativeRevisions,
+      admissions: tables.nativeAdmissions, imports: tables.nativeImports, rejections, sourceRejections }, nativeRoots);
     omissions.push(...unreadable.values());
     if (unavailableReviews.documents || unavailableReviews.revisions) omissions.push(unavailableReviews);
     // The archive says it; this line is so whoever runs the deployment hears
@@ -540,7 +597,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
     for (const entry of omissions) {
       report(`account export left out ${entry.kind}: ${entry.reason}, ${entry.documents} documents${entry.revisions === undefined ? "" : `, ${entry.revisions} revisions`}\n`);
     }
-    // `version` stays 1 with `priceLists`, `feedbackEvents`, `scriptUses` and `omissions`
+    // `version` stays 1 with `nativeMemory`, `priceLists`, `feedbackEvents`, `scriptUses` and `omissions`
     // added, and with new kinds among `documents`: v1 is an additive contract,
     // so a new top-level key, or a kind a reader does not know, is not a break
     // for a reader that keeps parsing what it knows, and a bump would tell
@@ -558,7 +615,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       version: 1, snapshotAt: owner.snapshotAt, account: { id: owner.id, name: owner.name, accountCreatedAt: owner.accountCreatedAt },
       projects: tables.projects, researchSessions: tables.researchSessions, documents: tables.documents, revisions: tables.revisions,
       inbox: { notifications: tables.notifications, preferences: tables.notificationPreferences[0] ?? null }, usage: tables.usage,
-      priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, scriptUses: tables.scriptUses, omissions,
+      nativeMemory, priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, scriptUses: tables.scriptUses, omissions,
       frontierEventReads: tables.frontierEventReads,
       evidenceCardRevisions:tables.evidenceCardRevisions,evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
       evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,evidenceChallenges:tables.evidenceChallenges,
