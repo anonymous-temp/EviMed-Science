@@ -399,6 +399,8 @@ const migrationSources = [
   "capsuleShareLinks.mjs",
   // The programs a script lesson is counted from (`evimed_learning.script_uses`): the account's own code, so the archive carries it.
   "scriptLessons.mjs",
+  // The memory map's dismissed lines and confirmed distinct-person pairs (`evimed_memory.map_edge_dismissals`), declared unexported.
+  "memoryMapEdges.mjs",
 ];
 
 /** The columns that make a table one account's: the owner's, a recipient's, or the plain `user_id`. */

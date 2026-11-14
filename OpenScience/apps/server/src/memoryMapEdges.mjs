@@ -3,6 +3,15 @@ import { createHash } from "node:crypto";
 import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
 import { HttpError } from "./security.mjs";
 
+/** The dismissals table, written as the other migrations are (statement closed at column 0) so the account-export table scan reads it. */
+const MAP_EDGE_DISMISSALS_SQL = `
+CREATE TABLE IF NOT EXISTS evimed_memory.map_edge_dismissals (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  edge_id text NOT NULL CHECK (edge_id ~ '^e_[0-9a-f]{24}$'),
+  created_at timestamptz(3) NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, edge_id)
+);`;
+
 /**
  * 「这条关联不对」: the researcher's word that a line of the relation view is wrong, and the line stays out of their map.
  *
@@ -62,12 +71,7 @@ export class MapEdgeCorrections {
     if (!made.has(this.database)) {
       const attempt = (async () => {
         await migrateMemorySettings(this.database);
-        await this.database.query(`CREATE TABLE IF NOT EXISTS evimed_memory.map_edge_dismissals (
-          user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
-          edge_id text NOT NULL CHECK (edge_id ~ '^e_[0-9a-f]{24}$'),
-          created_at timestamptz(3) NOT NULL DEFAULT now(),
-          PRIMARY KEY (user_id, edge_id)
-        )`);
+        await this.database.query(MAP_EDGE_DISMISSALS_SQL);
       })();
       made.set(this.database, attempt);
       attempt.catch(() => made.delete(this.database));
