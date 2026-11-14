@@ -2845,8 +2845,8 @@ export function loadConfig(overrides = {}) {
     // The bibliographic hosts sent through the node. Measured 2026-09-22 from the
     // production host: these three answer through it and not directly; the other
     // 72 answer directly and pay 1–2 s more through it, so they stay direct.
-    // EU CTIS since 2026-11-14: a trial's record took 4–13 s direct and two reads
-    // in eight passed 25 s, against 2–9 s and none through the node.
+    // EU CTIS since 2026-11-14: a trial's record took 3–13 s direct and two reads
+    // in eight passed 25 s, against 2–9 s and none of four through the node.
     edgeProxyHosts: String(
       overrides.edgeProxyHosts ?? process.env.OPEN_SCIENCE_EDGE_PROXY_HOSTS ?? "gtexportal.org,api.omim.org,api.materialsproject.org,euclinicaltrials.eu",
     ),

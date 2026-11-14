@@ -612,6 +612,52 @@ production session.
 the current and previous releases and removed the trees of `cb66eedb78bf`, `ee2276a2f024`, `01888f2e9e80` and `6e136d2aa7c9`. The
 superseded adapter and result-replay tags were removed.
 
+### 4.10 Production, second round (2026-11-12/14): what §4.9 left open
+
+Three releases on the live tree: `evimed-087f31306812-1` (11-12 11:12 UTC), `evimed-48ef3e9382c1-1` (11-14 10:07 UTC) and
+`evimed-8f13b5fac332-1` (11-14 14:22 UTC, branch `codex/release-1112d`). Plugin 0.1.15 went into the host catalogue on 11-12. Each release was followed by the same live check
+as §4.9 (throwaway account, synthetic lung-cancer patient, a matching turn and a supplement turn, off-peak), and each check found the next
+cause; none of them shows in CI or in the local replay, which never has a slow registry or forty concurrent readers of one row.
+
+| Found on | Defect | Measured | Fix (release) |
+|---|---|---|---|
+| 0266 | every served passage was its own INSERT … ON CONFLICT and UPDATE on the conversation's `cloud_reads` row | 35 of 111 evidence searches cancelled (57014) | one statement per document, a snapshot check first so a read that adds nothing never waits (087f) |
+| 0266 | a discovery ran past the plugin's 110 s host call and started again on the retry | 2 of 4 calls cut off | one discovery per task and request, detached from its caller; a call past 90 s answers `pending` with the same call to make, and that call joins the running search (087f) |
+| 0266 | the model passed arguments outside a bound and was told only that they were invalid | 10 calls | plugin 0.1.15 names the path and the bound, no value |
+| 0266 | 前沿动态's claims read TOAST columns of every row to find the ones still owed | Postgres 103–353% of 4 cores, load 4.7–6.0, 43 of 60 active-query samples | a trigger-kept `reader_ready_*` and `reader_best_source`, partial indexes, a background backfill (087f, 48ef) |
+| 0266 | `/api/ready` counted thirteen anti-joins six times a minute | 1.0–1.4 s a call | a relationship a validated key proves is not counted (087f) |
+| 087f | a commit waited for its task's advisory lock under the store's 5 s statement timeout | 27 commits cancelled; the turn passed 30 min | the lock wait has its own bound, 60 s (48ef) |
+| 087f | ChiCTR and CTIS records had no cache; every preparation, commit and result read asked the registry | `registry_unavailable` × 11 | a judgment's record is kept two hours per registry and id (48ef) |
+| 48ef | every commit projected every selected pair by reading its trial again, inside the commit; one EU CTIS record that missed the registry's 20 s deadline failed every preparation and every commit of its task | no judgment saved for 21 min after discovery; `registry_unavailable` × 20 (reason `timeout`), lock wait × 3; the turn passed 40 min | a discovery's record reads serve the assessment; a commit's projection asks no registry; a lane passes over an unread trial; an unread record is not asked for again for two minutes (8f13) |
+| 48ef | EU CTIS answers the production host slowly | one record 3–13 s direct, two of eight reads past 25 s; 2–9 s and none of four through the Tokyo node; discovery's record stage 225 s for 119 CTIS and 86 ChiCTR records | CTIS leaves through the node; eight record readers (8f13) |
+| 48ef | ChiCTR's site answers the host 405, and the failed page read was written inside the commit's transaction | 104 writes cancelled waiting on the row; 56 pages asked 327 times | the page cache writes outside its caller's transaction; a commit reads only what is held (8f13). ChiCTR eligibility text stays unavailable on production: its trials are judged on the listing |
+
+**Measured on each release** (same checks; the database figures are sixty samples of `pg_stat_activity` two seconds apart with no check running):
+
+| Measure | 0266 (11-11) | 087f (11-12) | 48ef (11-14) | 8f13 (11-14) |
+|---|---|---|---|---|
+| Evidence searches failed on the host | 35 of 111 | 0 | 0 of 131 | 0 of 184 |
+| Commits cancelled waiting for the task lock | — | 27 | 3 | 0 |
+| `registry_unavailable` on the matching path | — | 11 | 20 | 0 |
+| Discovery's record stage | — | — | 225 s | 69 s, 65 s |
+| First judgment saved after discovery | — | — | 21 min | 47 s |
+| ChiCTR page reads asked | — | — | 327 for 56 trials | 46 for 46 trials |
+| Matching turn | 975 s, succeeded | > 30 min | > 40 min; 15 pairs judged | 2,311 s, succeeded; 34 pairs judged |
+| Supplement turn | 1,359 s, succeeded | 409 (the first turn still ran) | 409 (the same) | 460 s, succeeded; 20 more judgments |
+| Samples with a 前沿动态 query active | 43 of 60 (45 of 56 on 11-11) | 48 of 51 | 12 of 60 | 9 of 60 |
+| Load average | 4.7–6.0 | 1.6–2.2 | 1.1–1.9 | 2.7–4.4 (another session was preparing a release on the host) |
+| `/api/ready` | 1.0–1.4 s | 0.34–0.45 s | 0.24–0.29 s | 0.24–0.27 s (one call 0.63 s) |
+| Kernel spend of the check | CNY 2.58 (505 calls) | — | CNY 1.81 (443 calls) | CNY 2.89 (813 calls) |
+
+On 8f13 no host call of the matching path failed for a cause of ours: the gateway logged one refusal in the supplement turn, by design
+(`match_correct` named no original message of the person's; the model took the new message with `match_context` and went on), and the
+model's own out-of-bound arguments (10 of 184 evidence searches). The matching turn is now as long as the work the model chose: it judged
+34 pairs, at about one saved judgment a minute.
+
+The 0266 turns succeeded because that run's candidates happened to be read in time; the path was the same. The walk after each switch fails on
+the composer's thinking-strength control (older than this round), and on 48ef also on the frontier topic page's control count (ten kinds, budget
+nine): the walk opened a fuller topic than on 087f and no web file changed between the two releases.
+
 ## 4.4 Gaps recorded at the owner's review (2026-11-08 evening)
 
 | Gap | What is known | Next |
@@ -642,7 +688,10 @@ A read-only trace of every importer of the old path decided what could go now; t
 | G1: delete the batch judge | done 2026-11-10 | — |
 | Deployment | live 2026-11-11 as `evimed-0266abec391a-1`, plugin 0.1.14 (§4.9) | — |
 | Unread tables | retired on production 2026-11-10 | — |
-| Production path load (§4.9) | evidence 57014 on `cloud_reads`, discovery past 110 s, the database CPU-bound by 前沿动态's queries | a write-pattern fix and a discovery job (one release); the frontier queries' profile |
+| Production path load (§4.9) | fixed on 087f and 48ef (§4.10): evidence reads 0 of 131 failed, discovery joins, the frontier's share of active queries 43/60 → 12/60 | — |
+| Registry reads on the matching path (§4.10) | fixed and live on `evimed-8f13b5fac332-1`: both turns of the check succeeded with no failed host call | — |
+| Assessment throughput | about one saved judgment a minute on production (34 pairs in a 38-minute turn); the lanes are not the bound they were measured as on the latency board | measure where a lane's time goes on production (child calls, prepare, commit) before changing anything |
+| ChiCTR eligibility text on production | the site answers the host 405; every page read fails and the trials are judged on their listing | a rendered read of chictr.org.cn (the cloud browser), or the evidence API carrying the criteria |
 | ~~Production trial index~~ | not needed (owner, 2026-11-08): production searches ClinicalTrials.gov (official API), CTIS and ChiCTR (EviMed evidence API) live; the dense branch stays optional and off without a manifest | — |
 
 **Fixed 2026-11-08 (production retrieval).** The live registry search handed discovery one run-sized page (20, `OPEN_SCIENCE_VCR_CANDIDATE_SEARCH_MAX`), so production ranked 20 candidates where the boards ranked 300. Discovery now reads the whole kept list up to its depth (`runtimeRead(..., { listMax })`, the control plane's own option; the runtime's reads keep their page), and reads the ClinicalTrials.gov records it ranks in batches of 100 (`filter.ids`, one request per hundred, a 15-minute cache in front of the single reads) instead of one paced request per trial (300 × 250 ms).
