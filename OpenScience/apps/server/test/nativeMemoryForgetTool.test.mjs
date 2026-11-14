@@ -42,7 +42,10 @@ function fixture(enabled = true) {
     read: async (_owner, target) => { assert.equal(inTransaction, false, 'engine reads stay outside the rejection transaction'); return files.get(target) ?? null; },
     replace: async (_owner, target, text) => { files.set(target, text); return true; },
     remove: async (_owner, target) => files.delete(target), rebuildMemoryDirectory: async () => {} };
-  const overlay = { configured: true, files: async () => new Map(), originsOf: async () => new Map(),
+  const overlay = { configured: true,
+    removalOrigins: async () => [],
+    removals: async () => rejections.flatMap(row => row.lines.map(text => ({fingerprint:lineFingerprint(text),text,rejectedAt:'2026-11-14'}))),
+    recordInstructionCheck: async () => {}, files: async () => new Map(), originsOf: async () => new Map(),
     reject: async (owner, type, target, lines, options) => rejections.push({ owner, type, uri: target, lines, options }),
     claimForgetIntent: async (owner, type, target, lines) => {
       const fresh = lines.filter(line => !rejections.some(row => row.owner === owner && row.type === type && row.lines.some(prior => lineFingerprint(prior) === lineFingerprint(line))));
@@ -285,4 +288,20 @@ test('unavailable semantic matching records a statement and an undo-bound scan b
   assert.equal(scans.length, 1);
   assert.equal(scans[0].fingerprint, lineFingerprint('Use metric units.'));
   assert.equal(f.files.get(uri), body);
+});
+
+test('alias-scoped duplicate cleanup still removes an exact copy from a different person file', async () => {
+  const f = fixture();
+  const copied = '王阿姨喜欢散步。', first = `${root}/memories/people/王阿姨.md`, other = `${root}/memories/people/大王阿姨.md`;
+  f.files.clear();
+  f.files.set(first, `# 王阿姨\n- Confirmed aliases: ["王阿姨","小王阿姨"]\n- ${copied}\n- Likes tea.`);
+  f.files.set(other, `# 大王阿姨\n- 大王阿姨喜欢散步。\n- ${copied}`);
+  f.store.personAliasHintEnabled = true;
+  f.store.rawFiles = async () => [...f.files].filter(([target]) => target.startsWith(`${root}/memories/`))
+    .map(([target, text]) => ({ uri: target, body: text, hash: contentHash(text), type: 'people', projectId: null }));
+  f.store.files = f.store.rawFiles;
+  const file = (await f.store.rawFiles(user.id)).find(row => row.uri === first);
+  await f.store.forgetLines(user.id, file, [copied]);
+  assert.ok(!f.files.get(other).split('\n').includes(`- ${copied}`), 'the exact withdrawn copy must leave every file');
+  assert.match(f.files.get(other), /大王阿姨喜欢散步/);
 });

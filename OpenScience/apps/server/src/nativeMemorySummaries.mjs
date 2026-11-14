@@ -105,6 +105,7 @@ async function drain(sessions, overlay, userId, sessionsForUri) {
  * @param {string|null} [namespaceId] @returns {Promise<string|null>}
  */
 export async function fenceWithdrawnMemoryBody(overlay, userId, uri, body, namespaceId = null) {
+  if (overlay?.memoryForgetBody) return overlay.memoryForgetBody(userId, uri, body, namespaceId);
   if (overlay?.deferredSummaryRebuildEnabled !== true || body === null) return body;
   const removed = await overlay.removals(userId, namespaceId);
   if (!removed.length) return body;

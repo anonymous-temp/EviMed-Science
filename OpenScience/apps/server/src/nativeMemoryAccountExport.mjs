@@ -20,8 +20,8 @@ const count = value => Number.isSafeInteger(value) && Number(value) >= 0 ? Numbe
  * @param {string[]} roots */
 export function projectNativeMemoryAccountData(data, roots) {
   /** @param {string} root */
-  const removals = root => data.rejections.filter(row => row.origin !== 'edit'
-    && (root.endsWith('/' + text(row.memoryType).split(':')[0]) || !text(row.memoryType).startsWith('gp-') && root === roots[0]));
+  const removals = root => data.rejections.filter(row =>
+    root.endsWith('/' + text(row.memoryType).split(':')[0]) || !text(row.memoryType).startsWith('gp-') && root === roots[0]);
   /** @param {unknown} value @param {string} root */
   const clean = (value, root) => typeof value !== 'string' ? null : value.split('\n').filter(line => {
     const statement = memoryLines(line)[0] ?? line;

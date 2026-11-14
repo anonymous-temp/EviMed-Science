@@ -150,3 +150,16 @@ for (const portable of [false, true]) test(`alias recall composes the real overl
     assert.match(text, /Likes walking/);
   }
 });
+
+test('MG6 exact copies outside an alias group are removed while a different person keeps their own fact', options, async t => {
+  const f = await scene(t);
+  const copied = '王阿姨喜欢散步。';
+  const first = f.seed('people/王阿姨.md', `# 王阿姨\n- Confirmed aliases: ["王阿姨","小王阿姨"]\n- ${copied}\n- Likes tea.`, { type: 'people' });
+  const other = f.seed('people/大王阿姨.md', `# 大王阿姨\n- 大王阿姨喜欢散步。\n- ${copied}`, { type: 'people' });
+  const file = (await f.store.rawFiles(f.userId)).find(row => row.uri === first);
+  await f.store.forgetLines(f.userId, file, [copied]);
+  assert.match(await f.sessions.read(f.userId, other), /大王阿姨喜欢散步/);
+  assert.ok(!(await f.sessions.read(f.userId, other)).split('\n').includes(`- ${copied}`));
+  await f.store.undo(f.userId, nativeFileId(first));
+  assert.ok((await f.sessions.read(f.userId, other)).split('\n').includes(`- ${copied}`));
+});

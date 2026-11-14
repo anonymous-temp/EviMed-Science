@@ -344,3 +344,20 @@ test("text-only replay reads the accepted final answer from this root turn, with
   transcript.messages[3].parts[0].text = `Do not keep ${["sk", "a".repeat(36)].join("-")}`;
   assert.equal((await reader("u1", { runId: run.id, projectId: "p1" }))?.answer, undefined, "the same identifier boundary as requests");
 });
+
+test('replay never returns a retained transcript rejected by the current memory fence', async () => {
+  let checked = false;
+  const reader = createTrajectoryReader({resolveProject:async()=>({id:'p'}),listRuns:async()=>[{id:'r',sessionId:'s'}],
+    readTranscript:async()=>({header:{},messages:[{role:'user',parts:[{type:'text',text:'M-41633'}]}]}),
+    readTraces:async()=>[],readShapes:async()=>({}),
+    allowSource:async(_user,value)=>{checked=true; assert.match(JSON.stringify(value),/M-41633/); return false;}});
+  assert.equal(await reader('u',{projectId:'p',runId:'r'}),null);
+  assert.equal(checked,true);
+});
+
+test('replay checks retained tool evidence as well as the transcript', async () => {
+  const reader = createTrajectoryReader({resolveProject:async()=>({id:'p'}),listRuns:async()=>[{id:'r',sessionId:'s'}],
+    readTranscript:async()=>({header:{},messages:[]}),readTraces:async()=>[{output:'M-41633'}],readShapes:async()=>({}),
+    allowSource:async(_user,value)=>!JSON.stringify(value).includes('M-41633')});
+  assert.equal(await reader('u',{projectId:'p',runId:'r'}),null);
+});

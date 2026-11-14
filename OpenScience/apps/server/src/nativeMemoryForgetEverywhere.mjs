@@ -54,7 +54,7 @@ export async function duplicatesOf({ files, removed, judge = null, userId }) {
   for (const file of files) {
     for (const line of file.statements) {
       const print = lineFingerprint(line);
-      if (goneFingerprints.has(print)) continue;
+      if (goneFingerprints.has(print)) { keep(file.uri, line); continue; }
       if (gone.some((entry) => containsRemoved(line, entry.text))) { keep(file.uri, line); continue; }
       const candidates = nearRemoved(line, gone).map((entry) => ({ fingerprint: entry.fingerprint, text: /** @type {string} */ (entry.text) }));
       if (candidates.length) near.push({ uri: file.uri, line, near: candidates, score: Math.max(...candidates.map((entry) => similarity(line, entry.text))) });

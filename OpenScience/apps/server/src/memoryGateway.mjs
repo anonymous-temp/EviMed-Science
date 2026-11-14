@@ -459,7 +459,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         (file.uri.startsWith(`${root}/preferences/`) || file.uri.startsWith(`${root}/entities/`)))) return listed;
       const [companion, profile] = await Promise.all([
         scopedMemoryList(ctx.sessions, ctx, `${root}/${other}`, query),
-        ctx.hidden(`${root}/profile.md`).then(hidden => hidden ? '' : ctx.sessions.read(ctx.user.id, `${root}/profile.md`, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 })),
+        ctx.hidden(`${root}/profile.md`).then(hidden => hidden ? '' : ctx.readMemory(`${root}/profile.md`, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 })),
       ]);
       // Rank before the engine's 512-node page cut too. Bound traversal at the same 10,000-file limit as privacy metadata;
       // a server without pagination support is detected by repeated pages. No unfiltered metadata crosses this boundary.
@@ -899,12 +899,13 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (ctx.shared) await ctx.ensureRegistered();
       let text = await ctx.readMemory(uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
       if (text === null && config.memoryPersonAliasHintEnabled === true && nativeMemoryFile(uri, `${ctx.userRoot}/memories`)?.type === 'people') {
+        if (!await ctx.personIdentityVisible(uri, '')) return missing;
         const label = personLabel(uri, '');
         const matches = [];
         for (const entry of (await ctx.sessions.tree(ctx.user.id, `${ctx.userRoot}/memories/people`, { levelLimit: 1, maxNodes: 200 })).slice(0, 200)) {
           if (entry.isDir || nativeMemoryFile(entry.uri, `${ctx.userRoot}/memories`)?.type !== 'people' || await ctx.hidden(entry.uri)) continue;
           const body = await ctx.readMemory(entry.uri).catch(() => null);
-          if (body !== null && confirmedAliases(body).includes(label)) matches.push({ uri: entry.uri, body });
+          if (body !== null && await ctx.personIdentityVisible(entry.uri, body) && confirmedAliases(body).includes(label)) matches.push({ uri: entry.uri, body });
         }
         if (matches.length === 1) { uri = matches[0].uri; text = matches[0].body; }
       }
@@ -1024,7 +1025,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           if (name === "read") {
             const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && ctx.recallFile(absolute(uri, ctx.userRoot)) && !isHidden(uri)).slice(0, 10).map(uri => absolute(uri, ctx.userRoot));
             if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件。")); continue; }
-            if (config.memoryDeferredSummaryRebuildEnabled === true || config.memoryObservationInductionEnabled === true || config.memoryPersonAliasHintEnabled === true) {
+            if (overlay?.memoryForgetBody || config.memoryDeferredSummaryRebuildEnabled === true || config.memoryObservationInductionEnabled === true || config.memoryPersonAliasHintEnabled === true) {
               const content = [];
               for (const uri of uris) {
                 const read = await handlers.read({ ...ctx, query: new URLSearchParams({ uri, model_use: 'true' }) });
@@ -1268,7 +1269,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         account: /** @type {any} */ (view).client.account,
         readMemory: async (/** @type {string} */ uri, options = {}) => {
           const text = await view.read(user.id, uri, options);
-          return config.memoryDeferredSummaryRebuildEnabled === true
+          return overlay?.memoryForgetBody || config.memoryDeferredSummaryRebuildEnabled === true
             ? fenceWithdrawnMemoryBody(overlay, user.id, uri, text, shared ? memoryContext.namespaceId : null) : text;
         },
         ensureRegistered: () => ensureRegistered(user.id, view, memoryContext),
@@ -1292,16 +1293,25 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         inductionEnabled: !shared && config.memoryObservationInductionEnabled === true,
         recallFile: (/** @type {string} */ uri) => nativeMemoryFile(uri, `${userRoot}/memories`)
           ?? (!shared && config.memoryObservationInductionEnabled === true ? observationFile(uri, `${userRoot}/memories`) : null),
+        personIdentityVisible: async (/** @type {string} */ uri, /** @type {string} */ body) => {
+          // A safe surviving body does not authorize a removed title or filename as an alias hint.
+          // Use the same source-aware fence for both names, including filename fallback and redirects.
+          for (const name of new Set([personLabel(uri, body), personLabel(uri, '')])) {
+            if (await fenceWithdrawnMemoryBody(overlay, user.id, uri, `# ${name}`, shared ? memoryContext.namespaceId : null) === null) return false;
+          }
+          return true;
+        },
         recallText: async (/** @type {string} */ uri, /** @type {string} */ text) => {
           if (observationFile(uri, `${userRoot}/memories`)) return `[seen once — observed choice, not a standing preference]\n${text}`;
           if (config.memoryPersonAliasHintEnabled !== true || nativeMemoryFile(uri, `${userRoot}/memories`)?.type !== 'people') return text;
+          if (!await ctx.personIdentityVisible(uri, text)) return text;
           if (!people) people = (async () => {
             const candidates = await view.tree(user.id, `${userRoot}/memories/people`, { levelLimit: 1, maxNodes: 200 }).catch(() => []);
             const rows = [];
             for (const entry of candidates.slice(0, 200)) {
               if (entry.isDir || nativeMemoryFile(entry.uri, `${userRoot}/memories`)?.type !== 'people' || await ctx.hidden(entry.uri)) continue;
               const body = await ctx.readMemory(entry.uri).catch(() => null);
-              if (body !== null) rows.push({ uri: entry.uri, label: personLabel(entry.uri, body), aliases: confirmedAliases(body) });
+              if (body !== null && await ctx.personIdentityVisible(entry.uri, body)) rows.push({ uri: entry.uri, label: personLabel(entry.uri, body), aliases: confirmedAliases(body) });
             }
             return rows;
           })();

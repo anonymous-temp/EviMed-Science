@@ -3,6 +3,7 @@ import test from 'node:test';
 import { MemoryHistory, MemoryHistoryLedger } from '../src/memoryHistory.mjs';
 import { nativeFileId } from '../src/nativeMemoryStore.mjs';
 import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
+import { removalAssertionKey } from '../src/nativeMemoryRejections.mjs';
 import { OpenVikingResources } from '../src/openVikingResources.mjs';
 import { projectNativeMemoryNamespace } from '../src/openVikingLayout.mjs';
 import { createServer } from 'node:http';
@@ -615,9 +616,9 @@ for (const action of ['forget','edit','delete']) for (const hard of [true,false]
     if(action==='edit') for(const mcp of [false,true]) assert.match((await call(mcp,false,'K-77777')).text,/K-77777/,'the edited-in value remains searchable');
     assert.ok(hits.some(hit=>hit.sessionId==='session_unrelated'),'an unrelated conversation survives even with the same number');
     assert.ok(!hits.some(hit=>hit.sessionId==='session_removed'),'neighbour windows cannot disclose a withheld message');
-    assert.equal(judged,hard?0:1);
+    assert.equal(judged,0,'a bound line origin is fenced without guessing its wording');
     const fences=(await f.database.query('SELECT * FROM evimed_memory.history_message_rejections WHERE owner_id=$1',[f.userId])).rows;
-    assert.equal(fences.length,1);assert.equal(fences[0].message_hash,lineFingerprint(original));assert.ok(!JSON.stringify(fences).includes(original));
+    assert.equal(fences.length,2);assert.ok(fences.some(row=>row.message_hash===lineFingerprint(original)));assert.ok(!JSON.stringify(fences).includes(original));
     if(action==='delete') await f.overlay.unreject(f.userId,'notes',[removed]);
     else await f.store.undo(f.userId,nativeFileId(uri));
     assert.ok((await search(f)).some(hit=>hit.sessionId==='session_removed'));
@@ -844,6 +845,10 @@ for (const spelling of ['M-31025', 'ｍ＿３１０２５', 'm 31025']) {
     const fences = (await f.database.query('SELECT archive_uri FROM evimed_memory.history_message_rejections WHERE owner_id=$1', [f.userId])).rows;
     assert.ok(fences.some(row => row.archive_uri === archive.archive_uri));
     const next = await f.commitConversation('parked-new', [{ role: 'user', text, at: fresh }], { projectId: 'default' });
+    // This fixture explicitly asserts the fact again. History consumes the same source-bound
+    // receipt as the worker; the timestamp alone is no longer reauthorization.
+    for (const removal of await f.overlay.removals(f.userId)) await f.overlay.recordInstructionCheck(f.userId,
+      removalAssertionKey(null, removal, removal.text, {role:'user',text,created_at:fresh}), {removalAssertion:true});
     await f.service.ingestArchive({ ...commit, engineSession: next.session, archiveUri: next.archive_uri }, f.context);
     const hits = await f.service.search(request);
     assert.ok(hits.length > 0);

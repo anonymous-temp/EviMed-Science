@@ -28,7 +28,7 @@ test('forget requests and completion receipts carry only facts, dates, kinds and
   assert.equal(JSON.stringify(result).includes(forgotten), false);
 });
 
-test('edits retain undoable text, removals and privacy checks retain receipts, and held lines are labelled inactive', () => {
+test('rejected edit text is withheld while undo receipts and inactive held lines remain', () => {
   const result = project(input({ revisions: [revision(), revision({ id: '2', change: 'deleted', reason: 'forgotten on the memory page', before: forgotten }),
     revision({ id: '3', reason: 'deleted on the memory page', before: forgotten }),
     revision({ id: '4', actor: 'platform', reason: 'rejected_line', before: forgotten }),
@@ -36,13 +36,14 @@ test('edits retain undoable text, removals and privacy checks retain receipts, a
     revision({ id: '6', undoneAt: at, before: 'Already undone' }), revision({ id: '7', sourceDeletedText: true, before: forgotten })],
     rejections: [{ memoryType: 'notes', fingerprint: lineFingerprint(forgotten), text: forgotten, origin: 'forget' },
       { memoryType: 'notes', fingerprint: lineFingerprint('Editable original'), text: 'Editable original', origin: 'edit' }] }));
-  assert.equal(result.revisions[0].before, 'Editable original');
+  assert.equal(result.revisions[0].before, '');
   assert.equal(result.revisions[0].undoable, true);
   assert.equal(result.revisions[1].undoable, true);
   for (const index of [1, 2, 3, 5, 6]) assert.equal(result.revisions[index].before, undefined);
   assert.deepEqual(result.revisions[4].heldLines, ['Held instruction']);
   assert.equal(result.revisions[4].inEffect, false);
   assert.equal(JSON.stringify(result).includes(forgotten), false, 'even a filename must not restore withdrawn text');
+  assert.equal(project(input({revisions:[revision()]})).revisions[0].before, 'Editable original', 'lifting the edit rejection restores its export without deleting undo data');
 });
 
 test('pending admissions and offers carry owned input, terminal and withdrawn rows do not resurrect it', () => {

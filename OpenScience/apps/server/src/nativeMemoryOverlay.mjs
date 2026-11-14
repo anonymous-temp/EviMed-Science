@@ -141,7 +141,8 @@ export async function readNativeMemoryOriginalSources(query, userId, archiveUris
     ) SELECT l.uri AS archive_uri,c.engine_session,c.project_id,c.project_created_at FROM lineage l
       LEFT JOIN evimed_memory.native_commits c ON c.user_id=$1 AND c.archive_uri=l.uri
       WHERE NOT EXISTS(SELECT 1 FROM edges e WHERE e.child=l.uri)
-      AND COALESCE(c.origin,'') NOT IN ('promotion','replay')
+      AND COALESCE(c.origin,'') NOT IN ('promotion','replay','tool')
+      AND COALESCE(c.engine_session,'') NOT LIKE 'mcp-store-%'
       AND NOT EXISTS(SELECT 1 FROM evimed_memory.native_admissions a WHERE a.user_id=$1
         AND (a.archive_uri=l.uri OR a.engine_session=c.engine_session))`, [owner(userId), archiveUris]);
     return result.rows.map(row => ({ archiveUri: row.archive_uri, engineSession: row.engine_session,
@@ -151,6 +152,8 @@ export async function readNativeMemoryOriginalSources(query, userId, archiveUris
 export class NativeMemoryOverlay {
   /** @param {{ database?: any, deferredSummaryRebuildEnabled?: boolean }} dependencies */
   constructor({ database = null, deferredSummaryRebuildEnabled = false } = {}) {
+    /** @type {((userId:string,uri:string,body:string|null,namespaceId?:string|null)=>Promise<string|null>)|null} */
+    this.memoryForgetBody = null;
     this.deferredSummaryRebuildEnabled = deferredSummaryRebuildEnabled === true;
     this.database = database ?? null;
     /** @type {any} */ this.sourceDeletion = null;

@@ -193,10 +193,20 @@ export class FeedbackEvents {
   /** @param {{database:any,jobs?:any,now?:()=>Date,onRecorded?:((event:any)=>Promise<any>)|null,evolutionSignals?:any}} dependencies */
   constructor({ database, jobs = null, now = () => new Date(), onRecorded = null, evolutionSignals = null }) {
     this.database = database;
+    /** @type {((userId:string,value:unknown,projectId?:string|null)=>Promise<boolean>)|null} */
+    this.memoryForgetReader = null;
     this.jobs = jobs;
     this.now = now;
     this.onRecorded = onRecorded;
     this.evolutionSignals = evolutionSignals;
+  }
+
+  /** @template T @param {string} userId @param {T[]} rows @returns {Promise<T[]>} */
+  async visible(userId, rows) {
+    if (!this.memoryForgetReader) return rows;
+    const kept = [];
+    for (const row of rows) if (await this.memoryForgetReader(userId, row)) kept.push(row);
+    return kept;
   }
 
   /**
@@ -283,7 +293,7 @@ export class FeedbackEvents {
       WHERE user_id=$1 AND trigger_kind='result-corrected'
       AND ((subject_type='result-version' AND subject_id=$2) OR detail->'successor'->>'versionId'=$2)
       ORDER BY occurred_at DESC,id DESC LIMIT $3`, [productId(userId, "user"), subject.id, limit]);
-    return result.rows.map(event);
+    return this.visible(userId, result.rows.map(event));
   }
 
   /**
@@ -327,7 +337,7 @@ export class FeedbackEvents {
     const items = result.rows.slice(0, limit).map(event);
     const last = items.at(-1);
     return {
-      items,
+      items: await this.visible(userId, items),
       // A cursor only when there is a next page, so "there is more" is a fact
       // rather than something the caller has to discover by asking again.
       nextCursor: result.rows.length > limit && last
@@ -388,7 +398,7 @@ export class FeedbackEvents {
     const result = await this.database.query(`SELECT * FROM evimed_product.feedback_events
       WHERE user_id=$1 AND trigger_kind=$2 AND subject_type=$3 AND subject_id=$4 ORDER BY occurred_at,id LIMIT 100`,
     [productId(userId, "user"), LEARNING_EVIDENCE_TRIGGER, LEARNING_EVIDENCE_SUBJECT_TYPE, boundedText(runId, 400)]);
-    return result.rows.map(event);
+    return this.visible(userId, result.rows.map(event));
   }
 
   /**
@@ -425,12 +435,12 @@ export class FeedbackEvents {
       ORDER BY e.subject_id, e.occurred_at, e.id`,
     [productId(userId, "user"), scope, from.toISOString(), to.toISOString(), [...LEARNING_CORRECTION_VERDICTS], [...LEARNING_ACCEPT_VERDICTS],
       projectId !== undefined, projectId ?? null, toolchainEnabled, requireShape]);
-    return result.rows
+    return this.visible(userId, result.rows
       .map((/** @type {any} */ row) => ({ runId: String(row.subject_id), projectId: row.project_id ?? null, at: new Date(row.occurred_at).toISOString(),
         endedAt: Number.isFinite(Date.parse(String(row.ended_at ?? ""))) ? new Date(row.ended_at).toISOString() : null, shape: Array.isArray(row.shape) ? row.shape : [],
         ...(toolchainEnabled && row.toolchain ? { toolchain: row.toolchain } : {}) }))
       .sort((left, right) => left.at.localeCompare(right.at) || left.runId.localeCompare(right.runId))
-      .slice(-limit);
+      .slice(-limit));
   }
 
   /** @param {string} userId @param {string} id */
@@ -438,7 +448,8 @@ export class FeedbackEvents {
     await migrateProductStore(this.database);
     const result = await this.database.query("SELECT * FROM evimed_product.feedback_events WHERE user_id=$1 AND id=$2",
       [productId(userId, "user"), productId(id, "feedback event")]);
-    return event(result.rows[0]);
+    const found = event(result.rows[0]);
+    return found && (await this.visible(userId, [found]))[0] || null;
   }
 
   /**

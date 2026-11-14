@@ -4,10 +4,26 @@ import { nativeIntegration } from './helpers/nativeFixture.mjs';
 import { NativeMemoryWorker } from '../src/nativeMemoryWorker.mjs';
 import { nativeFileId } from '../src/nativeMemoryStore.mjs';
 import { createForgetRequestJudge } from '../src/nativeMemoryForgetRequests.mjs';
+import { createRejectionJudge } from '../src/nativeMemoryRejections.mjs';
 const { fixture, options } = nativeIntegration();
 const fact = 'Project M-41633.';
 const other = 'Independent goal.';
 const old = '2026-01-01T00:00:00.000Z', fresh = '2099-01-01T00:00:00.000Z';
+// Enumerated affirmative fixture statements; the real judge parser checks their source witnesses.
+function allowFixtureRestatements(f) {
+  const rejectionJudge = createRejectionJudge({ config: { deepseekModel: 'fixture', deepseekApiKey: 'fixture' },
+    callModel: async (_deps, call) => {
+      const input = JSON.parse(call.body.messages[1].content);
+      const source = input.said.findIndex(text => [fact, '我上个月临时替同事值了2次夜班'].includes(text));
+      const candidates = input.candidates.map(row => row.candidate);
+      return { choices: [{ message: { content: JSON.stringify({
+        same: input.candidates.map(row => ({ candidate: row.candidate, removed: row.options[0] })),
+        stated: source < 0 ? [] : candidates,
+        assertions: source < 0 ? [] : candidates.map(candidate => ({ candidate, source, quote: input.said[source] })),
+      }) } }] };
+    } });
+  f.worker.rejectionJudge = rejectionJudge; f.worker.verification.rejectionJudge = rejectionJudge;
+}
 const withJudge = (f, check) => new NativeMemoryWorker({ ...f, nativeMemory: f.store, forgetRequestJudge: { check } });
 const verdict = (input, decision = 'remove') => ({ requests: [{ message: 0, quote: 'Forget that project.', decision,
   targets: input.candidates.flatMap((row, i) => row.text === fact ? [i] : []), intents: [] }], claims: [{ message: 1, quote: 'Forgotten.' }] });
@@ -49,6 +65,7 @@ test('off does not judge or remove', options, async t => {
 
 for (const deferred of [false, true]) test(`request without tool removes only referred lines, rejects re-extraction, permits later restatement, and is undoable (deferred=${deferred})`, options, async t => {
   const f = await fixture(t, { config: { memoryForgetRequestCheckEnabled: true } });
+  allowFixtureRestatements(f);
   f.overlay.deferredSummaryRebuildEnabled = deferred;
   const uri = f.seed('notes/test.md', `- ${fact}\n- ${other}`);
   const worker = withJudge(f, input => verdict(input));
@@ -352,6 +369,7 @@ test('two withdrawals in one original message both apply before that message is 
 
 test('a stored paraphrase and its original fact share removal authority and undo', options, async t => {
   const f = await fixture(t, { config: { memoryForgetRequestCheckEnabled: true } });
+  allowFixtureRestatements(f);
   const original = '我上个月临时替同事值了2次夜班';
   const wrapped = '用户 2026-03-28 提到上个月临时替同事值了 2 次夜班，随后要求忘掉；该条不保留。';
   const uri = f.seed('notes/plan.md', `- ${wrapped}\n- ${other}`);

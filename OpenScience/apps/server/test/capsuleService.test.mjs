@@ -579,3 +579,16 @@ test("a scan with no project in view is metered to the account's own default pro
   const entry = await documents.get(USER, "fact", "n1");
   assert.equal(entry.payload.unscanned, undefined, "judged, so it may be mounted");
 });
+
+test('semantic recall applies the same forget fence to the canonical indexed payload', async () => {
+  const documents = productDocumentsDouble();
+  const service = new CapsuleService(documents, {strictIndex:true,indexing:{
+    accountGeneration:async()=> 'generation', recall:async()=>[{row:entry,selection:{capsuleId:own.id,mode:'own'}}],
+  }});
+  const own = await service.ownCapsule(USER,{create:true});
+  const entry = await service.addEntry(USER,own.id,{factKind:'preference',layer:'profile',content:'M-41633',status:'approved'});
+  let checked = false;
+  documents.memoryAllows = async (_user,kind,value) => { checked = true; assert.equal(kind,'fact'); assert.equal(value.id,entry.id); return false; };
+  assert.deepEqual((await service.recall(USER,{query:'M-41633'})).items,[]);
+  assert.equal(checked,true);
+});

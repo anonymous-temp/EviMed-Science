@@ -770,7 +770,7 @@ export class CapsuleService {
     if (!entry || entry.payload.capsuleId !== capsuleId) throw new HttpError(404, "capsule_entry_not_found", "The capsule entry is unavailable.");
     if (entry.revision !== expectedRevision) throw new HttpError(409, "product_revision_conflict", "The record changed; reload before saving.");
     const history = await this.documents.history(userId, "fact", entryId, { limit: 2 });
-    const previous = (history.items ?? history).find((item) => item.revision === entry.revision - 1);
+    const previous = history.find((item) => item.revision === entry.revision - 1);
     if (!previous || previous.deletedAt) {
       return { undone: "removed", entry: await this.documents.remove(userId, "fact", entryId, entry.revision) };
     }
@@ -983,6 +983,7 @@ export class CapsuleService {
     const ranked = nominated.filter((/** @type {any} */ match) => kept.has(match.row.id));
     const items = [];
     for (const match of ranked) {
+      if (this.documents.memoryAllows && !await this.documents.memoryAllows(userId, "fact", { ...match.row, projectId: match.row.project_id ?? match.row.projectId })) continue;
       const payload = match.row.payload;
       if (factKinds.length && !factKinds.includes(payload.factKind)) continue;
       if (since && new Date(match.row.created_at).getTime() < new Date(since).getTime()) continue;

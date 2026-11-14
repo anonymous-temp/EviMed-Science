@@ -67,7 +67,7 @@ const request = (over = {}) => ({ userId: "u1", projectId: "p1", candidates: [
 ], said: ["Use tables when I ask you to compare."], ...over });
 
 test("one call carries a commit's near lines, thinking off, charged as memory extraction, and its answer is mapped back to the removed lines", async () => {
-  const { judge, calls } = judgeWith([{ same: [{ candidate: 0, removed: 0 }, { candidate: 1, removed: 1 }], stated: [0] }]);
+  const { judge, calls } = judgeWith([{ same: [{ candidate: 0, removed: 0 }, { candidate: 1, removed: 1 }], stated: [0], assertions: [{ candidate: 0, source: 0, quote: "Use tables when I ask you to compare." }] }]);
   const answer = await judge.same(request());
   assert.equal(calls.length, 1, "one call for both lines");
   const [call] = calls;
@@ -175,4 +175,15 @@ test('dated history cannot resurrect even a short forgotten value, in either dir
   assert.equal(containsRemoved('earlier: 成都 (until 2026-11-02)', '成都'), true);
   assert.equal(containsRemoved('成都', '曾为：成都（截至 2026-11-02）'), true);
   assert.equal(containsRemoved('earlier: 上海 (until 2026-11-02)', '成都'), false);
+});
+
+test('relearning requires a checked assertion witness, not an unsupported stated index', async () => {
+  const { judge } = judgeWith([{ same: [{ candidate: 0, removed: 0 }], stated: [0] }]);
+  assert.equal((await judge.same(request({ said: ['我每周哪天去游泳？'] }))).stated.size, 0);
+});
+test('an assertion witness must quote the indexed later human message', async () => {
+  const assertion = { candidate: 0, source: 0, quote: 'Use tables when I ask you to compare.' };
+  const { judge } = judgeWith([{ same: [{ candidate: 0, removed: 0 }], stated: [0], assertions: [assertion] }]);
+  assert.deepEqual([...(await judge.same(request())).stated], [0]);
+  assert.equal((await judge.same(request({ said: ['Did I ask for tables?'] }))).stated.size, 0);
 });

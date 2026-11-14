@@ -1469,3 +1469,46 @@ test('alias hints and redirects use the deferred-forget fence on every recall su
   const rpc = await f.mcp({ jsonrpc: '2.0', id: 913, method: 'tools/call', params: { name: 'read', arguments: { uris: [old] } } });
   assert.doesNotMatch(JSON.stringify(rpc), /Likes reading/);
 });
+
+test('withdrawal authority fences MCP reads with optional recall switches off', async t => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const withdrawn = 'Project M-41633.', uri = `${ROOT}/memories/notes/project.md`;
+  const overlay = { configured: true, sensitiveUris: async () => [], otherProjectUris: async () => [],
+    removals: async () => [{ text: withdrawn, fingerprint: lineFingerprint(withdrawn) }],
+    originsOf: async () => new Map(), memoryForgetBody: /** @type {((owner:string,fileUri:string,body:string|null)=>Promise<string|null>)|null} */ (null) };
+  const history = new MemoryHistory({ config: {}, ledger: { overlay, derivedSourcesRejected: async () => false } });
+  overlay.memoryForgetBody = (owner, fileUri, body) => history.fenceNativeBody({ kind: 'owned', ownerId: owner }, fileUri, body);
+  const f = await fixture(t, { overlay });
+  f.stub.seedMemory(OV_USER, 'notes/project.md', `- ${withdrawn}\n- Independent surviving fact.`);
+  const rest = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}`);
+  const rpc = await f.mcp({ jsonrpc: '2.0', id: 920, method: 'tools/call', params: { name: 'read', arguments: { uris: [uri] } } });
+  for (const response of [rest, rpc]) {
+    assert.doesNotMatch(JSON.stringify(response), /M-41633/);
+    assert.match(JSON.stringify(response), /Independent surviving fact/);
+  }
+});
+
+test('alias identity cannot reconstruct a withdrawn title from its filename or origin', async t => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const person = `${ROOT}/memories/people/王阿姨.md`, sibling = `${ROOT}/memories/people/小王阿姨.md`;
+  const archiveUri = `${ROOT}/sessions/dsh-old/history/archive_001`;
+  const overlay = { configured: true, sensitiveUris: async () => [], otherProjectUris: async () => [],
+    removals: async () => [{ text: 'Unrelated removed fact.', fingerprint: lineFingerprint('Unrelated removed fact.') }],
+    originsOf: async () => new Map([[sibling, new Map([[lineFingerprint('小王阿姨'), { archiveUri }]])]]), memoryForgetBody: /** @type {((owner:string,fileUri:string,body:string|null)=>Promise<string|null>)|null} */ (null) };
+  const history = new MemoryHistory({ config: {}, ledger: { overlay,
+    derivedSourcesRejected: async (_context, refs) => refs.archives.includes(archiveUri) } });
+  overlay.memoryForgetBody = (owner, fileUri, body) => history.fenceNativeBody({ kind: 'owned', ownerId: owner }, fileUri, body);
+  const f = await fixture(t, { config: { memoryPersonAliasHintEnabled: true }, overlay });
+  f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Likes walking.');
+  f.stub.seedMemory(OV_USER, 'people/小王阿姨.md', '# 小王阿姨\n- Independent surviving fact.');
+  const responses = [await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(person)}`),
+    await f.call('POST', '/api/v1/search/search', { query: 'walking' }),
+    await f.call('POST', '/api/v1/search/search', { query: 'walking', mode: 'context' }),
+    await f.mcp({ jsonrpc: '2.0', id: 921, method: 'tools/call', params: { name: 'read', arguments: { uris: [person] } } })];
+  for (const response of responses) {
+    assert.doesNotMatch(JSON.stringify(response), /小王阿姨|possibly the same person/);
+    assert.match(JSON.stringify(response), /Likes walking/);
+  }
+});

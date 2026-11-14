@@ -4,7 +4,7 @@ import { migrateMemorySettings } from './memorySettingsPersistence.mjs';
 import { migrateNativeMemory } from './nativeMemoryPersistence.mjs';
 import { lineFingerprint, normalisedStatement, nativeMemoryRejectionType } from './nativeMemoryOverlay.mjs';
 import { OPENVIKING_KNOWN_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from './openVikingLayout.mjs';
-import { compact } from './nativeMemoryRejections.mjs';
+import { compact, removalStatement, removalAssertionKey } from './nativeMemoryRejections.mjs';
 import { hardTokens, tokenPresent } from './nativeMemoryHardTokens.mjs';
 
 /** @typedef {{id:string,owner_id:string,owner_created_at:string,namespace_id:string,user_root:string,
@@ -192,18 +192,27 @@ export class MemoryHistoryLedger {
       .map(type => nativeMemoryRejectionType(type, context.kind === 'geo-project' ? context.namespaceId : null));
     // A one-shot remember/page archive can duplicate a conversation capture.
     // Only exact complete-message hashes bridge those copies; a shared number never does.
-    const freshlyStated = (text, at) => messages.some(message => message.role === 'user'
-      && lineFingerprint(message.text) === lineFingerprint(text)
-      && Date.parse(message.created_at ?? '') > Date.parse(at instanceof Date ? at.toISOString() : at));
-    if (archiveUri) for (const row of (await this.database.query(`SELECT h.archive_uri,h.message_hash,r.rejected_at FROM evimed_memory.history_message_rejections h
+    /** @param {string} text @param {{rejected_at:Date|string,fingerprint:string,text?:string|null}} row */
+    const freshlyStated = async (text, row) => {
+      const rejectedAt = row.rejected_at instanceof Date ? row.rejected_at.toISOString() : row.rejected_at;
+      for (const message of messages) {
+        if (message.role !== 'user' || lineFingerprint(message.text) !== lineFingerprint(text)
+          || !(Date.parse(message.created_at ?? '') > Date.parse(rejectedAt))) continue;
+        const key = removalAssertionKey(context.kind === 'geo-project' ? context.namespaceId : null,
+          {fingerprint:row.fingerprint,rejectedAt}, row.text ?? '', message);
+        if ((await this.overlay.instructionCheck?.(context.ownerId,key))?.removalAssertion === true) return true;
+      }
+      return false;
+    };
+    if (archiveUri) for (const row of (await this.database.query(`SELECT h.archive_uri,h.message_hash,r.rejected_at,r.fingerprint,r.text FROM evimed_memory.history_message_rejections h
       JOIN evimed_memory.native_rejections r ON r.user_id=h.owner_id AND r.memory_type=h.memory_type AND r.fingerprint=h.fingerprint
       WHERE h.owner_id=$1 AND h.owner_created_at=$2 AND h.namespace_id=$3 AND (h.archive_uri=$4 OR h.archive_uri ~ '/sessions/(mcp-store-|evimed-page-)')
       AND h.message_hash=ANY($5::text[])`,
       [context.ownerId,context.ownerCreatedAt,context.namespaceId,archiveUri,texts.map(lineFingerprint)])).rows) {
       // Exact old-archive fences never move. A synthetic copy's hash cannot fence a new human
-      // statement forever: use the verified original message's date, never commit/scan time.
-      if (row.archive_uri === archiveUri || texts.some(text => lineFingerprint(text) === row.message_hash
-        && !freshlyStated(text, row.rejected_at))) return true;
+      // statement forever: require its witnessed human assertion, never a user-role timestamp alone.
+      if (row.archive_uri === archiveUri) return true;
+      for (const text of texts) if (lineFingerprint(text) === row.message_hash && !await freshlyStated(text,row)) return true;
     }
     const prints = new Set(texts.flatMap(text => text.split('\n')).map(normalisedStatement).filter(Boolean).map(lineFingerprint));
     const candidates = texts.map(compact);
@@ -216,19 +225,60 @@ export class MemoryHistoryLedger {
         ORDER BY memory_type,fingerprint LIMIT 500`, [context.ownerId,types,type,fingerprint]);
       for (const row of result.rows) {
         if (++count > 10000) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
-        const removed = typeof row.text === 'string' ? compact(row.text) : '';
-        const tokens = row.scan_pending ? hardTokens(normalisedStatement(row.text ?? '')) : [];
-        if (tokens.length && texts.some(text => !freshlyStated(text,row.rejected_at)
-          && tokens.every(token => tokenPresent(token,text)))) return true;
-        if ((prints.has(row.fingerprint) || removed && candidates.some(candidate => candidate.includes(removed)))
-          && texts.some(text => !freshlyStated(text,row.rejected_at)
-            && (text.split('\n').some(line => lineFingerprint(normalisedStatement(line)) === row.fingerprint)
-              || removed && compact(text).includes(removed)))) return true;
+        const removed = typeof row.text === 'string' ? compact(removalStatement(row.text)) : '';
+        const tokens = row.scan_pending ? hardTokens(removalStatement(row.text ?? '')) : [];
+        for (const text of texts) {
+          const matched = tokens.length && tokens.every(token => tokenPresent(token,text))
+            || (prints.has(row.fingerprint) || removed && candidates.some(candidate => candidate.includes(removed)))
+              && (text.split('\n').some(line => lineFingerprint(normalisedStatement(line)) === row.fingerprint)
+                || removed && compact(text).includes(removed));
+          if (matched && !await freshlyStated(text,row)) return true;
+        }
       }
       if (result.rows.length < 500) return false;
       const last = result.rows.at(-1); type = last.memory_type; fingerprint = last.fingerprint;
     }
   }
+  /** No removal means no dependency traversal or change to historical availability.
+   * @param {{ownerId:string,ownerCreatedAt:string,kind:string,namespaceId:string}} context */
+  async hasWithdrawals(context) {
+    await this.migrate();
+    if ((await this.database.query('SELECT 1 FROM evimed_memory.native_rejections WHERE user_id=$1 LIMIT 1', [context.ownerId])).rows.length) return true;
+    return (await this.database.query(`SELECT 1 FROM evimed_memory.history_fences
+      WHERE owner_id=$1 AND owner_created_at=$2 AND permanent LIMIT 1`, [context.ownerId, context.ownerCreatedAt])).rows.length > 0;
+  }
+
+  /** A derived object has no message-level proof that it is independent of a withdrawn
+   * passage. Follow recorded archive/session ancestry and withdraw the object as a whole.
+   * The join to the existing rejection parent makes undo immediate, including after restart.
+   * @param {{ownerId:string,ownerCreatedAt:string,namespaceId:string,projectId?:string|null,projectCreatedAt?:string|null}} context
+   * @param {{archives:string[],sessions:string[]}} refs */
+  async derivedSourcesRejected(context, refs) {
+    if (!refs.archives.length && !refs.sessions.length) return false;
+    await this.migrate();
+    const originals = refs.archives.length ? await this.overlay.removalOrigins(context.ownerId, refs.archives) : [];
+    const archives = [...new Set([...refs.archives, ...originals.map(source => source.archiveUri)])];
+    const sessions = refs.sessions.map(session => `dsh-${session}`);
+    const result = await this.database.query(`SELECT 1 FROM evimed_memory.history_message_rejections h
+      JOIN evimed_memory.native_rejections r ON r.user_id=h.owner_id AND r.memory_type=h.memory_type AND r.fingerprint=h.fingerprint
+      LEFT JOIN evimed_memory.native_commits c ON c.user_id=h.owner_id AND c.archive_uri=h.archive_uri
+      WHERE h.owner_id=$1 AND h.owner_created_at=$2 AND h.namespace_id=$3
+        AND (h.archive_uri=ANY($4::text[]) OR split_part(split_part(h.archive_uri,'/sessions/',2),'/',1)=ANY($5::text[])
+          OR c.source_session=ANY($5::text[])) LIMIT 1`,
+    [context.ownerId, context.ownerCreatedAt, context.namespaceId, archives, sessions]);
+    if (result.rows.length) return true;
+    // Source-conversation deletion uses permanent history fences, even while its
+    // physical cleanup is waiting for the account's active conversations to stop.
+    const deleted = await this.database.query(`SELECT 1 FROM evimed_memory.history_fences f
+      WHERE f.owner_id=$1 AND f.owner_created_at=$2 AND f.permanent
+        AND (f.project_id='' OR f.project_id=$3) AND (f.project_created_at='' OR f.project_created_at=$4)
+        AND (f.session_id='' OR f.session_id=ANY($5::text[]) OR EXISTS (
+          SELECT 1 FROM evimed_memory.native_commits c WHERE c.user_id=f.owner_id AND c.archive_uri=ANY($6::text[])
+            AND (c.engine_session='dsh-'||f.session_id OR c.source_session='dsh-'||f.session_id))) LIMIT 1`,
+    [context.ownerId, context.ownerCreatedAt, context.projectId ?? '', context.projectCreatedAt ?? '', refs.sessions, archives]);
+    return deleted.rows.length > 0;
+  }
+
   async rejectMessages(context, memoryType, fingerprint, messages) {
     await this.migrate();
     for (const message of messages) await this.database.query(`INSERT INTO evimed_memory.history_message_rejections
@@ -340,7 +390,7 @@ export class MemoryHistoryLedger {
 
   async boundRejections(context, sessionUri) {
     await this.migrate();
-    return (await this.database.query(`SELECT DISTINCT r.memory_type,r.fingerprint,r.text FROM evimed_memory.history_message_rejections h
+    return (await this.database.query(`SELECT DISTINCT r.memory_type,r.fingerprint,r.text,r.rejected_at FROM evimed_memory.history_message_rejections h
       JOIN evimed_memory.native_rejections r ON r.user_id=h.owner_id AND r.memory_type=h.memory_type AND r.fingerprint=h.fingerprint
       WHERE h.owner_id=$1 AND h.owner_created_at=$2 AND h.namespace_id=$3 AND h.archive_uri=$4 AND r.text IS NOT NULL`,
       [context.ownerId,context.ownerCreatedAt,context.namespaceId,sessionUri])).rows;

@@ -6,7 +6,7 @@ import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWi
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
-import { neutralMemoryUri, removalLines, removalText, removalRefusals } from './nativeMemoryRejections.mjs';
+import { neutralMemoryUri, removalLines, removalText, removalRefusals, retainedRemovalKey } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
@@ -500,7 +500,7 @@ export class NativeMemoryStore {
    */
   async files(userId, options = {}) {
     let files = await this.rawFiles(userId, options);
-    if (this.overlay.deferredSummaryRebuildEnabled === true) {
+    if (this.overlay.memoryForgetBody || this.overlay.deferredSummaryRebuildEnabled === true) {
       files = (await mapLimit(files, 8, async file => {
         const body = await fenceWithdrawnMemoryBody(this.overlay, userId, file.uri, file.body, file.namespaceId);
         return body === null ? null : { ...file, body, hash: contentHash(body) };
@@ -1374,6 +1374,15 @@ export class NativeMemoryStore {
     if (next === null) return;
     await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, body: next, projectId: file.projectId, sensitive: file.sensitive });
     await this.overlay.setSources(userId, file.uri, sourcesNamedIn(next));
+    if (this.history && (removed.length || actor === 'user' && origin === 'edit') && (actor === 'user' || actor === 'conversation')) {
+      const authority = await this.overlay.removals(userId, context.kind === 'geo-project' ? context.namespaceId : null);
+      const prior = new Set(before.map(lineFingerprint));
+      for (const text of after.filter(line => actor === 'user' && origin === 'edit' || prior.has(lineFingerprint(line)))) {
+        await this.overlay.recordInstructionCheck(userId, retainedRemovalKey(file.uri, text, authority), {
+          retainedAfterRemoval: true, ...(actor === 'user' && origin === 'edit' && !prior.has(lineFingerprint(text)) ? { explicitEdit: true } : {}),
+        });
+      }
+    }
     // A line the person took out leaves the index of origins with it; one they wrote names no conversation.
     if (pathRemoved) {
       await this.overlay.inheritOrigins(userId,file.uri,new Map([...oldOrigins].filter(([print])=>kept.has(print)).map(([print,ref])=>[print,originalSources(ref)])));
@@ -1624,11 +1633,19 @@ export class NativeMemoryStore {
    */
   async #duplicatesPlan(userId, removed, origin) {
     try {
-      const inventory = (await this.files(userId)).filter(file => (file.namespaceId ?? null) === (origin?.namespaceId ?? null));
+      const removedPrints = new Set(removed.map(lineFingerprint));
+      const inventory = (await this.rawFiles(userId)).filter(file => (file.namespaceId ?? null) === (origin?.namespaceId ?? null));
       const aliasScope = this.personAliasHintEnabled && origin.type === 'people' && origin.uri && origin.body
         ? aliasesFor(inventory.filter(file => file.type === 'people'), { uri: origin.uri, body: origin.body }) : null;
-      const files = inventory.filter(file => aliasScope === null || file.type !== 'people' || file.uri === origin.uri
-        || aliasScope.includes(personLabel(file.uri, file.body))).map(file => ({ uri: file.uri, type: file.type, statements: statements(file.body) }));
+      const files = inventory.map(file => {
+        const samePerson = aliasScope === null || file.type !== 'people' || file.uri === origin.uri
+          || aliasScope.includes(personLabel(file.uri, file.body));
+        return { uri: file.uri, type: file.type, statements: statements(file.body).filter(line => {
+          const print = lineFingerprint(line);
+          // Exact copies share the withdrawal everywhere; only confirmed aliases authorize semantic/name variants.
+          return (samePerson || removedPrints.has(print)) && (file.uri !== origin.uri || !removedPrints.has(print));
+        }) };
+      });
       const plan = await duplicatesOf({ files, removed, judge: this.rejectionJudge, userId });
       if (aliasScope) {
         const names = aliasScope;
@@ -1660,7 +1677,7 @@ export class NativeMemoryStore {
     let taken = 0;
     for (const [uri, lines] of plan) {
       try {
-        const file = (await this.files(userId)).find((candidate) => candidate.uri === uri);
+        const file = (await this.rawFiles(userId)).find((candidate) => candidate.uri === uri);
         if (!file) continue;
         const prints = new Set(lines.map(lineFingerprint));
         const kept = [];
