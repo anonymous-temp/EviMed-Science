@@ -124,3 +124,18 @@ test('late archive discovery is queued before indexing and an unfinished scan ke
   assert.deepEqual(calls[0], [context, archiveUri, '2026-01-02T00:00:00.000Z']);
   assert.deepEqual(calls[1], { state: 'queued', reason: 'forget_scan_pending' });
 });
+
+test('native derived reader withdraws pre-existing copies and inherited paraphrases without deleting undo bytes', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const statement = 'My old project is M-41633.', uri = 'viking://user/u1/memories/notes/a.md';
+  let removed = true;
+  const overlay = {removals:async()=>removed?[{fingerprint:lineFingerprint(statement),text:statement,rejectedAt:'2026-01-01'}]:[],
+    originsOf:async()=>new Map([[uri,new Map([[lineFingerprint('A derived preference.'),{archiveUri:'old-archive'}]])]])};
+  const history = new MemoryHistory({config:{},contexts:{},ledger:{overlay,derivedSourcesRejected:async(_context,refs)=>removed&&refs.archives.includes('old-archive')}});
+  const context = {kind:'owned',ownerId:'u1',namespaceId:'u1'};
+  const body = `${statement}\nA derived preference.\nAn independent fact.`;
+  assert.equal(await history.fenceNativeBody(context,uri,body),'An independent fact.');
+  removed = false;
+  assert.equal(await history.fenceNativeBody(context,uri,body),body);
+});

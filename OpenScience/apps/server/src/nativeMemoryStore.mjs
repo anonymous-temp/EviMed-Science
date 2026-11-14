@@ -486,7 +486,7 @@ export class NativeMemoryStore {
    */
   async files(userId, options = {}) {
     let files = await this.rawFiles(userId, options);
-    if (this.overlay.deferredSummaryRebuildEnabled === true) {
+    if (this.overlay.memoryForgetBody || this.overlay.deferredSummaryRebuildEnabled === true) {
       files = (await mapLimit(files, 8, async file => {
         const body = await fenceWithdrawnMemoryBody(this.overlay, userId, file.uri, file.body, file.namespaceId);
         return body === null ? null : { ...file, body, hash: contentHash(body) };
@@ -1534,13 +1534,14 @@ export class NativeMemoryStore {
    * find them is no failure of the forget: nothing else goes, and it is said.
    * Only the memories of the forgotten one's own namespace are read: forgetting in the account's memory never reaches a shared GEO
    * project's (which its members share), and forgetting in a project's never reaches the account's.
-   * @param {string} userId @param {readonly string[]} removed @param {{ namespaceId?: string | null }} origin the forgotten file
+   * @param {string} userId @param {readonly string[]} removed @param {{ namespaceId?: string | null, uri?: string }} origin the forgotten file
    * @returns {Promise<Map<string, string[]>>} by file URI
    */
   async #duplicatesPlan(userId, removed, origin) {
     try {
+      const removedPrints = new Set(removed.map(lineFingerprint));
       const files = (await this.files(userId)).filter((file) => (file.namespaceId ?? null) === (origin?.namespaceId ?? null))
-        .map((file) => ({ uri: file.uri, type: file.type, statements: statements(file.body) }));
+        .map((file) => ({ uri: file.uri, type: file.type, statements: statements(file.body).filter(line => file.uri !== origin.uri || !removedPrints.has(lineFingerprint(line))) }));
       return await duplicatesOf({ files, removed, judge: this.rejectionJudge, userId });
     } catch (error) {
       this.report(`native memory forget duplicates: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
@@ -1560,7 +1561,7 @@ export class NativeMemoryStore {
     let taken = 0;
     for (const [uri, lines] of plan) {
       try {
-        const file = (await this.files(userId)).find((candidate) => candidate.uri === uri);
+        const file = (await this.rawFiles(userId)).find((candidate) => candidate.uri === uri);
         if (!file) continue;
         const prints = new Set(lines.map(lineFingerprint));
         const kept = [];

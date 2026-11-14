@@ -1,5 +1,6 @@
+import { removalRefusals, removalText } from './nativeMemoryRejections.mjs';
 import { recordNativeMaintenance } from './nativeMemoryMetrics.mjs';
-import { lineFingerprint, normalisedStatement, nativeMemoryRejectionType } from './nativeMemoryOverlay.mjs';
+import { lineFingerprint, normalisedStatement, nativeMemoryRejectionType, originalSources } from './nativeMemoryOverlay.mjs';
 import { hardTokens, sourceHasToken } from './nativeMemoryHardTokens.mjs';
 import { createHash } from 'node:crypto';
 import { MemoryHistorySecrets, createHistorySecretJudge } from './memoryHistorySecrets.mjs';
@@ -114,6 +115,8 @@ export class MemoryHistory {
     this.config = config; this.ledger = ledger; this.contexts = contexts;
     this.resolveSource = resolveSource; this.eligible = eligible; this.admitMessage = admitMessage; this.resourcesFor = resourcesFor;
     this.rejectionJudge = rejectionJudge;
+    /** @type {((userId:string,sources:unknown[],context:unknown)=>Promise<{role:string,text:string,created_at?:string|null}[]>)|null} */
+    this.nativeRemovalSources = null;
     this.secrets = new MemoryHistorySecrets({ ledger, judge: secretJudge ?? createHistorySecretJudge({ config, usageLedger }) });
     this.maintenance = { summary_rebuilds: 0, forget_scans: 0, forget_scan_retries: 0 };
     this.lastBackfill = { at: null, discovered: 0, processed: 0, failed: 0, coverage: null };
@@ -124,6 +127,32 @@ export class MemoryHistory {
 
   root(context, source) {
     return `${context.userRoot}/resources/history/${hash(context.ownerCreatedAt).slice(0, 24)}/${hash(JSON.stringify([source.projectId, source.projectCreatedAt])).slice(0, 24)}`;
+  }
+
+  /** Full-body reader shared by the gateway, memory page and opening slices.
+   * Cleanup continues to use raw engine reads. Never infer fresh authorship from
+   * an overlay body or a later consolidation timestamp.
+   * @param {Awaited<ReturnType<import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext['forProject']>>} context
+   * @param {string} uri @param {string|null} body */
+  async fenceNativeBody(context, uri, body) {
+    if (body === null) return null;
+    const overlay = this.ledger.overlay;
+    const namespaceId = context.kind === 'geo-project' ? context.namespaceId : null;
+    if (!(await overlay.removals(context.ownerId, namespaceId)).length) return body;
+    const origins = (await overlay.originsOf(context.ownerId, [uri])).get(uri) ?? new Map();
+    const kept = [];
+    for (const line of body.split('\n')) {
+      const text = removalText(line);
+      if (!text) { kept.push(line); continue; }
+      const sources = originalSources(origins.get(lineFingerprint(text)));
+      const messages = this.nativeRemovalSources ? await this.nativeRemovalSources(context.ownerId, sources, context) : [];
+      const refused = await removalRefusals({ userId: context.ownerId, overlay, namespaceId, candidates: [{text, sources: messages}] });
+      if (refused.size || await this.ledger.derivedSourcesRejected(context, {
+        archives: sources.map(source => source.archiveUri).filter(Boolean), sessions: [],
+      })) continue;
+      kept.push(line);
+    }
+    return kept.some(line => removalText(line)) ? kept.join('\n') : null;
   }
 
   /** Populate missing legacy source hashes before acknowledging destructive work.

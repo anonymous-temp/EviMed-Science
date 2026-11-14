@@ -229,6 +229,46 @@ export class MemoryHistoryLedger {
       const last = result.rows.at(-1); type = last.memory_type; fingerprint = last.fingerprint;
     }
   }
+  /** No removal means no dependency traversal or change to historical availability.
+   * @param {{ownerId:string,ownerCreatedAt:string,kind:string,namespaceId:string}} context */
+  async hasWithdrawals(context) {
+    await this.migrate();
+    if ((await this.database.query('SELECT 1 FROM evimed_memory.native_rejections WHERE user_id=$1 LIMIT 1', [context.ownerId])).rows.length) return true;
+    return (await this.database.query(`SELECT 1 FROM evimed_memory.history_fences
+      WHERE owner_id=$1 AND owner_created_at=$2 AND permanent LIMIT 1`, [context.ownerId, context.ownerCreatedAt])).rows.length > 0;
+  }
+
+  /** A derived object has no message-level proof that it is independent of a withdrawn
+   * passage. Follow recorded archive/session ancestry and withdraw the object as a whole.
+   * The join to the existing rejection parent makes undo immediate, including after restart.
+   * @param {{ownerId:string,ownerCreatedAt:string,namespaceId:string,projectId?:string|null,projectCreatedAt?:string|null}} context
+   * @param {{archives:string[],sessions:string[]}} refs */
+  async derivedSourcesRejected(context, refs) {
+    if (!refs.archives.length && !refs.sessions.length) return false;
+    await this.migrate();
+    const originals = refs.archives.length ? await this.overlay.removalOrigins(context.ownerId, refs.archives) : [];
+    const archives = [...new Set([...refs.archives, ...originals.map(source => source.archiveUri)])];
+    const sessions = refs.sessions.map(session => `dsh-${session}`);
+    const result = await this.database.query(`SELECT 1 FROM evimed_memory.history_message_rejections h
+      JOIN evimed_memory.native_rejections r ON r.user_id=h.owner_id AND r.memory_type=h.memory_type AND r.fingerprint=h.fingerprint
+      LEFT JOIN evimed_memory.native_commits c ON c.user_id=h.owner_id AND c.archive_uri=h.archive_uri
+      WHERE h.owner_id=$1 AND h.owner_created_at=$2 AND h.namespace_id=$3
+        AND (h.archive_uri=ANY($4::text[]) OR split_part(split_part(h.archive_uri,'/sessions/',2),'/',1)=ANY($5::text[])
+          OR c.source_session=ANY($5::text[])) LIMIT 1`,
+    [context.ownerId, context.ownerCreatedAt, context.namespaceId, archives, sessions]);
+    if (result.rows.length) return true;
+    // Source-conversation deletion uses permanent history fences, even while its
+    // physical cleanup is waiting for the account's active conversations to stop.
+    const deleted = await this.database.query(`SELECT 1 FROM evimed_memory.history_fences f
+      WHERE f.owner_id=$1 AND f.owner_created_at=$2 AND f.permanent
+        AND (f.project_id='' OR f.project_id=$3) AND (f.project_created_at='' OR f.project_created_at=$4)
+        AND (f.session_id='' OR f.session_id=ANY($5::text[]) OR EXISTS (
+          SELECT 1 FROM evimed_memory.native_commits c WHERE c.user_id=f.owner_id AND c.archive_uri=ANY($6::text[])
+            AND (c.engine_session='dsh-'||f.session_id OR c.source_session='dsh-'||f.session_id))) LIMIT 1`,
+    [context.ownerId, context.ownerCreatedAt, context.projectId ?? '', context.projectCreatedAt ?? '', refs.sessions, archives]);
+    return deleted.rows.length > 0;
+  }
+
   async rejectMessages(context, memoryType, fingerprint, messages) {
     await this.migrate();
     for (const message of messages) await this.database.query(`INSERT INTO evimed_memory.history_message_rejections

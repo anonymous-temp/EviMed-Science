@@ -18,21 +18,20 @@ function judge(sameOf) {
   } };
 }
 
-test("a line that contains the forgotten words is decided in code, with no model asked, and the forgotten line itself is not its own duplicate", async () => {
+test("a line that contains the forgotten words is decided in code, with no model asked, and an exact copy in another file also leaves", async () => {
   resetNativeMemoryMetrics();
   const asked = judge(() => true);
   const found = await duplicatesOf({
     userId: "u1", judge: asked, removed: ["我平时骑车通勤，单程约 40 分钟"],
     files: files({ "a.md": ["我平时骑车通勤，单程约 40 分钟 (as of 2026-10-01)", "我喜欢跑步"], "b.md": ["工作日我平时骑车通勤，单程约 40 分钟，风雨无阻"] }),
   });
-  // `a.md` holds the forgotten line itself (dated), which is not a duplicate of itself; `b.md` holds it with more around it.
-  assert.deepEqual([...found], [["b.md", ["工作日我平时骑车通勤，单程约 40 分钟，风雨无阻"]]]);
+  assert.deepEqual([...found], [["a.md", ["我平时骑车通勤，单程约 40 分钟 (as of 2026-10-01)"]], ["b.md", ["工作日我平时骑车通勤，单程约 40 分钟，风雨无阻"]]]);
   assert.equal(asked.asked.length, 0, "containment is code");
 });
 
-test("the forgotten line's own fingerprint is skipped, whatever date it wears", async () => {
+test("an exact copy in another file is removed, whatever date it wears", async () => {
   const found = await duplicatesOf({ userId: "u1", judge: null, removed: ["我骑车通勤"], files: files({ "a.md": ["我骑车通勤 (as of 2026-10-02)"] }) });
-  assert.equal(found.size, 0, "the same line, dated, is the forgotten line and is not removed twice");
+  assert.equal(found.size, 1, "file identity, not a shared fingerprint, distinguishes the source from its copies");
 });
 
 test("a line that is only near goes to the one judge, the best-scored first, and only what it says is the same goes", async () => {

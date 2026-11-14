@@ -150,6 +150,8 @@ export async function readNativeMemoryOriginalSources(query, userId, archiveUris
 export class NativeMemoryOverlay {
   /** @param {{ database?: any, deferredSummaryRebuildEnabled?: boolean }} dependencies */
   constructor({ database = null, deferredSummaryRebuildEnabled = false } = {}) {
+    /** @type {((userId:string,uri:string,body:string|null,namespaceId?:string|null)=>Promise<string|null>)|null} */
+    this.memoryForgetBody = null;
     this.deferredSummaryRebuildEnabled = deferredSummaryRebuildEnabled === true;
     this.database = database ?? null;
     /** @type {any} */ this.sourceDeletion = null;

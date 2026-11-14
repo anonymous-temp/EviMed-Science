@@ -450,7 +450,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         (file.uri.startsWith(`${root}/preferences/`) || file.uri.startsWith(`${root}/entities/`)))) return listed;
       const [companion, profile] = await Promise.all([
         scopedMemoryList(ctx.sessions, ctx, `${root}/${other}`, query),
-        ctx.hidden(`${root}/profile.md`).then(hidden => hidden ? '' : ctx.sessions.read(ctx.user.id, `${root}/profile.md`, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 })),
+        ctx.hidden(`${root}/profile.md`).then(hidden => hidden ? '' : ctx.readMemory(`${root}/profile.md`, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 })),
       ]);
       // Rank before the engine's 512-node page cut too. Bound traversal at the same 10,000-file limit as privacy metadata;
       // a server without pagination support is detected by repeated pages. No unfiltered metadata crosses this boundary.
@@ -1242,7 +1242,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         account: /** @type {any} */ (view).client.account,
         readMemory: async (/** @type {string} */ uri, options = {}) => {
           const text = await view.read(user.id, uri, options);
-          return config.memoryDeferredSummaryRebuildEnabled === true
+          return overlay?.memoryForgetBody || config.memoryDeferredSummaryRebuildEnabled === true
             ? fenceWithdrawnMemoryBody(overlay, user.id, uri, text, shared ? memoryContext.namespaceId : null) : text;
         },
         ensureRegistered: () => ensureRegistered(user.id, view, memoryContext),
