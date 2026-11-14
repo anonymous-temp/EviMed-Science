@@ -5232,6 +5232,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   if (feedbackEvents && productDocuments) feedbackEvents.memoryForgetReader = productDocuments.memoryForgetReader;
   nativeMemory.history = memoryHistory;
+  if (memoryHistory) memoryHistory.sweepMemory = scan => nativeMemory.sweepForgottenMemory(scan);
   nativeMemoryWorker.history = memoryHistory;
   nativeMemoryWorker.verification.history = memoryHistory;
   const sourceDeletionLedger = productDatabase ? new ConversationSourceDeletionLedger(productDatabase) : null;

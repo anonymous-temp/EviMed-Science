@@ -117,6 +117,8 @@ export class MemoryHistory {
     this.rejectionJudge = rejectionJudge;
     /** @type {((userId:string,sources:unknown[],context:unknown)=>Promise<{role:string,text:string,created_at?:string|null}[]>)|null} */
     this.nativeRemovalSources = null;
+    /** @type {((scan:import('./memoryHistoryPersistence.mjs').ForgetScan)=>Promise<void>)|null} */
+    this.sweepMemory = null;
     this.secrets = new MemoryHistorySecrets({ ledger, judge: secretJudge ?? createHistorySecretJudge({ config, usageLedger }) });
     this.maintenance = { summary_rebuilds: 0, forget_scans: 0, forget_scan_retries: 0 };
     this.lastBackfill = { at: null, discovered: 0, processed: 0, failed: 0, coverage: null };
@@ -197,7 +199,7 @@ export class MemoryHistory {
    * message hashes commit together, satisfying the deployed foreign key without
    * holding a database transaction across engine reads or model calls.
    * Undo lifts the fence, and a repeated forget reinstates it. */
-  async rejectRemoved(context, file, removed, judge, { archiveUri: requestArchive = null, activate = async () => {}, allowDeferred = false } = {}) {
+  async rejectRemoved(context, file, removed, judge, { archiveUri: requestArchive = null, activate = async () => {}, allowDeferred = false, memorySweep = /** @type {import('./memoryHistoryPersistence.mjs').MemorySweep|null} */ (null) } = {}) {
     if (!removed.length) { await activate(); return; }
     if (!context.ownerCreatedAt) context = {...context,ownerCreatedAt:(await this.ledger.database.query(
       'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[context.ownerId])).rows[0]?.stamp};
@@ -261,6 +263,7 @@ export class MemoryHistory {
     return this.ledger.database.transaction(client => this.ledger.database.withTransactionClient(client, async () => {
       await activate();
       for (const row of prepared) await this.ledger.rejectMessages(context, type, row.fingerprint, row.messages);
+      if (memorySweep) await this.ledger.queueMemorySweep(context, type, lineFingerprint(removed[0]), memorySweep);
       if (deferred) for (const text of removed) await this.ledger.queueForgetScan(context, type, lineFingerprint(text));
       return allowDeferred ? this.ledger.forgetScanPending(context.ownerId, type, removed.map(lineFingerprint)) : false;
     }));
@@ -292,6 +295,10 @@ export class MemoryHistory {
             && (!Number.isFinite(Date.parse(message.created_at ?? '')) || Date.parse(message.created_at) <= new Date(scan.cutoff).getTime()))
             .map(message => ({archiveUri,text:messageText(message,this.secretRedaction),created_at:message.created_at})).filter(message => message.text);
           matched.push(...await this.matchRemoved(context, scan.text, messages, this.rejectionJudge));
+        }
+        if (scan.memory_sweep && !scan.memory_sweep.done) {
+          if (!this.sweepMemory) throw new Error('Memory sweep unavailable.');
+          await this.sweepMemory(scan);
         }
         await this.ledger.finishForgetScan(scan, matched, cursor);
       } catch {

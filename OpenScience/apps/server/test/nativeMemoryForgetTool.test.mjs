@@ -325,3 +325,89 @@ test('FT12 a line kept through a lines forget stays kept after later unrelated f
   withdrawing.add(flight);
   assert.equal(await f.store.history.fenceNativeBody(context, uri, f.files.get(uri)), null, 'a later removal is judged on its own');
 });
+
+
+test('AL8 statement forget physically removes normalized copies without origins and keeps neighbours', async () => {
+  const f = fixture();
+  f.store.overlay.deferredSummaryRebuildEnabled = true;
+  f.store.rawFiles = f.store.files;
+  f.ledger.queueMemorySweep = async () => {};
+  const other = `${root}/memories/notes/imported.md`;
+  f.files.set(other, '- USE metric units. (as of 2026-11-12)\n- I am allergic to penicillin.');
+  await f.store.forget(user, project, null, { statement: 'Use metric units.' });
+  assert.equal(f.files.get(uri), '- Keep answers short.');
+  assert.equal(f.files.get(other), '- I am allergic to penicillin.');
+  assert.ok(f.revisions.every(row => /\[act:[a-f0-9]{12}\]/.test(row.reason)), 'one undo act');
+});
+
+test('AL8 deferred sweep searches other files, freezes eight candidates, retries and never accepts malformed pairs', async () => {
+  const f = fixture();
+  f.store.overlay.deferredSummaryRebuildEnabled = true;
+  f.store.rawFiles = f.store.files;
+  const other = `${root}/memories/notes/legacy.md`;
+  f.files.set(other, '- Measures should use the metric system.\n- I am allergic to penicillin.\n'
+    + Array.from({length:12}, (_, index) => `- Unrelated neighbour ${index}.`).join('\n'));
+  f.store.sessions.find = async () => [{uri:other}];
+  f.ledger.saveMemorySweep = async (_scan, sweep) => { saved = structuredClone(sweep); return live; };
+  let saved, live = true, calls = 0;
+  f.store.history.search = async () => [];
+  const act = 'abcdef123456';
+  f.rejections.push({lines:['Use metric units.']});
+  const scan = {owner_id:'u1',user_root:root,memory_sweep:{act,removed:[lineFingerprint('Use metric units.')],files:[{uri:other,hash:contentHash(f.files.get(other))}]}};
+  f.store.rejectionJudge = {same:async request => {
+    calls++;
+    assert.equal(request.requireAvailable, true);
+    assert.ok(request.candidates.length <= 8);
+    if (calls === 1) throw new Error('offline');
+    return {same:new Map(request.candidates.map((candidate,index) => [index,
+      candidate.text.startsWith('Measures') ? lineFingerprint('Use metric units.') : 'unoffered-fingerprint']))};
+  }};
+  await assert.rejects(f.store.sweepForgottenMemory(scan), /offline/);
+  assert.equal(saved.candidates.length, 8);
+  assert.match(f.files.get(other), /Measures/);
+  scan.memory_sweep = saved;
+  await f.store.sweepForgottenMemory(scan);
+  assert.doesNotMatch(f.files.get(other), /Measures/);
+  assert.match(f.files.get(other), /allergic|neighbour/);
+  assert.equal(saved.done, true);
+  assert.ok(f.revisions.every(row => row.reason.includes(`[act:${act}]`)));
+  live = false;
+  await f.store.sweepForgottenMemory(scan);
+  assert.equal(calls, 2, 'undo cancels a leased scan before judging');
+});
+
+test('AL8 immediate equality cleanup does not hide a paraphrase in the same other file from its deferred sweep', async () => {
+  const f = fixture(), other = `${root}/memories/notes/twice.md`;
+  f.store.overlay.deferredSummaryRebuildEnabled = true;
+  f.store.rawFiles = f.store.files;
+  f.store.history.search = async () => [];
+  f.store.sessions.find = async () => [{uri:other}];
+  f.files.set(other, '- Use metric units.\n- Measures should use the metric system.\n- I am allergic to penicillin.');
+  let sweep;
+  f.ledger.queueMemorySweep = async (_context, _type, _print, value) => { sweep = structuredClone(value); };
+  f.ledger.saveMemorySweep = async () => true;
+  await f.store.forget(user,project,null,{statement:'Use metric units.'});
+  f.store.rejectionJudge = {same:async request => ({same:new Map(request.candidates.flatMap((candidate,index) =>
+    candidate.text.startsWith('Measures') ? [[index,lineFingerprint('Use metric units.')]] : []))})};
+  await f.store.sweepForgottenMemory({owner_id:'u1',user_root:root,memory_sweep:sweep});
+  assert.equal(f.files.get(other), '- I am allergic to penicillin.');
+});
+
+test('AL8 a repeated statement keeps its undo act and a delayed sweep never selects a later file version', async () => {
+  const f = fixture(), queued = [], other = `${root}/memories/notes/later.md`;
+  f.store.overlay.deferredSummaryRebuildEnabled = true;
+  f.store.rawFiles = f.store.files;
+  f.store.history.search = async () => [];
+  f.store.overlay.revisionsOf = async (_owner, target) => f.revisions.filter(row=>row.uri===target).reverse();
+  f.ledger.queueMemorySweep = async (_context,_type,_print,sweep) => queued.push(structuredClone(sweep));
+  f.ledger.saveMemorySweep = async () => true;
+  f.files.set(other,'- Measures should use the metric system.');
+  await f.store.forget(user,project,null,{statement:'Use metric units.'});
+  await f.store.forget(user,project,null,{statement:'Use metric units.'});
+  assert.equal(queued[0].act,queued[1].act);
+  f.files.set(other,'- Measures should use the metric system.\n- A later independent edit.');
+  f.store.sessions.find = async () => [{uri:other}];
+  f.store.rejectionJudge = {same:async()=>{assert.fail('a later version is outside the frozen withdrawal');}};
+  await f.store.sweepForgottenMemory({owner_id:'u1',user_root:root,memory_sweep:queued[1]});
+  assert.match(f.files.get(other),/Measures/);
+});

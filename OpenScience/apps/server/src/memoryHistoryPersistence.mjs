@@ -7,8 +7,9 @@ import { OPENVIKING_KNOWN_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from '
 import { compact, removalStatement, removalAssertionKey } from './nativeMemoryRejections.mjs';
 import { hardTokens, tokenPresent } from './nativeMemoryHardTokens.mjs';
 
+/** @typedef {{act:string,removed:string[],files?:{uri:string,hash:string,afterExactHash?:string}[],candidates?:{uri:string,fingerprint:string,hash:string}[],done?:boolean}} MemorySweep */
 /** @typedef {{id:string,owner_id:string,owner_created_at:string,namespace_id:string,user_root:string,
- * memory_type:string,fingerprint:string,text:string,cutoff:Date,archives:string[],cursor:number,claim:string,attempts:number}} ForgetScan */
+ * memory_type:string,fingerprint:string,text:string,cutoff:Date,archives:string[],cursor:number,claim:string,attempts:number,memory_sweep?:MemorySweep|null}} ForgetScan */
 /** @typedef {{archive_uri:string,message_hash:string,fingerprint?:string,source_session?:string|null}} SourceMessage */
 
 /** A cited source unit (one archive, or every archive of one conversation session) is withdrawn whole when it
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS evimed_memory.history_forget_scans (
   FOREIGN KEY(owner_id,memory_type,fingerprint)
     REFERENCES evimed_memory.native_rejections(user_id,memory_type,fingerprint) ON DELETE CASCADE
 );
+ALTER TABLE evimed_memory.history_forget_scans ADD COLUMN IF NOT EXISTS memory_sweep jsonb;
 CREATE INDEX IF NOT EXISTS history_forget_scans_due ON evimed_memory.history_forget_scans(next_attempt_at) WHERE state='pending';
 CREATE TABLE IF NOT EXISTS evimed_memory.history_write_messages (
   owner_id text NOT NULL, owner_created_at text NOT NULL, namespace_id text NOT NULL,
@@ -348,6 +350,23 @@ export class MemoryHistoryLedger {
       FROM evimed_memory.native_rejections r WHERE r.user_id=$2 AND r.memory_type=$6 AND r.fingerprint=$7
       ON CONFLICT(owner_id,memory_type,fingerprint) DO NOTHING`,
     [randomBytes(16).toString('hex'),context.ownerId,context.ownerCreatedAt,context.namespaceId,context.userRoot,memoryType,fingerprint]);
+  }
+
+  /** Reuse the withdrawal outbox and its undo/erasure cascade; only addresses, hashes and an undo act are stored.
+   * @param {{ownerId:string,ownerCreatedAt:string,namespaceId:string,userRoot:string}} context
+   * @param {string} memoryType @param {string} fingerprint @param {MemorySweep} sweep */
+  async queueMemorySweep(context, memoryType, fingerprint, sweep) {
+    await this.queueForgetScan(context, memoryType, fingerprint);
+    await this.database.query(`UPDATE evimed_memory.history_forget_scans SET memory_sweep=$4::jsonb,
+      state='pending',claim=NULL,lease_until=NULL,next_attempt_at=clock_timestamp() WHERE owner_id=$1 AND memory_type=$2 AND fingerprint=$3`,
+    [context.ownerId,memoryType,fingerprint,JSON.stringify(sweep)]);
+  }
+
+  /** Persist the bounded candidate set before the first judge call. Recheck the lease after undo.
+   * @param {ForgetScan} scan @param {MemorySweep} sweep */
+  async saveMemorySweep(scan, sweep) {
+    return (await this.database.query(`UPDATE evimed_memory.history_forget_scans SET memory_sweep=$3::jsonb
+      WHERE id=$1 AND claim=$2 AND state='pending' RETURNING id`, [scan.id,scan.claim,JSON.stringify(sweep)])).rows.length > 0;
   }
 
   /** Discovery may register an old conversation after the original scan. Its
