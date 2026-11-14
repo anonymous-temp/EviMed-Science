@@ -645,7 +645,9 @@ for (const aliases of [false, true]) test(`MG6 withdrawal readers compose HTTP, 
 // unstored remarks. Every reader must still show the three kept lines, the penicillin allergy among them, and none of
 // the three forgotten things. Only the external engine, the model oracle and the runtime identity are fixtures.
 const p6cMessage = `${p6bMessage}对了，我是在上周航班延误了四个小时的候机室里写下这句话的，不过这个不用管。`;
-const nightStatement = '上个月临时顶夜班这件事', flightStatement = '上周航班延误了四个小时';
+// p6c's model passed "上个月临时顶夜班这件事" and the engine's semantic search found the message. The fixture engine
+// searches by substring, so the statement uses the person's own words; the stored rows are the same.
+const nightStatement = '上个月我临时顶了几个星期的夜班', flightStatement = '上周航班延误了四个小时';
 const forgottenWords = /游泳|夜班|航班/;
 
 test('FT12 statement forgets of unstored remarks never mask kept lines from the same conversation, in any reader', options, async t => {

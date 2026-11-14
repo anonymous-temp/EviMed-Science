@@ -127,11 +127,27 @@ test('FT12 a later message that is exactly the removed statement re-admits it wi
     recordInstructionCheck: async (/** @type {string} */ _owner, /** @type {string} */ key, /** @type {unknown} */ value) => { receipts.set(key, value); } };
   const refused = async (/** @type {any[]} */ sources, candidate = `${text} (as of 2026-11-14)`) =>
     (await removalRefusals({ userId: 'u', overlay: guard, candidates: [{ text: candidate, sources }] })).size;
-  for (const other of [source('Is it Private source A.?'), source(`The earlier chat said “${text}”`), source(text, '2026-11-10T11:00:00.000Z', 'assistant'),
-    source(text, '2026-11-10T09:00:00.000Z'), source(`${text} And B.`)]) assert.equal(await refused([other]), 1, `${other.role}: ${other.text}`);
+  for (const other of [source('Is it Private source A.?'), source(`${text.slice(0, -1)}?`), source(`The earlier chat said “${text}”`), source(`You wrote "${text}" before.`),
+    source(text, '2026-11-10T11:00:00.000Z', 'assistant'), source(text, '2026-11-10T09:00:00.000Z')]) assert.equal(await refused([other]), 1, `${other.role}: ${other.text}`);
   assert.equal(receipts.size, 0, 'no refused source leaves a receipt');
   assert.equal(await refused([source(text)]), 0, 'the person said it again, as a whole message, in a new conversation');
   assert.equal(receipts.get(removalAssertionKey(null, { fingerprint: lineFingerprint(text), rejectedAt }, text, source(text)))?.removalAssertion, true,
     'the history reader shares the same receipt for that new message');
   assert.equal(await refused([source(text)], `${text} Also B.`), 1, 'a line that adds to the restated words is not authorized by them');
+});
+
+test('FT12 without a judge, a later dated message asserting the removed statement as its own sentence re-admits it; with a judge, the judge decides', async () => {
+  const text = 'Release window is Wednesday night.', rejectedAt = removal.rejectedAt;
+  const guard = { removals: async () => [{ text, fingerprint: lineFingerprint(text), rejectedAt }],
+    instructionCheck: async () => null, recordInstructionCheck: async () => {} };
+  const dated = source('To be clear: Release window is Wednesday night. Please keep that.', '2099-01-01T00:00:00.000Z');
+  const refused = async (/** @type {any[]} */ sources, /** @type {any} */ judge = null) =>
+    (await removalRefusals({ userId: 'u', overlay: guard, judge, candidates: [{ text, sources }] })).size;
+  assert.equal(await refused([dated]), 0, 'the person said it again, with a date and a few more words');
+  for (const other of [source('Is the release window still Wednesday night?'), source('Release window is Wednesday night?'),
+    source(`The assistant said “${text}”`), source(`Pasted: "${text}"`), source(text, '2099-01-01T00:00:00.000Z', 'assistant')]) {
+    assert.equal(await refused([other]), 1, `${other.role}: ${other.text}`);
+  }
+  const notStated = { same: async () => ({ same: new Map([[0, lineFingerprint(text)]]), stated: new Set() }) };
+  assert.equal(await refused([dated], notStated), 1, 'when a judge is available and the wording differs, its verdict decides');
 });

@@ -279,6 +279,32 @@ export function decisionCovers(receipt, flag) {
   return row.covered.filter(value => typeof value === 'string');
 }
 
+const SENTENCE_END = new Set(['.', '。', '!', '！']);
+const QUESTION = new Set(['?', '？']);
+const BOUNDARY = new Set([...SENTENCE_END, ...QUESTION, ':', '：', ';', '；', '\n']);
+const QUOTE_PAIRS = [['“', '”'], ['‘', '’'], ['「', '」'], ['『', '』'], ['«', '»'], ['《', '》']];
+
+/** Whether `statement` stands in `message` as one of its own declarative sentences, outside any quotation: it starts
+ * the message or follows a sentence or clause end, and it ends the message or ends with a full stop or exclamation
+ * mark, not a question mark. Punctuation only; a judge decides anything about meaning.
+ * @param {string} message @param {string} statement */
+export function assertsStatement(message, statement) {
+  const flat = (/** @type {string} */ value) => String(value).replace(/\s+/g, ' ').trim().toLowerCase();
+  const body = flat(message);
+  const wanted = flat(removalStatement(statement)).replace(/[.。!！]+$/, '');
+  if (!wanted) return false;
+  for (let at = body.indexOf(wanted); at >= 0; at = body.indexOf(wanted, at + 1)) {
+    const before = body.slice(0, at).trimEnd(), after = body.slice(at + wanted.length);
+    if (before && !BOUNDARY.has(before.at(-1) ?? '')) continue;
+    const next = after.trimStart().charAt(0);
+    if (next && !SENTENCE_END.has(next)) continue;
+    const straight = before.split('"').length % 2 === 0;
+    const paired = QUOTE_PAIRS.some(([open, close]) => before.split(open).length > before.split(close).length);
+    if (!straight && !paired) return true;
+  }
+  return false;
+}
+
 /** All newly written lines, including titles/headings. @param {string} after @param {string} [before] */
 export function removalLines(after, before = '') {
   const prior = new Set(String(before).split('\n').map(removalText).map(lineFingerprint));
@@ -310,13 +336,18 @@ export async function removalRefusals({ userId, overlay, projectId = null, names
       let authorized = false;
       for (const source of sources) if ((await overlay.instructionCheck?.(userId, receiptKey(source)))?.removalAssertion === true) authorized = true;
       if (authorized) continue;
-      // A later message from the person that is, as a whole, this very statement is the person saying it again in a new
-      // conversation: it is its own witness and needs no model. Containment, a question or a quotation is not equality and
-      // still needs a witnessed assertion; an assistant message or an older message never qualifies (filtered above).
-      // All three must be the same statement: the removed fact, the line being written and the person's whole message.
+      // The person's own later message re-admits what it asserts. A message that is, as a whole, the removed statement
+      // is its own witness and needs no model. When no judge is available, a message in which the removed statement
+      // stands as one of its own declarative sentences, outside quotation marks, also asserts it ("To be clear: X.
+      // Please keep that."): punctuation decides, never words. A question, a quotation, an assistant or an older message
+      // never qualifies (filtered above). The line being written must be that statement, or the person's message itself.
       const said = lineFingerprint(removalStatement(candidate.text));
-      const restated = text && lineFingerprint(text) === said
-        ? sources.find(source => lineFingerprint(removalStatement(source.text)) === said) : undefined;
+      const removedPrint = text ? lineFingerprint(text) : '';
+      const restated = text ? sources.find(source => {
+        const whole = lineFingerprint(removalStatement(source.text));
+        if (whole === removedPrint && said === removedPrint) return true;
+        return !judge && (said === removedPrint || said === whole) && assertsStatement(source.text, text);
+      }) : undefined;
       if (restated) {
         await overlay.recordInstructionCheck?.(userId, receiptKey(restated), { removalAssertion: true });
         await overlay.recordInstructionCheck?.(userId, removalAssertionKey(namespaceId, entry, text, restated), { removalAssertion: true });
