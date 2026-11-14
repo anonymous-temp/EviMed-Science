@@ -149,3 +149,11 @@ export function skillUri(name) {
 export function openVikingKnowledgeModelKey(serviceKey) {
   return createHmac("sha256", String(serviceKey)).update("evimed/openviking/model-key/knowledge/v1").digest("base64url");
 }
+
+/** Only the caller's personal namespace can supply portable people/safety files.
+ * Project labels remain on the stored files; shared namespaces never qualify.
+ * @param {string} uri @param {string} memoryRoot @param {boolean} enabled */
+export function personalMemoryTravels(uri, memoryRoot, enabled) {
+  if (!enabled || !memoryRoot) return false;
+  return ['people', 'safety_notes'].some(segment => uri.startsWith(`${memoryRoot}/${segment}/`) && uri.endsWith('.md'));
+}

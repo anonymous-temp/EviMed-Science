@@ -10,7 +10,7 @@ import { recordResidentCard, recordResidentOmitted, recordResidentProfile } from
 import { estimatePromptTokens } from "./modelGateway.mjs";
 import { renderMemoryContext } from "./researchContext.mjs";
 import { memoryPausedFor } from "./memorySettings.mjs";
-import { mostUsedMemos } from "./memoryOpeningByUse.mjs";
+import { mostUsedMemos, standingPreferenceMemos } from "./memoryOpeningByUse.mjs";
 
 /**
  * The resident profile: what the platform itself puts in front of a conversation of the researcher's memory.
@@ -113,7 +113,7 @@ export function lookupLine({ omitted = 0, capsule = 0 }) {
  *
  * @param {{ capsuleFacts?: readonly any[], card?: any | null, capsuleCount?: number, maxRecords?: number, maxTokens?: number,
  *   nativeFiles?: any[], safetyFiles?: any[], config?: any, nativeIndex?: { counts: Record<string, number>, historySearchEnabled?: boolean } | null }} input
- * @returns {{ text: string, profile: string, memos: any[], omitted: number, index: string, safety: string }}
+ * @returns {{ text: string, profile: string, memos: any[], omitted: number, index: string, safety: string, standing: string }}
  *   `profile` is the memos alone; `index`, when opted in, also participates in the delivery digest.
  */
 export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleCount = 0, maxRecords = 24, maxTokens = CAPSULE_PROFILE_MAX_TOKENS, nativeFiles = [], safetyFiles = [], config = {}, nativeIndex = null }) {
@@ -125,10 +125,22 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   const safety = config.memorySafetyNotesEnabled === true
     ? renderSafetyNotes(safetyFiles, { maxTokens: Math.max(0, maxTokens - reserve - estimatePromptTokens(header)) })
     : { text: '', memos: [] };
+  const standingCandidates = standingPreferenceMemos(nativeFiles, config);
+  /** @type {ReturnType<typeof standingPreferenceMemos>} */ const standingMemos = [];
+  const standingHeader = '用户本人的持续偏好（保留原适用范围，本次明确要求优先）：';
+  const renderStanding = () => standingMemos.length
+    ? `${standingHeader}\n${renderMemoryContext([{ ...standingMemos[0], id: 'native-standing-preferences',
+      content: standingMemos.map(memo => memo.content).join('\n') }]).split('\n').slice(1).join('\n')}` : '';
+  for (const memo of standingCandidates) {
+    standingMemos.push(memo);
+    if (estimatePromptTokens(renderStanding()) + estimatePromptTokens(safety.text) + reserve + estimatePromptTokens(header) > maxTokens) standingMemos.pop();
+  }
+  const standing = renderStanding();
+  const standingTokens = standing ? estimatePromptTokens(`\n${standing}`) : 0;
   const safetyTokens = safety.text ? estimatePromptTokens(`\n${safety.text}`) : 0;
   // Supplying nativeIndex is the pure renderer's opt-in; production supplies it
   // only behind memoryOpeningIndexEnabled and only for an owned namespace.
-  const index = nativeIndex ? nativeIndexLine(nativeIndex, maxTokens - reserve - estimatePromptTokens(header) - safetyTokens) : "";
+  const index = nativeIndex ? nativeIndexLine(nativeIndex, maxTokens - reserve - estimatePromptTokens(header) - safetyTokens - standingTokens) : "";
   const indexTokens = index ? estimatePromptTokens(`\n${index}`) : 0;
   /** @type {any[]} */
   const memos = card ? [card] : [];
@@ -137,7 +149,7 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   let entries = 0;
   for (const memo of candidates) {
     if (entries >= bound) break;
-    if (estimatePromptTokens(renderMemoryContext([...memos, memo])) + reserve + indexTokens + safetyTokens > room) continue;
+    if (estimatePromptTokens(renderMemoryContext([...memos, memo])) + reserve + indexTokens + safetyTokens + standingTokens > room) continue;
     memos.push(memo);
     entries += 1;
   }
@@ -147,9 +159,10 @@ export function renderResidentProfile({ capsuleFacts = [], card = null, capsuleC
   // With no profile to give but something to look up, the line is the block.
   let text = profile ? renderMemoryContext(memos, { lookup: line }) : index ? `${header}\n${line}` : line;
   if (safety.text) text = `${text || header}\n${safety.text}`;
+  if (standing) text = [text, standing].filter(Boolean).join('\n');
   // A deliberately tiny experiment budget may not even hold the lookup line.
   if (nativeIndex && !profile && estimatePromptTokens(text) > room) text = "";
-  return { text, profile, memos: [...memos, ...safety.memos], omitted, index, safety: safety.text };
+  return { text, profile, memos: [...memos, ...safety.memos, ...standingMemos], omitted, index, safety: safety.text, standing };
 }
 
 /**
@@ -293,7 +306,7 @@ export class ResidentProfiles {
     // engine: with one, a lookup is the engine's own.
     const capsuleCount = !shared && this.config?.memoryEngineEnabled !== true && typeof this.capsules?.lookupCount === "function"
       ? await this.capsules.lookupCount(userId, projectId, CAPSULE_PROFILE_FACT_KINDS).catch(() => 0) : 0;
-    const nativeFiles = !shared && this.config?.memoryOpeningByUseEnabled === true && this.nativeFiles
+    const nativeFiles = !shared && (this.config?.memoryOpeningByUseEnabled === true || this.config?.memoryStandingInstructionsEnabled === true) && this.nativeFiles
       ? await this.nativeFiles(userId, projectId, Math.max(0, Math.min(100, Math.trunc(Number(this.config.memoryOpeningTopK ?? 5)) || 0))).catch(() => []) : [];
     const nativeIndex = !shared && this.config?.memoryEngineEnabled === true && this.config?.memoryOpeningIndexEnabled === true && this.nativeIndex
       ? await this.nativeIndex(userId, projectId).then(index => ({ ...index, historySearchEnabled: this.config.memoryHistorySearchEnabled !== false })).catch(() => null) : null;
@@ -304,7 +317,7 @@ export class ResidentProfiles {
     if (block.omitted > 0) recordResidentOmitted(block.omitted);
 
     // An index-only opening must change when its counts or history availability do.
-    const digestText = (block.index ? `${block.profile}\n${block.index}` : block.profile) + (block.safety ? `\n${block.safety}` : '');
+    const digestText = (block.index ? `${block.profile}\n${block.index}` : block.profile) + (block.safety ? `\n${block.safety}` : '') + (block.standing ? `\n${block.standing}` : '');
     const digest = createHash("sha256").update(shared ? JSON.stringify([contextPolicyIdentity(policy),digestText]) : digestText).digest("hex");
     // A conversation whose state cannot be read (an id the store cannot hold) is handed the profile and not recorded as
     // having been: it is the safe direction, and the next dispatch asks again.

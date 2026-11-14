@@ -156,7 +156,7 @@ test('the root is denied every tool of the plugin\'s server beyond the five the 
 
 test('search hint is an independent opt-in sentence, only on a native account, and reaches the plugin section', async () => {
   const options = { askUserEnabled: false, capsuleActive: false, reviewEnabled: false, capsuleToolEnabled: false, openVikingMemory: true }
-  const hint = '开场展示的只是部分记忆（画像和少量名称）；用户问起自己、身边的人事或以前说过、决定过的事，开场内容里没有时，先用 `mcp__openviking__search` 查一次，搜索结果为空后才说没有记录。'
+  const hint = '开场展示的只是部分记忆（画像和少量名称）；用户问起自己、身边的人事或以前说过、决定过的事，开场内容里没有时，先用 `mcp__openviking__search` 查一次；不同的人、属性或时间的记忆不是答案，应说明已记录的内容，并明确所问事实没有记录。对用户或助手以前说过的内容，记忆文件没有答案时，回答「没有记录」前必须查以前的对话一次：用同一个 `mcp__openviking__search`，不限定 target_uri，阅读返回的原始对话摘录；如果已查过就不重复。助手自己说过或建议过什么，以标明 assistant 的原始对话为来源，不把建议当成用户的决定；历史检索不可用时如实说明无法核实。'
   const baseline = buildGuidanceText([], options)
   assert.equal(buildGuidanceText([], { ...options, memorySearchHint: false }), baseline)
   assert.equal(buildGuidanceText([], { ...options, memorySearchHint: true }), baseline.replace('不在此列。）', `不在此列。）${hint}`))

@@ -418,3 +418,31 @@ test('index-only openings reach default projects, track count changes, and honor
   const broken = new ResidentProfiles({ config, store: memory, nativeIndex: async () => { throw new Error('privacy read failed'); } });
   assert.equal((await broken.forDispatch('u1', scope)).text, '');
 });
+
+test('standing preferences appear late without use counts, preserve escaping and budget, and change the digest', async () => {
+  let body = '- For weekly reports, use at most 140 characters.', digest = null;
+  const files = () => [{ uri: 'viking://user/owner/memories/preferences/self/length.md', body, usedCount: 0 }];
+  const config = { memoryEngineEnabled: true, memoryStandingInstructionsEnabled: true };
+  const store = { settings: async () => ({ pausedProjects: [] }), sessionState: async () => ({}),
+    residentState: async () => ({ digest, compactedSince: false }), noteResidentDelivered: async (_u, _p, _s, value) => { digest = value; } };
+  const profiles = new ResidentProfiles({ config, store, nativeFiles: async () => files() });
+  const scope = { projectId: 'default', sessionId: 'ses_standing' };
+  const first = await profiles.forDispatch('owner', scope);
+  assert.match(first.text, /140 characters/);
+  await first.delivered();
+  assert.equal((await profiles.forDispatch('owner', scope)).due, false);
+  body = '- For weekly reports, use at most 100 characters.';
+  assert.equal((await profiles.forDispatch('owner', scope)).reason, 'changed');
+  for (const maxTokens of [0, 40, 200, 1500]) {
+    const block = renderResidentProfile({ nativeFiles: files(), config, maxTokens });
+    assert.ok(estimatePromptTokens(block.text) <= maxTokens);
+  }
+  const rendered = renderResidentProfile({ nativeFiles: files(), config, capsuleFacts: [fact()] });
+  assert.ok(rendered.text.indexOf('用户本人的持续偏好') > rendered.text.indexOf('type="'));
+  assert.equal(renderResidentProfile({ nativeFiles: files() }).text, '');
+  let sharedReads = 0;
+  const shared = new ResidentProfiles({ config, store, nativeFiles: async () => { sharedReads++; return files(); },
+    contextPolicies: { forProject: async () => ({ kind: 'geo-project', controlProjectId: 'shared', ownerId: 'owner' }) } });
+  assert.doesNotMatch((await shared.forDispatch('owner', { ...scope, projectId: 'shared' })).text, /100 characters/);
+  assert.equal(sharedReads, 0);
+});

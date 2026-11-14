@@ -1,3 +1,4 @@
+import { personalMemoryTravels } from './openVikingLayout.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { migrateMemorySettings } from "./memorySettingsPersistence.mjs";
 import {
@@ -1123,15 +1124,17 @@ export class NativeMemoryOverlay {
    * `projectId`: what a conversation of `projectId` does not read (a project's rules and facts are its own, 2026-10-27). The catch-all
    * project's files are no project's and stay readable everywhere; a conversation in the catch-all reads no named project's.
    * @param {string} userId @param {string} projectId @param {number} [limit]
+   * @param {{peopleAcrossProjects?: boolean, memoryRoot?: string}} [options]
    * @returns {Promise<string[]>}
    */
-  async otherProjectUris(userId, projectId, limit = 10000) {
+  async otherProjectUris(userId, projectId, limit = 10000, { peopleAcrossProjects = false, memoryRoot = "" } = {}) {
     const bound = Math.max(1, Math.min(10000, Math.trunc(Number(limit)) || 10000));
     const result = await this.#query(`SELECT uri FROM evimed_memory.native_files WHERE user_id=$1 AND memory_type=ANY($2::text[])
       AND project_id IS NOT NULL AND project_id<>$3 AND project_id<>$4 ORDER BY uri LIMIT $5`,
     [owner(userId), [...OPENVIKING_PROJECT_MEMORY_TYPES], String(projectId ?? ""), CATCH_ALL_PROJECT_ID, bound + 1]);
     if (result.rows.length > bound) throw new HttpError(503, "memory_index_listing_too_large", "The complete set of other projects' files exceeds its safe recall bound.");
-    return result.rows.map((/** @type {any} */ row) => String(row.uri));
+    return result.rows.map((/** @type {any} */ row) => String(row.uri))
+      .filter(uri => !personalMemoryTravels(uri, memoryRoot, peopleAcrossProjects));
   }
 
   /** @param {string} userId @param {string} uri @param {any[]} labels the source labels now written into the file */

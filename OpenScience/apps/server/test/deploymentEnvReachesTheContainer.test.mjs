@@ -124,6 +124,8 @@ const operatorLevers = {
   // operator who chose `builtin` keeps paying for embeddings — and every recall
   // still returns memories, which is why nothing ever reports the setting was
   // dropped.
+  OPEN_SCIENCE_MEMORY_PEOPLE_ACROSS_PROJECTS_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_MEMORY_FILE_SEARCH_MIN_SCORE: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_INDEX_PROVIDER: ["open-science-web"],
   OPEN_SCIENCE_MEMORY_INDEX_STRICT: ["open-science-web"],
   OPEN_SCIENCE_OPENVIKING_URL: ["open-science-web"],

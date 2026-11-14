@@ -183,3 +183,40 @@ test('opening index uses the overlay and gateway scope, omits private names, and
   await resident.attached({ id: f.userId }, { id: 'default' }, 'ses_index', { digest: block.digest, memories: [] });
   assert.equal(await resident.forSession({ id: f.userId }, { id: 'default' }, 'ses_index'), null);
 });
+
+test('standing preferences and portable safety pass store, resident service and real capsule session gateway', options, async t => {
+  const { createServer } = await import('node:http');
+  const { once } = await import('node:events');
+  const { NativeMemoryStore } = await import('../src/nativeMemoryStore.mjs');
+  const { createCapsuleGatewayHandler } = await import('../src/capsuleGateway.mjs');
+  const f = await fixture(t, { config: { memorySafetyNotesEnabled: true } });
+  const config = { memoryEngineEnabled: true, memoryStandingInstructionsEnabled: true, memorySafetyNotesEnabled: true };
+  const native = new NativeMemoryStore({ sessions: f.sessions, overlay: f.overlay, standingInstructionsEnabled: true, peopleAcrossProjectsEnabled: true });
+  for (const [path, type, projectId, body] of [
+    ['preferences/self/length.md', 'preferences', null, '- Replies must be at most 140 characters.'],
+    ['safety_notes/father.md', 'safety_notes', A, '# Father\n- Reported penicillin allergy.'],
+    ['notes/project.md', 'notes', A, '- Private project plan.'],
+  ]) {
+    const uri = f.seed(path, body, { type, tags: projectId ? [`project=${projectId}`] : [] });
+    await f.overlay.upsertFile({ userId: f.userId, uri, memoryType: type, projectId, body });
+  }
+  const profiles = new ResidentProfiles({ config, store: f.memorySettings,
+    nativeFiles: (...args) => native.openingFiles(...args), safetyNotes: (...args) => native.safetyNotes(...args) });
+  const resident = nativeSessionResident({ residentProfiles: profiles, activeRuns: async () => [], startedByPlatform: () => false });
+  const handler = createCapsuleGatewayHandler({
+    runtimeManager: { assertActiveEviMedWorkloadToken: async () => ({ userId: f.userId, projectId: B }) },
+    store: { userById: async () => ({ id: f.userId }), requireProject: async () => ({ id: B, userId: f.userId }) },
+    service: {}, resident, sessions: { running: async () => [], state: async () => ({}), notes: async () => [] },
+  });
+  const server = createServer((req, res) => { void handler(req, res); });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const response = await fetch(`http://127.0.0.1:${server.address().port}/internal/capsules/v1/session`, {
+    method: 'POST', headers: { authorization: 'Bearer fixture-token', 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: 'ses_readpath' }),
+  });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.match(result.context, /140 characters/); assert.match(result.context, /penicillin allergy/);
+  assert.doesNotMatch(result.context, /Private project plan/);
+  assert.ok(result.context.indexOf('140 characters') > result.context.indexOf('penicillin allergy'));
+});

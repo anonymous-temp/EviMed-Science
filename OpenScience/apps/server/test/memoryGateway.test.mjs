@@ -1313,3 +1313,51 @@ test('deferred maintenance fences a late extraction in REST, MCP read, search an
   admitted = `- ${withdrawn}\n${retained}`;
   assert.match(JSON.stringify(await request('read', { uris: [uri] })), /Old booking/);
 });
+
+for (const floor of [0, 0.895]) test(`native file scores and optional floor reach REST and MCP (floor=${floor})`, async t => {
+  const f = await fixture(t, { config: { memoryFileSearchMinScore: floor } });
+  f.stub.seedMemory(OV_USER, 'people/a.md', 'Recorded neighbour A');
+  f.stub.seedMemory(OV_USER, 'people/b.md', 'Recorded neighbour B');
+  const rest = await f.call('POST', '/api/v1/search/search', { query: 'neighbour' });
+  assert.deepEqual(rest.json.result.memories.map(hit => hit.score), floor ? [0.9] : [0.9, 0.89]);
+  const rpc = await f.mcp({ jsonrpc: '2.0', id: 901, method: 'tools/call', params: { name: 'search', arguments: { query: 'neighbour' } } });
+  assert.deepEqual(JSON.parse(rpc.messages[0].result.content[0].text).memories.map(hit => hit.score), floor ? [0.9] : [0.9, 0.89]);
+  assert.equal(f.stub.sent('POST', '/api/v1/search/search').at(-1).body.score_threshold, floor || undefined);
+});
+
+test('original assistant history survives an empty memory-file search, with role and date in REST and MCP', async t => {
+  const { historyChunks } = await import('../src/memoryHistory.mjs');
+  const chunks = historyChunks([{ role: 'assistant', content: 'I suggested coloured notebook labels.', created_at: '2026-11-01T10:00:00Z' }]);
+  const f = await fixture(t, { config: { memoryHistorySearchEnabled: true, memoryFileSearchMinScore: 0.99 },
+    historySearch: async () => chunks.map(chunk => ({ ...chunk, conversationTitle: 'Earlier advice', conversationUrl: '/app/chat/earlier' })) });
+  const rest = await f.call('POST', '/api/v1/search/search', { query: 'notebook labels' });
+  assert.equal(rest.json.result.memories.length, 0);
+  assert.equal(rest.json.result.history[0].messages[0].sourceRole, 'assistant');
+  const rpc = await f.mcp({ jsonrpc: '2.0', id: 902, method: 'tools/call', params: { name: 'search', arguments: { query: 'notebook labels' } } });
+  assert.match(rpc.messages[0].result.content.at(-1).text, /assistant · 2026-11-01.*I suggested coloured notebook labels/);
+});
+
+test('portable people pass the real overlay and gateway on every read surface; project facts and privacy stay hidden', async t => {
+  const { NativeMemoryOverlay } = await import('../src/nativeMemoryOverlay.mjs');
+  const people = `${ROOT}/memories/people/father.md`, other = `${ROOT}/memories/notes/project.md`, privateUri = `${ROOT}/memories/people/private.md`;
+  for (const enabled of [false, true]) {
+    const overlay = new NativeMemoryOverlay({ database: { transaction: async () => {}, query: async sql => ({ rows:
+      sql.includes('native_markers') ? [{}] : sql.includes('AND sensitive') ? [{ uri: privateUri }] : sql.includes('memory_type=ANY') ? [people, other, privateUri].map(uri => ({ uri })) : [] }) } });
+    const f = await fixture(t, { config: { memoryPeopleAcrossProjectsEnabled: enabled }, overlay });
+    f.stub.seedMemory(OV_USER, 'people/father.md', 'Reported allergy');
+    f.stub.seedMemory(OV_USER, 'notes/project.md', 'Project allergy analysis');
+    f.stub.seedMemory(OV_USER, 'people/private.md', 'Private allergy');
+    const search = await f.call('POST', '/api/v1/search/search', { query: 'allergy' });
+    assert.deepEqual(search.json.result.memories.map(hit => hit.uri), enabled ? [people] : []);
+    assert.equal((await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(people)}`)).status, enabled ? 200 : 404);
+    const listing = await f.call('GET', `/api/v1/fs/ls?uri=${encodeURIComponent(`${ROOT}/memories/people`)}&recursive=true`);
+    assert.equal(JSON.stringify(listing.json).includes('father.md'), enabled);
+    for (const name of ['search', 'read', 'list']) {
+      const args = name === 'search' ? { query: 'allergy' } : name === 'read' ? { uris: [people, privateUri, other] } : { uri: `${ROOT}/memories`, recursive: true };
+      const rpc = await f.mcp({ jsonrpc: '2.0', id: 903, method: 'tools/call', params: { name, arguments: args } });
+      const text = JSON.stringify(rpc.messages);
+      assert.equal(text.includes(name === 'read' ? 'Reported allergy' : 'father.md'), enabled);
+      assert.doesNotMatch(text, /Private allergy|Project allergy analysis/);
+    }
+  }
+});

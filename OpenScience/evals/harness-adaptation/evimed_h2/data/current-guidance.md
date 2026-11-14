@@ -1,6 +1,6 @@
 <!-- READ-ONLY CONTEXT. The platform's standing guidance, as a plain conversation reads it. It is not part of the harness you edit:
      a change here is dropped. Your supplement goes in guidance.md and adds to this text; it must not repeat it. -->
-<!-- source: packages/socket/src/guidanceText.mjs sha256 80c4ce69dcb6e5771ef77a5e7ec4719b00dd44f5ae71976106ae890f8692b99f; the professional-workflow index and skill roots are left out -->
+<!-- source: packages/socket/src/guidanceText.mjs sha256 a8308f1f1d860991b4d75f2c0c26ab4c647bf0c0d1dc451cb0c0051641431e64; the professional-workflow index and skill roots are left out -->
 <evimed-orchestration>
 
 ## 你怎么工作

@@ -515,3 +515,19 @@ test('real AgentRuns dispatch and HTTP kernel acknowledgement allow gateway sour
   assert.equal(receipts, 1);
   assert.equal((await ledger.list(project))[0].dispatchStatus, 'accepted');
 });
+
+test('portable people switch never joins personal and shared GEO namespaces in search, read or list', options, async t => {
+  const f = await fixture(t, { config: { memoryPeopleAcrossProjectsEnabled: true } });
+  const shared = await f.contexts.forProject(f.a);
+  const own = f.stub.seedMemory(f.sessions.engineUser(f.owner.id), 'people/father.md', 'Personal allergy');
+  const team = f.stub.seedMemory(shared.namespaceId, 'people/colleague.md', 'Shared allergy');
+  for (const [project, visible, hidden] of [[f.a, team, own], [f.ordinary, own, team]]) {
+    const search = await f.call(project, 'POST', '/api/v1/search/search', { query: 'allergy' });
+    assert.equal(search.status, 200); assert.ok(search.text.includes(visible)); assert.ok(!search.text.includes(hidden));
+    const read = await f.call(project, 'GET', `/api/v1/content/read?uri=${encodeURIComponent(hidden)}`);
+    assert.equal(read.status, 403);
+    const root = visible.slice(0, visible.indexOf('/people/'));
+    const list = await f.call(project, 'GET', `/api/v1/fs/ls?uri=${encodeURIComponent(root)}&recursive=true`);
+    assert.ok(list.text.includes(visible)); assert.ok(!list.text.includes(hidden));
+  }
+});
