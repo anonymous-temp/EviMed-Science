@@ -530,9 +530,14 @@ test('AL8 account archive omits stale memory projections but preserves original 
   const response = await fetch(`${f.base}/api/account/export`, {headers:{cookie:f.cookie}});
   assert.equal(response.status,200);
   const entries = tarEntries(Buffer.from(await response.arrayBuffer()));
-  const original = [...entries].filter(([name])=>name.includes('/dsh-home/sessions/'));
-  assert.equal(original.length,1);
-  assert.match(original[0][1].toString(), /WITHDRAWN-MEMORY-PROJECTION/);
-  for (const [name, bytes] of entries) if (!name.includes('/dsh-home/sessions/')) assert.doesNotMatch(bytes.toString(), /WITHDRAWN-MEMORY-PROJECTION/);
+  const sessionsPath = 'projects/default/runtime/container-runtime/dsh-home/sessions/';
+  const transcriptPath = `${sessionsPath}s/session.jsonl`;
+  // TAR includes both empty directory entries as well as the original transcript.
+  assert.deepEqual([...entries.keys()].filter(name => name.includes('/dsh-home/sessions/')).sort(),
+    [sessionsPath, `${sessionsPath}s/`, transcriptPath]);
+  for (const directory of [sessionsPath, `${sessionsPath}s/`]) assert.equal(entries.get(directory).length, 0, directory);
+  assert.equal(entries.get(transcriptPath).toString(), JSON.stringify({role:'user',content:withdrawn}));
+  // Only this exact original transcript may retain the text, including among other session entries.
+  for (const [name, bytes] of entries) if (name !== transcriptPath) assert.equal(bytes.includes(withdrawn), false, name);
   assert.match(entries.get('account.json').toString(), /忘记仅移除记忆，不删除对话/);
 });
