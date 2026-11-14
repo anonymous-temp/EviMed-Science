@@ -79,6 +79,8 @@ const PREFLIGHT_ROW_BYTES = 32;
 /** A database double: enough PostgreSQL shape for the snapshot assembly, no more.
  * @param {any[]} usage */
 function fakeDatabase(usage, documents = [], feedbackEvents = []) {
+  /** @type {Set<unknown>} */
+  const checkedOutClients = new Set();
   const database = {
     /** @type {string[]} */ queries: [],
     /** What its pre-flight has reported in total — accumulated as it answers,
@@ -86,11 +88,22 @@ function fakeDatabase(usage, documents = [], feedbackEvents = []) {
      * holds no matter what. */
     preflightBytes: 0,
     /** @param {(client:any) => Promise<any>} operation */
-    transaction: (operation) =>
-      operation({
-        query: (/** @type {string} */ text, /** @type {any[]} */ values) =>
-          database.query(text, values),
-      }),
+    async transaction(operation) {
+      const client = {
+        query: (/** @type {string} */ text, /** @type {unknown[]} */ values = []) => {
+          assert.ok(checkedOutClients.has(client), "The database client is not owned by this transaction.");
+          return database.query(text, values);
+        },
+      };
+      checkedOutClients.add(client);
+      try { return await operation(client); }
+      finally { checkedOutClients.delete(client); }
+    },
+    /** @template T @param {unknown} client @param {() => Promise<T>} work */
+    async withTransactionClient(client, work) {
+      assert.ok(checkedOutClients.has(client), "The database client is not owned by this transaction.");
+      return work();
+    },
     /** @param {string} text @param {any[]} [values] */
     async query(text, values = []) {
       database.queries.push(text);
@@ -126,6 +139,44 @@ function fakeDatabase(usage, documents = [], feedbackEvents = []) {
   };
   return database;
 }
+
+test("the database fake refuses substituted and released transaction clients", async () => {
+  const database = fakeDatabase([]);
+  let entered = false;
+  const work = async () => { entered = true; };
+  const released = await database.transaction(async client => {
+    await assert.rejects(database.withTransactionClient({ query: client.query }, work), /not owned by this transaction/);
+    assert.equal(entered, false);
+    await database.withTransactionClient(client, work);
+    assert.equal(entered, true);
+    return client;
+  });
+  entered = false;
+  await assert.rejects(database.withTransactionClient(released, work), /not owned by this transaction/);
+  assert.equal(entered, false);
+});
+
+test("snapshot query observers preserve ownership through archive collection", async () => {
+  const database = fakeDatabase([]);
+  const observed = Object.create(database);
+  let inspected = false;
+  observed.transaction = (/** @type {Parameters<typeof database.transaction>[0]} */ operation) => database.transaction(async client => {
+    const query = client.query;
+    client.query = async (/** @type {string} */ sql, /** @type {unknown[] | undefined} */ values) => {
+      inspected = true;
+      return query.call(client, sql, values);
+    };
+    try { return await operation(client); }
+    finally { client.query = query; }
+  });
+  const exported = await withAccountExportSnapshot(observed, { id: "owner", accountCreatedAt: "2026-09-06 00:00:00+00" }, {}, async snapshot => {
+    await snapshot.withDatabaseSnapshot(async () => { assert.ok(inspected); });
+    return snapshot;
+  });
+  let entered = false;
+  await assert.rejects(exported.withDatabaseSnapshot(async () => { entered = true; }), { code: "account_export_snapshot_closed" });
+  assert.equal(entered, false);
+});
 
 test("account snapshots hydrate compact reviews into the legacy portable shape and keep unavailable records with an honest omission", async () => {
   const base = { artifactId: `ra_${"a".repeat(64)}`, versionId: `rv_${"b".repeat(64)}`, projectId: "default", path: "report.md", digest: "c".repeat(64),

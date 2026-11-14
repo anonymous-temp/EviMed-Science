@@ -92,27 +92,54 @@ test('snapshot assembly budgets and projects every capsule store before handing 
     native_rejections: held.rejections };
   /** @type {[string, unknown[]][]} */
   const queries = [];
-  let inSnapshot = false, sourceRedacted = false;
+  let transactionOpen = false, inSnapshot = false, sourceRedacted = false;
   const client = {
     /** @param {string} sql @param {unknown[]} [values] */
     query: async (sql, values = []) => {
+    assert.ok(transactionOpen, 'every snapshot query requires the held transaction');
     queries.push([sql, values]);
     if (sql.startsWith('SELECT count(*)')) return { rows: [{ rows: '1', bytes: '1' }] };
     if (sql.includes('FOR SHARE') && sql.includes('FROM evimed_control.users')) return { rows: [{ id: 'owner', sameGeneration: true, accountCreatedAt: at }] };
     for (const [table, rows] of Object.entries(nativeRows)) if (sql.startsWith('SELECT ') && sql.includes(`FROM evimed_memory.${table} `)) return { rows };
     return { rows: [], rowCount: 0 };
   } };
-  const database = { query: client.query, transaction: async (/** @type {(bound: typeof client) => Promise<unknown>} */ work) => work(client),
+  const database = {
+    /** @param {string} sql @param {unknown[]} [values] */
+    query: async (sql, values = []) => {
+      if (!transactionOpen) {
+        assert.ok(!sql.startsWith('SELECT ') || sql === "SELECT 1 FROM evimed_memory.native_markers WHERE name='project-stamps-v1'"
+          || sql === "SELECT to_regclass('evimed_control.projects') IS NOT NULL AS ok", 'snapshot reads cannot run outside the transaction');
+        return { rows: [], rowCount: 0 };
+      }
+      assert.ok(inSnapshot, 'service queries must borrow the snapshot client');
+      return client.query(sql, values);
+    },
+    transaction: async (/** @type {(bound: typeof client) => Promise<unknown>} */ work) => {
+      transactionOpen = true;
+      try { return await work(client); } finally { transactionOpen = false; }
+    },
     withTransactionClient: async (/** @type {typeof client} */ bound, /** @type {() => Promise<unknown>} */ work) => {
-    assert.equal(bound, client); inSnapshot = true;
-    try { return await work(); } finally { inSnapshot = false; }
-  } };
-  const nativeMemory = { contexts: { all: async () => { assert.ok(inSnapshot); return [{ userRoot: root }]; }, assertKnown: async () => { assert.ok(inSnapshot); } },
-    sourceDeletion: { assertAccountExportSafe: async () => { assert.ok(inSnapshot); }, historyFingerprints: async () => new Map(),
-      redactRevisions: async (/** @type {string} */ _owner, /** @type {import("../src/nativeMemoryAccountExport.mjs").NativeExportRow[]} */ rows) => { assert.ok(inSnapshot); sourceRedacted = true;
+      assert.ok(transactionOpen, 'The database client is not owned by this transaction.');
+      assert.equal(bound, client, 'The database client is not owned by this transaction.');
+      const previous = inSnapshot; inSnapshot = true;
+      try { return await work(); } finally { inSnapshot = previous; }
+    },
+  };
+  const readServiceState = async () => {
+    assert.ok(inSnapshot && transactionOpen);
+    await database.query('SELECT * FROM evimed_source_deletion.conversations WHERE user_id=$1', ['owner']);
+  };
+  const nativeMemory = { contexts: { all: async () => { await readServiceState(); return [{ userRoot: root }]; }, assertKnown: readServiceState },
+    sourceDeletion: { assertAccountExportSafe: readServiceState, historyFingerprints: async () => { await readServiceState(); return new Map(); },
+      redactRevisions: async (/** @type {string} */ _owner, /** @type {import("../src/nativeMemoryAccountExport.mjs").NativeExportRow[]} */ rows) => { await readServiceState(); sourceRedacted = true;
         return rows.map(row => row.id === 'source' ? { ...row, before: null, after: null, sourceDeletedText: true } : row); } } };
-  const entries = await withAccountExportSnapshot(database, { id: 'owner', accountCreatedAt: at }, {}, async snapshot =>
-    appendAccountStateArchiveEntry([], snapshot.data, {}), { nativeMemory });
+  const entries = await withAccountExportSnapshot(database, { id: 'owner', accountCreatedAt: at }, {}, async snapshot => {
+    assert.ok(transactionOpen, 'archive collection stays inside the account-deletion lock');
+    await snapshot.withDatabaseSnapshot(readServiceState);
+    return appendAccountStateArchiveEntry([], snapshot.data, {});
+  }, { nativeMemory });
+  assert.equal(transactionOpen, false);
+  await assert.rejects(database.withTransactionClient(client, async () => {}), /not owned by this transaction/);
   const bytes = entries[0].data, state = JSON.parse(bytes.toString());
   for (const section of ['forgetRequests', 'revisions', 'admissions', 'imports']) await t.test(section, () => {
     assert.ok(Array.isArray(state.nativeMemory?.[section]), `${section} is missing from the actual archive entry`);

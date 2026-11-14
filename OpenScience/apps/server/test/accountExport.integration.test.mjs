@@ -256,26 +256,52 @@ test("documents, revisions and usage share one PostgreSQL snapshot while the acc
   const f = await fixture(t);
   const db = f.app.store.database;
   const user = await authenticatedGeneration(f);
+  await f.app.nativeMemory.overlay.noteRegistered(f.owner);
+  const root = userRootUri(f.owner);
+  await db.query(`INSERT INTO evimed_memory.native_commits(user_id,archive_uri,engine_session,origin,state,extraction)
+    VALUES($1,$2,'dsh-snapshot','gateway','pending','{"forgetRequests":{"state":"pending","requests":[]}}')`,
+  [f.owner, `${root}/sessions/dsh-snapshot/history/archive_001`]);
+  await db.query(`INSERT INTO evimed_memory.native_revisions(user_id,uri,memory_type,change,actor,reason,before,after)
+    VALUES($1,$2,'notes','updated','user','edited on the memory page','original edit','replacement edit')`,
+  [f.owner, `${root}/memories/notes/snapshot.md`]);
+  await db.query(`INSERT INTO evimed_memory.native_admissions(user_id,candidate_id,candidate_revision,engine_session,state,pending_text,account_created_at)
+    SELECT id,'snapshot',1,'evimed-snapshot','queued','original pending input',created_at FROM evimed_control.users WHERE id=$1`, [f.owner]);
+  await db.query(`INSERT INTO evimed_memory.native_imports(id,user_id,statements,expires_at)
+    VALUES($1,$2,'[{"text":"original import"}]',now()+interval '1 hour')`, [`imp_${createHash("sha256").update(f.owner).digest("hex").slice(0, 24)}`, f.owner]);
   let changed = false;
   const observed = Object.create(db);
-  observed.transaction = operation => db.transaction(client => operation({ query: async (sql, values) => {
-    const result = await client.query(sql, values);
-    if (!changed && sql.startsWith("SELECT count(*)") && sql.includes("FROM evimed_product.documents")) {
-      changed = true;
-      await f.documents.put(f.owner, "fact", "fact-one", { capsuleId: "capsule-one", content: "concurrently changed", status: "approved" }, { expectedRevision: 2 });
-      await db.query("UPDATE evimed_usage.model_requests SET actual_cost=0.5 WHERE user_id=$1", [f.owner]);
-    }
-    return result;
-  } }));
+  observed.transaction = (/** @type {Parameters<typeof db.transaction>[0]} */ operation) => db.transaction(async client => {
+    // Instrument the owned client itself: a { query } wrapper is not a checked-out client.
+    const query = client.query;
+    client.query = async (/** @type {string} */ sql, /** @type {unknown[] | undefined} */ values) => {
+      const result = await query.call(client, sql, values);
+      if (!changed && sql.startsWith("SELECT count(*)") && sql.includes("FROM evimed_memory.native_commits")) {
+        changed = true;
+        await f.documents.put(f.owner, "fact", "fact-one", { capsuleId: "capsule-one", content: "concurrently changed", status: "approved" }, { expectedRevision: 2 });
+        await db.query("UPDATE evimed_usage.model_requests SET actual_cost=0.5 WHERE user_id=$1", [f.owner]);
+        await db.query(`UPDATE evimed_memory.native_commits SET extraction=jsonb_set(extraction,'{forgetRequests,state}','"completed"') WHERE user_id=$1`, [f.owner]);
+        await db.query("UPDATE evimed_memory.native_revisions SET before='concurrently changed edit' WHERE user_id=$1", [f.owner]);
+        await db.query("UPDATE evimed_memory.native_admissions SET pending_text='concurrently changed input' WHERE user_id=$1", [f.owner]);
+        await db.query(`UPDATE evimed_memory.native_imports SET statements=jsonb_set(statements,'{0,text}','"concurrently changed import"') WHERE user_id=$1`, [f.owner]);
+      }
+      return result;
+    };
+    try { return await operation(client); }
+    finally { client.query = query; }
+  });
   let state;
   await withAccountExportSnapshot(observed, user, f.app.config, async snapshot => {
     state = JSON.parse(snapshot.data.toString());
     await assert.rejects(db.transaction(client => client.query("SELECT id FROM evimed_control.users WHERE id=$1 FOR UPDATE NOWAIT", [f.owner])), { code: "55P03" });
-  });
+  }, { nativeMemory: { contexts: f.app.nativeMemoryContexts, sourceDeletion: f.app.sourceDeletion } });
   assert.equal(changed, true);
   assert.equal(state.documents.find(row => row.kind === "fact").payload.content, "owner corrected fact");
   assert.equal(state.revisions.filter(row => row.kind === "fact").length, 2);
   assert.equal(state.usage[0].actualCost, "0.25000000");
+  assert.equal(state.nativeMemory.forgetRequests[0].state, "pending");
+  assert.equal(state.nativeMemory.revisions[0].before, "original edit");
+  assert.equal(state.nativeMemory.admissions[0].text, "original pending input");
+  assert.equal(state.nativeMemory.imports[0].statements[0].text, "original import");
   assert.equal((await f.documents.get(f.owner, "fact", "fact-one")).payload.content, "concurrently changed");
   await db.transaction(client => client.query("SELECT id FROM evimed_control.users WHERE id=$1 FOR UPDATE NOWAIT", [f.owner]));
 });
