@@ -41,7 +41,7 @@
       "outputs": [
         {
           "path": "method-frame.json",
-          "required": true,
+          "required": false,
           "role": "work"
         }
       ],
