@@ -375,7 +375,7 @@ test("the boot proof boots under the environment production actually emits", asy
   assert.equal(optionalShell.status, 0, optionalShell.stderr);
   assert.deepEqual(optionalShell.stdout.split("\n").slice(0, -1), optionalNames.map(name => defaults[name]),
     "the boot proof uses the ordinary optional roots with no selected generation or gateway");
-  const memoryNames = ["EVIMED_MEMORY_FORGET_TARGETS_ENABLED", "EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED",
+  const memoryNames = ["EVIMED_MEMORY_PERSON_MERGE_ENABLED", "EVIMED_MEMORY_FORGET_TARGETS_ENABLED", "EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED",
     "EVIMED_MEMORY_SEARCH_HINT_ENABLED", "EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED"];
   const memoryExport = smoke.split("\n").filter(line => /^export\s.*EVIMED_MEMORY_/.test(line)).join("\n");
   const memoryShell = spawnSync("bash", ["-c", `${memoryExport}\nfor name in ${memoryNames.join(" ")}; do printenv "$name"; done`], {

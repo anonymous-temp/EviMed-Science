@@ -43,20 +43,20 @@ test('cross-topic induction reaches the native preference, retains original sour
   assert.equal(await f.sessions.read(f.userId, preference), null);
   assert.ok((await f.overlay.removals(f.userId)).some(row => row.text.includes('inferred from behaviour')));
 });
-test('explicit user identity confirmation merges files in code, preserves alias and both histories', options, async t => {
+test('extractor identity markers never merge files without the confirmed tool operation', options, async t => {
   const f = await scene(t);
   const first = f.seed('people/王阿姨.md', '# 王阿姨\n- 王阿姨喜欢散步。', { type: 'people' });
   const other = f.seed('people/小王阿姨.md', '# 小王阿姨\n- 小王阿姨喜欢读书。', { type: 'people' });
   const before = await f.sessions.read(f.userId, first);
   const after = `${before}\n- Confirmed aliases: ["王阿姨","小王阿姨"]\n- Alias confirmation: "王阿姨和小王阿姨是同一个人"`;
-  // Extraction only adds the confirmation to one card: the real worker/store must perform the cross-file merge.
+  // Even witnessed extraction markers are not a tool decision by the person.
   f.stub.extract = () => ({ updates: [{ uri: first, memory_type: 'people', before, after }] });
   await f.commitConversation('confirm', [{ role: 'user', text: '王阿姨和小王阿姨是同一个人' }]);
   await f.worker.processCommits({ userId: f.userId });
-  assert.equal(await f.sessions.read(f.userId, other), null);
+  assert.match(await f.sessions.read(f.userId, other), /喜欢读书/);
   const merged = await f.sessions.read(f.userId, first);
-  assert.match(merged, /Confirmed aliases/); assert.match(merged, /喜欢散步/); assert.match(merged, /喜欢读书/);
-  assert.ok((await f.overlay.revisionsOf(f.userId, other)).some(revision => revision.reason === 'explicit person alias merge'));
+  assert.match(merged, /Confirmed aliases/); assert.match(merged, /喜欢散步/); assert.doesNotMatch(merged, /喜欢读书/);
+  assert.equal((await f.overlay.revisionsOf(f.userId, other)).some(revision => revision.reason === 'explicit person alias merge'), false);
 });
 test('near names and assistant assertions cannot authorize merging or confirmed-alias fences', options, async t => {
   for (const role of ['user', 'assistant']) {

@@ -260,6 +260,7 @@ test('all four launch wording switches reach guidance without changing recorded 
     memorySearchHint: 'EVIMED_MEMORY_SEARCH_HINT_ENABLED',
     memoryForgetToolHint: 'EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED',
     memoryForgetTargets: 'EVIMED_MEMORY_FORGET_TARGETS_ENABLED',
+    memoryPersonMerge: 'EVIMED_MEMORY_PERSON_MERGE_ENABLED',
     memoryStandingInstructions: 'EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED',
   };
   const saved = Object.fromEntries(Object.values(switches).map(key => [key, process.env[key]]));
@@ -290,4 +291,20 @@ test('all four launch wording switches reach guidance without changing recorded 
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   }
+});
+
+test('people decisions appear only with the opt-in native memory guidance', () => {
+  const options = { ...guidanceDefaults, openVikingMemory: true };
+  assert.equal(buildGuidanceText([], options), buildGuidanceText([], { ...options, memoryPersonMerge: false }));
+  const enabled = buildGuidanceText([], { ...options, memoryPersonMerge: true });
+  assert.match(enabled, /mcp__openviking__merge_people/);
+  assert.match(enabled, /mcp__openviking__distinct_people/);
+  assert.match(enabled, /绝不自行判断/);
+  assert.doesNotMatch(buildGuidanceText([], { ...options, openVikingMemory: false, memoryPersonMerge: true }), /merge_people/);
+});
+
+test('people tools are denied by default and admitted only through the launch flag', () => {
+  const tools = ['mcp__openviking__merge_people', 'mcp__openviking__distinct_people'];
+  assert.deepEqual(rootHiddenMcpTools(tools), [...tools].sort());
+  assert.deepEqual(rootHiddenMcpTools(tools, true), []);
 });
