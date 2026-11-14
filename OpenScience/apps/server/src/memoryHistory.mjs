@@ -119,6 +119,8 @@ export class MemoryHistory {
     this.nativeRemovalSources = null;
     /** @type {((scan:import('./memoryHistoryPersistence.mjs').ForgetScan)=>Promise<void>)|null} */
     this.sweepMemory = null;
+    /** @type {(() => Promise<void>)|null} */
+    this.reviewMethods = null;
     this.secrets = new MemoryHistorySecrets({ ledger, judge: secretJudge ?? createHistorySecretJudge({ config, usageLedger }) });
     this.maintenance = { summary_rebuilds: 0, forget_scans: 0, forget_scan_retries: 0 };
     this.lastBackfill = { at: null, discovered: 0, processed: 0, failed: 0, coverage: null };
@@ -305,6 +307,7 @@ export class MemoryHistory {
         await this.ledger.finishForgetScan(scan, [], scan.cursor, true);
       }
     }
+    await this.reviewMethods?.();
   }
 
   async matchRemoved(context,text,messages,judge,tokens=hardTokens(removalStatement(text))) {

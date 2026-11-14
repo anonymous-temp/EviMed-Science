@@ -5232,7 +5232,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   if (feedbackEvents && productDocuments) feedbackEvents.memoryForgetReader = productDocuments.memoryForgetReader;
   nativeMemory.history = memoryHistory;
-  if (memoryHistory) memoryHistory.sweepMemory = scan => nativeMemory.sweepForgottenMemory(scan);
+  if (memoryHistory) {
+    memoryHistory.sweepMemory = scan => nativeMemory.sweepForgottenMemory(scan);
+    // Withdrawal review is maintenance even when learning/new official promotion is disabled. This adapter never calls a model.
+    const promotionReviews = officialPromotion ?? (officialPacks && productDocuments ? createOfficialPromotion({
+      documents: productDocuments, officialPacks, facts: async () => ({}), judge: async () => null, established: async () => new Set(),
+    }) : null);
+    memoryHistory.reviewMethods = promotionReviews ? () => promotionReviews.reviewWithdrawnSources() : null;
+  }
   nativeMemoryWorker.history = memoryHistory;
   nativeMemoryWorker.verification.history = memoryHistory;
   const sourceDeletionLedger = productDatabase ? new ConversationSourceDeletionLedger(productDatabase) : null;

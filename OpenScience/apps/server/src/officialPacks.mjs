@@ -532,7 +532,7 @@ export class OfficialPacks {
 
   /**
    * What an operator reads: each published pack, and each method body that has outcomes or was stopped, with its numbers and the reason.
-   * @returns {Promise<{ packs: any[], methods: any[] }>}
+   * @returns {Promise<{ packs: any[], methods: any[], reviews: {id:string,reason:string,message:string}[] }>}
    */
   async snapshot() {
     const packs = (await this.#publicationRows()).map((row) => ({ packId: row.payload.packId, status: row.payload.status, version: row.payload.version, contentHash: row.payload.contentHash,
@@ -541,7 +541,10 @@ export class OfficialPacks {
       const harm = methodHarmTest(row.payload.learning ?? emptyLearning(row.payload.sha), OFFICIAL_HARM_TEST);
       return { key: row.payload.key, sha: row.payload.sha, status: row.payload.status, runs: harm.runs, corrected: harm.bad, test: harm.state, ...(row.payload.stopped ? { stopped: row.payload.stopped } : {}) };
     });
-    return { packs, methods };
+    const reviews = (await this.#listAll(OFFICIAL_PROMOTED_RECORD)).filter(row => ['active','retired'].includes(row.payload.status)).flatMap(row =>
+      (row.payload.pendingRetirements ?? []).filter((/** @type {{status?:unknown,reason?:unknown}} */ item) => item.status === 'pending' && item.reason === 'source_withdrawn')
+        .map(() => ({id:row.id,reason:'source_withdrawn',message:'来源已撤回，请复核这条公共做法。'})));
+    return { packs, methods, reviews };
   }
 
   /** @returns {ReturnType<typeof newCounters>} */

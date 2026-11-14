@@ -421,3 +421,12 @@ test('FT12 an explicit page replacement survives later unrelated forgets and is 
   authority.unshift({ text, fingerprint: lineFingerprint(text), rejectedAt: '2026-03-01' });
   assert.equal(await history.fenceNativeBody(context, uri, text), null, 'a later removal of the edited line itself withdraws it');
 });
+
+test('AL8 the forget maintenance loop reviews promoted sources even with no remaining scans', async () => {
+  const {MemoryHistory} = await import('../src/memoryHistory.mjs');
+  const service = new MemoryHistory({config:{},ledger:{claimForgetScans:async()=>[]}});
+  let reviews = 0;
+  service.reviewMethods = async () => { reviews++; };
+  await service.drainForgetScans();
+  assert.equal(reviews,1);
+});
