@@ -87,3 +87,13 @@ test("a copy that was on the shelf all along stays there when its upgrade fails,
   assert.ok(reports.some((line) => /could not be taken off the shelf again: product_unavailable/.test(line)), reports.join("\n"));
   assert.ok(reports.some((line) => /not adopted: capsule_adoption_failed/.test(line)), "the upgrade's own failure is still the one reported");
 });
+
+test('AL8 operator review projection never shows private text carried in a stored review item', async () => {
+  const packs = new OfficialPacks({documents:{list:async (_owner,_kind,{filter}) => ({items:filter.recordType === 'official-promoted' ? [
+    {id:'opaque-promoted-id',payload:{status:'active',pendingRetirements:[{status:'pending',reason:'source_withdrawn',message:'PRIVATE SOURCE WORDS'}]}},
+    {id:'withdrawn-by-operator',payload:{status:'rejected',pendingRetirements:[{status:'pending',reason:'source_withdrawn'}]}},
+  ] : []})}});
+  const snapshot = await packs.snapshot();
+  assert.deepEqual(snapshot.reviews,[{id:'opaque-promoted-id',reason:'source_withdrawn',message:'来源已撤回，请复核这条公共做法。'}]);
+  assert.doesNotMatch(JSON.stringify(snapshot),/PRIVATE SOURCE WORDS/);
+});
