@@ -10,7 +10,7 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
-import { METHOD_SKILL_SCHEMA, mountedMethodDigest, normalizeSkillBody } from "@evimed/domain";
+import { METHOD_MOUNT, METHOD_SKILL_SCHEMA, mountedMethodDigest, normalizeSkillBody } from "@evimed/domain";
 
 import { safeId } from "../src/security.mjs";
 import { FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "../src/internalProjects.mjs";
@@ -228,6 +228,72 @@ const topical = (/** @type {string} */ id, /** @type {string} */ name, /** @type
 });
 const lexical = () => createMethodSimilarity();
 const ask = (/** @type {any[]} */ documents, /** @type {any} */ scope) => selectLearnedMethods(fakeLearning(documents), { userId: "u1", projectId: "p1", similarity: lexical(), ...scope });
+
+test("flat selection consumes every similarity hit as on main; only the pyramid caps its full-library scores", async () => {
+  const documents = Array.from({ length: 12 }, (_, index) => doc(`method-${index}`, `method-${index}`));
+  /** @type {number[]} */
+  const limits = [];
+  const similarity = {
+    nearest: async (/** @type {string} */ _query, /** @type {{id: string}[]} */ rows, /** @type {{limit: number}} */ options) => {
+      limits.push(options.limit);
+      return Object.assign(rows.map(method => ({ method, score: 1 })), { mode: "lexical" });
+    },
+  };
+  const base = { userId: "u1", projectId: "p1", query: "denominator", similarity };
+  const flat = await selectLearnedMethods(fakeLearning(documents), base);
+  assert.equal(flat.length, documents.length);
+  assert.ok(flat.every(method => method.reason === "similarity"));
+  assert.deepEqual(await selectLearnedMethods(fakeLearning(documents), {
+    ...base, pyramid: false, minSimilarity: 0, cardEvidence: false, skipPendingRetirements: false,
+  }), flat);
+  const pyramid = await selectLearnedMethods(fakeLearning(documents), { ...base, pyramid: true });
+  assert.equal(pyramid.filter(method => method.reason === "similarity").length, METHOD_MOUNT.nearest);
+  assert.equal(pyramid.filter(method => method.reason === "explore").length, METHOD_MOUNT.explore);
+  assert.deepEqual(limits, [METHOD_MOUNT.nearest, METHOD_MOUNT.nearest, documents.length]);
+});
+
+test("shared flat selection retains all authorized hits across pages and preserves the last page's attachments", async () => {
+  const documents = Array.from({ length: 101 }, (_, index) => ({
+    ...doc(`method-${String(index).padStart(3, "0")}`, `method-${index}`, { payload: {
+      provenance: { sourceProjectId: "p1" }, dependencies: [],
+      ...(index === 100 ? { files: { "scripts/check.py": 'print("ok")' } } : {}),
+    } }), revision: 1,
+  }));
+  const contextPolicy = { kind: "geo-project", ownerId: "u1", controlProjectId: "p1" };
+  /** @type {string[]} */
+  const hydrated = [];
+  /** @type {(string | null)[]} */
+  const cursors = [];
+  const learning = {
+    ...fakeLearning(documents),
+    listMethods: async (/** @type {string} */ _userId, /** @type {{limit: number, cursor: string | null}} */ options) => {
+      assert.equal(options.limit, 100);
+      cursors.push(options.cursor);
+      const page = options.cursor ? documents.slice(100) : documents.slice(0, 100);
+      return { items: page.map(row => ({ ...row, payload: { ...row.payload, body: undefined, files: undefined } })), nextCursor: options.cursor ? null : "page-2" };
+    },
+    getMethod: async (/** @type {string} */ _userId, /** @type {string} */ id, /** @type {{expectedRevision: number}} */ options) => {
+      assert.equal(options.expectedRevision, 1);
+      hydrated.push(id);
+      return documents.find(row => row.id === id);
+    },
+  };
+  const selected = await selectLearnedMethods(learning, {
+    userId: "u1", projectId: "p1", contextPolicy, contextItems: { method: async () => true },
+    maxCount: 110, maxBytes: 1_000_000, query: "denominator", keep: [learnedMethodDirectoryName("foreign")],
+    pyramid: false, minSimilarity: 0, cardEvidence: false, skipPendingRetirements: false,
+    similarity: { nearest: async (/** @type {string} */ _query, /** @type {{id: string}[]} */ rows) => {
+      assert.equal(rows.length, 101);
+      assert.equal(hydrated.length, 101, "Every authorized page was hydrated before ranking");
+      return Object.assign(rows.map(method => ({ method, score: 1 })), { mode: "lexical" });
+    } },
+  });
+  assert.deepEqual(cursors, [null, "page-2"]);
+  assert.deepEqual(selected.map(method => method.id), documents.map(row => row.id));
+  assert.ok(selected.every(method => method.reason === "similarity"));
+  assert.deepEqual(selected[100].files, { "scripts/check.py": 'print("ok")' });
+  assert.deepEqual(selected.kept, []);
+});
 
 test("a topical first message mounts the nearest method and what it reuses, and says why", async () => {
   const pin = `sha256:${"a".repeat(64)}`;
