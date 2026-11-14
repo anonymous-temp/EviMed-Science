@@ -2509,7 +2509,31 @@ export class NativeMemoryStore {
     let bytes = 0;
     for (const context of views) {
       if (this.memoryContexts) await this.memoryContexts.assertKnown(context);
-      const pack = await this.#engine(() => context.sessions.exportPack(userId));
+      // Engine packs include stale summaries and raw files, outside the withdrawal readers.
+      // Export readable current bodies when those readers are composed; never export undo before-images.
+      let pack;
+      if (this.history || this.overlay.memoryForgetBody || this.overlay.deferredSummaryRebuildEnabled === true) {
+        /** @type {import('fflate').Zippable} */
+        const current = {};
+        /** @type {{path:string,type:string,sha256:string}[]} */
+        const files = [];
+        let contentBytes = 0;
+        for (const file of await this.files(userId, {context:this.memoryContexts ? context : null})) {
+          if (!file.uri.startsWith(`${context.userRoot}/memories/`)) continue;
+          const body = await fenceWithdrawnMemoryBody(this.overlay, userId, file.uri, file.body, file.namespaceId);
+          if (!body?.trim()) continue;
+          // Filenames can themselves state a removed fact. Opaque names are stable within this pack.
+          const path = `memories/${contentHash(file.uri).slice(0,24)}.md`;
+          const data = Buffer.from(body);
+          contentBytes += data.byteLength;
+          if (bytes + contentBytes > MAX_NATIVE_PACK_BYTES) throw new HttpError(413, 'memory_export_too_large', 'The native memory export exceeds the account archive limit.');
+          current[path] = data;
+          files.push({path,type:file.type,sha256:contentHash(body)});
+        }
+        current['manifest.json'] = Buffer.from(JSON.stringify({schemaVersion:1,files,
+          note:'仅包含当前可用的记忆；已撤回的内容和临时副本不在导出中。'}));
+        pack = Buffer.from(zipSync(current));
+      } else pack = await this.#engine(() => context.sessions.exportPack(userId));
       bytes += pack.byteLength;
       if (bytes > MAX_NATIVE_PACK_BYTES) throw new HttpError(413, 'memory_export_too_large', 'The native memory export exceeds the account archive limit.');
       if (views.length === 1) {

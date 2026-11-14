@@ -250,7 +250,7 @@ import { MemoryRerank } from "./memoryRerank.mjs";
 import { OpenVikingClient } from "./openVikingClient.mjs";
 import { ProductDocuments, ProductJobs } from "./productStore.mjs";
 import { FeedbackEvents, deliverableSubjectId } from "./feedbackEvents.mjs";
-import { withAccountExportSnapshot, appendAccountStateArchiveEntry } from "./accountExport.mjs";
+import { withAccountExportSnapshot, appendAccountStateArchiveEntry, accountMemoryProjection } from "./accountExport.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONNECTOR_CREDENTIAL_GATEWAY_PATH, ConnectorCredentialStore, createConnectorCredentialGatewayHandler } from "./connectorCredentials.mjs";
 import { checkConnectorCredential } from "./connectorCredentialCheck.mjs";
@@ -9624,6 +9624,8 @@ async function collectUserArchiveEntries(user, projects = null, config = null) {
     exportedAt: new Date().toISOString(),
     user: { id: user.id, name: user.name },
     projects: listedProjects.map((project) => ({ id: project.id, name: project.name })),
+    note: '忘记仅移除记忆，不删除对话；原始对话记录仍包含你说过的内容。',
+    omitted: '记忆的临时工作区副本不在导出中，当前记忆见 memory。',
   }, null, 2)}\n`, "utf8");
   const metadata = {
     rel: "account.json",
@@ -9637,6 +9639,7 @@ async function collectUserArchiveEntries(user, projects = null, config = null) {
     if (relative === "projects") return "directory";
     const [container, projectId, ...parts] = relative.split("/");
     if (container !== "projects" || !projectIds.has(projectId)) return null;
+    if (accountMemoryProjection(parts.join('/'))) return null;
     return parts.length === 0 ? "directory" : projectArchivePathType(parts.join("/"));
   }, config?.maxArchiveEntries, config?.maxArchiveBytes);
   assertArchiveEntryLimit(entries.length + 1, config?.maxArchiveEntries, "account");

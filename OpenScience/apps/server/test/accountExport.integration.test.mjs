@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import test from "node:test";
@@ -511,4 +511,28 @@ test('account archive carries capsule input, edit and removal receipts without r
   } finally {
     await db.query('DELETE FROM evimed_source_deletion.conversations WHERE id=$1', [deletionId]);
   }
+});
+
+
+test('AL8 account archive omits stale memory projections but preserves original transcripts and explains their scope', options, async t => {
+  const f = await fixture(t);
+  const user = await f.app.store.userById(f.owner), project = await f.app.store.requireProject(user, 'default');
+  const withdrawn = 'WITHDRAWN-MEMORY-PROJECTION';
+  for (const relative of ['workspace/.evimed-brief/memory.md', 'workspace/.evimed-brief/sessions/s/context.md',
+    'workspace/.evimed-capsule/profile.md', 'workspace/.evimed-run/state.json']) {
+    const file = path.join(project.rootDir, relative);
+    await mkdir(path.dirname(file), {recursive:true});
+    await writeFile(file, withdrawn);
+  }
+  const transcript = path.join(project.rootDir, 'runtime/container-runtime/dsh-home/sessions/s/session.jsonl');
+  await mkdir(path.dirname(transcript), {recursive:true});
+  await writeFile(transcript, JSON.stringify({role:'user',content:withdrawn}));
+  const response = await fetch(`${f.base}/api/account/export`, {headers:{cookie:f.cookie}});
+  assert.equal(response.status,200);
+  const entries = tarEntries(Buffer.from(await response.arrayBuffer()));
+  const original = [...entries].filter(([name])=>name.includes('/dsh-home/sessions/'));
+  assert.equal(original.length,1);
+  assert.match(original[0][1].toString(), /WITHDRAWN-MEMORY-PROJECTION/);
+  for (const [name, bytes] of entries) if (!name.includes('/dsh-home/sessions/')) assert.doesNotMatch(bytes.toString(), /WITHDRAWN-MEMORY-PROJECTION/);
+  assert.match(entries.get('account.json').toString(), /忘记仅移除记忆，不删除对话/);
 });

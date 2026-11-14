@@ -1123,6 +1123,7 @@ test('targeted forget advertises and forwards exact lines or an unstored stateme
     const result = await f.mcp({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'forget', arguments: args } });
     assert.equal(result.status, 200); assert.ok(!result.messages[0].error);
     assert.match(result.messages[0].result.content[0].text, args.uri ? /Removed 1 line/ : /history.*rejection|rejection.*history/i);
+    assert.match(result.messages[0].result.content[0].text, /current conversation.*what was said.*[Nn]ew conversations.*not use/i);
   }
   assert.deepEqual(calls[0][3].lines, ['Use metric units.']);
   assert.equal(calls[1][2], null); assert.equal(calls[1][3].statement, 'Old project M-41633.');
@@ -1286,7 +1287,7 @@ test('a recorded statement with a pending scan discloses the paraphrase gap with
   assert.equal(answer.status, 200);
   const text = answer.messages[0].result.content[0].text;
   assert.match(text, /Recorded.*exact restatements/);
-  assert.match(text, /Earlier conversations are still being checked; paraphrases may still be recalled until that check finishes/);
+  assert.match(text, /Earlier conversations and memory copies are still being checked; paraphrases may still be recalled until that check finishes/);
   assert.doesNotMatch(text, /Retry|complete|deleted/);
 });
 

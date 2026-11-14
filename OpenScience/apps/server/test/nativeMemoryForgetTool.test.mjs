@@ -376,6 +376,21 @@ test('AL8 deferred sweep searches other files, freezes eight candidates, retries
   assert.equal(calls, 2, 'undo cancels a leased scan before judging');
 });
 
+test('AL8 native ZIP exports current fenced memory, never stale engine summaries or undo text', async () => {
+  const {unzipSync} = await import('fflate');
+  const f = fixture();
+  f.store.overlay.deferredSummaryRebuildEnabled = true;
+  f.store.rawFiles = f.store.files;
+  f.ledger.queueMemorySweep = async () => {};
+  f.store.overlay.file = async () => null;
+  f.store.sessions.exportPack = async () => Buffer.from('stale engine ZIP containing Use metric units.');
+  await f.store.forget(user, project, null, {statement:'Use metric units.'});
+  const archive = unzipSync(await f.store.exportPack('u1'));
+  const all = Object.values(archive).map(bytes => Buffer.from(bytes).toString()).join('\n');
+  assert.doesNotMatch(all, /Use metric units|stale engine/);
+  assert.match(all, /Keep answers short/);
+});
+
 test('AL8 immediate equality cleanup does not hide a paraphrase in the same other file from its deferred sweep', async () => {
   const f = fixture(), other = `${root}/memories/notes/twice.md`;
   f.store.overlay.deferredSummaryRebuildEnabled = true;

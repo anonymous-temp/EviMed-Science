@@ -139,12 +139,12 @@ test('unproven consolidation lineage keeps native cleanup pending and quarantine
 });
 
 test('source acknowledgment waits for an already-admitted RR account export through its final response handoff',options,async t=>{
-  const {app,base,headers,user,stub,engineUser,sessions}=await fixture(t),project=await app.store.requireProject(await app.store.userById(user.id),'default');
+  const {app,base,headers,user,stub,engineUser}=await fixture(t),project=await app.store.requireProject(await app.store.userById(user.id),'default');
   await app.sourceDeletion.ledger.migrate();await app.nativeMemory.overlay.noteRegistered(user.id);stub.seedMemory(engineUser,'profile.md','Private export source A.',{type:'profile'});
   let enterPack,releasePack,enterEnd,releaseEnd,enterPut;
   const packed=new Promise(resolve=>enterPack=resolve),packGate=new Promise(resolve=>releasePack=resolve),ending=new Promise(resolve=>enterEnd=resolve),endGate=new Promise(resolve=>releaseEnd=resolve),putting=new Promise(resolve=>enterPut=resolve);
   const timer=setTimeout(()=>{releasePack();releaseEnd();},10000);timer.unref();t.after(()=>clearTimeout(timer));
-  const originalPack=sessions.exportPack.bind(sessions);sessions.exportPack=async(...args)=>{enterPack();await packGate;return originalPack(...args);};
+  const originalPack=app.nativeMemory.exportPack.bind(app.nativeMemory);app.nativeMemory.exportPack=async(...args)=>{enterPack();await packGate;return originalPack(...args);};
   const order=[];app.server.on('request',(req,res)=>{if(req.url==='/api/account/export'){const end=res.end.bind(res);res.end=(...args)=>{enterEnd();void endGate.then(()=>end(...args));return res;};res.once('finish',()=>order.push('export-handoff'));}if(req.method==='DELETE'&&req.url?.endsWith('/conversations/a/source'))res.once('finish',()=>order.push('delete-ack'));});
   app.runtimeManager.captureConversationSource=async()=>({root:{id:'a',createdAt:1,cwd:'/workspace',isSeeded:false},sessions:[{id:'a'}]});
   const originalPut=app.sourceDeletion.ledger.put.bind(app.sourceDeletion.ledger);app.sourceDeletion.ledger.put=async row=>{enterPut();return originalPut(row);};
