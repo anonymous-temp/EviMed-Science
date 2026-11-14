@@ -29,3 +29,36 @@ for (const surface of ['get','list','learningEvidenceOf','listResultCorrections'
   assert.equal(checked,true);
   assert.deepEqual(result,surface === 'get' ? null : []);
 });
+
+test('FT12 lifecycle bookkeeping reads the real method row past the reader fence; ordinary readers still do not', async () => {
+  const row = {id:'m1',kind:'method',user_id:'u',project_id:null,payload:{status:'approved',provenance:{sourceProjectId:'gone',runId:'r1'}},revision:1,
+    created_at:new Date(),updated_at:new Date(),recorded_at:new Date(),deleted_at:null};
+  const documents = new ProductDocuments({transaction:async()=>{},query:async()=>({rows:[row]})});
+  documents.memoryForgetReader = async () => false;
+  assert.equal(await documents.get('u','method','m1'),null);
+  assert.deepEqual((await documents.list('u','method')).items,[]);
+  assert.equal((await documents.get('u','method','m1',{lifecycle:true}))?.payload.status,'approved');
+  assert.deepEqual((await documents.list('u','method',{lifecycle:true})).items.map(item=>item.id),['m1']);
+});
+
+test('FT12 method listings and feedback reads survive an unavailable memory context; an available one still withholds', async () => {
+  const { createMemoryForgetReader, forgetAuthorityView } = await import('../src/memoryForgetPropagation.mjs');
+  const { FeedbackEvents } = await import('../src/feedbackEvents.mjs');
+  const denied = async () => { throw Object.assign(new Error('unavailable'), { code: 'memory_scope_denied' }); };
+  const reader = (/** @type {() => Promise<any[]>} */ views) => createMemoryForgetReader({ context: () => forgetAuthorityView(views, denied),
+    hasWithdrawals: async () => true, rejected: async (_scope, texts) => texts.some(text => text.includes('M-41633')),
+    sourcesRejected: async () => false, resolveRun: async () => null, resolveMethod: async () => null });
+  const method = {id:'m1',kind:'method',user_id:'u',project_id:null,payload:{body:'Align citations.',provenance:{runId:'r1'}},revision:1,
+    created_at:new Date(),updated_at:new Date(),recorded_at:new Date(),deleted_at:null};
+  const event = {id:'event1',user_id:'u',project_id:'p',run_id:'r',trigger_kind:'learning-evidence',subject_type:'run',subject_id:'r',detail:{quote:'Keep it short.'},occurred_at:new Date(),recorded_at:new Date()};
+  const documents = new ProductDocuments({transaction:async()=>{},query:async()=>({rows:[method]})});
+  const feedback = new FeedbackEvents({database:{transaction:async()=>{},query:async()=>({rows:[event]})}});
+  for (const views of [denied, async () => [{ kind: 'owned' }]]) {
+    documents.memoryForgetReader = reader(views); feedback.memoryForgetReader = reader(views);
+    assert.deepEqual((await documents.list('u','method')).items.map(item=>item.id),['m1']);
+    assert.deepEqual((await feedback.list('u')).items.map(item=>item.id),['event1']);
+  }
+  method.payload.body = 'Use project M-41633.'; event.detail.quote = 'M-41633';
+  assert.deepEqual((await documents.list('u','method')).items,[], 'an available context with a rejection still withholds');
+  assert.deepEqual((await feedback.list('u')).items,[]);
+});

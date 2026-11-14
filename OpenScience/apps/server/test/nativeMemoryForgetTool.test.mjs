@@ -305,3 +305,23 @@ test('alias-scoped duplicate cleanup still removes an exact copy from a differen
   assert.ok(!f.files.get(other).split('\n').includes(`- ${copied}`), 'the exact withdrawn copy must leave every file');
   assert.match(f.files.get(other), /大王阿姨喜欢散步/);
 });
+
+test('FT12 a line kept through a lines forget stays kept after later unrelated forgets; a later removal concerning it still applies', async () => {
+  const f = fixture(), receipts = new Map();
+  const overlay = /** @type {any} */ (f.store.overlay);
+  overlay.recordInstructionCheck = async (/** @type {string} */ _owner, /** @type {string} */ key, /** @type {unknown} */ value, { replace = false } = {}) => {
+    if (replace || !receipts.has(key)) receipts.set(key, value);
+  };
+  overlay.instructionCheck = async (/** @type {string} */ _owner, /** @type {string} */ key) => receipts.get(key) ?? null;
+  const metric = lineFingerprint('Use metric units.'), flight = lineFingerprint('My flight was delayed four hours last week.');
+  // Model a kept line whose only recorded source is withdrawn whole by the removals in `withdrawing`.
+  const withdrawing = new Set([metric]);
+  f.ledger.derivedSourcesRejected = async (_context, _refs, { covered = [] } = {}) => [...withdrawing].some(print => !covered.includes(print));
+  assert.equal((await f.store.forget(user, project, uri, { lines: ['Use metric units.'] })).removedLines, 1);
+  await f.store.forget(user, project, null, { statement: 'My flight was delayed four hours last week.' });
+  const context = /** @type {any} */ ({ kind: 'owned', ownerId: user.id });
+  assert.equal(await f.store.history.fenceNativeBody(context, uri, f.files.get(uri)), '- Keep answers short.',
+    'the person kept this line; an unrelated later forget does not take that decision back');
+  withdrawing.add(flight);
+  assert.equal(await f.store.history.fenceNativeBody(context, uri, f.files.get(uri)), null, 'a later removal is judged on its own');
+});

@@ -639,3 +639,98 @@ for (const aliases of [false, true]) test(`MG6 withdrawal readers compose HTTP, 
   assert.match(restored.blocks.join('\n'), /M-41633/);
   assert.equal(restored.blocks.join('\n').includes('小王阿姨'), aliases, 'undo restores an alias title through the same authority');
 });
+
+// FT12: the recorded p6c product path (.lane/p6c). One human message stated four facts and two passing remarks; one
+// `remember` call stored the four facts. A lines forget took the swimming line; two statement forgets withdrew the two
+// unstored remarks. Every reader must still show the three kept lines, the penicillin allergy among them, and none of
+// the three forgotten things. Only the external engine, the model oracle and the runtime identity are fixtures.
+const p6cMessage = `${p6bMessage}对了，我是在上周航班延误了四个小时的候机室里写下这句话的，不过这个不用管。`;
+// p6c's model passed "上个月临时顶夜班这件事" and the engine's semantic search found the message. The fixture engine
+// searches by substring, so the statement uses the person's own words; the stored rows are the same.
+const nightStatement = '上个月我临时顶了几个星期的夜班', flightStatement = '上周航班延误了四个小时';
+const forgottenWords = /游泳|夜班|航班/;
+
+test('FT12 statement forgets of unstored remarks never mask kept lines from the same conversation, in any reader', options, async t => {
+  const f = await setup(t);
+  const uri = `${f.root}/profile.md`, safety = `${f.root}/safety_notes/allergy.md`;
+  const rememberedBody = ['# 用户', allergy, swimming, coffee, keys].join('\n'), keptBody = ['# 用户', allergy, coffee, keys].join('\n');
+  f.conversation.sessionId = 'session_p6c';
+  f.stub.extract = () => ({ adds: [{ uri, memory_type: 'profile', after: rememberedBody },
+    { uri: safety, memory_type: 'safety_notes', after: '对青霉素过敏。' }] });
+  const remember = await f.memory.callTool('remember', { messages: [{ role: 'user', content: p6bRemember }] });
+  assert.equal(remember.isError, false, remember.blocks.join('\n'));
+  const toolCommit = (await f.overlay.openCommits({ userId: f.userId })).find(commit => commit.origin === 'tool');
+  assert.equal(toolCommit.sourceSession, 'dsh-session_p6c', 'all four lines are bound to the one remember call of this conversation');
+  f.stub.extract = () => ({});
+  const original = await f.commitConversation('p6c', [
+    { role: 'assistant', text: '（平台信息，不是用户说的话）这段对话在用户的项目「日常笔记」里进行。', at: '2026-11-14T11:40:13.000Z' },
+    { role: 'user', text: p6cMessage, at: '2026-11-14T11:40:14.170Z' },
+    { role: 'assistant', text: '你让我记的四件事都已写进个人笔记。润色后的句子只作交流使用，没有保存。', at: '2026-11-14T11:40:44.471Z' },
+  ], { projectId: f.project.id });
+  // A fixed model oracle over enumerated fixture facts, not a production language rule.
+  const topics = [['游泳', '游泳'], ['夜班', '夜班'], ['航班', '航班延误']];
+  /** @param {{candidates:{text:string,removed:{fingerprint:string,text:string|null}[]}[]}} request */
+  const same = async ({ candidates }) => ({ stated: new Set(), same: new Map(candidates.flatMap((candidate, index) => {
+    const removal = candidate.removed[0];
+    const hit = topics.some(([removed, said]) => String(removal?.text ?? '').includes(removed) && candidate.text.includes(said));
+    return hit ? [[index, removal.fingerprint]] : [];
+  })) });
+  const judge = { same };
+  f.store.rejectionJudge = judge; f.history.rejectionJudge = judge;
+  const worker = new NativeMemoryWorker({ config: f.config, sessions: f.sessions, overlay: f.overlay, memorySettings: f.memorySettings,
+    memoryContexts: f.contexts, nativeMemory: f.store, rejectionJudge: judge });
+  worker.history = f.history; worker.verification.history = f.history;
+  await worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), rememberedBody);
+  // The production wiring (server.mjs) of every native reader.
+  f.history.nativeRemovalSources = (owner, sources, context) => worker.verification.readRemovalSources(owner, sources, context);
+  f.overlay.memoryForgetBody = (owner, fileUri, text) => f.history.fenceNativeBody(f.context, fileUri, text);
+
+  f.conversation.sessionId = 'session_p6c-2';
+  const lines = await f.memory.callTool('forget', { uri, lines: [swimming] });
+  assert.match(lines.blocks.join('\n'), /Removed 1 line/);
+  for (const [session, statement] of [['session_p6c-3', nightStatement], ['session_p6c-3b', flightStatement]]) {
+    f.conversation.sessionId = session;
+    const answer = await f.memory.callTool('forget', { statement });
+    assert.equal(answer.isError, false, answer.blocks.join('\n'));
+    assert.match(answer.blocks.join('\n'), /history recall rejection/);
+  }
+  assert.equal(await f.sessions.read(f.userId, uri), keptBody, 'the engine file keeps the three lines');
+  // The rows that used to mask them: the remember archive fenced for swimming, the conversation message fenced for each remark.
+  const rows = (await f.database.query('SELECT fingerprint,archive_uri,message_hash FROM evimed_memory.history_message_rejections WHERE owner_id=$1', [f.userId])).rows;
+  assert.ok(rows.some(row => row.archive_uri === toolCommit.archiveUri && row.fingerprint === lineFingerprint(removalText(swimming))));
+  for (const statement of [nightStatement, flightStatement]) assert.ok(rows.some(row => row.archive_uri === original.archive_uri
+    && row.fingerprint === lineFingerprint(statement) && row.message_hash === lineFingerprint(p6cMessage)), statement);
+
+  // conversation 4: read, search, list, the opening block and the safety block.
+  f.conversation.sessionId = 'session_p6c-4';
+  const read = (await f.memory.callTool('read', { uris: [uri] })).blocks.join('\n');
+  const search = (await f.memory.callTool('search', { query: '青霉素' })).blocks.join('\n');
+  const listed = (await f.memory.callTool('list', {})).blocks.join('\n');
+  const opening = await (await fetch(`${f.base}/api/v1/content/read?uri=${encodeURIComponent(uri)}`, { headers: { authorization: `Bearer ${f.token}` } })).text();
+  const safetyBlock = JSON.stringify(await f.store.safetyNotes(f.userId, f.project.id));
+  for (const [reader, output] of Object.entries({ read, search, opening })) {
+    for (const line of [allergy, coffee, keys]) assert.ok(output.includes(removalText(line).replace(/ \(as of .*\)$/, '')), `${reader} shows ${line}`);
+  }
+  assert.match(listed, /profile\.md/);
+  assert.match(safetyBlock, /对青霉素过敏/, 'the safety block keeps the allergy');
+  for (const [reader, output] of Object.entries({ read, search, listed, opening, safetyBlock })) assert.doesNotMatch(output, forgottenWords, reader);
+  assert.doesNotMatch(JSON.stringify(await f.store.files(f.userId)), forgottenWords);
+
+  // An assistant restatement after a question cannot re-learn a forgotten remark; the kept lines are untouched by that refusal.
+  f.stub.extract = () => ({ updates: [{ uri, memory_type: 'profile', before: keptBody, after: `${keptBody}\n- ${flightStatement} (as of 2026-11-14)` }] });
+  await f.commitConversation('p6c-question', [{ role: 'user', text: '我上周的航班是不是延误了？', at: '2099-01-01T00:00:00Z' },
+    { role: 'assistant', text: `是的，你说过${flightStatement}。`, at: '2099-01-01T00:00:01Z' }], { projectId: f.project.id });
+  await worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), keptBody, 'the assistant-derived line was refused');
+  const after = (await f.memory.callTool('read', { uris: [uri] })).blocks.join('\n');
+  assert.match(after, /对青霉素过敏/);
+  assert.doesNotMatch(after, forgottenWords);
+  // The person saying it again, as a whole message in a new conversation, re-admits it without any model verdict.
+  f.stub.extract = () => ({ updates: [{ uri, memory_type: 'profile', before: keptBody, after: `${keptBody}\n- ${flightStatement} (as of 2099-01-02)` }] });
+  await f.commitConversation('p6c-restated', [{ role: 'user', text: flightStatement, at: '2099-01-02T00:00:00Z' }], { projectId: f.project.id });
+  await worker.processCommits({ userId: f.userId });
+  const restated = (await f.memory.callTool('read', { uris: [uri] })).blocks.join('\n');
+  assert.match(restated, new RegExp(flightStatement));
+  assert.match(restated, /对青霉素过敏/);
+});

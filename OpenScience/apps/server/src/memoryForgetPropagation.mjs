@@ -1,7 +1,9 @@
 /** Read-time dependency withdrawal. No second deletion ledger and no cached verdict:
  * undo lifts the existing rejection and immediately restores these readers.
- * A derived object is withheld whole when a recorded source is withdrawn; editing
- * a sentence cannot prove that the remainder no longer depends on that source.
+ * A derived object is withheld when its own text says a withdrawn thing, or when a recorded
+ * source was withdrawn whole (`MemoryHistoryLedger.derivedSourcesRejected`): exactly as wide
+ * as the evidence. These are readers; lifecycle code (project deletion retiring the methods
+ * learnt only in it) reads the real rows and is never filtered here.
  */
 
 /** @param {unknown} value @returns {Record<string, unknown>} */
@@ -37,6 +39,33 @@ export function forgetDependencies(value) {
   return { texts, archives: [...archives], sessions: [...sessions], runs: [...runs], methods: [...methods] };
 }
 
+/**
+ * The memory view whose withdrawal authority applies to a derived row, or null when no authority can exist for it.
+ * Authority is keyed by the owner: native_rejections.user_id references evimed_control.users ON DELETE CASCADE, and
+ * history message rejections and fences carry the owner's incarnation and namespace. When the full view set cannot be
+ * resolved (a shared policy is unavailable or inconsistent), the owner's personal view still is, and its authority
+ * applies. Only an owner without a control-plane row has no authority at all; that row answers as not withdrawn
+ * instead of failing its reader. A shared namespace whose policy is unavailable cannot be read, so its own rejections
+ * are not consulted. Any other failure still throws: an unreadable ledger never reads as "nothing was forgotten".
+ * @template {{kind:string}} View
+ * @param {() => Promise<View[]>} loadViews every view of the owner
+ * @param {() => Promise<View[]>} loadOwned the owner's personal view only
+ * @param {((view:View)=>boolean)|null} [bound] the recorded shared binding
+ * @returns {Promise<View|null>}
+ */
+export async function forgetAuthorityView(loadViews, loadOwned, bound = null) {
+  /** @param {() => Promise<View[]>} load @returns {Promise<View[]|null>} */
+  const attempt = async load => {
+    try { return await load(); }
+    catch (error) {
+      if (forgetRecord(error).code === 'memory_scope_denied') return null;
+      throw error;
+    }
+  };
+  const views = await attempt(loadViews) ?? await attempt(loadOwned) ?? [];
+  return (bound ? views.find(bound) : undefined) ?? views.find(view => view.kind === 'owned') ?? null;
+}
+
 /** @typedef {{projectId?:string|null, payload?:unknown, [key:string]:unknown}} DerivedValue */
 /** @typedef {{archives:string[], sessions:string[]}} SourceReferences */
 /**
@@ -44,15 +73,20 @@ export function forgetDependencies(value) {
  * Resolution reads retained source records, never their filtered public projection.
  * @template Context
  * @param {{
- *   context: (userId:string,projectId:string|null,value:unknown) => Promise<Context>,
+ *   context: (userId:string,projectId:string|null,value:unknown) => Promise<Context|null>,
  *   rejected: (context:Context,texts:string[]) => Promise<boolean>,
  *   hasWithdrawals?: (context:Context) => Promise<boolean>,
  *   sourcesRejected: (context:Context,refs:SourceReferences) => Promise<boolean>,
+ *   conversationsDeleted?: (context:Context) => Promise<boolean>,
  *   resolveRun: (userId:string,projectId:string|null,runId:string) => Promise<unknown>,
  *   resolveMethod: (userId:string,methodId:string) => Promise<unknown>
  * }} dependencies
  */
 export function createMemoryForgetReader(dependencies) {
+  /** A source that no longer resolves is no evidence by itself: a deleted project's runs go with it while its methods
+   * follow their own lifecycle. It withholds only where a source conversation of that scope was deleted, which it
+   * may have come from and which can no longer be ruled out. @param {Context} context */
+  const unresolvedWithdrawn = async context => dependencies.conversationsDeleted ? dependencies.conversationsDeleted(context) : false;
   /** @param {string} userId @param {unknown} value @param {string|null} [projectId] @returns {Promise<boolean>} */
   return async function allowed(userId, value, projectId = null) {
     /** @type {Set<string>} */ const visited = new Set();
@@ -65,6 +99,8 @@ export function createMemoryForgetReader(dependencies) {
       const sourceProject = typeof namedProject === 'string' ? namedProject : null;
       const context = inherited !== null && sourceProject === scope && !provenance.contextPolicy
         ? inherited : await dependencies.context(userId, sourceProject, candidate);
+      // No resolvable owner means no recorded withdrawal for it (forgetAuthorityView).
+      if (context === null) return true;
       if (dependencies.hasWithdrawals && !await dependencies.hasWithdrawals(context)) return true;
       const refs = forgetDependencies(candidate);
       if (await dependencies.rejected(context, refs.texts) || await dependencies.sourcesRejected(context, refs)) return false;
@@ -73,14 +109,14 @@ export function createMemoryForgetReader(dependencies) {
         if (visited.has(key)) continue;
         visited.add(key);
         const run = await dependencies.resolveRun(userId, sourceProject, runId);
-        if (!run || !await check(run, sourceProject, depth + 1, context)) return false;
+        if (run ? !await check(run, sourceProject, depth + 1, context) : await unresolvedWithdrawn(context)) return false;
       }
       for (const methodId of refs.methods) {
         const key = JSON.stringify(['method', methodId]);
         if (visited.has(key)) continue;
         visited.add(key);
         const method = await dependencies.resolveMethod(userId, methodId);
-        if (!method || !await check(method, sourceProject, depth + 1, context)) return false;
+        if (method ? !await check(method, sourceProject, depth + 1, context) : await unresolvedWithdrawn(context)) return false;
       }
       return true;
     };

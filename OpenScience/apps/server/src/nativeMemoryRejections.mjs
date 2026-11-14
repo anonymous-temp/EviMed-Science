@@ -252,12 +252,57 @@ export function removalAssertionKey(namespaceId, removed, text, source) {
     removed.rejectedAt, removalStatement(text), source.role, source.text, source.created_at ?? null]));
 }
 
-/** Partial removals preserve untouched neighbours; explicit page edits also bind their newly
- * written lines here. Bind either receipt to the entire current removal authority.
+/** Legacy receipt address, bound to the entire removal authority of its time: any later removal, even an
+ * unrelated one, made it unreadable, so a kept line came and went with other forgets. Read only for
+ * receipts written before `lineDecisionKey`.
  * @param {string} uri @param {string} text @param {{fingerprint:string,rejectedAt?:string|null}[]} removals */
 export function retainedRemovalKey(uri, text, removals) {
   return contentHash(JSON.stringify(['retained-removal-v1', uri, lineFingerprint(text),
     removals.map(row => [row.fingerprint, row.rejectedAt]).sort()]));
+}
+
+/** Where a person's decision about one line of one file is kept: retained through their removal of other
+ * lines, or written by their own page edit. The receipt lists the removal fingerprints it was made under
+ * (`covered`); each later removal is judged on its own, so an unrelated forget neither hides the line nor
+ * lifts a fence that concerns the line.
+ * @param {'retained'|'edit'} kind @param {string} uri @param {string} text */
+export function lineDecisionKey(kind, uri, text) {
+  return contentHash(JSON.stringify(['line-decision-v2', kind, uri, lineFingerprint(text)]));
+}
+
+/** The removal fingerprints a line-decision receipt covers, or null when it is not that kind of receipt.
+ * @param {unknown} receipt @param {'retainedAfterRemoval'|'explicitEdit'} flag @returns {string[]|null} */
+export function decisionCovers(receipt, flag) {
+  if (!receipt || typeof receipt !== 'object') return null;
+  const row = /** @type {Record<string, unknown>} */ (receipt);
+  if (row[flag] !== true || !Array.isArray(row.covered)) return null;
+  return row.covered.filter(value => typeof value === 'string');
+}
+
+const SENTENCE_END = new Set(['.', '。', '!', '！']);
+const QUESTION = new Set(['?', '？']);
+const BOUNDARY = new Set([...SENTENCE_END, ...QUESTION, ':', '：', ';', '；', '\n']);
+const QUOTE_PAIRS = [['“', '”'], ['‘', '’'], ['「', '」'], ['『', '』'], ['«', '»'], ['《', '》']];
+
+/** Whether `statement` stands in `message` as one of its own declarative sentences, outside any quotation: it starts
+ * the message or follows a sentence or clause end, and it ends the message or ends with a full stop or exclamation
+ * mark, not a question mark. Punctuation only; a judge decides anything about meaning.
+ * @param {string} message @param {string} statement */
+export function assertsStatement(message, statement) {
+  const flat = (/** @type {string} */ value) => String(value).replace(/\s+/g, ' ').trim().toLowerCase();
+  const body = flat(message);
+  const wanted = flat(removalStatement(statement)).replace(/[.。!！]+$/, '');
+  if (!wanted) return false;
+  for (let at = body.indexOf(wanted); at >= 0; at = body.indexOf(wanted, at + 1)) {
+    const before = body.slice(0, at).trimEnd(), after = body.slice(at + wanted.length);
+    if (before && !BOUNDARY.has(before.at(-1) ?? '')) continue;
+    const next = after.trimStart().charAt(0);
+    if (next && !SENTENCE_END.has(next)) continue;
+    const straight = before.split('"').length % 2 === 0;
+    const paired = QUOTE_PAIRS.some(([open, close]) => before.split(open).length > before.split(close).length);
+    if (!straight && !paired) return true;
+  }
+  return false;
 }
 
 /** All newly written lines, including titles/headings. @param {string} after @param {string} [before] */
@@ -291,6 +336,23 @@ export async function removalRefusals({ userId, overlay, projectId = null, names
       let authorized = false;
       for (const source of sources) if ((await overlay.instructionCheck?.(userId, receiptKey(source)))?.removalAssertion === true) authorized = true;
       if (authorized) continue;
+      // The person's own later message re-admits what it asserts. A message that is, as a whole, the removed statement
+      // is its own witness and needs no model. When no judge is available, a message in which the removed statement
+      // stands as one of its own declarative sentences, outside quotation marks, also asserts it ("To be clear: X.
+      // Please keep that."): punctuation decides, never words. A question, a quotation, an assistant or an older message
+      // never qualifies (filtered above). The line being written must be that statement, or the person's message itself.
+      const said = lineFingerprint(removalStatement(candidate.text));
+      const removedPrint = text ? lineFingerprint(text) : '';
+      const restated = text ? sources.find(source => {
+        const whole = lineFingerprint(removalStatement(source.text));
+        if (whole === removedPrint && said === removedPrint) return true;
+        return !judge && (said === removedPrint || said === whole) && assertsStatement(source.text, text);
+      }) : undefined;
+      if (restated) {
+        await overlay.recordInstructionCheck?.(userId, receiptKey(restated), { removalAssertion: true });
+        await overlay.recordInstructionCheck?.(userId, removalAssertionKey(namespaceId, entry, text, restated), { removalAssertion: true });
+        continue;
+      }
       const hardMatch = tokens.length > 0 && tokens.every(token => tokenPresent(token, removalStatement(candidate.text), { ignoreWhitespace: ignoreTokenWhitespace }));
       if (tokens.length && !hardMatch) continue;
       const literal = hardMatch || print === entry.fingerprint || Boolean(text && containsRemoved(removalStatement(candidate.text), text));

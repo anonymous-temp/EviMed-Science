@@ -6,7 +6,7 @@ import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWi
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
-import { neutralMemoryUri, removalLines, removalText, removalRefusals, retainedRemovalKey } from './nativeMemoryRejections.mjs';
+import { neutralMemoryUri, removalLines, removalText, removalRefusals, lineDecisionKey } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
@@ -1376,11 +1376,13 @@ export class NativeMemoryStore {
     await this.overlay.setSources(userId, file.uri, sourcesNamedIn(next));
     if (this.history && (removed.length || actor === 'user' && origin === 'edit') && (actor === 'user' || actor === 'conversation')) {
       const authority = await this.overlay.removals(userId, context.kind === 'geo-project' ? context.namespaceId : null);
+      const covered = [...new Set(authority.map((/** @type {{fingerprint:string}} */ row) => row.fingerprint))].sort();
       const prior = new Set(before.map(lineFingerprint));
       for (const text of after.filter(line => actor === 'user' && origin === 'edit' || prior.has(lineFingerprint(line)))) {
-        await this.overlay.recordInstructionCheck(userId, retainedRemovalKey(file.uri, text, authority), {
-          retainedAfterRemoval: true, ...(actor === 'user' && origin === 'edit' && !prior.has(lineFingerprint(text)) ? { explicitEdit: true } : {}),
-        });
+        // The person's latest decision replaces their earlier one for this line; it covers only the removals that exist now.
+        const edited = actor === 'user' && origin === 'edit' && !prior.has(lineFingerprint(text));
+        await this.overlay.recordInstructionCheck(userId, lineDecisionKey(edited ? 'edit' : 'retained', file.uri, text),
+          edited ? { explicitEdit: true, covered } : { retainedAfterRemoval: true, covered }, { replace: true });
       }
     }
     // A line the person took out leaves the index of origins with it; one they wrote names no conversation.
