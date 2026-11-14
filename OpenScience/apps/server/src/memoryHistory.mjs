@@ -265,8 +265,8 @@ export class MemoryHistory {
     return this.ledger.database.transaction(client => this.ledger.database.withTransactionClient(client, async () => {
       await activate();
       for (const row of prepared) await this.ledger.rejectMessages(context, type, row.fingerprint, row.messages);
-      if (memorySweep) await this.ledger.queueMemorySweep(context, type, lineFingerprint(removed[0]), memorySweep);
       if (deferred) for (const text of removed) await this.ledger.queueForgetScan(context, type, lineFingerprint(text));
+      if (memorySweep) await this.ledger.queueMemorySweep(context, type, lineFingerprint(removed[0]), memorySweep);
       return allowDeferred ? this.ledger.forgetScanPending(context.ownerId, type, removed.map(lineFingerprint)) : false;
     }));
   }
@@ -298,14 +298,26 @@ export class MemoryHistory {
             .map(message => ({archiveUri,text:messageText(message,this.secretRedaction),created_at:message.created_at})).filter(message => message.text);
           matched.push(...await this.matchRemoved(context, scan.text, messages, this.rejectionJudge));
         }
-        if (scan.memory_sweep && !scan.memory_sweep.done) {
+      } catch {
+        await this.ledger.finishForgetScan(scan, [], scan.cursor, true);
+        continue;
+      }
+      // Archive fences and their cursor are independent of the memory-file judge.
+      // A sweep outage must not discard that progress or hold history indexing.
+      if (cursor > scan.cursor && scan.memory_sweep && !scan.memory_sweep.done) {
+        await this.ledger.finishForgetScan(scan, matched, cursor);
+        continue;
+      }
+      let sweepFailed = false;
+      try {
+        if (cursor >= scan.archives.length && scan.memory_sweep && !scan.memory_sweep.done) {
           if (!this.sweepMemory) throw new Error('Memory sweep unavailable.');
           await this.sweepMemory(scan);
         }
-        await this.ledger.finishForgetScan(scan, matched, cursor);
       } catch {
-        await this.ledger.finishForgetScan(scan, [], scan.cursor, true);
+        sweepFailed = true;
       }
+      await this.ledger.finishForgetScan(scan, matched, cursor, sweepFailed);
     }
     await this.reviewMethods?.();
   }

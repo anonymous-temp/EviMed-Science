@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS evimed_memory.history_forget_scans (
     REFERENCES evimed_memory.native_rejections(user_id,memory_type,fingerprint) ON DELETE CASCADE
 );
 ALTER TABLE evimed_memory.history_forget_scans ADD COLUMN IF NOT EXISTS memory_sweep jsonb;
+-- A memory-file sweep alone owes no archive scan. Existing obligations keep their frozen source scope.
+ALTER TABLE evimed_memory.history_forget_scans ADD COLUMN IF NOT EXISTS history_scan boolean NOT NULL DEFAULT true;
 CREATE INDEX IF NOT EXISTS history_forget_scans_due ON evimed_memory.history_forget_scans(next_attempt_at) WHERE state='pending';
 CREATE TABLE IF NOT EXISTS evimed_memory.history_write_messages (
   owner_id text NOT NULL, owner_created_at text NOT NULL, namespace_id text NOT NULL,
@@ -336,27 +338,29 @@ export class MemoryHistoryLedger {
       [context.ownerId,context.ownerCreatedAt,context.namespaceId,memoryType,fingerprint,message.archiveUri,message.messageHash??lineFingerprint(message.text)]);
   }
   /** @param {{ownerId:string,ownerCreatedAt:string,namespaceId:string,userRoot:string}} context
-   * @param {string} memoryType @param {string} fingerprint */
-  async queueForgetScan(context, memoryType, fingerprint) {
+   * @param {string} memoryType @param {string} fingerprint @param {boolean} [historyScan] */
+  async queueForgetScan(context, memoryType, fingerprint, historyScan = true) {
     await this.migrate();
     await this.database.query(`INSERT INTO evimed_memory.history_forget_scans
-      (id,owner_id,owner_created_at,namespace_id,user_root,memory_type,fingerprint,cutoff,archives)
+      (id,owner_id,owner_created_at,namespace_id,user_root,memory_type,fingerprint,cutoff,archives,history_scan)
       SELECT $1,$2,$3,$4,$5,$6,$7,r.rejected_at,ARRAY(
         SELECT archive_uri FROM (
           SELECT c.archive_uri FROM evimed_memory.native_commits c WHERE c.user_id=$2 AND c.created_at<=r.rejected_at
           UNION SELECT h.archive_uri FROM evimed_memory.history_archives h
             WHERE h.owner_id=$2 AND h.owner_created_at=$3 AND h.namespace_id=$4 AND (h.commit_created_at IS NULL OR h.commit_created_at<=r.rejected_at)
-        ) sources WHERE left(archive_uri,length($5)+10)=$5||'/sessions/' ORDER BY archive_uri)
+        ) sources WHERE $8 AND left(archive_uri,length($5)+10)=$5||'/sessions/' ORDER BY archive_uri),$8
       FROM evimed_memory.native_rejections r WHERE r.user_id=$2 AND r.memory_type=$6 AND r.fingerprint=$7
-      ON CONFLICT(owner_id,memory_type,fingerprint) DO NOTHING`,
-    [randomBytes(16).toString('hex'),context.ownerId,context.ownerCreatedAt,context.namespaceId,context.userRoot,memoryType,fingerprint]);
+      ON CONFLICT(owner_id,memory_type,fingerprint) DO UPDATE SET history_scan=true,archives=EXCLUDED.archives,
+        cursor=0,state='pending',claim=NULL,lease_until=NULL,next_attempt_at=clock_timestamp()
+      WHERE NOT history_forget_scans.history_scan AND EXCLUDED.history_scan`,
+    [randomBytes(16).toString('hex'),context.ownerId,context.ownerCreatedAt,context.namespaceId,context.userRoot,memoryType,fingerprint,historyScan]);
   }
 
   /** Reuse the withdrawal outbox and its undo/erasure cascade; only addresses, hashes and an undo act are stored.
    * @param {{ownerId:string,ownerCreatedAt:string,namespaceId:string,userRoot:string}} context
    * @param {string} memoryType @param {string} fingerprint @param {MemorySweep} sweep */
   async queueMemorySweep(context, memoryType, fingerprint, sweep) {
-    await this.queueForgetScan(context, memoryType, fingerprint);
+    await this.queueForgetScan(context, memoryType, fingerprint, false);
     await this.database.query(`UPDATE evimed_memory.history_forget_scans SET memory_sweep=$4::jsonb,
       state='pending',claim=NULL,lease_until=NULL,next_attempt_at=clock_timestamp() WHERE owner_id=$1 AND memory_type=$2 AND fingerprint=$3`,
     [context.ownerId,memoryType,fingerprint,JSON.stringify(sweep)]);
@@ -379,7 +383,7 @@ export class MemoryHistoryLedger {
     await this.database.query(`UPDATE evimed_memory.history_forget_scans SET
       archives=array_append(archives,$4),state='pending',next_attempt_at=clock_timestamp(),
       attempts=CASE WHEN state='complete' THEN 0 ELSE attempts END
-      WHERE owner_id=$1 AND owner_created_at=$2 AND namespace_id=$3
+      WHERE owner_id=$1 AND owner_created_at=$2 AND namespace_id=$3 AND history_scan
         AND NOT ($4=ANY(archives)) AND ($5::timestamptz IS NULL OR $5::timestamptz<=cutoff)`,
     [context.ownerId,context.ownerCreatedAt,context.namespaceId,archiveUri,minimumDate]);
   }
@@ -428,7 +432,8 @@ export class MemoryHistoryLedger {
       if (!failed) await this.rejectMessages({ ownerId:scan.owner_id,ownerCreatedAt:scan.owner_created_at,namespaceId:scan.namespace_id },
         scan.memory_type,scan.fingerprint,messages);
       await this.database.query(`UPDATE evimed_memory.history_forget_scans SET cursor=$3,
-        state=CASE WHEN NOT $4 AND $3>=cardinality(archives) THEN 'complete' ELSE 'pending' END,
+        state=CASE WHEN NOT $4 AND $3>=cardinality(archives)
+          AND (memory_sweep IS NULL OR memory_sweep->>'done'='true') THEN 'complete' ELSE 'pending' END,
         lease_until=NULL,claim=NULL,error=CASE WHEN $4 THEN 'memory_history_privacy_unavailable' ELSE '' END,
         attempts=CASE WHEN $4 THEN attempts ELSE 0 END,
         next_attempt_at=clock_timestamp()+CASE WHEN $4 THEN make_interval(secs=>LEAST(3600,30*power(2,LEAST(attempts,7)))::integer) ELSE interval '0 seconds' END

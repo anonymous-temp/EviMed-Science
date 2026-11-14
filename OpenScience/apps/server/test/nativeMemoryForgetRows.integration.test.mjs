@@ -8,6 +8,7 @@ import { NativeMemoryStore } from '../src/nativeMemoryStore.mjs';
 import { GeoNativeMemoryContext } from '../src/geoNativeMemoryContext.mjs';
 import { MemoryHistory, MemoryHistoryLedger } from '../src/memoryHistory.mjs';
 import { createRejectionJudge } from '../src/nativeMemoryRejections.mjs';
+import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
 import { ProductDocuments } from '../src/productStore.mjs';
 import { createMemoryForgetReader } from '../src/memoryForgetPropagation.mjs';
 import { createOfficialPromotion } from '../src/officialPromotion.mjs';
@@ -41,6 +42,40 @@ async function wired(t) {
   f.overlay.memoryForgetBody = (_owner,uri,body)=>history.fenceNativeBody(context,uri,body);
   return {...f,store,history,ledger,context,project};
 }
+
+for (const historyScan of [false, true]) test(`AL8c history settles while an independent memory sweep waits for its judge (history=${historyScan})`, options, async t => {
+  const f = await wired(t);
+  const statement = 'Project M-41633.', fingerprint = lineFingerprint(statement);
+  const original = await f.commitConversation('sweep-history', [{role:'user',text:statement,at:'2026-01-01T00:00:00Z'}], {projectId:'default'});
+  const ingest = archive => f.history.ingestArchive({userId:f.userId,projectId:'default',engineSession:archive.session,archiveUri:archive.archive_uri}, f.context);
+  // This longer line is not an exact copy, so only the sweep judge may remove it.
+  f.seed('notes/independent.md', `- ${statement} This project also has an independent safety constraint.`, {type:'notes'});
+  f.store.rejectionJudge = { same: async () => { throw new Error('fixture judge unavailable'); } };
+  await f.store.forget({id:f.userId}, f.project, null, {statement});
+  const scans = async () => (await f.database.query('SELECT * FROM evimed_memory.history_forget_scans WHERE owner_id=$1', [f.userId])).rows;
+  assert.equal((await scans())[0].history_scan, false, 'recorded archive fences do not create another history obligation');
+  if (historyScan) await f.ledger.queueForgetScan(f.context, 'notes', fingerprint);
+  await f.history.drainForgetScans();
+  const pending = (await scans())[0];
+  assert.equal(pending.state, 'pending');
+  assert.equal(pending.history_scan, historyScan);
+  assert.equal(pending.cursor, pending.archives.length, 'history progress commits even when the sweep fails');
+  assert.equal(pending.attempts, 1);
+  assert.ok(pending.next_attempt_at > new Date());
+  assert.ok(pending.memory_sweep.candidates.length, 'the unavailable judge leaves real memory-file work pending');
+  assert.equal(await f.ledger.forgetArchivePending(f.context, original.archive_uri), false);
+  await ingest(original);
+  const progress = (await f.database.query('SELECT state,reason,indexed_chunks FROM evimed_memory.history_archives WHERE owner_id=$1 AND archive_uri=$2', [f.userId,original.archive_uri])).rows;
+  assert.deepEqual(progress, [{state:'partial',reason:'removed_content',indexed_chunks:0}]);
+  await f.history.drainForgetScans();
+  assert.equal((await scans())[0].attempts, 1, 'a pass with only backed-off sweep work returns without claiming it');
+  const late = await f.commitConversation('sweep-late', [{role:'user',text:statement,at:'2026-01-02T00:00:00Z'}], {projectId:'default'});
+  await ingest(late);
+  assert.equal(await f.ledger.forgetArchivePending(f.context, late.archive_uri), historyScan,
+    'only an independently owed history scan can fence late archive discovery');
+  await f.store.undo(f.userId, (await f.store.forgotten(f.userId))[0].id);
+  assert.deepEqual(await scans(), [], 'undo cancels both kinds of work');
+});
 
 test('AL8 statement removes profile and independently restated notes without origins; export excludes both and one undo restores both', options, async t => {
   const f = await wired(t);

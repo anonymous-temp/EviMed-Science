@@ -67,6 +67,8 @@ export class OpenVikingStub {
     this.rebuildSummaries = false;
     /** Set to a status to answer every data request with it (an engine that is down). */
     this.failWith = 0;
+    /** Timer cancellation also settles delayed request waiters. @type {Map<ReturnType<typeof setTimeout>, () => void>} */
+    this.timers = new Map();
     this.server = null;
     this.url = "";
   }
@@ -80,7 +82,10 @@ export class OpenVikingStub {
   }
 
   async close() {
-    if (this.server) { this.server.closeAllConnections?.(); await new Promise((resolve) => this.server.close(resolve)); }
+    this.server?.closeAllConnections?.();
+    for (const [timer, cancel] of this.timers) { clearTimeout(timer); cancel(); }
+    this.timers.clear();
+    if (this.server) await new Promise((resolve) => this.server.close(resolve));
   }
 
   /** Requests whose path starts with a prefix. @param {string} method @param {string} prefix */
@@ -113,7 +118,11 @@ export class OpenVikingStub {
     const record = { method: req.method, path: url.pathname, query: Object.fromEntries(url.searchParams), body, user,
       headers: { ...req.headers } };
     this.requests.push(record);
-    if (this.delayMs) await new Promise((resolve) => setTimeout(resolve, this.delayMs));
+    if (this.delayMs) await new Promise((resolve) => {
+      const timer = setTimeout(() => { this.timers.delete(timer); resolve(undefined); }, this.delayMs);
+      this.timers.set(timer, () => resolve(undefined));
+    });
+    if (res.destroyed) return;
     const send = (status, json, contentType = "application/json") => {
       if (res.destroyed) return;
       res.writeHead(status, { "content-type": contentType });
@@ -380,11 +389,13 @@ export class OpenVikingStub {
     if (!settings && method === "DELETE") {
       this.deleting.add(String(target));
       this.users.delete(String(target));
-      setTimeout(() => {
+      const timer = setTimeout(() => {
+        this.timers.delete(timer);
         for (const uri of [...this.files.keys()]) if (uri.startsWith(`viking://user/${target}/`)) { this.files.delete(uri); this.tags.delete(uri); }
         for (const key of [...this.sessions.keys()]) if (key.startsWith(`${target}/`)) this.sessions.delete(key);
         this.deleting.delete(String(target));
       }, 30);
+      this.timers.set(timer, () => {});
       return send(202, ok({ account_id: account, user_id: target, status: "deleting", task_id: "deletion-task" }));
     }
     return send(404, fail("NOT_FOUND", "no stub admin route"));

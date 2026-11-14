@@ -62,6 +62,12 @@ export function nativeIntegration({ config: settings = {}, databaseUrl = process
     let clock = new Date("2026-10-13T08:00:00.000Z");
     const store = new NativeMemoryStore({ sessions, overlay, now: () => clock, conversationTitles });
     const worker = new NativeMemoryWorker({ config: merged, memorySettings, sessions, overlay, now: () => clock });
+    t.after(async () => {
+      worker.close();
+      await worker.running;
+      // Global maintenance claims must not consume a finished test's work through another stub engine.
+      await database.query("DELETE FROM evimed_control.users WHERE id=$1", [userId]);
+    });
     const resources = new OpenVikingResources({ client });
     // The consolidation reads times the database wrote (its own clock): its `now` is the real one, turned forward by hand.
     let skew = 0;

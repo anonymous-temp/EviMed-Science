@@ -430,3 +430,53 @@ test('AL8 the forget maintenance loop reviews promoted sources even with no rema
   await service.drainForgetScans();
   assert.equal(reviews,1);
 });
+
+for (const sweepAvailable of [false, true]) test(`AL8c an unavailable memory sweep preserves archive progress and yields (callback=${sweepAvailable})`, async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const root = 'viking://user/u1', archive = `${root}/sessions/dsh-first/history/archive_001`;
+  const scan = { id: 'scan', owner_id: 'u1', owner_created_at: '2026-01-01', namespace_id: 'u1', user_root: root,
+    memory_type: 'notes', fingerprint: 'print', text: 'Project M-41633.', cutoff: new Date('2026-11-14'),
+    archives: [archive], cursor: 0, claim: 'lease', attempts: 1, memory_sweep: { act: 'act', removed: ['print'] } };
+  const finishes = [], reads = [];
+  let due = true, claims = 0;
+  const ledger = {
+    claimForgetScans: async () => { claims++; return due ? [scan] : []; },
+    finishForgetScan: async (...args) => {
+      finishes.push(args); scan.cursor = args[2]; due = !args[3] && !scan.memory_sweep.done;
+    },
+  };
+  const context = { ownerId: 'u1', ownerCreatedAt: scan.owner_created_at, namespaceId: 'u1',
+    sessions: { read: async (_owner, uri) => { reads.push(uri); return JSON.stringify({ role: 'user', content: scan.text }); } } };
+  const service = new MemoryHistory({ config: {}, ledger, contexts: { forUri: async () => context } });
+  if (sweepAvailable) service.sweepMemory = async () => {
+    assert.equal(finishes.length, 1, 'archive fences commit before entering the potentially slow sweep judge');
+    throw new Error('judge unavailable');
+  };
+  await service.drainForgetScans();
+  assert.deepEqual(finishes[0], [scan, [{ archiveUri: archive, text: scan.text, created_at: undefined }], 1],
+    'the completed archive fences and cursor commit independently');
+  assert.deepEqual(finishes[1], [scan, [], 1, true], 'only the sweep needs retrying');
+  assert.equal(claims, 3, 'no runnable work ends the pass instead of waiting for the judge');
+  await service.drainForgetScans();
+  assert.equal(finishes.length, 2, 'a pending backoff is not retried in a new pass before it is due');
+  scan.cursor = 1; due = true;
+  service.sweepMemory = async () => { scan.memory_sweep.done = true; };
+  await service.drainForgetScans();
+  assert.equal(reads.length, 1, 'a sweep retry does not reread settled archive messages');
+  assert.deepEqual(finishes[2], [scan, [], 1, false]);
+});
+
+test('AL8c deferred history work is recorded before attaching an independent memory sweep', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const calls = [], sweep = { act: 'act', removed: ['print'] };
+  const context = { ownerId: 'u1', ownerCreatedAt: '2026-01-01', namespaceId: 'u1', userRoot: 'viking://user/u1' };
+  const service = new MemoryHistory({ config: {}, ledger: {
+    database: { transaction: async run => run({}), withTransactionClient: async (_client, run) => run() },
+    queueForgetScan: async () => calls.push('history'), queueMemorySweep: async () => calls.push('memory'),
+    forgetScanPending: async () => true,
+  } });
+  service.ensureSourceCopies = async () => { throw new Error('source offline'); };
+  assert.equal(await service.rejectRemoved(context, { uri: `${context.userRoot}/memories/notes/a.md`, type: 'notes' },
+    ['An earlier fact.'], null, { allowDeferred: true, memorySweep: sweep }), true);
+  assert.deepEqual(calls, ['history', 'memory']);
+});

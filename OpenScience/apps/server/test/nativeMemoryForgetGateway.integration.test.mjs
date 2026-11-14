@@ -389,7 +389,10 @@ for (const state of ['pending','running','complete']) test(`FT8 undo cancels a $
     return { same: new Map(candidates.map((_candidate, index) => [index, lineFingerprint(examinationStatement)])) };
   } };
   let work;
-  if (state === 'running') { work = f.history.drainForgetScans(); await started; }
+  if (state === 'running') {
+    work = f.history.drainForgetScans();
+    await Promise.race([started, work.then(() => assert.fail('the drain ended before claiming this fixture’s scan'))]);
+  }
   if (state === 'complete') await f.history.drainForgetScans();
   await f.store.undo(f.userId, forgotten.id);
   release(); await work;
@@ -494,7 +497,7 @@ test('FT8 an archive appended during a leased scan survives its older cursor ack
     return { same:new Map(candidates.map((_candidate,index) => [index,lineFingerprint(examinationStatement)])) };
   } };
   const work = f.history.drainForgetScans();
-  await started;
+  await Promise.race([started, work.then(() => assert.fail('the drain ended before claiming this fixture’s scan'))]);
   const late = await f.commitConversation('leased-late', [{ role:'user', text:original, at:'2026-01-02T00:00:00Z' }], { projectId:f.project.id });
   assert.equal((await ingest(late)).state, 'queued');
   release(); await work;
