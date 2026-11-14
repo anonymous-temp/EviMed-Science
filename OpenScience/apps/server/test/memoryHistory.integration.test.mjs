@@ -3,6 +3,7 @@ import test from 'node:test';
 import { MemoryHistory, MemoryHistoryLedger } from '../src/memoryHistory.mjs';
 import { nativeFileId } from '../src/nativeMemoryStore.mjs';
 import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
+import { removalAssertionKey } from '../src/nativeMemoryRejections.mjs';
 import { OpenVikingResources } from '../src/openVikingResources.mjs';
 import { projectNativeMemoryNamespace } from '../src/openVikingLayout.mjs';
 import { createServer } from 'node:http';
@@ -844,6 +845,10 @@ for (const spelling of ['M-31025', 'ｍ＿３１０２５', 'm 31025']) {
     const fences = (await f.database.query('SELECT archive_uri FROM evimed_memory.history_message_rejections WHERE owner_id=$1', [f.userId])).rows;
     assert.ok(fences.some(row => row.archive_uri === archive.archive_uri));
     const next = await f.commitConversation('parked-new', [{ role: 'user', text, at: fresh }], { projectId: 'default' });
+    // This fixture explicitly asserts the fact again. History consumes the same source-bound
+    // receipt as the worker; the timestamp alone is no longer reauthorization.
+    for (const removal of await f.overlay.removals(f.userId)) await f.overlay.recordInstructionCheck(f.userId,
+      removalAssertionKey(null, removal, removal.text, {role:'user',text,created_at:fresh}), {removalAssertion:true});
     await f.service.ingestArchive({ ...commit, engineSession: next.session, archiveUri: next.archive_uri }, f.context);
     const hits = await f.service.search(request);
     assert.ok(hits.length > 0);

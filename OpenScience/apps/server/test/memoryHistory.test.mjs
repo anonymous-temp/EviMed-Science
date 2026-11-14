@@ -222,3 +222,34 @@ test('explicitly kept neighbouring lines survive an archive fence; later removal
   authority.push({fingerprint:lineFingerprint(text),text,rejectedAt:'2026-11-15'});
   assert.equal(await history.fenceNativeBody(context,uri,`- ${text}`),null);
 });
+
+test('a later user-role question is not a history-read authorization', async () => {
+  const { MemoryHistoryLedger } = await import('../src/memoryHistory.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const text = 'My project M-41633', question = 'Was this my project M-41633?';
+  const ledger = new MemoryHistoryLedger({overlay:{instructionCheck:async()=>null},database:{query:async sql=>({rows:
+    sql.includes('SELECT memory_type,fingerprint,text,rejected_at') ? [{memory_type:'notes',fingerprint:lineFingerprint(text),text,rejected_at:new Date('2026-01-01')}] : []})}});
+  ledger.migrate = async () => {};
+  assert.equal(await ledger.rejected({ownerId:'u',ownerCreatedAt:'2025-01-01',namespaceId:'u',kind:'owned'},[question],'archive',
+    [{role:'user',text:question,created_at:'2099-01-01'}]),true);
+});
+
+test('history consumes the write-side assertion receipt for the exact new human source only', async () => {
+  const { MemoryHistoryLedger } = await import('../src/memoryHistory.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const { removalRefusals } = await import('../src/nativeMemoryRejections.mjs');
+  const text = 'My project M-41633', rejectedAt = '2026-01-01T00:00:00.000Z', checks = new Map();
+  const removed = {fingerprint:lineFingerprint(text),text,rejectedAt};
+  const source = {role:'user',text:'My project M-41633 is active again.',created_at:'2099-01-01'};
+  const overlay = {removals:async()=>[removed],instructionCheck:async(_owner,key)=>checks.get(key),
+    recordInstructionCheck:async(_owner,key,value)=>checks.set(key,value)};
+  await removalRefusals({userId:'u',overlay,candidates:[{text,sources:[source]}],
+    judge:{same:async()=>({same:new Map([[0,removed.fingerprint]]),stated:new Set([0]),witnesses:new Map([[0,0]])})}});
+  const ledger = new MemoryHistoryLedger({overlay,database:{query:async sql=>({rows:
+    sql.includes('SELECT memory_type,fingerprint,text,rejected_at') ? [{...removed,memory_type:'notes',rejected_at:new Date(rejectedAt)}] : []})}});
+  ledger.migrate = async () => {};
+  const context = {ownerId:'u',ownerCreatedAt:'2025-01-01',namespaceId:'u',kind:'owned'};
+  assert.equal(await ledger.rejected(context,[source.text],'new',[source]),false);
+  const quotation = {...source,text:`An earlier conversation said “${source.text}”`};
+  assert.equal(await ledger.rejected(context,[quotation.text],'quoted',[quotation]),true);
+});

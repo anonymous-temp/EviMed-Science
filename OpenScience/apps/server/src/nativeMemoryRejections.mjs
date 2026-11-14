@@ -232,6 +232,14 @@ export function removalStatement(text) {
   return normalisedStatement(removalText(text).replace(/^\*\*[^*\n]+[:：]\*\*\s*/, ''));
 }
 
+/** Shared by write review and history readers; dates and exact source bytes are part of consent.
+ * @param {string|null} namespaceId @param {{fingerprint:string,rejectedAt?:string|null}} removed
+ * @param {string} text @param {{role:string,text:string,created_at?:string|null}} source */
+export function removalAssertionKey(namespaceId, removed, text, source) {
+  return contentHash(JSON.stringify(['removal-assertion-v1', namespaceId, removed.fingerprint,
+    removed.rejectedAt, removalStatement(text), source.role, source.text, source.created_at ?? null]));
+}
+
 /** An explicit partial removal preserves its untouched neighbours even if their source archive
  * also contains a withdrawn passage. Bind this receipt to the entire current removal authority.
  * @param {string} uri @param {string} text @param {{fingerprint:string,rejectedAt?:string|null}[]} removals */
@@ -267,8 +275,7 @@ export async function removalRefusals({ userId, overlay, projectId = null, names
         && Date.parse(source.created_at ?? '') > Date.parse(entry.rejectedAt ?? '')
         && tokens.every(token => sourceHasToken(token, source, { ignoreWhitespace: ignoreTokenWhitespace })));
       /** @param {{role:string,text:string,created_at?:string|null}} source */
-      const receiptKey = source => contentHash(JSON.stringify(['removal-assertion-v1', namespaceId, entry.fingerprint,
-        entry.rejectedAt, removalStatement(candidate.text), source.role, source.text, source.created_at ?? null]));
+      const receiptKey = source => removalAssertionKey(namespaceId, entry, candidate.text, source);
       let authorized = false;
       for (const source of sources) if ((await overlay.instructionCheck?.(userId, receiptKey(source)))?.removalAssertion === true) authorized = true;
       if (authorized) continue;
@@ -297,6 +304,10 @@ export async function removalRefusals({ userId, overlay, projectId = null, names
         const witness = answer.witnesses?.get(index);
         if (answer.stated.has(index) && Number.isInteger(witness) && item.sources[witness]) {
           await overlay.recordInstructionCheck?.(userId, item.receiptKey(item.sources[witness]), { removalAssertion: true });
+          // A history excerpt has the person's wording, not the extractor's candidate. Bind the
+          // same witnessed assertion to the removed fact so both readers share this authority.
+          if (answer.same.has(index) || item.literal) await overlay.recordInstructionCheck?.(userId,
+            removalAssertionKey(namespaceId, entry, text, item.sources[witness]), { removalAssertion: true });
         }
         if ((item.literal || answer.same.has(index)) && !(item.sources.length && answer.stated.has(index))) {
           refused.set(lineFingerprint(item.candidate.text), { rejected: entry.fingerprint, via: item.literal ? 'contained' : 'judged' });
