@@ -133,3 +133,19 @@ test("the page restores a forgotten memory with the same PATCH it uses for any s
   const unknown = await fetch(`${base}/api/memory/records/nm_${"0".repeat(24)}`, { method: "PATCH", headers, body: JSON.stringify({ status: "active", expectedVersion: 1 }) });
   assert.equal(unknown.status, 404);
 });
+
+test('a targeted conversation-tool removal remains on the undo page', options, async t => {
+  const f = await fixture(t);
+  f.store.forgetTargetsEnabled = true;
+  const swimming = '每周三晚上去游泳 (as of 2026-11-14)';
+  const coffee = '早上习惯喝黑咖啡 (as of 2026-11-14)';
+  const uri = f.seed('profile.md', `# 用户\n- ${swimming}\n- ${coffee}`);
+  await f.store.forget({ id: f.userId }, { id: 'default', userId: f.userId }, uri,
+    { engineSession: 'dsh-tool-forget', lines: [swimming] });
+  const [entry] = await f.store.forgotten(f.userId);
+  assert.ok(entry);
+  assert.equal(entry.value, '每周三晚上去游泳');
+  await f.store.update(f.userId, entry.id, { status: 'active', expectedVersion: entry.version });
+  assert.ok((await f.sessions.read(f.userId, uri)).includes(swimming));
+  assert.ok((await f.sessions.read(f.userId, uri)).includes(coffee));
+});
