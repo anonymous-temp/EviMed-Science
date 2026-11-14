@@ -2870,3 +2870,5 @@ export { dnsKey, registrableDomain } from './src/geoDomains.mjs'
 export { RESEARCH_NATIVE_BUNDLES, researchNativeReceiptDigest, researchNativeArtifactDigest } from './src/researchNativeBundles.mjs'
 export { nativeResearchRowIsAdmitted, nativeResearchToolProfileHolds } from './src/researchNativeBundles.mjs'
 export { privateByDefault, sourcePrivacyOf, sourceAllowsEgress } from "./src/memoryPrivacy.mjs";
+
+export { checkMemoryNoteLabels, memoryHistoryLine, MEMORY_EXTRACTION_V2_REVIEW_TEXT, MEMORY_EXTRACTION_V2_FORMAT_TEXT } from './src/memoryExtractionFormat.mjs';

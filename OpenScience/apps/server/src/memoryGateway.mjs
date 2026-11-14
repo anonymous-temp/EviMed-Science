@@ -1,4 +1,5 @@
 import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
+import { closePersonNames, confirmedAliases, personLabel } from './nativeMemoryInduction.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { historySearchText } from './memoryHistory.mjs';
 import { openingProfileRead, selectOpeningEntries } from './memoryOpeningByUse.mjs';
@@ -10,7 +11,7 @@ import {
   recordGatewayCommit, recordGatewayMasked, recordGatewayMessage, recordGatewayRefusal, recordGatewayRequest,
   recordGatewayUpstreamFailure, recordGatewayWithheld, recordLedgerFailure, recordRecallNote,
 } from "./nativeMemoryMetrics.mjs";
-import { CORRECTIONS_UNDER_PREFERENCES, DERIVED_INDEX_SEGMENT, OBSERVATIONS_SEGMENT, nativeMemoryFile, parseArchiveUri } from "./openVikingSessions.mjs";
+import { CORRECTIONS_UNDER_PREFERENCES, DERIVED_INDEX_SEGMENT, OBSERVATIONS_SEGMENT, observationFile, nativeMemoryFile, parseArchiveUri } from "./openVikingSessions.mjs";
 import { HttpError } from "./security.mjs";
 
 /** The catch-all project: it has no single subject, so its conversations are given no project line (`residentProfile.mjs` names it the same). */
@@ -201,17 +202,17 @@ async function scopedListSearch(sessions, ctx, given) {
   // The engine ranks before anything is hidden here, and what is hidden includes every other named project's files: asked for exactly `limit`,
   // a conversation of one project could be answered one visible hit, or none, with its relevant ones ranked just below. So the engine is asked
   // for more (the most it takes is 100), and the answer is still cut to `limit` below.
-  const asked = excluded.length ? Math.min(100, limit * 4) : limit;
+  const asked = excluded.length || ctx.inductionEnabled ? Math.min(100, limit * 4) : limit;
   const floor = memorySearchFloor(ctx.memoryFileSearchMinScore);
   const answer = await sessions.search(ctx.user.id, { query: String(given.query ?? "").slice(0, 2_000), limit: asked, target_uri: target, level: 2,
     ...(floor > 0 ? { score_threshold: floor } : {}) });
   if (!answer || answer.error || !answer.result || typeof answer.result !== "object") throw new HttpError(502, "memory_gateway_upstream_invalid", "Native memory search is unavailable.");
   const result = { ...empty };
-  let remaining = limit;
+  let remaining = ctx.inductionEnabled ? asked : limit;
   for (const kind of ["memories", "resources", "skills"]) {
     const hits = memorySearchHits(Array.isArray(answer.result[kind]) ? answer.result[kind] : [], floor).filter(hit => {
       const uri = typeof hit?.uri === "string" ? hit.uri : "";
-      return !isMemorySummary(uri) && uri === absolute(uri, ctx.userRoot) && Boolean(nativeMemoryFile(uri, `${ctx.userRoot}/memories`)) && (uri === target || uri.startsWith(`${target}/`)) && !hidden(uri);
+      return !isMemorySummary(uri) && uri === absolute(uri, ctx.userRoot) && Boolean(ctx.recallFile(uri)) && (uri === target || uri.startsWith(`${target}/`)) && !hidden(uri);
     });
     result[kind] = [];
     // The vector queue can outlive a deletion or edit. Ranking identifies a candidate, never its
@@ -223,11 +224,16 @@ async function scopedListSearch(sessions, ctx, given) {
         return { uri: hit.uri,
           ...(typeof hit.context_type === 'string' ? { context_type: hit.context_type } : {}),
           ...(Number.isFinite(hit.score) ? { score: hit.score } : {}), ...(Number.isInteger(hit.level) ? { level: hit.level } : {}),
-          abstract: text,
+          abstract: await ctx.recallText(hit.uri, text),
           ...(Array.isArray(hit.tags) ? { tags: hit.tags.filter(tag => typeof tag === 'string') } : {}) };
       }));
       for (const hit of fresh) if (hit && remaining > 0) { result[kind].push(hit); remaining--; }
     }
+  }
+  if (ctx.inductionEnabled) {
+    result.memories.sort((left, right) => Number(left.abstract.includes('[Inferred from behaviour;')) - Number(right.abstract.includes('[Inferred from behaviour;')));
+    let available = limit;
+    for (const kind of ['memories', 'resources', 'skills']) { result[kind] = result[kind].slice(0, available); available -= result[kind].length; }
   }
   result.total = result.memories.length + result.resources.length + result.skills.length;
   return ok(result);
@@ -662,13 +668,15 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     for (const entry of Array.isArray(candidates) ? candidates : []) {
       let uri;
       try { uri = await ctx.checkUri(String(entry?.uri ?? '')); } catch { continue; }
-      if (!nativeMemoryFile(uri, `${ctx.userRoot}/memories`) || await ctx.hidden(uri)
+      if (!ctx.recallFile(uri) || await ctx.hidden(uri)
         || entry?.detail === 'overview' || entry?.level === 0 || entry?.level === 1) continue;
       const text = await ctx.readMemory(uri).catch(() => null);
       if (text === null) continue;
-      kept.push(context ? { uri, category: entry.category, score: entry.score, detail: entry.detail, text, origin: entry.origin }
-        : { uri, context_type: 'memory', level: entry.level, score: entry.score, abstract: text, tags: [] });
+      const recallText = await ctx.recallText(uri, text);
+      kept.push(context ? { uri, category: entry.category, score: entry.score, detail: entry.detail, text: recallText, origin: entry.origin }
+        : { uri, context_type: 'memory', level: entry.level, score: entry.score, abstract: recallText, tags: [] });
     }
+    if (ctx.inductionEnabled) kept.sort((left, right) => Number((left.text ?? left.abstract ?? '').includes('[Inferred from behaviour;')) - Number((right.text ?? right.abstract ?? '').includes('[Inferred from behaviour;')));
     if (!context) return ok({ memories: kept, resources: [], skills: [], total: kept.length });
     const rendered = kept.map(entry => `<memory uri="${entry.uri}" type="${nativeMemoryFile(entry.uri, `${ctx.userRoot}/memories`)?.type ?? 'memories'}">\n${entry.text}\n</memory>`).join('\n');
     return ok({ entries: kept, rendered, digest: '' });
@@ -883,13 +891,23 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
     async read(ctx) {
       const given = String(ctx.query.get("uri") ?? "");
       if (!insideNativeMemories(given, ctx.userRoot)) throw new HttpError(403, "memory_gateway_uri_refused", "The URI is outside native memories.");
-      const uri = await ctx.checkUri(given);
+      let uri = await ctx.checkUri(given);
       const admitted = await ctx.admit(null);
       const missing = { status: 404, json: refusal("NOT_FOUND", "File not found."), outcome: "withheld" };
       if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "memory_off"); return missing; }
-      if (!nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) || await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...missing, outcome: "local" };
+      if (!ctx.recallFile(absolute(uri, ctx.userRoot)) || await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...missing, outcome: "local" };
       if (ctx.shared) await ctx.ensureRegistered();
-      const text = await ctx.readMemory(uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
+      let text = await ctx.readMemory(uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
+      if (text === null && config.memoryPersonAliasHintEnabled === true && nativeMemoryFile(uri, `${ctx.userRoot}/memories`)?.type === 'people') {
+        const label = personLabel(uri, '');
+        const matches = [];
+        for (const entry of (await ctx.sessions.tree(ctx.user.id, `${ctx.userRoot}/memories/people`, { levelLimit: 1, maxNodes: 200 })).slice(0, 200)) {
+          if (entry.isDir || nativeMemoryFile(entry.uri, `${ctx.userRoot}/memories`)?.type !== 'people' || await ctx.hidden(entry.uri)) continue;
+          const body = await ctx.readMemory(entry.uri).catch(() => null);
+          if (body !== null && confirmedAliases(body).includes(label)) matches.push({ uri: entry.uri, body });
+        }
+        if (matches.length === 1) { uri = matches[0].uri; text = matches[0].body; }
+      }
       if (text === null) return { ...missing, outcome: "forwarded" };
       await noteRecalled(ctx, [absolute(uri, ctx.userRoot)]);
       // Startup reads this exact REST profile path without a caller marker. An explicit REST profile reader can opt in;
@@ -897,7 +915,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const startupProfile = !ctx.shared && uri === `${ctx.userRoot}/memories/profile.md` && ctx.query.get('model_use') !== 'true';
       if (!startupProfile) await noteUsed(ctx, [absolute(uri, ctx.userRoot)]);
       return { status: 200, json: ok(startupProfile
-        ? openingProfileRead(text, `${ctx.userRoot}/memories`, config) : text), outcome: "forwarded" };
+        ? openingProfileRead(text, `${ctx.userRoot}/memories`, config) : await ctx.recallText(uri, text)), outcome: "forwarded" };
     },
     async list(ctx) {
       let uri = String(ctx.query.get("uri") ?? "");
@@ -1004,14 +1022,16 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
               || ctx.shared && !projectMemoryVisible(full, ctx.userRoot, ctx.sessions.memoryTypes, directory);
           };
           if (name === "read") {
-            const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) && !isHidden(uri)).slice(0, 10).map(uri => absolute(uri, ctx.userRoot));
+            const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && ctx.recallFile(absolute(uri, ctx.userRoot)) && !isHidden(uri)).slice(0, 10).map(uri => absolute(uri, ctx.userRoot));
             if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件。")); continue; }
-            if (config.memoryDeferredSummaryRebuildEnabled === true) {
-              const rows = await Promise.all(uris.map(async uri => ({ uri, text: await ctx.readMemory(uri) })));
-              const readable = rows.filter(row => row.text !== null);
-              local.push(toolText(message.id, readable.map(row => `${row.uri}\n${row.text}`).join('\n\n') || '没有可读取的记忆文件。'));
-              await noteRecalled(ctx, readable.map(row => row.uri));
-              await noteUsed(ctx, readable.map(row => row.uri));
+            if (config.memoryDeferredSummaryRebuildEnabled === true || config.memoryObservationInductionEnabled === true || config.memoryPersonAliasHintEnabled === true) {
+              const content = [];
+              for (const uri of uris) {
+                const read = await handlers.read({ ...ctx, query: new URLSearchParams({ uri, model_use: 'true' }) });
+                if (read.status === 200 && read.json && typeof read.json === 'object'
+                  && 'result' in read.json && typeof read.json.result === 'string') content.push(`${uri}\n${read.json.result}`);
+              }
+              local.push(toolText(message.id, content.join('\n\n') || '没有可读取的记忆文件。'));
               continue;
             }
             forward.push({ ...message, params: { ...message.params, arguments: { uris } } });
@@ -1240,6 +1260,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const admissions = new Map();
       /** @type {Promise<string[]> | null} */
       let hiddenList = null;
+      /** @type {Promise<{uri:string,label:string,aliases:string[]}[]> | null} */
+      let people = null;
       const ctx = {
         memoryFileSearchMinScore: config.memoryFileSearchMinScore,
         user, project, json, query: url.searchParams, match: found.match, engineUser, userRoot, sessions: view, memoryContext, shared,
@@ -1267,6 +1289,29 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           }
           return full;
         },
+        inductionEnabled: !shared && config.memoryObservationInductionEnabled === true,
+        recallFile: (/** @type {string} */ uri) => nativeMemoryFile(uri, `${userRoot}/memories`)
+          ?? (!shared && config.memoryObservationInductionEnabled === true ? observationFile(uri, `${userRoot}/memories`) : null),
+        recallText: async (/** @type {string} */ uri, /** @type {string} */ text) => {
+          if (observationFile(uri, `${userRoot}/memories`)) return `[seen once — observed choice, not a standing preference]\n${text}`;
+          if (config.memoryPersonAliasHintEnabled !== true || nativeMemoryFile(uri, `${userRoot}/memories`)?.type !== 'people') return text;
+          if (!people) people = (async () => {
+            const candidates = await view.tree(user.id, `${userRoot}/memories/people`, { levelLimit: 1, maxNodes: 200 }).catch(() => []);
+            const rows = [];
+            for (const entry of candidates.slice(0, 200)) {
+              if (entry.isDir || nativeMemoryFile(entry.uri, `${userRoot}/memories`)?.type !== 'people' || await ctx.hidden(entry.uri)) continue;
+              const body = await ctx.readMemory(entry.uri).catch(() => null);
+              if (body !== null) rows.push({ uri: entry.uri, label: personLabel(entry.uri, body), aliases: confirmedAliases(body) });
+            }
+            return rows;
+          })();
+          const label = personLabel(uri, text), aliases = confirmedAliases(text);
+          const siblings = (await people).filter(row => row.uri !== uri && (closePersonNames(label, row.label)
+            || aliases.includes(row.label) || row.aliases.includes(label))).slice(0, 8);
+          if (!siblings.length) return text;
+          return `${text}\n\nRelated people files (possibly the same person — not confirmed; ask the user or report separately; never mix their facts):\n`
+            + siblings.map(row => `- ${row.label}: ${row.uri}`).join('\n');
+        },
         admit: (/** @type {string | null} */ engineSessionId, /** @type {number | null} */ at = null) => {
           const key = `${engineSessionId ?? ""}\u0000${at ?? ""}`;
           if (!admissions.has(key)) admissions.set(key, scopedAdmission(user, project, engineSessionId, at, memoryContext));
@@ -1286,8 +1331,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             // (S7, 2026-10-27). The personal namespace only; a shared project's namespace holds its own project alone.
             const otherProjects = shared || !overlay?.configured || typeof overlay.otherProjectUris !== "function" ? [] : await overlay.otherProjectUris(user.id, project.id, 10000, {
               peopleAcrossProjects: config.memoryPeopleAcrossProjectsEnabled === true, memoryRoot: `${userRoot}/memories` });
-            // The observations (`memories/observations`) are never read back, in either namespace.
-            return [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, `${userRoot}/memories/${OBSERVATIONS_SEGMENT}`, ...otherProjects,
+            // Observations remain hidden by default and in shared namespaces; opt-in personal recall labels them.
+            return [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, ...(shared || config.memoryObservationInductionEnabled !== true ? [`${userRoot}/memories/${OBSERVATIONS_SEGMENT}`] : []), ...otherProjects,
               ...(shared ? [`${userRoot}/memories/profile.md`, `${userRoot}/memories/.overview.md`, `${userRoot}/memories/.abstract.md`, ...await privatePreferences(ctx)] : []),
               ...sensitive.filter((/** @type {string} */ uri) => !shared || uri === userRoot || uri.startsWith(`${userRoot}/`))];
           })();

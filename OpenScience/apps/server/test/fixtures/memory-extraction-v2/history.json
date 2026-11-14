@@ -1,0 +1,58 @@
+{
+  "description": "Synthetic recorded conversation across three sessions, with hand-authored extraction-boundary responses.",
+  "sessions": [
+    {
+      "id": "change_0",
+      "messages": [
+        {
+          "role": "user",
+          "text": "My greenhouse setting is now 18 °C. Use 18 °C for my future greenhouse tables. Project Fern uses 18 °C; the Fern controller setting is 18 °C.",
+          "at": "2026-11-01T08:00:00Z"
+        }
+      ],
+      "writes": {
+        "profile.md": "# User\n- Greenhouse setting: 18 °C (as of 2026-11-01)",
+        "preferences/self/greenhouse.md": "- Greenhouse setting: 18 °C (as of 2026-11-01)",
+        "projects/fern.md": "# Fern\n## Constraints\n- Greenhouse setting: 18 °C (as of 2026-11-01)",
+        "entities/instruments/fern.md": "# Fern controller\n## Settings\n- Greenhouse setting: 18 °C (as of 2026-11-01)"
+      }
+    },
+    {
+      "id": "change_1",
+      "messages": [
+        {
+          "role": "user",
+          "text": "My greenhouse setting is now 20 °C. Use 20 °C for my future greenhouse tables. Project Fern uses 20 °C; the Fern controller setting is 20 °C.",
+          "at": "2026-11-02T08:00:00Z"
+        }
+      ],
+      "writes": {
+        "profile.md": "# User\n- Greenhouse setting: 20 °C (as of 2026-11-02)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
+        "preferences/self/greenhouse.md": "- Greenhouse setting: 20 °C (as of 2026-11-02)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
+        "projects/fern.md": "# Fern\n## Constraints\n- Greenhouse setting: 20 °C (as of 2026-11-02)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
+        "entities/instruments/fern.md": "# Fern controller\n## Settings\n- Greenhouse setting: 20 °C (as of 2026-11-02)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)"
+      }
+    },
+    {
+      "id": "change_2",
+      "messages": [
+        {
+          "role": "user",
+          "text": "My greenhouse setting is now 22 °C. Use 22 °C for my future greenhouse tables. Project Fern uses 22 °C; the Fern controller setting is 22 °C.",
+          "at": "2026-11-03T08:00:00Z"
+        }
+      ],
+      "writes": {
+        "profile.md": "# User\n- Greenhouse setting: 22 °C (as of 2026-11-03)\n- earlier: Greenhouse setting: 20 °C (until 2026-11-03)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
+        "preferences/self/greenhouse.md": "- Greenhouse setting: 22 °C (as of 2026-11-03)\n- earlier: Greenhouse setting: 20 °C (until 2026-11-03)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
+        "projects/fern.md": "# Fern\n## Constraints\n- Greenhouse setting: 22 °C (as of 2026-11-03)\n- earlier: Greenhouse setting: 20 °C (until 2026-11-03)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)",
+        "entities/instruments/fern.md": "# Fern controller\n## Settings\n- Greenhouse setting: 22 °C (as of 2026-11-03)\n- earlier: Greenhouse setting: 20 °C (until 2026-11-03)\n- earlier: Greenhouse setting: 18 °C (until 2026-11-02)"
+      }
+    }
+  ],
+  "anchors": [
+    "18 °C",
+    "20 °C",
+    "22 °C"
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "description": "Synthetic recorded repeated choice in two sessions, with hand-authored observation outputs.",
+  "sessions": [
+    {
+      "id": "numeric_one",
+      "messages": [
+        {
+          "role": "user",
+          "text": "把这份周报压到 140 字。",
+          "at": "2026-11-01T08:00:00Z"
+        }
+      ],
+      "writes": {
+        "observations/weekly_140.md": "- 周报：140 字（把这份周报压到 140 字）"
+      }
+    },
+    {
+      "id": "numeric_two",
+      "messages": [
+        {
+          "role": "user",
+          "text": "这份周报也用 140 字。",
+          "at": "2026-11-02T08:00:00Z"
+        }
+      ],
+      "writes": {
+        "observations/weekly_140.md": "- 周报：140 字（把这份周报压到 140 字）\n- 周报：140 字（这份周报也用 140 字）"
+      }
+    }
+  ],
+  "anchors": [
+    "140 字"
+  ]
+}

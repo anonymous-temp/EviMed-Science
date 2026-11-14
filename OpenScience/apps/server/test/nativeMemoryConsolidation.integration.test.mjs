@@ -374,3 +374,12 @@ test('an unsupported new merge file is removed undoably and the consumed source 
   assert.equal((await f.store.undo(f.userId, nativeFileId(added), {})).undone, 'restored');
   assert.equal(await f.sessions.read(f.userId, added), 'Weight 90 kg.');
 });
+
+test('extraction-v2 adds history/attribution preservation to the existing consolidation request only', options, async t => {
+  const f = await account(t, { config: { memoryTemplatesDirectory: 'memory-templates-extraction-v2' } });
+  assert.equal(await f.tick(), 'submitted');
+  const requests = compile(f.stub);
+  assert.equal(requests.length, 1);
+  assert.match(requests[0].body.instruction, /An earlier:/);
+  assert.match(requests[0].body.instruction, /sensitive marker/);
+});

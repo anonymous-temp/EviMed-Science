@@ -1,14 +1,15 @@
+import { confirmedAliasRequest, confirmedAliases, choiceRows, choiceKey } from './nativeMemoryInduction.mjs';
 import { checkForgetRequests } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash } from "node:crypto";
-import { carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn } from "@evimed/domain";
+import { checkMemoryNoteLabels, carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn } from "@evimed/domain";
 import { filterCapturedMessage } from "./memoryGateway.mjs";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
 import { HttpError } from './security.mjs';
 import {
   recordNativeCheck, recordNativeCommit, recordNativeExtraction, recordNativeExtractionFailure, recordNativeOperations, recordNativePass, recordNativeWrite,
-  recordPolicySync, recordRejectionLines, recordResetSweep, recordVerificationLines, recordPastedInstructionCheck,
+  recordMemoryNoteLabels, recordPolicySync, recordRejectionLines, recordResetSweep, recordVerificationLines, recordPastedInstructionCheck,
 } from "./nativeMemoryMetrics.mjs";
 import { NativeMemoryObservations } from "./nativeMemoryObservations.mjs";
 import { INSTRUCTION_ORIGIN_POLICY_HASH, instructionSourceMessage, pendingInstructionResult } from './nativeMemoryInstructionOrigin.mjs';
@@ -190,7 +191,7 @@ export class NativeMemoryWorker {
     this.consolidation = null;
     /** What promotes a choice two conversations repeated (`nativeMemoryObservations.mjs`); built from the store when there is one. @type {{ promote: (userId: string) => Promise<any> } | null} */
     this.observations = nativeMemory && typeof nativeMemory.keepRepeatedChoice === "function"
-      ? new NativeMemoryObservations({ overlay, sessions, memorySettings, keepRepeatedChoice: (userId, choice, origins) => nativeMemory.keepRepeatedChoice(userId, choice, origins), report }) : null;
+      ? new NativeMemoryObservations({ overlay, sessions, memorySettings, inductionEnabled: config.memoryObservationInductionEnabled === true, keepRepeatedChoice: (userId, choice, origins, evidence) => nativeMemory.keepRepeatedChoice(userId, choice, origins, evidence), report }) : null;
     /** When each account's type allowlist was last checked against the deployment's (`#syncPolicy`). @type {Map<string, number>} */
     this.policyChecked = new Map();
     this.now = now ?? (() => new Date());
@@ -851,6 +852,27 @@ export class NativeMemoryWorker {
         }
       }
     }
+    if (!sourceDeleted && context.kind !== 'geo-project' && this.config.memoryObservationInductionEnabled === true && this.nativeMemory && commit.origin !== 'promotion') {
+      for (const operation of [...(operations.adds ?? []), ...(operations.updates ?? [])]) {
+        const file = nativeMemoryFile(operation.uri, root) ?? observationFile(operation.uri, root);
+        if (!file || !['observations', 'preferences', 'corrections'].includes(file.type)) continue;
+        const live = await context.sessions.read(userId, operation.uri);
+        if (live === null || live !== operation.after) continue;
+        const explicit = file.type !== 'observations';
+        const parse = (/** @type {string} */ body) => choiceRows(explicit ? body.split('\n').filter(line => /^\s*- Stated choice: /.test(line)).join('\n').replace(/^\s*- Stated choice: /gm, '- Choice: ') : body);
+        const prior = new Set(parse(operation.before ?? '').map(choiceKey));
+        const choices = parse(live).filter(row => !prior.has(choiceKey(row)));
+        await this.nativeMemory.withdrawInferredChoices(userId, choices, explicit);
+      }
+    }
+    if (!sourceDeleted && context.kind !== 'geo-project' && this.config.memoryPersonAliasHintEnabled === true && this.nativeMemory) {
+      const sources = await this.verification.readRemovalSources(userId, [{ archiveUri: commit.archiveUri, projectId: commit.projectId }], context);
+      for (const operation of [...(operations.adds ?? []), ...(operations.updates ?? [])]) {
+        if (nativeMemoryFile(operation.uri, root)?.type !== 'people' || !operation.after) continue;
+        const names = confirmedAliasRequest(operation.after, sources);
+        if (names.length) await this.nativeMemory.mergeConfirmedAliases(userId, operation.uri, operation.after, names);
+      }
+    }
     recordNativeOperations(counts);
     return counts.added + counts.updated + counts.deleted;
   }
@@ -1024,6 +1046,13 @@ export class NativeMemoryWorker {
     const sessions = memoryContext.sessions;
     let current = await sessions.read(userId, uri);
     if (current === null) return null;
+    // Check syntax only: no extra model call, no semantic keyword filter, no rewrite.
+    // Count fresh writes, not replayed settlement receipts. Sensitive is sticky until the person changes it.
+    if (type === 'notes' && this.config.memoryTemplatesDirectory === 'memory-templates-extraction-v2') {
+      const labels = checkMemoryNoteLabels(current);
+      if (fresh) recordMemoryNoteLabels(labels);
+      if (labels.sensitive) await this.overlay.upsertFile({ userId, uri, memoryType: type, sensitive: true });
+    }
     if (this.robustInstructions && pastedInstructions.bodies?.get(uri) !== contentHash(current)) {
       const operations = { updates: [{ uri, before: diffBefore, after: current }] };
       const reviewed = await this.#instructionOrigins({ userId, archiveUri, projectId }, operations, memoryContext, extraOrigins);
@@ -1046,6 +1075,15 @@ export class NativeMemoryWorker {
     const origins = (await this.overlay.originsOf(userId, [uri])).get(uri) ?? new Map();
     const archive = archiveUri
       ? await this.verification.readRemovalSources(userId, [{ archiveUri, projectId }], memoryContext) : [];
+    if (type === 'people' && this.config.memoryPersonAliasHintEnabled === true
+      && JSON.stringify(confirmedAliases(current)) !== JSON.stringify(confirmedAliases(diffBefore))
+      && confirmedAliases(current).length && !confirmedAliasRequest(current, archive).length) {
+      const next = current.split('\n').filter(line => !/^\s*- (?:Confirmed aliases|Alias confirmation): /.test(line)).join('\n');
+      await withMemorySummaryInvalidation(sessions, this.overlay, userId, uri, () => sessions.replace(userId, uri, next));
+      await this.overlay.addRevision({ userId, uri, memoryType: type, change: 'updated', actor: 'platform',
+        reason: 'alias confirmation lacks a quoted user source', before: current, after: next, projectId });
+      current = next;
+    }
     const candidates = [];
     const cache = new Map();
     const inherited = await this.verification.readRemovalSources(userId, extraOrigins, memoryContext, cache);
@@ -1112,7 +1150,7 @@ export class NativeMemoryWorker {
         namespaceId: memoryContext.kind === 'geo-project' ? memoryContext.namespaceId : null, judge: this.rejectionJudge });
       await withMemorySummaryInvalidation(sessions, this.overlay, userId, neutral, () => sessions.replace(userId, neutral, body));
       await this.overlay.addRevision({ userId, uri: neutral, memoryType: type, change: 'added', actor: 'platform', reason: 'rejected_filename', before: null, after: body, projectId });
-      await this.overlay.upsertFile({ userId, uri: neutral, memoryType: type, body, projectId });
+      await this.overlay.upsertFile({ userId, uri: neutral, memoryType: type, body, projectId, ...(indexed?.sensitive ? { sensitive: true } : {}) });
       const inheritedOrigins = new Map(memoryLines(body).map(line => [lineFingerprint(line), [
         ...originalSources(origins.get(lineFingerprint(line))), ...extraOrigins, ...(archiveUri ? [{ archiveUri, projectId }] : []),
       ]]));

@@ -1361,3 +1361,111 @@ test('portable people pass the real overlay and gateway on every read surface; p
     }
   }
 });
+
+test('opt-in search and both read transports label observations and unconfirmed person hints', async t => {
+  const f = await fixture(t, { config: { memoryObservationInductionEnabled: true, memoryPersonAliasHintEnabled: true } });
+  const person = `${ROOT}/memories/people/王阿姨.md`, sibling = `${ROOT}/memories/people/小王阿姨.md`;
+  f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Likes walking.');
+  f.stub.seedMemory(OV_USER, 'people/小王阿姨.md', '# 小王阿姨\n- Different person until confirmed.');
+  const observation = `${ROOT}/memories/observations/morning.md`;
+  f.stub.seedMemory(OV_USER, 'observations/morning.md', '- Morning left free.');
+  const read = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(person)}`);
+  assert.match(read.json.result, /possibly the same person — not confirmed/);
+  assert.ok(read.json.result.includes(sibling));
+  const one = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(observation)}`);
+  assert.match(one.json.result, /seen once/);
+  const searched = await f.call('POST', '/api/v1/search/search', { query: 'morning', limit: 20 });
+  assert.ok(searched.json.result.memories.some(hit => hit.uri === observation && hit.abstract.includes('seen once')));
+  const context = await f.call('POST', '/api/v1/search/search', { query: 'morning', mode: 'context', limit: 20 });
+  assert.match(context.json.result.rendered, /seen once/);
+  const mcp = await f.mcp({ jsonrpc: '2.0', id: 771, method: 'tools/call', params: { name: 'read', arguments: { uris: [person, observation] } } });
+  assert.match(JSON.stringify(mcp), /not confirmed/);
+  assert.match(JSON.stringify(mcp), /seen once/);
+  const opening = await f.call('GET', `/api/v1/fs/ls?uri=${encodeURIComponent(`${ROOT}/memories`)}&output=agent&recursive=true&abs_limit=512&node_limit=512`);
+  assert.ok(!JSON.stringify(opening.json).includes('Morning left free'));
+});
+
+test('alias candidates respect hidden, project and account boundaries', async t => {
+  const hidden = `${ROOT}/memories/people/小王阿姨.md`;
+  const f = await fixture(t, { config: { memoryPersonAliasHintEnabled: true }, overlay: {
+    configured: true, sensitiveUris: async () => [hidden], otherProjectUris: async () => [] } });
+  f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨');
+  f.stub.seedMemory(OV_USER, 'people/小王阿姨.md', '# 小王阿姨');
+  const read = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(`${ROOT}/memories/people/王阿姨.md`)}`);
+  assert.ok(!read.json.result.includes('小王阿姨'));
+  assert.ok(!read.json.result.includes('not confirmed'));
+});
+
+test('stated preferences rank ahead of inferred choices even at limit one', async t => {
+  const f = await fixture(t, { config: { memoryObservationInductionEnabled: true } });
+  f.stub.seedMemory(OV_USER, 'preferences/self/inferred.md', '- Use Markdown [Inferred from behaviour; 2 conversations; dates: unknown]');
+  const stated = f.stub.seedMemory(OV_USER, 'preferences/self/stated.md', '- Use CSV.');
+  const found = await f.call('POST', '/api/v1/search/search', { query: 'Use', limit: 1 });
+  assert.equal(found.json.result.memories.length, 1);
+  assert.equal(found.json.result.memories[0].uri, stated);
+});
+test('an old people URI resolves only through one confirmed alias, never a similar name', async t => {
+  const f = await fixture(t, { config: { memoryPersonAliasHintEnabled: true } });
+  f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Confirmed aliases: ["王阿姨","小王阿姨"]\n- Likes walking.');
+  const read = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(`${ROOT}/memories/people/小王阿姨.md`)}`);
+  assert.equal(read.status, 200); assert.match(read.json.result, /Likes walking/);
+  const near = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(`${ROOT}/memories/people/大王阿姨.md`)}`);
+  assert.equal(near.status, 404);
+});
+
+for (const portable of [false, true]) test(`people scores, floor and alias hints share project/privacy scope (portable=${portable})`, async t => {
+  const { NativeMemoryOverlay } = await import('../src/nativeMemoryOverlay.mjs');
+  const person = `${ROOT}/memories/people/王阿姨.md`, sibling = `${ROOT}/memories/people/小王阿姨.md`;
+  const privateUri = `${ROOT}/memories/people/大王阿姨.md`;
+  const overlay = new NativeMemoryOverlay({ database: { transaction: async () => {}, query: async sql => ({ rows:
+    sql.includes('native_markers') ? [{}] : sql.includes('AND sensitive') ? [{ uri: privateUri }]
+      : sql.includes('memory_type=ANY') ? [sibling, privateUri].map(uri => ({ uri })) : [] }) } });
+  const f = await fixture(t, { config: { memoryPeopleAcrossProjectsEnabled: portable,
+    memoryPersonAliasHintEnabled: true, memoryObservationInductionEnabled: true, memoryFileSearchMinScore: 0.895 }, overlay });
+  f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Likes walking.');
+  f.stub.seedMemory(OV_USER, 'people/小王阿姨.md', '# 小王阿姨\n- Likes reading.');
+  f.stub.seedMemory(OV_USER, 'people/大王阿姨.md', '# 大王阿姨\n- Private person.');
+  const rest = await f.call('POST', '/api/v1/search/search', { query: '王阿姨' });
+  const rpc = await f.mcp({ jsonrpc: '2.0', id: 910, method: 'tools/call', params: { name: 'search', arguments: { query: '王阿姨' } } });
+  for (const result of [rest.json.result, JSON.parse(rpc.messages[0].result.content[0].text)]) {
+    assert.deepEqual(result.memories.map(hit => [hit.uri, hit.score]), [[person, 0.9]]);
+    assert.equal(result.memories[0].abstract.includes(sibling), portable);
+    assert.equal(result.memories[0].abstract.includes('possibly the same person'), portable);
+    assert.ok(!result.memories[0].abstract.includes(privateUri));
+  }
+  assert.equal(f.stub.sent('POST', '/api/v1/search/search').at(-1).body.score_threshold, 0.895);
+  const context = await f.call('POST', '/api/v1/search/search', { query: '王阿姨', mode: 'context' });
+  assert.equal(context.json.result.entries.find(entry => entry.uri === person).text.includes(sibling), portable);
+  assert.ok(!context.json.result.rendered.includes(privateUri));
+});
+
+test('alias hints and redirects use the deferred-forget fence on every recall surface', async t => {
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const person = `${ROOT}/memories/people/王阿姨.md`, sibling = `${ROOT}/memories/people/小王阿姨.md`;
+  const withdrawn = 'Small Wang alias withdrawn.', redirect = '- Confirmed aliases: ["Old Wang","New Wang"]';
+  const f = await fixture(t, { config: { memoryDeferredSummaryRebuildEnabled: true, memoryPersonAliasHintEnabled: true,
+    memoryObservationInductionEnabled: true }, overlay: {
+    configured: true, deferredSummaryRebuildEnabled: true,
+    sensitiveUris: async () => [], otherProjectUris: async () => [], noteRecalled: async () => {},
+    removals: async () => [withdrawn, redirect.slice(2)].map(text => ({ fingerprint: lineFingerprint(text), text })),
+    file: async () => ({ body: '' }),
+  } });
+  f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Likes walking.');
+  f.stub.seedMemory(OV_USER, 'people/小王阿姨.md', `- ${withdrawn}`);
+  f.stub.seedMemory(OV_USER, 'people/New Wang.md', `# New Wang\n${redirect}\n- Likes reading.`);
+  const responses = [await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(person)}`),
+    await f.call('POST', '/api/v1/search/search', { query: 'Likes' }),
+    await f.call('POST', '/api/v1/search/search', { query: 'Likes', mode: 'context' }),
+    await f.mcp({ jsonrpc: '2.0', id: 911, method: 'tools/call', params: { name: 'read', arguments: { uris: [person] } } }),
+    await f.mcp({ jsonrpc: '2.0', id: 912, method: 'tools/call', params: { name: 'search', arguments: { query: 'Likes' } } })];
+  for (const response of responses) {
+    assert.equal(response.status, 200);
+    assert.ok(!JSON.stringify(response).includes(sibling), 'a fully withdrawn sibling cannot reappear in an alias hint');
+    assert.doesNotMatch(JSON.stringify(response), /Small Wang alias withdrawn|Old Wang/);
+    assert.match(JSON.stringify(response), /Likes walking/);
+  }
+  const old = `${ROOT}/memories/people/Old Wang.md`;
+  assert.equal((await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(old)}`)).status, 404);
+  const rpc = await f.mcp({ jsonrpc: '2.0', id: 913, method: 'tools/call', params: { name: 'read', arguments: { uris: [old] } } });
+  assert.doesNotMatch(JSON.stringify(rpc), /Likes reading/);
+});

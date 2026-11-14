@@ -159,6 +159,13 @@ function boolEnv(name, fallback) {
   return !["0", "false", "no", "off"].includes(value.toLowerCase());
 }
 
+/** @param {unknown} value @returns {'memory-templates'|'memory-templates-extraction-v2'} */
+export function parseMemoryTemplatesDirectory(value) {
+  const directory = String(value ?? 'memory-templates').trim() || 'memory-templates';
+  if (directory === 'memory-templates' || directory === 'memory-templates-extraction-v2') return directory;
+  throw new Error('OPEN_SCIENCE_MEMORY_TEMPLATES_DIR must be memory-templates or memory-templates-extraction-v2.');
+}
+
 /** @param {unknown} value @returns {'merge'|'verify'} */
 export function parseNativeMemoryConsolidationMode(value) {
   const mode = String(value ?? 'merge').trim().toLowerCase() || 'merge';
@@ -387,6 +394,8 @@ function openVikingEngineSettings(overrides, modelSecret, rootSecret) {
     memoryPeopleAcrossProjectsEnabled: overrides.memoryPeopleAcrossProjectsEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PEOPLE_ACROSS_PROJECTS_ENABLED", false),
     memoryFileSearchMinScore: Number(overrides.memoryFileSearchMinScore ?? process.env.OPEN_SCIENCE_MEMORY_FILE_SEARCH_MIN_SCORE ?? 0),
     memoryStandingInstructionsEnabled: overrides.memoryStandingInstructionsEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_STANDING_INSTRUCTIONS_ENABLED", false),
+    memoryObservationInductionEnabled: overrides.memoryObservationInductionEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OBSERVATION_INDUCTION_ENABLED", false),
+    memoryPersonAliasHintEnabled: overrides.memoryPersonAliasHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PERSON_ALIAS_HINT_ENABLED", false),
     memorySafetyNotesEnabled: overrides.memorySafetyNotesEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_SAFETY_NOTES_ENABLED", false),
     memoryOpeningIndexEnabled: overrides.memoryOpeningIndexEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_INDEX_ENABLED", false),
     memoryOpeningByUseEnabled: overrides.memoryOpeningByUseEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_OPENING_BY_USE_ENABLED", false),
@@ -3070,6 +3079,8 @@ export function loadConfig(overrides = {}) {
     memoryDeferredSummaryRebuildEnabled: overrides.memoryDeferredSummaryRebuildEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_DEFERRED_SUMMARY_REBUILD_ENABLED", false),
     memoryForgetTargetsEnabled: overrides.memoryForgetTargetsEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_FORGET_TARGETS_ENABLED", false),
     memoryForgetToolHintEnabled: overrides.memoryForgetToolHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_FORGET_TOOL_HINT_ENABLED", false),
+    // Same setting selects the engine's read-only template mount in compose and its post-write format check.
+    memoryTemplatesDirectory: parseMemoryTemplatesDirectory(overrides.memoryTemplatesDirectory ?? process.env.OPEN_SCIENCE_MEMORY_TEMPLATES_DIR),
     memoryPastedInstructionCheckEnabled: overrides.memoryPastedInstructionCheckEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED", false),
     memoryPastedInstructionRobustEnabled: overrides.memoryPastedInstructionRobustEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_ROBUST_ENABLED", false),
     // The page's import of what another assistant remembered (`nativeMemoryImport.mjs`): one Flash call splits the pasted text, the person
