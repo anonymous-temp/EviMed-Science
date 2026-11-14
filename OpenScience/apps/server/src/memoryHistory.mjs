@@ -313,7 +313,7 @@ export class MemoryHistory {
         if (this.config.memoryForgetTargetsEnabled === true && sourceArchive.session.startsWith('dsh-') && raw !== null) {
           const dates = raw.split('\n').filter(line => line.trim()).map(line => JSON.parse(line))
             .filter(message => ['user','assistant'].includes(message.role)).map(message => Date.parse(message.created_at ?? ''));
-          const minimum = dates.length && dates.every(Number.isFinite) ? new Date(dates.reduce((minimum, date) => Math.min(minimum, date), Infinity)).toISOString() : null;
+          const minimum = dates.length && dates.every(Number.isFinite) ? new Date(dates.reduce((earliest, date) => Math.min(earliest, date), Infinity)).toISOString() : null;
           await this.ledger.queueLateForgetArchive(context, commit.archiveUri, minimum);
         }
         if (sourceArchive.session.startsWith('dsh-') && raw !== null) {
