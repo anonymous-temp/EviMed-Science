@@ -140,28 +140,38 @@ for (const availability of ['available', 'provider off', 'invalid answer', 'prov
   assert.equal((await maintenance()).same.size, 0);
   assert.equal(calls.length, 0, 'the maintenance allowance is already exhausted');
   if (availability !== 'available') {
-    const refused = await f.memory.callTool('forget', { statement: examinationStatement });
-    assert.equal(refused.isError, true);
-    assert.match(refused.blocks.join('\n'), /memory_history_privacy_unavailable:.*earlier conversations.*temporarily unavailable.*Retry/s);
-    assert.match(refused.blocks.join('\n'), /Do not claim.*complete.*automatic retry/s);
-    assert.doesNotMatch(refused.blocks.join('\n'), /private provider|private deadline/);
-    assert.deepEqual(await f.overlay.removals(f.userId), [], 'fallback refuses before rejection activation');
-    assert.deepEqual(await f.store.forgotten(f.userId), [], 'no undo revision falsely claims a recorded intent');
-    assert.deepEqual((await f.database.query('SELECT message_hash FROM evimed_memory.history_message_rejections WHERE owner_id=$1', [f.userId])).rows, []);
-    assert.equal((await search()).length, 1, 'the refused operation cannot claim history was fenced');
-    assert.equal((await f.overlay.retryableForgetChecks({ userId: f.userId })).length, 0, 'a tool call has no archived retry plan');
-    assert.equal(calls.length, availability === 'provider off' ? 0 : 1);
+    const recorded = await f.memory.callTool('forget', { statement: examinationStatement });
+    assert.equal(recorded.isError, false, recorded.blocks.join('\n'));
+    assert.match(recorded.blocks.join('\n'), /Recorded.*Earlier conversations are still being checked; paraphrases may still be recalled/);
+    assert.doesNotMatch(recorded.blocks.join('\n'), /private provider|private deadline/);
+    assert.equal((await f.overlay.removals(f.userId)).length, 1);
+    assert.equal((await f.store.forgotten(f.userId)).length, 1);
+    assert.equal((await search()).length, 1, 'the answer explicitly discloses the unscanned paraphrase gap');
+    assert.equal(await f.ledger.rejected(f.context, [examinationStatement]), true);
+    const queued = await f.database.query('SELECT * FROM evimed_memory.history_forget_scans WHERE owner_id=$1', [f.userId]);
+    assert.equal(queued.rows.length, 1);
+    assert.deepEqual(queued.rows[0].archives, [archive.archive_uri]);
+    assert.equal((await f.ledger.archiveCoverage(f.userId)).maintenance.forget_scans, 1);
+    assert.equal((await f.store.pending(f.userId)).filter(row => row.reason === 'forget_scan_pending').length, 1);
     failure = 'available';
     judgeConfig.deepseekProviderEnabled = true;
+    const restarted = new MemoryHistory({ config: f.config, ledger: new MemoryHistoryLedger({ database: f.database, overlay: f.overlay }),
+      contexts: f.contexts, rejectionJudge: f.store.rejectionJudge, resolveSource: f.history.resolveSource,
+      eligible: f.history.eligible, admitMessage: f.history.admitMessage });
+    await restarted.drainForgetScans();
+    assert.equal((await f.database.query('SELECT state FROM evimed_memory.history_forget_scans WHERE owner_id=$1', [f.userId])).rows[0].state, 'complete');
+    assert.deepEqual(await search(), [], 'restart completion fences the paraphrase without another tool call');
+    await restarted.drainForgetScans();
   }
-  // An explicit retry completes after recovery; no background completion is claimed.
+  // Repeating the tool after worker completion preserves its existing undo authority.
   const answer = await f.memory.callTool('forget', { statement: examinationStatement });
   assert.equal(answer.isError, false, answer.blocks.join('\n'));
-  assert.equal(calls.length, ['available', 'provider off'].includes(availability) ? 1 : 2);
+  assert.equal(calls.length, availability === 'available' ? 1 : availability === 'provider off' ? 2 : 3);
   // Assert outside callModel: an assertion inside that boundary is caught as a provider failure.
   for (const shown of calls) {
     assert.deepEqual(shown.candidates, [{ candidate: 0, text: original, options: [0] }]);
-    assert.deepEqual(shown.removed, [{ removed: 0, text: examinationStatement }]);
+    assert.equal(shown.removed.length, 1); assert.equal(shown.removed[0].removed, 0);
+    assert.equal(lineFingerprint(shown.removed[0].text), lineFingerprint(examinationStatement));
   }
   assert.match(answer.blocks.join('\n'), /Recorded a history recall rejection.*conversation text is unchanged/s);
   const removals = await f.overlay.removals(f.userId);
@@ -173,7 +183,7 @@ for (const availability of ['available', 'provider off', 'invalid answer', 'prov
   assert.deepEqual(await f.history.search({ user: f.user, project: f.project, query: original }), []);
   assert.match(await f.sessions.read(f.userId, `${archive.archive_uri}/messages.jsonl`), /previous examination/);
   assert.equal((await maintenance()).same.size, 0, 'privacy work does not replenish the maintenance allowance');
-  assert.equal(calls.length, ['available', 'provider off'].includes(availability) ? 1 : 2);
+  assert.equal(calls.length, availability === 'available' ? 1 : availability === 'provider off' ? 2 : 3);
   await f.store.undo(f.userId, (await f.store.forgotten(f.userId))[0].id);
   assert.equal((await search()).length, 1, 'undo restores the semantically matched original');
 });
@@ -360,4 +370,68 @@ test('FT8 HTTP line removal answers before rebuild, all readers use current byte
   const overview = await f.sessions.read(f.userId, `${f.root}/.overview.md`);
   assert.match(overview, /blue binders/); assert.doesNotMatch(overview, /R-41633/);
   assert.equal(await restarted.drainSummaryInvalidations(f.userId), 0);
+});
+
+for (const state of ['pending','running','complete']) test(`FT8 undo cancels a ${state} paraphrase obligation`, options, async t => {
+  const f = await setup(t), original = 'The previous examination was benign.';
+  const archive = await f.commitConversation(`undo-${state}`, [{ role: 'user', text: original }], { projectId: f.project.id });
+  await f.history.ingestArchive({ userId: f.userId, projectId: f.project.id, engineSession: archive.session, archiveUri: archive.archive_uri }, f.context);
+  f.store.rejectionJudge = { same: async () => { throw new Error('offline'); } };
+  assert.equal((await f.memory.callTool('forget', { statement: examinationStatement })).isError, false);
+  const forgotten = (await f.store.forgotten(f.userId))[0];
+  let release, entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  const held = new Promise(resolve => { release = resolve; });
+  f.history.rejectionJudge = { same: async ({ candidates }) => {
+    if (state === 'running') { entered(); await held; }
+    return { same: new Map(candidates.map((_candidate, index) => [index, lineFingerprint(examinationStatement)])) };
+  } };
+  let work;
+  if (state === 'running') { work = f.history.drainForgetScans(); await started; }
+  if (state === 'complete') await f.history.drainForgetScans();
+  await f.store.undo(f.userId, forgotten.id);
+  release(); await work;
+  assert.equal((await f.database.query('SELECT * FROM evimed_memory.history_forget_scans WHERE owner_id=$1', [f.userId])).rows.length, 0);
+  assert.equal((await f.history.search({ user: f.user, project: f.project, query: original })).length, 1);
+  assert.equal(await f.ledger.rejected(f.context, [examinationStatement]), false);
+});
+
+test('FT8 failed scan backs off, stays visible, coalesces tool retries and is erased with the account', options, async t => {
+  const f = await setup(t), original = 'The previous examination was benign.';
+  const archive = await f.commitConversation('retry', [{ role: 'user', text: original }], { projectId: f.project.id });
+  await f.history.ingestArchive({ userId: f.userId, projectId: f.project.id, engineSession: archive.session, archiveUri: archive.archive_uri }, f.context);
+  const judge = { same: async () => { throw new Error('offline'); } };
+  f.store.rejectionJudge = judge; f.history.rejectionJudge = judge;
+  const call = () => f.memory.callTool('forget', { statement: examinationStatement });
+  assert.equal((await call()).isError, false);
+  await f.history.drainForgetScans();
+  const rows = () => f.database.query('SELECT * FROM evimed_memory.history_forget_scans WHERE owner_id=$1', [f.userId]);
+  const failed = (await rows()).rows[0];
+  assert.equal(failed.cursor, 0); assert.equal(failed.attempts, 1); assert.equal(failed.state, 'pending');
+  assert.equal(failed.error, 'memory_history_privacy_unavailable'); assert.ok(failed.next_attempt_at > new Date());
+  await f.history.drainForgetScans();
+  assert.equal((await rows()).rows[0].attempts, 1, 'backoff prevents a busy retry');
+  assert.equal((await call()).isError, false);
+  assert.match((await f.memory.callTool('forget', { statement: examinationStatement.toUpperCase() })).blocks.join('\n'), /still being checked/);
+  assert.equal((await rows()).rows.length, 1); assert.equal((await rows()).rows[0].id, failed.id);
+  assert.equal((await f.store.forgotten(f.userId)).length, 1);
+  await f.history.refreshMaintenance();
+  assert.equal(f.history.status().maintenance.forget_scan_retries, 1);
+  assert.equal((await f.store.pending(f.userId)).find(row => row.reason === 'forget_scan_pending').state, 'retrying');
+  await f.database.query('DELETE FROM evimed_control.users WHERE id=$1', [f.userId]);
+  assert.deepEqual((await rows()).rows, []);
+});
+
+test('FT8 a pending scan applies literal hard-token fences without a read-time judge', options, async t => {
+  const f = await setup(t), statement = 'My withdrawn booking number is T-92516.';
+  // A failed source read can require a scan even for a literal-token statement.
+  const activate = async () => {
+    await f.overlay.claimForgetIntent(f.userId, 'notes', `${f.root}/notes/forget-token.md`, [statement]);
+    await f.ledger.queueForgetScan(f.context, 'notes', lineFingerprint(statement));
+  };
+  await f.ledger.migrate();
+  await f.database.transaction(client => f.database.withTransactionClient(client, activate));
+  f.history.rejectionJudge = { same: async () => assert.fail('recall must not call a judge') };
+  assert.equal(await f.ledger.rejected(f.context, ['The appointment was filed under T-92516.']), true);
+  assert.equal(await f.ledger.rejected(f.context, ['The appointment was filed under T-92517.']), false);
 });

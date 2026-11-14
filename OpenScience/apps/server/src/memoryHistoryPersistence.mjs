@@ -5,7 +5,10 @@ import { migrateNativeMemory } from './nativeMemoryPersistence.mjs';
 import { lineFingerprint, normalisedStatement, nativeMemoryRejectionType } from './nativeMemoryOverlay.mjs';
 import { OPENVIKING_KNOWN_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from './openVikingLayout.mjs';
 import { compact } from './nativeMemoryRejections.mjs';
+import { hardTokens, tokenPresent } from './nativeMemoryHardTokens.mjs';
 
+/** @typedef {{id:string,owner_id:string,owner_created_at:string,namespace_id:string,user_root:string,
+ * memory_type:string,fingerprint:string,text:string,cutoff:Date,archives:string[],cursor:number,claim:string,attempts:number}} ForgetScan */
 const migrations = new WeakMap();
 const sql = `
 CREATE SCHEMA IF NOT EXISTS evimed_memory;
@@ -16,6 +19,22 @@ CREATE TABLE IF NOT EXISTS evimed_memory.history_message_rejections (
   memory_type text NOT NULL, fingerprint text NOT NULL, archive_uri text NOT NULL, message_hash text NOT NULL,
   PRIMARY KEY(owner_id,owner_created_at,namespace_id,memory_type,fingerprint,archive_uri,message_hash)
 );
+-- An unarchived tool withdrawal can owe a paraphrase scan. No message text is
+-- copied here: immutable source addresses and a cursor survive worker restart.
+-- Undo and account erasure cancel both queued and leased work by cascade.
+CREATE TABLE IF NOT EXISTS evimed_memory.history_forget_scans (
+  id text PRIMARY KEY, owner_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  owner_created_at text NOT NULL, namespace_id text NOT NULL, user_root text NOT NULL,
+  memory_type text NOT NULL, fingerprint text NOT NULL, cutoff timestamptz NOT NULL,
+  archives text[] NOT NULL, cursor integer NOT NULL DEFAULT 0,
+  state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','complete')),
+  attempts integer NOT NULL DEFAULT 0, next_attempt_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  lease_until timestamptz, claim text, error text NOT NULL DEFAULT '',
+  UNIQUE(owner_id,memory_type,fingerprint),
+  FOREIGN KEY(owner_id,memory_type,fingerprint)
+    REFERENCES evimed_memory.native_rejections(user_id,memory_type,fingerprint) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS history_forget_scans_due ON evimed_memory.history_forget_scans(next_attempt_at) WHERE state='pending';
 CREATE TABLE IF NOT EXISTS evimed_memory.history_write_messages (
   owner_id text NOT NULL, owner_created_at text NOT NULL, namespace_id text NOT NULL,
   archive_uri text NOT NULL, message_hash text NOT NULL,
@@ -179,12 +198,17 @@ export class MemoryHistoryLedger {
     const candidates = texts.map(compact);
     let type = '', fingerprint = '', count = 0;
     for (;;) {
-      const result = await this.database.query(`SELECT memory_type,fingerprint,text,rejected_at FROM evimed_memory.native_rejections
+      const result = await this.database.query(`SELECT memory_type,fingerprint,text,rejected_at,EXISTS(SELECT 1 FROM evimed_memory.history_forget_scans s
+          WHERE s.owner_id=native_rejections.user_id AND s.memory_type=native_rejections.memory_type
+            AND s.fingerprint=native_rejections.fingerprint AND s.state='pending') AS scan_pending FROM evimed_memory.native_rejections
         WHERE user_id=$1 AND memory_type=ANY($2::text[]) AND (memory_type,fingerprint)>($3,$4)
         ORDER BY memory_type,fingerprint LIMIT 500`, [context.ownerId,types,type,fingerprint]);
       for (const row of result.rows) {
         if (++count > 10000) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
         const removed = typeof row.text === 'string' ? compact(row.text) : '';
+        const tokens = row.scan_pending ? hardTokens(normalisedStatement(row.text ?? '')) : [];
+        if (tokens.length && texts.some(text => !freshlyStated(text,row.rejected_at)
+          && tokens.every(token => tokenPresent(token,text)))) return true;
         if ((prints.has(row.fingerprint) || removed && candidates.some(candidate => candidate.includes(removed)))
           && texts.some(text => !freshlyStated(text,row.rejected_at)
             && (text.split('\n').some(line => lineFingerprint(normalisedStatement(line)) === row.fingerprint)
@@ -201,6 +225,83 @@ export class MemoryHistoryLedger {
       VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
       [context.ownerId,context.ownerCreatedAt,context.namespaceId,memoryType,fingerprint,message.archiveUri,message.messageHash??lineFingerprint(message.text)]);
   }
+  /** @param {{ownerId:string,ownerCreatedAt:string,namespaceId:string,userRoot:string}} context
+   * @param {string} memoryType @param {string} fingerprint */
+  async queueForgetScan(context, memoryType, fingerprint) {
+    await this.migrate();
+    await this.database.query(`INSERT INTO evimed_memory.history_forget_scans
+      (id,owner_id,owner_created_at,namespace_id,user_root,memory_type,fingerprint,cutoff,archives)
+      SELECT $1,$2,$3,$4,$5,$6,$7,r.rejected_at,ARRAY(
+        SELECT archive_uri FROM (
+          SELECT c.archive_uri FROM evimed_memory.native_commits c WHERE c.user_id=$2 AND c.created_at<=r.rejected_at
+          UNION SELECT h.archive_uri FROM evimed_memory.history_archives h
+            WHERE h.owner_id=$2 AND h.owner_created_at=$3 AND h.namespace_id=$4 AND h.commit_created_at<=r.rejected_at
+        ) sources WHERE left(archive_uri,length($5)+10)=$5||'/sessions/' ORDER BY archive_uri)
+      FROM evimed_memory.native_rejections r WHERE r.user_id=$2 AND r.memory_type=$6 AND r.fingerprint=$7
+      ON CONFLICT(owner_id,memory_type,fingerprint) DO NOTHING`,
+    [randomBytes(16).toString('hex'),context.ownerId,context.ownerCreatedAt,context.namespaceId,context.userRoot,memoryType,fingerprint]);
+  }
+
+  /** Bounded work per pass, capped retry delay, no terminal loss of the obligation.
+   * @returns {Promise<ForgetScan[]>} */
+  async claimForgetScans() {
+    await this.migrate();
+    const result = await this.database.query(`WITH claimed AS (
+      UPDATE evimed_memory.history_forget_scans s SET lease_until=clock_timestamp()+interval '10 minutes',
+        attempts=s.attempts+1,claim=$1 WHERE id IN (
+        SELECT q.id FROM evimed_memory.history_forget_scans q JOIN evimed_control.users u
+          ON u.id=q.owner_id AND u.created_at::text=q.owner_created_at
+        WHERE q.state='pending' AND q.next_attempt_at<=clock_timestamp()
+          AND (q.lease_until IS NULL OR q.lease_until<clock_timestamp())
+        ORDER BY q.next_attempt_at LIMIT 1 FOR UPDATE OF q SKIP LOCKED) RETURNING s.*)
+      SELECT c.*,r.text FROM claimed c JOIN evimed_memory.native_rejections r
+        ON r.user_id=c.owner_id AND r.memory_type=c.memory_type AND r.fingerprint=c.fingerprint`, [randomBytes(16).toString('hex')]);
+    return result.rows;
+  }
+
+  /** Hashes and progress commit together only while this exact claim still exists.
+   * Undo during a model call deletes the row and makes its late result a no-op.
+   * @param {ForgetScan} scan @param {{archiveUri:string,text:string}[]} messages
+   * @param {number} cursor @param {boolean} [failed] */
+  async finishForgetScan(scan, messages, cursor, failed = false) {
+    await this.database.transaction(client => this.database.withTransactionClient(client, async () => {
+      // Parent first, as undo's cascade locks it before the obligation. The
+      // inverse order could deadlock against a concurrent undo during hashing.
+      const parent = await this.database.query(`SELECT user_id FROM evimed_memory.native_rejections
+        WHERE user_id=$1 AND memory_type=$2 AND fingerprint=$3 FOR KEY SHARE`, [scan.owner_id,scan.memory_type,scan.fingerprint]);
+      if (!parent.rows.length) return;
+      const held = await this.database.query(`SELECT id FROM evimed_memory.history_forget_scans
+        WHERE id=$1 AND claim=$2 AND state='pending' FOR UPDATE`, [scan.id,scan.claim]);
+      if (!held.rows.length) return;
+      if (!failed) await this.rejectMessages({ ownerId:scan.owner_id,ownerCreatedAt:scan.owner_created_at,namespaceId:scan.namespace_id },
+        scan.memory_type,scan.fingerprint,messages);
+      await this.database.query(`UPDATE evimed_memory.history_forget_scans SET cursor=$3,
+        state=CASE WHEN NOT $4 AND $3>=cardinality(archives) THEN 'complete' ELSE 'pending' END,
+        lease_until=NULL,claim=NULL,error=CASE WHEN $4 THEN 'memory_history_privacy_unavailable' ELSE '' END,
+        attempts=CASE WHEN $4 THEN attempts ELSE 0 END,
+        next_attempt_at=clock_timestamp()+CASE WHEN $4 THEN make_interval(secs=>LEAST(3600,30*power(2,LEAST(attempts,7)))::integer) ELSE interval '0 seconds' END
+        WHERE id=$1 AND claim=$2`, [scan.id,scan.claim,cursor,failed]);
+    }));
+  }
+
+  /** @param {string} ownerId @param {string} memoryType @param {string[]} fingerprints */
+  async forgetScanPending(ownerId, memoryType, fingerprints) {
+    await this.migrate();
+    return Boolean((await this.database.query(`SELECT 1 FROM evimed_memory.history_forget_scans
+      WHERE owner_id=$1 AND memory_type=$2 AND fingerprint=ANY($3::text[]) AND state='pending' LIMIT 1`,
+    [ownerId,memoryType,fingerprints])).rows.length);
+  }
+
+  /** @param {string} ownerId */
+  async pendingForgetScans(ownerId) {
+    await this.migrate();
+    const result = await this.database.query(`SELECT s.id,s.cutoff,s.error FROM evimed_memory.history_forget_scans s
+      JOIN evimed_control.users u ON u.id=s.owner_id AND u.created_at::text=s.owner_created_at
+      WHERE s.owner_id=$1 AND s.state='pending' ORDER BY s.cutoff`, [ownerId]);
+    return result.rows.map((/** @type {{id:string,cutoff:Date,error:string}} */ row) => ({ id:`forget-scan:${row.id}`, text:'Checking earlier conversations for a recorded withdrawal.',
+      at:row.cutoff.toISOString(), state:row.error ? 'retrying' : 'pending', reason:'forget_scan_pending' }));
+  }
+
   async boundRejections(context, sessionUri) {
     await this.migrate();
     return (await this.database.query(`SELECT DISTINCT r.memory_type,r.fingerprint,r.text FROM evimed_memory.history_message_rejections h
@@ -407,7 +508,11 @@ export class MemoryHistoryLedger {
       JOIN evimed_control.users u ON u.id=c.user_id
       WHERE c.state='completed' AND ($1::text IS NULL OR c.user_id=$1) AND NOT EXISTS
         (SELECT 1 FROM evimed_memory.history_archives h WHERE h.owner_id=c.user_id AND h.owner_created_at=u.created_at::text AND h.archive_uri=c.archive_uri)`, [ownerId]);
-    return { ...counts, undiscovered: Number(pending.rows[0]?.n ?? 0) };
+    const maintenance = await this.database.query(`SELECT
+      (SELECT count(*)::integer FROM evimed_memory.history_forget_scans WHERE state='pending' AND ($1::text IS NULL OR owner_id=$1)) AS forget_scans,
+      (SELECT count(*)::integer FROM evimed_memory.history_forget_scans WHERE state='pending' AND error<>'' AND ($1::text IS NULL OR owner_id=$1)) AS forget_scan_retries,
+      (SELECT count(*)::integer FROM evimed_memory.native_summary_invalidations WHERE $1::text IS NULL OR user_id=$1) AS summary_rebuilds`, [ownerId]);
+    return { ...counts, undiscovered: Number(pending.rows[0]?.n ?? 0), maintenance: maintenance.rows[0] };
   }
   async removeResource(row) {
     if (/\/sessions\/(?:evimed-page-|mcp-store-)[^/]+$/.test(row.uri)) {

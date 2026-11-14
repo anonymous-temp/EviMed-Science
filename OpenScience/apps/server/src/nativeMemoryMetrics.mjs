@@ -87,6 +87,12 @@ const table = (labels) => new Map(labels.map((label) => [label, 0]));
 /** @param {Map<string, number>} map @param {string} key @param {number} [by] */
 function bump(map, key, by = 1) { if (map.has(key)) map.set(key, (map.get(key) ?? 0) + Math.max(0, Math.trunc(by) || 0)); }
 
+const maintenance = table(['summary_rebuilds', 'forget_scans', 'forget_scan_retries']);
+/** @param {{summary_rebuilds:number,forget_scans:number,forget_scan_retries:number}} counts */
+export function recordNativeMaintenance(counts) {
+  for (const [key, value] of Object.entries(counts)) if (maintenance.has(key)) maintenance.set(key, Number(value) || 0);
+}
+
 const requests = new Map(MEMORY_GATEWAY_ROUTES.flatMap((route) => MEMORY_GATEWAY_OUTCOMES.map((outcome) => [`${route}\u0000${outcome}`, 0])));
 const messages = table(MEMORY_GATEWAY_MESSAGE_OUTCOMES);
 const masked = table(["messages"]);
@@ -208,7 +214,7 @@ export function recordMapReplaced(outcome) { bump(mapReplaced, outcome); }
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, pastedInstructionChecks, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced, verificationJudge, verificationLines]) {
+  for (const map of [maintenance, requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, pastedInstructionChecks, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced, verificationJudge, verificationLines]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -217,6 +223,7 @@ export function resetNativeMemoryMetrics() {
 export function nativeMemoryCounters() {
   const plain = (/** @type {Map<string, number>} */ map) => Object.fromEntries(map);
   return {
+    maintenance: plain(maintenance),
     requests: Object.fromEntries([...requests].map(([key, value]) => [key.replace("\u0000", ":"), value])),
     messages: plain(messages), masked: plain(masked), commits: plain(commits), withheld: plain(withheld), refusals: plain(refusals),
     upstreamFailures: plain(upstreamFailures), ledgerFailures: plain(ledgerFailures), turnCommits: plain(turnCommits), workerCommits: plain(workerCommits),
@@ -235,6 +242,8 @@ const series = (map, label) => [...map].map(([key, value]) => ({ value, labels: 
  */
 export function nativeMemoryMetricFamilies() {
   return [
+    { name: 'open_science_native_memory_maintenance_pending', type: 'gauge', series: series(maintenance, 'kind'),
+      help: 'Durable summary rebuild and paraphrase scan obligations, including scans waiting to retry; refreshed by the native worker.' },
     { name: 'open_science_native_memory_verification_judge_total', type: 'counter', series: series(verificationJudge, 'outcome'),
       help: 'Source verification judge calls, including failed and unavailable calls and the daily cap.' },
     { name: 'open_science_native_memory_verification_lines_total', type: 'counter', series: series(verificationLines, 'outcome'),

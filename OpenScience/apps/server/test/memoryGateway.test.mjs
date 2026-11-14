@@ -1278,6 +1278,18 @@ test('history privacy refusal names its retry without exposing provider details 
   assert.deepEqual(f.failures, [{ code: error.code, status: 503 }]);
 });
 
+test('a recorded statement with a pending scan discloses the paraphrase gap without asking for a tool retry', async t => {
+  const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: {
+    forget: async () => ({ removed: false, historyRejected: true, historyScanPending: true }),
+  } });
+  const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: { statement: 'Old fact.' } } });
+  assert.equal(answer.status, 200);
+  const text = answer.messages[0].result.content[0].text;
+  assert.match(text, /Recorded.*exact restatements/);
+  assert.match(text, /Earlier conversations are still being checked; paraphrases may still be recalled until that check finishes/);
+  assert.doesNotMatch(text, /Retry|complete|deleted/);
+});
+
 test('deferred maintenance fences a late extraction in REST, MCP read, search and plugin context', async t => {
   const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
   const uri = `${ROOT}/memories/notes/late.md`, withdrawn = 'Old booking.', retained = '- Keep green folders.';

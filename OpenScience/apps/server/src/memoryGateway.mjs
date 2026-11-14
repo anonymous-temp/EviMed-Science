@@ -1145,6 +1145,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           };
           const outcome = await memoryTool.forget(ctx.user, ctx.project, target, Object.keys(options).length ? options : undefined);
           const text = outcome.missingLines ? `No lines removed. Unmatched lines: ${JSON.stringify(outcome.missingLines)}. Available lines: ${JSON.stringify(outcome.availableLines)}. Retry with exact complete lines.`
+            : outcome.historyScanPending ? 'Recorded a history recall rejection for the statement and exact restatements. Earlier conversations are still being checked; paraphrases may still be recalled until that check finishes. The conversation text is unchanged.'
             : outcome.historyRejected ? 'Recorded a history recall rejection for the statement. No memory file was deleted; the conversation text is unchanged.'
             : outcome.removedLines ? `Removed ${outcome.removedLines} line(s) from: ${target}. ${outcome.fileRemoved ? "The empty file was deleted." : "Other lines were kept."}`
             : outcome.removed ? `Deleted: ${target}` : `Not found: ${target}`;
