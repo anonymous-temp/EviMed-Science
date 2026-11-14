@@ -12,6 +12,7 @@ import { parseByteSize } from "../src/runtimeManager.mjs";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 for (const [key, property] of [
+  ['OPEN_SCIENCE_MEMORY_PEOPLE_ACROSS_PROJECTS_ENABLED', 'memoryPeopleAcrossProjectsEnabled'],
   ['OPEN_SCIENCE_MEMORY_SHARED_CAPTURE_PROOF_ENABLED', 'memorySharedCaptureProofEnabled'],
   ['OPEN_SCIENCE_MEMORY_FORGET_REQUEST_CHECK_ENABLED', 'memoryForgetRequestCheckEnabled'],
   ['OPEN_SCIENCE_MEMORY_FORGET_TOOL_HINT_ENABLED', 'memoryForgetToolHintEnabled'],
@@ -1239,4 +1240,16 @@ test('history retrieval V2 defaults off and accepts environment and explicit ove
     process.env[name]='true';assert.equal(loadConfig({rootDir:repoRoot}).memoryHistoryRetrievalV2Enabled,true);
     assert.equal(loadConfig({rootDir:repoRoot,memoryHistoryRetrievalV2Enabled:false}).memoryHistoryRetrievalV2Enabled,false);
   } finally { if(saved===undefined)delete process.env[name];else process.env[name]=saved; }
+});
+
+
+test('native memory search floor defaults to zero and supports environment and override', () => {
+  const key = 'OPEN_SCIENCE_MEMORY_FILE_SEARCH_MIN_SCORE', saved = process.env[key];
+  try {
+    delete process.env[key];
+    assert.equal(loadConfig({ rootDir: repoRoot }).memoryFileSearchMinScore, 0);
+    process.env[key] = '0.8';
+    assert.equal(loadConfig({ rootDir: repoRoot }).memoryFileSearchMinScore, 0.8);
+    assert.equal(loadConfig({ rootDir: repoRoot, memoryFileSearchMinScore: 0 }).memoryFileSearchMinScore, 0);
+  } finally { if (saved === undefined) delete process.env[key]; else process.env[key] = saved; }
 });
