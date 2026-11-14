@@ -1,5 +1,5 @@
 import { forgetRequestId } from './nativeMemoryForgetRequests.mjs';
-import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
+import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
@@ -485,7 +485,13 @@ export class NativeMemoryStore {
    * @param {string} userId @param {{ context?: any,uris?:string[]|null }} [options]
    */
   async files(userId, options = {}) {
-    const files = await this.rawFiles(userId, options);
+    let files = await this.rawFiles(userId, options);
+    if (this.overlay.deferredSummaryRebuildEnabled === true) {
+      files = (await mapLimit(files, 8, async file => {
+        const body = await fenceWithdrawnMemoryBody(this.overlay, userId, file.uri, file.body, file.namespaceId);
+        return body === null ? null : { ...file, body, hash: contentHash(body) };
+      })).filter(file => file !== null);
+    }
     if (!this.sourceDeletion) return files;
     const hidden = new Set(await this.sourceDeletion.hiddenMemoryUris(userId));
     return files.filter(file => ![...hidden].some(prefix=>file.uri===prefix||file.uri.startsWith(`${prefix}/`)));
@@ -957,7 +963,10 @@ export class NativeMemoryStore {
         }
       }
     }
-    return { items, query: text, semantic, conversations: (await this.#withConversationTitles(userId, items)).titles, usage: {} };
+    // Search is recall, not the explicit undo/history view. A forget's private
+    // before-image must not ride beside an otherwise current search result.
+    const recalled = this.overlay.deferredSummaryRebuildEnabled === true ? items.map(record => ({ ...record, revisions: [] })) : items;
+    return { items: recalled, query: text, semantic, conversations: (await this.#withConversationTitles(userId, items)).titles, usage: {} };
   }
 
   /**

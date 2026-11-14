@@ -3060,6 +3060,7 @@ export function loadConfig(overrides = {}) {
     nativeMemoryRejectionJudgeEnabled: overrides.nativeMemoryRejectionJudgeEnabled ?? boolEnv("OPEN_SCIENCE_NATIVE_MEMORY_REJECTION_JUDGE_ENABLED", true),
     // Experimental attribution check after extraction; a failed check keeps the written line.
     memoryForgetRequestCheckEnabled: overrides.memoryForgetRequestCheckEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_FORGET_REQUEST_CHECK_ENABLED", false),
+    memoryDeferredSummaryRebuildEnabled: overrides.memoryDeferredSummaryRebuildEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_DEFERRED_SUMMARY_REBUILD_ENABLED", false),
     memoryForgetTargetsEnabled: overrides.memoryForgetTargetsEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_FORGET_TARGETS_ENABLED", false),
     memoryForgetToolHintEnabled: overrides.memoryForgetToolHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_FORGET_TOOL_HINT_ENABLED", false),
     memoryPastedInstructionCheckEnabled: overrides.memoryPastedInstructionCheckEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED", false),

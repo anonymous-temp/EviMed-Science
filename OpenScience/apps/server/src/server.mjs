@@ -1393,7 +1393,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     openVikingClient.writeAdmission=(userId,operation)=>withNativeMemoryWrite(productDatabase,userId,operation);
     openVikingSessions.client.writeAdmission=(userId,operation)=>withNativeMemoryWrite(productDatabase,userId,operation);
   }
-  const nativeMemoryOverlay = overrides.nativeMemoryOverlay ?? new NativeMemoryOverlay({ database: productDatabase });
+  const nativeMemoryOverlay = overrides.nativeMemoryOverlay ?? new NativeMemoryOverlay({ database: productDatabase, deferredSummaryRebuildEnabled: config.memoryDeferredSummaryRebuildEnabled });
   // The registered memory namespaces of an account: its own, and each shared GEO project's (`geoNativeMemoryContext.mjs`).
   const nativeMemoryContexts = productDatabase && sharedContextPolicies ? new GeoNativeMemoryContext({ database: productDatabase,
     documents: productDocuments, policies: sharedContextPolicies, sessions: openVikingSessions,

@@ -20,10 +20,11 @@ const { options, fixture } = nativeIntegration();
 const removed = '- 用户父亲这段时间住在其哥哥家（2026-06-20）。';
 const retained = '- 用户周末会和家人一起吃饭。';
 
-async function setup(t) {
+async function setup(t, overrides = {}) {
   const f = await fixture(t);
   const config = { ...f.config, memoryEnabled: true, memoryRecallEnabled: true,
-    memoryHistorySearchEnabled: true, memoryForgetTargetsEnabled: true, memoryForgetRequestCheckEnabled: true };
+    memoryHistorySearchEnabled: true, memoryForgetTargetsEnabled: true, memoryForgetRequestCheckEnabled: true, ...overrides };
+  f.overlay.deferredSummaryRebuildEnabled = config.memoryDeferredSummaryRebuildEnabled === true;
   await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Test',1048576)", [f.userId]);
   const project = { id: 'default', userId: f.userId, name: 'Test' }, user = { id: f.userId };
   const contexts = new GeoNativeMemoryContext({ database: f.database, documents: null, sessions: f.sessions,
@@ -40,7 +41,7 @@ async function setup(t) {
   store.history = history;
   const token = 'forget-gateway-integration-token';
   const handler = createMemoryGatewayHandler({ config, sessions: f.sessions, overlay: f.overlay, memoryContexts: contexts,
-    memoryTool: store, admission: createMemoryAdmission({ config, memorySettings: f.memorySettings }),
+    memoryTool: store, historySearch: request => history.search(request), admission: createMemoryAdmission({ config, memorySettings: f.memorySettings }),
     runtimeManager: { assertActiveEviMedWorkloadToken: async value => {
       assert.equal(value, token); return { userId: user.id, projectId: project.id };
     } }, store: { userById: async () => user, requireProject: async () => project } });
@@ -53,7 +54,7 @@ async function setup(t) {
   const listed = response.headers.get('content-type').includes('event-stream') ? parseEventStream(text)[0] : JSON.parse(text);
   assert.deepEqual(listed.result.tools.find(tool => tool.name === 'forget'), memoryTools(config).find(tool => tool.name === 'forget'),
     'the real gateway and runner advertise the same model arguments');
-  return { ...f, store, context, history, ledger, memory, user, project };
+  return { ...f, store, context, contexts, config, history, ledger, memory, user, project, base: server.base, token };
 }
 
 test('P04 exact model arguments cross HTTP and store validation; one line leaves, rejection persists, undo restores', options, async t => {
@@ -245,8 +246,8 @@ for (const order of ['tool-first', 'settle-first', 'overlap']) test(`statement a
   assert.equal((await search()).length, 1);
 });
 
-test('two forget calls during a pending commit retain both independent removals', options, async t => {
-  const f = await setup(t), first = 'Project M-41633.', second = 'Project N-49223.';
+for (const deferred of [false, true]) test(`two forget calls during a pending commit retain both independent removals (deferred=${deferred})`, options, async t => {
+  const f = await setup(t, { memoryDeferredSummaryRebuildEnabled: deferred }), first = 'Project M-41633.', second = 'Project N-49223.';
   const uri = f.seed('notes/two-calls.md', `${first}\n${retained}`, { type: 'notes' });
   const archive = await f.commitConversation('pending-forget', [{ role: 'user', text: `${first} ${second}`, at: '2026-01-01T00:00:00Z' }], { projectId: f.project.id });
   const commit = { userId: f.userId, projectId: f.project.id, engineSession: archive.session, archiveUri: archive.archive_uri };
@@ -283,4 +284,80 @@ test('a statement upgrades an edit rejection to undoable forgetting exactly once
   for (let repeat = 0; repeat < 2; repeat++) assert.equal((await f.memory.callTool('forget', { statement })).isError, false);
   assert.equal((await f.overlay.rejectedLines(f.userId, 'notes'))[0].origin, 'forget');
   assert.equal((await f.store.forgotten(f.userId)).length, 1);
+});
+
+async function gatewayRequest(f, path, body) {
+  const response = await fetch(`${f.base}${path}`, { method: body ? 'POST' : 'GET',
+    headers: { authorization: `Bearer ${f.token}`, 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  return { status: response.status, body: await response.json() };
+}
+
+test('FT8 HTTP line removal answers before rebuild, all readers use current bytes, restarted worker converges', options, async t => {
+  const f = await setup(t, { memoryDeferredSummaryRebuildEnabled: true });
+  const withdrawn = '- My old booking is R-41633.', kept = '- Keep green folders.';
+  const uri = f.seed('notes/arrangements.md', `${withdrawn}\n${kept}`, { type: 'notes' });
+  f.seed('profile.md', '- Use metric units.', { type: 'profile' });
+  const archive = await f.commitConversation('fast', [{ role: 'user', text: withdrawn.slice(2), at: '2026-01-01T00:00:00Z' }], { projectId: f.project.id });
+  await f.history.ingestArchive({ userId: f.userId, projectId: f.project.id, engineSession: archive.session, archiveUri: archive.archive_uri }, f.context);
+  for (const directory of [f.root, `${f.root}/notes`]) for (const name of ['.overview.md','.abstract.md']) f.stub.files.set(`${directory}/${name}`, withdrawn);
+  f.stub.memorySearchSnapshot = new Map(f.stub.files);
+  f.stub.beforeReindex = async () => { throw new Error('rebuild unavailable'); };
+  const answer = await f.memory.callTool('forget', { uri, lines: [withdrawn] });
+  assert.equal(answer.isError, false, answer.blocks.join('\n'));
+  assert.equal(f.stub.sent('POST', '/api/v1/content/reindex').length, 0, 'no slow engine request is on the response path');
+  assert.equal((await f.overlay.pendingSummaryInvalidations(f.userId)).length, 2);
+  assert.equal(await f.sessions.read(f.userId, uri), kept);
+  for (const directory of [f.root, `${f.root}/notes`]) for (const name of ['.overview.md','.abstract.md']) {
+    assert.equal(await f.sessions.read(f.userId, `${directory}/${name}`), null);
+    assert.equal((await gatewayRequest(f, `/api/v1/content/read?uri=${encodeURIComponent(`${directory}/${name}`)}`)).status, 404);
+  }
+  for (const query of ['R-41633', 'folders']) {
+    const memorySearch = await f.memory.callTool('search', { query });
+    assert.doesNotMatch(memorySearch.blocks.join('\n'), /R-41633/);
+    assert.match(memorySearch.blocks.join('\n'), /green folders/, 'stale ranking retains the current neighbouring fact');
+    for (const mode of ['list','context']) {
+      const result = await gatewayRequest(f, '/api/v1/search/search', { query, ...(mode === 'context' ? { mode } : {}) });
+      assert.equal(result.status, 200);
+      assert.doesNotMatch(JSON.stringify(result.body), /R-41633/);
+      assert.match(JSON.stringify(result.body), /green folders/);
+    }
+  }
+  const read = await f.memory.callTool('read', { uris: [uri] });
+  assert.doesNotMatch(read.blocks.join('\n'), /R-41633/);
+  const opening = await gatewayRequest(f, `/api/v1/fs/ls?uri=${encodeURIComponent(f.root)}&recursive=true`);
+  assert.equal(opening.status, 200); assert.doesNotMatch(JSON.stringify(opening.body), /R-41633/);
+  assert.match(JSON.stringify(opening.body), /arrangements/);
+  const profile = await gatewayRequest(f, `/api/v1/content/read?uri=${encodeURIComponent(`${f.root}/profile.md`)}`);
+  assert.match(JSON.stringify(profile.body), /metric/);
+  const page = await f.store.profile(f.userId);
+  assert.doesNotMatch(JSON.stringify(page.records.filter(item => item.status !== 'archived').map(item => item.value)), /R-41633/);
+  assert.doesNotMatch(JSON.stringify(await f.store.search(f.userId, 'R-41633')), /R-41633.*old booking|old booking.*R-41633/);
+  assert.deepEqual(await f.history.search({ user: f.user, project: f.project, query: 'R-41633' }), []);
+  assert.match(await f.sessions.read(f.userId, `${archive.archive_uri}/messages.jsonl`), /R-41633/);
+  // An extraction already accepted by the engine can finish after its HTTP
+  // writer lease ended. Recall fences its literal replay until settlement.
+  f.stub.files.set(uri, `${withdrawn}\n${kept}\n- New unrelated fact.`);
+  for (const tool of ['read', 'search']) {
+    const late = await f.memory.callTool(tool, tool === 'read' ? { uris: [uri] } : { query: 'R-41633' });
+    assert.doesNotMatch(late.blocks.join('\n'), /R-41633/);
+    assert.match(late.blocks.join('\n'), /New unrelated fact/);
+  }
+  const lateRead = await gatewayRequest(f, `/api/v1/content/read?uri=${encodeURIComponent(uri)}`);
+  assert.doesNotMatch(JSON.stringify(lateRead.body), /R-41633/);
+  assert.match(JSON.stringify(lateRead.body), /New unrelated fact/);
+  assert.doesNotMatch(JSON.stringify((await f.store.records(f.userId)).map(item => item.value)), /R-41633/);
+  f.stub.files.set(uri, kept);
+  const restarted = new NativeMemoryWorker({ config: f.config, memorySettings: f.memorySettings, sessions: f.sessions, overlay: f.overlay });
+  await assert.rejects(restarted.drainSummaryInvalidations(f.userId));
+  assert.equal((await f.overlay.pendingSummaryInvalidations(f.userId)).length, 2);
+  // A later edit coalesces with the existing tickets; the rebuild reads live children.
+  const record = (await f.store.records(f.userId)).find(item => item.uri === uri);
+  await f.store.update(f.userId, record.id, { value: `${kept}\n- Use blue binders.`, expectedVersion: record.version });
+  assert.equal((await f.overlay.pendingSummaryInvalidations(f.userId)).length, 2);
+  f.stub.beforeReindex = null; f.stub.rebuildSummaries = true;
+  await restarted.drainSummaryInvalidations(f.userId);
+  assert.equal((await f.overlay.pendingSummaryInvalidations(f.userId)).length, 0);
+  const overview = await f.sessions.read(f.userId, `${f.root}/.overview.md`);
+  assert.match(overview, /blue binders/); assert.doesNotMatch(overview, /R-41633/);
+  assert.equal(await restarted.drainSummaryInvalidations(f.userId), 0);
 });

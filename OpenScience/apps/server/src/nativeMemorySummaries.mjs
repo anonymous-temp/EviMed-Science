@@ -1,3 +1,5 @@
+import { containsRemoved, removalLines, removalText } from './nativeMemoryRejections.mjs';
+import { lineFingerprint } from './nativeMemoryOverlay.mjs';
 import { HttpError } from './security.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 
@@ -53,6 +55,14 @@ export async function withMemorySummaryInvalidation(sessions, overlay, userId, u
     const tickets = await overlay.queueSummaryInvalidation(userId, directories);
     const result = await operation();
     if (afterMutation) await afterMutation();
+    if (overlay.deferredSummaryRebuildEnabled === true) {
+      // Removal is durable; withdraw derived text now, keeping the existing
+      // generation ticket for the exclusive worker's bottom-up rebuild.
+      for (const directory of directories) {
+        for (const name of MEMORY_SUMMARY_NAMES) await sessions.remove(userId, `${directory}/${name}`, { wait: true });
+      }
+      return result;
+    }
     await rebuild(sessions, userId, directories);
     await overlay.completeSummaryInvalidation(userId, tickets);
     return result;
@@ -83,4 +93,30 @@ async function drain(sessions, overlay, userId, sessionsForUri) {
     await overlay.completeSummaryInvalidation(userId, group.tickets);
   }
   return tickets.length;
+}
+
+
+/** An extraction accepted before a forget can still finish in the engine.
+ * Only the settled overlay may reauthorize literal withdrawn text; new unrelated
+ * lines remain visible. Cleanup uses raw reads and therefore still sees the work
+ * it owes. This never calls a model or interprets a paraphrase.
+ * @param {import('./nativeMemoryOverlay.mjs').NativeMemoryOverlay | null} overlay
+ * @param {string} userId @param {string} uri @param {string|null} body
+ * @param {string|null} [namespaceId] @returns {Promise<string|null>}
+ */
+export async function fenceWithdrawnMemoryBody(overlay, userId, uri, body, namespaceId = null) {
+  if (overlay?.deferredSummaryRebuildEnabled !== true || body === null) return body;
+  const removed = await overlay.removals(userId, namespaceId);
+  if (!removed.length) return body;
+  const known = await overlay.file(userId, uri);
+  const admitted = new Set(removalLines(known?.body ?? '').map(lineFingerprint));
+  let changed = false;
+  const kept = body.split('\n').filter(line => {
+    const text = removalText(line), fingerprint = lineFingerprint(text);
+    if (admitted.has(fingerprint)) return true;
+    const withdrawn = removed.some(row => row.fingerprint === fingerprint || row.text && containsRemoved(text, row.text));
+    if (withdrawn) changed = true;
+    return !withdrawn;
+  }).join('\n');
+  return changed && !removalLines(kept).length ? null : kept;
 }

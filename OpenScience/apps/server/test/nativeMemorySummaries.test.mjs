@@ -74,3 +74,41 @@ test('semantic rebuild uses the native bounded API and refuses incomplete or fai
   }
   await assert.rejects(sessions.rebuildMemoryDirectory('test', 'viking://user/other/memories/entities'), { code: 'memory_scope_denied' });
 });
+
+test('deferred mode withdraws every ancestor sidecar before answering and coalesces work across restart', async () => {
+  const f = fixture(), uri = `${root}/notes/a.md`;
+  f.overlay.deferredSummaryRebuildEnabled = true;
+  for (const directory of memorySummaryDirectories(uri, root)) for (const name of MEMORY_SUMMARY_NAMES) f.files.set(`${directory}/${name}`, 'removed');
+  f.sessions.rebuildMemoryDirectory = async () => { throw new Error('rebuild must not delay the answer'); };
+  await withMemorySummaryInvalidation(f.sessions, f.overlay, 'test', uri, async () => { f.files.set(uri, 'retained'); });
+  assert.deepEqual([...f.files], [[uri, 'retained']]);
+  assert.equal(f.pending.size, 2);
+  await withMemorySummaryInvalidation(f.sessions, f.overlay, 'test', uri, async () => { f.files.set(uri, 'newer retained'); });
+  assert.equal(f.pending.size, 2);
+  await assert.rejects(drainMemorySummaryInvalidations(f.sessions, f.overlay, 'test'), /rebuild must not delay/);
+  assert.equal(f.pending.size, 2);
+  // A new worker has only the persistent tickets and current engine bytes.
+  const restarted = { ...f.sessions, rebuildMemoryDirectory: async (_user, directory) => {
+    f.files.set(`${directory}/.overview.md`, f.files.get(uri));
+  } };
+  assert.equal(await drainMemorySummaryInvalidations(restarted, f.overlay, 'test'), 2);
+  assert.equal(f.files.get(`${root}/.overview.md`), 'newer retained');
+  assert.equal(await drainMemorySummaryInvalidations(restarted, f.overlay, 'test'), 0);
+});
+
+test('late extraction bytes cannot recall a withdrawn line before settlement, and settled reauthorization stays visible', async () => {
+  const { fenceWithdrawnMemoryBody } = await import('../src/nativeMemorySummaries.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  let settled = '- Keep green folders.';
+  const overlay = { deferredSummaryRebuildEnabled: true,
+    removals: async () => [{ fingerprint: lineFingerprint('Old booking.'), text: 'Old booking.' }],
+    file: async () => ({ body: settled }) };
+  const late = '- Old booking.\n- Keep green folders.\n- New unrelated fact.';
+  assert.equal(await fenceWithdrawnMemoryBody(overlay, 'test', `${root}/notes/a.md`, late), '- Keep green folders.\n- New unrelated fact.');
+  settled = late;
+  assert.equal(await fenceWithdrawnMemoryBody(overlay, 'test', `${root}/notes/a.md`, late), late);
+  settled = '';
+  assert.equal(await fenceWithdrawnMemoryBody(overlay, 'test', `${root}/notes/a.md`, '- Old booking.'), null);
+  overlay.deferredSummaryRebuildEnabled = false;
+  assert.equal(await fenceWithdrawnMemoryBody(overlay, 'test', `${root}/notes/a.md`, late), late);
+});

@@ -286,6 +286,7 @@ export class NativeMemoryWorker {
   }
 
   async #assertSummariesSettled(userId) {
+    if (this.overlay.deferredSummaryRebuildEnabled === true) return;
     if ((await this.overlay.pendingSummaryInvalidations(userId)).length) {
       throw new HttpError(503, 'memory_summary_rebuild_failed', 'Native memory directory maintenance is incomplete.');
     }

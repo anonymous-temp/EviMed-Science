@@ -47,8 +47,9 @@ test('off does not judge or remove', options, async t => {
   assert.equal(await f.sessions.read(f.userId, uri), fact);
 });
 
-test('request without tool removes only referred lines, rejects re-extraction, permits later restatement, and is undoable', options, async t => {
+for (const deferred of [false, true]) test(`request without tool removes only referred lines, rejects re-extraction, permits later restatement, and is undoable (deferred=${deferred})`, options, async t => {
   const f = await fixture(t, { config: { memoryForgetRequestCheckEnabled: true } });
+  f.overlay.deferredSummaryRebuildEnabled = deferred;
   const uri = f.seed('notes/test.md', `- ${fact}\n- ${other}`);
   const worker = withJudge(f, input => verdict(input));
   const committed = await f.commitConversation('on', [{ role: 'user', text: 'Forget that project.', at: old }, { role: 'assistant', text: 'Forgotten.' }]);
