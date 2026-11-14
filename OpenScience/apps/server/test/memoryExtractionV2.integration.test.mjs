@@ -17,7 +17,7 @@ import { removalLines } from '../src/nativeMemoryRejections.mjs';
 const { options, fixture } = nativeIntegration();
 // These tests pin the worker and the readers selected with the extraction-v2 directory, not the template wording: the recorded
 // writes keep the earlier v2 NOTES labels, which the worker's label count still recognises beside the v2.1 labels "用户认为：" and
-// "助手建议（用户未采纳）：" (wording and reader formats pinned in memoryExtractionV2.test.mjs).
+// "助手建议（用户未采用）：" (wording and reader formats pinned in memoryExtractionV2.test.mjs).
 const candidate = { memoryTemplatesDirectory: 'memory-templates-extraction-v2' };
 for (const name of ['attribution', 'history', 'numeric-choice']) test(`${name}: recorded conversations through the write ledger and real readers`, options, async t => {
   const recorded = JSON.parse(readFileSync(new URL(`./fixtures/memory-extraction-v2/${name}.json`, import.meta.url), 'utf8'));

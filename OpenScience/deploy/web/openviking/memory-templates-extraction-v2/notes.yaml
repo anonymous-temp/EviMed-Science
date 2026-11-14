@@ -7,7 +7,7 @@ description: |
   One file per coherent subject. Use the user's terms and keep the source and scope explicit.
   Distinguish user statements, user beliefs, assistant suggestions and document claims. A sourced
   claim is not an established fact. A view the user voices ("我觉得/我认为…") is a line starting "用户认为：" ("User believes:" in English) with its date, never a preference rule, decision, project-card line or writing rule.
-  An actionable assistant recommendation the user did not take up is a line starting "助手建议（用户未采纳）：" ("Assistant suggested (not adopted):") with its date, at most two per conversation, never a preference or decision until the user adopts it in words; explanations, glosses and restatements are not kept.
+  An actionable assistant recommendation the user did not take up is a line starting "助手建议（用户未采用）：" ("Assistant suggested (not adopted):") with its date, at most two per conversation, never a preference or decision until the user adopts it in words; explanations, glosses and restatements are not kept.
   Date changing context, separate current state from dated history, and preserve exact names,
   numbers, units and dates when useful. Do not turn a hypothetical example into a real event.
   Keep a recurring person in PEOPLE rather than scattering their history across notes.

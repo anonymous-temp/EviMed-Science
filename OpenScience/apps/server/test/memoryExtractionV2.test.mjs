@@ -54,7 +54,7 @@ test('extraction-v2.1 is the default text plus the five additions, each in its t
   assert.match(HISTORY_RULE, /At most the two latest earlier values per item; none for a value removed by a forget request\./);
   assert.ok(OPINION_RULE.includes('a line starting "用户认为：" ("User believes:" in English) with its date'));
   assert.match(OPINION_RULE, /never a preference rule, decision, project-card line or writing rule/);
-  assert.ok(SUGGESTION_RULE.includes('a line starting "助手建议（用户未采纳）：" ("Assistant suggested (not adopted):") with its date, at most two per conversation'));
+  assert.ok(SUGGESTION_RULE.includes('a line starting "助手建议（用户未采用）：" ("Assistant suggested (not adopted):") with its date, at most two per conversation'));
   assert.match(SUGGESTION_RULE, /never a preference or decision until the user adopts it in words; explanations, glosses and restatements are not kept/);
   // The types an opinion or a suggestion must never become say so at their point of use.
   assert.match(v2['preferences.yaml'], /attributed opinions belong in NOTES\. An opinion \("我觉得…"\) or an unadopted assistant suggestion is never a preference or a writing rule for a topic\./);
@@ -170,8 +170,8 @@ test('NOTES format check counts labelled statements without judging their meanin
 
 test('the v2.1 NOTES labels count as labelled with any date form; a misplaced or empty v2.1 label is malformed', () => {
   // The labels exactly as the NOTES rules state them.
-  const labels = [...`${OPINION_RULE} ${SUGGESTION_RULE}`.matchAll(/"((?:用户认为|User believes|助手建议（用户未采纳）|Assistant suggested \(not adopted\))[:：])"/g)].map(match => match[1]);
-  assert.deepEqual(labels, ['用户认为：', 'User believes:', '助手建议（用户未采纳）：', 'Assistant suggested (not adopted):']);
+  const labels = [...`${OPINION_RULE} ${SUGGESTION_RULE}`.matchAll(/"((?:用户认为|User believes|助手建议（用户未采用）|Assistant suggested \(not adopted\))[:：])"/g)].map(match => match[1]);
+  assert.deepEqual(labels, ['用户认为：', 'User believes:', '助手建议（用户未采用）：', 'Assistant suggested (not adopted):']);
   const body = ['# 观点与建议', ...labels.map(label => `- ${label}老城区更适合步行（2026-11-01）`), '- 普通笔记，没有标签',
     '- 用户认为（2026-11-01）：日期放在标签里', '- 用户认为：', '- 我觉得这不是标签'].join('\n');
   assert.deepEqual(checkMemoryNoteLabels(body), { checked: 8, labelled: 4, malformed: 2, sensitive: false });

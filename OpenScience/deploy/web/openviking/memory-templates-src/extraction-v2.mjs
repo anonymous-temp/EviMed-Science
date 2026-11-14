@@ -16,7 +16,7 @@ export const HISTORY_RULE = 'When a value changes, keep the current value plus o
 export const OPINION_RULE = 'A view the user voices ("我觉得/我认为…") is a line starting "用户认为：" ("User believes:" in English) with its date, never a preference rule, decision, project-card line or writing rule.';
 
 /** The unadopted-suggestion rule, at its point of use in NOTES. */
-export const SUGGESTION_RULE = 'An actionable assistant recommendation the user did not take up is a line starting "助手建议（用户未采纳）：" ("Assistant suggested (not adopted):") with its date, at most two per conversation, never a preference or decision until the user adopts it in words; explanations, glosses and restatements are not kept.';
+export const SUGGESTION_RULE = 'An actionable assistant recommendation the user did not take up is a line starting "助手建议（用户未采用）：" ("Assistant suggested (not adopted):") with its date, at most two per conversation, never a preference or decision until the user adopts it in words; explanations, glosses and restatements are not kept.';
 
 /** Observation induction's line, read by `choiceRows`: `- Choice: ` then one JSON object and nothing after it. */
 export const OBSERVATION_CHOICE_RULE = `Each bullet is one line, with nothing after the JSON:

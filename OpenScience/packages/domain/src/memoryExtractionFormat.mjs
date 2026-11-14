@@ -7,9 +7,9 @@ export function memoryHistoryLine(text) {
 }
 
 /** The NOTES labels the extraction-v2 templates ask for (v2.1): a user's opinion and an assistant suggestion the user did not take up. */
-const V21_LABEL = /^(?:用户认为：|User believes:|助手建议（用户未采纳）：|Assistant suggested \(not adopted\):)/;
+const V21_LABEL = /^(?:用户认为：|User believes:|助手建议（用户未采用）：|Assistant suggested \(not adopted\):)/;
 /** The labels of the earlier v2 line protocol, still recognised so that recorded memory and its fixtures keep counting; they end with a recorded date. */
-const V2_LABEL = /^(?:user stated:|user believes(?: \(sensitive\))?:|assistant suggested \((?:adopted|declined|not answered)\):|document says:|用户陈述：|用户观点(?:（敏感）)?：|助手建议（(?:已采纳|未采纳|未答复)）：|文档声称：)/;
+const V2_LABEL = /^(?:user stated:|user believes(?: \(sensitive\))?:|assistant suggested \((?:adopted|declined|not answered)\):|document says:|用户陈述：|用户观点(?:（敏感）)?：|助手建议（(?:已采纳|未采纳|未答复)）：|文档声称：)/; // retired-word-ok: labels in memory recorded before the rename, matched as data
 /** The start of an attempted label, not words somewhere in the sentence. */
 const ATTEMPTED_LABEL = /^(?:assistant suggested|user believes|user stated|document says|用户陈述|用户观点|用户认为|助手建议|文档声称)[:：（(]/i;
 
@@ -46,4 +46,4 @@ export function checkMemoryNoteLabels(body) {
 }
 
 /** Shared by the existing consolidation and verification requests; no extra call. */
-export const MEMORY_EXTRACTION_V2_REVIEW_TEXT = 'An earlier: / 曾为： line is dated history, not a stale current assertion. Preserve each earlier value and its date, the unprefixed current value, exact names, numbers and units, and the labels 用户认为： / User believes: and 助手建议（用户未采纳）： / Assistant suggested (not adopted):. Keep - Choice:, - Stated choice:, - Confirmed aliases: and - Alias confirmation: lines unchanged. Do not collapse history into the current value or turn a labelled opinion or suggestion into a fact. Deduplicate only unchanged repetitions.';
+export const MEMORY_EXTRACTION_V2_REVIEW_TEXT = 'An earlier: / 曾为： line is dated history, not a stale current assertion. Preserve each earlier value and its date, the unprefixed current value, exact names, numbers and units, and the labels 用户认为： / User believes: and 助手建议（用户未采用）： / Assistant suggested (not adopted):. Keep - Choice:, - Stated choice:, - Confirmed aliases: and - Alias confirmation: lines unchanged. Do not collapse history into the current value or turn a labelled opinion or suggestion into a fact. Deduplicate only unchanged repetitions.';
