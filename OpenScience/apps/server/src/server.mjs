@@ -1406,7 +1406,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // One judge of whether a line says what another says: it holds a line the engine wrote near one the person removed out (one call a
   // commit) and finds the other lines that say what a line the person forgot said (`nativeMemoryRejections.mjs`, `nativeMemoryForgetEverywhere.mjs`).
   const rejectionJudge = createRejectionJudge({ config, usageLedger });
-  const nativeMemory = new NativeMemoryStore({ forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions: openVikingSessions, overlay: nativeMemoryOverlay, memoryContexts: nativeMemoryContexts, rejectionJudge,
+  const nativeMemory = new NativeMemoryStore({ personAliasHintEnabled: config.memoryPersonAliasHintEnabled, forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions: openVikingSessions, overlay: nativeMemoryOverlay, memoryContexts: nativeMemoryContexts, rejectionJudge,
     report: (line) => process.stderr.write(`${line}\n`),
     // The conversation a memory came out of is named from the run ledger, which is composed further down.
     conversationTitles: (userId, refs) => nativeConversationTitles(userId, refs) });

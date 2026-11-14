@@ -1,9 +1,10 @@
+import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, confirmedAliases, aliasesFor, aliasVariants, personLabel } from './nativeMemoryInduction.mjs';
 import { forgetRequestId } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
-import { neutralMemoryUri, removalLines, removalText } from './nativeMemoryRejections.mjs';
+import { neutralMemoryUri, removalLines, removalText, removalRefusals } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
@@ -413,16 +414,17 @@ export class NativeMemoryStore {
    *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
    *   now?: () => Date, conversationTitles?: ConversationTitles | null,
    *   rejectionJudge?: { same: (request: any) => Promise<{ same: Map<number, string>, stated: Set<number> }> } | null,
-   *   report?: (line: string) => void, settleExtractionsMs?: number, forgetTargetsEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
+   *   report?: (line: string) => void, settleExtractionsMs?: number, forgetTargetsEnabled?: boolean, personAliasHintEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
    *   `conversationTitles` names the conversations a memory came out of (the run ledger knows them; this store does not). `rejectionJudge` is the
    *   rejection list's own judge (`nativeMemoryRejections.mjs`), asked which other lines say what a forgotten one said
    *   (`nativeMemoryForgetEverywhere.mjs`); absent, only the lines that contain a forgotten line's words go with it. `memoryContexts` names
    *   the registered namespaces (the account's own and each shared GEO project's, `geoNativeMemoryContext.mjs`).
    */
   constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, report = () => {},
-    settleExtractionsMs = 20_000, forgetTargetsEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
+    settleExtractionsMs = 20_000, forgetTargetsEnabled = false, personAliasHintEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
     this.sessions = sessions;
     this.forgetTargetsEnabled = forgetTargetsEnabled === true;
+    this.personAliasHintEnabled = personAliasHintEnabled === true;
     /** How long the map waits for its grey marks before drawing without them (`MAP_REPLACED_DEADLINE_MS`). */
     this.replacedDeadlineMs = replacedDeadlineMs;
     /** How long an account deletion waits for the account's running extractions before it is refused as in progress. */
@@ -1324,9 +1326,9 @@ export class NativeMemoryStore {
     const before = removalLines(file.body);
     const after = removalLines(next);
     const kept = new Set(after.map(lineFingerprint));
-    const removed = before.filter(text=>!kept.has(lineFingerprint(text)));
+    const removed = await this.#aliasRemovalLines(userId, file, before.filter(text=>!kept.has(lineFingerprint(text))));
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
-    if (actor === "user" || actor === "conversation" || reason === "source conversation deleted") {
+    if (actor === "user" || actor === "conversation" || reason === "source conversation deleted" || reason === "behavioural inference superseded") {
       // A deleted source already has its own history fence; recognizing its wording is not a second admission gate.
       const activate = async () => { await this.overlay.reject(userId, rejectionType, file.uri, removed, { origin }); };
       if (this.history && (actor === "user" || actor === "conversation")) {
@@ -1487,14 +1489,81 @@ export class NativeMemoryStore {
     return { ...forgotten, ...(also ? { alsoForgot: also } : {}) };
   }
 
+  /** A new typed choice withdraws an older behavioural inference in that scope; explicit choices always win.
+   * @param {string} userId @param {import('./nativeMemoryInduction.mjs').Choice[]} choices @param {boolean} explicit */
+  async withdrawInferredChoices(userId, choices, explicit) {
+    if (!choices.length) return;
+    this.#touch(userId);
+    for (const file of await this.files(userId)) {
+      if (file.type !== 'preferences' || file.namespaceId || !file.body.includes('[Inferred from behaviour;')) continue;
+      const inferred = choiceRows(file.body);
+      if (!inferred.some(old => choices.some(fresh => old.kind === fresh.kind && normaliseChoice(old.scope) === normaliseChoice(fresh.scope)
+        && (explicit || choiceKey(old) !== choiceKey(fresh))))) continue;
+      // The protocol keeps one inference per file. Refuse ambiguous multi-choice files rather than remove an unrelated preference.
+      if (new Set(inferred.map(choiceKey)).size !== 1) continue;
+      const next = file.body.split('\n').filter(line => !choiceRows(line).length && !line.includes('[Inferred from behaviour;')).join('\n');
+      if (!removalLines(next).length) await this.forgetFile(userId, file, { keepText: true, actor: 'platform', reason: 'behavioural inference superseded' });
+      else await this.#write(userId, file, next, { actor: 'platform', reason: 'behavioural inference superseded' });
+    }
+  }
+
+  /** Called only for a source-grounded explicit identity confirmation, never by consolidation or fuzzy search.
+   * @param {string} userId @param {string} uri @param {string} expected @param {string[]} names */
+  async mergeConfirmedAliases(userId, uri, expected, names) {
+    if (!this.personAliasHintEnabled) return;
+    return withNativeMemoryWrite(this.overlay.database, userId, async () => {
+      this.#touch(userId);
+      const files = await this.files(userId);
+      const kept = files.find(file => file.uri === uri && file.type === 'people');
+      if (!kept || !names.includes(personLabel(uri, kept.body)) || !names.every(name => confirmedAliases(kept.body).includes(name))) return;
+      const context = await this.#fileContext(userId, uri);
+      let sensitive = kept.sensitive === true;
+      for (const other of files.filter(file => file.uri !== uri && file.type === 'people'
+        && (file.namespaceId ?? null) === (kept.namespaceId ?? null) && names.includes(personLabel(file.uri, file.body)))) {
+        const before = await context.sessions.read(userId, uri);
+        if (before === null || await context.sessions.read(userId, other.uri) !== other.body) continue;
+        const inherited = (await this.overlay.originsOf(userId, [other.uri])).get(other.uri) ?? new Map();
+        if ((await removalRefusals({ userId, projectId: kept.projectId ?? null, overlay: this.overlay,
+          namespaceId: kept.namespaceId ?? null, judge: this.rejectionJudge,
+          candidates: removalLines(other.body).map(text => ({ text, sources: [] })) })).size) continue;
+        const section = `## Previously recorded under ${personLabel(other.uri, other.body)}\n${other.body}`;
+        if (kept.body !== expected && !before.includes(section)) continue;
+        const next = before.includes(section) ? before : `${before}\n\n${section}`;
+        await withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, next));
+        await this.overlay.addRevision({ userId, uri, memoryType: 'people', change: 'updated', actor: 'platform', reason: 'explicit person alias merge', before, after: next, projectId: kept.projectId });
+        sensitive ||= other.sensitive === true;
+        await this.overlay.upsertFile({ userId, uri, memoryType: 'people', body: next, projectId: kept.projectId, sensitive });
+        await this.overlay.syncOrigins(userId, uri, { after: next });
+        await this.overlay.inheritOrigins(userId, uri, new Map([...inherited].map(([print, origin]) => [print, originalSources(origin)])));
+        await withMemorySummaryInvalidation(context.sessions, this.overlay, userId, other.uri, () => context.sessions.remove(userId, other.uri));
+        await this.overlay.addRevision({ userId, uri: other.uri, memoryType: 'people', change: 'deleted', actor: 'platform', reason: 'explicit person alias merge', before: other.body, after: null, projectId: other.projectId });
+        await this.overlay.removeFile(userId, other.uri);
+      }
+      this.#touch(userId);
+    });
+  }
+
+  /** Confirmed aliases only; neither fuzzy hints nor a shared diagnosis confer removal authority.
+   * @param {string} userId @param {{uri:string,body:string,type:string,namespaceId?:string|null}} file @param {string[]} lines */
+  async #aliasRemovalLines(userId, file, lines) {
+    if (!this.personAliasHintEnabled || file.type !== 'people') return lines;
+    const peers = (await this.files(userId)).filter(candidate => candidate.type === 'people'
+      && (candidate.namespaceId ?? null) === (file.namespaceId ?? null));
+    const names = aliasesFor(peers, file);
+    return [...new Set(lines.flatMap(line => aliasVariants(line, names)))];
+  }
+
   /** Remove exactly the judged lines through the same revision/rejection/history path as the tool. */
   async forgetLines(userId, file, lines, { act = null, engineSession = null } = {}) {
     const prints = new Set(lines.map(removalText).map(lineFingerprint));
     const removed = removalLines(file.body).filter(text => prints.has(lineFingerprint(text)));
     if (!removed.length) return 0;
+    const aliasPlan = this.personAliasHintEnabled && file.type === 'people' ? await this.#duplicatesPlan(userId, removed, file) : new Map();
+    if (!act && aliasPlan.size) act = newAct();
     const next = file.body.split('\n').filter(line => !prints.has(lineFingerprint(removalText(line)))).join('\n');
     if (!removalLines(next).length) await this.forgetFile(userId, file, { keepText: true, actor: 'conversation', reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, engineSession });
     else await this.#write(userId, file, next, { actor: 'conversation', reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, neutralizeRemovedPath: true, engineSession });
+    if (aliasPlan.size) await this.#forgetDuplicates(userId, aliasPlan, { act, keepText: true, actor: 'conversation' });
     return removed.length;
   }
 
@@ -1529,14 +1598,29 @@ export class NativeMemoryStore {
    * find them is no failure of the forget: nothing else goes, and it is said.
    * Only the memories of the forgotten one's own namespace are read: forgetting in the account's memory never reaches a shared GEO
    * project's (which its members share), and forgetting in a project's never reaches the account's.
-   * @param {string} userId @param {readonly string[]} removed @param {{ namespaceId?: string | null }} origin the forgotten file
+   * @param {string} userId @param {readonly string[]} removed @param {{ namespaceId?: string | null, uri?:string, body?:string, type?:string }} origin the forgotten file
    * @returns {Promise<Map<string, string[]>>} by file URI
    */
   async #duplicatesPlan(userId, removed, origin) {
     try {
-      const files = (await this.files(userId)).filter((file) => (file.namespaceId ?? null) === (origin?.namespaceId ?? null))
-        .map((file) => ({ uri: file.uri, type: file.type, statements: statements(file.body) }));
-      return await duplicatesOf({ files, removed, judge: this.rejectionJudge, userId });
+      const inventory = (await this.files(userId)).filter(file => (file.namespaceId ?? null) === (origin?.namespaceId ?? null));
+      const aliasScope = this.personAliasHintEnabled && origin.type === 'people' && origin.uri && origin.body
+        ? aliasesFor(inventory.filter(file => file.type === 'people'), { uri: origin.uri, body: origin.body }) : null;
+      const files = inventory.filter(file => aliasScope === null || file.type !== 'people' || file.uri === origin.uri
+        || aliasScope.includes(personLabel(file.uri, file.body))).map(file => ({ uri: file.uri, type: file.type, statements: statements(file.body) }));
+      const plan = await duplicatesOf({ files, removed, judge: this.rejectionJudge, userId });
+      if (aliasScope) {
+        const names = aliasScope;
+        if (names.length) {
+          const variants = new Set(removed.flatMap(line => aliasVariants(line, names)).map(normalisedStatement));
+          for (const file of inventory) {
+            if (file.uri === origin.uri || file.type !== 'people' || !names.includes(personLabel(file.uri, file.body))) continue;
+            const matched = statements(file.body).filter(line => variants.has(normalisedStatement(line)));
+            if (matched.length) plan.set(file.uri, [...new Set([...(plan.get(file.uri) ?? []), ...matched])]);
+          }
+        }
+      }
+      return plan;
     } catch (error) {
       this.report(`native memory forget duplicates: ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
       return new Map();
@@ -1627,7 +1711,7 @@ export class NativeMemoryStore {
     this.#touch(userId);
     const oldOrigins = (await this.overlay.originsOf(userId,[file.uri])).get(file.uri) ?? new Map();
     const names = [...new Set([titleOf(file.type, file.uri, file.body), ...memoryNameVariants(file.uri)])].filter(name => hardTokens(name).length);
-    const removedLines = [...new Set([...removalLines(file.body), ...names])];
+    const removedLines = await this.#aliasRemovalLines(userId, file, [...new Set([...removalLines(file.body), ...names])]);
     const activate = async () => { await this.overlay.reject(userId, this.#rejectionType(context, file.type), file.uri, removedLines); };
     if (this.history && actor !== "platform") await this.history.rejectRemoved(context,file,
       [...new Map([...statements(file.body).map(removalText), ...names].map(text => [lineFingerprint(text), text])).values()],this.rejectionJudge, { activate });
@@ -1735,7 +1819,7 @@ export class NativeMemoryStore {
     const before = String(last.before);
     const had = new Set(statements(before).map(lineFingerprint));
     await this.overlay.reject(userId, rejectionType, uri, statements(live.body).filter((text) => !had.has(lineFingerprint(text))));
-    await this.overlay.unreject(userId, rejectionType, removalLines(before));
+    await this.overlay.unreject(userId, rejectionType, await this.#aliasRemovalLines(userId, { ...live, body: before }, removalLines(before)));
     let checkedBefore = before;
     const review = this.instructionWriteCheck ? async () => { checkedBefore = await this.instructionWriteCheck(userId, { ...live, uri, type: memoryType }, before, context); } : null;
     await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, before), review));
@@ -1767,7 +1851,9 @@ export class NativeMemoryStore {
     const review = this.instructionWriteCheck ? async () => { text = await this.instructionWriteCheck(userId, { uri, body: '', type: memoryType, projectId }, text, context); } : null;
     await this.#engine(() => withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, text), review));
     if (text === null) return;
-    await this.overlay.unreject(userId, this.#rejectionType(context, memoryType), [...removalLines(text), titleOf(memoryType, uri, text), ...memoryNameVariants(uri)]);
+    await this.overlay.unreject(userId, this.#rejectionType(context, memoryType), await this.#aliasRemovalLines(userId,
+      { uri, body: text, type: memoryType, namespaceId: context.kind === 'geo-project' ? context.namespaceId : null },
+      [...removalLines(text), titleOf(memoryType, uri, text), ...memoryNameVariants(uri)]));
     await this.overlay.upsertFile({ userId, uri, memoryType, body: text, projectId: projectId ?? undefined });
     if (projectId) await this.#engine(() => context.sessions.setTags(userId, uri, [`project=${projectId}`])).catch(() => {});
     const sourceRevision=await this.overlay.revision(userId,revisionId);
@@ -2057,12 +2143,21 @@ export class NativeMemoryStore {
    * path as 「记住这一条」, in a session of its own (`evimed-promote-…`) so that the preference it writes reads 「你在两次对话里都这样做」.
    * @param {string} userId @param {string} choice the observation's own words, a line or a few
    * @param {any[]} [origins] original conversation messages, never the promotion's processing time
-   * @returns {Promise<{ archiveUri: string }>}
+   * @param {{choice: import("./nativeMemoryInduction.mjs").Choice, dates:string[], count:number}} [evidence]
+   * @returns {Promise<{ archiveUri: string, suppressed?: boolean }>}
    */
-  async keepRepeatedChoice(userId, choice, origins = []) {
+  async keepRepeatedChoice(userId, choice, origins = [], evidence) {
+    if (evidence) {
+      this.#touch(userId);
+      for (const file of await this.files(userId)) {
+        if (!['preferences', 'corrections'].includes(file.type) || file.namespaceId) continue;
+        const stated = choiceRows(file.body.split('\n').filter(line => /^\s*- Stated choice: /.test(line)).join('\n').replace(/^\s*- Stated choice: /gm, '- Choice: '));
+        if (stated.some(row => row.kind === evidence.choice.kind && normaliseChoice(row.scope) === normaliseChoice(evidence.choice.scope))) return { archiveUri: '', suppressed: true };
+      }
+    }
     const words = maskIdentifiers(String(choice ?? "").replace(/\s+/g, " ").trim()).slice(0, 600);
     if (!words) throw new HttpError(400, "memory_payload_invalid", "There is nothing to keep.");
-    const commit = await this.#submitWords(userId, { content: repeatedChoiceMessage(words), projectId: null, origin: "promotion", prefix: "evimed-promote-" });
+    const commit = await this.#submitWords(userId, { content: evidence ? inferredChoiceMessage(evidence.choice, evidence.dates, evidence.count) : repeatedChoiceMessage(words), projectId: null, origin: "promotion", prefix: "evimed-promote-" });
     await this.overlay.linkRemovalSources(userId, commit.archiveUri, [...new Set(origins.map(origin => origin.archiveUri).filter(Boolean))]);
     return { archiveUri: commit.archiveUri };
   }

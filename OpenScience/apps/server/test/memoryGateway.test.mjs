@@ -1277,3 +1277,54 @@ test('history privacy refusal names its retry without exposing provider details 
   assert.doesNotMatch(answer.json.error.message, /private provider response/);
   assert.deepEqual(f.failures, [{ code: error.code, status: 503 }]);
 });
+
+test('opt-in search and both read transports label observations and unconfirmed person hints', async t => {
+  const f = await fixture(t, { config: { memoryObservationInductionEnabled: true, memoryPersonAliasHintEnabled: true } });
+  const person = `${ROOT}/memories/people/王阿姨.md`, sibling = `${ROOT}/memories/people/小王阿姨.md`;
+  f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Likes walking.');
+  f.stub.seedMemory(OV_USER, 'people/小王阿姨.md', '# 小王阿姨\n- Different person until confirmed.');
+  const observation = `${ROOT}/memories/observations/morning.md`;
+  f.stub.seedMemory(OV_USER, 'observations/morning.md', '- Morning left free.');
+  const read = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(person)}`);
+  assert.match(read.json.result, /possibly the same person — not confirmed/);
+  assert.ok(read.json.result.includes(sibling));
+  const one = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(observation)}`);
+  assert.match(one.json.result, /seen once/);
+  const searched = await f.call('POST', '/api/v1/search/search', { query: 'morning', limit: 20 });
+  assert.ok(searched.json.result.memories.some(hit => hit.uri === observation && hit.abstract.includes('seen once')));
+  const context = await f.call('POST', '/api/v1/search/search', { query: 'morning', mode: 'context', limit: 20 });
+  assert.match(context.json.result.rendered, /seen once/);
+  const mcp = await f.mcp({ jsonrpc: '2.0', id: 771, method: 'tools/call', params: { name: 'read', arguments: { uris: [person, observation] } } });
+  assert.match(JSON.stringify(mcp), /not confirmed/);
+  assert.match(JSON.stringify(mcp), /seen once/);
+  const opening = await f.call('GET', `/api/v1/fs/ls?uri=${encodeURIComponent(`${ROOT}/memories`)}&output=agent&recursive=true&abs_limit=512&node_limit=512`);
+  assert.ok(!JSON.stringify(opening.json).includes('Morning left free'));
+});
+
+test('alias candidates respect hidden, project and account boundaries', async t => {
+  const hidden = `${ROOT}/memories/people/小王阿姨.md`;
+  const f = await fixture(t, { config: { memoryPersonAliasHintEnabled: true }, overlay: {
+    configured: true, sensitiveUris: async () => [hidden], otherProjectUris: async () => [] } });
+  f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨');
+  f.stub.seedMemory(OV_USER, 'people/小王阿姨.md', '# 小王阿姨');
+  const read = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(`${ROOT}/memories/people/王阿姨.md`)}`);
+  assert.ok(!read.json.result.includes('小王阿姨'));
+  assert.ok(!read.json.result.includes('not confirmed'));
+});
+
+test('stated preferences rank ahead of inferred choices even at limit one', async t => {
+  const f = await fixture(t, { config: { memoryObservationInductionEnabled: true } });
+  f.stub.seedMemory(OV_USER, 'preferences/self/inferred.md', '- Use Markdown [Inferred from behaviour; 2 conversations; dates: unknown]');
+  const stated = f.stub.seedMemory(OV_USER, 'preferences/self/stated.md', '- Use CSV.');
+  const found = await f.call('POST', '/api/v1/search/search', { query: 'Use', limit: 1 });
+  assert.equal(found.json.result.memories.length, 1);
+  assert.equal(found.json.result.memories[0].uri, stated);
+});
+test('an old people URI resolves only through one confirmed alias, never a similar name', async t => {
+  const f = await fixture(t, { config: { memoryPersonAliasHintEnabled: true } });
+  f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Confirmed aliases: ["王阿姨","小王阿姨"]\n- Likes walking.');
+  const read = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(`${ROOT}/memories/people/小王阿姨.md`)}`);
+  assert.equal(read.status, 200); assert.match(read.json.result, /Likes walking/);
+  const near = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(`${ROOT}/memories/people/大王阿姨.md`)}`);
+  assert.equal(near.status, 404);
+});
