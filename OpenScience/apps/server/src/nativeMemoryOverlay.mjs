@@ -629,9 +629,11 @@ export class NativeMemoryOverlay {
     return result.rows.map(publicCommit);
   }
 
-  async recordInstructionCheck(userId, fingerprint, result) {
+  /** The first verdict stays; `replace` is only for a person's latest decision about one line (`lineDecisionKey`).
+   * @param {string} userId @param {string} fingerprint @param {unknown} result @param {{replace?:boolean}} [options] */
+  async recordInstructionCheck(userId, fingerprint, result, { replace = false } = {}) {
     await this.#query(`INSERT INTO evimed_memory.native_instruction_checks(user_id,fingerprint,result) VALUES($1,$2,$3::jsonb)
-      ON CONFLICT(user_id,fingerprint) DO NOTHING`, [owner(userId), fingerprint, JSON.stringify(result)]);
+      ON CONFLICT(user_id,fingerprint) DO ${replace ? 'UPDATE SET result=EXCLUDED.result' : 'NOTHING'}`, [owner(userId), fingerprint, JSON.stringify(result)]);
   }
 
   /** Disputed lines stay outside active recall, with the same recoverable revision authority as Undo. */

@@ -300,5 +300,124 @@ test('history ingestion judges a later human statement even when extraction wrot
     const result = await service.indexArchive(commit, context, JSON.stringify(message));
     assert.equal(result.chunks, message.created_at === '2026-02-01T00:00:00Z' ? 1 : 0);
   }
-  assert.equal(asked.length, 3, 'only later human messages need an assertion judgement');
+  // The exact later restatement is its own witness; the later question and quotation still go to the judge and are refused.
+  assert.equal(asked.length, 2, 'only later human messages that are not the statement itself need an assertion judgement');
+  assert.deepEqual(asked.map(request => request.said[0]), ['Did I use project M-41633?', 'The earlier chat said "Project M-41633."']);
+});
+
+// FT12: the recorded p6c product path. One human message stated four facts and two passing remarks; one `remember`
+// call stored the four facts. The rows below are the ones the forget paths write for it (memoryHistory.rejectRemoved):
+// the lines forget fences every message of the remember archive and owes the whole conversation; each statement forget
+// fences the one conversation message that contained its remark. No fake sits between the reader and the ledger.
+const p6cRoot = 'viking://user/u-7f';
+const p6cConversation = `${p6cRoot}/sessions/dsh-s-p6f-1/history/archive_001`;
+const p6cRemember = `${p6cRoot}/sessions/mcp-store-54ddb7f8836a/history/archive_001`;
+const p6cHumanMessage = '帮我记一下几件个人的事，放进我的个人笔记里：每周三晚上我去游泳；我早上习惯喝黑咖啡；家里的备用钥匙放在蓝色鞋柜第二层；我对青霉素过敏。另外顺便帮我把这句话润色得通顺些，不用保存：“上个月我临时顶了几个星期的夜班，所以最近作息有点乱，周报也晚交了”。对了，我是在上周航班延误了四个小时的候机室里写下这句话的，不过这个不用管。';
+const p6cRememberMessage = '帮我记一下几件个人的事，放进我的个人笔记里：每周三晚上我去游泳；我早上习惯喝黑咖啡；家里的备用钥匙放在蓝色鞋柜第二层；我对青霉素过敏。';
+const p6cKept = ['- 对青霉素过敏 (as of 2026-11-14)', '- 早上习惯喝黑咖啡 (as of 2026-11-14)', '- 家里的备用钥匙放在蓝色鞋柜第二层 (as of 2026-11-14)'];
+const p6cSwimming = '- 每周三晚上去游泳 (as of 2026-11-14)';
+
+/** Answers the ledger's queries from fixed rows, scoped by the archive/session parameters the ledger passes.
+ * @param {{fenced?:any[],recorded?:any[],deleted?:any[],removals?:any[]}} rows */
+function historyRowsDatabase({ fenced = [], recorded = [], deleted = [], removals = [] }) {
+  const sessionOf = (/** @type {string} */ uri) => String(uri).split('/sessions/')[1]?.split('/')[0] ?? '';
+  const scoped = (/** @type {any[]} */ rows, /** @type {any[]} */ values) => rows.filter(row => values[3].includes(row.archive_uri)
+    || values[4].includes(sessionOf(row.archive_uri)) || values[4].includes(row.source_session));
+  return { query: async (/** @type {string} */ sql, /** @type {any[]} */ values) => {
+    if (sql.includes('FROM evimed_memory.history_message_rejections h')) return { rows: scoped(fenced, values) };
+    if (sql.includes('FROM evimed_memory.history_write_messages w')) return { rows: scoped(recorded, values) };
+    if (sql.includes('FROM evimed_memory.history_fences f')) return { rows: deleted };
+    if (sql.includes('scan_pending')) return { rows: removals };
+    if (sql.includes('FROM evimed_memory.native_rejections WHERE user_id=$1 LIMIT 1')) return { rows: removals.length ? [{}] : [] };
+    throw new Error(`unexpected query: ${sql.slice(0, 80)}`);
+  } };
+}
+
+async function p6cLedger({ deleted = [] } = {}) {
+  const { MemoryHistoryLedger } = await import('../src/memoryHistory.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const { removalText } = await import('../src/nativeMemoryRejections.mjs');
+  const swim = lineFingerprint(removalText(p6cSwimming)), night = lineFingerprint('上个月临时顶夜班这件事'), flight = lineFingerprint('上周航班延误了四个小时');
+  const removals = [
+    { memoryType: 'profile', fingerprint: swim, text: removalText(p6cSwimming), rejectedAt: '2026-11-14T11:41:27.389Z' },
+    { memoryType: 'notes', fingerprint: night, text: '上个月临时顶夜班这件事', rejectedAt: '2026-11-14T11:42:24.549Z' },
+    { memoryType: 'notes', fingerprint: flight, text: '上周航班延误了四个小时', rejectedAt: '2026-11-14T11:42:59.455Z' },
+  ];
+  const fenced = [
+    { archive_uri: p6cRemember, message_hash: lineFingerprint(p6cRememberMessage), fingerprint: swim, source_session: 'dsh-s-p6f-1' },
+    { archive_uri: `${p6cRoot}/sessions/dsh-s-p6f-1`, message_hash: lineFingerprint(''), fingerprint: swim, source_session: null },
+    ...[swim, night, flight].map(fingerprint => ({ archive_uri: p6cConversation, message_hash: lineFingerprint(p6cHumanMessage), fingerprint, source_session: null })),
+  ];
+  const recorded = [
+    { archive_uri: p6cRemember, message_hash: lineFingerprint(p6cRememberMessage), source_session: 'dsh-s-p6f-1' },
+    { archive_uri: p6cConversation, message_hash: lineFingerprint(p6cHumanMessage), source_session: null },
+  ];
+  const overlay = { removals: async () => removals, removalOrigins: async () => [], instructionCheck: async () => null, originsOf: async () => new Map() };
+  const ledger = new MemoryHistoryLedger({ overlay, database: historyRowsDatabase({ fenced, recorded, deleted,
+    removals: removals.map(row => ({ memory_type: row.memoryType, fingerprint: row.fingerprint, text: row.text, rejected_at: new Date(row.rejectedAt), scan_pending: false })) }) });
+  ledger.migrate = async () => {};
+  return { ledger, overlay, removals };
+}
+
+for (const origin of [p6cRemember, p6cConversation]) test(`FT12 a lines forget and two statement forgets of unextracted remarks leave the kept lines readable (origin ${origin.includes('mcp-store') ? 'remember call' : 'conversation'})`, async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const { removalText } = await import('../src/nativeMemoryRejections.mjs');
+  const { ledger, overlay } = await p6cLedger();
+  const uri = `${p6cRoot}/memories/profile.md`;
+  overlay.originsOf = async () => new Map([[uri, new Map([...p6cKept, p6cSwimming].map(line => [lineFingerprint(removalText(line)), { archiveUri: origin }]))]]);
+  const history = new MemoryHistory({ config: {}, contexts: {}, ledger });
+  const context = { kind: 'owned', ownerId: 'u-7f', ownerCreatedAt: '2026-01-01', namespaceId: 'u-7f' };
+  const kept = ['# 用户', ...p6cKept].join('\n');
+  assert.equal(await history.fenceNativeBody(context, uri, kept), kept, 'the penicillin allergy and its siblings stay readable');
+  assert.equal(await history.fenceNativeBody(context, uri, ['# 用户', p6cKept[0], p6cSwimming].join('\n')), ['# 用户', p6cKept[0]].join('\n'),
+    'the removed line itself is still withheld');
+});
+
+test('FT12 a source is withheld only when withdrawn whole: every recorded human message exactly withdrawn, or the conversation deleted', async () => {
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const { MemoryHistoryLedger } = await import('../src/memoryHistory.mjs');
+  const { createMemoryForgetReader } = await import('../src/memoryForgetPropagation.mjs');
+  const context = { ownerId: 'u-7f', ownerCreatedAt: '2026-01-01', namespaceId: 'u-7f', kind: 'owned' };
+  const { ledger } = await p6cLedger();
+  assert.equal(await ledger.derivedSourcesRejected(context, { archives: [p6cRemember], sessions: [] }), false, 'the remember call stated other facts');
+  assert.equal(await ledger.derivedSourcesRejected(context, { archives: [p6cConversation], sessions: [] }), false, 'the conversation stated other facts');
+  assert.equal(await ledger.derivedSourcesRejected(context, { archives: [], sessions: ['s-p6f-1'] }), false, 'a session reference is conversation granularity');
+  const only = 'My old project is M-41633.', print = lineFingerprint(only);
+  const sole = `${p6cRoot}/sessions/dsh-only/history/archive_001`, mixed = `${p6cRoot}/sessions/dsh-mixed/history/archive_001`;
+  const exact = new MemoryHistoryLedger({ overlay: { removalOrigins: async () => [] }, database: historyRowsDatabase({
+    fenced: [sole, mixed].map(archive => ({ archive_uri: archive, message_hash: print, fingerprint: print, source_session: null })),
+    recorded: [{ archive_uri: sole, message_hash: print }, { archive_uri: mixed, message_hash: print }, { archive_uri: mixed, message_hash: lineFingerprint('Please summarise the trial.') }],
+    removals: [{ memory_type: 'notes', fingerprint: print, text: only, rejected_at: new Date('2026-11-14'), scan_pending: false }] }) });
+  exact.migrate = async () => {};
+  assert.equal(await exact.derivedSourcesRejected(context, { archives: [sole], sessions: [] }), true, 'its only message was exactly the withdrawn statement');
+  assert.equal(await exact.derivedSourcesRejected(context, { archives: [mixed], sessions: [] }), false, 'another message of that source is not withdrawn');
+  assert.equal(await exact.derivedSourcesRejected(context, { archives: [mixed, sole], sessions: [] }), true, 'a merge that inherits a withdrawn source is its descendant');
+  const deletion = await p6cLedger({ deleted: [{}] });
+  assert.equal(await deletion.ledger.derivedSourcesRejected(context, { archives: [p6cConversation], sessions: [] }), true, 'a deleted source conversation withdraws everything from it');
+  // Derived readers (capsule facts, resident profile, methods, feedback, export) share this authority.
+  const reader = (/** @type {any} */ scoped) => createMemoryForgetReader({ context: async () => context, hasWithdrawals: scope => scoped.hasWithdrawals(scope),
+    rejected: (scope, texts) => scoped.rejected(scope, texts), sourcesRejected: (scope, refs) => scoped.derivedSourcesRejected(scope, refs),
+    resolveRun: async () => null, resolveMethod: async () => null });
+  assert.equal(await reader(ledger)('u-7f', { kind: 'fact', payload: { content: '对青霉素过敏', provenance: { sessionId: 's-p6f-1', archiveUri: p6cConversation } } }), true);
+  assert.equal(await reader(exact)('u-7f', { kind: 'method', payload: { body: 'A paraphrased procedure', provenance: { archiveUri: sole } } }), false);
+  assert.equal(await reader(exact)('u-7f', { kind: 'method', payload: { body: 'A paraphrased procedure', provenance: { archiveUri: mixed } } }), true);
+  assert.equal(await reader(exact)('u-7f', { kind: 'fact', payload: { content: only, provenance: { archiveUri: mixed } } }), false, 'the withdrawn words themselves never return');
+});
+
+test('FT12 an explicit page replacement survives later unrelated forgets and is still withdrawn by a later removal of itself', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const { lineDecisionKey } = await import('../src/nativeMemoryRejections.mjs');
+  const uri = 'viking://user/u/memories/preferences/answer.md', text = 'Short answers, then detail.';
+  const authority = [{ text: 'Short answers.', fingerprint: lineFingerprint('Short answers.'), rejectedAt: '2026-01-01' }];
+  const receipts = new Map([[lineDecisionKey('edit', uri, text), { explicitEdit: true, covered: authority.map(row => row.fingerprint) }]]);
+  const overlay = { removals: async () => authority, originsOf: async () => new Map(), instructionCheck: async (/** @type {string} */ _owner, /** @type {string} */ key) => receipts.get(key) };
+  const history = new MemoryHistory({ config: {}, ledger: { overlay, derivedSourcesRejected: async () => false } });
+  const context = /** @type {any} */ ({ kind: 'owned', ownerId: 'u' });
+  assert.equal(await history.fenceNativeBody(context, uri, text), text);
+  authority.unshift({ text: '上周航班延误了四个小时', fingerprint: lineFingerprint('上周航班延误了四个小时'), rejectedAt: '2026-02-01' });
+  assert.equal(await history.fenceNativeBody(context, uri, text), text, 'an unrelated statement forget leaves the edited line readable');
+  authority.unshift({ text, fingerprint: lineFingerprint(text), rejectedAt: '2026-03-01' });
+  assert.equal(await history.fenceNativeBody(context, uri, text), null, 'a later removal of the edited line itself withdraws it');
 });

@@ -252,12 +252,31 @@ export function removalAssertionKey(namespaceId, removed, text, source) {
     removed.rejectedAt, removalStatement(text), source.role, source.text, source.created_at ?? null]));
 }
 
-/** Partial removals preserve untouched neighbours; explicit page edits also bind their newly
- * written lines here. Bind either receipt to the entire current removal authority.
+/** Legacy receipt address, bound to the entire removal authority of its time: any later removal, even an
+ * unrelated one, made it unreadable, so a kept line came and went with other forgets. Read only for
+ * receipts written before `lineDecisionKey`.
  * @param {string} uri @param {string} text @param {{fingerprint:string,rejectedAt?:string|null}[]} removals */
 export function retainedRemovalKey(uri, text, removals) {
   return contentHash(JSON.stringify(['retained-removal-v1', uri, lineFingerprint(text),
     removals.map(row => [row.fingerprint, row.rejectedAt]).sort()]));
+}
+
+/** Where a person's decision about one line of one file is kept: retained through their removal of other
+ * lines, or written by their own page edit. The receipt lists the removal fingerprints it was made under
+ * (`covered`); each later removal is judged on its own, so an unrelated forget neither hides the line nor
+ * lifts a fence that concerns the line.
+ * @param {'retained'|'edit'} kind @param {string} uri @param {string} text */
+export function lineDecisionKey(kind, uri, text) {
+  return contentHash(JSON.stringify(['line-decision-v2', kind, uri, lineFingerprint(text)]));
+}
+
+/** The removal fingerprints a line-decision receipt covers, or null when it is not that kind of receipt.
+ * @param {unknown} receipt @param {'retainedAfterRemoval'|'explicitEdit'} flag @returns {string[]|null} */
+export function decisionCovers(receipt, flag) {
+  if (!receipt || typeof receipt !== 'object') return null;
+  const row = /** @type {Record<string, unknown>} */ (receipt);
+  if (row[flag] !== true || !Array.isArray(row.covered)) return null;
+  return row.covered.filter(value => typeof value === 'string');
 }
 
 /** All newly written lines, including titles/headings. @param {string} after @param {string} [before] */
@@ -291,6 +310,18 @@ export async function removalRefusals({ userId, overlay, projectId = null, names
       let authorized = false;
       for (const source of sources) if ((await overlay.instructionCheck?.(userId, receiptKey(source)))?.removalAssertion === true) authorized = true;
       if (authorized) continue;
+      // A later message from the person that is, as a whole, this very statement is the person saying it again in a new
+      // conversation: it is its own witness and needs no model. Containment, a question or a quotation is not equality and
+      // still needs a witnessed assertion; an assistant message or an older message never qualifies (filtered above).
+      // All three must be the same statement: the removed fact, the line being written and the person's whole message.
+      const said = lineFingerprint(removalStatement(candidate.text));
+      const restated = text && lineFingerprint(text) === said
+        ? sources.find(source => lineFingerprint(removalStatement(source.text)) === said) : undefined;
+      if (restated) {
+        await overlay.recordInstructionCheck?.(userId, receiptKey(restated), { removalAssertion: true });
+        await overlay.recordInstructionCheck?.(userId, removalAssertionKey(namespaceId, entry, text, restated), { removalAssertion: true });
+        continue;
+      }
       const hardMatch = tokens.length > 0 && tokens.every(token => tokenPresent(token, removalStatement(candidate.text), { ignoreWhitespace: ignoreTokenWhitespace }));
       if (tokens.length && !hardMatch) continue;
       const literal = hardMatch || print === entry.fingerprint || Boolean(text && containsRemoved(removalStatement(candidate.text), text));

@@ -9,6 +9,26 @@ import { hardTokens, tokenPresent } from './nativeMemoryHardTokens.mjs';
 
 /** @typedef {{id:string,owner_id:string,owner_created_at:string,namespace_id:string,user_root:string,
  * memory_type:string,fingerprint:string,text:string,cutoff:Date,archives:string[],cursor:number,claim:string,attempts:number}} ForgetScan */
+/** @typedef {{archive_uri:string,message_hash:string,fingerprint?:string,source_session?:string|null}} SourceMessage */
+
+/** A cited source unit (one archive, or every archive of one conversation session) is withdrawn whole when it
+ * has an exactly withdrawn human message and no recorded human message of it survives. Any withdrawn unit
+ * withholds the object: a merge that inherited that unit is its descendant.
+ * @param {{archives:string[],sessions:string[],fenced:SourceMessage[],recorded:SourceMessage[],covered:readonly string[]}} input */
+export function wholeSourceWithdrawn({ archives, sessions, fenced, recorded, covered }) {
+  const sessionOf = (/** @type {string} */ uri) => String(uri).split('/sessions/')[1]?.split('/')[0] ?? '';
+  /** @type {((row:SourceMessage)=>boolean)[]} */
+  const units = [...archives.map(uri => (/** @type {SourceMessage} */ row) => row.archive_uri === uri),
+    ...sessions.map(name => (/** @type {SourceMessage} */ row) => sessionOf(row.archive_uri) === name || row.source_session === name)];
+  const skip = new Set(covered);
+  for (const inUnit of units) {
+    const exact = new Set(fenced.filter(row => inUnit(row) && row.message_hash === row.fingerprint && !skip.has(String(row.fingerprint)))
+      .map(row => row.message_hash));
+    if (exact.size && recorded.filter(inUnit).every(row => exact.has(row.message_hash))) return true;
+  }
+  return false;
+}
+
 const migrations = new WeakMap();
 const sql = `
 CREATE SCHEMA IF NOT EXISTS evimed_memory;
@@ -248,25 +268,40 @@ export class MemoryHistoryLedger {
       WHERE owner_id=$1 AND owner_created_at=$2 AND permanent LIMIT 1`, [context.ownerId, context.ownerCreatedAt])).rows.length > 0;
   }
 
-  /** A derived object has no message-level proof that it is independent of a withdrawn
-   * passage. Follow recorded archive/session ancestry and withdraw the object as a whole.
+  /** Withdrawal is exactly as wide as its evidence. A derived object (a native line, capsule fact, method,
+   * feedback or export row) records its sources only per archive or session, and one human message often
+   * states several facts: a message fenced because it CONTAINS a withdrawn fact is no evidence about the
+   * object's other facts. A source is withdrawn whole only when the person deleted that conversation
+   * (permanent history fence) or every recorded human message of it is exactly a withdrawn statement.
+   * Whether the object itself says the withdrawn thing is the caller's separate text check.
    * The join to the existing rejection parent makes undo immediate, including after restart.
    * @param {{ownerId:string,ownerCreatedAt:string,namespaceId:string,projectId?:string|null,projectCreatedAt?:string|null}} context
-   * @param {{archives:string[],sessions:string[]}} refs */
-  async derivedSourcesRejected(context, refs) {
+   * @param {{archives:string[],sessions:string[]}} refs
+   * @param {{covered?:readonly string[]}} [options] removal fingerprints a person's decision about this object already covers */
+  async derivedSourcesRejected(context, refs, { covered = [] } = {}) {
     if (!refs.archives.length && !refs.sessions.length) return false;
     await this.migrate();
     const originals = refs.archives.length ? await this.overlay.removalOrigins(context.ownerId, refs.archives) : [];
     const archives = [...new Set([...refs.archives, ...originals.map(source => source.archiveUri)])];
     const sessions = refs.sessions.map(session => `dsh-${session}`);
-    const result = await this.database.query(`SELECT 1 FROM evimed_memory.history_message_rejections h
+    const values = [context.ownerId, context.ownerCreatedAt, context.namespaceId, archives, sessions];
+    // Only a message that is exactly a withdrawn statement (its hash is the rejection's fingerprint) is withdrawn whole.
+    /** @type {SourceMessage[]} */
+    const fenced = (await this.database.query(`SELECT h.archive_uri,h.message_hash,h.fingerprint,c.source_session
+      FROM evimed_memory.history_message_rejections h
       JOIN evimed_memory.native_rejections r ON r.user_id=h.owner_id AND r.memory_type=h.memory_type AND r.fingerprint=h.fingerprint
       LEFT JOIN evimed_memory.native_commits c ON c.user_id=h.owner_id AND c.archive_uri=h.archive_uri
-      WHERE h.owner_id=$1 AND h.owner_created_at=$2 AND h.namespace_id=$3
+      WHERE h.owner_id=$1 AND h.owner_created_at=$2 AND h.namespace_id=$3 AND h.message_hash=h.fingerprint
         AND (h.archive_uri=ANY($4::text[]) OR split_part(split_part(h.archive_uri,'/sessions/',2),'/',1)=ANY($5::text[])
-          OR c.source_session=ANY($5::text[])) LIMIT 1`,
-    [context.ownerId, context.ownerCreatedAt, context.namespaceId, archives, sessions]);
-    if (result.rows.length) return true;
+          OR c.source_session=ANY($5::text[]))`, values)).rows;
+    /** @type {SourceMessage[]} */
+    const recorded = fenced.length ? (await this.database.query(`SELECT w.archive_uri,w.message_hash,c.source_session
+      FROM evimed_memory.history_write_messages w
+      LEFT JOIN evimed_memory.native_commits c ON c.user_id=w.owner_id AND c.archive_uri=w.archive_uri
+      WHERE w.owner_id=$1 AND w.owner_created_at=$2 AND w.namespace_id=$3 AND w.message_hash<>''
+        AND (w.archive_uri=ANY($4::text[]) OR split_part(split_part(w.archive_uri,'/sessions/',2),'/',1)=ANY($5::text[])
+          OR c.source_session=ANY($5::text[]))`, values)).rows : [];
+    if (wholeSourceWithdrawn({ archives, sessions, fenced, recorded, covered })) return true;
     // Source-conversation deletion uses permanent history fences, even while its
     // physical cleanup is waiting for the account's active conversations to stop.
     const deleted = await this.database.query(`SELECT 1 FROM evimed_memory.history_fences f

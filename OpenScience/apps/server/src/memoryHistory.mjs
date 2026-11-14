@@ -1,4 +1,4 @@
-import { removalRefusals, removalText, removalStatement, retainedRemovalKey } from './nativeMemoryRejections.mjs';
+import { removalRefusals, removalText, removalStatement, retainedRemovalKey, lineDecisionKey, decisionCovers } from './nativeMemoryRejections.mjs';
 import { recordNativeMaintenance } from './nativeMemoryMetrics.mjs';
 import { lineFingerprint, nativeMemoryRejectionType, originalSources } from './nativeMemoryOverlay.mjs';
 import { hardTokens, sourceHasToken } from './nativeMemoryHardTokens.mjs';
@@ -147,15 +147,24 @@ export class MemoryHistory {
       if (!text) { kept.push(line); continue; }
       const sources = originalSources(origins.get(lineFingerprint(text)));
       const messages = this.nativeRemovalSources ? await this.nativeRemovalSources(context.ownerId, sources, context) : [];
-      const receipt = await overlay.instructionCheck?.(context.ownerId, retainedRemovalKey(uri, text, authority));
-      // A person's explicit replacement on the memory page is already their statement.
-      // Its exact line and the entire current removal authority bind this permission.
-      if (receipt?.explicitEdit === true) { kept.push(line); continue; }
-      const refused = await removalRefusals({ userId: context.ownerId, overlay, namespaceId, candidates: [{text, sources: messages}] });
-      const retained = receipt?.retainedAfterRemoval === true;
-      if (refused.size || !retained && await this.ledger.derivedSourcesRejected(context, {
+      const legacy = await overlay.instructionCheck?.(context.ownerId, retainedRemovalKey(uri, text, authority));
+      // A legacy receipt was bound to the whole authority of its time and still covers exactly that.
+      if (legacy?.explicitEdit === true) { kept.push(line); continue; }
+      // A person's explicit replacement on the memory page is already their statement, and a line they kept while removing
+      // others was their decision too. Each covers the removals it was made under; a later removal is judged on its own.
+      const all = authority.map((/** @type {{fingerprint:string}} */ row) => row.fingerprint);
+      const edit = decisionCovers(await overlay.instructionCheck?.(context.ownerId, lineDecisionKey('edit', uri, text)), 'explicitEdit');
+      const retained = decisionCovers(await overlay.instructionCheck?.(context.ownerId, lineDecisionKey('retained', uri, text)), 'retainedAfterRemoval')
+        ?? (legacy?.retainedAfterRemoval === true ? all : null);
+      const judged = edit ? authority.filter((/** @type {{fingerprint:string}} */ row) => !edit.includes(row.fingerprint)) : authority;
+      const view = { removals: async () => judged, instructionCheck: (/** @type {string} */ owner, /** @type {string} */ key) => overlay.instructionCheck?.(owner, key),
+        recordInstructionCheck: (/** @type {string} */ owner, /** @type {string} */ key, /** @type {unknown} */ value) => overlay.recordInstructionCheck?.(owner, key, value) };
+      const refused = judged.length ? await removalRefusals({ userId: context.ownerId, overlay: view, namespaceId, candidates: [{text, sources: messages}] }) : new Map();
+      if (refused.size) continue;
+      const covered = [...(edit ?? []), ...(retained ?? [])];
+      if (legacy?.retainedAfterRemoval !== true && await this.ledger.derivedSourcesRejected(context, {
         archives: sources.map(source => source.archiveUri).filter(Boolean), sessions: [],
-      })) continue;
+      }, { covered })) continue;
       kept.push(line);
     }
     return kept.some(line => removalText(line)) ? kept.join('\n') : null;

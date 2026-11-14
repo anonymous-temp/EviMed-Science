@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { lineRefusal } from '../src/nativeMemoryWorker.mjs';
 import { lineFingerprint } from '../src/nativeMemoryOverlay.mjs';
-import { removalLines, removalRefusals } from '../src/nativeMemoryRejections.mjs';
+import { removalAssertionKey, removalLines, removalRefusals } from '../src/nativeMemoryRejections.mjs';
 import { hardTokens, sourceHasToken } from '../src/nativeMemoryHardTokens.mjs';
 
 const removal = { fingerprint: lineFingerprint('Project M-41633.'), text: 'Project M-41633.', rejectedAt: '2026-11-10T10:00:00.000Z' };
@@ -118,4 +118,20 @@ for (const witnesses of [undefined, new Map([[0, 8]])]) test('a stated index wit
   const judge = { same: async () => ({ same: new Map([[0, removal.fingerprint]]), stated: new Set([0]), witnesses }) };
   assert.equal((await removalRefusals({ userId: 'u', overlay, judge,
     candidates: [{ text: removal.text, sources: [source('Did I use project M-41633?')] }] })).size, 1);
+});
+
+test('FT12 a later message that is exactly the removed statement re-admits it without a model; a question, quote, assistant or old message never does', async () => {
+  const text = 'Private source A.', rejectedAt = removal.rejectedAt, receipts = new Map();
+  const guard = { removals: async () => [{ text, fingerprint: lineFingerprint(text), rejectedAt }],
+    instructionCheck: async (/** @type {string} */ _owner, /** @type {string} */ key) => receipts.get(key),
+    recordInstructionCheck: async (/** @type {string} */ _owner, /** @type {string} */ key, /** @type {unknown} */ value) => { receipts.set(key, value); } };
+  const refused = async (/** @type {any[]} */ sources, candidate = `${text} (as of 2026-11-14)`) =>
+    (await removalRefusals({ userId: 'u', overlay: guard, candidates: [{ text: candidate, sources }] })).size;
+  for (const other of [source('Is it Private source A.?'), source(`The earlier chat said “${text}”`), source(text, '2026-11-10T11:00:00.000Z', 'assistant'),
+    source(text, '2026-11-10T09:00:00.000Z'), source(`${text} And B.`)]) assert.equal(await refused([other]), 1, `${other.role}: ${other.text}`);
+  assert.equal(receipts.size, 0, 'no refused source leaves a receipt');
+  assert.equal(await refused([source(text)]), 0, 'the person said it again, as a whole message, in a new conversation');
+  assert.equal(receipts.get(removalAssertionKey(null, { fingerprint: lineFingerprint(text), rejectedAt }, text, source(text)))?.removalAssertion, true,
+    'the history reader shares the same receipt for that new message');
+  assert.equal(await refused([source(text)], `${text} Also B.`), 1, 'a line that adds to the restated words is not authorized by them');
 });
