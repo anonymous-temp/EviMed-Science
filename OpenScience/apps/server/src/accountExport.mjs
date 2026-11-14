@@ -179,6 +179,8 @@ export function accountExportTables(source = queries) {
  * the next migration into an outage for every export until someone edited this
  * file, and the export is not where that should be discovered. */
 export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
+  "evimed_memory.map_edge_dismissals": "opaque account-scoped map corrections and confirmed distinct-person pairs; hashes name deployment-local file paths and are not portable identity facts",
+  "evimed_memory.native_person_merges": "deployment-local exact-path redirects and two-file undo before-images; current merged content leaves through native-memory.zip and the operation through native revisions; snapshots can contain withdrawn facts and are not exported",
   "evimed_memory.native_accounts": "engine registration, scan and consolidation scheduling state; the account's memory files leave through memory/native-memory.zip, not the engine's maintenance authority",
   "evimed_memory.native_summary_invalidations": "generation tickets for rebuilding engine directory summaries after writes; an operational outbox, not authored memory content",
   "evimed_memory.native_source_copies": "derived archive-to-copy bindings used to prevent a synthetic memory write from manufacturing new source authority; not portable customer content",

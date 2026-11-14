@@ -209,6 +209,8 @@ const OPENVIKING_NARRATION = Object.freeze({
   // The tool takes the person's own words as `messages`; a reader is shown the first of them.
   remember: (args) => `记住：${excerpt(Array.isArray(args?.messages) ? args.messages.find((/** @type {any} */ message) => message?.role === 'user')?.content : args?.text, 32)}`,
   forget: () => '忘记一条记忆',
+  merge_people: () => '合并已确认的人物记忆',
+  distinct_people: () => '记录两位不同的人',
 })
 
 /** @type {Readonly<Record<string, (args: Record<string, any>, result: any) => string>>} */

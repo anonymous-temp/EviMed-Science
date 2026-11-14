@@ -304,9 +304,10 @@ export const OPENVIKING_MCP_TOOL_PREFIX = `mcp__${OPENVIKING_MCP_SERVER_NAME}__`
 export const OPENVIKING_MEMORY_TOOL_BASE_NAMES = Object.freeze(['search', 'read', 'list', 'remember', 'forget'])
 export const OPENVIKING_MEMORY_TOOL_NAMES = Object.freeze(OPENVIKING_MEMORY_TOOL_BASE_NAMES.map((name) => `${OPENVIKING_MCP_TOOL_PREFIX}${name}`))
 
-/** @param {string} name @returns {boolean} one of the five memory tools, under the name the model sees */
-export function isOpenVikingMemoryToolName(name) {
+/** @param {string} name @param {boolean} [personMerge] @returns {boolean} an enabled memory tool, under the name the model sees */
+export function isOpenVikingMemoryToolName(name, personMerge = false) {
   return OPENVIKING_MEMORY_TOOL_NAMES.includes(String(name ?? ''))
+    || personMerge && ['merge_people', 'distinct_people'].some(base => name === `${OPENVIKING_MCP_TOOL_PREFIX}${base}`)
 }
 
 /** @param {string} name @returns {boolean} any tool of the plugin's MCP server, admitted or not */

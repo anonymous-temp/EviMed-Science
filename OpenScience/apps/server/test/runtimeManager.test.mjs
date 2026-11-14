@@ -4922,6 +4922,7 @@ test('the three memory guidance switches stay independent in both launch paths',
   const plan = { sandboxMode: 'docker', dshHomeDir: '/runtime/dsh-home', capsuleMethodCount: 0 };
   const switches = [
     ['memoryForgetToolHintEnabled', 'EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED'],
+    ['memoryPersonMergeEnabled', 'EVIMED_MEMORY_PERSON_MERGE_ENABLED'],
     ['memoryForgetTargetsEnabled', 'EVIMED_MEMORY_FORGET_TARGETS_ENABLED'],
     ['memoryStandingInstructionsEnabled', 'EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED'],
   ];

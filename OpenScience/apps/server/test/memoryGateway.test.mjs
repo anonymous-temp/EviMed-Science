@@ -13,6 +13,8 @@ import { createMemoryAdmission, isPlatformStartedRun } from "../src/memoryAdmiss
 import {
   MEMORY_GATEWAY_PATH, MEMORY_GATEWAY_TOOLS, PLUGIN_CONTEXT_TAG, capsuleSearchText, createMemoryGatewayHandler, filterCapturedMessage, memoryGatewayRoutePattern, parseEventStream,
 } from "../src/memoryGateway.mjs";
+import { MapEdgeCorrections } from '../src/memoryMapEdges.mjs';
+import { personPairId } from '../src/nativeMemoryPeople.mjs';
 import { nativeMemoryCounters, resetNativeMemoryMetrics } from "../src/nativeMemoryMetrics.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
 import { openVikingUserId } from "../src/openVikingLayout.mjs";
@@ -44,7 +46,7 @@ function fixedAdmission(answer = {}) {
   return { asked, admit: async (caller) => { asked.push(caller.engineSessionId ?? null); return { ...base, ...(typeof answer === "function" ? answer(caller) : answer) }; } };
 }
 
-async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, timeoutMs = 4_000, project = {}, memoryContexts = null, rememberJournal = null } = {}) {
+async function fixture(t, { admission = fixedAdmission(), config = {}, overlay = null, stubOptions = {}, memoryTool = null, personMessages = null, capsuleSearch = null, historySearch = null, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, timeoutMs = 4_000, project = {}, memoryContexts = null, rememberJournal = null } = {}) {
   resetNativeMemoryMetrics();
   const stub = await startOpenVikingStub(t, stubOptions);
   const client = new OpenVikingClient({ openVikingUrl: stub.url, openVikingApiKey: stub.apiKey, openVikingAccount: "evimed" });
@@ -54,7 +56,7 @@ async function fixture(t, { admission = fixedAdmission(), config = {}, overlay =
     config: { memoryEngineEnabled: true, memoryEnabled: true, ...config },
     runtimeManager: { assertActiveEviMedWorkloadToken: async (token) => { if (token === TOKEN) return { userId: USER, projectId: "p1" }; throw new Error("no"); }, runtimeGeneration: () => "generation-1" },
     store: { userById: async (id) => (id === USER ? { id } : null), requireProject: async (_user, id) => ({ id, userId: USER, ...project }) },
-    sessions, admission, overlay, memoryTool, capsuleSearch, historySearch, sourceDeletion, sourceReceipt, sourceReceiptFailed,
+    sessions, admission, overlay, memoryTool, personMessages, capsuleSearch, historySearch, sourceDeletion, sourceReceipt, sourceReceiptFailed,
     memoryContexts: typeof memoryContexts === "function" ? memoryContexts(sessions) : memoryContexts, rememberJournal,
   });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
@@ -1510,5 +1512,55 @@ test('alias identity cannot reconstruct a withdrawn title from its filename or o
   for (const response of responses) {
     assert.doesNotMatch(JSON.stringify(response), /小王阿姨|possibly the same person/);
     assert.match(JSON.stringify(response), /Likes walking/);
+  }
+});
+
+
+test('people tools require the switch, a bound conversation and a verbatim user confirmation', async t => {
+  const keep = `${ROOT}/memories/people/王阿姨.md`, merge = `${ROOT}/memories/people/小王阿姨.md`;
+  const confirmation = '王阿姨和小王阿姨是同一个人。', calls = [];
+  const memoryTool = { forget: async () => ({ removed: false }), people: async (...args) => { calls.push(args); return { revisionId: '1' }; } };
+  const personMessages = async () => [{ role: 'user', text: confirmation }, { role: 'assistant', text: 'This is an assistant assertion.' }];
+  const f = await fixture(t, { config: { memoryPersonMergeEnabled: true }, memoryTool, personMessages,
+    admission: fixedAdmission({ sessionId: SESSION.slice(4) }) });
+  const listed = await f.mcp({ id: 1, method: 'tools/list' });
+  assert.ok(listed.messages[0].result.tools.some(tool => tool.name === 'merge_people'));
+  assert.ok(listed.messages[0].result.tools.some(tool => tool.name === 'distinct_people'));
+  const call = (name, arguments_) => f.mcp({ id: 2, method: 'tools/call', params: { name, arguments: arguments_ } });
+  for (const patch of [{ confirmation: undefined }, { confirmation: 'This is an assistant assertion.' }, { confirmation: 'Not said' },
+    { keep: merge }, { keep: keep.replace('/people/', '/notes/') }, { keep: keep.replace(OV_USER, 'another-user') }]) {
+    const answer = await call('merge_people', { keep, merge, confirmation, ...patch });
+    assert.ok(answer.messages[0].error, JSON.stringify(patch));
+  }
+  assert.equal(calls.length, 0);
+  assert.ok((await call('merge_people', { keep, merge, confirmation })).messages[0].result);
+  assert.equal(calls.length, 1); assert.equal(calls[0][2].engineSession, SESSION);
+  assert.ok((await call('distinct_people', { a: keep, b: merge, confirmation })).messages[0].result);
+  assert.equal(calls[1][2].distinct, true);
+  for (const config of [{}, { memoryPersonMergeEnabled: false }]) {
+    const off = await fixture(t, { config, memoryTool, personMessages });
+    const tools = (await off.mcp({ id: 1, method: 'tools/list' })).messages[0].result.tools;
+    assert.ok(tools.every(tool => !['merge_people', 'distinct_people'].includes(tool.name)));
+    assert.ok((await off.mcp({ id: 2, method: 'tools/call', params: { name: 'merge_people', arguments: { keep, merge, confirmation } } })).messages[0].error);
+  }
+  const unbound = await fixture(t, { config: { memoryPersonMergeEnabled: true }, memoryTool, personMessages });
+  assert.ok((await unbound.mcp({ id: 2, method: 'tools/call', params: { name: 'merge_people', arguments: { keep, merge, confirmation } } })).messages[0].error);
+});
+
+
+test('a confirmed distinct pair suppresses only its alias hint while switch-off preserves the existing hint', async t => {
+  const first = `${ROOT}/memories/people/王阿姨.md`, other = `${ROOT}/memories/people/小王阿姨.md`;
+  t.mock.method(MapEdgeCorrections.prototype, 'dismissed', async userId => {
+    assert.equal(userId, USER); return new Set([personPairId(first, other)]);
+  });
+  for (const enabled of [false, true]) {
+    const f = await fixture(t, { config: { memoryPersonAliasHintEnabled: true, memoryPersonMergeEnabled: enabled } });
+    f.stub.seedMemory(OV_USER, 'people/王阿姨.md', '# 王阿姨\n- Likes tea.');
+    f.stub.seedMemory(OV_USER, 'people/小王阿姨.md', '# 小王阿姨\n- Likes coffee.');
+    const answer = await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(first)}`);
+    assert.equal(answer.status, 200);
+    assert.equal(answer.json.result.includes('Related people files'), !enabled);
+    assert.match(answer.json.result, /Likes tea/);
+    assert.doesNotMatch(answer.json.result, /Likes coffee/);
   }
 });

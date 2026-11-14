@@ -189,6 +189,17 @@ CREATE INDEX IF NOT EXISTS native_revisions_user_id_idx ON evimed_memory.native_
 -- One diff is ingested once: the same archive never writes the same change of the same file twice.
 CREATE UNIQUE INDEX IF NOT EXISTS native_revisions_once_idx ON evimed_memory.native_revisions (user_id, archive_uri, uri, change)
   WHERE archive_uri IS NOT NULL;
+-- One user-confirmed merge is one revision, with a second before-image and a durable exact-path redirect.
+CREATE TABLE IF NOT EXISTS evimed_memory.native_person_merges (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  revision_id bigint PRIMARY KEY REFERENCES evimed_memory.native_revisions(id) ON DELETE CASCADE,
+  keep_uri text NOT NULL,
+  merge_uri text NOT NULL,
+  state text NOT NULL CHECK (state IN ('pending','applied','undone')),
+  snapshot jsonb,
+  CHECK (keep_uri <> merge_uri)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS native_person_merges_redirect_idx ON evimed_memory.native_person_merges(user_id,merge_uri) WHERE state <> 'undone';
 CREATE TABLE IF NOT EXISTS evimed_memory.native_files (
   user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   uri text NOT NULL CHECK (char_length(uri) BETWEEN 1 AND 600),

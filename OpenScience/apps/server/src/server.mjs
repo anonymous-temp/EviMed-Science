@@ -485,7 +485,7 @@ import { GeoInclusionClient, inclusionEnabled } from "./geoInclusionClient.mjs";
 import { assertBoundedRunAffordable, boundedRunBudget } from "./boundedRunBudget.mjs";
 import { createImModule } from "./imService.mjs";
 import { CAPSULE_GATEWAY_PATH, createCapsuleGatewayHandler, createNativeCapsuleSearch } from "./capsuleGateway.mjs";
-import { MEMORY_GATEWAY_PATH, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
+import { MEMORY_GATEWAY_PATH, filterCapturedMessage, createMemoryGatewayHandler, memoryGatewayRoutePattern } from "./memoryGateway.mjs";
 import { createMemoryAdmission } from "./memoryAdmission.mjs";
 import { isPlatformStartedRun } from "./memoryDispatch.mjs";
 import { OpenVikingSessions } from "./openVikingSessions.mjs";
@@ -1407,7 +1407,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // One judge of whether a line says what another says: it holds a line the engine wrote near one the person removed out (one call a
   // commit) and finds the other lines that say what a line the person forgot said (`nativeMemoryRejections.mjs`, `nativeMemoryForgetEverywhere.mjs`).
   const rejectionJudge = createRejectionJudge({ config, usageLedger });
-  const nativeMemory = new NativeMemoryStore({ personAliasHintEnabled: config.memoryPersonAliasHintEnabled, standingInstructionsEnabled: config.memoryStandingInstructionsEnabled, peopleAcrossProjectsEnabled: config.memoryPeopleAcrossProjectsEnabled, forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions: openVikingSessions, overlay: nativeMemoryOverlay, memoryContexts: nativeMemoryContexts, rejectionJudge,
+  const nativeMemory = new NativeMemoryStore({ personMergeEnabled: config.memoryPersonMergeEnabled, personAliasHintEnabled: config.memoryPersonAliasHintEnabled, standingInstructionsEnabled: config.memoryStandingInstructionsEnabled, peopleAcrossProjectsEnabled: config.memoryPeopleAcrossProjectsEnabled, forgetTargetsEnabled: config.memoryForgetTargetsEnabled, sessions: openVikingSessions, overlay: nativeMemoryOverlay, memoryContexts: nativeMemoryContexts, rejectionJudge,
     report: (line) => process.stderr.write(`${line}\n`),
     // The conversation a memory came out of is named from the run ledger, which is composed further down.
     conversationTitles: (userId, refs) => nativeConversationTitles(userId, refs) });
@@ -5358,6 +5358,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     ? subscriptionsForAudience({ subscriptions: zoneSubscriptions, userById: userId => store.userById(userId), allows: user => frontier.service.allows(user) }) : null;
   const memoryGatewayHandler = createMemoryGatewayHandler({
     config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
+    personMessages: async (project, sessionId) => {
+      // Read the kernel's recorded human messages, never the tool's role-labelled remember arguments.
+      // Admission binds the only running conversation; a concurrent or unbound call is refused before this reader.
+      const transcript = await runtimeManager.sessionTranscript(project, sessionId, { wake: false });
+      return transcript.messages.filter(message => message.role === 'user' && message.source === 'user').flatMap(message => {
+        const captured = filterCapturedMessage(message);
+        return 'forward' in captured ? [{ role: 'user', text: captured.forward.parts.map(part => part.text).join('\n') }] : [];
+      });
+    },
     memoryContexts: nativeMemoryContexts, rememberJournal: nativeRememberJournal,
     historySecrets: memoryHistory?.secrets,
     historySearch: memoryHistory ? request => memoryHistory.search(request, { includeWithdrawn: true }) : null,

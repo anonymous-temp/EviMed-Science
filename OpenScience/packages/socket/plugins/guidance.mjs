@@ -48,6 +48,7 @@ export const inject = ['systemPrompt']
  * @property {boolean} [capsuleMemoryEnabled]
  * @property {boolean} [openVikingMemory]
  * @property {boolean} [memoryForgetToolHint]
+ * @property {boolean} [memoryPersonMerge]
  * @property {boolean} [memoryForgetTargets]
  * @property {boolean} [memorySearchHint]
  * @property {boolean} [memoryStandingInstructions]
@@ -79,6 +80,7 @@ export const Config = Schema.object({
   capsuleMemoryEnabled: Schema.boolean().default(true)
     .description('Whether the capsule row\'s recall and note tools are mounted (EVIMED_CAPSULE_MEMORY_ENABLED, and not an account on the native memory engine); off, the guidance does not name them.'),
   memoryForgetToolHint: Schema.boolean().default(false).description('Act on explicit forget requests before claiming completion.'),
+  memoryPersonMerge: Schema.boolean().default(false).description('Ask before merging or distinguishing people files.'),
   memoryForgetTargets: Schema.boolean().default(false).description('Support exact-line and history-only forget targets.'),
   memorySearchHint: Schema.boolean().default(false)
     .description('Explain the partial memory opening and search before claiming absence (EVIMED_MEMORY_SEARCH_HINT_ENABLED).'),
@@ -106,6 +108,7 @@ export async function apply(ctx, config) {
     // Wording switches use the launch environment without changing the recorded preset composition.
     memorySearchHint: config.memorySearchHint === true || isLaunchFlagEnabled('EVIMED_MEMORY_SEARCH_HINT_ENABLED'),
     memoryForgetToolHint: config.memoryForgetToolHint === true || isLaunchFlagEnabled('EVIMED_MEMORY_FORGET_TOOL_HINT_ENABLED'),
+    memoryPersonMerge: config.memoryPersonMerge === true || isLaunchFlagEnabled('EVIMED_MEMORY_PERSON_MERGE_ENABLED'),
     memoryForgetTargets: config.memoryForgetTargets === true || isLaunchFlagEnabled('EVIMED_MEMORY_FORGET_TARGETS_ENABLED'),
     memoryStandingInstructions: config.memoryStandingInstructions === true || isLaunchFlagEnabled('EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED'),
   })

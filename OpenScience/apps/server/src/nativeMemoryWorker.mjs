@@ -865,13 +865,10 @@ export class NativeMemoryWorker {
         await this.nativeMemory.withdrawInferredChoices(userId, choices, explicit);
       }
     }
-    if (!sourceDeleted && context.kind !== 'geo-project' && this.config.memoryPersonAliasHintEnabled === true && this.nativeMemory) {
-      const sources = await this.verification.readRemovalSources(userId, [{ archiveUri: commit.archiveUri, projectId: commit.projectId }], context);
-      for (const operation of [...(operations.adds ?? []), ...(operations.updates ?? [])]) {
-        if (nativeMemoryFile(operation.uri, root)?.type !== 'people' || !operation.after) continue;
-        const names = confirmedAliasRequest(operation.after, sources);
-        if (names.length) await this.nativeMemory.mergeConfirmedAliases(userId, operation.uri, operation.after, names);
-      }
+    // Similar names and extractor-authored markers never merge identities. Only an already confirmed exact redirect applies.
+    if (!sourceDeleted && this.config.memoryPersonMergeEnabled === true && this.nativeMemory) {
+      await this.nativeMemory.redirectPeople(userId, context, [...(operations.adds ?? []), ...(operations.updates ?? [])]
+        .filter(operation => nativeMemoryFile(operation.uri, root)?.type === 'people').map(operation => operation.uri));
     }
     recordNativeOperations(counts);
     return counts.added + counts.updated + counts.deleted;

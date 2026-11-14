@@ -549,15 +549,16 @@ export function unmetDependencies(item, items, delivered) {
  * refused outright, and a tool the server gained after this build still
  * belongs to the children that ask for it.
  * @param {readonly string[]} registered
+ * @param {boolean} [personMerge]
  * @returns {string[]}
  */
-export function rootHiddenMcpTools(registered) {
+export function rootHiddenMcpTools(registered, personMerge = false) {
   const visible = new Set(ROOT_VISIBLE_MCP_BASE_NAMES)
   return [...new Set(registered)]
     .filter((name) => (name.startsWith(MCP_TOOL_PREFIX) && !visible.has(name.slice(MCP_TOOL_PREFIX.length)))
       // The OpenViking memory plugin's server advertises twenty tools and the memory gateway lists five; any other the
       // registry holds is not admitted, whatever answered the listing.
-      || (isOpenVikingToolName(name) && !isOpenVikingMemoryToolName(name)))
+      || (isOpenVikingToolName(name) && !isOpenVikingMemoryToolName(name, personMerge)))
     .sort()
 }
 

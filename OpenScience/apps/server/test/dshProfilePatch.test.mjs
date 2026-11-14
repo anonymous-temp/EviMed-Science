@@ -648,3 +648,10 @@ test('standing reply instructions reach socket guidance and default off', () => 
   assert.equal(runtimeEnvironment(enabled).EVIMED_MEMORY_STANDING_INSTRUCTIONS_ENABLED, '1');
   assert.equal(renderProfilePatch(enabled), renderProfilePatch(input), 'only the launch environment changes; a host patch cannot address agent-scoped guidance');
 });
+
+test('confirmed people merge reaches runtime guidance and defaults off', () => {
+  assert.equal(runtimeEnvironment(input).EVIMED_MEMORY_PERSON_MERGE_ENABLED, '0');
+  const enabled = { ...input, flags: { ...input.flags, memoryPersonMerge: true } };
+  assert.equal(runtimeEnvironment(enabled).EVIMED_MEMORY_PERSON_MERGE_ENABLED, '1');
+  assert.equal(renderProfilePatch(enabled), renderProfilePatch(input));
+});

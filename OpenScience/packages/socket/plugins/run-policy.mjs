@@ -1,3 +1,4 @@
+import { isLaunchFlagEnabled } from '@evimed/harness-port'
 /**
  * "When is a run finished, and when is it acceptable."
  *
@@ -677,7 +678,7 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       if (registered.length && !registered.some((tool) => tool.startsWith(MCP_TOOL_PREFIX))) {
         diagnostics(sessionId)?.degrade?.('root research-tool narrowing found no research tools registered at session start')
       } else {
-        const deny = rootHiddenMcpTools(registered).filter((tool) => !keep.has(tool))
+        const deny = rootHiddenMcpTools(registered, isLaunchFlagEnabled('EVIMED_MEMORY_PERSON_MERGE_ENABLED')).filter((tool) => !keep.has(tool))
         if (deny.length) disposers.push(restrictAgentTools(agent, { deny }))
       }
     } catch (error) {

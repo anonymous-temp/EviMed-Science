@@ -1,3 +1,5 @@
+import { PERSON_MEMORY_TOOLS, personDecisionRefusal, personPairId } from './nativeMemoryPeople.mjs';
+import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
 import { closePersonNames, confirmedAliases, personLabel } from './nativeMemoryInduction.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
@@ -385,7 +387,8 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   sourceReceipt?: ((request:any)=>Promise<void>) | null,
  *   sourceReceiptFailed?: ((request:any)=>Promise<void>) | null,
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
- *   memoryTool?: { forget: (user: any, project: any, uri: string | null, options?: any) => Promise<{ removed: boolean, removedLines?: number, fileRemoved?: boolean, historyRejected?: boolean, historyScanPending?: boolean, missingLines?: string[], availableLines?: string[] }> } | null,
+ *   personMessages?: ((project: Record<string, unknown>, sessionId: string) => Promise<{role:string,text:string}[]>) | null,
+ *   memoryTool?: { people?: import('./nativeMemoryStore.mjs').NativeMemoryStore['people'], forget: (user: any, project: any, uri: string | null, options?: any) => Promise<{ removed: boolean, removedLines?: number, fileRemoved?: boolean, historyRejected?: boolean, historyScanPending?: boolean, missingLines?: string[], availableLines?: string[] }> } | null,
  *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
  *   historySecrets?: import("./memoryHistorySecrets.mjs").MemoryHistorySecrets | null,
  *   historySearch?: ((request: any) => Promise<any[]>) | null,
@@ -397,7 +400,9 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  * @returns {((req: any, res: any, onFailure?: (failure: any) => void) => Promise<void>) & { commitSession: MemoryGatewayCommitSession }}
  *   the request handler, with the one function the control plane commits a conversation by (`nativeTurnCommit.mjs`)
  */
-export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, overlay = null, memoryTool = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, historySecrets = null, now = () => Date.now() }) {
+export function createMemoryGatewayHandler({ config, runtimeManager, store, sessions, admission, sourceDeletion = null, sourceReceipt = null, sourceReceiptFailed = null, overlay = null, memoryTool = null, personMessages = null, memoryContexts = null, rememberJournal = null, capsuleSearch = null, historySearch = null, historySecrets = null, now = () => Date.now() }) {
+  const personEdges = new MapEdgeCorrections({ database: overlay?.database });
+  const peopleEnabled = config.memoryPersonMergeEnabled === true && typeof memoryTool?.people === 'function' && personMessages !== null;
   const enabled = config.memoryEngineEnabled === true && config.memoryEnabled !== false && Boolean(sessions?.configured);
   const maxBodyBytes = Math.max(1_024, Number(config.memoryGatewayMaxBodyBytes) || 1_048_576);
   const ratePerMinute = Math.max(0, Number(config.memoryGatewayRatePerMinute ?? 600) || 0);
@@ -898,6 +903,19 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (!ctx.recallFile(absolute(uri, ctx.userRoot)) || await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...missing, outcome: "local" };
       if (ctx.shared) await ctx.ensureRegistered();
       let text = await ctx.readMemory(uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
+      if (text === null && config.memoryPersonMergeEnabled === true && overlay) {
+        const redirects = await overlay.personMerges(ctx.user.id), visited = new Set([uri]);
+        let redirected = redirects.find(row => row.mergeUri === uri && row.state === 'applied');
+        while (redirected) {
+          const target = redirected.keepUri;
+          if (visited.has(target) || !insideNativeMemories(target, ctx.userRoot) || await ctx.hidden(target)
+            || !await ctx.personIdentityVisible(uri, '')) return missing;
+          visited.add(target);
+          uri = await ctx.checkUri(target);
+          redirected = redirects.find(row => row.mergeUri === uri && row.state === 'applied');
+        }
+        if (visited.size > 1) text = await ctx.readMemory(uri);
+      }
       if (text === null && config.memoryPersonAliasHintEnabled === true && nativeMemoryFile(uri, `${ctx.userRoot}/memories`)?.type === 'people') {
         if (!await ctx.personIdentityVisible(uri, '')) return missing;
         const label = personLabel(uri, '');
@@ -990,14 +1008,15 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         handshake = false;
         const name = String(message.params?.name ?? "");
         const args = message.params?.arguments && typeof message.params.arguments === "object" ? message.params.arguments : {};
-        if (!TOOL_NAMES.includes(name)) {
+        const personOperation = name === 'merge_people' || name === 'distinct_people';
+        if (!TOOL_NAMES.includes(name) && !(peopleEnabled && personOperation)) {
           recordGatewayRefusal("memory_gateway_tool_refused");
           local.push(rpcError(message.id, -32601, `Tool not available: ${name}`));
           continue;
         }
         const admitted = await ctx.admit(null);
         // Every URI a tool names stays inside the caller's own space: `read` takes `uris`, `list` and `forget` `uri`, `search` `target_uri`.
-        const named = [args.uri, args.target_uri, ...(Array.isArray(args.uris) ? args.uris : [args.uris])].filter((value) => typeof value === "string" && value);
+        const named = [args.uri, args.target_uri, ...(personOperation ? [args.keep, args.merge, args.a, args.b] : []), ...(Array.isArray(args.uris) ? args.uris : [args.uris])].filter((value) => typeof value === "string" && value);
         if (named.some((uri) => !insideNativeMemories(uri, ctx.userRoot))) {
           recordGatewayRefusal("memory_gateway_uri_refused");
           local.push(rpcError(message.id, -32602, "The URI is outside the user's own memories."));
@@ -1009,6 +1028,34 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             try { await ctx.checkUri(uri); } catch { refusedUri = true; break; }
           }
           if (refusedUri) { local.push(rpcError(message.id, -32602, 'The URI is outside this project memory context.')); continue; }
+        }
+        if (personOperation) {
+          if (!admitted.learn || !admitted.recall || !admitted.sessionId || !personMessages || !memoryTool?.people) {
+            local.push(rpcError(message.id, -32602, 'A single current human conversation with writable memory is required.')); continue;
+          }
+          const left = name === 'merge_people' ? args.keep : args.a, right = name === 'merge_people' ? args.merge : args.b;
+          const a = typeof left === 'string' ? absolute(left, ctx.userRoot) : '';
+          const b = typeof right === 'string' ? absolute(right, ctx.userRoot) : '';
+          /** @type {{role:string,text:string}[]} */
+          let evidenceMessages;
+          try { evidenceMessages = await personMessages(ctx.project, admitted.sessionId); }
+          catch { local.push(rpcError(message.id, -32602, 'The current conversation could not be read. No people files changed; retry when it is available.')); continue; }
+          const reason = personDecisionRefusal({ root: ctx.userRoot, a, b, confirmation: args.confirmation, messages: evidenceMessages });
+          if (reason) { local.push(rpcError(message.id, -32602, reason)); continue; }
+          const otherProjects = overlay ? await overlay.otherProjectUris(ctx.user.id, ctx.project.id, 10000,
+            { peopleAcrossProjects: false, memoryRoot: `${ctx.userRoot}/memories` }) : [];
+          if (otherProjects.includes(a) || otherProjects.includes(b) || await ctx.hidden(a) || await ctx.hidden(b)) {
+            local.push(rpcError(message.id, -32602, 'These people files are not writable in this conversation.')); continue;
+          }
+          let result;
+          try { result = await memoryTool.people(ctx.user, ctx.project, { a, b, distinct: name === 'distinct_people', engineSession: `dsh-${admitted.sessionId}` }); }
+          catch (error) {
+            if (!(error instanceof HttpError) || !['memory_conflict', 'memory_scope_denied', 'memory_payload_invalid', 'memory_source_cleanup_busy', 'memory_map_edges_full'].includes(error.code)) throw error;
+            local.push(rpcError(message.id, -32602, error.message)); continue;
+          }
+          local.push(toolText(message.id, name === 'distinct_people' ? 'Recorded that these are different people. This pair will no longer be suggested.'
+            : `Merged the confirmed people files. Both histories are retained; undo is available on the memory page. ${JSON.stringify(result)}`));
+          continue;
         }
         if (READ_TOOLS.has(name)) {
           if (!admitted.recall) {
@@ -1025,7 +1072,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           if (name === "read") {
             const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && ctx.recallFile(absolute(uri, ctx.userRoot)) && !isHidden(uri)).slice(0, 10).map(uri => absolute(uri, ctx.userRoot));
             if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件。")); continue; }
-            if (overlay?.memoryForgetBody || config.memoryDeferredSummaryRebuildEnabled === true || config.memoryObservationInductionEnabled === true || config.memoryPersonAliasHintEnabled === true) {
+            if (overlay?.memoryForgetBody || config.memoryDeferredSummaryRebuildEnabled === true || config.memoryObservationInductionEnabled === true || config.memoryPersonAliasHintEnabled === true || config.memoryPersonMergeEnabled === true) {
               const content = [];
               for (const uri of uris) {
                 const read = await handlers.read({ ...ctx, query: new URLSearchParams({ uri, model_use: 'true' }) });
@@ -1200,6 +1247,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           message.result.tools = message.result.tools.filter((/** @type {any} */ tool) => TOOL_NAMES.includes(tool?.name))
             .map((/** @type {any} */ tool) => ({ name: tool.name, ...(tool.name === 'forget' && config.memoryForgetTargetsEnabled === true && memoryTool ? TARGETED_FORGET_TOOL
               : (ctx.shared ? PROJECT_MEMORY_TOOLS : MEMORY_GATEWAY_TOOLS)[/** @type {keyof typeof MEMORY_GATEWAY_TOOLS} */ (tool.name)]) }));
+          if (peopleEnabled) message.result.tools.push(...Object.entries(PERSON_MEMORY_TOOLS).map(([name, schema]) => ({ name, ...schema })));
         }
         const after = afterCall.get(message?.id);
         if (after) await after(message).catch(error => {if(error instanceof HttpError&&error.code==="memory_scope_denied")throw error;});
@@ -1316,7 +1364,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             return rows;
           })();
           const label = personLabel(uri, text), aliases = confirmedAliases(text);
-          const siblings = (await people).filter(row => row.uri !== uri && (closePersonNames(label, row.label)
+          const distinct = config.memoryPersonMergeEnabled === true ? await personEdges.dismissed(user.id) : new Set();
+          const siblings = (await people).filter(row => row.uri !== uri && !distinct.has(personPairId(uri, row.uri)) && (closePersonNames(label, row.label)
             || aliases.includes(row.label) || row.aliases.includes(label))).slice(0, 8);
           if (!siblings.length) return text;
           return `${text}\n\nRelated people files (possibly the same person — not confirmed; ask the user or report separately; never mix their facts):\n`
