@@ -1,6 +1,9 @@
+import { mergePeopleFiles, undoPeopleMerge, redirectPeopleWrites } from './nativeMemoryPeopleStore.mjs';
+import { personPairId, personProjectScope } from './nativeMemoryPeople.mjs';
+import { MapEdgeCorrections } from './memoryMapEdges.mjs';
 import { orderStandingPreferences } from './memoryOpeningByUse.mjs';
 import { personalMemoryTravels } from './openVikingLayout.mjs';
-import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, confirmedAliases, aliasesFor, aliasVariants, personLabel } from './nativeMemoryInduction.mjs';
+import { inferredChoiceMessage, choiceRows, choiceKey, normaliseChoice, aliasesFor, aliasVariants, personLabel } from './nativeMemoryInduction.mjs';
 import { forgetRequestId } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
@@ -416,18 +419,20 @@ export class NativeMemoryStore {
    *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
    *   now?: () => Date, conversationTitles?: ConversationTitles | null,
    *   rejectionJudge?: { same: (request: any) => Promise<{ same: Map<number, string>, stated: Set<number> }> } | null,
-   *   report?: (line: string) => void, settleExtractionsMs?: number, forgetTargetsEnabled?: boolean, personAliasHintEnabled?: boolean, standingInstructionsEnabled?: boolean, peopleAcrossProjectsEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
+   *   report?: (line: string) => void, settleExtractionsMs?: number, forgetTargetsEnabled?: boolean, personAliasHintEnabled?: boolean, personMergeEnabled?: boolean, standingInstructionsEnabled?: boolean, peopleAcrossProjectsEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
    *   `conversationTitles` names the conversations a memory came out of (the run ledger knows them; this store does not). `rejectionJudge` is the
    *   rejection list's own judge (`nativeMemoryRejections.mjs`), asked which other lines say what a forgotten one said
    *   (`nativeMemoryForgetEverywhere.mjs`); absent, only the lines that contain a forgotten line's words go with it. `memoryContexts` names
    *   the registered namespaces (the account's own and each shared GEO project's, `geoNativeMemoryContext.mjs`).
    */
   constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, report = () => {},
-    settleExtractionsMs = 20_000, forgetTargetsEnabled = false, personAliasHintEnabled = false, standingInstructionsEnabled = false, peopleAcrossProjectsEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
+    settleExtractionsMs = 20_000, forgetTargetsEnabled = false, personAliasHintEnabled = false, personMergeEnabled = false, standingInstructionsEnabled = false, peopleAcrossProjectsEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
     this.sessions = sessions;
     this.standingInstructionsEnabled = standingInstructionsEnabled;
     this.peopleAcrossProjectsEnabled = peopleAcrossProjectsEnabled;
     this.forgetTargetsEnabled = forgetTargetsEnabled === true;
+    this.personMergeEnabled = personMergeEnabled === true;
+    this.personEdges = new MapEdgeCorrections({ database: overlay.database });
     this.personAliasHintEnabled = personAliasHintEnabled === true;
     /** How long the map waits for its grey marks before drawing without them (`MAP_REPLACED_DEADLINE_MS`). */
     this.replacedDeadlineMs = replacedDeadlineMs;
@@ -1536,40 +1541,46 @@ export class NativeMemoryStore {
     }
   }
 
-  /** Called only for a source-grounded explicit identity confirmation, never by consolidation or fuzzy search.
-   * @param {string} userId @param {string} uri @param {string} expected @param {string[]} names */
-  async mergeConfirmedAliases(userId, uri, expected, names) {
-    if (!this.personAliasHintEnabled) return;
-    return withNativeMemoryWrite(this.overlay.database, userId, async () => {
-      this.#touch(userId);
-      const files = await this.files(userId);
-      const kept = files.find(file => file.uri === uri && file.type === 'people');
-      if (!kept || !names.includes(personLabel(uri, kept.body)) || !names.every(name => confirmedAliases(kept.body).includes(name))) return;
-      const context = await this.#fileContext(userId, uri);
-      let sensitive = kept.sensitive === true;
-      for (const other of files.filter(file => file.uri !== uri && file.type === 'people'
-        && (file.namespaceId ?? null) === (kept.namespaceId ?? null) && names.includes(personLabel(file.uri, file.body)))) {
-        const before = await context.sessions.read(userId, uri);
-        if (before === null || await context.sessions.read(userId, other.uri) !== other.body) continue;
-        const inherited = (await this.overlay.originsOf(userId, [other.uri])).get(other.uri) ?? new Map();
-        if ((await removalRefusals({ userId, projectId: kept.projectId ?? null, overlay: this.overlay,
-          namespaceId: kept.namespaceId ?? null, judge: this.rejectionJudge,
-          candidates: removalLines(other.body).map(text => ({ text, sources: [] })) })).size) continue;
-        const section = `## Previously recorded under ${personLabel(other.uri, other.body)}\n${other.body}`;
-        if (kept.body !== expected && !before.includes(section)) continue;
-        const next = before.includes(section) ? before : `${before}\n\n${section}`;
-        await withMemorySummaryInvalidation(context.sessions, this.overlay, userId, uri, () => context.sessions.replace(userId, uri, next));
-        await this.overlay.addRevision({ userId, uri, memoryType: 'people', change: 'updated', actor: 'platform', reason: 'explicit person alias merge', before, after: next, projectId: kept.projectId });
-        sensitive ||= other.sensitive === true;
-        await this.overlay.upsertFile({ userId, uri, memoryType: 'people', body: next, projectId: kept.projectId, sensitive });
-        await this.overlay.syncOrigins(userId, uri, { after: next });
-        await this.overlay.inheritOrigins(userId, uri, new Map([...inherited].map(([print, origin]) => [print, originalSources(origin)])));
-        await withMemorySummaryInvalidation(context.sessions, this.overlay, userId, other.uri, () => context.sessions.remove(userId, other.uri));
-        await this.overlay.addRevision({ userId, uri: other.uri, memoryType: 'people', change: 'deleted', actor: 'platform', reason: 'explicit person alias merge', before: other.body, after: null, projectId: other.projectId });
-        await this.overlay.removeFile(userId, other.uri);
+  /** Gateway-only entry: evidence is checked against the bound human conversation before this method is called.
+   * @param {{id:string}} user @param {{id:string,userId:string}} project
+   * @param {{a:string,b:string,distinct:boolean,engineSession:string}} decision */
+  async people(user, project, { a, b, distinct, engineSession }) {
+    if (!this.personMergeEnabled) throw new HttpError(400, 'memory_payload_invalid', 'People decisions are not enabled.');
+    return withNativeMemoryWrite(this.overlay.database, user.id, async () => {
+      this.#touch(user.id);
+      const context = await this.#projectContext(user.id, project.id);
+      if (project.userId !== user.id) throw new HttpError(403, 'memory_scope_denied', 'The conversation owner does not match.');
+      if (this.memoryContexts) await this.memoryContexts.assertLive(context);
+      for (const uri of [a, b]) {
+        const actual = await this.#fileContext(user.id, uri);
+        if (actual.namespaceId !== context.namespaceId || nativeMemoryFile(uri, context.sessions.memoryRoot(user.id))?.type !== 'people') {
+          throw new HttpError(403, 'memory_scope_denied', 'Both files must belong to this writable people scope.');
+        }
       }
-      this.#touch(userId);
-    });
+      const hidden = await this.overlay.otherProjectUris(user.id, project.id, 10000, { memoryRoot: context.sessions.memoryRoot(user.id), peopleAcrossProjects: false });
+      if ([a, b].some(uri => hidden.includes(uri))) throw new HttpError(403, 'memory_scope_denied', 'Another project’s memory is not writable here.');
+      const files = await this.files(user.id, { context: this.memoryContexts ? context : null });
+      const pending = distinct ? null : (await this.overlay.personMerges(user.id)).find(row => row.keepUri === a && row.mergeUri === b && row.state === 'pending');
+      const keep = files.find(file => file.uri === a), merge = files.find(file => file.uri === b) ?? pending?.snapshot?.merge;
+      if (!keep || !merge || a === b || keep.sensitive || merge.sensitive) throw new HttpError(400, 'memory_payload_invalid', 'Choose two available, different people files.');
+      if (personProjectScope(keep.projectId) !== personProjectScope(merge.projectId)) throw new HttpError(403, 'memory_scope_denied', 'People files in different project scopes cannot be combined.');
+      if (distinct) return this.personEdges.set(user.id, personPairId(a, b), true);
+      const origins = await this.overlay.originsOf(user.id, [a, b]);
+      /** @param {{uri:string,body:string,projectId?:string|null,sensitive?:boolean}} file @returns {import('./nativeMemoryPeople.mjs').PersonBefore} */
+      const snapshot = file => ({ uri: file.uri, body: file.body, projectId: file.projectId ?? null, sensitive: file.sensitive === true, origins: [...(origins.get(file.uri) ?? [])] });
+      await this.personEdges.set(user.id, personPairId(a, b), false);
+      const result = await mergePeopleFiles({ userId: user.id, overlay: this.overlay, context, keep: snapshot(keep), merge: snapshot(merge), engineSession });
+      this.#touch(user.id);
+      return result;
+    }, { exclusive: true });
+  }
+
+  /** Redirect only writes to an exact path retired by a human-confirmed tool operation.
+   * @param {string} userId @param {import('./nativeMemoryPeopleStore.mjs').PeopleContext} context @param {string[]} uris */
+  async redirectPeople(userId, context, uris) {
+    if (!this.personMergeEnabled) return;
+    await redirectPeopleWrites({ userId, overlay: this.overlay, context, uris });
+    this.#touch(userId);
   }
 
   /** Confirmed aliases only; neither fuzzy hints nor a shared diagnosis confer removal authority.
@@ -1822,7 +1833,7 @@ export class NativeMemoryStore {
    * and the engine's later extraction writes beside it rather than into it — what a restore can give back is the text.
    * @param {string} userId @param {string} id @param {{ expectedVersion?: number }} options
    */
-  async undo(userId,id,options={}) { return withNativeMemoryWrite(this.overlay.database,userId,()=>this.#undoOwned(userId,id,options)); }
+  async undo(userId,id,options={}) { return withNativeMemoryWrite(this.overlay.database,userId,()=>this.#undoOwned(userId,id,options), { exclusive: this.personMergeEnabled }); }
   async #undoOwned(userId, id, { expectedVersion = 0 } = {}) {
     this.#touch(userId);
     if (!NATIVE_RECORD_ID.test(String(id))) throw new HttpError(404, "memory_not_found", "Memory not found.");
@@ -1838,6 +1849,13 @@ export class NativeMemoryStore {
     const last = (await this.overlay.revisionsOf(userId, uri, { limit: 20 })).find((revision) => !revision.undoneAt);
     if (!last) throw new HttpError(409, "memory_conflict", "There is no change of this memory to undo.");
     if(last.sourceDeletedText||String(last.reason).includes('[source-deleted]'))throw new HttpError(409,'memory_source_deleted','The source for this memory version was deleted.');
+    const personMerge = (await this.overlay.personMerges?.(userId) ?? []).find(row => row.keepUri === uri
+      && (row.revisionId === last.id || last.reason === 'undo' && row.snapshot?.after === live?.body));
+    if (personMerge) {
+      await undoPeopleMerge({ userId, overlay: this.overlay, context, operation: personMerge });
+      this.#touch(userId);
+      return { undone: 'restored', record: await this.getRecord(userId, nativeFileId(uri)).catch(() => null), restored: [nativeFileId(personMerge.mergeUri)] };
+    }
     const memoryType = last.memoryType;
     const rejectionType = this.#rejectionType(context, memoryType);
     const projectId = context.kind === 'geo-project' ? context.projectId : last.projectId;

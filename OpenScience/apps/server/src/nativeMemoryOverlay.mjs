@@ -747,8 +747,34 @@ export class NativeMemoryOverlay {
     await this.#query("UPDATE evimed_memory.native_revisions SET undone_at=clock_timestamp() WHERE user_id=$1 AND id=$2", [owner(userId), String(id)]);
   }
 
+  /** @param {string} userId @param {string} revisionId @param {import('./nativeMemoryPeople.mjs').PersonMergeSnapshot} snapshot */
+  async recordPersonMerge(userId, revisionId, snapshot) {
+    await this.#query(`INSERT INTO evimed_memory.native_person_merges(user_id,revision_id,keep_uri,merge_uri,state,snapshot)
+      VALUES($1,$2,$3,$4,'pending',$5::jsonb)`, [owner(userId), revisionId, snapshot.keep.uri, snapshot.merge.uri, JSON.stringify(snapshot)]);
+  }
+
+  /** @param {string} userId @returns {Promise<import('./nativeMemoryPeople.mjs').PersonMerge[]>} */
+  async personMerges(userId) {
+    const result = await this.#query("SELECT * FROM evimed_memory.native_person_merges WHERE user_id=$1 AND state<>'undone' ORDER BY revision_id", [owner(userId)]);
+    return result.rows.map((/** @type {{revision_id:string,keep_uri:string,merge_uri:string,state:'pending'|'applied',snapshot:import('./nativeMemoryPeople.mjs').PersonMergeSnapshot|null}} */ row) =>
+      ({ revisionId: String(row.revision_id), keepUri: row.keep_uri, mergeUri: row.merge_uri, state: row.state, snapshot: row.snapshot }));
+  }
+
+  /** @param {string} userId @param {string} revisionId @param {'applied'|'undone'} state */
+  async settlePersonMerge(userId, revisionId, state) {
+    await this.#query('UPDATE evimed_memory.native_person_merges SET state=$3 WHERE user_id=$1 AND revision_id=$2', [owner(userId), revisionId, state]);
+  }
+
+  /** Privacy deletion invalidates the whole two-file undo before-image, including inherited sources.
+   * A redirect holds no facts; it stays so a future extraction cannot reopen the retired identity.
+   * @param {string} userId @param {string} uri */
+  async scrubPersonMerges(userId, uri) {
+    await this.#query('UPDATE evimed_memory.native_person_merges SET snapshot=NULL WHERE user_id=$1 AND (keep_uri=$2 OR merge_uri=$2)', [owner(userId), uri]);
+  }
+
   /** A person deleted this memory: its text leaves the history too (what was changed, and when, stays). @param {string} userId @param {string} uri */
   async forgetText(userId, uri) {
+    await this.scrubPersonMerges(userId, uri);
     await this.#query("UPDATE evimed_memory.native_revisions SET before=NULL, after=NULL WHERE user_id=$1 AND uri=$2", [owner(userId), String(uri)]);
   }
 
@@ -760,6 +786,7 @@ export class NativeMemoryOverlay {
   async scrubLines(userId, uri, lines, {sourceDeleted=false}={}) {
     const prints = new Set(lines.map(lineFingerprint));
     if (!prints.size) return 0;
+    await this.scrubPersonMerges(userId, uri);
     const scrub = (/** @type {string | null} */ text) => (text === null ? null
       : text.split("\n").filter((line) => !prints.has(lineFingerprint(line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "")))).join("\n"));
     const rows = await this.#query("SELECT id, before, after FROM evimed_memory.native_revisions WHERE user_id=$1 AND uri=$2", [owner(userId), String(uri)]);
