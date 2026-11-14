@@ -67,7 +67,7 @@ const request = (over = {}) => ({ userId: "u1", projectId: "p1", candidates: [
 ], said: ["Use tables when I ask you to compare."], ...over });
 
 test("one call carries a commit's near lines, thinking off, charged as memory extraction, and its answer is mapped back to the removed lines", async () => {
-  const { judge, calls } = judgeWith([{ same: [{ candidate: 0, removed: 0 }, { candidate: 1, removed: 1 }], stated: [0] }]);
+  const { judge, calls } = judgeWith([{ same: [{ candidate: 0, removed: 0 }, { candidate: 1, removed: 1 }], stated: [0], assertions: [{ candidate: 0, source: 0, quote: "Use tables when I ask you to compare." }] }]);
   const answer = await judge.same(request());
   assert.equal(calls.length, 1, "one call for both lines");
   const [call] = calls;
@@ -169,4 +169,15 @@ test('P07 fixture assertion errors are judge failures; the wire uses indexed rem
     } });
   await assert.rejects(judge.same(request({ originMessages: true })), { code: 'memory_history_privacy_unavailable' });
   assert.deepEqual(calls[0].removed[0], { removed: 0, text: 'prefers tables for comparisons' });
+});
+
+test('relearning requires a checked assertion witness, not an unsupported stated index', async () => {
+  const { judge } = judgeWith([{ same: [{ candidate: 0, removed: 0 }], stated: [0] }]);
+  assert.equal((await judge.same(request({ said: ['我每周哪天去游泳？'] }))).stated.size, 0);
+});
+test('an assertion witness must quote the indexed later human message', async () => {
+  const assertion = { candidate: 0, source: 0, quote: 'Use tables when I ask you to compare.' };
+  const { judge } = judgeWith([{ same: [{ candidate: 0, removed: 0 }], stated: [0], assertions: [assertion] }]);
+  assert.deepEqual([...(await judge.same(request())).stated], [0]);
+  assert.equal((await judge.same(request({ said: ['Did I ask for tables?'] }))).stated.size, 0);
 });

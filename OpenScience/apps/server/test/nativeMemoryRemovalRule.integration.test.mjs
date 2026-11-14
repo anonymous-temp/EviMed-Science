@@ -6,7 +6,19 @@ import { nativeFileId } from '../src/nativeMemoryStore.mjs';
 import { NativeMemoryObservations } from '../src/nativeMemoryObservations.mjs';
 import { NativeMemoryWorker } from '../src/nativeMemoryWorker.mjs';
 
-const { fixture, options } = nativeIntegration();
+const { fixture: baseFixture, options } = nativeIntegration();
+// These fixtures explicitly assert their project fact. Meaning is supplied by the test oracle;
+// production requires the model's checked assertion witness instead of token containment.
+async function fixture(t) {
+  const f = await baseFixture(t);
+  const judge = { same: async ({ candidates, said = [] }) => ({
+    same: new Map(candidates.map((candidate, index) => [index, candidate.removed[0].fingerprint])),
+    stated: new Set(said.some(text => ['Project M-41633.', 'My weekly report title is M-41633.'].includes(text))
+      ? candidates.map((_candidate, index) => index) : []),
+  }) };
+  f.worker.rejectionJudge = judge; f.worker.verification.rejectionJudge = judge;
+  return f;
+}
 const old = '2026-01-01T00:00:00.000Z';
 const fresh = '2099-01-01T00:00:00.000Z';
 
@@ -123,7 +135,7 @@ test('removal authority has no first-page limit and keeps hard tokens beyond the
   assert.equal(await f.sessions.read(f.userId, uri), null);
 });
 
-test('a fresh explicit remember-tool message remains a human restatement without a conversation binding', options, async t => {
+test('an unbound remember-tool user-role argument cannot manufacture human reauthorization', options, async t => {
   const f = await fixture(t);
   const fact = 'Project M-41633.';
   await f.overlay.reject(f.userId, 'preferences', `${f.root}/preferences/old.md`, [fact]);
@@ -131,7 +143,7 @@ test('a fresh explicit remember-tool message remains a human restatement without
   f.stub.extract = () => ({ adds: [{ uri, memory_type: 'project_context', after: fact }] });
   await f.commitConversation('remember', [{ role: 'user', text: fact, at: fresh }], { engineSession: 'mcp-store-restated', origin: 'tool' });
   await f.worker.processCommits({ userId: f.userId });
-  assert.equal(await f.sessions.read(f.userId, uri), fact);
+  assert.equal(await f.sessions.read(f.userId, uri), null);
 });
 
 test('a stale engine before-image cannot classify an edited-out value as unchanged, and a later statement gets fresh provenance', options, async t => {

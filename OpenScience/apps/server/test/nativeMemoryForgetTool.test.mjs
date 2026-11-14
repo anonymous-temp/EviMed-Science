@@ -42,7 +42,10 @@ function fixture(enabled = true) {
     read: async (_owner, target) => { assert.equal(inTransaction, false, 'engine reads stay outside the rejection transaction'); return files.get(target) ?? null; },
     replace: async (_owner, target, text) => { files.set(target, text); return true; },
     remove: async (_owner, target) => files.delete(target), rebuildMemoryDirectory: async () => {} };
-  const overlay = { configured: true, files: async () => new Map(), originsOf: async () => new Map(),
+  const overlay = { configured: true,
+    removalOrigins: async () => [],
+    removals: async () => rejections.flatMap(row => row.lines.map(text => ({fingerprint:lineFingerprint(text),text,rejectedAt:'2026-11-14'}))),
+    recordInstructionCheck: async () => {}, files: async () => new Map(), originsOf: async () => new Map(),
     reject: async (owner, type, target, lines, options) => rejections.push({ owner, type, uri: target, lines, options }),
     claimForgetIntent: async (owner, type, target, lines) => {
       const fresh = lines.filter(line => !rejections.some(row => row.owner === owner && row.type === type && row.lines.some(prior => lineFingerprint(prior) === lineFingerprint(line))));

@@ -6,12 +6,12 @@ import { recordRejectionJudge, recordRejectionLines } from "./nativeMemoryMetric
 /**
  * Shared removal authority (P24, 2026-11-10). Every engine write surface is held against the account's
  * removals across memory categories, within its native namespace. Hard tokens use the raw-history fence's
- * comparator and no model budget. Token-free restatements use the existing semantic judge. Only original
+ * comparator. All later restatements require the existing semantic judge and a source-bound assertion receipt. Only original
  * user messages dated after each removal can authorize the new write; replaying or promoting old text
  * cannot renew its date. Relearning never lifts the old conversation's removal.
  *
  * The judge is bounded per account/day and fails open for semantic candidates. Literal removal and hard
- * token checks remain code. `nearRemoved` remains a shortlist helper for finding existing duplicates;
+ * token conflict checks remain code. `nearRemoved` remains a shortlist helper for finding existing duplicates;
  * the write rule does not use lexical similarity to decide which token-free wording may be a restatement.
  * @module nativeMemoryRejections
  */
@@ -86,8 +86,8 @@ const INSTRUCTIONS = [
   "A research platform keeps short notes about one person. The person asked it to forget some of them (`removed`).",
   "`candidates` are lines the platform holds, written just now or earlier. For each candidate that says the same thing as one of its own `options` — the same fact, preference or instruction in other words, or the removed one with something added that does not change it — say which.",
   "A candidate that is only about the same subject, or says something more specific that the removed line did not, is not the same.",
-  "`said` is what the person themselves wrote in the conversation the lines came from. A candidate the person said in those words themselves (not the platform's wording of something else) is `stated`: the person chose it again, whatever they removed before.",
-  "Return JSON only: {\"same\":[{\"candidate\":<index>,\"removed\":<index>}],\"stated\":[<candidate index>]}. List only the pairs that are the same; use only the indexes given.",
+  "`said` is what the person themselves wrote in the conversation the lines came from. Only a new affirmative statement by that person which itself states the candidate fact is `stated`. Questions, forget requests, pasted or quoted earlier conversations, assistant restatements, and offers to add a fact back are NEVER assertions, even if they contain every word or identifier. Do not infer an answer from a question. For each stated index also return an `assertions` witness with candidate index, zero-based source index in said, and an exact quote of the affirmative statement. If no such statement exists, stated and assertions must be empty.",
+  "Return JSON only: {\"same\":[{\"candidate\":<index>,\"removed\":<index>}],\"stated\":[<candidate index>],\"assertions\":[{\"candidate\":<index>,\"source\":<said index>,\"quote\":<exact affirmative statement>}]}. List only the pairs that are the same; use only the indexes given.",
 ].join(" ");
 
 /**
@@ -149,7 +149,7 @@ export function createRejectionJudge({ config, usageLedger = null, fetchImpl = g
 
     /**
      * @param {{ userId: string, projectId?: string | null, runId?: string | null, originMessages?: boolean, candidates: { text: string, removed: { fingerprint: string, text: string }[] }[], said?: readonly string[] }} request
-     * @returns {Promise<{ same: Map<number, string>, stated: Set<number> }>} for each candidate index judged the same, the fingerprint of the removed line it repeats; and the candidates the person said themselves. Empty whenever the judge could not be asked or did not answer in the one shape: the lines are kept.
+     * @returns {Promise<{ same: Map<number, string>, stated: Set<number>, witnesses?: Map<number, number> }>} for each candidate index judged the same, the fingerprint of the removed line it repeats; and the candidates the person said themselves. Empty whenever the judge could not be asked or did not answer in the one shape: the lines are kept.
      */
     async same({ userId, projectId = null, runId = null, candidates, said = [], originMessages = false }) {
       const nothing = { same: /** @type {Map<number, string>} */ (new Map()), stated: /** @type {Set<number>} */ (new Set()) };
@@ -187,7 +187,20 @@ export function createRejectionJudge({ config, usageLedger = null, fetchImpl = g
         });
         const judged = parseJudgement(body?.choices?.[0]?.message?.content, offered, removedTexts.length);
         if (!judged) { recordRejectionJudge("failed"); recordRejectionLines("judge_failed", shown.length); if(originMessages) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' }); return nothing; }
-        const result = { same: /** @type {Map<number, string>} */ (new Map()), stated: judged.stated };
+        const witnesses = JSON.parse(String(body?.choices?.[0]?.message?.content ?? '{}')).assertions;
+        /** @type {Set<number>} */
+        const stated = new Set();
+        /** @type {Map<number, number>} */
+        const witnessesByCandidate = new Map();
+        for (const witness of Array.isArray(witnesses) ? witnesses : []) {
+          if (!judged.stated.has(witness?.candidate) || !Number.isInteger(witness.source)) continue;
+          const human = said.slice(0, MAX_SAID)[witness.source];
+          if (typeof human !== 'string' || typeof witness.quote !== 'string' || !witness.quote.trim()
+            || !human.slice(0, 300).includes(witness.quote)) continue;
+          stated.add(witness.candidate);
+          witnessesByCandidate.set(witness.candidate, witness.source);
+        }
+        const result = { same: /** @type {Map<number, string>} */ (new Map()), stated, witnesses: witnessesByCandidate };
         for (const [candidate, removed] of judged.same) result.same.set(candidate, removedPrints[removed]);
         recordRejectionLines("judged_same", result.same.size);
         recordRejectionLines("judged_kept", shown.length - result.same.size);
@@ -212,6 +225,21 @@ export function removalText(text) {
   return String(text).trim().replace(/^(?:#{1,6}|[-*+]|\d+[.)])\s+/, '');
 }
 
+/** Strip only memory presentation syntax before comparing the fact. Event dates inside the
+ * statement remain hard tokens; a template's trailing as-of date and bold field label do not.
+ * @param {string} text */
+export function removalStatement(text) {
+  return normalisedStatement(removalText(text).replace(/^\*\*[^*\n]+[:：]\*\*\s*/, ''));
+}
+
+/** An explicit partial removal preserves its untouched neighbours even if their source archive
+ * also contains a withdrawn passage. Bind this receipt to the entire current removal authority.
+ * @param {string} uri @param {string} text @param {{fingerprint:string,rejectedAt?:string|null}[]} removals */
+export function retainedRemovalKey(uri, text, removals) {
+  return contentHash(JSON.stringify(['retained-removal-v1', uri, lineFingerprint(text),
+    removals.map(row => [row.fingerprint, row.rejectedAt]).sort()]));
+}
+
 /** All newly written lines, including titles/headings. @param {string} after @param {string} [before] */
 export function removalLines(after, before = '') {
   const prior = new Set(String(before).split('\n').map(removalText).map(lineFingerprint));
@@ -219,7 +247,7 @@ export function removalLines(after, before = '') {
 }
 
 /** One write-side removal rule for extraction, consolidation, corrections and synthetic writes.
- * Hard tokens are literal shapes, use the history fence's normalization, and never spend a model budget.
+ * Hard tokens identify conflicts with the history fence's normalization. Human reauthorization is semantic.
  * Only a person's own source message strictly AFTER each removal may authorize its content. Rejections
  * remain in place: a new statement authorizes that write, never a replay of the old conversation.
  * @param {{userId:string, overlay:any, projectId?:string|null, namespaceId?:string|null, judge?:any, ignoreTokenWhitespace?:boolean,
@@ -229,27 +257,28 @@ export async function removalRefusals({ userId, overlay, projectId = null, names
   const removed = await overlay.removals(userId, namespaceId);
   const refused = new Map();
   for (const entry of removed) {
-    const text = entry.text ? normalisedStatement(entry.text) : '';
+    const text = entry.text ? removalStatement(entry.text) : '';
     const tokens = hardTokens(text);
     const pending = [];
     for (const candidate of candidates) {
       const print = lineFingerprint(candidate.text);
       if (refused.has(print)) continue;
       const sources = (candidate.sources ?? []).filter(source => source.role === 'user'
-        && Date.parse(source.created_at ?? '') > Date.parse(entry.rejectedAt ?? ''));
-      if (tokens.length) {
-        if (tokens.every(token => tokenPresent(token, normalisedStatement(candidate.text), { ignoreWhitespace: ignoreTokenWhitespace }))
-          && !sources.some(source => tokens.every(token => sourceHasToken(token, { ...source, text: normalisedStatement(source.text) }, { ignoreWhitespace: ignoreTokenWhitespace })))) {
-          refused.set(print, { rejected: entry.fingerprint, via: 'contained' });
-        }
-        continue;
-      }
-      const literal = print === entry.fingerprint || text && containsRemoved(candidate.text, text);
-      const stated = sources.some(source => compact(source.text).includes(compact(candidate.text))
-        || text && compact(source.text).includes(compact(text)));
-      if (stated) continue;
+        && Date.parse(source.created_at ?? '') > Date.parse(entry.rejectedAt ?? '')
+        && tokens.every(token => sourceHasToken(token, source, { ignoreWhitespace: ignoreTokenWhitespace })));
+      /** @param {{role:string,text:string,created_at?:string|null}} source */
+      const receiptKey = source => contentHash(JSON.stringify(['removal-assertion-v1', namespaceId, entry.fingerprint,
+        entry.rejectedAt, removalStatement(candidate.text), source.role, source.text, source.created_at ?? null]));
+      let authorized = false;
+      for (const source of sources) if ((await overlay.instructionCheck?.(userId, receiptKey(source)))?.removalAssertion === true) authorized = true;
+      if (authorized) continue;
+      const hardMatch = tokens.length > 0 && tokens.every(token => tokenPresent(token, removalStatement(candidate.text), { ignoreWhitespace: ignoreTokenWhitespace }));
+      if (tokens.length && !hardMatch) continue;
+      const literal = hardMatch || print === entry.fingerprint || Boolean(text && containsRemoved(removalStatement(candidate.text), text));
+      // Matching words or identifiers establish a conflict, never consent to relearn.
+      // Even exact containment in a later user message may be a question or an old quote.
       if (literal && (!sources.length || !judge)) { refused.set(print, { rejected: entry.fingerprint, via: 'contained' }); continue; }
-      if (text) pending.push({ candidate, sources, literal });
+      if (text) pending.push({ candidate, sources, literal, receiptKey });
     }
     // Batch only candidates sharing the very same source set; another line's message is never authority.
     const groups = new Map();
@@ -265,6 +294,10 @@ export async function removalRefusals({ userId, overlay, projectId = null, names
         said: batch[0].sources.map(source => source.text) }).catch(() => ({ same: new Map(), stated: new Set() }));
       for (let index = 0; index < batch.length; index++) {
         const item = batch[index];
+        const witness = answer.witnesses?.get(index);
+        if (answer.stated.has(index) && Number.isInteger(witness) && item.sources[witness]) {
+          await overlay.recordInstructionCheck?.(userId, item.receiptKey(item.sources[witness]), { removalAssertion: true });
+        }
         if ((item.literal || answer.same.has(index)) && !(item.sources.length && answer.stated.has(index))) {
           refused.set(lineFingerprint(item.candidate.text), { rejected: entry.fingerprint, via: item.literal ? 'contained' : 'judged' });
         }

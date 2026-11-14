@@ -5352,7 +5352,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     config, runtimeManager, store, sessions: openVikingSessions, admission: memoryAdmission,
     memoryContexts: nativeMemoryContexts, rememberJournal: nativeRememberJournal,
     historySecrets: memoryHistory?.secrets,
-    historySearch: memoryHistory ? request => memoryHistory.search(request) : null,
+    historySearch: memoryHistory ? request => memoryHistory.search(request, { includeWithdrawn: true }) : null,
     sourceDeletion,
     sourceReceipt:async({user,project,sessionId,uris,context:sourceContext})=>{
       // Unbound/concurrent native reads remain an acceptance gap; never guess the latest run.

@@ -78,8 +78,8 @@ test("a judge that fails keeps the line, and token-free wording is left to the e
 });
 
 test("the person's own words win: a line they said themselves is kept and a dated restatement authorizes only its own write", options, async (t) => {
-  // Word for word: the engine's line contains the removed one and the person said that line themselves in this conversation.
-  const judge = judgeDouble();
+  // Exact containment is not consent: this fixture supplies an affirmative semantic verdict too.
+  const judge = judgeDouble(request => ({ same: new Map([[0, request.candidates[0].removed[0].fingerprint]]), stated: new Set([0]) }));
   const verbatim = await removeThenWrite(t, { removedText: "Cites with numbered references.", after: "- Cites with numbered references; always gives the DOI.", judge,
     said: "Actually: cites with numbered references; always gives the DOI. That is how I want it." });
   assert.equal(await verbatim.read(), "- Cites with numbered references; always gives the DOI.");

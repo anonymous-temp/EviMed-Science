@@ -27,6 +27,7 @@ async function setup(t, overrides = {}) {
   f.overlay.deferredSummaryRebuildEnabled = config.memoryDeferredSummaryRebuildEnabled === true;
   await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Test',1048576)", [f.userId]);
   const project = { id: 'default', userId: f.userId, name: 'Test' }, user = { id: f.userId };
+  const conversation = { sessionId: null, title: 'Test conversation' };
   const contexts = new GeoNativeMemoryContext({ database: f.database, documents: null, sessions: f.sessions,
     policies: { forProject: async () => ({ kind: 'owned' }), policiesForOwner: async () => [] },
     settingsForOwner: id => f.memorySettings.settings(id) });
@@ -34,27 +35,28 @@ async function setup(t, overrides = {}) {
   const ledger = new MemoryHistoryLedger({ database: f.database, overlay: f.overlay, client: f.sessions.client });
   const history = new MemoryHistory({ config, ledger, contexts,
     resolveSource: async commit => ({ projectId: project.id, projectCreatedAt: context.projectCreatedAt,
-      sessionId: commit.engineSession?.slice(4), conversationTitle: 'Test conversation', conversationUrl: '/app/chat/test' }),
+      sessionId: commit.engineSession?.slice(4), conversationTitle: conversation.title, conversationUrl: '/app/chat/test' }),
     eligible: async () => true, admitMessage: async () => true });
   const store = new NativeMemoryStore({ sessions: f.sessions, overlay: f.overlay, memoryContexts: contexts,
     forgetTargetsEnabled: config.memoryForgetTargetsEnabled });
   store.history = history;
   const token = 'forget-gateway-integration-token';
   const handler = createMemoryGatewayHandler({ config, sessions: f.sessions, overlay: f.overlay, memoryContexts: contexts,
-    memoryTool: store, historySearch: request => history.search(request), admission: createMemoryAdmission({ config, memorySettings: f.memorySettings }),
+    memoryTool: store, historySearch: request => history.search(request, { includeWithdrawn: true }), admission: createMemoryAdmission({ config, memorySettings: f.memorySettings,
+      conversations: { running: async () => conversation.sessionId ? [{id:'run',sessionId:conversation.sessionId}] : [], runsOf: async () => [] } }),
     runtimeManager: { assertActiveEviMedWorkloadToken: async value => {
       assert.equal(value, token); return { userId: user.id, projectId: project.id };
     } }, store: { userById: async () => user, requireProject: async () => project } });
   const server = await startGatewayServer(handler);
   t.after(() => server.close());
-  const memory = createMemoryClient({ base: server.base, token, executeForget: true, config });
+  const memory = createMemoryClient({ base: server.base, token, readOnly: false, executeForget: true, config });
   const response = await fetch(`${server.base}/mcp`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) });
   const text = await response.text();
   const listed = response.headers.get('content-type').includes('event-stream') ? parseEventStream(text)[0] : JSON.parse(text);
   assert.deepEqual(listed.result.tools.find(tool => tool.name === 'forget'), memoryTools(config).find(tool => tool.name === 'forget'),
     'the real gateway and runner advertise the same model arguments');
-  return { ...f, store, context, contexts, config, history, ledger, memory, user, project, base: server.base, token };
+  return { ...f, store, context, contexts, config, history, ledger, memory, user, project, conversation, base: server.base, token };
 }
 
 test('P04 exact model arguments cross HTTP and store validation; one line leaves, rejection persists, undo restores', options, async t => {
@@ -499,4 +501,99 @@ test('FT8 undo releases a late archive waiting for a scan without spending the i
   assert.equal(await f.ledger.forgetArchivePending(f.context, late.archive_uri), false);
   await ingest(late);
   assert.equal((await f.history.search({ user:f.user, project:f.project, query:original })).length, 2);
+});
+
+// FT10: exact p6b conversation, with the misleading truncated title and a separate context chunk.
+const p6bMessage = '帮我记一下几件个人的事，放进我的个人笔记里：每周三晚上我去游泳；我早上习惯喝黑咖啡；家里的备用钥匙放在蓝色鞋柜第二层；我对青霉素过敏。另外顺便帮我把这句话润色得通顺些，不用保存：“上个月我临时顶了几个星期的夜班，所以最近作息有点乱，周报也晚交了”。';
+const p6bRemember = p6bMessage.split('另外')[0];
+const swimming = '- 每周三晚上去游泳 (as of 2026-11-14)';
+const nightShift = '- 上个月临时顶了几个星期的夜班，最近作息有点乱，周报也交晚了 (as of 2026-11-14)';
+const allergy = '- 对青霉素过敏 (as of 2026-11-14)';
+const coffee = '- 早上习惯喝黑咖啡 (as of 2026-11-14)';
+const keys = '- 家里备用钥匙放在蓝色鞋柜第二层 (as of 2026-11-14)';
+
+for (const target of [swimming, nightShift]) test(`FT10 remember -> line forget -> question cannot resurrect ${target}`, options, async t => {
+  const f = await setup(t, { memoryDeferredSummaryRebuildEnabled: true });
+  const uri = `${f.root}/profile.md`;
+  const body = ['# 用户',allergy,swimming,coffee,keys,nightShift].join('\n');
+  f.conversation.sessionId = 'session_p6b';
+  f.conversation.title = '帮我记一下几件个人的事，放进我的个人笔记里：每周三晚上我去游泳；我早上习惯喝黑…';
+  const rememberedBody = ['# 用户',allergy,swimming,coffee,keys].join('\n');
+  f.stub.extract = () => ({ adds: [{uri,memory_type:'profile',after:rememberedBody}] });
+  const remember = await f.memory.callTool('remember', { messages: [{role:'user',content:p6bRemember},
+    {role:'assistant',content:'已记入个人笔记：每周三晚上去游泳。'}] });
+  assert.equal(remember.isError, false, remember.blocks.join('\n'));
+  const toolCommit = (await f.overlay.openCommits({userId:f.userId})).find(commit => commit.origin === 'tool');
+  assert.equal(toolCommit.sourceSession, 'dsh-session_p6b', 'the real handler binds remember to its human conversation');
+  f.stub.extract = () => ({updates:[{uri,memory_type:'profile',before:rememberedBody,after:body}]});
+  const original = await f.commitConversation('p6b', [
+    {role:'assistant',text:'（平台信息，不是用户说的话）这段对话在用户的项目「日常笔记」里进行。',at:'2026-11-14T09:52:39.046Z'},
+    {role:'user',text:p6bMessage,at:'2026-11-14T09:52:40.000Z'},
+  ], {projectId:f.project.id});
+  // The external model is a fixed oracle. The gateway, judge parser, worker, store and ledger stay real.
+  const judge = createRejectionJudge({config:{deepseekModel:'fixture',deepseekApiKey:'fixture'},callModel:async (_deps, call) => {
+    const input = JSON.parse(call.body.messages[1].content);
+    const affirmative = target === swimming ? '每周三晚上我去游泳。请重新记住。' : '上个月我临时顶了几个星期的夜班，最近作息有点乱，周报也交晚了。请重新记住。';
+    const same = [], stated = [], assertions = [];
+    for (const candidate of input.candidates) {
+      // Enumerated fixture facts, not a production language rule.
+      if (lineFingerprint(candidate.text) === lineFingerprint(removalText(target))) same.push({candidate:candidate.candidate,removed:0});
+      // An unsupported stated index used to authorize a write. Deliberately return that
+      // bad model verdict for a question: the real parser must demand its missing witness.
+      if (input.said.includes(target === swimming ? '我每周哪天去游泳？' : '我上个月上过夜班吗？')) stated.push(candidate.candidate);
+      const source = input.said.indexOf(affirmative);
+      if (source >= 0 && lineFingerprint(candidate.text) === lineFingerprint(removalText(target))) {
+        stated.push(candidate.candidate); assertions.push({candidate:candidate.candidate,source,quote:affirmative});
+      }
+    }
+    return {choices:[{message:{content:JSON.stringify({same,stated,assertions})}}]};
+  }});
+  f.store.rejectionJudge = judge; f.history.rejectionJudge = judge;
+  const forgetMessage = target === swimming ? '我每周三晚上去游泳这条，帮我从记忆里忘掉吧，别的都别动。' : '还有我之前提过的上个月临时顶夜班那件事，也请忘掉，不要再记着。';
+  const forgetRequestJudge = { check: async ({conversation: turns,candidates}) => {
+    const message = turns.findIndex(turn => turn.role === 'user' && turn.text === forgetMessage);
+    const selected = candidates.findIndex(candidate => lineFingerprint(candidate.text) === lineFingerprint(removalText(target)));
+    return {requests:message < 0 ? [] : [{message,decision:'remove',targets:[selected],intents:[]}],claims:[]};
+  }};
+  const worker = new NativeMemoryWorker({config:f.config,sessions:f.sessions,overlay:f.overlay,memorySettings:f.memorySettings,
+    memoryContexts:f.contexts,nativeMemory:f.store,rejectionJudge:judge,forgetRequestJudge});
+  worker.history = f.history; worker.verification.history = f.history;
+  await worker.processCommits({userId:f.userId});
+  assert.equal((await f.overlay.commit(f.userId,toolCommit.archiveUri)).state, 'completed');
+  const origins = (await f.overlay.originsOf(f.userId,[uri])).get(uri);
+  assert.ok(origins.get(lineFingerprint(removalText(swimming))), 'the remembered line has durable origin authority');
+  const search = async () => (await f.memory.callTool('search',{query:target === swimming ? '游泳 每周 安排 习惯' : '上个月 夜班'})).blocks.join('\n');
+  assert.match(await search(), /每周三晚上我去游泳/);
+  f.history.nativeRemovalSources = (owner,sources,context) => worker.verification.readRemovalSources(owner,sources,context);
+  f.overlay.memoryForgetBody = (owner,fileUri,text) => f.history.fenceNativeBody(f.context,fileUri,text);
+  f.conversation.sessionId = 'session_p6b-forget';
+  const answer = await f.memory.callTool('forget',{uri,lines:[target]});
+  assert.equal(answer.isError,false,answer.blocks.join('\n'));
+  assert.match(answer.blocks.join('\n'),/Removed 1 line/);
+  f.stub.extract = () => ({});
+  await f.commitConversation('p6b-forget',[{role:'user',text:forgetMessage,at:'2026-11-14T09:53:44Z'},
+    {role:'assistant',text:'已经删掉了，其余几条原样保留。',at:'2026-11-14T09:53:55Z'}],{projectId:f.project.id});
+  await worker.processCommits({userId:f.userId});
+  const hashes = await f.database.query('SELECT archive_uri,message_hash FROM evimed_memory.history_message_rejections WHERE owner_id=$1 AND fingerprint=$2',
+    [f.userId,lineFingerprint(removalText(target))]);
+  assert.ok(hashes.rows.some(row => row.archive_uri === original.archive_uri && row.message_hash === lineFingerprint(p6bMessage)));
+  assert.match(await search(),/withdrawn/);
+  assert.doesNotMatch(await search(),/每周三晚上我去游泳|上个月我临时顶了几个星期/);
+  assert.match((await f.memory.callTool('read',{uris:[uri]})).blocks.join('\n'),/对青霉素过敏/);
+  const after = body.split('\n').filter(line => line !== target).join('\n');
+  const question = target === swimming ? '我每周哪天去游泳？' : '我上个月上过夜班吗？';
+  const reply = target === swimming ? '每周三晚上。这条来自你在早前对话里说过的话（当时让记进个人笔记：“每周三晚上我去游泳”）。需要我把它补进个人笔记吗？' : '早前对话说你上个月临时顶了几个星期的夜班。需要我补进笔记吗？';
+  f.stub.extract = () => ({updates:[{uri,memory_type:'profile',before:after,after:body}]});
+  const later = await f.commitConversation('p6b-question',[{role:'user',text:question,at:'2099-01-01T00:00:00Z'},
+    {role:'assistant',text:reply,at:'2099-01-01T00:00:01Z'}],{projectId:f.project.id});
+  await worker.processCommits({userId:f.userId});
+  assert.equal((await f.overlay.commit(f.userId,later.archive_uri)).state,'completed');
+  assert.equal(await f.sessions.read(f.userId,uri),after, 'after-write refusal removes the assistant-derived resurrection');
+  assert.equal(await f.ledger.rejected(f.context,[reply],later.archive_uri),true,'the assistant retelling cannot become a new history source');
+  const affirmative = target === swimming ? '每周三晚上我去游泳。请重新记住。' : '上个月我临时顶了几个星期的夜班，最近作息有点乱，周报也交晚了。请重新记住。';
+  await f.commitConversation('p6b-restated',[{role:'user',text:affirmative,at:'2099-01-02T00:00:00Z'}],{projectId:f.project.id});
+  await worker.processCommits({userId:f.userId});
+  assert.equal(await f.sessions.read(f.userId,uri),body,'a new affirmative human statement can authorize the fact');
+  assert.match(await f.history.fenceNativeBody(f.context,uri,body),new RegExp(target === swimming ? '每周三晚上去游泳' : '临时顶了几个星期'));
+  assert.equal(await f.ledger.rejected(f.context,[p6bMessage],original.archive_uri),true,'relearning never reopens the old archive');
 });

@@ -4,7 +4,7 @@ import { migrateMemorySettings } from './memorySettingsPersistence.mjs';
 import { migrateNativeMemory } from './nativeMemoryPersistence.mjs';
 import { lineFingerprint, normalisedStatement, nativeMemoryRejectionType } from './nativeMemoryOverlay.mjs';
 import { OPENVIKING_KNOWN_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from './openVikingLayout.mjs';
-import { compact } from './nativeMemoryRejections.mjs';
+import { compact, removalStatement } from './nativeMemoryRejections.mjs';
 import { hardTokens, tokenPresent } from './nativeMemoryHardTokens.mjs';
 
 /** @typedef {{id:string,owner_id:string,owner_created_at:string,namespace_id:string,user_root:string,
@@ -216,8 +216,8 @@ export class MemoryHistoryLedger {
         ORDER BY memory_type,fingerprint LIMIT 500`, [context.ownerId,types,type,fingerprint]);
       for (const row of result.rows) {
         if (++count > 10000) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
-        const removed = typeof row.text === 'string' ? compact(row.text) : '';
-        const tokens = row.scan_pending ? hardTokens(normalisedStatement(row.text ?? '')) : [];
+        const removed = typeof row.text === 'string' ? compact(removalStatement(row.text)) : '';
+        const tokens = row.scan_pending ? hardTokens(removalStatement(row.text ?? '')) : [];
         if (tokens.length && texts.some(text => !freshlyStated(text,row.rejected_at)
           && tokens.every(token => tokenPresent(token,text)))) return true;
         if ((prints.has(row.fingerprint) || removed && candidates.some(candidate => candidate.includes(removed)))
@@ -380,7 +380,7 @@ export class MemoryHistoryLedger {
 
   async boundRejections(context, sessionUri) {
     await this.migrate();
-    return (await this.database.query(`SELECT DISTINCT r.memory_type,r.fingerprint,r.text FROM evimed_memory.history_message_rejections h
+    return (await this.database.query(`SELECT DISTINCT r.memory_type,r.fingerprint,r.text,r.rejected_at FROM evimed_memory.history_message_rejections h
       JOIN evimed_memory.native_rejections r ON r.user_id=h.owner_id AND r.memory_type=h.memory_type AND r.fingerprint=h.fingerprint
       WHERE h.owner_id=$1 AND h.owner_created_at=$2 AND h.namespace_id=$3 AND h.archive_uri=$4 AND r.text IS NOT NULL`,
       [context.ownerId,context.ownerCreatedAt,context.namespaceId,sessionUri])).rows;

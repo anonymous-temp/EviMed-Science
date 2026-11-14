@@ -139,3 +139,86 @@ test('native derived reader withdraws pre-existing copies and inherited paraphra
   removed = false;
   assert.equal(await history.fenceNativeBody(context,uri,body),body);
 });
+
+test('removed-line syntax never becomes a hard token and token-free facts reach the semantic judge', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const history = new MemoryHistory({ config: {}, contexts: {}, ledger: {} });
+  const messages = [{ text: '每周三晚上我去游泳', archiveUri: 'archive' }];
+  const calls = [];
+  const judge = { same: async request => { calls.push(request); return { same: new Map([[0, 'removed']]) }; } };
+  assert.deepEqual(await history.matchRemoved({ ownerId: 'u' }, '1. **Habit:** 每周三晚上去游泳 (as of 2026-11-14)', messages, judge), messages);
+  assert.equal(calls[0].candidates[0].removed[0].text, '每周三晚上去游泳');
+});
+
+test('a line origin is fenced directly even when remember paraphrased the original words', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const root = 'viking://user/u1', uri = `${root}/memories/profile.md`;
+  const archiveUri = `${root}/sessions/mcp-store-first/history/archive_001`;
+  const original = `${root}/sessions/dsh-first/history/archive_001`;
+  const text = '每周三晚上去游泳 (as of 2026-11-14)', fenced = [];
+  const context = { ownerId: 'u1', ownerCreatedAt: '2026-01-01', kind: 'owned', namespaceId: 'u1', userRoot: root,
+    sessions: { read: async (_owner, path) => JSON.stringify({ role: 'user', content: path.startsWith(original) ? '每周三晚上我去游泳' : 'Go swimming Wednesday evenings.' }) } };
+  const history = new MemoryHistory({ config: {}, contexts: {}, ledger: {
+    database: { transaction: async run => run({}), withTransactionClient: async (_client, run) => run() },
+    overlay: { originsOf: async () => new Map([[uri,new Map([[lineFingerprint(text),{archiveUri}]])]]),
+      commit: async () => ({ sourceSession: 'dsh-first' }), removalOrigins: async () => [{archiveUri:original}] },
+    rejectMessages: async (_context, _type, _print, messages) => fenced.push(...messages),
+  } });
+  history.ensureSourceCopies = async () => {};
+  await history.rejectRemoved(context, {uri,type:'profile'}, [text], {same:async()=>({same:new Map()})});
+  assert.ok(fenced.some(message => message.archiveUri === original && message.text === '每周三晚上我去游泳'));
+});
+
+test('a surviving context-only chunk cannot expose a withdrawn message through its conversation title', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const { createHash } = await import('node:crypto');
+  const hash = text => createHash('sha256').update(text).digest('hex');
+  const context = {ownerId:'u',ownerCreatedAt:'2026-01-01',namespaceId:'u',kind:'owned',userRoot:'viking://user/u'};
+  const archive = `${context.userRoot}/sessions/dsh-first/history/archive_001`;
+  const fact = '帮我记一下几件个人的事，放进我的个人笔记里：每周三晚上我去游泳；我早上习惯喝黑咖啡；家里的备用钥匙放在蓝色鞋柜第二层；我对青霉素过敏。';
+  const messages = [{role:'assistant',content:'Platform project context.',created_at:'2026-01-01T00:00:00Z'}, {role:'user',content:fact}];
+  const raw = messages.map(JSON.stringify).join('\n');
+  const body = JSON.stringify({messages:historyChunks(messages.slice(0,1))[0].messages});
+  const source = {projectId:'default',projectCreatedAt:'2026-01-01',sessionId:'first',conversationTitle:fact.slice(0,48),conversationUrl:'/app/chat/first'};
+  let uri;
+  const history = new MemoryHistory({config:{memoryHistorySearchEnabled:true},contexts:{forProject:async()=>context},
+    resolveSource:async()=>source,eligible:async()=>true,ledger:{
+      lookup:async()=>({archive_uri:archive,project_id:'default',project_created_at:source.projectCreatedAt,session_id:'first',digest:hash(body)}),
+      archiveSourceHash:async()=>hash(raw),rejected:async(_scope,texts)=>texts.includes(fact),hasWithdrawals:async()=>true,
+    },resourcesFor:()=>({searchHistory:async()=>[{uri}],readHistory:async()=>body})});
+  context.sessions = {read:async()=>raw};
+  uri = `${context.userRoot}/resources/history/${hash(context.ownerCreatedAt).slice(0,24)}/chunk`;
+  const hits = await history.search({user:{id:'u'},project:{id:'default'},query:'游泳'}, {includeWithdrawn:true});
+  assert.doesNotMatch(historySearchText(hits),/每周三|游泳/);
+  assert.match(historySearchText(hits),/withdrawn/);
+});
+
+test('a rejected extraction fences the new question/assistant exchange against history resurrection', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const root = 'viking://user/u', archiveUri = `${root}/sessions/dsh-question/history/archive_001`;
+  const fenced = [], messages = [{role:'user',content:'我每周哪天去游泳？'},
+    {role:'assistant',content:'每周三晚上。早前对话说“每周三晚上我去游泳”，需要我补进笔记吗？'}];
+  const context = {ownerId:'u',userRoot:root,kind:'owned',sessions:{read:async()=>messages.map(JSON.stringify).join('\n')}};
+  const history = new MemoryHistory({config:{},contexts:{},ledger:{overlay:{removals:async()=>[
+    {memoryType:'profile',fingerprint:'swimming',text:'每周三晚上去游泳'},
+  ]},rejectMessages:async(_context,_type,_fingerprint,rows)=>fenced.push(...rows)}});
+  await history.rejectRelearned(context,archiveUri,['swimming']);
+  assert.deepEqual(fenced.map(row=>row.text),messages.map(row=>row.content));
+});
+
+test('explicitly kept neighbouring lines survive an archive fence; later removals invalidate that receipt', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const { retainedRemovalKey } = await import('../src/nativeMemoryRejections.mjs');
+  const uri = 'viking://user/u/memories/profile.md', text = '对青霉素过敏 (as of 2026-11-14)';
+  const authority = [{fingerprint:lineFingerprint('每周三晚上去游泳'),text:'每周三晚上去游泳',rejectedAt:'2026-11-14'}];
+  const held = retainedRemovalKey(uri,text,authority);
+  const overlay = {removals:async()=>authority,instructionCheck:async(_owner,key)=>key===held?{retainedAfterRemoval:true}:null,
+    originsOf:async()=>new Map([[uri,new Map([[lineFingerprint(text),{archiveUri:'origin'}]])]])};
+  const history = new MemoryHistory({config:{},contexts:{},ledger:{overlay,derivedSourcesRejected:async()=>true}});
+  const context = {ownerId:'u',kind:'owned'};
+  assert.equal(await history.fenceNativeBody(context,uri,`- ${text}`),`- ${text}`);
+  authority.push({fingerprint:lineFingerprint(text),text,rejectedAt:'2026-11-15'});
+  assert.equal(await history.fenceNativeBody(context,uri,`- ${text}`),null);
+});

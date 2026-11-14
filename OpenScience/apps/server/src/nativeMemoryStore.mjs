@@ -3,7 +3,7 @@ import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWi
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
-import { neutralMemoryUri, removalLines, removalText } from './nativeMemoryRejections.mjs';
+import { neutralMemoryUri, removalLines, removalText, retainedRemovalKey } from './nativeMemoryRejections.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
@@ -1356,6 +1356,13 @@ export class NativeMemoryStore {
     if (next === null) return;
     await this.overlay.upsertFile({ userId, uri: file.uri, memoryType: file.type, body: next, projectId: file.projectId, sensitive: file.sensitive });
     await this.overlay.setSources(userId, file.uri, sourcesNamedIn(next));
+    if (this.history && removed.length && (actor === 'user' || actor === 'conversation')) {
+      const authority = await this.overlay.removals(userId, context.kind === 'geo-project' ? context.namespaceId : null);
+      const prior = new Set(before.map(lineFingerprint));
+      for (const text of after.filter(line => prior.has(lineFingerprint(line)))) {
+        await this.overlay.recordInstructionCheck(userId, retainedRemovalKey(file.uri, text, authority), { retainedAfterRemoval: true });
+      }
+    }
     // A line the person took out leaves the index of origins with it; one they wrote names no conversation.
     if (pathRemoved) {
       await this.overlay.inheritOrigins(userId,file.uri,new Map([...oldOrigins].filter(([print])=>kept.has(print)).map(([print,ref])=>[print,originalSources(ref)])));
