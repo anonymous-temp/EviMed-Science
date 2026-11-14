@@ -5191,7 +5191,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }) : null;
   // Keep lifecycle fences active even when new history search is switched off.
   if (memoryHistory && nativeMemoryContexts && productDocuments) {
-    memoryHistory.nativeRemovalSources = (userId, sources, context) => nativeMemoryWorker.verification.readRemovalSources(userId, sources, context);
+    memoryHistory.nativeRemovalSources = (userId, sources, memoryContext) => nativeMemoryWorker.verification.readRemovalSources(userId, sources, memoryContext);
     nativeMemoryOverlay.memoryForgetBody = async (userId, uri, body) =>
       memoryHistory.fenceNativeBody(await nativeMemoryContexts.forUri(userId, uri), uri, body);
     productDocuments.memoryForgetReader = createMemoryForgetReader({
@@ -5212,9 +5212,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           'SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id=$2', [userId, projectId])).rows[0]?.stamp : null;
         return { ...owned, projectId, projectCreatedAt: stamp ?? null };
       },
-      hasWithdrawals: context => historyLedger.hasWithdrawals(context),
-      rejected: (context, texts) => historyLedger.rejected(context, texts),
-      sourcesRejected: (context, refs) => historyLedger.derivedSourcesRejected(context, refs),
+      hasWithdrawals: memoryContext => historyLedger.hasWithdrawals(memoryContext),
+      rejected: (memoryContext, texts) => historyLedger.rejected(memoryContext, texts),
+      sourcesRejected: (memoryContext, refs) => historyLedger.derivedSourcesRejected(memoryContext, refs),
       resolveRun: (userId, projectId, runId) => projectId ? resolveLessonSourceRun(store, agentRuns, userId, projectId, runId) : Promise.resolve(null),
       // Raw provenance resolution is private to the fence; calling the filtered reader here would recurse.
       resolveMethod: async (userId, methodId) => (await productDatabase.query(

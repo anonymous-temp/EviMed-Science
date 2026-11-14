@@ -28,7 +28,7 @@ test('statement forget withdraws three existing derived stores and their alterna
   await history.ingestArchive({userId:f.userId,projectId:'default',engineSession:archive.session,archiveUri:archive.archive_uri},context);
   const recallHistory = () => history.search({user:{id:f.userId},project,query:'M-41633',limit:5});
   assert.match(JSON.stringify(await recallHistory()),/M-41633/);
-  const uri = f.seed('notes/propagation.md',statement,{type:'notes'});
+  f.seed('notes/propagation.md',statement,{type:'notes'});
   await store.files(f.userId); // Warm the native body cache before the withdrawal.
   const documents = new ProductDocuments(f.database), capsules = new CapsuleService(documents);
   const capsule = await capsules.ownCapsule(f.userId,{create:true});

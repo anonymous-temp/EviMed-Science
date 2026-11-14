@@ -57,7 +57,7 @@ export class ProductDocuments {
   /** The live rejection authority also guards projections and historical bodies.
    * @param {string} userId @param {string} kind @param {unknown} value */
   async memoryAllows(userId, kind, value) {
-    return !value || !FORGET_DERIVED_KINDS.has(kind) || !this.memoryForgetReader || await this.memoryForgetReader(userId, value);
+    return !value || !FORGET_DERIVED_KINDS.has(kind) || !this.memoryForgetReader || this.memoryForgetReader(userId, value);
   }
 
   /** Create a bounded batch with its history in one transaction. No partial import is observable.
