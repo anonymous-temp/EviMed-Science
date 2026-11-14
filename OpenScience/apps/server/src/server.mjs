@@ -5215,6 +5215,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       hasWithdrawals: memoryContext => historyLedger.hasWithdrawals(memoryContext),
       rejected: (memoryContext, texts) => historyLedger.rejected(memoryContext, texts),
       sourcesRejected: (memoryContext, refs) => historyLedger.derivedSourcesRejected(memoryContext, refs),
+      conversationsDeleted: memoryContext => historyLedger.conversationsDeleted(memoryContext),
       resolveRun: (userId, projectId, runId) => projectId ? resolveLessonSourceRun(store, agentRuns, userId, projectId, runId) : Promise.resolve(null),
       // Raw provenance resolution is private to the fence; calling the filtered reader here would recurse.
       resolveMethod: async (userId, methodId) => (await productDatabase.query(

@@ -142,3 +142,17 @@ test("a method learnt in two projects is stopped when the second of them goes: i
   assert.deepEqual(second.retired, [method.id]);
   assert.equal((await documents.get("u1", "method", method.id)).payload.status, "retired");
 });
+
+test("FT12 project deletion retires through the real rows even while a memory withdrawal hides the method from readers", async () => {
+  const { documents, learning, learnIn } = fixture();
+  const only = await learnIn("withdrawn-from-readers", "p_one");
+  // Model the product store's reader fence: readers see nothing; lifecycle bookkeeping sees the real row.
+  const list = documents.list.bind(documents), get = documents.get.bind(documents);
+  documents.list = async (/** @type {string} */ userId, /** @type {string} */ kind, /** @type {any} */ options = {}) =>
+    options.lifecycle === true ? list(userId, kind, options) : { items: [], nextCursor: null };
+  documents.get = async (/** @type {string} */ userId, /** @type {string} */ kind, /** @type {string} */ id, /** @type {any} */ options = {}) =>
+    options.lifecycle === true ? get(userId, kind, id, options) : null;
+  const result = await learning.retireProjectMethods("u1", "p_one");
+  assert.deepEqual(result.retired, [only.id]);
+  assert.equal((await get("u1", "method", only.id)).payload.status, "retired");
+});

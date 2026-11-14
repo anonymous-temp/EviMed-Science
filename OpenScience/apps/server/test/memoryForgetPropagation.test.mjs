@@ -10,6 +10,8 @@ function fixture() {
     context: async (_user, projectId) => projectId,
     rejected: async (scope, texts) => scope !== 'shared' && removed && texts.some(text => text.includes('M-41633')),
     sourcesRejected: async (scope, refs) => scope !== 'shared' && removed && refs.sessions.includes('source'),
+    // The removal here stands for a deleted source conversation too, so a source that no longer resolves can be from it.
+    conversationsDeleted: async scope => scope !== 'shared' && removed,
     resolveRun: async (_user, _project, id) => runs.get(id), resolveMethod: async (_user, id) => methods.get(id),
   });
   return { allowed, undo: () => { removed = false; }, runs, methods };
@@ -43,7 +45,7 @@ test('cyclic merges terminate and still inspect each dependency', async () => {
   assert.equal(await f.allowed('u', {payload:{provenance:{mergedFrom:[{methodId:'m2'}]}}}), false);
 });
 
-test('a missing declared source cannot silently lift withdrawal after source cleanup', async () => {
+test('a missing declared source cannot silently lift withdrawal after source-conversation cleanup', async () => {
   const f = fixture();
   f.runs.delete('r1');
   assert.equal(await f.allowed('u',{payload:{provenance:{runId:'r1'},body:'A paraphrased method'}}),false);
@@ -56,4 +58,15 @@ test('a source run inherits its recorded shared namespace instead of falling bac
     resolveRun:async()=>({sessionId:'shared-source'}),resolveMethod:async()=>null,
   });
   assert.equal(await allowed('u',{payload:{provenance:{contextPolicy:{kind:'geo-project'},sourceProjectId:'p',runId:'r'}}}),false);
+});
+
+test('FT12 an unresolvable source is no evidence after a project deletion; after a conversation deletion it still withholds', async () => {
+  let conversationDeleted = false;
+  const allowed = createMemoryForgetReader({ context: async (_user, projectId) => projectId, hasWithdrawals: async () => true,
+    rejected: async () => false, sourcesRejected: async () => false, conversationsDeleted: async () => conversationDeleted,
+    resolveRun: async () => null, resolveMethod: async () => null });
+  const method = { payload: { body: 'Align every citation marker.', provenance: { sourceProjectId: 'project-gone', runId: 'run_1', mergedFrom: [{ methodId: 'gone' }] } } };
+  assert.equal(await allowed('u', method), true, 'the deleted project took its runs; the method follows its own lifecycle');
+  conversationDeleted = true;
+  assert.equal(await allowed('u', method), false, 'a deleted source conversation of that scope may have been its source');
 });

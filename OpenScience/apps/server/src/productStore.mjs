@@ -114,8 +114,10 @@ export class ProductDocuments {
     });
   }
 
-  /** @param {string} userId @param {string} kind @param {string} id @param {{ includeDeleted?: boolean, expectedRevision?: number }} options */
-  async get(userId, kind, id, { includeDeleted = false, expectedRevision = undefined } = {}) {
+  /** `lifecycle`: bookkeeping that must see and update the real row (a project deletion retiring the methods learnt only
+   * in it) reads past the memory-withdrawal fence. Never for a reader whose result reaches a model or a person.
+   * @param {string} userId @param {string} kind @param {string} id @param {{ includeDeleted?: boolean, expectedRevision?: number, lifecycle?: boolean }} options */
+  async get(userId, kind, id, { includeDeleted = false, expectedRevision = undefined, lifecycle = false } = {}) {
     if (expectedRevision !== undefined) productInteger(expectedRevision, 1, 2_147_483_647);
     const values = [productId(userId, "user"), productKind(kind), productId(id), includeDeleted, expectedRevision ?? null];
     await migrateProductStore(this.database);
@@ -123,7 +125,7 @@ export class ProductDocuments {
       WHERE user_id=$1 AND kind=$2 AND id=$3 AND ($4::boolean OR deleted_at IS NULL)
         AND ($5::integer IS NULL OR revision=$5)`, values);
     const found = record(result.rows[0]);
-    return await this.memoryAllows(userId, kind, found) ? found : null;
+    return lifecycle || await this.memoryAllows(userId, kind, found) ? found : null;
   }
 
   /** Compare a bounded authorized metadata closure in one database snapshot, without returning any body.
@@ -158,9 +160,10 @@ export class ProductDocuments {
    * text. A list of facts is otherwise up to a hundred payloads of 20,000
    * characters each (security review 2026-09-20).
    * @param {string} userId @param {string} kind
+   * `lifecycle` has the meaning it has for `get`.
    * @param {{ limit?: number, cursor?: string|null, projectId?: string|null, filter?: Record<string,any>, deleted?: boolean,
-   *   fields?: Record<string, true | number> | null }} options */
-  async list(userId, kind, { limit = 50, cursor = null, projectId = undefined, filter = {}, deleted = false, fields = null } = {}) {
+   *   fields?: Record<string, true | number> | null, lifecycle?: boolean }} options */
+  async list(userId, kind, { limit = 50, cursor = null, projectId = undefined, filter = {}, deleted = false, fields = null, lifecycle = false } = {}) {
     productInteger(limit, 1, 100);
     if (typeof deleted !== "boolean") throw new HttpError(400, "product_filter_invalid", "Invalid deletion filter.");
     const projection = payloadProjection(fields, 10);
@@ -191,7 +194,7 @@ export class ProductDocuments {
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
       if (!item) continue;
-      if (await this.memoryAllows(userId, kind, { ...item, payload: result.rows[index].privacy_payload ?? item.payload })) visible.push(item);
+      if (lifecycle || await this.memoryAllows(userId, kind, { ...item, payload: result.rows[index].privacy_payload ?? item.payload })) visible.push(item);
     }
     return { items: visible, nextCursor: result.rows.length > limit && last
       ? Buffer.from(JSON.stringify([last.createdAt, last.id])).toString("base64url") : null };

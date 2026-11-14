@@ -1,7 +1,9 @@
 /** Read-time dependency withdrawal. No second deletion ledger and no cached verdict:
  * undo lifts the existing rejection and immediately restores these readers.
- * A derived object is withheld whole when a recorded source is withdrawn; editing
- * a sentence cannot prove that the remainder no longer depends on that source.
+ * A derived object is withheld when its own text says a withdrawn thing, or when a recorded
+ * source was withdrawn whole (`MemoryHistoryLedger.derivedSourcesRejected`): exactly as wide
+ * as the evidence. These are readers; lifecycle code (project deletion retiring the methods
+ * learnt only in it) reads the real rows and is never filtered here.
  */
 
 /** @param {unknown} value @returns {Record<string, unknown>} */
@@ -48,11 +50,16 @@ export function forgetDependencies(value) {
  *   rejected: (context:Context,texts:string[]) => Promise<boolean>,
  *   hasWithdrawals?: (context:Context) => Promise<boolean>,
  *   sourcesRejected: (context:Context,refs:SourceReferences) => Promise<boolean>,
+ *   conversationsDeleted?: (context:Context) => Promise<boolean>,
  *   resolveRun: (userId:string,projectId:string|null,runId:string) => Promise<unknown>,
  *   resolveMethod: (userId:string,methodId:string) => Promise<unknown>
  * }} dependencies
  */
 export function createMemoryForgetReader(dependencies) {
+  /** A source that no longer resolves is no evidence by itself: a deleted project's runs go with it while its methods
+   * follow their own lifecycle. It withholds only where a source conversation of that scope was deleted, which it
+   * may have come from and which can no longer be ruled out. @param {Context} context */
+  const unresolvedWithdrawn = async context => dependencies.conversationsDeleted ? dependencies.conversationsDeleted(context) : false;
   /** @param {string} userId @param {unknown} value @param {string|null} [projectId] @returns {Promise<boolean>} */
   return async function allowed(userId, value, projectId = null) {
     /** @type {Set<string>} */ const visited = new Set();
@@ -73,14 +80,14 @@ export function createMemoryForgetReader(dependencies) {
         if (visited.has(key)) continue;
         visited.add(key);
         const run = await dependencies.resolveRun(userId, sourceProject, runId);
-        if (!run || !await check(run, sourceProject, depth + 1, context)) return false;
+        if (run ? !await check(run, sourceProject, depth + 1, context) : await unresolvedWithdrawn(context)) return false;
       }
       for (const methodId of refs.methods) {
         const key = JSON.stringify(['method', methodId]);
         if (visited.has(key)) continue;
         visited.add(key);
         const method = await dependencies.resolveMethod(userId, methodId);
-        if (!method || !await check(method, sourceProject, depth + 1, context)) return false;
+        if (method ? !await check(method, sourceProject, depth + 1, context) : await unresolvedWithdrawn(context)) return false;
       }
       return true;
     };

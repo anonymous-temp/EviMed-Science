@@ -29,3 +29,14 @@ for (const surface of ['get','list','learningEvidenceOf','listResultCorrections'
   assert.equal(checked,true);
   assert.deepEqual(result,surface === 'get' ? null : []);
 });
+
+test('FT12 lifecycle bookkeeping reads the real method row past the reader fence; ordinary readers still do not', async () => {
+  const row = {id:'m1',kind:'method',user_id:'u',project_id:null,payload:{status:'approved',provenance:{sourceProjectId:'gone',runId:'r1'}},revision:1,
+    created_at:new Date(),updated_at:new Date(),recorded_at:new Date(),deleted_at:null};
+  const documents = new ProductDocuments({transaction:async()=>{},query:async()=>({rows:[row]})});
+  documents.memoryForgetReader = async () => false;
+  assert.equal(await documents.get('u','method','m1'),null);
+  assert.deepEqual((await documents.list('u','method')).items,[]);
+  assert.equal((await documents.get('u','method','m1',{lifecycle:true}))?.payload.status,'approved');
+  assert.deepEqual((await documents.list('u','method',{lifecycle:true})).items.map(item=>item.id),['m1']);
+});

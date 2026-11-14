@@ -880,8 +880,9 @@ export class LearningService {
       /** @type {string | null} */
       let cursor = null;
       do {
+        // Lifecycle bookkeeping sees the real rows: a method a memory withdrawal hides from readers is still retired with its project.
         const page = await this.documents.list(userId, "method", {
-          limit: 100, cursor,
+          limit: 100, cursor, lifecycle: true,
           filter: { recordType: LEARNED_METHOD_RECORD_TYPE, provenance },
         });
         for (const listed of page.items ?? []) {
@@ -907,7 +908,7 @@ export class LearningService {
               break;
             } catch (error) {
               if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 3) throw error;
-              document = await this.documents.get(userId, "method", document.id) ?? document;
+              document = await this.documents.get(userId, "method", document.id, { lifecycle: true }) ?? document;
             }
           }
         }

@@ -314,6 +314,18 @@ export class MemoryHistoryLedger {
     return deleted.rows.length > 0;
   }
 
+  /** Whether a source conversation in this scope was deleted or withdrawn from history whole (a conversation-scoped
+   * permanent fence).
+   * Project deletion fences the project as a whole and is not a conversation deletion: what was learnt in it follows
+   * its own lifecycle (retired when learnt only there).
+   * @param {{ownerId:string,ownerCreatedAt:string,projectId?:string|null}} context */
+  async conversationsDeleted(context) {
+    await this.migrate();
+    return (await this.database.query(`SELECT 1 FROM evimed_memory.history_fences f
+      WHERE f.owner_id=$1 AND f.owner_created_at=$2 AND f.permanent AND f.session_id<>'' AND ($3='' OR f.project_id=$3) LIMIT 1`,
+    [context.ownerId, context.ownerCreatedAt, context.projectId ?? ''])).rows.length > 0;
+  }
+
   async rejectMessages(context, memoryType, fingerprint, messages) {
     await this.migrate();
     for (const message of messages) await this.database.query(`INSERT INTO evimed_memory.history_message_rejections
