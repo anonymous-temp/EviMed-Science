@@ -635,7 +635,10 @@ async function sweepLedgerTemps(project) {
   const parent = await openScopedDirectoryNoFollow(project.rootDir, project.metaDir, { create: true });
   try {
     for (const name of await readdir(parent.path)) {
-      if (/^\.runs\.\d{6}\.jsonl\./.test(name)) await rm(path.join(parent.path, name), { force: true });
+      const writer = /^\.runs\.\d{6}\.jsonl\.(\d+)\.(\d+)\.tmp_[A-Za-z0-9_-]+$/.exec(name);
+      if (writer && (Number(writer[1]) === process.pid || Number(writer[2]) < Date.now() - 5 * 60_000)) {
+        await rm(path.join(parent.path, name), { force: true });
+      }
     }
   } finally { await parent.handle.close(); }
 }
@@ -647,7 +650,7 @@ async function sweepLedgerTemps(project) {
 async function writeNextLedger(project, event, maxBytes, rotationEnabled = false, pending = [], invalidatePrefix = (..._files) => {}) {
   // The outer admission lock is keyed by product id. Publication also serializes
   // aliases of the same on-disk ledger in this process; multiple web writers on
-  // one volume remain unsupported. Never sweep another local writer's temp.
+  // one volume remain unsupported. Foreign temps have a five-minute grace period.
   const diskLock = { userId: "run-ledger-files", id: path.resolve(project.metaDir) };
   if (rotationEnabled) await withProjectStorageMutation(diskLock, () => sweepLedgerTemps(project));
   for (;;) {
@@ -736,8 +739,22 @@ function deepFreezeLedgerRow(value, seen = new WeakSet()) {
   return Object.freeze(value);
 }
 
+let freezeTestLedgerRows = false;
+
+// The test fixture enables this seam before constructing any store. Production
+// keeps shallow row freezing; tests also catch nested in-place mutations.
+export function freezeLedgerRowsForTest() {
+  freezeTestLedgerRows = true;
+}
+
+/** @template {object} T @param {T} value @returns {T} */
+function freezeFoldedLedgerRow(value) {
+  return freezeTestLedgerRows ? deepFreezeLedgerRow(value) : Object.freeze(value);
+}
+
 const terminalBase = Symbol("terminalBase");
 const terminalEvent = Symbol("terminalEvent");
+const uncheckedAdmission = Symbol("uncheckedAdmission");
 
 // Rows are replaced, never mutated: a shallow map copy resumes the exact same fold.
 // Prefix snapshots skip final presentation, which must run only after the tail.
@@ -775,7 +792,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
       const dispatchId = event.dispatchId == null ? null : safeStoredId(event.dispatchId, "dispatchId");
       const dispatchStatus = event.dispatchStatus ?? (dispatchId ? "dispatching" : "accepted");
       if (!dispatchStatuses.has(dispatchStatus)) throw corrupt("Agent run dispatch status is invalid.");
-      runs.set(id, Object.freeze({
+      runs.set(id, freezeFoldedLedgerRow({
         id,
         dispatchId,
         ...(event.dispatchFingerprint != null ? { dispatchFingerprint: normalizeDispatchFingerprint(event.dispatchFingerprint) } : {}),
@@ -830,7 +847,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
       const id = safeStoredId(event.id, "id");
       const current = runs.get(id);
       if (!current) throw corrupt("Runtime input refers to an unknown run.");
-      runs.set(id, Object.freeze({ ...current,
+      runs.set(id, freezeFoldedLedgerRow({ ...current,
         ...(event.event === "runtime-turn" ? { nativeTurn: validateNativeTurn(event.nativeTurn) } : {}),
         ...(event.rebased === true ? { nativeWorkflow: null } : {}),
         // A field on an existing event rather than an event kind of its own.
@@ -849,7 +866,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
     if (event.event === "native-workflow") {
       const current = runs.get(event.id);
       if (!current?.nativeTurn || event.evidence?.turnStartSeq !== current.nativeTurn.startSeq) throw corrupt("Native workflow proof has no matching input.");
-      runs.set(event.id, Object.freeze({ ...current, nativeWorkflow: event.evidence }));
+      runs.set(event.id, freezeFoldedLedgerRow({ ...current, nativeWorkflow: event.evidence }));
       continue;
     }
     if (event.event === "dispatch") {
@@ -861,7 +878,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
       if (!["accepted", "unknown", "rejected"].includes(event.status)) {
         throw corrupt("Agent run dispatch event is invalid.");
       }
-      runs.set(id, Object.freeze({ ...current, dispatchStatus: event.status }));
+      runs.set(id, freezeFoldedLedgerRow({ ...current, dispatchStatus: event.status }));
       continue;
     }
     if (event.event === "progress") {
@@ -877,7 +894,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
       // control plane reads this ledger and simply does not fold them.
       const deliverables = normalizeStoredDeliverables(event.deliverables);
       const snapshot = normalizeStoredProgress(event.snapshot);
-      runs.set(id, Object.freeze({
+      runs.set(id, freezeFoldedLedgerRow({
         ...current,
         ...(deliverables ? { deliverables } : {}),
         ...(snapshot ? { progress: { deliverables: deliverables ?? current.deliverables ?? [], ...snapshot } } : {}),
@@ -908,7 +925,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
         || current.artifacts.some(file => !artifacts.includes(file)) || current.unverifiedArtifacts.some(file => !unverifiedArtifacts.includes(file))
         || (current.presentedFiles ?? []).some(file => !presentedFiles.includes(file))
         || (current.outputFiles ?? []).some(file => !outputFiles?.includes(file))) throw corrupt("Artifact refresh evidence is invalid.");
-      runs.set(event.id, Object.freeze({ ...current, artifacts, unverifiedArtifacts, ...(outputFiles ? { outputFiles } : {}), ...(presentedFiles.length ? { presentedFiles } : {}),
+      runs.set(event.id, freezeFoldedLedgerRow({ ...current, artifacts, unverifiedArtifacts, ...(outputFiles ? { outputFiles } : {}), ...(presentedFiles.length ? { presentedFiles } : {}),
         artifactRefresh: { transcriptSha256: event.transcriptSha256, inventorySha256: event.inventorySha256, at: event.at } }));
       continue;
     }
@@ -920,17 +937,20 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
       const finishedAt = storedTimestamp(event.finishedAt, "finishedAt");
       const errorCode = event.errorCode == null ? null : String(event.errorCode);
       const priorTerminal = current[terminalEvent];
+      const outcome = { status: event.status, errorCode, finishedAt };
       let conflict = current.terminalConflict;
       let outcomes = current.terminalOutcomes;
       if (priorTerminal) {
-        if (outcomes?.some(outcome => isDeepStrictEqual(outcome, event))) continue;
+        if (outcomes?.some(previous => isDeepStrictEqual(previous, outcome))) continue;
         if (event.status !== current.status || errorCode !== current.errorCode) {
           conflict = true;
-          outcomes = [...(outcomes ?? [priorTerminal]), event];
+          outcomes = [...(outcomes ?? [{ status: priorTerminal.status,
+            errorCode: priorTerminal.errorCode == null ? null : String(priorTerminal.errorCode),
+            finishedAt: priorTerminal.finishedAt }]), outcome];
         }
         // Equal timestamps keep file order. Identical outcomes add no diagnostic.
         if (Date.parse(finishedAt) >= Date.parse(current.finishedAt)) {
-          if (conflict) runs.set(id, Object.freeze({ ...current, terminalConflict: true, terminalOutcomes: outcomes }));
+          if (conflict) runs.set(id, freezeFoldedLedgerRow({ ...current, terminalConflict: true, terminalOutcomes: outcomes }));
           continue;
         }
         // Restore fields supplied by the displaced terminal from its pre-terminal
@@ -938,9 +958,13 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
         const restored = { ...current };
         const base = current[terminalBase];
         for (const key of ["deliverables", "progress", "claimSummary", "canceledBy", "errorSubCode", "connectorNeeds",
-          "presentedFiles", "outputFiles", "verification"]) {
+          "presentedFiles", "outputFiles"]) {
           if (Object.hasOwn(base, key)) restored[key] = base[key]; else delete restored[key];
         }
+        // An unchecked admission can arrive after the first terminal. Restoring
+        // the pre-terminal row must never turn that admission into a clean bill.
+        restored.verification = current.verification === "unchecked" || current[uncheckedAdmission]
+          ? "unchecked" : base.verification;
         const displacedNotices = describedQualityNotices(priorTerminal.qualityNotices);
         restored.qualityNotices = current.qualityNotices.filter(notice => !displacedNotices.some(own => isDeepStrictEqual(own, notice)));
         for (const notice of base.qualityNotices) {
@@ -957,7 +981,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
       const deliverables = normalizeStoredDeliverables(event.deliverables);
       const snapshot = normalizeStoredProgress(event.snapshot);
       const claimSummary = normalizeClaimSummary(event.claimSummary);
-      runs.set(id, Object.freeze({
+      runs.set(id, freezeFoldedLedgerRow({
         ...current,
         [terminalBase]: current[terminalBase] ?? current,
         [terminalEvent]: event,
@@ -1002,7 +1026,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
         // survives a terminal event that says nothing; a terminal finding
         // outranks it.
         verification: normalizeVerification(event.verification)
-          ?? (current.verification === "unchecked" ? "unchecked" : null),
+          ?? (current.verification === "unchecked" || current[uncheckedAdmission] ? "unchecked" : null),
         // The run's own notices lead; anything appended after the fact — a
         // coverage judgement that was still running when the run finished —
         // follows, in whichever order the two events reached the ledger.
@@ -1042,7 +1066,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
       const current = runs.get(id);
       if (!current) continue;
       const repairRounds = normalizeRepairRounds(event.repairRounds);
-      runs.set(id, Object.freeze({
+      runs.set(id, freezeFoldedLedgerRow({
         ...current,
         ...(!current.promptDispatchStartedAt&&typeof event.promptDispatchStartedAt==='string'&&Number.isFinite(Date.parse(event.promptDispatchStartedAt))?{promptDispatchStartedAt:event.promptDispatchStartedAt}:{}),
         ...(event.inputAttribution ? { inputAttribution: mergeInputAttribution(current.inputAttribution,event.inputAttribution) } : {}),
@@ -1097,12 +1121,15 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
       // notice; deletion is not, because the word promises it.
       const archived = typeof event.archived === "boolean" ? event.archived : null;
       const deleted = event.deleted === true;
-      runs.set(id, Object.freeze({
+      runs.set(id, freezeFoldedLedgerRow({
         ...current,
         ...(labelled ? { title, titleSource } : {}),
         ...(question ? { question } : {}),
         ...(archived === null ? {} : { archived }),
         ...(deleted ? { deleted: true } : {}),
+        // Keep the admission even while a terminal finding outranks it. An
+        // earlier clean terminal may later displace that finding.
+        ...(event.verification === "unchecked" ? { [uncheckedAdmission]: true } : {}),
         verification: event.verification === "unchecked" && current.verification === null
           ? "unchecked"
           : current.verification,
@@ -1119,7 +1146,7 @@ function foldEvents(events, prefix = new Map(), finalize = true) {
   for (const [id, folded] of runs) {
     const run = folded;
     if (run.titleSource === "auto" || run.titleSource === "user") continue;
-    runs.set(id, Object.freeze({ ...run, title: derivedRunTitle(run), titleSource: "question" }));
+    runs.set(id, freezeFoldedLedgerRow({ ...run, title: derivedRunTitle(run), titleSource: "question" }));
   }
   return runs;
 }
@@ -5220,8 +5247,11 @@ export class AgentRunStore {
       .map((folded) => {
         const run = structuredClone(folded);
         const history = runPhaseHistory(events, run.id, prefix?.phases.get(run.id));
-        if (deletedSources.has(run.sessionId)) return { ...run, deleted: true, question: null, title: 'Conversation removed',
-          steers: [], goal: null, nativeWorkflow: null, deliverables: [], progress: undefined, qualityNotices: [], transcript: undefined };
+        if (run.deleted === true || deletedSources.has(run.sessionId)) {
+          delete run.terminalOutcomes;
+          return { ...run, deleted: true, question: null, title: 'Conversation removed',
+            steers: [], goal: null, nativeWorkflow: null, deliverables: [], progress: undefined, qualityNotices: [], transcript: undefined };
+        }
         return {
           ...run,
           phase: history.phase,

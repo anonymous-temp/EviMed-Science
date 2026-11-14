@@ -175,6 +175,21 @@ test("an unreadable continuation fails the report and names the segment", async 
   });
 });
 
+for (const missingIndex of [1, 2]) test(`a numbering gap at segment ${missingIndex} fails the report instead of measuring incomplete history`, async t => {
+  const root = await mkdtemp(path.join(tmpdir(), "gate-health-gap-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const meta = path.join(root, ".openscience");
+  await mkdir(meta);
+  await writeFile(path.join(meta, "runs.jsonl"), finished({ id: "base" }));
+  if (missingIndex === 2) await writeFile(path.join(meta, "runs.000001.jsonl"), finished({ id: "first" }));
+  await writeFile(path.join(meta, `runs.${String(missingIndex + 1).padStart(6, "0")}.jsonl`), finished({ id: "later" }));
+  assert.throws(() => run(root), error => {
+    assert.equal(error.status, 2);
+    assert.ok(String(error.stderr).includes(`missing run ledger segment ${path.join(meta, `runs.${String(missingIndex).padStart(6, "0")}.jsonl`)}`));
+    return true;
+  });
+});
+
 test("LG4 terminal conflicts count runs and select the earliest outcome across segments", async t => {
   const root = await mkdtemp(path.join(tmpdir(), "gate-health-conflict-"));
   t.after(() => rm(root, { recursive: true, force: true }));
