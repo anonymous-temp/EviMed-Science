@@ -7,7 +7,7 @@ import { neutralMemoryUri, removalLines, removalText } from './nativeMemoryRejec
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
-import { carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine, sourcePrivacyOf, MEMORY_SAFETY_NOTES_ANCHOR } from "@evimed/domain";
+import { memoryHistoryLine, carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine, sourcePrivacyOf, MEMORY_SAFETY_NOTES_ANCHOR } from "@evimed/domain";
 import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhere.mjs";
 import { recordForgetDuplicates, recordMapReplaced } from "./nativeMemoryMetrics.mjs";
 import { freshnessOf } from "./memoryMapSources/common.mjs";
@@ -322,7 +322,15 @@ export function projectCardRows(everything, projectId, { sections = false } = {}
       if (field && !card.has("field")) { card.set("field", { slot: "field", recordId: record.id, text: field[1].trim(), updatedAt: record.updatedAt }); continue; }
       if (!/^[-*+]\s+\S/.test(trimmed)) continue;
       const item = trimmed.replace(/^[-*+]\s+/, "");
-      const element = /^([^：:]{1,24})[：:]\s*(.+)$/.exec(item);
+      const history = memoryHistoryLine(item);
+      const earlierField = history && /^(?:领域|field)[：:]\s*(.+)$/i.exec(history.value);
+      if (earlierField) {
+        const heldField = card.get('field');
+        if (heldField?.recordId === record.id) card.set('field', { ...heldField,
+          text: `${heldField.text}；${history.prefix}${earlierField[1].trim()}${history.suffix}`.slice(0, 600) });
+        continue;
+      }
+      const element = /^([^：:]{1,24})[：:]\s*(.+)$/.exec(history?.value ?? item);
       const inElements = ELEMENTS.has(section) && element;
       const slot = inElements ? /** @type {Record<string, string>} */ (SLOT_OF_ELEMENT)[element[1].trim().toLowerCase()] : /** @type {Record<string, string>} */ (SLOT_OF_HEADING)[section];
       if (!slot) {
@@ -333,7 +341,7 @@ export function projectCardRows(everything, projectId, { sections = false } = {}
         }
         continue;
       }
-      const value = inElements ? element[2].trim() : item;
+      const value = inElements ? history ? `${history.prefix}${element[2].trim()}${history.suffix}` : element[2].trim() : item;
       const held = card.get(slot);
       card.set(slot, held && held.recordId === record.id ? { ...held, text: `${held.text}；${value}`.slice(0, 600) } : held ?? { slot, recordId: record.id, text: value.slice(0, 600), updatedAt: record.updatedAt });
     }

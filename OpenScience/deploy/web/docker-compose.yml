@@ -116,7 +116,7 @@ services:
       #
       # `memory.custom_templates_dir`. A directory that is not here is silent
       # upstream: the server falls back to its built-in memory types.
-      - ./openviking/memory-templates:/app/memory-templates:ro
+      - ./openviking/${OPEN_SCIENCE_MEMORY_TEMPLATES_DIR:-memory-templates}:/app/memory-templates:ro
     depends_on:
       evimed-openviking-init:
         condition: service_completed_successfully
@@ -182,6 +182,8 @@ services:
   evimed-openviking-init:
     image: ${OPEN_SCIENCE_OPENVIKING_IMAGE:-ghcr.io/volcengine/openviking:v0.5.3@sha256:57d3fd8873dbb78e5ccfdc57481006e6fbe765390ea18cd4a6b2f62da8aa104d}
     user: "0:0"
+    environment:
+      OPEN_SCIENCE_MEMORY_TEMPLATES_DIR: ${OPEN_SCIENCE_MEMORY_TEMPLATES_DIR:-memory-templates}
     entrypoint: ["python", "-c"]
     command:
       - |
@@ -268,7 +270,10 @@ services:
         # server that extracts with upstream's memory types and says nothing.
         # Naming the path here is the loud version.
         release = pathlib.Path('/input/openviking')
-        templates = release / 'memory-templates'
+        template_directory = os.environ.get('OPEN_SCIENCE_MEMORY_TEMPLATES_DIR') or 'memory-templates'
+        if template_directory not in ('memory-templates', 'memory-templates-extraction-v2'):
+            raise SystemExit('invalid OPEN_SCIENCE_MEMORY_TEMPLATES_DIR')
+        templates = release / template_directory
         needed = [templates]
         needed += [templates / (name + '.yaml') for name in ('profile', 'preferences', 'entities', 'corrections', 'project_context', 'decisions', 'follow_ups', 'project_facts', 'observations', 'recent_work', 'people', 'notes')]
         for path in needed:
@@ -409,6 +414,7 @@ services:
       OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_ENABLED:
       OPEN_SCIENCE_MEMORY_HISTORY_SECRET_REDACTION_DAILY_CALLS:
       OPEN_SCIENCE_MEMORY_HISTORY_RETRIEVAL_V2_ENABLED:
+      OPEN_SCIENCE_MEMORY_TEMPLATES_DIR: ${OPEN_SCIENCE_MEMORY_TEMPLATES_DIR:-memory-templates}
       OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED:
       OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_ROBUST_ENABLED:
       OPEN_SCIENCE_MEMORY_FORGET_REQUEST_CHECK_ENABLED:

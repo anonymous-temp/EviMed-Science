@@ -131,7 +131,7 @@ test("the memory templates are a release directory mounted read-only where the l
   // self-check and the modules built on the engine. A template directory mounted where the server does not look is
   // silent — it falls back to its built-in types — so the paths are held to the one definition.
   const service = base.services["evimed-openviking"];
-  const mounts = new Map(service.volumes.map((entry) => String(entry).split(":")).filter((parts) => parts[0].startsWith("./")).map((parts) => [parts[1], parts]));
+  const mounts = new Map(service.volumes.map((entry) => String(entry).replace("${OPEN_SCIENCE_MEMORY_TEMPLATES_DIR:-memory-templates}", "memory-templates").split(":")).filter((parts) => parts[0].startsWith("./")).map((parts) => [parts[1], parts]));
   assert.deepEqual([...mounts.keys()].sort(), [OPENVIKING_MEMORY_TEMPLATES_DIR], "a release file other than the templates is mounted into the engine");
   for (const [target, [source, , mode]] of mounts) {
     assert.equal(mode, "ro", `${target} is mounted writable`);
@@ -458,4 +458,21 @@ test("the embedding the index runs is pinned, because every stored vector came f
   // The reranker's endpoint is a complete URL: it is posted to verbatim.
   assert.ok(pin.rerank.apiBase.startsWith("https://dashscope.aliyuncs.com/"));
   assert.ok(pin.rerank.timeoutMs > 0);
+});
+
+test('extraction-v2 keeps all registered schemas and a read-only selectable mount', () => {
+  const defaults = renderMemoryTemplates();
+  const variant = renderMemoryTemplates({ variant: 'extraction-v2' });
+  for (const [name, text] of Object.entries(variant)) {
+    const current = YAML.parse(defaults[name]);
+    const parsed = YAML.parse(text);
+    assert.equal(parsed.memory_type, current.memory_type);
+    assert.equal(parsed.directory, current.directory);
+    assert.equal(parsed.filename_template, current.filename_template);
+    assert.deepEqual(parsed.fields.map(field => [field.name, field.type, field.merge_op]), current.fields.map(field => [field.name, field.type, field.merge_op]));
+  }
+  assert.ok(base.services['evimed-openviking'].volumes.includes('./openviking/${OPEN_SCIENCE_MEMORY_TEMPLATES_DIR:-memory-templates}:/app/memory-templates:ro'));
+  assert.equal(base.services['evimed-openviking-init'].environment.OPEN_SCIENCE_MEMORY_TEMPLATES_DIR, '${OPEN_SCIENCE_MEMORY_TEMPLATES_DIR:-memory-templates}');
+  assert.match(base.services['evimed-openviking-init'].command.join('\n'), /templates = release \/ template_directory/);
+  assert.equal(base.services['open-science-web'].environment.OPEN_SCIENCE_MEMORY_TEMPLATES_DIR, '${OPEN_SCIENCE_MEMORY_TEMPLATES_DIR:-memory-templates}');
 });

@@ -1,6 +1,6 @@
 import { removalLines, removalRefusals } from './nativeMemoryRejections.mjs';
 import { withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
-import { carriesPlatformContext, identifierShapesIn, platformIdentifiersIn } from '@evimed/domain';
+import { MEMORY_EXTRACTION_V2_REVIEW_TEXT, carriesPlatformContext, identifierShapesIn, platformIdentifiersIn } from '@evimed/domain';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { filterCapturedMessage } from './memoryGateway.mjs';
 import { instructionSourceMessage } from './nativeMemoryInstructionOrigin.mjs';
@@ -43,10 +43,10 @@ const INSTRUCTION = [
   'The verdict must be supported, unsupported, corrected, or attribution_wrong. corrected must be null unless correcting, otherwise a single non-empty string.',
 ].join(' ');
 
-/** @param {string} model @param {any[]} lines */
-export function verificationJudgeRequest(model, lines) {
+/** @param {string} model @param {any[]} lines @param {{memoryTemplatesDirectory?: string}} [config] */
+export function verificationJudgeRequest(model, lines, config = {}) {
   return { model, thinking: { type: 'disabled' }, temperature: 0, max_tokens: 6000,
-    response_format: { type: 'json_object' }, messages: [{ role: 'system', content: INSTRUCTION }, { role: 'user', content: JSON.stringify({ lines }) }] };
+    response_format: { type: 'json_object' }, messages: [{ role: 'system', content: config.memoryTemplatesDirectory === 'memory-templates-extraction-v2' ? `${INSTRUCTION} ${MEMORY_EXTRACTION_V2_REVIEW_TEXT}` : INSTRUCTION }, { role: 'user', content: JSON.stringify({ lines }) }] };
 }
 
 /** Strict local validation too: malformed/partial batches and fabricated corrections leave every line alone.
@@ -93,7 +93,7 @@ export function createVerificationJudge({ config, usageLedger = null, fetchImpl 
         recordVerificationJudge('asked');
         try {
           const body = await callModel({ config, usageLedger, fetchImpl }, { userId, projectId: 'default', runId: null,
-            purpose: 'memory-extraction', signal: controller.signal, body: verificationJudgeRequest(model, lines) });
+            purpose: 'memory-extraction', signal: controller.signal, body: verificationJudgeRequest(model, lines, config) });
           const results = parseVerificationJudgement(body?.choices?.[0]?.message?.content, lines);
           if (results) return { results, calls: made };
           recordVerificationJudge('failed');

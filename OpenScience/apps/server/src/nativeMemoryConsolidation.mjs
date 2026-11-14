@@ -1,3 +1,4 @@
+import { MEMORY_EXTRACTION_V2_REVIEW_TEXT } from '@evimed/domain';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash } from "node:crypto";
 import { recordNativeConsolidatedFiles, recordNativeConsolidation } from "./nativeMemoryMetrics.mjs";
@@ -195,7 +196,7 @@ export class NativeMemoryConsolidation {
   /** @param {string} userId @param {string} root @param {string} segment @param {string} salt */
   async #submitDirectory(userId, root, segment, salt) {
     const task = await this.resources.submitMemoryConsolidation(userId, {
-      to: `${root}/${segment}`, instruction: CONSOLIDATION_INSTRUCTION, idempotencyKey: `nm-consolidate-${digest(userId).slice(0, 24)}-${digest(segment).slice(0, 8)}-${salt}`,
+      to: `${root}/${segment}`, instruction: this.config.memoryTemplatesDirectory === 'memory-templates-extraction-v2' ? `${CONSOLIDATION_INSTRUCTION} ${MEMORY_EXTRACTION_V2_REVIEW_TEXT}` : CONSOLIDATION_INSTRUCTION, idempotencyKey: `nm-consolidate-${digest(userId).slice(0, 24)}-${digest(segment).slice(0, 8)}-${salt}`,
     });
     await this.overlay.noteConsolidationSubmitted(userId, task.taskId, this.now());
   }

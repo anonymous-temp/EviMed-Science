@@ -170,3 +170,9 @@ test('P07 fixture assertion errors are judge failures; the wire uses indexed rem
   await assert.rejects(judge.same(request({ originMessages: true })), { code: 'memory_history_privacy_unavailable' });
   assert.deepEqual(calls[0].removed[0], { removed: 0, text: 'prefers tables for comparisons' });
 });
+
+test('dated history cannot resurrect even a short forgotten value, in either direction', () => {
+  assert.equal(containsRemoved('earlier: 成都 (until 2026-11-02)', '成都'), true);
+  assert.equal(containsRemoved('成都', '曾为：成都（截至 2026-11-02）'), true);
+  assert.equal(containsRemoved('earlier: 上海 (until 2026-11-02)', '成都'), false);
+});

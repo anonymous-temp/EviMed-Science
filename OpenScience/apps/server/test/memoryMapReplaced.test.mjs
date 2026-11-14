@@ -205,3 +205,10 @@ test("freshness halves with its half-life from the last write or use, use stretc
   assert.equal(freshnessOf({ kind: "preference", projectId: "p", writtenAt: days(30) }, NOW), 0.5);
   assert.equal(freshnessOf({ kind: "decision" }, NOW), FRESHNESS_DURABLE);
 });
+
+test('an earlier line is never a replacement chain head even when it shares more words', () => {
+  const before = '- I work on the quality and automation of public greenhouse sensors';
+  const after = '- I work on the quality and automation of library circulation\n- earlier: I work on the quality and automation of public greenhouse sensors (until 2026-11-02)';
+  const [old] = profile(after, [revision(1, before, after)]);
+  assert.equal(old.head, lineId('I work on the quality and automation of library circulation'));
+});

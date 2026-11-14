@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { verifyLines, hardTokens, createVerificationJudge, parseVerificationJudgement, verificationJudgeRequest } from '../src/nativeMemoryVerification.mjs';
-import { parseNativeMemoryConsolidationMode } from '../src/config.mjs';
+import { parseMemoryTemplatesDirectory, parseNativeMemoryConsolidationMode } from '../src/config.mjs';
 
 const line = text => ({ text, uri: 'viking://user/test/memories/profile.md', fingerprint: text });
 const source = (text, role = 'user', created_at = '2026-11-01') => ({ text, role, created_at });
@@ -151,4 +151,16 @@ test('source timestamps ground calendar dates without lending their numbers to a
   assert.equal(parseVerificationJudgement(content('Dose 12 mg (2026-11-02).'), lines), null, 'an absent date still invalidates the batch');
   assert.equal(parseVerificationJudgement(content('Dose 11 mg (2026-11-01).'), lines), null, 'timestamp digits cannot ground a dose');
   assert.equal(parseVerificationJudgement(content('Dose 12 mg (2026-11-01).'), [{ ...lines[0], sources: [source('Dose 12 mg.', 'user', '2026-11-01 invalid')] }]), null);
+});
+
+test('extraction-v2 verification preserves historical labels and leaves the default request unchanged', () => {
+  assert.doesNotMatch(verificationJudgeRequest('model', []).messages[0].content, /An earlier:/);
+  assert.match(verificationJudgeRequest('model', [], { memoryTemplatesDirectory: 'memory-templates-extraction-v2' }).messages[0].content, /An earlier:/);
+});
+
+test('the single template setting defaults to current and refuses an unknown directory', () => {
+  assert.equal(parseMemoryTemplatesDirectory(undefined), 'memory-templates');
+  assert.equal(parseMemoryTemplatesDirectory(''), 'memory-templates');
+  assert.equal(parseMemoryTemplatesDirectory('memory-templates-extraction-v2'), 'memory-templates-extraction-v2');
+  assert.throws(() => parseMemoryTemplatesDirectory('../elsewhere'), /OPEN_SCIENCE_MEMORY_TEMPLATES_DIR/);
 });

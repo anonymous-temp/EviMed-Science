@@ -1,3 +1,4 @@
+import { memoryHistoryLine } from '@evimed/domain';
 import { hardTokens, tokenPresent, sourceHasToken } from './nativeMemoryHardTokens.mjs';
 import { contentHash, lineFingerprint, normalisedStatement } from './nativeMemoryOverlay.mjs';
 import { callModelForControlPlane } from "./modelGateway.mjs";
@@ -64,8 +65,19 @@ export function similarity(left, right) {
  * @param {string} written @param {string} removed the removed line's normalised text
  */
 export function containsRemoved(written, removed) {
-  const needle = compact(removed);
-  return [...needle].length >= MIN_CONTAINED && compact(written).includes(needle);
+  const writtenHistory = memoryHistoryLine(written);
+  const removedHistory = memoryHistoryLine(removed);
+  if (!writtenHistory && !removedHistory) {
+    const ordinaryNeedle = compact(removed);
+    return [...ordinaryNeedle].length >= MIN_CONTAINED && compact(written).includes(ordinaryNeedle);
+  }
+  // Wrapping a short forgotten value in a dated history line cannot defeat exact removal.
+  // Keep ordinary fingerprints unchanged: history and current still have distinct record/origin identities.
+  const plainWritten = normalisedStatement(writtenHistory?.value ?? written);
+  const plainRemoved = normalisedStatement(removedHistory?.value ?? removed);
+  if ((writtenHistory || removedHistory) && plainRemoved && plainWritten === plainRemoved) return true;
+  const needle = compact(plainRemoved);
+  return [...needle].length >= MIN_CONTAINED && compact(plainWritten).includes(needle);
 }
 
 /**

@@ -1,0 +1,32 @@
+{
+  "description": "Synthetic recorded conversation; expected memory is a hand-authored model-boundary contract, not a measured extraction.",
+  "sessions": [
+    {
+      "id": "opinion",
+      "messages": [
+        {
+          "role": "user",
+          "text": "我认为社区保留旧树比拓宽车道更重要。",
+          "at": "2026-11-01T08:00:00Z"
+        },
+        {
+          "role": "assistant",
+          "text": "建议使用 ArborCam X2 拍照记录。",
+          "at": "2026-11-01T08:01:00Z"
+        },
+        {
+          "role": "user",
+          "text": "不采纳 ArborCam X2 的建议，我只想讨论旧树。",
+          "at": "2026-11-01T08:02:00Z"
+        }
+      ],
+      "writes": {
+        "notes/old_trees.md": "# 旧树\n- 用户观点：社区保留旧树比拓宽车道更重要。（记录日期 2026-11-01）\n- 助手建议（未采纳）：使用 ArborCam X2 拍照记录。（记录日期 2026-11-01）"
+      }
+    }
+  ],
+  "anchors": [
+    "社区保留旧树比拓宽车道更重要",
+    "ArborCam X2"
+  ]
+}

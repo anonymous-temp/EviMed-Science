@@ -159,6 +159,13 @@ function boolEnv(name, fallback) {
   return !["0", "false", "no", "off"].includes(value.toLowerCase());
 }
 
+/** @param {unknown} value @returns {'memory-templates'|'memory-templates-extraction-v2'} */
+export function parseMemoryTemplatesDirectory(value) {
+  const directory = String(value ?? 'memory-templates').trim() || 'memory-templates';
+  if (directory === 'memory-templates' || directory === 'memory-templates-extraction-v2') return directory;
+  throw new Error('OPEN_SCIENCE_MEMORY_TEMPLATES_DIR must be memory-templates or memory-templates-extraction-v2.');
+}
+
 /** @param {unknown} value @returns {'merge'|'verify'} */
 export function parseNativeMemoryConsolidationMode(value) {
   const mode = String(value ?? 'merge').trim().toLowerCase() || 'merge';
@@ -3067,6 +3074,8 @@ export function loadConfig(overrides = {}) {
     memoryForgetRequestCheckEnabled: overrides.memoryForgetRequestCheckEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_FORGET_REQUEST_CHECK_ENABLED", false),
     memoryForgetTargetsEnabled: overrides.memoryForgetTargetsEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_FORGET_TARGETS_ENABLED", false),
     memoryForgetToolHintEnabled: overrides.memoryForgetToolHintEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_FORGET_TOOL_HINT_ENABLED", false),
+    // Same setting selects the engine's read-only template mount in compose and its post-write format check.
+    memoryTemplatesDirectory: parseMemoryTemplatesDirectory(overrides.memoryTemplatesDirectory ?? process.env.OPEN_SCIENCE_MEMORY_TEMPLATES_DIR),
     memoryPastedInstructionCheckEnabled: overrides.memoryPastedInstructionCheckEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_CHECK_ENABLED", false),
     memoryPastedInstructionRobustEnabled: overrides.memoryPastedInstructionRobustEnabled ?? boolEnv("OPEN_SCIENCE_MEMORY_PASTED_INSTRUCTION_ROBUST_ENABLED", false),
     // The page's import of what another assistant remembered (`nativeMemoryImport.mjs`): one Flash call splits the pasted text, the person

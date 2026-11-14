@@ -1,12 +1,14 @@
+import { memoryHistoryLine } from '@evimed/domain';
 import { compact, containsRemoved, similarity } from "../nativeMemoryRejections.mjs";
 import { lineFingerprint, normalisedStatement } from "../nativeMemoryOverlay.mjs";
 
 /**
  * 「以前 → 现在」: what the person's memory used to say, read from the revisions the overlay already keeps.
  *
- * The engine's file holds only what is true now, so a line it rewrote leaves nothing in the file; the old words are in the revision that
+ * Older templates kept only current values; extraction-v2 also keeps explicitly labelled history. This projection excludes those history
+ * lines from current replacement candidates and reads the old words from the revision that
  * took them out. This module reads those revisions and says which statement replaced which, so the map can draw the old one in grey with a line to
- * the new one, and a recall still reads only what is true now (the file). Two times come with each: when the words were first seen and when
+ * the new one, and recall reads the file, including its explicitly labelled earlier values. Two times come with each: when the words were first seen and when
  * they stopped being said — the two ends of a fact's validity that Graphiti keeps on an edge, here derived and never stored.
  *
  * Hidden knowledge:
@@ -103,7 +105,8 @@ export function statementForgotten(line, rejected) {
  * @returns {ReplacedStatement[]} oldest first
  */
 export function replacedStatements({ fileId, body, history, perLine, statementsOf, recordIdOfLine, rejected = [], refused = () => false }) {
-  const current = new Map(statementsOf(body).map((line) => [normalisedStatement(line), line]));
+  const currentStatements = (/** @type {unknown} */ text) => statementsOf(text).filter(line => !memoryHistoryLine(line));
+  const current = new Map(currentStatements(body).map((line) => [normalisedStatement(line), line]));
   /** @type {Map<string, string>} when each statement was first seen */
   const first = new Map();
   const seen = (/** @type {unknown} */ text, /** @type {string | null} */ at) => {
@@ -116,8 +119,8 @@ export function replacedStatements({ fileId, body, history, perLine, statementsO
     if (revision.change === "deleted" && !revision.undoneAt) { steps.length = 0; first.clear(); continue; }
     if (revision.before != null) seen(revision.before, first.size ? null : at);
     if (rewrites(revision)) {
-      const before = statementsOf(revision.before);
-      const after = statementsOf(revision.after);
+      const before = currentStatements(revision.before);
+      const after = currentStatements(revision.after);
       const keptAfter = new Set(after.map(normalisedStatement));
       const keptBefore = new Set(before.map(normalisedStatement));
       const removed = before.filter((line) => !keptAfter.has(normalisedStatement(line)));

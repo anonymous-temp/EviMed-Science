@@ -2,13 +2,13 @@ import { checkForgetRequests } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { createHash } from "node:crypto";
-import { carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn } from "@evimed/domain";
+import { checkMemoryNoteLabels, carriesPlatformContext, identifierShapesIn, linkStatesLeftFor, platformIdentifiersIn } from "@evimed/domain";
 import { filterCapturedMessage } from "./memoryGateway.mjs";
 import { contentHash, lineFingerprint, memoryLines } from "./nativeMemoryOverlay.mjs";
 import { HttpError } from './security.mjs';
 import {
   recordNativeCheck, recordNativeCommit, recordNativeExtraction, recordNativeExtractionFailure, recordNativeOperations, recordNativePass, recordNativeWrite,
-  recordPolicySync, recordRejectionLines, recordResetSweep, recordVerificationLines, recordPastedInstructionCheck,
+  recordMemoryNoteLabels, recordPolicySync, recordRejectionLines, recordResetSweep, recordVerificationLines, recordPastedInstructionCheck,
 } from "./nativeMemoryMetrics.mjs";
 import { NativeMemoryObservations } from "./nativeMemoryObservations.mjs";
 import { INSTRUCTION_ORIGIN_POLICY_HASH, instructionSourceMessage, pendingInstructionResult } from './nativeMemoryInstructionOrigin.mjs';
@@ -1022,6 +1022,13 @@ export class NativeMemoryWorker {
     const sessions = memoryContext.sessions;
     let current = await sessions.read(userId, uri);
     if (current === null) return null;
+    // Check syntax only: no extra model call, no semantic keyword filter, no rewrite.
+    // Count fresh writes, not replayed settlement receipts. Sensitive is sticky until the person changes it.
+    if (type === 'notes' && this.config.memoryTemplatesDirectory === 'memory-templates-extraction-v2') {
+      const labels = checkMemoryNoteLabels(current);
+      if (fresh) recordMemoryNoteLabels(labels);
+      if (labels.sensitive) await this.overlay.upsertFile({ userId, uri, memoryType: type, sensitive: true });
+    }
     if (this.robustInstructions && pastedInstructions.bodies?.get(uri) !== contentHash(current)) {
       const operations = { updates: [{ uri, before: diffBefore, after: current }] };
       const reviewed = await this.#instructionOrigins({ userId, archiveUri, projectId }, operations, memoryContext, extraOrigins);
@@ -1110,7 +1117,7 @@ export class NativeMemoryWorker {
         namespaceId: memoryContext.kind === 'geo-project' ? memoryContext.namespaceId : null, judge: this.rejectionJudge });
       await withMemorySummaryInvalidation(sessions, this.overlay, userId, neutral, () => sessions.replace(userId, neutral, body));
       await this.overlay.addRevision({ userId, uri: neutral, memoryType: type, change: 'added', actor: 'platform', reason: 'rejected_filename', before: null, after: body, projectId });
-      await this.overlay.upsertFile({ userId, uri: neutral, memoryType: type, body, projectId });
+      await this.overlay.upsertFile({ userId, uri: neutral, memoryType: type, body, projectId, ...(indexed?.sensitive ? { sensitive: true } : {}) });
       const inheritedOrigins = new Map(memoryLines(body).map(line => [lineFingerprint(line), [
         ...originalSources(origins.get(lineFingerprint(line))), ...extraOrigins, ...(archiveUri ? [{ archiveUri, projectId }] : []),
       ]]));

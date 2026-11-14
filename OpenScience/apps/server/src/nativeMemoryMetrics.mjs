@@ -119,12 +119,21 @@ const recallNotes = table(NATIVE_RECALL_NOTE_OUTCOMES);
 const imports = table(NATIVE_IMPORT_OUTCOMES);
 const mapReplaced = table(NATIVE_MAP_REPLACED_OUTCOMES);
 const verificationJudge = table(['asked', 'failed', 'over_budget', 'unavailable']);
+const noteLabels = table(['checked', 'missing_label', 'malformed']);
 const verificationLines = table(['supported', 'corrected', 'unsupported', 'unverifiable']);
 
 /** @param {string} outcome */
 export function recordVerificationJudge(outcome) { bump(verificationJudge, outcome); }
 /** @param {string} outcome @param {number} [count] */
 export function recordVerificationLines(outcome, count = 1) { bump(verificationLines, outcome, count); }
+
+/** Syntax-only NOTES coverage; no text, URI or account id is a metric label.
+ * @param {{ checked: number, missingLabel: number, malformed: number }} result */
+export function recordMemoryNoteLabels(result) {
+  bump(noteLabels, 'checked', result.checked);
+  bump(noteLabels, 'missing_label', result.missingLabel);
+  bump(noteLabels, 'malformed', result.malformed);
+}
 
 /** One gateway request. @param {string} route @param {string} outcome */
 export function recordGatewayRequest(route, outcome) {
@@ -208,7 +217,7 @@ export function recordMapReplaced(outcome) { bump(mapReplaced, outcome); }
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, pastedInstructionChecks, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced, verificationJudge, verificationLines]) {
+  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, pastedInstructionChecks, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced, verificationJudge, verificationLines, noteLabels]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -217,6 +226,7 @@ export function resetNativeMemoryMetrics() {
 export function nativeMemoryCounters() {
   const plain = (/** @type {Map<string, number>} */ map) => Object.fromEntries(map);
   return {
+    noteLabels: plain(noteLabels),
     requests: Object.fromEntries([...requests].map(([key, value]) => [key.replace("\u0000", ":"), value])),
     messages: plain(messages), masked: plain(masked), commits: plain(commits), withheld: plain(withheld), refusals: plain(refusals),
     upstreamFailures: plain(upstreamFailures), ledgerFailures: plain(ledgerFailures), turnCommits: plain(turnCommits), workerCommits: plain(workerCommits),
@@ -235,6 +245,8 @@ const series = (map, label) => [...map].map(([key, value]) => ({ value, labels: 
  */
 export function nativeMemoryMetricFamilies() {
   return [
+    { name: 'open_science_native_memory_note_labels_total', type: 'counter', series: series(noteLabels, 'outcome'),
+      help: 'Extraction-v2 NOTES statement checks per fresh write: checked, missing_label (all unlabelled statements, not inferred kinds), malformed label/outcome/date; no content rewrite.' },
     { name: 'open_science_native_memory_verification_judge_total', type: 'counter', series: series(verificationJudge, 'outcome'),
       help: 'Source verification judge calls, including failed and unavailable calls and the daily cap.' },
     { name: 'open_science_native_memory_verification_lines_total', type: 'counter', series: series(verificationLines, 'outcome'),
