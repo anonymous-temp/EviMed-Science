@@ -79,13 +79,13 @@ test("a judge that fails keeps the line, and token-free wording is left to the e
 
 test("the person's own words win: a line they said themselves is kept and a dated restatement authorizes only its own write", options, async (t) => {
   // Exact containment is not consent: this fixture supplies an affirmative semantic verdict too.
-  const judge = judgeDouble(request => ({ same: new Map([[0, request.candidates[0].removed[0].fingerprint]]), stated: new Set([0]) }));
+  const judge = judgeDouble(request => ({ same: new Map([[0, request.candidates[0].removed[0].fingerprint]]), stated: new Set([0]), witnesses: new Map([[0, 0]]) }));
   const verbatim = await removeThenWrite(t, { removedText: "Cites with numbered references.", after: "- Cites with numbered references; always gives the DOI.", judge,
     said: "Actually: cites with numbered references; always gives the DOI. That is how I want it." });
   assert.equal(await verbatim.read(), "- Cites with numbered references; always gives the DOI.");
   assert.equal((await verbatim.overlay.rejectedFingerprints(verbatim.userId, "preferences")).has(lineFingerprint("Cites with numbered references.")), true, "the old conversation remains fenced after relearning");
   // In other words: the judge says it is the same and that the person said it themselves.
-  const stated = judgeDouble((request) => ({ same: new Map([[0, request.candidates[0].removed[0].fingerprint]]), stated: new Set([0]) }));
+  const stated = judgeDouble((request) => ({ same: new Map([[0, request.candidates[0].removed[0].fingerprint]]), stated: new Set([0]), witnesses: new Map([[0, 0]]) }));
   const other = await removeThenWrite(t, { removedText: "Prefers tables for comparisons.", after: "- Likes comparisons presented as tables.", judge: stated,
     said: "When I ask you to compare, please use a table." });
   assert.equal(await other.read(), "- Likes comparisons presented as tables.");

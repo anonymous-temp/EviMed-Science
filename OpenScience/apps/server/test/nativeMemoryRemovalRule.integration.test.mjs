@@ -15,6 +15,7 @@ async function fixture(t) {
     same: new Map(candidates.map((candidate, index) => [index, candidate.removed[0].fingerprint])),
     stated: new Set(said.some(text => ['Project M-41633.', 'My weekly report title is M-41633.'].includes(text))
       ? candidates.map((_candidate, index) => index) : []),
+    witnesses: new Map(candidates.map((_candidate, index) => [index, said.findIndex(text => ['Project M-41633.', 'My weekly report title is M-41633.'].includes(text))])),
   }) };
   f.worker.rejectionJudge = judge; f.worker.verification.rejectionJudge = judge;
   return f;
@@ -59,7 +60,7 @@ test('a no-hard-token paraphrase uses the rejection judge with only messages aft
   const uri = `${f.root}/people/new.md`;
   f.stub.extract = () => ({ adds: [{ uri, memory_type: 'people', after: '- Likes comparisons presented as tables.' }] });
   const requests = [];
-  const judge = { same: async request => { requests.push(request); return { same: new Map([[0, request.candidates[0].removed[0].fingerprint]]), stated: new Set([0]) }; } };
+  const judge = { same: async request => { requests.push(request); return { same: new Map([[0, request.candidates[0].removed[0].fingerprint]]), stated: new Set([0]), witnesses: new Map([[0, 0]]) }; } };
   const worker = new NativeMemoryWorker({ ...f, rejectionJudge: judge });
   await f.commitConversation('old', [{ role: 'user', text: 'Please put comparisons in tables.', at: old }]);
   await worker.processCommits({ userId: f.userId });
@@ -281,7 +282,17 @@ for (const path of ['m-41633_project', 'ｍ＿４１６３３', 'm 41633']) {
     assert.ok([...(await f.overlay.files(f.userId)).values()].some(file => file.body === '- Independent goal.'), 'independent content remains');
     await f.commitConversation('new', [{ role: 'user', text: fact, at: fresh }], { engineSession: 'mcp-store-restatement', origin: 'tool' });
     await f.worker.processCommits({ userId: f.userId });
-    assert.equal(await f.sessions.read(f.userId, uri), body);
+    assert.equal(await f.sessions.read(f.userId, uri), null, 'a synthetic tool message alone is not human authorship');
+    await f.database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Test',1048576)", [f.userId]);
+    f.stub.extract = () => ({});
+    const human = await f.commitConversation('human-restatement', [{ role: 'user', text: fact, at: fresh }], { projectId: 'default' });
+    f.stub.extract = () => ({ adds: [{ uri, memory_type: 'project_context', after: body }] });
+    const bound = await f.commitConversation('bound-restatement', [{ role: 'user', text: fact, at: fresh }],
+      { projectId: 'default', engineSession: 'mcp-store-bound-restatement', origin: 'tool' });
+    await f.overlay.recordCommit({ userId: f.userId, archiveUri: bound.archive_uri, engineSession: bound.session,
+      sourceSession: human.session, projectId: 'default', origin: 'tool', taskId: bound.task_id });
+    await f.worker.processCommits({ userId: f.userId });
+    assert.equal(await f.sessions.read(f.userId, uri), body, 'the original later human assertion authorizes its bound remember copy');
   });
 }
 

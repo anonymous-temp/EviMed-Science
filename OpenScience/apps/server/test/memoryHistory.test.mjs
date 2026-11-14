@@ -253,3 +253,52 @@ test('history consumes the write-side assertion receipt for the exact new human 
   const quotation = {...source,text:`An earlier conversation said “${source.text}”`};
   assert.equal(await ledger.rejected(context,[quotation.text],'quoted',[quotation]),true);
 });
+
+
+test('an explicit page replacement stays readable only under its current removal authority', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const { retainedRemovalKey } = await import('../src/nativeMemoryRejections.mjs');
+  const uri = 'viking://user/u/memories/preferences/answer.md', text = 'Short answers, then detail.';
+  const authority = [{ text: 'Short answers.', fingerprint: lineFingerprint('Short answers.'), rejectedAt: '2026-01-01' }];
+  const receipts = new Map([[retainedRemovalKey(uri, text, authority), { retainedAfterRemoval: true, explicitEdit: true }]]);
+  const overlay = { removals: async () => authority, originsOf: async () => new Map(), instructionCheck: async (_owner, key) => receipts.get(key) };
+  const history = new MemoryHistory({ config: {}, ledger: { overlay, derivedSourcesRejected: async () => false } });
+  const context = { kind: 'owned', ownerId: 'u' };
+  assert.equal(await history.fenceNativeBody(context, uri, text), text);
+  authority.push({ text, fingerprint: lineFingerprint(text), rejectedAt: '2026-02-01' });
+  assert.equal(await history.fenceNativeBody(context, uri, text), null, 'a later removal invalidates the page receipt');
+});
+
+test('history ingestion judges a later human statement even when extraction wrote no memory', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const { removalAssertionKey } = await import('../src/nativeMemoryRejections.mjs');
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const text = 'Project M-41633.', removal = { text, fingerprint: lineFingerprint(text), rejectedAt: '2026-01-01T00:00:00Z' };
+  const receipts = new Map(), asked = [];
+  const overlay = { removals: async () => [removal], instructionCheck: async (_owner, key) => receipts.get(key),
+    recordInstructionCheck: async (_owner, key, value) => receipts.set(key, value) };
+  const ledger = { overlay, bindArchive: async () => true, alreadyIndexed: async () => false, reserve: async () => true, ready: async () => true,
+    rejected: async (_context, _texts, _archive, messages) => !receipts.has(removalAssertionKey(null, removal, text, messages[0])) };
+  const context = { kind: 'owned', ownerId: 'u', ownerCreatedAt: '2025-01-01', namespaceId: 'u', userRoot: 'viking://user/u' };
+  const service = new MemoryHistory({ config: {}, ledger,
+    resolveSource: async () => ({ sessionId: 'later', projectId: 'default', projectCreatedAt: '2025-01-01', conversationTitle: 'Test' }),
+    eligible: async () => true, admitMessage: async () => true, resourcesFor: () => ({ writeHistory: async () => {} }),
+    rejectionJudge: { same: async request => {
+      asked.push(request);
+      const affirmed = request.said[0] === text;
+      return { same: new Map([[0, removal.fingerprint]]), stated: new Set(affirmed ? [0] : []), witnesses: new Map(affirmed ? [[0, 0]] : []) };
+    } } });
+  const commit = { userId: 'u', engineSession: 'dsh-later', archiveUri: 'viking://user/u/sessions/dsh-later/history/archive_001' };
+  for (const message of [
+    { role: 'user', content: text, created_at: '2026-02-01T00:00:00Z' },
+    { role: 'user', content: 'Did I use project M-41633?', created_at: '2026-02-02T00:00:00Z' },
+    { role: 'user', content: 'The earlier chat said "Project M-41633."', created_at: '2026-02-03T00:00:00Z' },
+    { role: 'assistant', content: text, created_at: '2026-02-04T00:00:00Z' },
+    { role: 'user', content: text, created_at: '2025-12-01T00:00:00Z' },
+  ]) {
+    const result = await service.indexArchive(commit, context, JSON.stringify(message));
+    assert.equal(result.chunks, message.created_at === '2026-02-01T00:00:00Z' ? 1 : 0);
+  }
+  assert.equal(asked.length, 3, 'only later human messages need an assertion judgement');
+});

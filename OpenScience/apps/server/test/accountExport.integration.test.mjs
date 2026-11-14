@@ -487,7 +487,8 @@ test('account archive carries capsule input, edit and removal receipts without r
     assert.equal(native.forgetRequests.length, 6, 'personal and registered shared namespaces only');
     assert.deepEqual(native.forgetRequests[0].requests.map(row => row.status), ['pending', 'applying', 'completed', 'dismissed']);
     assert.equal(native.forgetRequests[0].completionReceipts.length, 1);
-    assert.equal(native.revisions.find(row => row.id === edit).before, 'EX-UNDOABLE-EDIT');
+    assert.equal(native.revisions.find(row => row.id === edit).before, '', 'export does not restate an edited-away value; explicit undo keeps its private receipt');
+    assert.equal(raw.includes(Buffer.from('EX-UNDOABLE-EDIT')), false);
     assert.equal(native.revisions.find(row => row.id === removal).undoable, true);
     assert.equal(native.revisions.find(row => row.id === removal).fileId, nativeFileId(`${root}/memories/notes/${forgotten}.md`));
     assert.deepEqual(native.revisions.find(row => row.held).heldLines, ['EX-HELD-LINE']);

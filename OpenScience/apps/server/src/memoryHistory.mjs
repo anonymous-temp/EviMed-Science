@@ -147,8 +147,12 @@ export class MemoryHistory {
       if (!text) { kept.push(line); continue; }
       const sources = originalSources(origins.get(lineFingerprint(text)));
       const messages = this.nativeRemovalSources ? await this.nativeRemovalSources(context.ownerId, sources, context) : [];
+      const receipt = await overlay.instructionCheck?.(context.ownerId, retainedRemovalKey(uri, text, authority));
+      // A person's explicit replacement on the memory page is already their statement.
+      // Its exact line and the entire current removal authority bind this permission.
+      if (receipt?.explicitEdit === true) { kept.push(line); continue; }
       const refused = await removalRefusals({ userId: context.ownerId, overlay, namespaceId, candidates: [{text, sources: messages}] });
-      const retained = (await overlay.instructionCheck?.(context.ownerId, retainedRemovalKey(uri, text, authority)))?.retainedAfterRemoval === true;
+      const retained = receipt?.retainedAfterRemoval === true;
       if (refused.size || !retained && await this.ledger.derivedSourcesRejected(context, {
         archives: sources.map(source => source.archiveUri).filter(Boolean), sessions: [],
       })) continue;
@@ -227,8 +231,12 @@ export class MemoryHistory {
           // locate the original message; it is never returned to a caller.
           const hits=await this.search({user:{id:context.ownerId},project:null,query:text,limit:8},
             {includeOrigins:true,forRemoval:true,removalUri:file.uri});
-          const discovered=hits.flatMap(hit=>(hit.originalMessages??[]).filter(message=>message.sourceRole==='user')
-            .map(message=>({archiveUri:hit.origin.archiveUri,text:message.text,messageHash:message.messageHash,created_at:message.date})));
+          const discovered=hits.flatMap(hit=>{
+            if (!('originalMessages' in hit) || !hit.origin) return [];
+            const archiveUri = hit.origin.archiveUri;
+            return (hit.originalMessages ?? []).filter(message=>message.sourceRole==='user')
+              .map(message=>({archiveUri,text:message.text,messageHash:message.messageHash,created_at:message.date}));
+          });
           const copies=discovered.filter(message=>messages.some(source=>lineFingerprint(source.text)===lineFingerprint(message.text)));
           messages.push(...(copies.length?copies:discovered));
         }
@@ -453,8 +461,16 @@ export class MemoryHistory {
     }
     const resources = this.resourcesFor(context), root = this.root(context, source);
     const removedIndices = new Set();
+    const namespaceId = context.kind === 'geo-project' ? context.namespaceId : null;
+    const removals = await this.ledger.overlay.removals(context.ownerId, namespaceId);
     for (const [index,message] of messages.entries()) {
       const text = messageText(message,this.secretRedaction);
+      // History can be indexed even when extraction produced no file. Establish the
+      // same checked assertion receipt here; search itself never asks a model.
+      if (text && message.role === 'user' && removals.some(row => Date.parse(message.created_at ?? '') > Date.parse(row.rejectedAt ?? ''))) {
+        await removalRefusals({ userId: context.ownerId, projectId: source.projectId, overlay: this.ledger.overlay, namespaceId,
+          judge: this.rejectionJudge, candidates: [{ text, sources: [{ role: message.role, text, created_at: message.created_at }] }] });
+      }
       if (text && await this.ledger.rejected(context,[text],commit.archiveUri,[{role:message.role,text,created_at:message.created_at}])) removedIndices.add(sourceIndices[index]);
     }
     const safeMessages = this.secretRedaction ? messages.map(message => {

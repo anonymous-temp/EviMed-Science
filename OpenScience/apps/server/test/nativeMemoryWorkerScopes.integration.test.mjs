@@ -122,6 +122,11 @@ test('project rejection keys do not erase equal facts in another namespace or cl
   assert.equal(await f.a.sessions.read(f.owner.id, f.file(f.a)), null);
   assert.equal(await f.b.sessions.read(f.owner.id, f.file(f.b)), text);
   assert.equal((await f.overlay.rejectedFingerprints(f.owner.id, 'project_facts')).size, 1);
+  f.worker.rejectionJudge = { same: async request => {
+    const source = request.said.indexOf(text);
+    return { same: new Map([[0, request.candidates[0].removed[0].fingerprint]]),
+      stated: new Set(source < 0 ? [] : [0]), witnesses: new Map(source < 0 ? [] : [[0, source]]) };
+  } };
   await f.archive(f.a, text); await f.worker.scanArchives(f.owner.id); await f.worker.processCommits({ userId: f.owner.id });
   assert.equal(await f.a.sessions.read(f.owner.id, f.file(f.a)), text);
   assert.equal((await f.overlay.rejectedFingerprints(f.owner.id, `${f.a.namespaceId}:project_facts`)).size, 1, 'relearning preserves old-archive rejection authority');
@@ -135,7 +140,8 @@ test('semantic rejections and the person restating them use only the accepted ar
   const judged = [];
   f.worker.rejectionJudge = { same: async request => {
     judged.push(request);
-    return { same: new Map([[0, request.candidates[0].removed[0].fingerprint]]), stated: new Set(request.said.includes('A researcher chose this again.') ? [0] : []) };
+    return { same: new Map([[0, request.candidates[0].removed[0].fingerprint]]), stated: new Set(request.said.includes('I use brief project abstracts.') ? [0] : []),
+      witnesses: new Map([[0, request.said.indexOf('I use brief project abstracts.')]]) };
   } };
   for (const context of [f.a, f.b]) await f.archive(context);
   await f.worker.scanArchives(user); await f.worker.processCommits({ userId: user });
@@ -143,7 +149,7 @@ test('semantic rejections and the person restating them use only the accepted ar
   assert.equal(await f.b.sessions.read(user, f.file(f.b)), reworded);
   assert.equal(judged.length, 1); assert.equal(judged[0].projectId, f.a.projectId);
   await f.overlay.unreject(user, `${f.a.namespaceId}:project_facts`, [reworded]);
-  await f.archive(f.a, 'A researcher chose this again.');
+  await f.archive(f.a, 'I use brief project abstracts.');
   await f.worker.scanArchives(user); await f.worker.processCommits({ userId: user });
   assert.equal(await f.a.sessions.read(user, f.file(f.a)), reworded);
   assert.equal((await f.overlay.rejectedFingerprints(user, `${f.a.namespaceId}:project_facts`)).size, 1, 'only the new statement is authorized');

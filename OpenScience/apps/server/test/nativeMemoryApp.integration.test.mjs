@@ -157,7 +157,8 @@ test("the map's events of a native account are derived from the files' revisions
   const record = (await (await fetch(`${base}/api/memory/records`, { headers })).json()).data.find((item) => item.uri === uri);
   const edited = await fetch(`${base}/api/memory/records/${encodeURIComponent(record.id)}`, { method: "PATCH", headers,
     body: JSON.stringify({ value: "Short answers, then detail.", expectedVersion: record.version }) });
-  assert.equal(edited.status, 200);
+  assert.equal(edited.status, 200, await edited.clone().text());
+  assert.equal((await edited.json()).data.value, "Short answers, then detail.");
   // Keep the fixture inside the observation window even when the local DB clock is slightly ahead of the API clock.
   await app.store.database.query("UPDATE evimed_memory.native_revisions SET changed_at=$3 WHERE user_id=$1 AND uri=$2", [user.id, uri, new Date(Date.now() - 60_000).toISOString()]);
   const map = (await (await fetch(`${base}/api/memory/map?include=events,buckets`, { headers })).json()).data;

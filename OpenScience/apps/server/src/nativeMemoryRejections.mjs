@@ -240,8 +240,8 @@ export function removalAssertionKey(namespaceId, removed, text, source) {
     removed.rejectedAt, removalStatement(text), source.role, source.text, source.created_at ?? null]));
 }
 
-/** An explicit partial removal preserves its untouched neighbours even if their source archive
- * also contains a withdrawn passage. Bind this receipt to the entire current removal authority.
+/** Partial removals preserve untouched neighbours; explicit page edits also bind their newly
+ * written lines here. Bind either receipt to the entire current removal authority.
  * @param {string} uri @param {string} text @param {{fingerprint:string,rejectedAt?:string|null}[]} removals */
 export function retainedRemovalKey(uri, text, removals) {
   return contentHash(JSON.stringify(['retained-removal-v1', uri, lineFingerprint(text),
@@ -302,14 +302,15 @@ export async function removalRefusals({ userId, overlay, projectId = null, names
       for (let index = 0; index < batch.length; index++) {
         const item = batch[index];
         const witness = answer.witnesses?.get(index);
-        if (answer.stated.has(index) && Number.isInteger(witness) && item.sources[witness]) {
+        const asserted = answer.stated.has(index) && Number.isInteger(witness) && Boolean(item.sources[witness]);
+        if (asserted) {
           await overlay.recordInstructionCheck?.(userId, item.receiptKey(item.sources[witness]), { removalAssertion: true });
           // A history excerpt has the person's wording, not the extractor's candidate. Bind the
           // same witnessed assertion to the removed fact so both readers share this authority.
           if (answer.same.has(index) || item.literal) await overlay.recordInstructionCheck?.(userId,
             removalAssertionKey(namespaceId, entry, text, item.sources[witness]), { removalAssertion: true });
         }
-        if ((item.literal || answer.same.has(index)) && !(item.sources.length && answer.stated.has(index))) {
+        if ((item.literal || answer.same.has(index)) && !asserted) {
           refused.set(lineFingerprint(item.candidate.text), { rejected: entry.fingerprint, via: item.literal ? 'contained' : 'judged' });
         }
       }

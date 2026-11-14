@@ -458,10 +458,25 @@ test('FT8 late discovery reopens the fixed-cutoff scan before indexing, while la
   await ingest(late);
   assert.equal(await f.ledger.forgetArchivePending(f.context, late.archive_uri), false);
   assert.deepEqual(await f.history.search({ user: f.user, project: f.project, query: original }), []);
+  // No extraction output is required to authorize original history: the ingest judge checks
+  // this enumerated affirmative statement, and never runs from the history reader.
+  f.history.rejectionJudge = createRejectionJudge({ config: { deepseekModel: 'fixture', deepseekApiKey: 'fixture' },
+    callModel: async (_deps, call) => {
+      const input = JSON.parse(call.body.messages[1].content);
+      const source = input.said.indexOf(examinationStatement);
+      return { choices: [{ message: { content: JSON.stringify({ same: [{ candidate: 0, removed: 0 }],
+        stated: source < 0 ? [] : [0], assertions: source < 0 ? [] : [{ candidate: 0, source, quote: examinationStatement }] }) } }] };
+    } });
   const fresh = await f.commitConversation('later-authorized', [{ role: 'user', text: examinationStatement, at: '2099-01-01T00:00:00Z' }], { projectId: f.project.id });
   await ingest(fresh);
   assert.equal(await f.ledger.forgetArchivePending(f.context, fresh.archive_uri), false);
-  assert.equal((await f.history.search({ user: f.user, project: f.project, query: examinationStatement })).length, 1);
+  const question = await f.commitConversation('later-question', [{ role: 'user', text: `Did I say: ${examinationStatement}`, at: '2099-01-02T00:00:00Z' }], { projectId: f.project.id });
+  await ingest(question);
+  f.history.rejectionJudge = { same: async () => assert.fail('search must consume receipts without model calls') };
+  const hits = await f.history.search({ user: f.user, project: f.project, query: examinationStatement });
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].sessionId, 'session_later-authorized');
+  assert.equal(await f.ledger.rejected(f.context, [original], first.archive_uri), true, 'restatement never opens the old archive');
 });
 
 test('FT8 an archive appended during a leased scan survives its older cursor acknowledgement', options, async t => {

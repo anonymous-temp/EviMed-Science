@@ -6,7 +6,7 @@ import { removalLines, removalRefusals } from '../src/nativeMemoryRejections.mjs
 import { hardTokens, sourceHasToken } from '../src/nativeMemoryHardTokens.mjs';
 
 const removal = { fingerprint: lineFingerprint('Project M-41633.'), text: 'Project M-41633.', rejectedAt: '2026-11-10T10:00:00.000Z' };
-const affirmed = { same: async ({ candidates, said }) => ({ same: new Map(candidates.map((candidate, index) => [index, candidate.removed[0].fingerprint])), stated: new Set(said.length ? candidates.map((_candidate, index) => index) : []) }) };
+const affirmed = { same: async ({ candidates, said }) => ({ same: new Map(candidates.map((candidate, index) => [index, candidate.removed[0].fingerprint])), stated: new Set(said.length ? candidates.map((_candidate, index) => index) : []), witnesses: new Map(said.length ? candidates.map((_candidate, index) => [index, 0]) : []) }) };
 const overlay = { removals: async () => [removal] };
 const source = (text, at = '2026-11-10T11:00:00.000Z', role = 'user') => ({ text, created_at: at, role });
 
@@ -33,7 +33,7 @@ test('headings are changed lines, and a judge cannot authorize a no-token rewrit
   assert.deepEqual(removalLines('# New title\n- New value\n## Old section', '# Old title\n## Old section'), ['New title', 'New value']);
   const guard = { removals: async () => [{ ...removal, text: 'Prefers tables for comparisons.' }] };
   const requests = [];
-  const judge = { same: async request => { requests.push(request); return { same: new Map([[0, removal.fingerprint]]), stated: new Set([0]) }; } };
+  const judge = { same: async request => { requests.push(request); return { same: new Map([[0, removal.fingerprint]]), stated: new Set([0]), witnesses: new Map([[0, 0]]) }; } };
   const text = 'Likes comparisons presented as tables.';
   assert.equal((await removalRefusals({ userId: 'u', overlay: guard, judge, candidates: [{ text, sources: [source(text, '2026-11-10T09:00:00.000Z')] }] })).size, 1);
   assert.deepEqual(requests[0].said, []);
@@ -112,4 +112,10 @@ test('a checked later assertion survives read-only recall, but never a different
   assert.equal((await removalRefusals({userId:'u',overlay:guard,candidates:[{text,sources:[source('我每周哪天去游泳？')]}]})).size,1);
   rejectedAt = '2026-11-10T12:00:00Z';
   assert.equal((await removalRefusals({userId:'u',overlay:guard,candidates})).size,1);
+});
+
+for (const witnesses of [undefined, new Map([[0, 8]])]) test('a stated index without an in-range source witness cannot authorize a write', async () => {
+  const judge = { same: async () => ({ same: new Map([[0, removal.fingerprint]]), stated: new Set([0]), witnesses }) };
+  assert.equal((await removalRefusals({ userId: 'u', overlay, judge,
+    candidates: [{ text: removal.text, sources: [source('Did I use project M-41633?')] }] })).size, 1);
 });
