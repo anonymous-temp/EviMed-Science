@@ -35,9 +35,12 @@ test('owned current and historical revisions share content bytes in one portable
 test('account data selects authored skill histories while leaving source accounts, projects, connections and proof authority behind',()=>{
   const original=envelope(),revision=original.skills[0].revisions[0],payload={schemaVersion:1,...revision,resources:revision.resources.map(r=>({...r,id:'resource:'+digest.slice(7)})),prepared:false};delete payload.revision;
   const state={version:1,account:{id:'old-owner',accountCreatedAt:'old-epoch'},projects:[{id:'old-project'}],connections:[{token:'fixture-not-authority'}],
+    nativeMemory:{forgetRequests:[{state:'completed'}],admissions:[{text:'Pending capsule input'}],imports:[],revisions:[]},
     documents:[{kind:'skill',id:'skill:original',revision:2,payload:{...payload,instructions:'Second authored version.'}},{kind:'extension-proof',id:'old-proof',payload:{qualified:true}}],
     revisions:[{kind:'skill',id:'skill:original',revision:1,payload}],personalSkillResources:[{...original.resources[0],id:'resource:'+digest.slice(7)}]};
   const decoded=decodeAccountSkillData(Buffer.from(JSON.stringify(state)),['skill:original']);assert.equal(decoded.skills[0].revisions.length,2);
   assert.equal(JSON.stringify(decoded.skills).includes('old-owner'),false);assert.equal(JSON.stringify(decoded.skills).includes('qualified'),false);
+  assert.equal(JSON.stringify(decoded.skills).includes('Pending capsule input'),false);
+  assert.equal(Object.hasOwn(decoded,'nativeMemory'),false,'account skill adoption ignores the additive capsule section');
   state.documents[0].payload.prepared=true;assert.throws(()=>decodeAccountSkillData(Buffer.from(JSON.stringify(state)),['skill:original']));
 });

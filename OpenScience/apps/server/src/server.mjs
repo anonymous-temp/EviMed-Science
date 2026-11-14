@@ -8069,7 +8069,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
           await securityAudit(config, "account.export", "completed", { userId: user.id });
           await sendUserArchive(res, user, entries);
-        }, { skillArtifacts, readResultReview: resultProvenance ? async (actor, row) => {
+        }, { skillArtifacts, nativeMemory: { contexts: nativeMemoryContexts, sourceDeletion }, readResultReview: resultProvenance ? async (actor, row) => {
           if (!exportProjects.has(row.projectId)) exportProjects.set(row.projectId, resultProvenance.scope(actor.id, row.projectId));
           const project = await exportProjects.get(row.projectId);
           // Use this exact historical row, not the latest revision of its version.

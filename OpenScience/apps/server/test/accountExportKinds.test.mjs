@@ -7,6 +7,8 @@ import path from "node:path";
 import test from "node:test";
 import {
   UNEXPORTED_DOCUMENT_KINDS,
+  UNEXPORTED_ACCOUNT_TABLES,
+  accountExportTables,
   accountExportDocumentKinds,
   exportDocumentRow,
   withAccountExportSnapshot,
@@ -789,4 +791,12 @@ test("a result record that does not read as one is left out and counted, not a r
   assert.ok(!state.documents.some((row) => row.id === "rv_broken"));
   assert.equal(state.documents.find((row) => row.id === f.report.versionId).payload.digest, sha(REPORT));
   assert.deepEqual(reported, ["account export left out result-version: unreadable_record, 1 documents, 1 revisions\n"]);
+});
+
+// SY4's four OPEN capsule-content stores now have explicit safe projections.
+test("capsule input and request stores are carried while private removal authority stays excluded", () => {
+  const carried = accountExportTables();
+  for (const table of ["native_commits", "native_revisions", "native_admissions", "native_imports"])
+    assert.ok(carried.includes(`evimed_memory.${table}`), `${table} has no own-content projection`);
+  assert.match(UNEXPORTED_ACCOUNT_TABLES["evimed_memory.native_rejections"], /removed/);
 });

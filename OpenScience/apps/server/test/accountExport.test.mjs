@@ -353,18 +353,6 @@ const migrationSources = [
 /** The columns that make a table one account's: the owner's, a recipient's, or the plain `user_id`. */
 const ACCOUNT_COLUMN = /(?:^|,)\s*(?:user_id|owner_id|recipient_id)\s/m;
 
-// Existing personal-content gaps uncovered by the SY4 inventory (2026-11-12).
-// These were outside this guard's migration scan, not deliberately excluded data.
-// Keep this debt finite: a new native table still needs an export decision, and
-// resolving a gap removes it here. Safe projections must honor namespace access
-// and source deletion before exporting pending/forgotten/held text.
-const nativeExportGaps = new Set([
-  "evimed_memory.native_admissions",
-  "evimed_memory.native_commits",
-  "evimed_memory.native_revisions",
-  "evimed_memory.native_imports",
-]);
-
 /** Every table the migrations create, mapped to whether it is account-scoped.
  * Read as source text because that is what a migration is here: one template
  * literal per module, with `${schema}` its only substitution. */
@@ -420,16 +408,21 @@ test("the exported table list is derived from the queries, joins included", () =
     "evimed_share.link_uses",
     "evimed_share.deliveries",
     "evimed_learning.script_uses",
+    "evimed_memory.native_admissions",
+    "evimed_memory.native_commits",
+    "evimed_memory.native_revisions",
+    "evimed_memory.native_imports",
+    "evimed_control.users",
   ]) {
     assert.ok(
       exported.includes(table),
       `${table} is not read by any export query`,
     );
   }
-  assert.equal(exported.length, 22, `the export reads ${exported.join(", ")}`);
+  assert.equal(exported.length, 26, `the export reads ${exported.join(", ")}`);
 });
 
-test("every account-scoped table has an export decision apart from the recorded native content gaps", () => {
+test("every account-scoped table has an export decision", () => {
   const tables = migratedTables();
   // The scan has to prove it scanned: a regex that matched nothing would make
   // every loop below vacuously true and this guard permanently green.
@@ -477,13 +470,7 @@ test("every account-scoped table has an export decision apart from the recorded 
     accountScoped.length >= 13,
     `only ${accountScoped.length} account-scoped tables were recognized`,
   );
-  for (const table of nativeExportGaps) {
-    assert.equal(tables.get(table), true, `${table} is a real account-scoped export gap`);
-    assert.ok(!exported.includes(table) && !Object.hasOwn(UNEXPORTED_ACCOUNT_TABLES, table),
-      `${table} now has an export decision; remove the resolved gap`);
-  }
   for (const table of accountScoped) {
-    if (nativeExportGaps.has(table)) continue;
     assert.ok(
       exported.includes(table) ||
         Object.hasOwn(UNEXPORTED_ACCOUNT_TABLES, table),

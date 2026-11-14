@@ -11,6 +11,10 @@ import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { withAccountExportSnapshot } from "../src/accountExport.mjs";
 import { migrateCapsuleShare } from "../src/capsuleShareLinks.mjs";
 import { ResultProvenanceService } from "../src/resultProvenanceService.mjs";
+import { GeoStore } from "../src/geoStore.mjs";
+import { nativeFileId } from "../src/nativeMemoryStore.mjs";
+import { lineFingerprint } from "../src/nativeMemoryOverlay.mjs";
+import { userRootUri } from "../src/openVikingLayout.mjs";
 import { CITE_VERSION } from "./fixtures/pins.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -372,4 +376,112 @@ test("source understanding, captures and method history export through their pub
   assert.deepEqual(state.revisions.filter(row => row.id === "understanding-one").map(row => row.payload.summary), ["Evidence is preserved.", "Revised evidence."]);
   assert.equal(state.documents.find(row => row.id === "source-method").payload.method.status, "draft");
   assert.equal(JSON.stringify(state).includes("private-"), false);
+});
+
+// Real PostgreSQL -> namespace registry/source-deletion reader -> snapshot -> HTTP tar archive.
+// Memory is disabled in this fixture, so no engine or model is needed to export its retained overlay content.
+test('account archive carries capsule input, edit and removal receipts without resurrecting private or foreign content', { ...options, timeout: 30000 }, async t => {
+  const deletionId = randomUUID();
+  const f = await fixture(t), db = f.app.store.database, overlay = f.app.nativeMemory.overlay;
+  await overlay.noteRegistered(f.owner);
+  const forgotten = 'EX-FORGOTTEN-79218-PRIVATE', withdrawn = 'EX-DELETED-SOURCE-82461', foreign = 'EX-OTHER-ACCOUNT-97512';
+  const root = userRootUri(f.owner), otherRoot = userRootUri(f.other);
+  const own = await f.app.store.userById(f.owner), project = await f.app.store.requireProject(own, 'default');
+  const geoStore = new GeoStore({ database: db }); await geoStore.ready();
+  const geoProject = await geoStore.createProject({ userId: f.owner, projectId: project.id, engines: ['deepseek'], coverageDays: 30 });
+  await geoStore.addMember({ geoId: geoProject.id, userId: f.other, role: 'editor', invitedBy: f.owner });
+  const shared = await f.app.nativeMemoryContexts.forProject(project);
+  assert.equal(shared.kind, 'geo-project');
+  const unregistered = `viking://user/gp-${'f'.repeat(24)}`;
+  const at = '2026-11-14T00:00:00.000Z';
+  /** @param {string} userId @param {string} nativeRoot @param {string} state @param {number} index @param {string} privateText */
+  const addCommit = async (userId, nativeRoot, state, index, privateText) => db.query(`INSERT INTO evimed_memory.native_commits
+    (user_id,archive_uri,engine_session,origin,state,extraction,created_at) VALUES($1,$2,$3,'gateway',$4,$5::jsonb,$6)`,
+    [userId, `${nativeRoot}/sessions/dsh-export-${index}/history/archive_001`, `dsh-export-${index}`, state, JSON.stringify({ forgetRequests: {
+      state: index === 0 ? 'applying' : 'completed', requests: ['pending', 'applying', 'completed', 'dismissed'].map(status => ({
+        quote: privateText, requestMessage: { at, text: privateText }, status, candidates: [{ type: 'notes', uri: `${nativeRoot}/memories/notes/${privateText}.md`, text: privateText }],
+        intents: [privateText], removed: status === 'completed' ? 1 : 0 })), claims: [{ quote: privateText, message: 1, turnMessage: 0 }], falseClaims: 1 } }), at]);
+  for (const [index, state] of ['pending', 'completed', 'failed', 'replayed', 'abandoned'].entries()) await addCommit(f.owner, root, state, index, forgotten);
+  await addCommit(f.owner, shared.userRoot, 'completed', 10, forgotten);
+  await addCommit(f.owner, unregistered, 'completed', 11, 'EX-UNREGISTERED-NAMESPACE');
+  await addCommit(f.other, otherRoot, 'completed', 12, foreign);
+  /** @param {string} userId @param {string} nativeRoot @param {string} name @param {string} reason @param {string} actor
+   * @param {string|null} before @param {string|null} after @param {string} [change] @param {string|null} [undoneAt] */
+  const addRevision = async (userId, nativeRoot, name, reason, actor, before, after, change = 'updated', undoneAt = null) =>
+    (await db.query(`INSERT INTO evimed_memory.native_revisions(user_id,uri,memory_type,change,actor,reason,before,after,undone_at)
+      VALUES($1,$2,'notes',$3,$4,$5,$6,$7,$8) RETURNING id::text`,
+    [userId, `${nativeRoot}/memories/notes/${name}.md`, change, actor, reason, before, after, undoneAt])).rows[0].id;
+  const edit = await addRevision(f.owner, root, 'edit', 'edited on the memory page', 'user', 'EX-UNDOABLE-EDIT', 'EX-EDIT-AFTER');
+  const removal = await addRevision(f.owner, root, forgotten, 'forgotten on the memory page', 'user', forgotten, null, 'deleted');
+  await addRevision(f.owner, root, 'added', '', 'engine', null, 'EX-ENGINE-ADDITION', 'added');
+  await addRevision(f.owner, root, 'restored', 'restored from forgotten', 'user', null, 'EX-RESTORED', 'restored');
+  await addRevision(f.owner, root, 'conversation-forget', 'forgotten in a conversation', 'conversation', forgotten, null, 'deleted');
+  await addRevision(f.owner, root, 'hard-delete', 'deleted', 'user', null, null, 'deleted');
+  await addRevision(f.owner, root, 'privacy', 'rejected_line', 'platform', forgotten, null, 'deleted');
+  await addRevision(f.owner, root, 'held', 'pasted_instruction_pending', 'platform', `Kept\nEX-HELD-LINE\n${forgotten}`, 'Kept');
+  await addRevision(f.owner, root, 'undo', 'edited on the memory page', 'user', 'EX-UNDONE-IMAGE', 'Changed', 'updated', at);
+  await addRevision(f.owner, shared.userRoot, 'shared', 'edited on the memory page', 'user', 'EX-REGISTERED-PROJECT', 'Shared edit');
+  await addRevision(f.owner, unregistered, 'foreign', 'edited on the memory page', 'user', 'EX-UNREGISTERED-NAMESPACE', null);
+  await addRevision(f.other, otherRoot, 'foreign', 'edited on the memory page', 'user', foreign, null);
+  const sourceUri = `${root}/memories/notes/source.md`;
+  await addRevision(f.owner, root, 'source', 'edited on the memory page', 'user', withdrawn, withdrawn);
+  await db.query(`INSERT INTO evimed_memory.native_rejections(user_id,memory_type,fingerprint,uri,text,origin)
+    VALUES($1,'profile',$2,$3,$4,'forget'),($1,'notes',$5,$3,'EX-UNDOABLE-EDIT','edit')`,
+  [f.owner, lineFingerprint(forgotten), `${root}/memories/profile.md`, forgotten, lineFingerprint('EX-UNDOABLE-EDIT')]);
+  for (const state of ['queued', 'submitting', 'pending', 'completed', 'failed', 'uncertain', 'suspended', 'cancelled']) {
+    await db.query(`INSERT INTO evimed_memory.native_admissions(user_id,candidate_id,candidate_revision,engine_session,state,pending_text,account_created_at)
+      SELECT id,$2,1,$3,$4,$5,created_at FROM evimed_control.users WHERE id=$1`,
+    [f.owner, `export-${state}`, `evimed-export-${state}`, state, ['completed', 'cancelled'].includes(state) ? forgotten : `EX-PENDING-${state}`]);
+  }
+  await db.query(`INSERT INTO evimed_memory.native_admissions(user_id,candidate_id,candidate_revision,engine_session,state,pending_text,error,account_created_at)
+    SELECT id,'source-cancel',1,'evimed-export-source','cancelled',$2,'source_conversation_deleted',created_at FROM evimed_control.users WHERE id=$1`, [f.owner, withdrawn]);
+  await db.query(`INSERT INTO evimed_memory.native_admissions(user_id,candidate_id,candidate_revision,engine_session,state,pending_text,account_created_at)
+    SELECT id,'foreign',1,'evimed-export-foreign','queued',$2,created_at FROM evimed_control.users WHERE id=$1`, [f.other, foreign]);
+  for (const [suffix, state, content] of [['1', 'offered', 'EX-OFFERED-IMPORT'], ['2', 'saved', forgotten], ['3', 'offered', forgotten]]) {
+    await db.query(`INSERT INTO evimed_memory.native_imports(id,user_id,state,statements,expires_at) VALUES($1,$2,$3,$4::jsonb,now()+interval '1 hour')`,
+    [`imp_${createHash('sha256').update(f.owner + suffix).digest('hex').slice(0, 24)}`, f.owner, state, JSON.stringify([{ id: 's1', text: content, sensitivity: 'ordinary', ticked: true }])]);
+  }
+  await db.query(`INSERT INTO evimed_memory.native_imports(id,user_id,statements,expires_at) VALUES($1,$2,$3::jsonb,now()+interval '1 hour')`,
+  [`imp_${createHash('sha256').update(f.other).digest('hex').slice(0, 24)}`, f.other, JSON.stringify([{ text: foreign }])]);
+  await db.query(`INSERT INTO evimed_memory.native_admissions(user_id,candidate_id,candidate_revision,engine_session,state,pending_text,account_created_at)
+    SELECT id,'old-epoch',1,'evimed-export-old','queued','EX-OLD-ACCOUNT-INPUT',created_at-interval '1 day' FROM evimed_control.users WHERE id=$1`, [f.owner]);
+  await f.app.sourceDeletion.ledger.migrate();
+  try {
+    // A completed historical source receipt retains its redaction prints after physical source cleanup.
+    await db.query(`INSERT INTO evimed_source_deletion.conversations(id,user_id,account_created_at,project_id,project_created_at,root_session_id,
+      session_ids,frozen,cleanup,source_removed,history_prints,cleaned_revision_id)
+      SELECT $1,u.id,u.created_at,p.id,p.created_at,'source-export','["source-export"]','{}','complete',true,$3::jsonb,
+        (SELECT max(id) FROM evimed_memory.native_revisions WHERE user_id=u.id)
+      FROM evimed_control.users u JOIN evimed_control.projects p ON p.user_id=u.id WHERE u.id=$2 AND p.id='default'`,
+    [deletionId, f.owner, JSON.stringify({ [sourceUri]: [lineFingerprint(withdrawn)] })]);
+    const response = await fetch(`${f.base}/api/account/export`, { headers: { cookie: f.cookie } });
+    assert.equal(response.status, 200, await response.clone().text());
+    const archive = Buffer.from(await response.arrayBuffer()), entries = tarEntries(archive), raw = gunzipSync(archive);
+    const exportedState = JSON.parse(entries.get('account/customer-state.json').toString()), native = exportedState.nativeMemory;
+    assert.equal(native.forgetRequests.length, 6, 'personal and registered shared namespaces only');
+    assert.deepEqual(native.forgetRequests[0].requests.map(row => row.status), ['pending', 'applying', 'completed', 'dismissed']);
+    assert.equal(native.forgetRequests[0].completionReceipts.length, 1);
+    assert.equal(native.revisions.find(row => row.id === edit).before, 'EX-UNDOABLE-EDIT');
+    assert.equal(native.revisions.find(row => row.id === removal).undoable, true);
+    assert.equal(native.revisions.find(row => row.id === removal).fileId, nativeFileId(`${root}/memories/notes/${forgotten}.md`));
+    assert.deepEqual(native.revisions.find(row => row.held).heldLines, ['EX-HELD-LINE']);
+    assert.equal(native.revisions.find(row => row.held).inEffect, false);
+    assert.ok(native.revisions.some(row => row.before === 'EX-REGISTERED-PROJECT'));
+    assert.ok(native.revisions.some(row => row.change === 'added' && row.undoable));
+    assert.ok(native.revisions.some(row => row.change === 'restored' && row.after === 'EX-RESTORED'));
+    assert.ok(native.revisions.some(row => row.actor === 'conversation' && row.before === undefined));
+    assert.equal(native.admissions.length, 9);
+    for (const row of native.admissions) assert.equal(row.text, ['completed', 'cancelled'].includes(row.state) ? undefined : `EX-PENDING-${row.state}`);
+    assert.equal(native.imports.length, 3);
+    assert.equal(native.imports.find(row => row.state === 'offered').statements[0].text, 'EX-OFFERED-IMPORT');
+    for (const value of [forgotten, withdrawn, foreign, 'EX-UNREGISTERED-NAMESPACE', 'EX-UNDONE-IMAGE', 'EX-OLD-ACCOUNT-INPUT']) {
+      assert.equal(raw.includes(Buffer.from(value)), false, `${value} must be absent from every archive entry`);
+      assert.equal(archive.includes(Buffer.from(value)), false);
+    }
+    await db.query("UPDATE evimed_source_deletion.conversations SET cleanup='pending' WHERE id=$1", [deletionId]);
+    const blocked = await fetch(`${f.base}/api/account/export`, { headers: { cookie: f.cookie } });
+    assert.equal(blocked.status, 409, 'the existing source-cleanup guard still governs the new projections');
+  } finally {
+    await db.query('DELETE FROM evimed_source_deletion.conversations WHERE id=$1', [deletionId]);
+  }
 });
