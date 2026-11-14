@@ -586,7 +586,8 @@ export async function planMethodSelection(entries, candidates, options = {}) {
         const entry = entries.get(String(hit.method?.id));
         if (!entry || taken.has(entry.id)) continue;
         scores.set(entry.id, Number(hit.score));
-        if (ranked.length < nearestLimit) ranked.push({ entry, reason: "similarity" });
+        // Flat selection consumes the provider's hits, as before. Only the pyramid asks for the whole library to score parents.
+        if (!pyramid || ranked.length < nearestLimit) ranked.push({ entry, reason: "similarity" });
       }
     } catch {
       // A ranking that cannot be made is a mount that has no question to rank by, never a run without methods.
