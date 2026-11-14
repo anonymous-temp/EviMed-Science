@@ -158,6 +158,7 @@ import { createClinicalReuse } from "./clinicalContextReuse.mjs";
 import { createLearningRuntime } from "./learningRuntime.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
 import { MethodConsolidation, createMethodScreenBaseline } from "./methodConsolidation.mjs";
+import { createMemoryForgetReader, forgetRecord } from "./memoryForgetPropagation.mjs";
 import { MethodReplay, MethodReplayJudge, createTrajectoryReader } from "./methodReplay.mjs";
 import { ScriptLessons, ScriptUses } from "./scriptLessons.mjs";
 import { createEvolutionVerification } from "./evolutionVerification.mjs";
@@ -4955,6 +4956,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const methodReplay = feedbackEvents ? new MethodReplay({
       learning: learningService, feedback: feedbackEvents, contextProvenance,
       readTrajectory: createTrajectoryReader({
+        allowSource: (userId, value, projectId) => productDocuments.memoryForgetReader?.(userId, value, projectId) ?? Promise.resolve(true),
         resolveProject: async (userId, projectId) => {
           const user = await store.userById(userId);
           return user ? store.requireProject(user, projectId) : null;
@@ -5188,6 +5190,39 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       agentRuns, memorySettings, agentRegistry, vcrPrivacyStore, memoryAdmission }),
   }) : null;
   // Keep lifecycle fences active even when new history search is switched off.
+  if (memoryHistory && nativeMemoryContexts && productDocuments) {
+    memoryHistory.nativeRemovalSources = (userId, sources, context) => nativeMemoryWorker.verification.readRemovalSources(userId, sources, context);
+    nativeMemoryOverlay.memoryForgetBody = async (userId, uri, body) =>
+      memoryHistory.fenceNativeBody(await nativeMemoryContexts.forUri(userId, uri), uri, body);
+    productDocuments.memoryForgetReader = createMemoryForgetReader({
+      context: async (userId, projectId, value) => {
+        const row = forgetRecord(value), payload = forgetRecord(row.payload ?? value);
+        const binding = forgetRecord(forgetRecord(payload.provenance).contextPolicy);
+        const views = await nativeMemoryContexts.all(userId);
+        if (binding.kind === 'geo-project') {
+          const shared = views.find(view => view.kind === 'geo-project'
+            && canonicalJson(contextPolicyIdentity(view.policy)) === canonicalJson(binding));
+          if (!shared) throw new HttpError(409, 'memory_scope_denied', 'The recorded memory namespace is unavailable.');
+          return shared;
+        }
+        // A project label cannot move an old personal fact into a newly shared namespace.
+        const owned = views.find(view => view.kind === 'owned');
+        if (!owned) throw new HttpError(409, 'memory_scope_denied', 'The memory namespace is unavailable.');
+        const stamp = projectId ? (await productDatabase.query(
+          'SELECT created_at::text AS stamp FROM evimed_control.projects WHERE user_id=$1 AND id=$2', [userId, projectId])).rows[0]?.stamp : null;
+        return { ...owned, projectId, projectCreatedAt: stamp ?? null };
+      },
+      hasWithdrawals: context => historyLedger.hasWithdrawals(context),
+      rejected: (context, texts) => historyLedger.rejected(context, texts),
+      sourcesRejected: (context, refs) => historyLedger.derivedSourcesRejected(context, refs),
+      resolveRun: (userId, projectId, runId) => projectId ? resolveLessonSourceRun(store, agentRuns, userId, projectId, runId) : Promise.resolve(null),
+      // Raw provenance resolution is private to the fence; calling the filtered reader here would recurse.
+      resolveMethod: async (userId, methodId) => (await productDatabase.query(
+        `SELECT payload,project_id AS "projectId" FROM evimed_product.documents WHERE user_id=$1 AND kind='method' AND id=$2`,
+        [userId, methodId])).rows[0] ?? null,
+    });
+  }
+  if (feedbackEvents && productDocuments) feedbackEvents.memoryForgetReader = productDocuments.memoryForgetReader;
   nativeMemory.history = memoryHistory;
   nativeMemoryWorker.history = memoryHistory;
   nativeMemoryWorker.verification.history = memoryHistory;
@@ -8070,7 +8105,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           if (snapshot) entries = appendAccountStateArchiveEntry(entries, snapshot.data, config);
           await securityAudit(config, "account.export", "completed", { userId: user.id });
           await sendUserArchive(res, user, entries);
-        }, { skillArtifacts, nativeMemory: { contexts: nativeMemoryContexts, sourceDeletion }, readResultReview: resultProvenance ? async (actor, row) => {
+        }, { skillArtifacts, memoryForgetReader: productDocuments?.memoryForgetReader, nativeMemory: { contexts: nativeMemoryContexts, sourceDeletion }, readResultReview: resultProvenance ? async (actor, row) => {
           if (!exportProjects.has(row.projectId)) exportProjects.set(row.projectId, resultProvenance.scope(actor.id, row.projectId));
           const project = await exportProjects.get(row.projectId);
           // Use this exact historical row, not the latest revision of its version.

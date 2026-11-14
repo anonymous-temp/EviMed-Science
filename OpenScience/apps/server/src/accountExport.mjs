@@ -467,6 +467,7 @@ export function exportedPriceLists(usageRows) {
  * @param {(snapshot:any) => Promise<any>} operation
  * @param {{maxRows?:number,maxBytes?:number,skillArtifacts?:any,report?:(line:string)=>void,
  * readResultReview?:(user:any,row:any)=>Promise<any>,
+ * memoryForgetReader?: ((userId:string,value:unknown,projectId?:string|null)=>Promise<boolean>) | null,
  * nativeMemory?: {contexts?: import("./geoNativeMemoryContext.mjs").GeoNativeMemoryContext | null,
  * sourceDeletion?: import("./conversationSourceDeletionService.mjs").ConversationSourceDeletionService | null}}} limits */
 export async function withAccountExportSnapshot(database, user, config, operation, limits = {}) {
@@ -548,6 +549,14 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       bytes += Number(size.rows[0].bytes);
       if (!Number.isSafeInteger(rows) || !Number.isSafeInteger(bytes) || rows > maxRows || bytes > maxBytes) throw tooLarge();
       tables[key] = (await client.query(query, values)).rows;
+      const memoryForgetReader = limits.memoryForgetReader;
+      if (memoryForgetReader && ['documents', 'revisions', 'feedbackEvents', 'scriptUses', 'researchSessions', 'notifications'].includes(key)) {
+        const visible = [];
+        for (const row of tables[key]) if (await inSnapshot(() => memoryForgetReader(user.id, row))) visible.push(row);
+        const omitted = tables[key].length - visible.length;
+        if (omitted) omissions.push({ kind: key, reason: 'withdrawn_memory', documents: omitted });
+        tables[key] = visible;
+      }
       if (key === "shareDeliveriesReceived") {
         tables[key] = tables[key].map((/** @type {any} */ { ownerId, ...delivery }) => ({ ...delivery, senderName: senderDisplayName(delivery.senderName, ownerId) }));
       }

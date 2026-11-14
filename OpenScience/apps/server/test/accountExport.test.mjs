@@ -691,3 +691,16 @@ test("an exported snapshot really routes its plugin documents through that rule"
     { status: 503, code: "account_export_unsupported_state" },
   );
 });
+
+test('the account snapshot applies the live forget reader before exporting derived records and feedback', async () => {
+  const user = {id:'user-1',accountCreatedAt:'2026-09-06 00:00:00+00'};
+  const source = {id:'fact1',kind:'fact',payload:{content:'M-41633'},revision:1};
+  const feedback = {id:'feedback1',projectId:'p',detail:{quote:'M-41633'}};
+  const checked = [];
+  const state = await withAccountExportSnapshot(fakeDatabase([],[source],[feedback]),user,{},async snapshot=>JSON.parse(snapshot.data.toString()),{
+    report:()=>{},memoryForgetReader:async(_user,value)=>{checked.push(value);return !JSON.stringify(value).includes('M-41633');},
+  });
+  assert.doesNotMatch(JSON.stringify(state),/M-41633/);
+  assert.equal(checked.length,2);
+  assert.ok(state.omissions.some(row=>row.reason==='withdrawn_memory'));
+});

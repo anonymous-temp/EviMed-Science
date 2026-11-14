@@ -213,10 +213,10 @@ export class MethodReplayJudge {
  * The reader that turns one accepted run of the ledger into a trajectory digest: the run's record, its stored transcript, its executed tool
  * trace and the structure of what it left. Null when the run cannot be read any more (its project was deleted, its transcript was pruned).
  * @param {{ resolveProject: (userId: string, projectId: string) => Promise<any>, listRuns: (project: any) => Promise<any[]>,
- *   readTranscript?: typeof readRunTranscript, readTraces?: typeof readToolTraces, readShapes?: typeof readArtifactShapes }} dependencies
+ *   readTranscript?: typeof readRunTranscript, readTraces?: typeof readToolTraces, allowSource?: ((userId:string,value:unknown,projectId:string)=>Promise<boolean>) | null, readShapes?: typeof readArtifactShapes }} dependencies
  * @returns {(userId: string, accepted: { runId: string, projectId: string | null }) => Promise<ReplayTrajectory | null>}
  */
-export function createTrajectoryReader({ resolveProject, listRuns, readTranscript = readRunTranscript, readTraces = readToolTraces, readShapes = readArtifactShapes }) {
+export function createTrajectoryReader({ resolveProject, listRuns, readTranscript = readRunTranscript, readTraces = readToolTraces, readShapes = readArtifactShapes, allowSource = null }) {
   return async (userId, accepted) => {
     if (!accepted.projectId) return null;
     const project = await resolveProject(userId, accepted.projectId).catch(() => null);
@@ -224,10 +224,13 @@ export function createTrajectoryReader({ resolveProject, listRuns, readTranscrip
     const run = (await listRuns(project).catch(() => [])).find((/** @type {any} */ item) => item?.id === accepted.runId);
     const transcript = await readTranscript(project, accepted.runId).catch(() => null);
     if (!run || !transcript) return null;
+    if (allowSource && !await allowSource(userId, { run, transcript }, accepted.projectId)) return null;
     const files = [...new Set(["artifacts", "unverifiedArtifacts", "outputFiles"].flatMap((field) => (Array.isArray(run[field]) ? run[field] : [])
       .map((/** @type {any} */ entry) => String(typeof entry === "string" ? entry : entry?.path ?? ""))))].filter(Boolean);
     const shapes = files.length ? await readShapes(project, files).catch(() => ({})) : {};
-    const digest = trajectoryDigest(transcript, run, { shapes, toolTraces: await readTraces(project, accepted.runId) });
+    const toolTraces = await readTraces(project, accepted.runId);
+    if (allowSource && !await allowSource(userId, { run, transcript, shapes, toolTraces }, accepted.projectId)) return null;
+    const digest = trajectoryDigest(transcript, run, { shapes, toolTraces });
     if (files.length) return digest;
     // The accepted work is the final answer, not merely the request. Read only
     // the root's current turn: earlier answers and unowned children are not this run.

@@ -1,3 +1,4 @@
+import { FORGET_DERIVED_KINDS } from "./memoryForgetPropagation.mjs";
 import { HttpError } from "./security.mjs";
 import { migrateProductStore, productId, productInteger, productKind, productPayload, productTime } from "./productPersistence.mjs";
 export { ProductJobs } from "./productJobs.mjs";
@@ -47,7 +48,17 @@ async function saveRevision(client, row) {
 /** Durable, account-scoped product records with optimistic updates and recoverable deletion. */
 export class ProductDocuments {
   /** @param {any} database */
-  constructor(database) { this.database = database; }
+  constructor(database) {
+    this.database = database;
+    /** @type {((userId:string,value:unknown,projectId?:string|null)=>Promise<boolean>)|null} */
+    this.memoryForgetReader = null;
+  }
+
+  /** The live rejection authority also guards projections and historical bodies.
+   * @param {string} userId @param {string} kind @param {unknown} value */
+  async memoryAllows(userId, kind, value) {
+    return !value || !FORGET_DERIVED_KINDS.has(kind) || !this.memoryForgetReader || await this.memoryForgetReader(userId, value);
+  }
 
   /** Create a bounded batch with its history in one transaction. No partial import is observable.
    * @param {string} userId @param {{kind:string,id:string,payload:Record<string,any>,projectId?:string|null}[]} records
@@ -111,7 +122,8 @@ export class ProductDocuments {
     const result = await this.database.query(`SELECT * FROM evimed_product.documents
       WHERE user_id=$1 AND kind=$2 AND id=$3 AND ($4::boolean OR deleted_at IS NULL)
         AND ($5::integer IS NULL OR revision=$5)`, values);
-    return record(result.rows[0]);
+    const found = record(result.rows[0]);
+    return await this.memoryAllows(userId, kind, found) ? found : null;
   }
 
   /** Compare a bounded authorized metadata closure in one database snapshot, without returning any body.
@@ -165,7 +177,7 @@ export class ProductDocuments {
     }
     if (projectId != null) productId(projectId, "project");
     await migrateProductStore(this.database);
-    const columns = fields == null ? "*" : `user_id,kind,id,project_id,${projection.sql} AS payload,revision,created_at,updated_at,deleted_at`;
+    const columns = fields == null ? "*" : `user_id,kind,id,project_id,${projection.sql} AS payload,payload AS privacy_payload,revision,created_at,updated_at,deleted_at`;
     const result = await this.database.query(`SELECT ${columns} FROM evimed_product.documents
       WHERE user_id=$1 AND kind=$2 AND (deleted_at IS NOT NULL)=$9::boolean
       AND (NOT $3::boolean OR project_id IS NOT DISTINCT FROM $4::text)
@@ -175,7 +187,13 @@ export class ProductDocuments {
       ...projection.values]);
     const items = result.rows.slice(0, limit).map(record);
     const last = items.at(-1);
-    return { items, nextCursor: result.rows.length > limit && last
+    const visible = [];
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
+      if (!item) continue;
+      if (await this.memoryAllows(userId, kind, { ...item, payload: result.rows[index].privacy_payload ?? item.payload })) visible.push(item);
+    }
+    return { items: visible, nextCursor: result.rows.length > limit && last
       ? Buffer.from(JSON.stringify([last.createdAt, last.id])).toString("base64url") : null };
   }
 
@@ -213,7 +231,12 @@ export class ProductDocuments {
         WHERE authorized.id=documents.id AND authorized.revision=documents.revision))
       ORDER BY updated_at DESC,id DESC LIMIT $5`,
     [productId(userId, "user"), productKind(kind), filterJson, query, limit, since, any.field, any.values, projectId !== undefined, projectId ?? null, ids !== undefined, ids ?? [], expectedRevisions !== undefined, JSON.stringify(expectedRevisions ?? [])]);
-    return result.rows.map(record);
+    const visible = [];
+    for (const row of result.rows) {
+      const item = record(row);
+      if (await this.memoryAllows(userId, kind, item)) visible.push(item);
+    }
+    return visible;
   }
 
   /** expectedRevision=0 creates; every update names the version the caller read.
@@ -286,10 +309,16 @@ export class ProductDocuments {
     productInteger(limit, 1, 100);
     if (beforeRevision != null) productInteger(beforeRevision, 1, 2_147_483_647);
     await migrateProductStore(this.database);
-    const result = await this.database.query(`SELECT revision,deleted_at,recorded_at,${projection.sql} AS payload FROM evimed_product.revisions
+    const result = await this.database.query(`SELECT revision,deleted_at,recorded_at,${projection.sql} AS payload,payload AS privacy_payload,
+      (SELECT d.project_id FROM evimed_product.documents d WHERE (d.user_id,d.kind,d.id)=(revisions.user_id,revisions.kind,revisions.id)) AS project_id
+      FROM evimed_product.revisions
       WHERE user_id=$1 AND kind=$2 AND id=$3 AND ($4::integer IS NULL OR revision<$4)
       ORDER BY revision DESC LIMIT $5`,
     [productId(userId, "user"), productKind(kind), productId(id), beforeRevision, limit, ...projection.values]);
-    return result.rows.map((row) => ({ revision: row.revision, payload: row.payload, deletedAt: productTime(row.deleted_at), recordedAt: productTime(row.recorded_at) }));
+    const visible = [];
+    for (const row of result.rows) if (await this.memoryAllows(userId, kind, { id, kind, projectId: row.project_id ?? null, payload: row.privacy_payload ?? row.payload })) {
+      visible.push({ revision: row.revision, payload: row.payload, deletedAt: productTime(row.deleted_at), recordedAt: productTime(row.recorded_at) });
+    }
+    return visible;
   }
 }

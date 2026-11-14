@@ -905,6 +905,10 @@ export class MethodDistillationRuns {
       .map((/** @type {any} */ entry) => String(typeof entry === "string" ? entry : entry?.path ?? ""))))].filter(Boolean);
     const shapes = files.length ? await readArtifactShapes(project, files).catch(() => ({})) : {};
     const toolTraces = await readToolTraces(project, run.id);
+    if (this.learning.documents?.memoryForgetReader && !await this.learning.documents.memoryForgetReader(job.userId,
+      { run, transcript, feedback, shapes, toolTraces }, project.id)) {
+      throw new HttpError(409, 'distillation_run_unavailable', 'The lesson depends on withdrawn memory.');
+    }
     // The researcher's whole library, ranked by what this lesson is about: a method learnt in another project is the one to amend,
     // not a near-duplicate to write beside it.
     const related = await this.#related(job.userId, lessonQueryText({ run, trigger, transcript, feedback, shapes }), policy);
@@ -952,6 +956,9 @@ export class MethodDistillationRuns {
       input.corrections.push(...sourceObservations.filter(source=>source.runId!==run.id).flatMap(source=>source.humanMessages.map(message=>
         ({source:'accepted-input',recordId:message.referenceId,key:null,text:message.text}))));
       input.signal='researcher';
+    }
+    if (this.learning.documents?.memoryForgetReader && !await this.learning.documents.memoryForgetReader(job.userId, input, project.id)) {
+      throw new HttpError(409, 'distillation_run_unavailable', 'The lesson depends on withdrawn memory.');
     }
     // Shared results predating the frozen-input contract cannot be adopted.
     const dispatchKey = typeof job.payload?.dispatchKey === "string" ? job.payload.dispatchKey.slice(0, 200) : "";

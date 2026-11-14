@@ -983,6 +983,7 @@ export class CapsuleService {
     const ranked = nominated.filter((/** @type {any} */ match) => kept.has(match.row.id));
     const items = [];
     for (const match of ranked) {
+      if (this.documents.memoryAllows && !await this.documents.memoryAllows(userId, "fact", { ...match.row, projectId: match.row.project_id ?? match.row.projectId })) continue;
       const payload = match.row.payload;
       if (factKinds.length && !factKinds.includes(payload.factKind)) continue;
       if (since && new Date(match.row.created_at).getTime() < new Date(since).getTime()) continue;

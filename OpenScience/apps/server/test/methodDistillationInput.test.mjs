@@ -503,3 +503,12 @@ test('pre-generation script jobs cannot adopt newer proven occurrences of the sa
     run: { id: 'old' }, job: { userId: 'u', projectId: 'p', payload: { trigger: 'script', runId: 'old', scriptHash: 'a'.repeat(32), runs: 3, conversations: 2 } } }), { code: 'distillation_run_unavailable' });
   assert.equal(dispatched, 0);
 });
+
+test('a pending lesson checks the retained transcript and feedback before sending any text to a model', async t => {
+  const root = await mkdtemp(path.join(tmpdir(),'evimed-forget-input-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const {project,run} = await projectWith(root);
+  const distillation = new MethodDistillationRuns({learning:{documents:{memoryForgetReader:async()=>false},listMethods:async()=>({items:[]})},
+    dispatch:async()=>assert.fail('withdrawn evidence reached dispatch'),readResult:async()=>({status:'running'})});
+  await assert.rejects(distillation.execute({project,run,job:{userId:'u1',projectId:'p',payload:{trigger:'correction'}}}),{code:'distillation_run_unavailable'});
+});
