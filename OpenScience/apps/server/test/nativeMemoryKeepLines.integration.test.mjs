@@ -92,3 +92,68 @@ test('a stale extraction never overwrites a later engine body', options, async t
   await f.worker.processCommits({ userId: f.userId });
   assert.equal(await f.sessions.read(f.userId, uri), '# Later independent profile');
 });
+
+/** @type {{name:string,before:string,after:string,expected:string,message:string,role?:string,outcome:'restored'|'kept_deleted_replaced'|'kept_deleted_grounded'}[]} */
+const revisedRules = [
+  { name: 'd1 district update in place', before: `- 住在小店区\n${allergy}`, after: `- 住在迎泽区\n${allergy}`,
+    expected: `- 住在迎泽区\n${allergy}`, message: '我搬到迎泽区了', outcome: 'kept_deleted_replaced' },
+  { name: 'd2 district update appended across an unchanged anchor', before: `- 住在小店区\n${allergy}`, after: `${allergy}\n- 住在迎泽区`,
+    expected: `${allergy}\n- 住在迎泽区`, message: '我搬到迎泽区了', outcome: 'kept_deleted_replaced' },
+  { name: 'd3 earlier-value wrapper', before: `- 青\n${allergy}`, after: `${allergy}\n- 红（曾为：青）`,
+    expected: `${allergy}\n- 红（曾为：青）`, message: '你好。', outcome: 'kept_deleted_replaced' },
+  { name: 'e user coffee grounds', before: `${coffee}\n${allergy}`, after: allergy,
+    expected: allergy, message: '我已经不喝咖啡了', outcome: 'kept_deleted_grounded' },
+  { name: 'unrelated deletion and addition in separate hunks', before: `${key}\n${allergy}`, after: `${allergy}\n- 周末参加陶艺课程`,
+    expected: `${key}\n${allergy}\n- 周末参加陶艺课程`, message: '你好。', outcome: 'restored' },
+  ...['我的', '了的'].map(text => ({ name: `stop-set overlap ${text}`, before: `- ${text}\n${allergy}`, after: allergy,
+    expected: `- ${text}\n${allergy}`, message: text, outcome: /** @type {const} */ ('restored') })),
+  ...['assistant', 'tool'].map(role => ({ name: `${role} coffee text is not grounds`, before: `${coffee}\n${allergy}`, after: allergy,
+    expected: `${coffee}\n${allergy}`, message: '我已经不喝咖啡了', role, outcome: /** @type {const} */ ('restored') })),
+];
+
+for (const scenario of revisedRules) test(`FT13b real commit/store: ${scenario.name}`, options, async t => {
+  const f = await fixture(t, { config: { memoryKeepUnexplainedLinesEnabled: true } });
+  const uri = `${f.root}/profile.md`;
+  f.stub.extract = () => ({ adds: [{ uri, after: scenario.before }] });
+  await f.commitConversation('initial', [{ role: 'user', text: scenario.before }]);
+  await f.worker.processCommits({ userId: f.userId });
+  const origins = (await f.overlay.originsOf(f.userId, [uri])).get(uri);
+  f.stub.extract = () => ({ updates: [{ uri, before: scenario.before, after: scenario.after }] });
+  const commit = await f.commitConversation('change', [
+    { role: 'user', text: '你好。' }, { role: scenario.role ?? 'user', text: scenario.message },
+  ]);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), scenario.expected);
+  assert.equal((await f.overlay.file(f.userId, uri)).body, scenario.expected);
+  const revisions = await f.overlay.admissionRevisions(f.userId, commit.archive_uri);
+  assert.equal(revisions.length, 1);
+  assert.equal(revisions[0].actor, 'engine');
+  assert.equal(revisions[0].before, scenario.before);
+  assert.equal(revisions[0].after, scenario.expected);
+  assert.equal(nativeMemoryCounters().unexplainedDeletions[scenario.outcome], 1);
+  if (scenario.outcome === 'restored') {
+    const print = lineFingerprint(scenario.before.split('\n')[0].slice(2));
+    assert.deepEqual((await f.overlay.originsOf(f.userId, [uri])).get(uri).get(print), origins.get(print));
+  }
+});
+
+for (const change of ['add', 'update']) test(`FT13b: related ${change} in another file cannot explain a deletion`, options, async t => {
+  const f = await fixture(t, { config: { memoryKeepUnexplainedLinesEnabled: true } });
+  const uri = `${f.root}/profile.md`, other = `${f.root}/notes/other.md`;
+  const prior = `- 住在小店区\n${allergy}`;
+  const otherBefore = '- 周末参加陶艺课程', otherAfter = `${otherBefore}\n- 住在迎泽区`;
+  f.stub.extract = () => ({ adds: [{ uri, after: prior }, ...(change === 'update' ? [{ uri: other, after: otherBefore }] : [])] });
+  await f.commitConversation('initial', [{ role: 'user', text: prior }]);
+  await f.worker.processCommits({ userId: f.userId });
+  f.stub.extract = () => ({ updates: [{ uri, before: prior, after: allergy },
+    ...(change === 'update' ? [{ uri: other, before: otherBefore, after: otherAfter }] : [])],
+  adds: change === 'add' ? [{ uri: other, after: otherAfter }] : [] });
+  const commit = await f.commitConversation('change', [{ role: 'user', text: '你好。' }]);
+  await f.worker.processCommits({ userId: f.userId });
+  assert.equal(await f.sessions.read(f.userId, uri), prior);
+  assert.equal(await f.sessions.read(f.userId, other), otherAfter);
+  const revisions = (await f.overlay.admissionRevisions(f.userId, commit.archive_uri)).filter(row => row.uri === uri);
+  assert.equal(revisions.length, 1);
+  assert.equal(revisions[0].after, prior);
+  assert.equal(nativeMemoryCounters().unexplainedDeletions.restored, 1);
+});

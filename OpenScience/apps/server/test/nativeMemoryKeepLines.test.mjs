@@ -29,18 +29,41 @@ test('restoration preserves raw text, stamps and position between surviving line
   assert.equal(classify({ before: prior }).after, prior);
 });
 
-test('a legitimate move with an explicit earlier value remains replaced', () => {
-  const old = '住在小店区';
-  for (const marker of ['曾为：', 'earlier:']) {
-    const next = `- 住在迎泽区（${marker}${old}）`;
-    assert.equal(classify({ before: `- ${old}`, after: next, added: [next.slice(2)], messages: [user('我搬到迎泽区了')] }).after, next);
+test('d1: same-hunk updates remain replaced even without lexical overlap', () => {
+  for (const [old, next] of [['住在小店区', '住在迎泽区'], ['喜欢游泳', '早晨跑步']]) {
+    const result = classify({ before: `- ${old}`, after: `- ${next}`, messages: [user('我搬到迎泽区了')] });
+    assert.equal(result.after, `- ${next}`);
+    assert.deepEqual(result.outcomes, ['kept_deleted_replaced']);
   }
 });
 
-test('added lines anywhere can explain replacement by hard tokens or Jaccard, unchanged neighbours cannot', () => {
-  assert.deepEqual(classify({ before: '- Project M-41633: old value', after: null, added: ['Project M-41633: new value'] }).outcomes, ['kept_deleted_replaced']);
-  assert.deepEqual(classify({ before: '- Prefers black coffee every morning.', after: null, added: ['Prefers black coffee every afternoon.'] }).outcomes, ['kept_deleted_replaced']);
-  assert.deepEqual(classify({ before: '- Project M-41633: old value', after: '- Project M-41633: neighbour' }).outcomes, ['restored']);
+test('d2: additions in another hunk of the same file explain replacement by content or hard token', () => {
+  for (const [old, next] of [['住在小店区', '住在迎泽区'], ['M-41633 已完成', 'M-41633 已归档'],
+    ['Prefers black coffee every morning.', 'COFFEE is no longer wanted.']]) {
+    const result = classify({ before: `- ${old}\n${allergy}`, after: `${allergy}\n- ${next}` });
+    assert.equal(result.after, `${allergy}\n- ${next}`);
+    assert.deepEqual(result.outcomes, ['kept_deleted_replaced']);
+  }
+});
+
+test('d3: an added earlier-value wrapper explains a deletion across hunks', () => {
+  for (const marker of ['曾为：', 'earlier:']) {
+    const next = `- 红（${marker}青）`;
+    assert.deepEqual(classify({ before: `- 青\n${allergy}`, after: `${allergy}\n${next}` }).outcomes, ['kept_deleted_replaced']);
+  }
+});
+
+test('an unrelated addition in a separate hunk does not explain a missing line', () => {
+  const prior = [key, allergy, coffee].join('\n');
+  const next = [allergy, coffee, '- 周末参加陶艺课程'].join('\n');
+  const result = classify({ before: prior, after: next, messages: [user('你好。')] });
+  assert.equal(result.after, [key, next].join('\n'));
+  assert.deepEqual(result.outcomes, ['restored']);
+});
+
+test('unchanged neighbours cannot explain replacement even when they share tokens', () => {
+  const neighbour = '- Project M-41633: neighbour';
+  assert.deepEqual(classify({ before: `- Project M-41633: old value\n${neighbour}`, after: neighbour }).outcomes, ['restored']);
 });
 
 test('the user can supply deletion grounds without a tool; assistant and tool messages cannot', () => {
@@ -79,7 +102,23 @@ test('the metric exposes all outcomes at zero and counts each without persisting
   assert.equal(read().series.find(row => row.labels.outcome === 'restored').value, 1);
 });
 
-test('as-of dates are not shared tokens and bare district changes do not fabricate lexical grounds', () => {
-  assert.deepEqual(classify({ before: '- 住在小店区', after: '- 住在迎泽区', added: ['住在迎泽区'], messages: [user('我搬到迎泽区了')] }).outcomes, ['restored']);
-  assert.deepEqual(classify({ before: key, after: coffee, added: [coffee.slice(2)] }).outcomes, ['restored']);
+test('e: user content grounds deletion without a similarity threshold', () => {
+  assert.deepEqual(classify({ before: coffee, after: null, messages: [user('我已经不喝咖啡了')] }).outcomes, ['kept_deleted_grounded']);
+  assert.deepEqual(classify({ before: '- Enjoys gardening outdoors.', after: null, messages: [user('GARDENING has ended.')] }).outcomes, ['kept_deleted_grounded']);
+  assert.deepEqual(classify({ before: '- Assigned M-41633', after: null, messages: [user('Close M-41633')] }).outcomes, ['kept_deleted_grounded']);
+  for (const role of ['assistant', 'tool']) {
+    assert.deepEqual(classify({ before: coffee, after: null, messages: [{ role, text: '我已经不喝咖啡了' }] }).outcomes, ['restored']);
+  }
+});
+
+test('stop-set-only overlap is neither grounds nor an append-style replacement', () => {
+  for (const text of ['我的', '了的', 'This is that with your', 'cat']) {
+    assert.deepEqual(classify({ before: `- ${text}`, after: null, messages: [user(text)] }).outcomes, ['restored']);
+    assert.deepEqual(classify({ before: `- ${text}\n${allergy}`, after: `${allergy}\n- ${text}要` }).outcomes, ['restored']);
+  }
+});
+
+test('as-of dates are not shared tokens and CJK pairs cannot span punctuation', () => {
+  assert.deepEqual(classify({ before: `${key}\n${allergy}`, after: `${allergy}\n${coffee}` }).outcomes, ['restored']);
+  assert.deepEqual(classify({ before: coffee, after: null, messages: [user('咖，啡')] }).outcomes, ['restored']);
 });

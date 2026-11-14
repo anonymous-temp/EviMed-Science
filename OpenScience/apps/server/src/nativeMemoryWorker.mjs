@@ -907,14 +907,6 @@ export class NativeMemoryWorker {
     for (const uri of new Set([...nodes.filter(node => !node.isDir && valid(node.uri)).map(node => node.uri), ...changes.map(entry => entry.operation.uri)])) {
       live.set(uri, await sessions.read(userId, uri));
     }
-    // Only actual added lines of this commit count, never an unchanged neighbouring statement.
-    const added = [...(operations.adds ?? []), ...(operations.updates ?? [])].filter(operation => valid(operation.uri)).flatMap(operation => {
-      const priorLines = memoryLines(operation.before ?? '');
-      if (priorLines.length > 200) return [];
-      const prior = new Set(priorLines.map(lineFingerprint));
-      const actual = new Set(memoryLines(live.get(operation.uri)).map(lineFingerprint));
-      return memoryLines(operation.after ?? '').filter(line => !prior.has(lineFingerprint(line)) && actual.has(lineFingerprint(line)));
-    });
     for (const entry of changes) {
       const uri = entry.operation.uri, settled = recorded.get(uri);
       let accepted = settled ? settled.after : entry.after;
@@ -931,7 +923,7 @@ export class NativeMemoryWorker {
         const withdrawn = hidden.some((/** @type {string} */ prefix) => uri === prefix || uri.startsWith(`${prefix}/`))
           ? new Set(beforeLines.map(lineFingerprint)) : withdrawals.get(uri) ?? new Set();
         const result = keepUnexplainedLines({ enabled: true, before: entry.before, after: entry.after,
-          neverKept: text => lineRefusal(text, new Set()) !== null, rejected: new Set(rejected.keys()), withdrawn, elsewhere, added, messages });
+          neverKept: text => lineRefusal(text, new Set()) !== null, rejected: new Set(rejected.keys()), withdrawn, elsewhere, messages });
         const current = await sessions.read(userId, uri);
         // Do not resurrect an obsolete pre-image over a later engine write or a person's edit.
         if (current !== entry.after && current !== result.after) continue;
