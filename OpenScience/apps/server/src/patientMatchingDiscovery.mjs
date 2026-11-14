@@ -62,8 +62,10 @@ export function createPatientMatchingDiscovery({vcr,models,index=null,jevEnabled
     const collection=meta.collection??incoming.collection?.id,collectionRevision=meta.collectionRevision??incoming.collection?.revision;
     const registryIds=[...new Set([...candidates.keys(),...exact,...denseIds])].slice(0,stageDepth*2),sourceFailures=[];
     if(!collection&&typeof vcr.service.prefetchRegistryRecords==='function')await vcr.service.prefetchRegistryRecords(registryIds.filter(id=>/^NCT\d{8}$/.test(id))).catch(()=>null);
+    // Eight at once: each registry's own pace (the registry client's lanes) bounds what it is asked, and EU CTIS answers one record in seconds —
+    // four readers spent 225 s on the 119 CTIS and 86 ChiCTR records of one production discovery (2026-11-14).
     let nextRecord=0;
-    await Promise.all(Array.from({length:Math.min(4,registryIds.length)},async()=>{
+    await Promise.all(Array.from({length:Math.min(8,registryIds.length)},async()=>{
       for(;;){const at=nextRecord++;if(at>=registryIds.length)break;const registryId=registryIds[at];
         const registry=/^ChiCTR/i.test(registryId)?'chictr':/^NCT\d{8}$/.test(registryId)?'clinicaltrials.gov':'ctis';
         const found=await vcr.service.runtimeRead(study,'trial_registry_record',{registry,registryId,...(collection?{collection,collectionRevision}:{})},{ownerView:true}).catch(()=>null);

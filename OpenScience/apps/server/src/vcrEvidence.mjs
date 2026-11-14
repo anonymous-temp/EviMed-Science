@@ -1327,8 +1327,38 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
   // A trial's record as a judgment reads it, kept `judgmentCacheMs` per registry and id (live registries only): one matching conversation
   // reads the same records at every lane's preparation, every commit's source check and every result read, and ChiCTR and CTIS had no
   // cache at all, one registry search per read (production 2026-11-12: such reads failed inside commits and held the commit's lock).
+  // Whatever read a live record keeps it here (2026-11-14): a discovery reads every record it ranks, and the assessment that follows reads the
+  // same ones. EU CTIS answered a record in 3–25 s from the production host, and such a read used to be made again inside each commit.
   /** @type {Map<string, { trial: any, at: number }>} */
   const judgmentCache = new Map();
+  /** @param {string} registryName @param {unknown} registryId */
+  const judgmentKey = (registryName, registryId) => `${registryName}:${String(registryId ?? "").trim().toUpperCase()}`;
+  // A record the registry did not give is not asked for again for two minutes, and the lanes of one assessment share one request for it: every
+  // lane's preparation starts at the same remaining pair, and each used to wait out the registry's deadline on the same record.
+  const JUDGMENT_UNREAD_MS = 2 * 60_000;
+  /** @type {Map<string, { answer: any, at: number }>} */
+  const judgmentUnread = new Map();
+  /** @type {Map<string, Promise<any>>} */
+  const judgmentReads = new Map();
+  /** A built record as a judgment reads it. @param {any} built @param {string} registryName @param {unknown} registryId @param {string | null} [collection] */
+  function judgmentTrialOf(built, registryName, registryId, collection = null) {
+    const precedent = built.precedent ?? {};
+    const description = built.description ?? built.record?.reduced?.protocolSection?.descriptionModule ?? {};
+    return {
+      registry: precedent.registry ?? registryName, registryId: precedent.registryId ?? registryId, title: precedent.title ?? "", summary: description.briefSummary ?? "",
+      eligibility: precedent.eligibilityText ?? "", minimumAge: precedent.pico?.minimumAge ?? "", maximumAge: precedent.pico?.maximumAge ?? "", sex: precedent.pico?.sex ?? "", conditions: precedent.pico?.conditions ?? [], interventions: (precedent.pico?.interventions ?? []).map((/** @type {any} */ item) => item?.name ?? item),
+      url: built.record?.url ?? precedent.sources?.[0]?.url ?? null, status: precedent.design?.overallStatus ?? null, phase: (precedent.design?.phases ?? []).join("/") || null,
+      recordHash: built.record?.hash ?? precedent.sources?.[0]?.recordHash ?? null, ...(collection ? { collection: precedent.sources?.[0]?.collection ?? null } : {}),
+    };
+  }
+  /** Keep a live record for the judgments that follow. @param {string} registryName @param {unknown} registryId @param {any} built */
+  function keepJudgment(registryName, registryId, built) {
+    if (!(Number(judgmentCacheMs) > 0) || !built?.precedent) return;
+    const key = judgmentKey(registryName, registryId);
+    judgmentCache.delete(key);
+    judgmentCache.set(key, { trial: judgmentTrialOf(built, registryName, registryId), at: now().getTime() });
+    while (judgmentCache.size > RECORD_CACHE_MAX) judgmentCache.delete(/** @type {string} */ (judgmentCache.keys().next().value));
+  }
 
   /**
    * One registry record, fetched and built — or the failure to. `userId` is whose
@@ -1369,6 +1399,7 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
       : fetched;
     if (fetched.status === "ok" && registryName === "chictr" && !built) return { failure: { status: REGISTRY_NOT_FOUND, reason: REGISTRY_NOT_FOUND } };
     if (fetched.status !== "ok" || !built?.precedent) return { failure: fetched };
+    keepJudgment(registryName, registryId, built);
     return { built };
   }
 
@@ -1779,32 +1810,38 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
     /**
      * A registry record as a judgment of a patient reads it: whole, because a clause is never truncated, and with what the model is shown beside the eligibility
      * text. A record with no eligibility text (a ChiCTR listing) is still a record. Never throws: a registry that cannot answer is a status.
-     * @param {{ userId?: string, registry?: string, registryId: string, collection?: string | null, collectionRevision?: string | null, signal?: AbortSignal }} input
+     * `cachedOnly` asks no registry: the record as a read within the window kept it, or `registry_record_not_held`.
+     * @param {{ userId?: string, registry?: string, registryId: string, collection?: string | null, collectionRevision?: string | null, signal?: AbortSignal, cachedOnly?: boolean }} input
      */
-    async judgmentRecord({ userId = "", registry: registryName = "clinicaltrials.gov", registryId, collection = null, collectionRevision = null, signal }) {
+    async judgmentRecord({ userId = "", registry: registryName = "clinicaltrials.gov", registryId, collection = null, collectionRevision = null, signal, cachedOnly = false }) {
       const live = collection == null && collectionRevision == null && Number(judgmentCacheMs) > 0;
-      const key = `${registryName}:${String(registryId ?? "").trim().toUpperCase()}`;
-      const hit = live ? judgmentCache.get(key) : null;
+      const hit = live ? judgmentCache.get(judgmentKey(registryName, registryId)) : null;
       if (hit && now().getTime() - hit.at < Number(judgmentCacheMs)) return { status: "ok", trial: structuredClone(hit.trial) };
-      let fetched;
-      try { fetched = await fetchRecord(registryName, String(registryId ?? ""), userId, { collection, collectionRevision, signal }); }
-      catch (error) { return { status: REGISTRY_UNAVAILABLE, reason: String(/** @type {any} */ (error)?.code ?? "request_failed"), registryId }; }
-      const { built, failure } = fetched;
-      if (!built) return { status: failure?.status === REGISTRY_NOT_FOUND ? REGISTRY_NOT_FOUND : (failure?.status ?? REGISTRY_UNAVAILABLE), reason: failure?.reason ?? "registry_record_unreadable", registryId };
-      const precedent = built.precedent ?? {};
-      const description = built.description ?? built.record?.reduced?.protocolSection?.descriptionModule ?? {};
-      const trial = {
-        registry: precedent.registry ?? registryName, registryId: precedent.registryId ?? registryId, title: precedent.title ?? "", summary: description.briefSummary ?? "",
-        eligibility: precedent.eligibilityText ?? "", minimumAge: precedent.pico?.minimumAge ?? "", maximumAge: precedent.pico?.maximumAge ?? "", sex: precedent.pico?.sex ?? "", conditions: precedent.pico?.conditions ?? [], interventions: (precedent.pico?.interventions ?? []).map((/** @type {any} */ item) => item?.name ?? item),
-        url: built.record?.url ?? precedent.sources?.[0]?.url ?? null, status: precedent.design?.overallStatus ?? null, phase: (precedent.design?.phases ?? []).join("/") || null,
-        recordHash: built.record?.hash ?? precedent.sources?.[0]?.recordHash ?? null, ...(collection ? { collection: precedent.sources?.[0]?.collection ?? null } : {}),
+      // `cachedOnly`: the caller holds a transaction or only counts what is saved, and asks no registry. A record not kept is "not read", never a request.
+      if (cachedOnly && collection == null && collectionRevision == null) return { status: REGISTRY_UNAVAILABLE, reason: "registry_record_not_held", registryId };
+      const read = async () => {
+        let fetched;
+        try { fetched = await fetchRecord(registryName, String(registryId ?? ""), userId, { collection, collectionRevision, signal }); }
+        catch (error) { return { status: REGISTRY_UNAVAILABLE, reason: String(/** @type {any} */ (error)?.code ?? "request_failed"), registryId }; }
+        const { built, failure } = fetched;
+        if (!built) return { status: failure?.status === REGISTRY_NOT_FOUND ? REGISTRY_NOT_FOUND : (failure?.status ?? REGISTRY_UNAVAILABLE), reason: failure?.reason ?? "registry_record_unreadable", registryId };
+        return { status: "ok", trial: judgmentTrialOf(built, registryName, registryId, collection) };
       };
-      if (live) {
-        judgmentCache.delete(key);
-        judgmentCache.set(key, { trial: structuredClone(trial), at: now().getTime() });
-        while (judgmentCache.size > RECORD_CACHE_MAX) judgmentCache.delete(/** @type {string} */ (judgmentCache.keys().next().value));
+      if (!live) return read();
+      const key = judgmentKey(registryName, registryId);
+      const unread = judgmentUnread.get(key);
+      if (unread && now().getTime() - unread.at < JUDGMENT_UNREAD_MS) return { ...unread.answer };
+      const running = judgmentReads.get(key);
+      if (running) return structuredClone(await running);
+      const work = read().finally(() => { judgmentReads.delete(key); });
+      judgmentReads.set(key, work);
+      const answer = await work;
+      judgmentUnread.delete(key);
+      if (answer.status !== "ok") {
+        judgmentUnread.set(key, { answer, at: now().getTime() });
+        while (judgmentUnread.size > RECORD_CACHE_MAX) judgmentUnread.delete(/** @type {string} */ (judgmentUnread.keys().next().value));
       }
-      return { status: "ok", trial };
+      return answer;
     },
 
     /**
@@ -2288,6 +2325,7 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
           if (!id) continue;
           recordCache.delete(id);
           recordCache.set(id, { built: item, at });
+          keepJudgment("clinicaltrials.gov", id, item);
         }
         while (recordCache.size > RECORD_CACHE_MAX) recordCache.delete(/** @type {string} */ (recordCache.keys().next().value));
         return { prefetched: (answer?.items ?? []).length, missing: (answer?.missing ?? []).length };

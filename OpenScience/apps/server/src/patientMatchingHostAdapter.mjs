@@ -21,6 +21,8 @@ const unsupported = operation => response({ code: 'patient_matching_resource_una
 const uniqSources = sources => [...new Map(sources.map(source => [source.sourceId, source])).values()];
 const same = (a, b) => canonicalJson(a) === canonicalJson(b);
 const registryOf = value => /^ChiCTR/i.test(String(value)) ? 'chictr' : /^\d{4}-\d{6}-\d{2}(?:-\d{2})?$/.test(String(value)) ? 'ctis' : 'clinicaltrials.gov';
+/** The registry did not give a trial's record: a fact about that read, never about the task's other pairs. @param {any} error */
+const registryUnread = error => error?.code === 'registry_unavailable' || error?.code === 'registry_not_found';
 export const patientMatchingScope = origin => ({ tenantId: origin.userId, actorId: origin.userId, projectId: origin.projectId, conversationId: origin.rootSessionId });
 
 /** The most concurrent executions one match_assess call may hold (the plugin runs ASSESS_LANES of them). */
@@ -106,11 +108,12 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     validateClinicalContext(context);
     return { context, sources, passages, note };
   }
-  async function trial(study, pair, meta, scope) {
+  /** `keptOnly`: the record as it is kept, with no request to a registry or its site (a commit's projection and a count of what is saved ask none). */
+  async function trial(study, pair, meta, scope, keptOnly = false) {
     /** @type {any} */
     const target = meta.protocolVersionId
       ? await targets.protocol({ study, protocolVersionId: meta.protocolVersionId })
-      : await targets.trial({ userId: study.userId, registry: registryOf(pair.trialId), registryId: pair.trialId, ...(meta.collection ? { collection: meta.collection, collectionRevision: meta.collectionRevision } : {}) });
+      : await targets.trial({ userId: study.userId, registry: registryOf(pair.trialId), registryId: pair.trialId, ...(meta.collection ? { collection: meta.collection, collectionRevision: meta.collectionRevision } : {}), ...(keptOnly ? { cachedOnly: true } : {}) });
     const prefix = `${JSON.stringify({title:target.title,summary:target.summary,demographics:target.takes??'',conditions:target.conditions,interventions:target.interventions})}\n\n`;
     const text = `${prefix}${target.eligibility}`;
     const source = { sourceId: `${meta.protocolVersionId ? 'protocol' : 'registry'}:${pair.trialId}`, revision: target.hash, digest: contentDigest(text), kind: meta.protocolVersionId ? 'protocol' : 'registry' };
@@ -129,13 +132,13 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
       else for(const span of list)await vcr.documents.recordWindow?.(study,record.documentId,record.text,span.start,span.end);
     }
   }
-  async function materials(study, pairs, meta, scope,origin=meta.origin) {
+  async function materials(study, pairs, meta, scope,origin=meta.origin,keptOnly=false) {
     const people = new Map(), trials = new Map(), bundles = [];
     const heldKnowledge=[...ledger(meta.taskId).knowledgePassages.values()];
     if(heldKnowledge.length){if(typeof knowledge?.refresh!=='function')deny('patient_matching_knowledge_unavailable');await knowledge.refresh({origin,scope,passages:heldKnowledge});}
     for (const pair of pairs) {
       if (!people.has(pair.subjectKey)) people.set(pair.subjectKey, await patient(study, pair.subjectKey, scope));
-      if (!trials.has(pair.trialId)) trials.set(pair.trialId, await trial(study, pair, meta, scope));
+      if (!trials.has(pair.trialId)) trials.set(pair.trialId, await trial(study, pair, meta, scope, keptOnly));
       const person = people.get(pair.subjectKey), target = trials.get(pair.trialId);
       // The newest records whole while they fit the window ("now" is the newest record; replay 2026-11-08: a first-18,000-characters window hid
       // the newest records of half the n2c2 patients), plus, per criterion, the best-matching chunks of the older records (BM25 on the criterion text).
@@ -162,7 +165,12 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     for(const row of selected)for(const passage of row.answer.knowledgePassages??[])ledger(meta.taskId).knowledgePassages.set(passage.evidenceId,passage);
     return selected;
   }
-  async function resultOf(origin, taskId, resultId = null) {
+  /**
+   * `keptOnly` reads no registry: a trial whose record is not kept is projected without it. Either way a trial the registry does not give now never
+   * fails the projection of the other pairs (production 2026-11-14: one slow EU CTIS record failed every commit of its task for twenty minutes) —
+   * the patient's sources are read as always, and a saved decision keeps the trial revision it was made on, which nothing says has changed.
+   */
+  async function resultOf(origin, taskId, resultId = null, { keptOnly = false } = {}) {
     const { meta, study, scope } = await owned(origin, taskId);
     const rows = await rowsOf(meta, study);
     const version = resultId ? (meta.results ?? []).find(item => item.resultId === resultId) : null;
@@ -186,8 +194,13 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
           continue;
         }
       }
-      const material = await materials(study, [pair], meta, scope,origin);
-      const pairSources=uniqSources(material.bundles.flatMap(bundle=>bundle.sources));
+      let pairSources;
+      try { pairSources=uniqSources((await materials(study, [pair], meta, scope,origin,keptOnly)).bundles.flatMap(bundle=>bundle.sources)); }
+      catch (error) {
+        if (!registryUnread(error)) throw error;
+        const person=await patient(study, pair.subjectKey, scope), trialSourceId=`${meta.protocolVersionId ? 'protocol' : 'registry'}:${pair.trialId}`;
+        pairSources=uniqSources([...person.sources,...(row?row.answer.coreDecision.sourceRefs.filter(source=>source.sourceId===trialSourceId):[]),...[...ledger(meta.taskId).knowledgePassages.values()].map(passage=>passage.source)]);
+      }
       sources.push(...pairSources); selectedPairs.push(pair);
       if (row) {
         decisions.push(row.answer.coreDecision);
@@ -235,7 +248,7 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     const previous = input.phase === 'refresh' ? meta.executions.find(item => item.executionId === input.executionId) : null;
     if (input.phase === 'refresh' && !previous) deny('patient_matching_execution_not_found');
     if (previous && (previous.rootCallId !== origin.callId || (previous.epoch ?? 0) !== (meta.continuationEpoch ?? 0))) deny('patient_matching_execution_superseded');
-    const saved = await rowsOf(meta, study), current = saved.length ? await resultOf(origin, meta.taskId) : null;
+    const saved = await rowsOf(meta, study), current = saved.length ? await resultOf(origin, meta.taskId, null, { keptOnly: true }) : null;
     const done = current ? attemptedPairs(meta,current,saved) : new Set();
     const laneOf = (/** @type {any} */ item) => item.lane ?? 0, ownLane = lane ?? 0, epoch = meta.continuationEpoch ?? 0;
     const busy = new Set(meta.executions.filter(item => item.state === 'prepared' && item.rootCallId === origin.callId && (item.epoch ?? 0) === epoch && laneOf(item) !== ownLane)
@@ -248,13 +261,21 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     if(!previous&&!heldByLane){
       // The structured child response has a token bound too. Partition work by source
       // clause count, never by a clinical label or a retrieval score.
-      const selected=[],profiles=new Map();let clauses=0;
+      // A trial the registry does not give now is passed over, and the lane takes the pairs behind it: every lane starts at the same remaining
+      // pair, so one unread record used to stop the whole assessment. With nothing else left to take, that read's failure is the answer.
+      const selected=[],profiles=new Map();let clauses=0,unread=null;
       for(const pair of pairs){
-        if(!profiles.has(pair.trialId))profiles.set(pair.trialId,await trial(study,pair,meta,scope));
-        const count=Math.max(1,profiles.get(pair.trialId).profile.criteria.length);
+        if(!profiles.has(pair.trialId)){
+          try{profiles.set(pair.trialId,await trial(study,pair,meta,scope));}
+          catch(error){if(!registryUnread(error))throw error;unread=error;profiles.set(pair.trialId,null);}
+        }
+        const profile=profiles.get(pair.trialId);
+        if(!profile)continue;
+        const count=Math.max(1,profile.profile.criteria.length);
         if(selected.length&&clauses+count>24)break;
         selected.push(pair);clauses+=count;
       }
+      if(!selected.length&&unread)throw unread;
       pairs=selected;
     }
     let material = await materials(study, pairs, meta, scope,origin);
@@ -280,7 +301,7 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
   async function progress(origin, taskId) {
     const { meta, study, row } = await owned(origin, taskId);
     if (meta.state === 'cancelled') return { pending:false,taskId,revision:row.revision,continuationEpoch:meta.continuationEpoch??0,cursor:0,remaining:meta.selectedPairs.length,rootSessionId:origin.rootSessionId,state:'cancelled',jobId:taskId };
-    const projection = await resultOf(origin, taskId), attempted = attemptedPairs(meta, projection, await rowsOf(meta, study));
+    const projection = await resultOf(origin, taskId, null, { keptOnly: true }), attempted = attemptedPairs(meta, projection, await rowsOf(meta, study));
     const withdrawn = await vcr.matchStore.withdrawnSubjects(study.id);
     const remaining = meta.selectedPairs.filter(pair => !attempted.has(pairIdentity(pair)) && !withdrawn.has(pair.subjectKey)).length;
     return { pending: remaining > 0, taskId, revision: row.revision,continuationEpoch:meta.continuationEpoch??0, cursor: meta.selectedPairs.length - remaining, remaining,
@@ -301,7 +322,7 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     if (meta.pluginGeneration !== origin.pluginGeneration) deny('patient_matching_generation_changed');
     const execution = meta.executions.find(item => item.executionId === input.executionId);
     if (!execution || execution.profileDigest !== input.profileDigest || input.profileDigest !== profileDigest || execution.rootCallId !== origin.callId) deny('patient_matching_execution_mismatch');
-    if (execution.state === 'committed') { const saved = await resultOf(origin,meta.taskId); return response({...saved,...(input.phase==='failure'&&execution.failureCount>0?{failureCheckpoint:{saved:true,executionId:execution.executionId}}:{})},'The native result was already saved.',saved.state==='complete'?'complete':saved.state==='failed'?'failed':'partial'); }
+    if (execution.state === 'committed') { const saved = await resultOf(origin,meta.taskId,null,{keptOnly:true}); return response({...saved,...(input.phase==='failure'&&execution.failureCount>0?{failureCheckpoint:{saved:true,executionId:execution.executionId}}:{})},'The native result was already saved.',saved.state==='complete'?'complete':saved.state==='failed'?'failed':'partial'); }
     if ((execution.epoch ?? 0) !== (meta.continuationEpoch ?? 0)) deny('patient_matching_execution_superseded');
     if (!['commit','failure'].includes(input.phase) || !input.native?.childId || !input.native?.messageId) deny('patient_matching_native_result_invalid');
     if (input.phase === 'failure' ? Object.hasOwn(input,'decisions') : !Array.isArray(input.decisions) || input.decisions.length > 1000) deny('patient_matching_native_result_invalid');
@@ -370,7 +391,8 @@ export function createPatientMatchingHostAdapter({ vcr, documents, config = {}, 
     await repository.put(scope, meta.taskId, { ...meta, rowIds:[...new Set(rowIds)],resultId,resultRevision,
       results:[...(meta.results??[]),{resultId,revision:resultRevision,rowIds:[...new Set(rowIds)]}],
       executions:meta.executions.map(item=>item.executionId===execution.executionId?{...item,state:'committed',resultId,failureCount}:item) },row.revision);
-    const result = await resultOf(origin,meta.taskId), remaining = await progress(origin,meta.taskId);
+    // The commit holds its task's lock and a transaction: its own pairs were read above, and the projection of the rest asks no registry.
+    const result = await resultOf(origin,meta.taskId,null,{keptOnly:true}), remaining = await progress(origin,meta.taskId);
     if (onPending && remaining.pending) await onPending(origin,meta.taskId);
     return response({ ...result,...(input.phase==='failure'?{failureCheckpoint:{saved:true,executionId:execution.executionId}}:{}) },
       failureCount ? 'Validated results and non-clinical failed attempts were saved.' : 'Native matching decisions were saved.', result.state==='complete'?'complete':result.state==='failed'?'failed':'partial');

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { segmentCriteria } from "@evimed/domain";
 import { judgmentTargets } from "../src/vcrMatchJudge.mjs";
-import { chictrEligibilityFrom, createRegistryPageCounters, createRegistryPages } from "../src/vcrRegistryPages.mjs";
+import { chictrEligibilityFrom, createRegistryPageCounters, createRegistryPages, VcrRegistryPageStore } from "../src/vcrRegistryPages.mjs";
 
 const URL_OF = (n) => `https://www.chictr.org.cn/showproj.html?proj=${n}`;
 const NAV = "- 网站首页|\n- ChiCTR简介|\n\n检索试验 按国家、省（市）统计\n";
@@ -158,6 +158,37 @@ test("words that were read keep standing when their days are over and the page c
   advance(7 * 3_600_000);
   reader.behaviour = async () => ({ text: "| 纳入标准： | （1） 新的条件。 |\n" });
   assert.equal((await ask(pages))?.eligibility, "Inclusion Criteria:\n（1） 新的条件。");
+});
+
+// Production 2026-11-14: a matching commit re-read its trials inside its transaction. ChiCTR answers this host 405, so each such read failed, and
+// the failure was written inside the commit: the row stayed locked until the commit ended (104 writes cancelled waiting on it) and was lost with a
+// commit that did not save, so 56 pages were asked 327 times.
+test("an ask that reads nothing returns the words that are held and never asks the site or writes", async () => {
+  const { pages, reader, store } = setup();
+  const quiet = () => pages.eligibilityFor({ registry: "chictr", registryId: "ChiCTR2000099999", url: URL_OF(99999), cachedOnly: true });
+  assert.equal(await quiet(), null);
+  assert.equal(reader.calls.length, 0);
+  assert.equal(store.rows.size, 0);
+  const read = await ask(pages);
+  assert.deepEqual(await quiet(), read);
+  assert.equal(reader.calls.length, 1);
+});
+
+test("the page cache writes outside the transaction its caller holds, and reads inside it", async () => {
+  let apart = 0;
+  /** @type {Array<[string, number]>} */
+  const statements = [];
+  const database = {
+    withoutTransactionClient(/** @type {() => any} */ work) { apart += 1; return work(); },
+    transaction: async (/** @type {(client: any) => Promise<any>} */ operation) => operation({ query: async (/** @type {string} */ sql) => { statements.push([String(sql).trim().split(/\s+/u)[0], apart]); return { rows: [] }; } }),
+  };
+  const store = new VcrRegistryPageStore({ database });
+  store.ready = async () => {};
+  const at = new Date("2026-11-14T10:00:00Z");
+  await store.get({ registry: "chictr", registryId: "ChiCTR2000099999" });
+  await store.saveFailed({ registry: "chictr", registryId: "ChiCTR2000099999", url: URL_OF(99999), reason: "web_read_upstream_error", at });
+  await store.saveRead({ registry: "chictr", registryId: "ChiCTR2000099999", url: URL_OF(99999), eligibility: "Inclusion Criteria:\nAdults.", at });
+  assert.deepEqual(statements.filter(([word]) => word !== "SET"), [["SELECT", 0], ["INSERT", 1], ["INSERT", 2]]);
 });
 
 test("only ChiCTR's own pages are read, and only where the switch is on", async () => {

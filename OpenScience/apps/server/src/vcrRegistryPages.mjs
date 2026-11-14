@@ -117,6 +117,15 @@ export function chictrEligibilityFrom(pageText) {
 
 /** The registry-page cache: one row per registry and id, public text, no study. @extends VcrStoreBase */
 export class VcrRegistryPageStore extends VcrStoreBase {
+  /**
+   * A write of its own, outside whatever transaction the caller holds: the row is public text keyed by registry and id, and written inside a
+   * matching commit it stayed locked until that commit ended and was lost when the commit was. Production 2026-11-14: 104 writes cancelled waiting
+   * on such a row, and 56 pages asked 327 times because the remembered failure did not last.
+   * @param {string} sql @param {unknown[]} values
+   */
+  apart(sql, values) {
+    return typeof this.database.withoutTransactionClient === 'function' ? this.database.withoutTransactionClient(() => this.query(sql, values)) : this.query(sql, values);
+  }
   /** @param {{ registry: string, registryId: string }} key */
   async get({ registry, registryId }) {
     const row = await this.one(`SELECT * FROM ${VCR_SCHEMA}.registry_pages WHERE registry=$1 AND registry_id=$2`, [registry, registryId]);
@@ -128,7 +137,7 @@ export class VcrRegistryPageStore extends VcrStoreBase {
 
   /** A page that read: its words, replacing whatever was there. @param {{ registry: string, registryId: string, url: string, eligibility: string, at: Date }} entry */
   async saveRead({ registry, registryId, url, eligibility, at }) {
-    await this.query(`INSERT INTO ${VCR_SCHEMA}.registry_pages (registry, registry_id, status, eligibility, url, source, text_hash, reason, fetched_at, attempted_at)
+    await this.apart(`INSERT INTO ${VCR_SCHEMA}.registry_pages (registry, registry_id, status, eligibility, url, source, text_hash, reason, fetched_at, attempted_at)
       VALUES ($1,$2,'ok',$3,$4,'web_read',$5,NULL,$6,$6)
       ON CONFLICT (registry, registry_id) DO UPDATE SET status='ok', eligibility=EXCLUDED.eligibility, url=EXCLUDED.url, source=EXCLUDED.source, text_hash=EXCLUDED.text_hash,
         reason=NULL, fetched_at=EXCLUDED.fetched_at, attempted_at=EXCLUDED.attempted_at`,
@@ -137,7 +146,7 @@ export class VcrRegistryPageStore extends VcrStoreBase {
 
   /** An attempt that gave nothing: when, and why. Words an earlier read kept stay. @param {{ registry: string, registryId: string, url: string, reason: string, at: Date }} entry */
   async saveFailed({ registry, registryId, url, reason, at }) {
-    await this.query(`INSERT INTO ${VCR_SCHEMA}.registry_pages (registry, registry_id, status, url, reason, attempted_at) VALUES ($1,$2,'failed',$3,$4,$5)
+    await this.apart(`INSERT INTO ${VCR_SCHEMA}.registry_pages (registry, registry_id, status, url, reason, attempted_at) VALUES ($1,$2,'failed',$3,$4,$5)
       ON CONFLICT (registry, registry_id) DO UPDATE SET reason=EXCLUDED.reason, attempted_at=EXCLUDED.attempted_at`, [registry, registryId, url, reason, at.toISOString()]);
   }
 }
@@ -166,14 +175,16 @@ export function createRegistryPages({ store, webReader, config = {}, report = ()
   /** @type {Map<string, Promise<{ eligibility: string, url: string, fetchedAt: string, source: string } | null>>} one attempt at a time for one page */
   const open = new Map();
 
-  /** @param {{ registry: string, registryId: string, url: string, signal?: AbortSignal }} input */
-  async function attempt({ registry, registryId, url, signal }) {
+  /** @param {{ registry: string, registryId: string, url: string, signal?: AbortSignal, cachedOnly?: boolean }} input */
+  async function attempt({ registry, registryId, url, signal, cachedOnly = false }) {
     const held = await store.get({ registry, registryId });
     const at = now();
     /** @param {NonNullable<typeof held>} row */
     const answer = (row) => ({ eligibility: row.eligibility, url: row.url || url, fetchedAt: (row.fetchedAt ?? row.attemptedAt).toISOString(), source: row.source });
     const hasWords = Boolean(held && held.status === 'ok' && held.eligibility);
     if (hasWords && held && held.fetchedAt && at.getTime() - held.fetchedAt.getTime() < keptFor) { counters.fromCache += 1; return answer(held); }
+    // The caller asks no page (it holds a transaction): the words there are, however old, and nothing is read or written.
+    if (cachedOnly) return hasWords && held ? answer(held) : null;
     // Asked recently and nothing came of it, or the words are old and the last ask failed: the words there are, if any, and no new ask.
     if (held && at.getTime() - held.attemptedAt.getTime() < failureFor && (held.status === 'failed' || held.reason)) {
       counters.remembered += 1;
@@ -206,14 +217,16 @@ export function createRegistryPages({ store, webReader, config = {}, report = ()
     /**
      * The eligibility text of a ChiCTR record from its page, or null. Never throws and never waits longer than the deadline: a null is a pair judged on
      * what the listing carries.
-     * @param {{ registry: string, registryId: string, url?: string | null, signal?: AbortSignal }} input
+     * `cachedOnly` reads what is held and asks the site nothing.
+     * @param {{ registry: string, registryId: string, url?: string | null, signal?: AbortSignal, cachedOnly?: boolean }} input
      * @returns {Promise<{ eligibility: string, url: string, fetchedAt: string, source: string } | null>}
      */
-    async eligibilityFor({ registry, registryId, url, signal }) {
+    async eligibilityFor({ registry, registryId, url, signal, cachedOnly = false }) {
       if (config.vcrRegistryPagesEnabled === false || String(registry).toLowerCase() !== 'chictr' || !webReader?.read || !registryId) return null;
       let address;
       try { address = new URL(String(url ?? '')); } catch { return null; }
       if (address.protocol !== 'https:' || !CHICTR_HOSTS.includes(address.hostname)) return null;
+      if (cachedOnly) return attempt({ registry: 'chictr', registryId: String(registryId), url: address.href, cachedOnly: true }).catch(() => null);
       const key = `chictr\u0000${registryId}`;
       const running = open.get(key);
       if (running) return running;

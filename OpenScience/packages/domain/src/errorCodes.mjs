@@ -346,6 +346,7 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "registry_not_configured",
   "registry_not_found",
   "registry_record_unreadable",
+  "registry_record_not_held",
   "registry_answer_unreadable",
   // A read the data plane refused — every table withheld from this principal,
   // or a document that is not this study's: the guardrail working. The run
@@ -1564,6 +1565,7 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   'registry_watch_timeout',
   'registry_id_invalid',
   'registry_record_unreadable',
+  'registry_record_not_held',
   'registry_answer_unreadable',
   // A read the data plane refused: every table of the snapshot is withheld from
   // this principal, or the subject document is not this study's. The guardrail
@@ -2600,6 +2602,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   registry_not_found: '登记库里没有这条记录；报告会写「不可得」，不会编造。',
   registry_id_invalid: '登记号的格式不对；核对后重查。',
   registry_record_unreadable: '这条登记记录读不出来；报告会写「不可得」。',
+  registry_record_not_held: '这条登记记录这次没有重新读取；已保存的判断不受影响。',
   registry_answer_unreadable: '登记库的应答读不出来，这次没有采用；稍后可以重查。',
   // The engine channel and its jobs.
   vcr_engine_unconfigured: '本部署还没有配置计算引擎，需要计算的步骤暂不可用；其余步骤照常。',

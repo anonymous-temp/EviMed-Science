@@ -248,12 +248,13 @@ function whoTheTrialTakes({ minimumAge = '', maximumAge = '', sex = '' }) {
  * number at once is bounded.
  * A ChiCTR listing carries no eligibility text; `pages` (vcrRegistryPages) reads it from the record's page when it can, and a record whose page gave nothing is a
  * target with `eligibilitySource: 'none'` as before. Whatever `pages` does, it never makes a read fail.
- * @param {{ evidence?: any, matchStore: any, pages?: { eligibilityFor: (input: { registry: string, registryId: string, url?: string | null, signal?: AbortSignal }) => Promise<{ eligibility: string, url: string, fetchedAt: string, source: string } | null> } | null }} deps
+ * @param {{ evidence?: any, matchStore: any, pages?: { eligibilityFor: (input: { registry: string, registryId: string, url?: string | null, signal?: AbortSignal, cachedOnly?: boolean }) => Promise<{ eligibility: string, url: string, fetchedAt: string, source: string } | null> } | null }} deps
  */
 export function judgmentTargets({ evidence = null, matchStore, pages = null }) {
   return {
     /** A registry record, whole: nothing here is cut, because a clause is never truncated. A record with no eligibility text is still a target.
-     * @param {{ userId: string, registry: string, registryId: string, collection?: string | null, collectionRevision?: string | null, signal?: AbortSignal }} input */
+     * `cachedOnly` asks no registry and no page: the record and the page's words as they are held, or `registry_unavailable`.
+     * @param {{ userId: string, registry: string, registryId: string, collection?: string | null, collectionRevision?: string | null, signal?: AbortSignal, cachedOnly?: boolean }} input */
     async trial(input) {
       if (!evidence?.judgmentRecord) throw failure('registry_unavailable', '试验登记检索未接入。');
       const fetched = await evidence.judgmentRecord(input);
@@ -266,7 +267,7 @@ export function judgmentTargets({ evidence = null, matchStore, pages = null }) {
       /** @type {{ eligibility: string, url: string, fetchedAt: string, source: string } | null} */
       let page = null;
       if (!eligibility.trim() && pages && !trial.collection) {
-        page = await pages.eligibilityFor({ registry: String(trial.registry ?? input.registry), registryId: String(trial.registryId), url: trial.url, signal: input.signal }).catch(() => null);
+        page = await pages.eligibilityFor({ registry: String(trial.registry ?? input.registry), registryId: String(trial.registryId), url: trial.url, signal: input.signal, ...(input.cachedOnly ? { cachedOnly: true } : {}) }).catch(() => null);
         if (page?.eligibility.trim()) eligibility = page.eligibility;
         else page = null;
       }

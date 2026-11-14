@@ -1218,7 +1218,7 @@ services:
       # credentials file is bound below (/dev/null where there is none).
       OPEN_SCIENCE_EDGE_PROXY_URL: ${OPEN_SCIENCE_EDGE_PROXY_URL:-}
       OPEN_SCIENCE_EDGE_PROXY_CREDENTIALS_FILE: /run/secrets/edge-proxy-credentials
-      OPEN_SCIENCE_EDGE_PROXY_HOSTS: ${OPEN_SCIENCE_EDGE_PROXY_HOSTS:-gtexportal.org,api.omim.org,api.materialsproject.org}
+      OPEN_SCIENCE_EDGE_PROXY_HOSTS: ${OPEN_SCIENCE_EDGE_PROXY_HOSTS:-gtexportal.org,api.omim.org,api.materialsproject.org,euclinicaltrials.eu}
       OPEN_SCIENCE_EDGE_PROXY_CONNECT_TIMEOUT_MS: ${OPEN_SCIENCE_EDGE_PROXY_CONNECT_TIMEOUT_MS:-10000}
       OPEN_SCIENCE_WEB_SEARCH_EDGE_URL: ${OPEN_SCIENCE_WEB_SEARCH_EDGE_URL:-}
       OPEN_SCIENCE_WEB_SEARCH_BAILIAN_ENABLED: ${OPEN_SCIENCE_WEB_SEARCH_BAILIAN_ENABLED:-false}
