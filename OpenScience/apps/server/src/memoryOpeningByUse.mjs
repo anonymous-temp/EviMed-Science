@@ -156,3 +156,45 @@ export function mostUsedMemos(files, config) {
       originalSources: file.originalSources ?? [], attribution: file.attribution, sourcePrivacy: file.sourcePrivacy,
     }));
 }
+
+/** Templates identify the person's own preferences and corrections by directory,
+ * but do not distinguish reply form from other preferences. Do not infer meaning.
+ * @param {{ uri: string, sensitive?: boolean }} file */
+export function standingPreferenceFile(file) {
+  return !file.sensitive && /\/memories\/preferences\/(?:self|corrections)\/.+\.md$/.test(file.uri);
+}
+
+/** @typedef {{ uri: string, body?: string, sensitive?: boolean, updatedAt?: string | null,
+ * modTime?: string | null, usedCount?: number, lastUsedAt?: string | null,
+ * originalSources?: unknown[], attribution?: unknown, sourcePrivacy?: unknown }} StandingPreferenceFile */
+/** Recency first so a correction gets a chance before a frequently used old rule.
+ * @param {StandingPreferenceFile[]} files */
+export function orderStandingPreferences(files) {
+  return files.filter(standingPreferenceFile).sort((a, b) =>
+    String(b.updatedAt ?? b.modTime ?? '').localeCompare(String(a.updatedAt ?? a.modTime ?? ''))
+    || count(b) - count(a) || lastUse(b) - lastUse(a) || a.uri.localeCompare(b.uri));
+}
+
+/** Complete lines preserve scope and exceptions; never truncate a rule mid-condition.
+ * Inputs have passed the owned store's deletion and receipt readers.
+ * @param {StandingPreferenceFile[]} files @param {{ memoryStandingInstructionsEnabled?: boolean }} config */
+export function standingPreferenceMemos(files, config) {
+  if (config.memoryStandingInstructionsEnabled !== true) return [];
+  let remaining = 400;
+  const memos = [];
+  for (const file of orderStandingPreferences(files)) {
+    /** @type {string[]} */ const kept = [];
+    const statements = String(file.body ?? '').replace(/<!--[\s\S]*?-->/g, '').split(/\n(?=\s*(?:[-*+]\s|\d+[.)]\s|#))/);
+    for (const raw of statements) {
+      const statement = raw.trim();
+      if (!statement || statement.startsWith('#') || statement.startsWith('<!--')) continue;
+      const size = [...statement].length + 1;
+      if (size > remaining) continue;
+      kept.push(statement); remaining -= size;
+    }
+    if (kept.length) memos.push({ id: `native-standing:${file.uri}`, memoryType: 'native_standing_preference',
+      kind: 'preference', scope: 'user', origin: 'engine', content: kept.join('\n'), updatedAt: file.updatedAt ?? null,
+      originalSources: file.originalSources ?? [], attribution: file.attribution, sourcePrivacy: file.sourcePrivacy });
+  }
+  return memos;
+}

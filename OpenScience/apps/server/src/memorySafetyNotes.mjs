@@ -1,3 +1,4 @@
+import { personalMemoryTravels } from './openVikingLayout.mjs';
 import { MEMORY_SAFETY_NOTES_ANCHOR } from '@evimed/domain';
 import { nativeMemoryFile } from './openVikingSessions.mjs';
 import { estimatePromptTokens } from './modelGateway.mjs';
@@ -33,11 +34,11 @@ export function safetyNoteLines(body, type) {
 }
 
 /** The same owned namespace, sensitive/deletion and project exclusions as gateway reads.
- * @param {any} file @param {{memoryRoot: string, projectId: string, hiddenUris?: string[]}} scope */
-export function safetyNoteFile(file, { memoryRoot, projectId, hiddenUris = [] }) {
+ * @param {any} file @param {{memoryRoot: string, projectId: string, hiddenUris?: string[], peopleAcrossProjects?: boolean}} scope */
+export function safetyNoteFile(file, { memoryRoot, projectId, hiddenUris = [], peopleAcrossProjects = false }) {
   const place = nativeMemoryFile(String(file.uri ?? ''), memoryRoot);
   return !!place && ['people', 'profile', 'safety_notes'].includes(place.type) && !file.sensitive
-    && (!file.projectId || file.projectId === 'default' || file.projectId === projectId)
+    && (!file.projectId || file.projectId === 'default' || file.projectId === projectId || personalMemoryTravels(file.uri, memoryRoot, peopleAcrossProjects))
     && !hiddenUris.some(uri => file.uri === uri || file.uri.startsWith(`${uri}/`));
 }
 

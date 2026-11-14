@@ -1,3 +1,5 @@
+import { orderStandingPreferences } from './memoryOpeningByUse.mjs';
+import { personalMemoryTravels } from './openVikingLayout.mjs';
 import { forgetRequestId } from './nativeMemoryForgetRequests.mjs';
 import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
@@ -405,15 +407,17 @@ export class NativeMemoryStore {
    *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
    *   now?: () => Date, conversationTitles?: ConversationTitles | null,
    *   rejectionJudge?: { same: (request: any) => Promise<{ same: Map<number, string>, stated: Set<number> }> } | null,
-   *   report?: (line: string) => void, settleExtractionsMs?: number, forgetTargetsEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
+   *   report?: (line: string) => void, settleExtractionsMs?: number, forgetTargetsEnabled?: boolean, standingInstructionsEnabled?: boolean, peopleAcrossProjectsEnabled?: boolean, replacedDeadlineMs?: number }} dependencies
    *   `conversationTitles` names the conversations a memory came out of (the run ledger knows them; this store does not). `rejectionJudge` is the
    *   rejection list's own judge (`nativeMemoryRejections.mjs`), asked which other lines say what a forgotten one said
    *   (`nativeMemoryForgetEverywhere.mjs`); absent, only the lines that contain a forgotten line's words go with it. `memoryContexts` names
    *   the registered namespaces (the account's own and each shared GEO project's, `geoNativeMemoryContext.mjs`).
    */
   constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, report = () => {},
-    settleExtractionsMs = 20_000, forgetTargetsEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
+    settleExtractionsMs = 20_000, forgetTargetsEnabled = false, standingInstructionsEnabled = false, peopleAcrossProjectsEnabled = false, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
     this.sessions = sessions;
+    this.standingInstructionsEnabled = standingInstructionsEnabled;
+    this.peopleAcrossProjectsEnabled = peopleAcrossProjectsEnabled;
     this.forgetTargetsEnabled = forgetTargetsEnabled === true;
     /** How long the map waits for its grey marks before drawing without them (`MAP_REPLACED_DEADLINE_MS`). */
     this.replacedDeadlineMs = replacedDeadlineMs;
@@ -988,7 +992,7 @@ export class NativeMemoryStore {
    * A failed exclusion lookup leaves no index; it never counts unfiltered files.
    * @param {string} userId @param {string} projectId */
   async openingIndex(userId, projectId) {
-    const hiddenUris = [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId)];
+    const hiddenUris = [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId, 10000, { peopleAcrossProjects: this.peopleAcrossProjectsEnabled, memoryRoot: this.sessions.memoryRoot(userId) })];
     return nativeMemoryIndex((await this.overlay.files(userId)).values(), { memoryRoot: this.sessions.memoryRoot(userId), hiddenUris });
   }
 
@@ -996,8 +1000,8 @@ export class NativeMemoryStore {
    * The ordinary file/record readers apply deletion fences, forgotten lines and producer receipts.
    * @param {string} userId @param {string} projectId */
   async safetyNotes(userId, projectId) {
-    const scope = { memoryRoot: this.sessions.memoryRoot(userId), projectId,
-      hiddenUris: [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId)] };
+    const scope = { memoryRoot: this.sessions.memoryRoot(userId), projectId, peopleAcrossProjects: this.peopleAcrossProjectsEnabled,
+      hiddenUris: [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId, 10000, { peopleAcrossProjects: this.peopleAcrossProjectsEnabled, memoryRoot: this.sessions.memoryRoot(userId) })] };
     const selected = [...(await this.overlay.files(userId)).values()]
       .filter(file => safetyNoteFile(file, scope) && safetyNoteLines(file.body, file.memoryType).length);
     if (!selected.length) return [];
@@ -1026,21 +1030,25 @@ export class NativeMemoryStore {
     });
   }
 
-  /** Most-used owned files, through the existing deletion and producer-receipt readers.
-   * No shared namespace, sensitive file, observation or other project's fact enters this opening slice.
+  /** Most-used owned files and opt-in own preference bodies, through deletion and producer-receipt readers.
+   * Only the people/safety opt-in relaxes project labels; shared namespaces and sensitive files never enter.
    * @param {string} userId @param {string} projectId @param {number} [limit] */
   async openingFiles(userId, projectId, limit = 5) {
     const root = this.sessions.memoryRoot(userId);
-    const hidden = [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId)];
-    const selected = [...(await this.overlay.files(userId)).values()]
-      .filter(file => file.usedCount > 0 && !file.sensitive && nativeMemoryFile(file.uri, root)
-        && (!file.projectId || file.projectId === projectId)
-        && !hidden.some(prefix => file.uri === prefix || file.uri.startsWith(`${prefix}/`)))
+    const hidden = [...await this.overlay.sensitiveUris(userId), ...await this.overlay.otherProjectUris(userId, projectId, 10000, { peopleAcrossProjects: this.peopleAcrossProjectsEnabled, memoryRoot: this.sessions.memoryRoot(userId) })];
+    const visible = [...(await this.overlay.files(userId)).values()]
+      .filter(file => !file.sensitive && nativeMemoryFile(file.uri, root)
+        && (!file.projectId || file.projectId === projectId || personalMemoryTravels(file.uri, root, this.peopleAcrossProjectsEnabled))
+        && !hidden.some(prefix => file.uri === prefix || file.uri.startsWith(`${prefix}/`)));
+    const used = visible.filter(file => file.usedCount > 0)
       .sort((a, b) => b.usedCount - a.usedCount || String(b.lastUsedAt ?? '').localeCompare(String(a.lastUsedAt ?? '')) || a.uri.localeCompare(b.uri))
       .slice(0, Math.max(0, Math.min(100, limit)));
+    const preferences = this.standingInstructionsEnabled ? orderStandingPreferences(visible).slice(0, 100) : [];
+    const selected = [...new Map([...used, ...preferences].map(file => [file.uri, file])).values()];
     if (!selected.length) return [];
     const files = (await this.files(userId, { uris: selected.map(file => file.uri) }))
-      .filter(file => !file.sensitive && (!file.projectId || file.projectId === projectId) && nativeMemoryFile(file.uri, root));
+      .filter(file => !file.sensitive && (!file.projectId || file.projectId === projectId
+        || personalMemoryTravels(file.uri, root, this.peopleAcrossProjectsEnabled)) && nativeMemoryFile(file.uri, root));
     const records = await this.records(userId, { files });
     return files.flatMap(file => {
       const sources = records.filter(record => record.uri === file.uri);

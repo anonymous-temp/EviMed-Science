@@ -59,8 +59,7 @@ export class MemoryIndexProvider {
     this.openViking = openViking;
     this.rerank = rerank;
     // The relevance floor a capsule recall asks the index for (`OPEN_SCIENCE_MEMORY_SEARCH_MIN_SCORE`).
-    const floor = Number(config?.memorySearchMinScore ?? 0.75);
-    this.searchMinScore = Number.isFinite(floor) ? Math.max(0, Math.min(1, floor)) : 0.75;
+    this.searchMinScore = memorySearchFloor(config?.memorySearchMinScore, 0.75);
   }
 
   /** True when the selected provider can actually be asked. */
@@ -73,4 +72,18 @@ export class MemoryIndexProvider {
     if (!this.openViking) return { provider: this.provider, configured: false, connected: false, code: "memory_index_client_missing" };
     return { provider: this.provider, ...(await this.openViking.status()) };
   }
+}
+
+/** One relevance-floor policy for capsule and native file retrieval.
+ * @param {unknown} value @param {number} fallback */
+export function memorySearchFloor(value, fallback = 0) {
+  const floor = Number(value ?? fallback);
+  return Number.isFinite(floor) ? Math.max(0, Math.min(1, floor)) : fallback;
+}
+
+/** Zero preserves unscored legacy hits; an enabled floor requires a finite score.
+ * @template {{ score?: number }} T
+ * @param {T[]} hits @param {number} floor @returns {T[]} */
+export function memorySearchHits(hits, floor) {
+  return floor > 0 ? hits.filter(hit => Number.isFinite(hit.score) && Number(hit.score) >= floor) : hits;
 }

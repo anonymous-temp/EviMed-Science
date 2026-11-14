@@ -1,3 +1,4 @@
+import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
 import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { openVikingPeerId, openVikingScopedId, openVikingUserId } from "./openVikingLayout.mjs";
 import { HttpError } from "./security.mjs";
@@ -420,14 +421,14 @@ export class OpenVikingClient {
         ...(targets.length ? { target_uri: targets } : {}),
         context_type: "memory",
         node_limit: Math.max(1, Math.min(100, Number(limit) || 8)),
-        score_threshold: Number(scoreThreshold) || 0,
+        score_threshold: memorySearchFloor(scoreThreshold),
         level: LEAF_LEVEL,
         read_content: true,
       },
     });
     const result = body?.result ?? body ?? {};
     const memories = Array.isArray(result.memories) ? result.memories : [];
-    return memories.map((hit) => ({
+    return memorySearchHits(memories, memorySearchFloor(scoreThreshold)).map((hit) => ({
       uri: String(hit?.uri ?? ""),
       score: Number(hit?.score) || 0,
       // A leaf hit carries the file; a directory hit carries only its summary.

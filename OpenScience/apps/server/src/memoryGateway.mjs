@@ -1,3 +1,4 @@
+import { memorySearchFloor, memorySearchHits } from './memoryIndexProvider.mjs';
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { historySearchText } from './memoryHistory.mjs';
 import { openingProfileRead, selectOpeningEntries } from './memoryOpeningByUse.mjs';
@@ -201,12 +202,14 @@ async function scopedListSearch(sessions, ctx, given) {
   // a conversation of one project could be answered one visible hit, or none, with its relevant ones ranked just below. So the engine is asked
   // for more (the most it takes is 100), and the answer is still cut to `limit` below.
   const asked = excluded.length ? Math.min(100, limit * 4) : limit;
-  const answer = await sessions.search(ctx.user.id, { query: String(given.query ?? "").slice(0, 2_000), limit: asked, target_uri: target, level: 2 });
+  const floor = memorySearchFloor(ctx.memoryFileSearchMinScore);
+  const answer = await sessions.search(ctx.user.id, { query: String(given.query ?? "").slice(0, 2_000), limit: asked, target_uri: target, level: 2,
+    ...(floor > 0 ? { score_threshold: floor } : {}) });
   if (!answer || answer.error || !answer.result || typeof answer.result !== "object") throw new HttpError(502, "memory_gateway_upstream_invalid", "Native memory search is unavailable.");
   const result = { ...empty };
   let remaining = limit;
   for (const kind of ["memories", "resources", "skills"]) {
-    const hits = (Array.isArray(answer.result[kind]) ? answer.result[kind] : []).filter(hit => {
+    const hits = memorySearchHits(Array.isArray(answer.result[kind]) ? answer.result[kind] : [], floor).filter(hit => {
       const uri = typeof hit?.uri === "string" ? hit.uri : "";
       return !isMemorySummary(uri) && uri === absolute(uri, ctx.userRoot) && Boolean(nativeMemoryFile(uri, `${ctx.userRoot}/memories`)) && (uri === target || uri.startsWith(`${target}/`)) && !hidden(uri);
     });
@@ -1229,6 +1232,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       /** @type {Promise<string[]> | null} */
       let hiddenList = null;
       const ctx = {
+        memoryFileSearchMinScore: config.memoryFileSearchMinScore,
         user, project, json, query: url.searchParams, match: found.match, engineUser, userRoot, sessions: view, memoryContext, shared,
         account: /** @type {any} */ (view).client.account,
         ensureRegistered: () => ensureRegistered(user.id, view, memoryContext),
@@ -1266,7 +1270,8 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
             // Another named project's card, decisions, working facts, open items and recent work: a rule given for one project ("this
             // project's deliverables in English") is that project's, and a conversation elsewhere that searched for it applied it there
             // (S7, 2026-10-27). The personal namespace only; a shared project's namespace holds its own project alone.
-            const otherProjects = shared || !overlay?.configured || typeof overlay.otherProjectUris !== "function" ? [] : await overlay.otherProjectUris(user.id, project.id);
+            const otherProjects = shared || !overlay?.configured || typeof overlay.otherProjectUris !== "function" ? [] : await overlay.otherProjectUris(user.id, project.id, 10000, {
+              peopleAcrossProjects: config.memoryPeopleAcrossProjectsEnabled === true, memoryRoot: `${userRoot}/memories` });
             // The observations (`memories/observations`) are never read back, in either namespace.
             return [`${userRoot}/memories/${DERIVED_INDEX_SEGMENT}`, `${userRoot}/memories/${OBSERVATIONS_SEGMENT}`, ...otherProjects,
               ...(shared ? [`${userRoot}/memories/profile.md`, `${userRoot}/memories/.overview.md`, `${userRoot}/memories/.abstract.md`, ...await privatePreferences(ctx)] : []),
