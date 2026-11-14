@@ -19,13 +19,19 @@ async function clean(f, directories) {
   for (const directory of directories) assert.ok(rebuilt.some(r => r.body.uri === directory && r.body.recursive === false && r.body.wait === true));
 }
 
-for (const path of ['forget', 'page-edit', 'page-delete']) test(`${path} invalidates both summaries through every ancestor`, options, async t => {
+for (const deferred of [false, true]) for (const path of ['forget', 'page-edit', 'page-delete']) test(`${path} invalidates both summaries through every ancestor (deferred=${deferred})`, options, async t => {
   const f = await fixture(t), uri = f.seed('preferences/corrections/deep/fact.md', `- ${marker}\n- Keep green folders.`, { type: 'corrections' });
+  f.overlay.deferredSummaryRebuildEnabled = deferred;
   const directories = summaries(f, uri);
   const record = (await f.store.records(f.userId)).find(candidate => candidate.uri === uri);
   if (path === 'forget') await f.store.forget({ id: f.userId }, { id: 'default' }, uri);
   else if (path === 'page-delete') await f.store.remove(f.userId, record.id);
   else await f.store.update(f.userId, record.id, { value: 'Keep green folders.', expectedVersion: record.version });
+  if (deferred) {
+    assert.equal((await f.overlay.pendingSummaryInvalidations(f.userId)).length, directories.length);
+    assert.equal(f.stub.sent('POST', '/api/v1/content/reindex').length, 0);
+    await f.worker.drainSummaryInvalidations(f.userId);
+  }
   await clean(f, directories);
 });
 
@@ -150,4 +156,54 @@ test('a refused-file deletion keeps its commit pending until crash recovery clea
   await f.worker.drainSummaryInvalidations(f.userId);
   assert.equal(await f.worker.processCommits({ userId: f.userId }), 1);
   assert.equal((await f.overlay.commit(f.userId, committed.archive_uri)).state, 'completed');
+});
+
+test('deferred cleanup coalesces a second forget and an extraction commit without stranding settlement', options, async t => {
+  const f = await fixture(t, { extract: ({ user, files }) => {
+    const uri = `viking://user/${user}/memories/notes/a.md`;
+    return { updates: [{ uri, memory_type: 'notes', before: files.get(uri), after: `- ${marker}\n- Keep green folders.\n- Use blue binders.` }] };
+  } });
+  f.overlay.deferredSummaryRebuildEnabled = true; f.store.forgetTargetsEnabled = true;
+  const first = f.seed('notes/a.md', `- ${marker}\n- Keep green folders.`, { type: 'notes' });
+  const second = f.seed('notes/b.md', '- Remove orange folders.\n- Keep purple folders.', { type: 'notes' });
+  await f.store.forget({ id: f.userId }, { id: 'default' }, first, { lines: [marker] });
+  await f.store.forget({ id: f.userId }, { id: 'default' }, second, { lines: ['Remove orange folders.'] });
+  assert.equal((await f.overlay.pendingSummaryInvalidations(f.userId)).length, 2);
+  const commit = await f.commitConversation('queued-extraction', [{ role: 'user', text: 'Use blue binders.' }]);
+  assert.equal(await f.worker.processCommits({ userId: f.userId }), 1);
+  assert.equal((await f.overlay.commit(f.userId, commit.archive_uri)).state, 'completed');
+  assert.doesNotMatch(await f.sessions.read(f.userId, first), /P19-REMOVED/);
+  assert.match(await f.sessions.read(f.userId, first), /blue binders/);
+  assert.match(await f.sessions.read(f.userId, second), /purple folders/);
+  assert.equal((await f.overlay.pendingSummaryInvalidations(f.userId)).length, 2);
+  f.stub.rebuildSummaries = true;
+  await f.worker.drainSummaryInvalidations(f.userId);
+  const overview = await f.sessions.read(f.userId, `${f.root}/.overview.md`);
+  assert.doesNotMatch(overview, /P19-REMOVED|orange folders/);
+  assert.match(overview, /blue binders/); assert.match(overview, /purple folders/);
+});
+
+test('a running deferred rebuild excludes writes; their retry and the next generation converge', options, async t => {
+  const f = await fixture(t);
+  f.overlay.deferredSummaryRebuildEnabled = true; f.store.forgetTargetsEnabled = true;
+  const uri = f.seed('notes/order.md', '- First fact.\n- Second fact.\n- Retained fact.', { type: 'notes' });
+  await f.store.forget({ id: f.userId }, { id: 'default' }, uri, { lines: ['First fact.'] });
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  const held = new Promise(resolve => { release = resolve; });
+  t.after(() => release());
+  f.stub.beforeReindex = async () => { entered(); await held; };
+  f.stub.rebuildSummaries = true;
+  const draining = f.worker.drainSummaryInvalidations(f.userId);
+  await started;
+  await assert.rejects(f.store.forget({ id: f.userId }, { id: 'default' }, uri, { lines: ['Second fact.'] }), { code: 'memory_source_cleanup_busy' });
+  await assert.rejects(withNativeMemoryWrite(f.database, f.userId, async () => {
+    assert.fail('an extraction writer cannot enter during the rebuild');
+  }), { code: 'memory_source_cleanup_busy' });
+  release(); await draining;
+  await f.store.forget({ id: f.userId }, { id: 'default' }, uri, { lines: ['Second fact.'] });
+  assert.equal(await f.sessions.read(f.userId, `${f.root}/.overview.md`), null);
+  await f.worker.drainSummaryInvalidations(f.userId);
+  const overview = await f.sessions.read(f.userId, `${f.root}/.overview.md`);
+  assert.match(overview, /Retained fact/); assert.doesNotMatch(overview, /First fact|Second fact/);
 });

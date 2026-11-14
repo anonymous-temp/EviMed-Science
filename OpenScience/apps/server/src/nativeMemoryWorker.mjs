@@ -240,7 +240,7 @@ export class NativeMemoryWorker {
     let commits = 0;
     let accounts = 0;
     try {
-      if (this.history) { await this.history.drainDeletes(); await this.history.backfill(); }
+      if (this.history) { await this.history.drainForgetScans?.(); await this.history.drainDeletes(); await this.history.backfill(); }
       // The offers of the page's import that nobody saved are not kept past their hour (a saved one a day: what was saved is the engine's).
       await this.overlay.deleteExpiredImports().catch(() => 0);
       for (const userId of await this.overlay.accounts()) {
@@ -268,6 +268,7 @@ export class NativeMemoryWorker {
           this.report(`native memory worker: ${userId.slice(0, 8)}… ${String(/** @type {any} */ (error)?.code ?? /** @type {any} */ (error)?.message ?? error).slice(0, 120)}`);
         }
       }
+      await this.history?.refreshMaintenance?.();
       this.last = { at: this.now().toISOString(), ok: true, accounts, commits, error: null };
       recordNativePass(true);
     } catch (error) {
@@ -286,6 +287,7 @@ export class NativeMemoryWorker {
   }
 
   async #assertSummariesSettled(userId) {
+    if (this.overlay.deferredSummaryRebuildEnabled === true) return;
     if ((await this.overlay.pendingSummaryInvalidations(userId)).length) {
       throw new HttpError(503, 'memory_summary_rebuild_failed', 'Native memory directory maintenance is incomplete.');
     }

@@ -61,3 +61,66 @@ test('forget origin lookup uses the verified owner namespace without inventing a
   assert.match(searched[0], /^viking:\/\/user\/u1\/resources\/history\/[a-f0-9]{24}$/);
   await assert.rejects(service.search({ user: { id: 'u1' }, project: { id: 'missing', userId: 'u1' }, query: 'units' }), /memory_scope_denied/);
 });
+
+test('deferred scan reads a bounded frozen archive batch, excludes later restatements and retries without partial completion', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const root = 'viking://user/u1', reads = [], finishes = [];
+  const scan = { id: 'scan', owner_id: 'u1', owner_created_at: '2026-01-01', namespace_id: 'u1', user_root: root,
+    memory_type: 'notes', fingerprint: 'fingerprint', text: 'Use metric units.', cutoff: new Date('2026-11-14'),
+    archives: Array.from({ length: 6 }, (_, index) => `${root}/sessions/dsh-${index}/history/archive_001`), cursor: 0, claim: 'lease' };
+  let unavailable = true;
+  const context = { ownerId: 'u1', ownerCreatedAt: scan.owner_created_at, namespaceId: 'u1', userRoot: root,
+    sessions: { read: async (_owner, uri) => { reads.push(uri); return [
+      {role:'user',content:'I prefer metric measures.',created_at:'2026-11-01'},
+      {role:'user',content:'I prefer metric measures.',created_at:'2026-11-15'},
+    ].map(message => JSON.stringify(message)).join('\n'); } } };
+  const queued = [scan];
+  const ledger = { claimForgetScans: async () => queued.splice(0,1), finishForgetScan: async (...args) => finishes.push(args) };
+  const service = new MemoryHistory({ config: {}, ledger, contexts: { forUri: async () => context },
+    rejectionJudge: { same: async ({ candidates }) => {
+      if (unavailable) throw new Error('offline');
+      assert.equal(candidates.length, 1, 'later authorization is outside the frozen withdrawal');
+      return { same: new Map([[0,'fingerprint']]) };
+    } } });
+  await service.drainForgetScans();
+  assert.deepEqual(finishes[0], [scan, [], 0, true]);
+  unavailable = false; reads.length = 0; queued.push(scan);
+  await service.drainForgetScans();
+  assert.equal(reads.length, 4);
+  assert.equal(finishes[1][1].length, 4);
+  assert.equal(finishes[1][2], 4);
+  scan.cursor = 4; queued.push(scan);
+  await service.drainForgetScans();
+  assert.equal(finishes[2][1].length, 2);
+  assert.equal(finishes[2][2], 6);
+});
+
+
+test('durable maintenance counts reach worker status and the existing metrics registry', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const { nativeMemoryMetricFamilies } = await import('../src/nativeMemoryMetrics.mjs');
+  const maintenance = { summary_rebuilds: 2, forget_scans: 3, forget_scan_retries: 1 };
+  const service = new MemoryHistory({ config: {}, ledger: { archiveCoverage: async () => ({ maintenance }) } });
+  await service.refreshMaintenance();
+  assert.deepEqual(service.status().maintenance, maintenance);
+  const gauge = nativeMemoryMetricFamilies().find(family => family.name === 'open_science_native_memory_maintenance_pending');
+  assert.deepEqual(Object.fromEntries(gauge.series.map(sample => [sample.labels.kind, sample.value])), maintenance);
+});
+
+test('late archive discovery is queued before indexing and an unfinished scan keeps its chunks unpublished', async () => {
+  const { MemoryHistory } = await import('../src/memoryHistory.mjs');
+  const root = 'viking://user/u1', archiveUri = `${root}/sessions/dsh-late/history/archive_001`, calls = [];
+  const context = { ownerId: 'u1', ownerCreatedAt: '2026-01-01', namespaceId: 'u1', userRoot: root,
+    sessions: { read: async () => JSON.stringify({ role: 'user', content: 'An earlier fact.', created_at: '2026-01-02T00:00:00Z' }) } };
+  const ledger = {
+    registerWriteMessages: async () => {},
+    queueLateForgetArchive: async (...args) => calls.push(args), boundRejections: async () => [],
+    startArchive: async () => ({ state: 'queued' }), forgetArchivePending: async () => true,
+    finishArchive: async (_commit, _context, state, result) => calls.push({ state, ...result }),
+  };
+  const service = new MemoryHistory({ config: { memoryHistorySearchEnabled: true, memoryForgetTargetsEnabled: true }, ledger });
+  service.indexArchive = async () => { throw new Error('unscanned text must not reach indexing'); };
+  assert.deepEqual(await service.ingestArchive({ archiveUri, engineSession: 'dsh-late' }, context), { state: 'queued', reason: 'forget_scan_pending' });
+  assert.deepEqual(calls[0], [context, archiveUri, '2026-01-02T00:00:00.000Z']);
+  assert.deepEqual(calls[1], { state: 'queued', reason: 'forget_scan_pending' });
+});

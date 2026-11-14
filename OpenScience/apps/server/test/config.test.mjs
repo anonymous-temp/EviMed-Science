@@ -15,6 +15,7 @@ for (const [key, property] of [
   ['OPEN_SCIENCE_MEMORY_SHARED_CAPTURE_PROOF_ENABLED', 'memorySharedCaptureProofEnabled'],
   ['OPEN_SCIENCE_MEMORY_FORGET_REQUEST_CHECK_ENABLED', 'memoryForgetRequestCheckEnabled'],
   ['OPEN_SCIENCE_MEMORY_FORGET_TOOL_HINT_ENABLED', 'memoryForgetToolHintEnabled'],
+  ['OPEN_SCIENCE_MEMORY_DEFERRED_SUMMARY_REBUILD_ENABLED', 'memoryDeferredSummaryRebuildEnabled'],
   ['OPEN_SCIENCE_MEMORY_FORGET_TARGETS_ENABLED', 'memoryForgetTargetsEnabled'],
 ]) test(`${key} defaults off and supports explicit override`, () => {
   const saved = process.env[key];

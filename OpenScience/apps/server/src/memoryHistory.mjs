@@ -1,3 +1,4 @@
+import { recordNativeMaintenance } from './nativeMemoryMetrics.mjs';
 import { lineFingerprint, normalisedStatement, nativeMemoryRejectionType } from './nativeMemoryOverlay.mjs';
 import { hardTokens, sourceHasToken } from './nativeMemoryHardTokens.mjs';
 import { createHash } from 'node:crypto';
@@ -114,6 +115,7 @@ export class MemoryHistory {
     this.resolveSource = resolveSource; this.eligible = eligible; this.admitMessage = admitMessage; this.resourcesFor = resourcesFor;
     this.rejectionJudge = rejectionJudge;
     this.secrets = new MemoryHistorySecrets({ ledger, judge: secretJudge ?? createHistorySecretJudge({ config, usageLedger }) });
+    this.maintenance = { summary_rebuilds: 0, forget_scans: 0, forget_scan_retries: 0 };
     this.lastBackfill = { at: null, discovered: 0, processed: 0, failed: 0, coverage: null };
   }
   get enabled() { return this.config.memoryHistorySearchEnabled === true; }
@@ -151,57 +153,99 @@ export class MemoryHistory {
    * message hashes commit together, satisfying the deployed foreign key without
    * holding a database transaction across engine reads or model calls.
    * Undo lifts the fence, and a repeated forget reinstates it. */
-  async rejectRemoved(context, file, removed, judge, { archiveUri: requestArchive = null, activate = async () => {} } = {}) {
+  async rejectRemoved(context, file, removed, judge, { archiveUri: requestArchive = null, activate = async () => {}, allowDeferred = false } = {}) {
     if (!removed.length) { await activate(); return; }
     if (!context.ownerCreatedAt) context = {...context,ownerCreatedAt:(await this.ledger.database.query(
       'SELECT created_at::text AS stamp FROM evimed_control.users WHERE id=$1',[context.ownerId])).rows[0]?.stamp};
-    await this.ensureSourceCopies(context);
-    const origins = (await this.ledger.overlay.originsOf(context.ownerId,[file.uri])).get(file.uri);
     const type = nativeMemoryRejectionType(file.type,context.kind === 'geo-project' ? context.namespaceId : null);
     const prepared = [];
-    for (const text of removed) {
-      const fingerprint = lineFingerprint(text), origin = origins?.get(fingerprint);
-      const archives = [...new Set([origin?.archiveUri,...(origin?.sources ?? []).map(source=>source.archiveUri),requestArchive].filter(Boolean))];
-      const messages = [], obligations = [];
-      for (const archiveUri of archives) {
-        const archive = parseArchiveUri(archiveUri);
-        if (!archive || archive.userRoot !== context.userRoot || archive.rest) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
-        const binding=await this.ledger.overlay.commit(context.ownerId,archiveUri);
-        if (platformSessionOf(binding?.sourceSession)) {
-          // The conversation may not have archived its current turn yet. Keep a
-          // session-bound obligation so its later archive fences the actual words.
-          obligations.push({archiveUri:`${context.userRoot}/sessions/${binding.sourceSession}`,text:''});
+    let deferred = false;
+    try {
+      await this.ensureSourceCopies(context);
+      const origins = (await this.ledger.overlay.originsOf(context.ownerId,[file.uri])).get(file.uri);
+      for (const text of removed) {
+        const fingerprint = lineFingerprint(text), origin = origins?.get(fingerprint);
+        const archives = [...new Set([origin?.archiveUri,...(origin?.sources ?? []).map(source=>source.archiveUri),requestArchive].filter(Boolean))];
+        const messages = [], obligations = [];
+        for (const archiveUri of archives) {
+          const archive = parseArchiveUri(archiveUri);
+          if (!archive || archive.userRoot !== context.userRoot || archive.rest) throw Object.assign(new Error('memory_history_privacy_unavailable'), { code: 'memory_history_privacy_unavailable' });
+          const binding=await this.ledger.overlay.commit(context.ownerId,archiveUri);
+          if (platformSessionOf(binding?.sourceSession)) {
+            // The conversation may not have archived its current turn yet. Keep a
+            // session-bound obligation so its later archive fences the actual words.
+            obligations.push({archiveUri:`${context.userRoot}/sessions/${binding.sourceSession}`,text:''});
+          }
+          const raw = await context.sessions.read(context.ownerId,`${archiveUri}/messages.jsonl`);
+          if (raw === null) continue; // An absent archive has no original words to return.
+          if (Buffer.byteLength(raw)>MAX_ARCHIVE_BYTES) throw new MemoryHistoryLimitError('archive_bytes');
+          for (const line of raw.split('\n').filter(entry=>entry.trim())) {
+            const body = JSON.parse(line);
+            const words = messageText(body,this.secretRedaction);
+            if (words) messages.push({archiveUri,text:words,created_at:body.created_at});
+          }
         }
-        const raw = await context.sessions.read(context.ownerId,`${archiveUri}/messages.jsonl`);
-        if (raw === null) continue; // An absent archive has no original words to return.
-        if (Buffer.byteLength(raw)>MAX_ARCHIVE_BYTES) throw new MemoryHistoryLimitError('archive_bytes');
-        for (const line of raw.split('\n').filter(entry=>entry.trim())) {
-          const body = JSON.parse(line);
-          const words = messageText(body,this.secretRedaction);
-          if (words) messages.push({archiveUri,text:words,created_at:body.created_at});
+        const tokens = hardTokens(normalisedStatement(text));
+        const hasConversation = archives.some(uri=>uri!==requestArchive && parseArchiveUri(uri)?.session.startsWith('dsh-'));
+        if (!hasConversation && context.kind !== 'geo-project' && this.enabled) {
+          // Internal source lookup uses the same product history search and all its
+          // account/incarnation/source proofs. Rejected text is inspected only to
+          // locate the original message; it is never returned to a caller.
+          const hits=await this.search({user:{id:context.ownerId},project:null,query:text,limit:8},
+            {includeOrigins:true,forRemoval:true,removalUri:file.uri});
+          const discovered=hits.flatMap(hit=>(hit.originalMessages??[]).filter(message=>message.sourceRole==='user')
+            .map(message=>({archiveUri:hit.origin.archiveUri,text:message.text,messageHash:message.messageHash,created_at:message.date})));
+          const copies=discovered.filter(message=>messages.some(source=>lineFingerprint(source.text)===lineFingerprint(message.text)));
+          messages.push(...(copies.length?copies:discovered));
         }
+        const unique=[...new Map(messages.map(message=>[JSON.stringify([message.archiveUri,message.messageHash??lineFingerprint(message.text)]),message])).values()];
+        const matched=await this.matchRemoved(context,text,unique,judge,tokens);
+        prepared.push({ fingerprint, messages: [...obligations, ...matched] });
       }
-      const tokens = hardTokens(normalisedStatement(text));
-      const hasConversation = archives.some(uri=>uri!==requestArchive && parseArchiveUri(uri)?.session.startsWith('dsh-'));
-      if (!hasConversation && context.kind !== 'geo-project' && this.enabled) {
-        // Internal source lookup uses the same product history search and all its
-        // account/incarnation/source proofs. Rejected text is inspected only to
-        // locate the original message; it is never returned to a caller.
-        const hits=await this.search({user:{id:context.ownerId},project:null,query:text,limit:8},
-          {includeOrigins:true,forRemoval:true,removalUri:file.uri});
-        const discovered=hits.flatMap(hit=>(hit.originalMessages??[]).filter(message=>message.sourceRole==='user')
-          .map(message=>({archiveUri:hit.origin.archiveUri,text:message.text,messageHash:message.messageHash,created_at:message.date})));
-        const copies=discovered.filter(message=>messages.some(source=>lineFingerprint(source.text)===lineFingerprint(message.text)));
-        messages.push(...(copies.length?copies:discovered));
-      }
-      const unique=[...new Map(messages.map(message=>[JSON.stringify([message.archiveUri,message.messageHash??lineFingerprint(message.text)]),message])).values()];
-      const matched=await this.matchRemoved(context,text,unique,judge,tokens);
-      prepared.push({ fingerprint, messages: [...obligations, ...matched] });
+    } catch (error) {
+      if (!allowDeferred) throw error;
+      deferred = true;
     }
-    await this.ledger.database.transaction(client => this.ledger.database.withTransactionClient(client, async () => {
+    return this.ledger.database.transaction(client => this.ledger.database.withTransactionClient(client, async () => {
       await activate();
       for (const row of prepared) await this.ledger.rejectMessages(context, type, row.fingerprint, row.messages);
+      if (deferred) for (const text of removed) await this.ledger.queueForgetScan(context, type, lineFingerprint(text));
+      return allowDeferred ? this.ledger.forgetScanPending(context.ownerId, type, removed.map(lineFingerprint)) : false;
     }));
+  }
+
+  /** Four leased obligations per pass, four archives per obligation. Source
+   * cutoff and namespace are frozen when the rejection commits; late discovery
+   * can append old archives, but never sweep in a later human restatement. No read-time judge.
+   */
+  async drainForgetScans() {
+    for (let batch = 0; batch < 4; batch++) {
+      const scan = (await this.ledger.claimForgetScans())[0];
+      if (!scan) break;
+      let cursor = scan.cursor;
+      /** @type {{archiveUri:string,text:string}[]} */
+      const matched = [];
+      try {
+        const context = await this.contexts.forUri(scan.owner_id, `${scan.user_root}/memories/notes/forget.md`);
+        if (context.ownerCreatedAt !== scan.owner_created_at || context.namespaceId !== scan.namespace_id) throw new Error('Forget scan scope changed.');
+        for (; cursor < Math.min(scan.cursor + 4, scan.archives.length); cursor++) {
+          const archiveUri = scan.archives[cursor], archive = parseArchiveUri(archiveUri);
+          if (!archive || archive.userRoot !== scan.user_root || archive.rest) throw new Error('Invalid forget scan source.');
+          const raw = await context.sessions.read(scan.owner_id, `${archiveUri}/messages.jsonl`);
+          if (raw === null) continue;
+          if (Buffer.byteLength(raw) > MAX_ARCHIVE_BYTES) throw new MemoryHistoryLimitError('archive_bytes');
+          const rows = raw.split('\n').filter(line => line.trim());
+          if (rows.length > MAX_MESSAGES) throw new MemoryHistoryLimitError('source_messages');
+          const messages = rows.map(line => JSON.parse(line)).filter(message => ['user','assistant'].includes(message.role)
+            && (!Number.isFinite(Date.parse(message.created_at ?? '')) || Date.parse(message.created_at) <= new Date(scan.cutoff).getTime()))
+            .map(message => ({archiveUri,text:messageText(message,this.secretRedaction),created_at:message.created_at})).filter(message => message.text);
+          matched.push(...await this.matchRemoved(context, scan.text, messages, this.rejectionJudge));
+        }
+        await this.ledger.finishForgetScan(scan, matched, cursor);
+      } catch {
+        await this.ledger.finishForgetScan(scan, [], scan.cursor, true);
+      }
+    }
   }
 
   async matchRemoved(context,text,messages,judge,tokens=hardTokens(normalisedStatement(text))) {
@@ -266,6 +310,12 @@ export class MemoryHistory {
         const texts = raw.split('\n').filter(entry=>entry.trim()).map(entry=>JSON.parse(entry))
           .filter(message=>message.role==='user').map(message=>messageText(message,this.secretRedaction)).filter(Boolean);
         await this.ledger.registerWriteMessages(context,commit.archiveUri,texts);
+        if (this.config.memoryForgetTargetsEnabled === true && sourceArchive.session.startsWith('dsh-') && raw !== null) {
+          const dates = raw.split('\n').filter(line => line.trim()).map(line => JSON.parse(line))
+            .filter(message => ['user','assistant'].includes(message.role)).map(message => Date.parse(message.created_at ?? ''));
+          const minimum = dates.length && dates.every(Number.isFinite) ? new Date(dates.reduce((earliest, date) => Math.min(earliest, date), Infinity)).toISOString() : null;
+          await this.ledger.queueLateForgetArchive(context, commit.archiveUri, minimum);
+        }
         if (sourceArchive.session.startsWith('dsh-') && raw !== null) {
           const owed=await this.ledger.boundRejections(context,`${context.userRoot}/sessions/${sourceArchive.session}`);
           if(owed.length) {
@@ -289,6 +339,12 @@ export class MemoryHistory {
     if (['excluded','withdrawn'].includes(progress.state) || progress.state === 'complete' && (!this.secretRedaction || progress.secret_review_version === 1)) return;
     try {
       if (this.secretRedaction && progress.secret_review_version !== 1) await this.ledger.retireSecretChunks(commit,context);
+      if (this.config.memoryForgetTargetsEnabled === true && await this.ledger.forgetArchivePending(context, commit.archiveUri)) {
+        // Waiting is queued work, not an indexing failure that spends its retry
+        // cap. Completion or undo lets the ordinary worker claim it again.
+        await this.ledger.finishArchive(commit, context, 'queued', { reason: 'forget_scan_pending' });
+        return { state: 'queued', reason: 'forget_scan_pending' };
+      }
       const outcome = await this.indexArchive(commit, context,rawArchive);
       await this.ledger.finishArchive(commit, context, outcome.state, outcome);
     } catch (error) {
@@ -400,7 +456,11 @@ export class MemoryHistory {
     this.lastBackfill = { at: new Date().toISOString(), discovered, processed, failed, coverage: await this.ledger.archiveCoverage() };
   }
   async coverage(ownerId) { return this.ledger.archiveCoverage(ownerId); }
-  status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill } }; }
+  async refreshMaintenance() {
+    this.maintenance = (await this.ledger.archiveCoverage()).maintenance;
+    recordNativeMaintenance(this.maintenance);
+  }
+  status() { return { enabled: this.enabled, backfill: { ...this.lastBackfill }, maintenance: { ...this.maintenance } }; }
 
   async search({ user, project, query, limit = 5 }, { includeOrigins = false, forRemoval = false, removalUri = null, retrievalV2 = this.config.memoryHistoryRetrievalV2Enabled === true } = {}) {
     if (!this.enabled || !query?.trim()) return [];

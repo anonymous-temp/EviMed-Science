@@ -488,7 +488,7 @@ export async function openLab({
   try {
     await database.query("SELECT 1");
     await migrateMemorySettings(database);
-    const overlay = new NativeMemoryOverlay({ database });
+    const overlay = new NativeMemoryOverlay({ database, deferredSummaryRebuildEnabled: config.memoryDeferredSummaryRebuildEnabled });
     await overlay.migrate();
     const client = new OpenVikingClient({ openVikingUrl: engineUrl, openVikingApiKey: engineKey, openVikingAccount: account, openVikingRequestTimeoutMs: engineTimeoutMs });
     client.writeAdmission = (userId, operation) => withNativeMemoryWrite(database, userId, operation);

@@ -1,5 +1,5 @@
 import { forgetRequestId } from './nativeMemoryForgetRequests.mjs';
-import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations } from './nativeMemorySummaries.mjs';
+import { withMemorySummaryInvalidation, drainMemorySummaryInvalidations, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
 import { nativeMemoryIndex } from "./memoryOpeningIndex.mjs";
 import { safetyNoteFile, safetyNoteLines } from './memorySafetyNotes.mjs';
 import { hardTokens, memoryNameVariants, tokenPresent } from './nativeMemoryHardTokens.mjs';
@@ -485,7 +485,13 @@ export class NativeMemoryStore {
    * @param {string} userId @param {{ context?: any,uris?:string[]|null }} [options]
    */
   async files(userId, options = {}) {
-    const files = await this.rawFiles(userId, options);
+    let files = await this.rawFiles(userId, options);
+    if (this.overlay.deferredSummaryRebuildEnabled === true) {
+      files = (await mapLimit(files, 8, async file => {
+        const body = await fenceWithdrawnMemoryBody(this.overlay, userId, file.uri, file.body, file.namespaceId);
+        return body === null ? null : { ...file, body, hash: contentHash(body) };
+      })).filter(file => file !== null);
+    }
     if (!this.sourceDeletion) return files;
     const hidden = new Set(await this.sourceDeletion.hiddenMemoryUris(userId));
     return files.filter(file => ![...hidden].some(prefix=>file.uri===prefix||file.uri.startsWith(`${prefix}/`)));
@@ -847,7 +853,7 @@ export class NativeMemoryStore {
     for (const record of records) (groups[record.kind] ??= []).push(record);
     const pending = await this.pending(userId);
     return {
-      ...(holder ? { holder } : {}), records, groups, activeCount: active.length, pendingCount: this.instructionWriteCheck ? pending.length : 0, episodeCount: 0,
+      ...(holder ? { holder } : {}), records, groups, activeCount: active.length, pendingCount: this.instructionWriteCheck || this.forgetTargetsEnabled ? pending.length : 0, episodeCount: 0,
       conversations: titles, usage: {}, pending,
     };
   }
@@ -868,10 +874,11 @@ export class NativeMemoryStore {
           ? [{ index: choice, text: candidate.text }] : []),
       }]);
     });
-    if (!this.instructionWriteCheck) return [...confirmations, ...writes];
+    const scans = this.history && this.forgetTargetsEnabled ? await this.history.ledger.pendingForgetScans(userId) : [];
+    if (!this.instructionWriteCheck) return [...scans, ...confirmations, ...writes];
     const held = await this.overlay.pendingInstructionRevisions(userId);
     const files = await this.overlay.files(userId);
-    return [...confirmations, ...writes, ...held.flatMap(revision => {
+    return [...scans, ...confirmations, ...writes, ...held.flatMap(revision => {
       const kept = new Set([...removalLines(revision.after ?? ''), ...removalLines(files.get(revision.uri)?.body ?? '')].map(lineFingerprint));
       return removalLines(revision.before ?? '').filter(text => !kept.has(lineFingerprint(text)) && (!revision.pendingFingerprints || revision.pendingFingerprints.has(lineFingerprint(text)))).map(text => ({
         id: `instruction:${revision.id}:${lineFingerprint(text)}`, text, at: revision.changedAt, state: 'pending', reason: 'instruction_origin_uncertain',
@@ -957,7 +964,10 @@ export class NativeMemoryStore {
         }
       }
     }
-    return { items, query: text, semantic, conversations: (await this.#withConversationTitles(userId, items)).titles, usage: {} };
+    // Search is recall, not the explicit undo/history view. A forget's private
+    // before-image must not ride beside an otherwise current search result.
+    const recalled = this.overlay.deferredSummaryRebuildEnabled === true ? items.map(record => ({ ...record, revisions: [] })) : items;
+    return { items: recalled, query: text, semantic, conversations: (await this.#withConversationTitles(userId, items)).titles, usage: {} };
   }
 
   /**
@@ -1502,9 +1512,12 @@ export class NativeMemoryStore {
       if (fresh.length) await this.overlay.addRevision({ userId, uri, memoryType: 'notes', change: 'deleted', actor: 'conversation',
         reason: `${engineSession ? 'forgotten in a conversation' : 'forgotten by conversation request'}${actSuffix(act)}`, before: fresh.join('\n'), after: null, archiveUri, engineSession });
     };
-    if (this.history) await this.history.rejectRemoved(actual, { uri, type: 'notes' }, lines, this.rejectionJudge, { archiveUri, activate });
+    let pending = false;
+    if (this.history) pending = (await this.history.rejectRemoved(actual, { uri, type: 'notes' }, lines, this.rejectionJudge,
+      { archiveUri, activate, allowDeferred: this.forgetTargetsEnabled })) === true;
     else await this.overlay.database.transaction(client => this.overlay.database.withTransactionClient(client, activate));
     this.#touch(userId);
+    return pending;
   }
 
   /** The withdrawal and its acknowledgement can themselves repeat part of the withdrawn fact. Undo lifts their existing rejection fence too. */
@@ -1661,9 +1674,9 @@ export class NativeMemoryStore {
     }
     if (!uri) {
       if (!this.history) throw new HttpError(503, 'memory_engine_unavailable', 'History rejection is unavailable.');
-      await withNativeMemoryWrite(this.overlay.database, String(user.id), () =>
+      const historyScanPending = await withNativeMemoryWrite(this.overlay.database, String(user.id), () =>
         this.recordForgetIntent(String(user.id), actual, null, [removalText(statement).replace(/\s+/g, ' ')], { engineSession }));
-      return { removed: false, historyRejected: true };
+      return { removed: false, historyRejected: true, ...(historyScanPending ? { historyScanPending: true } : {}) };
     }
     const files = await this.files(String(user.id), { context: this.memoryContexts ? actual : null });
     const file = files.find((candidate) => candidate.uri === uri);

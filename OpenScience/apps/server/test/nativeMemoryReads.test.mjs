@@ -106,3 +106,16 @@ test("a read that was under way when a write happened is not shared with the rea
   assert.notEqual(await before, await after);
   assert.equal(calls.tree, 2);
 });
+
+test('deferred-mode search excludes private undo before-images while the explicit record view retains them', async () => {
+  const { store } = engine({ count: 0 });
+  const record = { id: 'record', uri: `${ROOT}/notes/a.md`, value: 'Kept fact.', summary: 'Notes', revisions: [{ value: 'Withdrawn fact.' }] };
+  store.records = async () => [record];
+  store.overlay.deferredSummaryRebuildEnabled = true;
+  const answer = await store.search('u1', '');
+  assert.doesNotMatch(JSON.stringify(answer), /Withdrawn fact/);
+  assert.match(JSON.stringify(answer), /Kept fact/);
+  assert.equal((await store.records('u1'))[0].revisions[0].value, 'Withdrawn fact.');
+  store.overlay.deferredSummaryRebuildEnabled = false;
+  assert.equal((await store.search('u1', '')).items[0].revisions[0].value, 'Withdrawn fact.');
+});

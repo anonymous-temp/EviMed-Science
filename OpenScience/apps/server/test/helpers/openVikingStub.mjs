@@ -60,6 +60,11 @@ export class OpenVikingStub {
     this.taskSeq = 0;
     /** Set to a number of milliseconds to make every answer wait that long (a hanging engine). */
     this.delayMs = 0;
+    /** A frozen engine index can lag its current leaf bytes. @type {Map<string,string> | null} */
+    this.memorySearchSnapshot = null;
+    /** @type {(() => Promise<void>) | null} */
+    this.beforeReindex = null;
+    this.rebuildSummaries = false;
     /** Set to a status to answer every data request with it (an engine that is down). */
     this.failWith = 0;
     this.server = null;
@@ -269,6 +274,15 @@ export class OpenVikingStub {
       return send(200, ok({ root_uri: root, created, updated, unchanged: [], vector_status: 'complete' }));
     }
     if (path === '/api/v1/content/reindex' && req.method === 'POST') {
+      try { if (this.beforeReindex) await this.beforeReindex(); }
+      catch { return send(503, fail('UNAVAILABLE', 'stub: reindex down')); }
+      if (this.rebuildSummaries) {
+        const directory = String(body?.uri ?? '');
+        const text = [...this.files].filter(([uri]) => uri.startsWith(`${directory}/`)
+          && !['.overview.md','.abstract.md'].includes(uri.slice(directory.length + 1)))
+          .map(([, content]) => content).join('\n');
+        for (const name of ['.overview.md','.abstract.md']) this.files.set(`${directory}/${name}`, text);
+      }
       if (!within(String(body?.uri ?? ''))) return send(403, fail('PERMISSION_DENIED', 'Access denied'));
       return send(200, ok({ status: 'completed', failed_records: 0, queue_status: {} }));
     }
@@ -279,7 +293,8 @@ export class OpenVikingStub {
       const target = String(body?.target_uri ?? `${own}/memories`);
       if (!within(target)) return send(403, fail("PERMISSION_DENIED", "Access denied"));
       const words = String(body?.query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
-      const hits = [...this.files.entries()]
+      const indexed = target.includes('/resources/history') ? this.files : this.memorySearchSnapshot ?? this.files;
+      const hits = [...indexed.entries()]
         .filter(([uri]) => uri.startsWith(`${target}/`) && (uri.includes("/memories/") || uri.includes("/resources/history/")) && !exclude.some((prefix) => uri === prefix || uri.startsWith(`${prefix}/`)))
         .filter(([uri, text]) => words.length === 0 || words.some((word) => `${uri}\n${text}`.toLowerCase().includes(word)))
         .filter(([uri]) => !(body?.tags ?? []).length || (body.tags).every((tag) => (this.tags.get(uri) ?? []).includes(tag)))

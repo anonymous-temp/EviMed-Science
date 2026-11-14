@@ -56,6 +56,7 @@ function fixture(enabled = true) {
   store.files = async () => [...files].filter(([target]) => target.startsWith(`${root}/memories/`)).map(([target, text]) => ({ uri: target, body: text, hash: contentHash(text), type: 'preferences', projectId: null }));
   const ledger = new MemoryHistoryLedger({ database, overlay });
   ledger.migrate = async () => {};
+  ledger.forgetScanPending = async () => false;
   const history = new MemoryHistory({ config: { memoryHistorySearchEnabled: true }, ledger });
   history.ensureSourceCopies = async context => { context.ownerCreatedAt = '2026-01-01'; };
   // The store's legacy context has no owner stamp; model that lookup separately.
@@ -156,8 +157,9 @@ for (const statement of ['The previous examination was benign.', 'My old project
   });
 }
 
-test('a history-only failure is retryable without an active rejection or a success revision', async () => {
+test('a failed durable scan record rolls back the statement rejection and remains retryable', async () => {
   const f = fixture(); f.failHistory(true);
+  f.ledger.queueForgetScan = async () => { throw new Error('history unavailable'); };
   await assert.rejects(f.store.forget(user, project, null, { statement: 'Old project.' }), /history unavailable/);
   assert.deepEqual(f.rejections, []); assert.deepEqual(f.revisions, []);
   f.failHistory(false);
@@ -268,4 +270,19 @@ test('formatting-only statements are rejected before any privacy mutation', asyn
   const f = fixture();
   await assert.rejects(f.store.forget(user, project, null, { statement: '# (as of 2026-11-12)' }), error => error.code === 'memory_payload_invalid');
   assert.deepEqual(f.rejections, []); assert.deepEqual(f.revisions, []); assert.deepEqual(f.historyCalls, []);
+});
+
+test('unavailable semantic matching records a statement and an undo-bound scan before answering', async () => {
+  const f = fixture(), scans = [];
+  f.ledger.queueForgetScan = async (context, type, fingerprint) => scans.push({ context, type, fingerprint });
+  f.ledger.forgetScanPending = async () => scans.length > 0;
+  f.store.rejectionJudge = { same: async () => { throw Object.assign(new Error('unavailable'), { code: 'memory_history_privacy_unavailable' }); } };
+  const answer = await f.store.forget(user, project, null, { statement: 'Use metric units.' });
+  assert.equal(answer.historyRejected, true);
+  assert.equal(answer.historyScanPending, true);
+  assert.equal(f.rejections.length, 1);
+  assert.equal(f.revisions.length, 1);
+  assert.equal(scans.length, 1);
+  assert.equal(scans[0].fingerprint, lineFingerprint('Use metric units.'));
+  assert.equal(f.files.get(uri), body);
 });

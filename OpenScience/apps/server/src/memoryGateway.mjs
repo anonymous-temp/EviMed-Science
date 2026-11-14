@@ -1,7 +1,7 @@
 import { withNativeMemoryWrite } from './nativeMemoryWriteFence.mjs';
 import { historySearchText } from './memoryHistory.mjs';
 import { openingProfileRead, selectOpeningEntries } from './memoryOpeningByUse.mjs';
-import { isMemorySummary } from './nativeMemorySummaries.mjs';
+import { isMemorySummary, fenceWithdrawnMemoryBody } from './nativeMemorySummaries.mjs';
 import { ALL_ERROR_CODES, carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
 import { withoutResearchGoalGesture } from "./researchGoal.mjs";
 
@@ -215,7 +215,7 @@ async function scopedListSearch(sessions, ctx, given) {
     // present text: read the exact leaf before returning it, and refill past missing candidates.
     for (let offset = 0; offset < hits.length && remaining > 0; offset += 4) {
       const fresh = await Promise.all(hits.slice(offset, offset + 4).map(async hit => {
-        const text = await sessions.read(ctx.user.id, hit.uri).catch(() => null);
+        const text = await ctx.readMemory(hit.uri).catch(() => null);
         if (text === null) return null;
         return { uri: hit.uri,
           ...(typeof hit.context_type === 'string' ? { context_type: hit.context_type } : {}),
@@ -376,7 +376,7 @@ const rpcError = (/** @type {unknown} */ id, /** @type {number} */ code, /** @ty
  *   sourceReceipt?: ((request:any)=>Promise<void>) | null,
  *   sourceReceiptFailed?: ((request:any)=>Promise<void>) | null,
  *   overlay?: import("./nativeMemoryOverlay.mjs").NativeMemoryOverlay | null,
- *   memoryTool?: { forget: (user: any, project: any, uri: string | null, options?: any) => Promise<{ removed: boolean, removedLines?: number, fileRemoved?: boolean, historyRejected?: boolean, missingLines?: string[], availableLines?: string[] }> } | null,
+ *   memoryTool?: { forget: (user: any, project: any, uri: string | null, options?: any) => Promise<{ removed: boolean, removedLines?: number, fileRemoved?: boolean, historyRejected?: boolean, historyScanPending?: boolean, missingLines?: string[], availableLines?: string[] }> } | null,
  *   capsuleSearch?: ((request: { user: any, project: any, query: string, limit: number, contextPolicy?:any }) => Promise<Record<string, any>[]>) | null,
  *   historySecrets?: import("./memoryHistorySecrets.mjs").MemoryHistorySecrets | null,
  *   historySearch?: ((request: any) => Promise<any[]>) | null,
@@ -661,7 +661,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       try { uri = await ctx.checkUri(String(entry?.uri ?? '')); } catch { continue; }
       if (!nativeMemoryFile(uri, `${ctx.userRoot}/memories`) || await ctx.hidden(uri)
         || entry?.detail === 'overview' || entry?.level === 0 || entry?.level === 1) continue;
-      const text = await ctx.sessions.read(ctx.user.id, uri).catch(() => null);
+      const text = await ctx.readMemory(uri).catch(() => null);
       if (text === null) continue;
       kept.push(context ? { uri, category: entry.category, score: entry.score, detail: entry.detail, text, origin: entry.origin }
         : { uri, context_type: 'memory', level: entry.level, score: entry.score, abstract: text, tags: [] });
@@ -886,7 +886,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       if (!admitted.recall) { recordGatewayWithheld(admitted.recallReason ?? "memory_off"); return missing; }
       if (!nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) || await ctx.hidden(absolute(uri, ctx.userRoot))) return { ...missing, outcome: "local" };
       if (ctx.shared) await ctx.ensureRegistered();
-      const text = await ctx.sessions.read(ctx.user.id, uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
+      const text = await ctx.readMemory(uri, { timeoutMs: ctx.sessions.fastTimeoutMs * 2 });
       if (text === null) return { ...missing, outcome: "forwarded" };
       await noteRecalled(ctx, [absolute(uri, ctx.userRoot)]);
       // Startup reads this exact REST profile path without a caller marker. An explicit REST profile reader can opt in;
@@ -1003,6 +1003,14 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           if (name === "read") {
             const uris = (Array.isArray(args.uris) ? args.uris : [args.uris]).filter((/** @type {unknown} */ uri) => typeof uri === "string" && uri && nativeMemoryFile(absolute(uri, ctx.userRoot), `${ctx.userRoot}/memories`) && !isHidden(uri)).slice(0, 10).map(uri => absolute(uri, ctx.userRoot));
             if (!uris.length) { local.push(toolText(message.id, "没有可读取的记忆文件。")); continue; }
+            if (config.memoryDeferredSummaryRebuildEnabled === true) {
+              const rows = await Promise.all(uris.map(async uri => ({ uri, text: await ctx.readMemory(uri) })));
+              const readable = rows.filter(row => row.text !== null);
+              local.push(toolText(message.id, readable.map(row => `${row.uri}\n${row.text}`).join('\n\n') || '没有可读取的记忆文件。'));
+              await noteRecalled(ctx, readable.map(row => row.uri));
+              await noteUsed(ctx, readable.map(row => row.uri));
+              continue;
+            }
             forward.push({ ...message, params: { ...message.params, arguments: { uris } } });
             afterCall.set(message.id, async (answer) => {
               if (!answer?.error) await noteRecalled(ctx, uris);
@@ -1137,6 +1145,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
           };
           const outcome = await memoryTool.forget(ctx.user, ctx.project, target, Object.keys(options).length ? options : undefined);
           const text = outcome.missingLines ? `No lines removed. Unmatched lines: ${JSON.stringify(outcome.missingLines)}. Available lines: ${JSON.stringify(outcome.availableLines)}. Retry with exact complete lines.`
+            : outcome.historyScanPending ? 'Recorded a history recall rejection for the statement and exact restatements. Earlier conversations are still being checked; paraphrases may still be recalled until that check finishes. The conversation text is unchanged.'
             : outcome.historyRejected ? 'Recorded a history recall rejection for the statement. No memory file was deleted; the conversation text is unchanged.'
             : outcome.removedLines ? `Removed ${outcome.removedLines} line(s) from: ${target}. ${outcome.fileRemoved ? "The empty file was deleted." : "Other lines were kept."}`
             : outcome.removed ? `Deleted: ${target}` : `Not found: ${target}`;
@@ -1231,6 +1240,11 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
       const ctx = {
         user, project, json, query: url.searchParams, match: found.match, engineUser, userRoot, sessions: view, memoryContext, shared,
         account: /** @type {any} */ (view).client.account,
+        readMemory: async (/** @type {string} */ uri, options = {}) => {
+          const text = await view.read(user.id, uri, options);
+          return config.memoryDeferredSummaryRebuildEnabled === true
+            ? fenceWithdrawnMemoryBody(overlay, user.id, uri, text, shared ? memoryContext.namespaceId : null) : text;
+        },
         ensureRegistered: () => ensureRegistered(user.id, view, memoryContext),
         checkUri: async (uri) => {
           if (!insideOwnSpace(uri, userRoot)) throw new HttpError(403, 'memory_gateway_uri_refused', 'The URI is outside the project memory context.');

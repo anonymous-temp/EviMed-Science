@@ -1277,3 +1277,39 @@ test('history privacy refusal names its retry without exposing provider details 
   assert.doesNotMatch(answer.json.error.message, /private provider response/);
   assert.deepEqual(f.failures, [{ code: error.code, status: 503 }]);
 });
+
+test('a recorded statement with a pending scan discloses the paraphrase gap without asking for a tool retry', async t => {
+  const f = await fixture(t, { config: { memoryForgetTargetsEnabled: true }, memoryTool: {
+    forget: async () => ({ removed: false, historyRejected: true, historyScanPending: true }),
+  } });
+  const answer = await f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'forget', arguments: { statement: 'Old fact.' } } });
+  assert.equal(answer.status, 200);
+  const text = answer.messages[0].result.content[0].text;
+  assert.match(text, /Recorded.*exact restatements/);
+  assert.match(text, /Earlier conversations are still being checked; paraphrases may still be recalled until that check finishes/);
+  assert.doesNotMatch(text, /Retry|complete|deleted/);
+});
+
+test('deferred maintenance fences a late extraction in REST, MCP read, search and plugin context', async t => {
+  const { lineFingerprint } = await import('../src/nativeMemoryOverlay.mjs');
+  const uri = `${ROOT}/memories/notes/late.md`, withdrawn = 'Old booking.', retained = '- Keep green folders.';
+  let admitted = retained;
+  const f = await fixture(t, { config: { memoryDeferredSummaryRebuildEnabled: true }, overlay: {
+    configured: true, deferredSummaryRebuildEnabled: true,
+    sensitiveUris: async () => [], otherProjectUris: async () => [], noteRecalled: async () => {},
+    removals: async () => [{ fingerprint: lineFingerprint(withdrawn), text: withdrawn }], file: async () => ({ body: admitted }),
+  } });
+  f.stub.seedMemory(OV_USER, 'notes/late.md', `- ${withdrawn}\n${retained}`);
+  const request = (name, args) => f.mcp({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } });
+  const responses = [await f.call('GET', `/api/v1/content/read?uri=${encodeURIComponent(uri)}`),
+    await f.call('POST', '/api/v1/search/search', { query: 'booking' }),
+    await f.call('POST', '/api/v1/search/search', { query: 'booking', mode: 'context' }),
+    await request('read', { uris: [uri] }), await request('search', { query: 'booking' })];
+  for (const response of responses) {
+    assert.equal(response.status, 200);
+    assert.doesNotMatch(JSON.stringify(response), /Old booking/);
+    assert.match(JSON.stringify(response), /green folders/);
+  }
+  admitted = `- ${withdrawn}\n${retained}`;
+  assert.match(JSON.stringify(await request('read', { uris: [uri] })), /Old booking/);
+});
