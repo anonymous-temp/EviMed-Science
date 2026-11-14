@@ -7,6 +7,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { gunzipSync } from "node:zlib";
+import { unzipSync } from "fflate";
 
 import { nativeFileId } from "../src/nativeMemoryStore.mjs";
 import { OpenVikingClient } from "../src/openVikingClient.mjs";
@@ -50,6 +51,20 @@ async function fixture(t, { native = true } = {}) {
   const headers = { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0], "x-open-science-csrf": auth.data.csrfToken };
   const engineUser = openVikingSessions.engineUser(user.id);
   return { app, base, headers, user, stub, engineUser, sessions: openVikingSessions, seed: (rel, text, extra) => stub.seedMemory(engineUser, rel, text, extra) };
+}
+
+/** One entry's bytes out of an uncompressed tar. */
+function tarEntry(buffer, wanted) {
+  for (let offset = 0; offset + 512 <= buffer.length;) {
+    const header = buffer.subarray(offset, offset + 512);
+    if (header.every((byte) => byte === 0)) break;
+    const name = header.subarray(0, 100).toString().replace(/\0.*$/, "");
+    const prefix = header.subarray(345, 500).toString().replace(/\0.*$/, "");
+    const size = Number.parseInt(header.subarray(124, 136).toString().replace(/\0.*$/, "").trim() || "0", 8);
+    if ((prefix ? `${prefix}/${name}` : name) === wanted) return buffer.subarray(offset + 512, offset + 512 + size);
+    offset += 512 + Math.ceil(size / 512) * 512;
+  }
+  throw new Error(`no ${wanted} in the archive`);
 }
 
 test("the page reads the engine's files, and the dispatch hands nothing of memory that the engine does not", options, async (t) => {
@@ -99,7 +114,13 @@ test("the export carries the engine's pack, and deleting the account erases what
   assert.equal(exported.status, 200);
   const tar = gunzipSync(Buffer.from(await exported.arrayBuffer()));
   assert.ok(tar.includes(Buffer.from("memory/native-memory.zip")), "the archive names the pack");
-  assert.ok(tar.includes(Buffer.from("PK-stub-pack:1")), "and holds what the engine exported");
+  // The pack is built from the current memory bodies behind the withdrawal readers (a manifest and one file per memory,
+  // named opaquely), not the engine's raw pack: that one carries stale summaries and bytes a forget already withdrew.
+  assert.equal(tar.includes(Buffer.from("PK-stub-pack:1")), false, "the engine's raw pack does not leave through the export");
+  const pack = unzipSync(tarEntry(tar, "memory/native-memory.zip"));
+  const manifest = JSON.parse(Buffer.from(pack["manifest.json"]).toString());
+  assert.deepEqual(manifest.files.map((file) => file.type), ["preferences"], "the manifest lists the one memory by type");
+  assert.match(Buffer.from(pack[manifest.files[0].path]).toString(), /Plain\./, "and the pack holds its current body");
   const deleted = await fetch(`${base}/api/account`, { method: "DELETE", headers, body: JSON.stringify({ confirm: user.id, password: PASSWORD }) });
   assert.equal(deleted.status, 200, await deleted.clone().text());
   assert.equal(stub.users.has(engineUser), false, "the engine no longer knows the account");
