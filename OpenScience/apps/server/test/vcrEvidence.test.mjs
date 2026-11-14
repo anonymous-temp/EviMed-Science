@@ -818,6 +818,29 @@ test("a trial's record for a judgment is read like any registry read: nothing wr
   assert.equal((await unconfigured.judgmentRecord({ userId: "u1", registryId: "NCT02296125" })).reason, "registry_not_configured");
 });
 
+test("a judgment's trial record is kept per registry and id for its window: one read, a failure never kept, a frozen collection never cached", async () => {
+  const store = storeDouble();
+  let at = new Date(AT).getTime(), reads = 0, failNext = false;
+  const double = registryDouble();
+  const registry = { ...double, async record(/** @type {string} */ id) { reads += 1; if (failNext) { failNext = false; return { status: "registry_unavailable", reason: "ETIMEDOUT" }; } return double.record(id); } };
+  const pipeline = createVcrEvidencePipeline({ store, registry, now: () => new Date(at), judgmentCacheMs: 60_000 });
+  failNext = true;
+  assert.equal((await pipeline.judgmentRecord({ userId: "u1", registryId: "NCT02296125" })).status, "registry_unavailable");
+  const first = await pipeline.judgmentRecord({ userId: "u1", registryId: "NCT02296125" });
+  assert.equal(first.status, "ok");
+  first.trial.eligibility = "changed by a caller";
+  const second = await pipeline.judgmentRecord({ userId: "u2", registryId: "nct02296125" });
+  assert.equal(reads, 2, "the failure was not kept; the success was");
+  assert.match(second.trial.eligibility, /^Inclusion Criteria:/, "a caller's change never reaches the next reader");
+  at += 60_001;
+  await pipeline.judgmentRecord({ userId: "u1", registryId: "NCT02296125" });
+  assert.equal(reads, 3, "read again once the window is over");
+  const off = createVcrEvidencePipeline({ store, registry, now: () => new Date(at) });
+  await off.judgmentRecord({ userId: "u1", registryId: "NCT02296125" });
+  await off.judgmentRecord({ userId: "u1", registryId: "NCT02296125" });
+  assert.equal(reads, 5, "no window, no cache");
+});
+
 test("the runtime's registry read answers structure, never throws, and never writes", async () => {
   const store = storeDouble();
   const pipeline = createVcrEvidencePipeline({ store, registry: registryDouble(), now: () => new Date(AT) });

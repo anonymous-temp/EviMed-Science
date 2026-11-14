@@ -1207,6 +1207,12 @@ function vcrSettings(overrides) {
     // RUN_MS bounds the search itself. Each pending and joined answer is a `patient matching discovery: <outcome>` line in the web log.
     patientMatchingDiscoveryWaitMs: integer("patientMatchingDiscoveryWaitMs", "OPEN_SCIENCE_PATIENT_MATCHING_DISCOVERY_WAIT_MS", 90000, 1000, 100000),
     patientMatchingDiscoveryRunMs: integer("patientMatchingDiscoveryRunMs", "OPEN_SCIENCE_PATIENT_MATCHING_DISCOVERY_RUN_MS", 600000, 60000, 1800000),
+    // How long a result commit waits for its task's commit lock (commits of one task take turns); below the plugin's 110 s host call.
+    patientMatchingCommitLockWaitMs: integer("patientMatchingCommitLockWaitMs", "OPEN_SCIENCE_PATIENT_MATCHING_COMMIT_LOCK_WAIT_MS", 60000, 1000, 100000),
+    // How long a trial record read for a judgment is kept per registry and id (live registries; 0 reads every time). One matching
+    // conversation reads the same records at every preparation, commit source check and result read, and ChiCTR and CTIS had no
+    // cache at all: on production (2026-11-12) those reads failed inside commits. Counter: none; a read that misses goes to the registry.
+    vcrJudgmentRecordCacheMs: integer("vcrJudgmentRecordCacheMs", "OPEN_SCIENCE_VCR_JUDGMENT_RECORD_CACHE_MS", 7200000, 0, 86400000),
     patientMatchingRankView: ["balanced", "trial-record"].includes(String(overrides.patientMatchingRankView ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_RANK_VIEW ?? "").trim()) ? String(overrides.patientMatchingRankView ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_RANK_VIEW).trim() : "trial-record",
     patientMatchingJevDepth: integer("patientMatchingJevDepth", "OPEN_SCIENCE_PATIENT_MATCHING_JEV_DEPTH", 300, 0, 500),
     patientMatchingTrialIndexManifest: String(overrides.patientMatchingTrialIndexManifest ?? process.env.OPEN_SCIENCE_PATIENT_MATCHING_TRIAL_INDEX_MANIFEST ?? ''),

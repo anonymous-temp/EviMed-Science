@@ -845,12 +845,18 @@ ALTER TABLE evimed_frontier.items ADD COLUMN IF NOT EXISTS ask_at timestamptz(3)
 -- the start-up backfill (rows that predate the trigger: reader_tidy set, reader_ready_sha NULL) never takes it again. No query writes them.
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_ready_source text;
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_ready_sha text;
+-- reader_best_source is the best text the row holds, whether or not it was tidied: 'body', 'abstract', 'excerpt', 'summary',
+-- 'reports', or '' for none (never NULL once the trigger has seen the row). The claims that asked whether a text is empty
+-- (btrim over body_text, abstract_raw, body_excerpt: the TOAST again) read it instead (production 2026-11-12: the reader-summary
+-- claim, every batch, 1-2 s with two parallel workers).
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS reader_best_source text;
 CREATE OR REPLACE FUNCTION evimed_frontier.item_texts_reader_ready() RETURNS trigger AS $fn$
 DECLARE best text;
 BEGIN
   best := CASE WHEN btrim(coalesce(NEW.body_text, '')) <> '' THEN 'body' WHEN btrim(coalesce(NEW.abstract_raw, '')) <> '' THEN 'abstract'
     WHEN btrim(coalesce(NEW.body_excerpt, '')) <> '' THEN 'excerpt' WHEN btrim(coalesce(NEW.reader_summary, '')) <> '' THEN 'summary'
     WHEN btrim(coalesce(NEW.reader_reports, '')) <> '' THEN 'reports' END;
+  NEW.reader_best_source := coalesce(best, '');
   IF NEW.reader_tidy IS NOT NULL AND NEW.reader_tidy->>'source' = best THEN
     NEW.reader_ready_source := best;
     NEW.reader_ready_sha := NEW.reader_tidy->>'sha';
@@ -869,6 +875,9 @@ DO $fn$ BEGIN
 END $fn$;
 -- The tidy step's claim looks for texts with no verdict; the older partial index above never matched its predicate.
 CREATE INDEX IF NOT EXISTS frontier_item_texts_untidied_idx ON evimed_frontier.item_texts (item_id) WHERE reader_tidy IS NULL;
+-- The reader-summary step's few rows: no summary yet and no full text, abstract or excerpt.
+CREATE INDEX IF NOT EXISTS frontier_item_texts_summary_owed_idx ON evimed_frontier.item_texts (item_id)
+  WHERE reader_summary IS NULL AND reader_best_source IN ('reports', '');
 -- Every item's text and genre is read through its entry (the pipeline's item context, once per processing step): an item's newest entry.
 CREATE INDEX IF NOT EXISTS frontier_entries_item_idx ON evimed_frontier.entries (item_id, revision DESC, id DESC) WHERE item_id IS NOT NULL;
 -- The owed-edit claim: the few published items no edit has been written for.
@@ -1034,8 +1043,8 @@ export async function backfillTimelineRule(client) {
 }
 
 /**
- * Rows written before the `item_texts_reader_ready` trigger existed: the tidied rows the trigger never computed (`reader_ready_sha`
- * NULL), a thousand at a time, each its own statement. Every row it touches leaves with a sha or '', so a later start finds none.
+ * Rows written before the `item_texts_reader_ready` trigger computed them: every row whose `reader_best_source` is still NULL, a
+ * thousand at a time, each its own statement. Every row it touches leaves with a best source ('' for none), so a later start finds none.
  * @param {any} database
  */
 async function backfillReaderReady(database) {
@@ -1043,7 +1052,7 @@ async function backfillReaderReady(database) {
   for (;;) {
     const done = await database.query(`WITH batch AS (
         SELECT item_id FROM evimed_frontier.item_texts
-        WHERE item_id > $1 AND reader_tidy IS NOT NULL AND reader_ready_sha IS NULL
+        WHERE item_id > $1 AND reader_best_source IS NULL
         ORDER BY item_id LIMIT 1000)
       UPDATE evimed_frontier.item_texts t SET reader_tidy = t.reader_tidy FROM batch WHERE t.item_id = batch.item_id
       RETURNING t.item_id`, [after]);

@@ -1226,10 +1226,10 @@ export function poolTargetOf(raw) {
  *   reranker?: import("./vcrCandidateRerank.mjs").VcrCandidateRerank | null, searches?: import("./vcrCandidateSearchStore.mjs").VcrCandidateSearchStore | null,
  *   retrieval?: { retrieveMax?: number, deadlineMs?: number, concurrency?: number },
  *   meter?: ((study: any, spend: { tokens: number, requestId: string | null, model: string }) => Promise<unknown>) | null,
- *   summaryCloudAllowed?: ((entry: { studyId: string, subjectKey?: string | null }) => Promise<boolean>) | null }} options `summaryCloudAllowed` says whether a run's summary of a person may go to the reranker; `meter` books the reranker's token count to the study's owner; `reranker` reorders a candidate list against the run's
+ *   summaryCloudAllowed?: ((entry: { studyId: string, subjectKey?: string | null }) => Promise<boolean>) | null, judgmentCacheMs?: number }} options `judgmentCacheMs` keeps a judgment's trial record that long (0: never); `summaryCloudAllowed` says whether a run's summary of a person may go to the reranker; `meter` books the reranker's token count to the study's owner; `reranker` reorders a candidate list against the run's
  *   summary of the patient; `searches` keeps the receipt of a search; `retrieval` bounds how deep and how long a search reads the registries.
  */
-export function createVcrEvidencePipeline({ store, registry = null, trialCorpus = null, jobs = null, now = () => new Date(), logger = null, reranker = null, searches = null, retrieval = {}, meter = null, summaryCloudAllowed = null } = { store: null }) {
+export function createVcrEvidencePipeline({ store, registry = null, trialCorpus = null, jobs = null, now = () => new Date(), logger = null, reranker = null, searches = null, retrieval = {}, meter = null, summaryCloudAllowed = null, judgmentCacheMs = 0 } = { store: null }) {
   if (!store) throw new TypeError("The evidence pipeline needs its store.");
   /** @type {{resolve:Function}|null} */
   let literatureSources = null;
@@ -1324,6 +1324,11 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
   const recordCache = new Map();
   /** @param {string} id */
   const cachedRecord = (id) => { const hit = recordCache.get(id); return hit && now().getTime() - hit.at < RECORD_CACHE_MS ? hit.built : null; };
+  // A trial's record as a judgment reads it, kept `judgmentCacheMs` per registry and id (live registries only): one matching conversation
+  // reads the same records at every lane's preparation, every commit's source check and every result read, and ChiCTR and CTIS had no
+  // cache at all, one registry search per read (production 2026-11-12: such reads failed inside commits and held the commit's lock).
+  /** @type {Map<string, { trial: any, at: number }>} */
+  const judgmentCache = new Map();
 
   /**
    * One registry record, fetched and built — or the failure to. `userId` is whose
@@ -1777,6 +1782,10 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
      * @param {{ userId?: string, registry?: string, registryId: string, collection?: string | null, collectionRevision?: string | null, signal?: AbortSignal }} input
      */
     async judgmentRecord({ userId = "", registry: registryName = "clinicaltrials.gov", registryId, collection = null, collectionRevision = null, signal }) {
+      const live = collection == null && collectionRevision == null && Number(judgmentCacheMs) > 0;
+      const key = `${registryName}:${String(registryId ?? "").trim().toUpperCase()}`;
+      const hit = live ? judgmentCache.get(key) : null;
+      if (hit && now().getTime() - hit.at < Number(judgmentCacheMs)) return { status: "ok", trial: structuredClone(hit.trial) };
       let fetched;
       try { fetched = await fetchRecord(registryName, String(registryId ?? ""), userId, { collection, collectionRevision, signal }); }
       catch (error) { return { status: REGISTRY_UNAVAILABLE, reason: String(/** @type {any} */ (error)?.code ?? "request_failed"), registryId }; }
@@ -1784,12 +1793,18 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
       if (!built) return { status: failure?.status === REGISTRY_NOT_FOUND ? REGISTRY_NOT_FOUND : (failure?.status ?? REGISTRY_UNAVAILABLE), reason: failure?.reason ?? "registry_record_unreadable", registryId };
       const precedent = built.precedent ?? {};
       const description = built.description ?? built.record?.reduced?.protocolSection?.descriptionModule ?? {};
-      return { status: "ok", trial: {
+      const trial = {
         registry: precedent.registry ?? registryName, registryId: precedent.registryId ?? registryId, title: precedent.title ?? "", summary: description.briefSummary ?? "",
         eligibility: precedent.eligibilityText ?? "", minimumAge: precedent.pico?.minimumAge ?? "", maximumAge: precedent.pico?.maximumAge ?? "", sex: precedent.pico?.sex ?? "", conditions: precedent.pico?.conditions ?? [], interventions: (precedent.pico?.interventions ?? []).map((/** @type {any} */ item) => item?.name ?? item),
         url: built.record?.url ?? precedent.sources?.[0]?.url ?? null, status: precedent.design?.overallStatus ?? null, phase: (precedent.design?.phases ?? []).join("/") || null,
         recordHash: built.record?.hash ?? precedent.sources?.[0]?.recordHash ?? null, ...(collection ? { collection: precedent.sources?.[0]?.collection ?? null } : {}),
-      } };
+      };
+      if (live) {
+        judgmentCache.delete(key);
+        judgmentCache.set(key, { trial: structuredClone(trial), at: now().getTime() });
+        while (judgmentCache.size > RECORD_CACHE_MAX) judgmentCache.delete(/** @type {string} */ (judgmentCache.keys().next().value));
+      }
+      return { status: "ok", trial };
     },
 
     /**
