@@ -6,7 +6,6 @@ import { personLabel } from './nativeMemoryInduction.mjs';
 import { withMemorySummaryInvalidation } from './nativeMemorySummaries.mjs';
 
 /** @typedef {import('./nativeMemoryPeople.mjs').PersonBefore} PersonBefore */
-/** @typedef {import('./nativeMemoryPeople.mjs').PersonMergeSnapshot} PersonMergeSnapshot */
 /** @typedef {{sessions:import('./openVikingSessions.mjs').OpenVikingSessions,kind?:string,namespaceId?:string|null,projectId?:string|null}} PeopleContext */
 /** @typedef {{userId:string,overlay:import('./nativeMemoryOverlay.mjs').NativeMemoryOverlay,context:PeopleContext}} PeopleDependencies */
 const conflict = () => new HttpError(409, 'memory_conflict', 'The people files changed. Read them again before merging or undoing.');
@@ -40,13 +39,13 @@ export async function mergePeopleFiles(deps) {
     const after = mergePeopleText(keep.body, merge.body, personLabel(merge.uri, merge.body));
     // The native overlay and its revisions have a bounded text limit. Refuse before any truncating write.
     if (after.length > NATIVE_TEXT_LIMIT) throw new HttpError(400, 'memory_payload_invalid', 'The combined people file is too large.');
-    const snapshot = { keep, merge, after, confirmationSession: engineSession };
+    const prepared = { keep, merge, after, confirmationSession: engineSession };
     const revision = await overlay.addRevision({ userId, uri: keep.uri, memoryType: 'people', change: 'updated', actor: 'conversation',
       // The confirming turn authorizes the move; it is not a new source of the transferred facts.
       reason: 'confirmed people merge', before: keep.body, after, projectId: keep.projectId });
     if (!revision) throw conflict();
-    await overlay.recordPersonMerge(userId, revision.id, snapshot);
-    operation = { revisionId: revision.id, keepUri: keep.uri, mergeUri: merge.uri, state: 'pending', snapshot };
+    await overlay.recordPersonMerge(userId, revision.id, prepared);
+    operation = { revisionId: revision.id, keepUri: keep.uri, mergeUri: merge.uri, state: 'pending', snapshot: prepared };
   }
   const snapshot = operation.snapshot;
   if (!snapshot) throw conflict();
